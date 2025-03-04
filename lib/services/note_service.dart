@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import '../models/note.dart';
+import '../models/page.dart';
 
 class NoteService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -15,9 +17,11 @@ class NoteService {
       .orderBy('createdAt', descending: true);
 
   // 노트 생성
-  Future<String> createNote({
-    required String originalText,
-    required String translatedText,
+  Future<Note?> createNote({
+    String title = '',
+    String content = '',
+    String? originalText,
+    String? translatedText,
     String? imageUrl,
     List<String>? tags,
   }) async {
@@ -25,13 +29,13 @@ class NoteService {
       // 현재 사용자 확인
       final user = _auth.currentUser;
       if (user == null) {
-        print('사용자가 로그인되어 있지 않습니다. 익명 로그인 시도...');
+        debugPrint('사용자가 로그인되어 있지 않습니다. 익명 로그인 시도...');
         try {
           // 익명 로그인 시도
           final userCredential = await _auth.signInAnonymously();
-          print('익명 로그인 성공: ${userCredential.user?.uid}');
+          debugPrint('익명 로그인 성공: ${userCredential.user?.uid}');
         } catch (authError) {
-          print('익명 로그인 실패: $authError');
+          debugPrint('익명 로그인 실패: $authError');
           throw Exception('사용자가 로그인되어 있지 않습니다. 익명 로그인 시도 실패: $authError');
         }
       }
@@ -42,11 +46,15 @@ class NoteService {
         throw Exception('사용자가 로그인되어 있지 않습니다.');
       }
 
+      // 원본 텍스트와 번역 텍스트 설정
+      final finalOriginalText = originalText ?? title;
+      final finalTranslatedText = translatedText ?? content;
+
       // 노트 데이터 생성
       final noteData = {
         'userId': currentUser.uid,
-        'originalText': originalText,
-        'translatedText': translatedText,
+        'originalText': finalOriginalText,
+        'translatedText': finalTranslatedText,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'imageUrl': imageUrl,
@@ -54,16 +62,28 @@ class NoteService {
         'isFavorite': false,
         'flashCards': [],
         'pages': [],
-        'extractedText': originalText,
+        'extractedText': finalOriginalText,
         'flashcardCount': 0,
         'reviewCount': 0,
       };
 
       // Firestore에 노트 추가
       final docRef = await _notesCollection.add(noteData);
-      return docRef.id;
+
+      // 생성된 노트 객체 반환
+      return Note(
+        id: docRef.id,
+        originalText: finalOriginalText,
+        translatedText: finalTranslatedText,
+        imageUrl: imageUrl,
+        tags: tags ?? [],
+        flashCards: [],
+        pages: [],
+        extractedText: finalOriginalText,
+        userId: currentUser.uid,
+      );
     } catch (e) {
-      print('노트 생성 중 오류가 발생했습니다: $e');
+      debugPrint('노트 생성 중 오류가 발생했습니다: $e');
       throw Exception('노트 생성 중 오류가 발생했습니다: $e');
     }
   }
@@ -76,7 +96,7 @@ class NoteService {
       });
     } catch (e) {
       // 오류 발생 시 빈 리스트 반환
-      print('노트 목록을 가져오는 중 오류가 발생했습니다: $e');
+      debugPrint('노트 목록을 가져오는 중 오류가 발생했습니다: $e');
       return Stream.value([]);
     }
   }
@@ -90,7 +110,7 @@ class NoteService {
       }
       return null;
     } catch (e) {
-      print('노트를 가져오는 중 오류가 발생했습니다: $e');
+      debugPrint('노트를 가져오는 중 오류가 발생했습니다: $e');
       throw Exception('노트를 가져오는 중 오류가 발생했습니다: $e');
     }
   }
@@ -106,13 +126,13 @@ class NoteService {
         'tags': note.tags,
         'isFavorite': note.isFavorite,
         'flashCards': note.flashCards.map((card) => card.toJson()).toList(),
-        'pages': note.pages,
+        'pages': note.pages.map((page) => page.id).toList(),
         'extractedText': note.extractedText,
         'flashcardCount': note.flashcardCount,
         'reviewCount': note.reviewCount,
       });
     } catch (e) {
-      print('노트 업데이트 중 오류가 발생했습니다: $e');
+      debugPrint('노트 업데이트 중 오류가 발생했습니다: $e');
       throw Exception('노트 업데이트 중 오류가 발생했습니다: $e');
     }
   }
@@ -122,7 +142,7 @@ class NoteService {
     try {
       await _notesCollection.doc(noteId).delete();
     } catch (e) {
-      print('노트 삭제 중 오류가 발생했습니다: $e');
+      debugPrint('노트 삭제 중 오류가 발생했습니다: $e');
       throw Exception('노트 삭제 중 오류가 발생했습니다: $e');
     }
   }
@@ -135,7 +155,7 @@ class NoteService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('노트 즐겨찾기 설정 중 오류가 발생했습니다: $e');
+      debugPrint('노트 즐겨찾기 설정 중 오류가 발생했습니다: $e');
       throw Exception('노트 즐겨찾기 설정 중 오류가 발생했습니다: $e');
     }
   }
