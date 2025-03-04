@@ -81,6 +81,16 @@ class Note {
       updatedAt = DateTime.now();
     }
 
+    // pages 필드 처리 개선
+    List<String> pages = [];
+    if (data['pages'] != null) {
+      if (data['pages'] is List) {
+        pages = (data['pages'] as List)
+            .map((page) => page?.toString() ?? '')
+            .toList();
+      }
+    }
+
     return Note(
       id: doc.id,
       originalText: data['originalText'] ?? '',
@@ -94,10 +104,7 @@ class Note {
               ?.map((card) => FlashCard.fromJson(card))
               .toList() ??
           [],
-      pages: (data['pages'] as List<dynamic>?)
-              ?.map((page) => page as String)
-              .toList() ??
-          [],
+      pages: pages,
       extractedText: data['extractedText'] ?? '',
       flashcardCount: data['flashcardCount'] ?? 0,
       reviewCount: data['reviewCount'] ?? 0,

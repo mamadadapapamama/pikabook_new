@@ -48,8 +48,9 @@ class FlashCard {
       'front': front,
       'back': back,
       'pinyin': pinyin,
-      'createdAt': createdAt, // Firestore는 DateTime 객체를 자동으로 Timestamp로 변환
-      'lastReviewedAt': lastReviewedAt,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'lastReviewedAt':
+          lastReviewedAt != null ? Timestamp.fromDate(lastReviewedAt!) : null,
       'reviewCount': reviewCount,
       'noteId': noteId,
     };
