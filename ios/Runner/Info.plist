@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>갤러리에서 이미지를 선택하여 OCR 처리를 위해 사용합니다.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>카메라로 이미지를 촬영하여 OCR 처리를 위해 사용합니다.</string>
 </dict>
 </plist>
