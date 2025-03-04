@@ -41,6 +41,9 @@ dependencies:
   firebase_auth: ^5.4.2   # 최신 버전으로 업데이트
   cloud_firestore: 5.6.3 # 최신 버전으로 업데이트
   # 기타 필요한 Firebase 패키지...
+  
+  # UI 컴포넌트
+  google_fonts: ^6.1.0
 
 dev_dependencies:
   flutter_test:
