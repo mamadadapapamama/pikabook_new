@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../services/google_cloud_service.dart';
+import '../../services/note_service.dart';
 
 class OcrScreen extends StatefulWidget {
   const OcrScreen({Key? key}) : super(key: key);
@@ -15,6 +16,7 @@ class OcrScreen extends StatefulWidget {
 class _OcrScreenState extends State<OcrScreen> {
   final ImagePicker _picker = ImagePicker();
   final GoogleCloudService _cloudService = GoogleCloudService();
+  final NoteService _noteService = NoteService();
 
   File? _selectedImage;
   String? _extractedText;
@@ -98,11 +100,20 @@ class _OcrScreenState extends State<OcrScreen> {
     });
 
     try {
-      // TODO: 노트 저장 로직 구현
-      await Future.delayed(const Duration(seconds: 1));
+      // 노트 저장 로직 구현
+      final noteId = await _noteService.createNote(
+        originalText: _extractedText!,
+        translatedText: _translatedText!,
+        imageUrl: _selectedImage?.path,
+      );
 
-      // 저장 성공 후 이전 화면으로 돌아가기
+      // 저장 성공 메시지 표시
       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('노트가 성공적으로 저장되었습니다.')),
+        );
+
+        // 이전 화면으로 돌아가기
         Navigator.of(context).pop();
       }
     } catch (e) {
