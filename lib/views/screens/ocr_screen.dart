@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../services/google_cloud_service.dart';
 
 class OcrScreen extends StatefulWidget {
   const OcrScreen({Key? key}) : super(key: key);
@@ -13,15 +14,30 @@ class OcrScreen extends StatefulWidget {
 
 class _OcrScreenState extends State<OcrScreen> {
   final ImagePicker _picker = ImagePicker();
+  final GoogleCloudService _cloudService = GoogleCloudService();
+
   File? _selectedImage;
   String? _extractedText;
   String? _translatedText;
   bool _isLoading = false;
   bool _isProcessing = false;
+  bool _isPickingImage = false;
 
   Future<void> _pickImage(ImageSource source) async {
+    if (_isPickingImage) return;
+
+    setState(() {
+      _isPickingImage = true;
+    });
+
     try {
-      final XFile? pickedFile = await _picker.pickImage(source: source);
+      final XFile? pickedFile = await _picker.pickImage(
+        source: source,
+        imageQuality: 70,
+        maxWidth: 1000,
+        maxHeight: 1000,
+      );
+
       if (pickedFile != null) {
         setState(() {
           _selectedImage = File(pickedFile.path);
@@ -33,6 +49,12 @@ class _OcrScreenState extends State<OcrScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('이미지를 선택하는 중 오류가 발생했습니다: $e')),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPickingImage = false;
+        });
+      }
     }
   }
 
@@ -44,12 +66,18 @@ class _OcrScreenState extends State<OcrScreen> {
     });
 
     try {
-      // TODO: OCR 서비스 연동
-      // 임시 데이터
-      await Future.delayed(const Duration(seconds: 2));
+      final extractedText =
+          await _cloudService.extractTextFromImage(_selectedImage!);
+
+      if (extractedText.isEmpty) {
+        throw Exception('텍스트를 추출할 수 없습니다.');
+      }
+
+      final translatedText = await _cloudService.translateText(extractedText);
+
       setState(() {
-        _extractedText = "这是一个示例文本。\n这是中文OCR的结果。";
-        _translatedText = "이것은 예시 텍스트입니다.\n이것은 중국어 OCR 결과입니다.";
+        _extractedText = extractedText;
+        _translatedText = translatedText;
         _isProcessing = false;
       });
     } catch (e) {
@@ -160,6 +188,24 @@ class _OcrScreenState extends State<OcrScreen> {
                   _selectedImage!,
                   height: 200,
                   fit: BoxFit.cover,
+                  cacheHeight: 400,
+                  cacheWidth: 400,
+                  frameBuilder:
+                      (context, child, frame, wasSynchronouslyLoaded) {
+                    if (frame == null) {
+                      return Container(
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    }
+                    return child;
+                  },
                 ),
               )
             else
@@ -181,8 +227,11 @@ class _OcrScreenState extends State<OcrScreen> {
                   child: CustomButton(
                     text: '카메라',
                     icon: Icons.camera_alt,
-                    onPressed: () => _pickImage(ImageSource.camera),
+                    onPressed: _isPickingImage
+                        ? null
+                        : () => _pickImage(ImageSource.camera),
                     type: ButtonType.outline,
+                    isLoading: _isPickingImage && _selectedImage == null,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -190,8 +239,11 @@ class _OcrScreenState extends State<OcrScreen> {
                   child: CustomButton(
                     text: '갤러리',
                     icon: Icons.photo_library,
-                    onPressed: () => _pickImage(ImageSource.gallery),
+                    onPressed: _isPickingImage
+                        ? null
+                        : () => _pickImage(ImageSource.gallery),
                     type: ButtonType.outline,
+                    isLoading: _isPickingImage && _selectedImage == null,
                   ),
                 ),
               ],
