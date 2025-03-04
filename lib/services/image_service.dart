@@ -108,4 +108,52 @@ class ImageService {
       return false;
     }
   }
+
+  // 이미지 업로드 (로컬 저장소에 저장)
+  Future<String> uploadImage(File imageFile) async {
+    try {
+      // 이미지 저장 및 최적화
+      final relativePath = await saveAndOptimizeImage(imageFile);
+      return relativePath;
+    } catch (e) {
+      debugPrint('이미지 업로드 중 오류 발생: $e');
+      throw Exception('이미지 업로드 중 오류가 발생했습니다: $e');
+    }
+  }
+
+  // 갤러리에서 여러 이미지 선택
+  Future<List<File>> pickMultipleImages() async {
+    try {
+      final picker = ImagePicker();
+      final pickedFiles = await picker.pickMultiImage();
+
+      if (pickedFiles.isEmpty) {
+        return [];
+      }
+
+      // XFile을 File로 변환
+      return pickedFiles.map((xFile) => File(xFile.path)).toList();
+    } catch (e) {
+      debugPrint('이미지 선택 중 오류 발생: $e');
+      throw Exception('이미지 선택 중 오류가 발생했습니다: $e');
+    }
+  }
+
+  // 카메라로 이미지 촬영
+  Future<File?> takePhoto() async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.camera);
+
+      if (pickedFile == null) {
+        return null;
+      }
+
+      // XFile을 File로 변환
+      return File(pickedFile.path);
+    } catch (e) {
+      debugPrint('카메라 사용 중 오류 발생: $e');
+      throw Exception('카메라 사용 중 오류가 발생했습니다: $e');
+    }
+  }
 }
