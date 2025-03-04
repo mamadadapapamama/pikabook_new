@@ -25,12 +25,26 @@ class NoteService {
       // 현재 사용자 확인
       final user = _auth.currentUser;
       if (user == null) {
+        print('사용자가 로그인되어 있지 않습니다. 익명 로그인 시도...');
+        try {
+          // 익명 로그인 시도
+          final userCredential = await _auth.signInAnonymously();
+          print('익명 로그인 성공: ${userCredential.user?.uid}');
+        } catch (authError) {
+          print('익명 로그인 실패: $authError');
+          throw Exception('사용자가 로그인되어 있지 않습니다. 익명 로그인 시도 실패: $authError');
+        }
+      }
+
+      // 로그인 후 다시 확인
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) {
         throw Exception('사용자가 로그인되어 있지 않습니다.');
       }
 
       // 노트 데이터 생성
       final noteData = {
-        'userId': user.uid,
+        'userId': currentUser.uid,
         'originalText': originalText,
         'translatedText': translatedText,
         'createdAt': FieldValue.serverTimestamp(),
@@ -49,6 +63,7 @@ class NoteService {
       final docRef = await _notesCollection.add(noteData);
       return docRef.id;
     } catch (e) {
+      print('노트 생성 중 오류가 발생했습니다: $e');
       throw Exception('노트 생성 중 오류가 발생했습니다: $e');
     }
   }
