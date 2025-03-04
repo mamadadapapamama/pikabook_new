@@ -17,7 +17,7 @@ class PageService {
   Query getPagesForNoteQuery(String noteId) {
     return _pagesCollection
         .where('noteId', isEqualTo: noteId)
-        .orderBy('pageNumber', descending: false);
+        .orderBy('pageNumber');
   }
 
   // 페이지 생성
