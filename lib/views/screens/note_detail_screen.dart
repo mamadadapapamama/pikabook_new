@@ -330,9 +330,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '노트 정보',
-                  style: Theme.of(context).textTheme.titleLarge,
+                Expanded(
+                  child: InkWell(
+                    onTap: _showEditTitleDialog,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _note!.originalText,
+                            style: Theme.of(context).textTheme.titleLarge,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.edit, size: 16),
+                      ],
+                    ),
+                  ),
                 ),
                 Text(
                   DateFormatter.formatDateTime(_note!.updatedAt),
@@ -364,6 +378,82 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
       ),
     );
+  }
+
+  void _showEditTitleDialog() {
+    final titleController = TextEditingController(text: _note!.originalText);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('노트 제목 변경'),
+        content: TextField(
+          controller: titleController,
+          decoration: const InputDecoration(
+            labelText: '제목',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newTitle = titleController.text.trim();
+              if (newTitle.isNotEmpty) {
+                _updateNoteTitle(newTitle);
+              }
+              Navigator.of(context).pop();
+            },
+            child: const Text('저장'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateNoteTitle(String newTitle) async {
+    if (_note == null || _note?.id == null) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 노트 객체 복사 및 제목 업데이트
+      final updatedNote = _note!.copyWith(
+        originalText: newTitle,
+        updatedAt: DateTime.now(),
+      );
+
+      // Firestore 업데이트
+      await _noteService.updateNote(_note!.id!, updatedNote);
+
+      // 상태 업데이트
+      if (mounted) {
+        setState(() {
+          _note = updatedNote;
+          _isLoading = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('노트 제목이 변경되었습니다.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('노트 제목 변경 중 오류가 발생했습니다: $e')),
+        );
+      }
+    }
   }
 
   Widget _buildPageIndicator() {
