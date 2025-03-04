@@ -5,6 +5,7 @@ import '../../widgets/custom_button.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../services/google_cloud_service.dart';
 import '../../services/note_service.dart';
+import '../../services/image_service.dart';
 
 class OcrScreen extends StatefulWidget {
   const OcrScreen({Key? key}) : super(key: key);
@@ -17,6 +18,7 @@ class _OcrScreenState extends State<OcrScreen> {
   final ImagePicker _picker = ImagePicker();
   final GoogleCloudService _cloudService = GoogleCloudService();
   final NoteService _noteService = NoteService();
+  final ImageService _imageService = ImageService();
 
   File? _selectedImage;
   String? _extractedText;
@@ -93,18 +95,24 @@ class _OcrScreenState extends State<OcrScreen> {
   }
 
   Future<void> _saveAsNote() async {
-    if (_extractedText == null || _translatedText == null) return;
+    if (_extractedText == null ||
+        _translatedText == null ||
+        _selectedImage == null) return;
 
     setState(() {
       _isLoading = true;
     });
 
     try {
+      // 이미지 저장 및 최적화
+      final String imagePath =
+          await _imageService.saveAndOptimizeImage(_selectedImage!);
+
       // 노트 저장 로직 구현
       final noteId = await _noteService.createNote(
         originalText: _extractedText!,
         translatedText: _translatedText!,
-        imageUrl: _selectedImage?.path,
+        imageUrl: imagePath, // 저장된 이미지의 상대 경로
       );
 
       // 저장 성공 메시지 표시
@@ -254,7 +262,7 @@ class _OcrScreenState extends State<OcrScreen> {
                         ? null
                         : () => _pickImage(ImageSource.gallery),
                     type: ButtonType.outline,
-                    isLoading: _isPickingImage && _selectedImage == null,
+                    isLoading: _isPickingImage && _selectedImage != null,
                   ),
                 ),
               ],
@@ -274,24 +282,9 @@ class _OcrScreenState extends State<OcrScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.volume_up, size: 20),
-                  onPressed: () {
-                    // TODO: TTS 기능 구현
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('TTS 기능은 아직 준비 중입니다.')),
-                    );
-                  },
-                  tooltip: '소리 듣기',
-                ),
-              ],
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Container(
@@ -302,7 +295,7 @@ class _OcrScreenState extends State<OcrScreen> {
               ),
               child: Text(
                 content,
-                style: Theme.of(context).textTheme.bodyLarge,
+                style: const TextStyle(fontSize: 16, height: 1.5),
               ),
             ),
           ],

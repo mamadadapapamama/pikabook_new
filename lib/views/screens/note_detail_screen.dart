@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import '../../models/note.dart';
 import '../../services/note_service.dart';
+import '../../services/image_service.dart';
 import '../../utils/date_formatter.dart';
 import '../../widgets/loading_indicator.dart';
 
@@ -15,11 +17,13 @@ class NoteDetailScreen extends StatefulWidget {
 
 class _NoteDetailScreenState extends State<NoteDetailScreen> {
   final NoteService _noteService = NoteService();
+  final ImageService _imageService = ImageService();
 
   Note? _note;
   bool _isLoading = true;
   String? _error;
   bool _isFavorite = false;
+  File? _imageFile;
 
   @override
   void initState() {
@@ -42,6 +46,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           _isFavorite = note?.isFavorite ?? false;
           _isLoading = false;
         });
+
+        // 이미지 로드
+        _loadImage();
       }
     } catch (e) {
       if (mounted) {
@@ -50,6 +57,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadImage() async {
+    if (_note?.imageUrl == null || _note!.imageUrl!.isEmpty) return;
+
+    try {
+      final imageFile = await _imageService.getImageFile(_note!.imageUrl);
+      if (mounted) {
+        setState(() {
+          _imageFile = imageFile;
+        });
+      }
+    } catch (e) {
+      debugPrint('이미지 로드 중 오류 발생: $e');
     }
   }
 
@@ -85,6 +107,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
 
     try {
+      // 이미지 삭제
+      if (_note?.imageUrl != null && _note!.imageUrl!.isNotEmpty) {
+        await _imageService.deleteImage(_note!.imageUrl);
+      }
+
+      // 노트 삭제
       await _noteService.deleteNote(_note!.id!);
 
       if (mounted) {
@@ -235,12 +263,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
               const SizedBox(height: 8),
             ],
-            if (_note!.imageUrl != null && _note!.imageUrl!.isNotEmpty) ...[
+            if (_imageFile != null) ...[
               const SizedBox(height: 8),
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  _note!.imageUrl!,
+                child: Image.file(
+                  _imageFile!,
                   height: 150,
                   width: double.infinity,
                   fit: BoxFit.cover,
@@ -250,8 +278,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       width: double.infinity,
                       color: Colors.grey[200],
                       child: const Center(
-                        child: Icon(Icons.broken_image,
-                            size: 48, color: Colors.grey),
+                        child: Text('이미지를 불러올 수 없습니다.'),
                       ),
                     );
                   },
@@ -271,26 +298,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.volume_up, size: 20),
-                  onPressed: () {
-                    // TODO: TTS 기능 구현
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('TTS 기능은 아직 준비 중입니다.')),
-                    );
-                  },
-                  tooltip: '소리 듣기',
-                ),
-              ],
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
             Container(
@@ -301,7 +313,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
               child: Text(
                 content,
-                style: Theme.of(context).textTheme.bodyLarge,
+                style: const TextStyle(fontSize: 16, height: 1.5),
               ),
             ),
           ],
@@ -317,111 +329,28 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '플래시카드 (${_note!.flashCards.length})',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  '플래시카드',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
-                TextButton.icon(
-                  icon: const Icon(Icons.play_arrow, size: 18),
-                  label: const Text('학습하기'),
-                  onPressed: () {
-                    // TODO: 플래시카드 학습 화면으로 이동
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('플래시카드 학습 기능은 아직 준비 중입니다.')),
-                    );
-                  },
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                Text(
+                  '${_note!.flashCards.length}개',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 120,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: _note!.flashCards.length,
-                itemBuilder: (context, index) {
-                  final card = _note!.flashCards[index];
-                  return Container(
-                    width: 150,
-                    margin: const EdgeInsets.only(right: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Stack(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                card.front,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                card.pinyin ?? '',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                  fontStyle: FontStyle.italic,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const Spacer(),
-                              Text(
-                                card.back,
-                                style: const TextStyle(fontSize: 14),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: const BoxDecoration(
-                              color: Colors.blue,
-                              borderRadius: BorderRadius.only(
-                                topRight: Radius.circular(8),
-                                bottomLeft: Radius.circular(8),
-                              ),
-                            ),
-                            child: Text(
-                              '${card.reviewCount}회',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+            const SizedBox(height: 16),
+            // 플래시카드 목록 표시 (추후 구현)
+            const Center(
+              child: Text('플래시카드 기능은 추후 업데이트 예정입니다.'),
             ),
           ],
         ),
@@ -431,37 +360,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Widget _buildActionButtons() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () {
-              // TODO: 플래시카드 생성 기능 구현
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('플래시카드 생성 기능은 아직 준비 중입니다.')),
-              );
-            },
-            icon: const Icon(Icons.add_card),
-            label: const Text('플래시카드 생성'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: () {
-              // TODO: 노트 편집 기능 구현
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('노트 편집 기능은 아직 준비 중입니다.')),
-              );
-            },
-            icon: const Icon(Icons.edit),
-            label: const Text('노트 편집'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
+        ElevatedButton.icon(
+          onPressed: () {
+            // TODO: 플래시카드 학습 화면으로 이동
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('플래시카드 기능은 추후 업데이트 예정입니다.')),
+            );
+          },
+          icon: const Icon(Icons.school),
+          label: const Text('플래시카드 학습'),
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
         ),
       ],

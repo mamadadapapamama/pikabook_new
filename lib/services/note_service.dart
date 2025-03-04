@@ -12,7 +12,7 @@ class NoteService {
   // 현재 사용자의 노트 컬렉션 참조
   Query get _userNotesQuery => _notesCollection
       .where('userId', isEqualTo: _auth.currentUser?.uid)
-      .orderBy('updatedAt', descending: true);
+      .orderBy('createdAt', descending: true);
 
   // 노트 생성
   Future<String> createNote({
