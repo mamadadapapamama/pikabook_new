@@ -40,6 +40,7 @@ dependencies:
   firebase_core: 3.11.0  # 최신 버전으로 업데이트
   firebase_auth: ^5.4.2   # 최신 버전으로 업데이트
   cloud_firestore: 5.6.3 # 최신 버전으로 업데이트
+  # firebase_storage: ^11.5.6 제거됨 - 로컬 저장 방식 사용
   # 기타 필요한 Firebase 패키지...
   
   # UI 컴포넌트
