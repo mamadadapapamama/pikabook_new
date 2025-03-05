@@ -90,6 +90,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       // 노트에 연결된 페이지 로드
       final pages = await _pageService.getPagesForNote(_note!.id!);
 
+      debugPrint('노트 ${_note!.id}의 페이지 ${pages.length}개 로드됨');
+
       if (mounted) {
         setState(() {
           _pages = pages;
@@ -465,33 +467,52 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     return Container(
       height: 50,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: _pages.length,
-        itemBuilder: (context, index) {
-          final isSelected = index == _currentPageIndex;
-          return GestureDetector(
-            onTap: () => _changePage(index),
-            child: Container(
-              width: 40,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              decoration: BoxDecoration(
-                color: isSelected ? Colors.blue : Colors.grey[300],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Center(
-                child: Text(
-                  '${index + 1}',
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.black,
-                    fontWeight:
-                        isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-              ),
+      child: Column(
+        children: [
+          // 페이지 번호 표시
+          Text(
+            '${_currentPageIndex + 1}/${_pages.length} 페이지',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
             ),
-          );
-        },
+          ),
+          const SizedBox(height: 4),
+          // 페이지 인디케이터
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _pages.length,
+              itemBuilder: (context, index) {
+                final isSelected = index == _currentPageIndex;
+                return GestureDetector(
+                  onTap: () => _changePage(index),
+                  child: Container(
+                    width: 40,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.blue : Colors.grey[300],
+                      borderRadius: BorderRadius.circular(8),
+                      border: isSelected
+                          ? Border.all(color: Colors.blue.shade700, width: 2)
+                          : null,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -193,8 +193,15 @@ class NoteService {
 
       // 페이지 ID를 수집할 리스트
       List<String> pageIds = [];
-      if (note.pages.isNotEmpty) {
-        pageIds = note.pages.map((page) => page.id!).toList();
+
+      // 첫 번째 페이지 ID 가져오기
+      final firstPages = await _pageService.getPagesForNote(note.id!);
+      if (firstPages.isNotEmpty) {
+        for (var page in firstPages) {
+          if (page.id != null) {
+            pageIds.add(page.id!);
+          }
+        }
       }
 
       // 나머지 이미지 병렬 처리
@@ -244,8 +251,9 @@ class NoteService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // 노트 객체 업데이트 (copyWith 사용)
-      // 페이지 객체 가져오기
+      print('Updated note with ${pageIds.length} page IDs in Firestore');
+
+      // 모든 페이지 객체 가져오기
       List<Page> updatedPages = [];
       for (String pageId in pageIds) {
         final page = await _pageService.getPageById(pageId);
@@ -254,10 +262,24 @@ class NoteService {
         }
       }
 
+      print('Retrieved ${updatedPages.length} page objects');
+
       // 업데이트된 페이지 목록으로 새 노트 객체 생성
-      final updatedNote = note.copyWith(
-        pages: updatedPages,
+      final updatedNote = Note(
+        id: note.id,
+        originalText: note.originalText,
+        translatedText: note.translatedText,
+        createdAt: note.createdAt,
         updatedAt: DateTime.now(),
+        imageUrl: note.imageUrl,
+        tags: note.tags,
+        isFavorite: note.isFavorite,
+        flashCards: note.flashCards,
+        pages: updatedPages,
+        extractedText: note.extractedText,
+        flashcardCount: note.flashcardCount,
+        reviewCount: note.reviewCount,
+        userId: note.userId,
       );
 
       print('Successfully created note with ${updatedPages.length} pages');

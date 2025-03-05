@@ -127,11 +127,19 @@ class PageService {
   // 노트의 모든 페이지 가져오기
   Future<List<page_model.Page>> getPagesForNote(String noteId) async {
     try {
+      debugPrint('노트 $noteId의 페이지 조회 시작');
       final snapshot = await getPagesForNoteQuery(noteId).get();
-      return snapshot.docs
-          .map((doc) => page_model.Page.fromFirestore(
-              doc as DocumentSnapshot<Map<String, dynamic>>))
+      debugPrint('노트 $noteId의 페이지 쿼리 결과: ${snapshot.docs.length}개 문서');
+
+      final pages = snapshot.docs
+          .map((doc) => page_model.Page.fromFirestore(doc))
           .toList();
+
+      // 페이지 번호 순으로 정렬
+      pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+      debugPrint('노트 $noteId의 페이지 ${pages.length}개 로드 완료');
+      return pages;
     } catch (e) {
       debugPrint('노트의 페이지 목록 조회 중 오류 발생: $e');
       throw Exception('페이지 목록을 조회할 수 없습니다: $e');
