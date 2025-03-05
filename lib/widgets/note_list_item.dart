@@ -3,6 +3,7 @@ import 'dart:io';
 import '../models/note.dart';
 import '../utils/date_formatter.dart';
 import '../services/image_service.dart';
+import '../views/screens/flashcard_screen.dart';
 
 class NoteListItem extends StatefulWidget {
   final Note note;
@@ -178,31 +179,41 @@ class _NoteListItemState extends State<NoteListItem> {
                             // 플래시카드 카운터 표시
                             if (widget.note.flashcardCount > 0 ||
                                 widget.note.flashCards.isNotEmpty) ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue[100],
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.school,
-                                      size: 14,
-                                      color: Colors.blue,
+                              InkWell(
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) => FlashCardScreen(
+                                          noteId: widget.note.id),
                                     ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${widget.note.flashcardCount > 0 ? widget.note.flashcardCount : widget.note.flashCards.length}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue[100],
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.school,
+                                        size: 14,
                                         color: Colors.blue,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${widget.note.flashcardCount > 0 ? widget.note.flashcardCount : widget.note.flashCards.length}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
