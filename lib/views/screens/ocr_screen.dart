@@ -23,15 +23,32 @@ class _OcrScreenState extends State<OcrScreen> {
   File? _selectedImage;
   String? _extractedText;
   String? _translatedText;
+  String? _errorMessage;
   bool _isLoading = false;
   bool _isProcessing = false;
   bool _isPickingImage = false;
+  // 사용자 설정에서 가져온 번역 언어 (한국어 또는 영어)
+  // 실제로는 사용자 설정에서 가져와야 함
+  String _targetLanguage = 'ko'; // 기본값: 한국어
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserPreferences();
+  }
+
+  // 사용자 설정 로드 (온보딩에서 선택한 번역 언어)
+  Future<void> _loadUserPreferences() async {
+    // TODO: 실제 구현에서는 SharedPreferences나 다른 저장소에서 사용자 설정을 로드
+    // 예시: _targetLanguage = await UserPreferences.getTranslationLanguage() ?? 'ko';
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     if (_isPickingImage) return;
 
     setState(() {
       _isPickingImage = true;
+      _errorMessage = null;
     });
 
     try {
@@ -50,6 +67,9 @@ class _OcrScreenState extends State<OcrScreen> {
         });
       }
     } catch (e) {
+      setState(() {
+        _errorMessage = '이미지를 선택하는 중 오류가 발생했습니다: $e';
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('이미지를 선택하는 중 오류가 발생했습니다: $e')),
       );
@@ -67,9 +87,11 @@ class _OcrScreenState extends State<OcrScreen> {
 
     setState(() {
       _isProcessing = true;
+      _errorMessage = null;
     });
 
     try {
+      // OCR로 텍스트 추출 (중국어 원문)
       final extractedText =
           await _cloudService.extractTextFromImage(_selectedImage!);
 
@@ -77,7 +99,11 @@ class _OcrScreenState extends State<OcrScreen> {
         throw Exception('텍스트를 추출할 수 없습니다.');
       }
 
-      final translatedText = await _cloudService.translateText(extractedText);
+      // 추출된 텍스트 번역 (한국어 또는 영어로)
+      final translatedText = await _cloudService.translateText(
+        extractedText,
+        targetLanguage: _targetLanguage,
+      );
 
       setState(() {
         _extractedText = extractedText;
@@ -87,6 +113,7 @@ class _OcrScreenState extends State<OcrScreen> {
     } catch (e) {
       setState(() {
         _isProcessing = false;
+        _errorMessage = '이미지 처리 중 오류가 발생했습니다: $e';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('이미지 처리 중 오류가 발생했습니다: $e')),
@@ -101,18 +128,14 @@ class _OcrScreenState extends State<OcrScreen> {
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      // 이미지 저장 및 최적화
-      final String imagePath =
-          await _imageService.saveAndOptimizeImage(_selectedImage!);
-
       // 노트 저장 로직 구현
-      final noteId = await _noteService.createNote(
-        originalText: _extractedText!,
-        translatedText: _translatedText!,
-        imageUrl: imagePath, // 저장된 이미지의 상대 경로
+      final note = await _noteService.createNoteWithImage(
+        _selectedImage!,
+        title: '이미지 노트 ${DateTime.now().toString().substring(0, 16)}',
       );
 
       // 저장 성공 메시지 표시
@@ -127,6 +150,7 @@ class _OcrScreenState extends State<OcrScreen> {
     } catch (e) {
       setState(() {
         _isLoading = false;
+        _errorMessage = '노트 저장 중 오류가 발생했습니다: $e';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('노트 저장 중 오류가 발생했습니다: $e')),
@@ -167,11 +191,17 @@ class _OcrScreenState extends State<OcrScreen> {
                             },
                       isLoading: _isProcessing,
                     ),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    _buildErrorSection(_errorMessage!),
+                  ],
                   if (_extractedText != null) ...[
                     const SizedBox(height: 16),
                     _buildTextSection('추출된 텍스트 (중국어)', _extractedText!),
                     const SizedBox(height: 16),
-                    _buildTextSection('번역 (한국어)', _translatedText!),
+                    _buildTextSection(
+                        '번역 (${_targetLanguage == 'ko' ? '한국어' : '영어'})',
+                        _translatedText!),
                     const SizedBox(height: 24),
                     CustomButton(
                       text: '노트로 저장하기',
@@ -207,24 +237,6 @@ class _OcrScreenState extends State<OcrScreen> {
                   _selectedImage!,
                   height: 200,
                   fit: BoxFit.cover,
-                  cacheHeight: 400,
-                  cacheWidth: 400,
-                  frameBuilder:
-                      (context, child, frame, wasSynchronouslyLoaded) {
-                    if (frame == null) {
-                      return Container(
-                        height: 200,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                      );
-                    }
-                    return child;
-                  },
                 ),
               )
             else
@@ -243,26 +255,26 @@ class _OcrScreenState extends State<OcrScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 Expanded(
-                  child: CustomButton(
-                    text: '카메라',
-                    icon: Icons.camera_alt,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text('갤러리'),
                     onPressed: _isPickingImage
                         ? null
-                        : () => _pickImage(ImageSource.camera),
-                    type: ButtonType.outline,
-                    isLoading: _isPickingImage && _selectedImage == null,
+                        : () {
+                            _pickImage(ImageSource.gallery);
+                          },
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: CustomButton(
-                    text: '갤러리',
-                    icon: Icons.photo_library,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('카메라'),
                     onPressed: _isPickingImage
                         ? null
-                        : () => _pickImage(ImageSource.gallery),
-                    type: ButtonType.outline,
-                    isLoading: _isPickingImage && _selectedImage != null,
+                        : () {
+                            _pickImage(ImageSource.camera);
+                          },
                   ),
                 ),
               ],
@@ -293,10 +305,45 @@ class _OcrScreenState extends State<OcrScreen> {
                 color: Colors.grey[100],
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
+              child: SelectableText(
                 content,
-                style: const TextStyle(fontSize: 16, height: 1.5),
+                style: const TextStyle(fontSize: 16),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorSection(String errorMessage) {
+    return Card(
+      elevation: 2,
+      color: Colors.red[50],
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red[700]),
+                const SizedBox(width: 8),
+                Text(
+                  '오류',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red[700],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              errorMessage,
+              style: TextStyle(color: Colors.red[700]),
             ),
           ],
         ),
