@@ -154,6 +154,7 @@ class NoteService {
     List<String>? tags,
     String? targetLanguage,
     Function(int progress)? progressCallback,
+    bool silentProgress = false, // 진행 상황 업데이트 무시 옵션
   }) async {
     try {
       if (imageFiles.isEmpty) {
@@ -168,8 +169,10 @@ class NoteService {
       final generatedTitle =
           title ?? 'Note ${DateTime.now().toString().substring(0, 16)}';
 
-      // 첫 번째 이미지 처리 시작을 알림
-      progressCallback?.call(0);
+      // 첫 번째 이미지 처리 시작을 알림 (무시 옵션이 true일 때는 호출하지 않음)
+      if (!silentProgress && progressCallback != null) {
+        progressCallback(0);
+      }
 
       // 첫 번째 이미지로 노트 생성
       final note = await createNoteWithImage(
@@ -226,11 +229,13 @@ class NoteService {
           targetLanguage: targetLanguage,
         )
             .then((page) {
-          // 각 이미지 처리 후 진행 상황 업데이트
+          // 각 이미지 처리 후 진행 상황 업데이트 (무시 옵션이 true일 때는 호출하지 않음)
           processedCount++;
-          final progress =
-              (processedCount * 100 ~/ imageFiles.length).clamp(0, 100);
-          progressCallback?.call(progress);
+          if (!silentProgress && progressCallback != null) {
+            final progress =
+                (processedCount * 100 ~/ imageFiles.length).clamp(0, 100);
+            progressCallback(progress);
+          }
           return page;
         }));
       }

@@ -27,14 +27,15 @@ class FlashCardService {
     required String front,
     required String back,
     String? noteId,
+    String? pinyin,
   }) async {
     if (_userId == null) {
       throw Exception('사용자가 로그인되어 있지 않습니다.');
     }
 
     try {
-      // 병음 생성
-      final pinyin = PinyinHelper.getPinyin(front);
+      // 병음 생성 (제공된 경우 사용, 아니면 자동 생성)
+      final finalPinyin = pinyin ?? PinyinHelper.getPinyin(front);
 
       // 플래시카드 ID 생성
       final id = _uuid.v4();
@@ -44,7 +45,7 @@ class FlashCardService {
         id: id,
         front: front,
         back: back,
-        pinyin: pinyin,
+        pinyin: finalPinyin,
         createdAt: DateTime.now(),
         noteId: noteId,
       );
