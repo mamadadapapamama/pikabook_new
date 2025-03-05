@@ -78,10 +78,18 @@ class FlashCardService {
 
       final count = querySnapshot.docs.length;
 
+      // 플래시카드 목록 가져오기
+      final flashCards = querySnapshot.docs
+          .map((doc) => FlashCard.fromJson(doc.data() as Map<String, dynamic>))
+          .toList();
+
       // 노트 문서 업데이트
       await _firestore.collection('notes').doc(noteId).update({
-        'flashCardCount': count,
+        'flashcardCount': count,
+        'flashCards': flashCards.map((card) => card.toJson()).toList(),
       });
+
+      debugPrint('노트 $noteId의 플래시카드 카운터 업데이트: $count개');
     } catch (e) {
       debugPrint('노트 플래시카드 카운터 업데이트 중 오류 발생: $e');
     }
