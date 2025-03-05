@@ -52,9 +52,24 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     });
 
     try {
-      final flashCards = widget.noteId != null
-          ? await _flashCardService.getFlashCardsForNote(widget.noteId!)
-          : await _flashCardService.getAllFlashCards();
+      List<FlashCard> flashCards;
+
+      if (widget.noteId != null) {
+        // 특정 노트의 플래시카드만 가져오기
+        try {
+          flashCards =
+              await _flashCardService.getFlashCardsForNote(widget.noteId!);
+        } catch (e) {
+          debugPrint('노트별 플래시카드 조회 중 오류 발생: $e');
+          // 인덱스 오류 발생 시 대체 방법으로 모든 플래시카드를 가져와서 필터링
+          final allCards = await _flashCardService.getAllFlashCards();
+          flashCards =
+              allCards.where((card) => card.noteId == widget.noteId).toList();
+        }
+      } else {
+        // 모든 플래시카드 가져오기
+        flashCards = await _flashCardService.getAllFlashCards();
+      }
 
       if (mounted) {
         setState(() {

@@ -102,14 +102,19 @@ class FlashCardService {
     }
 
     try {
-      final querySnapshot = await _flashCardsCollection
-          .where('userId', isEqualTo: _userId)
-          .orderBy('createdAt', descending: true)
-          .get();
+      // 방법 1: 인덱스 없이 쿼리하기 (userId만 필터링)
+      final querySnapshot =
+          await _flashCardsCollection.where('userId', isEqualTo: _userId).get();
 
-      return querySnapshot.docs
+      // 클라이언트 측에서 정렬
+      final flashCards = querySnapshot.docs
           .map((doc) => FlashCard.fromJson(doc.data() as Map<String, dynamic>))
           .toList();
+
+      // createdAt 기준으로 내림차순 정렬
+      flashCards.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      return flashCards;
     } catch (e) {
       debugPrint('플래시카드 목록 조회 중 오류 발생: $e');
       throw Exception('플래시카드 목록을 가져올 수 없습니다: $e');
@@ -123,15 +128,21 @@ class FlashCardService {
     }
 
     try {
+      // 방법 1: 인덱스 없이 쿼리하기 (userId와 noteId만 필터링)
       final querySnapshot = await _flashCardsCollection
           .where('userId', isEqualTo: _userId)
           .where('noteId', isEqualTo: noteId)
-          .orderBy('createdAt', descending: true)
           .get();
 
-      return querySnapshot.docs
+      // 클라이언트 측에서 정렬
+      final flashCards = querySnapshot.docs
           .map((doc) => FlashCard.fromJson(doc.data() as Map<String, dynamic>))
           .toList();
+
+      // createdAt 기준으로 내림차순 정렬
+      flashCards.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      return flashCards;
     } catch (e) {
       debugPrint('노트 플래시카드 조회 중 오류 발생: $e');
       throw Exception('노트의 플래시카드를 가져올 수 없습니다: $e');

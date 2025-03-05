@@ -268,12 +268,10 @@ class _ImagePickerBottomSheet extends StatelessWidget {
     try {
       // 진행 상황을 추적할 ValueNotifier 생성
       final _progressNotifier = ValueNotifier<int>(0);
+      bool _isProcessing = true;
 
       // 로딩 표시
       if (context.mounted) {
-        // 진행 상황을 표시할 ScaffoldMessenger 키 생성
-        final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-
         // 진행 상황 다이얼로그 표시
         showDialog(
           context: context,
@@ -287,23 +285,18 @@ class _ImagePickerBottomSheet extends StatelessWidget {
                 children: [
                   const CircularProgressIndicator(),
                   const SizedBox(height: 16),
-                  StatefulBuilder(
-                    builder: (context, setState) {
-                      // 상태 변수를 클로저에 저장
-                      return ValueListenableBuilder<int>(
-                        valueListenable: _progressNotifier,
-                        builder: (context, progress, child) {
-                          final total = images.length;
-                          return Column(
-                            children: [
-                              Text('이미지 처리 중: $progress / $total'),
-                              const SizedBox(height: 8),
-                              LinearProgressIndicator(
-                                value: total > 0 ? progress / total : 0,
-                              ),
-                            ],
-                          );
-                        },
+                  ValueListenableBuilder<int>(
+                    valueListenable: _progressNotifier,
+                    builder: (context, progress, child) {
+                      final total = images.length;
+                      return Column(
+                        children: [
+                          Text('이미지 처리 중: $progress / $total'),
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: total > 0 ? progress / total : 0,
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -335,6 +328,15 @@ class _ImagePickerBottomSheet extends StatelessWidget {
 
         // 노트 목록 새로고침
         Provider.of<HomeViewModel>(context, listen: false).refreshNotes();
+
+        // 생성된 노트로 이동
+        if (note != null && note.id != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => NoteDetailScreen(noteId: note.id!),
+            ),
+          );
+        }
       }
     } catch (e) {
       // 다이얼로그 닫기
