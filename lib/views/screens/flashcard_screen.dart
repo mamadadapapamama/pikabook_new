@@ -7,7 +7,6 @@ import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../services/dictionary_service.dart';
-import '../../widgets/dictionary_popup.dart';
 
 class FlashCardScreen extends StatefulWidget {
   final String? noteId; // 특정 노트의 플래시카드만 표시하려면 noteId 전달
@@ -336,24 +335,53 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          GestureDetector(
-            onLongPress: () => _showDictionaryPopup(card.front),
-            child: Text(
-              card.front,
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
+          SelectableText(
+            card.front,
+            style: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
             ),
+            textAlign: TextAlign.center,
+            contextMenuBuilder: (context, editableTextState) {
+              final TextEditingValue value = editableTextState.textEditingValue;
+              final List<ContextMenuButtonItem> buttonItems =
+                  editableTextState.contextMenuButtonItems;
+
+              if (value.selection.isValid &&
+                  value.selection.start != value.selection.end) {
+                buttonItems.add(
+                  ContextMenuButtonItem(
+                    label: '사전',
+                    onPressed: () {
+                      final selectedText = value.text.substring(
+                        value.selection.start,
+                        value.selection.end,
+                      );
+                      _showDictionarySnackbar(selectedText);
+                    },
+                  ),
+                );
+
+                buttonItems.add(
+                  ContextMenuButtonItem(
+                    label: '플래시카드에 추가',
+                    onPressed: () {
+                      final selectedText = value.text.substring(
+                        value.selection.start,
+                        value.selection.end,
+                      );
+                      _addToFlashcard(selectedText, '', '직접 의미 입력 필요');
+                    },
+                  ),
+                );
+              }
+              return AdaptiveTextSelectionToolbar.buttonItems(
+                anchors: editableTextState.contextMenuAnchors,
+                buttonItems: buttonItems,
+              );
+            },
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            children: _buildWordChips(card.front),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           Text(
             card.pinyin,
             style: TextStyle(
@@ -376,35 +404,74 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     );
   }
 
-  // 단어 칩 위젯 생성
-  List<Widget> _buildWordChips(String text) {
+  // 사전 스낵바 표시
+  void _showDictionarySnackbar(String word) {
     final dictionaryService = DictionaryService();
-    final words = dictionaryService.segmentChineseText(text);
+    final entry = dictionaryService.lookupWord(word);
+    final ttsService = TtsService();
 
-    return words.map((word) {
-      final entry = dictionaryService.lookupWord(word);
-      return ActionChip(
-        label: Text(word),
-        backgroundColor:
-            entry != null ? Colors.blue.shade50 : Colors.grey.shade200,
-        onPressed: () => _showDictionaryPopup(word),
+    if (entry == null) {
+      // 사전에 없는 단어일 경우
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('사전에서 찾을 수 없는 단어: $word'),
+          action: SnackBarAction(
+            label: '플래시카드에 추가',
+            onPressed: () {
+              _addToFlashcard(word, '', '직접 의미 입력 필요');
+            },
+          ),
+          duration: const Duration(seconds: 5),
+        ),
       );
-    }).toList();
-  }
+      return;
+    }
 
-  // 사전 팝업 표시
-  void _showDictionaryPopup(String word) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: DictionaryPopup(
-          word: word,
-          onClose: () => Navigator.of(context).pop(),
-          onAddToFlashcard: (word, pinyin, meaning) {
-            Navigator.of(context).pop();
-            _addToFlashcard(word, pinyin, meaning);
+    // 사전에 있는 단어일 경우
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  entry.word,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  entry.pinyin,
+                  style: const TextStyle(
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.volume_up,
+                      size: 16, color: Colors.white),
+                  onPressed: () => ttsService.speak(entry.word),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            Text('의미: ${entry.meaning}'),
+          ],
+        ),
+        action: SnackBarAction(
+          label: '플래시카드에 추가',
+          onPressed: () {
+            _addToFlashcard(entry.word, entry.pinyin, entry.meaning);
           },
         ),
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
