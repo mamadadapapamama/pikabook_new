@@ -176,7 +176,8 @@ class _NoteListItemState extends State<NoteListItem> {
                         Row(
                           children: [
                             // 플래시카드 카운터 표시
-                            if (widget.note.flashcardCount > 0) ...[
+                            if (widget.note.flashcardCount > 0 ||
+                                widget.note.flashCards.isNotEmpty) ...[
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 2),
@@ -194,7 +195,7 @@ class _NoteListItemState extends State<NoteListItem> {
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      '${widget.note.flashcardCount}',
+                                      '${widget.note.flashcardCount > 0 ? widget.note.flashcardCount : widget.note.flashCards.length}',
                                       style: const TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,

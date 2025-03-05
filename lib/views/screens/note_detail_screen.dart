@@ -280,7 +280,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         actions: [
           if (_note != null) ...[
             // 플래시카드 카운터 및 버튼
-            if (_note!.flashcardCount > 0)
+            if (_note!.flashcardCount > 0 || (_note!.flashCards.isNotEmpty))
               InkWell(
                 onTap: () {
                   Navigator.of(context).push(
@@ -304,7 +304,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       const Icon(Icons.school, size: 16, color: Colors.blue),
                       const SizedBox(width: 4),
                       Text(
-                        '${_note!.flashcardCount}',
+                        '${_note!.flashcardCount > 0 ? _note!.flashcardCount : _note!.flashCards.length}',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -376,7 +376,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
 
         // 하단 액션 버튼
-        if (_note!.flashCards.isNotEmpty) _buildActionButtons(),
+        _buildActionButtons(),
       ],
     );
   }
@@ -573,206 +573,243 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Widget _buildPageContent() {
-    if (_pages.isEmpty || _currentPageIndex >= _pages.length) {
-      return const Center(
-        child: Text('페이지 내용이 없습니다.'),
-      );
+    if (_currentPageIndex >= _pages.length) {
+      return const Center(child: Text('페이지를 찾을 수 없습니다.'));
     }
 
     final currentPage = _pages[_currentPageIndex];
+    final imageFile = _imageFiles[_currentPageIndex];
+    final bool isLoadingImage =
+        imageFile == null && currentPage.imageUrl != null;
 
     return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (currentPage.imageUrl != null && currentPage.imageUrl!.isNotEmpty)
+          // 이미지 표시
+          if (currentPage.imageUrl != null) ...[
             Center(
-              child: _imageFiles.isNotEmpty &&
-                      _imageFiles[_currentPageIndex] != null
-                  ? Image.file(
-                      _imageFiles[_currentPageIndex]!,
-                      fit: BoxFit.contain,
-                      height: 200,
-                    )
-                  : Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          height: 200,
-                          width: double.infinity,
-                          color: Colors.grey[200],
-                        ),
-                        Column(
+              child: isLoadingImage
+                  ? Container(
+                      width: double.infinity,
+                      height: 300,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Center(
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
+                          children: [
                             CircularProgressIndicator(),
                             SizedBox(height: 16),
                             Text('이미지 로딩 중...'),
                           ],
                         ),
-                      ],
+                      ),
+                    )
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: imageFile != null
+                          ? Image.file(
+                              imageFile,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: double.infinity,
+                                  height: 200,
+                                  color: Colors.grey[200],
+                                  child: const Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.image_not_supported,
+                                            size: 48, color: Colors.grey),
+                                        SizedBox(height: 8),
+                                        Text('이미지를 불러올 수 없습니다.'),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            )
+                          : Container(
+                              width: double.infinity,
+                              height: 200,
+                              color: Colors.grey[200],
+                              child: const Center(
+                                child: Text('이미지를 찾을 수 없습니다.'),
+                              ),
+                            ),
                     ),
             ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
 
           // 텍스트 표시 모드 토글 버튼
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+          _buildTextDisplayToggle(),
+          const SizedBox(height: 16),
+
+          // 원본 텍스트 표시
+          if (_textDisplayMode == TextDisplayMode.both ||
+              _textDisplayMode == TextDisplayMode.originalOnly) ...[
+            _buildTextSection(
+              title: '원문',
+              text: currentPage.originalText,
+              isOriginal: true,
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // 번역 텍스트 표시
+          if (_textDisplayMode == TextDisplayMode.both ||
+              _textDisplayMode == TextDisplayMode.translationOnly) ...[
+            _buildTextSection(
+              title: '번역',
+              text: currentPage.translatedText,
+              isOriginal: false,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextDisplayToggle() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          ToggleButtons(
+            isSelected: [
+              _textDisplayMode == TextDisplayMode.both,
+              _textDisplayMode == TextDisplayMode.originalOnly,
+              _textDisplayMode == TextDisplayMode.translationOnly,
+            ],
+            onPressed: (index) {
+              setState(() {
+                switch (index) {
+                  case 0:
+                    _textDisplayMode = TextDisplayMode.both;
+                    break;
+                  case 1:
+                    _textDisplayMode = TextDisplayMode.originalOnly;
+                    break;
+                  case 2:
+                    _textDisplayMode = TextDisplayMode.translationOnly;
+                    break;
+                }
+              });
+            },
+            borderRadius: BorderRadius.circular(8),
+            children: const [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text('모두 보기'),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text('원문만'),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text('번역만'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextSection(
+      {required String title, required String text, required bool isOriginal}) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                ToggleButtons(
-                  isSelected: [
-                    _textDisplayMode == TextDisplayMode.both,
-                    _textDisplayMode == TextDisplayMode.originalOnly,
-                    _textDisplayMode == TextDisplayMode.translationOnly,
-                  ],
-                  onPressed: (index) {
-                    setState(() {
-                      switch (index) {
-                        case 0:
-                          _textDisplayMode = TextDisplayMode.both;
-                          break;
-                        case 1:
-                          _textDisplayMode = TextDisplayMode.originalOnly;
-                          break;
-                        case 2:
-                          _textDisplayMode = TextDisplayMode.translationOnly;
-                          break;
-                      }
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  children: const [
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text('모두 보기'),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text('원문만'),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text('번역만'),
+                Text(title, style: Theme.of(context).textTheme.titleLarge),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _isSpeaking ? Icons.stop : Icons.volume_up,
+                        size: 24,
+                        color: _isSpeaking ? Colors.red : Colors.blue,
+                      ),
+                      onPressed:
+                          _isSpeaking ? _stopSpeaking : _speakCurrentPage,
+                      tooltip: _isSpeaking ? '중지' : '소리 듣기',
                     ),
                   ],
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // 원문 텍스트 (표시 모드에 따라 조건부 표시)
-          if (_textDisplayMode == TextDisplayMode.both ||
-              _textDisplayMode == TextDisplayMode.originalOnly)
-            Card(
-              elevation: 2,
-              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '원본 텍스트',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                _isSpeaking ? Icons.stop : Icons.volume_up,
-                                color: Theme.of(context).primaryColor,
-                              ),
-                              onPressed: _isSpeaking
-                                  ? _stopSpeaking
-                                  : _speakCurrentPage,
-                              tooltip: _isSpeaking ? '음성 중지' : '음성으로 듣기',
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onLongPress: () {
-                        // 텍스트 선택 시 컨텍스트 메뉴 표시
-                      },
-                      child: SelectableText(
-                        currentPage.originalText,
-                        style: const TextStyle(fontSize: 16),
-                        contextMenuBuilder: (context, editableTextState) {
-                          final TextEditingValue value =
-                              editableTextState.textEditingValue;
-                          final List<ContextMenuButtonItem> buttonItems =
-                              editableTextState.contextMenuButtonItems;
+              child: SelectableText(
+                text,
+                style: const TextStyle(fontSize: 16, height: 1.5),
+                contextMenuBuilder: (context, editableTextState) {
+                  final TextEditingValue value =
+                      editableTextState.textEditingValue;
+                  final List<ContextMenuButtonItem> buttonItems =
+                      editableTextState.contextMenuButtonItems;
 
-                          if (value.selection.isValid &&
-                              value.selection.start != value.selection.end) {
-                            buttonItems.add(
-                              ContextMenuButtonItem(
-                                label: '플래시카드에 추가',
-                                onPressed: () {
-                                  final selectedText = value.text.substring(
-                                    value.selection.start,
-                                    value.selection.end,
-                                  );
-                                  _createFlashCard(
-                                      selectedText, currentPage.translatedText);
-                                },
-                              ),
-                            );
+                  if (value.selection.isValid &&
+                      value.selection.start != value.selection.end) {
+                    buttonItems.add(
+                      ContextMenuButtonItem(
+                        label: '플래시카드에 추가',
+                        onPressed: () {
+                          final selectedText = value.text.substring(
+                            value.selection.start,
+                            value.selection.end,
+                          );
+
+                          // 현재 페이지의 번역 텍스트 또는 원본 텍스트 가져오기
+                          String translatedText = '';
+                          if (_pages.isNotEmpty &&
+                              _currentPageIndex < _pages.length) {
+                            final currentPage = _pages[_currentPageIndex];
+                            translatedText = isOriginal
+                                ? currentPage.translatedText
+                                : currentPage.originalText;
+                          } else if (_note != null) {
+                            translatedText = isOriginal
+                                ? _note!.translatedText
+                                : _note!.originalText;
                           }
 
-                          return AdaptiveTextSelectionToolbar.buttonItems(
-                            anchors: editableTextState.contextMenuAnchors,
-                            buttonItems: buttonItems,
-                          );
+                          _createFlashCard(selectedText, translatedText);
                         },
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          const SizedBox(height: 16),
+                    );
+                  }
 
-          // 번역 텍스트 (표시 모드에 따라 조건부 표시)
-          if ((_textDisplayMode == TextDisplayMode.both ||
-                  _textDisplayMode == TextDisplayMode.translationOnly) &&
-              currentPage.translatedText.isNotEmpty)
-            Card(
-              elevation: 2,
-              margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '번역 텍스트',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    SelectableText(
-                      currentPage.translatedText,
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                  ],
-                ),
+                  return AdaptiveTextSelectionToolbar.buttonItems(
+                    anchors: editableTextState.contextMenuAnchors,
+                    buttonItems: buttonItems,
+                  );
+                },
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -853,52 +890,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
             const SizedBox(height: 16),
           ],
-          _buildTextSection('원문 (중국어)', _note!.originalText, 'zh-CN'),
+          _buildTextSection(
+            title: '원문 (중국어)',
+            text: _note!.originalText,
+            isOriginal: true,
+          ),
           const SizedBox(height: 16),
-          _buildTextSection('번역 (한국어)', _note!.translatedText, 'ko-KR'),
+          _buildTextSection(
+            title: '번역 (한국어)',
+            text: _note!.translatedText,
+            isOriginal: false,
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildTextSection(String title, String content, String language) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleLarge),
-                IconButton(
-                  icon: Icon(
-                    _isSpeaking ? Icons.stop : Icons.volume_up,
-                    size: 24,
-                    color: _isSpeaking ? Colors.red : Colors.blue,
-                  ),
-                  onPressed: () => _speakCurrentPage(),
-                  tooltip: _isSpeaking ? '중지' : '소리 듣기',
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                content,
-                style: const TextStyle(fontSize: 16, height: 1.5),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -906,24 +909,32 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Widget _buildActionButtons() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
         children: [
-          ElevatedButton.icon(
-            onPressed: () {
-              // 플래시카드 학습 화면으로 이동
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => FlashCardScreen(noteId: _note!.id),
-                ),
-              );
-            },
-            icon: const Icon(Icons.school),
-            label: const Text('플래시카드 학습'),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          // 플래시카드 섹션
+          if (_note!.flashCards.isNotEmpty) ...[
+            _buildTextSection(
+              title: '플래시카드',
+              text: '${_note!.flashCards.length}개의 플래시카드가 있습니다.',
+              isOriginal: false,
             ),
-          ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => FlashCardScreen(noteId: _note!.id),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.school),
+              label: const Text('플래시카드 학습하기'),
+              style: ElevatedButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+              ),
+            ),
+          ],
         ],
       ),
     );
