@@ -148,76 +148,123 @@ class NoteService {
   }
 
   // 여러 이미지로 노트 생성
-  Future<Note?> createNoteWithMultipleImages(
-    List<File> imageFiles, {
+  Future<Note?> createNoteWithMultipleImages({
+    required List<File> imageFiles,
     String? title,
     List<String>? tags,
     String? targetLanguage,
-    Function(int, int)? progressCallback,
+    Function(int progress)? progressCallback,
   }) async {
     try {
       if (imageFiles.isEmpty) {
-        throw Exception('이미지 파일이 제공되지 않았습니다.');
+        return null;
       }
 
-      // 노트 제목 설정 (제공되지 않은 경우 자동 생성)
-      final noteTitle = title ?? await _generateNoteTitle();
+      print(
+          'Starting note creation with multiple images: ${imageFiles.length}');
 
       // 첫 번째 이미지로 노트 생성
-      debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
+      final firstImageFile = imageFiles[0];
+      final generatedTitle =
+          title ?? 'Note ${DateTime.now().toString().substring(0, 16)}';
+
+      // 첫 번째 이미지 처리 시작을 알림
+      progressCallback?.call(0);
+
+      // 첫 번째 이미지로 노트 생성
       final note = await createNoteWithImage(
-        imageFiles.first,
-        title: noteTitle,
+        firstImageFile,
+        title: generatedTitle,
         tags: tags,
         targetLanguage: targetLanguage,
       );
 
-      if (note?.id != null) {
-        // 진행 상황 업데이트 (첫 번째 이미지 완료)
-        if (progressCallback != null) {
-          progressCallback(1, imageFiles.length);
-        }
+      if (note == null) {
+        return null;
+      }
 
-        // 나머지 이미지가 있는 경우에만 처리
-        if (imageFiles.length > 1) {
-          debugPrint('추가 이미지 처리 시작: ${imageFiles.length - 1}개');
+      // 추가 이미지가 없으면 바로 반환
+      if (imageFiles.length == 1) {
+        return note;
+      }
 
-          // 나머지 이미지로 페이지 생성 (병렬 처리)
-          final futures = <Future>[];
+      print(
+          'Processing additional ${imageFiles.length - 1} images for note: ${note.id}');
 
-          for (int i = 1; i < imageFiles.length; i++) {
-            final future = _pageService
-                .createPageWithImage(
-              noteId: note!.id!,
-              pageNumber: i,
-              imageFile: imageFiles[i],
-              targetLanguage: targetLanguage,
-            )
-                .then((_) {
-              // 각 이미지 처리 완료 시 진행 상황 업데이트
-              if (progressCallback != null) {
-                progressCallback(i + 1, imageFiles.length);
-              }
-            });
+      // 페이지 ID를 수집할 리스트
+      List<String> pageIds = [];
+      if (note.pages.isNotEmpty) {
+        pageIds = note.pages.map((page) => page.id!).toList();
+      }
 
-            futures.add(future);
+      // 나머지 이미지 병렬 처리
+      final remainingImages = imageFiles.sublist(1);
+      int processedCount = 1; // 첫 번째 이미지는 이미 처리됨
 
-            // 서버 부하를 줄이기 위해 약간의 지연 추가
-            if (i < imageFiles.length - 1) {
-              await Future.delayed(const Duration(milliseconds: 500));
-            }
-          }
+      // 병렬 처리를 위한 Future 리스트
+      List<Future<Page?>> pageFutures = [];
 
-          // 모든 페이지 생성 완료 대기
-          await Future.wait(futures);
-          debugPrint('모든 이미지 처리 완료');
+      for (int i = 0; i < remainingImages.length; i++) {
+        final imageFile = remainingImages[i];
+
+        // 서버 부하 감소를 위한 약간의 지연
+        await Future.delayed(Duration(milliseconds: 500));
+
+        // 페이지 생성 Future 추가
+        pageFutures.add(_pageService
+            .createPageWithImage(
+          noteId: note.id!,
+          imageFile: imageFile,
+          pageNumber: i + 1, // 첫 번째 페이지는 이미 생성되었으므로 i+1
+          targetLanguage: targetLanguage,
+        )
+            .then((page) {
+          // 각 이미지 처리 후 진행 상황 업데이트
+          processedCount++;
+          final progress =
+              (processedCount * 100 ~/ imageFiles.length).clamp(0, 100);
+          progressCallback?.call(progress);
+          return page;
+        }));
+      }
+
+      // 모든 페이지 생성 완료 대기
+      final pages = await Future.wait(pageFutures);
+
+      // 성공적으로 생성된 페이지의 ID만 수집
+      for (final page in pages) {
+        if (page != null && page.id != null) {
+          pageIds.add(page.id!);
         }
       }
 
-      return note;
+      // Firestore에서 노트 문서 업데이트
+      await _firestore.collection('notes').doc(note.id).update({
+        'pages': pageIds,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // 노트 객체 업데이트 (copyWith 사용)
+      // 페이지 객체 가져오기
+      List<Page> updatedPages = [];
+      for (String pageId in pageIds) {
+        final page = await _pageService.getPageById(pageId);
+        if (page != null) {
+          updatedPages.add(page);
+        }
+      }
+
+      // 업데이트된 페이지 목록으로 새 노트 객체 생성
+      final updatedNote = note.copyWith(
+        pages: updatedPages,
+        updatedAt: DateTime.now(),
+      );
+
+      print('Successfully created note with ${updatedPages.length} pages');
+      return updatedNote;
     } catch (e) {
-      debugPrint('여러 이미지로 노트 생성 중 오류 발생: $e');
-      throw Exception('여러 이미지로 노트를 생성할 수 없습니다: $e');
+      print('Error creating note with multiple images: $e');
+      return null;
     }
   }
 

@@ -316,9 +316,9 @@ class _ImagePickerBottomSheet extends StatelessWidget {
 
       // 여러 이미지로 노트 생성 (진행 상황 콜백 추가)
       final note = await _noteService.createNoteWithMultipleImages(
-        images,
-        progressCallback: (current, total) {
-          _progressNotifier.value = current;
+        imageFiles: images,
+        progressCallback: (progress) {
+          _progressNotifier.value = progress;
         },
       );
 

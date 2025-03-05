@@ -77,6 +77,12 @@ class TranslationService {
 
     final target = targetLanguage ?? _targetLanguage;
 
+    // 중국어 번역이 아닌 경우 바로 대체 서비스 사용
+    if (target != 'zh' && target != 'zh-CN' && target != 'zh-TW') {
+      debugPrint('중국어 번역이 아니므로 대체 번역 서비스를 사용합니다.');
+      return await _translateWithFallbackService(text, target);
+    }
+
     try {
       // API 키 로드
       final apiKey = await _loadApiKey();
@@ -90,6 +96,8 @@ class TranslationService {
       final url = Uri.parse(
         'https://translation.googleapis.com/language/translate/v2?key=$apiKey',
       );
+
+      debugPrint('Google Translate API 호출: 소스=${_sourceLanguage}, 대상=$target');
 
       final response = await http
           .post(
@@ -117,6 +125,7 @@ class TranslationService {
             data['data'].containsKey('translations') &&
             (data['data']['translations'] as List).isNotEmpty) {
           final translations = data['data']['translations'] as List;
+          debugPrint('Google Translate API 번역 성공');
           return translations[0]['translatedText'] as String;
         } else {
           debugPrint('Google Translate API 응답 형식 오류: $data');
@@ -127,12 +136,8 @@ class TranslationService {
             'Google Translate API 응답 오류: ${response.statusCode}, ${response.body}');
 
         // 오류 코드가 API 키 관련 문제인 경우 대체 서비스 사용
-        if (response.statusCode == 400 || response.statusCode == 403) {
-          debugPrint('API 키 오류로 대체 번역 서비스 사용 시도...');
-          return await _translateWithFallbackService(text, target);
-        }
-
-        throw Exception('번역 API 응답 오류: ${response.statusCode}');
+        debugPrint('API 키 오류로 대체 번역 서비스 사용 시도...');
+        return await _translateWithFallbackService(text, target);
       }
     } catch (e) {
       debugPrint('Google Translate API 사용 중 오류 발생: $e');
