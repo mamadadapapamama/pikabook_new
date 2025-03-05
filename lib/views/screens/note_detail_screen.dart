@@ -12,6 +12,8 @@ import '../../utils/date_formatter.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_widget.dart';
 import 'flashcard_screen.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 // 텍스트 표시 모드
 enum TextDisplayMode { both, originalOnly, translationOnly }
@@ -769,8 +771,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 contextMenuBuilder: (context, editableTextState) {
                   final TextEditingValue value =
                       editableTextState.textEditingValue;
-                  final List<ContextMenuButtonItem> buttonItems =
-                      editableTextState.contextMenuButtonItems;
+
+                  // 기본 컨텍스트 메뉴 버튼 가져오기
+                  final List<ContextMenuButtonItem> buttonItems = [];
+
+                  // 복사 버튼 추가
+                  buttonItems.add(
+                    ContextMenuButtonItem(
+                      label: '복사',
+                      onPressed: () {
+                        final selectedText = value.text.substring(
+                          value.selection.start,
+                          value.selection.end,
+                        );
+                        Clipboard.setData(ClipboardData(text: selectedText));
+                      },
+                    ),
+                  );
 
                   if (value.selection.isValid &&
                       value.selection.start != value.selection.end) {
@@ -913,11 +930,30 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
 
     try {
+      // 사전에서 단어 정보 찾기
+      final dictionaryEntry = _dictionaryService.lookupWord(front);
+
+      // 사전에 단어가 있으면 병음과 의미 사용
+      final String finalBack;
+      final String? finalPinyin;
+
+      if (dictionaryEntry != null) {
+        finalBack = dictionaryEntry.meaning;
+        finalPinyin = dictionaryEntry.pinyin;
+      } else {
+        finalBack = back;
+        finalPinyin = pinyin;
+      }
+
       await _flashCardService.createFlashCard(
         front: front,
-        back: back,
+        back: finalBack,
+        pinyin: finalPinyin,
         noteId: widget.noteId,
       );
+
+      // 노트 다시 로드하여 카운터 업데이트
+      await _loadNote();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

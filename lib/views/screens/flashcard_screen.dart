@@ -344,8 +344,23 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             textAlign: TextAlign.center,
             contextMenuBuilder: (context, editableTextState) {
               final TextEditingValue value = editableTextState.textEditingValue;
-              final List<ContextMenuButtonItem> buttonItems =
-                  editableTextState.contextMenuButtonItems;
+
+              // 기본 컨텍스트 메뉴 버튼 가져오기
+              final List<ContextMenuButtonItem> buttonItems = [];
+
+              // 복사 버튼 추가
+              buttonItems.add(
+                ContextMenuButtonItem(
+                  label: '복사',
+                  onPressed: () {
+                    final selectedText = value.text.substring(
+                      value.selection.start,
+                      value.selection.end,
+                    );
+                    Clipboard.setData(ClipboardData(text: selectedText));
+                  },
+                ),
+              );
 
               if (value.selection.isValid &&
                   value.selection.start != value.selection.end) {
@@ -482,6 +497,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       setState(() => _isLoading = true);
 
       final flashCardService = FlashCardService();
+      final dictionaryService = DictionaryService();
       final userId = FirebaseAuth.instance.currentUser?.uid;
 
       if (userId == null) {
@@ -491,9 +507,25 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
         return;
       }
 
+      // 사전에서 단어 정보 찾기
+      final dictionaryEntry = dictionaryService.lookupWord(word);
+
+      // 사전에 단어가 있으면 병음과 의미 사용
+      final String finalMeaning;
+      final String? finalPinyin;
+
+      if (dictionaryEntry != null) {
+        finalMeaning = dictionaryEntry.meaning;
+        finalPinyin = dictionaryEntry.pinyin;
+      } else {
+        finalMeaning = meaning;
+        finalPinyin = pinyin.isNotEmpty ? pinyin : null;
+      }
+
       await flashCardService.createFlashCard(
         front: word,
-        back: meaning,
+        back: finalMeaning,
+        pinyin: finalPinyin,
         noteId: widget.noteId,
       );
 
