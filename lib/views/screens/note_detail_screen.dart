@@ -11,7 +11,6 @@ import '../../services/dictionary_service.dart';
 import '../../utils/date_formatter.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_widget.dart';
-import '../../widgets/dictionary_popup.dart';
 import 'flashcard_screen.dart';
 
 // 텍스트 표시 모드
@@ -779,13 +778,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     if (isOriginal) {
                       buttonItems.add(
                         ContextMenuButtonItem(
-                          label: '사전에서 검색',
+                          label: '사전',
                           onPressed: () {
                             final selectedText = value.text.substring(
                               value.selection.start,
                               value.selection.end,
                             );
-                            _showDictionaryPopup(selectedText);
+                            _showDictionarySnackbar(selectedText);
                           },
                         ),
                       );
@@ -826,48 +825,80 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 },
               ),
             ),
-            if (isOriginal) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: _buildWordChips(text),
-              ),
-            ],
           ],
         ),
       ),
     );
   }
 
-  // 단어 칩 위젯 생성
-  List<Widget> _buildWordChips(String text) {
-    final words = _dictionaryService.segmentChineseText(text);
+  // 사전 스낵바 표시
+  void _showDictionarySnackbar(String word) {
+    final dictionaryService = DictionaryService();
+    final entry = dictionaryService.lookupWord(word);
+    final ttsService = TtsService();
 
-    return words.map((word) {
-      final entry = _dictionaryService.lookupWord(word);
-      return ActionChip(
-        label: Text(word),
-        backgroundColor:
-            entry != null ? Colors.blue.shade50 : Colors.grey.shade200,
-        onPressed: () => _showDictionaryPopup(word),
+    if (entry == null) {
+      // 사전에 없는 단어일 경우
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('사전에서 찾을 수 없는 단어: $word'),
+          action: SnackBarAction(
+            label: '플래시카드에 추가',
+            onPressed: () {
+              _createFlashCard(word, '직접 의미 입력 필요');
+            },
+          ),
+          duration: const Duration(seconds: 5),
+        ),
       );
-    }).toList();
-  }
+      return;
+    }
 
-  // 사전 팝업 표시
-  void _showDictionaryPopup(String word) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: DictionaryPopup(
-          word: word,
-          onClose: () => Navigator.of(context).pop(),
-          onAddToFlashcard: (word, pinyin, meaning) {
-            Navigator.of(context).pop();
-            _createFlashCard(word, meaning, pinyin: pinyin);
+    // 사전에 있는 단어일 경우
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  entry.word,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  entry.pinyin,
+                  style: const TextStyle(
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.volume_up,
+                      size: 16, color: Colors.white),
+                  onPressed: () => ttsService.speak(entry.word),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            Text('의미: ${entry.meaning}'),
+          ],
+        ),
+        action: SnackBarAction(
+          label: '플래시카드에 추가',
+          onPressed: () {
+            _createFlashCard(entry.word, entry.meaning, pinyin: entry.pinyin);
           },
         ),
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
