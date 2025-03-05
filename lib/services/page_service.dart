@@ -4,11 +4,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/page.dart' as page_model;
 import 'image_service.dart';
+import 'ocr_service.dart';
+import 'translation_service.dart';
 
 class PageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final ImageService _imageService = ImageService();
+  final OcrService _ocrService = OcrService();
+  final TranslationService _translationService = TranslationService();
 
   // 페이지 컬렉션 참조
   CollectionReference get _pagesCollection => _firestore.collection('pages');
@@ -72,6 +76,37 @@ class PageService {
     } catch (e) {
       debugPrint('페이지 생성 중 오류 발생: $e');
       throw Exception('페이지를 생성할 수 없습니다: $e');
+    }
+  }
+
+  // 이미지로 페이지 생성 (OCR 및 번역 포함)
+  Future<page_model.Page> createPageWithImage({
+    required String noteId,
+    required int pageNumber,
+    required File imageFile,
+    String? targetLanguage,
+  }) async {
+    try {
+      // 이미지에서 텍스트 추출 (OCR)
+      final extractedText = await _ocrService.extractText(imageFile);
+
+      // 추출된 텍스트 번역
+      final translatedText = await _translationService.translateText(
+        extractedText,
+        targetLanguage: targetLanguage,
+      );
+
+      // 페이지 생성
+      return await createPage(
+        noteId: noteId,
+        originalText: extractedText,
+        translatedText: translatedText,
+        pageNumber: pageNumber,
+        imageFile: imageFile,
+      );
+    } catch (e) {
+      debugPrint('이미지로 페이지 생성 중 오류 발생: $e');
+      throw Exception('이미지로 페이지를 생성할 수 없습니다: $e');
     }
   }
 
@@ -143,6 +178,19 @@ class PageService {
         // 새 이미지 업로드
         final newImageUrl = await _imageService.uploadImage(imageFile);
         updates['imageUrl'] = newImageUrl;
+
+        // 이미지가 변경되었고 원본 텍스트가 제공되지 않은 경우, OCR 수행
+        if (originalText == null) {
+          final extractedText = await _ocrService.extractText(imageFile);
+          updates['originalText'] = extractedText;
+
+          // 번역 텍스트가 제공되지 않은 경우, 번역 수행
+          if (translatedText == null) {
+            final translatedText =
+                await _translationService.translateText(extractedText);
+            updates['translatedText'] = translatedText;
+          }
+        }
       }
 
       // Firestore 업데이트
@@ -150,6 +198,35 @@ class PageService {
     } catch (e) {
       debugPrint('페이지 업데이트 중 오류 발생: $e');
       throw Exception('페이지를 업데이트할 수 없습니다: $e');
+    }
+  }
+
+  // 페이지 텍스트 번역
+  Future<String> translatePageText(String pageId,
+      {String? targetLanguage}) async {
+    try {
+      // 페이지 정보 가져오기
+      final page = await getPageById(pageId);
+      if (page == null) {
+        throw Exception('페이지를 찾을 수 없습니다.');
+      }
+
+      // 원본 텍스트 번역
+      final translatedText = await _translationService.translateText(
+        page.originalText,
+        targetLanguage: targetLanguage,
+      );
+
+      // 번역 결과 저장
+      await updatePage(
+        pageId,
+        translatedText: translatedText,
+      );
+
+      return translatedText;
+    } catch (e) {
+      debugPrint('페이지 텍스트 번역 중 오류 발생: $e');
+      throw Exception('페이지 텍스트를 번역할 수 없습니다: $e');
     }
   }
 

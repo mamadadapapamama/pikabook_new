@@ -158,7 +158,6 @@ class HomeScreen extends StatelessWidget {
 class _ImagePickerBottomSheet extends StatelessWidget {
   final ImageService _imageService = ImageService();
   final NoteService _noteService = NoteService();
-  final PageService _pageService = PageService();
 
   _ImagePickerBottomSheet({Key? key}) : super(key: key);
 
@@ -274,30 +273,8 @@ class _ImagePickerBottomSheet extends StatelessWidget {
         );
       }
 
-      // 자동 생성된 노트 제목 (예: #1 Note)
-      final noteCount = await _getNoteCount();
-      final title = '#${noteCount + 1} Note';
-
-      // 노트 생성
-      final note = await _noteService.createNote(
-        title: title,
-        content: '',
-      );
-
-      if (note?.id == null) {
-        throw Exception('노트 생성에 실패했습니다.');
-      }
-
-      // 각 이미지에 대해 페이지 생성
-      for (int i = 0; i < images.length; i++) {
-        await _pageService.createPage(
-          noteId: note!.id!,
-          originalText: '원본 텍스트 ${i + 1}', // 실제로는 OCR로 추출한 텍스트
-          translatedText: '번역된 텍스트 ${i + 1}', // 실제로는 번역 API로 번역한 텍스트
-          pageNumber: i,
-          imageFile: images[i],
-        );
-      }
+      // 여러 이미지로 노트 생성
+      final note = await _noteService.createNoteWithMultipleImages(images);
 
       // 성공 메시지 표시
       if (context.mounted) {
@@ -314,15 +291,6 @@ class _ImagePickerBottomSheet extends StatelessWidget {
           SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
         );
       }
-    }
-  }
-
-  Future<int> _getNoteCount() async {
-    try {
-      final notes = await _noteService.getNotes().first;
-      return notes.length;
-    } catch (e) {
-      return 0;
     }
   }
 }

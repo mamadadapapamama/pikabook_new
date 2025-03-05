@@ -48,7 +48,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _initTts() async {
-    await _ttsService.init();
+    try {
+      await _ttsService.init();
+    } catch (e) {
+      debugPrint('TTS 초기화 중 오류 발생: $e');
+    }
   }
 
   Future<void> _loadNote() async {
@@ -124,41 +128,42 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
-  Future<void> _speakText(String text, {String language = 'zh-CN'}) async {
-    if (_isSpeaking) {
-      await _ttsService.stop();
-      setState(() {
-        _isSpeaking = false;
-      });
-      return;
-    }
+  Future<void> _speakCurrentPage() async {
+    if (_pages.isEmpty || _currentPageIndex >= _pages.length) return;
+
+    final currentPage = _pages[_currentPageIndex];
+    final textToSpeak = currentPage.translatedText.isNotEmpty
+        ? currentPage.translatedText
+        : currentPage.originalText;
+
+    if (textToSpeak.isEmpty) return;
 
     setState(() {
       _isSpeaking = true;
     });
 
     try {
-      await _ttsService.setLanguage(language);
-      await _ttsService.speak(text);
-
-      // 재생이 완료되면 상태 업데이트
-      Future.delayed(Duration(milliseconds: 500), () {
-        if (_ttsService.state == TtsState.stopped && mounted) {
-          setState(() {
-            _isSpeaking = false;
-          });
-        }
-      });
+      await _ttsService.speak(textToSpeak);
     } catch (e) {
-      debugPrint('TTS 재생 중 오류 발생: $e');
+      debugPrint('TTS 실행 중 오류 발생: $e');
       if (mounted) {
-        setState(() {
-          _isSpeaking = false;
-        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('음성 재생 중 오류가 발생했습니다: $e')),
         );
       }
+    }
+  }
+
+  Future<void> _stopSpeaking() async {
+    if (!_isSpeaking) return;
+
+    try {
+      await _ttsService.stop();
+      setState(() {
+        _isSpeaking = false;
+      });
+    } catch (e) {
+      debugPrint('TTS 중지 중 오류 발생: $e');
     }
   }
 
@@ -492,16 +497,109 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Widget _buildPageContent() {
-    if (_currentPageIndex >= _pages.length) {
-      return const Center(child: Text('페이지를 찾을 수 없습니다.'));
+    if (_pages.isEmpty || _currentPageIndex >= _pages.length) {
+      return const Center(
+        child: Text('페이지 내용이 없습니다.'),
+      );
     }
 
     final currentPage = _pages[_currentPageIndex];
-    final imageFile = _imageFiles[_currentPageIndex];
 
-    return PageWidget(
-      page: currentPage,
-      imageFile: imageFile,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (currentPage.imageUrl != null && currentPage.imageUrl!.isNotEmpty)
+          Center(
+            child:
+                _imageFiles.isNotEmpty && _imageFiles[_currentPageIndex] != null
+                    ? Image.file(
+                        _imageFiles[_currentPageIndex]!,
+                        fit: BoxFit.contain,
+                        height: 200,
+                      )
+                    : Image.network(
+                        currentPage.imageUrl!,
+                        fit: BoxFit.contain,
+                        height: 200,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(
+                            child: Icon(Icons.broken_image, size: 100),
+                          );
+                        },
+                      ),
+          ),
+        const SizedBox(height: 16),
+        Card(
+          elevation: 2,
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '원본 텍스트',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        _isSpeaking ? Icons.stop : Icons.volume_up,
+                        color: Theme.of(context).primaryColor,
+                      ),
+                      onPressed:
+                          _isSpeaking ? _stopSpeaking : _speakCurrentPage,
+                      tooltip: _isSpeaking ? '음성 중지' : '음성으로 듣기',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  currentPage.originalText,
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (currentPage.translatedText.isNotEmpty)
+          Card(
+            elevation: 2,
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '번역 텍스트',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    currentPage.translatedText,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -575,7 +673,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     size: 24,
                     color: _isSpeaking ? Colors.red : Colors.blue,
                   ),
-                  onPressed: () => _speakText(content, language: language),
+                  onPressed: () => _speakCurrentPage(),
                   tooltip: _isSpeaking ? '중지' : '소리 듣기',
                 ),
               ],
