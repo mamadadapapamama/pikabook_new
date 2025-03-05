@@ -118,6 +118,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       if (page.imageUrl == null || page.imageUrl!.isEmpty) continue;
 
       try {
+        // 이미지 로딩 상태 표시
+        if (mounted) {
+          setState(() {
+            // 이미지 로딩 중임을 표시하는 플래그 추가
+            _imageFiles[i] = null;
+          });
+        }
+
         final imageFile = await _imageService.getImageFile(page.imageUrl);
         if (mounted) {
           setState(() {
@@ -538,21 +546,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         fit: BoxFit.contain,
                         height: 200,
                       )
-                    : Image.network(
-                        currentPage.imageUrl!,
-                        fit: BoxFit.contain,
-                        height: 200,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Center(
-                            child: Icon(Icons.broken_image, size: 100),
-                          );
-                        },
+                    : Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            height: 200,
+                            width: double.infinity,
+                            color: Colors.grey[200],
+                          ),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text('이미지 로딩 중...'),
+                            ],
+                          ),
+                        ],
                       ),
           ),
         const SizedBox(height: 16),
