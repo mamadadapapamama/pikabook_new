@@ -173,11 +173,77 @@ class _NoteListItemState extends State<NoteListItem> {
                             color: Colors.grey[600],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 20),
-                          onPressed: () => _confirmDelete(context),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
+                        Row(
+                          children: [
+                            // 플래시카드 카운터 표시
+                            if (widget.note.flashcardCount > 0) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue[100],
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.school,
+                                      size: 14,
+                                      color: Colors.blue,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${widget.note.flashcardCount}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            // 페이지 수 표시
+                            if (widget.note.pages.isNotEmpty) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.green[100],
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.description,
+                                      size: 14,
+                                      color: Colors.green,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${widget.note.pages.length}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 20),
+                              onPressed: () => _confirmDelete(context),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
                         ),
                       ],
                     ),
