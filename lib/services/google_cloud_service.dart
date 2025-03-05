@@ -1,115 +1,146 @@
-import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/services.dart';
-import 'package:googleapis/vision/v1.dart' as vision;
-import 'package:googleapis/translate/v3.dart' as translate;
-import 'package:googleapis_auth/auth_io.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
+import 'ocr_service.dart';
+import 'translation_service.dart';
 
+/// Google Cloud 서비스를 통합적으로 관리하는 클래스
+/// OCR 및 번역 기능을 제공합니다.
 class GoogleCloudService {
+  final OcrService _ocrService = OcrService();
+  final TranslationService _translationService = TranslationService();
+
+  // 싱글톤 패턴 구현
   static final GoogleCloudService _instance = GoogleCloudService._internal();
   factory GoogleCloudService() => _instance;
   GoogleCloudService._internal();
 
-  // 서비스 계정 인증 정보
-  static const String _credentialsPath =
-      'assets/credentials/service-account.json';
-
-  // 서비스 계정 인증 정보를 로드하는 메서드
-  Future<Map<String, dynamic>> _loadCredentials() async {
-    try {
-      final String jsonString = await rootBundle.loadString(_credentialsPath);
-      return json.decode(jsonString) as Map<String, dynamic>;
-    } catch (e) {
-      throw Exception('서비스 계정 인증 정보를 로드하는데 실패했습니다: $e');
-    }
-  }
-
-  // 서비스 계정으로 인증하는 메서드
-  Future<AutoRefreshingAuthClient> _getAuthClient(List<String> scopes) async {
-    try {
-      final credentialsJson = await _loadCredentials();
-      final credentials = ServiceAccountCredentials.fromJson(credentialsJson);
-      return await clientViaServiceAccount(credentials, scopes);
-    } catch (e) {
-      throw Exception('인증 클라이언트 생성에 실패했습니다: $e');
-    }
-  }
-
-  // 이미지에서 텍스트 추출 (OCR)
+  /// 이미지에서 텍스트 추출 (OCR)
+  /// 중국어 텍스트를 추출합니다.
   Future<String> extractTextFromImage(File imageFile) async {
     try {
-      // Vision API 인증
-      final client = await _getAuthClient([vision.VisionApi.cloudVisionScope]);
-      final visionApi = vision.VisionApi(client);
-
-      // 이미지 파일을 base64로 인코딩
-      final List<int> imageBytes = await imageFile.readAsBytes();
-      final String base64Image = base64Encode(imageBytes);
-
-      // OCR 요청 생성
-      final request = vision.AnnotateImageRequest()
-        ..image = (vision.Image()..content = base64Image)
-        ..features = [
-          vision.Feature()
-            ..type = 'TEXT_DETECTION'
-            ..maxResults = 1
-        ]
-        ..imageContext = (vision.ImageContext()
-          ..languageHints = ['zh-Hans', 'zh-Hant']); // 중국어 간체 및 번체 지정
-
-      // API 요청 실행
-      final response = await visionApi.images.annotate(
-        vision.BatchAnnotateImagesRequest()..requests = [request],
-      );
-
-      // 응답에서 텍스트 추출
-      final textAnnotation = response.responses?.first.fullTextAnnotation;
-      if (textAnnotation == null || textAnnotation.text == null) {
-        return '';
-      }
-
-      return textAnnotation.text!;
+      debugPrint('GoogleCloudService: 이미지에서 중국어 텍스트 추출 시작');
+      final result = await _ocrService.extractText(imageFile);
+      debugPrint('GoogleCloudService: 텍스트 추출 완료 (${result.length} 자)');
+      return result;
     } catch (e) {
-      throw Exception('이미지에서 텍스트 추출에 실패했습니다: $e');
+      debugPrint('GoogleCloudService: 텍스트 추출 중 오류 발생: $e');
+      throw Exception('텍스트를 추출할 수 없습니다: $e');
     }
   }
 
-  // 텍스트 번역 (중국어 -> 한국어)
-  Future<String> translateText(String text,
-      {String sourceLanguage = 'zh', String targetLanguage = 'ko'}) async {
+  /// 텍스트 번역
+  /// 중국어 텍스트를 한국어 또는 영어로 번역합니다.
+  Future<String> translateText(String text, {String? targetLanguage}) async {
     try {
-      // Translation API 인증
-      final client =
-          await _getAuthClient([translate.TranslateApi.cloudTranslationScope]);
-      final translateApi = translate.TranslateApi(client);
-
-      // 프로젝트 ID 가져오기
-      final credentials = await _loadCredentials();
-      final projectId = credentials['project_id'] as String;
-
-      // 번역 요청 생성
-      final request = translate.TranslateTextRequest()
-        ..contents = [text]
-        ..sourceLanguageCode = sourceLanguage
-        ..targetLanguageCode = targetLanguage
-        ..mimeType = 'text/plain';
-
-      // API 요청 실행
-      final response = await translateApi.projects.translateText(
-        request,
-        'projects/$projectId',
-      );
-
-      // 응답에서 번역된 텍스트 추출
-      if (response.translations == null || response.translations!.isEmpty) {
+      if (text.isEmpty) {
+        debugPrint('GoogleCloudService: 번역할 텍스트가 비어 있습니다.');
         return '';
       }
 
-      return response.translations!.first.translatedText ?? '';
+      // MVP에서는 타겟 언어를 한국어 또는 영어로만 제한
+      final target = (targetLanguage == 'ko' || targetLanguage == 'en')
+          ? targetLanguage!
+          : 'ko'; // 기본값: 한국어
+
+      debugPrint(
+          'GoogleCloudService: 중국어 텍스트 번역 시작 (${text.length} 자, 대상 언어: $target)');
+
+      // 텍스트가 너무 길면 분할하여 번역
+      if (text.length > 5000) {
+        debugPrint('GoogleCloudService: 텍스트가 너무 길어 분할하여 번역합니다.');
+        return await _translateLongText(text, targetLanguage: target);
+      }
+
+      final result = await _translationService.translateText(
+        text,
+        targetLanguage: target,
+      );
+
+      debugPrint('GoogleCloudService: 텍스트 번역 완료 (${result.length} 자)');
+      return result;
     } catch (e) {
-      throw Exception('텍스트 번역에 실패했습니다: $e');
+      debugPrint('GoogleCloudService: 텍스트 번역 중 오류 발생: $e');
+      throw Exception('텍스트를 번역할 수 없습니다: $e');
+    }
+  }
+
+  /// 긴 텍스트를 분할하여 번역
+  Future<String> _translateLongText(String text,
+      {String? targetLanguage}) async {
+    try {
+      // MVP에서는 타겟 언어를 한국어 또는 영어로만 제한
+      final target = (targetLanguage == 'ko' || targetLanguage == 'en')
+          ? targetLanguage!
+          : 'ko'; // 기본값: 한국어
+
+      // 텍스트를 문단 단위로 분할
+      final paragraphs = text.split('\n\n');
+      final translatedParagraphs = <String>[];
+
+      // 각 문단을 번역
+      for (int i = 0; i < paragraphs.length; i++) {
+        final paragraph = paragraphs[i].trim();
+        if (paragraph.isEmpty) {
+          translatedParagraphs.add('');
+          continue;
+        }
+
+        debugPrint(
+            'GoogleCloudService: 문단 ${i + 1}/${paragraphs.length} 번역 중 (${paragraph.length} 자)');
+
+        // 문단이 너무 길면 더 작은 단위로 분할
+        if (paragraph.length > 5000) {
+          final sentences = paragraph.split(RegExp(r'(?<=[.!?])\s+'));
+          final translatedSentences = <String>[];
+
+          // 문장 단위로 번역
+          for (final sentence in sentences) {
+            if (sentence.isEmpty) continue;
+
+            final translatedSentence = await _translationService.translateText(
+              sentence,
+              targetLanguage: target,
+            );
+
+            translatedSentences.add(translatedSentence);
+          }
+
+          translatedParagraphs.add(translatedSentences.join(' '));
+        } else {
+          // 문단 단위로 번역
+          final translatedParagraph = await _translationService.translateText(
+            paragraph,
+            targetLanguage: target,
+          );
+
+          translatedParagraphs.add(translatedParagraph);
+        }
+      }
+
+      // 번역된 문단을 합쳐서 반환
+      return translatedParagraphs.join('\n\n');
+    } catch (e) {
+      debugPrint('GoogleCloudService: 긴 텍스트 번역 중 오류 발생: $e');
+      throw Exception('긴 텍스트를 번역할 수 없습니다: $e');
+    }
+  }
+
+  /// 지원되는 언어 목록 가져오기
+  /// MVP에서는 한국어와 영어만 지원합니다.
+  Future<List<Map<String, String>>> getSupportedLanguages() async {
+    try {
+      debugPrint('GoogleCloudService: 지원 언어 목록 조회 시작');
+      final languages = await _translationService.getSupportedLanguages();
+      debugPrint(
+          'GoogleCloudService: 지원 언어 목록 조회 완료 (${languages.length}개 언어)');
+      return languages;
+    } catch (e) {
+      debugPrint('GoogleCloudService: 지원 언어 목록 조회 중 오류 발생: $e');
+      // MVP에서는 한국어와 영어만 지원
+      return [
+        {'code': 'ko', 'name': '한국어'},
+        {'code': 'en', 'name': 'English'},
+      ];
     }
   }
 }
