@@ -266,15 +266,66 @@ class _ImagePickerBottomSheet extends StatelessWidget {
     if (images.isEmpty) return;
 
     try {
+      // 진행 상황을 추적할 ValueNotifier 생성
+      final _progressNotifier = ValueNotifier<int>(0);
+
       // 로딩 표시
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('노트 생성 중...')),
+        // 진행 상황을 표시할 ScaffoldMessenger 키 생성
+        final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
+        // 진행 상황 다이얼로그 표시
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => WillPopScope(
+            onWillPop: () async => false, // 뒤로 가기 방지
+            child: AlertDialog(
+              title: const Text('노트 생성 중...'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  StatefulBuilder(
+                    builder: (context, setState) {
+                      // 상태 변수를 클로저에 저장
+                      return ValueListenableBuilder<int>(
+                        valueListenable: _progressNotifier,
+                        builder: (context, progress, child) {
+                          final total = images.length;
+                          return Column(
+                            children: [
+                              Text('이미지 처리 중: $progress / $total'),
+                              const SizedBox(height: 8),
+                              LinearProgressIndicator(
+                                value: total > 0 ? progress / total : 0,
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       }
 
-      // 여러 이미지로 노트 생성
-      final note = await _noteService.createNoteWithMultipleImages(images);
+      // 여러 이미지로 노트 생성 (진행 상황 콜백 추가)
+      final note = await _noteService.createNoteWithMultipleImages(
+        images,
+        progressCallback: (current, total) {
+          _progressNotifier.value = current;
+        },
+      );
+
+      // 다이얼로그 닫기
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
 
       // 성공 메시지 표시
       if (context.mounted) {
@@ -286,6 +337,11 @@ class _ImagePickerBottomSheet extends StatelessWidget {
         Provider.of<HomeViewModel>(context, listen: false).refreshNotes();
       }
     } catch (e) {
+      // 다이얼로그 닫기
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
