@@ -153,6 +153,7 @@ class NoteService {
     String? title,
     List<String>? tags,
     String? targetLanguage,
+    Function(int, int)? progressCallback,
   }) async {
     try {
       if (imageFiles.isEmpty) {
@@ -163,6 +164,7 @@ class NoteService {
       final noteTitle = title ?? await _generateNoteTitle();
 
       // 첫 번째 이미지로 노트 생성
+      debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
       final note = await createNoteWithImage(
         imageFiles.first,
         title: noteTitle,
@@ -171,14 +173,44 @@ class NoteService {
       );
 
       if (note?.id != null) {
-        // 나머지 이미지로 페이지 생성
-        for (int i = 1; i < imageFiles.length; i++) {
-          await _pageService.createPageWithImage(
-            noteId: note!.id!,
-            pageNumber: i,
-            imageFile: imageFiles[i],
-            targetLanguage: targetLanguage,
-          );
+        // 진행 상황 업데이트 (첫 번째 이미지 완료)
+        if (progressCallback != null) {
+          progressCallback(1, imageFiles.length);
+        }
+
+        // 나머지 이미지가 있는 경우에만 처리
+        if (imageFiles.length > 1) {
+          debugPrint('추가 이미지 처리 시작: ${imageFiles.length - 1}개');
+
+          // 나머지 이미지로 페이지 생성 (병렬 처리)
+          final futures = <Future>[];
+
+          for (int i = 1; i < imageFiles.length; i++) {
+            final future = _pageService
+                .createPageWithImage(
+              noteId: note!.id!,
+              pageNumber: i,
+              imageFile: imageFiles[i],
+              targetLanguage: targetLanguage,
+            )
+                .then((_) {
+              // 각 이미지 처리 완료 시 진행 상황 업데이트
+              if (progressCallback != null) {
+                progressCallback(i + 1, imageFiles.length);
+              }
+            });
+
+            futures.add(future);
+
+            // 서버 부하를 줄이기 위해 약간의 지연 추가
+            if (i < imageFiles.length - 1) {
+              await Future.delayed(const Duration(milliseconds: 500));
+            }
+          }
+
+          // 모든 페이지 생성 완료 대기
+          await Future.wait(futures);
+          debugPrint('모든 이미지 처리 완료');
         }
       }
 

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:googleapis/vision/v1.dart' as vision;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
@@ -42,8 +43,7 @@ class OcrService {
   // 서비스 계정 키 파일 로드
   Future<Map<String, dynamic>> _loadCredentialsFile() async {
     try {
-      // 앱 내 assets에서 키 파일 로드
-      // 참고: 실제 앱에서는 보안을 위해 키를 안전하게 관리해야 합니다.
+      // 먼저 앱 문서 디렉토리에서 키 파일 확인
       final directory = await getApplicationDocumentsDirectory();
       final credentialsPath = '${directory.path}/google_cloud_credentials.json';
       final file = File(credentialsPath);
@@ -52,7 +52,21 @@ class OcrService {
         final contents = await file.readAsString();
         return json.decode(contents) as Map<String, dynamic>;
       } else {
-        throw Exception('서비스 계정 키 파일을 찾을 수 없습니다.');
+        // 앱 문서 디렉토리에 파일이 없으면 assets에서 로드하여 복사
+        try {
+          // assets에서 키 파일 로드 (service-account.json으로 변경)
+          final String jsonString = await rootBundle
+              .loadString('assets/credentials/service-account.json');
+
+          // 앱 문서 디렉토리에 파일 저장
+          await file.create(recursive: true);
+          await file.writeAsString(jsonString);
+
+          return json.decode(jsonString) as Map<String, dynamic>;
+        } catch (assetError) {
+          debugPrint('assets에서 서비스 계정 키 파일 로드 중 오류 발생: $assetError');
+          throw Exception('서비스 계정 키 파일을 찾을 수 없습니다.');
+        }
       }
     } catch (e) {
       debugPrint('서비스 계정 키 파일 로드 중 오류 발생: $e');
