@@ -7,9 +7,11 @@ import '../../services/page_service.dart';
 import '../../services/image_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
+import '../../services/dictionary_service.dart';
 import '../../utils/date_formatter.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_widget.dart';
+import '../../widgets/dictionary_popup.dart';
 import 'flashcard_screen.dart';
 
 // 텍스트 표시 모드
@@ -30,6 +32,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   final ImageService _imageService = ImageService();
   final TtsService _ttsService = TtsService();
   final FlashCardService _flashCardService = FlashCardService();
+  final DictionaryService _dictionaryService = DictionaryService();
 
   Note? _note;
   List<page_model.Page> _pages = [];
@@ -772,6 +775,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
                   if (value.selection.isValid &&
                       value.selection.start != value.selection.end) {
+                    // 사전 검색 버튼 추가 (중국어 텍스트인 경우에만)
+                    if (isOriginal) {
+                      buttonItems.add(
+                        ContextMenuButtonItem(
+                          label: '사전에서 검색',
+                          onPressed: () {
+                            final selectedText = value.text.substring(
+                              value.selection.start,
+                              value.selection.end,
+                            );
+                            _showDictionaryPopup(selectedText);
+                          },
+                        ),
+                      );
+                    }
+
                     buttonItems.add(
                       ContextMenuButtonItem(
                         label: '플래시카드에 추가',
@@ -800,7 +819,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       ),
                     );
                   }
-
                   return AdaptiveTextSelectionToolbar.buttonItems(
                     anchors: editableTextState.contextMenuAnchors,
                     buttonItems: buttonItems,
@@ -808,40 +826,78 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 },
               ),
             ),
+            if (isOriginal) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: _buildWordChips(text),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Future<void> _createFlashCard(String front, String translatedText) async {
-    if (_note == null || _note?.id == null) return;
+  // 단어 칩 위젯 생성
+  List<Widget> _buildWordChips(String text) {
+    final words = _dictionaryService.segmentChineseText(text);
+
+    return words.map((word) {
+      final entry = _dictionaryService.lookupWord(word);
+      return ActionChip(
+        label: Text(word),
+        backgroundColor:
+            entry != null ? Colors.blue.shade50 : Colors.grey.shade200,
+        onPressed: () => _showDictionaryPopup(word),
+      );
+    }).toList();
+  }
+
+  // 사전 팝업 표시
+  void _showDictionaryPopup(String word) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: DictionaryPopup(
+          word: word,
+          onClose: () => Navigator.of(context).pop(),
+          onAddToFlashcard: (word, pinyin, meaning) {
+            Navigator.of(context).pop();
+            _createFlashCard(word, meaning, pinyin: pinyin);
+          },
+        ),
+      ),
+    );
+  }
+
+  // 플래시카드 생성
+  Future<void> _createFlashCard(String front, String back,
+      {String? pinyin}) async {
+    if (_isCreatingFlashCard) return;
 
     setState(() {
       _isCreatingFlashCard = true;
     });
 
     try {
-      final back = translatedText;
-
       await _flashCardService.createFlashCard(
         front: front,
         back: back,
-        noteId: _note!.id,
+        noteId: widget.noteId,
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('플래시카드가 추가되었습니다.')));
-
-        _loadNote();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('플래시카드가 추가되었습니다')),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('플래시카드 추가 중 오류가 발생했습니다: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('플래시카드 추가 실패: $e')),
+        );
       }
     } finally {
       if (mounted) {

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
 import '../../models/flash_card.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../services/dictionary_service.dart';
+import '../../widgets/dictionary_popup.dart';
 
 class FlashCardScreen extends StatefulWidget {
   final String? noteId; // 특정 노트의 플래시카드만 표시하려면 noteId 전달
@@ -331,15 +336,24 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Text(
-            card.front,
-            style: const TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
+          GestureDetector(
+            onLongPress: () => _showDictionaryPopup(card.front),
+            child: Text(
+              card.front,
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            children: _buildWordChips(card.front),
+          ),
+          const SizedBox(height: 16),
           Text(
             card.pinyin,
             style: TextStyle(
@@ -360,6 +374,75 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
         ],
       ),
     );
+  }
+
+  // 단어 칩 위젯 생성
+  List<Widget> _buildWordChips(String text) {
+    final dictionaryService = DictionaryService();
+    final words = dictionaryService.segmentChineseText(text);
+
+    return words.map((word) {
+      final entry = dictionaryService.lookupWord(word);
+      return ActionChip(
+        label: Text(word),
+        backgroundColor:
+            entry != null ? Colors.blue.shade50 : Colors.grey.shade200,
+        onPressed: () => _showDictionaryPopup(word),
+      );
+    }).toList();
+  }
+
+  // 사전 팝업 표시
+  void _showDictionaryPopup(String word) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: DictionaryPopup(
+          word: word,
+          onClose: () => Navigator.of(context).pop(),
+          onAddToFlashcard: (word, pinyin, meaning) {
+            Navigator.of(context).pop();
+            _addToFlashcard(word, pinyin, meaning);
+          },
+        ),
+      ),
+    );
+  }
+
+  // 플래시카드 추가
+  void _addToFlashcard(String word, String pinyin, String meaning) async {
+    try {
+      setState(() => _isLoading = true);
+
+      final flashCardService = FlashCardService();
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+
+      if (userId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('로그인이 필요합니다')),
+        );
+        return;
+      }
+
+      await flashCardService.createFlashCard(
+        front: word,
+        back: meaning,
+        noteId: widget.noteId,
+      );
+
+      // 플래시카드 목록 새로고침
+      await _loadFlashCards();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('플래시카드가 추가되었습니다')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('플래시카드 추가 실패: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   Widget _buildCardBack(FlashCard card) {
