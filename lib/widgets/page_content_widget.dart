@@ -4,9 +4,8 @@ import 'dart:io';
 import '../models/page.dart' as page_model;
 import '../services/dictionary_service.dart';
 import '../services/flashcard_service.dart';
-
-// 텍스트 표시 모드
-enum TextDisplayMode { both, originalOnly, translationOnly }
+import '../utils/text_display_mode.dart';
+import 'text_section_widget.dart';
 
 class PageContentWidget extends StatefulWidget {
   final page_model.Page page;
@@ -108,10 +107,13 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           // 원본 텍스트 표시
           if (_textDisplayMode == TextDisplayMode.both ||
               _textDisplayMode == TextDisplayMode.originalOnly) ...[
-            _buildTextSection(
+            TextSectionWidget(
               title: '원문',
               text: widget.page.originalText,
               isOriginal: true,
+              onDictionaryLookup: _showDictionarySnackbar,
+              onCreateFlashCard: widget.onCreateFlashCard,
+              translatedText: widget.page.translatedText,
             ),
             const SizedBox(height: 16),
           ],
@@ -119,10 +121,13 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           // 번역 텍스트 표시
           if (_textDisplayMode == TextDisplayMode.both ||
               _textDisplayMode == TextDisplayMode.translationOnly) ...[
-            _buildTextSection(
+            TextSectionWidget(
               title: '번역',
               text: widget.page.translatedText,
               isOriginal: false,
+              onDictionaryLookup: _showDictionarySnackbar,
+              onCreateFlashCard: widget.onCreateFlashCard,
+              translatedText: widget.page.originalText,
             ),
           ],
         ],
@@ -174,102 +179,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildTextSection({
-    required String title,
-    required String text,
-    required bool isOriginal,
-  }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: SelectableText(
-                text,
-                style: const TextStyle(fontSize: 16, height: 1.5),
-                contextMenuBuilder: (context, editableTextState) {
-                  final TextEditingValue value =
-                      editableTextState.textEditingValue;
-
-                  // 기본 컨텍스트 메뉴 버튼 가져오기
-                  final List<ContextMenuButtonItem> buttonItems = [];
-
-                  // 복사 버튼 추가
-                  buttonItems.add(
-                    ContextMenuButtonItem(
-                      label: '복사',
-                      onPressed: () {
-                        final selectedText = value.text.substring(
-                          value.selection.start,
-                          value.selection.end,
-                        );
-                        Clipboard.setData(ClipboardData(text: selectedText));
-                      },
-                    ),
-                  );
-
-                  if (value.selection.isValid &&
-                      value.selection.start != value.selection.end) {
-                    // 사전 검색 버튼 추가 (중국어 텍스트인 경우에만)
-                    if (isOriginal) {
-                      buttonItems.add(
-                        ContextMenuButtonItem(
-                          label: '사전',
-                          onPressed: () {
-                            final selectedText = value.text.substring(
-                              value.selection.start,
-                              value.selection.end,
-                            );
-                            _showDictionarySnackbar(selectedText);
-                          },
-                        ),
-                      );
-                    }
-
-                    buttonItems.add(
-                      ContextMenuButtonItem(
-                        label: '플래시카드에 추가',
-                        onPressed: () {
-                          final selectedText = value.text.substring(
-                            value.selection.start,
-                            value.selection.end,
-                          );
-
-                          // 현재 페이지의 번역 텍스트 또는 원본 텍스트 가져오기
-                          String translatedText = isOriginal
-                              ? widget.page.translatedText
-                              : widget.page.originalText;
-
-                          widget.onCreateFlashCard(
-                              selectedText, translatedText);
-                        },
-                      ),
-                    );
-                  }
-                  return AdaptiveTextSelectionToolbar.buttonItems(
-                    anchors: editableTextState.contextMenuAnchors,
-                    buttonItems: buttonItems,
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
