@@ -61,6 +61,7 @@ dependencies:
   # TTS
   flutter_tts: ^4.2.2
   pinyin: ^3.3.0
+  shared_preferences: ^2.5.2
 
 dev_dependencies:
   flutter_test:

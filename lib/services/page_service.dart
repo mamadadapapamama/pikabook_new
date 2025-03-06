@@ -6,6 +6,7 @@ import '../models/page.dart' as page_model;
 import 'image_service.dart';
 import 'ocr_service.dart';
 import 'translation_service.dart';
+import 'page_cache_service.dart';
 
 class PageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -13,6 +14,7 @@ class PageService {
   final ImageService _imageService = ImageService();
   final OcrService _ocrService = OcrService();
   final TranslationService _translationService = TranslationService();
+  final PageCacheService _cacheService = PageCacheService();
 
   // 페이지 컬렉션 참조
   CollectionReference get _pagesCollection => _firestore.collection('pages');
@@ -64,7 +66,7 @@ class PageService {
       });
 
       // ID가 포함된 페이지 객체 반환
-      return page_model.Page(
+      final newPage = page_model.Page(
         id: pageRef.id,
         originalText: originalText,
         translatedText: translatedText,
@@ -73,6 +75,11 @@ class PageService {
         createdAt: now,
         updatedAt: now,
       );
+
+      // 캐시에 새 페이지 저장
+      _cacheService.cachePage(pageRef.id, newPage);
+
+      return newPage;
     } catch (e) {
       debugPrint('페이지 생성 중 오류 발생: $e');
       throw Exception('페이지를 생성할 수 없습니다: $e');
@@ -110,24 +117,51 @@ class PageService {
     }
   }
 
-  // 페이지 가져오기
+  // 페이지 가져오기 (캐시 활용)
   Future<page_model.Page?> getPageById(String pageId) async {
     try {
+      // 1. 캐시에서 페이지 확인
+      final cachedPage = _cacheService.getPage(pageId);
+      if (cachedPage != null) {
+        debugPrint('캐시에서 페이지 $pageId 로드됨');
+        return cachedPage;
+      }
+
+      // 2. Firestore에서 페이지 가져오기
+      debugPrint('Firestore에서 페이지 $pageId 로드 시작');
       final doc = await _pagesCollection.doc(pageId).get();
       if (!doc.exists) {
         return null;
       }
-      return page_model.Page.fromFirestore(doc);
+
+      // 3. 페이지 객체 생성 및 캐시에 저장
+      final page = page_model.Page.fromFirestore(doc);
+      if (page.id != null) {
+        _cacheService.cachePage(page.id!, page);
+      }
+
+      debugPrint('Firestore에서 페이지 $pageId 로드 완료 및 캐시에 저장됨');
+      return page;
     } catch (e) {
       debugPrint('페이지 조회 중 오류 발생: $e');
       throw Exception('페이지를 조회할 수 없습니다: $e');
     }
   }
 
-  // 노트의 모든 페이지 가져오기
+  // 노트의 모든 페이지 가져오기 (캐시 활용)
   Future<List<page_model.Page>> getPagesForNote(String noteId) async {
     try {
       debugPrint('노트 $noteId의 페이지 조회 시작');
+
+      // 1. 캐시에서 모든 페이지 확인
+      if (_cacheService.hasAllPagesForNote(noteId)) {
+        final cachedPages = _cacheService.getPagesForNote(noteId);
+        debugPrint('캐시에서 노트 $noteId의 페이지 ${cachedPages.length}개 로드됨');
+        return cachedPages;
+      }
+
+      // 2. Firestore에서 페이지 가져오기
+      debugPrint('Firestore에서 노트 $noteId의 페이지 로드 시작');
       final snapshot = await getPagesForNoteQuery(noteId).get();
       debugPrint('노트 $noteId의 페이지 쿼리 결과: ${snapshot.docs.length}개 문서');
 
@@ -138,7 +172,10 @@ class PageService {
       // 페이지 번호 순으로 정렬
       pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
 
-      debugPrint('노트 $noteId의 페이지 ${pages.length}개 로드 완료');
+      // 3. 캐시에 페이지 저장
+      _cacheService.cachePages(noteId, pages);
+
+      debugPrint('노트 $noteId의 페이지 ${pages.length}개 로드 완료 및 캐시에 저장됨');
       return pages;
     } catch (e) {
       debugPrint('노트의 페이지 목록 조회 중 오류 발생: $e');
@@ -203,6 +240,12 @@ class PageService {
 
       // Firestore 업데이트
       await _pagesCollection.doc(pageId).update(updates);
+
+      // 캐시에서 페이지 제거 (업데이트된 데이터로 다시 로드되도록)
+      _cacheService.removePage(pageId);
+
+      // 업데이트된 페이지 다시 로드하여 캐시 갱신
+      await getPageById(pageId);
     } catch (e) {
       debugPrint('페이지 업데이트 중 오류 발생: $e');
       throw Exception('페이지를 업데이트할 수 없습니다: $e');
@@ -253,6 +296,9 @@ class PageService {
 
       // 페이지 문서 삭제
       await _pagesCollection.doc(pageId).delete();
+
+      // 캐시에서 페이지 제거
+      _cacheService.removePage(pageId);
     } catch (e) {
       debugPrint('페이지 삭제 중 오류 발생: $e');
       throw Exception('페이지를 삭제할 수 없습니다: $e');
@@ -268,9 +314,22 @@ class PageService {
       for (final doc in snapshot.docs) {
         await deletePage(doc.id);
       }
+
+      // 노트의 모든 페이지를 캐시에서 제거
+      _cacheService.removePagesForNote(noteId);
     } catch (e) {
       debugPrint('노트의 모든 페이지 삭제 중 오류 발생: $e');
       throw Exception('페이지를 삭제할 수 없습니다: $e');
     }
+  }
+
+  // 캐시 정리 (오래된 항목 제거)
+  void clearOldCache() {
+    _cacheService.clearOldCache();
+  }
+
+  // 전체 캐시 초기화
+  void clearCache() {
+    _cacheService.clearCache();
   }
 }

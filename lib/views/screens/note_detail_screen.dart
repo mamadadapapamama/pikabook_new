@@ -49,40 +49,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
 
     try {
-      final note = await _noteService.getNoteById(widget.noteId);
+      // 노트와 페이지를 함께 로드 (캐싱 활용)
+      final result = await _noteService.getNoteWithPages(widget.noteId);
+      final note = result['note'] as Note;
+      final pages = result['pages'] as List<dynamic>;
 
       if (mounted) {
         setState(() {
           _note = note;
-          _isFavorite = note?.isFavorite ?? false;
-        });
-
-        // 페이지 로드
-        await _loadPages();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = '노트를 불러오는 중 오류가 발생했습니다: $e';
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadPages() async {
-    if (_note == null) return;
-
-    try {
-      // 노트에 연결된 페이지 로드
-      final pages = await _pageService.getPagesForNote(_note!.id!);
-
-      debugPrint('노트 ${_note!.id}의 페이지 ${pages.length}개 로드됨');
-
-      if (mounted) {
-        setState(() {
-          _pages = pages;
-          _imageFiles = List.filled(pages.length, null);
+          _isFavorite = note.isFavorite;
+          _pages = pages.cast<page_model.Page>();
+          _imageFiles = List.filled(_pages.length, null);
+          _currentPageIndex = _pages.isNotEmpty ? 0 : -1;
           _isLoading = false;
         });
 
@@ -92,7 +70,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = '페이지를 불러오는 중 오류가 발생했습니다: $e';
+          _error = '노트를 불러오는 중 오류가 발생했습니다: $e';
           _isLoading = false;
         });
       }

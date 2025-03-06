@@ -2,46 +2,64 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'theme/app_theme.dart';
 import 'views/screens/home_screen.dart';
+import 'services/initialization_service.dart';
+import 'views/screens/splash_screen.dart';
+import 'firebase_options.dart';
 
 class App extends StatefulWidget {
-  const App({Key? key}) : super(key: key);
+  final InitializationService initializationService;
+
+  const App({Key? key, required this.initializationService}) : super(key: key);
 
   @override
   State<App> createState() => _AppState();
 }
 
 class _AppState extends State<App> {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  bool _isInitialized = false;
+  bool _isFirebaseInitialized = false;
+  bool _isUserAuthenticated = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _initializeApp();
+    _checkInitializationStatus();
   }
 
-  Future<void> _initializeApp() async {
+  Future<void> _checkInitializationStatus() async {
     try {
-      // 현재 사용자가 없으면 익명 로그인 수행
-      if (_auth.currentUser == null) {
-        print('익명 인증 시작...');
-        final userCredential = await _auth.signInAnonymously();
-        print('익명 인증 성공: ${userCredential.user?.uid}');
-      } else {
-        print('기존 사용자 발견: ${_auth.currentUser?.uid}');
+      // Firebase 초기화 상태 확인
+      final firebaseInitialized =
+          await widget.initializationService.isFirebaseInitialized;
+
+      if (!firebaseInitialized) {
+        setState(() {
+          _error = widget.initializationService.firebaseError;
+        });
+        return;
       }
 
-      // 인증 후 다시 확인
-      if (_auth.currentUser == null) {
-        throw Exception('익명 인증 후에도 사용자가 null입니다.');
-      }
-    } catch (e) {
-      print('익명 인증 실패: $e');
-      _error = '인증 초기화 중 오류가 발생했습니다: $e';
-    } finally {
       setState(() {
-        _isInitialized = true;
+        _isFirebaseInitialized = true;
+      });
+
+      // 사용자 인증 상태 확인
+      final userAuthenticated =
+          await widget.initializationService.isUserAuthenticated;
+
+      if (!userAuthenticated) {
+        setState(() {
+          _error = widget.initializationService.authError;
+        });
+        return;
+      }
+
+      setState(() {
+        _isUserAuthenticated = true;
+      });
+    } catch (e) {
+      setState(() {
+        _error = '앱 초기화 중 오류가 발생했습니다: $e';
       });
     }
   }
@@ -51,14 +69,23 @@ class _AppState extends State<App> {
     return MaterialApp(
       title: 'Pikabook',
       theme: AppTheme.lightTheme,
-      home: _isInitialized
-          ? (_error != null ? _buildErrorScreen() : const HomeScreen())
-          : const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(),
-              ),
-            ),
+      home: _buildHomeScreen(),
     );
+  }
+
+  Widget _buildHomeScreen() {
+    // 오류가 있는 경우
+    if (_error != null) {
+      return _buildErrorScreen();
+    }
+
+    // 초기화 완료된 경우
+    if (_isFirebaseInitialized && _isUserAuthenticated) {
+      return const HomeScreen();
+    }
+
+    // 초기화 중인 경우
+    return const SplashScreen();
   }
 
   Widget _buildErrorScreen() {
@@ -75,9 +102,13 @@ class _AppState extends State<App> {
               onPressed: () {
                 setState(() {
                   _error = null;
-                  _isInitialized = false;
+                  _isFirebaseInitialized = false;
+                  _isUserAuthenticated = false;
                 });
-                _initializeApp();
+                widget.initializationService.retryInitialization(
+                  options: DefaultFirebaseOptions.currentPlatform,
+                );
+                _checkInitializationStatus();
               },
               child: const Text('다시 시도'),
             ),
