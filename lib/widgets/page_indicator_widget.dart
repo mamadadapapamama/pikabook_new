@@ -15,14 +15,67 @@ class PageIndicatorWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 50,
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      height: 60,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+      ),
       child: Column(
         children: [
           // 페이지 번호 표시
-          Text(
-            '${currentPageIndex + 1}/$totalPages 페이지',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '${currentPageIndex + 1}/$totalPages 페이지',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(width: 8),
+              // 이전/다음 페이지 버튼
+              if (totalPages > 1)
+                Row(
+                  children: [
+                    // 이전 페이지 버튼
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios, size: 16),
+                      onPressed: currentPageIndex > 0
+                          ? () => onPageChanged(currentPageIndex - 1)
+                          : null,
+                      color: currentPageIndex > 0 ? Colors.blue : Colors.grey,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 30,
+                        minHeight: 30,
+                      ),
+                    ),
+                    // 다음 페이지 버튼
+                    IconButton(
+                      icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onPressed: currentPageIndex < totalPages - 1
+                          ? () => onPageChanged(currentPageIndex + 1)
+                          : null,
+                      color: currentPageIndex < totalPages - 1
+                          ? Colors.blue
+                          : Colors.grey,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 30,
+                        minHeight: 30,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
           ),
           const SizedBox(height: 4),
           // 페이지 인디케이터
@@ -45,6 +98,15 @@ class PageIndicatorWidget extends StatelessWidget {
                               color: Colors.blue.shade700,
                               width: 2,
                             )
+                          : null,
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: Colors.blue.withOpacity(0.3),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ]
                           : null,
                     ),
                     child: Center(
