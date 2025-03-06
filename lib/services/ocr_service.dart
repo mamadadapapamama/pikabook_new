@@ -19,6 +19,34 @@ class OcrService {
   // 감지할 언어 설정 (MVP에서는 중국어만 지원)
   final String _targetLanguage = 'zh-CN'; // 중국어
 
+  // 핀인 성조 기호 (1-4성)
+  final List<String> _toneMarks = [
+    'ā',
+    'á',
+    'ǎ',
+    'à',
+    'ē',
+    'é',
+    'ě',
+    'è',
+    'ī',
+    'í',
+    'ǐ',
+    'ì',
+    'ō',
+    'ó',
+    'ǒ',
+    'ò',
+    'ū',
+    'ú',
+    'ǔ',
+    'ù',
+    'ǖ',
+    'ǘ',
+    'ǚ',
+    'ǜ'
+  ];
+
   // API 초기화
   Future<void> initialize() async {
     if (_visionApi != null) return;
@@ -110,7 +138,14 @@ class OcrService {
       final annotations = response.responses?[0];
       if (annotations?.textAnnotations != null &&
           annotations!.textAnnotations!.isNotEmpty) {
-        // 첫 번째 항목은 전체 텍스트이므로 건너뛰고, 개별 텍스트 블록을 처리
+        // 전체 텍스트 (첫 번째 항목)
+        final fullText = annotations.textAnnotations![0].description ?? '';
+        debugPrint('감지된 전체 텍스트: $fullText');
+
+        // 핀인 제거 및 필터링 처리
+        final processedText = _processExtractedText(fullText);
+
+        // 개별 텍스트 블록 처리 (첫 번째 항목은 전체 텍스트이므로 건너뜀)
         final textBlocks = annotations.textAnnotations!.skip(1).toList();
 
         // 필터링된 텍스트 블록을 저장할 리스트
@@ -128,16 +163,19 @@ class OcrService {
           }
         }
 
-        // 필터링된 텍스트 블록이 없으면 빈 문자열 반환
+        // 필터링된 텍스트 블록이 없으면 처리된 전체 텍스트 반환
         if (filteredBlocks.isEmpty) {
-          debugPrint('필터링 후 감지된 텍스트 블록이 없습니다.');
-          return '';
+          debugPrint('필터링 후 감지된 텍스트 블록이 없습니다. 처리된 전체 텍스트 반환');
+          return processedText;
         }
 
         // 필터링된 텍스트 블록을 원본 위치에 따라 정렬하고 결합
         final combinedText = _combineTextBlocks(filteredBlocks);
-        debugPrint('필터링 후 감지된 텍스트: $combinedText');
-        return combinedText;
+
+        // 최종 결과에서 핀인 제거
+        final finalText = _removePinyin(combinedText);
+        debugPrint('최종 처리된 텍스트: $finalText');
+        return finalText;
       }
 
       return '';
@@ -154,9 +192,151 @@ class OcrService {
     }
   }
 
+  // 추출된 전체 텍스트 처리 (핀인 제거 및 필터링)
+  String _processExtractedText(String text) {
+    // 줄 단위로 분리
+    final lines = text.split('\n');
+    final processedLines = <String>[];
+
+    for (final line in lines) {
+      // 핀인 패턴 확인 (알파벳과 성조 기호로만 구성된 줄)
+      if (_isPinyinLine(line)) {
+        debugPrint('핀인으로 판단되어 제거: $line');
+        continue;
+      }
+
+      // 중국어 문자가 포함된 줄만 유지
+      if (_containsChineseOrValidCompound(line)) {
+        // 줄 내에서 핀인 부분 제거
+        final cleanedLine = _removePinyin(line);
+        processedLines.add(cleanedLine);
+      }
+    }
+
+    return processedLines.join('\n');
+  }
+
+  // 핀인 줄인지 확인 (알파벳과 성조 기호로만 구성)
+  bool _isPinyinLine(String line) {
+    // 공백 제거
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) return false;
+
+    // 중국어 문자가 포함되어 있으면 핀인이 아님
+    if (RegExp(r'[\u4e00-\u9fff]').hasMatch(trimmed)) {
+      return false;
+    }
+
+    // 성조 기호가 포함되어 있는지 확인
+    bool hasToneMark = false;
+    for (final mark in _toneMarks) {
+      if (trimmed.contains(mark)) {
+        hasToneMark = true;
+        break;
+      }
+    }
+
+    // 알파벳과 성조 기호, 공백만 포함되어 있는지 확인
+    final nonPinyinChars = RegExp(r'[^a-zA-Z\s' + _toneMarks.join('') + ']');
+    final containsNonPinyinChars = nonPinyinChars.hasMatch(trimmed);
+
+    // 알파벳이 포함되어 있고, 성조 기호가 있거나 알파벳/공백만 있으면 핀인으로 간주
+    return RegExp(r'[a-zA-Z]').hasMatch(trimmed) &&
+        (hasToneMark || !containsNonPinyinChars);
+  }
+
+  // 텍스트에서 핀인 부분 제거
+  String _removePinyin(String text) {
+    // 줄 단위로 처리
+    final lines = text.split('\n');
+    final cleanedLines = <String>[];
+
+    for (final line in lines) {
+      // 핀인 줄이면 제거
+      if (_isPinyinLine(line)) {
+        continue;
+      }
+
+      // 단어 단위로 분리하여 핀인 단어 제거
+      final words = line.split(' ');
+      final cleanedWords = <String>[];
+
+      for (final word in words) {
+        // 핀인 단어가 아니면 유지
+        if (!_isPinyinWord(word)) {
+          cleanedWords.add(word);
+        }
+      }
+
+      cleanedLines.add(cleanedWords.join(' '));
+    }
+
+    return cleanedLines.join('\n');
+  }
+
+  // 단어가 핀인인지 확인
+  bool _isPinyinWord(String word) {
+    // 공백 제거
+    final trimmed = word.trim();
+    if (trimmed.isEmpty) return false;
+
+    // 중국어 문자가 포함되어 있으면 핀인이 아님
+    if (RegExp(r'[\u4e00-\u9fff]').hasMatch(trimmed)) {
+      return false;
+    }
+
+    // 성조 기호가 포함되어 있는지 확인
+    bool hasToneMark = false;
+    for (final mark in _toneMarks) {
+      if (trimmed.contains(mark)) {
+        hasToneMark = true;
+        break;
+      }
+    }
+
+    // 알파벳과 성조 기호만 포함되어 있는지 확인
+    final nonPinyinChars = RegExp(r'[^a-zA-Z' + _toneMarks.join('') + ']');
+    final containsNonPinyinChars = nonPinyinChars.hasMatch(trimmed);
+
+    // 알파벳이 포함되어 있고, 성조 기호가 있거나 알파벳만 있으면 핀인으로 간주
+    return RegExp(r'[a-zA-Z]').hasMatch(trimmed) &&
+        (hasToneMark || !containsNonPinyinChars);
+  }
+
+  // 중국어 문자 또는 유효한 복합문(영어+중국어, 숫자+중국어)이 포함되어 있는지 확인
+  bool _containsChineseOrValidCompound(String text) {
+    // 중국어 문자 포함 여부
+    final hasChineseChars = RegExp(r'[\u4e00-\u9fff]').hasMatch(text);
+
+    // 중국어가 포함되어 있으면 유효함
+    if (hasChineseChars) {
+      return true;
+    }
+
+    // 영어 문자 포함 여부
+    final hasEnglishChars = RegExp(r'[a-zA-Z]').hasMatch(text);
+
+    // 숫자 포함 여부
+    final hasDigits = RegExp(r'\d').hasMatch(text);
+
+    // 영어+숫자 조합인 경우 (예: "Chapter 1")
+    if (hasEnglishChars && hasDigits) {
+      return true;
+    }
+
+    // 그 외의 경우는 유효하지 않음
+    return false;
+  }
+
   // 텍스트 블록을 필터링하는 메서드
   bool _shouldKeepTextBlock(String text) {
-    // 1. 숫자만 있는 경우 제외
+    // 핀인으로 판단되면 제외
+    if (_isPinyinWord(text) || _isPinyinLine(text)) {
+      debugPrint('핀인으로 판단되어 제외: $text');
+      return false;
+    }
+
+    // 1. 숫자만 있는 경우 제외 (페이지 번호로 간주)
     if (RegExp(r'^\d+$').hasMatch(text)) {
       debugPrint('숫자만 있는 텍스트 제외: $text');
       return false;
@@ -276,6 +456,15 @@ class OcrService {
         if (responses.isNotEmpty &&
             responses[0]['textAnnotations'] != null &&
             (responses[0]['textAnnotations'] as List).isNotEmpty) {
+          // 전체 텍스트 (첫 번째 항목)
+          final fullText =
+              responses[0]['textAnnotations'][0]['description'] as String? ??
+                  '';
+          debugPrint('HTTP 요청: 감지된 전체 텍스트: $fullText');
+
+          // 핀인 제거 및 필터링 처리
+          final processedText = _processExtractedText(fullText);
+
           // 개별 텍스트 블록 처리 (첫 번째 항목은 전체 텍스트이므로 건너뜀)
           final textBlocks =
               (responses[0]['textAnnotations'] as List).skip(1).toList();
@@ -295,16 +484,19 @@ class OcrService {
             }
           }
 
-          // 필터링된 텍스트 블록이 없으면 빈 문자열 반환
+          // 필터링된 텍스트 블록이 없으면 처리된 전체 텍스트 반환
           if (filteredBlocks.isEmpty) {
-            debugPrint('HTTP 요청: 필터링 후 감지된 텍스트 블록이 없습니다.');
-            return '';
+            debugPrint('HTTP 요청: 필터링 후 감지된 텍스트 블록이 없습니다. 처리된 전체 텍스트 반환');
+            return processedText;
           }
 
           // 필터링된 텍스트 블록을 위치에 따라 정렬하고 결합
           final combinedText = _combineHttpTextBlocks(filteredBlocks);
-          debugPrint('HTTP 요청: 필터링 후 감지된 텍스트: $combinedText');
-          return combinedText;
+
+          // 최종 결과에서 핀인 제거
+          final finalText = _removePinyin(combinedText);
+          debugPrint('HTTP 요청: 최종 처리된 텍스트: $finalText');
+          return finalText;
         }
 
         return '';

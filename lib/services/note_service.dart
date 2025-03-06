@@ -189,8 +189,15 @@ class NoteService {
         throw Exception('사용자가 로그인되어 있지 않습니다.');
       }
 
+      // 제목이 비어있으면 자동 생성
+      String finalTitle = title;
+      if (finalTitle.isEmpty) {
+        finalTitle = await _generateNoteTitle();
+        debugPrint('자동 생성된 노트 제목: $finalTitle');
+      }
+
       // 원본 텍스트와 번역 텍스트 설정
-      final finalOriginalText = originalText ?? title;
+      final finalOriginalText = originalText ?? finalTitle;
       final finalTranslatedText = translatedText ?? content;
 
       // 노트 데이터 생성
@@ -253,18 +260,19 @@ class NoteService {
 
       // 노트 제목 설정 (제공되지 않은 경우 자동 생성)
       final noteTitle = title ?? await _generateNoteTitle();
+      debugPrint('노트 제목 설정: $noteTitle');
 
-      // 노트 생성
+      // 노트 생성 (제목과 추출된 텍스트를 분리)
       final note = await createNote(
         title: noteTitle,
-        originalText: extractedText,
-        translatedText: translatedText,
+        originalText: noteTitle, // 제목을 원본 텍스트로 설정
+        translatedText: translatedText.isEmpty ? '번역 텍스트 없음' : translatedText,
         imageUrl: imageUrl,
         tags: tags,
       );
 
       if (note?.id != null) {
-        // 첫 번째 페이지 생성
+        // 첫 번째 페이지 생성 (OCR로 추출된 텍스트를 페이지 내용으로 사용)
         await _pageService.createPage(
           noteId: note!.id!,
           originalText: extractedText,
