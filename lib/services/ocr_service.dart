@@ -373,39 +373,65 @@ class OcrService {
 
   // 텍스트 블록을 위치에 따라 정렬하고 결합하는 메서드
   String _combineTextBlocks(List<vision.EntityAnnotation> blocks) {
-    // 텍스트 블록을 위치(세로 방향)에 따라 정렬
-    blocks.sort((a, b) {
-      final aY = a.boundingPoly?.vertices?[0].y ?? 0;
-      final bY = b.boundingPoly?.vertices?[0].y ?? 0;
+    if (blocks.isEmpty) return '';
 
-      // Y 좌표가 같으면 X 좌표로 정렬 (왼쪽에서 오른쪽으로)
-      if ((aY - bY).abs() < 10) {
+    // 텍스트 블록을 Y 좌표에 따라 그룹화
+    final Map<int, List<vision.EntityAnnotation>> lineGroups = {};
+
+    // 각 블록의 Y 좌표 중앙값 계산
+    for (final block in blocks) {
+      if (block.boundingPoly == null || block.boundingPoly!.vertices == null)
+        continue;
+
+      // 바운딩 박스의 중앙 Y 좌표 계산
+      final vertices = block.boundingPoly!.vertices!;
+      if (vertices.length < 4) continue;
+
+      // 상단 Y 좌표 (왼쪽 상단, 오른쪽 상단 점의 평균)
+      final topY = ((vertices[0].y ?? 0) + (vertices[1].y ?? 0)) ~/ 2;
+
+      // 10픽셀 단위로 반올림하여 같은 줄로 그룹화
+      final lineKey = (topY ~/ 10) * 10;
+
+      if (!lineGroups.containsKey(lineKey)) {
+        lineGroups[lineKey] = [];
+      }
+      lineGroups[lineKey]!.add(block);
+    }
+
+    // 각 줄 내에서 X 좌표에 따라 정렬
+    for (final lineKey in lineGroups.keys) {
+      lineGroups[lineKey]!.sort((a, b) {
         final aX = a.boundingPoly?.vertices?[0].x ?? 0;
         final bX = b.boundingPoly?.vertices?[0].x ?? 0;
         return aX.compareTo(bX);
-      }
+      });
+    }
 
-      return aY.compareTo(bY);
-    });
+    // 줄 키를 기준으로 정렬 (위에서 아래로)
+    final sortedLineKeys = lineGroups.keys.toList()..sort();
 
-    // 정렬된 블록을 결합
+    // 정렬된 줄을 결합
     final buffer = StringBuffer();
-    int? lastY;
 
-    for (final block in blocks) {
-      final text = block.description ?? '';
-      final y = block.boundingPoly?.vertices?[0].y ?? 0;
+    for (int i = 0; i < sortedLineKeys.length; i++) {
+      final lineKey = sortedLineKeys[i];
+      final lineBlocks = lineGroups[lineKey]!;
 
-      // 새로운 줄인지 확인 (Y 좌표가 이전 블록과 충분히 다른 경우)
-      if (lastY != null && (y - lastY).abs() > 10) {
-        buffer.write('\n');
-      } else if (lastY != null) {
-        // 같은 줄의 다른 블록이면 공백 추가
-        buffer.write(' ');
+      // 현재 줄의 텍스트 블록 결합
+      final lineBuffer = StringBuffer();
+      for (int j = 0; j < lineBlocks.length; j++) {
+        final text = lineBlocks[j].description ?? '';
+
+        // 첫 번째 블록이 아니면 공백 추가
+        if (j > 0) lineBuffer.write(' ');
+
+        lineBuffer.write(text);
       }
 
-      buffer.write(text);
-      lastY = y;
+      // 줄 추가
+      if (i > 0) buffer.write('\n');
+      buffer.write(lineBuffer.toString());
     }
 
     return buffer.toString();
@@ -511,39 +537,64 @@ class OcrService {
 
   // HTTP 응답의 텍스트 블록을 위치에 따라 정렬하고 결합하는 메서드
   String _combineHttpTextBlocks(List<dynamic> blocks) {
-    // 텍스트 블록을 위치(세로 방향)에 따라 정렬
-    blocks.sort((a, b) {
-      final aY = a['boundingPoly']?['vertices']?[0]?['y'] ?? 0;
-      final bY = b['boundingPoly']?['vertices']?[0]?['y'] ?? 0;
+    if (blocks.isEmpty) return '';
 
-      // Y 좌표가 같으면 X 좌표로 정렬 (왼쪽에서 오른쪽으로)
-      if ((aY - bY).abs() < 10) {
-        final aX = a['boundingPoly']?['vertices']?[0]?['x'] ?? 0;
-        final bX = b['boundingPoly']?['vertices']?[0]?['x'] ?? 0;
-        return aX.compareTo(bX);
-      }
+    // 텍스트 블록을 Y 좌표에 따라 그룹화
+    final Map<int, List<dynamic>> lineGroups = {};
 
-      return aY.compareTo(bY);
-    });
-
-    // 정렬된 블록을 결합
-    final buffer = StringBuffer();
-    int? lastY;
-
+    // 각 블록의 Y 좌표 중앙값 계산
     for (final block in blocks) {
-      final text = block['description'] as String? ?? '';
-      final y = block['boundingPoly']?['vertices']?[0]?['y'] ?? 0;
+      if (block['boundingPoly'] == null ||
+          block['boundingPoly']['vertices'] == null) continue;
 
-      // 새로운 줄인지 확인 (Y 좌표가 이전 블록과 충분히 다른 경우)
-      if (lastY != null && (y - lastY).abs() > 10) {
-        buffer.write('\n');
-      } else if (lastY != null) {
-        // 같은 줄의 다른 블록이면 공백 추가
-        buffer.write(' ');
+      final vertices = block['boundingPoly']['vertices'];
+      if (vertices.length < 4) continue;
+
+      // 상단 Y 좌표 (왼쪽 상단, 오른쪽 상단 점의 평균)
+      final topY = ((vertices[0]['y'] ?? 0) + (vertices[1]['y'] ?? 0)) ~/ 2;
+
+      // 10픽셀 단위로 반올림하여 같은 줄로 그룹화
+      final lineKey = (topY ~/ 10) * 10;
+
+      if (!lineGroups.containsKey(lineKey)) {
+        lineGroups[lineKey] = [];
+      }
+      lineGroups[lineKey]!.add(block);
+    }
+
+    // 각 줄 내에서 X 좌표에 따라 정렬
+    for (final lineKey in lineGroups.keys) {
+      lineGroups[lineKey]!.sort((a, b) {
+        final aX = a['boundingPoly']['vertices'][0]['x'] ?? 0;
+        final bX = b['boundingPoly']['vertices'][0]['x'] ?? 0;
+        return aX.compareTo(bX);
+      });
+    }
+
+    // 줄 키를 기준으로 정렬 (위에서 아래로)
+    final sortedLineKeys = lineGroups.keys.toList()..sort();
+
+    // 정렬된 줄을 결합
+    final buffer = StringBuffer();
+
+    for (int i = 0; i < sortedLineKeys.length; i++) {
+      final lineKey = sortedLineKeys[i];
+      final lineBlocks = lineGroups[lineKey]!;
+
+      // 현재 줄의 텍스트 블록 결합
+      final lineBuffer = StringBuffer();
+      for (int j = 0; j < lineBlocks.length; j++) {
+        final text = lineBlocks[j]['description'] as String? ?? '';
+
+        // 첫 번째 블록이 아니면 공백 추가
+        if (j > 0) lineBuffer.write(' ');
+
+        lineBuffer.write(text);
       }
 
-      buffer.write(text);
-      lastY = y;
+      // 줄 추가
+      if (i > 0) buffer.write('\n');
+      buffer.write(lineBuffer.toString());
     }
 
     return buffer.toString();

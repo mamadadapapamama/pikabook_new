@@ -32,34 +32,22 @@ class TextSectionWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleLarge),
-                // 원문인 경우에만 TTS 버튼 표시
-                if (isOriginal)
-                  IconButton(
-                    icon: const Icon(Icons.volume_up),
-                    tooltip: '텍스트 읽기',
-                    onPressed: () async {
-                      // 중국어로 언어 설정
-                      await ttsService.setLanguage('zh-CN');
-                      // 텍스트 읽기
-                      await ttsService.speak(text);
-                    },
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(12),
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.grey[100],
                 borderRadius: BorderRadius.circular(8),
               ),
               child: SelectableText(
                 text,
-                style: const TextStyle(fontSize: 16, height: 1.5),
+                style: TextStyle(
+                  fontSize: isOriginal ? 18 : 16, // 원문은 더 큰 글자 크기
+                  height: 1.8, // 줄 간격 증가
+                  letterSpacing: isOriginal ? 0.5 : 0.2, // 글자 간격 조정
+                ),
                 contextMenuBuilder: (context, editableTextState) {
                   final TextEditingValue value =
                       editableTextState.textEditingValue;
