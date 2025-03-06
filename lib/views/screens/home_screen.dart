@@ -81,30 +81,12 @@ class HomeScreen extends StatelessWidget {
               );
             }
 
-            return NotificationListener<ScrollNotification>(
-              onNotification: (ScrollNotification scrollInfo) {
-                // 스크롤이 끝에 도달하면 추가 노트 로드
-                if (scrollInfo.metrics.pixels ==
-                        scrollInfo.metrics.maxScrollExtent &&
-                    viewModel.hasMoreNotes &&
-                    !viewModel.isLoadingMore) {
-                  viewModel.loadMoreNotes();
-                }
-                return false;
-              },
+            // RefreshIndicator로 감싸서 pull to refresh 기능 추가
+            return RefreshIndicator(
+              onRefresh: () => viewModel.refreshNotes(),
               child: ListView.builder(
-                itemCount:
-                    viewModel.notes.length + (viewModel.hasMoreNotes ? 1 : 0),
+                itemCount: viewModel.notes.length,
                 itemBuilder: (context, index) {
-                  // 마지막 아이템이고 더 로드할 노트가 있는 경우 로딩 인디케이터 표시
-                  if (index == viewModel.notes.length &&
-                      viewModel.hasMoreNotes) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16.0),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-
                   // 일반 노트 아이템
                   final note = viewModel.notes[index];
                   return NoteListItem(

@@ -5,6 +5,7 @@ import '../models/page.dart' as page_model;
 import '../services/dictionary_service.dart';
 import '../services/flashcard_service.dart';
 import '../utils/text_display_mode.dart';
+import '../views/screens/full_image_screen.dart';
 import 'text_section_widget.dart';
 
 class PageContentWidget extends StatefulWidget {
@@ -60,41 +61,71 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                         ),
                       ),
                     )
-                  : ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: widget.imageFile != null
-                          ? Image.file(
-                              widget.imageFile!,
-                              height: 200,
-                              width: double.infinity,
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  width: double.infinity,
-                                  height: 150,
-                                  color: Colors.grey[200],
-                                  child: const Center(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.image_not_supported,
-                                            size: 48, color: Colors.grey),
-                                        SizedBox(height: 8),
-                                        Text('이미지를 불러올 수 없습니다.'),
-                                      ],
+                  : GestureDetector(
+                      onTap: () => _openFullScreenImage(context),
+                      child: Hero(
+                        tag: 'image_${widget.page.id}',
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              widget.imageFile != null
+                                  ? Image.file(
+                                      widget.imageFile!,
+                                      height: 200,
+                                      width: double.infinity,
+                                      fit: BoxFit.contain,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                        return Container(
+                                          width: double.infinity,
+                                          height: 150,
+                                          color: Colors.grey[200],
+                                          child: const Center(
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.image_not_supported,
+                                                    size: 48,
+                                                    color: Colors.grey),
+                                                SizedBox(height: 8),
+                                                Text('이미지를 불러올 수 없습니다.'),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    )
+                                  : Container(
+                                      width: double.infinity,
+                                      height: 150,
+                                      color: Colors.grey[200],
+                                      child: const Center(
+                                        child: Text('이미지를 찾을 수 없습니다.'),
+                                      ),
                                     ),
+                              // 확대 아이콘 오버레이
+                              Positioned(
+                                right: 8,
+                                bottom: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.5),
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
-                                );
-                              },
-                            )
-                          : Container(
-                              width: double.infinity,
-                              height: 150,
-                              color: Colors.grey[200],
-                              child: const Center(
-                                child: Text('이미지를 찾을 수 없습니다.'),
+                                  child: const Icon(
+                                    Icons.zoom_in,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
             ),
             const SizedBox(height: 16),
@@ -131,6 +162,21 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  // 전체 화면 이미지 뷰어 열기
+  void _openFullScreenImage(BuildContext context) {
+    if (widget.imageFile == null && widget.page.imageUrl == null) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FullImageScreen(
+          imageFile: widget.imageFile,
+          imageUrl: widget.page.imageUrl,
+          title: '이미지 보기',
+        ),
       ),
     );
   }
