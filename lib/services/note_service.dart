@@ -300,8 +300,9 @@ class NoteService {
 
       // 첫 번째 이미지로 노트 생성
       final firstImageFile = imageFiles[0];
-      final generatedTitle =
-          title ?? 'Note ${DateTime.now().toString().substring(0, 16)}';
+
+      // 노트 제목 설정 (제공되지 않은 경우 자동 생성)
+      final generatedTitle = title ?? await _generateNoteTitle();
 
       // 첫 번째 이미지 처리 시작을 알림 (무시 옵션이 true일 때는 호출하지 않음)
       if (!silentProgress && progressCallback != null) {
@@ -432,10 +433,15 @@ class NoteService {
   // 자동 노트 제목 생성
   Future<String> _generateNoteTitle() async {
     try {
+      // 현재 사용자의 노트 수 가져오기
       final notes = await getNotes().first;
-      return '#${notes.length + 1} Note';
+      final noteNumber = notes.length + 1;
+      final title = '#$noteNumber Note';
+      debugPrint('자동 노트 제목 생성: $title (현재 노트 수: ${notes.length})');
+      return title;
     } catch (e) {
       debugPrint('자동 노트 제목 생성 중 오류 발생: $e');
+      // 오류 발생 시 기본값 사용
       return '#1 Note';
     }
   }
