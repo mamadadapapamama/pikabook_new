@@ -289,20 +289,23 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
       if (context.mounted && note != null && note.id != null) {
         print("노트 상세 화면으로 이동 시도");
 
-        // 노트 목록 새로고침
-        Provider.of<HomeViewModel>(context, listen: false).refreshNotes();
+        // Provider 사용 없이 바로 노트 상세 화면으로 이동
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => NoteDetailScreen(noteId: note.id!),
+          ),
+        );
 
-        // 약간의 지연 후 노트 상세 화면으로 이동 (UI 업데이트 시간 확보)
-        Future.delayed(Duration(milliseconds: 300), () {
-          if (context.mounted) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => NoteDetailScreen(noteId: note.id!),
-              ),
-            );
-            print("노트 상세 화면으로 이동 완료");
-          }
-        });
+        print("노트 상세 화면으로 이동 완료");
+
+        // 나중에 홈 화면으로 돌아왔을 때 노트 목록이 새로고침되도록 알림
+        // (이 부분은 선택 사항)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('노트가 생성되었습니다. 홈 화면으로 돌아가면 목록이 업데이트됩니다.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
       } else {
         print("노트 생성 실패 또는 ID 없음: ${note?.id}");
         if (context.mounted) {

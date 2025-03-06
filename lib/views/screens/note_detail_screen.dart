@@ -5,12 +5,10 @@ import '../../models/page.dart' as page_model;
 import '../../services/note_service.dart';
 import '../../services/page_service.dart';
 import '../../services/image_service.dart';
-import '../../services/tts_service.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/dictionary_service.dart';
 import '../../utils/date_formatter.dart';
 import '../../widgets/loading_indicator.dart';
-import '../../widgets/page_widget.dart';
 import 'flashcard_screen.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -31,7 +29,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   final NoteService _noteService = NoteService();
   final PageService _pageService = PageService();
   final ImageService _imageService = ImageService();
-  final TtsService _ttsService = TtsService();
   final FlashCardService _flashCardService = FlashCardService();
   final DictionaryService _dictionaryService = DictionaryService();
 
@@ -41,7 +38,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   bool _isLoading = true;
   String? _error;
   bool _isFavorite = false;
-  bool _isSpeaking = false;
   int _currentPageIndex = 0;
   bool _isCreatingFlashCard = false;
 
@@ -51,22 +47,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _initTts();
     _loadNote();
-  }
-
-  @override
-  void dispose() {
-    _ttsService.dispose();
-    super.dispose();
-  }
-
-  Future<void> _initTts() async {
-    try {
-      await _ttsService.init();
-    } catch (e) {
-      debugPrint('TTS 초기화 중 오류 발생: $e');
-    }
   }
 
   Future<void> _loadNote() async {
@@ -132,10 +113,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       if (page.imageUrl == null || page.imageUrl!.isEmpty) continue;
 
       try {
-        // 이미지 로딩 상태 표시
         if (mounted) {
           setState(() {
-            // 이미지 로딩 중임을 표시하는 플래그 추가
             _imageFiles[i] = null;
           });
         }
@@ -149,45 +128,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       } catch (e) {
         debugPrint('이미지 로드 중 오류 발생: $e');
       }
-    }
-  }
-
-  Future<void> _speakCurrentPage() async {
-    if (_pages.isEmpty || _currentPageIndex >= _pages.length) return;
-
-    final currentPage = _pages[_currentPageIndex];
-    final textToSpeak = currentPage.translatedText.isNotEmpty
-        ? currentPage.translatedText
-        : currentPage.originalText;
-
-    if (textToSpeak.isEmpty) return;
-
-    setState(() {
-      _isSpeaking = true;
-    });
-
-    try {
-      await _ttsService.speak(textToSpeak);
-    } catch (e) {
-      debugPrint('TTS 실행 중 오류 발생: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('음성 재생 중 오류가 발생했습니다: $e')));
-      }
-    }
-  }
-
-  Future<void> _stopSpeaking() async {
-    if (!_isSpeaking) return;
-
-    try {
-      await _ttsService.stop();
-      setState(() {
-        _isSpeaking = false;
-      });
-    } catch (e) {
-      debugPrint('TTS 중지 중 오류 발생: $e');
     }
   }
 
@@ -268,184 +208,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
   }
 
-  void _changePage(int index) {
-    if (index >= 0 && index < _pages.length) {
-      setState(() {
-        _currentPageIndex = index;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('노트 상세'),
-        actions: [
-          if (_note != null) ...[
-            // 플래시카드 카운터 및 버튼
-            if (_note!.flashcardCount > 0 || (_note!.flashCards.isNotEmpty))
-              InkWell(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => FlashCardScreen(noteId: _note!.id),
-                    ),
-                  );
-                },
-                child: Container(
-                  margin: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 4,
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[100],
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.school, size: 16, color: Colors.blue),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_note!.flashcardCount > 0 ? _note!.flashcardCount : _note!.flashCards.length}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            IconButton(
-              icon: Icon(
-                _isFavorite ? Icons.favorite : Icons.favorite_border,
-                color: _isFavorite ? Colors.red : null,
-              ),
-              onPressed: _toggleFavorite,
-              tooltip: '즐겨찾기',
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _confirmDelete,
-              tooltip: '삭제',
-            ),
-          ],
-        ],
-      ),
-      body: _isLoading
-          ? const LoadingIndicator(message: '노트 불러오는 중...')
-          : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: Colors.red,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(_error!, textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadNote,
-                        child: const Text('다시 시도'),
-                      ),
-                    ],
-                  ),
-                )
-              : _note == null
-                  ? const Center(child: Text('노트를 찾을 수 없습니다.'))
-                  : _buildNoteContent(),
-    );
-  }
-
-  Widget _buildNoteContent() {
-    return Column(
-      children: [
-        // 노트 헤더
-        _buildNoteHeader(),
-
-        // 페이지 인디케이터 (여러 페이지가 있는 경우)
-        if (_pages.length > 1) _buildPageIndicator(),
-
-        // 현재 페이지 내용
-        Expanded(
-          child: _pages.isEmpty
-              ? _buildLegacyNoteContent() // 기존 노트 형식 지원
-              : _buildPageContent(),
-        ),
-
-        // 하단 액션 버튼
-        _buildActionButtons(),
-      ],
-    );
-  }
-
-  Widget _buildNoteHeader() {
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.all(8.0),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: _showEditTitleDialog,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _note!.originalText,
-                            style: Theme.of(context).textTheme.titleLarge,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.edit, size: 16),
-                      ],
-                    ),
-                  ),
-                ),
-                Text(
-                  DateFormatter.formatDateTime(_note!.updatedAt),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (_note!.tags.isNotEmpty) ...[
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: _note!.tags
-                    .map(
-                      (tag) => Chip(
-                        label: Text(tag),
-                        backgroundColor: Colors.blue[50],
-                        labelStyle: const TextStyle(fontSize: 12),
-                        padding: EdgeInsets.zero,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showEditTitleDialog() {
     final titleController = TextEditingController(text: _note!.originalText);
 
@@ -522,6 +284,146 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
+  void _changePage(int index) {
+    if (index >= 0 && index < _pages.length) {
+      setState(() {
+        _currentPageIndex = index;
+      });
+    }
+  }
+
+  void _showMoreOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.edit),
+            title: const Text('제목 변경'),
+            onTap: () {
+              Navigator.pop(context);
+              _showEditTitleDialog();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline),
+            title: const Text('노트 삭제'),
+            onTap: () {
+              Navigator.pop(context);
+              _confirmDelete();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: _note != null
+            ? Text(_note!.originalText, overflow: TextOverflow.ellipsis)
+            : const Text('노트 상세'),
+        actions: [
+          if (_note != null) ...[
+            // 플래시카드 카운터 및 버튼
+            if (_note!.flashcardCount > 0 || (_note!.flashCards.isNotEmpty))
+              InkWell(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => FlashCardScreen(noteId: _note!.id),
+                    ),
+                  );
+                },
+                child: Container(
+                  margin: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 4,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[100],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.school, size: 16, color: Colors.blue),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_note!.flashcardCount > 0 ? _note!.flashcardCount : _note!.flashCards.length}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            IconButton(
+              icon: Icon(
+                _isFavorite ? Icons.favorite : Icons.favorite_border,
+                color: _isFavorite ? Colors.red : null,
+              ),
+              onPressed: _toggleFavorite,
+              tooltip: '즐겨찾기',
+            ),
+            IconButton(
+              icon: const Icon(Icons.more_vert),
+              onPressed: _showMoreOptions,
+              tooltip: '더 보기',
+            ),
+          ],
+        ],
+      ),
+      body: _isLoading
+          ? const LoadingIndicator(message: '노트 불러오는 중...')
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadNote,
+                        child: const Text('다시 시도'),
+                      ),
+                    ],
+                  ),
+                )
+              : _note == null
+                  ? const Center(child: Text('노트를 찾을 수 없습니다.'))
+                  : _buildNoteContent(),
+    );
+  }
+
+  Widget _buildNoteContent() {
+    return Column(
+      children: [
+        // 페이지 인디케이터 (여러 페이지가 있는 경우)
+        if (_pages.length > 1) _buildPageIndicator(),
+
+        // 현재 페이지 내용
+        Expanded(
+          child: _pages.isEmpty
+              ? _buildLegacyNoteContent() // 기존 노트 형식 지원
+              : _buildPageContent(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPageIndicator() {
     return Container(
       height: 50,
@@ -591,13 +493,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 이미지 표시
+          // 이미지 표시 (크기 축소)
           if (currentPage.imageUrl != null) ...[
             Center(
               child: isLoadingImage
                   ? Container(
                       width: double.infinity,
-                      height: 300,
+                      height: 200, // 이미지 크기 축소
                       decoration: BoxDecoration(
                         color: Colors.grey[200],
                         borderRadius: BorderRadius.circular(8),
@@ -618,11 +520,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                       child: imageFile != null
                           ? Image.file(
                               imageFile,
+                              height: 200, // 이미지 크기 축소
+                              width: double.infinity,
                               fit: BoxFit.contain,
                               errorBuilder: (context, error, stackTrace) {
                                 return Container(
                                   width: double.infinity,
-                                  height: 200,
+                                  height: 150,
                                   color: Colors.grey[200],
                                   child: const Center(
                                     child: Column(
@@ -640,7 +544,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                             )
                           : Container(
                               width: double.infinity,
-                              height: 200,
+                              height: 150,
                               color: Colors.grey[200],
                               child: const Center(
                                 child: Text('이미지를 찾을 수 없습니다.'),
@@ -738,26 +642,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleLarge),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        _isSpeaking ? Icons.stop : Icons.volume_up,
-                        size: 24,
-                        color: _isSpeaking ? Colors.red : Colors.blue,
-                      ),
-                      onPressed:
-                          _isSpeaking ? _stopSpeaking : _speakCurrentPage,
-                      tooltip: _isSpeaking ? '중지' : '소리 듣기',
-                    ),
-                  ],
-                ),
-              ],
-            ),
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
@@ -852,7 +737,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void _showDictionarySnackbar(String word) {
     final dictionaryService = DictionaryService();
     final entry = dictionaryService.lookupWord(word);
-    final ttsService = TtsService();
 
     if (entry == null) {
       // 사전에 없는 단어일 경우
@@ -895,13 +779,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                   style: const TextStyle(
                     fontStyle: FontStyle.italic,
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.volume_up,
-                      size: 16, color: Colors.white),
-                  onPressed: () => ttsService.speak(entry.word),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
                 ),
               ],
             ),
@@ -1024,40 +901,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             text: _note!.translatedText,
             isOriginal: false,
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        children: [
-          // 플래시카드 섹션
-          if (_note!.flashCards.isNotEmpty) ...[
-            _buildTextSection(
-              title: '플래시카드',
-              text: '${_note!.flashCards.length}개의 플래시카드가 있습니다.',
-              isOriginal: false,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => FlashCardScreen(noteId: _note!.id),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.school),
-              label: const Text('플래시카드 학습하기'),
-              style: ElevatedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-              ),
-            ),
-          ],
         ],
       ),
     );
