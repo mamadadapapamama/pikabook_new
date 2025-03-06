@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/note.dart';
 import '../models/page.dart';
 import 'page_service.dart';
@@ -17,6 +19,10 @@ class NoteService {
   final OcrService _ocrService = OcrService();
   final TranslationService _translationService = TranslationService();
 
+  // SharedPreferences 키
+  static const String _cachedNotesKey = 'cached_notes';
+  static const String _lastCacheTimeKey = 'last_cache_time';
+
   // 컬렉션 참조
   CollectionReference get _notesCollection => _firestore.collection('notes');
 
@@ -24,6 +30,122 @@ class NoteService {
   Query get _userNotesQuery => _notesCollection
       .where('userId', isEqualTo: _auth.currentUser?.uid)
       .orderBy('createdAt', descending: true);
+
+  // 페이징된 노트 목록 가져오기
+  Stream<List<Note>> getPagedNotes({int limit = 10}) {
+    try {
+      return _userNotesQuery.limit(limit).snapshots().map((snapshot) {
+        debugPrint('페이징된 노트 목록 수신: ${snapshot.docs.length}개');
+        return snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
+      });
+    } catch (e) {
+      debugPrint('페이징된 노트 목록을 가져오는 중 오류 발생: $e');
+      return Stream.value([]);
+    }
+  }
+
+  // 추가 노트 가져오기 (페이징)
+  Future<List<Note>> getMoreNotes({Note? lastNote, int limit = 10}) async {
+    try {
+      Query query = _userNotesQuery;
+
+      // 마지막 노트가 있으면 해당 노트 이후부터 쿼리
+      if (lastNote != null && lastNote.createdAt != null) {
+        query = query.startAfter([lastNote.createdAt]);
+      }
+
+      // 제한된 수의 노트 가져오기
+      final snapshot = await query.limit(limit).get();
+
+      return snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
+    } catch (e) {
+      debugPrint('추가 노트를 가져오는 중 오류 발생: $e');
+      return [];
+    }
+  }
+
+  // 노트 목록 가져오기 (기존 메서드)
+  Stream<List<Note>> getNotes() {
+    try {
+      return _userNotesQuery.snapshots().map((snapshot) {
+        return snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
+      });
+    } catch (e) {
+      // 오류 발생 시 빈 리스트 반환
+      debugPrint('노트 목록을 가져오는 중 오류가 발생했습니다: $e');
+      return Stream.value([]);
+    }
+  }
+
+  // 캐시된 노트 가져오기
+  Future<List<Note>> getCachedNotes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedData = prefs.getString(_cachedNotesKey);
+
+      if (cachedData == null || cachedData.isEmpty) {
+        return [];
+      }
+
+      final List<dynamic> decodedData = jsonDecode(cachedData);
+      return decodedData.map((item) => Note.fromJson(item)).toList();
+    } catch (e) {
+      debugPrint('캐시된 노트를 가져오는 중 오류 발생: $e');
+      return [];
+    }
+  }
+
+  // 노트 캐싱
+  Future<void> cacheNotes(List<Note> notes) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encodedData =
+          jsonEncode(notes.map((note) => note.toJson()).toList());
+      await prefs.setString(_cachedNotesKey, encodedData);
+      debugPrint('${notes.length}개 노트 캐싱 완료');
+    } catch (e) {
+      debugPrint('노트 캐싱 중 오류 발생: $e');
+    }
+  }
+
+  // 마지막 캐시 시간 저장
+  Future<void> saveLastCacheTime(DateTime time) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastCacheTimeKey, time.toIso8601String());
+    } catch (e) {
+      debugPrint('캐시 시간 저장 중 오류 발생: $e');
+    }
+  }
+
+  // 마지막 캐시 시간 가져오기
+  Future<DateTime?> getLastCacheTime() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final timeString = prefs.getString(_lastCacheTimeKey);
+
+      if (timeString == null || timeString.isEmpty) {
+        return null;
+      }
+
+      return DateTime.parse(timeString);
+    } catch (e) {
+      debugPrint('캐시 시간 가져오기 중 오류 발생: $e');
+      return null;
+    }
+  }
+
+  // 캐시 초기화
+  Future<void> clearCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_cachedNotesKey);
+      await prefs.remove(_lastCacheTimeKey);
+      debugPrint('노트 캐시 초기화 완료');
+    } catch (e) {
+      debugPrint('캐시 초기화 중 오류 발생: $e');
+    }
+  }
 
   // 노트 생성
   Future<Note?> createNote({
@@ -306,19 +428,6 @@ class NoteService {
     }
   }
 
-  // 노트 목록 가져오기
-  Stream<List<Note>> getNotes() {
-    try {
-      return _userNotesQuery.snapshots().map((snapshot) {
-        return snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
-      });
-    } catch (e) {
-      // 오류 발생 시 빈 리스트 반환
-      debugPrint('노트 목록을 가져오는 중 오류가 발생했습니다: $e');
-      return Stream.value([]);
-    }
-  }
-
   // 특정 노트 가져오기
   Future<Note?> getNoteById(String noteId) async {
     try {
@@ -330,6 +439,28 @@ class NoteService {
     } catch (e) {
       debugPrint('노트를 가져오는 중 오류가 발생했습니다: $e');
       throw Exception('노트를 가져오는 중 오류가 발생했습니다: $e');
+    }
+  }
+
+  // 노트와 페이지를 함께 가져오기 (캐싱 활용)
+  Future<Map<String, dynamic>> getNoteWithPages(String noteId) async {
+    try {
+      // 노트 정보 가져오기
+      final note = await getNoteById(noteId);
+      if (note == null) {
+        throw Exception('노트를 찾을 수 없습니다.');
+      }
+
+      // 페이지 정보 가져오기 (캐싱 활용)
+      final pages = await _pageService.getPagesForNote(noteId);
+
+      return {
+        'note': note,
+        'pages': pages,
+      };
+    } catch (e) {
+      debugPrint('노트와 페이지를 가져오는 중 오류가 발생했습니다: $e');
+      throw Exception('노트와 페이지를 가져오는 중 오류가 발생했습니다: $e');
     }
   }
 

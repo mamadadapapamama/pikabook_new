@@ -145,6 +145,53 @@ class Note {
     };
   }
 
+  // 로컬 캐싱을 위한 JSON 직렬화
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'originalText': originalText,
+      'translatedText': translatedText,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'imageUrl': imageUrl,
+      'tags': tags,
+      'isFavorite': isFavorite,
+      'flashCards': flashCards.map((card) => card.toJson()).toList(),
+      'pages': [], // 페이지는 별도로 캐싱하므로 빈 리스트로 저장
+      'extractedText': extractedText,
+      'flashcardCount': flashcardCount,
+      'reviewCount': reviewCount,
+      'userId': userId,
+    };
+  }
+
+  // JSON에서 Note 객체 생성
+  factory Note.fromJson(Map<String, dynamic> json) {
+    return Note(
+      id: json['id'],
+      originalText: json['originalText'] ?? '',
+      translatedText: json['translatedText'] ?? '',
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
+      imageUrl: json['imageUrl'],
+      tags: List<String>.from(json['tags'] ?? []),
+      isFavorite: json['isFavorite'] ?? false,
+      flashCards: (json['flashCards'] as List<dynamic>?)
+              ?.map((card) => FlashCard.fromJson(card))
+              .toList() ??
+          [],
+      pages: [], // 페이지는 별도로 로드
+      extractedText: json['extractedText'] ?? '',
+      flashcardCount: json['flashcardCount'] ?? 0,
+      reviewCount: json['reviewCount'] ?? 0,
+      userId: json['userId'],
+    );
+  }
+
   Note copyWith({
     String? id,
     String? originalText,
