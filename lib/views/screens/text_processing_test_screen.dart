@@ -50,6 +50,12 @@ class _TextProcessingTestScreenState extends State<TextProcessingTestScreen> {
                 ? '전문 서적 모드'
                 : '언어 학습 모드',
           ),
+          // 더미 데이터 버튼
+          IconButton(
+            icon: const Icon(Icons.data_array),
+            onPressed: _loadDummyData,
+            tooltip: '더미 데이터 로드',
+          ),
         ],
       ),
       body: _buildBody(),
@@ -251,14 +257,16 @@ class _TextProcessingTestScreenState extends State<TextProcessingTestScreen> {
   ProcessedText _createDummyData() {
     if (_mode == TextProcessingMode.professionalReading) {
       return ProcessedText(
-        fullOriginalText: '这是一个测试文本。这是中文的示例。',
-        fullTranslatedText: '이것은 테스트 텍스트입니다. 이것은 중국어 예시입니다.',
+        fullOriginalText: '这是一个测试文本。这是中文的示例。我喜欢学习中文，因为它很有趣。',
+        fullTranslatedText:
+            '이것은 테스트 텍스트입니다. 이것은 중국어 예시입니다. 나는 중국어 공부를 좋아합니다, 왜냐하면 재미있기 때문입니다.',
         showFullText: true,
       );
     } else {
       return ProcessedText(
-        fullOriginalText: '这是一个测试文本。这是中文的示例。',
-        fullTranslatedText: '이것은 테스트 텍스트입니다. 이것은 중국어 예시입니다.',
+        fullOriginalText: '这是一个测试文本。这是中文的示例。我喜欢学习中文，因为它很有趣。',
+        fullTranslatedText:
+            '이것은 테스트 텍스트입니다. 이것은 중국어 예시입니다. 나는 중국어 공부를 좋아합니다, 왜냐하면 재미있기 때문입니다.',
         segments: [
           TextSegment(
             originalText: '这是一个测试文本。',
@@ -270,9 +278,35 @@ class _TextProcessingTestScreenState extends State<TextProcessingTestScreen> {
             pinyin: 'zhè shì zhōng wén de shì lì.',
             translatedText: '이것은 중국어 예시입니다.',
           ),
+          TextSegment(
+            originalText: '我喜欢学习中文，',
+            pinyin: 'wǒ xǐ huān xué xí zhōng wén,',
+            translatedText: '나는 중국어 공부를 좋아합니다,',
+          ),
+          TextSegment(
+            originalText: '因为它很有趣。',
+            pinyin: 'yīn wèi tā hěn yǒu qù.',
+            translatedText: '왜냐하면 재미있기 때문입니다.',
+          ),
         ],
         showFullText: false,
       );
     }
+  }
+
+  /// 더미 데이터 로드
+  void _loadDummyData() {
+    setState(() {
+      _isProcessing = true;
+      _errorMessage = null;
+    });
+
+    // 잠시 지연 후 더미 데이터 로드 (로딩 효과를 위해)
+    Future.delayed(const Duration(seconds: 1), () {
+      setState(() {
+        _processedText = _createDummyData();
+        _isProcessing = false;
+      });
+    });
   }
 }

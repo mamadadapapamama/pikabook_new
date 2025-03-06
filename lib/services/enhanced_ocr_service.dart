@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:googleapis/vision/v1.dart' as vision;
@@ -217,6 +218,19 @@ class EnhancedOcrService {
         final translatedText =
             await _translationService.translateText(line, targetLanguage: 'ko');
 
+        // 핀인이 없는 경우 자동 생성 시도
+        if (currentPinyin == null) {
+          try {
+            currentPinyin =
+                await _languageDetectionService.generatePinyin(line);
+            debugPrint('핀인 자동 생성: $currentPinyin');
+          } catch (e) {
+            debugPrint('핀인 자동 생성 실패: $e');
+            // 핀인 생성 실패 시 기본 핀인 제공 (예시)
+            currentPinyin = _generateSimplePinyin(line);
+          }
+        }
+
         // 세그먼트 추가
         segments.add(TextSegment(
           originalText: line,
@@ -230,5 +244,12 @@ class EnhancedOcrService {
     }
 
     return segments;
+  }
+
+  /// 간단한 핀인 생성 (임시 구현)
+  String _generateSimplePinyin(String chineseText) {
+    // 실제 구현에서는 외부 API나 라이브러리를 사용해야 함
+    // MVP에서는 간단한 예시 핀인 반환
+    return '(pinyin for: ${chineseText.substring(0, min(10, chineseText.length))}...)';
   }
 }
