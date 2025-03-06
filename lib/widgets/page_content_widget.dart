@@ -4,6 +4,7 @@ import 'dart:io';
 import '../models/page.dart' as page_model;
 import '../services/dictionary_service.dart';
 import '../services/flashcard_service.dart';
+import '../services/tts_service.dart';
 import '../utils/text_display_mode.dart';
 import '../views/screens/full_image_screen.dart';
 import 'text_section_widget.dart';
@@ -31,6 +32,29 @@ class PageContentWidget extends StatefulWidget {
 class _PageContentWidgetState extends State<PageContentWidget> {
   TextDisplayMode _textDisplayMode = TextDisplayMode.both;
   final DictionaryService _dictionaryService = DictionaryService();
+  final TtsService _ttsService = TtsService();
+
+  @override
+  void initState() {
+    super.initState();
+    _ttsService.init();
+  }
+
+  @override
+  void dispose() {
+    // 화면을 나갈 때 TTS 중지
+    _ttsService.stop();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(PageContentWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 페이지가 변경되면 TTS 중지
+    if (oldWidget.page.id != widget.page.id) {
+      _ttsService.stop();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

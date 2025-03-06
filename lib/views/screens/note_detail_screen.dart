@@ -7,6 +7,7 @@ import '../../services/page_service.dart';
 import '../../services/image_service.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/dictionary_service.dart';
+import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_content_widget.dart';
 import '../../widgets/page_indicator_widget.dart';
@@ -26,6 +27,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   final PageService _pageService = PageService();
   final ImageService _imageService = ImageService();
   final FlashCardService _flashCardService = FlashCardService();
+  final TtsService _ttsService = TtsService();
 
   Note? _note;
   List<page_model.Page> _pages = [];
@@ -40,6 +42,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void initState() {
     super.initState();
     _loadNote();
+    _ttsService.init();
+  }
+
+  @override
+  void dispose() {
+    // 화면을 나갈 때 TTS 중지
+    _ttsService.stop();
+    super.dispose();
   }
 
   Future<void> _loadNote() async {
@@ -328,6 +338,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   void _changePage(int index) {
     if (index >= 0 && index < _pages.length) {
+      // 페이지 전환 시 TTS 중지
+      _ttsService.stop();
+
       setState(() {
         _currentPageIndex = index;
       });
