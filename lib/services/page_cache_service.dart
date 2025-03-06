@@ -44,7 +44,14 @@ class PageCacheService {
       }
     }
 
-    _notePageIds[noteId] = pageIds;
+    // 기존 페이지 ID 목록과 병합 (중복 제거)
+    final existingIds = _notePageIds[noteId] ?? [];
+    final mergedIds = {...existingIds, ...pageIds}.toList();
+
+    _notePageIds[noteId] = mergedIds;
+
+    debugPrint(
+        '노트 $noteId의 페이지 ${mergedIds.length}개가 캐시에 저장됨 (${pages.length}개 추가)');
   }
 
   /// 캐시에서 페이지 가져오기
@@ -69,6 +76,11 @@ class PageCacheService {
       }
     }
 
+    // 페이지 번호 순으로 정렬
+    pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+    debugPrint(
+        '캐시에서 노트 $noteId의 페이지 ID ${pageIds.length}개 중 ${pages.length}개 로드됨');
     return pages;
   }
 
@@ -80,9 +92,15 @@ class PageCacheService {
   /// 캐시에 노트의 모든 페이지가 있는지 확인
   bool hasAllPagesForNote(String noteId) {
     final pageIds = _notePageIds[noteId] ?? [];
-    if (pageIds.isEmpty) return false;
+    if (pageIds.isEmpty) {
+      debugPrint('노트 $noteId의 캐시된 페이지 ID가 없음');
+      return false;
+    }
 
-    return pageIds.every((pageId) => hasPage(pageId));
+    final allPagesExist = pageIds.every((pageId) => hasPage(pageId));
+    debugPrint(
+        '노트 $noteId의 모든 페이지(${pageIds.length}개) 캐시 존재 여부: $allPagesExist');
+    return allPagesExist;
   }
 
   /// 캐시에서 페이지 제거
