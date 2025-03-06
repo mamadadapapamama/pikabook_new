@@ -59,6 +59,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           _note = note;
           _isFavorite = note.isFavorite;
           _pages = pages.cast<page_model.Page>();
+
+          // 페이지 번호 순으로 정렬
+          _pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
           _imageFiles = List.filled(_pages.length, null);
           _currentPageIndex = _pages.isNotEmpty ? 0 : -1;
           _isLoading = false;
@@ -66,6 +70,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
         // 각 페이지의 이미지 로드
         _loadPageImages();
+
+        // 페이지 수 로그 출력
+        debugPrint('노트에 ${_pages.length}개의 페이지가 있습니다.');
       }
     } catch (e) {
       if (mounted) {
@@ -78,26 +85,51 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _loadPageImages() async {
+    // 현재 페이지 이미지 우선 로드
+    _loadPageImage(_currentPageIndex);
+
+    // 다음 페이지 이미지 미리 로드 (있는 경우)
+    if (_currentPageIndex + 1 < _pages.length) {
+      _loadPageImage(_currentPageIndex + 1);
+    }
+
+    // 이전 페이지 이미지 미리 로드 (있는 경우)
+    if (_currentPageIndex - 1 >= 0) {
+      _loadPageImage(_currentPageIndex - 1);
+    }
+
+    // 나머지 페이지 이미지 로드
     for (int i = 0; i < _pages.length; i++) {
-      final page = _pages[i];
-      if (page.imageUrl == null || page.imageUrl!.isEmpty) continue;
-
-      try {
-        if (mounted) {
-          setState(() {
-            _imageFiles[i] = null;
-          });
-        }
-
-        final imageFile = await _imageService.getImageFile(page.imageUrl);
-        if (mounted) {
-          setState(() {
-            _imageFiles[i] = imageFile;
-          });
-        }
-      } catch (e) {
-        debugPrint('이미지 로드 중 오류 발생: $e');
+      if (i != _currentPageIndex &&
+          i != _currentPageIndex + 1 &&
+          i != _currentPageIndex - 1) {
+        _loadPageImage(i);
       }
+    }
+  }
+
+  Future<void> _loadPageImage(int index) async {
+    if (index < 0 || index >= _pages.length) return;
+
+    final page = _pages[index];
+    if (page.imageUrl == null || page.imageUrl!.isEmpty) return;
+    if (_imageFiles[index] != null) return; // 이미 로드된 경우 스킵
+
+    try {
+      if (mounted) {
+        setState(() {
+          _imageFiles[index] = null;
+        });
+      }
+
+      final imageFile = await _imageService.getImageFile(page.imageUrl);
+      if (mounted) {
+        setState(() {
+          _imageFiles[index] = imageFile;
+        });
+      }
+    } catch (e) {
+      debugPrint('이미지 로드 중 오류 발생: $e');
     }
   }
 
@@ -259,6 +291,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       setState(() {
         _currentPageIndex = index;
       });
+      debugPrint('페이지 전환: $_currentPageIndex -> $index');
+
+      // 페이지 전환 시 해당 페이지의 이미지 로드 확인
+      _loadPageImage(index);
+
+      // 다음 페이지 이미지 미리 로드 (있는 경우)
+      if (index + 1 < _pages.length) {
+        _loadPageImage(index + 1);
+      }
+
+      // 이전 페이지 이미지 미리 로드 (있는 경우)
+      if (index - 1 >= 0) {
+        _loadPageImage(index - 1);
+      }
     }
   }
 
@@ -462,7 +508,32 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
         // 현재 페이지 내용
         Expanded(
-          child: _buildCurrentPageContent(),
+          child: GestureDetector(
+            // 좌우 스와이프로 페이지 전환
+            onHorizontalDragEnd: (details) {
+              if (details.primaryVelocity == null) return;
+
+              // 오른쪽에서 왼쪽으로 스와이프 (다음 페이지)
+              if (details.primaryVelocity! < 0 &&
+                  _currentPageIndex < _pages.length - 1) {
+                _changePage(_currentPageIndex + 1);
+              }
+              // 왼쪽에서 오른쪽으로 스와이프 (이전 페이지)
+              else if (details.primaryVelocity! > 0 && _currentPageIndex > 0) {
+                _changePage(_currentPageIndex - 1);
+              }
+            },
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (Widget child, Animation<double> animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: child,
+                );
+              },
+              child: _buildCurrentPageContent(),
+            ),
+          ),
         ),
       ],
     );
@@ -479,6 +550,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         imageFile == null && currentPage.imageUrl != null;
 
     return PageContentWidget(
+      key: ValueKey('page_content_${currentPage.id}_$_currentPageIndex'),
       page: currentPage,
       imageFile: imageFile,
       isLoadingImage: isLoadingImage,

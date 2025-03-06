@@ -120,9 +120,24 @@ class HomeViewModel extends ChangeNotifier {
 
   // 캐시 업데이트
   void _updateCache() {
-    _noteService.cacheNotes(_notes);
-    _lastRefreshTime = DateTime.now();
-    _noteService.saveLastCacheTime(_lastRefreshTime!);
+    try {
+      // 노트 목록이 비어있으면 캐싱하지 않음
+      if (_notes.isEmpty) return;
+
+      // 마지막 캐싱 시간이 없거나 5분이 지났을 때만 캐싱
+      if (_lastRefreshTime == null ||
+          DateTime.now().difference(_lastRefreshTime!) >
+              const Duration(minutes: 5)) {
+        _noteService.cacheNotes(_notes);
+        _lastRefreshTime = DateTime.now();
+        _noteService.saveLastCacheTime(_lastRefreshTime!);
+        debugPrint('노트 캐시 업데이트 완료: ${_notes.length}개');
+      } else {
+        debugPrint('최근에 캐싱되어 캐시 업데이트 건너뜀');
+      }
+    } catch (e) {
+      debugPrint('캐시 업데이트 중 오류 발생: $e');
+    }
   }
 
   // 노트 목록 새로고침

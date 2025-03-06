@@ -98,11 +98,23 @@ class NoteService {
   // 노트 캐싱
   Future<void> cacheNotes(List<Note> notes) async {
     try {
+      // Timestamp 오류를 방지하기 위해 각 노트를 JSON으로 변환
+      final List<Map<String, dynamic>> jsonNotes = [];
+
+      for (final note in notes) {
+        try {
+          // 각 노트를 개별적으로 JSON으로 변환하여 오류 발생 시 해당 노트만 건너뜀
+          final noteJson = note.toJson();
+          jsonNotes.add(noteJson);
+        } catch (e) {
+          debugPrint('노트 JSON 변환 중 오류 발생 (건너뜀): $e');
+        }
+      }
+
       final prefs = await SharedPreferences.getInstance();
-      final encodedData =
-          jsonEncode(notes.map((note) => note.toJson()).toList());
+      final encodedData = jsonEncode(jsonNotes);
       await prefs.setString(_cachedNotesKey, encodedData);
-      debugPrint('${notes.length}개 노트 캐싱 완료');
+      debugPrint('${jsonNotes.length}개 노트 캐싱 완료');
     } catch (e) {
       debugPrint('노트 캐싱 중 오류 발생: $e');
     }
