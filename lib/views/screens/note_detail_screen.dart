@@ -73,6 +73,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
         // 페이지 수 로그 출력
         debugPrint('노트에 ${_pages.length}개의 페이지가 있습니다.');
+        for (int i = 0; i < _pages.length; i++) {
+          final page = _pages[i];
+          debugPrint(
+              '페이지[$i]: id=${page.id}, pageNumber=${page.pageNumber}, 이미지=${page.imageUrl != null}');
+        }
+
+        // 페이지가 없거나 1개만 있는 경우 페이지 서비스에 다시 요청
+        if (_pages.length <= 1) {
+          debugPrint('페이지가 ${_pages.length}개만 로드되어 페이지 서비스에 다시 요청합니다.');
+          _reloadPages();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -81,6 +92,35 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  // 페이지 다시 로드
+  Future<void> _reloadPages() async {
+    try {
+      // 페이지 서비스에서 직접 페이지 목록 가져오기
+      final pages = await _pageService.getPagesForNote(widget.noteId);
+
+      if (mounted && pages.isNotEmpty) {
+        setState(() {
+          _pages = pages;
+          // 이미지 파일 배열 크기 조정
+          if (_imageFiles.length != _pages.length) {
+            _imageFiles = List.filled(_pages.length, null);
+          }
+          // 현재 페이지 인덱스 확인
+          if (_currentPageIndex >= _pages.length) {
+            _currentPageIndex = 0;
+          }
+        });
+
+        // 이미지 로드
+        _loadPageImages();
+
+        debugPrint('페이지 다시 로드 완료: ${_pages.length}개');
+      }
+    } catch (e) {
+      debugPrint('페이지 다시 로드 중 오류 발생: $e');
     }
   }
 

@@ -466,6 +466,20 @@ class NoteService {
       // 페이지 정보 가져오기 (캐싱 활용)
       final pages = await _pageService.getPagesForNote(noteId);
 
+      // 노트 문서에서 페이지 ID 목록 확인
+      if (pages.isEmpty || pages.length <= 1) {
+        debugPrint('페이지가 없거나 1개만 있어 노트 문서에서 페이지 ID 목록을 직접 확인합니다.');
+        final noteDoc = await _notesCollection.doc(noteId).get();
+        if (noteDoc.exists) {
+          final data = noteDoc.data() as Map<String, dynamic>?;
+          final pageIds = data?['pages'] as List<dynamic>?;
+
+          if (pageIds != null && pageIds.isNotEmpty) {
+            debugPrint('노트 문서에서 ${pageIds.length}개의 페이지 ID를 찾았습니다: $pageIds');
+          }
+        }
+      }
+
       return {
         'note': note,
         'pages': pages,
