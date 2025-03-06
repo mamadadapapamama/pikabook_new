@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'theme/app_theme.dart';
 import 'views/screens/home_screen.dart';
 import 'services/initialization_service.dart';
 import 'views/screens/splash_screen.dart';
+import 'views/screens/text_processing_test_screen.dart';
 import 'firebase_options.dart';
 
 class App extends StatefulWidget {
@@ -77,6 +79,11 @@ class _AppState extends State<App> {
     // 오류가 있는 경우
     if (_error != null) {
       return _buildErrorScreen();
+    }
+
+    // 디버그 모드에서 테스트 화면 표시
+    if (kDebugMode) {
+      return const TextProcessingTestScreen();
     }
 
     // 초기화 완료된 경우
