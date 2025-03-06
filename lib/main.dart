@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'services/note_service.dart';
+import 'services/image_service.dart';
+import 'services/page_cache_service.dart';
+import 'views/screens/splash_screen.dart';
+import 'views/screens/home_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'app.dart';
 import 'services/initialization_service.dart';
+import 'app.dart';
 
 void main() async {
   // Flutter 엔진 초기화 보장
