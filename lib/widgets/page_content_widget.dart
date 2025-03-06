@@ -153,12 +153,12 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                       ),
                     ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
           ],
 
           // 텍스트 표시 모드 토글 버튼
           _buildTextDisplayToggle(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
           // 원본 텍스트 표시
           if (_textDisplayMode == TextDisplayMode.both ||
@@ -171,7 +171,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               onCreateFlashCard: widget.onCreateFlashCard,
               translatedText: widget.page.translatedText,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
           ],
 
           // 번역 텍스트 표시
@@ -210,8 +210,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // 텍스트 표시 모드 토글 버튼
           ToggleButtons(
             isSelected: [
               _textDisplayMode == TextDisplayMode.both,
@@ -236,18 +237,30 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             borderRadius: BorderRadius.circular(8),
             children: const [
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+                padding: EdgeInsets.symmetric(horizontal: 12),
                 child: Text('모두 보기'),
               ),
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+                padding: EdgeInsets.symmetric(horizontal: 12),
                 child: Text('원문만'),
               ),
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
+                padding: EdgeInsets.symmetric(horizontal: 12),
                 child: Text('번역만'),
               ),
             ],
+          ),
+
+          // TTS 버튼 (원문 읽기)
+          IconButton(
+            icon: const Icon(Icons.volume_up),
+            tooltip: '원문 읽기',
+            onPressed: () async {
+              // 중국어로 언어 설정
+              await _ttsService.setLanguage('zh-CN');
+              // 원문 텍스트 읽기
+              await _ttsService.speak(widget.page.originalText);
+            },
           ),
         ],
       ),

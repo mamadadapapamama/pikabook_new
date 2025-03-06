@@ -60,5 +60,4 @@ class DefaultFirebaseOptions {
     storageBucket: 'mylingowith.firebasestorage.app',
     iosBundleId: 'com.example.pikabookNew',
   );
-
 }
