@@ -8,13 +8,8 @@ class HomeViewModel extends ChangeNotifier {
 
   List<Note> _notes = [];
   bool _isLoading = true;
-  bool _isLoadingMore = false;
   String? _error;
   StreamSubscription<List<Note>>? _notesSubscription;
-
-  // 페이징 관련 변수
-  static const int _pageSize = 10;
-  bool _hasMoreNotes = true;
 
   // 캐싱 관련 변수
   DateTime? _lastRefreshTime;
@@ -23,10 +18,8 @@ class HomeViewModel extends ChangeNotifier {
   // Getter
   List<Note> get notes => _notes;
   bool get isLoading => _isLoading;
-  bool get isLoadingMore => _isLoadingMore;
   String? get error => _error;
   bool get hasNotes => _notes.isNotEmpty;
-  bool get hasMoreNotes => _hasMoreNotes;
 
   // 생성자에서 노트 목록을 불러옵니다.
   HomeViewModel() {
@@ -39,7 +32,7 @@ class HomeViewModel extends ChangeNotifier {
     await _loadCachedNotes();
 
     // 서버에서 최신 데이터 로드
-    _loadInitialNotes();
+    _loadNotes();
   }
 
   // 캐시된 노트 로드
@@ -74,8 +67,8 @@ class HomeViewModel extends ChangeNotifier {
     return difference < _cacheValidDuration;
   }
 
-  // 초기 노트 목록 로드
-  void _loadInitialNotes() {
+  // 노트 목록 로드
+  void _loadNotes() {
     _error = null;
 
     // 이미 로드된 캐시가 유효하면 로딩 상태 변경 없이 진행
@@ -85,18 +78,17 @@ class HomeViewModel extends ChangeNotifier {
     }
 
     try {
-      debugPrint('초기 노트 목록 로드 시작 (최대 $_pageSize개)');
+      debugPrint('노트 목록 로드 시작');
 
       // 기존 구독이 있으면 취소
       _cancelSubscription();
 
-      // 페이징된 노트 목록 구독
-      _notesSubscription = _noteService.getPagedNotes(limit: _pageSize).listen(
+      // 모든 노트 목록 구독
+      _notesSubscription = _noteService.getNotes().listen(
         (notesList) {
-          debugPrint('초기 노트 목록 수신: ${notesList.length}개');
+          debugPrint('노트 목록 수신: ${notesList.length}개');
           _notes = notesList;
           _isLoading = false;
-          _hasMoreNotes = notesList.length >= _pageSize;
           _error = null;
           notifyListeners();
 
@@ -126,41 +118,6 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  // 추가 노트 로드 (페이징)
-  Future<void> loadMoreNotes() async {
-    if (_isLoadingMore || !_hasMoreNotes) return;
-
-    _isLoadingMore = true;
-    notifyListeners();
-
-    try {
-      debugPrint('추가 노트 로드 시작 (마지막 노트 이후)');
-      final lastNote = _notes.isNotEmpty ? _notes.last : null;
-      final moreNotes = await _noteService.getMoreNotes(
-        lastNote: lastNote,
-        limit: _pageSize,
-      );
-
-      debugPrint('추가 노트 로드 완료: ${moreNotes.length}개');
-
-      if (moreNotes.isNotEmpty) {
-        _notes.addAll(moreNotes);
-        _hasMoreNotes = moreNotes.length >= _pageSize;
-      } else {
-        _hasMoreNotes = false;
-      }
-    } catch (e) {
-      debugPrint('추가 노트 로드 오류: $e');
-      // 추가 로드 실패는 토스트 메시지 등으로 알리고 기존 데이터 유지
-    } finally {
-      _isLoadingMore = false;
-      notifyListeners();
-
-      // 캐시 업데이트
-      _updateCache();
-    }
-  }
-
   // 캐시 업데이트
   void _updateCache() {
     _noteService.cacheNotes(_notes);
@@ -172,8 +129,8 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> refreshNotes() async {
     _cancelSubscription();
     _notes = [];
-    _hasMoreNotes = true;
-    _loadInitialNotes();
+    _loadNotes();
+    return Future.value(); // RefreshIndicator를 위해 Future 반환
   }
 
   // 구독 취소
