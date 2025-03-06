@@ -262,18 +262,50 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   void _showEditTitleDialog() {
     final titleController = TextEditingController(text: _note!.originalText);
+    final isDefaultTitle = _note!.originalText.startsWith('#') &&
+        _note!.originalText.contains('Note');
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('노트 제목 변경'),
-        content: TextField(
-          controller: titleController,
-          decoration: const InputDecoration(
-            labelText: '제목',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isDefaultTitle)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8.0),
+                child: Text(
+                  '자동 생성된 제목을 더 의미 있는 제목으로 변경해보세요.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+            TextField(
+              controller: titleController,
+              decoration: InputDecoration(
+                labelText: '제목',
+                hintText: '노트 내용을 잘 나타내는 제목을 입력하세요',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () => titleController.clear(),
+                ),
+              ),
+              autofocus: true,
+              maxLength: 50, // 제목 길이 제한
+              textInputAction: TextInputAction.done,
+              onSubmitted: (value) {
+                if (value.trim().isNotEmpty) {
+                  _updateNoteTitle(value.trim());
+                  Navigator.of(context).pop();
+                }
+              },
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -298,40 +330,43 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   Future<void> _updateNoteTitle(String newTitle) async {
     if (_note == null || _note?.id == null) return;
 
+    // 즉시 UI 업데이트 (낙관적 업데이트)
+    final previousTitle = _note!.originalText;
     setState(() {
+      _note = _note!.copyWith(
+        originalText: newTitle,
+        updatedAt: DateTime.now(),
+      );
       _isLoading = true;
     });
 
     try {
-      // 노트 객체 복사 및 제목 업데이트
-      final updatedNote = _note!.copyWith(
-        originalText: newTitle,
-        updatedAt: DateTime.now(),
-      );
-
       // Firestore 업데이트
-      await _noteService.updateNote(_note!.id!, updatedNote);
+      await _noteService.updateNote(_note!.id!, _note!);
 
-      // 상태 업데이트
+      // 업데이트 완료
       if (mounted) {
         setState(() {
-          _note = updatedNote;
           _isLoading = false;
         });
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('노트 제목이 변경되었습니다.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('노트 제목이 변경되었습니다.')),
+        );
       }
     } catch (e) {
+      // 오류 발생 시 이전 제목으로 복원
       if (mounted) {
         setState(() {
+          _note = _note!.copyWith(
+            originalText: previousTitle,
+          );
           _isLoading = false;
         });
 
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('노트 제목 변경 중 오류가 발생했습니다: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('노트 제목 변경 중 오류가 발생했습니다: $e')),
+        );
       }
     }
   }
@@ -449,7 +484,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: _note != null
-            ? Text(_note!.originalText, overflow: TextOverflow.ellipsis)
+            ? GestureDetector(
+                onTap: _showEditTitleDialog,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _note!.originalText,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.edit, size: 16),
+                  ],
+                ),
+              )
             : const Text('노트 상세'),
         actions: [
           if (_note != null) ...[
