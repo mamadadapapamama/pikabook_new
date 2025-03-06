@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/tts_service.dart';
 
 class TextSectionWidget extends StatelessWidget {
   final String title;
@@ -21,6 +22,8 @@ class TextSectionWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final TtsService ttsService = TtsService();
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -29,7 +32,24 @@ class TextSectionWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleLarge),
+                // 원문인 경우에만 TTS 버튼 표시
+                if (isOriginal)
+                  IconButton(
+                    icon: const Icon(Icons.volume_up),
+                    tooltip: '텍스트 읽기',
+                    onPressed: () async {
+                      // 중국어로 언어 설정
+                      await ttsService.setLanguage('zh-CN');
+                      // 텍스트 읽기
+                      await ttsService.speak(text);
+                    },
+                  ),
+              ],
+            ),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
@@ -63,31 +83,41 @@ class TextSectionWidget extends StatelessWidget {
 
                   if (value.selection.isValid &&
                       value.selection.start != value.selection.end) {
-                    // 사전 검색 버튼 추가 (중국어 텍스트인 경우에만)
+                    // 선택된 텍스트가 있는 경우
+                    final selectedText = value.text.substring(
+                      value.selection.start,
+                      value.selection.end,
+                    );
+
+                    // 원문인 경우 TTS 및 사전 검색 버튼 추가
                     if (isOriginal) {
+                      // TTS 버튼 추가
+                      buttonItems.add(
+                        ContextMenuButtonItem(
+                          label: '읽기',
+                          onPressed: () async {
+                            await ttsService.setLanguage('zh-CN');
+                            await ttsService.speak(selectedText);
+                          },
+                        ),
+                      );
+
+                      // 사전 검색 버튼 추가
                       buttonItems.add(
                         ContextMenuButtonItem(
                           label: '사전',
                           onPressed: () {
-                            final selectedText = value.text.substring(
-                              value.selection.start,
-                              value.selection.end,
-                            );
                             onDictionaryLookup(selectedText);
                           },
                         ),
                       );
                     }
 
+                    // 플래시카드 추가 버튼
                     buttonItems.add(
                       ContextMenuButtonItem(
                         label: '플래시카드에 추가',
                         onPressed: () {
-                          final selectedText = value.text.substring(
-                            value.selection.start,
-                            value.selection.end,
-                          );
-
                           onCreateFlashCard(selectedText, translatedText);
                         },
                       ),
