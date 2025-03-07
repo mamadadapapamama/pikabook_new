@@ -72,200 +72,276 @@ class _NoteListItemState extends State<NoteListItem> {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       elevation: 2,
-      child: InkWell(
-        onTap: widget.onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 이미지 썸네일
-              if (_imageFile != null) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: SizedBox(
+      child: GestureDetector(
+        onLongPress: () => _showContextMenu(context),
+        child: InkWell(
+          onTap: widget.onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 이미지 썸네일
+                if (_imageFile != null) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: Image.file(
+                        _imageFile!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 80,
+                            height: 80,
+                            color: Colors.grey[200],
+                            child: const Icon(Icons.image_not_supported,
+                                color: Colors.grey),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                ] else if (_isLoadingImage) ...[
+                  Container(
                     width: 80,
                     height: 80,
-                    child: Image.file(
-                      _imageFile!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: 80,
-                          height: 80,
-                          color: Colors.grey[200],
-                          child: const Icon(Icons.image_not_supported,
-                              color: Colors.grey),
-                        );
-                      },
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-              ] else if (_isLoadingImage) ...[
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Center(
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-              ],
+                  const SizedBox(width: 16),
+                ],
 
-              // 노트 내용
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            widget.note.originalText,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                // 노트 내용
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              widget.note.originalText,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            widget.note.isFavorite
-                                ? Icons.favorite
-                                : Icons.favorite_border,
-                            color: widget.note.isFavorite
-                                ? Colors.red
-                                : Colors.grey,
+                          IconButton(
+                            icon: Icon(
+                              widget.note.isFavorite
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              color: widget.note.isFavorite
+                                  ? Colors.red
+                                  : Colors.grey,
+                            ),
+                            onPressed: () => widget
+                                .onFavoriteToggle(!widget.note.isFavorite),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
                           ),
-                          onPressed: () =>
-                              widget.onFavoriteToggle(!widget.note.isFavorite),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.note.translatedText,
-                      style: const TextStyle(fontSize: 14),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          DateFormatter.formatDate(widget.note.updatedAt),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.note.translatedText,
+                        style: const TextStyle(fontSize: 14),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            DateFormatter.formatDate(widget.note.updatedAt),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
                           ),
-                        ),
-                        Row(
-                          children: [
-                            // 플래시카드 카운터 표시
-                            if (widget.note.flashcardCount > 0 ||
-                                widget.note.flashCards.isNotEmpty) ...[
-                              InkWell(
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (context) => FlashCardScreen(
-                                          noteId: widget.note.id),
+                          Row(
+                            children: [
+                              // 플래시카드 카운터 표시
+                              if (widget.note.flashcardCount > 0 ||
+                                  widget.note.flashCards.isNotEmpty) ...[
+                                InkWell(
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (context) => FlashCardScreen(
+                                            noteId: widget.note.id),
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue[100],
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
-                                  );
-                                },
-                                child: Container(
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.school,
+                                          size: 14,
+                                          color: Colors.blue,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${widget.note.flashcardCount > 0 ? widget.note.flashcardCount : widget.note.flashCards.length}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              // 페이지 수 표시
+                              if (widget.note.pages.isNotEmpty) ...[
+                                Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue[100],
+                                    color: Colors.green[100],
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       const Icon(
-                                        Icons.school,
+                                        Icons.description,
                                         size: 14,
-                                        color: Colors.blue,
+                                        color: Colors.green,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        '${widget.note.flashcardCount > 0 ? widget.note.flashcardCount : widget.note.flashCards.length}',
+                                        '${widget.note.pages.length}',
                                         style: const TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.blue,
+                                          color: Colors.green,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
+                                const SizedBox(width: 8),
+                              ],
+                              IconButton(
+                                icon:
+                                    const Icon(Icons.delete_outline, size: 20),
+                                onPressed: () => _confirmDelete(context),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
                               ),
-                              const SizedBox(width: 8),
                             ],
-                            // 페이지 수 표시
-                            if (widget.note.pages.isNotEmpty) ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.green[100],
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.description,
-                                      size: 14,
-                                      color: Colors.green,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${widget.note.pages.length}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 20),
-                              onPressed: () => _confirmDelete(context),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  void _showContextMenu(BuildContext context) {
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final position = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy + size.height,
+        position.dx + size.width,
+        position.dy,
+      ),
+      items: [
+        PopupMenuItem(
+          child: Row(
+            children: const [
+              Icon(Icons.school, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('플래시카드'),
+            ],
+          ),
+          onTap: () {
+            // 메뉴가 닫힌 후 플래시카드 화면으로 이동하기 위해 지연 실행
+            Future.delayed(Duration.zero, () {
+              if (context.mounted) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        FlashCardScreen(noteId: widget.note.id),
+                  ),
+                );
+              }
+            });
+          },
+        ),
+        PopupMenuItem(
+          child: Row(
+            children: [
+              Icon(
+                widget.note.isFavorite ? Icons.favorite : Icons.favorite_border,
+                color: widget.note.isFavorite ? Colors.red : Colors.grey,
+              ),
+              const SizedBox(width: 8),
+              Text(widget.note.isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'),
+            ],
+          ),
+          onTap: () {
+            widget.onFavoriteToggle(!widget.note.isFavorite);
+          },
+        ),
+        PopupMenuItem(
+          child: Row(
+            children: const [
+              Icon(Icons.delete_outline, color: Colors.red),
+              SizedBox(width: 8),
+              Text('삭제'),
+            ],
+          ),
+          onTap: () {
+            // 메뉴가 닫힌 후 삭제 확인 대화상자를 표시하기 위해 지연 실행
+            Future.delayed(Duration.zero, () {
+              if (context.mounted) {
+                _confirmDelete(context);
+              }
+            });
+          },
+        ),
+      ],
     );
   }
 

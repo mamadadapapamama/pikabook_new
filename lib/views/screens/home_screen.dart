@@ -287,6 +287,7 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
       // 여러 이미지로 노트 생성 (진행 상황 업데이트 무시)
       note = await _noteService.createNoteWithMultipleImages(
         imageFiles: images,
+        title: null, // 자동 타이틀 생성을 위해 null 전달
         silentProgress: true, // 진행 상황 업데이트 무시
         progressCallback: null, // 콜백 없음
       );
