@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:pinyin/pinyin.dart';
 
 /// 언어 감지 및 처리를 위한 서비스
 class LanguageDetectionService {
@@ -64,10 +65,39 @@ class LanguageDetectionService {
     return lines.where((line) => isPinyinLine(line)).toList();
   }
 
-  /// 중국어 텍스트에 대한 핀인 생성 (외부 API 호출 필요)
+  /// 중국어 텍스트에 대한 핀인 생성 (pinyin 패키지 사용)
   Future<String> generatePinyin(String chineseText) async {
-    // TODO: 외부 핀인 생성 API 연동
-    // MVP에서는 간단한 구현으로 대체
-    return '핀인 생성 예정 (API 연동 필요)';
+    try {
+      // 문장 내 각 한자에 대한 핀인 생성
+      final List<String> pinyinWords = [];
+
+      // 문장을 한자 단위로 처리
+      for (int i = 0; i < chineseText.length; i++) {
+        final char = chineseText[i];
+
+        // 중국어 한자인 경우 핀인 생성
+        if (containsChinese(char)) {
+          // pinyin 패키지 사용 - 성조 표시가 있는 형식으로 변환
+          final pinyin =
+              PinyinHelper.getPinyin(char, format: PinyinFormat.WITH_TONE_MARK);
+          pinyinWords.add(pinyin);
+        }
+        // 구두점이나 기타 문자는 그대로 유지
+        else {
+          // 공백 추가 (가독성을 위해)
+          if (char == '，' || char == '。' || char == '！' || char == '？') {
+            pinyinWords.add(char + ' ');
+          } else {
+            pinyinWords.add(char);
+          }
+        }
+      }
+
+      // 핀인 단어들을 공백으로 연결
+      return pinyinWords.join(' ').replaceAll('  ', ' ').trim();
+    } catch (e) {
+      debugPrint('핀인 생성 중 오류 발생: $e');
+      throw Exception('핀인을 생성할 수 없습니다: $e');
+    }
   }
 }

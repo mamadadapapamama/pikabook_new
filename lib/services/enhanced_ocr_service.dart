@@ -7,6 +7,7 @@ import 'package:googleapis/vision/v1.dart' as vision;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:pinyin/pinyin.dart';
 import '../models/text_processing_mode.dart';
 import '../models/processed_text.dart';
 import '../models/text_segment.dart';
@@ -246,10 +247,15 @@ class EnhancedOcrService {
     return segments;
   }
 
-  /// 간단한 핀인 생성 (임시 구현)
+  /// 간단한 핀인 생성 (pinyin 패키지 사용)
   String _generateSimplePinyin(String chineseText) {
-    // 실제 구현에서는 외부 API나 라이브러리를 사용해야 함
-    // MVP에서는 간단한 예시 핀인 반환
-    return '(pinyin for: ${chineseText.substring(0, min(10, chineseText.length))}...)';
+    try {
+      // 문장 전체에 대한 핀인 생성
+      return PinyinHelper.getPinyin(chineseText,
+          format: PinyinFormat.WITH_TONE_MARK);
+    } catch (e) {
+      debugPrint('간단한 핀인 생성 중 오류 발생: $e');
+      return '(pinyin for: ${chineseText.substring(0, min(10, chineseText.length))}...)';
+    }
   }
 }
