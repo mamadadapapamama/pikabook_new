@@ -16,6 +16,7 @@ import '../../widgets/page_content_widget.dart';
 import '../../widgets/page_indicator_widget.dart';
 import 'flashcard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async'; // Timer 클래스를 사용하기 위한 import 추가
 
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;
@@ -52,6 +53,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   // 텍스트 처리 모드
   TextProcessingMode _textProcessingMode = TextProcessingMode.languageLearning;
 
+  Timer? _backgroundCheckTimer; // 타이머 변수 추가
+
   @override
   void initState() {
     super.initState();
@@ -65,6 +68,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   @override
   void dispose() {
+    // 타이머 정리
+    _backgroundCheckTimer?.cancel();
     // 화면을 나갈 때 TTS 중지
     _ttsService.stop();
     super.dispose();
@@ -159,9 +164,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // 백그라운드 처리 완료 확인을 위한 타이머 설정
   void _setupBackgroundProcessingCheck() {
-    // 5초마다 백그라운드 처리 상태 확인
-    Future.delayed(Duration(seconds: 5), () async {
-      if (!mounted) return;
+    // 기존 타이머가 있으면 취소
+    _backgroundCheckTimer?.cancel();
+
+    // 타이머 생성 전 로그 출력
+    debugPrint('백그라운드 처리 확인 타이머 설정: ${widget.noteId}');
+
+    // 5초마다 백그라운드 처리 상태 확인하는 주기적 타이머 설정
+    _backgroundCheckTimer = Timer.periodic(Duration(seconds: 5), (timer) async {
+      if (!mounted) {
+        debugPrint('화면이 더 이상 마운트되지 않음 - 타이머 취소');
+        timer.cancel();
+        return;
+      }
 
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -190,14 +205,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
             );
           }
-        } else {
-          // 아직 처리 중인 경우 타이머 재설정
-          _setupBackgroundProcessingCheck();
+
+          // 업데이트가 완료되었으므로 타이머 취소
+          debugPrint('백그라운드 처리 완료 - 타이머 취소');
+          timer.cancel();
         }
       } catch (e) {
         debugPrint('백그라운드 처리 상태 확인 중 오류 발생: $e');
-        // 오류 발생 시에도 타이머 재설정
-        _setupBackgroundProcessingCheck();
       }
     });
   }

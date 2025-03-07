@@ -30,7 +30,11 @@ class GoogleCloudService {
 
   /// 텍스트 번역
   /// 중국어 텍스트를 한국어 또는 영어로 번역합니다.
-  Future<String> translateText(String text, {String? targetLanguage}) async {
+  Future<String> translateText({
+    required String text,
+    String? sourceLanguage,
+    String? targetLanguage,
+  }) async {
     try {
       if (text.isEmpty) {
         debugPrint('GoogleCloudService: 번역할 텍스트가 비어 있습니다.');
@@ -39,7 +43,7 @@ class GoogleCloudService {
 
       // MVP에서는 타겟 언어를 한국어 또는 영어로만 제한
       final target = (targetLanguage == 'ko' || targetLanguage == 'en')
-          ? targetLanguage!
+          ? targetLanguage
           : 'ko'; // 기본값: 한국어
 
       debugPrint(
@@ -53,6 +57,7 @@ class GoogleCloudService {
 
       final result = await _translationService.translateText(
         text,
+        sourceLanguage: sourceLanguage ?? 'auto',
         targetLanguage: target,
       );
 
@@ -70,7 +75,7 @@ class GoogleCloudService {
     try {
       // MVP에서는 타겟 언어를 한국어 또는 영어로만 제한
       final target = (targetLanguage == 'ko' || targetLanguage == 'en')
-          ? targetLanguage!
+          ? targetLanguage
           : 'ko'; // 기본값: 한국어
 
       // 텍스트를 문단 단위로 분할
