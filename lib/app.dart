@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'theme/app_theme.dart';
 import 'views/screens/home_screen.dart';
 import 'services/initialization_service.dart';
+import 'services/user_preferences_service.dart';
 import 'views/screens/splash_screen.dart';
+import 'views/screens/onboarding_screen.dart';
 import 'views/screens/text_processing_test_screen.dart';
 import 'firebase_options.dart';
 
@@ -20,12 +22,28 @@ class App extends StatefulWidget {
 class _AppState extends State<App> {
   bool _isFirebaseInitialized = false;
   bool _isUserAuthenticated = false;
+  bool _isOnboardingCompleted = false;
   String? _error;
+  final UserPreferencesService _preferencesService = UserPreferencesService();
 
   @override
   void initState() {
     super.initState();
     _checkInitializationStatus();
+    _checkOnboardingStatus();
+  }
+
+  Future<void> _checkOnboardingStatus() async {
+    try {
+      final isCompleted = await _preferencesService.isOnboardingCompleted();
+      if (mounted) {
+        setState(() {
+          _isOnboardingCompleted = isCompleted;
+        });
+      }
+    } catch (e) {
+      debugPrint('온보딩 상태 확인 중 오류 발생: $e');
+    }
   }
 
   Future<void> _checkInitializationStatus() async {
@@ -83,12 +101,18 @@ class _AppState extends State<App> {
 
     // 디버그 모드에서 테스트 화면 표시
     if (kDebugMode) {
-      return const TextProcessingTestScreen();
+      // 온보딩 화면 테스트를 위해 주석 해제
+      // return const OnboardingScreen();
     }
 
     // 초기화 완료된 경우
     if (_isFirebaseInitialized && _isUserAuthenticated) {
-      return const HomeScreen();
+      // 온보딩 완료 여부에 따라 화면 결정
+      if (_isOnboardingCompleted) {
+        return const HomeScreen();
+      } else {
+        return const OnboardingScreen();
+      }
     }
 
     // 초기화 중인 경우

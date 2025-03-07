@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 import '../models/page.dart' as page_model;
+import '../models/processed_text.dart';
+import '../models/text_processing_mode.dart';
 import '../services/dictionary_service.dart';
-import '../services/flashcard_service.dart';
+import '../services/flashcard_service.dart' hide debugPrint;
 import '../services/tts_service.dart';
+import '../services/enhanced_ocr_service.dart';
 import '../utils/text_display_mode.dart';
 import '../views/screens/full_image_screen.dart';
 import 'text_section_widget.dart';
+import 'processed_text_widget.dart';
 
 class PageContentWidget extends StatefulWidget {
   final page_model.Page page;
@@ -15,6 +19,7 @@ class PageContentWidget extends StatefulWidget {
   final bool isLoadingImage;
   final String noteId;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
+  final TextProcessingMode textProcessingMode;
 
   const PageContentWidget({
     Key? key,
@@ -23,6 +28,7 @@ class PageContentWidget extends StatefulWidget {
     required this.isLoadingImage,
     required this.noteId,
     required this.onCreateFlashCard,
+    this.textProcessingMode = TextProcessingMode.languageLearning,
   }) : super(key: key);
 
   @override
@@ -33,18 +39,16 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   TextDisplayMode _textDisplayMode = TextDisplayMode.both;
   final DictionaryService _dictionaryService = DictionaryService();
   final TtsService _ttsService = TtsService();
+  final EnhancedOcrService _ocrService = EnhancedOcrService();
+
+  ProcessedText? _processedText;
+  bool _isProcessingText = false;
 
   @override
   void initState() {
     super.initState();
     _ttsService.init();
-  }
-
-  @override
-  void dispose() {
-    // 화면을 나갈 때 TTS 중지
-    _ttsService.stop();
-    super.dispose();
+    _processPageText();
   }
 
   @override
@@ -53,7 +57,70 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     // 페이지가 변경되면 TTS 중지
     if (oldWidget.page.id != widget.page.id) {
       _ttsService.stop();
+      _processPageText();
     }
+
+    // 텍스트 처리 모드가 변경되면 다시 처리
+    if (oldWidget.textProcessingMode != widget.textProcessingMode) {
+      _processPageText();
+    }
+  }
+
+  // 페이지 텍스트 처리
+  Future<void> _processPageText() async {
+    if (widget.page.originalText.isEmpty) return;
+
+    setState(() {
+      _isProcessingText = true;
+    });
+
+    try {
+      // 텍스트 처리 모드에 따라 다른 처리
+      if (widget.imageFile != null) {
+        // 이미지가 있는 경우 OCR 처리
+        final processedText = await _ocrService.processImage(
+          widget.imageFile!,
+          widget.textProcessingMode,
+        );
+
+        if (mounted) {
+          setState(() {
+            _processedText = processedText;
+            _isProcessingText = false;
+          });
+        }
+      } else {
+        // 이미지가 없는 경우 텍스트만 처리
+        // 간단한 ProcessedText 객체 생성
+        final processedText = ProcessedText(
+          fullOriginalText: widget.page.originalText,
+          fullTranslatedText: widget.page.translatedText,
+          showFullText: widget.textProcessingMode ==
+              TextProcessingMode.professionalReading,
+        );
+
+        if (mounted) {
+          setState(() {
+            _processedText = processedText;
+            _isProcessingText = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('텍스트 처리 중 오류 발생: $e');
+      if (mounted) {
+        setState(() {
+          _isProcessingText = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    // 화면을 나갈 때 TTS 중지
+    _ttsService.stop();
+    super.dispose();
   }
 
   @override
@@ -156,35 +223,59 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             const SizedBox(height: 20),
           ],
 
-          // 텍스트 표시 모드 토글 버튼
-          _buildTextDisplayToggle(),
-          const SizedBox(height: 20),
-
-          // 원본 텍스트 표시
-          if (_textDisplayMode == TextDisplayMode.both ||
-              _textDisplayMode == TextDisplayMode.originalOnly) ...[
-            TextSectionWidget(
-              title: '원문',
-              text: widget.page.originalText,
-              isOriginal: true,
+          // 텍스트 처리 중 표시
+          if (_isProcessingText)
+            const Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('텍스트 처리 중...'),
+                ],
+              ),
+            )
+          // 처리된 텍스트가 있는 경우
+          else if (_processedText != null)
+            ProcessedTextWidget(
+              processedText: _processedText!,
+              onTts: _speakText,
               onDictionaryLookup: _showDictionarySnackbar,
-              onCreateFlashCard: widget.onCreateFlashCard,
-              translatedText: widget.page.translatedText,
-            ),
-            const SizedBox(height: 24),
-          ],
+              onCreateFlashCard: (word, meaning) {
+                widget.onCreateFlashCard(word, meaning);
+              },
+            )
+          // 기존 방식으로 텍스트 표시 (처리된 텍스트가 없는 경우)
+          else ...[
+            // 텍스트 표시 모드 토글 버튼
+            _buildTextDisplayToggle(),
+            const SizedBox(height: 20),
 
-          // 번역 텍스트 표시
-          if (_textDisplayMode == TextDisplayMode.both ||
-              _textDisplayMode == TextDisplayMode.translationOnly) ...[
-            TextSectionWidget(
-              title: '번역',
-              text: widget.page.translatedText,
-              isOriginal: false,
-              onDictionaryLookup: _showDictionarySnackbar,
-              onCreateFlashCard: widget.onCreateFlashCard,
-              translatedText: widget.page.originalText,
-            ),
+            // 원본 텍스트 표시
+            if (_textDisplayMode == TextDisplayMode.both ||
+                _textDisplayMode == TextDisplayMode.originalOnly) ...[
+              TextSectionWidget(
+                title: '원문',
+                text: widget.page.originalText,
+                isOriginal: true,
+                onDictionaryLookup: _showDictionarySnackbar,
+                onCreateFlashCard: widget.onCreateFlashCard,
+                translatedText: widget.page.translatedText,
+              ),
+              const SizedBox(height: 24),
+            ],
+
+            // 번역 텍스트 표시
+            if (_textDisplayMode == TextDisplayMode.both ||
+                _textDisplayMode == TextDisplayMode.translationOnly) ...[
+              TextSectionWidget(
+                title: '번역',
+                text: widget.page.translatedText,
+                isOriginal: false,
+                onDictionaryLookup: _showDictionarySnackbar,
+                onCreateFlashCard: widget.onCreateFlashCard,
+                translatedText: widget.page.originalText,
+              ),
+            ],
           ],
         ],
       ),
@@ -204,6 +295,14 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         ),
       ),
     );
+  }
+
+  // TTS로 텍스트 읽기
+  Future<void> _speakText(String text) async {
+    // 중국어로 언어 설정
+    await _ttsService.setLanguage('zh-CN');
+    // 텍스트 읽기
+    await _ttsService.speak(text);
   }
 
   Widget _buildTextDisplayToggle() {
@@ -255,12 +354,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           IconButton(
             icon: const Icon(Icons.volume_up),
             tooltip: '원문 읽기',
-            onPressed: () async {
-              // 중국어로 언어 설정
-              await _ttsService.setLanguage('zh-CN');
-              // 원문 텍스트 읽기
-              await _ttsService.speak(widget.page.originalText);
-            },
+            onPressed: () => _speakText(widget.page.originalText),
           ),
         ],
       ),

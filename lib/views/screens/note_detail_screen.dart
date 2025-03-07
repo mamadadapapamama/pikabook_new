@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
+import '../../models/text_processing_mode.dart';
 import '../../services/note_service.dart';
 import '../../services/page_service.dart';
 import '../../services/image_service.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/dictionary_service.dart';
 import '../../services/tts_service.dart';
+import '../../services/enhanced_ocr_service.dart';
+import '../../services/user_preferences_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_content_widget.dart';
 import '../../widgets/page_indicator_widget.dart';
@@ -28,6 +31,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   final ImageService _imageService = ImageService();
   final FlashCardService _flashCardService = FlashCardService();
   final TtsService _ttsService = TtsService();
+  final EnhancedOcrService _ocrService = EnhancedOcrService();
+  final UserPreferencesService _preferencesService = UserPreferencesService();
 
   Note? _note;
   List<page_model.Page> _pages = [];
@@ -38,11 +43,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   int _currentPageIndex = 0;
   bool _isCreatingFlashCard = false;
 
+  // 텍스트 처리 모드
+  TextProcessingMode _textProcessingMode = TextProcessingMode.languageLearning;
+
   @override
   void initState() {
     super.initState();
     _loadNote();
     _ttsService.init();
+    _loadUserPreferences();
   }
 
   @override
@@ -399,27 +408,124 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void _showMoreOptions() {
     showModalBottomSheet(
       context: context,
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.edit),
-            title: const Text('제목 변경'),
-            onTap: () {
-              Navigator.pop(context);
-              _showEditTitleDialog();
-            },
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('노트 제목 변경'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showEditTitleDialog();
+                },
+              ),
+              // 텍스트 처리 모드 선택 옵션 추가
+              ListTile(
+                leading: Icon(
+                  _textProcessingMode == TextProcessingMode.professionalReading
+                      ? Icons.menu_book
+                      : Icons.school,
+                ),
+                title: const Text('텍스트 처리 모드'),
+                subtitle: Text(
+                  _textProcessingMode == TextProcessingMode.professionalReading
+                      ? '전문 서적 모드 (전체 텍스트 번역)'
+                      : '언어 학습 모드 (문장별 번역 및 핀인)',
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showTextProcessingModeDialog();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete),
+                title: const Text('노트 삭제'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDelete();
+                },
+              ),
+            ],
           ),
-          ListTile(
-            leading: const Icon(Icons.delete_outline),
-            title: const Text('노트 삭제'),
-            onTap: () {
-              Navigator.pop(context);
-              _confirmDelete();
-            },
+        );
+      },
+    );
+  }
+
+  // 사용자 기본 설정 로드
+  Future<void> _loadUserPreferences() async {
+    try {
+      final mode = await _preferencesService.getTextProcessingMode();
+      if (mounted) {
+        setState(() {
+          _textProcessingMode = mode;
+        });
+      }
+    } catch (e) {
+      debugPrint('사용자 기본 설정 로드 중 오류 발생: $e');
+    }
+  }
+
+  // 텍스트 처리 모드 변경 및 저장
+  Future<void> _changeTextProcessingMode(TextProcessingMode mode) async {
+    setState(() {
+      _textProcessingMode = mode;
+    });
+
+    try {
+      // 앱 전체 설정 업데이트
+      await _preferencesService.setDefaultTextProcessingMode(mode);
+    } catch (e) {
+      debugPrint('텍스트 처리 모드 저장 중 오류 발생: $e');
+    }
+  }
+
+  // 텍스트 처리 모드 선택 다이얼로그
+  void _showTextProcessingModeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('텍스트 처리 모드 선택'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RadioListTile<TextProcessingMode>(
+                title: const Text('전문 서적 모드'),
+                subtitle: const Text('전체 텍스트 번역 제공'),
+                value: TextProcessingMode.professionalReading,
+                groupValue: _textProcessingMode,
+                onChanged: (value) {
+                  Navigator.pop(context);
+                  if (value != null) {
+                    _changeTextProcessingMode(value);
+                  }
+                },
+              ),
+              RadioListTile<TextProcessingMode>(
+                title: const Text('언어 학습 모드'),
+                subtitle: const Text('문장별 번역 및 핀인 제공'),
+                value: TextProcessingMode.languageLearning,
+                groupValue: _textProcessingMode,
+                onChanged: (value) {
+                  Navigator.pop(context);
+                  if (value != null) {
+                    _changeTextProcessingMode(value);
+                  }
+                },
+              ),
+            ],
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('취소'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -659,6 +765,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       isLoadingImage: isLoadingImage,
       noteId: widget.noteId,
       onCreateFlashCard: _createFlashCard,
+      textProcessingMode: _textProcessingMode,
     );
   }
 }
