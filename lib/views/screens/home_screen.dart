@@ -10,7 +10,6 @@ import '../../services/page_service.dart';
 import '../../services/image_service.dart';
 import '../../models/note.dart';
 import 'note_detail_screen.dart';
-import 'create_note_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);

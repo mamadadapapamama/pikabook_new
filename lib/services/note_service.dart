@@ -5,11 +5,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/note.dart';
-import '../models/page.dart';
+import '../models/page.dart' as page_model;
 import 'page_service.dart';
 import 'image_service.dart';
 import 'ocr_service.dart';
 import 'translation_service.dart';
+import 'note_cache_service.dart';
+import 'page_cache_service.dart';
 
 class NoteService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -18,6 +20,8 @@ class NoteService {
   final ImageService _imageService = ImageService();
   final OcrService _ocrService = OcrService();
   final TranslationService _translationService = TranslationService();
+  final NoteCacheService _noteCacheService = NoteCacheService();
+  final PageCacheService _pageCacheService = PageCacheService();
 
   // SharedPreferences 키
   static const String _cachedNotesKey = 'cached_notes';
@@ -35,8 +39,14 @@ class NoteService {
   Stream<List<Note>> getPagedNotes({int limit = 10}) {
     try {
       return _userNotesQuery.limit(limit).snapshots().map((snapshot) {
-        debugPrint('페이징된 노트 목록 수신: ${snapshot.docs.length}개');
-        return snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
+        final notes =
+            snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
+
+        // 백그라운드에서 노트 캐싱
+        _noteCacheService.cacheNotes(notes);
+
+        debugPrint('페이징된 노트 목록 수신: ${notes.length}개');
+        return notes;
       });
     } catch (e) {
       debugPrint('페이징된 노트 목록을 가져오는 중 오류 발생: $e');
@@ -56,8 +66,13 @@ class NoteService {
 
       // 제한된 수의 노트 가져오기
       final snapshot = await query.limit(limit).get();
+      final notes =
+          snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
 
-      return snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
+      // 백그라운드에서 노트 캐싱
+      _noteCacheService.cacheNotes(notes);
+
+      return notes;
     } catch (e) {
       debugPrint('추가 노트를 가져오는 중 오류 발생: $e');
       return [];
@@ -68,7 +83,13 @@ class NoteService {
   Stream<List<Note>> getNotes() {
     try {
       return _userNotesQuery.snapshots().map((snapshot) {
-        return snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
+        final notes =
+            snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
+
+        // 백그라운드에서 노트 캐싱
+        _noteCacheService.cacheNotes(notes);
+
+        return notes;
       });
     } catch (e) {
       // 오류 발생 시 빈 리스트 반환
@@ -80,41 +101,19 @@ class NoteService {
   // 캐시된 노트 가져오기
   Future<List<Note>> getCachedNotes() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cachedData = prefs.getString(_cachedNotesKey);
-
-      if (cachedData == null || cachedData.isEmpty) {
-        return [];
-      }
-
-      final List<dynamic> decodedData = jsonDecode(cachedData);
-      return decodedData.map((item) => Note.fromJson(item)).toList();
+      // 새로운 캐시 서비스 사용
+      return await _noteCacheService.getCachedNotes();
     } catch (e) {
       debugPrint('캐시된 노트를 가져오는 중 오류 발생: $e');
       return [];
     }
   }
 
-  // 노트 캐싱
+  // 노트 캐싱 (이전 방식 - 호환성 유지)
   Future<void> cacheNotes(List<Note> notes) async {
     try {
-      // Timestamp 오류를 방지하기 위해 각 노트를 JSON으로 변환
-      final List<Map<String, dynamic>> jsonNotes = [];
-
-      for (final note in notes) {
-        try {
-          // 각 노트를 개별적으로 JSON으로 변환하여 오류 발생 시 해당 노트만 건너뜀
-          final noteJson = note.toJson();
-          jsonNotes.add(noteJson);
-        } catch (e) {
-          debugPrint('노트 JSON 변환 중 오류 발생 (건너뜀): $e');
-        }
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      final encodedData = jsonEncode(jsonNotes);
-      await prefs.setString(_cachedNotesKey, encodedData);
-      debugPrint('${jsonNotes.length}개 노트 캐싱 완료');
+      // 새로운 캐시 서비스 사용
+      await _noteCacheService.cacheNotes(notes);
     } catch (e) {
       debugPrint('노트 캐싱 중 오류 발생: $e');
     }
@@ -160,81 +159,189 @@ class NoteService {
   }
 
   // 노트 생성
-  Future<Note?> createNote({
-    String title = '',
-    String content = '',
-    String? originalText,
-    String? translatedText,
-    String? imageUrl,
-    List<String>? tags,
-  }) async {
+  Future<Note> createNote(String title, File? imageFile) async {
     try {
       // 현재 사용자 확인
       final user = _auth.currentUser;
       if (user == null) {
-        debugPrint('사용자가 로그인되어 있지 않습니다. 익명 로그인 시도...');
-        try {
-          // 익명 로그인 시도
-          final userCredential = await _auth.signInAnonymously();
-          debugPrint('익명 로그인 성공: ${userCredential.user?.uid}');
-        } catch (authError) {
-          debugPrint('익명 로그인 실패: $authError');
-          throw Exception('사용자가 로그인되어 있지 않습니다. 익명 로그인 시도 실패: $authError');
-        }
+        throw Exception('로그인이 필요합니다.');
       }
 
-      // 로그인 후 다시 확인
-      final currentUser = _auth.currentUser;
-      if (currentUser == null) {
-        throw Exception('사용자가 로그인되어 있지 않습니다.');
-      }
-
-      // 제목이 비어있으면 자동 생성
-      String finalTitle = title;
-      if (finalTitle.isEmpty) {
-        finalTitle = await _generateNoteTitle();
-        debugPrint('자동 생성된 노트 제목: $finalTitle');
-      }
-
-      // 원본 텍스트와 번역 텍스트 설정
-      final finalOriginalText = originalText ?? finalTitle;
-      final finalTranslatedText = translatedText ?? content;
-
-      // 노트 데이터 생성
+      // 기본 노트 데이터 생성
+      final now = DateTime.now();
       final noteData = {
-        'userId': currentUser.uid,
-        'originalText': finalOriginalText,
-        'translatedText': finalTranslatedText,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'imageUrl': imageUrl,
-        'tags': tags ?? [],
+        'userId': user.uid,
+        'originalText': title,
+        'translatedText': '',
         'isFavorite': false,
-        'flashCards': [],
-        'pages': [],
-        'extractedText': finalOriginalText,
         'flashcardCount': 0,
-        'reviewCount': 0,
+        'flashCards': [],
+        'createdAt': now,
+        'updatedAt': now,
       };
 
       // Firestore에 노트 추가
       final docRef = await _notesCollection.add(noteData);
+      final noteId = docRef.id;
 
-      // 생성된 노트 객체 반환
-      return Note(
-        id: docRef.id,
-        originalText: finalOriginalText,
-        translatedText: finalTranslatedText,
-        imageUrl: imageUrl,
-        tags: tags ?? [],
-        flashCards: [],
-        pages: [],
-        extractedText: finalOriginalText,
-        userId: currentUser.uid,
-      );
+      // 이미지가 있으면 처리
+      if (imageFile != null) {
+        await _processImageAndCreatePage(noteId, imageFile);
+      }
+
+      // 생성된 노트 가져오기
+      final docSnapshot = await docRef.get();
+      final note = Note.fromFirestore(docSnapshot);
+
+      // 노트 캐싱
+      await _noteCacheService.cacheNote(note);
+
+      return note;
     } catch (e) {
-      debugPrint('노트 생성 중 오류가 발생했습니다: $e');
-      throw Exception('노트 생성 중 오류가 발생했습니다: $e');
+      debugPrint('노트 생성 중 오류 발생: $e');
+      rethrow;
+    }
+  }
+
+  // 노트 업데이트
+  Future<void> updateNote(String noteId, Note updatedNote) async {
+    try {
+      // Firestore에 업데이트
+      await _notesCollection.doc(noteId).update({
+        'originalText': updatedNote.originalText,
+        'translatedText': updatedNote.translatedText,
+        'isFavorite': updatedNote.isFavorite,
+        'flashcardCount': updatedNote.flashcardCount,
+        'flashCards': updatedNote.flashCards,
+        'updatedAt': DateTime.now(),
+      });
+
+      // 캐시 업데이트
+      await _noteCacheService.cacheNote(updatedNote);
+    } catch (e) {
+      debugPrint('노트 업데이트 중 오류 발생: $e');
+      rethrow;
+    }
+  }
+
+  // 노트 삭제
+  Future<void> deleteNote(String noteId) async {
+    try {
+      // 노트에 연결된 페이지 삭제
+      await _pageService.deleteAllPagesForNote(noteId);
+
+      // Firestore에서 노트 삭제
+      await _notesCollection.doc(noteId).delete();
+
+      // 캐시에서 노트 삭제
+      await _noteCacheService.removeCachedNote(noteId);
+
+      // 페이지 캐시에서도 삭제
+      await _pageCacheService.removePagesForNote(noteId);
+    } catch (e) {
+      debugPrint('노트 삭제 중 오류 발생: $e');
+      rethrow;
+    }
+  }
+
+  // 즐겨찾기 토글
+  Future<void> toggleFavorite(String noteId, bool isFavorite) async {
+    try {
+      await _notesCollection.doc(noteId).update({
+        'isFavorite': isFavorite,
+        'updatedAt': DateTime.now(),
+      });
+
+      // 캐시된 노트 업데이트
+      final cachedNote = await _noteCacheService.getCachedNote(noteId);
+      if (cachedNote != null) {
+        final updatedNote = cachedNote.copyWith(isFavorite: isFavorite);
+        await _noteCacheService.cacheNote(updatedNote);
+      }
+    } catch (e) {
+      debugPrint('즐겨찾기 토글 중 오류 발생: $e');
+      rethrow;
+    }
+  }
+
+  // 노트와 페이지를 함께 가져오기 (캐싱 활용)
+  Future<Map<String, dynamic>> getNoteWithPages(String noteId) async {
+    try {
+      Note? note;
+      List<page_model.Page> pages = [];
+      bool isFromCache = false;
+
+      // 1. 캐시에서 노트 확인
+      note = await _noteCacheService.getCachedNote(noteId);
+
+      // 2. 캐시에 노트가 없으면 Firestore에서 가져오기
+      if (note == null) {
+        final docSnapshot = await _notesCollection.doc(noteId).get();
+        if (docSnapshot.exists) {
+          note = Note.fromFirestore(docSnapshot);
+          // 노트 캐싱
+          await _noteCacheService.cacheNote(note);
+        } else {
+          throw Exception('노트를 찾을 수 없습니다.');
+        }
+      } else {
+        isFromCache = true;
+        debugPrint('캐시에서 노트 로드: $noteId');
+      }
+
+      // 3. 캐시에서 페이지 확인
+      final hasAllPages = await _pageCacheService.hasAllPagesForNote(noteId);
+
+      if (hasAllPages) {
+        // 캐시에 모든 페이지가 있으면 캐시에서 가져오기
+        pages = await _pageCacheService.getPagesForNote(noteId);
+        isFromCache = true;
+        debugPrint('캐시에서 페이지 로드: ${pages.length}개');
+      } else {
+        // 캐시에 페이지가 없으면 Firestore에서 가져오기
+        pages = await _pageService.getPagesForNote(noteId);
+        // 페이지 캐싱
+        await _pageCacheService.cachePages(noteId, pages);
+      }
+
+      return {
+        'note': note,
+        'pages': pages,
+        'isFromCache': isFromCache,
+      };
+    } catch (e) {
+      debugPrint('노트와 페이지를 가져오는 중 오류 발생: $e');
+      rethrow;
+    }
+  }
+
+  // 자동 노트 제목 생성
+  Future<String> _generateNoteTitle() async {
+    try {
+      // 현재 사용자의 노트 수 가져오기
+      final notes = await getNotes().first;
+      final noteNumber = notes.length + 1;
+      final title = '#$noteNumber Note';
+      debugPrint('자동 노트 제목 생성: $title (현재 노트 수: ${notes.length})');
+      return title;
+    } catch (e) {
+      debugPrint('자동 노트 제목 생성 중 오류 발생: $e');
+      // 오류 발생 시 기본값 사용
+      return '#1 Note';
+    }
+  }
+
+  // 특정 노트 가져오기
+  Future<Note?> getNoteById(String noteId) async {
+    try {
+      final docSnapshot = await _notesCollection.doc(noteId).get();
+      if (docSnapshot.exists) {
+        return Note.fromFirestore(docSnapshot);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('노트를 가져오는 중 오류가 발생했습니다: $e');
+      throw Exception('노트를 가져오는 중 오류가 발생했습니다: $e');
     }
   }
 
@@ -264,11 +371,8 @@ class NoteService {
 
       // 노트 생성 (제목과 추출된 텍스트를 분리)
       final note = await createNote(
-        title: noteTitle,
-        originalText: noteTitle, // 제목을 원본 텍스트로 설정
-        translatedText: translatedText.isEmpty ? '번역 텍스트 없음' : translatedText,
-        imageUrl: imageUrl,
-        tags: tags,
+        noteTitle,
+        imageFile,
       );
 
       if (note?.id != null) {
@@ -355,7 +459,7 @@ class NoteService {
       int processedCount = 1; // 첫 번째 이미지는 이미 처리됨
 
       // 병렬 처리를 위한 Future 리스트
-      List<Future<Page?>> pageFutures = [];
+      List<Future<page_model.Page?>> pageFutures = [];
 
       for (int i = 0; i < remainingImages.length; i++) {
         final imageFile = remainingImages[i];
@@ -402,7 +506,7 @@ class NoteService {
       print('Updated note with ${pageIds.length} page IDs in Firestore');
 
       // 모든 페이지 객체 가져오기
-      List<Page> updatedPages = [];
+      List<page_model.Page> updatedPages = [];
       for (String pageId in pageIds) {
         final page = await _pageService.getPageById(pageId);
         if (page != null) {
@@ -438,118 +542,60 @@ class NoteService {
     }
   }
 
-  // 자동 노트 제목 생성
-  Future<String> _generateNoteTitle() async {
+  // 이미지 처리 및 페이지 생성
+  Future<void> _processImageAndCreatePage(String noteId, File imageFile) async {
     try {
-      // 현재 사용자의 노트 수 가져오기
-      final notes = await getNotes().first;
-      final noteNumber = notes.length + 1;
-      final title = '#$noteNumber Note';
-      debugPrint('자동 노트 제목 생성: $title (현재 노트 수: ${notes.length})');
-      return title;
-    } catch (e) {
-      debugPrint('자동 노트 제목 생성 중 오류 발생: $e');
-      // 오류 발생 시 기본값 사용
-      return '#1 Note';
-    }
-  }
-
-  // 특정 노트 가져오기
-  Future<Note?> getNoteById(String noteId) async {
-    try {
-      final docSnapshot = await _notesCollection.doc(noteId).get();
-      if (docSnapshot.exists) {
-        return Note.fromFirestore(docSnapshot);
-      }
-      return null;
-    } catch (e) {
-      debugPrint('노트를 가져오는 중 오류가 발생했습니다: $e');
-      throw Exception('노트를 가져오는 중 오류가 발생했습니다: $e');
-    }
-  }
-
-  // 노트와 페이지를 함께 가져오기 (캐싱 활용)
-  Future<Map<String, dynamic>> getNoteWithPages(String noteId) async {
-    try {
-      // 노트 정보 가져오기
-      final note = await getNoteById(noteId);
-      if (note == null) {
-        throw Exception('노트를 찾을 수 없습니다.');
+      // 이미지 업로드
+      final imageUrl = await _imageService.uploadImage(imageFile);
+      if (imageUrl == null || imageUrl.isEmpty) {
+        throw Exception('이미지 업로드에 실패했습니다.');
       }
 
-      // 페이지 정보 가져오기 (캐싱 활용)
-      final pages = await _pageService.getPagesForNote(noteId);
-
-      // 노트 문서에서 페이지 ID 목록 확인
-      if (pages.isEmpty || pages.length <= 1) {
-        debugPrint('페이지가 없거나 1개만 있어 노트 문서에서 페이지 ID 목록을 직접 확인합니다.');
-        final noteDoc = await _notesCollection.doc(noteId).get();
-        if (noteDoc.exists) {
-          final data = noteDoc.data() as Map<String, dynamic>?;
-          final pageIds = data?['pages'] as List<dynamic>?;
-
-          if (pageIds != null && pageIds.isNotEmpty) {
-            debugPrint('노트 문서에서 ${pageIds.length}개의 페이지 ID를 찾았습니다: $pageIds');
-          }
-        }
+      // OCR로 텍스트 추출
+      final extractedText = await _ocrService.extractText(imageFile);
+      if (extractedText.isEmpty) {
+        debugPrint('OCR 텍스트 추출 실패 또는 텍스트 없음');
       }
 
-      return {
-        'note': note,
-        'pages': pages,
-      };
-    } catch (e) {
-      debugPrint('노트와 페이지를 가져오는 중 오류가 발생했습니다: $e');
-      throw Exception('노트와 페이지를 가져오는 중 오류가 발생했습니다: $e');
-    }
-  }
+      // 텍스트 번역
+      String translatedText = '';
+      if (extractedText.isNotEmpty) {
+        translatedText = await _translationService.translateText(
+          extractedText,
+          targetLanguage: 'ko',
+        );
+      }
 
-  // 노트 업데이트
-  Future<void> updateNote(String noteId, Note note) async {
-    try {
-      await _notesCollection.doc(noteId).update({
-        'originalText': note.originalText,
-        'translatedText': note.translatedText,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'imageUrl': note.imageUrl,
-        'tags': note.tags,
-        'isFavorite': note.isFavorite,
-        'flashCards': note.flashCards.map((card) => card.toJson()).toList(),
-        'pages': note.pages.map((page) => page.id).toList(),
-        'extractedText': note.extractedText,
-        'flashcardCount': note.flashcardCount,
-        'reviewCount': note.reviewCount,
-      });
-    } catch (e) {
-      debugPrint('노트 업데이트 중 오류가 발생했습니다: $e');
-      throw Exception('노트 업데이트 중 오류가 발생했습니다: $e');
-    }
-  }
+      // 페이지 생성
+      final page = await _pageService.createPage(
+        noteId: noteId,
+        originalText: extractedText,
+        translatedText: translatedText,
+        pageNumber: 1,
+        imageFile: imageFile,
+      );
 
-  // 노트 삭제
-  Future<void> deleteNote(String noteId) async {
-    try {
-      // 노트에 연결된 모든 페이지 삭제
-      await _pageService.deleteAllPagesForNote(noteId);
+      // 페이지 캐싱
+      if (page != null) {
+        await _pageCacheService.cachePage(noteId, page);
+      }
 
-      // 노트 문서 삭제
-      await _notesCollection.doc(noteId).delete();
-    } catch (e) {
-      debugPrint('노트 삭제 중 오류가 발생했습니다: $e');
-      throw Exception('노트 삭제 중 오류가 발생했습니다: $e');
-    }
-  }
+      // 노트 업데이트 (첫 페이지 내용으로 노트 내용 업데이트)
+      final noteDoc = await _notesCollection.doc(noteId).get();
+      if (noteDoc.exists) {
+        final note = Note.fromFirestore(noteDoc);
+        final updatedNote = note.copyWith(
+          originalText:
+              extractedText.isNotEmpty ? extractedText : note.originalText,
+          translatedText:
+              translatedText.isNotEmpty ? translatedText : note.translatedText,
+        );
 
-  // 노트 즐겨찾기 토글
-  Future<void> toggleFavorite(String noteId, bool isFavorite) async {
-    try {
-      await _notesCollection.doc(noteId).update({
-        'isFavorite': isFavorite,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+        await updateNote(noteId, updatedNote);
+      }
     } catch (e) {
-      debugPrint('노트 즐겨찾기 설정 중 오류가 발생했습니다: $e');
-      throw Exception('노트 즐겨찾기 설정 중 오류가 발생했습니다: $e');
+      debugPrint('이미지 처리 및 페이지 생성 중 오류 발생: $e');
+      rethrow;
     }
   }
 }
