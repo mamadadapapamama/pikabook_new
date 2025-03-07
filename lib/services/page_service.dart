@@ -154,8 +154,8 @@ class PageService {
       debugPrint('노트 $noteId의 페이지 조회 시작');
 
       // 1. 캐시에서 모든 페이지 확인
-      if (_cacheService.hasAllPagesForNote(noteId)) {
-        final cachedPages = _cacheService.getPagesForNote(noteId);
+      if (await _cacheService.hasAllPagesForNote(noteId)) {
+        final cachedPages = await _cacheService.getPagesForNote(noteId);
         debugPrint('캐시에서 노트 $noteId의 페이지 ${cachedPages.length}개 로드됨');
 
         // 페이지가 1개만 있는 경우 Firestore에서 다시 확인 (캐시 문제 가능성)
@@ -379,7 +379,7 @@ class PageService {
 
   // 캐시 정리 (오래된 항목 제거)
   void clearOldCache() {
-    _cacheService.clearOldCache();
+    _cacheService.clearOldMemoryCache();
   }
 
   // 전체 캐시 초기화

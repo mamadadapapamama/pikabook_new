@@ -132,9 +132,8 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
 
       // 노트 생성
       final note = await _noteService.createNote(
-        title: title,
-        content: '',
-        tags: tags,
+        title,
+        null,
       );
 
       if (note?.id == null) {

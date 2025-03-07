@@ -47,6 +47,34 @@ class Page {
     };
   }
 
+  // JSON으로 변환 (캐싱용)
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'imageUrl': imageUrl,
+      'originalText': originalText,
+      'translatedText': translatedText,
+      'pageNumber': pageNumber,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  // JSON에서 생성 (캐싱용)
+  factory Page.fromJson(Map<String, dynamic> json) {
+    return Page(
+      id: json['id'],
+      imageUrl: json['imageUrl'],
+      originalText: json['originalText'] ?? '',
+      translatedText: json['translatedText'] ?? '',
+      pageNumber: json['pageNumber'] ?? 0,
+      createdAt:
+          json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+      updatedAt:
+          json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
+    );
+  }
+
   // 페이지 복사본 생성 (필드 업데이트용)
   Page copyWith({
     String? id,
