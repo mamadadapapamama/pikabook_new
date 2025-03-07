@@ -10,6 +10,7 @@ import '../services/flashcard_service.dart' hide debugPrint;
 import '../services/tts_service.dart';
 import '../services/enhanced_ocr_service.dart';
 import '../services/language_detection_service.dart';
+import '../services/translation_service.dart';
 import '../utils/text_display_mode.dart';
 import '../views/screens/full_image_screen.dart';
 import 'text_section_widget.dart';
@@ -44,6 +45,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final LanguageDetectionService _languageDetectionService =
       LanguageDetectionService();
+  final TranslationService _translationService = TranslationService();
 
   ProcessedText? _processedText;
   bool _isProcessingText = false;
@@ -130,35 +132,15 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
           // 문장 단위로 분리
           final originalSentences = _splitIntoSentences(originalText);
-          final translatedSentences = _splitIntoSentences(translatedText);
 
-          // 분리된 문장 확인
-          debugPrint('분리된 원본 문장 수: ${originalSentences.length}');
-          if (originalSentences.isNotEmpty) {
-            debugPrint('첫 번째 원본 문장: ${originalSentences[0]}');
-          }
-          debugPrint('분리된 번역 문장 수: ${translatedSentences.length}');
-          if (translatedSentences.isNotEmpty) {
-            debugPrint('첫 번째 번역 문장: ${translatedSentences[0]}');
-          }
-
-          // 문장 수 맞추기
-          final sentenceCount = originalSentences.length;
-          final adjustedTranslatedSentences = translatedSentences.length >=
-                  sentenceCount
-              ? translatedSentences.sublist(0, sentenceCount)
-              : [
-                  ...translatedSentences,
-                  ...List.filled(sentenceCount - translatedSentences.length, '')
-                ];
-
-          // 문장별 처리 결과 생성
+          // 각 문장별로 번역 수행
           final segments = <TextSegment>[];
 
-          // 각 문장에 대해 핀인 생성 및 세그먼트 생성
-          for (int i = 0; i < sentenceCount; i++) {
+          // 각 문장에 대해 핀인 생성 및 번역 수행
+          for (int i = 0; i < originalSentences.length; i++) {
             final originalSentence = originalSentences[i];
             String? pinyin;
+            String? sentenceTranslation;
 
             // 중국어가 포함된 문장에 대해서만 핀인 생성
             if (_languageDetectionService.containsChinese(originalSentence)) {
@@ -172,26 +154,45 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 } else {
                   pinyin = '';
                 }
+
+                // 각 문장별로 번역 수행
+                sentenceTranslation = await _translationService
+                    .translateText(originalSentence, targetLanguage: 'ko');
+                debugPrint('문장 번역 완료: $sentenceTranslation');
               } catch (e) {
-                debugPrint('핀인 생성 실패: $e');
-                pinyin = ''; // 실패 시 빈 문자열
+                debugPrint('핀인 생성 또는 번역 실패: $e');
+                pinyin = '';
+                sentenceTranslation = '';
               }
             } else {
-              pinyin = ''; // 중국어가 없는 경우 빈 문자열
+              pinyin = '';
+              // 중국어가 없는 문장도 번역 시도
+              try {
+                sentenceTranslation = await _translationService
+                    .translateText(originalSentence, targetLanguage: 'ko');
+              } catch (e) {
+                sentenceTranslation = originalSentence; // 번역 실패 시 원본 사용
+              }
             }
 
             segments.add(TextSegment(
               originalText: originalSentence,
-              translatedText: adjustedTranslatedSentences[i],
-              pinyin: pinyin,
+              translatedText: sentenceTranslation ?? '', // null 체크 추가
+              pinyin: pinyin ?? '', // null 체크 추가
             ));
           }
 
           debugPrint('생성된 세그먼트 수: ${segments.length}');
 
+          // 전체 번역 텍스트가 없는 경우 각 문장 번역을 합쳐서 사용
+          final fullTranslatedText =
+              translatedText.isEmpty && segments.isNotEmpty
+                  ? segments.map((s) => s.translatedText ?? '').join('\n')
+                  : translatedText;
+
           final processedText = ProcessedText(
             fullOriginalText: originalText,
-            fullTranslatedText: translatedText,
+            fullTranslatedText: fullTranslatedText,
             segments: segments,
             showFullText: false, // 문장별 모드로 시작
           );
