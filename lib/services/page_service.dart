@@ -120,24 +120,20 @@ class PageService {
   // 페이지 가져오기 (캐시 활용)
   Future<page_model.Page?> getPageById(String pageId) async {
     try {
-      // 1. 캐시에서 페이지 확인
-      final cachedPage = _cacheService.getPage(pageId);
-      if (cachedPage != null) {
-        debugPrint('캐시에서 페이지 $pageId 로드됨');
-        return cachedPage;
-      }
-
-      // 2. Firestore에서 페이지 가져오기
+      // Firestore에서 페이지 가져오기
       debugPrint('Firestore에서 페이지 $pageId 로드 시작');
       final doc = await _pagesCollection.doc(pageId).get();
       if (!doc.exists) {
         return null;
       }
 
-      // 3. 페이지 객체 생성 및 캐시에 저장
+      // 페이지 객체 생성 및 캐시에 저장
       final page = page_model.Page.fromFirestore(doc);
       if (page.id != null) {
-        _cacheService.cachePage(page.id!, page);
+        // 노트 ID 가져오기
+        final data = doc.data() as Map<String, dynamic>;
+        final noteId = data['noteId'] as String;
+        await _cacheService.cachePage(noteId, page);
       }
 
       debugPrint('Firestore에서 페이지 $pageId 로드 완료 및 캐시에 저장됨');
@@ -177,7 +173,7 @@ class PageService {
         debugPrint('페이지 쿼리 결과가 없어 노트 문서에서 페이지 ID 목록을 확인합니다.');
         final noteDoc = await _firestore.collection('notes').doc(noteId).get();
         if (noteDoc.exists) {
-          final data = noteDoc.data() as Map<String, dynamic>?;
+          final data = noteDoc.data();
           final pageIds = data?['pages'] as List<dynamic>?;
 
           if (pageIds != null && pageIds.isNotEmpty) {
@@ -204,7 +200,7 @@ class PageService {
             pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
 
             // 캐시에 페이지 저장
-            _cacheService.cachePages(noteId, pages);
+            await _cacheService.cachePages(noteId, pages);
 
             debugPrint(
                 '노트 $noteId의 페이지 ${pages.length}개 로드 완료 및 캐시에 저장됨 (ID 목록 사용)');
