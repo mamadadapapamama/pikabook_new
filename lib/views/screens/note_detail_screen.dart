@@ -149,27 +149,28 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   Future<void> _loadPageImages() async {
-    // 현재 페이지 이미지 우선 로드
-    _loadPageImage(_currentPageIndex);
+    // 현재 페이지 이미지 우선 로드 (동기적으로 처리)
+    await _loadPageImage(_currentPageIndex);
 
-    // 다음 페이지 이미지 미리 로드 (있는 경우)
+    // 다음 페이지와 이전 페이지 이미지 미리 로드 (비동기적으로 처리)
     if (_currentPageIndex + 1 < _pages.length) {
       _loadPageImage(_currentPageIndex + 1);
     }
 
-    // 이전 페이지 이미지 미리 로드 (있는 경우)
     if (_currentPageIndex - 1 >= 0) {
       _loadPageImage(_currentPageIndex - 1);
     }
 
-    // 나머지 페이지 이미지 로드
-    for (int i = 0; i < _pages.length; i++) {
-      if (i != _currentPageIndex &&
-          i != _currentPageIndex + 1 &&
-          i != _currentPageIndex - 1) {
-        _loadPageImage(i);
+    // 나머지 페이지 이미지는 백그라운드에서 로드
+    Future.microtask(() {
+      for (int i = 0; i < _pages.length; i++) {
+        if (i != _currentPageIndex &&
+            i != _currentPageIndex + 1 &&
+            i != _currentPageIndex - 1) {
+          _loadPageImage(i);
+        }
       }
-    }
+    });
   }
 
   Future<void> _loadPageImage(int index) async {
@@ -400,18 +401,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       });
       debugPrint('페이지 전환: $_currentPageIndex -> $index');
 
-      // 페이지 전환 시 해당 페이지의 이미지 로드 확인
-      _loadPageImage(index);
+      // 페이지 전환 시 해당 페이지의 이미지 로드 확인 (동기적으로 처리)
+      _loadPageImage(index).then((_) {
+        // 다음 페이지 이미지 미리 로드 (있는 경우)
+        if (index + 1 < _pages.length) {
+          _loadPageImage(index + 1);
+        }
 
-      // 다음 페이지 이미지 미리 로드 (있는 경우)
-      if (index + 1 < _pages.length) {
-        _loadPageImage(index + 1);
-      }
-
-      // 이전 페이지 이미지 미리 로드 (있는 경우)
-      if (index - 1 >= 0) {
-        _loadPageImage(index - 1);
-      }
+        // 이전 페이지 이미지 미리 로드 (있는 경우)
+        if (index - 1 >= 0) {
+          _loadPageImage(index - 1);
+        }
+      });
     }
   }
 

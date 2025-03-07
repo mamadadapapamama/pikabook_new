@@ -517,9 +517,9 @@ class NoteService {
 
               // 노트 내용 업데이트
               await _notesCollection.doc(noteId).update({
-                'originalText': extractedText,
                 'translatedText': translatedText,
                 'extractedText': extractedText,
+                // originalText는 업데이트하지 않고 generatedTitle 유지
               });
             }
 
@@ -727,13 +727,17 @@ class NoteService {
       if (noteDoc.exists) {
         final note = Note.fromFirestore(noteDoc);
         final updatedNote = note.copyWith(
-          originalText:
-              extractedText.isNotEmpty ? extractedText : note.originalText,
+          // originalText는 유지하고 제목을 보존
           translatedText:
               translatedText.isNotEmpty ? translatedText : note.translatedText,
         );
 
-        await updateNote(noteId, updatedNote);
+        // extractedText 필드 업데이트
+        await _notesCollection.doc(noteId).update({
+          'extractedText': extractedText,
+          'translatedText':
+              translatedText.isNotEmpty ? translatedText : note.translatedText,
+        });
       }
     } catch (e) {
       debugPrint('이미지 처리 및 페이지 생성 중 오류 발생: $e');

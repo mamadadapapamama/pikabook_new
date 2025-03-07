@@ -70,12 +70,29 @@ class PageCacheService {
     final existingIds = _notePageIds[noteId] ?? [];
     final mergedIds = {...existingIds, ...pageIds}.toList();
 
+    // 페이지 번호 순으로 정렬
+    final pagesMap = {for (var page in pages) page.id!: page};
+    mergedIds.sort((a, b) {
+      final pageA = pagesMap[a];
+      final pageB = pagesMap[b];
+      if (pageA != null && pageB != null) {
+        return pageA.pageNumber.compareTo(pageB.pageNumber);
+      }
+      return 0;
+    });
+
     _notePageIds[noteId] = mergedIds;
 
     // 로컬 저장소에 노트-페이지 관계 저장
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('$_prefNotePageIdsPrefix$noteId', mergedIds);
+
+      // 마지막 업데이트 시간 저장
+      await prefs.setString(
+        '${_prefNotePageIdsPrefix}timestamp_$noteId',
+        DateTime.now().toIso8601String(),
+      );
     } catch (e) {
       debugPrint('노트-페이지 관계 로컬 캐싱 중 오류 발생: $e');
     }
@@ -91,6 +108,7 @@ class PageCacheService {
     if (page != null) {
       // 페이지가 있으면 타임스탬프 업데이트
       _cacheTimestamps[pageId] = DateTime.now();
+      debugPrint('메모리 캐시에서 페이지 로드: $pageId');
       return page;
     }
 
@@ -105,14 +123,26 @@ class PageCacheService {
         final timestamp = DateTime.parse(timestampStr);
         if (DateTime.now().difference(timestamp) < _cacheValidity) {
           debugPrint('로컬 저장소에서 페이지 로드: $pageId');
-          final pageMap = jsonDecode(pageJson) as Map<String, dynamic>;
-          page = page_model.Page.fromJson(pageMap);
+          try {
+            final pageMap = jsonDecode(pageJson) as Map<String, dynamic>;
+            page = page_model.Page.fromJson(pageMap);
 
-          // 메모리 캐시 업데이트
-          _pageCache[pageId] = page;
-          _cacheTimestamps[pageId] = DateTime.now();
+            // 메모리 캐시 업데이트
+            _pageCache[pageId] = page;
+            _cacheTimestamps[pageId] = DateTime.now();
 
-          return page;
+            return page;
+          } catch (e) {
+            debugPrint('페이지 JSON 파싱 중 오류 발생: $e');
+            // 캐시 데이터가 손상된 경우 제거
+            await prefs.remove('$_prefKeyPrefix$pageId');
+            await prefs.remove('${_prefKeyPrefix}timestamp_$pageId');
+          }
+        } else {
+          // 캐시가 만료된 경우 제거
+          await prefs.remove('$_prefKeyPrefix$pageId');
+          await prefs.remove('${_prefKeyPrefix}timestamp_$pageId');
+          debugPrint('만료된 페이지 캐시 제거: $pageId');
         }
       }
     } catch (e) {
@@ -130,10 +160,27 @@ class PageCacheService {
     }
 
     final pageIds = _notePageIds[noteId] ?? [];
-    final pages = <page_model.Page>[];
+    if (pageIds.isEmpty) {
+      debugPrint('노트 $noteId의 캐시된 페이지 ID가 없음');
+      return [];
+    }
 
-    for (final pageId in pageIds) {
+    final pages = <page_model.Page>[];
+    final missingPageIds = <String>[];
+
+    // 병렬로 페이지 로드
+    final futures = pageIds.map((pageId) async {
       final page = await getPage(pageId);
+      if (page != null) {
+        return page;
+      } else {
+        missingPageIds.add(pageId);
+        return null;
+      }
+    });
+
+    final results = await Future.wait(futures);
+    for (final page in results) {
       if (page != null) {
         pages.add(page);
       }
@@ -141,6 +188,10 @@ class PageCacheService {
 
     // 페이지 번호 순으로 정렬
     pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+    if (missingPageIds.isNotEmpty) {
+      debugPrint('캐시에서 찾을 수 없는 페이지 ID: $missingPageIds');
+    }
 
     debugPrint(
         '캐시에서 노트 $noteId의 페이지 ID ${pageIds.length}개 중 ${pages.length}개 로드됨');
@@ -152,10 +203,26 @@ class PageCacheService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final pageIds = prefs.getStringList('$_prefNotePageIdsPrefix$noteId');
+      final timestampStr =
+          prefs.getString('${_prefNotePageIdsPrefix}timestamp_$noteId');
 
       if (pageIds != null) {
-        _notePageIds[noteId] = pageIds;
-        debugPrint('로컬 저장소에서 노트 $noteId의 페이지 ID ${pageIds.length}개 로드됨');
+        // 캐시 유효성 검사
+        bool isValid = true;
+        if (timestampStr != null) {
+          final timestamp = DateTime.parse(timestampStr);
+          isValid = DateTime.now().difference(timestamp) < _cacheValidity;
+        }
+
+        if (isValid) {
+          _notePageIds[noteId] = pageIds;
+          debugPrint('로컬 저장소에서 노트 $noteId의 페이지 ID ${pageIds.length}개 로드됨');
+        } else {
+          // 캐시가 만료된 경우 제거
+          await prefs.remove('$_prefNotePageIdsPrefix$noteId');
+          await prefs.remove('${_prefNotePageIdsPrefix}timestamp_$noteId');
+          debugPrint('만료된 노트-페이지 관계 캐시 제거: $noteId');
+        }
       }
     } catch (e) {
       debugPrint('로컬 저장소에서 노트-페이지 관계 로드 중 오류 발생: $e');
