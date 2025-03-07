@@ -3,6 +3,7 @@ import 'dart:io';
 import '../models/note.dart';
 import '../utils/date_formatter.dart';
 import '../services/image_service.dart';
+import '../services/note_service.dart';
 import '../views/screens/flashcard_screen.dart';
 
 class NoteListItem extends StatefulWidget {
@@ -25,6 +26,7 @@ class NoteListItem extends StatefulWidget {
 
 class _NoteListItemState extends State<NoteListItem> {
   final ImageService _imageService = ImageService();
+  final NoteService _noteService = NoteService();
   File? _imageFile;
   bool _isLoadingImage = false;
 
@@ -292,7 +294,44 @@ class _NoteListItemState extends State<NoteListItem> {
             children: const [
               Icon(Icons.school, color: Colors.blue),
               SizedBox(width: 8),
-              Text('플래시카드'),
+              Text('플래시카드에 추가'),
+            ],
+          ),
+          onTap: () async {
+            // 메뉴가 닫힌 후 플래시카드에 추가하기 위해 지연 실행
+            Future.delayed(Duration.zero, () async {
+              if (context.mounted && widget.note.id != null) {
+                // 로딩 표시
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('플래시카드에 추가 중...')),
+                );
+
+                // 노트 내용을 플래시카드로 추가
+                final success =
+                    await _noteService.addNoteToFlashcards(widget.note.id!);
+
+                if (context.mounted) {
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('플래시카드에 추가되었습니다.')),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text('이미 추가된 플래시카드이거나 추가에 실패했습니다.')),
+                    );
+                  }
+                }
+              }
+            });
+          },
+        ),
+        PopupMenuItem(
+          child: Row(
+            children: const [
+              Icon(Icons.menu_book, color: Colors.green),
+              SizedBox(width: 8),
+              Text('플래시카드 학습'),
             ],
           ),
           onTap: () {
