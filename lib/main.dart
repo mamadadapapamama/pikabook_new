@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'services/note_service.dart';
 import 'services/image_service.dart';
-import 'services/page_cache_service.dart';
+import 'services/unified_cache_service.dart';
 import 'services/user_preferences_service.dart';
 import 'views/screens/splash_screen.dart';
 import 'views/screens/home_screen.dart';
@@ -30,6 +30,9 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // 캐시 서비스 초기화 (싱글톤 인스턴스 생성)
+  UnifiedCacheService();
 
   // 초기화 서비스 생성
   final initService = InitializationService();
