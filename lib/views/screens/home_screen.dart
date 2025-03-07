@@ -70,12 +70,6 @@ class HomeScreen extends StatelessWidget {
                             horizontal: 16, vertical: 12),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '오른쪽 하단의 + 버튼을 눌러 새 노트를 만들 수도 있습니다.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
                   ],
                 ),
               );

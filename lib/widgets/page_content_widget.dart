@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import '../models/page.dart' as page_model;
 import '../models/processed_text.dart';
+import '../models/text_segment.dart';
 import '../models/text_processing_mode.dart';
 import '../services/dictionary_service.dart';
 import '../services/flashcard_service.dart' hide debugPrint;
 import '../services/tts_service.dart';
 import '../services/enhanced_ocr_service.dart';
+import '../services/language_detection_service.dart';
 import '../utils/text_display_mode.dart';
 import '../views/screens/full_image_screen.dart';
 import 'text_section_widget.dart';
@@ -40,6 +42,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   final DictionaryService _dictionaryService = DictionaryService();
   final TtsService _ttsService = TtsService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
+  final LanguageDetectionService _languageDetectionService =
+      LanguageDetectionService();
 
   ProcessedText? _processedText;
   bool _isProcessingText = false;
@@ -75,12 +79,20 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     });
 
     try {
+      // 캐시된 텍스트 확인
+      final originalText = widget.page.originalText;
+      final translatedText = widget.page.translatedText;
+
+      debugPrint(
+          '페이지 텍스트 처리: 원본 텍스트 ${originalText.length}자, 번역 텍스트 ${translatedText.length}자');
+
       // 텍스트 처리 모드에 따라 다른 처리
-      if (widget.imageFile != null) {
-        // 이미지가 있는 경우 OCR 처리
-        final processedText = await _ocrService.processImage(
-          widget.imageFile!,
-          widget.textProcessingMode,
+      if (widget.textProcessingMode == TextProcessingMode.professionalReading) {
+        // 전문 서적 모드: 전체 텍스트 표시
+        final processedText = ProcessedText(
+          fullOriginalText: originalText,
+          fullTranslatedText: translatedText,
+          showFullText: true,
         );
 
         if (mounted) {
@@ -90,20 +102,87 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           });
         }
       } else {
-        // 이미지가 없는 경우 텍스트만 처리
-        // 간단한 ProcessedText 객체 생성
-        final processedText = ProcessedText(
-          fullOriginalText: widget.page.originalText,
-          fullTranslatedText: widget.page.translatedText,
-          showFullText: widget.textProcessingMode ==
-              TextProcessingMode.professionalReading,
-        );
+        // 언어 학습 모드: 문장별 처리
+        if (widget.imageFile != null &&
+            (originalText.isEmpty || translatedText.isEmpty)) {
+          // 캐시된 텍스트가 없는 경우에만 OCR 처리
+          debugPrint('캐시된 텍스트가 없어 OCR 처리 시작');
+          final processedText = await _ocrService.processImage(
+            widget.imageFile!,
+            widget.textProcessingMode,
+          );
 
-        if (mounted) {
-          setState(() {
-            _processedText = processedText;
-            _isProcessingText = false;
-          });
+          if (mounted) {
+            setState(() {
+              _processedText = processedText;
+              _isProcessingText = false;
+            });
+          }
+        } else {
+          // 캐시된 텍스트 사용
+          debugPrint('캐시된 텍스트 사용');
+
+          // 문장 단위로 분리
+          final originalSentences = _splitIntoSentences(originalText);
+          final translatedSentences = _splitIntoSentences(translatedText);
+
+          debugPrint(
+              '원본 문장 수: ${originalSentences.length}, 번역 문장 수: ${translatedSentences.length}');
+
+          // 문장 수 맞추기
+          final sentenceCount = originalSentences.length;
+          final adjustedTranslatedSentences = translatedSentences.length >=
+                  sentenceCount
+              ? translatedSentences.sublist(0, sentenceCount)
+              : [
+                  ...translatedSentences,
+                  ...List.filled(sentenceCount - translatedSentences.length, '')
+                ];
+
+          // 문장별 처리 결과 생성
+          final segments = <TextSegment>[];
+
+          // 각 문장에 대해 핀인 생성 및 세그먼트 생성
+          for (int i = 0; i < sentenceCount; i++) {
+            final originalSentence = originalSentences[i];
+            String? pinyin;
+
+            // 중국어가 포함된 문장에 대해서만 핀인 생성
+            if (_languageDetectionService.containsChinese(originalSentence)) {
+              try {
+                pinyin = await _languageDetectionService
+                    .generatePinyin(originalSentence);
+                debugPrint('핀인 생성 성공: $pinyin');
+              } catch (e) {
+                debugPrint('핀인 생성 실패: $e');
+                pinyin = ''; // 실패 시 빈 문자열
+              }
+            } else {
+              pinyin = ''; // 중국어가 없는 경우 빈 문자열
+            }
+
+            segments.add(TextSegment(
+              originalText: originalSentence,
+              translatedText: adjustedTranslatedSentences[i],
+              pinyin: pinyin,
+            ));
+          }
+
+          debugPrint('생성된 세그먼트 수: ${segments.length}');
+
+          final processedText = ProcessedText(
+            fullOriginalText: originalText,
+            fullTranslatedText: translatedText,
+            segments: segments,
+            showFullText: false, // 문장별 모드로 시작
+          );
+
+          if (mounted) {
+            setState(() {
+              _processedText = processedText;
+              _isProcessingText = false;
+            });
+          }
         }
       }
     } catch (e) {
@@ -114,6 +193,17 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         });
       }
     }
+  }
+
+  // 텍스트를 문장 단위로 분리
+  List<String> _splitIntoSentences(String text) {
+    if (text.isEmpty) return [];
+
+    // 문장 구분자로 분리
+    final sentences = text.split(RegExp(r'(?<=[.!?。！？])\s*'));
+
+    // 빈 문장 제거 및 공백 제거
+    return sentences.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
   }
 
   @override
