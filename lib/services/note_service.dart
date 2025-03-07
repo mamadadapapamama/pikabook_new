@@ -11,8 +11,7 @@ import 'page_service.dart';
 import 'image_service.dart';
 import 'ocr_service.dart';
 import 'translation_service.dart';
-import 'note_cache_service.dart';
-import 'page_cache_service.dart';
+import 'unified_cache_service.dart';
 
 class NoteService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -21,8 +20,7 @@ class NoteService {
   final ImageService _imageService = ImageService();
   final OcrService _ocrService = OcrService();
   final TranslationService _translationService = TranslationService();
-  final NoteCacheService _noteCacheService = NoteCacheService();
-  final PageCacheService _pageCacheService = PageCacheService();
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
 
   // SharedPreferences 키
   static const String _cachedNotesKey = 'cached_notes';
@@ -44,7 +42,7 @@ class NoteService {
             snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
 
         // 백그라운드에서 노트 캐싱
-        _noteCacheService.cacheNotes(notes);
+        _cacheService.cacheNotes(notes);
 
         debugPrint('페이징된 노트 목록 수신: ${notes.length}개');
         return notes;
@@ -71,7 +69,7 @@ class NoteService {
           snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
 
       // 백그라운드에서 노트 캐싱
-      _noteCacheService.cacheNotes(notes);
+      _cacheService.cacheNotes(notes);
 
       return notes;
     } catch (e) {
@@ -88,7 +86,7 @@ class NoteService {
             snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
 
         // 백그라운드에서 노트 캐싱
-        _noteCacheService.cacheNotes(notes);
+        _cacheService.cacheNotes(notes);
 
         return notes;
       });
@@ -103,7 +101,7 @@ class NoteService {
   Future<List<Note>> getCachedNotes() async {
     try {
       // 새로운 캐시 서비스 사용
-      return await _noteCacheService.getCachedNotes();
+      return await _cacheService.getCachedNotes();
     } catch (e) {
       debugPrint('캐시된 노트를 가져오는 중 오류 발생: $e');
       return [];
@@ -114,7 +112,7 @@ class NoteService {
   Future<void> cacheNotes(List<Note> notes) async {
     try {
       // 새로운 캐시 서비스 사용
-      await _noteCacheService.cacheNotes(notes);
+      await _cacheService.cacheNotes(notes);
     } catch (e) {
       debugPrint('노트 캐싱 중 오류 발생: $e');
     }
@@ -195,7 +193,7 @@ class NoteService {
       final note = Note.fromFirestore(docSnapshot);
 
       // 노트 캐싱
-      await _noteCacheService.cacheNote(note);
+      await _cacheService.cacheNote(note);
 
       return note;
     } catch (e) {
@@ -218,7 +216,7 @@ class NoteService {
       });
 
       // 캐시 업데이트
-      await _noteCacheService.cacheNote(updatedNote);
+      await _cacheService.cacheNote(updatedNote);
     } catch (e) {
       debugPrint('노트 업데이트 중 오류 발생: $e');
       rethrow;
@@ -235,10 +233,10 @@ class NoteService {
       await _notesCollection.doc(noteId).delete();
 
       // 캐시에서 노트 삭제
-      await _noteCacheService.removeCachedNote(noteId);
+      await _cacheService.removeCachedNote(noteId);
 
       // 페이지 캐시에서도 삭제
-      await _pageCacheService.removePagesForNote(noteId);
+      await _cacheService.removePagesForNote(noteId);
     } catch (e) {
       debugPrint('노트 삭제 중 오류 발생: $e');
       rethrow;
@@ -254,10 +252,10 @@ class NoteService {
       });
 
       // 캐시된 노트 업데이트
-      final cachedNote = await _noteCacheService.getCachedNote(noteId);
+      final cachedNote = await _cacheService.getCachedNote(noteId);
       if (cachedNote != null) {
         final updatedNote = cachedNote.copyWith(isFavorite: isFavorite);
-        await _noteCacheService.cacheNote(updatedNote);
+        await _cacheService.cacheNote(updatedNote);
       }
     } catch (e) {
       debugPrint('즐겨찾기 토글 중 오류 발생: $e');
@@ -275,8 +273,11 @@ class NoteService {
 
       debugPrint('노트 $noteId와 페이지 로드 시작');
 
-      // 1. 캐시에서 노트 확인
-      note = await _noteCacheService.getCachedNote(noteId);
+      // 1. 통합 캐시 서비스에서 노트와 페이지 가져오기
+      final cacheResult = await _cacheService.getNoteWithPages(noteId);
+      note = cacheResult['note'] as Note?;
+      pages = (cacheResult['pages'] as List<dynamic>).cast<page_model.Page>();
+      isFromCache = cacheResult['isFromCache'] as bool;
 
       // 2. 캐시에 노트가 없으면 Firestore에서 가져오기
       if (note == null) {
@@ -284,32 +285,20 @@ class NoteService {
         if (docSnapshot.exists) {
           note = Note.fromFirestore(docSnapshot);
           // 노트 캐싱
-          await _noteCacheService.cacheNote(note);
+          await _cacheService.cacheNote(note);
           debugPrint('Firestore에서 노트 로드 및 캐싱: $noteId');
         } else {
           throw Exception('노트를 찾을 수 없습니다.');
         }
       } else {
-        isFromCache = true;
         debugPrint('캐시에서 노트 로드: $noteId');
       }
 
-      // 3. 캐시에서 페이지 확인 (병렬 처리)
-      final hasAllPagesTask = _pageCacheService.hasAllPagesForNote(noteId);
-      final processingStatusTask = _checkBackgroundProcessingStatus(noteId);
+      // 3. 백그라운드 처리 상태 확인
+      isProcessing = await _checkBackgroundProcessingStatus(noteId);
 
-      final results =
-          await Future.wait([hasAllPagesTask, processingStatusTask]);
-      final hasAllPages = results[0] as bool;
-      isProcessing = results[1] as bool;
-
-      if (hasAllPages) {
-        // 캐시에 모든 페이지가 있으면 캐시에서 가져오기
-        pages = await _pageCacheService.getPagesForNote(noteId);
-        isFromCache = true;
-        debugPrint('캐시에서 페이지 로드: ${pages.length}개');
-      } else {
-        // 캐시에 페이지가 없으면 Firestore에서 가져오기
+      // 4. 캐시에 페이지가 없거나 불완전하면 Firestore에서 가져오기
+      if (pages.isEmpty) {
         debugPrint('Firestore에서 노트 $noteId의 페이지 로드 시작');
         pages = await _pageService.getPagesForNote(noteId);
 
@@ -317,13 +306,13 @@ class NoteService {
         if (pages.isNotEmpty) {
           // 메인 스레드 차단 방지를 위해 microtask 사용
           Future.microtask(() async {
-            await _pageCacheService.cachePages(noteId, pages);
+            await _cacheService.cachePages(noteId, pages);
             debugPrint('백그라운드에서 노트 $noteId의 페이지 ${pages.length}개 캐싱 완료');
           });
         }
       }
 
-      // 4. 이미지 미리 로드 (백그라운드에서 처리)
+      // 5. 이미지 미리 로드 (백그라운드에서 처리)
       if (pages.isNotEmpty) {
         _preloadImagesInBackground(pages);
       }
@@ -398,6 +387,10 @@ class NoteService {
         return;
       }
 
+      // 처리 진행 상황 추적
+      int processedCount = 0;
+      final totalCount = imageFiles.length;
+
       for (int i = 0; i < imageFiles.length; i++) {
         final imageFile = imageFiles[i];
         final pageId = pageIds[i];
@@ -435,8 +428,15 @@ class NoteService {
 
           // 페이지 캐싱
           if (updatedPage != null) {
-            await _pageCacheService.cachePage(noteId, updatedPage);
+            await _cacheService.cachePage(noteId, updatedPage);
             print('페이지 내용 업데이트 완료: 이미지 ${i + 1}, 페이지 ID: ${pageId}');
+
+            // 진행 상황 업데이트
+            processedCount++;
+            if (!silentProgress && progressCallback != null) {
+              final progress = (processedCount * 100) ~/ totalCount;
+              progressCallback(progress);
+            }
           } else {
             print('페이지 내용 업데이트 실패: 이미지 ${i + 1}, 페이지 ID: ${pageId}');
           }
@@ -456,8 +456,40 @@ class NoteService {
         final noteDoc = await _notesCollection.doc(noteId).get();
         if (noteDoc.exists) {
           final updatedNote = Note.fromFirestore(noteDoc);
-          await _noteCacheService.cacheNote(updatedNote);
+          await _cacheService.cacheNote(updatedNote);
           print('노트 캐시 업데이트 완료: $noteId');
+
+          // 페이지 목록 업데이트 확인
+          final data = noteDoc.data() as Map<String, dynamic>?;
+          final storedPageIds = data?['pages'] as List<dynamic>?;
+
+          // 페이지 ID 목록이 없거나 불완전한 경우 업데이트
+          if (storedPageIds == null ||
+              storedPageIds.length < pageIds.length + 1) {
+            // 첫 번째 페이지 ID 가져오기
+            final firstPageSnapshot = await _notesCollection
+                .where('noteId', isEqualTo: noteId)
+                .where('pageNumber', isEqualTo: 0)
+                .limit(1)
+                .get();
+
+            List<String> allPageIds = [];
+
+            if (firstPageSnapshot.docs.isNotEmpty) {
+              final firstPageId = firstPageSnapshot.docs.first.id;
+              allPageIds = [firstPageId, ...pageIds];
+            } else {
+              allPageIds = pageIds;
+            }
+
+            // 노트 문서에 페이지 ID 목록 업데이트
+            await _notesCollection.doc(noteId).update({
+              'pages': allPageIds,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+
+            print('노트 문서의 페이지 ID 목록 업데이트 완료: ${allPageIds.length}개');
+          }
         }
       } catch (e) {
         print('노트 캐시 업데이트 실패: $e');
@@ -465,6 +497,17 @@ class NoteService {
 
       // 백그라운드 처리 상태 업데이트
       await _setBackgroundProcessingStatus(noteId, false);
+
+      // 완료 후 페이지 캐시 강제 갱신
+      try {
+        final pages = await _pageService.getPagesForNote(noteId);
+        if (pages.isNotEmpty) {
+          await _cacheService.cachePages(noteId, pages);
+          print('백그라운드 처리 완료 후 페이지 캐시 강제 갱신: ${pages.length}개');
+        }
+      } catch (e) {
+        print('페이지 캐시 강제 갱신 중 오류 발생: $e');
+      }
     } catch (e) {
       print('백그라운드 페이지 내용 채우기 중 오류 발생: $e');
       await _setBackgroundProcessingStatus(noteId, false);
@@ -689,13 +732,13 @@ class NoteService {
             // 페이지 캐싱
             if (updatedFirstPage != null) {
               firstPage = updatedFirstPage;
-              await _pageCacheService.cachePage(noteId, updatedFirstPage);
+              await _cacheService.cachePage(noteId, updatedFirstPage);
               print('첫 번째 페이지 내용 업데이트 완료: ${updatedFirstPage.id}');
             }
 
             // 진행 상황 업데이트 (첫 페이지 완료)
             if (!silentProgress && progressCallback != null) {
-              progressCallback(100);
+              progressCallback((100 / imageFiles.length).round());
             }
           }
         } catch (e) {
@@ -708,7 +751,7 @@ class NoteService {
       final note = Note.fromFirestore(docSnapshot);
 
       // 노트 캐싱
-      await _noteCacheService.cacheNote(note);
+      await _cacheService.cacheNote(note);
 
       // 첫 번째 페이지 객체 가져오기
       List<page_model.Page> firstPages = [];
@@ -721,27 +764,36 @@ class NoteService {
         }
       }
 
+      // 백그라운드 처리 상태 설정
+      await _setBackgroundProcessingStatus(noteId, imageFiles.length > 1);
+
       // 첫 번째 페이지 처리 완료 후 결과 반환
       final result = {
         'success': true,
         'note': note,
         'pages': firstPages,
         'noteId': noteId,
-        'processingComplete': false, // 항상 false로 설정 (나머지 페이지는 백그라운드에서 처리)
+        'processingComplete': imageFiles.length <= 1, // 이미지가 1개만 있으면 완료
       };
 
       // 나머지 이미지는 백그라운드에서 처리 (진행 상황 업데이트 없이)
       if (imageFiles.length > 1) {
         // 백그라운드에서 나머지 페이지 내용 채우기
-        Future.microtask(() {
-          _fillRemainingPagesContent(
+        Future.microtask(() async {
+          await _fillRemainingPagesContent(
             noteId: noteId,
             imageFiles: imageFiles.sublist(1),
             pageIds: pageIds.sublist(1),
             targetLanguage: targetLanguage,
             progressCallback: progressCallback,
-            silentProgress: true, // 항상 조용히 처리
+            silentProgress: silentProgress,
           );
+
+          // 처리 완료 후 노트 캐시 갱신
+          final updatedNote = await getNoteById(noteId);
+          if (updatedNote != null) {
+            await _cacheService.cacheNote(updatedNote);
+          }
         });
       }
 
@@ -787,7 +839,7 @@ class NoteService {
 
       // 페이지 캐싱
       if (page != null) {
-        await _pageCacheService.cachePage(noteId, page);
+        await _cacheService.cachePage(noteId, page);
       }
 
       // 노트 업데이트 (첫 페이지 내용으로 노트 내용 업데이트)

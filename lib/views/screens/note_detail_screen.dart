@@ -73,38 +73,72 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
 
     try {
+      // 백그라운드 처리 중인 경우 스낵바 표시
+      if (widget.isProcessingBackground && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('추가 페이지를 백그라운드에서 처리 중입니다...'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+
       // 노트와 페이지를 함께 로드 (캐싱 활용)
       final result = await _noteService.getNoteWithPages(widget.noteId);
       final note = result['note'] as Note;
       final pages = result['pages'] as List<dynamic>;
+      final isFromCache = result['isFromCache'] as bool;
+      final isProcessingBackground =
+          result['isProcessingBackground'] as bool? ?? false;
 
       if (mounted) {
         setState(() {
           _note = note;
           _isFavorite = note.isFavorite;
-          _pages = pages.cast<page_model.Page>();
+
+          // 페이지 업데이트 (기존 페이지 유지하면서 새 페이지 추가)
+          if (_pages.isEmpty) {
+            // 첫 로드 시에는 모든 페이지 설정
+            _pages = pages.cast<page_model.Page>();
+          } else if (pages.isNotEmpty && pages.length > _pages.length) {
+            // 페이지가 추가된 경우 (백그라운드 처리 완료 등)
+            _pages = pages.cast<page_model.Page>();
+            debugPrint('페이지 수가 증가하여 전체 페이지 업데이트: ${_pages.length}개');
+          }
 
           // 페이지 번호 순으로 정렬
           _pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
 
-          _imageFiles = List.filled(_pages.length, null);
-          _currentPageIndex = _pages.isNotEmpty ? 0 : -1;
+          // 이미지 파일 배열 초기화 (이미 로드된 이미지는 유지)
+          if (_imageFiles.length != _pages.length) {
+            final newImageFiles = List<File?>.filled(_pages.length, null);
+            // 기존 이미지 파일 복사
+            for (int i = 0; i < _imageFiles.length && i < _pages.length; i++) {
+              newImageFiles[i] = _imageFiles[i];
+            }
+            _imageFiles = newImageFiles;
+          }
+
+          _currentPageIndex =
+              _currentPageIndex >= 0 && _currentPageIndex < _pages.length
+                  ? _currentPageIndex
+                  : (_pages.isNotEmpty ? 0 : -1);
           _isLoading = false;
         });
 
-        // 각 페이지의 이미지 로드
-        _loadPageImages();
-
         // 페이지 수 로그 출력
-        debugPrint('노트에 ${_pages.length}개의 페이지가 있습니다.');
+        debugPrint('노트에 ${_pages.length}개의 페이지가 있습니다. (캐시에서 로드: $isFromCache)');
         for (int i = 0; i < _pages.length; i++) {
           final page = _pages[i];
           debugPrint(
               '페이지[$i]: id=${page.id}, pageNumber=${page.pageNumber}, 이미지=${page.imageUrl != null}');
         }
 
-        // 페이지가 없거나 1개만 있는 경우 페이지 서비스에 다시 요청
-        if (_pages.length <= 1) {
+        // 각 페이지의 이미지 로드 (현재 페이지 우선)
+        _loadPageImages();
+
+        // 페이지가 없거나 1개만 있고 캐시에서 로드된 경우에만 페이지 서비스에 다시 요청
+        if (_pages.length <= 1 && isFromCache) {
           debugPrint('페이지가 ${_pages.length}개만 로드되어 페이지 서비스에 다시 요청합니다.');
           _reloadPages();
         }
@@ -122,52 +156,90 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   // 페이지 다시 로드
   Future<void> _reloadPages() async {
     try {
+      // 이미 로드 중인지 확인
+      if (_isLoading) return;
+
+      setState(() {
+        _isLoading = true;
+      });
+
       // 페이지 서비스에서 직접 페이지 목록 가져오기
       final pages = await _pageService.getPagesForNote(widget.noteId);
 
       if (mounted && pages.isNotEmpty) {
         setState(() {
-          _pages = pages;
-          // 이미지 파일 배열 크기 조정
-          if (_imageFiles.length != _pages.length) {
-            _imageFiles = List.filled(_pages.length, null);
+          // 기존 페이지 수보다 많은 경우에만 업데이트
+          if (pages.length > _pages.length) {
+            _pages = pages;
+            // 이미지 파일 배열 크기 조정 (기존 이미지 유지)
+            if (_imageFiles.length != _pages.length) {
+              final newImageFiles = List<File?>.filled(_pages.length, null);
+              // 기존 이미지 파일 복사
+              for (int i = 0;
+                  i < _imageFiles.length && i < _pages.length;
+                  i++) {
+                newImageFiles[i] = _imageFiles[i];
+              }
+              _imageFiles = newImageFiles;
+            }
+
+            // 현재 페이지 인덱스 확인
+            if (_currentPageIndex >= _pages.length) {
+              _currentPageIndex = _pages.isNotEmpty ? 0 : -1;
+            }
+
+            debugPrint('페이지 다시 로드 완료: ${_pages.length}개');
+          } else {
+            debugPrint(
+                '서버에서 가져온 페이지 수(${pages.length})가 현재 페이지 수(${_pages.length})보다 적거나 같아 업데이트하지 않음');
           }
-          // 현재 페이지 인덱스 확인
-          if (_currentPageIndex >= _pages.length) {
-            _currentPageIndex = 0;
-          }
+
+          _isLoading = false;
         });
 
         // 이미지 로드
         _loadPageImages();
-
-        debugPrint('페이지 다시 로드 완료: ${_pages.length}개');
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
       }
     } catch (e) {
       debugPrint('페이지 다시 로드 중 오류 발생: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _loadPageImages() async {
+    if (_pages.isEmpty) return;
+
     // 현재 페이지 이미지 우선 로드 (동기적으로 처리)
-    await _loadPageImage(_currentPageIndex);
+    if (_currentPageIndex >= 0 && _currentPageIndex < _pages.length) {
+      await _loadPageImage(_currentPageIndex);
+    }
 
     // 다음 페이지와 이전 페이지 이미지 미리 로드 (비동기적으로 처리)
-    if (_currentPageIndex + 1 < _pages.length) {
-      _loadPageImage(_currentPageIndex + 1);
-    }
+    Future.microtask(() async {
+      // 다음 페이지 로드
+      if (_currentPageIndex + 1 < _pages.length) {
+        await _loadPageImage(_currentPageIndex + 1);
+      }
 
-    if (_currentPageIndex - 1 >= 0) {
-      _loadPageImage(_currentPageIndex - 1);
-    }
+      // 이전 페이지 로드
+      if (_currentPageIndex - 1 >= 0) {
+        await _loadPageImage(_currentPageIndex - 1);
+      }
 
-    // 나머지 페이지 이미지는 백그라운드에서 로드
-    Future.microtask(() {
+      // 나머지 페이지 이미지는 백그라운드에서 로드
       for (int i = 0; i < _pages.length; i++) {
         if (i != _currentPageIndex &&
             i != _currentPageIndex + 1 &&
             i != _currentPageIndex - 1) {
-          _loadPageImage(i);
+          await _loadPageImage(i);
         }
       }
     });
@@ -175,20 +247,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Future<void> _loadPageImage(int index) async {
     if (index < 0 || index >= _pages.length) return;
+    if (_imageFiles.length <= index) return;
 
     final page = _pages[index];
     if (page.imageUrl == null || page.imageUrl!.isEmpty) return;
     if (_imageFiles[index] != null) return; // 이미 로드된 경우 스킵
 
     try {
-      if (mounted) {
-        setState(() {
-          _imageFiles[index] = null;
-        });
-      }
-
       final imageFile = await _imageService.getImageFile(page.imageUrl);
-      if (mounted) {
+      if (mounted && index < _imageFiles.length) {
         setState(() {
           _imageFiles[index] = imageFile;
         });
@@ -391,29 +458,24 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
-  void _changePage(int index) {
-    if (index >= 0 && index < _pages.length) {
-      // 페이지 전환 시 TTS 중지
-      _ttsService.stop();
-
-      setState(() {
-        _currentPageIndex = index;
-      });
-      debugPrint('페이지 전환: $_currentPageIndex -> $index');
-
-      // 페이지 전환 시 해당 페이지의 이미지 로드 확인 (동기적으로 처리)
-      _loadPageImage(index).then((_) {
-        // 다음 페이지 이미지 미리 로드 (있는 경우)
-        if (index + 1 < _pages.length) {
-          _loadPageImage(index + 1);
-        }
-
-        // 이전 페이지 이미지 미리 로드 (있는 경우)
-        if (index - 1 >= 0) {
-          _loadPageImage(index - 1);
-        }
-      });
+  void _changePage(int newIndex) {
+    if (newIndex < 0 ||
+        newIndex >= _pages.length ||
+        newIndex == _currentPageIndex) {
+      return;
     }
+
+    debugPrint('페이지 전환: $_currentPageIndex -> $newIndex');
+
+    // TTS 중지
+    _ttsService.stop();
+
+    setState(() {
+      _currentPageIndex = newIndex;
+    });
+
+    // 새 페이지의 이미지 로드
+    _loadPageImages();
   }
 
   void _showMoreOptions() {
