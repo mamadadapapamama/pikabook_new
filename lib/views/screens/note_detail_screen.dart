@@ -18,8 +18,13 @@ import 'flashcard_screen.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;
+  final bool isProcessingBackground;
 
-  const NoteDetailScreen({Key? key, required this.noteId}) : super(key: key);
+  const NoteDetailScreen({
+    Key? key,
+    required this.noteId,
+    this.isProcessingBackground = false,
+  }) : super(key: key);
 
   @override
   State<NoteDetailScreen> createState() => _NoteDetailScreenState();
@@ -50,7 +55,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   void initState() {
     super.initState();
     _loadNote();
-    _ttsService.init();
+    _initTts();
     _loadUserPreferences();
   }
 
@@ -190,6 +195,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     } catch (e) {
       debugPrint('이미지 로드 중 오류 발생: $e');
     }
+  }
+
+  // TTS 초기화
+  void _initTts() {
+    _ttsService.init();
   }
 
   Future<void> _toggleFavorite() async {
@@ -758,11 +768,25 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final bool isLoadingImage =
         imageFile == null && currentPage.imageUrl != null;
 
+    // 이미지가 로딩 중이면 로딩 인디케이터 표시
+    if (isLoadingImage) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('페이지 로딩 중...', style: TextStyle(fontSize: 16)),
+          ],
+        ),
+      );
+    }
+
     return PageContentWidget(
       key: ValueKey('page_content_${currentPage.id}_$_currentPageIndex'),
       page: currentPage,
       imageFile: imageFile,
-      isLoadingImage: isLoadingImage,
+      isLoadingImage: false,
       noteId: widget.noteId,
       onCreateFlashCard: _createFlashCard,
       textProcessingMode: _textProcessingMode,

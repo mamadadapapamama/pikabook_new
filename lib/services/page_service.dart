@@ -386,4 +386,100 @@ class PageService {
   void clearCache() {
     _cacheService.clearCache();
   }
+
+  // 빈 페이지 구조만 생성 (내용 없음)
+  Future<page_model.Page?> createEmptyPage({
+    required String noteId,
+    required int pageNumber,
+  }) async {
+    try {
+      // 사용자 확인
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw Exception('로그인이 필요합니다.');
+      }
+
+      // 빈 페이지 데이터 생성
+      final now = DateTime.now();
+      final pageData = page_model.Page(
+        originalText: '',
+        translatedText: '',
+        pageNumber: pageNumber,
+        imageUrl: null,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      // Firestore에 페이지 추가
+      final pageRef = await _pagesCollection.add({
+        ...pageData.toFirestore(),
+        'userId': user.uid,
+        'noteId': noteId,
+      });
+
+      // ID가 포함된 페이지 객체 반환
+      final newPage = page_model.Page(
+        id: pageRef.id,
+        originalText: '',
+        translatedText: '',
+        pageNumber: pageNumber,
+        imageUrl: null,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      // 캐시에 새 페이지 저장
+      _cacheService.cachePage(pageRef.id, newPage);
+
+      debugPrint('빈 페이지 구조 생성 완료: ID=${pageRef.id}, 페이지 번호=$pageNumber');
+      return newPage;
+    } catch (e) {
+      debugPrint('빈 페이지 구조 생성 중 오류 발생: $e');
+      return null;
+    }
+  }
+
+  // 기존 페이지 내용 업데이트
+  Future<page_model.Page?> updatePageContent({
+    required String pageId,
+    required String originalText,
+    required String translatedText,
+    required File imageFile,
+  }) async {
+    try {
+      // 이미지 업로드
+      final imageUrl = await _imageService.uploadImage(imageFile);
+
+      // 업데이트할 데이터
+      final updates = <String, dynamic>{
+        'originalText': originalText,
+        'translatedText': translatedText,
+        'imageUrl': imageUrl,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Firestore 업데이트
+      await _pagesCollection.doc(pageId).update(updates);
+
+      // 업데이트된 페이지 가져오기
+      final updatedDoc = await _pagesCollection.doc(pageId).get();
+      if (!updatedDoc.exists) {
+        return null;
+      }
+
+      // 페이지 객체 생성
+      final updatedPage = page_model.Page.fromFirestore(updatedDoc);
+
+      // 캐시 업데이트
+      if (updatedPage.id != null) {
+        _cacheService.cachePage(updatedPage.id!, updatedPage);
+      }
+
+      debugPrint('페이지 내용 업데이트 완료: ID=$pageId');
+      return updatedPage;
+    } catch (e) {
+      debugPrint('페이지 내용 업데이트 중 오류 발생: $e');
+      return null;
+    }
+  }
 }

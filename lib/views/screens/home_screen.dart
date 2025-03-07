@@ -279,44 +279,60 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
       BuildContext context, List<File> images) async {
     if (images.isEmpty) return;
 
-    Note? note;
+    // 로딩 다이얼로그 표시 여부를 추적하는 변수
+    bool isLoadingDialogShowing = false;
 
     try {
       print("노트 생성 시작: ${images.length}개 이미지");
 
-      // 여러 이미지로 노트 생성 (진행 상황 업데이트 무시)
-      note = await _noteService.createNoteWithMultipleImages(
+      // 로딩 다이얼로그 표시 - 첫 페이지 로딩까지만 표시
+      if (context.mounted) {
+        LoadingDialog.show(context, message: '노트 생성 중...');
+        isLoadingDialogShowing = true;
+      }
+
+      // 여러 이미지로 노트 생성 (첫 번째 페이지만 처리하고 결과 반환)
+      final result = await _noteService.createNoteWithMultipleImages(
         imageFiles: images,
         title: null, // 자동 타이틀 생성을 위해 null 전달
         silentProgress: true, // 진행 상황 업데이트 무시
-        progressCallback: null, // 콜백 없음
       );
 
-      print("노트 생성 완료: ${note?.id}");
-
-      // 노트 생성 완료 후 즉시 로딩 다이얼로그 닫기
-      if (context.mounted) {
+      // 로딩 다이얼로그 닫기 (화면 전환 전)
+      if (context.mounted && isLoadingDialogShowing) {
         LoadingDialog.hide(context);
+        isLoadingDialogShowing = false;
+        // 약간의 지연을 주어 다이얼로그가 확실히 닫히도록 함
+        await Future.delayed(Duration(milliseconds: 100));
       }
 
-      // 노트 생성 완료 후 즉시 노트 상세 화면으로 이동
-      if (context.mounted && note != null && note.id != null) {
-        print("노트 상세 화면으로 이동 시도");
+      if (result['success'] == true && result['noteId'] != null) {
+        final String noteId = result['noteId'] as String;
 
-        // 즉시 노트 상세 화면으로 이동
-        final String noteId = note.id!;
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => NoteDetailScreen(noteId: noteId),
-          ),
-        );
+        // 노트 상세 화면으로 이동
+        if (context.mounted) {
+          print("노트 상세 화면으로 이동 시도");
 
-        print("노트 상세 화면으로 이동 완료");
+          // 화면 전환
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => NoteDetailScreen(
+                noteId: noteId,
+                isProcessingBackground: false, // 백그라운드 처리 알림 제거
+              ),
+            ),
+          );
+
+          print("노트 상세 화면으로 이동 완료");
+        }
       } else {
-        print("노트 생성 실패 또는 ID 없음: ${note?.id}");
+        // 오류 메시지 표시
+        final message = result['message'] ?? '노트 생성에 실패했습니다.';
+        print("노트 생성 실패: $message");
+
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('노트 생성에 실패했습니다.')),
+            SnackBar(content: Text(message.toString())),
           );
         }
       }
@@ -324,8 +340,9 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
       print("노트 생성 중 오류 발생: $e");
 
       // 오류 발생 시 로딩 다이얼로그 닫고 오류 메시지 표시
-      if (context.mounted) {
+      if (context.mounted && isLoadingDialogShowing) {
         LoadingDialog.hide(context);
+        isLoadingDialogShowing = false;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
         );
