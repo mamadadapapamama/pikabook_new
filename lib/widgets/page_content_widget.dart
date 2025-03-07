@@ -122,12 +122,25 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           // 캐시된 텍스트 사용
           debugPrint('캐시된 텍스트 사용');
 
+          // 텍스트 내용 확인
+          debugPrint(
+              '원본 텍스트 길이: ${originalText.length}, 처음 50자: ${originalText.substring(0, originalText.length > 50 ? 50 : originalText.length)}');
+          debugPrint(
+              '번역 텍스트 길이: ${translatedText.length}, 처음 50자: ${translatedText.substring(0, translatedText.length > 50 ? 50 : translatedText.length)}');
+
           // 문장 단위로 분리
           final originalSentences = _splitIntoSentences(originalText);
           final translatedSentences = _splitIntoSentences(translatedText);
 
-          debugPrint(
-              '원본 문장 수: ${originalSentences.length}, 번역 문장 수: ${translatedSentences.length}');
+          // 분리된 문장 확인
+          debugPrint('분리된 원본 문장 수: ${originalSentences.length}');
+          if (originalSentences.isNotEmpty) {
+            debugPrint('첫 번째 원본 문장: ${originalSentences[0]}');
+          }
+          debugPrint('분리된 번역 문장 수: ${translatedSentences.length}');
+          if (translatedSentences.isNotEmpty) {
+            debugPrint('첫 번째 번역 문장: ${translatedSentences[0]}');
+          }
 
           // 문장 수 맞추기
           final sentenceCount = originalSentences.length;
@@ -150,9 +163,15 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             // 중국어가 포함된 문장에 대해서만 핀인 생성
             if (_languageDetectionService.containsChinese(originalSentence)) {
               try {
-                pinyin = await _languageDetectionService
-                    .generatePinyin(originalSentence);
-                debugPrint('핀인 생성 성공: $pinyin');
+                // 문장에서 중국어 문자만 추출하여 핀인 생성
+                final chineseCharsOnly = _extractChineseChars(originalSentence);
+                if (chineseCharsOnly.isNotEmpty) {
+                  pinyin = await _languageDetectionService
+                      .generatePinyin(chineseCharsOnly);
+                  debugPrint('핀인 생성 성공 (중국어 문자만): $pinyin');
+                } else {
+                  pinyin = '';
+                }
               } catch (e) {
                 debugPrint('핀인 생성 실패: $e');
                 pinyin = ''; // 실패 시 빈 문자열
@@ -199,11 +218,26 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   List<String> _splitIntoSentences(String text) {
     if (text.isEmpty) return [];
 
-    // 문장 구분자로 분리
-    final sentences = text.split(RegExp(r'(?<=[.!?。！？])\s*'));
+    debugPrint('문장 분리 시작: 텍스트 길이 ${text.length}자');
 
-    // 빈 문장 제거 및 공백 제거
-    return sentences.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    // 문장 구분자 패턴 (마침표, 느낌표, 물음표, 쉼표 등 뒤에 공백이 있을 수도 있음)
+    final pattern = RegExp(r'(?<=[。！？!?\.,，、])\s*');
+
+    // 문장 구분자로 분리
+    final sentences = text.split(pattern);
+
+    // 빈 문장 제거
+    final result = sentences.where((s) => s.trim().isNotEmpty).toList();
+
+    // 결과 확인
+    debugPrint('분리된 문장 수: ${result.length}');
+    if (result.isNotEmpty) {
+      for (int i = 0; i < result.length && i < 3; i++) {
+        debugPrint('문장 $i: ${result[i]}');
+      }
+    }
+
+    return result;
   }
 
   @override
@@ -325,15 +359,24 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               ),
             )
           // 처리된 텍스트가 있는 경우
-          else if (_processedText != null)
-            ProcessedTextWidget(
-              processedText: _processedText!,
-              onTts: _speakText,
-              onDictionaryLookup: _showDictionarySnackbar,
-              onCreateFlashCard: (word, meaning) {
-                widget.onCreateFlashCard(word, meaning);
-              },
-            )
+          else if (_processedText != null) ...[
+            Builder(builder: (context) {
+              debugPrint(
+                  'ProcessedText 표시: 원본 텍스트 ${_processedText!.fullOriginalText.length}자, ' +
+                      '번역 텍스트 ${_processedText!.fullTranslatedText?.length ?? 0}자, ' +
+                      '세그먼트 ${_processedText!.segments?.length ?? 0}개, ' +
+                      '전체 텍스트 모드: ${_processedText!.showFullText}');
+
+              return ProcessedTextWidget(
+                processedText: _processedText!,
+                onTts: _speakText,
+                onDictionaryLookup: _showDictionarySnackbar,
+                onCreateFlashCard: (word, meaning) {
+                  widget.onCreateFlashCard(word, meaning);
+                },
+              );
+            }),
+          ]
           // 기존 방식으로 텍스트 표시 (처리된 텍스트가 없는 경우)
           else ...[
             // 텍스트 표시 모드 토글 버튼
@@ -513,5 +556,22 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  // 문자열에서 중국어 문자만 추출
+  String _extractChineseChars(String text) {
+    // 중국어 문자 패턴 (유니코드 범위: 4E00-9FFF)
+    final chinesePattern = RegExp(r'[\u4e00-\u9fff]');
+
+    // 중국어 문자만 추출
+    final buffer = StringBuffer();
+    for (int i = 0; i < text.length; i++) {
+      final char = text[i];
+      if (chinesePattern.hasMatch(char)) {
+        buffer.write(char);
+      }
+    }
+
+    return buffer.toString();
   }
 }

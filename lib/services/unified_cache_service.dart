@@ -368,4 +368,99 @@ class UnifiedCacheService {
 
     return validNotes;
   }
+
+  /// 번역 가져오기
+  Future<String?> getTranslation(
+      String originalText, String targetLanguage) async {
+    if (originalText.isEmpty) return null;
+
+    // 긴 텍스트의 경우 해시 사용
+    final textHash = _generateTextHash(originalText);
+    final key =
+        _translationKeyPrefix + '${textHash}_${targetLanguage.toLowerCase()}';
+
+    // 메모리 캐시 확인
+    if (_translationCache.containsKey(key)) {
+      debugPrint('메모리에서 캐시된 번역 찾음');
+      return _translationCache[key];
+    }
+
+    // 로컬 캐시 확인
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedData = prefs.getString(key);
+      final timestampKey =
+          '${_translationKeyPrefix}timestamp_${textHash}_${targetLanguage.toLowerCase()}';
+      final timestampStr = prefs.getString(timestampKey);
+
+      if (cachedData != null && timestampStr != null) {
+        try {
+          final timestamp = DateTime.parse(timestampStr);
+          if (DateTime.now().difference(timestamp) < _cacheValidity) {
+            debugPrint('로컬에서 캐시된 번역 찾음');
+            // 메모리 캐시에도 저장
+            _translationCache[key] = cachedData;
+            _cacheTimestamps[key] = timestamp;
+            return cachedData;
+          }
+        } catch (e) {
+          debugPrint('타임스탬프 파싱 중 오류: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('로컬 캐시 접근 중 오류: $e');
+    }
+
+    return null;
+  }
+
+  /// 번역 캐싱
+  Future<void> cacheTranslation(
+      String originalText, String translatedText, String targetLanguage) async {
+    if (originalText.isEmpty || translatedText.isEmpty) return;
+
+    // 긴 텍스트의 경우 해시 사용
+    final textHash = _generateTextHash(originalText);
+    final key =
+        _translationKeyPrefix + '${textHash}_${targetLanguage.toLowerCase()}';
+
+    // 메모리 캐시에 저장
+    _translationCache[key] = translatedText;
+    _cacheTimestamps[key] = DateTime.now();
+
+    // 로컬 캐시에 저장
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, translatedText);
+      await prefs.setString(
+          '${_translationKeyPrefix}timestamp_${textHash}_${targetLanguage.toLowerCase()}',
+          DateTime.now().toIso8601String());
+    } catch (e) {
+      debugPrint('번역 로컬 캐싱 중 오류: $e');
+    }
+
+    // 캐시 크기 제한
+    _limitCacheSize();
+  }
+
+  /// 캐시 크기 제한
+  void _limitCacheSize() {
+    // 번역 캐시 크기 제한
+    if (_translationCache.length > _maxTranslationItems) {
+      // 가장 오래된 항목부터 제거
+      final sortedEntries = _cacheTimestamps.entries
+          .where((entry) => entry.key.startsWith(_translationKeyPrefix))
+          .toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
+
+      final itemsToRemove = sortedEntries.length - _maxTranslationItems;
+      if (itemsToRemove > 0) {
+        for (int i = 0; i < itemsToRemove; i++) {
+          final key = sortedEntries[i].key;
+          _translationCache.remove(key);
+          _cacheTimestamps.remove(key);
+        }
+      }
+    }
+  }
 }

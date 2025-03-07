@@ -145,37 +145,8 @@ class OcrService {
         // 핀인 제거 및 필터링 처리
         final processedText = _processExtractedText(fullText);
 
-        // 개별 텍스트 블록 처리 (첫 번째 항목은 전체 텍스트이므로 건너뜀)
-        final textBlocks = annotations.textAnnotations!.skip(1).toList();
-
-        // 필터링된 텍스트 블록을 저장할 리스트
-        final filteredBlocks = <vision.EntityAnnotation>[];
-
-        for (final block in textBlocks) {
-          final text = block.description ?? '';
-
-          // 텍스트가 비어있으면 건너뜀
-          if (text.isEmpty) continue;
-
-          // 필터링 조건 적용
-          if (_shouldKeepTextBlock(text)) {
-            filteredBlocks.add(block);
-          }
-        }
-
-        // 필터링된 텍스트 블록이 없으면 처리된 전체 텍스트 반환
-        if (filteredBlocks.isEmpty) {
-          debugPrint('필터링 후 감지된 텍스트 블록이 없습니다. 처리된 전체 텍스트 반환');
-          return processedText;
-        }
-
-        // 필터링된 텍스트 블록을 원본 위치에 따라 정렬하고 결합
-        final combinedText = _combineTextBlocks(filteredBlocks);
-
-        // 최종 결과에서 핀인 제거
-        final finalText = _removePinyin(combinedText);
-        debugPrint('최종 처리된 텍스트: $finalText');
-        return finalText;
+        // 개별 텍스트 블록 처리는 건너뛰고 전체 텍스트만 사용
+        return processedText;
       }
 
       return '';
@@ -198,22 +169,32 @@ class OcrService {
     final lines = text.split('\n');
     final processedLines = <String>[];
 
+    debugPrint('원본 텍스트 줄 수: ${lines.length}');
+
     for (final line in lines) {
+      // 빈 줄 건너뛰기
+      if (line.trim().isEmpty) continue;
+
       // 핀인 패턴 확인 (알파벳과 성조 기호로만 구성된 줄)
       if (_isPinyinLine(line)) {
         debugPrint('핀인으로 판단되어 제거: $line');
         continue;
       }
 
-      // 중국어 문자가 포함된 줄만 유지
+      // 중국어 문자가 포함된 줄 또는 문장 부호만 있는 줄 유지
       if (_containsChineseOrValidCompound(line)) {
-        // 줄 내에서 핀인 부분 제거
+        // 줄 내에서 핀인 부분 제거 (문장 부호는 유지)
         final cleanedLine = _removePinyin(line);
-        processedLines.add(cleanedLine);
+        if (cleanedLine.trim().isNotEmpty) {
+          processedLines.add(cleanedLine);
+          debugPrint('처리된 줄: $cleanedLine');
+        }
       }
     }
 
-    return processedLines.join('\n');
+    final result = processedLines.join('\n');
+    debugPrint('처리 후 텍스트 길이: ${result.length}');
+    return result;
   }
 
   // 핀인 줄인지 확인 (알파벳과 성조 기호로만 구성)
@@ -221,6 +202,11 @@ class OcrService {
     // 공백 제거
     final trimmed = line.trim();
     if (trimmed.isEmpty) return false;
+
+    // 문장 부호만 있는 경우 핀인이 아님
+    if (RegExp(r'^[。！？，,\.!?]+$').hasMatch(trimmed)) {
+      return false;
+    }
 
     // 중국어 문자가 포함되어 있으면 핀인이 아님
     if (RegExp(r'[\u4e00-\u9fff]').hasMatch(trimmed)) {
@@ -262,13 +248,24 @@ class OcrService {
       final cleanedWords = <String>[];
 
       for (final word in words) {
+        // 문장 부호만 있는 경우 유지
+        if (RegExp(r'^[。！？，,\.!?]+$').hasMatch(word.trim())) {
+          cleanedWords.add(word);
+          continue;
+        }
+
         // 핀인 단어가 아니면 유지
         if (!_isPinyinWord(word)) {
           cleanedWords.add(word);
+        } else {
+          debugPrint('핀인으로 판단되어 제외: $word');
         }
       }
 
-      cleanedLines.add(cleanedWords.join(' '));
+      final cleanedLine = cleanedWords.join(' ');
+      if (cleanedLine.trim().isNotEmpty) {
+        cleanedLines.add(cleanedLine);
+      }
     }
 
     return cleanedLines.join('\n');
@@ -279,6 +276,11 @@ class OcrService {
     // 공백 제거
     final trimmed = word.trim();
     if (trimmed.isEmpty) return false;
+
+    // 문장 부호만 있는 경우 핀인이 아님
+    if (RegExp(r'^[。！？，,\.!?]+$').hasMatch(trimmed)) {
+      return false;
+    }
 
     // 중국어 문자가 포함되어 있으면 핀인이 아님
     if (RegExp(r'[\u4e00-\u9fff]').hasMatch(trimmed)) {
@@ -305,31 +307,54 @@ class OcrService {
 
   // 중국어 문자 또는 유효한 복합문(영어+중국어, 숫자+중국어)이 포함되어 있는지 확인
   bool _containsChineseOrValidCompound(String text) {
+    // 공백만 있는 경우 제외
+    if (text.trim().isEmpty) return false;
+
     // 중국어 문자 포함 여부
     final hasChineseChars = RegExp(r'[\u4e00-\u9fff]').hasMatch(text);
-
-    // 중국어가 포함되어 있으면 유효함
-    if (hasChineseChars) {
-      return true;
-    }
 
     // 영어 문자 포함 여부
     final hasEnglishChars = RegExp(r'[a-zA-Z]').hasMatch(text);
 
-    // 숫자 포함 여부
+    // 문장 부호 포함 여부 (중국어 문장 부호 포함)
+    final hasPunctuation = RegExp(r'[。！？，,\.!?]').hasMatch(text);
+
+    // 숫자가 포함되어 있는지 확인
     final hasDigits = RegExp(r'\d').hasMatch(text);
 
-    // 영어+숫자 조합인 경우 (예: "Chapter 1")
+    // 중국어가 포함된 경우 유지
+    if (hasChineseChars) {
+      return true;
+    }
+
+    // 영어+숫자 조합인 경우 유지 (예: "Chapter 1")
     if (hasEnglishChars && hasDigits) {
       return true;
     }
 
-    // 그 외의 경우는 유효하지 않음
-    return false;
+    // 문장 부호만 있는 경우 유지 (문장 구분을 위해)
+    if (hasPunctuation && text.trim().length <= 2) {
+      return true;
+    }
+
+    // 그 외의 경우 (한국어, 일본어 등) 제외
+    if (!hasChineseChars && !hasEnglishChars && !hasPunctuation) {
+      debugPrint('지원되지 않는 언어 텍스트 제외: $text');
+      return false;
+    }
+
+    // 기본적으로 영어만 있는 경우도 유지 (영어+중국어 조합을 위해)
+    return true;
   }
 
   // 텍스트 블록을 필터링하는 메서드
   bool _shouldKeepTextBlock(String text) {
+    // 문장 부호만 있는 경우 유지
+    if (RegExp(r'^[。！？，,\.!?:"]+$').hasMatch(text.trim())) {
+      debugPrint('문장 부호 유지: $text');
+      return true;
+    }
+
     // 핀인으로 판단되면 제외
     if (_isPinyinWord(text) || _isPinyinLine(text)) {
       debugPrint('핀인으로 판단되어 제외: $text');
@@ -348,7 +373,10 @@ class OcrService {
     // 3. 영어 문자가 포함되어 있는지 확인
     final hasEnglishChars = RegExp(r'[a-zA-Z]').hasMatch(text);
 
-    // 4. 숫자가 포함되어 있는지 확인
+    // 4. 문장 부호가 포함되어 있는지 확인
+    final hasPunctuation = RegExp(r'[。！？，,\.!?:"]').hasMatch(text);
+
+    // 5. 숫자가 포함되어 있는지 확인
     final hasDigits = RegExp(r'\d').hasMatch(text);
 
     // 중국어가 포함된 경우 유지
@@ -361,8 +389,13 @@ class OcrService {
       return true;
     }
 
+    // 문장 부호가 포함된 경우 유지
+    if (hasPunctuation) {
+      return true;
+    }
+
     // 그 외의 경우 (한국어, 일본어 등) 제외
-    if (!hasChineseChars && !hasEnglishChars) {
+    if (!hasChineseChars && !hasEnglishChars && !hasPunctuation) {
       debugPrint('지원되지 않는 언어 텍스트 제외: $text');
       return false;
     }
@@ -414,27 +447,38 @@ class OcrService {
     // 정렬된 줄을 결합
     final buffer = StringBuffer();
 
+    debugPrint('정렬된 줄 수: ${sortedLineKeys.length}');
+
     for (int i = 0; i < sortedLineKeys.length; i++) {
       final lineKey = sortedLineKeys[i];
       final lineBlocks = lineGroups[lineKey]!;
+
+      debugPrint('줄 $i의 블록 수: ${lineBlocks.length}');
 
       // 현재 줄의 텍스트 블록 결합
       final lineBuffer = StringBuffer();
       for (int j = 0; j < lineBlocks.length; j++) {
         final text = lineBlocks[j].description ?? '';
 
+        // 문장 부호만 있는 경우 공백 없이 추가
+        final isPunctuation = RegExp(r'^[。！？，,\.!?:"]+$').hasMatch(text.trim());
+
         // 첫 번째 블록이 아니면 공백 추가
-        if (j > 0) lineBuffer.write(' ');
+        if (j > 0 && !isPunctuation) lineBuffer.write(' ');
 
         lineBuffer.write(text);
       }
+
+      debugPrint('줄 $i 텍스트: ${lineBuffer.toString()}');
 
       // 줄 추가
       if (i > 0) buffer.write('\n');
       buffer.write(lineBuffer.toString());
     }
 
-    return buffer.toString();
+    final result = buffer.toString();
+    debugPrint('결합된 텍스트: $result');
+    return result;
   }
 
   // HTTP 요청을 통한 텍스트 추출 (백업 방법)
@@ -491,38 +535,8 @@ class OcrService {
           // 핀인 제거 및 필터링 처리
           final processedText = _processExtractedText(fullText);
 
-          // 개별 텍스트 블록 처리 (첫 번째 항목은 전체 텍스트이므로 건너뜀)
-          final textBlocks =
-              (responses[0]['textAnnotations'] as List).skip(1).toList();
-
-          // 필터링된 텍스트 블록을 저장할 리스트
-          final filteredBlocks = [];
-
-          for (final block in textBlocks) {
-            final text = block['description'] as String? ?? '';
-
-            // 텍스트가 비어있으면 건너뜀
-            if (text.isEmpty) continue;
-
-            // 필터링 조건 적용
-            if (_shouldKeepTextBlock(text)) {
-              filteredBlocks.add(block);
-            }
-          }
-
-          // 필터링된 텍스트 블록이 없으면 처리된 전체 텍스트 반환
-          if (filteredBlocks.isEmpty) {
-            debugPrint('HTTP 요청: 필터링 후 감지된 텍스트 블록이 없습니다. 처리된 전체 텍스트 반환');
-            return processedText;
-          }
-
-          // 필터링된 텍스트 블록을 위치에 따라 정렬하고 결합
-          final combinedText = _combineHttpTextBlocks(filteredBlocks);
-
-          // 최종 결과에서 핀인 제거
-          final finalText = _removePinyin(combinedText);
-          debugPrint('HTTP 요청: 최종 처리된 텍스트: $finalText');
-          return finalText;
+          // 개별 텍스트 블록 처리는 건너뛰고 전체 텍스트만 사용
+          return processedText;
         }
 
         return '';
@@ -533,71 +547,6 @@ class OcrService {
       debugPrint('HTTP 요청으로 OCR 시도 중 오류 발생: $e');
       throw e;
     }
-  }
-
-  // HTTP 응답의 텍스트 블록을 위치에 따라 정렬하고 결합하는 메서드
-  String _combineHttpTextBlocks(List<dynamic> blocks) {
-    if (blocks.isEmpty) return '';
-
-    // 텍스트 블록을 Y 좌표에 따라 그룹화
-    final Map<int, List<dynamic>> lineGroups = {};
-
-    // 각 블록의 Y 좌표 중앙값 계산
-    for (final block in blocks) {
-      if (block['boundingPoly'] == null ||
-          block['boundingPoly']['vertices'] == null) continue;
-
-      final vertices = block['boundingPoly']['vertices'];
-      if (vertices.length < 4) continue;
-
-      // 상단 Y 좌표 (왼쪽 상단, 오른쪽 상단 점의 평균)
-      final topY = ((vertices[0]['y'] ?? 0) + (vertices[1]['y'] ?? 0)) ~/ 2;
-
-      // 10픽셀 단위로 반올림하여 같은 줄로 그룹화
-      final lineKey = (topY ~/ 10) * 10;
-
-      if (!lineGroups.containsKey(lineKey)) {
-        lineGroups[lineKey] = [];
-      }
-      lineGroups[lineKey]!.add(block);
-    }
-
-    // 각 줄 내에서 X 좌표에 따라 정렬
-    for (final lineKey in lineGroups.keys) {
-      lineGroups[lineKey]!.sort((a, b) {
-        final aX = a['boundingPoly']['vertices'][0]['x'] ?? 0;
-        final bX = b['boundingPoly']['vertices'][0]['x'] ?? 0;
-        return aX.compareTo(bX);
-      });
-    }
-
-    // 줄 키를 기준으로 정렬 (위에서 아래로)
-    final sortedLineKeys = lineGroups.keys.toList()..sort();
-
-    // 정렬된 줄을 결합
-    final buffer = StringBuffer();
-
-    for (int i = 0; i < sortedLineKeys.length; i++) {
-      final lineKey = sortedLineKeys[i];
-      final lineBlocks = lineGroups[lineKey]!;
-
-      // 현재 줄의 텍스트 블록 결합
-      final lineBuffer = StringBuffer();
-      for (int j = 0; j < lineBlocks.length; j++) {
-        final text = lineBlocks[j]['description'] as String? ?? '';
-
-        // 첫 번째 블록이 아니면 공백 추가
-        if (j > 0) lineBuffer.write(' ');
-
-        lineBuffer.write(text);
-      }
-
-      // 줄 추가
-      if (i > 0) buffer.write('\n');
-      buffer.write(lineBuffer.toString());
-    }
-
-    return buffer.toString();
   }
 
   // 리소스 해제

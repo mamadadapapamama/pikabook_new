@@ -169,27 +169,53 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     // 세그먼트가 없는 경우
     if (widget.processedText.segments == null ||
         widget.processedText.segments!.isEmpty) {
+      debugPrint('세그먼트 데이터가 없습니다.');
       return const Center(
         child: Text('문장별 데이터가 없습니다. 전체 텍스트 모드를 사용해주세요.'),
       );
     }
 
+    debugPrint('세그먼트 표시: ${widget.processedText.segments!.length}개');
+
+    // 세그먼트 위젯 목록 생성
+    final segmentWidgets =
+        widget.processedText.segments!.asMap().entries.map((entry) {
+      final index = entry.key;
+      final segment = entry.value;
+      debugPrint(
+          '세그먼트 $index: ${segment.originalText.substring(0, segment.originalText.length > 10 ? 10 : segment.originalText.length)}...');
+
+      return TextSegmentWidget(
+        segment: segment,
+        onTts: widget.onTts != null
+            ? () => widget.onTts?.call(segment.originalText)
+            : null,
+        onDictionaryLookup: widget.onDictionaryLookup,
+        onCreateFlashCard: widget.onCreateFlashCard,
+      );
+    }).toList();
+
     // 세그먼트 목록 표시
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: widget.processedText.segments!.length,
-      itemBuilder: (context, index) {
-        final segment = widget.processedText.segments![index];
-        return TextSegmentWidget(
-          segment: segment,
-          onTts: widget.onTts != null
-              ? () => widget.onTts?.call(segment.originalText)
-              : null,
-          onDictionaryLookup: widget.onDictionaryLookup,
-          onCreateFlashCard: widget.onCreateFlashCard,
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '문장별 표시 (${widget.processedText.segments!.length}개)',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade700,
+          ),
+        ),
+        const SizedBox(height: 16),
+        // 세그먼트 위젯 목록을 ListView로 표시
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: segmentWidgets.length,
+          itemBuilder: (context, index) => segmentWidgets[index],
+        ),
+      ],
     );
   }
 }
