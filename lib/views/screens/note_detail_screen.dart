@@ -15,6 +15,7 @@ import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_content_widget.dart';
 import '../../widgets/page_indicator_widget.dart';
 import 'flashcard_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;
@@ -57,6 +58,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _loadNote();
     _initTts();
     _loadUserPreferences();
+
+    // 백그라운드 처리 완료 확인을 위한 타이머 설정
+    _setupBackgroundProcessingCheck();
   }
 
   @override
@@ -153,8 +157,53 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
-  // 페이지 다시 로드
-  Future<void> _reloadPages() async {
+  // 백그라운드 처리 완료 확인을 위한 타이머 설정
+  void _setupBackgroundProcessingCheck() {
+    // 5초마다 백그라운드 처리 상태 확인
+    Future.delayed(Duration(seconds: 5), () async {
+      if (!mounted) return;
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final pagesUpdated =
+            prefs.getBool('pages_updated_${widget.noteId}') ?? false;
+
+        if (pagesUpdated) {
+          // 페이지 업데이트가 완료된 경우
+          final updatedPageCount =
+              prefs.getInt('updated_page_count_${widget.noteId}') ?? 0;
+          debugPrint('백그라운드 처리 완료 감지: $updatedPageCount 페이지 업데이트됨');
+
+          // 플래그 초기화
+          await prefs.remove('pages_updated_${widget.noteId}');
+          await prefs.remove('updated_page_count_${widget.noteId}');
+
+          // 페이지 다시 로드
+          _reloadPages(forceReload: true);
+
+          // 완료 메시지 표시
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$updatedPageCount개의 추가 페이지 처리가 완료되었습니다.'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        } else {
+          // 아직 처리 중인 경우 타이머 재설정
+          _setupBackgroundProcessingCheck();
+        }
+      } catch (e) {
+        debugPrint('백그라운드 처리 상태 확인 중 오류 발생: $e');
+        // 오류 발생 시에도 타이머 재설정
+        _setupBackgroundProcessingCheck();
+      }
+    });
+  }
+
+  // 페이지 다시 로드 (forceReload 매개변수 추가)
+  Future<void> _reloadPages({bool forceReload = false}) async {
     try {
       // 이미 로드 중인지 확인
       if (_isLoading) return;
@@ -168,8 +217,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
       if (mounted && pages.isNotEmpty) {
         setState(() {
-          // 기존 페이지 수보다 많은 경우에만 업데이트
-          if (pages.length > _pages.length) {
+          // 기존 페이지 수보다 많은 경우 또는 강제 로드 시 업데이트
+          if (forceReload || pages.length > _pages.length) {
             _pages = pages;
             // 이미지 파일 배열 크기 조정 (기존 이미지 유지)
             if (_imageFiles.length != _pages.length) {

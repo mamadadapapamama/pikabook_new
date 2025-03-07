@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/note.dart';
 import '../models/page.dart' as page_model;
+import 'package:crypto/crypto.dart';
 
 /// 통합 캐싱 서비스
 ///
@@ -27,6 +28,9 @@ class UnifiedCacheService {
   // 노트별 페이지 ID 목록 (노트 ID -> 페이지 ID 목록)
   final Map<String, List<String>> _notePageIds = {};
 
+  // 번역 캐시 (원본 텍스트 해시 -> 번역 텍스트)
+  final Map<String, String> _translationCache = {};
+
   // 캐시 타임스탬프 (ID -> 마지막 액세스 시간)
   final Map<String, DateTime> _cacheTimestamps = {};
 
@@ -36,11 +40,13 @@ class UnifiedCacheService {
   // 최대 캐시 항목 수
   final int _maxNoteItems = 50;
   final int _maxPageItems = 200;
+  final int _maxTranslationItems = 500;
 
   // SharedPreferences 키 접두사
   static const String _noteKeyPrefix = 'note_cache_';
   static const String _pageKeyPrefix = 'page_cache_';
   static const String _notePageIdsPrefix = 'note_page_ids_';
+  static const String _translationKeyPrefix = 'translation_cache_';
 
   /// 로컬 저장소 캐시 정리 (오래된 항목 제거)
   Future<void> _cleanupExpiredLocalCache() async {
@@ -223,6 +229,25 @@ class UnifiedCacheService {
         final pageId = pageEntries[i].key;
         _pageCache.remove(pageId);
         _cacheTimestamps.remove(pageId);
+      }
+    }
+
+    // 번역 캐시 정리
+    if (_translationCache.length > _maxTranslationItems) {
+      // 가장 오래된 항목부터 삭제
+      final translationEntries = _cacheTimestamps.entries
+          .where((entry) => _translationCache.containsKey(entry.key))
+          .toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
+
+      final translationItemsToRemove =
+          (_translationCache.length - (_maxTranslationItems * 0.8)).ceil();
+      for (int i = 0;
+          i < translationItemsToRemove && i < translationEntries.length;
+          i++) {
+        final textHash = translationEntries[i].key;
+        _translationCache.remove(textHash);
+        _cacheTimestamps.remove(textHash);
       }
     }
   }
@@ -741,5 +766,81 @@ class UnifiedCacheService {
       debugPrint('노트와 페이지를 가져오는 중 오류 발생: $e');
       rethrow;
     }
+  }
+
+  /// 번역 결과 캐싱
+  Future<void> cacheTranslation(
+      String originalText, String translatedText) async {
+    if (originalText.isEmpty || translatedText.isEmpty) return;
+
+    // 원본 텍스트의 해시 생성 (키로 사용)
+    final textHash = _generateTextHash(originalText);
+
+    // 메모리 캐시에 저장
+    _translationCache[textHash] = translatedText;
+    _cacheTimestamps[textHash] = DateTime.now();
+
+    // 캐시 크기 관리
+    _cleanupMemoryCacheIfNeeded();
+
+    // 로컬 저장소에 저장
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('$_translationKeyPrefix$textHash', translatedText);
+      await prefs.setString('${_translationKeyPrefix}timestamp_$textHash',
+          DateTime.now().toIso8601String());
+    } catch (e) {
+      debugPrint('번역 결과 로컬 캐싱 중 오류 발생: $e');
+    }
+  }
+
+  /// 캐시에서 번역 결과 가져오기
+  Future<String?> getCachedTranslation(String originalText) async {
+    if (originalText.isEmpty) return null;
+
+    // 원본 텍스트의 해시 생성 (키로 사용)
+    final textHash = _generateTextHash(originalText);
+
+    // 1. 메모리 캐시 확인
+    if (_translationCache.containsKey(textHash)) {
+      final cachedTime = _cacheTimestamps[textHash];
+      if (cachedTime != null &&
+          DateTime.now().difference(cachedTime) < _cacheValidity) {
+        debugPrint('메모리 캐시에서 번역 결과 로드');
+        return _translationCache[textHash];
+      }
+    }
+
+    // 2. 로컬 저장소 확인
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final translatedText = prefs.getString('$_translationKeyPrefix$textHash');
+      final timestampStr =
+          prefs.getString('${_translationKeyPrefix}timestamp_$textHash');
+
+      if (translatedText != null && timestampStr != null) {
+        final timestamp = DateTime.parse(timestampStr);
+        if (DateTime.now().difference(timestamp) < _cacheValidity) {
+          debugPrint('로컬 저장소에서 번역 결과 로드');
+
+          // 메모리 캐시 업데이트
+          _translationCache[textHash] = translatedText;
+          _cacheTimestamps[textHash] = DateTime.now();
+
+          return translatedText;
+        }
+      }
+    } catch (e) {
+      debugPrint('캐시에서 번역 결과 로드 중 오류 발생: $e');
+    }
+
+    return null;
+  }
+
+  /// 텍스트 해시 생성
+  String _generateTextHash(String text) {
+    final bytes = utf8.encode(text);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
   }
 }

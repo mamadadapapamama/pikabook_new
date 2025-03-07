@@ -375,13 +375,13 @@ class NoteService {
     bool silentProgress = false,
   }) async {
     try {
-      print('백그라운드 처리 시작: ${imageFiles.length}개 이미지의 내용 채우기');
+      debugPrint('백그라운드 처리 시작: ${imageFiles.length}개 이미지의 내용 채우기');
 
       // 백그라운드 처리 상태 설정
       await _setBackgroundProcessingStatus(noteId, true);
 
       if (imageFiles.length != pageIds.length) {
-        print(
+        debugPrint(
             '이미지 수와 페이지 ID 수가 일치하지 않습니다: 이미지 ${imageFiles.length}개, 페이지 ID ${pageIds.length}개');
         await _setBackgroundProcessingStatus(noteId, false);
         return;
@@ -391,22 +391,26 @@ class NoteService {
       int processedCount = 0;
       final totalCount = imageFiles.length;
 
+      // 처리된 페이지 목록
+      final List<page_model.Page> processedPages = [];
+
       for (int i = 0; i < imageFiles.length; i++) {
         final imageFile = imageFiles[i];
         final pageId = pageIds[i];
-        print('이미지 ${i + 1}/${imageFiles.length} 처리 중...');
+        debugPrint('이미지 ${i + 1}/${imageFiles.length} 처리 중...');
 
         try {
           // 이미지 업로드
           final imageUrl = await _imageService.uploadImage(imageFile);
           if (imageUrl == null || imageUrl.isEmpty) {
-            print('이미지 업로드 실패: 이미지 ${i + 1}');
+            debugPrint('이미지 업로드 실패: 이미지 ${i + 1}');
             continue;
           }
 
           // OCR로 텍스트 추출
           final extractedText = await _ocrService.extractText(imageFile);
-          print('OCR 텍스트 추출 완료: 이미지 ${i + 1}, 텍스트 길이: ${extractedText.length}');
+          debugPrint(
+              'OCR 텍스트 추출 완료: 이미지 ${i + 1}, 텍스트 길이: ${extractedText.length}');
 
           // 텍스트 번역
           String translatedText = '';
@@ -415,7 +419,8 @@ class NoteService {
               extractedText,
               targetLanguage: targetLanguage ?? 'ko',
             );
-            print('번역 완료: 이미지 ${i + 1}, 번역 텍스트 길이: ${translatedText.length}');
+            debugPrint(
+                '번역 완료: 이미지 ${i + 1}, 번역 텍스트 길이: ${translatedText.length}');
           }
 
           // 페이지 내용 업데이트
@@ -429,7 +434,10 @@ class NoteService {
           // 페이지 캐싱
           if (updatedPage != null) {
             await _cacheService.cachePage(noteId, updatedPage);
-            print('페이지 내용 업데이트 완료: 이미지 ${i + 1}, 페이지 ID: ${pageId}');
+            debugPrint('페이지 내용 업데이트 완료: 이미지 ${i + 1}, 페이지 ID: ${pageId}');
+
+            // 처리된 페이지 목록에 추가
+            processedPages.add(updatedPage);
 
             // 진행 상황 업데이트
             processedCount++;
@@ -438,10 +446,10 @@ class NoteService {
               progressCallback(progress);
             }
           } else {
-            print('페이지 내용 업데이트 실패: 이미지 ${i + 1}, 페이지 ID: ${pageId}');
+            debugPrint('페이지 내용 업데이트 실패: 이미지 ${i + 1}, 페이지 ID: ${pageId}');
           }
         } catch (e) {
-          print('이미지 ${i + 1} 처리 중 오류 발생: $e');
+          debugPrint('이미지 ${i + 1} 처리 중 오류 발생: $e');
           // 한 이미지 처리 실패해도 계속 진행
         }
 
@@ -449,7 +457,8 @@ class NoteService {
         await Future.delayed(Duration(milliseconds: 500));
       }
 
-      print('백그라운드 처리 완료: ${pageIds.length} 페이지의 내용 채우기 완료, 노트 ID: $noteId');
+      debugPrint(
+          '백그라운드 처리 완료: ${pageIds.length} 페이지의 내용 채우기 완료, 노트 ID: $noteId');
 
       // 노트 객체 업데이트 (캐시 갱신)
       try {
@@ -457,7 +466,7 @@ class NoteService {
         if (noteDoc.exists) {
           final updatedNote = Note.fromFirestore(noteDoc);
           await _cacheService.cacheNote(updatedNote);
-          print('노트 캐시 업데이트 완료: $noteId');
+          debugPrint('노트 캐시 업데이트 완료: $noteId');
 
           // 페이지 목록 업데이트 확인
           final data = noteDoc.data() as Map<String, dynamic>?;
@@ -488,11 +497,11 @@ class NoteService {
               'updatedAt': FieldValue.serverTimestamp(),
             });
 
-            print('노트 문서의 페이지 ID 목록 업데이트 완료: ${allPageIds.length}개');
+            debugPrint('노트 문서의 페이지 ID 목록 업데이트 완료: ${allPageIds.length}개');
           }
         }
       } catch (e) {
-        print('노트 캐시 업데이트 실패: $e');
+        debugPrint('노트 캐시 업데이트 실패: $e');
       }
 
       // 백그라운드 처리 상태 업데이트
@@ -500,16 +509,23 @@ class NoteService {
 
       // 완료 후 페이지 캐시 강제 갱신
       try {
-        final pages = await _pageService.getPagesForNote(noteId);
-        if (pages.isNotEmpty) {
-          await _cacheService.cachePages(noteId, pages);
-          print('백그라운드 처리 완료 후 페이지 캐시 강제 갱신: ${pages.length}개');
+        if (processedPages.isNotEmpty) {
+          // 처리된 페이지들을 캐시에 저장
+          await _cacheService.cachePages(noteId, processedPages);
+          debugPrint('백그라운드 처리 완료 후 페이지 캐시 강제 갱신: ${processedPages.length}개');
+
+          // 노트 상세 화면에 알림 전송 (페이지 업데이트 완료)
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('pages_updated_$noteId', true);
+          await prefs.setInt(
+              'updated_page_count_$noteId', processedPages.length);
+          debugPrint('페이지 업데이트 완료 알림 설정: $noteId');
         }
       } catch (e) {
-        print('페이지 캐시 강제 갱신 중 오류 발생: $e');
+        debugPrint('페이지 캐시 강제 갱신 중 오류 발생: $e');
       }
     } catch (e) {
-      print('백그라운드 페이지 내용 채우기 중 오류 발생: $e');
+      debugPrint('백그라운드 페이지 내용 채우기 중 오류 발생: $e');
       await _setBackgroundProcessingStatus(noteId, false);
     }
   }

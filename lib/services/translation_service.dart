@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:googleapis_auth/auth_io.dart';
+import 'google_cloud_service.dart';
+import 'unified_cache_service.dart';
 
 class TranslationService {
   // 싱글톤 패턴 구현
@@ -19,6 +21,12 @@ class TranslationService {
   // Google Cloud 인증 클라이언트
   http.Client? _authClient;
   String? _projectId;
+
+  // Google Cloud Service 인스턴스
+  final GoogleCloudService _googleCloudService = GoogleCloudService();
+
+  // 통합 캐시 서비스 사용
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
 
   // 언어 설정 메서드
   void setSourceLanguage(String languageCode) {
@@ -91,6 +99,13 @@ class TranslationService {
         '번역 요청: 원본 텍스트 길이=${text.length}, 소스 언어=$_sourceLanguage, 대상 언어=$target');
 
     try {
+      // 캐시에서 번역 결과 확인
+      final cachedTranslation = await _cacheService.getCachedTranslation(text);
+      if (cachedTranslation != null) {
+        debugPrint('캐시에서 번역 결과 로드');
+        return cachedTranslation;
+      }
+
       // Google Cloud 인증 초기화
       final authInitialized = await _initializeGoogleAuth();
 
@@ -136,7 +151,15 @@ class TranslationService {
                 (data['translations'] as List).isNotEmpty) {
               final translations = data['translations'] as List;
               debugPrint('Google Translate API 번역 성공');
-              return translations[0]['translatedText'] as String;
+              final translatedText =
+                  translations[0]['translatedText'] as String;
+
+              // 번역 결과 캐싱
+              if (translatedText.isNotEmpty) {
+                await _cacheService.cacheTranslation(text, translatedText);
+              }
+
+              return translatedText;
             } else {
               debugPrint('Google Translate API 응답 형식 오류: $data');
               throw Exception('번역 API 응답 형식 오류');
