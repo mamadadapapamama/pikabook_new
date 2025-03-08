@@ -246,7 +246,7 @@ class _TextProcessingTestScreenState extends State<TextProcessingTestScreen> {
   }
 
   /// 플래시카드 생성
-  void _createFlashCard(String word, String meaning) {
+  void _createFlashCard(String word, String meaning, {String? pinyin}) {
     // TODO: 플래시카드 생성 구현
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('플래시카드 생성: $word - $meaning')),

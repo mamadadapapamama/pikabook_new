@@ -14,7 +14,7 @@ class TextSegmentWidget extends StatelessWidget {
   final Function(String)? onDictionaryLookup;
 
   /// 플래시카드 생성 시 콜백
-  final Function(String, String)? onCreateFlashCard;
+  final Function(String, String, {String? pinyin})? onCreateFlashCard;
 
   /// 핀인 표시 여부
   final bool showPinyin;
