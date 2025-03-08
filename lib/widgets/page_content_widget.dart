@@ -15,6 +15,7 @@ import '../utils/text_display_mode.dart';
 import '../views/screens/full_image_screen.dart';
 import 'text_section_widget.dart';
 import 'processed_text_widget.dart';
+import '../services/page_service.dart';
 
 class PageContentWidget extends StatefulWidget {
   final page_model.Page page;
@@ -120,6 +121,11 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               _isProcessingText = false;
             });
           }
+
+          // 처리된 텍스트를 페이지에 캐싱
+          if (processedText.fullOriginalText.isNotEmpty) {
+            await _updatePageCache(processedText);
+          }
         } else {
           // 캐시된 텍스트 사용
           debugPrint('캐시된 텍스트 사용');
@@ -135,12 +141,13 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
           // 각 문장별로 번역 수행
           final segments = <TextSegment>[];
+          final StringBuffer combinedTranslation = StringBuffer();
 
           // 각 문장에 대해 핀인 생성 및 번역 수행
           for (int i = 0; i < originalSentences.length; i++) {
             final originalSentence = originalSentences[i];
-            String? pinyin;
-            String? sentenceTranslation;
+            String pinyin = '';
+            String sentenceTranslation = '';
 
             // 중국어가 포함된 문장에 대해서만 핀인 생성
             if (_languageDetectionService.containsChinese(originalSentence)) {
@@ -148,47 +155,113 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 // 문장에서 중국어 문자만 추출하여 핀인 생성
                 final chineseCharsOnly = _extractChineseChars(originalSentence);
                 if (chineseCharsOnly.isNotEmpty) {
-                  pinyin = await _languageDetectionService
+                  final generatedPinyin = await _languageDetectionService
                       .generatePinyin(chineseCharsOnly);
+                  pinyin = generatedPinyin;
                   debugPrint('핀인 생성 성공 (중국어 문자만): $pinyin');
-                } else {
-                  pinyin = '';
                 }
 
-                // 각 문장별로 번역 수행
-                sentenceTranslation = await _translationService
-                    .translateText(originalSentence, targetLanguage: 'ko');
+                // 캐시에서 번역 확인 (임시 구현)
+                String? cachedTranslation;
+                try {
+                  cachedTranslation = await _translationService.getTranslation(
+                      originalSentence, 'ko');
+                } catch (e) {
+                  debugPrint('캐시된 번역 조회 중 오류: $e');
+                  cachedTranslation = null;
+                }
+
+                // 캐시에 없으면 번역 수행 및 캐싱
+                if (cachedTranslation == null || cachedTranslation.isEmpty) {
+                  final newTranslation = await _translationService
+                      .translateText(originalSentence, targetLanguage: 'ko');
+                  sentenceTranslation = newTranslation;
+
+                  // 번역 결과 캐싱 (임시 구현)
+                  if (sentenceTranslation.isNotEmpty) {
+                    try {
+                      await _translationService.cacheTranslation(
+                          originalSentence, sentenceTranslation, 'ko');
+                    } catch (e) {
+                      debugPrint('번역 캐싱 중 오류: $e');
+                    }
+                  }
+                } else {
+                  sentenceTranslation = cachedTranslation;
+                  debugPrint('캐시된 번역 사용: $sentenceTranslation');
+                }
+
                 debugPrint('문장 번역 완료: $sentenceTranslation');
+
+                // 번역 결과 추가
+                if (combinedTranslation.isNotEmpty) {
+                  combinedTranslation.write('\n');
+                }
+                combinedTranslation.write(sentenceTranslation);
               } catch (e) {
                 debugPrint('핀인 생성 또는 번역 실패: $e');
-                pinyin = '';
-                sentenceTranslation = '';
               }
             } else {
-              pinyin = '';
               // 중국어가 없는 문장도 번역 시도
               try {
-                sentenceTranslation = await _translationService
-                    .translateText(originalSentence, targetLanguage: 'ko');
+                // 캐시에서 번역 확인 (임시 구현)
+                String? cachedTranslation;
+                try {
+                  cachedTranslation = await _translationService.getTranslation(
+                      originalSentence, 'ko');
+                } catch (e) {
+                  debugPrint('캐시된 번역 조회 중 오류: $e');
+                  cachedTranslation = null;
+                }
+
+                // 캐시에 없으면 번역 수행 및 캐싱
+                if (cachedTranslation == null || cachedTranslation.isEmpty) {
+                  final newTranslation = await _translationService
+                      .translateText(originalSentence, targetLanguage: 'ko');
+                  sentenceTranslation = newTranslation;
+
+                  // 번역 결과 캐싱 (임시 구현)
+                  if (sentenceTranslation.isNotEmpty) {
+                    try {
+                      await _translationService.cacheTranslation(
+                          originalSentence, sentenceTranslation, 'ko');
+                    } catch (e) {
+                      debugPrint('번역 캐싱 중 오류: $e');
+                    }
+                  }
+                } else {
+                  sentenceTranslation = cachedTranslation;
+                  debugPrint('캐시된 번역 사용: $sentenceTranslation');
+                }
+
+                // 번역 결과 추가
+                if (combinedTranslation.isNotEmpty) {
+                  combinedTranslation.write('\n');
+                }
+                combinedTranslation.write(sentenceTranslation);
               } catch (e) {
                 sentenceTranslation = originalSentence; // 번역 실패 시 원본 사용
+
+                // 번역 결과 추가
+                if (combinedTranslation.isNotEmpty) {
+                  combinedTranslation.write('\n');
+                }
+                combinedTranslation.write(sentenceTranslation);
               }
             }
 
             segments.add(TextSegment(
               originalText: originalSentence,
-              translatedText: sentenceTranslation ?? '', // null 체크 추가
-              pinyin: pinyin ?? '', // null 체크 추가
+              translatedText: sentenceTranslation,
+              pinyin: pinyin,
             ));
           }
 
           debugPrint('생성된 세그먼트 수: ${segments.length}');
 
-          // 전체 번역 텍스트가 없는 경우 각 문장 번역을 합쳐서 사용
-          final fullTranslatedText =
-              translatedText.isEmpty && segments.isNotEmpty
-                  ? segments.map((s) => s.translatedText ?? '').join('\n')
-                  : translatedText;
+          // 전체 번역 텍스트 생성
+          final fullTranslatedText = combinedTranslation.toString();
+          debugPrint('생성된 전체 번역 텍스트: ${fullTranslatedText.length}자');
 
           final processedText = ProcessedText(
             fullOriginalText: originalText,
@@ -203,6 +276,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               _isProcessingText = false;
             });
           }
+
+          // 처리된 텍스트를 페이지에 캐싱
+          await _updatePageCache(processedText);
         }
       }
     } catch (e) {
@@ -212,6 +288,32 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           _isProcessingText = false;
         });
       }
+    }
+  }
+
+  // 페이지 캐시 업데이트
+  Future<void> _updatePageCache(ProcessedText processedText) async {
+    try {
+      // 페이지 ID가 없으면 업데이트 불가
+      final pageId = widget.page.id;
+      if (pageId == null || pageId.isEmpty) {
+        debugPrint('페이지 ID가 없어 캐시 업데이트를 건너뜁니다.');
+        return;
+      }
+
+      // 페이지 서비스 가져오기
+      final pageService = PageService();
+
+      // 페이지 업데이트
+      await pageService.updatePageContent(
+        pageId,
+        processedText.fullOriginalText,
+        processedText.fullTranslatedText ?? '',
+      );
+
+      debugPrint('페이지 캐시 업데이트 완료: $pageId');
+    } catch (e) {
+      debugPrint('페이지 캐시 업데이트 중 오류 발생: $e');
     }
   }
 
@@ -433,10 +535,16 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   // TTS로 텍스트 읽기
   Future<void> _speakText(String text) async {
-    // 중국어로 언어 설정
-    await _ttsService.setLanguage('zh-CN');
-    // 텍스트 읽기
-    await _ttsService.speak(text);
+    if (text.isEmpty) return;
+
+    try {
+      // 중국어로 언어 설정
+      await _ttsService.setLanguage('zh-CN');
+      // 텍스트 읽기
+      await _ttsService.speak(text);
+    } catch (e) {
+      debugPrint('TTS 실행 중 오류 발생: $e');
+    }
   }
 
   Widget _buildTextDisplayToggle() {
