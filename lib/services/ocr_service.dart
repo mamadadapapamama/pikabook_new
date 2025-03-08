@@ -165,36 +165,45 @@ class OcrService {
 
   // 추출된 전체 텍스트 처리 (핀인 제거 및 필터링)
   String _processExtractedText(String text) {
-    // 줄 단위로 분리
-    final lines = text.split('\n');
-    final processedLines = <String>[];
+    // 문장 단위로 분리하여 처리
+    final sentences = _splitIntoSentences(text);
+    final processedSentences = <String>[];
 
-    debugPrint('원본 텍스트 줄 수: ${lines.length}');
-
-    for (final line in lines) {
-      // 빈 줄 건너뛰기
-      if (line.trim().isEmpty) continue;
-
-      // 핀인 패턴 확인 (알파벳과 성조 기호로만 구성된 줄)
-      if (_isPinyinLine(line)) {
-        debugPrint('핀인으로 판단되어 제거: $line');
+    for (final sentence in sentences) {
+      // 핀인 패턴 확인 (알파벳과 성조 기호로만 구성된 문장)
+      if (_isPinyinLine(sentence)) {
+        debugPrint('핀인으로 판단되어 제거: $sentence');
         continue;
       }
 
-      // 중국어 문자가 포함된 줄 또는 문장 부호만 있는 줄 유지
-      if (_containsChineseOrValidCompound(line)) {
-        // 줄 내에서 핀인 부분 제거 (문장 부호는 유지)
-        final cleanedLine = _removePinyin(line);
-        if (cleanedLine.trim().isNotEmpty) {
-          processedLines.add(cleanedLine);
-          debugPrint('처리된 줄: $cleanedLine');
+      // 중국어 문자가 포함된 문장만 유지
+      if (_containsChineseOrValidCompound(sentence)) {
+        // 문장 내에서 핀인 부분 제거 (문장 부호는 유지)
+        final cleanedSentence = _removePinyin(sentence);
+        if (cleanedSentence.trim().isNotEmpty) {
+          processedSentences.add(cleanedSentence);
+          debugPrint('처리된 문장: $cleanedSentence');
         }
       }
     }
 
-    final result = processedLines.join('\n');
+    final result = processedSentences.join('\n');
     debugPrint('처리 후 텍스트 길이: ${result.length}');
     return result;
+  }
+
+  // 텍스트를 문장 단위로 분리
+  List<String> _splitIntoSentences(String text) {
+    if (text.isEmpty) return [];
+
+    // 문장 구분자 패턴 (마침표, 느낌표, 물음표, 쉼표 등 뒤에 공백이 있을 수도 있음)
+    final pattern = RegExp(r'(?<=[.!?。！？])\s*');
+
+    // 문장 구분자로 분리
+    final sentences = text.split(pattern);
+
+    // 빈 문장 제거
+    return sentences.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
   }
 
   // 핀인 줄인지 확인 (알파벳과 성조 기호로만 구성)

@@ -41,9 +41,7 @@ class NoteService {
         final notes =
             snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
 
-        // 백그라운드에서 노트 캐싱
-        _cacheService.cacheNotes(notes);
-
+        // 백그라운드 캐싱 제거 - 특정 액션 완료 시점에만 캐싱하도록 변경
         debugPrint('페이징된 노트 목록 수신: ${notes.length}개');
         return notes;
       });
@@ -68,9 +66,7 @@ class NoteService {
       final notes =
           snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
 
-      // 백그라운드에서 노트 캐싱
-      _cacheService.cacheNotes(notes);
-
+      // 백그라운드 캐싱 제거 - 특정 액션 완료 시점에만 캐싱하도록 변경
       return notes;
     } catch (e) {
       debugPrint('추가 노트를 가져오는 중 오류 발생: $e');
@@ -85,9 +81,7 @@ class NoteService {
         final notes =
             snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
 
-        // 백그라운드에서 노트 캐싱
-        _cacheService.cacheNotes(notes);
-
+        // 백그라운드 캐싱 제거 - 특정 액션 완료 시점에만 캐싱하도록 변경
         return notes;
       });
     } catch (e) {
@@ -284,7 +278,7 @@ class NoteService {
         final docSnapshot = await _notesCollection.doc(noteId).get();
         if (docSnapshot.exists) {
           note = Note.fromFirestore(docSnapshot);
-          // 노트 캐싱
+          // 노트 캐싱 - 노트 로드 완료 시점에 캐싱
           await _cacheService.cacheNote(note);
           debugPrint('Firestore에서 노트 로드 및 캐싱: $noteId');
         } else {
@@ -302,13 +296,10 @@ class NoteService {
         debugPrint('Firestore에서 노트 $noteId의 페이지 로드 시작');
         pages = await _pageService.getPagesForNote(noteId);
 
-        // 페이지 캐싱 (백그라운드에서 처리)
+        // 페이지 캐싱 - 페이지 로드 완료 시점에 캐싱
         if (pages.isNotEmpty) {
-          // 메인 스레드 차단 방지를 위해 microtask 사용
-          Future.microtask(() async {
-            await _cacheService.cachePages(noteId, pages);
-            debugPrint('백그라운드에서 노트 $noteId의 페이지 ${pages.length}개 캐싱 완료');
-          });
+          await _cacheService.cachePages(noteId, pages);
+          debugPrint('노트 $noteId의 페이지 ${pages.length}개 캐싱 완료');
         }
       }
 
@@ -430,13 +421,10 @@ class NoteService {
             translatedText,
           );
 
-          // 페이지 캐싱
+          // 페이지 캐싱 - 페이지 업데이트 완료 시점에 캐싱
           if (updatedPage != null) {
-            await _cacheService.cachePage(noteId, updatedPage);
-            debugPrint('페이지 내용 업데이트 완료: 이미지 ${i + 1}, 페이지 ID: ${pageId}');
-
-            // 처리된 페이지 목록에 추가
             processedPages.add(updatedPage);
+            debugPrint('페이지 내용 업데이트 완료: 이미지 ${i + 1}, 페이지 ID: ${pageId}');
 
             // 진행 상황 업데이트
             processedCount++;
@@ -459,7 +447,7 @@ class NoteService {
       debugPrint(
           '백그라운드 처리 완료: ${pageIds.length} 페이지의 내용 채우기 완료, 노트 ID: $noteId');
 
-      // 노트 객체 업데이트 (캐시 갱신)
+      // 노트 객체 업데이트 (캐시 갱신) - 모든 페이지 처리 완료 시점에 캐싱
       try {
         final noteDoc = await _notesCollection.doc(noteId).get();
         if (noteDoc.exists) {
@@ -506,7 +494,7 @@ class NoteService {
       // 백그라운드 처리 상태 업데이트
       await _setBackgroundProcessingStatus(noteId, false);
 
-      // 완료 후 페이지 캐시 강제 갱신
+      // 완료 후 페이지 캐시 강제 갱신 - 모든 처리 완료 시점에 캐싱
       try {
         if (processedPages.isNotEmpty) {
           // 처리된 페이지들을 캐시에 저장
@@ -668,6 +656,19 @@ class NoteService {
       List<String> pageIds = [];
       page_model.Page? firstPage;
 
+      // 모든 이미지 업로드 먼저 수행
+      List<String?> imageUrls = [];
+      for (int i = 0; i < imageFiles.length; i++) {
+        try {
+          final imageUrl = await _imageService.uploadImage(imageFiles[i]);
+          imageUrls.add(imageUrl);
+          print('이미지 ${i} 업로드 완료: ${imageUrl != null}');
+        } catch (e) {
+          print('이미지 ${i} 업로드 중 오류 발생: $e');
+          imageUrls.add(null);
+        }
+      }
+
       // 모든 페이지의 구조를 먼저 생성 (내용 없이)
       for (int i = 0; i < imageFiles.length; i++) {
         try {
@@ -675,15 +676,24 @@ class NoteService {
           final emptyPage = await _pageService.createEmptyPage(
             noteId: noteId,
             pageNumber: i,
+            imageUrl: imageUrls[i], // 이미지 URL 전달
           );
 
           if (emptyPage != null && emptyPage.id != null) {
             pageIds.add(emptyPage.id!);
-            print('빈 페이지 구조 생성 완료: 페이지 ${i}, ID: ${emptyPage.id}');
+            print(
+                '빈 페이지 구조 생성 완료: 페이지 ${i}, ID: ${emptyPage.id}, 이미지 URL: ${imageUrls[i] != null}');
 
             // 첫 번째 페이지 저장
             if (i == 0) {
               firstPage = emptyPage;
+
+              // 노트의 썸네일로 설정
+              if (imageUrls[0] != null && imageUrls[0]!.isNotEmpty) {
+                await _notesCollection.doc(noteId).update({
+                  'imageUrl': imageUrls[0],
+                });
+              }
             }
           }
         } catch (e) {
@@ -709,51 +719,41 @@ class NoteService {
         final firstImageFile = imageFiles[0];
 
         try {
-          // 이미지 업로드
-          final imageUrl = await _imageService.uploadImage(firstImageFile);
-          if (imageUrl != null && imageUrl.isNotEmpty) {
-            // 노트의 썸네일로 설정
-            await _notesCollection.doc(noteId).update({
-              'imageUrl': imageUrl,
-            });
+          // OCR로 텍스트 추출
+          final extractedText = await _ocrService.extractText(firstImageFile);
 
-            // OCR로 텍스트 추출
-            final extractedText = await _ocrService.extractText(firstImageFile);
-
-            // 텍스트 번역
-            String translatedText = '';
-            if (extractedText.isNotEmpty) {
-              translatedText = await _translationService.translateText(
-                extractedText,
-                targetLanguage: targetLanguage ?? 'ko',
-              );
-
-              // 노트 내용 업데이트
-              await _notesCollection.doc(noteId).update({
-                'translatedText': translatedText,
-                'extractedText': extractedText,
-                // originalText는 업데이트하지 않고 generatedTitle 유지
-              });
-            }
-
-            // 첫 번째 페이지 내용 업데이트
-            final updatedFirstPage = await _pageService.updatePageContent(
-              firstPage.id!,
+          // 텍스트 번역
+          String translatedText = '';
+          if (extractedText.isNotEmpty) {
+            translatedText = await _translationService.translateText(
               extractedText,
-              translatedText,
+              targetLanguage: targetLanguage ?? 'ko',
             );
 
-            // 페이지 캐싱
-            if (updatedFirstPage != null) {
-              firstPage = updatedFirstPage;
-              await _cacheService.cachePage(noteId, updatedFirstPage);
-              print('첫 번째 페이지 내용 업데이트 완료: ${updatedFirstPage.id}');
-            }
+            // 노트 내용 업데이트
+            await _notesCollection.doc(noteId).update({
+              'translatedText': translatedText,
+              'extractedText': extractedText,
+              // originalText는 업데이트하지 않고 generatedTitle 유지
+            });
+          }
 
-            // 진행 상황 업데이트 (첫 페이지 완료)
-            if (!silentProgress && progressCallback != null) {
-              progressCallback((100 / imageFiles.length).round());
-            }
+          // 첫 번째 페이지 내용 업데이트
+          final updatedFirstPage = await _pageService.updatePageContent(
+            firstPage.id!,
+            extractedText,
+            translatedText,
+          );
+
+          // 페이지 캐싱
+          if (updatedFirstPage != null) {
+            firstPage = updatedFirstPage;
+            debugPrint('첫 번째 페이지 내용 업데이트 완료: ${updatedFirstPage.id}');
+          }
+
+          // 진행 상황 업데이트 (첫 페이지 완료)
+          if (!silentProgress && progressCallback != null) {
+            progressCallback((100 / imageFiles.length).round());
           }
         } catch (e) {
           print('첫 번째 이미지 처리 중 오류 발생: $e');

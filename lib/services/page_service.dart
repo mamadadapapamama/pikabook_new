@@ -162,29 +162,14 @@ class PageService {
     try {
       debugPrint('노트 $noteId의 페이지 조회 시작');
 
-      // 캐싱 중복 방지 및 최소 간격 확인
-      if (_isCachingInProgress) {
-        debugPrint('이미 캐싱이 진행 중입니다. 캐시 또는 Firestore에서 데이터를 가져옵니다.');
-      }
-
-      final now = DateTime.now();
-      final lastCache = _lastCacheTime[noteId];
-      final shouldUseCache =
-          lastCache != null && now.difference(lastCache) < _cacheThreshold;
-
-      if (shouldUseCache) {
-        debugPrint('최근에 캐싱되어 캐시 업데이트 건너뜀');
-      }
-
       // 1. 캐시에서 모든 페이지 확인
       if (await _cacheService.hasAllPagesForNote(noteId)) {
         final cachedPages = await _cacheService.getPagesForNote(noteId);
         debugPrint('캐시에서 노트 $noteId의 페이지 ${cachedPages.length}개 로드됨');
 
-        // 페이지가 비어있거나 1개만 있는데 더 많은 페이지가 있어야 하는 경우 Firestore에서 다시 확인
-        if (cachedPages.isEmpty ||
-            (cachedPages.length <= 1 && !shouldUseCache)) {
-          debugPrint('캐시에 페이지가 부족하여 Firestore에서 다시 확인합니다.');
+        // 페이지가 비어있는 경우 Firestore에서 다시 확인
+        if (cachedPages.isEmpty) {
+          debugPrint('캐시에 페이지가 없어 Firestore에서 다시 확인합니다.');
           // 캐시 무시하고 계속 진행
         } else {
           return cachedPages;
@@ -227,17 +212,10 @@ class PageService {
             // 페이지 번호 순으로 정렬
             pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
 
-            // 캐시에 페이지 저장 (중복 방지)
-            if (!_isCachingInProgress && !shouldUseCache) {
-              _isCachingInProgress = true;
-              try {
-                await _cacheService.cachePages(noteId, pages);
-                _lastCacheTime[noteId] = DateTime.now();
-                debugPrint(
-                    '노트 $noteId의 페이지 ${pages.length}개 캐시에 저장됨 (ID 목록 사용)');
-              } finally {
-                _isCachingInProgress = false;
-              }
+            // 페이지 로드 완료 시점에 캐싱
+            if (pages.isNotEmpty) {
+              await _cacheService.cachePages(noteId, pages);
+              debugPrint('노트 $noteId의 페이지 ${pages.length}개 캐시에 저장됨 (ID 목록 사용)');
             }
 
             return pages;
@@ -258,16 +236,10 @@ class PageService {
             '페이지 정보: id=${page.id}, pageNumber=${page.pageNumber}, imageUrl=${page.imageUrl != null}');
       }
 
-      // 3. 캐시에 페이지 저장 (중복 방지)
-      if (!_isCachingInProgress && !shouldUseCache && pages.isNotEmpty) {
-        _isCachingInProgress = true;
-        try {
-          await _cacheService.cachePages(noteId, pages);
-          _lastCacheTime[noteId] = DateTime.now();
-          debugPrint('노트 $noteId의 페이지 ${pages.length}개 캐시에 저장됨');
-        } finally {
-          _isCachingInProgress = false;
-        }
+      // 페이지 로드 완료 시점에 캐싱
+      if (pages.isNotEmpty) {
+        await _cacheService.cachePages(noteId, pages);
+        debugPrint('노트 $noteId의 페이지 ${pages.length}개 캐시에 저장됨');
       }
 
       return pages;
@@ -363,6 +335,7 @@ class PageService {
   Future<page_model.Page?> createEmptyPage({
     required String noteId,
     required int pageNumber,
+    String? imageUrl,
   }) async {
     try {
       // 사용자 확인
@@ -377,7 +350,7 @@ class PageService {
         originalText: '',
         translatedText: '',
         pageNumber: pageNumber,
-        imageUrl: null,
+        imageUrl: imageUrl,
         createdAt: now,
         updatedAt: now,
       );
@@ -395,7 +368,7 @@ class PageService {
         originalText: '',
         translatedText: '',
         pageNumber: pageNumber,
-        imageUrl: null,
+        imageUrl: imageUrl,
         createdAt: now,
         updatedAt: now,
       );
@@ -403,7 +376,8 @@ class PageService {
       // 캐시에 새 페이지 저장 (노트 ID 사용)
       await _cacheService.cachePage(noteId, newPage);
 
-      debugPrint('빈 페이지 구조 생성 완료: ID=${pageRef.id}, 페이지 번호=$pageNumber');
+      debugPrint(
+          '빈 페이지 구조 생성 완료: ID=${pageRef.id}, 페이지 번호=$pageNumber, 이미지 URL=${imageUrl != null}');
       return newPage;
     } catch (e) {
       debugPrint('빈 페이지 구조 생성 중 오류 발생: $e');
@@ -422,14 +396,26 @@ class PageService {
         'updatedAt': DateTime.now(),
       });
 
-      // 캐시 업데이트
+      // 캐시 업데이트 - 페이지 내용 업데이트 완료 시점에 캐싱
       await _cacheService.cacheText('page_original', pageId, originalText);
       await _cacheService.cacheText('page_translated', pageId, translatedText);
 
       // 업데이트된 페이지 객체 반환
       final pageDoc = await _pagesCollection.doc(pageId).get();
       if (pageDoc.exists) {
-        return page_model.Page.fromFirestore(pageDoc);
+        final updatedPage = page_model.Page.fromFirestore(pageDoc);
+
+        // 노트 ID 확인
+        final data = pageDoc.data() as Map<String, dynamic>?;
+        final noteId = data?['noteId'] as String?;
+
+        // 노트 ID가 있으면 페이지 객체 캐싱
+        if (noteId != null && updatedPage.id != null) {
+          await _cacheService.cachePage(noteId, updatedPage);
+          debugPrint('페이지 객체 캐시 업데이트 완료: ${updatedPage.id}');
+        }
+
+        return updatedPage;
       }
 
       debugPrint('페이지 내용 업데이트 완료: ID=$pageId');

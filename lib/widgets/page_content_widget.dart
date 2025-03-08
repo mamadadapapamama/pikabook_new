@@ -16,6 +16,8 @@ import '../views/screens/full_image_screen.dart';
 import 'text_section_widget.dart';
 import 'processed_text_widget.dart';
 import '../services/page_service.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PageContentWidget extends StatefulWidget {
   final page_model.Page page;
@@ -85,9 +87,21 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       // 캐시된 텍스트 확인
       final originalText = widget.page.originalText;
       final translatedText = widget.page.translatedText;
+      final pageId = widget.page.id;
 
       debugPrint(
-          '페이지 텍스트 처리: 원본 텍스트 ${originalText.length}자, 번역 텍스트 ${translatedText.length}자');
+          '페이지 텍스트 처리 시작: 페이지 ID=$pageId, 원본 텍스트 ${originalText.length}자, 번역 텍스트 ${translatedText.length}자');
+
+      // 캐시된 핀인 확인 (페이지 처리 전에 미리 로드)
+      Map<String, String> pinyinCache = {};
+      if (pageId != null && pageId.isNotEmpty) {
+        try {
+          pinyinCache = await _loadPinyinCache(pageId);
+          debugPrint('핀인 캐시 미리 로드: ${pinyinCache.length}개 항목');
+        } catch (e) {
+          debugPrint('핀인 캐시 미리 로드 중 오류: $e');
+        }
+      }
 
       // 텍스트 처리 모드에 따라 다른 처리
       if (widget.textProcessingMode == TextProcessingMode.professionalReading) {
@@ -128,20 +142,33 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           }
         } else {
           // 캐시된 텍스트 사용
-          debugPrint('캐시된 텍스트 사용');
-
-          // 텍스트 내용 확인
           debugPrint(
-              '원본 텍스트 길이: ${originalText.length}, 처음 50자: ${originalText.substring(0, originalText.length > 50 ? 50 : originalText.length)}');
-          debugPrint(
-              '번역 텍스트 길이: ${translatedText.length}, 처음 50자: ${translatedText.substring(0, translatedText.length > 50 ? 50 : translatedText.length)}');
+              '캐시된 텍스트 사용: 원본=${originalText.length}자, 번역=${translatedText.length}자');
 
           // 문장 단위로 분리
           final originalSentences = _splitIntoSentences(originalText);
+          debugPrint('분리된 문장 수: ${originalSentences.length}개');
 
           // 각 문장별로 번역 수행
           final segments = <TextSegment>[];
           final StringBuffer combinedTranslation = StringBuffer();
+
+          // 번역된 텍스트가 있으면 문장 단위로 분리
+          List<String> translatedSentences = [];
+          if (translatedText.isNotEmpty) {
+            translatedSentences = _splitIntoSentences(translatedText);
+            debugPrint('분리된 번역 문장 수: ${translatedSentences.length}개');
+          }
+
+          // 캐시된 번역 문장 수와 원본 문장 수가 일치하면 캐시된 번역 사용
+          bool useExistingTranslation =
+              translatedSentences.length == originalSentences.length;
+          if (useExistingTranslation) {
+            debugPrint('기존 번역 문장 수가 일치하여 캐시된 번역 사용');
+          } else {
+            debugPrint(
+                '번역 문장 수 불일치: 원본=${originalSentences.length}, 번역=${translatedSentences.length}');
+          }
 
           // 각 문장에 대해 핀인 생성 및 번역 수행
           for (int i = 0; i < originalSentences.length; i++) {
@@ -149,49 +176,73 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             String pinyin = '';
             String sentenceTranslation = '';
 
+            // 캐시된 번역 사용 (문장 수가 일치하는 경우)
+            if (useExistingTranslation && i < translatedSentences.length) {
+              sentenceTranslation = translatedSentences[i];
+              debugPrint('캐시된 번역 사용 (문장 $i): ${sentenceTranslation.length}자');
+            }
+
             // 중국어가 포함된 문장에 대해서만 핀인 생성
             if (_languageDetectionService.containsChinese(originalSentence)) {
               try {
-                // 문장에서 중국어 문자만 추출하여 핀인 생성
-                final chineseCharsOnly = _extractChineseChars(originalSentence);
-                if (chineseCharsOnly.isNotEmpty) {
-                  final generatedPinyin = await _languageDetectionService
-                      .generatePinyin(chineseCharsOnly);
-                  pinyin = generatedPinyin;
-                  debugPrint('핀인 생성 성공 (중국어 문자만): $pinyin');
-                }
-
-                // 캐시에서 번역 확인 (임시 구현)
-                String? cachedTranslation;
-                try {
-                  cachedTranslation = await _translationService.getTranslation(
-                      originalSentence, 'ko');
-                } catch (e) {
-                  debugPrint('캐시된 번역 조회 중 오류: $e');
-                  cachedTranslation = null;
-                }
-
-                // 캐시에 없으면 번역 수행 및 캐싱
-                if (cachedTranslation == null || cachedTranslation.isEmpty) {
-                  final newTranslation = await _translationService
-                      .translateText(originalSentence, targetLanguage: 'ko');
-                  sentenceTranslation = newTranslation;
-
-                  // 번역 결과 캐싱 (임시 구현)
-                  if (sentenceTranslation.isNotEmpty) {
-                    try {
-                      await _translationService.cacheTranslation(
-                          originalSentence, sentenceTranslation, 'ko');
-                    } catch (e) {
-                      debugPrint('번역 캐싱 중 오류: $e');
-                    }
-                  }
+                // 캐시에서 핀인 확인
+                if (pinyinCache.containsKey(originalSentence)) {
+                  pinyin = pinyinCache[originalSentence]!;
+                  debugPrint('캐시된 핀인 사용 (문장 $i): $pinyin');
                 } else {
-                  sentenceTranslation = cachedTranslation;
-                  debugPrint('캐시된 번역 사용: $sentenceTranslation');
+                  // 문장에서 중국어 문자만 추출하여 핀인 생성
+                  final chineseCharsOnly =
+                      _extractChineseChars(originalSentence);
+                  if (chineseCharsOnly.isNotEmpty) {
+                    final generatedPinyin = await _languageDetectionService
+                        .generatePinyin(chineseCharsOnly);
+                    pinyin = generatedPinyin;
+                    debugPrint('핀인 생성 성공 (문장 $i): $pinyin');
+
+                    // 핀인 캐시에 추가
+                    pinyinCache[originalSentence] = pinyin;
+                  }
                 }
 
-                debugPrint('문장 번역 완료: $sentenceTranslation');
+                // 번역이 아직 없는 경우에만 번역 수행
+                if (sentenceTranslation.isEmpty) {
+                  // 캐시에서 번역 확인
+                  String? cachedTranslation;
+                  try {
+                    cachedTranslation = await _translationService
+                        .getTranslation(originalSentence, 'ko');
+                    if (cachedTranslation != null &&
+                        cachedTranslation.isNotEmpty) {
+                      debugPrint(
+                          '번역 캐시에서 로드 (문장 $i): ${cachedTranslation.length}자');
+                    }
+                  } catch (e) {
+                    debugPrint('캐시된 번역 조회 중 오류 (문장 $i): $e');
+                    cachedTranslation = null;
+                  }
+
+                  // 캐시에 없으면 번역 수행 및 캐싱
+                  if (cachedTranslation == null || cachedTranslation.isEmpty) {
+                    debugPrint(
+                        '새로운 번역 요청 (문장 $i): ${originalSentence.length}자');
+                    final newTranslation = await _translationService
+                        .translateText(originalSentence, targetLanguage: 'ko');
+                    sentenceTranslation = newTranslation;
+
+                    // 번역 결과 캐싱
+                    if (sentenceTranslation.isNotEmpty) {
+                      try {
+                        await _translationService.cacheTranslation(
+                            originalSentence, sentenceTranslation, 'ko');
+                        debugPrint('번역 결과 캐싱 완료 (문장 $i)');
+                      } catch (e) {
+                        debugPrint('번역 캐싱 중 오류 (문장 $i): $e');
+                      }
+                    }
+                  } else {
+                    sentenceTranslation = cachedTranslation;
+                  }
+                }
 
                 // 번역 결과 추가
                 if (combinedTranslation.isNotEmpty) {
@@ -199,55 +250,53 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 }
                 combinedTranslation.write(sentenceTranslation);
               } catch (e) {
-                debugPrint('핀인 생성 또는 번역 실패: $e');
+                debugPrint('핀인 생성 또는 번역 실패 (문장 $i): $e');
               }
             } else {
-              // 중국어가 없는 문장도 번역 시도
-              try {
-                // 캐시에서 번역 확인 (임시 구현)
-                String? cachedTranslation;
+              // 중국어가 없는 문장 처리
+              // 번역이 아직 없는 경우에만 번역 수행
+              if (sentenceTranslation.isEmpty) {
+                // 중국어가 없는 문장도 번역 시도
                 try {
-                  cachedTranslation = await _translationService.getTranslation(
-                      originalSentence, 'ko');
-                } catch (e) {
-                  debugPrint('캐시된 번역 조회 중 오류: $e');
-                  cachedTranslation = null;
-                }
-
-                // 캐시에 없으면 번역 수행 및 캐싱
-                if (cachedTranslation == null || cachedTranslation.isEmpty) {
-                  final newTranslation = await _translationService
-                      .translateText(originalSentence, targetLanguage: 'ko');
-                  sentenceTranslation = newTranslation;
-
-                  // 번역 결과 캐싱 (임시 구현)
-                  if (sentenceTranslation.isNotEmpty) {
-                    try {
-                      await _translationService.cacheTranslation(
-                          originalSentence, sentenceTranslation, 'ko');
-                    } catch (e) {
-                      debugPrint('번역 캐싱 중 오류: $e');
-                    }
+                  // 캐시에서 번역 확인 (임시 구현)
+                  String? cachedTranslation;
+                  try {
+                    cachedTranslation = await _translationService
+                        .getTranslation(originalSentence, 'ko');
+                  } catch (e) {
+                    debugPrint('캐시된 번역 조회 중 오류: $e');
+                    cachedTranslation = null;
                   }
-                } else {
-                  sentenceTranslation = cachedTranslation;
-                  debugPrint('캐시된 번역 사용: $sentenceTranslation');
-                }
 
-                // 번역 결과 추가
-                if (combinedTranslation.isNotEmpty) {
-                  combinedTranslation.write('\n');
-                }
-                combinedTranslation.write(sentenceTranslation);
-              } catch (e) {
-                sentenceTranslation = originalSentence; // 번역 실패 시 원본 사용
+                  // 캐시에 없으면 번역 수행 및 캐싱
+                  if (cachedTranslation == null || cachedTranslation.isEmpty) {
+                    final newTranslation = await _translationService
+                        .translateText(originalSentence, targetLanguage: 'ko');
+                    sentenceTranslation = newTranslation;
 
-                // 번역 결과 추가
-                if (combinedTranslation.isNotEmpty) {
-                  combinedTranslation.write('\n');
+                    // 번역 결과 캐싱 (임시 구현)
+                    if (sentenceTranslation.isNotEmpty) {
+                      try {
+                        await _translationService.cacheTranslation(
+                            originalSentence, sentenceTranslation, 'ko');
+                      } catch (e) {
+                        debugPrint('번역 캐싱 중 오류: $e');
+                      }
+                    }
+                  } else {
+                    sentenceTranslation = cachedTranslation;
+                    debugPrint('캐시된 번역 사용: $sentenceTranslation');
+                  }
+                } catch (e) {
+                  sentenceTranslation = originalSentence; // 번역 실패 시 원본 사용
                 }
-                combinedTranslation.write(sentenceTranslation);
               }
+
+              // 번역 결과 추가
+              if (combinedTranslation.isNotEmpty) {
+                combinedTranslation.write('\n');
+              }
+              combinedTranslation.write(sentenceTranslation);
             }
 
             segments.add(TextSegment(
@@ -257,7 +306,10 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             ));
           }
 
-          debugPrint('생성된 세그먼트 수: ${segments.length}');
+          // 핀인 캐시 저장
+          await _savePinyinCache(pageId, pinyinCache);
+
+          debugPrint('생성된 세그먼트 수: ${segments.length}개');
 
           // 전체 번역 텍스트 생성
           final fullTranslatedText = combinedTranslation.toString();
@@ -277,8 +329,13 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             });
           }
 
-          // 처리된 텍스트를 페이지에 캐싱
-          await _updatePageCache(processedText);
+          // 번역 텍스트가 변경된 경우에만 페이지 캐시 업데이트
+          if (!useExistingTranslation || translatedText != fullTranslatedText) {
+            debugPrint('번역 텍스트가 변경되어 페이지 캐시 업데이트');
+            await _updatePageCache(processedText);
+          } else {
+            debugPrint('번역 텍스트가 동일하여 페이지 캐시 업데이트 건너뜀');
+          }
         }
       }
     } catch (e) {
@@ -321,8 +378,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   List<String> _splitIntoSentences(String text) {
     if (text.isEmpty) return [];
 
-    debugPrint('문장 분리 시작: 텍스트 길이 ${text.length}자');
-
     // 문장 구분자 패턴 (마침표, 느낌표, 물음표, 쉼표 등 뒤에 공백이 있을 수도 있음)
     final pattern = RegExp(r'(?<=[。！？!?\.,，、])\s*');
 
@@ -330,17 +385,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     final sentences = text.split(pattern);
 
     // 빈 문장 제거
-    final result = sentences.where((s) => s.trim().isNotEmpty).toList();
-
-    // 결과 확인
-    debugPrint('분리된 문장 수: ${result.length}');
-    if (result.isNotEmpty) {
-      for (int i = 0; i < result.length && i < 3; i++) {
-        debugPrint('문장 $i: ${result[i]}');
-      }
-    }
-
-    return result;
+    return sentences.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
   }
 
   @override
@@ -682,5 +727,49 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     }
 
     return buffer.toString();
+  }
+
+  // 핀인 캐싱 메서드 수정
+  Future<Map<String, String>> _loadPinyinCache(String? pageId) async {
+    if (pageId == null || pageId.isEmpty) return {};
+
+    try {
+      final pinyinCacheKey = 'pinyin_cache_$pageId';
+      final prefs = await SharedPreferences.getInstance();
+      final cachedPinyinJson = prefs.getString(pinyinCacheKey);
+
+      if (cachedPinyinJson != null && cachedPinyinJson.isNotEmpty) {
+        final Map<String, dynamic> jsonData = jsonDecode(cachedPinyinJson);
+        final Map<String, String> pinyinCache = {};
+
+        jsonData.forEach((key, value) {
+          if (value is String) {
+            pinyinCache[key] = value;
+          }
+        });
+
+        debugPrint('캐시된 핀인 로드 완료: ${pinyinCache.length}개');
+        return pinyinCache;
+      }
+    } catch (e) {
+      debugPrint('핀인 캐시 로드 중 오류: $e');
+    }
+
+    return {};
+  }
+
+  Future<void> _savePinyinCache(
+      String? pageId, Map<String, String> pinyinCache) async {
+    if (pageId == null || pageId.isEmpty || pinyinCache.isEmpty) return;
+
+    try {
+      final pinyinCacheKey = 'pinyin_cache_$pageId';
+      final prefs = await SharedPreferences.getInstance();
+      final jsonData = jsonEncode(pinyinCache);
+      await prefs.setString(pinyinCacheKey, jsonData);
+      debugPrint('핀인 캐시 저장 완료: ${pinyinCache.length}개');
+    } catch (e) {
+      debugPrint('핀인 캐시 저장 중 오류: $e');
+    }
   }
 }
