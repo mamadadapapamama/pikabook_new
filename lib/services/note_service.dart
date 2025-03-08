@@ -425,10 +425,9 @@ class NoteService {
 
           // 페이지 내용 업데이트
           final updatedPage = await _pageService.updatePageContent(
-            pageId: pageId,
-            originalText: extractedText,
-            translatedText: translatedText,
-            imageFile: imageFile,
+            pageId,
+            extractedText,
+            translatedText,
           );
 
           // 페이지 캐싱
@@ -739,10 +738,9 @@ class NoteService {
 
             // 첫 번째 페이지 내용 업데이트
             final updatedFirstPage = await _pageService.updatePageContent(
-              pageId: firstPage.id!,
-              originalText: extractedText,
-              translatedText: translatedText,
-              imageFile: firstImageFile,
+              firstPage.id!,
+              extractedText,
+              translatedText,
             );
 
             // 페이지 캐싱

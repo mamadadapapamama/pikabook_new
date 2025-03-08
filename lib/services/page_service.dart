@@ -411,61 +411,32 @@ class PageService {
     }
   }
 
-  // 기존 페이지 내용 업데이트
-  Future<page_model.Page?> updatePageContent({
-    required String pageId,
-    required String originalText,
-    required String translatedText,
-    required File imageFile,
-  }) async {
+  /// 페이지 내용 업데이트
+  Future<page_model.Page?> updatePageContent(
+      String pageId, String originalText, String translatedText) async {
     try {
-      // 페이지 정보 가져오기 (노트 ID 확인용)
-      final pageDoc = await _pagesCollection.doc(pageId).get();
-      if (!pageDoc.exists) {
-        throw Exception('페이지를 찾을 수 없습니다.');
-      }
-
-      final data = pageDoc.data() as Map<String, dynamic>?;
-      final noteId = data?['noteId'] as String?;
-
-      if (noteId == null) {
-        throw Exception('페이지의 노트 ID를 찾을 수 없습니다.');
-      }
-
-      // 이미지 업로드
-      final imageUrl = await _imageService.uploadImage(imageFile);
-
-      // 업데이트할 데이터
-      final updates = <String, dynamic>{
+      // Firestore에 업데이트
+      await _pagesCollection.doc(pageId).update({
         'originalText': originalText,
         'translatedText': translatedText,
-        'imageUrl': imageUrl,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
-
-      // Firestore 업데이트
-      await _pagesCollection.doc(pageId).update(updates);
-
-      // 업데이트된 페이지 가져오기
-      final updatedDoc = await _pagesCollection.doc(pageId).get();
-      if (!updatedDoc.exists) {
-        return null;
-      }
-
-      // 페이지 객체 생성
-      final updatedPage = page_model.Page.fromFirestore(updatedDoc);
+        'updatedAt': DateTime.now(),
+      });
 
       // 캐시 업데이트
-      await _cacheService.cachePage(noteId, updatedPage);
+      await _cacheService.cacheText('page_original', pageId, originalText);
+      await _cacheService.cacheText('page_translated', pageId, translatedText);
+
+      // 업데이트된 페이지 객체 반환
+      final pageDoc = await _pagesCollection.doc(pageId).get();
+      if (pageDoc.exists) {
+        return page_model.Page.fromFirestore(pageDoc);
+      }
+
       debugPrint('페이지 내용 업데이트 완료: ID=$pageId');
-
-      // 캐시 타임스탬프 업데이트
-      _lastCacheTime[noteId] = DateTime.now();
-
-      return updatedPage;
+      return null;
     } catch (e) {
       debugPrint('페이지 내용 업데이트 중 오류 발생: $e');
-      return null;
+      throw Exception('페이지 내용을 업데이트할 수 없습니다: $e');
     }
   }
 

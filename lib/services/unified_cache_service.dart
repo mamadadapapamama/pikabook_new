@@ -463,4 +463,42 @@ class UnifiedCacheService {
       }
     }
   }
+
+  /// 텍스트 캐싱
+  Future<void> cacheText(String type, String id, String text) async {
+    try {
+      // 메모리 캐시에 저장
+      final key = '${type}_$id';
+      final now = DateTime.now();
+
+      // 메모리 캐시에 저장
+      _cacheTimestamps[key] = now;
+
+      // 타입에 따라 다른 캐시 맵에 저장
+      if (type == 'page_original' || type == 'page_translated') {
+        // 페이지 텍스트 캐싱
+        final pageId = id;
+        if (_pageCache.containsKey(pageId)) {
+          final page = _pageCache[pageId]!;
+          if (type == 'page_original') {
+            _pageCache[pageId] = page.copyWith(originalText: text);
+          } else {
+            _pageCache[pageId] = page.copyWith(translatedText: text);
+          }
+        }
+      }
+
+      // 로컬 저장소에 저장
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(key, text);
+        await prefs.setString('${type}_timestamp_$id', now.toIso8601String());
+        debugPrint('텍스트 캐싱 완료: $type, ID=$id, 길이=${text.length}');
+      } catch (e) {
+        debugPrint('로컬 저장소에 텍스트 캐싱 중 오류: $e');
+      }
+    } catch (e) {
+      debugPrint('텍스트 캐싱 중 오류 발생: $e');
+    }
+  }
 }

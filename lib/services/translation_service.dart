@@ -197,4 +197,22 @@ class TranslationService {
       {'code': 'ja', 'name': '일본어'},
     ];
   }
+
+  /// 번역 캐싱
+  Future<void> cacheTranslation(
+      String originalText, String translatedText, String targetLanguage) async {
+    // 이 메서드는 UnifiedCacheService를 통해 구현되어야 합니다.
+    // 현재는 임시 구현으로 로그만 출력합니다.
+    debugPrint(
+        '번역 캐싱: 원본 텍스트 ${originalText.length}자, 번역 텍스트 ${translatedText.length}자');
+  }
+
+  /// 캐시된 번역 가져오기
+  Future<String?> getTranslation(
+      String originalText, String targetLanguage) async {
+    // 이 메서드는 UnifiedCacheService를 통해 구현되어야 합니다.
+    // 현재는 임시 구현으로 null을 반환합니다.
+    debugPrint('캐시된 번역 조회: 원본 텍스트 ${originalText.length}자');
+    return null;
+  }
 }
