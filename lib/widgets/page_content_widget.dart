@@ -519,8 +519,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 processedText: _processedText!,
                 onTts: _speakText,
                 onDictionaryLookup: _showDictionarySnackbar,
-                onCreateFlashCard: (word, meaning) {
-                  widget.onCreateFlashCard(word, meaning);
+                onCreateFlashCard: (word, meaning, {String? pinyin}) {
+                  widget.onCreateFlashCard(word, meaning, pinyin: pinyin);
                 },
               );
             }),
@@ -661,7 +661,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           action: SnackBarAction(
             label: '플래시카드에 추가',
             onPressed: () {
-              widget.onCreateFlashCard(word, '직접 의미 입력 필요');
+              widget.onCreateFlashCard(word, '직접 의미 입력 필요', pinyin: null);
             },
           ),
           duration: const Duration(seconds: 5),
