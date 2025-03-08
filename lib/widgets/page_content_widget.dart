@@ -5,6 +5,7 @@ import '../models/page.dart' as page_model;
 import '../models/processed_text.dart';
 import '../models/text_segment.dart';
 import '../models/text_processing_mode.dart';
+import '../models/flash_card.dart';
 import '../services/dictionary_service.dart';
 import '../services/flashcard_service.dart' hide debugPrint;
 import '../services/tts_service.dart';
@@ -26,6 +27,7 @@ class PageContentWidget extends StatefulWidget {
   final String noteId;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
   final TextProcessingMode textProcessingMode;
+  final List<FlashCard>? flashCards;
 
   const PageContentWidget({
     Key? key,
@@ -35,6 +37,7 @@ class PageContentWidget extends StatefulWidget {
     required this.noteId,
     required this.onCreateFlashCard,
     this.textProcessingMode = TextProcessingMode.languageLearning,
+    this.flashCards,
   }) : super(key: key);
 
   @override
@@ -522,6 +525,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 onCreateFlashCard: (word, meaning, {String? pinyin}) {
                   widget.onCreateFlashCard(word, meaning, pinyin: pinyin);
                 },
+                flashCards: widget.flashCards,
               );
             }),
           ]

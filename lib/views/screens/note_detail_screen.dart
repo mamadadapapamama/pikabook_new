@@ -17,6 +17,7 @@ import '../../widgets/page_indicator_widget.dart';
 import 'flashcard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async'; // Timer 클래스를 사용하기 위한 import 추가
+import '../../services/unified_cache_service.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;
@@ -40,6 +41,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   final TtsService _ttsService = TtsService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UserPreferencesService _preferencesService = UserPreferencesService();
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
 
   Note? _note;
   List<page_model.Page> _pages = [];
@@ -698,8 +700,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         noteId: widget.noteId,
       );
 
-      // 노트 다시 로드하여 카운터 업데이트
+      // 캐시 무효화 후 노트 다시 로드
+      await _cacheService.removeCachedNote(widget.noteId);
       await _loadNote();
+
+      // 상태 업데이트를 강제로 적용
+      if (mounted) {
+        setState(() {
+          // 플래시카드 카운터 UI 업데이트를 위한 강제 리렌더링
+        });
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -916,6 +926,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       noteId: widget.noteId,
       onCreateFlashCard: _createFlashCard,
       textProcessingMode: _textProcessingMode,
+      flashCards: _note?.flashCards,
     );
   }
 }
