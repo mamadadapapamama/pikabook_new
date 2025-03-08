@@ -48,74 +48,76 @@ class TextSectionWidget extends StatelessWidget {
                   height: 1.8, // 줄 간격 증가
                   letterSpacing: isOriginal ? 0.5 : 0.2, // 글자 간격 조정
                 ),
-                contextMenuBuilder: (context, editableTextState) {
-                  final TextEditingValue value =
-                      editableTextState.textEditingValue;
+                contextMenuBuilder: isOriginal
+                    ? (context, editableTextState) {
+                        final TextEditingValue value =
+                            editableTextState.textEditingValue;
+                        final selectedText =
+                            value.selection.textInside(value.text);
 
-                  // 기본 컨텍스트 메뉴 버튼 가져오기
-                  final List<ContextMenuButtonItem> buttonItems = [];
+                        // 기본 컨텍스트 메뉴 버튼 가져오기
+                        final List<ContextMenuButtonItem> buttonItems = [];
 
-                  // 복사 버튼 추가
-                  buttonItems.add(
-                    ContextMenuButtonItem(
-                      label: '복사',
-                      onPressed: () {
-                        final selectedText = value.text.substring(
-                          value.selection.start,
-                          value.selection.end,
+                        // 복사 버튼 추가
+                        buttonItems.add(
+                          ContextMenuButtonItem(
+                            label: '복사',
+                            onPressed: () {
+                              Clipboard.setData(
+                                  ClipboardData(text: selectedText));
+                              editableTextState.hideToolbar();
+                            },
+                          ),
                         );
-                        Clipboard.setData(ClipboardData(text: selectedText));
-                      },
-                    ),
-                  );
 
-                  if (value.selection.isValid &&
-                      value.selection.start != value.selection.end) {
-                    // 선택된 텍스트가 있는 경우
-                    final selectedText = value.text.substring(
-                      value.selection.start,
-                      value.selection.end,
-                    );
+                        // TTS 버튼 추가
+                        buttonItems.add(
+                          ContextMenuButtonItem(
+                            label: '읽기',
+                            onPressed: () async {
+                              editableTextState.hideToolbar();
+                              await ttsService.setLanguage('zh-CN');
+                              await ttsService.speak(selectedText);
+                            },
+                          ),
+                        );
 
-                    // 원문인 경우 TTS 및 사전 검색 버튼 추가
-                    if (isOriginal) {
-                      // TTS 버튼 추가
-                      buttonItems.add(
-                        ContextMenuButtonItem(
-                          label: '읽기',
-                          onPressed: () async {
-                            await ttsService.setLanguage('zh-CN');
-                            await ttsService.speak(selectedText);
-                          },
-                        ),
-                      );
+                        // 사전 검색 버튼 추가
+                        buttonItems.add(
+                          ContextMenuButtonItem(
+                            label: '사전 검색',
+                            onPressed: () {
+                              editableTextState.hideToolbar();
+                              onDictionaryLookup(selectedText);
+                            },
+                          ),
+                        );
 
-                      // 사전 검색 버튼 추가
-                      buttonItems.add(
-                        ContextMenuButtonItem(
-                          label: '사전',
-                          onPressed: () {
-                            onDictionaryLookup(selectedText);
-                          },
-                        ),
-                      );
-                    }
+                        // 플래시카드 추가 버튼 (원문 -> 번역)
+                        buttonItems.add(
+                          ContextMenuButtonItem(
+                            label: '플래시카드 추가',
+                            onPressed: () {
+                              editableTextState.hideToolbar();
+                              onCreateFlashCard(selectedText, translatedText);
 
-                    // 플래시카드 추가 버튼
-                    buttonItems.add(
-                      ContextMenuButtonItem(
-                        label: '플래시카드에 추가',
-                        onPressed: () {
-                          onCreateFlashCard(selectedText, translatedText);
-                        },
-                      ),
-                    );
-                  }
-                  return AdaptiveTextSelectionToolbar.buttonItems(
-                    anchors: editableTextState.contextMenuAnchors,
-                    buttonItems: buttonItems,
-                  );
-                },
+                              // 추가 완료 메시지 표시
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('플래시카드가 추가되었습니다.'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                        );
+
+                        return AdaptiveTextSelectionToolbar.buttonItems(
+                          anchors: editableTextState.contextMenuAnchors,
+                          buttonItems: buttonItems,
+                        );
+                      }
+                    : null, // 번역문에는 context menu 없음
               ),
             ),
           ],

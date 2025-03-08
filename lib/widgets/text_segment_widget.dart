@@ -65,10 +65,74 @@ class TextSegmentWidget extends StatelessWidget {
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
-            onSelectionChanged: (selection, cause) {
-              if (selection.baseOffset != selection.extentOffset) {
-                // 텍스트 선택 시 처리
-              }
+            contextMenuBuilder: (context, editableTextState) {
+              final TextEditingValue value = editableTextState.textEditingValue;
+              final selectedText = value.selection.textInside(value.text);
+
+              // 기본 메뉴 항목 가져오기
+              final List<ContextMenuButtonItem> buttonItems = [];
+
+              // 복사 버튼 추가
+              buttonItems.add(
+                ContextMenuButtonItem(
+                  onPressed: () {
+                    editableTextState
+                        .copySelection(SelectionChangedCause.toolbar);
+                    editableTextState.hideToolbar();
+                  },
+                  label: '복사',
+                ),
+              );
+
+              // 사전 검색 버튼 추가
+              buttonItems.add(
+                ContextMenuButtonItem(
+                  onPressed: () {
+                    editableTextState.hideToolbar();
+                    if (onDictionaryLookup != null) {
+                      onDictionaryLookup!(selectedText);
+                    }
+                  },
+                  label: '사전 검색',
+                ),
+              );
+
+              // 플래시카드 추가 버튼 생성
+              buttonItems.add(
+                ContextMenuButtonItem(
+                  onPressed: () {
+                    editableTextState.hideToolbar();
+
+                    // 원문에서 선택한 경우, 번역을 의미로 사용
+                    final String word = selectedText;
+                    final String meaning =
+                        segment.translatedText ?? '직접 의미 입력 필요';
+
+                    // 플래시카드 바로 추가
+                    if (onCreateFlashCard != null) {
+                      onCreateFlashCard!(
+                        word,
+                        meaning,
+                        pinyin: segment.pinyin,
+                      );
+
+                      // 추가 완료 메시지 표시
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('플래시카드가 추가되었습니다.'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  label: '플래시카드 추가',
+                ),
+              );
+
+              return AdaptiveTextSelectionToolbar.buttonItems(
+                anchors: editableTextState.contextMenuAnchors,
+                buttonItems: buttonItems,
+              );
             },
           ),
         ),
