@@ -18,6 +18,7 @@ import 'flashcard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async'; // Timer 클래스를 사용하기 위한 import 추가
 import '../../services/unified_cache_service.dart';
+import 'package:badges/badges.dart' as badges;
 
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;
@@ -702,12 +703,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
       // 캐시 무효화 후 노트 다시 로드
       await _cacheService.removeCachedNote(widget.noteId);
-      await _loadNote();
+
+      // 노트 다시 로드
+      final result = await _noteService.getNoteWithPages(widget.noteId);
+      final updatedNote = result['note'] as Note;
 
       // 상태 업데이트를 강제로 적용
       if (mounted) {
         setState(() {
-          // 플래시카드 카운터 UI 업데이트를 위한 강제 리렌더링
+          // 노트 객체 업데이트 (플래시카드 카운터 포함)
+          _note = updatedNote;
         });
       }
 
@@ -755,41 +760,32 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             : const Text('노트 상세'),
         actions: [
           if (_note != null) ...[
-            // 플래시카드 카운터 및 버튼
-            if (_note!.flashcardCount > 0 || (_note!.flashCards.isNotEmpty))
-              InkWell(
-                onTap: () {
-                  Navigator.of(context).push(
+            // 플래시카드 버튼
+            if (_note!.flashcardCount > 0)
+              IconButton(
+                icon: badges.Badge(
+                  badgeContent: Text(
+                    '${_note!.flashcardCount}',
+                    style: TextStyle(color: Colors.white, fontSize: 10),
+                  ),
+                  child: const Icon(Icons.flash_on),
+                ),
+                onPressed: () async {
+                  // 플래시카드 화면으로 이동하고 결과를 받음
+                  final result = await Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => FlashCardScreen(noteId: _note!.id),
                     ),
                   );
+
+                  // 플래시카드가 변경되었으면 노트 정보 다시 로드
+                  if (result == true && mounted) {
+                    // 캐시 무효화
+                    await _cacheService.removeCachedNote(widget.noteId);
+                    // 노트 다시 로드
+                    _loadNote();
+                  }
                 },
-                child: Container(
-                  margin: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 4,
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[100],
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.school, size: 16, color: Colors.blue),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_note!.flashcardCount > 0 ? _note!.flashcardCount : _note!.flashCards.length}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             IconButton(
               icon: Icon(
