@@ -41,88 +41,113 @@ class TextSectionWidget extends StatelessWidget {
                 color: Colors.grey[100],
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: SelectableText(
-                text,
-                style: TextStyle(
-                  fontSize: isOriginal ? 18 : 16, // 원문은 더 큰 글자 크기
-                  height: 1.8, // 줄 간격 증가
-                  letterSpacing: isOriginal ? 0.5 : 0.2, // 글자 간격 조정
-                ),
-                contextMenuBuilder: isOriginal
-                    ? (context, editableTextState) {
-                        final TextEditingValue value =
-                            editableTextState.textEditingValue;
-                        final selectedText =
-                            value.selection.textInside(value.text);
+              child: isOriginal
+                  ? GestureDetector(
+                      onLongPress: () {
+                        // 전체 텍스트 선택 시 메뉴 표시
+                        _showCustomMenu(context, text, ttsService);
+                      },
+                      child: SelectableText(
+                        text,
+                        style: TextStyle(
+                          fontSize: isOriginal ? 18 : 16, // 원문은 더 큰 글자 크기
+                          height: 1.8, // 줄 간격 증가
+                          letterSpacing: isOriginal ? 0.5 : 0.2, // 글자 간격 조정
+                        ),
+                        onSelectionChanged: (selection, cause) {
+                          if (selection.baseOffset != selection.extentOffset) {
+                            // 텍스트가 선택되면 커스텀 메뉴 표시
+                            final String selectedText = text.substring(
+                              selection.baseOffset,
+                              selection.extentOffset,
+                            );
 
-                        // 기본 컨텍스트 메뉴 버튼 가져오기
-                        final List<ContextMenuButtonItem> buttonItems = [];
-
-                        // 복사 버튼 추가
-                        buttonItems.add(
-                          ContextMenuButtonItem(
-                            label: '복사',
-                            onPressed: () {
-                              Clipboard.setData(
-                                  ClipboardData(text: selectedText));
-                              editableTextState.hideToolbar();
-                            },
-                          ),
-                        );
-
-                        // TTS 버튼 추가
-                        buttonItems.add(
-                          ContextMenuButtonItem(
-                            label: '읽기',
-                            onPressed: () async {
-                              editableTextState.hideToolbar();
-                              await ttsService.setLanguage('zh-CN');
-                              await ttsService.speak(selectedText);
-                            },
-                          ),
-                        );
-
-                        // 사전 검색 버튼 추가
-                        buttonItems.add(
-                          ContextMenuButtonItem(
-                            label: '사전 검색',
-                            onPressed: () {
-                              editableTextState.hideToolbar();
-                              onDictionaryLookup(selectedText);
-                            },
-                          ),
-                        );
-
-                        // 플래시카드 추가 버튼 (원문 -> 번역)
-                        buttonItems.add(
-                          ContextMenuButtonItem(
-                            label: '플래시카드 추가',
-                            onPressed: () {
-                              editableTextState.hideToolbar();
-                              onCreateFlashCard(selectedText, translatedText);
-
-                              // 추가 완료 메시지 표시
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('플래시카드가 추가되었습니다.'),
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
-                            },
-                          ),
-                        );
-
-                        return AdaptiveTextSelectionToolbar.buttonItems(
-                          anchors: editableTextState.contextMenuAnchors,
-                          buttonItems: buttonItems,
-                        );
-                      }
-                    : null, // 번역문에는 context menu 없음
-              ),
+                            // 선택 완료 후 메뉴 표시 (약간의 딜레이 추가)
+                            if (cause == SelectionChangedCause.longPress) {
+                              Future.delayed(const Duration(milliseconds: 200),
+                                  () {
+                                _showCustomMenu(
+                                    context, selectedText, ttsService);
+                              });
+                            }
+                          }
+                        },
+                        contextMenuBuilder: null, // 기본 컨텍스트 메뉴 비활성화
+                      ),
+                    )
+                  : Text(
+                      text,
+                      style: TextStyle(
+                        fontSize: 16, // 번역문은 작은 글자 크기
+                        height: 1.8, // 줄 간격 증가
+                        letterSpacing: 0.2, // 글자 간격 조정
+                      ),
+                    ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// 커스텀 메뉴 표시
+  void _showCustomMenu(
+      BuildContext context, String selectedText, TtsService ttsService) {
+    if (selectedText.isEmpty) return;
+
+    final RenderBox button = context.findRenderObject() as RenderBox;
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero),
+            ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    showMenu(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem(
+          child: const Text('복사'),
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: selectedText));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('텍스트가 복사되었습니다')),
+            );
+          },
+        ),
+        PopupMenuItem(
+          child: const Text('읽기'),
+          onTap: () async {
+            await ttsService.setLanguage('zh-CN');
+            await ttsService.speak(selectedText);
+          },
+        ),
+        PopupMenuItem(
+          child: const Text('사전 검색'),
+          onTap: () {
+            onDictionaryLookup(selectedText);
+          },
+        ),
+        PopupMenuItem(
+          child: const Text('플래시카드 추가'),
+          onTap: () {
+            onCreateFlashCard(selectedText, translatedText);
+
+            // 추가 완료 메시지 표시
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('플래시카드가 추가되었습니다.'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

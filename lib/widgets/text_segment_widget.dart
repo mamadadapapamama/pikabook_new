@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/text_segment.dart';
 
 /// 텍스트 세그먼트 위젯
@@ -59,81 +60,46 @@ class TextSegmentWidget extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: SelectableText(
-            segment.originalText,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-            contextMenuBuilder: (context, editableTextState) {
-              final TextEditingValue value = editableTextState.textEditingValue;
-              final selectedText = value.selection.textInside(value.text);
-
-              // 기본 메뉴 항목 가져오기
-              final List<ContextMenuButtonItem> buttonItems = [];
-
-              // 복사 버튼 추가
-              buttonItems.add(
-                ContextMenuButtonItem(
-                  onPressed: () {
-                    editableTextState
-                        .copySelection(SelectionChangedCause.toolbar);
-                    editableTextState.hideToolbar();
-                  },
-                  label: '복사',
-                ),
+          child: GestureDetector(
+            onLongPress: () {
+              // 현재 선택된 텍스트 가져오기
+              final TextSelection selection = TextSelection.fromPosition(
+                const TextPosition(offset: 0),
               );
 
-              // 사전 검색 버튼 추가
-              buttonItems.add(
-                ContextMenuButtonItem(
-                  onPressed: () {
-                    editableTextState.hideToolbar();
-                    if (onDictionaryLookup != null) {
-                      onDictionaryLookup!(selectedText);
-                    }
-                  },
-                  label: '사전 검색',
-                ),
-              );
+              // 선택된 텍스트가 없으면 전체 텍스트 사용
+              final String selectedText =
+                  selection.textInside(segment.originalText).isNotEmpty
+                      ? selection.textInside(segment.originalText)
+                      : segment.originalText;
 
-              // 플래시카드 추가 버튼 생성
-              buttonItems.add(
-                ContextMenuButtonItem(
-                  onPressed: () {
-                    editableTextState.hideToolbar();
-
-                    // 원문에서 선택한 경우, 번역을 의미로 사용
-                    final String word = selectedText;
-                    final String meaning =
-                        segment.translatedText ?? '직접 의미 입력 필요';
-
-                    // 플래시카드 바로 추가
-                    if (onCreateFlashCard != null) {
-                      onCreateFlashCard!(
-                        word,
-                        meaning,
-                        pinyin: segment.pinyin,
-                      );
-
-                      // 추가 완료 메시지 표시
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('플래시카드가 추가되었습니다.'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
-                  label: '플래시카드 추가',
-                ),
-              );
-
-              return AdaptiveTextSelectionToolbar.buttonItems(
-                anchors: editableTextState.contextMenuAnchors,
-                buttonItems: buttonItems,
-              );
+              // 커스텀 메뉴 표시
+              _showCustomMenu(context, selectedText);
             },
+            child: SelectableText(
+              segment.originalText,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+              onSelectionChanged: (selection, cause) {
+                if (selection.baseOffset != selection.extentOffset) {
+                  // 텍스트가 선택되면 커스텀 메뉴 표시
+                  final String selectedText = segment.originalText.substring(
+                    selection.baseOffset,
+                    selection.extentOffset,
+                  );
+
+                  // 선택 완료 후 메뉴 표시 (약간의 딜레이 추가)
+                  if (cause == SelectionChangedCause.longPress) {
+                    Future.delayed(const Duration(milliseconds: 200), () {
+                      _showCustomMenu(context, selectedText);
+                    });
+                  }
+                }
+              },
+              contextMenuBuilder: null, // 기본 컨텍스트 메뉴 비활성화
+            ),
           ),
         ),
         if (onTts != null)
@@ -142,6 +108,72 @@ class TextSegmentWidget extends StatelessWidget {
             onPressed: onTts,
             tooltip: '읽기',
           ),
+      ],
+    );
+  }
+
+  /// 커스텀 메뉴 표시
+  void _showCustomMenu(BuildContext context, String selectedText) {
+    if (selectedText.isEmpty) return;
+
+    final RenderBox button = context.findRenderObject() as RenderBox;
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero),
+            ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    showMenu(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem(
+          child: const Text('복사'),
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: selectedText));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('텍스트가 복사되었습니다')),
+            );
+          },
+        ),
+        PopupMenuItem(
+          child: const Text('사전 검색'),
+          onTap: () {
+            if (onDictionaryLookup != null) {
+              onDictionaryLookup!(selectedText);
+            }
+          },
+        ),
+        PopupMenuItem(
+          child: const Text('플래시카드 추가'),
+          onTap: () {
+            // 원문에서 선택한 경우, 번역을 의미로 사용
+            final String word = selectedText;
+            final String meaning = segment.translatedText ?? '직접 의미 입력 필요';
+
+            // 플래시카드 바로 추가
+            if (onCreateFlashCard != null) {
+              onCreateFlashCard!(
+                word,
+                meaning,
+                pinyin: segment.pinyin,
+              );
+
+              // 추가 완료 메시지 표시
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('플래시카드가 추가되었습니다.'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+        ),
       ],
     );
   }
@@ -169,7 +201,7 @@ class TextSegmentWidget extends StatelessWidget {
         color: Colors.grey.shade100,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: SelectableText(
+      child: Text(
         segment.translatedText ?? '번역 없음',
         style: TextStyle(
           fontSize: 16,
