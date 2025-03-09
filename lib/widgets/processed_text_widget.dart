@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import '../models/processed_text.dart';
 import '../models/text_segment.dart';
 import '../models/flash_card.dart';
@@ -76,6 +78,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       return SelectableText(
         text,
         style: TextStyle(fontSize: fontSize, height: height),
+        contextMenuBuilder: _buildCustomContextMenu,
       );
     }
 
@@ -138,89 +141,97 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
     return SelectableText.rich(
       TextSpan(children: spans),
-      contextMenuBuilder: (context, editableTextState) {
-        final TextEditingValue value = editableTextState.textEditingValue;
-        final selectedText = value.selection.textInside(value.text);
+      contextMenuBuilder: _buildCustomContextMenu,
+    );
+  }
 
-        // 기본 메뉴 항목 가져오기
-        final List<ContextMenuButtonItem> buttonItems = [];
+  // 통일된 사용자 정의 컨텍스트 메뉴 빌더
+  Widget _buildCustomContextMenu(
+      BuildContext context, EditableTextState editableTextState) {
+    final TextEditingValue value = editableTextState.textEditingValue;
+    final String selectedText = value.selection.textInside(value.text);
 
-        // 복사 버튼 추가
-        buttonItems.add(
-          ContextMenuButtonItem(
-            onPressed: () {
-              editableTextState.copySelection(SelectionChangedCause.toolbar);
-              editableTextState.hideToolbar();
-            },
-            label: '복사',
-          ),
-        );
+    if (selectedText.isEmpty) {
+      return Container();
+    }
 
-        // 사전 검색 버튼 추가
-        buttonItems.add(
-          ContextMenuButtonItem(
-            onPressed: () {
-              editableTextState.hideToolbar();
-              if (widget.onDictionaryLookup != null) {
-                widget.onDictionaryLookup!(selectedText);
+    // 기본 메뉴 항목 가져오기
+    final List<ContextMenuButtonItem> buttonItems = [];
+
+    // 복사 버튼 추가
+    buttonItems.add(
+      ContextMenuButtonItem(
+        onPressed: () {
+          editableTextState.copySelection(SelectionChangedCause.toolbar);
+          editableTextState.hideToolbar();
+        },
+        label: '복사',
+      ),
+    );
+
+    // 사전 검색 버튼 추가
+    buttonItems.add(
+      ContextMenuButtonItem(
+        onPressed: () {
+          editableTextState.hideToolbar();
+          if (widget.onDictionaryLookup != null) {
+            widget.onDictionaryLookup!(selectedText);
+          }
+        },
+        label: '사전 검색',
+      ),
+    );
+
+    // 플래시카드 추가 버튼 생성
+    buttonItems.add(
+      ContextMenuButtonItem(
+        onPressed: () {
+          // 컨텍스트 메뉴 닫기
+          editableTextState.hideToolbar();
+
+          // 원문에서 선택한 경우, 해당 세그먼트의 번역 찾기
+          String meaning = '';
+          String? pinyin;
+
+          if (widget.processedText.segments != null) {
+            for (final segment in widget.processedText.segments!) {
+              if (segment.originalText.contains(selectedText)) {
+                meaning = segment.translatedText ?? '';
+                pinyin = segment.pinyin;
+                break;
               }
-            },
-            label: '사전 검색',
-          ),
-        );
+            }
+          }
 
-        // 플래시카드 추가 버튼 생성
-        buttonItems.add(
-          ContextMenuButtonItem(
-            onPressed: () {
-              // 컨텍스트 메뉴 닫기
-              editableTextState.hideToolbar();
+          // 의미가 없으면 빈 문자열로 설정
+          if (meaning.isEmpty) {
+            meaning = '직접 의미 입력 필요';
+          }
 
-              // 원문에서 선택한 경우, 해당 세그먼트의 번역 찾기
-              String meaning = '';
-              String? pinyin;
+          // 플래시카드 바로 추가
+          if (widget.onCreateFlashCard != null) {
+            widget.onCreateFlashCard!(
+              selectedText,
+              meaning,
+              pinyin: pinyin,
+            );
+          }
 
-              if (widget.processedText.segments != null) {
-                for (final segment in widget.processedText.segments!) {
-                  if (segment.originalText.contains(selectedText)) {
-                    meaning = segment.translatedText ?? '';
-                    pinyin = segment.pinyin;
-                    break;
-                  }
-                }
-              }
+          // 추가 완료 메시지 표시
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('플래시카드가 추가되었습니다.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        },
+        label: '플래시카드 추가',
+      ),
+    );
 
-              // 의미가 없으면 빈 문자열로 설정
-              if (meaning.isEmpty) {
-                meaning = '직접 의미 입력 필요';
-              }
-
-              // 플래시카드 바로 추가
-              if (widget.onCreateFlashCard != null) {
-                widget.onCreateFlashCard!(
-                  selectedText,
-                  meaning,
-                  pinyin: pinyin,
-                );
-              }
-
-              // 추가 완료 메시지 표시
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('플래시카드가 추가되었습니다.'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            label: '플래시카드 추가',
-          ),
-        );
-
-        return AdaptiveTextSelectionToolbar.buttonItems(
-          anchors: editableTextState.contextMenuAnchors,
-          buttonItems: buttonItems,
-        );
-      },
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: buttonItems,
     );
   }
 
@@ -302,9 +313,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                _buildHighlightedText(
+                SelectableText(
                   widget.processedText.fullOriginalText,
-                  fontSize: 16,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    height: 1.5,
+                  ),
+                  contextMenuBuilder: _buildCustomContextMenu,
                 ),
               ],
             ),
@@ -331,6 +346,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   SelectableText(
                     widget.processedText.fullTranslatedText!,
                     style: const TextStyle(fontSize: 16),
+                    contextMenuBuilder: _buildCustomContextMenu,
                   ),
                 ],
               ),
@@ -423,7 +439,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             const SizedBox(height: 8),
 
             // 번역 (null 체크 추가)
-            SelectableText(
+            Text(
               segment.translatedText ?? '',
               style: const TextStyle(fontSize: 16, height: 1.5),
             ),
