@@ -221,6 +221,13 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('플래시카드'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            // 플래시카드 변경 여부를 결과로 전달
+            Navigator.of(context).pop(true);
+          },
+        ),
         actions: [
           if (_flashCards.isNotEmpty)
             Padding(
@@ -271,7 +278,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           ),
                           const SizedBox(height: 24),
                           ElevatedButton(
-                            onPressed: () => Navigator.of(context).pop(),
+                            onPressed: () => Navigator.of(context).pop(true),
                             child: const Text('돌아가기'),
                           ),
                         ],
