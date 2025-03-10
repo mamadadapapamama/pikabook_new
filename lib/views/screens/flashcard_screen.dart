@@ -7,6 +7,7 @@ import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../services/dictionary_service.dart';
+import '../../services/chinese_dictionary_service.dart';
 
 class FlashCardScreen extends StatefulWidget {
   final String? noteId; // 특정 노트의 플래시카드만 표시하려면 noteId 전달
@@ -31,8 +32,11 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   @override
   void initState() {
     super.initState();
-    _initTts();
     _loadFlashCards();
+    _initTts();
+
+    // 중국어 사전 로드
+    _loadChineseDictionary();
   }
 
   @override
@@ -216,6 +220,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
+  // 중국어 사전 로드
+  Future<void> _loadChineseDictionary() async {
+    final dictionaryService = ChineseDictionaryService();
+    await dictionaryService.loadDictionary();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -291,6 +301,13 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   Widget _buildFlashCardContent() {
     final currentCard = _flashCards[_currentIndex];
 
+    // 중국어 사전에서 단어 정보 가져오기
+    final dictionaryService = ChineseDictionaryService();
+    final entry = dictionaryService.lookup(currentCard.front);
+
+    // 발음 정보 (사전에 있으면 사전의 발음, 없으면 카드의 발음)
+    final pinyin = entry?.pinyin ?? currentCard.pinyin;
+
     return Column(
       children: [
         Expanded(
@@ -326,6 +343,13 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   }
 
   Widget _buildCardFront(FlashCard card) {
+    // 중국어 사전에서 단어 정보 가져오기
+    final dictionaryService = ChineseDictionaryService();
+    final entry = dictionaryService.lookup(card.front);
+
+    // 발음 정보 (사전에 있으면 사전의 발음, 없으면 카드의 발음)
+    final pinyin = entry?.pinyin ?? card.pinyin;
+
     return Container(
       key: const ValueKey<String>('front'),
       padding: const EdgeInsets.all(24),
@@ -405,7 +429,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           ),
           const SizedBox(height: 24),
           Text(
-            card.pinyin,
+            pinyin,
             style: TextStyle(
               fontSize: 18,
               color: Colors.grey[700],
@@ -552,6 +576,13 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   }
 
   Widget _buildCardBack(FlashCard card) {
+    // 중국어 사전에서 단어 정보 가져오기
+    final dictionaryService = ChineseDictionaryService();
+    final entry = dictionaryService.lookup(card.front);
+
+    // 의미 정보 (사전에 있으면 사전의 의미, 없으면 카드의 의미)
+    final meaning = entry?.meaning ?? card.back;
+
     return Container(
       key: const ValueKey<String>('back'),
       padding: const EdgeInsets.all(24),
@@ -569,7 +600,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           ),
           const SizedBox(height: 24),
           Text(
-            card.back,
+            meaning,
             style: const TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,

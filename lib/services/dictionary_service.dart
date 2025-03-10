@@ -114,4 +114,78 @@ class DictionaryService {
     // 실제로는 중국어 단어 분석 라이브러리를 사용해야 함
     return text.split('');
   }
+
+  // 단어별 의미 분석 결과를 담을 클래스
+  Future<List<WordAnalysis>> analyzeText(String text) async {
+    // 현재는 간단한 구현으로, 실제로는 API 호출이 필요합니다
+    List<WordAnalysis> result = [];
+
+    try {
+      // 여기서 API 호출을 구현합니다
+      // 예시: Google Cloud Natural Language API 또는 Baidu API 호출
+
+      // 임시 구현: 사전에서 단어를 찾아 분석 결과 생성
+      // 실제 구현에서는 API 응답을 파싱하여 결과 생성
+      final words = text.split(' '); // 간단한 공백 기준 분리 (실제로는 더 복잡한 분리 필요)
+
+      for (final word in words) {
+        if (word.trim().isEmpty) continue;
+
+        final entry = lookupWord(word.trim());
+        if (entry != null) {
+          result.add(WordAnalysis(
+            word: entry.word,
+            pinyin: entry.pinyin,
+            meaning: entry.meaning,
+            partOfSpeech: _guessPartOfSpeech(entry.meaning),
+          ));
+        } else {
+          // 사전에 없는 단어는 분석 결과 없음으로 표시
+          result.add(WordAnalysis(
+            word: word.trim(),
+            pinyin: '',
+            meaning: '사전에 없는 단어',
+            partOfSpeech: '알 수 없음',
+          ));
+        }
+      }
+    } catch (e) {
+      debugPrint('텍스트 분석 중 오류 발생: $e');
+    }
+
+    return result;
+  }
+
+  // 간단한 품사 추측 (실제로는 API에서 제공하는 품사 정보 사용)
+  String _guessPartOfSpeech(String meaning) {
+    final lowerMeaning = meaning.toLowerCase();
+
+    if (lowerMeaning.contains('동사') || lowerMeaning.contains('verb')) {
+      return '동사';
+    } else if (lowerMeaning.contains('명사') || lowerMeaning.contains('noun')) {
+      return '명사';
+    } else if (lowerMeaning.contains('형용사') ||
+        lowerMeaning.contains('adjective')) {
+      return '형용사';
+    } else if (lowerMeaning.contains('부사') || lowerMeaning.contains('adverb')) {
+      return '부사';
+    } else {
+      return '기타';
+    }
+  }
+}
+
+// 단어 분석 결과를 담는 클래스
+class WordAnalysis {
+  final String word;
+  final String pinyin;
+  final String meaning;
+  final String partOfSpeech; // 품사 정보
+
+  WordAnalysis({
+    required this.word,
+    required this.pinyin,
+    required this.meaning,
+    required this.partOfSpeech,
+  });
 }
