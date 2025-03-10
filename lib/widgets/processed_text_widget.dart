@@ -318,14 +318,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                // 원문은 일반 SelectableText 사용 (분절 없음)
-                SelectableText(
+                // 원문은 플래시카드 단어 하이라이트 표시
+                _buildHighlightedTextWithoutContextMenu(
                   widget.processedText.fullOriginalText,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    height: 1.5,
-                  ),
-                  contextMenuBuilder: _buildCustomContextMenu,
+                  fontSize: 16,
+                  height: 1.5,
                 ),
               ],
             ),
@@ -353,13 +350,88 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   SelectableText(
                     widget.processedText.fullTranslatedText!,
                     style: const TextStyle(fontSize: 16),
-                    contextMenuBuilder: _buildCustomContextMenu,
+                    // 컨텍스트 메뉴 제공 안함
+                    contextMenuBuilder: null,
                   ),
                 ],
               ),
             ),
           ),
       ],
+    );
+  }
+
+  /// 텍스트에서 플래시카드 단어 하이라이트 표시 (컨텍스트 메뉴 없음)
+  Widget _buildHighlightedTextWithoutContextMenu(String text,
+      {double fontSize = 16, double height = 1.5}) {
+    if (_flashcardWords.isEmpty) {
+      return SelectableText(
+        text,
+        style: TextStyle(fontSize: fontSize, height: height),
+        contextMenuBuilder: null, // 컨텍스트 메뉴 제공 안함
+      );
+    }
+
+    // 텍스트 스팬 목록 생성
+    final List<TextSpan> spans = [];
+
+    // 현재 처리 중인 위치
+    int currentPosition = 0;
+
+    // 텍스트 전체 길이
+    final int textLength = text.length;
+
+    // 플래시카드 단어 검색 및 하이라이트 처리
+    while (currentPosition < textLength) {
+      int nextHighlightPos = textLength;
+      String? wordToHighlight;
+
+      // 가장 가까운 플래시카드 단어 찾기
+      for (final word in _flashcardWords) {
+        final int pos = text.indexOf(word, currentPosition);
+        if (pos != -1 && pos < nextHighlightPos) {
+          nextHighlightPos = pos;
+          wordToHighlight = word;
+        }
+      }
+
+      // 일반 텍스트 추가 (하이라이트 전까지)
+      if (nextHighlightPos > currentPosition) {
+        spans.add(TextSpan(
+          text: text.substring(currentPosition, nextHighlightPos),
+          style: TextStyle(fontSize: fontSize, height: height),
+        ));
+      }
+
+      // 하이라이트 텍스트 추가
+      if (wordToHighlight != null) {
+        spans.add(TextSpan(
+          text: wordToHighlight,
+          style: TextStyle(
+            fontSize: fontSize,
+            height: height,
+            backgroundColor: Colors.yellow.shade200,
+            fontWeight: FontWeight.bold,
+          ),
+        ));
+        currentPosition = nextHighlightPos + wordToHighlight.length;
+      } else {
+        // 더 이상 하이라이트할 단어가 없으면 종료
+        break;
+      }
+    }
+
+    // 남은 텍스트 추가
+    if (currentPosition < textLength) {
+      spans.add(TextSpan(
+        text: text.substring(currentPosition),
+        style: TextStyle(fontSize: fontSize, height: height),
+      ));
+    }
+
+    return SelectableText.rich(
+      TextSpan(children: spans),
+      contextMenuBuilder: null, // 컨텍스트 메뉴 제공 안함
     );
   }
 
@@ -426,6 +498,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             SegmentedTextWidget(
               text: segment.originalText,
               noteId: widget.noteId,
+              onFlashCardAdded: () {
+                // 플래시카드가 추가되면 상위 위젯에 알림
+                if (widget.onCreateFlashCard != null) {
+                  // 빈 문자열을 전달하여 상위 위젯에서 노트 상태 업데이트만 수행하도록 함
+                  widget.onCreateFlashCard!("", "", pinyin: null);
+                }
+              },
             ),
 
             // 핀인이 있으면 표시
