@@ -118,6 +118,7 @@ class _TextProcessingTestScreenState extends State<TextProcessingTestScreen> {
               onTts: _speakText,
               onDictionaryLookup: _lookupDictionary,
               onCreateFlashCard: _createFlashCard,
+              noteId: null,
             )
 
           // 안내 메시지 표시
