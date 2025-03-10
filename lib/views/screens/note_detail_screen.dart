@@ -694,37 +694,36 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         finalPinyin = pinyin;
       }
 
-      await _flashCardService.createFlashCard(
+      // 플래시카드 생성
+      final newFlashCard = await _flashCardService.createFlashCard(
         front: front,
         back: finalBack,
         pinyin: finalPinyin,
         noteId: widget.noteId,
       );
 
-      // 캐시 무효화 후 노트 다시 로드
+      // 캐시 무효화
       await _cacheService.removeCachedNote(widget.noteId);
 
-      // 노트 다시 로드
-      final result = await _noteService.getNoteWithPages(widget.noteId);
-      final updatedNote = result['note'] as Note;
-
-      // 상태 업데이트를 강제로 적용
-      if (mounted) {
-        setState(() {
-          // 노트 객체 업데이트 (플래시카드 카운터 포함)
-          _note = updatedNote;
-        });
-      }
+      // 노트 다시 로드 (전체 노트 데이터를 새로 가져옴)
+      await _loadNote();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('플래시카드가 추가되었습니다')),
+          SnackBar(
+            content: Text('플래시카드가 추가되었습니다: $front'),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     } catch (e) {
+      debugPrint('플래시카드 생성 중 오류 발생: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('플래시카드 추가 실패: $e')),
+          SnackBar(
+            content: Text('플래시카드 추가 중 오류가 발생했습니다: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -761,32 +760,33 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         actions: [
           if (_note != null) ...[
             // 플래시카드 버튼
-            if (_note!.flashcardCount > 0)
-              IconButton(
-                icon: badges.Badge(
-                  badgeContent: Text(
-                    '${_note!.flashcardCount}',
-                    style: TextStyle(color: Colors.white, fontSize: 10),
+            IconButton(
+              icon: _note!.flashcardCount > 0
+                  ? badges.Badge(
+                      badgeContent: Text(
+                        '${_note!.flashcardCount}',
+                        style: TextStyle(color: Colors.white, fontSize: 10),
+                      ),
+                      child: const Icon(Icons.flash_on),
+                    )
+                  : const Icon(Icons.flash_on),
+              onPressed: () async {
+                // 플래시카드 화면으로 이동하고 결과를 받음
+                final result = await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => FlashCardScreen(noteId: _note!.id),
                   ),
-                  child: const Icon(Icons.flash_on),
-                ),
-                onPressed: () async {
-                  // 플래시카드 화면으로 이동하고 결과를 받음
-                  final result = await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => FlashCardScreen(noteId: _note!.id),
-                    ),
-                  );
+                );
 
-                  // 플래시카드가 변경되었으면 노트 정보 다시 로드
-                  if (result == true && mounted) {
-                    // 캐시 무효화
-                    await _cacheService.removeCachedNote(widget.noteId);
-                    // 노트 다시 로드
-                    _loadNote();
-                  }
-                },
-              ),
+                // 플래시카드가 변경되었으면 노트 정보 다시 로드
+                if (result == true && mounted) {
+                  // 캐시 무효화
+                  await _cacheService.removeCachedNote(widget.noteId);
+                  // 노트 다시 로드
+                  _loadNote();
+                }
+              },
+            ),
             IconButton(
               icon: Icon(
                 _isFavorite ? Icons.favorite : Icons.favorite_border,
