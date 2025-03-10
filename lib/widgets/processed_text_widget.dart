@@ -5,6 +5,7 @@ import '../models/processed_text.dart';
 import '../models/text_segment.dart';
 import '../models/flash_card.dart';
 import 'text_segment_widget.dart';
+import 'segmented_text_widget.dart';
 
 /// 처리된 텍스트 표시 위젯
 /// 전체 텍스트와 세그먼트별 표시를 전환할 수 있습니다.
@@ -343,10 +344,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  SelectableText(
-                    widget.processedText.fullTranslatedText!,
-                    style: const TextStyle(fontSize: 16),
-                    contextMenuBuilder: _buildCustomContextMenu,
+                  SegmentedTextWidget(
+                    text: widget.processedText.fullTranslatedText!,
                   ),
                 ],
               ),
