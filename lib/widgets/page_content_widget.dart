@@ -526,6 +526,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   widget.onCreateFlashCard(word, meaning, pinyin: pinyin);
                 },
                 flashCards: widget.flashCards,
+                noteId: widget.noteId,
               );
             }),
           ]

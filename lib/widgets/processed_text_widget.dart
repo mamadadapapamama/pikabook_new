@@ -25,6 +25,9 @@ class ProcessedTextWidget extends StatefulWidget {
   /// 플래시카드 목록 (하이라이트 표시용)
   final List<FlashCard>? flashCards;
 
+  /// 노트 ID
+  final String? noteId;
+
   const ProcessedTextWidget({
     Key? key,
     required this.processedText,
@@ -32,6 +35,7 @@ class ProcessedTextWidget extends StatefulWidget {
     this.onDictionaryLookup,
     this.onCreateFlashCard,
     this.flashCards,
+    this.noteId,
   }) : super(key: key);
 
   @override
@@ -314,13 +318,10 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                SelectableText(
-                  widget.processedText.fullOriginalText,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    height: 1.5,
-                  ),
-                  contextMenuBuilder: _buildCustomContextMenu,
+                // 원문에 SegmentedTextWidget 적용
+                SegmentedTextWidget(
+                  text: widget.processedText.fullOriginalText,
+                  noteId: widget.noteId,
                 ),
               ],
             ),
@@ -344,8 +345,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  SegmentedTextWidget(
-                    text: widget.processedText.fullTranslatedText!,
+                  // 번역 텍스트는 일반 SelectableText 사용
+                  SelectableText(
+                    widget.processedText.fullTranslatedText!,
+                    style: const TextStyle(fontSize: 16),
+                    contextMenuBuilder: _buildCustomContextMenu,
                   ),
                 ],
               ),
