@@ -5,6 +5,7 @@ import '../services/flashcard_service.dart' hide debugPrint;
 import '../services/tts_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/note.dart';
+import '../services/dictionary_service.dart';
 
 class SegmentedTextWidget extends StatefulWidget {
   final String text;
@@ -26,6 +27,7 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
   final ChineseSegmenterService _segmenterService = ChineseSegmenterService();
   final TtsService _ttsService = TtsService();
   final FlashCardService _flashCardService = FlashCardService();
+  final DictionaryService _dictionaryService = DictionaryService();
 
   List<SegmentedWord> _segments = [];
   bool _isLoading = true;
@@ -90,12 +92,29 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.grey[200],
+              color: segment.isInDictionary
+                  ? Colors.blue.shade50
+                  : Colors.grey.shade200,
               borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: segment.isInDictionary
+                    ? Colors.blue.shade200
+                    : Colors.grey.shade400,
+                width: segment.isInDictionary ? 1.0 : 1.0,
+                style: segment.isInDictionary
+                    ? BorderStyle.solid
+                    : BorderStyle.none,
+              ),
             ),
             child: Text(
               segment.word,
-              style: const TextStyle(fontSize: 18),
+              style: TextStyle(
+                fontSize: 18,
+                color: segment.isInDictionary ? Colors.black87 : Colors.black54,
+                fontWeight: segment.isInDictionary
+                    ? FontWeight.normal
+                    : FontWeight.normal,
+              ),
             ),
           ),
         );
@@ -148,6 +167,13 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
                 '의미: ${segment.meaning}',
                 style: const TextStyle(fontSize: 16),
               ),
+              if (segment.source != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '출처: ${segment.source}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
               const SizedBox(height: 16),
               if (widget.noteId != null) ...[
                 SizedBox(
@@ -159,9 +185,73 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
                   ),
                 ),
               ],
+              if (segment.meaning == '사전에 없는 단어' ||
+                  segment.meaning.isEmpty ||
+                  segment.source == 'external') ...[
+                const SizedBox(height: 8),
+                const Divider(),
+                const SizedBox(height: 8),
+                const Text(
+                  '외부 사전에서 검색:',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildExternalDictButton(
+                      context,
+                      segment.word,
+                      'Google',
+                      ExternalDictType.google,
+                      Icons.g_translate,
+                    ),
+                    _buildExternalDictButton(
+                      context,
+                      segment.word,
+                      'Naver',
+                      ExternalDictType.naver,
+                      Icons.language,
+                    ),
+                    _buildExternalDictButton(
+                      context,
+                      segment.word,
+                      'Baidu',
+                      ExternalDictType.baidu,
+                      Icons.search,
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         );
+      },
+    );
+  }
+
+  Widget _buildExternalDictButton(
+    BuildContext context,
+    String word,
+    String label,
+    ExternalDictType type,
+    IconData icon,
+  ) {
+    return ElevatedButton.icon(
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      onPressed: () async {
+        Navigator.pop(context);
+        final success =
+            await _dictionaryService.openExternalDictionary(word, type: type);
+        if (!success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$label 사전을 열 수 없습니다.')),
+          );
+        }
       },
     );
   }

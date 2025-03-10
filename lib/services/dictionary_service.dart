@@ -1,16 +1,21 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io' show Platform;
 
 class DictionaryEntry {
   final String word;
   final String pinyin;
   final String meaning;
   final List<String> examples;
+  final String? source; // 사전 출처 (JSON, 시스템 사전, 외부 사전 등)
 
   DictionaryEntry({
     required this.word,
     required this.pinyin,
     required this.meaning,
     this.examples = const [],
+    this.source,
   });
 }
 
@@ -84,13 +89,101 @@ class DictionaryService {
     ),
   };
 
-  // 단어 검색
+  // 단어 검색 - 단계별 폴백 구현
+  Future<DictionaryEntry?> lookupWordWithFallback(String word) async {
+    try {
+      // 1. 앱 내 JSON 단어장에서 검색
+      final jsonResult = _dictionary[word];
+      if (jsonResult != null) {
+        return jsonResult;
+      }
+
+      // 2. 시스템 사전 기능 활용 (iOS/Android)
+      final systemDictResult = await _lookupInSystemDictionary(word);
+      if (systemDictResult != null) {
+        return systemDictResult;
+      }
+
+      // 3. 외부 사전 서비스 URL 생성 (실제 검색은 사용자가 URL을 통해 수행)
+      return DictionaryEntry(
+        word: word,
+        pinyin: '',
+        meaning: '사전에서 찾을 수 없습니다. 외부 사전에서 검색하려면 탭하세요.',
+        examples: [],
+        source: 'external',
+      );
+    } catch (e) {
+      debugPrint('단어 검색 중 오류 발생: $e');
+      return null;
+    }
+  }
+
+  // 기존 단어 검색 메서드 (하위 호환성 유지)
   DictionaryEntry? lookupWord(String word) {
     try {
       return _dictionary[word];
     } catch (e) {
       debugPrint('단어 검색 중 오류 발생: $e');
       return null;
+    }
+  }
+
+  // 시스템 사전에서 단어 검색 (iOS/Android)
+  Future<DictionaryEntry?> _lookupInSystemDictionary(String word) async {
+    try {
+      // iOS의 경우 사전 앱 URL 스킴 사용
+      if (Platform.isIOS) {
+        // iOS 사전 앱은 직접적인 API가 없어 URL 스킴을 통해 열기만 가능
+        // 결과를 직접 가져올 수는 없음
+        return null;
+      }
+
+      // Android의 경우 시스템 사전 API 사용 (실제로는 구현 필요)
+      if (Platform.isAndroid) {
+        // Android에는 표준 사전 API가 없어 제조사별 구현이 다를 수 있음
+        return null;
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('시스템 사전 검색 중 오류 발생: $e');
+      return null;
+    }
+  }
+
+  // 외부 사전 서비스로 연결 (Google Translate, Naver 사전 등)
+  Future<bool> openExternalDictionary(String word,
+      {ExternalDictType type = ExternalDictType.google}) async {
+    try {
+      final Uri uri = _getExternalDictionaryUri(word, type);
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint('외부 사전 열기 중 오류 발생: $e');
+      return false;
+    }
+  }
+
+  // 외부 사전 서비스 URL 생성
+  Uri _getExternalDictionaryUri(String word, ExternalDictType type) {
+    switch (type) {
+      case ExternalDictType.google:
+        // Google Translate (중국어 -> 한국어)
+        return Uri.parse(
+            'https://translate.google.com/?sl=zh-CN&tl=ko&text=${Uri.encodeComponent(word)}&op=translate');
+
+      case ExternalDictType.naver:
+        // Naver 사전 (중국어)
+        return Uri.parse(
+            'https://dict.naver.com/dict.search?query=${Uri.encodeComponent(word)}');
+
+      case ExternalDictType.baidu:
+        // Baidu 사전
+        return Uri.parse(
+            'https://dict.baidu.com/s?wd=${Uri.encodeComponent(word)}');
+
+      default:
+        return Uri.parse(
+            'https://translate.google.com/?sl=zh-CN&tl=ko&text=${Uri.encodeComponent(word)}&op=translate');
     }
   }
 
@@ -173,6 +266,13 @@ class DictionaryService {
       return '기타';
     }
   }
+}
+
+// 외부 사전 유형
+enum ExternalDictType {
+  google, // Google Translate
+  naver, // Naver 사전
+  baidu, // Baidu 사전
 }
 
 // 단어 분석 결과를 담는 클래스
