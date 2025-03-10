@@ -3,15 +3,19 @@ import 'package:flutter/services.dart';
 import '../services/chinese_segmenter_service.dart';
 import '../services/flashcard_service.dart' hide debugPrint;
 import '../services/tts_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/note.dart';
 
 class SegmentedTextWidget extends StatefulWidget {
   final String text;
   final String? noteId;
+  final Function()? onFlashCardAdded;
 
   const SegmentedTextWidget({
     Key? key,
     required this.text,
     this.noteId,
+    this.onFlashCardAdded,
   }) : super(key: key);
 
   @override
@@ -181,6 +185,10 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
         pinyin: segment.pinyin,
         noteId: widget.noteId!,
       );
+
+      if (widget.onFlashCardAdded != null) {
+        widget.onFlashCardAdded!();
+      }
 
       if (mounted) {
         Navigator.pop(context);

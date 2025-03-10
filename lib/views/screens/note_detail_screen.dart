@@ -19,6 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async'; // Timer 클래스를 사용하기 위한 import 추가
 import '../../services/unified_cache_service.dart';
 import 'package:badges/badges.dart' as badges;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;
@@ -678,37 +679,55 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
 
     try {
-      // 사전에서 단어 정보 찾기
-      final dictionaryService = DictionaryService();
-      final dictionaryEntry = dictionaryService.lookupWord(front);
-
-      // 사전에 단어가 있으면 병음과 의미 사용
-      final String finalBack;
-      final String? finalPinyin;
-
-      if (dictionaryEntry != null) {
-        finalBack = dictionaryEntry.meaning;
-        finalPinyin = dictionaryEntry.pinyin;
+      // 빈 문자열이 전달된 경우 (SegmentedTextWidget에서 호출된 경우)
+      // 플래시카드 생성을 건너뛰고 노트 상태만 업데이트
+      if (front.isEmpty && back.isEmpty) {
+        debugPrint('SegmentedTextWidget에서 호출: 노트 상태만 업데이트');
       } else {
-        finalBack = back;
-        finalPinyin = pinyin;
-      }
+        // 사전에서 단어 정보 찾기
+        final dictionaryService = DictionaryService();
+        final dictionaryEntry = dictionaryService.lookupWord(front);
 
-      // 플래시카드 생성
-      final newFlashCard = await _flashCardService.createFlashCard(
-        front: front,
-        back: finalBack,
-        pinyin: finalPinyin,
-        noteId: widget.noteId,
-      );
+        // 사전에 단어가 있으면 병음과 의미 사용
+        final String finalBack;
+        final String? finalPinyin;
+
+        if (dictionaryEntry != null) {
+          finalBack = dictionaryEntry.meaning;
+          finalPinyin = dictionaryEntry.pinyin;
+        } else {
+          finalBack = back;
+          finalPinyin = pinyin;
+        }
+
+        // 플래시카드 생성
+        final newFlashCard = await _flashCardService.createFlashCard(
+          front: front,
+          back: finalBack,
+          pinyin: finalPinyin,
+          noteId: widget.noteId,
+        );
+      }
 
       // 캐시 무효화
       await _cacheService.removeCachedNote(widget.noteId);
 
-      // 노트 다시 로드 (전체 노트 데이터를 새로 가져옴)
-      await _loadNote();
+      // Firestore에서 직접 노트 가져오기
+      final noteDoc = await FirebaseFirestore.instance
+          .collection('notes')
+          .doc(widget.noteId)
+          .get();
 
-      if (mounted) {
+      if (noteDoc.exists && mounted) {
+        final updatedNote = Note.fromFirestore(noteDoc);
+        setState(() {
+          _note = updatedNote;
+          debugPrint(
+              '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
+        });
+      }
+
+      if (mounted && front.isNotEmpty && back.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('플래시카드가 추가되었습니다: $front'),
@@ -782,8 +801,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                 if (result == true && mounted) {
                   // 캐시 무효화
                   await _cacheService.removeCachedNote(widget.noteId);
-                  // 노트 다시 로드
-                  _loadNote();
+
+                  // Firestore에서 직접 노트 가져오기
+                  final noteDoc = await FirebaseFirestore.instance
+                      .collection('notes')
+                      .doc(widget.noteId)
+                      .get();
+
+                  if (noteDoc.exists && mounted) {
+                    setState(() {
+                      _note = Note.fromFirestore(noteDoc);
+                      debugPrint(
+                          '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
+                    });
+                  }
                 }
               },
             ),
