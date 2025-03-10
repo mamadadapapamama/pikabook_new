@@ -318,10 +318,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                // 원문에 SegmentedTextWidget 적용
-                SegmentedTextWidget(
-                  text: widget.processedText.fullOriginalText,
-                  noteId: widget.noteId,
+                // 원문은 일반 SelectableText 사용 (분절 없음)
+                SelectableText(
+                  widget.processedText.fullOriginalText,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    height: 1.5,
+                  ),
+                  contextMenuBuilder: _buildCustomContextMenu,
                 ),
               ],
             ),
@@ -418,10 +422,10 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 원문
-            _buildHighlightedText(
-              segment.originalText,
-              fontSize: 18,
+            // 원문에 SegmentedTextWidget 적용
+            SegmentedTextWidget(
+              text: segment.originalText,
+              noteId: widget.noteId,
             ),
 
             // 핀인이 있으면 표시
