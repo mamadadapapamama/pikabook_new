@@ -727,24 +727,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         });
       }
 
-      if (mounted && front.isNotEmpty && back.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('플래시카드가 추가되었습니다: $front'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
+      // 스낵바 제거 - 플래시카드 카운터가 증가하는 것으로 충분한 피드백 제공
     } catch (e) {
       debugPrint('플래시카드 생성 중 오류 발생: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('플래시카드 추가 중 오류가 발생했습니다: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // 오류 스낵바도 제거
     } finally {
       if (mounted) {
         setState(() {
