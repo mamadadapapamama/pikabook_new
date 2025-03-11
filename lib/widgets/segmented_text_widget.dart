@@ -64,11 +64,10 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
 
             return Material(
               color: Colors.transparent,
-              child: InkWell(
+              child: GestureDetector(
                 onTap: () {
                   _showWordDetails(context, segment);
                 },
-                borderRadius: BorderRadius.circular(4.0),
                 child: Container(
                   margin: const EdgeInsets.symmetric(
                       vertical: 2.0, horizontal: 1.0),
@@ -86,24 +85,9 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
                     ),
                     borderRadius: BorderRadius.circular(4.0),
                   ),
-                  child: SelectableText(
+                  child: Text(
                     segment.text,
                     style: TextStyle(fontSize: 18, color: Colors.black),
-                    onSelectionChanged: (selection, cause) {
-                      if (selection.baseOffset != selection.extentOffset) {
-                        setState(() {
-                          _selectedText = segment.text.substring(
-                            selection.baseOffset,
-                            selection.extentOffset,
-                          );
-                        });
-                      }
-                    },
-                    contextMenuBuilder: (context, editableTextState) {
-                      return _buildCustomContextMenu(
-                          context, editableTextState);
-                    },
-                    enableInteractiveSelection: true, // 선택 활성화
                   ),
                 ),
               ),
