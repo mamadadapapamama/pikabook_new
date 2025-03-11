@@ -50,6 +50,11 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
         contextMenuBuilder: (context, editableTextState) {
           return _buildCustomContextMenu(context, editableTextState);
         },
+        enableInteractiveSelection: true,
+        selectionControls: MaterialTextSelectionControls(),
+        showCursor: true,
+        cursorWidth: 2.0,
+        cursorColor: Colors.blue,
       );
     }
 
@@ -64,7 +69,7 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
 
             return Material(
               color: Colors.transparent,
-              child: GestureDetector(
+              child: InkWell(
                 onTap: () {
                   _showWordDetails(context, segment);
                 },
@@ -85,9 +90,28 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
                     ),
                     borderRadius: BorderRadius.circular(4.0),
                   ),
-                  child: Text(
+                  child: SelectableText(
                     segment.text,
                     style: TextStyle(fontSize: 18, color: Colors.black),
+                    enableInteractiveSelection: true,
+                    selectionControls: MaterialTextSelectionControls(),
+                    showCursor: true,
+                    cursorWidth: 2.0,
+                    cursorColor: Colors.blue,
+                    onSelectionChanged: (selection, cause) {
+                      if (selection.baseOffset != selection.extentOffset) {
+                        setState(() {
+                          _selectedText = segment.text.substring(
+                            selection.baseOffset,
+                            selection.extentOffset,
+                          );
+                        });
+                      }
+                    },
+                    contextMenuBuilder: (context, editableTextState) {
+                      return _buildCustomContextMenu(
+                          context, editableTextState);
+                    },
                   ),
                 ),
               ),
@@ -156,11 +180,29 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
     final String selectedText = value.selection.textInside(value.text);
 
     if (selectedText.isEmpty) {
-      return Container();
+      return AdaptiveTextSelectionToolbar.editableText(
+        editableTextState: editableTextState,
+      );
     }
 
-    // 기본 메뉴 항목 가져오기
-    final List<ContextMenuButtonItem> buttonItems = [];
+    // 기본 메뉴 항목 직접 생성
+    final List<ContextMenuButtonItem> buttonItems = [
+      ContextMenuButtonItem(
+        onPressed: () {
+          Clipboard.setData(ClipboardData(
+            text: selectedText,
+          ));
+          editableTextState.hideToolbar();
+        },
+        label: '복사',
+      ),
+      ContextMenuButtonItem(
+        onPressed: () {
+          editableTextState.selectAll(SelectionChangedCause.toolbar);
+        },
+        label: '전체 선택',
+      ),
+    ];
 
     // 사전 검색 버튼 추가
     buttonItems.add(

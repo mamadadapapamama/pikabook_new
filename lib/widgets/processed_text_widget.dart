@@ -223,14 +223,32 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     final String selectedText = value.selection.textInside(value.text);
 
     if (selectedText.isEmpty) {
-      return Container();
+      return AdaptiveTextSelectionToolbar.editableText(
+        editableTextState: editableTextState,
+      );
     }
+
+    // 기본 메뉴 항목 직접 생성
+    final List<ContextMenuButtonItem> buttonItems = [
+      ContextMenuButtonItem(
+        onPressed: () {
+          Clipboard.setData(ClipboardData(
+            text: selectedText,
+          ));
+          editableTextState.hideToolbar();
+        },
+        label: '복사',
+      ),
+      ContextMenuButtonItem(
+        onPressed: () {
+          editableTextState.selectAll(SelectionChangedCause.toolbar);
+        },
+        label: '전체 선택',
+      ),
+    ];
 
     // 중국어 문자인지 확인
     bool containsChinese = RegExp(r'[\u4e00-\u9fa5]').hasMatch(selectedText);
-
-    // 기본 메뉴 항목 가져오기
-    final List<ContextMenuButtonItem> buttonItems = [];
 
     // 사전 검색 버튼 추가 (중국어 문자가 포함된 경우에만)
     if (containsChinese) {
