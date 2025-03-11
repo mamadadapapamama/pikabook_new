@@ -103,6 +103,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         contextMenuBuilder: (context, editableTextState) {
           return _buildCustomContextMenu(context, editableTextState);
         },
+        enableInteractiveSelection: true,
+        selectionControls: MaterialTextSelectionControls(),
+        showCursor: true,
+        cursorWidth: 2.0,
+        cursorColor: Colors.blue,
       );
     }
 
@@ -203,6 +208,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       contextMenuBuilder: (context, editableTextState) {
         return _buildCustomContextMenu(context, editableTextState);
       },
+      enableInteractiveSelection: true,
+      selectionControls: MaterialTextSelectionControls(),
+      showCursor: true,
+      cursorWidth: 2.0,
+      cursorColor: Colors.blue,
     );
   }
 
@@ -392,7 +402,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                       ],
                     ),
 
-                    // 국립국어원 API 테스트 버튼 추가 (디버그 모드에서만 표시)
+                    // Papago API 테스트 버튼 추가 (디버그 모드에서만 표시)
                     if (kDebugMode)
                       Padding(
                         padding: const EdgeInsets.only(top: 16.0),
@@ -406,15 +416,15 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                             const SizedBox(height: 8),
                             ElevatedButton(
                               onPressed: () {
-                                // 국립국어원 API 테스트 실행
+                                // Papago API 테스트 실행
                                 final dictionaryService = DictionaryService();
-                                dictionaryService.testKrDictApi(word.text);
+                                dictionaryService.testPapagoApi(word.text);
 
                                 // 테스트 실행 알림
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
-                                        '국립국어원 API 테스트가 실행되었습니다. 콘솔 로그를 확인하세요.'),
+                                        'Papago API 테스트가 실행되었습니다. 콘솔 로그를 확인하세요.'),
                                     duration: Duration(seconds: 3),
                                   ),
                                 );
@@ -422,7 +432,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blue[700],
                               ),
-                              child: const Text('국립국어원 API 테스트'),
+                              child: const Text('Papago API 테스트'),
                             ),
                           ],
                         ),
@@ -517,6 +527,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                               return _buildCustomContextMenu(
                                   context, editableTextState);
                             },
+                            enableInteractiveSelection: true,
+                            selectionControls: MaterialTextSelectionControls(),
+                            showCursor: true,
+                            cursorWidth: 2.0,
+                            cursorColor: Colors.blue,
                           ),
                   ),
                   // TTS 버튼 추가
@@ -579,6 +594,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 contextMenuBuilder: (context, editableTextState) {
                   return _buildCustomContextMenu(context, editableTextState);
                 },
+                enableInteractiveSelection: true,
+                selectionControls: MaterialTextSelectionControls(),
+                showCursor: true,
+                cursorWidth: 2.0,
+                cursorColor: Colors.blue,
               ),
         const SizedBox(height: 16),
         // 번역 텍스트
