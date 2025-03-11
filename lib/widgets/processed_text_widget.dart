@@ -261,30 +261,52 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 원문 텍스트에 GestureDetector 추가
-              GestureDetector(
-                onLongPress: (sentence.originalText.isNotEmpty)
-                    ? () => _showCustomMenu(context, sentence.originalText)
-                    : null,
-                child: SelectableText.rich(
-                  TextSpan(
-                    text: sentence.originalText,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.normal,
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onLongPress: (sentence.originalText.isNotEmpty)
+                          ? () =>
+                              _showCustomMenu(context, sentence.originalText)
+                          : null,
+                      child: SelectableText.rich(
+                        TextSpan(
+                          text: sentence.originalText,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.normal,
+                          ),
+                        ),
+                        onSelectionChanged: (selection, cause) {
+                          if (selection.baseOffset != selection.extentOffset) {
+                            setState(() {
+                              _selectedText = sentence.originalText.substring(
+                                  selection.baseOffset, selection.extentOffset);
+                              _selectionOffset = selection;
+                            });
+
+                            // 선택 완료 후 메뉴 표시 (약간의 딜레이 추가)
+                            if (cause == SelectionChangedCause.longPress) {
+                              Future.delayed(const Duration(milliseconds: 200),
+                                  () {
+                                _showCustomMenu(context, _selectedText);
+                              });
+                            }
+                          }
+                        },
+                        // 기본 컨텍스트 메뉴 비활성화
+                        contextMenuBuilder: null,
+                      ),
                     ),
                   ),
-                  onSelectionChanged: (selection, cause) {
-                    if (selection.baseOffset != selection.extentOffset) {
-                      setState(() {
-                        _selectedText = sentence.originalText.substring(
-                            selection.baseOffset, selection.extentOffset);
-                        _selectionOffset = selection;
-                      });
-                    }
-                  },
-                  // 기본 컨텍스트 메뉴 비활성화
-                  contextMenuBuilder: null,
-                ),
+                  // TTS 버튼 추가
+                  if (widget.onTts != null && sentence.originalText.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.volume_up),
+                      onPressed: () => widget.onTts!(sentence.originalText),
+                      tooltip: '읽기',
+                    ),
+                ],
               ),
               if (sentence.translatedText != null &&
                   sentence.translatedText!.isNotEmpty)
@@ -353,42 +375,92 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   // 커스텀 컨텍스트 메뉴 표시 메서드
   void _showCustomMenu(BuildContext context, String text) {
+    if (text.isEmpty) return;
+
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
-    final position = renderBox.localToGlobal(Offset.zero);
+    final Offset position = renderBox.localToGlobal(Offset.zero);
+
+    // 화면 크기 가져오기
+    final Size screenSize = MediaQuery.of(context).size;
+
+    // 메뉴 위치 계산 (화면 중앙에 표시)
+    final RelativeRect rect = RelativeRect.fromLTRB(
+      screenSize.width / 2 - 100, // 왼쪽
+      position.dy + 50, // 위
+      screenSize.width / 2 - 100, // 오른쪽
+      position.dy + 50, // 아래
+    );
 
     showMenu(
       context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx + renderBox.size.width,
-        position.dy + renderBox.size.height,
-      ),
+      position: rect,
       items: [
         PopupMenuItem(
           child: Text('복사'),
           onTap: () {
             Clipboard.setData(ClipboardData(
                 text: _selectedText.isNotEmpty ? _selectedText : text));
+
+            // 복사 완료 메시지 표시
+            Future.delayed(const Duration(milliseconds: 100), () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('텍스트가 복사되었습니다')),
+              );
+            });
           },
         ),
         PopupMenuItem(
           child: Text('사전 찾기'),
           onTap: () {
-            if (_selectedText.isNotEmpty && widget.onDictionaryLookup != null) {
-              widget.onDictionaryLookup!(_selectedText);
+            final String selectedText =
+                _selectedText.isNotEmpty ? _selectedText : text;
+            if (widget.onDictionaryLookup != null) {
+              Future.delayed(const Duration(milliseconds: 100), () {
+                widget.onDictionaryLookup!(selectedText);
+              });
             }
           },
         ),
         PopupMenuItem(
           child: Text('플래시카드 추가'),
           onTap: () {
-            if (_selectedText.isNotEmpty && widget.onCreateFlashCard != null) {
-              widget.onCreateFlashCard!(
-                _selectedText,
-                '',
-                pinyin: null,
-              );
+            final String selectedText =
+                _selectedText.isNotEmpty ? _selectedText : text;
+            if (widget.onCreateFlashCard != null) {
+              // 원문에서 선택한 경우, 해당 세그먼트의 번역 찾기
+              String meaning = '';
+              String? pinyin;
+
+              if (widget.processedText.segments != null) {
+                for (final segment in widget.processedText.segments!) {
+                  if (segment.originalText.contains(selectedText)) {
+                    meaning = segment.translatedText ?? '';
+                    pinyin = segment.pinyin;
+                    break;
+                  }
+                }
+              }
+
+              // 의미가 없으면 빈 문자열로 설정
+              if (meaning.isEmpty) {
+                meaning = '직접 의미 입력 필요';
+              }
+
+              Future.delayed(const Duration(milliseconds: 100), () {
+                widget.onCreateFlashCard!(
+                  selectedText,
+                  meaning,
+                  pinyin: pinyin,
+                );
+
+                // 추가 완료 메시지 표시
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('플래시카드가 추가되었습니다.'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              });
             }
           },
         ),
