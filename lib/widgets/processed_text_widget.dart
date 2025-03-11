@@ -274,12 +274,18 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               Row(
                 children: [
                   Expanded(
-                    child: _flashcardWords.isEmpty
-                        ? SelectableText(
+                    child: _flashcardWords.isNotEmpty
+                        ? _buildHighlightedText(
+                            sentence.originalText,
+                            fontSize: 18,
+                            height: 1.5,
+                          )
+                        : SelectableText(
                             sentence.originalText,
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.normal,
+                              height: 1.5,
                             ),
                             onSelectionChanged: (selection, cause) {
                               if (selection.baseOffset !=
@@ -296,11 +302,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                               return _buildCustomContextMenu(
                                   context, editableTextState);
                             },
-                          )
-                        : _buildHighlightedText(
-                            sentence.originalText,
-                            fontSize: 18,
-                            height: 1.5,
                           ),
                   ),
                   // TTS 버튼 추가
@@ -336,12 +337,18 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 원문 텍스트
-        _flashcardWords.isEmpty
-            ? SelectableText(
+        _flashcardWords.isNotEmpty
+            ? _buildHighlightedText(
+                widget.processedText.fullOriginalText,
+                fontSize: 18,
+                height: 1.5,
+              )
+            : SelectableText(
                 widget.processedText.fullOriginalText,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.normal,
+                  height: 1.5,
                 ),
                 onSelectionChanged: (selection, cause) {
                   if (selection.baseOffset != selection.extentOffset) {
@@ -356,11 +363,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 contextMenuBuilder: (context, editableTextState) {
                   return _buildCustomContextMenu(context, editableTextState);
                 },
-              )
-            : _buildHighlightedText(
-                widget.processedText.fullOriginalText,
-                fontSize: 18,
-                height: 1.5,
               ),
         const SizedBox(height: 16),
         // 번역 텍스트
