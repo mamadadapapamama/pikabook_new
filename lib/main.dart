@@ -13,20 +13,33 @@ import 'firebase_options.dart';
 import 'services/initialization_service.dart';
 import 'app.dart';
 import 'services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'services/chinese_segmenter_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  try {
-    // Firebase 초기화
-    debugPrint('Firebase 초기화 시작...');
-    await Firebase.initializeApp();
-    debugPrint('Firebase 초기화 완료');
-  } catch (e) {
-    debugPrint('Firebase 초기화 중 오류 발생: $e');
-  }
+  // 앱 설정 로드
+  await loadAppSettings();
 
   runApp(const MyApp());
+}
+
+// 앱 설정 로드 함수 추가
+Future<void> loadAppSettings() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    // 기본값은 false (비활성화)로 설정
+    ChineseSegmenterService.isSegmentationEnabled =
+        prefs.getBool('segmentation_enabled') ?? false;
+  } catch (e) {
+    print('설정 로드 중 오류 발생: $e');
+    // 오류 발생 시 기본값으로 비활성화
+    ChineseSegmenterService.isSegmentationEnabled = false;
+  }
 }
 
 class MyApp extends StatelessWidget {
