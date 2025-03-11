@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'chinese_dictionary_service.dart';
 import 'dictionary_service.dart';
@@ -17,15 +18,36 @@ class ChineseSegmenterService {
 
   final DictionaryService _fallbackDictionaryService = DictionaryService();
 
+  // 세그멘테이션 활성화 여부 플래그 추가
+  static bool isSegmentationEnabled = false; // MVP에서는 비활성화
+
+  bool _isInitialized = false;
+
+  Future<void> initialize() async {
+    if (!_isInitialized) {
+      await _dictionaryService.loadDictionary();
+      // DictionaryService에 loadDictionary 메서드가 없는 경우 주석 처리
+      // if (_fallbackDictionaryService != null) {
+      //   await _fallbackDictionaryService.loadDictionary();
+      // }
+      _isInitialized = true;
+    }
+  }
+
   // 중국어 텍스트 분절 및 사전 정보 추가
   Future<List<SegmentedWord>> processText(String text) async {
-    // 사전이 로드되지 않았으면 로드
-    if (!_dictionaryService.isLoaded) {
-      await _dictionaryService.loadDictionary();
-    }
+    await initialize();
 
-    // 단어 분절
-    final List<String> segments = _segmentText(text);
+    // 세그멘테이션이 비활성화된 경우 전체 텍스트를 하나의 세그먼트로 반환
+    if (!isSegmentationEnabled) {
+      return [
+        SegmentedWord(
+          text: text,
+          meaning: '', // 의미는 비워둠
+          pinyin: '', // 병음도 비워둠
+        )
+      ];
+    }
 
     // 각 단어에 사전 정보 추가
     List<SegmentedWord> result = [];
@@ -33,7 +55,7 @@ class ChineseSegmenterService {
     // 비동기 처리를 위한 Future 목록
     List<Future<SegmentedWord>> futures = [];
 
-    for (String segment in segments) {
+    for (String segment in _segmentText(text)) {
       futures.add(_processSegment(segment));
     }
 
@@ -51,11 +73,9 @@ class ChineseSegmenterService {
     if (entry != null) {
       // JSON 사전에서 찾은 경우
       return SegmentedWord(
-        word: segment,
-        pinyin: entry.pinyin,
+        text: segment,
         meaning: entry.meaning,
-        isInDictionary: true,
-        source: 'json',
+        pinyin: entry.pinyin,
       );
     } else {
       // 2. 폴백 사전 서비스 사용 (DictionaryService)
@@ -65,20 +85,17 @@ class ChineseSegmenterService {
       if (fallbackEntry != null) {
         // 폴백 사전에서 찾은 경우
         return SegmentedWord(
-          word: segment,
-          pinyin: fallbackEntry.pinyin,
+          text: segment,
           meaning: fallbackEntry.meaning,
-          isInDictionary: true,
-          source: fallbackEntry.source,
+          pinyin: fallbackEntry.pinyin,
+          source: 'external',
         );
       } else {
         // 3. 사전에 없는 경우 - 외부 사전 서비스 필요
         return SegmentedWord(
-          word: segment,
-          pinyin: '',
+          text: segment,
           meaning: '사전에 없는 단어',
-          isInDictionary: false,
-          source: 'none',
+          pinyin: '',
         );
       }
     }
@@ -120,21 +137,24 @@ class ChineseSegmenterService {
 
     return result;
   }
+
+  bool isWordInDictionary(String word) {
+    // lookup 메서드로 변경
+    return _dictionaryService.lookup(word) != null;
+  }
 }
 
 // 분절된 단어 클래스
 class SegmentedWord {
-  final String word;
-  final String pinyin;
+  final String text;
   final String meaning;
-  final bool isInDictionary; // 사전에 있는 단어인지 여부
+  final String pinyin;
   final String? source;
 
   SegmentedWord({
-    required this.word,
-    required this.pinyin,
+    required this.text,
     required this.meaning,
-    this.isInDictionary = false,
+    required this.pinyin,
     this.source,
   });
 }

@@ -164,13 +164,170 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           }
 
           // 캐시된 번역 문장 수와 원본 문장 수가 일치하면 캐시된 번역 사용
-          bool useExistingTranslation =
-              translatedSentences.length == originalSentences.length;
-          if (useExistingTranslation) {
+          bool useExistingTranslation = translatedSentences.isNotEmpty;
+
+          if (originalSentences.length == translatedSentences.length) {
             debugPrint('기존 번역 문장 수가 일치하여 캐시된 번역 사용');
-          } else {
+
+            // 문장 수가 일치하는 경우 직접 매핑하여 세그먼트 생성
+            for (int i = 0; i < originalSentences.length; i++) {
+              final originalSentence = originalSentences[i];
+              final translatedSentence = translatedSentences[i];
+              String pinyin = '';
+
+              // 중국어가 포함된 문장에 대해서만 핀인 생성
+              if (_languageDetectionService.containsChinese(originalSentence)) {
+                try {
+                  // 캐시에서 핀인 확인
+                  if (pinyinCache.containsKey(originalSentence)) {
+                    pinyin = pinyinCache[originalSentence]!;
+                    debugPrint('캐시된 핀인 사용 (문장 $i): $pinyin');
+                  } else {
+                    // 문장에서 중국어 문자만 추출하여 핀인 생성
+                    final chineseCharsOnly =
+                        _extractChineseChars(originalSentence);
+                    if (chineseCharsOnly.isNotEmpty) {
+                      final generatedPinyin = await _languageDetectionService
+                          .generatePinyin(chineseCharsOnly);
+                      pinyin = generatedPinyin;
+                      debugPrint('핀인 생성 성공 (문장 $i): $pinyin');
+
+                      // 핀인 캐시에 추가
+                      pinyinCache[originalSentence] = pinyin;
+                    }
+                  }
+                } catch (e) {
+                  debugPrint('핀인 생성 실패 (문장 $i): $e');
+                }
+              }
+
+              segments.add(TextSegment(
+                originalText: originalSentence,
+                translatedText: translatedSentence,
+                pinyin: pinyin,
+              ));
+
+              // 전체 번역 텍스트 구성
+              if (combinedTranslation.isNotEmpty) {
+                combinedTranslation.write('\n');
+              }
+              combinedTranslation.write(translatedSentence);
+            }
+
+            // 핀인 캐시 저장
+            await _savePinyinCache(pageId, pinyinCache);
+
+            // 처리 완료 후 다음 단계로 진행
+            final processedText = ProcessedText(
+              fullOriginalText: originalText,
+              fullTranslatedText: combinedTranslation.toString(),
+              segments: segments,
+              showFullText: false, // 문장별 모드로 시작
+            );
+
+            if (mounted) {
+              setState(() {
+                _processedText = processedText;
+                _isProcessingText = false;
+              });
+            }
+
+            // 번역 텍스트가 변경된 경우에만 페이지 캐시 업데이트
+            if (translatedText != combinedTranslation.toString()) {
+              debugPrint('번역 텍스트가 변경되어 페이지 캐시 업데이트');
+              await _updatePageCache(processedText);
+            } else {
+              debugPrint('번역 텍스트가 동일하여 페이지 캐시 업데이트 건너뜀');
+            }
+
+            return; // 처리 완료
+          } else if (translatedSentences.isNotEmpty) {
             debugPrint(
-                '번역 문장 수 불일치: 원본=${originalSentences.length}, 번역=${translatedSentences.length}');
+                '번역 문장 수 불일치: 원본=${originalSentences.length}, 번역=${translatedSentences.length}, 매핑 시도');
+
+            // 문장 수가 불일치하더라도 기존 번역을 최대한 활용
+            final mappedSegments = _mapOriginalAndTranslatedSentences(
+                originalSentences, translatedSentences);
+
+            // 매핑된 세그먼트 사용
+            if (mappedSegments.isNotEmpty) {
+              // 각 문장에 대해 핀인 생성 및 번역 수행
+              for (int i = 0; i < mappedSegments.length; i++) {
+                final originalSentence = mappedSegments[i].originalText;
+                final sentenceTranslation =
+                    mappedSegments[i].translatedText ?? '';
+                String pinyin = '';
+
+                // 중국어가 포함된 문장에 대해서만 핀인 생성
+                if (_languageDetectionService
+                    .containsChinese(originalSentence)) {
+                  try {
+                    // 캐시에서 핀인 확인
+                    if (pinyinCache.containsKey(originalSentence)) {
+                      pinyin = pinyinCache[originalSentence]!;
+                      debugPrint('캐시된 핀인 사용 (문장 $i): $pinyin');
+                    } else {
+                      // 문장에서 중국어 문자만 추출하여 핀인 생성
+                      final chineseCharsOnly =
+                          _extractChineseChars(originalSentence);
+                      if (chineseCharsOnly.isNotEmpty) {
+                        final generatedPinyin = await _languageDetectionService
+                            .generatePinyin(chineseCharsOnly);
+                        pinyin = generatedPinyin;
+                        debugPrint('핀인 생성 성공 (문장 $i): $pinyin');
+
+                        // 핀인 캐시에 추가
+                        pinyinCache[originalSentence] = pinyin;
+                      }
+                    }
+                  } catch (e) {
+                    debugPrint('핀인 생성 실패 (문장 $i): $e');
+                  }
+                }
+
+                segments.add(TextSegment(
+                  originalText: originalSentence,
+                  translatedText: sentenceTranslation,
+                  pinyin: pinyin,
+                ));
+
+                // 전체 번역 텍스트 구성
+                if (combinedTranslation.isNotEmpty) {
+                  combinedTranslation.write('\n');
+                }
+                combinedTranslation.write(sentenceTranslation);
+              }
+
+              // 핀인 캐시 저장
+              await _savePinyinCache(pageId, pinyinCache);
+
+              // 처리 완료 후 다음 단계로 진행
+              final processedText = ProcessedText(
+                fullOriginalText: originalText,
+                fullTranslatedText: combinedTranslation.toString(),
+                segments: segments,
+                showFullText: false, // 문장별 모드로 시작
+              );
+
+              if (mounted) {
+                setState(() {
+                  _processedText = processedText;
+                  _isProcessingText = false;
+                });
+              }
+
+              // 번역 텍스트가 변경된 경우에만 페이지 캐시 업데이트
+              if (translatedText != combinedTranslation.toString()) {
+                debugPrint('번역 텍스트가 변경되어 페이지 캐시 업데이트');
+                await _updatePageCache(processedText);
+              } else {
+                debugPrint('번역 텍스트가 동일하여 페이지 캐시 업데이트 건너뜀');
+              }
+
+              return; // 처리 완료
+            }
+          } else {
+            debugPrint('캐시된 번역 없음, 새로 번역 시작');
           }
 
           // 각 문장에 대해 핀인 생성 및 번역 수행
@@ -178,12 +335,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             final originalSentence = originalSentences[i];
             String pinyin = '';
             String sentenceTranslation = '';
-
-            // 캐시된 번역 사용 (문장 수가 일치하는 경우)
-            if (useExistingTranslation && i < translatedSentences.length) {
-              sentenceTranslation = translatedSentences[i];
-              debugPrint('캐시된 번역 사용 (문장 $i): ${sentenceTranslation.length}자');
-            }
 
             // 중국어가 포함된 문장에 대해서만 핀인 생성
             if (_languageDetectionService.containsChinese(originalSentence)) {
@@ -207,99 +358,81 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   }
                 }
 
-                // 번역이 아직 없는 경우에만 번역 수행
-                if (sentenceTranslation.isEmpty) {
-                  // 캐시에서 번역 확인
-                  String? cachedTranslation;
-                  try {
-                    cachedTranslation = await _translationService
-                        .getTranslation(originalSentence, 'ko');
-                    if (cachedTranslation != null &&
-                        cachedTranslation.isNotEmpty) {
-                      debugPrint(
-                          '번역 캐시에서 로드 (문장 $i): ${cachedTranslation.length}자');
-                    }
-                  } catch (e) {
-                    debugPrint('캐시된 번역 조회 중 오류 (문장 $i): $e');
-                    cachedTranslation = null;
-                  }
-
-                  // 캐시에 없으면 번역 수행 및 캐싱
-                  if (cachedTranslation == null || cachedTranslation.isEmpty) {
+                // 번역 수행
+                // 캐시에서 번역 확인
+                String? cachedTranslation;
+                try {
+                  cachedTranslation = await _translationService.getTranslation(
+                      originalSentence, 'ko');
+                  if (cachedTranslation != null &&
+                      cachedTranslation.isNotEmpty) {
                     debugPrint(
-                        '새로운 번역 요청 (문장 $i): ${originalSentence.length}자');
-                    final newTranslation = await _translationService
-                        .translateText(originalSentence, targetLanguage: 'ko');
-                    sentenceTranslation = newTranslation;
-
-                    // 번역 결과 캐싱
-                    if (sentenceTranslation.isNotEmpty) {
-                      try {
-                        await _translationService.cacheTranslation(
-                            originalSentence, sentenceTranslation, 'ko');
-                        debugPrint('번역 결과 캐싱 완료 (문장 $i)');
-                      } catch (e) {
-                        debugPrint('번역 캐싱 중 오류 (문장 $i): $e');
-                      }
-                    }
-                  } else {
-                    sentenceTranslation = cachedTranslation;
+                        '번역 캐시에서 로드 (문장 $i): ${cachedTranslation.length}자');
                   }
+                } catch (e) {
+                  debugPrint('캐시된 번역 조회 중 오류 (문장 $i): $e');
+                  cachedTranslation = null;
                 }
 
-                // 번역 결과 추가
-                if (combinedTranslation.isNotEmpty) {
-                  combinedTranslation.write('\n');
+                // 캐시에 없으면 번역 수행 및 캐싱
+                if (cachedTranslation == null || cachedTranslation.isEmpty) {
+                  debugPrint('새로운 번역 요청 (문장 $i): ${originalSentence.length}자');
+                  final newTranslation = await _translationService
+                      .translateText(originalSentence, targetLanguage: 'ko');
+                  sentenceTranslation = newTranslation;
+
+                  // 번역 결과 캐싱
+                  if (sentenceTranslation.isNotEmpty) {
+                    try {
+                      await _translationService.cacheTranslation(
+                          originalSentence, sentenceTranslation, 'ko');
+                      debugPrint('번역 결과 캐싱 완료 (문장 $i)');
+                    } catch (e) {
+                      debugPrint('번역 캐싱 중 오류 (문장 $i): $e');
+                    }
+                  }
+                } else {
+                  sentenceTranslation = cachedTranslation;
                 }
-                combinedTranslation.write(sentenceTranslation);
               } catch (e) {
                 debugPrint('핀인 생성 또는 번역 실패 (문장 $i): $e');
               }
             } else {
               // 중국어가 없는 문장 처리
-              // 번역이 아직 없는 경우에만 번역 수행
-              if (sentenceTranslation.isEmpty) {
-                // 중국어가 없는 문장도 번역 시도
+              // 번역 시도
+              try {
+                // 캐시에서 번역 확인
+                String? cachedTranslation;
                 try {
-                  // 캐시에서 번역 확인 (임시 구현)
-                  String? cachedTranslation;
-                  try {
-                    cachedTranslation = await _translationService
-                        .getTranslation(originalSentence, 'ko');
-                  } catch (e) {
-                    debugPrint('캐시된 번역 조회 중 오류: $e');
-                    cachedTranslation = null;
-                  }
-
-                  // 캐시에 없으면 번역 수행 및 캐싱
-                  if (cachedTranslation == null || cachedTranslation.isEmpty) {
-                    final newTranslation = await _translationService
-                        .translateText(originalSentence, targetLanguage: 'ko');
-                    sentenceTranslation = newTranslation;
-
-                    // 번역 결과 캐싱 (임시 구현)
-                    if (sentenceTranslation.isNotEmpty) {
-                      try {
-                        await _translationService.cacheTranslation(
-                            originalSentence, sentenceTranslation, 'ko');
-                      } catch (e) {
-                        debugPrint('번역 캐싱 중 오류: $e');
-                      }
-                    }
-                  } else {
-                    sentenceTranslation = cachedTranslation;
-                    debugPrint('캐시된 번역 사용: $sentenceTranslation');
-                  }
+                  cachedTranslation = await _translationService.getTranslation(
+                      originalSentence, 'ko');
                 } catch (e) {
-                  sentenceTranslation = originalSentence; // 번역 실패 시 원본 사용
+                  debugPrint('캐시된 번역 조회 중 오류: $e');
+                  cachedTranslation = null;
                 }
-              }
 
-              // 번역 결과 추가
-              if (combinedTranslation.isNotEmpty) {
-                combinedTranslation.write('\n');
+                // 캐시에 없으면 번역 수행 및 캐싱
+                if (cachedTranslation == null || cachedTranslation.isEmpty) {
+                  final newTranslation = await _translationService
+                      .translateText(originalSentence, targetLanguage: 'ko');
+                  sentenceTranslation = newTranslation;
+
+                  // 번역 결과 캐싱
+                  if (sentenceTranslation.isNotEmpty) {
+                    try {
+                      await _translationService.cacheTranslation(
+                          originalSentence, sentenceTranslation, 'ko');
+                    } catch (e) {
+                      debugPrint('번역 캐싱 중 오류: $e');
+                    }
+                  }
+                } else {
+                  sentenceTranslation = cachedTranslation;
+                  debugPrint('캐시된 번역 사용: $sentenceTranslation');
+                }
+              } catch (e) {
+                sentenceTranslation = originalSentence; // 번역 실패 시 원본 사용
               }
-              combinedTranslation.write(sentenceTranslation);
             }
 
             segments.add(TextSegment(
@@ -307,6 +440,12 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               translatedText: sentenceTranslation,
               pinyin: pinyin,
             ));
+
+            // 번역 결과 추가
+            if (combinedTranslation.isNotEmpty) {
+              combinedTranslation.write('\n');
+            }
+            combinedTranslation.write(sentenceTranslation);
           }
 
           // 핀인 캐시 저장
@@ -333,7 +472,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           }
 
           // 번역 텍스트가 변경된 경우에만 페이지 캐시 업데이트
-          if (!useExistingTranslation || translatedText != fullTranslatedText) {
+          if (translatedText != fullTranslatedText) {
             debugPrint('번역 텍스트가 변경되어 페이지 캐시 업데이트');
             await _updatePageCache(processedText);
           } else {
@@ -377,18 +516,85 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     }
   }
 
-  // 텍스트를 문장 단위로 분리
+  // 텍스트를 문장 단위로 분리 (개선된 버전)
   List<String> _splitIntoSentences(String text) {
     if (text.isEmpty) return [];
 
-    // 문장 구분자 패턴 (마침표, 느낌표, 물음표, 쉼표 등 뒤에 공백이 있을 수도 있음)
-    final pattern = RegExp(r'(?<=[。！？!?\.,，、])\s*');
+    // 개선된 문장 구분자 패턴
+    // 중국어 문장 구분자(。！？), 영어 문장 구분자(.!?), 쉼표(,，), 기타 구분자(、:;) 등을 포함
+    // 구분자 뒤에 공백이 있을 수도 있고, 줄바꿈 문자도 문장 구분자로 처리
+    final pattern = RegExp(r'(?<=[。！？!?\.,，、:;；：])\s*|[\n\r]+');
 
     // 문장 구분자로 분리
     final sentences = text.split(pattern);
 
-    // 빈 문장 제거
+    // 빈 문장 제거 및 정리
     return sentences.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  }
+
+  // 원본 문장과 번역 문장을 최대한 매핑하는 함수 추가
+  List<TextSegment> _mapOriginalAndTranslatedSentences(
+      List<String> originalSentences, List<String> translatedSentences) {
+    final segments = <TextSegment>[];
+    final int originalCount = originalSentences.length;
+    final int translatedCount = translatedSentences.length;
+
+    debugPrint('원본 문장 수: $originalCount, 번역 문장 수: $translatedCount');
+
+    // 문장 수가 같으면 1:1 매핑
+    if (originalCount == translatedCount) {
+      for (int i = 0; i < originalCount; i++) {
+        segments.add(TextSegment(
+          originalText: originalSentences[i],
+          translatedText: translatedSentences[i],
+          pinyin: '',
+        ));
+      }
+      return segments;
+    }
+
+    // 문장 수가 다른 경우 최대한 매핑 시도
+    // 1. 원본 문장 수가 더 많은 경우: 번역 문장을 비율에 맞게 분배
+    if (originalCount > translatedCount) {
+      final double ratio = originalCount / translatedCount;
+      for (int i = 0; i < originalCount; i++) {
+        final int translatedIndex = (i / ratio).floor();
+        final String translatedText = translatedIndex < translatedCount
+            ? translatedSentences[translatedIndex]
+            : '';
+
+        segments.add(TextSegment(
+          originalText: originalSentences[i],
+          translatedText: translatedText,
+          pinyin: '',
+        ));
+      }
+    }
+    // 2. 번역 문장 수가 더 많은 경우: 원본 문장을 비율에 맞게 분배
+    else {
+      final double ratio = translatedCount / originalCount;
+      for (int i = 0; i < originalCount; i++) {
+        final int startIndex = (i * ratio).floor();
+        final int endIndex = ((i + 1) * ratio).floor();
+
+        // 해당 원본 문장에 매핑되는 번역 문장들을 결합
+        final StringBuffer combinedTranslation = StringBuffer();
+        for (int j = startIndex; j < endIndex && j < translatedCount; j++) {
+          if (combinedTranslation.isNotEmpty) {
+            combinedTranslation.write(' ');
+          }
+          combinedTranslation.write(translatedSentences[j]);
+        }
+
+        segments.add(TextSegment(
+          originalText: originalSentences[i],
+          translatedText: combinedTranslation.toString(),
+          pinyin: '',
+        ));
+      }
+    }
+
+    return segments;
   }
 
   @override

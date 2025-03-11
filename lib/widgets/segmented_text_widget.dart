@@ -9,291 +9,200 @@ import '../services/dictionary_service.dart';
 
 class SegmentedTextWidget extends StatefulWidget {
   final String text;
-  final String? noteId;
-  final Function()? onFlashCardAdded;
+  final List<SegmentedWord> segments;
+  final Function(String)? onLookupDictionary;
+  final Function(String)? onAddToFlashcard;
 
   const SegmentedTextWidget({
     Key? key,
     required this.text,
-    this.noteId,
-    this.onFlashCardAdded,
+    required this.segments,
+    this.onLookupDictionary,
+    this.onAddToFlashcard,
   }) : super(key: key);
 
   @override
-  _SegmentedTextWidgetState createState() => _SegmentedTextWidgetState();
+  State<SegmentedTextWidget> createState() => _SegmentedTextWidgetState();
 }
 
 class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
-  final ChineseSegmenterService _segmenterService = ChineseSegmenterService();
-  final TtsService _ttsService = TtsService();
-  final FlashCardService _flashCardService = FlashCardService();
-  final DictionaryService _dictionaryService = DictionaryService();
-
-  List<SegmentedWord> _segments = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _processText();
-  }
-
-  @override
-  void didUpdateWidget(SegmentedTextWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text) {
-      _processText();
-    }
-  }
-
-  Future<void> _processText() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final segments = await _segmenterService.processText(widget.text);
-
-      if (mounted) {
-        setState(() {
-          _segments = segments;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('텍스트 처리 오류: $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
+  String _selectedText = '';
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_segments.isEmpty) {
-      return Text(
-        widget.text,
-        style: const TextStyle(fontSize: 18),
+    // 세그멘테이션이 비활성화된 경우 단순 텍스트 표시
+    if (!ChineseSegmenterService.isSegmentationEnabled) {
+      return GestureDetector(
+        onLongPress: () {
+          // 컨텍스트 메뉴 표시 로직
+          _showCustomMenu(context, widget.text);
+        },
+        child: SelectableText.rich(
+          TextSpan(
+            text: widget.text,
+            style: TextStyle(fontSize: 18, color: Colors.black),
+          ),
+          onSelectionChanged: (selection, cause) {
+            if (selection.baseOffset != selection.extentOffset) {
+              setState(() {
+                _selectedText = widget.text.substring(
+                  selection.baseOffset,
+                  selection.extentOffset,
+                );
+              });
+            }
+          },
+          // 기본 컨텍스트 메뉴 비활성화
+          contextMenuBuilder: null,
+        ),
       );
     }
 
-    return Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      children: _segments.map((segment) {
-        return GestureDetector(
-          onTap: () => _showWordDetails(context, segment),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: segment.isInDictionary
-                  ? Colors.blue.shade50
-                  : Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: segment.isInDictionary
-                    ? Colors.blue.shade200
-                    : Colors.grey.shade400,
-                width: segment.isInDictionary ? 1.0 : 1.0,
-                style: segment.isInDictionary
-                    ? BorderStyle.solid
-                    : BorderStyle.none,
+    // 기존 세그멘테이션 표시 로직
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          children: widget.segments.map((segment) {
+            final bool isInDictionary =
+                ChineseSegmenterService().isWordInDictionary(segment.text);
+
+            return GestureDetector(
+              onTap: () {
+                _showWordDetails(context, segment);
+              },
+              onLongPress: () {
+                _showCustomMenu(context, segment.text);
+              },
+              child: Container(
+                margin:
+                    const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
+                decoration: BoxDecoration(
+                  color: isInDictionary
+                      ? Colors.blue.withOpacity(0.1)
+                      : Colors.grey.withOpacity(0.1),
+                  border: Border.all(
+                    color: isInDictionary
+                        ? Colors.blue.withOpacity(0.3)
+                        : Colors.grey.withOpacity(0.3),
+                    width: 1.0,
+                  ),
+                  borderRadius: BorderRadius.circular(4.0),
+                ),
+                child: Text(
+                  segment.text,
+                  style: TextStyle(fontSize: 18, color: Colors.black),
+                ),
               ),
-            ),
-            child: Text(
-              segment.word,
-              style: TextStyle(
-                fontSize: 18,
-                color: segment.isInDictionary ? Colors.black87 : Colors.black54,
-                fontWeight: segment.isInDictionary
-                    ? FontWeight.normal
-                    : FontWeight.normal,
-              ),
-            ),
-          ),
-        );
-      }).toList(),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
+  // 단어 상세 정보 표시
   void _showWordDetails(BuildContext context, SegmentedWord segment) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    segment.word,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    segment.pinyin,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.volume_up),
-                    onPressed: () => _ttsService.speak(segment.word),
-                    tooltip: '발음 듣기',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.content_copy),
-                    onPressed: () => _copyToClipboard(context, segment.word),
-                    tooltip: '복사',
-                  ),
-                ],
+      builder: (context) => AlertDialog(
+        title: Text(segment.text),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (segment.pinyin.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text(
+                  '발음: ${segment.pinyin}',
+                  style: TextStyle(fontStyle: FontStyle.italic),
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                '의미: ${segment.meaning}',
-                style: const TextStyle(fontSize: 16),
-              ),
-              if (segment.source != null) ...[
-                const SizedBox(height: 4),
-                Text(
+            if (segment.source != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text(
                   '출처: ${segment.source}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
-              ],
-              const SizedBox(height: 16),
-              if (widget.noteId != null) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.flash_on),
-                    label: const Text('플래시카드 추가'),
-                    onPressed: () => _addToFlashcard(context, segment),
-                  ),
-                ),
-              ],
-              if (segment.meaning == '사전에 없는 단어' ||
-                  segment.meaning.isEmpty ||
-                  segment.source == 'external') ...[
-                const SizedBox(height: 8),
-                const Divider(),
-                const SizedBox(height: 8),
-                const Text(
-                  '외부 사전에서 검색:',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildExternalDictButton(
-                      context,
-                      segment.word,
-                      'Google',
-                      ExternalDictType.google,
-                      Icons.g_translate,
-                    ),
-                    _buildExternalDictButton(
-                      context,
-                      segment.word,
-                      'Naver',
-                      ExternalDictType.naver,
-                      Icons.language,
-                    ),
-                    _buildExternalDictButton(
-                      context,
-                      segment.word,
-                      'Baidu',
-                      ExternalDictType.baidu,
-                      Icons.search,
-                    ),
-                  ],
-                ),
-              ],
-            ],
+              ),
+            Text('의미: ${segment.meaning}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: Text('닫기'),
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildExternalDictButton(
-    BuildContext context,
-    String word,
-    String label,
-    ExternalDictType type,
-    IconData icon,
-  ) {
-    return ElevatedButton.icon(
-      icon: Icon(icon, size: 16),
-      label: Text(label),
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          TextButton(
+            onPressed: () {
+              if (widget.onAddToFlashcard != null) {
+                widget.onAddToFlashcard!(segment.text);
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('플래시카드에 추가되었습니다.')),
+                );
+              }
+            },
+            child: Text('플래시카드 추가'),
+          ),
+        ],
       ),
-      onPressed: () async {
-        Navigator.pop(context);
-        final success =
-            await _dictionaryService.openExternalDictionary(word, type: type);
-        if (!success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$label 사전을 열 수 없습니다.')),
-          );
-        }
-      },
     );
   }
 
-  void _copyToClipboard(BuildContext context, String text) {
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('클립보드에 복사되었습니다')),
+  // 커스텀 컨텍스트 메뉴 표시 메서드
+  void _showCustomMenu(BuildContext context, String text) {
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final position = renderBox.localToGlobal(Offset.zero);
+
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx + renderBox.size.width,
+        position.dy + renderBox.size.height,
+      ),
+      items: [
+        PopupMenuItem(
+          child: Text('복사'),
+          onTap: () {
+            Clipboard.setData(
+              ClipboardData(
+                text: _selectedText.isNotEmpty ? _selectedText : text,
+              ),
+            );
+          },
+        ),
+        PopupMenuItem(
+          child: Text('사전 찾기'),
+          onTap: () {
+            if (_selectedText.isNotEmpty) {
+              // 사전 찾기 기능 호출
+              if (widget.onLookupDictionary != null) {
+                widget.onLookupDictionary!(_selectedText);
+              }
+            }
+          },
+        ),
+        PopupMenuItem(
+          child: Text('플래시카드 추가'),
+          onTap: () {
+            if (_selectedText.isNotEmpty) {
+              // 플래시카드 추가 기능 호출
+              if (widget.onAddToFlashcard != null) {
+                widget.onAddToFlashcard!(_selectedText);
+              }
+            }
+          },
+        ),
+      ],
     );
-    Navigator.pop(context);
-  }
-
-  Future<void> _addToFlashcard(
-      BuildContext context, SegmentedWord segment) async {
-    if (widget.noteId == null) return;
-
-    try {
-      await _flashCardService.createFlashCard(
-        front: segment.word,
-        back: segment.meaning,
-        pinyin: segment.pinyin,
-        noteId: widget.noteId!,
-      );
-
-      if (widget.onFlashCardAdded != null) {
-        widget.onFlashCardAdded!();
-      }
-
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('플래시카드가 추가되었습니다')),
-        );
-      }
-    } catch (e) {
-      debugPrint('플래시카드 추가 오류: $e');
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('플래시카드 추가 실패: $e')),
-        );
-      }
-    }
   }
 }
