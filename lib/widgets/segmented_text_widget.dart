@@ -62,44 +62,49 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
             final bool isInDictionary =
                 ChineseSegmenterService().isWordInDictionary(segment.text);
 
-            return Container(
-              margin:
-                  const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
-              padding:
-                  const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-              decoration: BoxDecoration(
-                color: isInDictionary
-                    ? Colors.blue.withOpacity(0.1)
-                    : Colors.grey.withOpacity(0.1),
-                border: Border.all(
-                  color: isInDictionary
-                      ? Colors.blue.withOpacity(0.3)
-                      : Colors.grey.withOpacity(0.3),
-                  width: 1.0,
-                ),
-                borderRadius: BorderRadius.circular(4.0),
-              ),
+            return Material(
+              color: Colors.transparent,
               child: InkWell(
                 onTap: () {
                   _showWordDetails(context, segment);
                 },
-                child: SelectableText(
-                  segment.text,
-                  style: TextStyle(fontSize: 18, color: Colors.black),
-                  onSelectionChanged: (selection, cause) {
-                    if (selection.baseOffset != selection.extentOffset) {
-                      setState(() {
-                        _selectedText = segment.text.substring(
-                          selection.baseOffset,
-                          selection.extentOffset,
-                        );
-                      });
-                    }
-                  },
-                  contextMenuBuilder: (context, editableTextState) {
-                    return _buildCustomContextMenu(context, editableTextState);
-                  },
-                  enableInteractiveSelection: true, // 선택 활성화
+                borderRadius: BorderRadius.circular(4.0),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(
+                      vertical: 2.0, horizontal: 1.0),
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 2.0, horizontal: 4.0),
+                  decoration: BoxDecoration(
+                    color: isInDictionary
+                        ? Colors.blue.withOpacity(0.1)
+                        : Colors.grey.withOpacity(0.1),
+                    border: Border.all(
+                      color: isInDictionary
+                          ? Colors.blue.withOpacity(0.3)
+                          : Colors.grey.withOpacity(0.3),
+                      width: 1.0,
+                    ),
+                    borderRadius: BorderRadius.circular(4.0),
+                  ),
+                  child: SelectableText(
+                    segment.text,
+                    style: TextStyle(fontSize: 18, color: Colors.black),
+                    onSelectionChanged: (selection, cause) {
+                      if (selection.baseOffset != selection.extentOffset) {
+                        setState(() {
+                          _selectedText = segment.text.substring(
+                            selection.baseOffset,
+                            selection.extentOffset,
+                          );
+                        });
+                      }
+                    },
+                    contextMenuBuilder: (context, editableTextState) {
+                      return _buildCustomContextMenu(
+                          context, editableTextState);
+                    },
+                    enableInteractiveSelection: true, // 선택 활성화
+                  ),
                 ),
               ),
             );
