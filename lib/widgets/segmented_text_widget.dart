@@ -32,29 +32,24 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
   Widget build(BuildContext context) {
     // 세그멘테이션이 비활성화된 경우 단순 텍스트 표시
     if (!ChineseSegmenterService.isSegmentationEnabled) {
-      return GestureDetector(
-        onLongPress: () {
-          // 컨텍스트 메뉴 표시 로직
-          _showCustomMenu(context, widget.text);
-        },
-        child: SelectableText.rich(
-          TextSpan(
-            text: widget.text,
-            style: TextStyle(fontSize: 18, color: Colors.black),
-          ),
-          onSelectionChanged: (selection, cause) {
-            if (selection.baseOffset != selection.extentOffset) {
-              setState(() {
-                _selectedText = widget.text.substring(
-                  selection.baseOffset,
-                  selection.extentOffset,
-                );
-              });
-            }
-          },
-          // 기본 컨텍스트 메뉴 비활성화
-          contextMenuBuilder: null,
+      return SelectableText.rich(
+        TextSpan(
+          text: widget.text,
+          style: TextStyle(fontSize: 18, color: Colors.black),
         ),
+        onSelectionChanged: (selection, cause) {
+          if (selection.baseOffset != selection.extentOffset) {
+            setState(() {
+              _selectedText = widget.text.substring(
+                selection.baseOffset,
+                selection.extentOffset,
+              );
+            });
+          }
+        },
+        contextMenuBuilder: (context, editableTextState) {
+          return _buildCustomContextMenu(context, editableTextState);
+        },
       );
     }
 
@@ -67,33 +62,44 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
             final bool isInDictionary =
                 ChineseSegmenterService().isWordInDictionary(segment.text);
 
-            return GestureDetector(
-              onTap: () {
-                _showWordDetails(context, segment);
-              },
-              onLongPress: () {
-                _showCustomMenu(context, segment.text);
-              },
-              child: Container(
-                margin:
-                    const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
-                padding:
-                    const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
-                decoration: BoxDecoration(
+            return Container(
+              margin:
+                  const EdgeInsets.symmetric(vertical: 2.0, horizontal: 1.0),
+              padding:
+                  const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
+              decoration: BoxDecoration(
+                color: isInDictionary
+                    ? Colors.blue.withOpacity(0.1)
+                    : Colors.grey.withOpacity(0.1),
+                border: Border.all(
                   color: isInDictionary
-                      ? Colors.blue.withOpacity(0.1)
-                      : Colors.grey.withOpacity(0.1),
-                  border: Border.all(
-                    color: isInDictionary
-                        ? Colors.blue.withOpacity(0.3)
-                        : Colors.grey.withOpacity(0.3),
-                    width: 1.0,
-                  ),
-                  borderRadius: BorderRadius.circular(4.0),
+                      ? Colors.blue.withOpacity(0.3)
+                      : Colors.grey.withOpacity(0.3),
+                  width: 1.0,
                 ),
-                child: Text(
+                borderRadius: BorderRadius.circular(4.0),
+              ),
+              child: InkWell(
+                onTap: () {
+                  _showWordDetails(context, segment);
+                },
+                child: SelectableText(
                   segment.text,
                   style: TextStyle(fontSize: 18, color: Colors.black),
+                  onSelectionChanged: (selection, cause) {
+                    if (selection.baseOffset != selection.extentOffset) {
+                      setState(() {
+                        _selectedText = segment.text.substring(
+                          selection.baseOffset,
+                          selection.extentOffset,
+                        );
+                      });
+                    }
+                  },
+                  contextMenuBuilder: (context, editableTextState) {
+                    return _buildCustomContextMenu(context, editableTextState);
+                  },
+                  enableInteractiveSelection: true, // 선택 활성화
                 ),
               ),
             );
@@ -144,9 +150,7 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
               if (widget.onAddToFlashcard != null) {
                 widget.onAddToFlashcard!(segment.text);
                 Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('플래시카드에 추가되었습니다.')),
-                );
+                // 스낵바 제거 - 플래시카드 카운터가 증가하는 것으로 충분한 피드백 제공
               }
             },
             child: Text('플래시카드 추가'),
@@ -156,53 +160,51 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
     );
   }
 
-  // 커스텀 컨텍스트 메뉴 표시 메서드
-  void _showCustomMenu(BuildContext context, String text) {
-    final RenderBox renderBox = context.findRenderObject() as RenderBox;
-    final position = renderBox.localToGlobal(Offset.zero);
+  // 커스텀 컨텍스트 메뉴 빌더
+  Widget _buildCustomContextMenu(
+      BuildContext context, EditableTextState editableTextState) {
+    final TextEditingValue value = editableTextState.textEditingValue;
+    final String selectedText = value.selection.textInside(value.text);
 
-    showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx + renderBox.size.width,
-        position.dy + renderBox.size.height,
+    if (selectedText.isEmpty) {
+      return Container();
+    }
+
+    // 기본 메뉴 항목 가져오기
+    final List<ContextMenuButtonItem> buttonItems = [];
+
+    // 사전 검색 버튼 추가
+    buttonItems.add(
+      ContextMenuButtonItem(
+        onPressed: () {
+          editableTextState.hideToolbar();
+          if (widget.onLookupDictionary != null) {
+            widget.onLookupDictionary!(selectedText);
+          }
+        },
+        label: '사전 찾기',
       ),
-      items: [
-        PopupMenuItem(
-          child: Text('복사'),
-          onTap: () {
-            Clipboard.setData(
-              ClipboardData(
-                text: _selectedText.isNotEmpty ? _selectedText : text,
-              ),
-            );
-          },
-        ),
-        PopupMenuItem(
-          child: Text('사전 찾기'),
-          onTap: () {
-            if (_selectedText.isNotEmpty) {
-              // 사전 찾기 기능 호출
-              if (widget.onLookupDictionary != null) {
-                widget.onLookupDictionary!(_selectedText);
-              }
-            }
-          },
-        ),
-        PopupMenuItem(
-          child: Text('플래시카드 추가'),
-          onTap: () {
-            if (_selectedText.isNotEmpty) {
-              // 플래시카드 추가 기능 호출
-              if (widget.onAddToFlashcard != null) {
-                widget.onAddToFlashcard!(_selectedText);
-              }
-            }
-          },
-        ),
-      ],
+    );
+
+    // 플래시카드 추가 버튼 생성
+    buttonItems.add(
+      ContextMenuButtonItem(
+        onPressed: () {
+          // 컨텍스트 메뉴 닫기
+          editableTextState.hideToolbar();
+
+          // 플래시카드 추가 기능 호출
+          if (widget.onAddToFlashcard != null) {
+            widget.onAddToFlashcard!(selectedText);
+          }
+        },
+        label: '플래시카드 추가',
+      ),
+    );
+
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: buttonItems,
     );
   }
 }
