@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:math' show min, max;
 import '../models/processed_text.dart';
 import '../models/text_segment.dart';
 import '../models/flash_card.dart';
 import 'segmented_text_widget.dart';
 import '../services/chinese_segmenter_service.dart';
+import '../services/dictionary_service.dart';
 
 /// 처리된 텍스트 표시 위젯
 /// 전체 텍스트와 세그먼트별 표시를 전환할 수 있습니다.
@@ -88,10 +90,12 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         text,
         style: TextStyle(fontSize: fontSize, height: height),
         onSelectionChanged: (selection, cause) {
+          // 선택된 텍스트가 있을 때만 처리
           if (selection.baseOffset != selection.extentOffset) {
+            final selectedText =
+                text.substring(selection.baseOffset, selection.extentOffset);
             setState(() {
-              _selectedText =
-                  text.substring(selection.baseOffset, selection.extentOffset);
+              _selectedText = selectedText;
               _selectionOffset = selection;
             });
           }
@@ -162,13 +166,36 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     return SelectableText.rich(
       TextSpan(children: spans),
       onSelectionChanged: (selection, cause) {
+        // 선택된 텍스트가 있을 때만 처리
         if (selection.baseOffset != selection.extentOffset) {
-          // 선택된 텍스트 추출
-          final String fullText =
-              spans.fold<String>('', (prev, span) => prev + (span.text ?? ''));
+          // 선택된 텍스트 추출 (스팬에서 선택 범위에 해당하는 텍스트 추출)
+          int currentPos = 0;
+          String selectedText = '';
+
+          for (var span in spans) {
+            final spanText = span.text ?? '';
+            final spanStart = currentPos;
+            final spanEnd = currentPos + spanText.length;
+
+            // 선택 범위와 스팬 범위가 겹치는지 확인
+            if (spanEnd > selection.baseOffset &&
+                spanStart < selection.extentOffset) {
+              final overlapStart = max(spanStart, selection.baseOffset);
+              final overlapEnd = min(spanEnd, selection.extentOffset);
+
+              if (overlapEnd > overlapStart) {
+                final relativeStart = overlapStart - spanStart;
+                final relativeEnd = overlapEnd - spanStart;
+                selectedText += spanText.substring(
+                    max(0, relativeStart), min(spanText.length, relativeEnd));
+              }
+            }
+
+            currentPos = spanEnd;
+          }
+
           setState(() {
-            _selectedText = fullText.substring(
-                selection.baseOffset, selection.extentOffset);
+            _selectedText = selectedText;
             _selectionOffset = selection;
           });
         }
@@ -189,21 +216,46 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       return Container();
     }
 
+    // 중국어 문자인지 확인
+    bool containsChinese = RegExp(r'[\u4e00-\u9fa5]').hasMatch(selectedText);
+
     // 기본 메뉴 항목 가져오기
     final List<ContextMenuButtonItem> buttonItems = [];
 
-    // 사전 검색 버튼 추가
-    buttonItems.add(
-      ContextMenuButtonItem(
-        onPressed: () {
-          editableTextState.hideToolbar();
-          if (widget.onDictionaryLookup != null) {
+    // 사전 검색 버튼 추가 (중국어 문자가 포함된 경우에만)
+    if (containsChinese) {
+      buttonItems.add(
+        ContextMenuButtonItem(
+          onPressed: () async {
+            editableTextState.hideToolbar();
+
+            // 중국어 분석 서비스 사용
+            final segmenterService = ChineseSegmenterService();
+            final wordInfo =
+                await segmenterService.processSelectedWord(selectedText);
+
+            // 단어 정보 표시
+            if (wordInfo != null && context.mounted) {
+              _showWordDetails(wordInfo);
+            }
+          },
+          label: '사전 검색',
+        ),
+      );
+    }
+
+    // 기존 사전 검색 버튼 (onDictionaryLookup 콜백 사용)
+    if (widget.onDictionaryLookup != null) {
+      buttonItems.add(
+        ContextMenuButtonItem(
+          onPressed: () {
+            editableTextState.hideToolbar();
             widget.onDictionaryLookup!(selectedText);
-          }
-        },
-        label: '사전 검색',
-      ),
-    );
+          },
+          label: '기존 사전 검색',
+        ),
+      );
+    }
 
     // 플래시카드 추가 버튼 생성
     buttonItems.add(
@@ -255,6 +307,168 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     );
   }
 
+  // 단어 선택 시 사전 기능 호출
+  Future<void> _handleWordSelection(String selectedText) async {
+    if (selectedText.isEmpty) return;
+
+    // 중국어 문자인지 확인
+    bool containsChinese = RegExp(r'[\u4e00-\u9fa5]').hasMatch(selectedText);
+    if (!containsChinese) return;
+
+    // 중국어 분석 서비스 사용
+    final segmenterService = ChineseSegmenterService();
+    final wordInfo = await segmenterService.processSelectedWord(selectedText);
+
+    // 단어 정보 표시
+    if (wordInfo != null) {
+      _showWordDetails(wordInfo);
+    }
+  }
+
+  // 단어 정보 표시 다이얼로그
+  void _showWordDetails(SegmentedWord word) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(word.text,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (word.pinyin.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Text(
+                    '발음: ${word.pinyin}',
+                    style: const TextStyle(
+                        fontSize: 16, fontStyle: FontStyle.italic),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Text(
+                  '의미: ${word.meaning}',
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
+              if (word.source != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Text(
+                    '출처: ${word.source}',
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                ),
+              if (word.meaning == '사전에 없는 단어' ||
+                  word.meaning.isEmpty ||
+                  word.source == 'external')
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(),
+                    const Text('외부 사전 검색:',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => _openExternalDictionary(
+                              word.text, ExternalDictType.google),
+                          child: const Text('Google'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => _openExternalDictionary(
+                              word.text, ExternalDictType.naver),
+                          child: const Text('Naver'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => _openExternalDictionary(
+                              word.text, ExternalDictType.baidu),
+                          child: const Text('Baidu'),
+                        ),
+                      ],
+                    ),
+
+                    // 국립국어원 API 테스트 버튼 추가 (디버그 모드에서만 표시)
+                    if (kDebugMode)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('API 테스트:',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue)),
+                            const SizedBox(height: 8),
+                            ElevatedButton(
+                              onPressed: () {
+                                // 국립국어원 API 테스트 실행
+                                final dictionaryService = DictionaryService();
+                                dictionaryService.testKrDictApi(word.text);
+
+                                // 테스트 실행 알림
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        '국립국어원 API 테스트가 실행되었습니다. 콘솔 로그를 확인하세요.'),
+                                    duration: Duration(seconds: 3),
+                                  ),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue[700],
+                              ),
+                              child: const Text('국립국어원 API 테스트'),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('닫기'),
+          ),
+          TextButton(
+            onPressed: () {
+              // 플래시카드에 추가하는 기능 (이미 구현되어 있다면 호출)
+              _addToFlashcard(word.text, word.meaning, word.pinyin);
+              Navigator.of(context).pop();
+            },
+            child: const Text('플래시카드에 추가'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 외부 사전 열기
+  Future<void> _openExternalDictionary(
+      String word, ExternalDictType type) async {
+    final dictionaryService = DictionaryService();
+    await dictionaryService.openExternalDictionary(word, type: type);
+  }
+
+  // 플래시카드에 추가
+  void _addToFlashcard(String word, String meaning, String pinyin) {
+    // 플래시카드 추가 로직 구현
+    // 이미 구현된 플래시카드 추가 메서드가 있다면 그것을 호출
+    debugPrint('플래시카드에 추가: $word ($pinyin) - $meaning');
+
+    // 부모 위젯에 알림 (콜백이 있는 경우)
+    if (widget.onCreateFlashCard != null) {
+      widget.onCreateFlashCard!(word, meaning, pinyin: pinyin);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.processedText.fullOriginalText.isEmpty) {
@@ -290,10 +504,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                             onSelectionChanged: (selection, cause) {
                               if (selection.baseOffset !=
                                   selection.extentOffset) {
+                                final selectedText = sentence.originalText
+                                    .substring(selection.baseOffset,
+                                        selection.extentOffset);
                                 setState(() {
-                                  _selectedText = sentence.originalText
-                                      .substring(selection.baseOffset,
-                                          selection.extentOffset);
+                                  _selectedText = selectedText;
                                   _selectionOffset = selection;
                                 });
                               }
@@ -352,10 +567,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 ),
                 onSelectionChanged: (selection, cause) {
                   if (selection.baseOffset != selection.extentOffset) {
+                    final selectedText = widget.processedText.fullOriginalText
+                        .substring(
+                            selection.baseOffset, selection.extentOffset);
                     setState(() {
-                      _selectedText = widget.processedText.fullOriginalText
-                          .substring(
-                              selection.baseOffset, selection.extentOffset);
+                      _selectedText = selectedText;
                       _selectionOffset = selection;
                     });
                   }

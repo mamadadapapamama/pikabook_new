@@ -142,6 +142,44 @@ class ChineseSegmenterService {
     // lookup 메서드로 변경
     return _dictionaryService.lookup(word) != null;
   }
+
+  // 유저가 선택한 단어 처리 메서드 추가
+  Future<SegmentedWord> processSelectedWord(String word) async {
+    await initialize();
+
+    // 1. 앱 내 JSON 사전에서 검색
+    final entry = _dictionaryService.lookup(word);
+
+    if (entry != null) {
+      // JSON 사전에서 찾은 경우
+      return SegmentedWord(
+        text: word,
+        meaning: entry.meaning,
+        pinyin: entry.pinyin,
+      );
+    } else {
+      // 2. 폴백 사전 서비스 사용 (DictionaryService)
+      final fallbackEntry =
+          await _fallbackDictionaryService.lookupWordWithFallback(word);
+
+      if (fallbackEntry != null) {
+        // 폴백 사전에서 찾은 경우
+        return SegmentedWord(
+          text: word,
+          meaning: fallbackEntry.meaning,
+          pinyin: fallbackEntry.pinyin,
+          source: 'external',
+        );
+      } else {
+        // 3. 사전에 없는 경우 - 외부 사전 서비스 필요
+        return SegmentedWord(
+          text: word,
+          meaning: '사전에 없는 단어',
+          pinyin: '',
+        );
+      }
+    }
+  }
 }
 
 // 분절된 단어 클래스

@@ -36,7 +36,12 @@ class ChineseDictionaryService {
       }
 
       // 분절용 단어 목록 로드
-      _words = List<String>.from(jsonData['words']);
+      _words = List<String>.from(jsonData['words'] ?? []);
+      if (_words.isEmpty && dictionary.isNotEmpty) {
+        // words 배열이 없으면 dictionary의 단어들을 사용
+        _words =
+            dictionary.map<String>((entry) => entry['word'] as String).toList();
+      }
 
       _isLoaded = true;
       debugPrint('중국어 사전 ${_entries.length}개 항목 로드 완료');

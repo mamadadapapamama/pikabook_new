@@ -45,7 +45,7 @@ app.*.map.json
 /android/app/release
 
 # Google Cloud Service Account
-assets/credentials/
+/assets/credentials/
 *.json
 !pubspec.json
 !firebase.json
