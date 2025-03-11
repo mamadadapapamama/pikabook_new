@@ -2,6 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io' show Platform;
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:xml/xml.dart';
+import 'dart:math' show min;
 
 class DictionaryEntry {
   final String word;
@@ -23,7 +27,27 @@ class DictionaryService {
   // 싱글톤 패턴 구현
   static final DictionaryService _instance = DictionaryService._internal();
   factory DictionaryService() => _instance;
-  DictionaryService._internal();
+  DictionaryService._internal() {
+    // 초기화 시 API 키 로드
+    loadApiKeys();
+  }
+
+  // API 키 저장 변수
+  String? _krDictApiKey;
+
+  // API 키 로드 메서드
+  Future<void> loadApiKeys() async {
+    try {
+      final String jsonString =
+          await rootBundle.loadString('assets/credentials/api_keys.json');
+      final Map<String, dynamic> jsonData = json.decode(jsonString);
+      _krDictApiKey = jsonData['krdict_api_key'];
+      debugPrint('API 키 로드 완료: $_krDictApiKey');
+    } catch (e) {
+      debugPrint('API 키 로드 오류: $e');
+      _krDictApiKey = null;
+    }
+  }
 
   // 간단한 인메모리 사전 (실제로는 데이터베이스나 API를 사용해야 함)
   final Map<String, DictionaryEntry> _dictionary = {
@@ -92,6 +116,11 @@ class DictionaryService {
   // 단어 검색 - 단계별 폴백 구현
   Future<DictionaryEntry?> lookupWordWithFallback(String word) async {
     try {
+      // API 키가 로드되지 않았으면 로드
+      if (_krDictApiKey == null) {
+        await loadApiKeys();
+      }
+
       // 1. 앱 내 JSON 단어장에서 검색
       final jsonResult = _dictionary[word];
       if (jsonResult != null) {
@@ -104,7 +133,13 @@ class DictionaryService {
         return systemDictResult;
       }
 
-      // 3. 외부 사전 서비스 URL 생성 (실제 검색은 사용자가 URL을 통해 수행)
+      // 3. 국립국어원 오픈 API 사용
+      final apiResult = await _lookupInKrDictApi(word);
+      if (apiResult != null) {
+        return apiResult;
+      }
+
+      // 4. 외부 사전 서비스 URL 생성 (실제 검색은 사용자가 URL을 통해 수행)
       return DictionaryEntry(
         word: word,
         pinyin: '',
@@ -116,6 +151,292 @@ class DictionaryService {
       debugPrint('단어 검색 중 오류 발생: $e');
       return null;
     }
+  }
+
+  // 국립국어원 오픈 API를 사용하여 단어 검색
+  Future<DictionaryEntry?> _lookupInKrDictApi(String word) async {
+    try {
+      // API 키가 없으면 검색 불가
+      if (_krDictApiKey == null || _krDictApiKey == 'YOUR_API_KEY_HERE') {
+        debugPrint('유효한 API 키가 없습니다.');
+        return null;
+      }
+
+      debugPrint('국립국어원 API 검색 시작: "$word"');
+
+      // 국립국어원 중국어 사전 API URL
+      // 파라미터 설명:
+      // - key: API 키
+      // - q: 검색어
+      // - advanced: 고급 검색 여부 (y)
+      // - target: 찾을 대상 (4: 원어)
+      // - lang: 언어 (31: 중국어)
+      // - method: 검색 방식 (exact: 정확히 일치하는 단어)
+      // - translated: 다국어 번역 여부 (y)
+      // - trans_lang: 번역 언어 (1: 한국어)
+      final url = Uri.parse(
+          'https://krdict.korean.go.kr/api/search?key=$_krDictApiKey&q=${Uri.encodeComponent(word)}&advanced=y&target=4&lang=31&method=exact&translated=y&trans_lang=1');
+
+      debugPrint('API 요청 URL: $url');
+
+      // API 요청 시작 시간 기록
+      final startTime = DateTime.now();
+      final response = await http.get(url);
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+
+      debugPrint('API 응답 시간: ${duration.inMilliseconds}ms');
+      debugPrint('API 응답 상태 코드: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        // 응답 내용 로깅 (처음 200자만)
+        final responsePreview = response.body.length > 200
+            ? '${response.body.substring(0, 200)}...'
+            : response.body;
+        debugPrint('API 응답 내용 미리보기: $responsePreview');
+
+        // XML 응답 파싱
+        final document = XmlDocument.parse(response.body);
+
+        // 에러 코드 확인
+        final errorElements = document.findAllElements('error');
+        if (errorElements.isNotEmpty) {
+          final errorCode = errorElements.first
+              .findElements('error_code')
+              .firstOrNull
+              ?.innerText;
+          final errorMessage = errorElements.first
+              .findElements('message')
+              .firstOrNull
+              ?.innerText;
+          debugPrint('API 에러: $errorCode - $errorMessage');
+          return null;
+        }
+
+        // 검색 결과 총 개수 확인
+        final totalElement = document.findAllElements('total').firstOrNull;
+        final totalCount = totalElement != null
+            ? int.tryParse(totalElement.innerText) ?? 0
+            : 0;
+        debugPrint('검색 결과 총 개수: $totalCount');
+
+        // item 요소 찾기
+        final items = document.findAllElements('item');
+        debugPrint('검색 결과 항목 수: ${items.length}');
+
+        if (items.isNotEmpty) {
+          // 첫 번째 결과 사용
+          final item = items.first;
+          debugPrint('첫 번째 검색 결과 처리 중...');
+
+          // 단어 정보 요소 찾기
+          final wordInfo = item.findElements('word_info').firstOrNull;
+          if (wordInfo == null) {
+            debugPrint('word_info 요소를 찾을 수 없습니다.');
+            return null;
+          }
+
+          // 의미와 발음 추출
+          String definition = '';
+          final senseInfo = wordInfo.findElements('sense_info').firstOrNull;
+          if (senseInfo != null) {
+            definition =
+                senseInfo.findElements('definition').firstOrNull?.innerText ??
+                    '의미를 찾을 수 없습니다';
+          } else {
+            debugPrint('sense_info 요소를 찾을 수 없습니다.');
+          }
+
+          final pronunciation =
+              wordInfo.findElements('pronunciation').firstOrNull?.innerText ??
+                  '';
+          debugPrint('추출된 발음: $pronunciation');
+          debugPrint('추출된 의미: $definition');
+
+          // 원어 정보 추출 (중국어 원어)
+          String originalLanguage = '';
+          final originalLanguageInfo =
+              wordInfo.findElements('original_language_info').firstOrNull;
+          if (originalLanguageInfo != null) {
+            originalLanguage = originalLanguageInfo
+                    .findElements('original_language')
+                    .firstOrNull
+                    ?.innerText ??
+                '';
+            debugPrint('추출된 원어: $originalLanguage');
+          } else {
+            debugPrint('original_language_info 요소를 찾을 수 없습니다.');
+          }
+
+          // 예문 추출
+          final examples = <String>[];
+          final exampleInfos = senseInfo?.findElements('example_info') ?? [];
+          for (var exampleInfo in exampleInfos) {
+            final example =
+                exampleInfo.findElements('example').firstOrNull?.innerText;
+            if (example != null && example.isNotEmpty) {
+              examples.add(example);
+            }
+          }
+          debugPrint('추출된 예문 수: ${examples.length}');
+
+          return DictionaryEntry(
+            word: word,
+            pinyin: pronunciation,
+            meaning: definition,
+            examples: examples,
+            source: 'krdict',
+          );
+        } else {
+          debugPrint('검색 결과가 없습니다.');
+        }
+      } else {
+        debugPrint('API 요청 실패: ${response.statusCode}');
+        debugPrint('응답 내용: ${response.body}');
+      }
+
+      return null;
+    } catch (e, stackTrace) {
+      debugPrint('국립국어원 API 검색 중 오류 발생: $e');
+      debugPrint('스택 트레이스: $stackTrace');
+      return null;
+    }
+  }
+
+  // 국립국어원 API 테스트 메서드 - 다양한 파라미터 조합으로 API 호출 테스트
+  Future<void> testKrDictApi(String word) async {
+    debugPrint('===== 국립국어원 API 테스트 시작: "$word" =====');
+
+    // 테스트할 파라미터 조합 목록
+    final paramCombinations = [
+      {
+        'description': '기본 검색 (target=1, 표제어)',
+        'params':
+            'key=$_krDictApiKey&q=${Uri.encodeComponent(word)}&translated=y&trans_lang=1'
+      },
+      {
+        'description': '원어 검색 (target=4, lang=31, 중국어)',
+        'params':
+            'key=$_krDictApiKey&q=${Uri.encodeComponent(word)}&advanced=y&target=4&lang=31&translated=y&trans_lang=1'
+      },
+      {
+        'description': '정확한 검색 (method=exact)',
+        'params':
+            'key=$_krDictApiKey&q=${Uri.encodeComponent(word)}&advanced=y&target=4&lang=31&method=exact&translated=y&trans_lang=1'
+      },
+      {
+        'description': '시작 검색 (method=start)',
+        'params':
+            'key=$_krDictApiKey&q=${Uri.encodeComponent(word)}&advanced=y&target=4&lang=31&method=start&translated=y&trans_lang=1'
+      },
+      {
+        'description': '포함 검색 (method=include)',
+        'params':
+            'key=$_krDictApiKey&q=${Uri.encodeComponent(word)}&advanced=y&target=4&lang=31&method=include&translated=y&trans_lang=1'
+      },
+      {
+        'description': '유사 검색 (method=similar)',
+        'params':
+            'key=$_krDictApiKey&q=${Uri.encodeComponent(word)}&advanced=y&target=4&lang=31&method=similar&translated=y&trans_lang=1'
+      },
+    ];
+
+    // 각 파라미터 조합으로 API 호출 테스트
+    for (var combination in paramCombinations) {
+      final description = combination['description'];
+      final params = combination['params'];
+
+      debugPrint('\n----- 테스트: $description -----');
+
+      try {
+        final url = Uri.parse('https://krdict.korean.go.kr/api/search?$params');
+        debugPrint('요청 URL: $url');
+
+        final response = await http.get(url);
+        debugPrint('응답 상태 코드: ${response.statusCode}');
+
+        if (response.statusCode == 200) {
+          // XML 응답 파싱
+          final document = XmlDocument.parse(response.body);
+
+          // 에러 확인
+          final errorElements = document.findAllElements('error');
+          if (errorElements.isNotEmpty) {
+            final errorCode = errorElements.first
+                .findElements('error_code')
+                .firstOrNull
+                ?.innerText;
+            final errorMessage = errorElements.first
+                .findElements('message')
+                .firstOrNull
+                ?.innerText;
+            debugPrint('API 에러: $errorCode - $errorMessage');
+            continue;
+          }
+
+          // 검색 결과 개수 확인
+          final totalElement = document.findAllElements('total').firstOrNull;
+          final totalCount = totalElement != null
+              ? int.tryParse(totalElement.innerText) ?? 0
+              : 0;
+          debugPrint('검색 결과 개수: $totalCount');
+
+          // 결과가 있으면 첫 번째 항목 정보 출력
+          final items = document.findAllElements('item');
+          if (items.isNotEmpty) {
+            debugPrint('첫 번째 결과 정보:');
+            final item = items.first;
+
+            // 단어 정보 출력
+            final wordInfo = item.findElements('word_info').firstOrNull;
+            if (wordInfo != null) {
+              final word = wordInfo.findElements('word').firstOrNull?.innerText;
+              debugPrint('- 단어: $word');
+
+              // 발음 정보
+              final pronunciationInfo =
+                  wordInfo.findElements('pronunciation_info').firstOrNull;
+              if (pronunciationInfo != null) {
+                final pronunciation = pronunciationInfo
+                    .findElements('pronunciation')
+                    .firstOrNull
+                    ?.innerText;
+                debugPrint('- 발음: $pronunciation');
+              }
+
+              // 원어 정보
+              final originalLanguageInfo =
+                  wordInfo.findElements('original_language_info').firstOrNull;
+              if (originalLanguageInfo != null) {
+                final originalLanguage = originalLanguageInfo
+                    .findElements('original_language')
+                    .firstOrNull
+                    ?.innerText;
+                debugPrint('- 원어: $originalLanguage');
+              }
+
+              // 의미 정보
+              final senseInfo = wordInfo.findElements('sense_info').firstOrNull;
+              if (senseInfo != null) {
+                final definition =
+                    senseInfo.findElements('definition').firstOrNull?.innerText;
+                debugPrint('- 의미: $definition');
+              }
+            } else {
+              debugPrint('word_info 요소를 찾을 수 없습니다.');
+            }
+          } else {
+            debugPrint('검색 결과가 없습니다.');
+          }
+        } else {
+          debugPrint('API 요청 실패: ${response.statusCode}');
+        }
+      } catch (e) {
+        debugPrint('테스트 중 오류 발생: $e');
+      }
+    }
+
+    debugPrint('\n===== 국립국어원 API 테스트 완료 =====');
   }
 
   // 기존 단어 검색 메서드 (하위 호환성 유지)
