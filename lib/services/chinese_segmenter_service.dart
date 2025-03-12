@@ -25,11 +25,9 @@ class ChineseSegmenterService {
 
   Future<void> initialize() async {
     if (!_isInitialized) {
+      debugPrint('ChineseSegmenterService 초기화 시작...');
       await _dictionaryService.loadDictionary();
-      // DictionaryService에 loadDictionary 메서드가 없는 경우 주석 처리
-      // if (_fallbackDictionaryService != null) {
-      //   await _fallbackDictionaryService.loadDictionary();
-      // }
+      debugPrint('ChineseSegmenterService 초기화 완료: 사전 로드됨');
       _isInitialized = true;
     }
   }
@@ -139,8 +137,17 @@ class ChineseSegmenterService {
   }
 
   bool isWordInDictionary(String word) {
+    // 사전이 초기화되지 않았으면 초기화
+    if (!_isInitialized) {
+      debugPrint('사전 확인 전 초기화 필요');
+      // 비동기 함수를 동기적으로 호출할 수 없으므로, 초기화되지 않은 상태에서는 false 반환
+      return false;
+    }
+
     // lookup 메서드로 변경
-    return _dictionaryService.lookup(word) != null;
+    final result = _dictionaryService.lookup(word) != null;
+    debugPrint('단어 "$word" 사전 확인 결과: ${result ? "있음" : "없음"}');
+    return result;
   }
 
   // 유저가 선택한 단어 처리 메서드 추가
