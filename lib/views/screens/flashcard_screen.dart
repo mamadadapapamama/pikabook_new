@@ -6,7 +6,7 @@ import '../../models/flash_card.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
-import '../../services/dictionary_service.dart';
+import '../../services/dictionary_service.dart' hide DictionaryEntry;
 import '../../services/chinese_dictionary_service.dart';
 
 class FlashCardScreen extends StatefulWidget {
@@ -226,6 +226,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     await dictionaryService.loadDictionary();
   }
 
+  // 중국어 사전에서 단어 정보 가져오기 (중복 코드 제거를 위한 메서드 추출)
+  DictionaryEntry? _getDictionaryEntry(String word) {
+    final dictionaryService = ChineseDictionaryService();
+    return dictionaryService.lookup(word);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -301,13 +307,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   Widget _buildFlashCardContent() {
     final currentCard = _flashCards[_currentIndex];
 
-    // 중국어 사전에서 단어 정보 가져오기
-    final dictionaryService = ChineseDictionaryService();
-    final entry = dictionaryService.lookup(currentCard.front);
-
-    // 발음 정보 (사전에 있으면 사전의 발음, 없으면 카드의 발음)
-    final pinyin = entry?.pinyin ?? currentCard.pinyin;
-
     return Column(
       children: [
         Expanded(
@@ -344,8 +343,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
   Widget _buildCardFront(FlashCard card) {
     // 중국어 사전에서 단어 정보 가져오기
-    final dictionaryService = ChineseDictionaryService();
-    final entry = dictionaryService.lookup(card.front);
+    final entry = _getDictionaryEntry(card.front);
 
     // 발음 정보 (사전에 있으면 사전의 발음, 없으면 카드의 발음)
     final pinyin = entry?.pinyin ?? card.pinyin;
@@ -577,8 +575,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
   Widget _buildCardBack(FlashCard card) {
     // 중국어 사전에서 단어 정보 가져오기
-    final dictionaryService = ChineseDictionaryService();
-    final entry = dictionaryService.lookup(card.front);
+    final entry = _getDictionaryEntry(card.front);
 
     // 의미 정보 (사전에 있으면 사전의 의미, 없으면 카드의 의미)
     final meaning = entry?.meaning ?? card.back;

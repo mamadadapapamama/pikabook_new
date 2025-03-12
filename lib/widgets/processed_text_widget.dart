@@ -91,8 +91,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   /// 플래시카드에 추가된 단어 추출
   void _extractFlashcardWords() {
     final Set<String> newFlashcardWords = {};
+    debugPrint('_extractFlashcardWords 호출됨');
+    debugPrint('widget.flashCards: ${widget.flashCards}');
+    debugPrint('widget.flashCards 길이: ${widget.flashCards?.length ?? 0}');
+
     if (widget.flashCards != null && widget.flashCards!.isNotEmpty) {
       for (final card in widget.flashCards!) {
+        debugPrint('플래시카드 확인: front=${card.front}, back=${card.back}');
         if (card.front.isNotEmpty) {
           newFlashcardWords.add(card.front);
           // 디버그 로그 추가
@@ -101,18 +106,30 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       }
     }
 
+    debugPrint('추출된 플래시카드 단어 수: ${newFlashcardWords.length}');
+    if (newFlashcardWords.isNotEmpty) {
+      debugPrint('추출된 플래시카드 단어 목록: ${newFlashcardWords.join(", ")}');
+    }
+
     // 변경 사항이 있는 경우에만 상태 업데이트
     if (_flashcardWords.length != newFlashcardWords.length ||
         !_flashcardWords.containsAll(newFlashcardWords)) {
+      debugPrint(
+          '플래시카드 단어 목록 업데이트: ${_flashcardWords.length} -> ${newFlashcardWords.length}');
       setState(() {
         _flashcardWords = newFlashcardWords;
       });
+    } else {
+      debugPrint('플래시카드 단어 목록 변경 없음');
     }
   }
 
   /// 텍스트에서 플래시카드 단어 하이라이트 표시
   Widget _buildHighlightedText(String text,
       {double fontSize = 16, double height = 1.5}) {
+    // 하이라이트 로직은 유지하되, 컨텍스트 메뉴 처리 방식 변경
+
+    // 하이라이트가 없는 경우 (플래시카드 단어가 없는 경우)
     if (_flashcardWords.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
@@ -131,40 +148,86 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
               // 디버그 로그 추가
               debugPrint('선택된 텍스트: "$_selectedText"');
-              debugPrint(
-                  '중국어 문자 포함 여부: ${ContextMenuHelper.containsChineseCharacters(_selectedText)}');
+              debugPrint('중국어 문자 감지 검사: "$_selectedText"');
+              final containsChinese =
+                  ContextMenuHelper.containsChineseCharacters(_selectedText);
+              debugPrint('중국어 문자 감지 결과: $containsChinese');
+              debugPrint('중국어 문자 포함 여부: $containsChinese');
             }
           },
+          // 컨텍스트 메뉴 빌더 - 항상 커스텀 메뉴 표시
           contextMenuBuilder: (context, editableTextState) {
-            // 선택된 텍스트가 없으면 기본 메뉴 표시
-            if (_selectedText.isEmpty) {
-              debugPrint('컨텍스트 메뉴: 선택된 텍스트 없음');
-              return AdaptiveTextSelectionToolbar.editableText(
-                editableTextState: editableTextState,
-              );
+            final String selectedText = editableTextState
+                .textEditingValue.selection
+                .textInside(editableTextState.textEditingValue.text);
+
+            debugPrint('contextMenuBuilder 호출됨: 선택된 텍스트 = "$selectedText"');
+            debugPrint('_flashcardWords 크기: ${_flashcardWords.length}');
+            if (_flashcardWords.isNotEmpty) {
+              debugPrint('_flashcardWords 내용: ${_flashcardWords.join(", ")}');
             }
 
-            // 중국어 문자가 포함되어 있는지 확인
-            bool containsChinese =
-                ContextMenuHelper.containsChineseCharacters(_selectedText);
-            debugPrint('컨텍스트 메뉴: 중국어 포함 = $containsChinese');
-
-            // 중국어가 아니면 기본 메뉴 표시
-            if (!containsChinese) {
-              debugPrint('컨텍스트 메뉴: 중국어 아님, 기본 메뉴 표시');
+            // 선택된 텍스트가 없으면 기본 메뉴 표시
+            if (selectedText.isEmpty) {
+              debugPrint('선택된 텍스트가 없음 -> 기본 메뉴 표시');
               return AdaptiveTextSelectionToolbar.editableText(
                 editableTextState: editableTextState,
               );
             }
 
             // 이미 플래시카드에 추가된 단어인지 확인
-            bool isAlreadyInFlashcard = _flashcardWords.contains(_selectedText);
-            debugPrint('컨텍스트 메뉴: 이미 플래시카드에 추가된 단어 = $isAlreadyInFlashcard');
-            debugPrint('현재 플래시카드 단어 수: ${_flashcardWords.length}');
+            bool isAlreadyInFlashcard = _flashcardWords.contains(selectedText);
 
-            // 항상 커스텀 메뉴 표시 (플래시카드 추가 여부와 관계없이)
-            debugPrint('컨텍스트 메뉴: 커스텀 메뉴 표시');
-            return _buildCustomContextMenu(context, editableTextState);
+            debugPrint('이미 플래시카드에 추가된 단어: $isAlreadyInFlashcard');
+            debugPrint(
+                '_flashcardWords에 "$selectedText" 포함 여부: ${_flashcardWords.contains(selectedText)}');
+
+            // 플래시카드에 이미 추가된 단어인 경우, 해당 단어의 뜻을 바로 표시하고 컨텍스트 메뉴는 표시하지 않음
+            if (isAlreadyInFlashcard) {
+              debugPrint('플래시카드에 이미 추가된 단어 -> 사전 검색 실행');
+              // 단어 상세 정보를 바로 표시
+              if (widget.onDictionaryLookup != null) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  widget.onDictionaryLookup!(selectedText);
+                });
+              }
+              return const SizedBox.shrink();
+            }
+
+            // 중국어 문자가 포함된 경우에만 커스텀 메뉴 표시
+            bool containsChinese =
+                ContextMenuHelper.containsChineseCharacters(selectedText);
+
+            debugPrint('중국어 문자 포함 여부: $containsChinese');
+
+            if (!containsChinese) {
+              debugPrint('중국어 문자가 포함되지 않음 -> 기본 메뉴 표시');
+              // 중국어가 아닌 경우 기본 메뉴 표시
+              return AdaptiveTextSelectionToolbar.editableText(
+                editableTextState: editableTextState,
+              );
+            }
+
+            debugPrint('커스텀 컨텍스트 메뉴 표시');
+            return ContextMenuHelper.buildCustomContextMenu(
+              context: context,
+              editableTextState: editableTextState,
+              selectedText: selectedText,
+              flashcardWords: _flashcardWords,
+              onLookupDictionary: () {
+                if (widget.onDictionaryLookup != null) {
+                  widget.onDictionaryLookup!(selectedText);
+                }
+              },
+              onAddToFlashcard: () {
+                if (widget.onCreateFlashCard != null) {
+                  widget.onCreateFlashCard!(selectedText, '', pinyin: null);
+                  setState(() {
+                    _flashcardWords.add(selectedText);
+                  });
+                }
+              },
+            );
           },
           enableInteractiveSelection: true,
           selectionControls: MaterialTextSelectionControls(),
@@ -268,40 +331,70 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
             // 디버그 로그 추가
             debugPrint('선택된 텍스트 (하이라이트): "$_selectedText"');
-            debugPrint(
-                '중국어 문자 포함 여부: ${ContextMenuHelper.containsChineseCharacters(_selectedText)}');
+            debugPrint('중국어 문자 감지 검사: "$_selectedText"');
+            final containsChinese =
+                ContextMenuHelper.containsChineseCharacters(_selectedText);
+            debugPrint('중국어 문자 감지 결과: $containsChinese');
+            debugPrint('중국어 문자 포함 여부: $containsChinese');
           }
         },
+        // 컨텍스트 메뉴 빌더 - 항상 커스텀 메뉴 표시
         contextMenuBuilder: (context, editableTextState) {
+          final String selectedText = editableTextState
+              .textEditingValue.selection
+              .textInside(editableTextState.textEditingValue.text);
+
           // 선택된 텍스트가 없으면 기본 메뉴 표시
-          if (_selectedText.isEmpty) {
-            debugPrint('컨텍스트 메뉴: 선택된 텍스트 없음');
-            return AdaptiveTextSelectionToolbar.editableText(
-              editableTextState: editableTextState,
-            );
-          }
-
-          // 중국어 문자가 포함되어 있는지 확인
-          bool containsChinese =
-              ContextMenuHelper.containsChineseCharacters(_selectedText);
-          debugPrint('컨텍스트 메뉴: 중국어 포함 = $containsChinese');
-
-          // 중국어가 아니면 기본 메뉴 표시
-          if (!containsChinese) {
-            debugPrint('컨텍스트 메뉴: 중국어 아님, 기본 메뉴 표시');
+          if (selectedText.isEmpty) {
             return AdaptiveTextSelectionToolbar.editableText(
               editableTextState: editableTextState,
             );
           }
 
           // 이미 플래시카드에 추가된 단어인지 확인
-          bool isAlreadyInFlashcard = _flashcardWords.contains(_selectedText);
-          debugPrint('컨텍스트 메뉴: 이미 플래시카드에 추가된 단어 = $isAlreadyInFlashcard');
-          debugPrint('현재 플래시카드 단어 수: ${_flashcardWords.length}');
+          bool isAlreadyInFlashcard = _flashcardWords.contains(selectedText);
 
-          // 항상 커스텀 메뉴 표시 (플래시카드 추가 여부와 관계없이)
-          debugPrint('컨텍스트 메뉴: 커스텀 메뉴 표시');
-          return _buildCustomContextMenu(context, editableTextState);
+          // 플래시카드에 이미 추가된 단어인 경우, 해당 단어의 뜻을 바로 표시하고 컨텍스트 메뉴는 표시하지 않음
+          if (isAlreadyInFlashcard) {
+            // 단어 상세 정보를 바로 표시
+            if (widget.onDictionaryLookup != null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                widget.onDictionaryLookup!(selectedText);
+              });
+            }
+            return const SizedBox.shrink();
+          }
+
+          // 중국어 문자가 포함된 경우에만 커스텀 메뉴 표시
+          bool containsChinese =
+              ContextMenuHelper.containsChineseCharacters(selectedText);
+
+          if (!containsChinese) {
+            // 중국어가 아닌 경우 기본 메뉴 표시
+            return AdaptiveTextSelectionToolbar.editableText(
+              editableTextState: editableTextState,
+            );
+          }
+
+          return ContextMenuHelper.buildCustomContextMenu(
+            context: context,
+            editableTextState: editableTextState,
+            selectedText: selectedText,
+            flashcardWords: _flashcardWords,
+            onLookupDictionary: () {
+              if (widget.onDictionaryLookup != null) {
+                widget.onDictionaryLookup!(selectedText);
+              }
+            },
+            onAddToFlashcard: () {
+              if (widget.onCreateFlashCard != null) {
+                widget.onCreateFlashCard!(selectedText, '', pinyin: null);
+                setState(() {
+                  _flashcardWords.add(selectedText);
+                });
+              }
+            },
+          );
         },
         enableInteractiveSelection: true,
         selectionControls: MaterialTextSelectionControls(),
@@ -685,6 +778,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                                 debugPrint(
                                     '컨텍스트 메뉴 빌더 (세그먼트): 중국어 포함 = $containsChinese');
 
+                                debugPrint(
+                                    '_flashcardWords 크기: ${_flashcardWords.length}');
+                                if (_flashcardWords.isNotEmpty) {
+                                  debugPrint(
+                                      '_flashcardWords 내용: ${_flashcardWords.join(", ")}');
+                                }
+
                                 // 중국어가 아니면 기본 메뉴 표시
                                 if (!containsChinese) {
                                   return AdaptiveTextSelectionToolbar
@@ -698,10 +798,44 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                                     _flashcardWords.contains(_selectedText);
                                 debugPrint(
                                     '이미 플래시카드에 추가된 단어: $isAlreadyInFlashcard');
+                                debugPrint(
+                                    '_flashcardWords에 "$_selectedText" 포함 여부: ${_flashcardWords.contains(_selectedText)}');
+
+                                // 플래시카드에 이미 추가된 단어인 경우, 해당 단어의 뜻을 바로 표시하고 컨텍스트 메뉴는 표시하지 않음
+                                if (isAlreadyInFlashcard) {
+                                  debugPrint('플래시카드에 이미 추가된 단어 -> 사전 검색 실행');
+                                  // 단어 상세 정보를 바로 표시
+                                  if (widget.onDictionaryLookup != null) {
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                      widget.onDictionaryLookup!(_selectedText);
+                                    });
+                                  }
+                                  return const SizedBox.shrink();
+                                }
 
                                 // 항상 커스텀 메뉴 표시
-                                return _buildCustomContextMenu(
-                                    context, editableTextState);
+                                return ContextMenuHelper.buildCustomContextMenu(
+                                  context: context,
+                                  editableTextState: editableTextState,
+                                  selectedText: _selectedText,
+                                  flashcardWords: _flashcardWords,
+                                  onLookupDictionary: () {
+                                    if (widget.onDictionaryLookup != null) {
+                                      widget.onDictionaryLookup!(_selectedText);
+                                    }
+                                  },
+                                  onAddToFlashcard: () {
+                                    if (widget.onCreateFlashCard != null) {
+                                      widget.onCreateFlashCard!(
+                                          _selectedText, '',
+                                          pinyin: null);
+                                      setState(() {
+                                        _flashcardWords.add(_selectedText);
+                                      });
+                                    }
+                                  },
+                                );
                               },
                               enableInteractiveSelection: true,
                               showCursor: true,
@@ -803,7 +937,26 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                     debugPrint('이미 플래시카드에 추가된 단어: $isAlreadyInFlashcard');
 
                     // 항상 커스텀 메뉴 표시
-                    return _buildCustomContextMenu(context, editableTextState);
+                    return ContextMenuHelper.buildCustomContextMenu(
+                      context: context,
+                      editableTextState: editableTextState,
+                      selectedText: _selectedText,
+                      flashcardWords: _flashcardWords,
+                      onLookupDictionary: () {
+                        if (widget.onDictionaryLookup != null) {
+                          widget.onDictionaryLookup!(_selectedText);
+                        }
+                      },
+                      onAddToFlashcard: () {
+                        if (widget.onCreateFlashCard != null) {
+                          widget.onCreateFlashCard!(_selectedText, '',
+                              pinyin: null);
+                          setState(() {
+                            _flashcardWords.add(_selectedText);
+                          });
+                        }
+                      },
+                    );
                   },
                   enableInteractiveSelection: true,
                   showCursor: true,
@@ -824,138 +977,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             ),
           ),
       ],
-    );
-  }
-
-  /// 커스텀 컨텍스트 메뉴 생성
-  Widget _buildCustomContextMenu(
-      BuildContext context, EditableTextState editableTextState) {
-    // 디버그 로그 추가
-    debugPrint('커스텀 컨텍스트 메뉴 빌더 호출: 선택된 텍스트 = "$_selectedText"');
-
-    // 선택된 텍스트가 이미 플래시카드에 있는지 확인
-    // 매번 최신 상태를 확인하기 위해 widget.flashCards에서 직접 확인
-    bool isAlreadyInFlashcard = false;
-    if (widget.flashCards != null) {
-      for (final card in widget.flashCards!) {
-        if (card.front == _selectedText) {
-          isAlreadyInFlashcard = true;
-          break;
-        }
-      }
-    }
-
-    // 로컬 변수와 비교
-    bool isInLocalFlashcards = _flashcardWords.contains(_selectedText);
-
-    debugPrint(
-        '커스텀 메뉴: 플래시카드 확인 결과 - widget: $isAlreadyInFlashcard, 로컬: $isInLocalFlashcards');
-
-    // 두 결과가 다르면 로컬 상태 업데이트
-    if (isAlreadyInFlashcard != isInLocalFlashcards) {
-      debugPrint('커스텀 메뉴: 플래시카드 상태 불일치 감지, 업데이트 필요');
-      // 다음 프레임에서 상태 업데이트
-      Future.microtask(() {
-        if (mounted) {
-          setState(() {
-            if (isAlreadyInFlashcard &&
-                !_flashcardWords.contains(_selectedText)) {
-              _flashcardWords.add(_selectedText);
-            }
-          });
-        }
-      });
-    }
-
-    // 커스텀 메뉴 항목 생성
-    final List<ContextMenuButtonItem> buttonItems = [];
-
-    // 복사 버튼
-    buttonItems.add(
-      ContextMenuButtonItem(
-        onPressed: () {
-          editableTextState.copySelection(SelectionChangedCause.toolbar);
-          editableTextState.hideToolbar();
-        },
-        label: '복사',
-      ),
-    );
-
-    // 전체 선택 버튼
-    buttonItems.add(
-      ContextMenuButtonItem(
-        onPressed: () {
-          editableTextState.selectAll(SelectionChangedCause.toolbar);
-        },
-        label: '전체 선택',
-      ),
-    );
-
-    // 사전 검색 버튼
-    if (widget.onDictionaryLookup != null) {
-      buttonItems.add(
-        ContextMenuButtonItem(
-          onPressed: () {
-            editableTextState.hideToolbar();
-            widget.onDictionaryLookup!(_selectedText);
-          },
-          label: '사전 검색',
-        ),
-      );
-    }
-
-    // 플래시카드 추가 버튼 (이미 추가된 경우에는 표시하지 않음)
-    if (widget.onCreateFlashCard != null && !isAlreadyInFlashcard) {
-      buttonItems.add(
-        ContextMenuButtonItem(
-          onPressed: () {
-            editableTextState.hideToolbar();
-
-            // 플래시카드 추가 기능 호출
-            // 원문에서 선택한 경우, 해당 세그먼트의 번역 찾기
-            String meaning = '';
-            String? pinyin;
-
-            if (widget.processedText.segments != null) {
-              for (final segment in widget.processedText.segments!) {
-                if (segment.originalText.contains(_selectedText)) {
-                  meaning = segment.translatedText ?? '';
-                  pinyin = segment.pinyin;
-                  break;
-                }
-              }
-            }
-
-            // 의미가 없으면 빈 문자열로 설정
-            if (meaning.isEmpty) {
-              meaning = '직접 의미 입력 필요';
-            }
-
-            widget.onCreateFlashCard!(_selectedText, meaning, pinyin: pinyin);
-
-            // 플래시카드 단어 목록에 추가하여 하이라이트 표시
-            if (!_flashcardWords.contains(_selectedText)) {
-              setState(() {
-                _flashcardWords.add(_selectedText);
-              });
-            }
-
-            // 추가 완료 메시지 표시
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('플래시카드에 추가되었습니다'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
-          label: '플래시카드 추가',
-        ),
-      );
-    }
-
-    return AdaptiveTextSelectionToolbar.buttonItems(
-      anchors: editableTextState.contextMenuAnchors,
-      buttonItems: buttonItems,
     );
   }
 }
