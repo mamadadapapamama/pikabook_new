@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'chinese_dictionary_service.dart';
 import 'dictionary_service.dart';
+import 'package:pinyin/pinyin.dart';
 
 class ChineseSegmenterService {
   static final ChineseSegmenterService _instance =
@@ -174,17 +175,38 @@ class ChineseSegmenterService {
         return SegmentedWord(
           text: word,
           meaning: fallbackEntry.meaning,
-          pinyin: fallbackEntry.pinyin,
-          source: 'external',
+          pinyin: fallbackEntry.pinyin.isEmpty
+              ? await _generatePinyin(word)
+              : fallbackEntry.pinyin,
+          source: fallbackEntry.source ?? 'external',
         );
       } else {
         // 3. 사전에 없는 경우 - 외부 사전 서비스 필요
+        // 핀인 생성 시도
+        String pinyin = '';
+        try {
+          pinyin = await _generatePinyin(word);
+        } catch (e) {
+          debugPrint('핀인 생성 중 오류 발생: $e');
+        }
+
         return SegmentedWord(
           text: word,
           meaning: '사전에 없는 단어',
-          pinyin: '',
+          pinyin: pinyin,
         );
       }
+    }
+  }
+
+  // 핀인 생성 메서드
+  Future<String> _generatePinyin(String text) async {
+    try {
+      // pinyin 패키지 사용
+      return PinyinHelper.getPinyin(text, separator: ' ');
+    } catch (e) {
+      debugPrint('핀인 생성 중 오류 발생: $e');
+      return '';
     }
   }
 }

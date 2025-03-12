@@ -88,15 +88,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   Widget _buildHighlightedText(String text,
       {double fontSize = 16, double height = 1.5}) {
     if (_flashcardWords.isEmpty) {
-      return GestureDetector(
-        onLongPress: () {
-          // 현재 선택된 텍스트가 있으면 컨텍스트 메뉴 표시
-          if (_selectedText.isNotEmpty) {
-            // _buildCustomContextMenu는 직접 호출할 수 없음
-            // 대신 _handleWordSelection을 호출하여 단어 정보 표시
-            _handleWordSelection(_selectedText);
-          }
-        },
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
         child: SelectableText(
           text,
           style: TextStyle(fontSize: fontSize, height: height),
@@ -110,6 +103,18 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 _selectionOffset = selection;
               });
             }
+          },
+          contextMenuBuilder: (context, editableTextState) {
+            // 선택된 텍스트가 없거나 중국어가 아니면 기본 메뉴 표시
+            if (_selectedText.isEmpty ||
+                !ContextMenuHelper.containsChineseCharacters(_selectedText)) {
+              return AdaptiveTextSelectionToolbar.editableText(
+                editableTextState: editableTextState,
+              );
+            }
+
+            // 커스텀 메뉴 항목 생성
+            return _buildCustomContextMenu(context, editableTextState);
           },
           enableInteractiveSelection: true,
           selectionControls: MaterialTextSelectionControls(),
@@ -129,6 +134,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     // 텍스트 전체 길이
     final int textLength = text.length;
 
+    // 이미 처리된 위치를 추적하기 위한 집합
+    final Set<int> processedPositions = {};
+
     // 플래시카드 단어 검색 및 하이라이트 처리
     while (currentPosition < textLength) {
       int nextHighlightPos = textLength;
@@ -137,7 +145,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       // 가장 가까운 플래시카드 단어 찾기
       for (final word in _flashcardWords) {
         final int pos = text.indexOf(word, currentPosition);
-        if (pos != -1 && pos < nextHighlightPos) {
+        if (pos != -1 &&
+            pos < nextHighlightPos &&
+            !processedPositions.contains(pos)) {
           nextHighlightPos = pos;
           wordToHighlight = word;
         }
@@ -169,15 +179,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             height: height,
             backgroundColor: Colors.yellow.shade200,
             fontWeight: FontWeight.bold,
-            decoration: TextDecoration.underline,
-            decorationColor: Colors.blue.withOpacity(0.5),
-            decorationThickness: 1.0,
           ),
           recognizer: TapGestureRecognizer()
             ..onTap = () {
               _handleWordSelection(wordToHighlight!);
             },
         ));
+        // 처리된 위치 추가
+        processedPositions.add(nextHighlightPos);
         currentPosition = nextHighlightPos + wordToHighlight.length;
       } else {
         // 더 이상 하이라이트할 단어가 없으면 종료
@@ -276,127 +285,254 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   // 단어 정보 표시 다이얼로그
   void _showWordDetails(SegmentedWord word) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(word.text,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (word.pinyin.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Text(
-                    '발음: ${word.pinyin}',
-                    style: const TextStyle(
-                        fontSize: 16, fontStyle: FontStyle.italic),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 단어 헤더
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: Text(
-                  '의미: ${word.meaning}',
-                  style: const TextStyle(fontSize: 16),
+                const SizedBox(height: 16),
+
+                // 단어 제목
+                Text(
+                  word.text,
+                  style: const TextStyle(
+                      fontSize: 28, fontWeight: FontWeight.bold),
                 ),
-              ),
-              if (word.source != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Text(
-                    '출처: ${word.source}',
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                ),
-              if (word.meaning == '사전에 없는 단어' ||
-                  word.meaning.isEmpty ||
-                  word.source == 'external')
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Divider(),
-                    const Text('외부 사전 검색:',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
+
+                const SizedBox(height: 16),
+
+                // 발음 정보
+                if (word.pinyin.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: Row(
                       children: [
-                        ElevatedButton(
-                          onPressed: () => _openExternalDictionary(
-                              word.text, ExternalDictType.google),
-                          child: const Text('Google'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => _openExternalDictionary(
-                              word.text, ExternalDictType.naver),
-                          child: const Text('Naver'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => _openExternalDictionary(
-                              word.text, ExternalDictType.baidu),
-                          child: const Text('Baidu'),
+                        const Icon(Icons.record_voice_over, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        Text(
+                          '발음: ${word.pinyin}',
+                          style: const TextStyle(
+                              fontSize: 18, fontStyle: FontStyle.italic),
                         ),
                       ],
                     ),
+                  ),
 
-                    // Papago API 테스트 버튼 추가 (디버그 모드에서만 표시)
-                    if (kDebugMode)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('API 테스트:',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue)),
-                            const SizedBox(height: 8),
-                            ElevatedButton(
-                              onPressed: () {
-                                // Papago API 테스트 실행
-                                final dictionaryService = DictionaryService();
-                                dictionaryService.testPapagoApi(word.text);
-
-                                // 테스트 실행 알림
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'Papago API 테스트가 실행되었습니다. 콘솔 로그를 확인하세요.'),
-                                    duration: Duration(seconds: 3),
-                                  ),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue[700],
-                              ),
-                              child: const Text('Papago API 테스트'),
-                            ),
-                          ],
+                // 의미 정보
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.translate, color: Colors.green),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '의미: ${word.meaning}',
+                          style: const TextStyle(fontSize: 18),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+
+                // 출처 정보
+                if (word.source != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.source, color: Colors.grey),
+                        const SizedBox(width: 8),
+                        Text(
+                          '출처: ${word.source}',
+                          style:
+                              const TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                const Divider(height: 24),
+
+                // 외부 사전 검색 섹션
+                if (word.meaning == '사전에 없는 단어' ||
+                    word.meaning.isEmpty ||
+                    word.source == 'external')
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '외부 사전 검색:',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildExternalDictButton(word.text,
+                              ExternalDictType.google, 'Google', Colors.blue),
+                          _buildExternalDictButton(word.text,
+                              ExternalDictType.naver, 'Naver', Colors.green),
+                          _buildExternalDictButton(word.text,
+                              ExternalDictType.baidu, 'Baidu', Colors.red),
+                        ],
+                      ),
+                    ],
+                  ),
+
+                // 디버그 모드 API 테스트 버튼
+                if (kDebugMode)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Divider(),
+                        const Text('API 테스트:',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue)),
+                        const SizedBox(height: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            // Papago API 테스트 실행
+                            final dictionaryService = DictionaryService();
+                            dictionaryService.testPapagoApi(word.text);
+
+                            // 테스트 실행 알림
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Papago API 테스트가 실행되었습니다. 콘솔 로그를 확인하세요.'),
+                                duration: Duration(seconds: 3),
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue[700],
+                          ),
+                          child: const Text('Papago API 테스트'),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                const SizedBox(height: 24),
+
+                // 하단 버튼
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text('닫기'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          _addToFlashcard(word.text, word.meaning, word.pinyin);
+                          Navigator.of(context).pop();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          backgroundColor: Colors.blue,
+                        ),
+                        child: const Text('플래시카드에 추가'),
+                      ),
+                    ),
                   ],
                 ),
-            ],
+              ],
+            ),
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('닫기'),
-          ),
-          TextButton(
-            onPressed: () {
-              // 플래시카드에 추가하는 기능 (이미 구현되어 있다면 호출)
-              _addToFlashcard(word.text, word.meaning, word.pinyin);
-              Navigator.of(context).pop();
-            },
-            child: const Text('플래시카드에 추가'),
-          ),
-        ],
       ),
     );
+  }
+
+  // 외부 사전 버튼 위젯
+  Widget _buildExternalDictButton(
+      String word, ExternalDictType type, String label, Color color) {
+    return ElevatedButton(
+      onPressed: () => _searchExternalDictionary(word, type),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+      child: Text(label),
+    );
+  }
+
+  // 외부 사전 검색 및 결과 표시
+  Future<void> _searchExternalDictionary(
+      String word, ExternalDictType type) async {
+    // 로딩 표시
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('외부 사전에서 검색 중...'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    // 외부 사전 검색
+    final dictionaryService = DictionaryService();
+    final result = await dictionaryService.searchExternalDictionary(word, type);
+
+    // 검색 결과가 있으면 표시
+    if (result != null && context.mounted) {
+      Navigator.of(context).pop(); // 현재 바텀시트 닫기
+      _showWordDetails(SegmentedWord(
+        text: result.word,
+        pinyin: result.pinyin,
+        meaning: result.meaning,
+        source: result.source,
+      ));
+    } else if (context.mounted) {
+      // 검색 실패 시 메시지 표시
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('외부 사전 검색에 실패했습니다.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // 외부 브라우저로 열기
+      _openExternalDictionary(word, type);
+    }
   }
 
   // 외부 사전 열기
@@ -522,41 +658,45 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 fontSize: 18,
                 height: 1.5,
               )
-            : SelectableText(
-                widget.processedText.fullOriginalText,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.normal,
-                  height: 1.5,
-                ),
-                onSelectionChanged: (selection, cause) {
-                  if (selection.baseOffset != selection.extentOffset) {
-                    final selectedText = widget.processedText.fullOriginalText
-                        .substring(
-                            selection.baseOffset, selection.extentOffset);
-                    setState(() {
-                      _selectedText = selectedText;
-                      _selectionOffset = selection;
-                    });
-                  }
-                },
-                contextMenuBuilder: (context, editableTextState) {
-                  // 선택된 텍스트가 없거나 중국어가 아니면 기본 메뉴 표시
-                  if (_selectedText.isEmpty ||
-                      !ContextMenuHelper.containsChineseCharacters(
-                          _selectedText)) {
-                    return AdaptiveTextSelectionToolbar.editableText(
-                      editableTextState: editableTextState,
-                    );
-                  }
+            : Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                child: SelectableText(
+                  widget.processedText.fullOriginalText,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.normal,
+                    height: 1.5,
+                  ),
+                  onSelectionChanged: (selection, cause) {
+                    if (selection.baseOffset != selection.extentOffset) {
+                      final selectedText = widget.processedText.fullOriginalText
+                          .substring(
+                              selection.baseOffset, selection.extentOffset);
+                      setState(() {
+                        _selectedText = selectedText;
+                        _selectionOffset = selection;
+                      });
+                    }
+                  },
+                  contextMenuBuilder: (context, editableTextState) {
+                    // 선택된 텍스트가 없거나 중국어가 아니면 기본 메뉴 표시
+                    if (_selectedText.isEmpty ||
+                        !ContextMenuHelper.containsChineseCharacters(
+                            _selectedText)) {
+                      return AdaptiveTextSelectionToolbar.editableText(
+                        editableTextState: editableTextState,
+                      );
+                    }
 
-                  // 커스텀 메뉴 항목 생성
-                  return _buildCustomContextMenu(context, editableTextState);
-                },
-                enableInteractiveSelection: true,
-                showCursor: true,
-                cursorWidth: 2.0,
-                cursorColor: Colors.blue,
+                    // 커스텀 메뉴 항목 생성
+                    return _buildCustomContextMenu(context, editableTextState);
+                  },
+                  enableInteractiveSelection: true,
+                  showCursor: true,
+                  cursorWidth: 2.0,
+                  cursorColor: Colors.blue,
+                ),
               ),
         const SizedBox(height: 16),
         // 번역 텍스트
