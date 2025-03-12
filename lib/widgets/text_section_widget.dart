@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/tts_service.dart';
+import '../utils/context_menu_helper.dart';
 
 class TextSectionWidget extends StatelessWidget {
   final String title;
@@ -44,38 +45,132 @@ class TextSectionWidget extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: isOriginal
-                  ? GestureDetector(
-                      onLongPress: () {
-                        // 전체 텍스트 선택 시 메뉴 표시
-                        _showCustomMenu(context, text, ttsService);
-                      },
-                      child: SelectableText(
-                        text,
-                        style: TextStyle(
-                          fontSize: isOriginal ? 18 : 16, // 원문은 더 큰 글자 크기
-                          height: 1.8, // 줄 간격 증가
-                          letterSpacing: isOriginal ? 0.5 : 0.2, // 글자 간격 조정
-                        ),
-                        onSelectionChanged: (selection, cause) {
-                          if (selection.baseOffset != selection.extentOffset) {
-                            // 텍스트가 선택되면 커스텀 메뉴 표시
-                            final String selectedText = text.substring(
-                              selection.baseOffset,
-                              selection.extentOffset,
-                            );
-
-                            // 선택 완료 후 메뉴 표시 (약간의 딜레이 추가)
-                            if (cause == SelectionChangedCause.longPress) {
-                              Future.delayed(const Duration(milliseconds: 200),
-                                  () {
-                                _showCustomMenu(
-                                    context, selectedText, ttsService);
-                              });
-                            }
-                          }
-                        },
-                        contextMenuBuilder: null, // 기본 컨텍스트 메뉴 비활성화
+                  ? SelectableText(
+                      text,
+                      style: TextStyle(
+                        fontSize: isOriginal ? 18 : 16, // 원문은 더 큰 글자 크기
+                        height: 1.8, // 줄 간격 증가
+                        letterSpacing: isOriginal ? 0.5 : 0.2, // 글자 간격 조정
                       ),
+                      contextMenuBuilder: (context, editableTextState) {
+                        final String selectedText = editableTextState
+                            .textEditingValue.selection
+                            .textInside(
+                                editableTextState.textEditingValue.text);
+
+                        debugPrint('contextMenuBuilder 호출됨: 선택된 텍스트 = "$selectedText"');
+                        
+                        // 선택된 텍스트가 없으면 기본 메뉴 표시
+                        if (selectedText.isEmpty) {
+                          return AdaptiveTextSelectionToolbar.editableText(
+                            editableTextState: editableTextState,
+                          );
+                        }
+
+                        // 이미 플래시카드에 추가된 단어인지 확인
+                        bool isAlreadyInFlashcard =
+                            flashcardWords?.contains(selectedText) ?? false;
+                        
+                        debugPrint('플래시카드에 포함된 단어: $isAlreadyInFlashcard');
+
+                        // 플래시카드에 이미 추가된 단어인 경우, 해당 단어의 뜻을 바로 표시하고 컨텍스트 메뉴는 표시하지 않음
+                        if (isAlreadyInFlashcard) {
+                          // 단어 상세 정보를 바로 표시
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            onDictionaryLookup(selectedText);
+                          });
+                          return const SizedBox.shrink();
+                        }
+
+                        // 중국어 문자가 포함된 경우에만 사전 검색 및 플래시카드 추가 메뉴 항목 표시
+                        bool containsChinese = ContextMenuHelper.containsChineseCharacters(selectedText);
+                        
+                        if (!containsChinese) {
+                          // 중국어가 아닌 경우 기본 메뉴 표시
+                          return AdaptiveTextSelectionToolbar.editableText(
+                            editableTextState: editableTextState,
+                          );
+                        }
+
+                        // 커스텀 메뉴 항목 생성
+                        final List<ContextMenuButtonItem> buttonItems = [];
+
+                        // 복사 버튼 추가
+                        buttonItems.add(
+                          ContextMenuButtonItem(
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: selectedText));
+                              editableTextState.hideToolbar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('복사되었습니다')),
+                              );
+                            },
+                            label: '복사',
+                          ),
+                        );
+
+                        // 전체 선택 버튼 추가
+                        buttonItems.add(
+                          ContextMenuButtonItem(
+                            onPressed: () {
+                              editableTextState.selectAll(SelectionChangedCause.toolbar);
+                            },
+                            label: '전체 선택',
+                          ),
+                        );
+
+                        // 사전 검색 버튼 추가
+                        buttonItems.add(
+                          ContextMenuButtonItem(
+                            onPressed: () {
+                              editableTextState.hideToolbar();
+                              onDictionaryLookup(selectedText);
+                            },
+                            label: '사전 검색',
+                          ),
+                        );
+
+                        // 플래시카드 추가 버튼 생성 (이미 추가된 경우에는 표시하지 않음)
+                        if (!isAlreadyInFlashcard) {
+                          buttonItems.add(
+                            ContextMenuButtonItem(
+                              onPressed: () {
+                                editableTextState.hideToolbar();
+                                onCreateFlashCard(selectedText, translatedText);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('플래시카드가 추가되었습니다.'),
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                              label: '플래시카드 추가',
+                            ),
+                          );
+                        }
+
+                        // 읽기 버튼 추가
+                        buttonItems.add(
+                          ContextMenuButtonItem(
+                            onPressed: () {
+                              editableTextState.hideToolbar();
+                              ttsService.setLanguage('zh-CN');
+                              ttsService.speak(selectedText);
+                            },
+                            label: '읽기',
+                          ),
+                        );
+
+                        return AdaptiveTextSelectionToolbar.buttonItems(
+                          anchors: editableTextState.contextMenuAnchors,
+                          buttonItems: buttonItems,
+                        );
+                      },
+                      enableInteractiveSelection: true,
+                      selectionControls: MaterialTextSelectionControls(),
+                      showCursor: true,
+                      cursorWidth: 2.0,
+                      cursorColor: Colors.blue,
                     )
                   : Text(
                       text,
@@ -89,73 +184,6 @@ class TextSectionWidget extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-
-  /// 커스텀 메뉴 표시
-  void _showCustomMenu(
-      BuildContext context, String selectedText, TtsService ttsService) {
-    if (selectedText.isEmpty) return;
-
-    // 이미 플래시카드에 추가된 단어인지 확인
-    final bool isAlreadyInFlashcard =
-        flashcardWords != null && flashcardWords!.contains(selectedText);
-
-    final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
-    final RelativeRect position = RelativeRect.fromRect(
-      Rect.fromPoints(
-        button.localToGlobal(Offset.zero, ancestor: overlay),
-        button.localToGlobal(button.size.bottomRight(Offset.zero),
-            ancestor: overlay),
-      ),
-      Offset.zero & overlay.size,
-    );
-
-    showMenu(
-      context: context,
-      position: position,
-      items: [
-        PopupMenuItem(
-          child: const Text('복사'),
-          onTap: () {
-            Clipboard.setData(ClipboardData(text: selectedText));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('텍스트가 복사되었습니다')),
-            );
-          },
-        ),
-        PopupMenuItem(
-          child: const Text('읽기'),
-          onTap: () async {
-            await ttsService.setLanguage('zh-CN');
-            await ttsService.speak(selectedText);
-          },
-        ),
-        PopupMenuItem(
-          child: const Text('사전 검색'),
-          onTap: () {
-            onDictionaryLookup(selectedText);
-          },
-        ),
-        // 이미 플래시카드에 추가된 단어가 아닌 경우에만 플래시카드 추가 메뉴 표시
-        if (!isAlreadyInFlashcard)
-          PopupMenuItem(
-            child: const Text('플래시카드 추가'),
-            onTap: () {
-              onCreateFlashCard(selectedText, translatedText);
-
-              // 추가 완료 메시지 표시
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('플래시카드가 추가되었습니다.'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-          ),
-      ],
     );
   }
 }
