@@ -35,6 +35,31 @@ class DictionaryService {
   String? _papagoClientId;
   String? _papagoClientSecret;
 
+  // 검색 결과 캐시 (메모리 캐시)
+  final Map<String, DictionaryEntry> _searchResultCache = {};
+
+  // 사전 업데이트 콜백 리스트
+  final List<Function()> _dictionaryUpdateListeners = [];
+
+  // 사전 업데이트 리스너 추가
+  void addDictionaryUpdateListener(Function() listener) {
+    if (!_dictionaryUpdateListeners.contains(listener)) {
+      _dictionaryUpdateListeners.add(listener);
+    }
+  }
+
+  // 사전 업데이트 리스너 제거
+  void removeDictionaryUpdateListener(Function() listener) {
+    _dictionaryUpdateListeners.remove(listener);
+  }
+
+  // 사전 업데이트 알림
+  void _notifyDictionaryUpdated() {
+    for (final listener in _dictionaryUpdateListeners) {
+      listener();
+    }
+  }
+
   // API 키 로드 메서드
   Future<void> loadApiKeys() async {
     try {
@@ -164,6 +189,13 @@ class DictionaryService {
         return null;
       }
 
+      // 이미 사전에 있는지 확인 (중복 API 호출 방지)
+      final existingEntry = _dictionary[word];
+      if (existingEntry != null) {
+        debugPrint('이미 사전에 있는 단어 반환: $word');
+        return existingEntry;
+      }
+
       debugPrint('Papago API 번역 시작: "$word"');
 
       // Papago API URL (최신 URL로 변경)
@@ -184,17 +216,21 @@ class DictionaryService {
         'text': word,
       };
 
-      debugPrint('요청 URL: $url');
-      debugPrint('요청 헤더: $headers');
-      debugPrint('요청 바디: $body');
-
       // API 요청 시작 시간 기록
       final startTime = DateTime.now();
-      final response = await http.post(
+
+      // 타임아웃 설정 (5초)
+      final response = await http
+          .post(
         url,
         headers: headers,
         body: body,
-      );
+      )
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        debugPrint('Papago API 요청 타임아웃');
+        return http.Response('{"error":"timeout"}', 408);
+      });
+
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime);
 
@@ -210,9 +246,9 @@ class DictionaryService {
 
         // JSON 응답 파싱
         final Map<String, dynamic> data = json.decode(response.body);
-        debugPrint('응답 데이터 구조: ${data.keys}');
 
         if (data.containsKey('message')) {
+          debugPrint('응답 데이터 구조: ${data.keys}');
           debugPrint('message 구조: ${data['message'].keys}');
 
           if (data['message'].containsKey('result')) {
@@ -227,13 +263,22 @@ class DictionaryService {
             debugPrint('번역 결과: $translatedText');
 
             // 번역 결과를 DictionaryEntry로 변환
-            return DictionaryEntry(
+            final entry = DictionaryEntry(
               word: word,
               pinyin: '', // Papago는 발음 정보를 제공하지 않음
               meaning: translatedText,
               examples: [],
               source: 'papago',
             );
+
+            // 사전에 추가 (메모리 사전에 영구 저장)
+            _dictionary[word] = entry;
+            debugPrint('사전에 단어 추가됨: $word -> $translatedText');
+
+            // 사전 업데이트 알림
+            _notifyDictionaryUpdated();
+
+            return entry;
           } else {
             debugPrint('API 응답에 result 필드가 없습니다.');
             return null;
@@ -343,7 +388,17 @@ class DictionaryService {
   // 기존 단어 검색 메서드 (하위 호환성 유지)
   DictionaryEntry? lookupWord(String word) {
     try {
-      return _dictionary[word];
+      // 사전에서 단어 검색
+      final entry = _dictionary[word];
+
+      // 디버그 로그 추가
+      if (entry != null) {
+        debugPrint('사전에서 단어 찾음: $word -> ${entry.meaning}');
+      } else {
+        debugPrint('사전에서 단어를 찾을 수 없음: $word');
+      }
+
+      return entry;
     } catch (e) {
       debugPrint('단어 검색 중 오류 발생: $e');
       return null;
@@ -413,22 +468,48 @@ class DictionaryService {
   Future<DictionaryEntry?> searchExternalDictionary(
       String word, ExternalDictType type) async {
     try {
+      // 이미 사전에 있는지 확인
+      final existingEntry = _dictionary[word];
+      if (existingEntry != null) {
+        debugPrint('이미 사전에 있는 단어: $word');
+        return existingEntry;
+      }
+
+      // 캐시 키 생성 (단어 + 타입)
+      final cacheKey = '${word}_${type.toString()}';
+
+      // 메모리 캐시 확인 (임시 캐시)
+      final cachedResult = _searchResultCache[cacheKey];
+      if (cachedResult != null) {
+        debugPrint('캐시된 검색 결과 반환: $word');
+        return cachedResult;
+      }
+
       // Papago API 사용 (Google, Naver, Baidu 대신)
       final papagoResult = await _lookupWithPapagoApi(word);
       if (papagoResult != null) {
         // 검색 결과를 사전에 추가
         _addToDictionary(papagoResult);
+
+        // 캐시에 결과 저장
+        _searchResultCache[cacheKey] = papagoResult;
+
         return papagoResult;
       }
 
       // API 검색 실패 시 기본 정보 반환
-      return DictionaryEntry(
+      final fallbackEntry = DictionaryEntry(
         word: word,
         pinyin: '',
         meaning: '외부 사전 검색 결과를 가져올 수 없습니다.',
         examples: [],
         source: type.toString().split('.').last,
       );
+
+      // 캐시에 실패 결과도 저장 (재시도 방지)
+      _searchResultCache[cacheKey] = fallbackEntry;
+
+      return fallbackEntry;
     } catch (e) {
       debugPrint('외부 사전 검색 중 오류 발생: $e');
       return null;
@@ -437,9 +518,21 @@ class DictionaryService {
 
   // 사전에 단어 추가
   void _addToDictionary(DictionaryEntry entry) {
+    bool isNewEntry = false;
     if (!_dictionary.containsKey(entry.word)) {
       _dictionary[entry.word] = entry;
+      isNewEntry = true;
       debugPrint('사전에 단어 추가됨: ${entry.word}');
+    } else if (_dictionary[entry.word]!.meaning != entry.meaning) {
+      // 기존 단어의 의미가 다른 경우 업데이트
+      _dictionary[entry.word] = entry;
+      isNewEntry = true;
+      debugPrint('사전에 단어 업데이트됨: ${entry.word}');
+    }
+
+    // 새 단어가 추가되었거나 업데이트된 경우 리스너에 알림
+    if (isNewEntry) {
+      _notifyDictionaryUpdated();
     }
   }
 

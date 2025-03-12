@@ -13,6 +13,7 @@ class SegmentedTextWidget extends StatefulWidget {
   final List<SegmentedWord> segments;
   final Function(String)? onLookupDictionary;
   final Function(String)? onAddToFlashcard;
+  final Set<String>? flashcardWords; // 플래시카드 단어 목록 추가
 
   const SegmentedTextWidget({
     Key? key,
@@ -20,6 +21,7 @@ class SegmentedTextWidget extends StatefulWidget {
     required this.segments,
     this.onLookupDictionary,
     this.onAddToFlashcard,
+    this.flashcardWords,
   }) : super(key: key);
 
   @override
@@ -28,6 +30,26 @@ class SegmentedTextWidget extends StatefulWidget {
 
 class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
   String _selectedText = '';
+  Set<String> _flashcardWords = {}; // 플래시카드 단어 목록 저장
+
+  @override
+  void initState() {
+    super.initState();
+    _updateFlashcardWords();
+  }
+
+  @override
+  void didUpdateWidget(SegmentedTextWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.flashcardWords != widget.flashcardWords) {
+      _updateFlashcardWords();
+    }
+  }
+
+  // 플래시카드 단어 목록 업데이트
+  void _updateFlashcardWords() {
+    _flashcardWords = widget.flashcardWords?.toSet() ?? {};
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,12 +68,39 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
                 selection.extentOffset,
               );
             });
+
+            // 디버그 로그 추가
+            debugPrint('선택된 텍스트 (세그먼트 비활성화): "$_selectedText"');
+            debugPrint(
+                '중국어 문자 포함 여부: ${ContextMenuHelper.containsChineseCharacters(_selectedText)}');
           }
         },
         contextMenuBuilder: (context, editableTextState) {
-          // 선택된 텍스트가 없거나 중국어가 아니면 기본 메뉴 표시
-          if (_selectedText.isEmpty ||
-              !ContextMenuHelper.containsChineseCharacters(_selectedText)) {
+          // 선택된 텍스트가 없으면 기본 메뉴 표시
+          if (_selectedText.isEmpty) {
+            return AdaptiveTextSelectionToolbar.editableText(
+              editableTextState: editableTextState,
+            );
+          }
+
+          // 중국어 문자가 포함되어 있는지 확인
+          bool containsChinese =
+              ContextMenuHelper.containsChineseCharacters(_selectedText);
+          debugPrint('컨텍스트 메뉴 빌더 (세그먼트 비활성화): 중국어 포함 = $containsChinese');
+
+          // 중국어가 아니면 기본 메뉴 표시
+          if (!containsChinese) {
+            return AdaptiveTextSelectionToolbar.editableText(
+              editableTextState: editableTextState,
+            );
+          }
+
+          // 이미 플래시카드에 추가된 단어인지 확인
+          bool isAlreadyInFlashcard = _flashcardWords.contains(_selectedText);
+          debugPrint('이미 플래시카드에 추가된 단어: $isAlreadyInFlashcard');
+
+          // 이미 플래시카드에 추가된 단어면 기본 메뉴 표시
+          if (isAlreadyInFlashcard) {
             return AdaptiveTextSelectionToolbar.editableText(
               editableTextState: editableTextState,
             );
@@ -84,8 +133,11 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
             debugPrint(
                 '세그먼트 "${segment.text}" 사전 확인: ${isInDictionary ? "있음" : "없음"}');
 
+            // 플래시카드에 이미 추가된 단어인지 확인
+            final bool isInFlashcard = _flashcardWords.contains(segment.text);
+
             // 단어장에 있는 단어는 InkWell로 감싸서 탭하면 바로 뜻이 표시되도록 함
-            if (isInDictionary) {
+            if (isInDictionary || isInFlashcard) {
               return Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -98,9 +150,13 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
                     padding: const EdgeInsets.symmetric(
                         vertical: 2.0, horizontal: 4.0),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
+                      color: isInFlashcard
+                          ? Colors.yellow.shade200
+                          : Colors.blue.withOpacity(0.1),
                       border: Border.all(
-                        color: Colors.blue.withOpacity(0.3),
+                        color: isInFlashcard
+                            ? Colors.yellow.shade400
+                            : Colors.blue.withOpacity(0.3),
                         width: 1.0,
                       ),
                       borderRadius: BorderRadius.circular(4.0),
@@ -110,7 +166,11 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
                       style: TextStyle(
                         fontSize: 18,
                         color: Colors.black,
-                        decoration: TextDecoration.underline,
+                        fontWeight:
+                            isInFlashcard ? FontWeight.bold : FontWeight.normal,
+                        decoration: isInFlashcard
+                            ? TextDecoration.none
+                            : TextDecoration.underline,
                         decorationColor: Colors.blue.withOpacity(0.5),
                         decorationThickness: 1.0,
                       ),
@@ -193,16 +253,23 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
             },
             child: Text('닫기'),
           ),
-          TextButton(
-            onPressed: () {
-              if (widget.onAddToFlashcard != null) {
-                widget.onAddToFlashcard!(segment.text);
-                Navigator.of(context).pop();
-                // 스낵바 제거 - 플래시카드 카운터가 증가하는 것으로 충분한 피드백 제공
-              }
-            },
-            child: Text('플래시카드 추가'),
-          ),
+          // 이미 플래시카드에 추가된 단어인지 확인하여 버튼 표시 여부 결정
+          if (!_flashcardWords.contains(segment.text))
+            TextButton(
+              onPressed: () {
+                if (widget.onAddToFlashcard != null) {
+                  widget.onAddToFlashcard!(segment.text);
+
+                  // 플래시카드 단어 목록에 추가
+                  setState(() {
+                    _flashcardWords.add(segment.text);
+                  });
+
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text('플래시카드 추가'),
+            ),
         ],
       ),
     );
@@ -214,6 +281,19 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
     bool containsChinese =
         ContextMenuHelper.containsChineseCharacters(selectedText);
     if (!containsChinese) return;
+
+    // 이미 플래시카드에 추가된 단어인지 확인
+    bool isAlreadyInFlashcard = _flashcardWords.contains(selectedText);
+    if (isAlreadyInFlashcard) {
+      // 이미 플래시카드에 추가된 단어는 단어 상세 정보만 표시
+      for (var segment in widget.segments) {
+        if (segment.text == selectedText) {
+          _showWordDetails(context, segment);
+          return;
+        }
+      }
+      return;
+    }
 
     // 단어장에 있는지 확인
     final segmenterService = ChineseSegmenterService();
@@ -253,6 +333,11 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
             onTap: () {
               if (widget.onAddToFlashcard != null) {
                 widget.onAddToFlashcard!(selectedText);
+
+                // 플래시카드 단어 목록에 추가
+                setState(() {
+                  _flashcardWords.add(selectedText);
+                });
               }
             },
           ),
@@ -273,6 +358,23 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
   // 커스텀 컨텍스트 메뉴 빌더
   Widget _buildCustomContextMenu(
       BuildContext context, EditableTextState editableTextState) {
+    // 디버그 로그 추가
+    debugPrint('커스텀 컨텍스트 메뉴 빌더 호출됨: 선택된 텍스트 = "$_selectedText"');
+    debugPrint(
+        '중국어 문자 포함 여부: ${ContextMenuHelper.containsChineseCharacters(_selectedText)}');
+
+    // 이미 플래시카드에 추가된 단어인지 확인
+    bool isAlreadyInFlashcard = _flashcardWords.contains(_selectedText);
+    debugPrint('이미 플래시카드에 추가된 단어: $isAlreadyInFlashcard');
+
+    // 이미 플래시카드에 추가된 단어면 기본 메뉴 표시
+    if (isAlreadyInFlashcard) {
+      debugPrint('기본 컨텍스트 메뉴 표시 (이미 플래시카드에 추가됨)');
+      return AdaptiveTextSelectionToolbar.editableText(
+        editableTextState: editableTextState,
+      );
+    }
+
     // 커스텀 메뉴 항목 생성
     final List<ContextMenuButtonItem> buttonItems = [];
 
@@ -323,6 +425,11 @@ class _SegmentedTextWidgetState extends State<SegmentedTextWidget> {
           // 플래시카드 추가 기능 호출
           if (widget.onAddToFlashcard != null) {
             widget.onAddToFlashcard!(_selectedText);
+
+            // 플래시카드 단어 목록에 추가
+            setState(() {
+              _flashcardWords.add(_selectedText);
+            });
           }
         },
         label: '플래시카드 추가',

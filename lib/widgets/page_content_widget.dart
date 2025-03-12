@@ -606,6 +606,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // 플래시카드 단어 목록 추출
+    final Set<String> flashcardWords = _extractFlashcardWords();
+
     return SingleChildScrollView(
       key: ValueKey('page_${widget.page.id}'),
       padding: const EdgeInsets.all(16.0),
@@ -752,6 +755,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 onDictionaryLookup: _showDictionarySnackbar,
                 onCreateFlashCard: widget.onCreateFlashCard,
                 translatedText: widget.page.translatedText,
+                flashcardWords: flashcardWords,
               ),
               const SizedBox(height: 24),
             ],
@@ -766,6 +770,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 onDictionaryLookup: _showDictionarySnackbar,
                 onCreateFlashCard: widget.onCreateFlashCard,
                 translatedText: widget.page.originalText,
+                flashcardWords: flashcardWords,
               ),
             ],
           ],
@@ -861,82 +866,149 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   // 사전 스낵바 표시
   void _showDictionarySnackbar(String word) {
+    // 디버그 로그 추가
+    debugPrint('사전 검색 요청: $word');
+
+    // 사전 서비스에서 단어 검색
     final entry = _dictionaryService.lookupWord(word);
 
     if (entry == null) {
-      // 사전에 없는 단어일 경우
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('사전에서 찾을 수 없는 단어: $word'),
-          action: SnackBarAction(
-            label: '플래시카드에 추가',
-            onPressed: () {
-              widget.onCreateFlashCard(word, '직접 의미 입력 필요', pinyin: null);
-            },
-          ),
-          duration: const Duration(seconds: 5),
-        ),
-      );
+      // 사전에 없는 단어일 경우 Papago API로 검색 시도
+      debugPrint('사전에 없는 단어, Papago API로 검색 시도: $word');
+      _dictionaryService.lookupWordWithFallback(word).then((apiEntry) {
+        if (apiEntry != null) {
+          _showDictionaryBottomSheet(apiEntry);
+        } else {
+          // API 검색도 실패한 경우 스낵바 표시
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('사전에서 찾을 수 없는 단어: $word'),
+              action: SnackBarAction(
+                label: '플래시카드에 추가',
+                onPressed: () {
+                  widget.onCreateFlashCard(word, '직접 의미 입력 필요', pinyin: null);
+                },
+              ),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      });
       return;
     }
 
-    // 사전에 있는 단어일 경우
+    // 사전에 있는 단어일 경우 바로 bottom sheet 표시
+    _showDictionaryBottomSheet(entry);
+  }
+
+  // 사전 결과를 bottom sheet으로 표시
+  void _showDictionaryBottomSheet(DictionaryEntry entry) {
+    debugPrint('사전 결과 bottom sheet 표시: ${entry.word}');
+
+    // 간단한 스낵바로 먼저 표시 (디버깅용)
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
+        content: Text('사전 검색 결과: ${entry.word} - ${entry.meaning}'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+
+    // Bottom Sheet 표시
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 단어 제목
+              Text(
+                entry.word,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // 발음 정보
+              if (entry.pinyin.isNotEmpty)
                 Text(
-                  entry.word,
+                  '발음: ${entry.pinyin}',
                   style: const TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  entry.pinyin,
-                  style: const TextStyle(
                     fontStyle: FontStyle.italic,
                   ),
                 ),
-              ],
-            ),
-            Text('의미: ${entry.meaning}'),
-          ],
-        ),
-        action: SnackBarAction(
-          label: '플래시카드에 추가',
-          onPressed: () {
-            widget.onCreateFlashCard(entry.word, entry.meaning,
-                pinyin: entry.pinyin);
-          },
-        ),
-        duration: const Duration(seconds: 5),
-        behavior: SnackBarBehavior.floating,
-      ),
+
+              const SizedBox(height: 8),
+
+              // 의미 정보
+              Text(
+                '의미: ${entry.meaning}',
+                style: const TextStyle(fontSize: 16),
+              ),
+
+              const SizedBox(height: 16),
+
+              // 버튼 영역
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // TTS 버튼
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _speakText(entry.word);
+                      Navigator.pop(context);
+                    },
+                    icon: const Icon(Icons.volume_up),
+                    label: const Text('읽기'),
+                  ),
+
+                  // 플래시카드 추가 버튼
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      widget.onCreateFlashCard(
+                        entry.word,
+                        entry.meaning,
+                        pinyin: entry.pinyin,
+                      );
+                      Navigator.pop(context);
+
+                      // 추가 완료 메시지
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('플래시카드에 추가되었습니다'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.add_card),
+                    label: const Text('플래시카드 추가'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
   // 문자열에서 중국어 문자만 추출
   String _extractChineseChars(String text) {
-    // 중국어 문자 패턴 (유니코드 범위: 4E00-9FFF)
-    final chinesePattern = RegExp(r'[\u4e00-\u9fff]');
-
-    // 중국어 문자만 추출
-    final buffer = StringBuffer();
-    for (int i = 0; i < text.length; i++) {
-      final char = text[i];
-      if (chinesePattern.hasMatch(char)) {
-        buffer.write(char);
-      }
+    final RegExp chineseRegex = RegExp(r'[\u4e00-\u9fff]+');
+    final Iterable<Match> matches = chineseRegex.allMatches(text);
+    final StringBuffer buffer = StringBuffer();
+    for (final match in matches) {
+      buffer.write(match.group(0));
     }
-
     return buffer.toString();
   }
 
@@ -945,12 +1017,12 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     if (pageId == null || pageId.isEmpty) return {};
 
     try {
-      final pinyinCacheKey = 'pinyin_cache_$pageId';
       final prefs = await SharedPreferences.getInstance();
-      final cachedPinyinJson = prefs.getString(pinyinCacheKey);
+      final cacheKey = 'pinyin_cache_$pageId';
+      final cachedData = prefs.getString(cacheKey);
 
-      if (cachedPinyinJson != null && cachedPinyinJson.isNotEmpty) {
-        final Map<String, dynamic> jsonData = jsonDecode(cachedPinyinJson);
+      if (cachedData != null && cachedData.isNotEmpty) {
+        final Map<String, dynamic> jsonData = json.decode(cachedData);
         final Map<String, String> pinyinCache = {};
 
         jsonData.forEach((key, value) {
@@ -959,28 +1031,38 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           }
         });
 
-        debugPrint('캐시된 핀인 로드 완료: ${pinyinCache.length}개');
+        debugPrint('핀인 캐시 로드 성공: ${pinyinCache.length}개 항목');
         return pinyinCache;
       }
     } catch (e) {
-      debugPrint('핀인 캐시 로드 중 오류: $e');
+      debugPrint('핀인 캐시 로드 중 오류 발생: $e');
     }
-
     return {};
   }
 
   Future<void> _savePinyinCache(
-      String? pageId, Map<String, String> pinyinCache) async {
-    if (pageId == null || pageId.isEmpty || pinyinCache.isEmpty) return;
+      String? pageId, Map<String, String> cache) async {
+    if (pageId == null || pageId.isEmpty || cache.isEmpty) return;
 
     try {
-      final pinyinCacheKey = 'pinyin_cache_$pageId';
       final prefs = await SharedPreferences.getInstance();
-      final jsonData = jsonEncode(pinyinCache);
-      await prefs.setString(pinyinCacheKey, jsonData);
-      debugPrint('핀인 캐시 저장 완료: ${pinyinCache.length}개');
+      final cacheKey = 'pinyin_cache_$pageId';
+      final jsonData = json.encode(cache);
+      await prefs.setString(cacheKey, jsonData);
+      debugPrint('핀인 캐시 저장 성공: ${cache.length}개 항목');
     } catch (e) {
-      debugPrint('핀인 캐시 저장 중 오류: $e');
+      debugPrint('핀인 캐시 저장 중 오류 발생: $e');
     }
+  }
+
+  // 플래시카드 단어 목록 추출
+  Set<String> _extractFlashcardWords() {
+    final Set<String> flashcardWords = {};
+    if (widget.flashCards != null && widget.flashCards!.isNotEmpty) {
+      for (final card in widget.flashCards!) {
+        flashcardWords.add(card.front);
+      }
+    }
+    return flashcardWords;
   }
 }

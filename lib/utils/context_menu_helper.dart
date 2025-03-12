@@ -52,7 +52,16 @@ class ContextMenuHelper {
 
   /// 선택된 텍스트가 중국어 문자를 포함하는지 확인합니다.
   static bool containsChineseCharacters(String text) {
-    return RegExp(r'[\u4e00-\u9fa5]').hasMatch(text);
+    // 디버그 로그 추가
+    debugPrint('중국어 문자 감지 검사: "$text"');
+
+    // 중국어 문자 범위 (CJK Unified Ideographs)
+    final bool hasChinese = RegExp(r'[\u4e00-\u9fff]').hasMatch(text);
+
+    // 결과 로깅
+    debugPrint('중국어 문자 감지 결과: $hasChinese');
+
+    return hasChinese;
   }
 
   /// 선택된 텍스트가 사전에 있는지 확인합니다.
