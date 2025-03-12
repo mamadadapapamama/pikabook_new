@@ -12,7 +12,11 @@ class ChineseSegmenterService {
     return _instance;
   }
 
-  ChineseSegmenterService._internal();
+  ChineseSegmenterService._internal() {
+    // 사전 업데이트 리스너 등록
+    _fallbackDictionaryService
+        .addDictionaryUpdateListener(_onDictionaryUpdated);
+  }
 
   final ChineseDictionaryService _dictionaryService =
       ChineseDictionaryService();
@@ -23,6 +27,12 @@ class ChineseSegmenterService {
   static bool isSegmentationEnabled = false; // MVP에서는 비활성화
 
   bool _isInitialized = false;
+
+  // 사전 업데이트 감지 시 호출되는 콜백
+  void _onDictionaryUpdated() {
+    debugPrint('ChineseSegmenterService: 사전 업데이트 감지됨');
+    // 필요한 경우 캐시 초기화 등의 작업 수행
+  }
 
   Future<void> initialize() async {
     if (!_isInitialized) {

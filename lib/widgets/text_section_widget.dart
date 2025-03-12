@@ -9,6 +9,7 @@ class TextSectionWidget extends StatelessWidget {
   final Function(String) onDictionaryLookup;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
   final String translatedText;
+  final Set<String>? flashcardWords;
 
   const TextSectionWidget({
     Key? key,
@@ -18,6 +19,7 @@ class TextSectionWidget extends StatelessWidget {
     required this.onDictionaryLookup,
     required this.onCreateFlashCard,
     required this.translatedText,
+    this.flashcardWords,
   }) : super(key: key);
 
   @override
@@ -95,6 +97,10 @@ class TextSectionWidget extends StatelessWidget {
       BuildContext context, String selectedText, TtsService ttsService) {
     if (selectedText.isEmpty) return;
 
+    // 이미 플래시카드에 추가된 단어인지 확인
+    final bool isAlreadyInFlashcard =
+        flashcardWords != null && flashcardWords!.contains(selectedText);
+
     final RenderBox button = context.findRenderObject() as RenderBox;
     final RenderBox overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox;
@@ -133,20 +139,22 @@ class TextSectionWidget extends StatelessWidget {
             onDictionaryLookup(selectedText);
           },
         ),
-        PopupMenuItem(
-          child: const Text('플래시카드 추가'),
-          onTap: () {
-            onCreateFlashCard(selectedText, translatedText);
+        // 이미 플래시카드에 추가된 단어가 아닌 경우에만 플래시카드 추가 메뉴 표시
+        if (!isAlreadyInFlashcard)
+          PopupMenuItem(
+            child: const Text('플래시카드 추가'),
+            onTap: () {
+              onCreateFlashCard(selectedText, translatedText);
 
-            // 추가 완료 메시지 표시
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('플래시카드가 추가되었습니다.'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
-        ),
+              // 추가 완료 메시지 표시
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('플래시카드가 추가되었습니다.'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
       ],
     );
   }
