@@ -35,6 +35,11 @@ Future<void> loadAppSettings() async {
     // 기본값은 false (비활성화)로 설정
     ChineseSegmenterService.isSegmentationEnabled =
         prefs.getBool('segmentation_enabled') ?? false;
+
+    // 사전 미리 로드
+    final segmenterService = ChineseSegmenterService();
+    await segmenterService.initialize();
+    print('사전 미리 로드 완료');
   } catch (e) {
     print('설정 로드 중 오류 발생: $e');
     // 오류 발생 시 기본값으로 비활성화
