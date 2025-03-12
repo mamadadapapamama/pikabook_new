@@ -5,6 +5,7 @@ import 'dart:io' show Platform;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+/// 외부 사전 서비스 (e.g papago, google translate) 를 관리하는 서비스
 class DictionaryEntry {
   final String word;
   final String pinyin;
@@ -405,6 +406,40 @@ class DictionaryService {
       default:
         return Uri.parse(
             'https://translate.google.com/?sl=zh-CN&tl=ko&text=${Uri.encodeComponent(word)}&op=translate');
+    }
+  }
+
+  // 외부 사전에서 단어 검색 후 결과 반환
+  Future<DictionaryEntry?> searchExternalDictionary(
+      String word, ExternalDictType type) async {
+    try {
+      // Papago API 사용 (Google, Naver, Baidu 대신)
+      final papagoResult = await _lookupWithPapagoApi(word);
+      if (papagoResult != null) {
+        // 검색 결과를 사전에 추가
+        _addToDictionary(papagoResult);
+        return papagoResult;
+      }
+
+      // API 검색 실패 시 기본 정보 반환
+      return DictionaryEntry(
+        word: word,
+        pinyin: '',
+        meaning: '외부 사전 검색 결과를 가져올 수 없습니다.',
+        examples: [],
+        source: type.toString().split('.').last,
+      );
+    } catch (e) {
+      debugPrint('외부 사전 검색 중 오류 발생: $e');
+      return null;
+    }
+  }
+
+  // 사전에 단어 추가
+  void _addToDictionary(DictionaryEntry entry) {
+    if (!_dictionary.containsKey(entry.word)) {
+      _dictionary[entry.word] = entry;
+      debugPrint('사전에 단어 추가됨: ${entry.word}');
     }
   }
 
