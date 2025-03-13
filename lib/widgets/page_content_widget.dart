@@ -336,7 +336,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
               return ProcessedTextWidget(
                 processedText: _processedText!,
-                onTts: _speakText,
                 onDictionaryLookup: _showDictionarySnackbar,
                 onCreateFlashCard: (word, meaning, {String? pinyin}) {
                   widget.onCreateFlashCard(word, meaning, pinyin: pinyin);

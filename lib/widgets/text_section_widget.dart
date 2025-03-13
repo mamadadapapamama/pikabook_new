@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import '../services/tts_service.dart';
 import '../services/language_detection_service.dart';
 import '../utils/context_menu_helper.dart';
+import '../utils/text_selection_helper.dart';
+
+// text_section_widget은 원문, 번역문 섹션을 카드 형태로 표시
 
 class TextSectionWidget extends StatelessWidget {
   final String title;
@@ -44,42 +47,17 @@ class TextSectionWidget extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: isOriginal
-                  ? SelectableText(
-                      text,
+                  ? TextSelectionHelper.buildSelectableText(
+                      text: text,
                       style: TextStyle(
                         fontSize: 18, // 원문은 큰 글자 크기
                         height: 1.8, // 줄 간격 증가
                         letterSpacing: isOriginal ? 0.5 : 0.2, // 글자 간격 조정
                       ),
-                      contextMenuBuilder: (context, editableTextState) {
-                        final String selectedText = editableTextState
-                            .textEditingValue.selection
-                            .textInside(
-                                editableTextState.textEditingValue.text);
-
-                        debugPrint(
-                            '==== TextSectionWidget.contextMenuBuilder 호출됨 ====');
-                        debugPrint('선택된 텍스트 = "$selectedText"');
-                        debugPrint(
-                            '플래시카드 단어 수: ${flashcardWords?.length ?? 0}');
-
-                        // ContextMenuHelper 사용하여 컨텍스트 메뉴 생성
-                        return ContextMenuHelper.buildCustomContextMenu(
-                          context: context,
-                          editableTextState: editableTextState,
-                          selectedText: selectedText,
-                          flashcardWords: flashcardWords,
-                          onLookupDictionary: (text) =>
-                              onDictionaryLookup(text),
-                          onAddToFlashcard: (text) =>
-                              onCreateFlashCard(text, translatedText),
-                        );
-                      },
-                      enableInteractiveSelection: true,
-                      selectionControls: MaterialTextSelectionControls(),
-                      showCursor: true,
-                      cursorWidth: 2.0,
-                      cursorColor: Colors.blue,
+                      onDictionaryLookup: onDictionaryLookup,
+                      onCreateFlashCard: onCreateFlashCard,
+                      translatedText: translatedText,
+                      flashcardWords: flashcardWords,
                     )
                   : Text(
                       text,

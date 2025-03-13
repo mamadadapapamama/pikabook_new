@@ -3,44 +3,44 @@ import 'package:flutter/gestures.dart';
 import '../models/processed_text.dart';
 import '../models/flash_card.dart';
 import '../utils/context_menu_helper.dart';
+import '../utils/text_selection_helper.dart';
 
+/// **텍스트 처리 결과를 표시하는 위젯**
 class ProcessedTextWidget extends StatefulWidget {
   final ProcessedText processedText;
+  final bool showTranslation;
   final Function(String)? onDictionaryLookup;
   final Function(String, String, {String? pinyin})? onCreateFlashCard;
   final List<FlashCard>? flashCards;
-  final bool showTranslation;
-  final Function(String)? onTts;
 
   const ProcessedTextWidget({
-    super.key,
+    Key? key,
     required this.processedText,
+    this.showTranslation = true,
     this.onDictionaryLookup,
     this.onCreateFlashCard,
     this.flashCards,
-    this.showTranslation = false,
-    this.onTts,
-  });
+  }) : super(key: key);
 
   @override
   State<ProcessedTextWidget> createState() => _ProcessedTextWidgetState();
 }
 
 class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
-  Set<String> _flashcardWords = {};
   String _selectedText = '';
+  late Set<String> _flashcardWords;
 
   @override
   void initState() {
     super.initState();
+    _flashcardWords = {};
     _extractFlashcardWords();
   }
 
   @override
   void didUpdateWidget(ProcessedTextWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.processedText != widget.processedText ||
-        oldWidget.flashCards != widget.flashCards) {
+    if (oldWidget.flashCards != widget.flashCards) {
       _extractFlashcardWords();
     }
   }
@@ -114,7 +114,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         spans.add(TextSpan(text: text.substring(lastEnd, pos.start)));
       }
 
-      // 하이라이트된 단어 추가 (제스처 인식기 없이 스타일만 적용)
+      // 하이라이트된 단어 추가 - 탭과 선택 모두 가능하도록 수정
       spans.add(
         TextSpan(
           text: pos.word,
@@ -141,6 +141,24 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     }
 
     return spans;
+  }
+
+  /// **선택 가능한 텍스트 위젯 생성**
+  Widget _buildSelectableText(String text) {
+    return SelectableText.rich(
+      TextSpan(
+        children: _buildHighlightedText(text),
+        style: const TextStyle(fontSize: 16),
+      ),
+      onSelectionChanged: (selection, cause) {
+        _handleSelectionChanged(selection, text);
+      },
+      contextMenuBuilder: _buildContextMenu,
+      enableInteractiveSelection: true,
+      showCursor: true,
+      cursorWidth: 2.0,
+      cursorColor: Colors.blue,
+    );
   }
 
   /// **텍스트 선택 변경 처리 메서드**
@@ -215,24 +233,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           });
         }
       },
-    );
-  }
-
-  /// **선택 가능한 텍스트 위젯 생성**
-  Widget _buildSelectableText(String text) {
-    return SelectableText.rich(
-      TextSpan(
-        children: _buildHighlightedText(text),
-        style: const TextStyle(fontSize: 16),
-      ),
-      onSelectionChanged: (selection, cause) {
-        _handleSelectionChanged(selection, text);
-      },
-      contextMenuBuilder: _buildContextMenu,
-      enableInteractiveSelection: true,
-      showCursor: true,
-      cursorWidth: 2.0,
-      cursorColor: Colors.blue,
     );
   }
 
@@ -322,7 +322,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   }
 }
 
-/// 단어 위치 정보를 저장하는 클래스
+/// **단어 위치 정보를 저장하는 클래스**
 class _WordPosition {
   final String word;
   final int start;
