@@ -300,7 +300,6 @@ class EnhancedOcrService {
 
     // 문장 수가 일치하면 1:1 매핑
     if (originalSentences.length == translatedSentences.length) {
-      debugPrint('문장 수 일치: 1:1 매핑 수행');
       for (int i = 0; i < originalSentences.length; i++) {
         final originalSentence = originalSentences[i];
         final translatedSentence = translatedSentences[i];
@@ -310,11 +309,9 @@ class EnhancedOcrService {
         if (languageDetectionService.containsChinese(originalSentence)) {
           try {
             // 문장에서 중국어 문자만 추출하여 핀인 생성
-            final chineseCharsOnly =
-                languageDetectionService.extractChineseChars(originalSentence);
+            final chineseCharsOnly = languageDetectionService.extractChineseChars(originalSentence);
             if (chineseCharsOnly.isNotEmpty) {
-              pinyin = await languageDetectionService
-                  .generatePinyin(chineseCharsOnly);
+              pinyin = await languageDetectionService.generatePinyin(chineseCharsOnly);
             }
           } catch (e) {
             debugPrint('핀인 생성 실패: $e');
@@ -333,10 +330,40 @@ class EnhancedOcrService {
         }
         combinedTranslation.write(translatedSentence);
       }
+    } 
+    // 문장 수가 불일치하면 매핑 시도
+    else if (translatedSentences.isNotEmpty) {
+      final mappedSegments = translationService.mapOriginalAndTranslatedSentences(
+          originalSentences, translatedSentences);
+
+      for (final segment in mappedSegments) {
+        String pinyin = '';
+        if (languageDetectionService.containsChinese(segment.originalText)) {
+          try {
+            final chineseCharsOnly = languageDetectionService.extractChineseChars(segment.originalText);
+            if (chineseCharsOnly.isNotEmpty) {
+              pinyin = await languageDetectionService.generatePinyin(chineseCharsOnly);
+            }
+          } catch (e) {
+            debugPrint('핀인 생성 실패: $e');
+          }
+        }
+
+        segments.add(TextSegment(
+          originalText: segment.originalText,
+          translatedText: segment.translatedText ?? '',
+          pinyin: pinyin,
+        ));
+
+        // 전체 번역 텍스트 구성
+        if (combinedTranslation.isNotEmpty) {
+          combinedTranslation.write('\n');
+        }
+        combinedTranslation.write(segment.translatedText ?? '');
+      }
     }
-    // 문장 수가 불일치하거나 번역이 없는 경우 각 문장을 개별적으로 번역
+    // 번역 텍스트가 없으면 새로 번역
     else {
-      debugPrint('문장 수 불일치 또는 번역 없음: 개별 번역 수행');
       for (final originalSentence in originalSentences) {
         String pinyin = '';
         String sentenceTranslation = '';
@@ -345,27 +372,23 @@ class EnhancedOcrService {
         if (languageDetectionService.containsChinese(originalSentence)) {
           try {
             // 핀인 생성
-            final chineseCharsOnly =
-                languageDetectionService.extractChineseChars(originalSentence);
+            final chineseCharsOnly = languageDetectionService.extractChineseChars(originalSentence);
             if (chineseCharsOnly.isNotEmpty) {
-              pinyin = await languageDetectionService
-                  .generatePinyin(chineseCharsOnly);
+              pinyin = await languageDetectionService.generatePinyin(chineseCharsOnly);
             }
 
             // 번역 수행
-            sentenceTranslation = await translationService
-                .translateText(originalSentence, targetLanguage: 'ko');
+            sentenceTranslation = await translationService.translateText(
+                originalSentence, targetLanguage: 'ko');
           } catch (e) {
             debugPrint('핀인 생성 또는 번역 실패: $e');
-            sentenceTranslation = '번역 실패';
           }
         } else {
           // 중국어가 없는 문장 처리
           try {
-            sentenceTranslation = await translationService
-                .translateText(originalSentence, targetLanguage: 'ko');
+            sentenceTranslation = await translationService.translateText(
+                originalSentence, targetLanguage: 'ko');
           } catch (e) {
-            debugPrint('번역 실패: $e');
             sentenceTranslation = originalSentence; // 번역 실패 시 원본 사용
           }
         }
@@ -376,7 +399,7 @@ class EnhancedOcrService {
           pinyin: pinyin,
         ));
 
-        // 전체 번역 텍스트 구성
+        // 번역 결과 추가
         if (combinedTranslation.isNotEmpty) {
           combinedTranslation.write('\n');
         }

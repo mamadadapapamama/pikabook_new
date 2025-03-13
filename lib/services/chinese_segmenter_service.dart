@@ -234,6 +234,12 @@ class ChineseSegmenterService {
     for (final paragraph in paragraphs) {
       if (paragraph.trim().isEmpty) continue;
 
+      // 숫자만으로 구성된 단락은 건너뜀 (페이지 번호 등)
+      if (RegExp(r'^\s*\d+\s*$').hasMatch(paragraph)) {
+        debugPrint('숫자만 있는 단락 제외: $paragraph');
+        continue;
+      }
+
       // 특정 패턴 감지 (예: '제 N과', 챕터 제목 등) - 정규식 패턴 개선
       final patterns = <String, String>{};
       // 다양한 형태의 챕터 제목 패턴 감지 (제 13과, 第 1 课, 13과, 第13课, 第十三课 등)
@@ -293,8 +299,20 @@ class ChineseSegmenterService {
               enumerationPlaceholder + enumerationCommas.length.toString());
         });
 
-        // 문장 구분 기호로 분리
-        final sentencePattern = RegExp(r'([。！？；…]+)');
+        // 말줄임표 처리 - 연속된 마침표를 하나의 문장 구분자로 처리
+        final ellipsisPattern = RegExp(r'\.{3,}|…{1,}');
+        final ellipsisPlaceholder = "###ELLIPSIS###";
+        final ellipses = <String>[];
+
+        ellipsisPattern.allMatches(tempText).forEach((match) {
+          final ellipsis = match.group(0)!;
+          ellipses.add(ellipsis);
+          tempText = tempText.replaceFirst(
+              ellipsis, ellipsisPlaceholder + ellipses.length.toString());
+        });
+
+        // 문장 구분 기호로 분리 (말줄임표 포함)
+        final sentencePattern = RegExp(r'([。！？；]+)');
         final parts = tempText.split(sentencePattern);
 
         final sentences = <String>[];
@@ -315,12 +333,13 @@ class ChineseSegmenterService {
         }
 
         // 쉼표(，)를 포함한 긴 문장은 보조적으로 분리
-        // 단, 따옴표가 포함된 문장은 분리하지 않음
+        // 단, 따옴표나 말줄임표가 포함된 문장은 분리하지 않음
         final finalSentences = <String>[];
         for (final sentence in sentences) {
           if (sentence.contains("，") &&
               sentence.length > 10 &&
-              !sentence.contains(quotePlaceholder)) {
+              !sentence.contains(quotePlaceholder) &&
+              !sentence.contains(ellipsisPlaceholder)) {
             final subSentences = sentence.split("，");
             for (final subSentence in subSentences) {
               if (subSentence.trim().isNotEmpty) {
@@ -333,8 +352,21 @@ class ChineseSegmenterService {
           }
         }
 
+        // 말줄임표 복원
+        List<String> restoredEllipsisSentences = finalSentences.map((sentence) {
+          String result = sentence;
+          for (int i = 0; i < ellipses.length; i++) {
+            final placeholder = ellipsisPlaceholder + (i + 1).toString();
+            if (result.contains(placeholder)) {
+              result = result.replaceAll(placeholder, ellipses[i]);
+            }
+          }
+          return result;
+        }).toList();
+
         // 열거 쉼표(、) 복원
-        List<String> restoredEnumSentences = finalSentences.map((sentence) {
+        List<String> restoredEnumSentences =
+            restoredEllipsisSentences.map((sentence) {
           String result = sentence;
           for (int i = 0; i < enumerationCommas.length; i++) {
             final placeholder = enumerationPlaceholder + (i + 1).toString();
@@ -362,6 +394,16 @@ class ChineseSegmenterService {
         allSentences.addAll(restoredQuoteSentences);
       }
     }
+
+    // 숫자만으로 구성된 문장 필터링 (페이지 번호 등)
+    allSentences = allSentences.where((sentence) {
+      // 숫자와 공백만 포함된 문장인지 확인
+      final isOnlyNumbers = RegExp(r'^\s*\d+\s*$').hasMatch(sentence);
+      if (isOnlyNumbers) {
+        debugPrint('숫자만 있는 문장 제외: $sentence');
+      }
+      return !isOnlyNumbers;
+    }).toList();
 
     // 디버그 출력 추가
     debugPrint('최종 문장 수: ${allSentences.length}');
