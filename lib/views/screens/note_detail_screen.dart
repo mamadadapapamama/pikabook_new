@@ -14,6 +14,10 @@ import '../../services/user_preferences_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/page_content_widget.dart';
 import '../../widgets/page_indicator_widget.dart';
+import '../../widgets/note_detail_app_bar.dart';
+import '../../widgets/note_action_bottom_sheet.dart';
+import '../../widgets/note_page_view.dart';
+import '../../widgets/edit_title_dialog.dart';
 import 'flashcard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async'; // Timer 클래스를 사용하기 위한 import 추가
@@ -36,6 +40,7 @@ class NoteDetailScreen extends StatefulWidget {
 }
 
 class _NoteDetailScreenState extends State<NoteDetailScreen> {
+  // 서비스 인스턴스
   final NoteService _noteService = NoteService();
   final PageService _pageService = PageService();
   final ImageService _imageService = ImageService();
@@ -45,6 +50,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   final UserPreferencesService _preferencesService = UserPreferencesService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
 
+  // 상태 변수
   Note? _note;
   List<page_model.Page> _pages = [];
   List<File?> _imageFiles = [];
@@ -53,11 +59,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   bool _isFavorite = false;
   int _currentPageIndex = 0;
   bool _isCreatingFlashCard = false;
-
-  // 텍스트 처리 모드
   TextProcessingMode _textProcessingMode = TextProcessingMode.languageLearning;
-
-  Timer? _backgroundCheckTimer; // 타이머 변수 추가
+  Timer? _backgroundCheckTimer;
 
   @override
   void initState() {
@@ -65,19 +68,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _loadNote();
     _initTts();
     _loadUserPreferences();
-
-    // 백그라운드 처리 완료 확인을 위한 타이머 설정
     _setupBackgroundProcessingCheck();
   }
 
   @override
   void dispose() {
-    // 타이머 정리
     _backgroundCheckTimer?.cancel();
-    // 화면을 나갈 때 TTS 중지
     _ttsService.stop();
     super.dispose();
   }
+
+  // ===== 데이터 로딩 관련 메서드 =====
 
   Future<void> _loadNote() async {
     setState(() {
@@ -281,6 +282,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
+  // ===== 이미지 로딩 관련 메서드 =====
+
   Future<void> _loadPageImages() async {
     if (_pages.isEmpty) return;
 
@@ -332,10 +335,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
-  // TTS 초기화
+  // ===== TTS 관련 메서드 =====
+
   void _initTts() {
     _ttsService.init();
   }
+
+  // ===== 노트 액션 관련 메서드 =====
 
   Future<void> _toggleFavorite() async {
     if (_note == null || _note?.id == null) return;
@@ -415,68 +421,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   void _showEditTitleDialog() {
-    final titleController = TextEditingController(text: _note!.originalText);
-    final isDefaultTitle = _note!.originalText.startsWith('#') &&
-        _note!.originalText.contains('Note');
+    if (_note == null) return;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('노트 제목 변경'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isDefaultTitle)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8.0),
-                child: Text(
-                  '자동 생성된 제목을 더 의미 있는 제목으로 변경해보세요.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                  ),
-                ),
-              ),
-            TextField(
-              controller: titleController,
-              decoration: InputDecoration(
-                labelText: '제목',
-                hintText: '노트 내용을 잘 나타내는 제목을 입력하세요',
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () => titleController.clear(),
-                ),
-              ),
-              autofocus: true,
-              maxLength: 50, // 제목 길이 제한
-              textInputAction: TextInputAction.done,
-              onSubmitted: (value) {
-                if (value.trim().isNotEmpty) {
-                  _updateNoteTitle(value.trim());
-                  Navigator.of(context).pop();
-                }
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () {
-              final newTitle = titleController.text.trim();
-              if (newTitle.isNotEmpty) {
-                _updateNoteTitle(newTitle);
-              }
-              Navigator.of(context).pop();
-            },
-            child: const Text('저장'),
-          ),
-        ],
+      builder: (context) => EditTitleDialog(
+        currentTitle: _note!.originalText,
+        onTitleUpdated: _updateNoteTitle,
       ),
     );
   }
@@ -525,6 +476,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
+  // ===== 페이지 탐색 관련 메서드 =====
+
   void _changePage(int newIndex) {
     if (newIndex < 0 ||
         newIndex >= _pages.length ||
@@ -545,56 +498,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     _loadPageImages();
   }
 
+  // ===== 메뉴 및 다이얼로그 관련 메서드 =====
+
   void _showMoreOptions() {
     showModalBottomSheet(
       context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.edit),
-                title: const Text('노트 제목 변경'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showEditTitleDialog();
-                },
-              ),
-              // 텍스트 처리 모드 선택 옵션 추가
-              ListTile(
-                leading: Icon(
-                  _textProcessingMode == TextProcessingMode.professionalReading
-                      ? Icons.menu_book
-                      : Icons.school,
-                ),
-                title: const Text('텍스트 처리 모드'),
-                subtitle: Text(
-                  _textProcessingMode == TextProcessingMode.professionalReading
-                      ? '전문 서적 모드 (전체 텍스트 번역)'
-                      : '언어 학습 모드 (문장별 번역 및 핀인)',
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showTextProcessingModeDialog();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete),
-                title: const Text('노트 삭제'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _confirmDelete();
-                },
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (context) => NoteActionBottomSheet(
+        onEditTitle: _showEditTitleDialog,
+        onDeleteNote: _confirmDelete,
+        onShowTextProcessingModeDialog: _showTextProcessingModeDialog,
+        textProcessingMode: _textProcessingMode,
+      ),
     );
   }
 
-  // 사용자 기본 설정 로드
+  // ===== 사용자 설정 관련 메서드 =====
+
   Future<void> _loadUserPreferences() async {
     try {
       final mode = await _preferencesService.getTextProcessingMode();
@@ -608,7 +527,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
-  // 텍스트 처리 모드 변경 및 저장
   Future<void> _changeTextProcessingMode(TextProcessingMode mode) async {
     setState(() {
       _textProcessingMode = mode;
@@ -622,54 +540,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
-  // 텍스트 처리 모드 선택 다이얼로그
   void _showTextProcessingModeDialog() {
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('텍스트 처리 모드 선택'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RadioListTile<TextProcessingMode>(
-                title: const Text('전문 서적 모드'),
-                subtitle: const Text('전체 텍스트 번역 제공'),
-                value: TextProcessingMode.professionalReading,
-                groupValue: _textProcessingMode,
-                onChanged: (value) {
-                  Navigator.pop(context);
-                  if (value != null) {
-                    _changeTextProcessingMode(value);
-                  }
-                },
-              ),
-              RadioListTile<TextProcessingMode>(
-                title: const Text('언어 학습 모드'),
-                subtitle: const Text('문장별 번역 및 핀인 제공'),
-                value: TextProcessingMode.languageLearning,
-                groupValue: _textProcessingMode,
-                onChanged: (value) {
-                  Navigator.pop(context);
-                  if (value != null) {
-                    _changeTextProcessingMode(value);
-                  }
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('취소'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => TextProcessingModeDialog(
+        currentMode: _textProcessingMode,
+        onModeChanged: _changeTextProcessingMode,
+      ),
     );
   }
 
-  // 플래시카드 생성
+  // ===== 플래시카드 관련 메서드 =====
+
   Future<void> _createFlashCard(String front, String back,
       {String? pinyin}) async {
     if (_isCreatingFlashCard) return;
@@ -726,11 +608,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
         });
       }
-
-      // 스낵바 제거 - 플래시카드 카운터가 증가하는 것으로 충분한 피드백 제공
     } catch (e) {
       debugPrint('플래시카드 생성 중 오류 발생: $e');
-      // 오류 스낵바도 제거
     } finally {
       if (mounted) {
         setState(() {
@@ -740,202 +619,92 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
+  // ===== 플래시카드 화면 이동 관련 메서드 =====
+
+  Future<void> _navigateToFlashCardScreen() async {
+    if (_note == null) return;
+
+    // 플래시카드 화면으로 이동하고 결과를 받음
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FlashCardScreen(noteId: _note!.id),
+      ),
+    );
+
+    // 플래시카드가 변경되었으면 노트 정보 다시 로드
+    if (result == true && mounted) {
+      // 캐시 무효화
+      await _cacheService.removeCachedNote(widget.noteId);
+
+      // Firestore에서 직접 노트 가져오기
+      final noteDoc = await FirebaseFirestore.instance
+          .collection('notes')
+          .doc(widget.noteId)
+          .get();
+
+      if (noteDoc.exists && mounted) {
+        setState(() {
+          _note = Note.fromFirestore(noteDoc);
+          debugPrint(
+              '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
+        });
+      }
+    }
+  }
+
+  // ===== UI 빌드 메서드 =====
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: _note != null
-            ? GestureDetector(
-                onTap: _showEditTitleDialog,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _note!.originalText,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.edit, size: 16),
-                  ],
-                ),
-              )
-            : const Text('노트 상세'),
-        actions: [
-          if (_note != null) ...[
-            // 플래시카드 버튼
-            IconButton(
-              icon: _note!.flashcardCount > 0
-                  ? badges.Badge(
-                      badgeContent: Text(
-                        '${_note!.flashcardCount}',
-                        style: TextStyle(color: Colors.white, fontSize: 10),
-                      ),
-                      child: const Icon(Icons.flash_on),
-                    )
-                  : const Icon(Icons.flash_on),
-              onPressed: () async {
-                // 플래시카드 화면으로 이동하고 결과를 받음
-                final result = await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => FlashCardScreen(noteId: _note!.id),
-                  ),
-                );
-
-                // 플래시카드가 변경되었으면 노트 정보 다시 로드
-                if (result == true && mounted) {
-                  // 캐시 무효화
-                  await _cacheService.removeCachedNote(widget.noteId);
-
-                  // Firestore에서 직접 노트 가져오기
-                  final noteDoc = await FirebaseFirestore.instance
-                      .collection('notes')
-                      .doc(widget.noteId)
-                      .get();
-
-                  if (noteDoc.exists && mounted) {
-                    setState(() {
-                      _note = Note.fromFirestore(noteDoc);
-                      debugPrint(
-                          '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
-                    });
-                  }
-                }
-              },
-            ),
-            IconButton(
-              icon: Icon(
-                _isFavorite ? Icons.favorite : Icons.favorite_border,
-                color: _isFavorite ? Colors.red : null,
-              ),
-              onPressed: _toggleFavorite,
-              tooltip: '즐겨찾기',
-            ),
-            IconButton(
-              icon: const Icon(Icons.more_vert),
-              onPressed: _showMoreOptions,
-              tooltip: '더 보기',
-            ),
-          ],
-        ],
+      appBar: NoteDetailAppBar(
+        note: _note,
+        isFavorite: _isFavorite,
+        onEditTitle: _showEditTitleDialog,
+        onToggleFavorite: _toggleFavorite,
+        onShowMoreOptions: _showMoreOptions,
+        onFlashCardPressed: _navigateToFlashCardScreen,
       ),
-      body: _isLoading
-          ? const LoadingIndicator(message: '노트 불러오는 중...')
-          : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: Colors.red,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(_error!, textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadNote,
-                        child: const Text('다시 시도'),
-                      ),
-                    ],
-                  ),
-                )
-              : _note == null
-                  ? const Center(child: Text('노트를 찾을 수 없습니다.'))
-                  : _buildNoteContent(),
+      body: _buildBody(),
     );
   }
 
-  Widget _buildNoteContent() {
-    if (_pages.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.note_alt_outlined, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text('페이지가 없습니다.', style: TextStyle(fontSize: 18)),
-            SizedBox(height: 8),
-            Text('이 노트에는 페이지가 없습니다.', style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-      );
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const LoadingIndicator(message: '노트 불러오는 중...');
     }
 
-    return Column(
-      children: [
-        // 페이지 인디케이터 (여러 페이지가 있는 경우)
-        if (_pages.length > 1)
-          PageIndicatorWidget(
-            currentPageIndex: _currentPageIndex,
-            totalPages: _pages.length,
-            onPageChanged: _changePage,
-          ),
-
-        // 현재 페이지 내용
-        Expanded(
-          child: GestureDetector(
-            // 좌우 스와이프로 페이지 전환
-            onHorizontalDragEnd: (details) {
-              if (details.primaryVelocity == null) return;
-
-              // 오른쪽에서 왼쪽으로 스와이프 (다음 페이지)
-              if (details.primaryVelocity! < 0 &&
-                  _currentPageIndex < _pages.length - 1) {
-                _changePage(_currentPageIndex + 1);
-              }
-              // 왼쪽에서 오른쪽으로 스와이프 (이전 페이지)
-              else if (details.primaryVelocity! > 0 && _currentPageIndex > 0) {
-                _changePage(_currentPageIndex - 1);
-              }
-            },
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              transitionBuilder: (Widget child, Animation<double> animation) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: child,
-                );
-              },
-              child: _buildCurrentPageContent(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCurrentPageContent() {
-    if (_currentPageIndex >= _pages.length) {
-      return const Center(child: Text('페이지를 찾을 수 없습니다.'));
-    }
-
-    final currentPage = _pages[_currentPageIndex];
-    final imageFile = _imageFiles[_currentPageIndex];
-    final bool isLoadingImage =
-        imageFile == null && currentPage.imageUrl != null;
-
-    // 이미지가 로딩 중이면 로딩 인디케이터 표시
-    if (isLoadingImage) {
+    if (_error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('페이지 로딩 중...', style: TextStyle(fontSize: 16)),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+              color: Colors.red,
+            ),
+            const SizedBox(height: 16),
+            Text(_error!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadNote,
+              child: const Text('다시 시도'),
+            ),
           ],
         ),
       );
     }
 
-    return PageContentWidget(
-      key: ValueKey('page_content_${currentPage.id}_$_currentPageIndex'),
-      page: currentPage,
-      imageFile: imageFile,
-      isLoadingImage: false,
+    if (_note == null) {
+      return const Center(child: Text('노트를 찾을 수 없습니다.'));
+    }
+
+    return NotePageView(
+      pages: _pages,
+      imageFiles: _imageFiles,
+      currentPageIndex: _currentPageIndex,
+      onPageChanged: _changePage,
       noteId: widget.noteId,
       onCreateFlashCard: _createFlashCard,
       textProcessingMode: _textProcessingMode,
