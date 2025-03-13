@@ -224,6 +224,9 @@ class ChineseSegmenterService {
   List<String> splitIntoSentences(String text) {
     if (text.isEmpty) return [];
 
+    // 전처리: 연속된 마침표를 표준 말줄임표로 변환
+    text = _normalizeEllipsis(text);
+
     // 줄바꿈 문자를 기준으로 먼저 분리
     final paragraphs = text.split('\n');
     debugPrint('줄바꿈으로 분리된 단락 수: ${paragraphs.length}');
@@ -277,7 +280,7 @@ class ChineseSegmenterService {
           // 시작 부분에 약간의 공백이 있을 수 있음
           isChapterParagraph = true;
           // 전체 단락을 챕터 제목으로 처리
-          allSentences.add(paragraph.trim());
+          allSentences.add(_normalizeEllipsis(paragraph.trim()));
           debugPrint('챕터 제목으로 처리: ${paragraph.trim()}');
         }
       }
@@ -295,7 +298,7 @@ class ChineseSegmenterService {
         final matches = quotePattern.allMatches(tempText).toList();
         for (final match in matches) {
           final quotedText = match.group(0)!;
-          quotes.add(quotedText);
+          quotes.add(_normalizeEllipsis(quotedText));
           tempText = tempText.replaceFirst(
               quotedText, quotePlaceholder + quotes.length.toString());
         }
@@ -435,8 +438,8 @@ class ChineseSegmenterService {
           return result;
         }).toList();
 
-        // 최종 문장 추가
-        allSentences.addAll(restoredQuoteSentences);
+        // 최종 문장 추가 (각 문장에 대해 연속된 마침표 정규화)
+        allSentences.addAll(restoredQuoteSentences.map(_normalizeEllipsis));
       }
     }
 
@@ -479,6 +482,9 @@ class ChineseSegmenterService {
       return !isOnlyNumbers;
     }).toList();
 
+    // 최종 출력 전에 모든 문장에서 연속된 마침표를 표준 말줄임표로 변환
+    mergedSentences = mergedSentences.map(_normalizeEllipsis).toList();
+
     // 디버그 출력 추가
     debugPrint('최종 문장 수: ${mergedSentences.length}');
     for (int i = 0; i < mergedSentences.length; i++) {
@@ -490,6 +496,37 @@ class ChineseSegmenterService {
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
+  }
+
+  /// 연속된 마침표를 표준 말줄임표로 변환
+  String _normalizeEllipsis(String text) {
+    if (text.isEmpty) return text;
+
+    // 영어 마침표(.), 중국어 마침표(。), 전각 마침표(．) 등을 모두 포함
+    final ellipsisRegex = RegExp(r'[.．。]{2,}');
+
+    // 모든 일치 항목을 찾아 변환
+    Iterable<RegExpMatch> matches = ellipsisRegex.allMatches(text);
+
+    // 뒤에서부터 처리하여 인덱스 변화 방지
+    List<RegExpMatch> matchList = matches.toList().reversed.toList();
+
+    String result = text;
+    for (final match in matchList) {
+      final start = match.start;
+      final end = match.end;
+
+      // 연속된 마침표를 표준 말줄임표로 대체
+      result = result.replaceRange(start, end, '…');
+
+      debugPrint('연속된 마침표 변환: "${match.group(0)}" -> "…"');
+    }
+
+    // 연속된 말줄임표 문자도 하나로 통일
+    final multipleEllipsisRegex = RegExp(r'…{2,}');
+    result = result.replaceAll(multipleEllipsisRegex, '…');
+
+    return result;
   }
 
   /// 특별 마커가 있는 문장인지 확인
