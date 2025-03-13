@@ -10,6 +10,7 @@ import '../../services/page_service.dart';
 import '../../services/image_service.dart';
 import '../../models/note.dart';
 import 'note_detail_screen.dart';
+import 'context_menu_test_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -21,6 +22,25 @@ class HomeScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Pikabook'),
+          actions: [
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'test_context_menu') {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const ContextMenuTestScreen(),
+                    ),
+                  );
+                }
+              },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                const PopupMenuItem<String>(
+                  value: 'test_context_menu',
+                  child: Text('컨텍스트 메뉴 테스트'),
+                ),
+              ],
+            ),
+          ],
         ),
         body: Consumer<HomeViewModel>(
           builder: (context, viewModel, child) {

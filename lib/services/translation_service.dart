@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:googleapis/translate/v3.dart' as translate;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
+import '../models/text_segment.dart';
 // 순환 참조 제거
 // import 'google_cloud_service.dart';
 
@@ -214,5 +215,70 @@ class TranslationService {
     // 현재는 임시 구현으로 null을 반환합니다.
     debugPrint('캐시된 번역 조회: 원본 텍스트 ${originalText.length}자');
     return null;
+  }
+
+  /// 원본 문장과 번역 문장을 최대한 매핑하는 함수
+  List<TextSegment> mapOriginalAndTranslatedSentences(
+      List<String> originalSentences, List<String> translatedSentences) {
+    final segments = <TextSegment>[];
+    final int originalCount = originalSentences.length;
+    final int translatedCount = translatedSentences.length;
+
+    debugPrint('원본 문장 수: $originalCount, 번역 문장 수: $translatedCount');
+
+    // 문장 수가 같으면 1:1 매핑
+    if (originalCount == translatedCount) {
+      for (int i = 0; i < originalCount; i++) {
+        segments.add(TextSegment(
+          originalText: originalSentences[i],
+          translatedText: translatedSentences[i],
+          pinyin: '',
+        ));
+      }
+      return segments;
+    }
+
+    // 문장 수가 다른 경우 최대한 매핑 시도
+    // 1. 원본 문장 수가 더 많은 경우: 번역 문장을 비율에 맞게 분배
+    if (originalCount > translatedCount) {
+      final double ratio = originalCount / translatedCount;
+      for (int i = 0; i < originalCount; i++) {
+        final int translatedIndex = (i / ratio).floor();
+        final String translatedText = translatedIndex < translatedCount
+            ? translatedSentences[translatedIndex]
+            : '';
+
+        segments.add(TextSegment(
+          originalText: originalSentences[i],
+          translatedText: translatedText,
+          pinyin: '',
+        ));
+      }
+    }
+    // 2. 번역 문장 수가 더 많은 경우: 원본 문장을 비율에 맞게 분배
+    else {
+      final double ratio = translatedCount / originalCount;
+      for (int i = 0; i < originalCount; i++) {
+        final int startIndex = (i * ratio).floor();
+        final int endIndex = ((i + 1) * ratio).floor();
+
+        // 해당 원본 문장에 매핑되는 번역 문장들을 결합
+        final StringBuffer combinedTranslation = StringBuffer();
+        for (int j = startIndex; j < endIndex && j < translatedCount; j++) {
+          if (combinedTranslation.isNotEmpty) {
+            combinedTranslation.write(' ');
+          }
+          combinedTranslation.write(translatedSentences[j]);
+        }
+
+        segments.add(TextSegment(
+          originalText: originalSentences[i],
+          translatedText: combinedTranslation.toString(),
+          pinyin: '',
+        ));
+      }
+    }
+
+    return segments;
   }
 }

@@ -219,6 +219,22 @@ class ChineseSegmenterService {
       return '';
     }
   }
+
+  /// 텍스트를 문장 단위로 분리
+  List<String> splitIntoSentences(String text) {
+    if (text.isEmpty) return [];
+
+    // 개선된 문장 구분자 패턴
+    // 중국어 문장 구분자(。！？), 영어 문장 구분자(.!?), 쉼표(,，), 기타 구분자(、:;) 등을 포함
+    // 구분자 뒤에 공백이 있을 수도 있고, 줄바꿈 문자도 문장 구분자로 처리
+    final pattern = RegExp(r'(?<=[。！？!?\.,，、:;；：])\s*|[\n\r]+');
+
+    // 문장 구분자로 분리
+    final sentences = text.split(pattern);
+
+    // 빈 문장 제거 및 정리
+    return sentences.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  }
 }
 
 // 분절된 단어 클래스

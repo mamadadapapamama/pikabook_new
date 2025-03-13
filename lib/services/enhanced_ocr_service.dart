@@ -13,6 +13,7 @@ import '../models/processed_text.dart';
 import '../models/text_segment.dart';
 import 'language_detection_service.dart';
 import 'translation_service.dart';
+import 'chinese_segmenter_service.dart';
 
 /// 개선된 OCR 서비스
 /// 모드에 따라 다른 처리를 수행하고, 핀인 처리를 분리합니다.
@@ -257,5 +258,165 @@ class EnhancedOcrService {
       debugPrint('간단한 핀인 생성 중 오류 발생: $e');
       return '(pinyin for: ${chineseText.substring(0, min(10, chineseText.length))}...)';
     }
+  }
+
+  /// 텍스트 처리 (OCR 없이 기존 텍스트 처리)
+  Future<ProcessedText> processText(String originalText, String translatedText,
+      TextProcessingMode mode) async {
+    if (originalText.isEmpty) {
+      throw Exception('원본 텍스트가 비어 있습니다.');
+    }
+
+    // 전문 서적 모드: 전체 텍스트 표시
+    if (mode == TextProcessingMode.professionalReading) {
+      return ProcessedText(
+        fullOriginalText: originalText,
+        fullTranslatedText: translatedText,
+        showFullText: true,
+      );
+    }
+
+    // 언어 학습 모드: 문장별 처리
+    final languageDetectionService = LanguageDetectionService();
+    final translationService = TranslationService();
+    final segmenterService = ChineseSegmenterService();
+
+    // 문장 단위로 분리
+    final originalSentences = segmenterService.splitIntoSentences(originalText);
+    debugPrint('분리된 문장 수: ${originalSentences.length}개');
+
+    // 번역된 텍스트가 있으면 문장 단위로 분리
+    List<String> translatedSentences = [];
+    if (translatedText.isNotEmpty) {
+      translatedSentences = segmenterService.splitIntoSentences(translatedText);
+      debugPrint('분리된 번역 문장 수: ${translatedSentences.length}개');
+    }
+
+    // 각 문장별로 번역 수행
+    final segments = <TextSegment>[];
+    final StringBuffer combinedTranslation = StringBuffer();
+
+    // 문장 수가 일치하면 1:1 매핑
+    if (originalSentences.length == translatedSentences.length) {
+      for (int i = 0; i < originalSentences.length; i++) {
+        final originalSentence = originalSentences[i];
+        final translatedSentence = translatedSentences[i];
+        String pinyin = '';
+
+        // 중국어가 포함된 문장에 대해서만 핀인 생성
+        if (languageDetectionService.containsChinese(originalSentence)) {
+          try {
+            // 문장에서 중국어 문자만 추출하여 핀인 생성
+            final chineseCharsOnly =
+                languageDetectionService.extractChineseChars(originalSentence);
+            if (chineseCharsOnly.isNotEmpty) {
+              pinyin = await languageDetectionService
+                  .generatePinyin(chineseCharsOnly);
+            }
+          } catch (e) {
+            debugPrint('핀인 생성 실패: $e');
+          }
+        }
+
+        segments.add(TextSegment(
+          originalText: originalSentence,
+          translatedText: translatedSentence,
+          pinyin: pinyin,
+        ));
+
+        // 전체 번역 텍스트 구성
+        if (combinedTranslation.isNotEmpty) {
+          combinedTranslation.write('\n');
+        }
+        combinedTranslation.write(translatedSentence);
+      }
+    }
+    // 문장 수가 불일치하면 매핑 시도
+    else if (translatedSentences.isNotEmpty) {
+      final mappedSegments =
+          translationService.mapOriginalAndTranslatedSentences(
+              originalSentences, translatedSentences);
+
+      for (final segment in mappedSegments) {
+        String pinyin = '';
+        if (languageDetectionService.containsChinese(segment.originalText)) {
+          try {
+            final chineseCharsOnly = languageDetectionService
+                .extractChineseChars(segment.originalText);
+            if (chineseCharsOnly.isNotEmpty) {
+              pinyin = await languageDetectionService
+                  .generatePinyin(chineseCharsOnly);
+            }
+          } catch (e) {
+            debugPrint('핀인 생성 실패: $e');
+          }
+        }
+
+        segments.add(TextSegment(
+          originalText: segment.originalText,
+          translatedText: segment.translatedText ?? '',
+          pinyin: pinyin,
+        ));
+
+        // 전체 번역 텍스트 구성
+        if (combinedTranslation.isNotEmpty) {
+          combinedTranslation.write('\n');
+        }
+        combinedTranslation.write(segment.translatedText ?? '');
+      }
+    }
+    // 번역 텍스트가 없으면 새로 번역
+    else {
+      for (final originalSentence in originalSentences) {
+        String pinyin = '';
+        String sentenceTranslation = '';
+
+        // 중국어가 포함된 문장에 대해서만 핀인 생성 및 번역
+        if (languageDetectionService.containsChinese(originalSentence)) {
+          try {
+            // 핀인 생성
+            final chineseCharsOnly =
+                languageDetectionService.extractChineseChars(originalSentence);
+            if (chineseCharsOnly.isNotEmpty) {
+              pinyin = await languageDetectionService
+                  .generatePinyin(chineseCharsOnly);
+            }
+
+            // 번역 수행
+            sentenceTranslation = await translationService
+                .translateText(originalSentence, targetLanguage: 'ko');
+          } catch (e) {
+            debugPrint('핀인 생성 또는 번역 실패: $e');
+          }
+        } else {
+          // 중국어가 없는 문장 처리
+          try {
+            sentenceTranslation = await translationService
+                .translateText(originalSentence, targetLanguage: 'ko');
+          } catch (e) {
+            sentenceTranslation = originalSentence; // 번역 실패 시 원본 사용
+          }
+        }
+
+        segments.add(TextSegment(
+          originalText: originalSentence,
+          translatedText: sentenceTranslation,
+          pinyin: pinyin,
+        ));
+
+        // 번역 결과 추가
+        if (combinedTranslation.isNotEmpty) {
+          combinedTranslation.write('\n');
+        }
+        combinedTranslation.write(sentenceTranslation);
+      }
+    }
+
+    return ProcessedText(
+      fullOriginalText: originalText,
+      fullTranslatedText: combinedTranslation.toString(),
+      segments: segments,
+      showFullText: false, // 문장별 모드로 시작
+    );
   }
 }
