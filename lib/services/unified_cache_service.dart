@@ -501,4 +501,48 @@ class UnifiedCacheService {
       debugPrint('텍스트 캐싱 중 오류 발생: $e');
     }
   }
+
+  /// 핀인 캐시 로드
+  Future<Map<String, String>> loadPinyinCache(String? pageId) async {
+    if (pageId == null || pageId.isEmpty) return {};
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'pinyin_cache_$pageId';
+      final cachedData = prefs.getString(cacheKey);
+
+      if (cachedData != null && cachedData.isNotEmpty) {
+        final Map<String, dynamic> jsonData = json.decode(cachedData);
+        final Map<String, String> pinyinCache = {};
+
+        jsonData.forEach((key, value) {
+          if (value is String) {
+            pinyinCache[key] = value;
+          }
+        });
+
+        debugPrint('핀인 캐시 로드 성공: ${pinyinCache.length}개 항목');
+        return pinyinCache;
+      }
+    } catch (e) {
+      debugPrint('핀인 캐시 로드 중 오류 발생: $e');
+    }
+    return {};
+  }
+
+  /// 핀인 캐시 저장
+  Future<void> savePinyinCache(
+      String? pageId, Map<String, String> cache) async {
+    if (pageId == null || pageId.isEmpty || cache.isEmpty) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'pinyin_cache_$pageId';
+      final jsonData = json.encode(cache);
+      await prefs.setString(cacheKey, jsonData);
+      debugPrint('핀인 캐시 저장 성공: ${cache.length}개 항목');
+    } catch (e) {
+      debugPrint('핀인 캐시 저장 중 오류 발생: $e');
+    }
+  }
 }

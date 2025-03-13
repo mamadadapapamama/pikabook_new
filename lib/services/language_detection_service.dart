@@ -100,4 +100,15 @@ class LanguageDetectionService {
       throw Exception('핀인을 생성할 수 없습니다: $e');
     }
   }
+
+  /// 문자열에서 중국어 문자만 추출
+  String extractChineseChars(String text) {
+    final RegExp chineseRegex = RegExp(r'[\u4e00-\u9fff]+');
+    final Iterable<Match> matches = chineseRegex.allMatches(text);
+    final StringBuffer buffer = StringBuffer();
+    for (final match in matches) {
+      buffer.write(match.group(0));
+    }
+    return buffer.toString();
+  }
 }

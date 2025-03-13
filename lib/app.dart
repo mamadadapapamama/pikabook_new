@@ -7,7 +7,6 @@ import 'services/initialization_service.dart';
 import 'services/user_preferences_service.dart';
 import 'views/screens/splash_screen.dart';
 import 'views/screens/onboarding_screen.dart';
-import 'views/screens/text_processing_test_screen.dart';
 import 'firebase_options.dart';
 
 class App extends StatefulWidget {
