@@ -224,16 +224,169 @@ class ChineseSegmenterService {
   List<String> splitIntoSentences(String text) {
     if (text.isEmpty) return [];
 
-    // 개선된 문장 구분자 패턴
-    // 중국어 문장 구분자(。！？), 영어 문장 구분자(.!?), 쉼표(,，), 기타 구분자(、:;) 등을 포함
-    // 구분자 뒤에 공백이 있을 수도 있고, 줄바꿈 문자도 문장 구분자로 처리
-    final pattern = RegExp(r'(?<=[。！？!?\.,，、:;；：])\s*|[\n\r]+');
+    // 줄바꿈 문자를 기준으로 먼저 분리
+    final paragraphs = text.split('\n');
+    debugPrint('줄바꿈으로 분리된 단락 수: ${paragraphs.length}');
 
-    // 문장 구분자로 분리
-    final sentences = text.split(pattern);
+    // 각 단락을 개별적으로 처리
+    List<String> allSentences = [];
+
+    for (final paragraph in paragraphs) {
+      if (paragraph.trim().isEmpty) continue;
+
+      // 특정 패턴 감지 (예: '제 N과', 챕터 제목 등) - 정규식 패턴 개선
+      final patterns = <String, String>{};
+      // 다양한 형태의 챕터 제목 패턴 감지 (제 13과, 第 1 课, 13과, 第13课, 第十三课 등)
+      final chapterPattern = RegExp(
+          r'(第\s*\d+\s*[课課]|第\s*[一二三四五六七八九十百千]+\s*[课課]|제\s*\d+\s*과|\d+\s*[课課과])');
+      final titlePlaceholder = "###TITLE###";
+
+      // 챕터 패턴 찾기
+      String tempText = paragraph;
+      final chapterMatches = chapterPattern.allMatches(paragraph).toList();
+      debugPrint('단락에서 찾은 챕터 패턴 수: ${chapterMatches.length}');
+
+      // 챕터 제목 패턴이 있는지 확인
+      bool isChapterParagraph = false;
+      if (chapterMatches.isNotEmpty) {
+        final match = chapterMatches.first;
+        final chapterText = match.group(0)!;
+        debugPrint('찾은 챕터 텍스트: $chapterText');
+
+        // 챕터 텍스트가 단락의 시작 부분에 있는지 확인
+        final startIndex = match.start;
+        if (startIndex == 0 || startIndex <= 2) {
+          // 시작 부분에 약간의 공백이 있을 수 있음
+          isChapterParagraph = true;
+          // 전체 단락을 챕터 제목으로 처리
+          allSentences.add(paragraph.trim());
+          debugPrint('챕터 제목으로 처리: ${paragraph.trim()}');
+        }
+      }
+
+      // 챕터 제목이 아닌 경우 일반 문장 처리
+      if (!isChapterParagraph) {
+        // 다양한 형태의 따옴표 패턴 감지 (중국어, 영어, 한국어 등)
+        final quotes = <String>[];
+        // 영어 따옴표 "...", 중국어 따옴표 "...", 한국어 따옴표 "..." 등을 모두 포함
+        final quotePattern =
+            RegExp(r'[""].*?[""]|[""].*?[""]|[""].*?[""]|[""].*?[""]');
+        final quotePlaceholder = "###QUOTE###";
+
+        // 따옴표 패턴 찾기
+        final matches = quotePattern.allMatches(tempText).toList();
+        for (final match in matches) {
+          final quotedText = match.group(0)!;
+          quotes.add(quotedText);
+          tempText = tempText.replaceFirst(
+              quotedText, quotePlaceholder + quotes.length.toString());
+        }
+
+        // 열거 쉼표(、)를 임시 플레이스홀더로 대체하여 보호
+        final enumerationCommas = <String>[];
+        final enumerationPattern = RegExp(r'、');
+        final enumerationPlaceholder = "###ENUM###";
+
+        enumerationPattern.allMatches(tempText).forEach((match) {
+          enumerationCommas.add(match.group(0)!);
+          tempText = tempText.replaceFirst(match.group(0)!,
+              enumerationPlaceholder + enumerationCommas.length.toString());
+        });
+
+        // 문장 구분 기호로 분리
+        final sentencePattern = RegExp(r'([。！？；…]+)');
+        final parts = tempText.split(sentencePattern);
+
+        final sentences = <String>[];
+        for (int i = 0; i < parts.length - 1; i += 2) {
+          if (i + 1 < parts.length) {
+            final sentence = parts[i] + parts[i + 1];
+            if (sentence.trim().isNotEmpty) {
+              sentences.add(sentence.trim());
+            }
+          } else if (parts[i].trim().isNotEmpty) {
+            sentences.add(parts[i].trim());
+          }
+        }
+
+        // 마지막 부분이 남아있고 구분자가 없는 경우 추가
+        if (parts.length % 2 == 1 && parts.last.trim().isNotEmpty) {
+          sentences.add(parts.last.trim());
+        }
+
+        // 쉼표(，)를 포함한 긴 문장은 보조적으로 분리
+        // 단, 따옴표가 포함된 문장은 분리하지 않음
+        final finalSentences = <String>[];
+        for (final sentence in sentences) {
+          if (sentence.contains("，") &&
+              sentence.length > 10 &&
+              !sentence.contains(quotePlaceholder)) {
+            final subSentences = sentence.split("，");
+            for (final subSentence in subSentences) {
+              if (subSentence.trim().isNotEmpty) {
+                // 임시적으로 마침표 추가
+                finalSentences.add("${subSentence.trim()}。");
+              }
+            }
+          } else {
+            finalSentences.add(sentence);
+          }
+        }
+
+        // 열거 쉼표(、) 복원
+        List<String> restoredEnumSentences = finalSentences.map((sentence) {
+          String result = sentence;
+          for (int i = 0; i < enumerationCommas.length; i++) {
+            final placeholder = enumerationPlaceholder + (i + 1).toString();
+            if (result.contains(placeholder)) {
+              result = result.replaceAll(placeholder, enumerationCommas[i]);
+            }
+          }
+          return result;
+        }).toList();
+
+        // 따옴표 복원
+        List<String> restoredQuoteSentences =
+            restoredEnumSentences.map((sentence) {
+          String result = sentence;
+          for (int i = 0; i < quotes.length; i++) {
+            final placeholder = quotePlaceholder + (i + 1).toString();
+            if (result.contains(placeholder)) {
+              result = result.replaceAll(placeholder, quotes[i]);
+            }
+          }
+          return result;
+        }).toList();
+
+        // 최종 문장 추가
+        allSentences.addAll(restoredQuoteSentences);
+      }
+    }
+
+    // 디버그 출력 추가
+    debugPrint('최종 문장 수: ${allSentences.length}');
+    for (int i = 0; i < allSentences.length; i++) {
+      debugPrint('문장 $i: ${allSentences[i]}');
+    }
 
     // 빈 문장 제거 및 정리
-    return sentences.map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    return allSentences
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+
+  /// 특별 마커가 있는 문장인지 확인
+  bool isChapterTitle(String sentence) {
+    return sentence.startsWith("##CHAPTER##");
+  }
+
+  /// 특별 마커 제거
+  String removeMarker(String sentence) {
+    if (sentence.startsWith("##CHAPTER##")) {
+      return sentence.substring("##CHAPTER##".length).trim();
+    }
+    return sentence;
   }
 }
 
