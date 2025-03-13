@@ -109,7 +109,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         spans.add(TextSpan(text: text.substring(lastEnd, pos.start)));
       }
 
-      // 하이라이트된 단어 추가 (선택 가능하도록 수정)
+      // 하이라이트된 단어 추가 (제스처 인식기 없이 스타일만 적용)
       spans.add(
         TextSpan(
           text: pos.word,
@@ -117,7 +117,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             backgroundColor: Colors.yellow,
             fontWeight: FontWeight.bold,
           ),
-          // 제스처 인식기 제거하여 일반 선택이 가능하도록 함
+          // 제스처 인식기 제거
         ),
       );
 
@@ -146,43 +146,17 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           ),
           onSelectionChanged: (selection, cause) {
             if (selection.baseOffset != selection.extentOffset) {
-              // 범위 체크 추가 - 방향에 관계없이 작동하도록 수정
-              final int start = selection.start;
-              final int end = selection.end;
-
-              if (start >= 0 &&
-                  end >= 0 &&
-                  start < widget.processedText.fullOriginalText.length &&
-                  end <= widget.processedText.fullOriginalText.length) {
-                setState(() {
-                  _selectedText = widget.processedText.fullOriginalText
-                      .substring(start, end);
-                });
-              }
+              setState(() {
+                _selectedText = widget.processedText.fullOriginalText
+                    .substring(selection.baseOffset, selection.extentOffset);
+              });
             }
           },
           contextMenuBuilder: (context, editableTextState) {
-            // 범위 체크 추가 - 방향에 관계없이 작동하도록 수정
             final TextSelection selection =
                 editableTextState.textEditingValue.selection;
-            final int start = selection.start;
-            final int end = selection.end;
-
-            if (start < 0 ||
-                end < 0 ||
-                start >= editableTextState.textEditingValue.text.length ||
-                end > editableTextState.textEditingValue.text.length) {
-              return const SizedBox.shrink();
-            }
-
-            String selectedText = '';
-            try {
-              selectedText =
-                  selection.textInside(editableTextState.textEditingValue.text);
-            } catch (e) {
-              debugPrint('텍스트 선택 오류: $e');
-              return const SizedBox.shrink();
-            }
+            final String selectedText =
+                selection.textInside(editableTextState.textEditingValue.text);
 
             if (selectedText.isEmpty) {
               return const SizedBox.shrink();
@@ -190,8 +164,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
             _selectedText = selectedText;
 
-            // 선택한 단어가 플래시카드에 포함된 경우 → 컨텍스트 메뉴 표시하지 않음 (탭으로만 처리)
+            // 선택한 단어가 플래시카드에 포함된 경우 → 바로 사전 검색 실행
             if (_flashcardWords.contains(_selectedText)) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                widget.onDictionaryLookup?.call(_selectedText);
+              });
               return const SizedBox.shrink();
             }
 
@@ -221,7 +198,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           showCursor: true,
           cursorWidth: 2.0,
           cursorColor: Colors.blue,
-          selectionControls: MaterialTextSelectionControls(),
         ),
 
         // 번역 텍스트 표시 (showTranslation이 true이고 번역 텍스트가 있는 경우)
@@ -254,43 +230,17 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               ),
               onSelectionChanged: (selection, cause) {
                 if (selection.baseOffset != selection.extentOffset) {
-                  // 범위 체크 추가 - 방향에 관계없이 작동하도록 수정
-                  final int start = selection.start;
-                  final int end = selection.end;
-
-                  if (start >= 0 &&
-                      end >= 0 &&
-                      start < segment.originalText.length &&
-                      end <= segment.originalText.length) {
-                    setState(() {
-                      _selectedText =
-                          segment.originalText.substring(start, end);
-                    });
-                  }
+                  setState(() {
+                    _selectedText = segment.originalText.substring(
+                        selection.baseOffset, selection.extentOffset);
+                  });
                 }
               },
               contextMenuBuilder: (context, editableTextState) {
-                // 범위 체크 추가 - 방향에 관계없이 작동하도록 수정
                 final TextSelection selection =
                     editableTextState.textEditingValue.selection;
-                final int start = selection.start;
-                final int end = selection.end;
-
-                if (start < 0 ||
-                    end < 0 ||
-                    start >= editableTextState.textEditingValue.text.length ||
-                    end > editableTextState.textEditingValue.text.length) {
-                  return const SizedBox.shrink();
-                }
-
-                String selectedText = '';
-                try {
-                  selectedText = selection
-                      .textInside(editableTextState.textEditingValue.text);
-                } catch (e) {
-                  debugPrint('텍스트 선택 오류: $e');
-                  return const SizedBox.shrink();
-                }
+                final String selectedText = selection
+                    .textInside(editableTextState.textEditingValue.text);
 
                 if (selectedText.isEmpty) {
                   return const SizedBox.shrink();
@@ -298,8 +248,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
                 _selectedText = selectedText;
 
-                // 선택한 단어가 플래시카드에 포함된 경우 → 컨텍스트 메뉴 표시하지 않음 (탭으로만 처리)
+                // 선택한 단어가 플래시카드에 포함된 경우 → 바로 사전 검색 실행
                 if (_flashcardWords.contains(_selectedText)) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    widget.onDictionaryLookup?.call(_selectedText);
+                  });
                   return const SizedBox.shrink();
                 }
 
@@ -329,7 +282,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               showCursor: true,
               cursorWidth: 2.0,
               cursorColor: Colors.blue,
-              selectionControls: MaterialTextSelectionControls(),
             ),
 
             // 핀인 표시
@@ -368,20 +320,10 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // 문장 바깥 탭 시 선택 취소를 위한 GestureDetector 추가
-    return GestureDetector(
-      onTap: () {
-        // 문장 바깥을 탭하면 선택 취소
-        setState(() {
-          _selectedText = '';
-        });
-      },
-      behavior: HitTestBehavior.translucent,
-      child: widget.processedText.segments != null &&
-              !widget.processedText.showFullText
-          ? _buildSegmentedView()
-          : _buildFullTextView(),
-    );
+    return widget.processedText.segments != null &&
+            !widget.processedText.showFullText
+        ? _buildSegmentedView()
+        : _buildFullTextView();
   }
 }
 

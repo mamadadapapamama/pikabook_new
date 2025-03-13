@@ -41,7 +41,10 @@ class ContextMenuHelper {
 
     if (isInFlashcards) {
       debugPrint('플래시카드에 포함된 단어: $selectedText - 컨텍스트 메뉴 표시하지 않음');
-      // 자동 사전 검색 콜백 제거 (탭으로만 처리)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        debugPrint('사전 검색 콜백 호출: $selectedText');
+        onLookupDictionary?.call(selectedText);
+      });
       return const SizedBox.shrink(); // 기본 컨텍스트 메뉴를 띄우지 않음
     }
 
