@@ -3,6 +3,7 @@ import '../services/dictionary_service.dart';
 import '../services/page_content_service.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
+
 class DictionaryResultWidget extends StatelessWidget {
   final DictionaryEntry entry;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
@@ -62,7 +63,7 @@ class DictionaryResultWidget extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: () {
                   pageContentService.speakText(entry.word);
-                  Navigator.pop(context);
+                  // Navigator.pop(context); // 바텀 시트를 닫지 않도록 제거
                 },
                 icon: const Icon(Icons.volume_up),
                 label: const Text('읽기'),
