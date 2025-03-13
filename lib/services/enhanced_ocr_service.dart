@@ -15,8 +15,10 @@ import 'language_detection_service.dart';
 import 'translation_service.dart';
 import 'chinese_segmenter_service.dart';
 
-/// 개선된 OCR 서비스
-/// 모드에 따라 다른 처리를 수행하고, 핀인 처리를 분리합니다.
+/// 개선된 OCR 서비스 : OCR 처리 후 모드에 따라 다른 처리를 수행합니다. 
+/// 전문 서적 모드 : 핀인 제거 후 전체 텍스트 번역 
+/// 언어 학습 모드:  문장별 분리, 번역 후 핀인 처리
+
 class EnhancedOcrService {
   // 싱글톤 패턴 구현
   static final EnhancedOcrService _instance = EnhancedOcrService._internal();
@@ -298,6 +300,7 @@ class EnhancedOcrService {
 
     // 문장 수가 일치하면 1:1 매핑
     if (originalSentences.length == translatedSentences.length) {
+      debugPrint('문장 수 일치: 1:1 매핑 수행');
       for (int i = 0; i < originalSentences.length; i++) {
         final originalSentence = originalSentences[i];
         final translatedSentence = translatedSentences[i];
@@ -331,42 +334,9 @@ class EnhancedOcrService {
         combinedTranslation.write(translatedSentence);
       }
     }
-    // 문장 수가 불일치하면 매핑 시도
-    else if (translatedSentences.isNotEmpty) {
-      final mappedSegments =
-          translationService.mapOriginalAndTranslatedSentences(
-              originalSentences, translatedSentences);
-
-      for (final segment in mappedSegments) {
-        String pinyin = '';
-        if (languageDetectionService.containsChinese(segment.originalText)) {
-          try {
-            final chineseCharsOnly = languageDetectionService
-                .extractChineseChars(segment.originalText);
-            if (chineseCharsOnly.isNotEmpty) {
-              pinyin = await languageDetectionService
-                  .generatePinyin(chineseCharsOnly);
-            }
-          } catch (e) {
-            debugPrint('핀인 생성 실패: $e');
-          }
-        }
-
-        segments.add(TextSegment(
-          originalText: segment.originalText,
-          translatedText: segment.translatedText ?? '',
-          pinyin: pinyin,
-        ));
-
-        // 전체 번역 텍스트 구성
-        if (combinedTranslation.isNotEmpty) {
-          combinedTranslation.write('\n');
-        }
-        combinedTranslation.write(segment.translatedText ?? '');
-      }
-    }
-    // 번역 텍스트가 없으면 새로 번역
+    // 문장 수가 불일치하거나 번역이 없는 경우 각 문장을 개별적으로 번역
     else {
+      debugPrint('문장 수 불일치 또는 번역 없음: 개별 번역 수행');
       for (final originalSentence in originalSentences) {
         String pinyin = '';
         String sentenceTranslation = '';
@@ -387,6 +357,7 @@ class EnhancedOcrService {
                 .translateText(originalSentence, targetLanguage: 'ko');
           } catch (e) {
             debugPrint('핀인 생성 또는 번역 실패: $e');
+            sentenceTranslation = '번역 실패';
           }
         } else {
           // 중국어가 없는 문장 처리
@@ -394,6 +365,7 @@ class EnhancedOcrService {
             sentenceTranslation = await translationService
                 .translateText(originalSentence, targetLanguage: 'ko');
           } catch (e) {
+            debugPrint('번역 실패: $e');
             sentenceTranslation = originalSentence; // 번역 실패 시 원본 사용
           }
         }
@@ -404,7 +376,7 @@ class EnhancedOcrService {
           pinyin: pinyin,
         ));
 
-        // 번역 결과 추가
+        // 전체 번역 텍스트 구성
         if (combinedTranslation.isNotEmpty) {
           combinedTranslation.write('\n');
         }
