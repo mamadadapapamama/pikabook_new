@@ -513,8 +513,14 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   void _showDictionaryBottomSheet(DictionaryEntry entry) {
     debugPrint('사전 결과 bottom sheet 표시: ${entry.word}');
 
-    // 스낵바 제거 (중복 방지)
+    // 간단한 스낵바로 먼저 표시 (디버깅용)
     ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('사전 검색 결과: ${entry.word} - ${entry.meaning}'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
 
     // Bottom Sheet 표시
     showModalBottomSheet<void>(
