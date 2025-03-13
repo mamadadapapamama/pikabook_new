@@ -240,6 +240,18 @@ class ChineseSegmenterService {
         continue;
       }
 
+      // 마침표만으로 구성된 단락은 말줄임표로 처리
+      if (RegExp(r'^\s*[.．。]+\s*$').hasMatch(paragraph)) {
+        debugPrint('마침표만 있는 단락을 말줄임표로 처리: $paragraph');
+        // 말줄임표로 변환하여 이전 문장에 추가
+        if (allSentences.isNotEmpty) {
+          allSentences[allSentences.length - 1] += '…';
+        } else {
+          allSentences.add('…');
+        }
+        continue;
+      }
+
       // 특정 패턴 감지 (예: '제 N과', 챕터 제목 등) - 정규식 패턴 개선
       final patterns = <String, String>{};
       // 다양한 형태의 챕터 제목 패턴 감지 (제 13과, 第 1 课, 13과, 第13课, 第十三课 등)
@@ -300,7 +312,8 @@ class ChineseSegmenterService {
         });
 
         // 말줄임표 처리 - 연속된 마침표를 하나의 문장 구분자로 처리
-        final ellipsisPattern = RegExp(r'\.{3,}|…{1,}');
+        // 영어 마침표(.), 중국어 마침표(。), 전각 마침표(．) 등을 모두 포함
+        final ellipsisPattern = RegExp(r'[.．。]{2,}|…{1,}');
         final ellipsisPlaceholder = "###ELLIPSIS###";
         final ellipses = <String>[];
 
@@ -311,8 +324,26 @@ class ChineseSegmenterService {
               ellipsis, ellipsisPlaceholder + ellipses.length.toString());
         });
 
-        // 문장 구분 기호로 분리 (말줄임표 포함)
+        // 문장 구분 기호로 분리 (말줄임표 제외)
+        // 마침표(.), 느낌표(!), 물음표(?), 세미콜론(;) 등을 문장 구분자로 사용
         final sentencePattern = RegExp(r'([。！？；]+)');
+
+        // 단일 마침표(.)는 말줄임표와 구분하기 위해 별도 처리
+        // 단일 마침표 앞뒤에 공백이 있거나 문장 끝에 있는 경우에만 문장 구분자로 처리
+        final singleDotPattern = RegExp(r'(\s\.\s|\s\.$|[^.]\.$)');
+
+        // 먼저 단일 마침표를 임시 플레이스홀더로 대체
+        final singleDots = <String>[];
+        final singleDotPlaceholder = "###DOT###";
+
+        singleDotPattern.allMatches(tempText).forEach((match) {
+          final dot = match.group(0)!;
+          singleDots.add(dot);
+          tempText = tempText.replaceFirst(
+              dot, singleDotPlaceholder + singleDots.length.toString());
+        });
+
+        // 문장 구분 기호로 분리
         final parts = tempText.split(sentencePattern);
 
         final sentences = <String>[];
@@ -352,13 +383,27 @@ class ChineseSegmenterService {
           }
         }
 
+        // 단일 마침표 복원
+        List<String> restoredDotSentences = finalSentences.map((sentence) {
+          String result = sentence;
+          for (int i = 0; i < singleDots.length; i++) {
+            final placeholder = singleDotPlaceholder + (i + 1).toString();
+            if (result.contains(placeholder)) {
+              result = result.replaceAll(placeholder, singleDots[i]);
+            }
+          }
+          return result;
+        }).toList();
+
         // 말줄임표 복원
-        List<String> restoredEllipsisSentences = finalSentences.map((sentence) {
+        List<String> restoredEllipsisSentences =
+            restoredDotSentences.map((sentence) {
           String result = sentence;
           for (int i = 0; i < ellipses.length; i++) {
             final placeholder = ellipsisPlaceholder + (i + 1).toString();
             if (result.contains(placeholder)) {
-              result = result.replaceAll(placeholder, ellipses[i]);
+              // 모든 종류의 말줄임표를 표준 말줄임표(…)로 통일
+              result = result.replaceAll(placeholder, '…');
             }
           }
           return result;
@@ -395,8 +440,37 @@ class ChineseSegmenterService {
       }
     }
 
+    // 마침표만으로 구성된 문장 필터링 및 병합
+    List<String> mergedSentences = [];
+    String? currentSentence;
+
+    for (final sentence in allSentences) {
+      // 마침표만으로 구성된 문장인지 확인
+      final isOnlyDots = RegExp(r'^\s*[.．。]+\s*$').hasMatch(sentence);
+
+      if (isOnlyDots) {
+        // 마침표만 있는 문장은 말줄임표로 변환하여 이전 문장에 추가
+        if (currentSentence != null) {
+          currentSentence += '…';
+        } else {
+          currentSentence = '…';
+        }
+      } else {
+        // 이전 문장이 있으면 추가
+        if (currentSentence != null) {
+          mergedSentences.add(currentSentence);
+        }
+        currentSentence = sentence;
+      }
+    }
+
+    // 마지막 문장 추가
+    if (currentSentence != null) {
+      mergedSentences.add(currentSentence);
+    }
+
     // 숫자만으로 구성된 문장 필터링 (페이지 번호 등)
-    allSentences = allSentences.where((sentence) {
+    mergedSentences = mergedSentences.where((sentence) {
       // 숫자와 공백만 포함된 문장인지 확인
       final isOnlyNumbers = RegExp(r'^\s*\d+\s*$').hasMatch(sentence);
       if (isOnlyNumbers) {
@@ -406,13 +480,13 @@ class ChineseSegmenterService {
     }).toList();
 
     // 디버그 출력 추가
-    debugPrint('최종 문장 수: ${allSentences.length}');
-    for (int i = 0; i < allSentences.length; i++) {
-      debugPrint('문장 $i: ${allSentences[i]}');
+    debugPrint('최종 문장 수: ${mergedSentences.length}');
+    for (int i = 0; i < mergedSentences.length; i++) {
+      debugPrint('문장 $i: ${mergedSentences[i]}');
     }
 
     // 빈 문장 제거 및 정리
-    return allSentences
+    return mergedSentences
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
