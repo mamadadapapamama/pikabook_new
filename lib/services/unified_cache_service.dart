@@ -5,11 +5,10 @@ import '../models/note.dart';
 import '../models/page.dart' as page_model;
 import 'package:crypto/crypto.dart';
 
-/// 통합 캐싱 서비스
-///
-/// 노트와 페이지 데이터를 위한 통합 캐싱 서비스입니다.
+/// 노트, 페이지의 데이터를 통합 캐싱 서비스입니다.
 /// 메모리 캐싱과 로컬 저장소 캐싱을 모두 지원합니다.
 /// 메모리 캐시는 앱이 실행 중일 때만 유지되며, 로컬 저장소 캐시는 앱을 재시작해도 유지됩니다.
+
 class UnifiedCacheService {
   // 싱글톤 인스턴스
   static final UnifiedCacheService _instance = UnifiedCacheService._internal();
