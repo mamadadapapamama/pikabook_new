@@ -5,7 +5,8 @@ import '../models/flash_card.dart';
 import '../utils/context_menu_helper.dart';
 import '../utils/text_selection_helper.dart';
 
-/// **텍스트 처리 결과를 표시하는 위젯**
+/// 페이지의 텍스트 프로세싱(OCR, 번역, pinyin, highlight)이 완료되면, 텍스트 처리 결과를 표시하는 위젯
+
 class ProcessedTextWidget extends StatefulWidget {
   final ProcessedText processedText;
   final bool showTranslation;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// 내부 중국어 사전 데이터를 로드 관리하는 서비스 
+
 class ChineseDictionaryService {
   static final ChineseDictionaryService _instance =
       ChineseDictionaryService._internal();

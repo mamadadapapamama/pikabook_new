@@ -1,5 +1,8 @@
+
 /// 텍스트 세그먼트 모델
 /// 원문, 핀인, 번역을 함께 관리합니다.
+
+
 class TextSegment {
   /// 원문 텍스트 (중국어)
   final String originalText;

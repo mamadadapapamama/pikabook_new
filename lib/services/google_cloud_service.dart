@@ -1,12 +1,13 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'ocr_service.dart';
+import 'enhanced_ocr_service.dart';
 import 'translation_service.dart';
 
 /// Google Cloud 서비스를 통합적으로 관리하는 클래스
 /// OCR 및 번역 기능을 제공합니다.
+
 class GoogleCloudService {
-  final OcrService _ocrService = OcrService();
+  final EnhancedOcrService _ocrService = EnhancedOcrService();
   final TranslationService _translationService = TranslationService();
 
   // 싱글톤 패턴 구현

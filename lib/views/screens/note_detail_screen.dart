@@ -12,8 +12,6 @@ import '../../services/tts_service.dart';
 import '../../services/enhanced_ocr_service.dart';
 import '../../services/user_preferences_service.dart';
 import '../../widgets/loading_indicator.dart';
-import '../../widgets/page_content_widget.dart';
-import '../../widgets/page_indicator_widget.dart';
 import '../../widgets/note_detail_app_bar.dart';
 import '../../widgets/note_action_bottom_sheet.dart';
 import '../../widgets/note_page_view.dart';
@@ -22,8 +20,10 @@ import 'flashcard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async'; // Timer 클래스를 사용하기 위한 import 추가
 import '../../services/unified_cache_service.dart';
-import 'package:badges/badges.dart' as badges;
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+/// 노트 상세 화면
+/// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
 
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;

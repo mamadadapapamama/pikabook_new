@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -9,18 +11,18 @@ import '../models/page.dart' as page_model;
 import '../models/flash_card.dart';
 import 'page_service.dart';
 import 'image_service.dart';
-import 'ocr_service.dart';
 import 'translation_service.dart';
 import 'unified_cache_service.dart';
+import 'enhanced_ocr_service.dart';
 
 class NoteService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final PageService _pageService = PageService();
   final ImageService _imageService = ImageService();
-  final OcrService _ocrService = OcrService();
   final TranslationService _translationService = TranslationService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
+  final EnhancedOcrService _ocrService = EnhancedOcrService();
 
   // SharedPreferences 키
   static const String _cachedNotesKey = 'cached_notes';

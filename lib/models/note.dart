@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'flash_card.dart';
 import 'page.dart';
 
+/// Straight forward! Note 의 모델
+
 class Note {
   final String? id;
   final String originalText;

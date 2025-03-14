@@ -1,22 +1,20 @@
 import 'dart:io';
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:googleapis/vision/v1.dart' as vision;
 import 'package:googleapis_auth/auth_io.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'package:pinyin/pinyin.dart';
 import '../models/text_processing_mode.dart';
 import '../models/processed_text.dart';
 import '../models/text_segment.dart';
-import 'language_detection_service.dart';
 import 'translation_service.dart';
 import 'chinese_segmenter_service.dart';
+import 'text_cleaner_service.dart';
+import 'pinyin_creation_service.dart';
 
-/// 개선된 OCR 서비스 : OCR 처리 후 모드에 따라 다른 처리를 수행합니다. 
-/// 전문 서적 모드 : 핀인 제거 후 전체 텍스트 번역 
+/// 개선된 OCR 서비스 : OCR 처리 후 모드에 따라 다른 처리를 수행합니다.
+/// 전문 서적 모드 : 핀인 제거 후 전체 텍스트 번역
 /// 언어 학습 모드:  문장별 분리, 번역 후 핀인 처리
 
 class EnhancedOcrService {
@@ -32,11 +30,18 @@ class EnhancedOcrService {
   final String _targetLanguage = 'zh-CN'; // 중국어
 
   // 언어 감지 서비스
-  final LanguageDetectionService _languageDetectionService =
-      LanguageDetectionService();
+
+  // 텍스트 정리 서비스
+  final TextCleanerService _textCleanerService = TextCleanerService();
+
+  // 핀인 생성 서비스
+  final PinyinCreationService _pinyinService = PinyinCreationService();
 
   // 번역 서비스
   final TranslationService _translationService = TranslationService();
+
+  // 중국어 분할 서비스
+  final ChineseSegmenterService _segmenterService = ChineseSegmenterService();
 
   // API 초기화
   Future<void> initialize() async {
@@ -135,13 +140,17 @@ class EnhancedOcrService {
         final fullText = annotations.textAnnotations![0].description ?? '';
         debugPrint('감지된 전체 텍스트: $fullText');
 
+        // 불필요한 텍스트 제거
+        final cleanedText = _textCleanerService.cleanText(fullText);
+        debugPrint('정리된 텍스트: $cleanedText');
+
         // 모드에 따라 다른 처리 수행
         if (mode == TextProcessingMode.professionalReading) {
           // 전문 서적 모드: 핀인 제거 후 전체 텍스트 처리
-          return await _processProfessionalReading(fullText);
+          return await _processProfessionalReading(cleanedText);
         } else {
           // 언어 학습 모드: 문장별 처리
-          return await _processLanguageLearning(fullText);
+          return await _processLanguageLearning(cleanedText);
         }
       }
 
@@ -160,7 +169,7 @@ class EnhancedOcrService {
   /// 핀인 제거 후 전체 텍스트 번역
   Future<ProcessedText> _processProfessionalReading(String fullText) async {
     // 핀인 줄 제거
-    final cleanedText = _languageDetectionService.removePinyinLines(fullText);
+    final cleanedText = _textCleanerService.removePinyinLines(fullText);
 
     // 번역
     final translatedText = await _translationService.translateText(cleanedText,
@@ -178,14 +187,14 @@ class EnhancedOcrService {
   /// 문장별로 분리하여 번역 및 핀인 처리
   Future<ProcessedText> _processLanguageLearning(String fullText) async {
     // 핀인 줄 제거한 전체 텍스트
-    final cleanedText = _languageDetectionService.removePinyinLines(fullText);
+    final cleanedText = _textCleanerService.removePinyinLines(fullText);
 
     // 전체 번역
     final fullTranslatedText = await _translationService
         .translateText(cleanedText, targetLanguage: 'ko');
 
-    // 문장 분리
-    final segments = await _segmentText(fullText);
+    // 문장 분리 및 병렬 처리
+    final segments = await _processTextSegmentsInParallel(cleanedText);
 
     return ProcessedText(
       fullOriginalText: cleanedText,
@@ -195,223 +204,149 @@ class EnhancedOcrService {
     );
   }
 
-  /// 텍스트를 문장으로 분리하고 각 문장에 대해 번역 및 핀인 처리
-  Future<List<TextSegment>> _segmentText(String text) async {
-    // 줄 단위로 분리
-    final lines = text.split('\n');
-    final segments = <TextSegment>[];
+  /// 문장을 병렬로 처리
+  Future<List<TextSegment>> _processTextSegmentsInParallel(String text) async {
+    // 문장 분리
+    final sentences = _segmenterService.splitIntoSentences(text);
+    debugPrint('분리된 문장 수: ${sentences.length}개');
 
-    // 중국어 문장과 핀인 줄 매칭
-    String? currentPinyin;
-
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i];
-
-      // 빈 줄 건너뛰기
-      if (line.trim().isEmpty) continue;
-
-      // 핀인 줄인지 확인
-      if (_languageDetectionService.isPinyinLine(line)) {
-        currentPinyin = line;
-        continue;
-      }
-
-      // 중국어 문장이 있는 경우
-      if (_languageDetectionService.containsChinese(line)) {
-        // 번역
-        final translatedText =
-            await _translationService.translateText(line, targetLanguage: 'ko');
-
-        // 핀인이 없는 경우 자동 생성 시도
-        if (currentPinyin == null) {
-          try {
-            currentPinyin =
-                await _languageDetectionService.generatePinyin(line);
-            debugPrint('핀인 자동 생성: $currentPinyin');
-          } catch (e) {
-            debugPrint('핀인 자동 생성 실패: $e');
-            // 핀인 생성 실패 시 기본 핀인 제공 (예시)
-            currentPinyin = _generateSimplePinyin(line);
-          }
-        }
-
-        // 세그먼트 추가
-        segments.add(TextSegment(
-          originalText: line,
-          pinyin: currentPinyin,
-          translatedText: translatedText,
-        ));
-
-        // 핀인 초기화 (다음 문장을 위해)
-        currentPinyin = null;
-      }
+    if (sentences.isEmpty) {
+      return [];
     }
+
+    // 병렬 처리를 위한 Future 목록
+    List<Future<TextSegment>> futures = [];
+
+    // 각 문장에 대한 처리 작업 생성
+    for (final sentence in sentences) {
+      if (sentence.trim().isEmpty) continue;
+      futures.add(_processSentence(sentence));
+    }
+
+    // 모든 작업 병렬 실행 및 결과 수집
+    final segments = await Future.wait(futures);
 
     return segments;
   }
 
-  /// 간단한 핀인 생성 (pinyin 패키지 사용)
-  String _generateSimplePinyin(String chineseText) {
+  /// 개별 문장 처리 (번역 및 핀인 생성)
+  Future<TextSegment> _processSentence(String sentence) async {
+    String translatedText = '';
+    String pinyin = '';
+
     try {
-      // 문장 전체에 대한 핀인 생성
-      return PinyinHelper.getPinyin(chineseText,
-          format: PinyinFormat.WITH_TONE_MARK);
+      // 중국어가 포함된 문장에 대해서만 핀인 생성
+      if (_textCleanerService.containsChinese(sentence)) {
+        // 번역과 핀인 생성을 병렬로 처리
+        final results = await Future.wait([
+          _translationService.translateText(sentence, targetLanguage: 'ko'),
+          _generatePinyinForSentence(sentence)
+        ]);
+
+        translatedText = results[0];
+        pinyin = results[1];
+      } else {
+        // 중국어가 없는 문장은 번역만 수행
+        translatedText = await _translationService.translateText(sentence,
+            targetLanguage: 'ko');
+      }
     } catch (e) {
-      debugPrint('간단한 핀인 생성 중 오류 발생: $e');
-      return '(pinyin for: ${chineseText.substring(0, min(10, chineseText.length))}...)';
+      debugPrint('문장 처리 중 오류 발생: $e');
+      // 오류 발생 시 원본 문장 사용
+      translatedText = '(번역 오류)';
+    }
+
+    return TextSegment(
+      originalText: sentence,
+      translatedText: translatedText,
+      pinyin: pinyin,
+    );
+  }
+
+  /// 문장에서 중국어 문자만 추출하여 핀인 생성
+  Future<String> _generatePinyinForSentence(String sentence) async {
+    try {
+      // 중국어 문자만 추출
+      final chineseCharsOnly =
+          _textCleanerService.extractChineseChars(sentence);
+      if (chineseCharsOnly.isEmpty) {
+        return '';
+      }
+
+      // 핀인 생성
+      return await _pinyinService.generatePinyin(chineseCharsOnly);
+    } catch (e) {
+      debugPrint('핀인 생성 중 오류 발생: $e');
+      return '';
     }
   }
 
   /// 텍스트 처리 (OCR 없이 기존 텍스트 처리)
-  Future<ProcessedText> processText(String originalText, String translatedText,
-      TextProcessingMode mode) async {
-    if (originalText.isEmpty) {
-      throw Exception('원본 텍스트가 비어 있습니다.');
-    }
-
-    // 전문 서적 모드: 전체 텍스트 표시
-    if (mode == TextProcessingMode.professionalReading) {
-      return ProcessedText(
-        fullOriginalText: originalText,
-        fullTranslatedText: translatedText,
-        showFullText: true,
-      );
-    }
-
-    // 언어 학습 모드: 문장별 처리
-    final languageDetectionService = LanguageDetectionService();
-    final translationService = TranslationService();
-    final segmenterService = ChineseSegmenterService();
-
-    // 문장 단위로 분리
-    final originalSentences = segmenterService.splitIntoSentences(originalText);
-    debugPrint('분리된 문장 수: ${originalSentences.length}개');
-
-    // 번역된 텍스트가 있으면 문장 단위로 분리
-    List<String> translatedSentences = [];
-    if (translatedText.isNotEmpty) {
-      translatedSentences = segmenterService.splitIntoSentences(translatedText);
-      debugPrint('분리된 번역 문장 수: ${translatedSentences.length}개');
-    }
-
-    // 각 문장별로 번역 수행
-    final segments = <TextSegment>[];
-    final StringBuffer combinedTranslation = StringBuffer();
-
-    // 문장 수가 일치하면 1:1 매핑
-    if (originalSentences.length == translatedSentences.length) {
-      for (int i = 0; i < originalSentences.length; i++) {
-        final originalSentence = originalSentences[i];
-        final translatedSentence = translatedSentences[i];
-        String pinyin = '';
-
-        // 중국어가 포함된 문장에 대해서만 핀인 생성
-        if (languageDetectionService.containsChinese(originalSentence)) {
-          try {
-            // 문장에서 중국어 문자만 추출하여 핀인 생성
-            final chineseCharsOnly = languageDetectionService.extractChineseChars(originalSentence);
-            if (chineseCharsOnly.isNotEmpty) {
-              pinyin = await languageDetectionService.generatePinyin(chineseCharsOnly);
-            }
-          } catch (e) {
-            debugPrint('핀인 생성 실패: $e');
-          }
-        }
-
-        segments.add(TextSegment(
-          originalText: originalSentence,
-          translatedText: translatedSentence,
-          pinyin: pinyin,
-        ));
-
-        // 전체 번역 텍스트 구성
-        if (combinedTranslation.isNotEmpty) {
-          combinedTranslation.write('\n');
-        }
-        combinedTranslation.write(translatedSentence);
+  Future<ProcessedText> processText(
+      String text, TextProcessingMode mode) async {
+    try {
+      // 모드에 따라 다른 처리 수행
+      if (mode == TextProcessingMode.professionalReading) {
+        return await _processProfessionalReading(text);
+      } else {
+        return await _processLanguageLearning(text);
       }
-    } 
-    // 문장 수가 불일치하면 매핑 시도
-    else if (translatedSentences.isNotEmpty) {
-      final mappedSegments = translationService.mapOriginalAndTranslatedSentences(
-          originalSentences, translatedSentences);
-
-      for (final segment in mappedSegments) {
-        String pinyin = '';
-        if (languageDetectionService.containsChinese(segment.originalText)) {
-          try {
-            final chineseCharsOnly = languageDetectionService.extractChineseChars(segment.originalText);
-            if (chineseCharsOnly.isNotEmpty) {
-              pinyin = await languageDetectionService.generatePinyin(chineseCharsOnly);
-            }
-          } catch (e) {
-            debugPrint('핀인 생성 실패: $e');
-          }
-        }
-
-        segments.add(TextSegment(
-          originalText: segment.originalText,
-          translatedText: segment.translatedText ?? '',
-          pinyin: pinyin,
-        ));
-
-        // 전체 번역 텍스트 구성
-        if (combinedTranslation.isNotEmpty) {
-          combinedTranslation.write('\n');
-        }
-        combinedTranslation.write(segment.translatedText ?? '');
-      }
+    } catch (e) {
+      debugPrint('텍스트 처리 중 오류 발생: $e');
+      throw Exception('텍스트를 처리할 수 없습니다: $e');
     }
-    // 번역 텍스트가 없으면 새로 번역
-    else {
-      for (final originalSentence in originalSentences) {
-        String pinyin = '';
-        String sentenceTranslation = '';
+  }
 
-        // 중국어가 포함된 문장에 대해서만 핀인 생성 및 번역
-        if (languageDetectionService.containsChinese(originalSentence)) {
-          try {
-            // 핀인 생성
-            final chineseCharsOnly = languageDetectionService.extractChineseChars(originalSentence);
-            if (chineseCharsOnly.isNotEmpty) {
-              pinyin = await languageDetectionService.generatePinyin(chineseCharsOnly);
-            }
+  /// 이미지에서 텍스트 추출 (OCR)
+  Future<String> extractText(File imageFile) async {
+    try {
+      await initialize();
 
-            // 번역 수행
-            sentenceTranslation = await translationService.translateText(
-                originalSentence, targetLanguage: 'ko');
-          } catch (e) {
-            debugPrint('핀인 생성 또는 번역 실패: $e');
-          }
-        } else {
-          // 중국어가 없는 문장 처리
-          try {
-            sentenceTranslation = await translationService.translateText(
-                originalSentence, targetLanguage: 'ko');
-          } catch (e) {
-            sentenceTranslation = originalSentence; // 번역 실패 시 원본 사용
-          }
-        }
-
-        segments.add(TextSegment(
-          originalText: originalSentence,
-          translatedText: sentenceTranslation,
-          pinyin: pinyin,
-        ));
-
-        // 번역 결과 추가
-        if (combinedTranslation.isNotEmpty) {
-          combinedTranslation.write('\n');
-        }
-        combinedTranslation.write(sentenceTranslation);
+      if (_visionApi == null) {
+        throw Exception('Vision API가 초기화되지 않았습니다.');
       }
-    }
 
-    return ProcessedText(
-      fullOriginalText: originalText,
-      fullTranslatedText: combinedTranslation.toString(),
-      segments: segments,
-      showFullText: false, // 문장별 모드로 시작
-    );
+      // 이미지 파일을 base64로 인코딩
+      final bytes = await imageFile.readAsBytes();
+      final base64Image = base64Encode(bytes);
+
+      // Vision API 요청 생성
+      final request = vision.AnnotateImageRequest();
+      request.image = vision.Image()..content = base64Image;
+      request.features = [
+        vision.Feature()
+          ..type = 'TEXT_DETECTION'
+          ..maxResults = 1
+      ];
+
+      // 언어 힌트 추가 (중국어 우선)
+      request.imageContext = vision.ImageContext()
+        ..languageHints = ['zh-CN', 'zh-TW', 'ja', 'ko', 'en'];
+
+      // API 요청 전송
+      final batchRequest = vision.BatchAnnotateImagesRequest()
+        ..requests = [request];
+      final response = await _visionApi!.images.annotate(batchRequest);
+
+      // 응답 처리
+      if (response.responses == null || response.responses!.isEmpty) {
+        return '';
+      }
+
+      final textAnnotation = response.responses![0].fullTextAnnotation;
+      if (textAnnotation == null) {
+        return '';
+      }
+
+      String extractedText = textAnnotation.text ?? '';
+
+      // TextCleanerService를 사용하여 불필요한 텍스트 제거
+      extractedText = _textCleanerService.cleanText(extractedText);
+
+      return extractedText;
+    } catch (e) {
+      debugPrint('텍스트 추출 중 오류 발생: $e');
+      return '';
+    }
   }
 }

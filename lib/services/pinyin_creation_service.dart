@@ -1,0 +1,57 @@
+import 'package:flutter/foundation.dart';
+import 'package:pinyin/pinyin.dart';
+
+/// 중국어 텍스트에 대한 핀인 생성 서비스
+class PinyinCreationService {
+  // 싱글톤 패턴
+  static final PinyinCreationService _instance =
+      PinyinCreationService._internal();
+  factory PinyinCreationService() => _instance;
+  PinyinCreationService._internal();
+
+  /// 중국어 텍스트에 대한 핀인 생성
+  Future<String> generatePinyin(String chineseText) async {
+    if (chineseText.isEmpty) return '';
+
+    try {
+      // 핀인 라이브러리 사용
+      final pinyinResult = PinyinHelper.getPinyin(chineseText,
+          separator: ' ', format: PinyinFormat.WITH_TONE_MARK);
+
+      return pinyinResult;
+    } catch (e) {
+      debugPrint('핀인 생성 중 오류 발생: $e');
+      return '';
+    }
+  }
+
+  /// 병렬 처리를 위한 격리 함수
+  Future<String> generatePinyinIsolate(String chineseText) async {
+    try {
+      return await compute(_generatePinyinInIsolate, chineseText);
+    } catch (e) {
+      debugPrint('핀인 생성 격리 함수 실행 중 오류 발생: $e');
+      return '';
+    }
+  }
+
+  /// 격리 환경에서 실행되는 핀인 생성 함수
+  static String _generatePinyinInIsolate(String chineseText) {
+    if (chineseText.isEmpty) return '';
+
+    try {
+      return PinyinHelper.getPinyin(chineseText,
+          separator: ' ', format: PinyinFormat.WITH_TONE_MARK);
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /// 핀인 포맷팅 (필요시 사용)
+  String formatPinyin(String pinyin) {
+    if (pinyin.isEmpty) return '';
+
+    // 기본적인 포맷팅 (공백 정리 등)
+    return pinyin.trim();
+  }
+}

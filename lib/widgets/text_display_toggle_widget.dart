@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import '../utils/text_display_mode.dart';
 import '../services/page_content_service.dart';
 
-/// 텍스트 표시 모드를 전환하는 토글 버튼 위젯
+/// 텍스트 표시 모드를 전환하는 토글 버튼 위젯. 
+
 class TextDisplayToggleWidget extends StatelessWidget {
   final TextDisplayMode currentMode;
   final Function(TextDisplayMode) onModeChanged;

@@ -6,6 +6,10 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 /// 외부 사전 서비스 (e.g papago, google translate) 를 관리하는 서비스
+/// 단어 검색 결과 캐싱
+/// 플래시카드 연동을 위한 단어 정보 제공
+
+
 class DictionaryEntry {
   final String word;
   final String pinyin;
