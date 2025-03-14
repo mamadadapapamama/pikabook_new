@@ -1,6 +1,6 @@
 import 'text_segment.dart';
 
-/// OCR 결과를 처리한 텍스트 모델
+/// OCR 결과를 처리한 텍스트 모델. text_segment의 리스트를 담을 수 있음
 
 class ProcessedText {
   /// 전체 원문 텍스트
