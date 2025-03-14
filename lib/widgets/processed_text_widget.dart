@@ -317,18 +317,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       onAddToFlashcard: (String text) {
         if (_selectedText.isNotEmpty) {
           widget.onCreateFlashCard?.call(_selectedText, '', pinyin: null);
-
-          // 플래시카드 단어 추가 후 즉시 화면 갱신
           setState(() {
             _flashcardWords.add(_selectedText);
-            _selectedText = ''; // 선택 초기화
-          });
-
-          // 화면을 강제로 다시 그림
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              setState(() {});
-            }
           });
         }
       },
