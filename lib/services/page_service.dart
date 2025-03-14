@@ -8,7 +8,7 @@ import 'enhanced_ocr_service.dart';
 import 'translation_service.dart';
 import 'unified_cache_service.dart';
 
-// 페이지 서비스: 페이지 관리 (CRUD) 기능을 제공합니다. 
+// 페이지 서비스: 페이지 관리 (CRUD) 기능을 제공합니다.
 
 class PageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -520,5 +520,39 @@ class PageService {
     _cacheService.clearCache();
     _lastCacheTime.clear();
     _isCachingInProgress = false;
+  }
+
+  // 처리된 텍스트 캐싱
+  Future<void> cacheProcessedText(
+    String pageId,
+    String textProcessingMode,
+    dynamic processedText,
+  ) async {
+    try {
+      await _cacheService.cacheProcessedText(
+        pageId,
+        textProcessingMode,
+        processedText,
+      );
+      debugPrint('처리된 텍스트 캐싱 완료: 페이지 ID=$pageId, 모드=$textProcessingMode');
+    } catch (e) {
+      debugPrint('처리된 텍스트 캐싱 중 오류 발생: $e');
+    }
+  }
+
+  // 캐시된 처리 텍스트 가져오기
+  Future<dynamic> getCachedProcessedText(
+    String pageId,
+    String textProcessingMode,
+  ) async {
+    try {
+      return await _cacheService.getCachedProcessedText(
+        pageId,
+        textProcessingMode,
+      );
+    } catch (e) {
+      debugPrint('캐시된 처리 텍스트 조회 중 오류 발생: $e');
+      return null;
+    }
   }
 }
