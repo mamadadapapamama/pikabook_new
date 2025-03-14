@@ -34,18 +34,36 @@ class ContextMenuHelper {
       );
     }
 
-    // ✅ 선택한 단어가 플래시카드에 포함된 경우 => 기본 컨텍스트 메뉴 없이 "탭 하면 뜻이 바로 표시됨"
+    // ✅ 선택한 단어가 플래시카드에 포함된 경우 => 컨텍스트 메뉴 표시 및 사전 검색 실행
     bool isInFlashcards =
         flashcardWords != null && flashcardWords.contains(selectedText);
     debugPrint('선택된 텍스트가 플래시카드에 포함되어 있는지: $isInFlashcards');
 
     if (isInFlashcards) {
-      debugPrint('플래시카드에 포함된 단어: $selectedText - 컨텍스트 메뉴 표시하지 않음');
+      debugPrint('플래시카드에 포함된 단어: $selectedText - 사전 검색 실행 및 컨텍스트 메뉴 표시');
+      // 사전 검색 실행
       WidgetsBinding.instance.addPostFrameCallback((_) {
         debugPrint('사전 검색 콜백 호출: $selectedText');
         onLookupDictionary?.call(selectedText);
       });
-      return const SizedBox.shrink(); // 기본 컨텍스트 메뉴를 띄우지 않음
+
+      // 플래시카드 단어용 컨텍스트 메뉴 표시
+      final List<ContextMenuButtonItem> buttonItems = [];
+
+      // 사전 검색 버튼
+      buttonItems.add(
+        ContextMenuButtonItem(
+          onPressed: () {
+            onLookupDictionary?.call(selectedText);
+          },
+          label: '사전 검색',
+        ),
+      );
+
+      return AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: editableTextState.contextMenuAnchors,
+        buttonItems: buttonItems,
+      );
     }
 
     // ✅ 선택된 단어가 중국어인지 확인하여 추가 기능 제공

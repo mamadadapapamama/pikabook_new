@@ -66,10 +66,12 @@ class PageContentService {
       } else {
         // 기존 텍스트 처리
         debugPrint('기존 텍스트 처리 시작');
+        // 텍스트 처리 모드 설정
+        final mode = textProcessingMode;
+
         final processedText = await _ocrService.processText(
           originalText,
-          translatedText,
-          textProcessingMode,
+          mode,
         );
 
         // 번역 텍스트가 변경된 경우에만 페이지 캐시 업데이트
@@ -153,5 +155,37 @@ class PageContentService {
     }
 
     return entry;
+  }
+
+  /// 문자열을 TextProcessingMode로 변환
+  TextProcessingMode _getTextProcessingMode(String mode) {
+    return mode == 'professionalReading'
+        ? TextProcessingMode.professionalReading
+        : TextProcessingMode.languageLearning;
+  }
+
+  Future<ProcessedText> processText(String originalText, String translatedText,
+      TextProcessingMode textProcessingMode) async {
+    try {
+      // 텍스트 처리
+      ProcessedText processedText =
+          await _ocrService.processText(originalText, textProcessingMode);
+
+      // 번역 텍스트가 있는 경우 설정
+      if (translatedText.isNotEmpty &&
+          processedText.fullTranslatedText == null) {
+        processedText =
+            processedText.copyWith(fullTranslatedText: translatedText);
+      }
+
+      return processedText;
+    } catch (e) {
+      debugPrint('Error processing text: $e');
+      // 오류 발생 시 기본 ProcessedText 객체 반환
+      return ProcessedText(
+        fullOriginalText: originalText,
+        fullTranslatedText: translatedText,
+      );
+    }
   }
 }

@@ -1,10 +1,13 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:googleapis/vision/v1.dart' as vision;
 import 'package:googleapis_auth/auth_io.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:pinyin/pinyin.dart';
 import '../models/text_processing_mode.dart';
 import '../models/processed_text.dart';
 import '../models/text_segment.dart';
