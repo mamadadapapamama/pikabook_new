@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
+
+// 텍스트 음성 변환 서비스를 제공합니다 
+
 enum TtsState { playing, stopped, paused, continued }
 
 class TtsService {

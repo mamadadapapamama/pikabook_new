@@ -11,6 +11,8 @@ import '../../services/image_service.dart';
 import '../../models/note.dart';
 import 'note_detail_screen.dart';
 
+/// 향후 유저 세팅 화면으로 바꾸어 사용. 현재는 사용되지 않음 
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
 

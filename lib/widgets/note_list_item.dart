@@ -6,6 +6,8 @@ import '../services/image_service.dart';
 import '../services/note_service.dart';
 import '../views/screens/flashcard_screen.dart';
 
+/// 홈페이지 노트리스트 화면에서 사용되는 카드 위젯
+
 class NoteListItem extends StatefulWidget {
   final Note note;
   final VoidCallback onTap;

@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// straight forward! flashcard 의 모델
+
 class FlashCard {
   final String id;
   final String front; // 원문 (중국어)

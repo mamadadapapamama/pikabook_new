@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Straight forward! Page 의 모델
+
 class Page {
   final String? id;
   final String? imageUrl;

@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import '../services/tts_service.dart';
-import '../services/language_detection_service.dart';
-import '../utils/context_menu_helper.dart';
 import '../utils/text_selection_helper.dart';
 
-// text_section_widget은 원문, 번역문 섹션을 카드 형태로 표시
+// 아직 페이지의 텍스트 처리가 완료되지 않았을때, 원문 번역문 섹션을 처리하는 위젯.
 
 class TextSectionWidget extends StatelessWidget {
   final String title;

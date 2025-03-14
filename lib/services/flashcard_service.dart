@@ -5,6 +5,8 @@ import 'package:uuid/uuid.dart';
 import '../models/flash_card.dart';
 import 'package:pinyin/pinyin.dart';
 
+/// 플래시카드 생성 및 관리 기능(CRUD)을 제공합니다
+
 class FlashCardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;

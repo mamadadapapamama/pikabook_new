@@ -1,6 +1,7 @@
 import 'text_segment.dart';
 
 /// OCR 결과를 처리한 텍스트 모델
+
 class ProcessedText {
   /// 전체 원문 텍스트
   final String fullOriginalText;
