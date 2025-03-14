@@ -8,7 +8,7 @@ import '../services/tts_service.dart';
 /// - 플래시카드가 추가된 단어: 기본 컨텍스트 메뉴 없이 바로 뜻을 표시
 /// - 플래시카드가 없는 단어: 롱 프레스 시 커스텀 컨텍스트 메뉴 제공
 class ContextMenuHelper {
-  /// **커스텀 컨텍스트 메뉴를 생성하는 메서드**
+  /// **커스텍스트 메뉴를 생성하는 메서드**
   /// - `flashcardWords`에 포함된 단어는 기본 메뉴 없이 바로 뜻을 표시
   /// - 그 외 단어들은 커스텀 메뉴를 제공
   static Widget buildCustomContextMenu({
@@ -23,7 +23,7 @@ class ContextMenuHelper {
     debugPrint('선택된 텍스트: "$selectedText"');
     debugPrint('플래시카드 단어 수: ${flashcardWords?.length ?? 0}');
     if (flashcardWords != null && flashcardWords.isNotEmpty) {
-      debugPrint('플래시카드 단어 목록: ${flashcardWords.join(', ')}');
+      debugPrint('플래시카드 단어 목록: ${flashcardWords.take(5).join(', ')}');
     }
 
     // 선택된 텍스트가 없으면 기본 메뉴 표시
@@ -61,18 +61,7 @@ class ContextMenuHelper {
       );
     }
 
-    // ✅ 선택된 단어가 중국어인지 확인하여 추가 기능 제공
-    bool containsChinese = _containsChineseCharacters(selectedText);
-    debugPrint('중국어 포함 여부: $containsChinese');
-
-    // 중국어가 아닌 경우 기본 컨텍스트 메뉴 표시
-    if (!containsChinese) {
-      return AdaptiveTextSelectionToolbar.editableText(
-        editableTextState: editableTextState,
-      );
-    }
-
-    // ✅ 커스텀 메뉴 항목 설정 (중국어인 경우만)
+    // ✅ 모든 텍스트에 대해 커스텀 메뉴 제공
     final List<ContextMenuButtonItem> buttonItems = [];
 
     // 사전 검색 버튼
