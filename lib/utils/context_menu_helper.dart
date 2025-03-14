@@ -93,12 +93,6 @@ class ContextMenuHelper {
           onPressed: () {
             editableTextState.hideToolbar();
             onAddToFlashcard?.call(selectedText);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('플래시카드가 추가되었습니다.'),
-                duration: Duration(seconds: 2),
-              ),
-            );
           },
           label: '플래시카드 추가',
         ),
