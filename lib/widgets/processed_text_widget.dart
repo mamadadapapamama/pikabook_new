@@ -123,7 +123,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             backgroundColor: Colors.yellow,
             fontWeight: FontWeight.bold,
           ),
-          // TapGestureRecognizer 제거하여 선택 가능하도록 함
         ),
       );
 
@@ -167,6 +166,12 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         setState(() {
           _selectedText = text.substring(start, end);
         });
+
+        // 선택한 텍스트가 플래시카드 단어인지 확인
+        if (_flashcardWords.contains(_selectedText)) {
+          // 플래시카드 단어인 경우 사전 검색 실행
+          widget.onDictionaryLookup?.call(_selectedText);
+        }
       }
     }
   }
@@ -202,14 +207,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
     _selectedText = selectedText;
 
-    // 선택한 단어가 플래시카드에 포함된 경우 → 컨텍스트 메뉴 표시 및 사전 검색 실행
+    // 선택한 단어가 플래시카드에 포함된 경우 → 컨텍스트 메뉴만 표시
     if (_flashcardWords.contains(_selectedText)) {
-      // 사전 검색 실행
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        widget.onDictionaryLookup?.call(_selectedText);
-      });
-
-      // 컨텍스트 메뉴도 표시
+      // 컨텍스트 메뉴 표시
       return ContextMenuHelper.buildCustomContextMenu(
         context: context,
         editableTextState: editableTextState,

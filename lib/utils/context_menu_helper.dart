@@ -40,12 +40,7 @@ class ContextMenuHelper {
     debugPrint('선택된 텍스트가 플래시카드에 포함되어 있는지: $isInFlashcards');
 
     if (isInFlashcards) {
-      debugPrint('플래시카드에 포함된 단어: $selectedText - 사전 검색 실행 및 컨텍스트 메뉴 표시');
-      // 사전 검색 실행
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        debugPrint('사전 검색 콜백 호출: $selectedText');
-        onLookupDictionary?.call(selectedText);
-      });
+      debugPrint('플래시카드에 포함된 단어: $selectedText - 컨텍스트 메뉴 표시');
 
       // 플래시카드 단어용 컨텍스트 메뉴 표시
       final List<ContextMenuButtonItem> buttonItems = [];
