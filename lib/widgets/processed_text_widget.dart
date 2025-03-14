@@ -30,6 +30,7 @@ class ProcessedTextWidget extends StatefulWidget {
 class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   String _selectedText = '';
   late Set<String> _flashcardWords;
+  final GlobalKey _textKey = GlobalKey();
 
   @override
   void initState() {
@@ -69,7 +70,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   /// **문장에서 플래시카드 단어를 하이라이트하여 표시**
   List<TextSpan> _buildHighlightedText(String text) {
     List<TextSpan> spans = [];
-    int currentIndex = 0;
+
+    // 텍스트가 비어있으면 빈 스팬 반환
+    if (text.isEmpty) {
+      return spans;
+    }
 
     // 플래시카드 단어가 없으면 일반 텍스트만 반환
     if (_flashcardWords.isEmpty) {
@@ -139,19 +144,31 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   /// **선택 가능한 텍스트 위젯 생성**
   Widget _buildSelectableText(String text) {
-    return SelectableText.rich(
-      TextSpan(
-        children: _buildHighlightedText(text),
-        style: const TextStyle(fontSize: 16),
+    // 텍스트가 비어있으면 빈 컨테이너 반환
+    if (text.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Material 위젯으로 감싸서 선택 기능 개선
+    return Material(
+      color: Colors.transparent,
+      child: SelectableText.rich(
+        TextSpan(
+          children: _buildHighlightedText(text),
+          style: const TextStyle(fontSize: 16),
+        ),
+        onSelectionChanged: (selection, cause) {
+          _handleSelectionChanged(selection, text);
+        },
+        onTap: () {
+          _handleTextTap(text);
+        },
+        contextMenuBuilder: _buildContextMenu,
+        enableInteractiveSelection: true,
+        showCursor: true,
+        cursorWidth: 2.0,
+        cursorColor: Colors.blue,
       ),
-      onSelectionChanged: (selection, cause) {
-        _handleSelectionChanged(selection, text);
-      },
-      contextMenuBuilder: _buildContextMenu,
-      enableInteractiveSelection: true,
-      showCursor: true,
-      cursorWidth: 2.0,
-      cursorColor: Colors.blue,
     );
   }
 
@@ -166,11 +183,30 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         setState(() {
           _selectedText = text.substring(start, end);
         });
+      }
+    }
+  }
 
-        // 선택한 텍스트가 플래시카드 단어인지 확인
-        if (_flashcardWords.contains(_selectedText)) {
-          // 플래시카드 단어인 경우 사전 검색 실행
-          widget.onDictionaryLookup?.call(_selectedText);
+  /// **텍스트 탭 이벤트 처리**
+  void _handleTextTap(String text) {
+    // 현재 선택된 텍스트가 있는지 확인
+    if (_selectedText.isNotEmpty) {
+      // 선택된 텍스트가 플래시카드 단어인지 확인
+      if (_flashcardWords.contains(_selectedText)) {
+        // 플래시카드 단어인 경우 사전 검색 실행
+        widget.onDictionaryLookup?.call(_selectedText);
+      }
+    } else {
+      // 선택된 텍스트가 없는 경우, 탭한 위치의 단어가 플래시카드 단어인지 확인
+      // 이 부분은 실제 구현에서 더 정교하게 해야 함
+      // 여기서는 간단한 예시만 제공
+
+      // 모든 플래시카드 단어에 대해 검사
+      for (final word in _flashcardWords) {
+        if (text.contains(word)) {
+          // 플래시카드 단어가 포함된 경우 사전 검색 실행
+          widget.onDictionaryLookup?.call(word);
+          break;
         }
       }
     }
@@ -270,51 +306,117 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   /// **세그먼트별 텍스트 표시 위젯**
   Widget _buildSegmentedView() {
+    // 세그먼트가 없으면 빈 컨테이너 반환
+    if (widget.processedText.segments == null ||
+        widget.processedText.segments!.isEmpty) {
+      debugPrint('세그먼트가 없습니다.');
+
+      // 세그먼트가 없으면 전체 텍스트 표시
+      return _buildFullTextView();
+    }
+
+    debugPrint('세그먼트 수: ${widget.processedText.segments!.length}');
+
+    // 세그먼트 목록을 위젯 목록으로 변환
+    List<Widget> segmentWidgets = [];
+
+    for (int i = 0; i < widget.processedText.segments!.length; i++) {
+      final segment = widget.processedText.segments![i];
+
+      // 디버깅 정보 출력
+      debugPrint('세그먼트 $i 원본 텍스트: "${segment.originalText}"');
+      debugPrint('세그먼트 $i 번역 텍스트: "${segment.translatedText}"');
+      debugPrint('세그먼트 $i 핀인: "${segment.pinyin}"');
+
+      // 원본 텍스트가 비어있으면 건너뜀
+      if (segment.originalText.isEmpty) {
+        debugPrint('세그먼트 $i 원본 텍스트가 비어있어 건너뜁니다.');
+        continue;
+      }
+
+      // 세그먼트 위젯 생성
+      segmentWidgets.add(
+        Container(
+          margin: const EdgeInsets.only(bottom: 16.0),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.withOpacity(0.2)),
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 세그먼트 번호 표시 (디버깅용)
+              Text(
+                '세그먼트 ${i + 1}',
+                style: const TextStyle(
+                  fontSize: 10.0,
+                  color: Colors.grey,
+                ),
+              ),
+
+              const SizedBox(height: 4.0),
+
+              // 원본 텍스트 표시
+              _buildSelectableText(segment.originalText),
+
+              // 핀인 표시
+              if (segment.pinyin != null && segment.pinyin!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                  child: Text(
+                    segment.pinyin!,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+
+              // 번역 텍스트 표시
+              if (widget.showTranslation && segment.translatedText != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                  child: Text(
+                    segment.translatedText!,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 세그먼트 위젯이 없으면 전체 텍스트 표시
+    if (segmentWidgets.isEmpty) {
+      debugPrint('세그먼트 위젯이 없어 전체 텍스트를 표시합니다.');
+      return _buildFullTextView();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: widget.processedText.segments!.map((segment) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 원본 텍스트 표시
-            _buildSelectableText(segment.originalText),
-
-            // 핀인 표시
-            if (segment.pinyin != null && segment.pinyin!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
-                child: Text(
-                  segment.pinyin!,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontStyle: FontStyle.italic,
-                    color: Colors.grey,
-                  ),
-                ),
-              ),
-
-            // 번역 텍스트 표시
-            if (widget.showTranslation && segment.translatedText != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0, bottom: 12.0),
-                child: Text(
-                  segment.translatedText!,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.blue,
-                  ),
-                ),
-              ),
-
-            const SizedBox(height: 8),
-          ],
-        );
-      }).toList(),
+      children: segmentWidgets,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    // 디버깅 정보 출력
+    debugPrint('ProcessedTextWidget.build 호출');
+    debugPrint('showFullText: ${widget.processedText.showFullText}');
+    debugPrint('segments 존재 여부: ${widget.processedText.segments != null}');
+    if (widget.processedText.segments != null) {
+      debugPrint('segments 개수: ${widget.processedText.segments!.length}');
+    }
+    debugPrint('fullOriginalText: "${widget.processedText.fullOriginalText}"');
+    debugPrint(
+        'fullTranslatedText: "${widget.processedText.fullTranslatedText}"');
+
     // 문장 바깥 탭 시 선택 취소를 위한 GestureDetector 추가
     return GestureDetector(
       onTap: () {
@@ -324,10 +426,37 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         });
       },
       behavior: HitTestBehavior.translucent,
-      child: widget.processedText.segments != null &&
-              !widget.processedText.showFullText
-          ? _buildSegmentedView()
-          : _buildFullTextView(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 모드에 따라 다른 위젯 표시
+          if (widget.processedText.segments != null &&
+              !widget.processedText.showFullText)
+            _buildSegmentedView()
+          else
+            _buildFullTextView(),
+
+          // 디버깅용 모드 표시
+          Container(
+            margin: const EdgeInsets.only(top: 16.0),
+            padding: const EdgeInsets.all(8.0),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4.0),
+            ),
+            child: Text(
+              widget.processedText.segments != null &&
+                      !widget.processedText.showFullText
+                  ? '세그먼트 모드'
+                  : '전체 텍스트 모드',
+              style: const TextStyle(
+                fontSize: 12.0,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
