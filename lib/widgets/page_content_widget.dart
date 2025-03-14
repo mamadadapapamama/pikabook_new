@@ -13,9 +13,8 @@ import 'page_image_widget.dart';
 import 'text_display_toggle_widget.dart';
 
 /// 페이지 내의 이미지, 텍스트 처리상태, 처리된 텍스트 등을 표시
-/// 텍스트모드전환, 사전 검색 등 처리 
+/// 텍스트모드전환, 사전 검색 등 처리
 /// 텍스트 처리중 상태, 플래시카드 단어 목록 등 관리 (counter와 하이라이터를 위해)
-
 
 class PageContentWidget extends StatefulWidget {
   final page_model.Page page;
@@ -86,12 +85,20 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       _isProcessingText = true;
     });
 
+    final startTime = DateTime.now();
+    debugPrint('페이지 텍스트 처리 시작: ${widget.page.id}');
+
     try {
       final processedText = await _pageContentService.processPageText(
         page: widget.page,
         imageFile: widget.imageFile,
         textProcessingMode: widget.textProcessingMode,
       );
+
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+      debugPrint(
+          '페이지 텍스트 처리 완료: ${widget.page.id}, 소요 시간: ${duration.inMilliseconds}ms');
 
       if (mounted) {
         setState(() {

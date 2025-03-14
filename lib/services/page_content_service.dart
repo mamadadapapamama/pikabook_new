@@ -40,10 +40,29 @@ class PageContentService {
     if (page.originalText.isEmpty && imageFile == null) return null;
 
     try {
+      final pageId = page.id;
+      if (pageId == null) {
+        debugPrint('페이지 ID가 없어 캐시를 확인할 수 없습니다.');
+      } else {
+        // 캐시된 ProcessedText 확인
+        final cachedProcessedText = await _pageService.getCachedProcessedText(
+          pageId,
+          textProcessingMode.toString().split('.').last, // enum 값을 문자열로 변환
+        );
+
+        if (cachedProcessedText != null) {
+          debugPrint(
+              '캐시된 처리 텍스트 사용: 페이지 ID=$pageId, 모드=${textProcessingMode.toString().split('.').last}');
+          return cachedProcessedText;
+        }
+
+        debugPrint(
+            '캐시된 처리 텍스트 없음: 페이지 ID=$pageId, 모드=${textProcessingMode.toString().split('.').last}');
+      }
+
       // 캐시된 텍스트 확인
       final originalText = page.originalText;
       final translatedText = page.translatedText;
-      final pageId = page.id;
 
       debugPrint(
           '페이지 텍스트 처리 시작: 페이지 ID=$pageId, 원본 텍스트 ${originalText.length}자, 번역 텍스트 ${translatedText.length}자');
@@ -59,28 +78,30 @@ class PageContentService {
 
         // 처리된 텍스트를 페이지에 캐싱
         if (processedText.fullOriginalText.isNotEmpty && pageId != null) {
-          await updatePageCache(pageId, processedText);
+          await updatePageCache(pageId, processedText, textProcessingMode);
         }
 
         return processedText;
       } else {
         // 기존 텍스트 처리
         debugPrint('기존 텍스트 처리 시작');
-        // 텍스트 처리 모드 설정
-        final mode = textProcessingMode;
-
         final processedText = await _ocrService.processText(
           originalText,
-          mode,
+          textProcessingMode,
         );
 
         // 번역 텍스트가 변경된 경우에만 페이지 캐시 업데이트
         if (translatedText != processedText.fullTranslatedText &&
             pageId != null) {
           debugPrint('번역 텍스트가 변경되어 페이지 캐시 업데이트');
-          await updatePageCache(pageId, processedText);
-        } else {
-          debugPrint('번역 텍스트가 동일하여 페이지 캐시 업데이트 건너뜀');
+          await updatePageCache(pageId, processedText, textProcessingMode);
+        } else if (pageId != null) {
+          debugPrint('번역 텍스트가 동일하여 페이지 내용 업데이트 건너뜀, ProcessedText만 캐싱');
+          await _pageService.cacheProcessedText(
+            pageId,
+            textProcessingMode.toString().split('.').last,
+            processedText,
+          );
         }
 
         return processedText;
@@ -93,7 +114,10 @@ class PageContentService {
 
   // 페이지 캐시 업데이트
   Future<void> updatePageCache(
-      String pageId, ProcessedText processedText) async {
+    String pageId,
+    ProcessedText processedText,
+    TextProcessingMode textProcessingMode,
+  ) async {
     try {
       if (pageId.isEmpty) {
         debugPrint('페이지 ID가 없어 캐시 업데이트를 건너뜁니다.');
@@ -105,6 +129,13 @@ class PageContentService {
         pageId,
         processedText.fullOriginalText,
         processedText.fullTranslatedText ?? '',
+      );
+
+      // ProcessedText 객체 캐싱
+      await _pageService.cacheProcessedText(
+        pageId,
+        textProcessingMode.toString().split('.').last,
+        processedText,
       );
 
       debugPrint('페이지 캐시 업데이트 완료: $pageId');
