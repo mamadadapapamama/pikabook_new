@@ -115,7 +115,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         spans.add(TextSpan(text: text.substring(lastEnd, pos.start)));
       }
 
-      // 하이라이트된 단어 추가 - 탭과 선택 모두 가능하도록 수정
+      // 하이라이트된 단어 추가 - 선택 가능하도록 수정
       spans.add(
         TextSpan(
           text: pos.word,
@@ -123,13 +123,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             backgroundColor: Colors.yellow,
             fontWeight: FontWeight.bold,
           ),
-          // 탭 제스처 인식기 추가 - 사전 조회 기능 활성화
-          recognizer: TapGestureRecognizer()
-            ..onTap = () {
-              if (widget.onDictionaryLookup != null) {
-                widget.onDictionaryLookup!(pos.word);
-              }
-            },
+          // TapGestureRecognizer 제거하여 선택 가능하도록 함
         ),
       );
 
@@ -208,11 +202,26 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
     _selectedText = selectedText;
 
-    // 선택한 단어가 플래시카드에 포함된 경우 → 바로 사전 검색 실행
+    // 선택한 단어가 플래시카드에 포함된 경우 → 컨텍스트 메뉴 표시 및 사전 검색 실행
     if (_flashcardWords.contains(_selectedText)) {
-      // 이중 호출 방지를 위해 PostFrameCallback 제거
-      // 대신 컨텍스트 메뉴를 표시하지 않음
-      return const SizedBox.shrink();
+      // 사전 검색 실행
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onDictionaryLookup?.call(_selectedText);
+      });
+
+      // 컨텍스트 메뉴도 표시
+      return ContextMenuHelper.buildCustomContextMenu(
+        context: context,
+        editableTextState: editableTextState,
+        selectedText: _selectedText,
+        flashcardWords: _flashcardWords,
+        onLookupDictionary: (String text) {
+          widget.onDictionaryLookup?.call(text);
+        },
+        onAddToFlashcard: (String text) {
+          // 이미 플래시카드에 있으므로 추가 기능은 제공하지 않음
+        },
+      );
     }
 
     // 선택한 단어가 플래시카드에 없는 경우 → 커스텀 컨텍스트 메뉴 표시
