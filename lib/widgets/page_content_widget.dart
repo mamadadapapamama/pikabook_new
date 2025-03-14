@@ -8,6 +8,7 @@ import '../utils/text_display_mode.dart';
 import 'text_section_widget.dart';
 import 'processed_text_widget.dart';
 import '../services/page_content_service.dart';
+import '../services/dictionary_service.dart';
 import 'dictionary_result_widget.dart';
 import 'page_image_widget.dart';
 import 'text_display_toggle_widget.dart';
@@ -245,7 +246,38 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     // 디버그 로그 추가
     debugPrint('사전 검색 요청: $word');
 
+    // 이미 플래시카드에 있는 단어인지 확인
+    FlashCard? existingCard;
+    if (widget.flashCards != null) {
+      for (final card in widget.flashCards!) {
+        if (card.front == word) {
+          existingCard = card;
+          debugPrint('플래시카드에 이미 있는 단어: $word');
+          break;
+        }
+      }
+    }
+
     try {
+      // 플래시카드에 이미 있는 단어인 경우, 플래시카드 정보로 사전 결과 표시
+      if (existingCard != null) {
+        if (!mounted) return;
+
+        final customEntry = DictionaryEntry(
+          word: existingCard.front,
+          pinyin: existingCard.pinyin ?? '',
+          meaning: existingCard.back,
+          examples: [],
+        );
+
+        DictionaryResultWidget.showDictionaryBottomSheet(
+          context: context,
+          entry: customEntry,
+          onCreateFlashCard: widget.onCreateFlashCard,
+        );
+        return;
+      }
+
       // 사전 서비스에서 단어 검색
       final entry = await _pageContentService.lookupWord(word);
 
@@ -258,20 +290,36 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           );
         }
       } else {
-        // API 검색도 실패한 경우 스낵바 표시
+        // 사전에서 찾을 수 없는 경우, 바로 플래시카드 추가 다이얼로그 표시
         if (!mounted) return;
 
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('사전에서 찾을 수 없는 단어: $word'),
-            action: SnackBarAction(
-              label: '플래시카드에 추가',
-              onPressed: () {
-                widget.onCreateFlashCard(word, '직접 의미 입력 필요', pinyin: null);
-              },
+        // 커스텀 다이얼로그 표시
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('새 플래시카드 추가'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('단어: $word'),
+                const SizedBox(height: 16),
+                const Text('사전에서 찾을 수 없습니다. 직접 의미를 입력하시겠습니까?'),
+              ],
             ),
-            duration: const Duration(seconds: 5),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  widget.onCreateFlashCard(word, '직접 의미 입력 필요', pinyin: null);
+                },
+                child: const Text('추가'),
+              ),
+            ],
           ),
         );
       }

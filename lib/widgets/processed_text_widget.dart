@@ -42,8 +42,20 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   @override
   void didUpdateWidget(ProcessedTextWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    // 플래시카드 목록이 변경된 경우
     if (oldWidget.flashCards != widget.flashCards) {
+      debugPrint('플래시카드 목록 변경 감지: didUpdateWidget');
       _extractFlashcardWords();
+    }
+
+    // 처리된 텍스트가 변경된 경우
+    if (oldWidget.processedText != widget.processedText) {
+      debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
+      // 선택된 텍스트 초기화
+      setState(() {
+        _selectedText = '';
+      });
     }
   }
 
@@ -57,13 +69,19 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         }
       }
     }
-    setState(() {
-      _flashcardWords = newFlashcardWords;
-    });
 
-    // 플래시카드 목록이 변경되면 화면을 강제로 다시 그림
-    if (mounted) {
-      setState(() {});
+    // 변경 사항이 있는 경우에만 setState 호출
+    if (_flashcardWords.length != newFlashcardWords.length ||
+        !_flashcardWords.containsAll(newFlashcardWords) ||
+        !newFlashcardWords.containsAll(_flashcardWords)) {
+      setState(() {
+        _flashcardWords = newFlashcardWords;
+      });
+
+      debugPrint('플래시카드 단어 목록 업데이트: ${_flashcardWords.length}개');
+      if (_flashcardWords.isNotEmpty) {
+        debugPrint('첫 5개 단어: ${_flashcardWords.take(5).join(', ')}');
+      }
     }
   }
 
@@ -89,7 +107,31 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
       int index = 0;
       while ((index = text.indexOf(word, index)) != -1) {
-        wordPositions.add(_WordPosition(word, index, index + word.length));
+        // 단어 경계 확인 (단어 앞뒤에 중국어 문자가 없는 경우만 추가)
+        bool isValidWordBoundary = true;
+
+        // 단어 앞에 중국어 문자가 있는지 확인
+        if (index > 0) {
+          final char = text[index - 1];
+          final RegExp chineseRegex = RegExp(r'[\u4e00-\u9fff]');
+          if (chineseRegex.hasMatch(char)) {
+            isValidWordBoundary = false;
+          }
+        }
+
+        // 단어 뒤에 중국어 문자가 있는지 확인
+        if (isValidWordBoundary && index + word.length < text.length) {
+          final char = text[index + word.length];
+          final RegExp chineseRegex = RegExp(r'[\u4e00-\u9fff]');
+          if (chineseRegex.hasMatch(char)) {
+            isValidWordBoundary = false;
+          }
+        }
+
+        if (isValidWordBoundary) {
+          wordPositions.add(_WordPosition(word, index, index + word.length));
+        }
+
         index += word.length;
       }
     }
@@ -120,7 +162,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         spans.add(TextSpan(text: text.substring(lastEnd, pos.start)));
       }
 
-      // 하이라이트된 단어 추가 - 선택 가능하도록 수정
+      // 하이라이트된 단어 추가 - 탭 가능하도록 수정
       spans.add(
         TextSpan(
           text: pos.word,
@@ -128,6 +170,18 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             backgroundColor: Colors.yellow,
             fontWeight: FontWeight.bold,
           ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () {
+              // 선택된 텍스트 초기화
+              setState(() {
+                _selectedText = '';
+              });
+
+              // 사전 검색 실행
+              if (widget.onDictionaryLookup != null) {
+                widget.onDictionaryLookup!(pos.word);
+              }
+            },
         ),
       );
 
@@ -149,26 +203,20 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       return const SizedBox.shrink();
     }
 
-    // Material 위젯으로 감싸서 선택 기능 개선
-    return Material(
-      color: Colors.transparent,
-      child: SelectableText.rich(
-        TextSpan(
-          children: _buildHighlightedText(text),
-          style: const TextStyle(fontSize: 16),
-        ),
-        onSelectionChanged: (selection, cause) {
-          _handleSelectionChanged(selection, text);
-        },
-        onTap: () {
-          _handleTextTap(text);
-        },
-        contextMenuBuilder: _buildContextMenu,
-        enableInteractiveSelection: true,
-        showCursor: true,
-        cursorWidth: 2.0,
-        cursorColor: Colors.blue,
+    // 선택 가능한 텍스트 위젯 생성
+    return SelectableText.rich(
+      TextSpan(
+        children: _buildHighlightedText(text),
+        style: const TextStyle(fontSize: 16),
       ),
+      onSelectionChanged: (selection, cause) {
+        _handleSelectionChanged(selection, text);
+      },
+      contextMenuBuilder: _buildContextMenu,
+      enableInteractiveSelection: true,
+      showCursor: true,
+      cursorWidth: 2.0,
+      cursorColor: Colors.blue,
     );
   }
 
@@ -180,33 +228,30 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       final int end = selection.end;
 
       if (start >= 0 && end >= 0 && start < text.length && end <= text.length) {
-        setState(() {
-          _selectedText = text.substring(start, end);
-        });
-      }
-    }
-  }
+        final selectedText = text.substring(start, end);
 
-  /// **텍스트 탭 이벤트 처리**
-  void _handleTextTap(String text) {
-    // 현재 선택된 텍스트가 있는지 확인
-    if (_selectedText.isNotEmpty) {
-      // 선택된 텍스트가 플래시카드 단어인지 확인
-      if (_flashcardWords.contains(_selectedText)) {
-        // 플래시카드 단어인 경우 사전 검색 실행
-        widget.onDictionaryLookup?.call(_selectedText);
-      }
-    } else {
-      // 선택된 텍스트가 없는 경우, 탭한 위치의 단어가 플래시카드 단어인지 확인
-      // 이 부분은 실제 구현에서 더 정교하게 해야 함
-      // 여기서는 간단한 예시만 제공
+        // 플래시카드 단어와 정확히 일치하는 경우에만 선택 취소
+        bool shouldCancelSelection = false;
 
-      // 모든 플래시카드 단어에 대해 검사
-      for (final word in _flashcardWords) {
-        if (text.contains(word)) {
-          // 플래시카드 단어가 포함된 경우 사전 검색 실행
-          widget.onDictionaryLookup?.call(word);
-          break;
+        for (final word in _flashcardWords) {
+          // 선택된 텍스트가 플래시카드 단어와 정확히 일치하는 경우
+          if (selectedText == word) {
+            shouldCancelSelection = true;
+            break;
+          }
+        }
+
+        if (shouldCancelSelection) {
+          // 선택 취소
+          setState(() {
+            _selectedText = '';
+          });
+
+          // 선택이 취소되었으므로 사전 검색 실행하지 않음
+        } else {
+          setState(() {
+            _selectedText = selectedText;
+          });
         }
       }
     }
@@ -241,24 +286,22 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       return const SizedBox.shrink();
     }
 
-    _selectedText = selectedText;
+    // 플래시카드 단어와 정확히 일치하는 경우에만 컨텍스트 메뉴 숨김
+    bool shouldHideContextMenu = false;
 
-    // 선택한 단어가 플래시카드에 포함된 경우 → 컨텍스트 메뉴만 표시
-    if (_flashcardWords.contains(_selectedText)) {
-      // 컨텍스트 메뉴 표시
-      return ContextMenuHelper.buildCustomContextMenu(
-        context: context,
-        editableTextState: editableTextState,
-        selectedText: _selectedText,
-        flashcardWords: _flashcardWords,
-        onLookupDictionary: (String text) {
-          widget.onDictionaryLookup?.call(text);
-        },
-        onAddToFlashcard: (String text) {
-          // 이미 플래시카드에 있으므로 추가 기능은 제공하지 않음
-        },
-      );
+    for (final word in _flashcardWords) {
+      // 선택된 텍스트가 플래시카드 단어와 정확히 일치하는 경우
+      if (selectedText == word) {
+        shouldHideContextMenu = true;
+        break;
+      }
     }
+
+    if (shouldHideContextMenu) {
+      return const SizedBox.shrink();
+    }
+
+    _selectedText = selectedText;
 
     // 선택한 단어가 플래시카드에 없는 경우 → 커스텀 컨텍스트 메뉴 표시
     return ContextMenuHelper.buildCustomContextMenu(
@@ -274,8 +317,18 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       onAddToFlashcard: (String text) {
         if (_selectedText.isNotEmpty) {
           widget.onCreateFlashCard?.call(_selectedText, '', pinyin: null);
+
+          // 플래시카드 단어 추가 후 즉시 화면 갱신
           setState(() {
             _flashcardWords.add(_selectedText);
+            _selectedText = ''; // 선택 초기화
+          });
+
+          // 화면을 강제로 다시 그림
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {});
+            }
           });
         }
       },

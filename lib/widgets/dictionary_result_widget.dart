@@ -103,15 +103,6 @@ class DictionaryResultWidget extends StatelessWidget {
     required DictionaryEntry entry,
     required Function(String, String, {String? pinyin}) onCreateFlashCard,
   }) {
-    // 간단한 스낵바로 먼저 표시 (디버깅용)
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('사전 검색 결과: ${entry.word} - ${entry.meaning}'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
-
     // Bottom Sheet 표시
     showModalBottomSheet<void>(
       context: context,
