@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 import '../models/processed_text.dart';
 import '../models/flash_card.dart';
 import '../utils/context_menu_helper.dart';
@@ -37,6 +38,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   final TextReaderService _textReaderService = TextReaderService();
   int? _playingSegmentIndex;
 
+  // 선택된 텍스트 상태 관리를 위한 ValueNotifier
+  final ValueNotifier<String> _selectedTextNotifier = ValueNotifier<String>('');
+
   @override
   void initState() {
     super.initState();
@@ -70,6 +74,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   @override
   void dispose() {
     _textReaderService.dispose();
+    _selectedTextNotifier.dispose(); // ValueNotifier 정리
     super.dispose();
   }
 
@@ -79,16 +84,21 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
     // 플래시카드 목록이 변경된 경우
     if (oldWidget.flashCards != widget.flashCards) {
-      debugPrint('플래시카드 목록 변경 감지: didUpdateWidget');
+      if (kDebugMode) {
+        debugPrint('플래시카드 목록 변경 감지: didUpdateWidget');
+      }
       _extractFlashcardWords();
     }
 
     // 처리된 텍스트가 변경된 경우
     if (oldWidget.processedText != widget.processedText) {
-      debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
+      if (kDebugMode) {
+        debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
+      }
       // 선택된 텍스트 초기화
       setState(() {
         _selectedText = '';
+        _selectedTextNotifier.value = '';
       });
     }
   }
@@ -97,10 +107,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   void _extractFlashcardWords() {
     final Set<String> newFlashcardWords = {};
 
-    debugPrint('_extractFlashcardWords 호출');
+    if (kDebugMode) {
+      debugPrint('_extractFlashcardWords 호출');
+    }
 
     if (widget.flashCards != null) {
-      debugPrint('플래시카드 목록 수: ${widget.flashCards!.length}개');
+      if (kDebugMode) {
+        debugPrint('플래시카드 목록 수: ${widget.flashCards!.length}개');
+      }
 
       for (final card in widget.flashCards!) {
         if (card.front.isNotEmpty) {
@@ -108,11 +122,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         }
       }
 
-      if (widget.flashCards!.isNotEmpty) {
+      if (widget.flashCards!.isNotEmpty && kDebugMode) {
         debugPrint(
             '첫 5개 플래시카드: ${widget.flashCards!.take(5).map((card) => card.front).join(', ')}');
       }
-    } else {
+    } else if (kDebugMode) {
       debugPrint('플래시카드 목록이 null임');
     }
 
@@ -120,19 +134,23 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     if (_flashcardWords.length != newFlashcardWords.length ||
         !_flashcardWords.containsAll(newFlashcardWords) ||
         !newFlashcardWords.containsAll(_flashcardWords)) {
-      debugPrint('플래시카드 단어 목록 변경 감지:');
-      debugPrint('  이전: ${_flashcardWords.length}개');
-      debugPrint('  새로운: ${newFlashcardWords.length}개');
+      if (kDebugMode) {
+        debugPrint('플래시카드 단어 목록 변경 감지:');
+        debugPrint('  이전: ${_flashcardWords.length}개');
+        debugPrint('  새로운: ${newFlashcardWords.length}개');
+      }
 
       setState(() {
         _flashcardWords = newFlashcardWords;
       });
 
-      debugPrint('플래시카드 단어 목록 업데이트 완료: ${_flashcardWords.length}개');
-      if (_flashcardWords.isNotEmpty) {
-        debugPrint('첫 5개 단어: ${_flashcardWords.take(5).join(', ')}');
+      if (kDebugMode) {
+        debugPrint('플래시카드 단어 목록 업데이트 완료: ${_flashcardWords.length}개');
+        if (_flashcardWords.isNotEmpty) {
+          debugPrint('첫 5개 단어: ${_flashcardWords.take(5).join(', ')}');
+        }
       }
-    } else {
+    } else if (kDebugMode) {
       debugPrint('플래시카드 단어 목록 변경 없음: ${_flashcardWords.length}개');
     }
   }
@@ -144,19 +162,24 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       return const SizedBox.shrink();
     }
 
-    debugPrint('_buildSelectableText 호출: 텍스트 길이=${text.length}');
+    if (kDebugMode) {
+      debugPrint('_buildSelectableText 호출: 텍스트 길이=${text.length}');
+    }
 
     // 하이라이트된 텍스트 스팬 생성
     final textSpans = TextHighlightManager.buildHighlightedText(
       text: text,
       flashcardWords: _flashcardWords,
       onTap: (word) {
-        debugPrint('하이라이트된 단어 탭됨: $word');
+        if (kDebugMode) {
+          debugPrint('하이라이트된 단어 탭됨: $word');
+        }
         // 선택된 텍스트 초기화 - 빌드 후에 실행되도록 Future.microtask 사용
         Future.microtask(() {
           if (mounted) {
             setState(() {
               _selectedText = '';
+              _selectedTextNotifier.value = '';
             });
           }
         });
@@ -169,12 +192,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       normalStyle: const TextStyle(fontSize: 16),
     );
 
-    // 선택된 텍스트 상태 관리를 위한 ValueNotifier 사용
-    final selectedTextNotifier = ValueNotifier<String>(_selectedText);
+    // 클래스 멤버 ValueNotifier 사용
+    _selectedTextNotifier.value = _selectedText;
 
-    // 위젯이 dispose될 때 ValueNotifier도 dispose되도록 설정
     return ValueListenableBuilder<String>(
-      valueListenable: selectedTextNotifier,
+      valueListenable: _selectedTextNotifier,
       builder: (context, selectedText, child) {
         return SelectableText.rich(
           TextSpan(
@@ -189,7 +211,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               selectedText: selectedText,
               onSelectionChanged: (text) {
                 // 상태 변경을 ValueNotifier를 통해 처리하고, 빌드 후에 setState 호출
-                selectedTextNotifier.value = text;
+                _selectedTextNotifier.value = text;
                 Future.microtask(() {
                   if (mounted) {
                     setState(() {
@@ -265,13 +287,17 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     // 세그먼트가 없으면 빈 컨테이너 반환
     if (widget.processedText.segments == null ||
         widget.processedText.segments!.isEmpty) {
-      debugPrint('세그먼트가 없습니다.');
+      if (kDebugMode) {
+        debugPrint('세그먼트가 없습니다.');
+      }
 
       // 세그먼트가 없으면 전체 텍스트 표시
       return _buildFullTextView();
     }
 
-    debugPrint('세그먼트 수: ${widget.processedText.segments!.length}');
+    if (kDebugMode) {
+      debugPrint('세그먼트 수: ${widget.processedText.segments!.length}');
+    }
 
     // 세그먼트 목록을 위젯 목록으로 변환
     List<Widget> segmentWidgets = [];
@@ -280,13 +306,17 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       final segment = widget.processedText.segments![i];
 
       // 디버깅 정보 출력
-      debugPrint('세그먼트 $i 원본 텍스트: "${segment.originalText}"');
-      debugPrint('세그먼트 $i 번역 텍스트: "${segment.translatedText}"');
-      debugPrint('세그먼트 $i 핀인: "${segment.pinyin}"');
+      if (kDebugMode) {
+        debugPrint('세그먼트 $i 원본 텍스트: "${segment.originalText}"');
+        debugPrint('세그먼트 $i 번역 텍스트: "${segment.translatedText}"');
+        debugPrint('세그먼트 $i 핀인: "${segment.pinyin}"');
+      }
 
       // 원본 텍스트가 비어있으면 건너뜀
       if (segment.originalText.isEmpty) {
-        debugPrint('세그먼트 $i 원본 텍스트가 비어있어 건너뜁니다.');
+        if (kDebugMode) {
+          debugPrint('세그먼트 $i 원본 텍스트가 비어있어 건너뜁니다.');
+        }
         continue;
       }
 
@@ -358,7 +388,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
     // 세그먼트 위젯이 없으면 전체 텍스트 표시
     if (segmentWidgets.isEmpty) {
-      debugPrint('세그먼트 위젯이 없어 전체 텍스트를 표시합니다.');
+      if (kDebugMode) {
+        debugPrint('세그먼트 위젯이 없어 전체 텍스트를 표시합니다.');
+      }
       return _buildFullTextView();
     }
 
@@ -371,15 +403,18 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   @override
   Widget build(BuildContext context) {
     // 디버깅 정보 출력
-    debugPrint('ProcessedTextWidget.build 호출');
-    debugPrint('showFullText: ${widget.processedText.showFullText}');
-    debugPrint('segments 존재 여부: ${widget.processedText.segments != null}');
-    if (widget.processedText.segments != null) {
-      debugPrint('segments 개수: ${widget.processedText.segments!.length}');
+    if (kDebugMode) {
+      debugPrint('ProcessedTextWidget.build 호출');
+      debugPrint('showFullText: ${widget.processedText.showFullText}');
+      debugPrint('segments 존재 여부: ${widget.processedText.segments != null}');
+      if (widget.processedText.segments != null) {
+        debugPrint('segments 개수: ${widget.processedText.segments!.length}');
+      }
+      debugPrint(
+          'fullOriginalText: "${widget.processedText.fullOriginalText}"');
+      debugPrint(
+          'fullTranslatedText: "${widget.processedText.fullTranslatedText}"');
     }
-    debugPrint('fullOriginalText: "${widget.processedText.fullOriginalText}"');
-    debugPrint(
-        'fullTranslatedText: "${widget.processedText.fullTranslatedText}"');
 
     // 문장 바깥 탭 시 선택 취소를 위한 GestureDetector 추가
     return GestureDetector(
@@ -457,84 +492,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           ),
         ],
       ),
-    );
-  }
-
-  /// **컨텍스트 메뉴 빌더 메서드**
-  Widget _buildContextMenu(
-      BuildContext context, EditableTextState editableTextState) {
-    debugPrint('_buildContextMenu 호출됨');
-
-    // 범위 체크 추가 - 방향에 관계없이 작동하도록 수정
-    final TextSelection selection =
-        editableTextState.textEditingValue.selection;
-    final int start = selection.start;
-    final int end = selection.end;
-
-    debugPrint('선택 범위: $start-$end');
-
-    if (start < 0 ||
-        end < 0 ||
-        start >= editableTextState.textEditingValue.text.length ||
-        end > editableTextState.textEditingValue.text.length) {
-      debugPrint('선택 범위가 유효하지 않음');
-      return AdaptiveTextSelectionToolbar.editableText(
-        editableTextState: editableTextState,
-      );
-    }
-
-    String selectedText = '';
-    String fullText = editableTextState.textEditingValue.text;
-    try {
-      selectedText = selection.textInside(fullText);
-      debugPrint('선택된 텍스트: "$selectedText"');
-    } catch (e) {
-      debugPrint('텍스트 선택 오류: $e');
-      return AdaptiveTextSelectionToolbar.editableText(
-        editableTextState: editableTextState,
-      );
-    }
-
-    if (selectedText.isEmpty) {
-      debugPrint('선택된 텍스트가 비어있음');
-      return AdaptiveTextSelectionToolbar.editableText(
-        editableTextState: editableTextState,
-      );
-    }
-
-    // 플래시카드 단어와 정확히 일치하는 경우에는 사전 검색 실행
-    bool isExactFlashcardWord = _flashcardWords.contains(selectedText);
-    if (isExactFlashcardWord) {
-      debugPrint('플래시카드 단어와 정확히 일치: $selectedText - 사전 검색 실행');
-      // 사전 검색 실행
-      if (widget.onDictionaryLookup != null) {
-        widget.onDictionaryLookup!(selectedText);
-      }
-      return const SizedBox.shrink();
-    }
-
-    _selectedText = selectedText;
-    debugPrint('커스텀 컨텍스트 메뉴 표시');
-
-    // 선택한 단어가 플래시카드에 없는 경우 → 커스텀 컨텍스트 메뉴 표시
-    return ContextMenuHelper.buildCustomContextMenu(
-      context: context,
-      editableTextState: editableTextState,
-      selectedText: _selectedText,
-      flashcardWords: _flashcardWords,
-      onLookupDictionary: (String text) {
-        if (_selectedText.isNotEmpty && widget.onDictionaryLookup != null) {
-          widget.onDictionaryLookup!(_selectedText);
-        }
-      },
-      onAddToFlashcard: (String text) {
-        if (_selectedText.isNotEmpty && widget.onCreateFlashCard != null) {
-          widget.onCreateFlashCard!(_selectedText, '', pinyin: null);
-          setState(() {
-            _flashcardWords.add(_selectedText);
-          });
-        }
-      },
     );
   }
 }
