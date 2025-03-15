@@ -184,10 +184,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
               return ProcessedTextWidget(
                 processedText: _processedText!,
+                onDictionaryLookup: _showDictionaryResult,
                 onCreateFlashCard: (word, meaning, {String? pinyin}) {
                   widget.onCreateFlashCard(word, meaning, pinyin: pinyin);
-                  // 사전 검색 결과도 함께 표시
-                  _showDictionaryResult(word);
                 },
                 flashCards: widget.flashCards,
                 showTranslation: true,
@@ -249,10 +248,13 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
     // 이미 플래시카드에 있는 단어인지 확인
     FlashCard? existingCard;
+    bool isExistingFlashcard = false;
+
     if (widget.flashCards != null) {
       for (final card in widget.flashCards!) {
         if (card.front == word) {
           existingCard = card;
+          isExistingFlashcard = true;
           debugPrint('플래시카드에 이미 있는 단어: $word');
           break;
         }
@@ -275,6 +277,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           context: context,
           entry: customEntry,
           onCreateFlashCard: widget.onCreateFlashCard,
+          isExistingFlashcard: true,
         );
         return;
       }
@@ -288,6 +291,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             context: context,
             entry: entry,
             onCreateFlashCard: widget.onCreateFlashCard,
+            isExistingFlashcard: false,
           );
         }
       } else {
@@ -298,14 +302,14 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: Text('새 플래시카드 추가'),
+            title: Text('단어 찾기 결과'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('단어: $word'),
                 const SizedBox(height: 16),
-                const Text('사전에서 찾을 수 없습니다. 직접 의미를 입력하시겠습니까?'),
+                const Text('사전에서 찾을 수 없습니다. 플래시카드에 추가하시겠습니까?'),
               ],
             ),
             actions: [
