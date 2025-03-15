@@ -10,8 +10,9 @@ import '../../services/page_service.dart';
 import '../../services/image_service.dart';
 import '../../models/note.dart';
 import 'note_detail_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-/// 향후 유저 세팅 화면으로 바꾸어 사용. 현재는 사용되지 않음 
+/// 향후 유저 세팅 화면으로 바꾸어 사용. 현재는 사용되지 않음
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -21,7 +22,19 @@ class HomeScreen extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => HomeViewModel(),
       child: Scaffold(
-        appBar: AppBar(title: const Text('Pikabook')), //AppBar,
+        appBar: AppBar(
+          title: const Text('Pikabook'),
+          actions: [
+            // 프로필 버튼
+            IconButton(
+              icon: const Icon(Icons.account_circle),
+              onPressed: () {
+                Navigator.pushNamed(context, '/profile');
+              },
+              tooltip: '프로필',
+            ),
+          ],
+        ),
         body: Consumer<HomeViewModel>(
           builder: (context, viewModel, child) {
             if (viewModel.isLoading) {

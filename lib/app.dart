@@ -7,7 +7,8 @@ import 'services/user_preferences_service.dart';
 import 'views/screens/splash_screen.dart';
 import 'views/screens/onboarding_screen.dart';
 import 'firebase_options.dart';
-import 'screens/login_screen.dart';
+import 'views/screens/login_screen.dart';
+import 'views/screens/profile_screen.dart';
 
 class App extends StatefulWidget {
   final InitializationService initializationService;
@@ -97,12 +98,25 @@ class _AppState extends State<App> {
     });
   }
 
+  void _handleLogout() {
+    setState(() {
+      _isUserAuthenticated = false;
+      _skipLogin = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Pikabook',
       theme: AppTheme.lightTheme,
       home: _buildHomeScreen(),
+      routes: {
+        '/profile': (context) => ProfileScreen(
+              initializationService: widget.initializationService,
+              onLogout: _handleLogout,
+            ),
+      },
     );
   }
 
