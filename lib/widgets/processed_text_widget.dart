@@ -152,9 +152,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       flashcardWords: _flashcardWords,
       onTap: (word) {
         debugPrint('하이라이트된 단어 탭됨: $word');
-        // 선택된 텍스트 초기화
-        setState(() {
-          _selectedText = '';
+        // 선택된 텍스트 초기화 - 빌드 후에 실행되도록 Future.microtask 사용
+        Future.microtask(() {
+          if (mounted) {
+            setState(() {
+              _selectedText = '';
+            });
+          }
         });
 
         // 사전 검색 실행
@@ -165,38 +169,57 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       normalStyle: const TextStyle(fontSize: 16),
     );
 
-    // 선택 가능한 텍스트 위젯 생성
-    return SelectableText.rich(
-      TextSpan(
-        children: textSpans,
-        style: const TextStyle(fontSize: 16),
-      ),
-      contextMenuBuilder: (context, editableTextState) {
-        return ContextMenuManager.buildContextMenu(
-          context: context,
-          editableTextState: editableTextState,
-          flashcardWords: _flashcardWords,
-          selectedText: _selectedText,
-          onSelectionChanged: (text) {
-            setState(() {
-              _selectedText = text;
-            });
+    // 선택된 텍스트 상태 관리를 위한 ValueNotifier 사용
+    final selectedTextNotifier = ValueNotifier<String>(_selectedText);
+
+    // 위젯이 dispose될 때 ValueNotifier도 dispose되도록 설정
+    return ValueListenableBuilder<String>(
+      valueListenable: selectedTextNotifier,
+      builder: (context, selectedText, child) {
+        return SelectableText.rich(
+          TextSpan(
+            children: textSpans,
+            style: const TextStyle(fontSize: 16),
+          ),
+          contextMenuBuilder: (context, editableTextState) {
+            return ContextMenuManager.buildContextMenu(
+              context: context,
+              editableTextState: editableTextState,
+              flashcardWords: _flashcardWords,
+              selectedText: selectedText,
+              onSelectionChanged: (text) {
+                // 상태 변경을 ValueNotifier를 통해 처리하고, 빌드 후에 setState 호출
+                selectedTextNotifier.value = text;
+                Future.microtask(() {
+                  if (mounted) {
+                    setState(() {
+                      _selectedText = text;
+                    });
+                  }
+                });
+              },
+              onDictionaryLookup: widget.onDictionaryLookup,
+              onCreateFlashCard: (word, meaning, {String? pinyin}) {
+                if (widget.onCreateFlashCard != null) {
+                  widget.onCreateFlashCard!(word, meaning, pinyin: pinyin);
+                  // 빌드 후에 setState 호출
+                  Future.microtask(() {
+                    if (mounted) {
+                      setState(() {
+                        _flashcardWords.add(word);
+                      });
+                    }
+                  });
+                }
+              },
+            );
           },
-          onDictionaryLookup: widget.onDictionaryLookup,
-          onCreateFlashCard: (word, meaning, {String? pinyin}) {
-            if (widget.onCreateFlashCard != null) {
-              widget.onCreateFlashCard!(word, meaning, pinyin: pinyin);
-              setState(() {
-                _flashcardWords.add(word);
-              });
-            }
-          },
+          enableInteractiveSelection: true,
+          showCursor: true,
+          cursorWidth: 2.0,
+          cursorColor: Colors.blue,
         );
       },
-      enableInteractiveSelection: true,
-      showCursor: true,
-      cursorWidth: 2.0,
-      cursorColor: Colors.blue,
     );
   }
 
@@ -434,6 +457,84 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           ),
         ],
       ),
+    );
+  }
+
+  /// **컨텍스트 메뉴 빌더 메서드**
+  Widget _buildContextMenu(
+      BuildContext context, EditableTextState editableTextState) {
+    debugPrint('_buildContextMenu 호출됨');
+
+    // 범위 체크 추가 - 방향에 관계없이 작동하도록 수정
+    final TextSelection selection =
+        editableTextState.textEditingValue.selection;
+    final int start = selection.start;
+    final int end = selection.end;
+
+    debugPrint('선택 범위: $start-$end');
+
+    if (start < 0 ||
+        end < 0 ||
+        start >= editableTextState.textEditingValue.text.length ||
+        end > editableTextState.textEditingValue.text.length) {
+      debugPrint('선택 범위가 유효하지 않음');
+      return AdaptiveTextSelectionToolbar.editableText(
+        editableTextState: editableTextState,
+      );
+    }
+
+    String selectedText = '';
+    String fullText = editableTextState.textEditingValue.text;
+    try {
+      selectedText = selection.textInside(fullText);
+      debugPrint('선택된 텍스트: "$selectedText"');
+    } catch (e) {
+      debugPrint('텍스트 선택 오류: $e');
+      return AdaptiveTextSelectionToolbar.editableText(
+        editableTextState: editableTextState,
+      );
+    }
+
+    if (selectedText.isEmpty) {
+      debugPrint('선택된 텍스트가 비어있음');
+      return AdaptiveTextSelectionToolbar.editableText(
+        editableTextState: editableTextState,
+      );
+    }
+
+    // 플래시카드 단어와 정확히 일치하는 경우에는 사전 검색 실행
+    bool isExactFlashcardWord = _flashcardWords.contains(selectedText);
+    if (isExactFlashcardWord) {
+      debugPrint('플래시카드 단어와 정확히 일치: $selectedText - 사전 검색 실행');
+      // 사전 검색 실행
+      if (widget.onDictionaryLookup != null) {
+        widget.onDictionaryLookup!(selectedText);
+      }
+      return const SizedBox.shrink();
+    }
+
+    _selectedText = selectedText;
+    debugPrint('커스텀 컨텍스트 메뉴 표시');
+
+    // 선택한 단어가 플래시카드에 없는 경우 → 커스텀 컨텍스트 메뉴 표시
+    return ContextMenuHelper.buildCustomContextMenu(
+      context: context,
+      editableTextState: editableTextState,
+      selectedText: _selectedText,
+      flashcardWords: _flashcardWords,
+      onLookupDictionary: (String text) {
+        if (_selectedText.isNotEmpty && widget.onDictionaryLookup != null) {
+          widget.onDictionaryLookup!(_selectedText);
+        }
+      },
+      onAddToFlashcard: (String text) {
+        if (_selectedText.isNotEmpty && widget.onCreateFlashCard != null) {
+          widget.onCreateFlashCard!(_selectedText, '', pinyin: null);
+          setState(() {
+            _flashcardWords.add(_selectedText);
+          });
+        }
+      },
     );
   }
 }

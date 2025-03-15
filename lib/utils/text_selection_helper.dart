@@ -31,33 +31,39 @@ class TextSelectionHelper {
       normalStyle: style,
     );
 
-    // 선택된 텍스트 상태 관리를 위한 변수
-    String selectedText = '';
+    // 선택된 텍스트 상태 관리를 위한 ValueNotifier 사용
+    final selectedTextNotifier = ValueNotifier<String>('');
 
-    return SelectableText.rich(
-      TextSpan(
-        children: textSpans,
-        style: style,
-      ),
-      contextMenuBuilder: (context, editableTextState) {
-        return ContextMenuManager.buildContextMenu(
-          context: context,
-          editableTextState: editableTextState,
-          flashcardWords: words,
-          selectedText: selectedText,
-          onSelectionChanged: (text) {
-            selectedText = text;
+    return ValueListenableBuilder<String>(
+      valueListenable: selectedTextNotifier,
+      builder: (context, selectedText, child) {
+        return SelectableText.rich(
+          TextSpan(
+            children: textSpans,
+            style: style,
+          ),
+          contextMenuBuilder: (context, editableTextState) {
+            return ContextMenuManager.buildContextMenu(
+              context: context,
+              editableTextState: editableTextState,
+              flashcardWords: words,
+              selectedText: selectedText,
+              onSelectionChanged: (text) {
+                // 상태 변경을 ValueNotifier를 통해 처리
+                selectedTextNotifier.value = text;
+              },
+              onDictionaryLookup: onDictionaryLookup,
+              onCreateFlashCard: (word, meaning, {String? pinyin}) {
+                onCreateFlashCard(word, translatedText, pinyin: pinyin);
+              },
+            );
           },
-          onDictionaryLookup: onDictionaryLookup,
-          onCreateFlashCard: (word, meaning, {String? pinyin}) {
-            onCreateFlashCard(word, translatedText, pinyin: pinyin);
-          },
+          enableInteractiveSelection: true,
+          showCursor: true,
+          cursorWidth: 2.0,
+          cursorColor: Colors.blue,
         );
       },
-      enableInteractiveSelection: true,
-      showCursor: true,
-      cursorWidth: 2.0,
-      cursorColor: Colors.blue,
     );
   }
 }
