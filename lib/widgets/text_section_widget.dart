@@ -54,6 +54,10 @@ class TextSectionWidget extends StatelessWidget {
                       onCreateFlashCard: onCreateFlashCard,
                       translatedText: translatedText,
                       flashcardWords: flashcardWords,
+                      onWordTap: (word) {
+                        // 하이라이트된 단어를 탭했을 때 사전 검색 실행
+                        onDictionaryLookup(word);
+                      },
                     )
                   : Text(
                       text,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'context_menu_helper.dart';
+import 'context_menu_manager.dart';
+import 'text_highlight_manager.dart';
 
 /// 텍스트 선택 관련 공통 기능을 제공하는 유틸리티 클래스
 class TextSelectionHelper {
@@ -11,71 +12,52 @@ class TextSelectionHelper {
     required Function(String, String, {String? pinyin}) onCreateFlashCard,
     required String translatedText,
     Set<String>? flashcardWords,
+    Function(String)? onWordTap,
   }) {
-    return SelectableText(
-      text,
-      style: style,
+    // 플래시카드 단어 목록이 null인 경우 빈 Set으로 초기화
+    final Set<String> words = flashcardWords ?? {};
+
+    // 하이라이트된 텍스트 스팬 생성
+    final textSpans = TextHighlightManager.buildHighlightedText(
+      text: text,
+      flashcardWords: words,
+      onTap: (word) {
+        if (onWordTap != null) {
+          onWordTap(word);
+        } else {
+          onDictionaryLookup(word);
+        }
+      },
+      normalStyle: style,
+    );
+
+    // 선택된 텍스트 상태 관리를 위한 변수
+    String selectedText = '';
+
+    return SelectableText.rich(
+      TextSpan(
+        children: textSpans,
+        style: style,
+      ),
       contextMenuBuilder: (context, editableTextState) {
-        return _buildContextMenu(
+        return ContextMenuManager.buildContextMenu(
           context: context,
           editableTextState: editableTextState,
+          flashcardWords: words,
+          selectedText: selectedText,
+          onSelectionChanged: (text) {
+            selectedText = text;
+          },
           onDictionaryLookup: onDictionaryLookup,
-          onCreateFlashCard: onCreateFlashCard,
-          translatedText: translatedText,
-          flashcardWords: flashcardWords,
+          onCreateFlashCard: (word, meaning, {String? pinyin}) {
+            onCreateFlashCard(word, translatedText, pinyin: pinyin);
+          },
         );
       },
       enableInteractiveSelection: true,
-      selectionControls: MaterialTextSelectionControls(),
       showCursor: true,
       cursorWidth: 2.0,
       cursorColor: Colors.blue,
-    );
-  }
-
-  /// 컨텍스트 메뉴 빌더 메서드
-  static Widget _buildContextMenu({
-    required BuildContext context,
-    required EditableTextState editableTextState,
-    required Function(String) onDictionaryLookup,
-    required Function(String, String, {String? pinyin}) onCreateFlashCard,
-    required String translatedText,
-    Set<String>? flashcardWords,
-  }) {
-    // 범위 체크 추가 - 방향에 관계없이 작동하도록 수정
-    final TextSelection selection =
-        editableTextState.textEditingValue.selection;
-    final int start = selection.start;
-    final int end = selection.end;
-
-    if (start < 0 ||
-        end < 0 ||
-        start >= editableTextState.textEditingValue.text.length ||
-        end > editableTextState.textEditingValue.text.length) {
-      return const SizedBox.shrink();
-    }
-
-    String selectedText = '';
-    try {
-      selectedText =
-          selection.textInside(editableTextState.textEditingValue.text);
-    } catch (e) {
-      debugPrint('텍스트 선택 오류: $e');
-      return const SizedBox.shrink();
-    }
-
-    if (selectedText.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // 선택한 단어가 플래시카드에 포함된 경우에도 커스텀 컨텍스트 메뉴 표시
-    return ContextMenuHelper.buildCustomContextMenu(
-      context: context,
-      editableTextState: editableTextState,
-      selectedText: selectedText,
-      flashcardWords: flashcardWords,
-      onLookupDictionary: onDictionaryLookup,
-      onAddToFlashcard: (text) => onCreateFlashCard(text, translatedText),
     );
   }
 }
