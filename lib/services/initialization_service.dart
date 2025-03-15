@@ -18,8 +18,16 @@ class InitializationService {
   String? _firebaseError;
   String? _authError;
 
-  // 인증 서비스
-  final AuthService _authService = AuthService();
+  // 인증 서비스 (지연 초기화)
+  AuthService? _authService;
+
+  // 인증 서비스 getter
+  AuthService get authService {
+    if (_authService == null) {
+      _authService = AuthService();
+    }
+    return _authService!;
+  }
 
   // 상태 확인 getter
   Future<bool> get isFirebaseInitialized => _firebaseInitialized.future;
@@ -61,6 +69,17 @@ class InitializationService {
     }
   }
 
+  // Firebase가 이미 초기화되었음을 표시하는 메서드
+  Future<void> markFirebaseInitialized() async {
+    if (_firebaseInitialized.isCompleted) return;
+
+    debugPrint('Firebase 초기화 완료 표시 (외부 초기화)');
+    _firebaseInitialized.complete(true);
+
+    // 사용자 인증 상태 확인
+    await _checkAuthenticationState();
+  }
+
   // 사용자 인증 상태 확인 메서드
   Future<void> _checkAuthenticationState() async {
     if (_userAuthenticationChecked.isCompleted) return;
@@ -89,7 +108,7 @@ class InitializationService {
   Future<UserCredential?> signInAnonymously() async {
     try {
       debugPrint('익명 인증 시작...');
-      final userCredential = await _authService.signInAnonymously();
+      final userCredential = await authService.signInAnonymously();
       debugPrint('익명 인증 성공: ${userCredential.user?.uid}');
       return userCredential;
     } catch (e) {
@@ -103,7 +122,7 @@ class InitializationService {
   Future<UserCredential?> signInWithGoogle() async {
     try {
       debugPrint('Google 인증 시작...');
-      final userCredential = await _authService.signInWithGoogle();
+      final userCredential = await authService.signInWithGoogle();
       debugPrint('Google 인증 성공: ${userCredential.user?.uid}');
       return userCredential;
     } catch (e) {
@@ -117,7 +136,7 @@ class InitializationService {
   Future<UserCredential?> signInWithApple() async {
     try {
       debugPrint('Apple 인증 시작...');
-      final userCredential = await _authService.signInWithApple();
+      final userCredential = await authService.signInWithApple();
       debugPrint('Apple 인증 성공: ${userCredential.user?.uid}');
       return userCredential;
     } catch (e) {
@@ -131,8 +150,7 @@ class InitializationService {
   Future<UserCredential?> linkAnonymousAccountWithGoogle() async {
     try {
       debugPrint('익명 계정을 Google 계정과 연결 시작...');
-      final userCredential =
-          await _authService.linkAnonymousAccountWithGoogle();
+      final userCredential = await authService.linkAnonymousAccountWithGoogle();
       debugPrint('Google 계정 연결 성공: ${userCredential.user?.uid}');
       return userCredential;
     } catch (e) {
@@ -146,7 +164,7 @@ class InitializationService {
   Future<UserCredential?> linkAnonymousAccountWithApple() async {
     try {
       debugPrint('익명 계정을 Apple 계정과 연결 시작...');
-      final userCredential = await _authService.linkAnonymousAccountWithApple();
+      final userCredential = await authService.linkAnonymousAccountWithApple();
       debugPrint('Apple 계정 연결 성공: ${userCredential.user?.uid}');
       return userCredential;
     } catch (e) {
@@ -159,7 +177,7 @@ class InitializationService {
   // 로그아웃 메서드
   Future<void> signOut() async {
     try {
-      await _authService.signOut();
+      await authService.signOut();
       debugPrint('로그아웃 성공');
     } catch (e) {
       debugPrint('로그아웃 실패: $e');
