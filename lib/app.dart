@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'theme/app_theme.dart';
 import 'views/screens/home_screen.dart';
@@ -8,6 +7,7 @@ import 'services/user_preferences_service.dart';
 import 'views/screens/splash_screen.dart';
 import 'views/screens/onboarding_screen.dart';
 import 'firebase_options.dart';
+import 'screens/login_screen.dart';
 
 class App extends StatefulWidget {
   final InitializationService initializationService;
@@ -22,6 +22,7 @@ class _AppState extends State<App> {
   bool _isFirebaseInitialized = false;
   bool _isUserAuthenticated = false;
   bool _isOnboardingCompleted = false;
+  bool _skipLogin = false;
   String? _error;
   final UserPreferencesService _preferencesService = UserPreferencesService();
 
@@ -63,24 +64,37 @@ class _AppState extends State<App> {
       });
 
       // 사용자 인증 상태 확인
-      final userAuthenticated =
-          await widget.initializationService.isUserAuthenticated;
+      final userAuthenticationChecked =
+          await widget.initializationService.isUserAuthenticationChecked;
 
-      if (!userAuthenticated) {
+      if (!userAuthenticationChecked) {
         setState(() {
           _error = widget.initializationService.authError;
         });
         return;
       }
 
+      // 사용자가 로그인되어 있는지 확인
       setState(() {
-        _isUserAuthenticated = true;
+        _isUserAuthenticated = widget.initializationService.isUserAuthenticated;
       });
     } catch (e) {
       setState(() {
         _error = '앱 초기화 중 오류가 발생했습니다: $e';
       });
     }
+  }
+
+  void _handleLoginSuccess() {
+    setState(() {
+      _isUserAuthenticated = true;
+    });
+  }
+
+  void _handleSkipLogin() {
+    setState(() {
+      _skipLogin = true;
+    });
   }
 
   @override
@@ -104,13 +118,29 @@ class _AppState extends State<App> {
       // return const OnboardingScreen();
     }
 
-    // 초기화 완료된 경우
-    if (_isFirebaseInitialized && _isUserAuthenticated) {
-      // 온보딩 완료 여부에 따라 화면 결정
-      if (_isOnboardingCompleted) {
-        return const HomeScreen();
+    // Firebase 초기화가 완료된 경우
+    if (_isFirebaseInitialized) {
+      // 사용자가 로그인되어 있거나 로그인을 건너뛴 경우
+      if (_isUserAuthenticated || _skipLogin) {
+        // 온보딩 완료 여부에 따라 화면 결정
+        if (_isOnboardingCompleted) {
+          return const HomeScreen();
+        } else {
+          return OnboardingScreen(
+            onComplete: () {
+              setState(() {
+                _isOnboardingCompleted = true;
+              });
+            },
+          );
+        }
       } else {
-        return const OnboardingScreen();
+        // 로그인 화면 표시
+        return LoginScreen(
+          initializationService: widget.initializationService,
+          onLoginSuccess: _handleLoginSuccess,
+          onSkipLogin: _handleSkipLogin,
+        );
       }
     }
 

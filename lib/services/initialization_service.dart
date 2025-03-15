@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'unified_cache_service.dart';
+import 'auth_service.dart';
 
 /// 앱 초기화를 관리하는 서비스
 ///
@@ -11,21 +12,31 @@ import 'unified_cache_service.dart';
 class InitializationService {
   // 초기화 상태를 추적하는 컨트롤러
   Completer<bool> _firebaseInitialized = Completer<bool>();
-  Completer<bool> _userAuthenticated = Completer<bool>();
+  Completer<bool> _userAuthenticationChecked = Completer<bool>();
 
   // 오류 메시지 저장
   String? _firebaseError;
   String? _authError;
 
+  // 인증 서비스
+  final AuthService _authService = AuthService();
+
   // 상태 확인 getter
   Future<bool> get isFirebaseInitialized => _firebaseInitialized.future;
-  Future<bool> get isUserAuthenticated => _userAuthenticated.future;
+  Future<bool> get isUserAuthenticationChecked =>
+      _userAuthenticationChecked.future;
   bool get isFirebaseInitializing => !_firebaseInitialized.isCompleted;
-  bool get isUserAuthenticating => !_userAuthenticated.isCompleted;
+  bool get isUserAuthenticationChecking =>
+      !_userAuthenticationChecked.isCompleted;
 
   // 오류 메시지 getter
   String? get firebaseError => _firebaseError;
   String? get authError => _authError;
+
+  // 사용자 인증 상태 getter
+  bool get isUserAuthenticated => FirebaseAuth.instance.currentUser != null;
+  bool get isAnonymousUser =>
+      FirebaseAuth.instance.currentUser?.isAnonymous ?? false;
 
   // Firebase 초기화 메서드
   Future<void> initializeFirebase({required FirebaseOptions options}) async {
@@ -40,53 +51,100 @@ class InitializationService {
       // 초기화 완료 표시
       _firebaseInitialized.complete(true);
 
-      // 사용자 인증 시작
-      _authenticateUser();
+      // 사용자 인증 상태 확인
+      _checkAuthenticationState();
     } catch (e) {
       debugPrint('Firebase 초기화 실패: $e');
       _firebaseError = '앱 초기화 중 오류가 발생했습니다: $e';
       _firebaseInitialized.complete(false);
-      _userAuthenticated.complete(false);
+      _userAuthenticationChecked.complete(false);
     }
   }
 
-  // 사용자 인증 메서드
-  Future<void> _authenticateUser() async {
-    if (_userAuthenticated.isCompleted) return;
+  // 사용자 인증 상태 확인 메서드
+  Future<void> _checkAuthenticationState() async {
+    if (_userAuthenticationChecked.isCompleted) return;
 
     try {
       final auth = FirebaseAuth.instance;
 
-      // 현재 사용자가 없으면 익명 로그인 수행
-      if (auth.currentUser == null) {
-        debugPrint('익명 인증 시작...');
-        await auth.signInAnonymously();
-        debugPrint('익명 인증 성공: ${auth.currentUser?.uid}');
+      // 현재 사용자 확인
+      if (auth.currentUser != null) {
+        debugPrint(
+            '기존 사용자 발견: ${auth.currentUser?.uid} (익명: ${auth.currentUser?.isAnonymous})');
       } else {
-        debugPrint('기존 사용자 발견: ${auth.currentUser?.uid}');
+        debugPrint('로그인된 사용자 없음');
       }
 
-      // 인증 후 다시 확인
-      if (auth.currentUser == null) {
-        throw Exception('익명 인증 후에도 사용자가 null입니다.');
-      }
-
-      // 인증 완료 표시
-      _userAuthenticated.complete(true);
+      // 인증 상태 확인 완료 표시
+      _userAuthenticationChecked.complete(true);
     } catch (e) {
-      debugPrint('사용자 인증 실패: $e');
-      _authError = '사용자 인증 중 오류가 발생했습니다: $e';
-      _userAuthenticated.complete(false);
+      debugPrint('사용자 인증 상태 확인 실패: $e');
+      _authError = '사용자 인증 상태 확인 중 오류가 발생했습니다: $e';
+      _userAuthenticationChecked.complete(false);
+    }
+  }
+
+  // 익명 로그인 메서드
+  Future<UserCredential?> signInAnonymously() async {
+    try {
+      debugPrint('익명 인증 시작...');
+      final userCredential = await _authService.signInAnonymously();
+      debugPrint('익명 인증 성공: ${userCredential.user?.uid}');
+      return userCredential;
+    } catch (e) {
+      debugPrint('익명 인증 실패: $e');
+      _authError = '익명 인증 중 오류가 발생했습니다: $e';
+      return null;
+    }
+  }
+
+  // Google 로그인 메서드
+  Future<UserCredential?> signInWithGoogle() async {
+    try {
+      debugPrint('Google 인증 시작...');
+      final userCredential = await _authService.signInWithGoogle();
+      debugPrint('Google 인증 성공: ${userCredential.user?.uid}');
+      return userCredential;
+    } catch (e) {
+      debugPrint('Google 인증 실패: $e');
+      _authError = 'Google 인증 중 오류가 발생했습니다: $e';
+      return null;
+    }
+  }
+
+  // Apple 로그인 메서드
+  Future<UserCredential?> signInWithApple() async {
+    try {
+      debugPrint('Apple 인증 시작...');
+      final userCredential = await _authService.signInWithApple();
+      debugPrint('Apple 인증 성공: ${userCredential.user?.uid}');
+      return userCredential;
+    } catch (e) {
+      debugPrint('Apple 인증 실패: $e');
+      _authError = 'Apple 인증 중 오류가 발생했습니다: $e';
+      return null;
+    }
+  }
+
+  // 로그아웃 메서드
+  Future<void> signOut() async {
+    try {
+      await _authService.signOut();
+      debugPrint('로그아웃 성공');
+    } catch (e) {
+      debugPrint('로그아웃 실패: $e');
+      _authError = '로그아웃 중 오류가 발생했습니다: $e';
     }
   }
 
   // 초기화 재시도 메서드
   void retryInitialization({required FirebaseOptions options}) {
-    if (isFirebaseInitializing || isUserAuthenticating) return;
+    if (isFirebaseInitializing || isUserAuthenticationChecking) return;
 
     // 컨트롤러 재설정
     _firebaseInitialized = Completer<bool>();
-    _userAuthenticated = Completer<bool>();
+    _userAuthenticationChecked = Completer<bool>();
     _firebaseError = null;
     _authError = null;
 

@@ -43,6 +43,11 @@ dependencies:
   # firebase_storage: ^11.5.6 제거됨 - 로컬 저장 방식 사용
   # 기타 필요한 Firebase 패키지...
   
+  # 소셜 로그인 패키지
+  google_sign_in: ^6.2.1  # Google 로그인
+  sign_in_with_apple: ^5.0.0  # Apple 로그인
+  crypto: ^3.0.3  # Apple 로그인에 필요한 nonce 생성용
+  
   # UI 컴포넌트
   google_fonts: ^6.2.1
   image_picker: ^1.1.2
@@ -62,7 +67,6 @@ dependencies:
   flutter_tts: ^4.2.2
   pinyin: ^3.3.0
   shared_preferences: ^2.5.2
-  crypto: ^3.0.3
   badges: ^3.1.2
   url_launcher: ^6.2.5
   xml: ^6.5.0

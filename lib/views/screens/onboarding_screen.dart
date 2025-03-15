@@ -4,7 +4,9 @@ import '../../services/user_preferences_service.dart';
 import 'home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({Key? key}) : super(key: key);
+  final VoidCallback? onComplete;
+
+  const OnboardingScreen({Key? key, this.onComplete}) : super(key: key);
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -297,6 +299,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => const HomeScreen()),
       );
+    }
+
+    if (widget.onComplete != null) {
+      widget.onComplete!();
     }
   }
 }
