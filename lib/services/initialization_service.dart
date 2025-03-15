@@ -127,6 +127,35 @@ class InitializationService {
     }
   }
 
+  // 익명 계정을 Google 계정과 연결하는 메서드
+  Future<UserCredential?> linkAnonymousAccountWithGoogle() async {
+    try {
+      debugPrint('익명 계정을 Google 계정과 연결 시작...');
+      final userCredential =
+          await _authService.linkAnonymousAccountWithGoogle();
+      debugPrint('Google 계정 연결 성공: ${userCredential.user?.uid}');
+      return userCredential;
+    } catch (e) {
+      debugPrint('Google 계정 연결 실패: $e');
+      _authError = 'Google 계정 연결 중 오류가 발생했습니다: $e';
+      return null;
+    }
+  }
+
+  // 익명 계정을 Apple 계정과 연결하는 메서드
+  Future<UserCredential?> linkAnonymousAccountWithApple() async {
+    try {
+      debugPrint('익명 계정을 Apple 계정과 연결 시작...');
+      final userCredential = await _authService.linkAnonymousAccountWithApple();
+      debugPrint('Apple 계정 연결 성공: ${userCredential.user?.uid}');
+      return userCredential;
+    } catch (e) {
+      debugPrint('Apple 계정 연결 실패: $e');
+      _authError = 'Apple 계정 연결 중 오류가 발생했습니다: $e';
+      return null;
+    }
+  }
+
   // 로그아웃 메서드
   Future<void> signOut() async {
     try {
