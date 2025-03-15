@@ -59,32 +59,53 @@ class ContextMenuManager {
       debugPrint('플래시카드 단어와 정확히 일치: $newSelectedText - 사전 검색 실행');
       // 사전 검색 실행
       if (onDictionaryLookup != null) {
-        onDictionaryLookup(newSelectedText);
+        // 빌드 후에 실행되도록 Future.microtask 사용
+        Future.microtask(() => onDictionaryLookup(newSelectedText));
       }
       return const SizedBox.shrink();
     }
 
-    // 선택된 텍스트 업데이트
-    onSelectionChanged(newSelectedText);
+    // 선택된 텍스트 업데이트 - 빌드 후에 실행되도록 Future.microtask 사용
+    if (newSelectedText != selectedText) {
+      Future.microtask(() => onSelectionChanged(newSelectedText));
+    }
+
     debugPrint('커스텀 컨텍스트 메뉴 표시');
 
     // 선택한 단어가 플래시카드에 없는 경우 → 커스텀 컨텍스트 메뉴 표시
-    return ContextMenuHelper.buildCustomContextMenu(
-      context: context,
-      editableTextState: editableTextState,
-      selectedText: newSelectedText,
-      flashcardWords: flashcardWords,
-      onLookupDictionary: (String text) {
-        if (newSelectedText.isNotEmpty && onDictionaryLookup != null) {
-          onDictionaryLookup(newSelectedText);
-        }
-      },
-      onAddToFlashcard: (String text) {
-        if (newSelectedText.isNotEmpty && onCreateFlashCard != null) {
-          onCreateFlashCard(newSelectedText, '', pinyin: null);
-          // 플래시카드 단어 목록에 추가는 호출자가 처리해야 함
-        }
-      },
+    final List<ContextMenuButtonItem> buttonItems = [];
+
+    // 사전 검색 버튼
+    buttonItems.add(
+      ContextMenuButtonItem(
+        onPressed: () {
+          editableTextState.hideToolbar();
+          if (onDictionaryLookup != null) {
+            onDictionaryLookup(newSelectedText);
+          }
+        },
+        label: '사전 검색',
+      ),
+    );
+
+    // 플래시카드 추가 버튼 (이미 추가된 경우에는 표시하지 않음)
+    if (!isExactFlashcardWord) {
+      buttonItems.add(
+        ContextMenuButtonItem(
+          onPressed: () {
+            editableTextState.hideToolbar();
+            if (onCreateFlashCard != null) {
+              onCreateFlashCard(newSelectedText, '', pinyin: null);
+            }
+          },
+          label: '플래시카드 추가',
+        ),
+      );
+    }
+
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: buttonItems,
     );
   }
 }
