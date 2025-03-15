@@ -54,4 +54,6 @@ target 'Runner' do
       end
     end
   end
+
+  pod 'GoogleSignIn'
 end
