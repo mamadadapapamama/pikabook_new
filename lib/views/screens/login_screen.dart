@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../services/initialization_service.dart';
-import '../theme/app_theme.dart';
-import '../theme/tokens/color_tokens.dart';
-import '../widgets/loading_indicator.dart';
+import '../../../services/initialization_service.dart';
+import '../../../theme/app_theme.dart';
+import '../../../theme/tokens/color_tokens.dart';
+import '../../../widgets/loading_indicator.dart';
 
 class LoginScreen extends StatefulWidget {
   final InitializationService initializationService;

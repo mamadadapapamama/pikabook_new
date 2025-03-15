@@ -19,16 +19,19 @@ import 'services/chinese_segmenter_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Firebase 직접 초기화
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   // 앱 설정 로드
   await loadAppSettings();
 
   // 초기화 서비스 생성
   final initializationService = InitializationService();
 
-  // Firebase 초기화
-  await initializationService.initializeFirebase(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  // 초기화 서비스에 Firebase가 이미 초기화되었음을 알림
+  await initializationService.markFirebaseInitialized();
 
   runApp(App(initializationService: initializationService));
 }
