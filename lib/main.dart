@@ -18,14 +18,19 @@ import 'services/chinese_segmenter_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
 
   // 앱 설정 로드
   await loadAppSettings();
 
-  runApp(const MyApp());
+  // 초기화 서비스 생성
+  final initializationService = InitializationService();
+
+  // Firebase 초기화
+  await initializationService.initializeFirebase(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  runApp(App(initializationService: initializationService));
 }
 
 // 앱 설정 로드 함수 추가
