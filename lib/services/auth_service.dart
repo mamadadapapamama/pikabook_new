@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
+import '../firebase_options.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -79,14 +81,25 @@ class AuthService {
   // Google 로그인
   Future<UserCredential> signInWithGoogle() async {
     try {
-      // Google 로그인 프로세스 시작
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-
-      if (googleUser == null) {
-        throw Exception('Google 로그인이 취소되었습니다.');
+      // Firebase 초기화 확인
+      if (!Firebase.apps.isNotEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
       }
 
-      // Google 인증 정보 가져오기
+      // Google 로그인 시작
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+
+      // 사용자가 로그인을 취소한 경우
+      if (googleUser == null) {
+        throw FirebaseAuthException(
+          code: 'sign_in_canceled',
+          message: '사용자가 Google 로그인을 취소했습니다.',
+        );
+      }
+
+      // 인증 정보 가져오기
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
@@ -96,7 +109,7 @@ class AuthService {
         idToken: googleAuth.idToken,
       );
 
-      // Firebase로 로그인
+      // Firebase에 로그인
       final userCredential = await _auth.signInWithCredential(credential);
 
       // 사용자 정보 Firestore에 저장
@@ -105,6 +118,7 @@ class AuthService {
         'email': userCredential.user!.email,
         'isAnonymous': false,
         'profileImage': userCredential.user!.photoURL,
+        'createdAt': FieldValue.serverTimestamp(),
         'lastLoginAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -118,7 +132,14 @@ class AuthService {
   // Apple 로그인
   Future<UserCredential> signInWithApple() async {
     try {
-      // nonce 생성
+      // Firebase 초기화 확인
+      if (!Firebase.apps.isNotEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
+
+      // 보안을 위한 nonce 생성
       final rawNonce = _generateNonce();
       final nonce = _sha256ofString(rawNonce);
 
@@ -132,30 +153,32 @@ class AuthService {
       );
 
       // OAuthCredential 생성
-      final oauthCredential = OAuthProvider('apple.com').credential(
+      final oauthCredential = OAuthProvider("apple.com").credential(
         idToken: appleCredential.identityToken,
         rawNonce: rawNonce,
       );
 
-      // Firebase로 로그인
+      // Firebase에 로그인
       final userCredential = await _auth.signInWithCredential(oauthCredential);
 
-      // 사용자 이름 설정 (Apple은 첫 로그인에만 이름 제공)
-      String? displayName = userCredential.user!.displayName;
-      if (displayName == null || displayName.isEmpty) {
+      // 사용자 이름이 없는 경우 처리 (Apple은 두 번째 로그인부터 이름을 제공하지 않음)
+      String? displayName = userCredential.user?.displayName;
+      if ((displayName == null || displayName.isEmpty) &&
+          appleCredential.givenName != null) {
         displayName =
-            '${appleCredential.givenName ?? ''} ${appleCredential.familyName ?? ''}'
-                .trim();
-        if (displayName.isNotEmpty) {
-          await userCredential.user!.updateDisplayName(displayName);
-        }
+            '${appleCredential.givenName} ${appleCredential.familyName}';
+
+        // 사용자 프로필 업데이트
+        await userCredential.user?.updateDisplayName(displayName);
       }
 
       // 사용자 정보 Firestore에 저장
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'name': displayName.isNotEmpty ? displayName : 'Apple 사용자',
+        'name': displayName ?? 'Apple 사용자',
         'email': userCredential.user!.email,
         'isAnonymous': false,
+        'profileImage': userCredential.user!.photoURL,
+        'createdAt': FieldValue.serverTimestamp(),
         'lastLoginAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 

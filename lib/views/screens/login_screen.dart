@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../../../services/initialization_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/tokens/color_tokens.dart';
@@ -183,8 +184,12 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleGoogleSignIn() async {
     _setLoading(true);
     try {
-      final userCredential =
-          await widget.initializationService.signInWithGoogle();
+      // Firebase 초기화 확인
+      if (!Firebase.apps.isNotEmpty) {
+        throw Exception('Firebase가 초기화되지 않았습니다.');
+      }
+      
+      final userCredential = await widget.initializationService.signInWithGoogle();
       if (userCredential != null) {
         widget.onLoginSuccess();
       } else {
@@ -200,8 +205,12 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleAppleSignIn() async {
     _setLoading(true);
     try {
-      final userCredential =
-          await widget.initializationService.signInWithApple();
+      // Firebase 초기화 확인
+      if (!Firebase.apps.isNotEmpty) {
+        throw Exception('Firebase가 초기화되지 않았습니다.');
+      }
+      
+      final userCredential = await widget.initializationService.signInWithApple();
       if (userCredential != null) {
         widget.onLoginSuccess();
       } else {
@@ -217,8 +226,12 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleAnonymousSignIn() async {
     _setLoading(true);
     try {
-      final userCredential =
-          await widget.initializationService.signInAnonymously();
+      // Firebase 초기화 확인
+      if (!Firebase.apps.isNotEmpty) {
+        throw Exception('Firebase가 초기화되지 않았습니다.');
+      }
+      
+      final userCredential = await widget.initializationService.signInAnonymously();
       if (userCredential != null) {
         widget.onLoginSuccess();
       } else {

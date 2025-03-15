@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/initialization_service.dart';
 import '../../theme/tokens/color_tokens.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 class ProfileScreen extends StatefulWidget {
   final InitializationService initializationService;
@@ -227,6 +228,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
 
     try {
+      // Firebase 초기화 확인
+      if (!Firebase.apps.isNotEmpty) {
+        throw Exception('Firebase가 초기화되지 않았습니다.');
+      }
+
       // 익명 계정을 Google 계정과 연결
       await widget.initializationService.linkAnonymousAccountWithGoogle();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -252,6 +258,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
 
     try {
+      // Firebase 초기화 확인
+      if (!Firebase.apps.isNotEmpty) {
+        throw Exception('Firebase가 초기화되지 않았습니다.');
+      }
+
       // 익명 계정을 Apple 계정과 연결
       await widget.initializationService.linkAnonymousAccountWithApple();
       ScaffoldMessenger.of(context).showSnackBar(
