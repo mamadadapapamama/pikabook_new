@@ -7,11 +7,13 @@ import '../services/page_content_service.dart';
 class DictionaryResultWidget extends StatelessWidget {
   final DictionaryEntry entry;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
+  final bool isExistingFlashcard;
 
   const DictionaryResultWidget({
     super.key,
     required this.entry,
     required this.onCreateFlashCard,
+    this.isExistingFlashcard = false,
   });
 
   @override
@@ -71,24 +73,32 @@ class DictionaryResultWidget extends StatelessWidget {
 
               // 플래시카드 추가 버튼
               ElevatedButton.icon(
-                onPressed: () {
-                  onCreateFlashCard(
-                    entry.word,
-                    entry.meaning,
-                    pinyin: entry.pinyin,
-                  );
-                  Navigator.pop(context);
+                onPressed: isExistingFlashcard
+                    ? null // 이미 플래시카드에 있는 경우 비활성화
+                    : () {
+                        onCreateFlashCard(
+                          entry.word,
+                          entry.meaning,
+                          pinyin: entry.pinyin,
+                        );
+                        Navigator.pop(context);
 
-                  // 추가 완료 메시지
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('플래시카드에 추가되었습니다'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.add_card),
-                label: const Text('플래시카드 추가'),
+                        // 추가 완료 메시지
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('플래시카드에 추가되었습니다'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                icon: Icon(isExistingFlashcard ? Icons.check : Icons.add_card),
+                label: Text(isExistingFlashcard ? '이미 추가됨' : '플래시카드 추가'),
+                style: isExistingFlashcard
+                    ? ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey[300],
+                        foregroundColor: Colors.grey[700],
+                      )
+                    : null,
               ),
             ],
           ),
@@ -102,17 +112,21 @@ class DictionaryResultWidget extends StatelessWidget {
     required BuildContext context,
     required DictionaryEntry entry,
     required Function(String, String, {String? pinyin}) onCreateFlashCard,
+    bool isExistingFlashcard = false,
   }) {
-    // Bottom Sheet 표시
-    showModalBottomSheet<void>(
+    showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (BuildContext context) {
-        return DictionaryResultWidget(
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: DictionaryResultWidget(
           entry: entry,
           onCreateFlashCard: onCreateFlashCard,
-        );
-      },
+          isExistingFlashcard: isExistingFlashcard,
+        ),
+      ),
     );
   }
 }

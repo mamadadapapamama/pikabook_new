@@ -255,8 +255,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               });
 
               // 사전 검색 실행
-              if (widget.onCreateFlashCard != null) {
-                widget.onCreateFlashCard!(pos.word, '', pinyin: null);
+              if (widget.onDictionaryLookup != null) {
+                widget.onDictionaryLookup!(pos.word);
               }
             },
           // 선택 불가능하게 설정 (중요)
@@ -395,8 +395,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     if (isExactFlashcardWord) {
       debugPrint('플래시카드 단어와 정확히 일치: $selectedText - 사전 검색 실행');
       // 사전 검색 실행
-      if (widget.onCreateFlashCard != null) {
-        widget.onCreateFlashCard!(selectedText, '', pinyin: null);
+      if (widget.onDictionaryLookup != null) {
+        widget.onDictionaryLookup!(selectedText);
       }
       return const SizedBox.shrink();
     }
@@ -411,13 +411,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       selectedText: _selectedText,
       flashcardWords: _flashcardWords,
       onLookupDictionary: (String text) {
-        if (_selectedText.isNotEmpty) {
-          widget.onCreateFlashCard?.call(_selectedText, '', pinyin: null);
+        if (_selectedText.isNotEmpty && widget.onDictionaryLookup != null) {
+          widget.onDictionaryLookup!(_selectedText);
         }
       },
       onAddToFlashcard: (String text) {
-        if (_selectedText.isNotEmpty) {
-          widget.onCreateFlashCard?.call(_selectedText, '', pinyin: null);
+        if (_selectedText.isNotEmpty && widget.onCreateFlashCard != null) {
+          widget.onCreateFlashCard!(_selectedText, '', pinyin: null);
           setState(() {
             _flashcardWords.add(_selectedText);
           });
