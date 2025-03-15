@@ -184,9 +184,10 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
               return ProcessedTextWidget(
                 processedText: _processedText!,
-                onDictionaryLookup: _showDictionaryResult,
                 onCreateFlashCard: (word, meaning, {String? pinyin}) {
                   widget.onCreateFlashCard(word, meaning, pinyin: pinyin);
+                  // 사전 검색 결과도 함께 표시
+                  _showDictionaryResult(word);
                 },
                 flashCards: widget.flashCards,
                 showTranslation: true,

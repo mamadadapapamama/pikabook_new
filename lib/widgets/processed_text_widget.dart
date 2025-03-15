@@ -4,6 +4,7 @@ import '../models/processed_text.dart';
 import '../models/flash_card.dart';
 import '../utils/context_menu_helper.dart';
 import '../utils/text_selection_helper.dart';
+import '../services/text_reader_service.dart';
 
 /// 페이지의 텍스트 프로세싱(OCR, 번역, pinyin, highlight)이 완료되면, 텍스트 처리 결과를 표시하는 위젯
 
@@ -31,12 +32,43 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   String _selectedText = '';
   late Set<String> _flashcardWords;
   final GlobalKey _textKey = GlobalKey();
+  final TextReaderService _textReaderService = TextReaderService();
+  int? _playingSegmentIndex;
 
   @override
   void initState() {
     super.initState();
     _flashcardWords = {};
     _extractFlashcardWords();
+    _initTextReader();
+  }
+
+  void _initTextReader() async {
+    await _textReaderService.init();
+
+    // TTS 상태 변경 콜백 설정
+    _textReaderService.setOnPlayingStateChanged((segmentIndex) {
+      if (mounted) {
+        setState(() {
+          _playingSegmentIndex = segmentIndex;
+        });
+      }
+    });
+
+    // TTS 재생 완료 콜백 설정
+    _textReaderService.setOnPlayingCompleted(() {
+      if (mounted) {
+        setState(() {
+          _playingSegmentIndex = null;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _textReaderService.dispose();
+    super.dispose();
   }
 
   @override
@@ -217,11 +249,19 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           recognizer: TapGestureRecognizer()
             ..onTap = () {
               debugPrint('하이라이트된 단어 탭됨: ${pos.word}');
+              // 선택된 텍스트 초기화
+              setState(() {
+                _selectedText = '';
+              });
+
               // 사전 검색 실행
-              if (widget.onDictionaryLookup != null) {
-                widget.onDictionaryLookup!(pos.word);
+              if (widget.onCreateFlashCard != null) {
+                widget.onCreateFlashCard!(pos.word, '', pinyin: null);
               }
             },
+          // 선택 불가능하게 설정 (중요)
+          mouseCursor: SystemMouseCursors.click,
+          semanticsLabel: 'flashcard:${pos.word}',
         ),
       );
 
@@ -355,8 +395,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     if (isExactFlashcardWord) {
       debugPrint('플래시카드 단어와 정확히 일치: $selectedText - 사전 검색 실행');
       // 사전 검색 실행
-      if (widget.onDictionaryLookup != null) {
-        widget.onDictionaryLookup!(selectedText);
+      if (widget.onCreateFlashCard != null) {
+        widget.onCreateFlashCard!(selectedText, '', pinyin: null);
       }
       return const SizedBox.shrink();
     }
@@ -372,7 +412,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       flashcardWords: _flashcardWords,
       onLookupDictionary: (String text) {
         if (_selectedText.isNotEmpty) {
-          widget.onDictionaryLookup?.call(_selectedText);
+          widget.onCreateFlashCard?.call(_selectedText, '', pinyin: null);
         }
       },
       onAddToFlashcard: (String text) {
@@ -384,6 +424,23 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         }
       },
     );
+  }
+
+  /// **TTS 재생 메서드**
+  void _playTts(String text, {int? segmentIndex}) {
+    if (text.isEmpty) return;
+
+    if (_playingSegmentIndex == segmentIndex) {
+      // 이미 재생 중인 세그먼트를 다시 클릭한 경우 중지
+      _textReaderService.stop();
+    } else {
+      // 새로운 세그먼트 재생
+      if (segmentIndex != null) {
+        _textReaderService.readSegment(text, segmentIndex);
+      } else {
+        _textReaderService.readText(text);
+      }
+    }
   }
 
   /// **전체 텍스트 표시 위젯**
@@ -448,13 +505,27 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 세그먼트 번호 표시 (디버깅용)
-              Text(
-                '세그먼트 ${i + 1}',
-                style: const TextStyle(
-                  fontSize: 10.0,
-                  color: Colors.grey,
-                ),
+              // TTS 버튼 추가
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      _playingSegmentIndex == i
+                          ? Icons.stop_circle
+                          : Icons.play_circle,
+                      color:
+                          _playingSegmentIndex == i ? Colors.red : Colors.blue,
+                    ),
+                    onPressed: () {
+                      _playTts(segment.originalText, segmentIndex: i);
+                    },
+                    tooltip: _playingSegmentIndex == i ? '중지' : '읽기',
+                    iconSize: 24,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
               ),
 
               const SizedBox(height: 4.0),
@@ -532,23 +603,59 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           else
             _buildFullTextView(),
 
-          // 디버깅용 모드 표시
-          Container(
-            margin: const EdgeInsets.only(top: 16.0),
-            padding: const EdgeInsets.all(8.0),
-            decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(4.0),
+          // 하단 컨트롤 바 추가
+          _buildBottomControlBar(),
+        ],
+      ),
+    );
+  }
+
+  /// **하단 컨트롤 바 위젯**
+  Widget _buildBottomControlBar() {
+    return Container(
+      margin: const EdgeInsets.only(top: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: Colors.grey.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // 모드 표시
+          Text(
+            widget.processedText.segments != null &&
+                    !widget.processedText.showFullText
+                ? '세그먼트 모드'
+                : '전체 텍스트 모드',
+            style: const TextStyle(
+              fontSize: 12.0,
+              color: Colors.grey,
             ),
-            child: Text(
-              widget.processedText.segments != null &&
-                      !widget.processedText.showFullText
-                  ? '세그먼트 모드'
-                  : '전체 텍스트 모드',
-              style: const TextStyle(
-                fontSize: 12.0,
-                color: Colors.grey,
-              ),
+          ),
+
+          // 전체 TTS 재생 버튼
+          ElevatedButton.icon(
+            onPressed: _playingSegmentIndex != null
+                ? () {
+                    // 재생 중이면 중지
+                    _textReaderService.stop();
+                  }
+                : () {
+                    // 전체 텍스트 읽기
+                    _textReaderService.readAllSegments(widget.processedText);
+                  },
+            icon: Icon(
+              _playingSegmentIndex != null ? Icons.stop : Icons.play_arrow,
+              size: 18,
+            ),
+            label: Text(
+              _playingSegmentIndex != null ? '중지' : '전체 읽기',
+              style: const TextStyle(fontSize: 12),
+            ),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: const Size(0, 0),
             ),
           ),
         ],

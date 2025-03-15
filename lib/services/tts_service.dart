@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import '../models/processed_text.dart';
 
-
-// 텍스트 음성 변환 서비스를 제공합니다 
+// 텍스트 음성 변환 서비스를 제공합니다
 
 enum TtsState { playing, stopped, paused, continued }
 
@@ -14,6 +15,15 @@ class TtsService {
   FlutterTts? _flutterTts;
   TtsState _ttsState = TtsState.stopped;
   String _currentLanguage = 'zh-CN'; // 기본 언어: 중국어
+
+  // 현재 재생 중인 세그먼트 인덱스
+  int? _currentSegmentIndex;
+
+  // 재생 상태 변경 콜백
+  Function(int?)? _onPlayingStateChanged;
+
+  // 재생 완료 콜백
+  Function? _onPlayingCompleted;
 
   // 초기화
   Future<void> init() async {
@@ -28,6 +38,11 @@ class TtsService {
     _flutterTts?.setCompletionHandler(() {
       debugPrint("TTS 재생 완료");
       _ttsState = TtsState.stopped;
+
+      // 재생 완료 콜백 호출
+      if (_onPlayingCompleted != null) {
+        _onPlayingCompleted!();
+      }
     });
 
     _flutterTts?.setCancelHandler(() {
@@ -94,6 +109,9 @@ class TtsService {
 
     await _flutterTts?.stop();
     _ttsState = TtsState.stopped;
+
+    // 현재 재생 중인 세그먼트 초기화
+    _updateCurrentSegment(null);
   }
 
   // 재생 일시정지
@@ -107,12 +125,17 @@ class TtsService {
   // 현재 상태 확인
   TtsState get state => _ttsState;
 
+  // 현재 재생 중인 세그먼트 인덱스
+  int? get currentSegmentIndex => _currentSegmentIndex;
+
   // 리소스 해제
   Future<void> dispose() async {
     if (_flutterTts == null) return;
 
     await _flutterTts?.stop();
     _flutterTts = null;
+    _onPlayingStateChanged = null;
+    _onPlayingCompleted = null;
   }
 
   // 사용 가능한 언어 목록 가져오기
@@ -139,5 +162,90 @@ class TtsService {
       debugPrint('음성 목록을 가져오는 중 오류 발생: $e');
       return [];
     }
+  }
+
+  // 재생 상태 변경 콜백 설정
+  void setOnPlayingStateChanged(Function(int?) callback) {
+    _onPlayingStateChanged = callback;
+  }
+
+  // 재생 완료 콜백 설정
+  void setOnPlayingCompleted(Function callback) {
+    _onPlayingCompleted = callback;
+  }
+
+  // 현재 재생 중인 세그먼트 업데이트
+  void _updateCurrentSegment(int? segmentIndex) {
+    _currentSegmentIndex = segmentIndex;
+    if (_onPlayingStateChanged != null) {
+      _onPlayingStateChanged!(_currentSegmentIndex);
+    }
+  }
+
+  /// **세그먼트 단위로 텍스트 읽기**
+  /// - segmentIndex: 재생할 세그먼트 인덱스
+  /// - text: 재생할 텍스트
+  Future<void> speakSegment(String text, int segmentIndex) async {
+    if (_flutterTts == null) await init();
+
+    // 이미 재생 중인 경우 중지
+    if (_currentSegmentIndex != null) {
+      await stop();
+    }
+
+    // 현재 재생 중인 세그먼트 업데이트
+    _updateCurrentSegment(segmentIndex);
+
+    // 텍스트 재생
+    if (text.isNotEmpty) {
+      await _flutterTts?.speak(text);
+    }
+  }
+
+  /// **ProcessedText의 모든 세그먼트 순차적으로 읽기**
+  Future<void> speakAllSegments(ProcessedText processedText) async {
+    if (_flutterTts == null) await init();
+
+    // 이미 재생 중인 경우 중지
+    if (_currentSegmentIndex != null) {
+      await stop();
+      return;
+    }
+
+    // 세그먼트 모드인 경우
+    if (processedText.segments != null &&
+        !processedText.showFullText &&
+        processedText.segments!.isNotEmpty) {
+      // 각 세그먼트를 순차적으로 읽기
+      for (int i = 0; i < processedText.segments!.length; i++) {
+        final segment = processedText.segments![i];
+        if (segment.originalText.isEmpty) continue;
+
+        // 현재 세그먼트 재생 중 표시
+        _updateCurrentSegment(i);
+
+        // TTS 재생
+        await speak(segment.originalText);
+
+        // 재생 완료 대기 (대략적인 시간 계산)
+        await Future.delayed(
+            Duration(milliseconds: segment.originalText.length * 100 + 1000));
+
+        // 재생이 중단되었는지 확인
+        if (_currentSegmentIndex == null) break;
+      }
+    } else {
+      // 전체 텍스트 모드인 경우
+      _updateCurrentSegment(0); // 재생 중 표시
+
+      await speak(processedText.fullOriginalText);
+
+      // 재생 완료 대기
+      await Future.delayed(Duration(
+          milliseconds: processedText.fullOriginalText.length * 100 + 1000));
+    }
+
+    // 재생 완료 후 상태 업데이트
+    _updateCurrentSegment(null);
   }
 }
