@@ -113,7 +113,7 @@ class AuthService {
   }
 
   // Apple 로그인
-  Future<UserCredential> signInWithApple() async {
+  Future<User?> signInWithApple() async {
     try {
       // Firebase 초기화 확인
       if (!Firebase.apps.isNotEmpty) {
@@ -122,11 +122,11 @@ class AuthService {
         );
       }
 
-      // 보안을 위한 nonce 생성
+      // nonce 생성
       final rawNonce = _generateNonce();
       final nonce = _sha256ofString(rawNonce);
 
-      // Apple 로그인 요청
+      // Apple 로그인 시작
       final appleCredential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
@@ -143,32 +143,33 @@ class AuthService {
 
       // Firebase에 로그인
       final userCredential = await _auth.signInWithCredential(oauthCredential);
-
-      // 사용자 이름이 없는 경우 처리 (Apple은 두 번째 로그인부터 이름을 제공하지 않음)
-      String? displayName = userCredential.user?.displayName;
-      if ((displayName == null || displayName.isEmpty) &&
-          appleCredential.givenName != null) {
-        displayName =
-            '${appleCredential.givenName} ${appleCredential.familyName}';
-
-        // 사용자 프로필 업데이트
-        await userCredential.user?.updateDisplayName(displayName);
-      }
-
+      
       // 사용자 정보 Firestore에 저장
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'name': displayName ?? 'Apple 사용자',
-        'email': userCredential.user!.email,
-        'isAnonymous': false,
-        'profileImage': userCredential.user!.photoURL,
-        'createdAt': FieldValue.serverTimestamp(),
-        'lastLoginAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      return userCredential;
+      if (userCredential.user != null) {
+        // Apple은 처음 로그인할 때만 이름 정보를 제공
+        String? displayName = userCredential.user!.displayName;
+        
+        // 이름 정보가 없고 Apple에서 제공한 이름이 있으면 사용
+        if ((displayName == null || displayName.isEmpty) && 
+            (appleCredential.givenName != null || appleCredential.familyName != null)) {
+          displayName = [
+            appleCredential.givenName ?? '',
+            appleCredential.familyName ?? ''
+          ].join(' ').trim();
+          
+          // 이름 정보가 있으면 Firebase 사용자 프로필 업데이트
+          if (displayName.isNotEmpty) {
+            await userCredential.user!.updateDisplayName(displayName);
+          }
+        }
+        
+        await _saveUserToFirestore(userCredential.user!);
+      }
+      
+      return userCredential.user;
     } catch (e) {
-      debugPrint('Apple 로그인 오류: $e');
-      rethrow;
+      debugPrint('Apple 로그인 중 오류 발생: $e');
+      return null;
     }
   }
 
