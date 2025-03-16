@@ -89,8 +89,9 @@ class AuthService {
       }
 
       // 인증 정보 가져오기
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
       // Firebase 인증 정보 생성
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
@@ -98,13 +99,14 @@ class AuthService {
       );
 
       // Firebase에 로그인
-      final UserCredential userCredential = await _auth.signInWithCredential(credential);
-      
+      final UserCredential userCredential =
+          await _auth.signInWithCredential(credential);
+
       // 사용자 정보 Firestore에 저장
       if (userCredential.user != null) {
         await _saveUserToFirestore(userCredential.user!);
       }
-      
+
       return userCredential.user;
     } catch (e) {
       debugPrint('Google 로그인 중 오류 발생: $e');
@@ -143,29 +145,30 @@ class AuthService {
 
       // Firebase에 로그인
       final userCredential = await _auth.signInWithCredential(oauthCredential);
-      
+
       // 사용자 정보 Firestore에 저장
       if (userCredential.user != null) {
         // Apple은 처음 로그인할 때만 이름 정보를 제공
         String? displayName = userCredential.user!.displayName;
-        
+
         // 이름 정보가 없고 Apple에서 제공한 이름이 있으면 사용
-        if ((displayName == null || displayName.isEmpty) && 
-            (appleCredential.givenName != null || appleCredential.familyName != null)) {
+        if ((displayName == null || displayName.isEmpty) &&
+            (appleCredential.givenName != null ||
+                appleCredential.familyName != null)) {
           displayName = [
             appleCredential.givenName ?? '',
             appleCredential.familyName ?? ''
           ].join(' ').trim();
-          
+
           // 이름 정보가 있으면 Firebase 사용자 프로필 업데이트
           if (displayName.isNotEmpty) {
             await userCredential.user!.updateDisplayName(displayName);
           }
         }
-        
+
         await _saveUserToFirestore(userCredential.user!);
       }
-      
+
       return userCredential.user;
     } catch (e) {
       debugPrint('Apple 로그인 중 오류 발생: $e');

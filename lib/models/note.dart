@@ -19,6 +19,8 @@ class Note {
   final int flashcardCount;
   final int reviewCount;
   final String? userId;
+  final bool processingCompleted;
+  final bool isProcessingBackground;
 
   Note({
     this.id,
@@ -35,6 +37,8 @@ class Note {
     int? flashcardCount,
     int? reviewCount,
     this.userId,
+    this.processingCompleted = false,
+    this.isProcessingBackground = false,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
         tags = tags ?? [],
@@ -64,6 +68,8 @@ class Note {
       flashcardCount: 0,
       reviewCount: 0,
       userId: userId,
+      processingCompleted: false,
+      isProcessingBackground: false,
     );
   }
 
@@ -126,6 +132,8 @@ class Note {
       flashcardCount: data['flashcardCount'] ?? 0,
       reviewCount: data['reviewCount'] ?? 0,
       userId: data['userId'],
+      processingCompleted: data['processingCompleted'] ?? false,
+      isProcessingBackground: data['isProcessingBackground'] ?? false,
     );
   }
 
@@ -144,6 +152,8 @@ class Note {
       'flashcardCount': flashcardCount,
       'reviewCount': reviewCount,
       'userId': userId,
+      'processingCompleted': processingCompleted,
+      'isProcessingBackground': isProcessingBackground,
     };
   }
 
@@ -164,6 +174,8 @@ class Note {
       'flashcardCount': flashcardCount,
       'reviewCount': reviewCount,
       'userId': userId,
+      'processingCompleted': processingCompleted,
+      'isProcessingBackground': isProcessingBackground,
     };
   }
 
@@ -191,6 +203,8 @@ class Note {
       flashcardCount: json['flashcardCount'] ?? 0,
       reviewCount: json['reviewCount'] ?? 0,
       userId: json['userId'],
+      processingCompleted: json['processingCompleted'] ?? false,
+      isProcessingBackground: json['isProcessingBackground'] ?? false,
     );
   }
 
@@ -209,6 +223,8 @@ class Note {
     int? flashcardCount,
     int? reviewCount,
     String? userId,
+    bool? processingCompleted,
+    bool? isProcessingBackground,
   }) {
     return Note(
       id: id ?? this.id,
@@ -225,6 +241,9 @@ class Note {
       flashcardCount: flashcardCount ?? this.flashcardCount,
       reviewCount: reviewCount ?? this.reviewCount,
       userId: userId ?? this.userId,
+      processingCompleted: processingCompleted ?? this.processingCompleted,
+      isProcessingBackground:
+          isProcessingBackground ?? this.isProcessingBackground,
     );
   }
 
