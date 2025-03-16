@@ -19,7 +19,7 @@ class TranslationService {
   http.Client? _httpClient;
   String? _projectId;
   bool _isInitializing = false;
-  
+
   // 사용량 추적 서비스
   final UsageLimitService _usageLimitService = UsageLimitService();
 
@@ -109,7 +109,7 @@ class TranslationService {
         headers: {'Content-Type': 'application/json'},
       );
 
-      String translatedText = text;  // 기본값은 원본 텍스트
+      String translatedText = text; // 기본값은 원본 텍스트
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
@@ -129,7 +129,7 @@ class TranslationService {
 
       // 번역된 글자 수 기록 (제한 없이 사용량만 추적)
       await _usageLimitService.addTranslatedChars(text.length);
-      
+
       return translatedText;
     } catch (e) {
       debugPrint('번역 중 오류 발생: $e');
