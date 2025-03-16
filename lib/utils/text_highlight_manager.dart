@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 
 /// 단어 위치 정보를 저장하는 클래스
@@ -132,10 +131,11 @@ class TextHighlightManager {
   }
 
   /// 하이라이트된 텍스트 스팬 생성 (최적화 버전)
+  /// GestureRecognizer를 사용하지 않고 단순히 스타일만 적용하여 하이라이트 효과를 줍니다.
   static List<TextSpan> buildHighlightedText({
     required String text,
     required Set<String> flashcardWords,
-    required Function(String) onTap,
+    required Function(String) onTap, // 이 매개변수는 호환성을 위해 유지하지만 사용하지 않습니다.
     TextStyle? normalStyle,
     TextStyle? highlightStyle,
   }) {
@@ -195,23 +195,11 @@ class TextHighlightManager {
         ));
       }
 
-      // 하이라이트된 단어 추가 - 탭 가능하도록 설정
+      // 하이라이트된 단어 추가 - 제스처 인식기 없이 스타일만 적용
       spans.add(
         TextSpan(
           text: pos.word,
           style: highlightTextStyle,
-          recognizer: TapGestureRecognizer()
-            ..onTap = () {
-              if (kDebugMode) {
-                debugPrint('하이라이트된 단어 탭됨: ${pos.word}');
-              }
-              // 텍스트 선택 중에는 탭 이벤트를 발생시키지 않도록 함
-              // 선택 모드가 아닐 때만 탭 이벤트 처리
-              onTap(pos.word);
-            },
-          // 선택 가능하도록 설정
-          mouseCursor: SystemMouseCursors.text,
-          semanticsLabel: 'flashcard:${pos.word}',
         ),
       );
 

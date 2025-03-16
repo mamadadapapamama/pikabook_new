@@ -33,11 +33,54 @@ class ContextMenuManager {
       debugPrint('선택 방향: ${isReversed ? '우-좌' : '좌-우'}');
     }
 
+    // 선택된 텍스트가 이미 있는 경우, 이를 사용하여 컨텍스트 메뉴 생성
+    if (selectedText.isNotEmpty) {
+      if (kDebugMode) {
+        debugPrint('이미 선택된 텍스트 사용: "$selectedText"');
+      }
+
+      // 플래시카드 단어와 정확히 일치하는 경우에는 사전 검색 실행
+      bool isExactFlashcardWord = flashcardWords.contains(selectedText);
+      if (isExactFlashcardWord) {
+        if (kDebugMode) {
+          debugPrint('플래시카드 단어와 정확히 일치: $selectedText - 사전 검색 실행');
+        }
+        // 사전 검색 실행
+        if (onDictionaryLookup != null) {
+          // 빌드 후에 실행되도록 Future.microtask 사용
+          Future.microtask(() => onDictionaryLookup(selectedText));
+        }
+        return const SizedBox.shrink();
+      }
+
+      // 커스텀 컨텍스트 메뉴 표시
+      return _buildCustomContextMenu(
+        editableTextState: editableTextState,
+        selectedText: selectedText,
+        isExactFlashcardWord: isExactFlashcardWord,
+        onDictionaryLookup: onDictionaryLookup,
+        onCreateFlashCard: onCreateFlashCard,
+      );
+    }
+
     // 선택 범위가 -1인 경우 처리 (하이라이트된 텍스트에서 발생하는 문제)
     if (start == -1 || end == -1) {
       if (kDebugMode) {
         debugPrint('유효하지 않은 선택 범위 감지: $start-$end, 빈 메뉴 표시');
       }
+
+      // 선택된 텍스트가 있으면 그것을 사용
+      if (selectedText.isNotEmpty) {
+        bool isExactFlashcardWord = flashcardWords.contains(selectedText);
+        return _buildCustomContextMenu(
+          editableTextState: editableTextState,
+          selectedText: selectedText,
+          isExactFlashcardWord: isExactFlashcardWord,
+          onDictionaryLookup: onDictionaryLookup,
+          onCreateFlashCard: onCreateFlashCard,
+        );
+      }
+
       // 기본 메뉴 대신 빈 컨테이너 반환
       return const SizedBox.shrink();
     }
@@ -68,6 +111,19 @@ class ContextMenuManager {
       if (kDebugMode) {
         debugPrint('선택 범위가 유효하지 않음: $start-$end (텍스트 길이: $textLength)');
       }
+
+      // 선택된 텍스트가 있으면 그것을 사용
+      if (selectedText.isNotEmpty) {
+        bool isExactFlashcardWord = flashcardWords.contains(selectedText);
+        return _buildCustomContextMenu(
+          editableTextState: editableTextState,
+          selectedText: selectedText,
+          isExactFlashcardWord: isExactFlashcardWord,
+          onDictionaryLookup: onDictionaryLookup,
+          onCreateFlashCard: onCreateFlashCard,
+        );
+      }
+
       // 기본 메뉴 대신 빈 컨테이너 반환
       return const SizedBox.shrink();
     }
@@ -84,6 +140,19 @@ class ContextMenuManager {
       if (kDebugMode) {
         debugPrint('텍스트 선택 오류: $e');
       }
+
+      // 선택된 텍스트가 있으면 그것을 사용
+      if (selectedText.isNotEmpty) {
+        bool isExactFlashcardWord = flashcardWords.contains(selectedText);
+        return _buildCustomContextMenu(
+          editableTextState: editableTextState,
+          selectedText: selectedText,
+          isExactFlashcardWord: isExactFlashcardWord,
+          onDictionaryLookup: onDictionaryLookup,
+          onCreateFlashCard: onCreateFlashCard,
+        );
+      }
+
       // 기본 메뉴 대신 빈 컨테이너 반환
       return const SizedBox.shrink();
     }
@@ -92,6 +161,19 @@ class ContextMenuManager {
       if (kDebugMode) {
         debugPrint('선택된 텍스트가 비어있음');
       }
+
+      // 선택된 텍스트가 있으면 그것을 사용
+      if (selectedText.isNotEmpty) {
+        bool isExactFlashcardWord = flashcardWords.contains(selectedText);
+        return _buildCustomContextMenu(
+          editableTextState: editableTextState,
+          selectedText: selectedText,
+          isExactFlashcardWord: isExactFlashcardWord,
+          onDictionaryLookup: onDictionaryLookup,
+          onCreateFlashCard: onCreateFlashCard,
+        );
+      }
+
       // 기본 메뉴 대신 빈 컨테이너 반환
       return const SizedBox.shrink();
     }
@@ -119,6 +201,24 @@ class ContextMenuManager {
       debugPrint('커스텀 컨텍스트 메뉴 표시');
     }
 
+    // 커스텀 컨텍스트 메뉴 생성
+    return _buildCustomContextMenu(
+      editableTextState: editableTextState,
+      selectedText: newSelectedText,
+      isExactFlashcardWord: isExactFlashcardWord,
+      onDictionaryLookup: onDictionaryLookup,
+      onCreateFlashCard: onCreateFlashCard,
+    );
+  }
+
+  /// 커스텀 컨텍스트 메뉴 생성 메서드
+  static Widget _buildCustomContextMenu({
+    required EditableTextState editableTextState,
+    required String selectedText,
+    required bool isExactFlashcardWord,
+    required Function(String)? onDictionaryLookup,
+    required Function(String, String, {String? pinyin})? onCreateFlashCard,
+  }) {
     // 선택한 단어가 플래시카드에 없는 경우 → 커스텀 컨텍스트 메뉴 표시
     final List<ContextMenuButtonItem> buttonItems = [];
 
@@ -128,7 +228,7 @@ class ContextMenuManager {
         onPressed: () {
           editableTextState.hideToolbar();
           if (onDictionaryLookup != null) {
-            onDictionaryLookup(newSelectedText);
+            onDictionaryLookup(selectedText);
           }
         },
         label: '사전 검색',
@@ -142,7 +242,7 @@ class ContextMenuManager {
           onPressed: () {
             editableTextState.hideToolbar();
             if (onCreateFlashCard != null) {
-              onCreateFlashCard(newSelectedText, '', pinyin: null);
+              onCreateFlashCard(selectedText, '', pinyin: null);
             }
           },
           label: '플래시카드 추가',

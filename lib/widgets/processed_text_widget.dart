@@ -171,22 +171,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       text: text,
       flashcardWords: _flashcardWords,
       onTap: (word) {
+        // 이 콜백은 더 이상 사용되지 않지만 호환성을 위해 유지
         if (kDebugMode) {
-          debugPrint('하이라이트된 단어 탭됨: $word');
-        }
-        // 선택된 텍스트 초기화 - 빌드 후에 실행되도록 Future.microtask 사용
-        Future.microtask(() {
-          if (mounted) {
-            setState(() {
-              _selectedText = '';
-              _selectedTextNotifier.value = '';
-            });
-          }
-        });
-
-        // 사전 검색 실행
-        if (widget.onDictionaryLookup != null) {
-          widget.onDictionaryLookup!(word);
+          debugPrint('하이라이트된 단어 콜백 (사용되지 않음): $word');
         }
       },
       normalStyle: const TextStyle(fontSize: 16),
@@ -261,6 +248,50 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   });
                 }
               });
+              return;
+            }
+
+            // 선택 범위가 유효한 경우
+            if (selection.start >= 0 &&
+                selection.end > selection.start &&
+                selection.end <= text.length) {
+              // 선택된 텍스트 추출
+              final selectedWord =
+                  text.substring(selection.start, selection.end);
+
+              // 선택된 텍스트가 플래시카드 단어인 경우 사전 검색 실행
+              if (_flashcardWords.contains(selectedWord) &&
+                  cause == SelectionChangedCause.tap) {
+                if (kDebugMode) {
+                  debugPrint('플래시카드 단어 탭됨: $selectedWord');
+                }
+
+                // 선택 취소
+                Future.microtask(() {
+                  if (mounted) {
+                    setState(() {
+                      _selectedText = '';
+                      _selectedTextNotifier.value = '';
+                    });
+                  }
+                });
+
+                // 사전 검색 실행
+                if (widget.onDictionaryLookup != null) {
+                  Future.microtask(
+                      () => widget.onDictionaryLookup!(selectedWord));
+                }
+              } else {
+                // 일반 텍스트 선택인 경우 선택된 텍스트 업데이트
+                Future.microtask(() {
+                  if (mounted) {
+                    setState(() {
+                      _selectedText = selectedWord;
+                      _selectedTextNotifier.value = selectedWord;
+                    });
+                  }
+                });
+              }
             }
           },
         );
