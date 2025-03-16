@@ -6,6 +6,7 @@ import 'package:googleapis/translate/v3.dart' as translate;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import '../models/text_segment.dart';
+import 'usage_limit_service.dart';
 // 순환 참조 제거
 // import 'google_cloud_service.dart';
 
@@ -18,6 +19,9 @@ class TranslationService {
   http.Client? _httpClient;
   String? _projectId;
   bool _isInitializing = false;
+  
+  // 사용량 추적 서비스
+  final UsageLimitService _usageLimitService = UsageLimitService();
 
   TranslationService._internal() {
     debugPrint('TranslationService 생성됨');
@@ -86,48 +90,47 @@ class TranslationService {
 
       debugPrint('번역 요청: ${text.length}자, 소스: $source, 타겟: $target');
 
-      // HTTP 직접 호출 방식으로 변경
-      try {
-        // 요청 본문 생성
-        final requestBody = {
-          'contents': [text],
-          'targetLanguageCode': target,
-          if (source != null && source != 'auto') 'sourceLanguageCode': source,
-          'mimeType': 'text/plain',
-        };
+      // 요청 본문 생성
+      final requestBody = {
+        'contents': [text],
+        'targetLanguageCode': target,
+        if (source != null && source != 'auto') 'sourceLanguageCode': source,
+        'mimeType': 'text/plain',
+      };
 
-        // API 엔드포인트 URL
-        final url = Uri.parse(
-            'https://translation.googleapis.com/v3/$parent:translateText');
+      // API 엔드포인트 URL
+      final url = Uri.parse(
+          'https://translation.googleapis.com/v3/$parent:translateText');
 
-        // POST 요청 전송
-        final response = await _httpClient!.post(
-          url,
-          body: jsonEncode(requestBody),
-          headers: {'Content-Type': 'application/json'},
-        );
+      // POST 요청 전송
+      final response = await _httpClient!.post(
+        url,
+        body: jsonEncode(requestBody),
+        headers: {'Content-Type': 'application/json'},
+      );
 
-        if (response.statusCode == 200) {
-          final Map<String, dynamic> data = jsonDecode(response.body);
-          final translations = data['translations'] as List<dynamic>?;
+      String translatedText = text;  // 기본값은 원본 텍스트
 
-          if (translations != null && translations.isNotEmpty) {
-            final translatedText =
-                translations.first['translatedText'] as String?;
-            if (translatedText != null && translatedText.isNotEmpty) {
-              debugPrint('번역 완료: ${translatedText.length}자');
-              return translatedText;
-            }
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        final translations = data['translations'] as List<dynamic>?;
+
+        if (translations != null && translations.isNotEmpty) {
+          final translatedResult =
+              translations.first['translatedText'] as String?;
+          if (translatedResult != null && translatedResult.isNotEmpty) {
+            debugPrint('번역 완료: ${translatedResult.length}자');
+            translatedText = translatedResult;
           }
-        } else {
-          debugPrint('번역 API 호출 실패: ${response.statusCode}, ${response.body}');
         }
-      } catch (e) {
-        debugPrint('번역 API 호출 중 오류 발생: $e');
+      } else {
+        debugPrint('번역 API 호출 실패: ${response.statusCode}, ${response.body}');
       }
 
-      debugPrint('번역 결과가 비어있어 원본 텍스트 반환');
-      return text;
+      // 번역된 글자 수 기록 (제한 없이 사용량만 추적)
+      await _usageLimitService.addTranslatedChars(text.length);
+      
+      return translatedText;
     } catch (e) {
       debugPrint('번역 중 오류 발생: $e');
       return text; // 오류 발생 시 원본 텍스트 반환

@@ -14,6 +14,7 @@ import 'image_service.dart';
 import 'translation_service.dart';
 import 'unified_cache_service.dart';
 import 'enhanced_ocr_service.dart';
+import 'usage_limit_service.dart';
 
 class NoteService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -23,6 +24,7 @@ class NoteService {
   final TranslationService _translationService = TranslationService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
+  final UsageLimitService _usageLimitService = UsageLimitService();
 
   // SharedPreferences 키
   static const String _cachedNotesKey = 'cached_notes';
@@ -162,6 +164,9 @@ class NoteService {
         throw Exception('로그인이 필요합니다.');
       }
 
+      // 사용량 추적 (제한은 적용하지 않음)
+      await _usageLimitService.incrementNoteCount();
+      
       // 기본 노트 데이터 생성
       final now = DateTime.now();
       final noteData = {
@@ -233,6 +238,9 @@ class NoteService {
 
       // 페이지 캐시에서도 삭제
       await _cacheService.removePagesForNote(noteId);
+      
+      // 사용량 추적 (노트 개수 감소)
+      await _usageLimitService.decrementNoteCount();
     } catch (e) {
       debugPrint('노트 삭제 중 오류 발생: $e');
       rethrow;
@@ -635,6 +643,9 @@ class NoteService {
       if (user == null) {
         return {'success': false, 'message': '로그인이 필요합니다.'};
       }
+
+      // 사용량 추적 (제한은 적용하지 않음)
+      await _usageLimitService.incrementNoteCount();
 
       // 기본 노트 데이터 생성 (이미지 처리 없이)
       final now = DateTime.now();
