@@ -180,16 +180,29 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     });
   }
 
-  void _nextCard() {
-    if (_currentIndex < _flashCards.length - 1) {
-      _cardController.swipe(CardSwiperDirection.left);
-    }
-  }
+  // 카드 스와이프 처리
+  bool _onSwipe(
+      int? previousIndex, int? currentIndex, CardSwiperDirection direction) {
+    // 디버그 정보 출력
+    debugPrint(
+        '스와이프: 이전 인덱스=$previousIndex, 현재 인덱스=$currentIndex, 방향=$direction');
 
-  void _previousCard() {
-    if (_currentIndex > 0) {
-      _cardController.swipe(CardSwiperDirection.right);
+    // CardSwiper 위젯이 제공하는 currentIndex를 그대로 사용
+    if (currentIndex != null && currentIndex < _flashCards.length) {
+      setState(() {
+        _currentIndex = currentIndex;
+        _isFlipped = false;
+      });
+
+      _updateFlashCardReviewCount();
     }
+
+    // 위로 스와이프하는 경우 카드 삭제
+    if (direction == CardSwiperDirection.top) {
+      _deleteCurrentCard();
+    }
+
+    return true; // 스와이프 동작 허용
   }
 
   Future<void> _deleteCurrentCard() async {
@@ -251,30 +264,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   DictionaryEntry? _getDictionaryEntry(String word) {
     final dictionaryService = ChineseDictionaryService();
     return dictionaryService.lookup(word);
-  }
-
-  // 카드 스와이프 처리
-  bool _onSwipe(
-      int? previousIndex, int? currentIndex, CardSwiperDirection direction) {
-    // 디버그 정보 출력
-    debugPrint(
-        '스와이프: 이전 인덱스=$previousIndex, 현재 인덱스=$currentIndex, 방향=$direction');
-
-    if (currentIndex != null && currentIndex < _flashCards.length) {
-      setState(() {
-        _currentIndex = currentIndex;
-        _isFlipped = false;
-      });
-
-      _updateFlashCardReviewCount();
-    }
-
-    // 위로 스와이프하는 경우 카드 삭제
-    if (direction == CardSwiperDirection.top) {
-      _deleteCurrentCard();
-    }
-
-    return true; // 스와이프 동작 허용
   }
 
   // 핑인 업데이트 메서드 추가
@@ -423,7 +412,10 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               cardsCount: _flashCards.length,
                               onSwipe: _onSwipe,
                               allowedSwipeDirection:
-                                  AllowedSwipeDirection.all(),
+                                  AllowedSwipeDirection.symmetric(
+                                horizontal: true,
+                                vertical: true,
+                              ),
                               onUndo:
                                   (previousIndex, currentIndex, direction) =>
                                       true,
@@ -438,7 +430,47 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                             ),
                           ),
                         ),
-                        _buildControlButtons(),
+                        // 핑인 업데이트 버튼만 남기고 하단 바 제거
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.flip),
+                                onPressed:
+                                    _flashCards.isNotEmpty ? _flipCard : null,
+                                iconSize: 32.0,
+                                color: _flashCards.isNotEmpty
+                                    ? Colors.blue
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(width: 16),
+                              IconButton(
+                                icon: const Icon(Icons.refresh),
+                                onPressed: _flashCards.isNotEmpty
+                                    ? _updatePinyin
+                                    : null,
+                                iconSize: 32.0,
+                                tooltip: '핑인 업데이트',
+                                color: _flashCards.isNotEmpty
+                                    ? Colors.green
+                                    : Colors.grey,
+                              ),
+                              const SizedBox(width: 16),
+                              IconButton(
+                                icon: const Icon(Icons.delete),
+                                onPressed: _flashCards.isNotEmpty
+                                    ? _deleteCurrentCard
+                                    : null,
+                                iconSize: 32.0,
+                                color: _flashCards.isNotEmpty
+                                    ? Colors.red
+                                    : Colors.grey,
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
     );
@@ -549,58 +581,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                 textAlign: TextAlign.center,
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildControlButtons() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 24.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: _currentIndex > 0 ? _previousCard : null,
-            iconSize: 32.0,
-            color: _currentIndex > 0 ? Colors.blue : Colors.grey,
-          ),
-          IconButton(
-            icon: const Icon(Icons.flip),
-            onPressed: _flashCards.isNotEmpty ? _flipCard : null,
-            iconSize: 32.0,
-            color: _flashCards.isNotEmpty ? Colors.blue : Colors.grey,
-          ),
-          IconButton(
-            icon: const Icon(Icons.volume_up),
-            onPressed: _flashCards.isNotEmpty ? _speakCurrentCard : null,
-            iconSize: 32.0,
-            color: _flashCards.isNotEmpty ? Colors.blue : Colors.grey,
-          ),
-          // 핑인 업데이트 버튼 추가
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _flashCards.isNotEmpty ? _updatePinyin : null,
-            iconSize: 32.0,
-            tooltip: '핑인 업데이트',
-            color: _flashCards.isNotEmpty ? Colors.green : Colors.grey,
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: _flashCards.isNotEmpty ? _deleteCurrentCard : null,
-            iconSize: 32.0,
-            color: _flashCards.isNotEmpty ? Colors.red : Colors.grey,
-          ),
-          IconButton(
-            icon: const Icon(Icons.arrow_forward),
-            onPressed:
-                _currentIndex < _flashCards.length - 1 ? _nextCard : null,
-            iconSize: 32.0,
-            color: _currentIndex < _flashCards.length - 1
-                ? Colors.blue
-                : Colors.grey,
           ),
         ],
       ),
