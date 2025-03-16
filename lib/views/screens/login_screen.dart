@@ -179,9 +179,8 @@ class _LoginScreenState extends State<LoginScreen> {
         throw Exception('Firebase가 초기화되지 않았습니다.');
       }
 
-      final userCredential =
-          await widget.initializationService.signInWithGoogle();
-      if (userCredential != null) {
+      final user = await widget.initializationService.signInWithGoogle();
+      if (user != null) {
         widget.onLoginSuccess();
       } else {
         _setError('Google 로그인에 실패했습니다.');
@@ -201,9 +200,8 @@ class _LoginScreenState extends State<LoginScreen> {
         throw Exception('Firebase가 초기화되지 않았습니다.');
       }
 
-      final userCredential =
-          await widget.initializationService.signInWithApple();
-      if (userCredential != null) {
+      final user = await widget.initializationService.signInWithApple();
+      if (user != null) {
         widget.onLoginSuccess();
       } else {
         _setError('Apple 로그인에 실패했습니다.');

@@ -22,7 +22,7 @@ class ProcessedText {
     this.showFullText = false,
   });
 
-  /// JSON에서 생성
+  /// JSON에서 생
   factory ProcessedText.fromJson(Map<String, dynamic> json) {
     return ProcessedText(
       fullOriginalText: json['fullOriginalText'] as String,

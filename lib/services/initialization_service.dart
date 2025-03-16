@@ -115,12 +115,12 @@ class InitializationService {
   }
 
   // Google 로그인 메서드
-  Future<UserCredential?> signInWithGoogle() async {
+  Future<User?> signInWithGoogle() async {
     try {
       debugPrint('Google 인증 시작...');
-      final userCredential = await authService.signInWithGoogle();
-      debugPrint('Google 인증 성공: ${userCredential.user?.uid}');
-      return userCredential;
+      final user = await authService.signInWithGoogle();
+      debugPrint('Google 인증 성공: ${user?.uid}');
+      return user;
     } catch (e) {
       debugPrint('Google 인증 실패: $e');
       _authError = 'Google 인증 중 오류가 발생했습니다: $e';
@@ -129,12 +129,12 @@ class InitializationService {
   }
 
   // Apple 로그인 메서드
-  Future<UserCredential?> signInWithApple() async {
+  Future<User?> signInWithApple() async {
     try {
       debugPrint('Apple 인증 시작...');
-      final userCredential = await authService.signInWithApple();
-      debugPrint('Apple 인증 성공: ${userCredential.user?.uid}');
-      return userCredential;
+      final user = await authService.signInWithApple();
+      debugPrint('Apple 인증 성공: ${user?.uid}');
+      return user;
     } catch (e) {
       debugPrint('Apple 인증 실패: $e');
       _authError = 'Apple 인증 중 오류가 발생했습니다: $e';
