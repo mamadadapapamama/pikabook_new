@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/flash_card.dart';
 import 'package:pinyin/pinyin.dart';
+import 'dictionary_service.dart';
+import 'chinese_dictionary_service.dart';
 
 /// 플래시카드 생성 및 관리 기능(CRUD)을 제공합니다
 
@@ -11,6 +13,9 @@ class FlashCardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
+  final DictionaryService _dictionaryService = DictionaryService();
+  final ChineseDictionaryService _chineseDictionaryService =
+      ChineseDictionaryService();
 
   // 싱글톤 패턴 구현
   static final FlashCardService _instance = FlashCardService._internal();
@@ -37,7 +42,35 @@ class FlashCardService {
 
     try {
       // 병음 생성 (제공된 경우 사용, 아니면 자동 생성)
-      final finalPinyin = pinyin ?? PinyinHelper.getPinyin(front);
+      final finalPinyin = pinyin ??
+          PinyinHelper.getPinyin(front,
+              separator: ' ', format: PinyinFormat.WITH_TONE_MARK);
+
+      // 뜻이 비어있거나 제공되지 않은 경우 사전에서 검색
+      String finalBack = back;
+      if (finalBack.isEmpty) {
+        // 1. 먼저 내부 중국어 사전에서 검색
+        await _chineseDictionaryService.loadDictionary();
+        final dictEntry = _chineseDictionaryService.lookup(front);
+
+        if (dictEntry != null) {
+          finalBack = dictEntry.meaning;
+          debugPrint('내부 사전에서 뜻 찾음: $front -> $finalBack');
+        } else {
+          // 2. 내부 사전에 없으면 외부 API 호출
+          debugPrint('내부 사전에 없는 단어, API 호출: $front');
+          final apiEntry =
+              await _dictionaryService.lookupWordWithFallback(front);
+
+          if (apiEntry != null && apiEntry.meaning.isNotEmpty) {
+            finalBack = apiEntry.meaning;
+            debugPrint('API에서 뜻 찾음: $front -> $finalBack');
+          } else {
+            finalBack = '뜻을 찾을 수 없습니다';
+            debugPrint('API에서도 뜻을 찾을 수 없음: $front');
+          }
+        }
+      }
 
       // 플래시카드 ID 생성
       final id = _uuid.v4();
@@ -46,7 +79,7 @@ class FlashCardService {
       final flashCard = FlashCard(
         id: id,
         front: front,
-        back: back,
+        back: finalBack,
         pinyin: finalPinyin,
         createdAt: DateTime.now(),
         noteId: noteId,
