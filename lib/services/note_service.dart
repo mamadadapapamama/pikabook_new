@@ -302,23 +302,14 @@ class NoteService {
       isProcessing = await _checkBackgroundProcessingStatus(noteId);
 
       // 4. 캐시에 페이지가 없거나 불완전하면 Firestore에서 가져오기
-      if (pages.isEmpty || !isFromCache) {
+      if (pages.isEmpty) {
         debugPrint('Firestore에서 노트 $noteId의 페이지 로드 시작');
-        final firestorePages = await _pageService.getPagesForNote(noteId);
+        pages = await _pageService.getPagesForNote(noteId);
 
-        // Firestore에서 가져온 페이지가 있으면 업데이트
-        if (firestorePages.isNotEmpty) {
-          pages = firestorePages;
-
-          // 페이지 캐싱 - 페이지 로드 완료 시점에 캐싱
+        // 페이지 캐싱 - 페이지 로드 완료 시점에 캐싱
+        if (pages.isNotEmpty) {
           await _cacheService.cachePages(noteId, pages);
           debugPrint('노트 $noteId의 페이지 ${pages.length}개 캐싱 완료');
-
-          // 페이지 번호 로깅
-          for (int i = 0; i < pages.length; i++) {
-            debugPrint(
-                'Firestore 페이지[$i]: id=${pages[i].id}, pageNumber=${pages[i].pageNumber}');
-          }
         }
       }
 
@@ -355,9 +346,18 @@ class NoteService {
   Future<void> _setBackgroundProcessingStatus(
       String noteId, bool isProcessing) async {
     try {
+      // SharedPreferences에 상태 저장 (임시)
       final prefs = await SharedPreferences.getInstance();
       final key = 'processing_note_$noteId';
       await prefs.setBool(key, isProcessing);
+
+      // Firestore 노트 문서에도 상태 저장 (영구적)
+      await _notesCollection.doc(noteId).update({
+        'isProcessingBackground': isProcessing,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      debugPrint('백그라운드 처리 상태 설정: $noteId, 처리 중: $isProcessing');
     } catch (e) {
       debugPrint('백그라운드 처리 상태 설정 중 오류 발생: $e');
     }
@@ -468,43 +468,43 @@ class NoteService {
 
       // 노트 객체 업데이트 (캐시 갱신) - 모든 페이지 처리 완료 시점에 캐싱
       try {
+        // 모든 페이지 ID 가져오기 (첫 번째 페이지 포함)
         final noteDoc = await _notesCollection.doc(noteId).get();
         if (noteDoc.exists) {
+          final data = noteDoc.data() as Map<String, dynamic>?;
+          List<String> allPageIds = [];
+
+          // 첫 번째 페이지 ID 가져오기
+          final firstPageSnapshot = await _firestore
+              .collection('pages')
+              .where('noteId', isEqualTo: noteId)
+              .where('pageNumber', isEqualTo: 0)
+              .limit(1)
+              .get();
+
+          if (firstPageSnapshot.docs.isNotEmpty) {
+            final firstPageId = firstPageSnapshot.docs.first.id;
+            allPageIds = [firstPageId, ...pageIds];
+          } else {
+            allPageIds = pageIds;
+          }
+
+          // 노트 문서에 모든 페이지 ID 목록 업데이트
+          await _notesCollection.doc(noteId).update({
+            'pages': allPageIds,
+            'processedPageCount': processedPages.length,
+            'totalPageCount': allPageIds.length,
+            'isProcessingBackground': false,
+            'processingCompleted': true,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+          debugPrint('노트 문서의 페이지 ID 목록 업데이트 완료: ${allPageIds.length}개');
+
+          // 업데이트된 노트 객체 캐싱
           final updatedNote = Note.fromFirestore(noteDoc);
           await _cacheService.cacheNote(updatedNote);
           debugPrint('노트 캐시 업데이트 완료: $noteId');
-
-          // 페이지 목록 업데이트 확인
-          final data = noteDoc.data() as Map<String, dynamic>?;
-          final storedPageIds = data?['pages'] as List<dynamic>?;
-
-          // 페이지 ID 목록이 없거나 불완전한 경우 업데이트
-          if (storedPageIds == null ||
-              storedPageIds.length < pageIds.length + 1) {
-            // 첫 번째 페이지 ID 가져오기
-            final firstPageSnapshot = await _notesCollection
-                .where('noteId', isEqualTo: noteId)
-                .where('pageNumber', isEqualTo: 0)
-                .limit(1)
-                .get();
-
-            List<String> allPageIds = [];
-
-            if (firstPageSnapshot.docs.isNotEmpty) {
-              final firstPageId = firstPageSnapshot.docs.first.id;
-              allPageIds = [firstPageId, ...pageIds];
-            } else {
-              allPageIds = pageIds;
-            }
-
-            // 노트 문서에 페이지 ID 목록 업데이트
-            await _notesCollection.doc(noteId).update({
-              'pages': allPageIds,
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-
-            debugPrint('노트 문서의 페이지 ID 목록 업데이트 완료: ${allPageIds.length}개');
-          }
         }
       } catch (e) {
         debugPrint('노트 캐시 업데이트 실패: $e');
@@ -728,6 +728,9 @@ class NoteService {
         try {
           await _firestore.collection('notes').doc(noteId).update({
             'pages': pageIds,
+            'totalPageCount': pageIds.length,
+            'isProcessingBackground': imageFiles.length > 1,
+            'processingCompleted': imageFiles.length <= 1,
             'updatedAt': FieldValue.serverTimestamp(),
           });
           print('노트 문서 업데이트 완료: $noteId, 페이지 수: ${pageIds.length}');
@@ -864,18 +867,12 @@ class NoteService {
         );
       }
 
-      // 현재 노트의 페이지 수 확인하여 페이지 번호 결정
-      final existingPages = await _pageService.getPagesForNote(noteId);
-      final pageNumber = existingPages.length + 1;
-
-      debugPrint('새 페이지 생성: 노트 ID=$noteId, 페이지 번호=$pageNumber');
-
       // 페이지 생성
       final page = await _pageService.createPage(
         noteId: noteId,
         originalText: extractedText,
         translatedText: translatedText,
-        pageNumber: pageNumber,
+        pageNumber: 1,
         imageFile: imageFile,
       );
 

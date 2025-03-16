@@ -279,30 +279,33 @@ class UnifiedCacheService {
     return result;
   }
 
-  /// 페이지 캐시 크기 확인 및 제한
+  /// 페이지 캐시 크기 확인 및 정리
   void _checkPageCacheSize() {
-    // 페이지 캐시 크기 제한
+    // 메모리 캐시 크기 제한
     if (_pageCache.length > _maxPageItems) {
-      // 가장 오래된 항목부터 제거
-      final sortedEntries = _cacheTimestamps.entries
-          .where((entry) => _pageCache.containsKey(entry.key))
-          .toList()
-        ..sort((a, b) => a.value.compareTo(b.value));
+      debugPrint('페이지 캐시 크기 제한 초과: ${_pageCache.length}개 > $_maxPageItems개');
 
-      final itemsToRemove = sortedEntries.length - _maxPageItems;
-      if (itemsToRemove > 0) {
-        debugPrint('페이지 캐시 크기 제한: $itemsToRemove개 항목 제거');
-        for (int i = 0; i < itemsToRemove; i++) {
-          final key = sortedEntries[i].key;
+      // 가장 오래된 항목부터 제거
+      final sortedEntries = _pageCache.keys.toList()
+        ..sort((a, b) {
+          final timeA = _cacheTimestamps[a] ?? DateTime.now();
+          final timeB = _cacheTimestamps[b] ?? DateTime.now();
+          return timeA.compareTo(timeB);
+        });
+
+      // 제거할 항목 수 계산
+      final itemsToRemove = _pageCache.length - _maxPageItems;
+
+      // 가장 오래된 항목부터 제거
+      for (int i = 0; i < itemsToRemove; i++) {
+        if (i < sortedEntries.length) {
+          final key = sortedEntries[i];
           _pageCache.remove(key);
           _cacheTimestamps.remove(key);
-
-          // 노트-페이지 관계에서도 제거
-          for (final noteId in _notePageIds.keys) {
-            _notePageIds[noteId]?.remove(key);
-          }
         }
       }
+
+      debugPrint('페이지 캐시 정리 완료: $itemsToRemove개 항목 제거');
     }
   }
 
@@ -346,26 +349,10 @@ class UnifiedCacheService {
     final note = await getCachedNote(noteId);
     final pages = await getPagesForNote(noteId);
 
-    // 캐시된 페이지가 없거나 불완전한 경우 isFromCache를 false로 설정하여
-    // 호출자가 Firestore에서 다시 로드하도록 유도
-    final isFromCache = note != null && pages.isNotEmpty;
-
-    debugPrint(
-        'UnifiedCacheService.getNoteWithPages: noteId=$noteId, 페이지 수=${pages.length}, isFromCache=$isFromCache');
-
-    // 페이지 번호 순으로 정렬
-    pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-
-    // 페이지 번호 로깅
-    for (int i = 0; i < pages.length; i++) {
-      debugPrint(
-          '캐시된 페이지[$i]: id=${pages[i].id}, pageNumber=${pages[i].pageNumber}');
-    }
-
     return {
       'note': note,
       'pages': pages,
-      'isFromCache': isFromCache,
+      'isFromCache': note != null,
     };
   }
 

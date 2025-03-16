@@ -104,27 +104,40 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       final isFromCache = result['isFromCache'] as bool;
       final isProcessingBackground =
           result['isProcessingBackground'] as bool? ?? false;
+      final processingCompleted = note.processingCompleted ?? false;
 
       if (mounted) {
         setState(() {
           _note = note;
           _isFavorite = note.isFavorite;
 
-          // 페이지 업데이트
-          _pages = pages.cast<page_model.Page>();
+          // 페이지 업데이트 (기존 페이지 유지하면서 새 페이지 추가)
+          if (_pages.isEmpty) {
+            // 첫 로드 시에는 모든 페이지 설정
+            _pages = pages.cast<page_model.Page>();
+          } else if (pages.isNotEmpty && pages.length > _pages.length) {
+            // 페이지가 추가된 경우 (백그라운드 처리 완료 등)
+            _pages = pages.cast<page_model.Page>();
+            debugPrint('페이지 수가 증가하여 전체 페이지 업데이트: ${_pages.length}개');
+          }
 
           // 페이지 번호 순으로 정렬
           _pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
 
-          // 이미지 파일 배열 초기화
-          _imageFiles = List<File?>.filled(_pages.length, null);
+          // 이미지 파일 배열 초기화 (이미 로드된 이미지는 유지)
+          if (_imageFiles.length != _pages.length) {
+            final newImageFiles = List<File?>.filled(_pages.length, null);
+            // 기존 이미지 파일 복사
+            for (int i = 0; i < _imageFiles.length && i < _pages.length; i++) {
+              newImageFiles[i] = _imageFiles[i];
+            }
+            _imageFiles = newImageFiles;
+          }
 
-          // 현재 페이지 인덱스 설정
           _currentPageIndex =
               _currentPageIndex >= 0 && _currentPageIndex < _pages.length
                   ? _currentPageIndex
                   : (_pages.isNotEmpty ? 0 : -1);
-
           _isLoading = false;
         });
 
@@ -139,10 +152,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         // 각 페이지의 이미지 로드 (현재 페이지 우선)
         _loadPageImages();
 
-        // 페이지가 없거나 1개만 있고 캐시에서 로드된 경우에만 페이지 서비스에 다시 요청
-        if (_pages.length <= 1 && isFromCache) {
-          debugPrint('페이지가 ${_pages.length}개만 로드되어 페이지 서비스에 다시 요청합니다.');
-          _reloadPages();
+        // 다음 조건에서 페이지 서비스에 다시 요청:
+        // 1. 페이지가 없거나 1개만 있고 캐시에서 로드된 경우
+        // 2. 백그라운드 처리가 완료된 경우 (processingCompleted가 true)
+        if ((_pages.length <= 1 && isFromCache) || processingCompleted) {
+          debugPrint(
+              '페이지 다시 로드 조건 충족: 페이지 수=${_pages.length}, 캐시=$isFromCache, 처리완료=$processingCompleted');
+          _reloadPages(forceReload: processingCompleted);
         }
       }
     } catch (e) {
@@ -218,6 +234,28 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       setState(() {
         _isLoading = true;
       });
+
+      // 노트 문서에서 처리 완료 상태 확인
+      bool processingCompleted = false;
+      if (_note != null && _note!.id != null) {
+        try {
+          final noteDoc = await FirebaseFirestore.instance
+              .collection('notes')
+              .doc(_note!.id)
+              .get();
+          if (noteDoc.exists) {
+            final data = noteDoc.data();
+            processingCompleted =
+                data?['processingCompleted'] as bool? ?? false;
+            if (processingCompleted) {
+              debugPrint('노트 문서에서 백그라운드 처리 완료 상태 확인: $processingCompleted');
+              forceReload = true; // 처리가 완료된 경우 강제 로드
+            }
+          }
+        } catch (e) {
+          debugPrint('노트 문서 확인 중 오류 발생: $e');
+        }
+      }
 
       // 페이지 서비스에서 직접 페이지 목록 가져오기
       final pages = await _pageService.getPagesForNote(widget.noteId);
