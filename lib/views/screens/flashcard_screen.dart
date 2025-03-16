@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flip_card/flip_card.dart';
+import 'package:pinyin/pinyin.dart';
 import '../../models/flash_card.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
@@ -252,21 +253,73 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   }
 
   // 카드 스와이프 처리
-  bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
-    if (currentIndex != null) {
+  bool _onSwipe(
+      int? previousIndex, int? currentIndex, CardSwiperDirection direction) {
+    if (currentIndex != null && currentIndex < _flashCards.length) {
       setState(() {
         _currentIndex = currentIndex;
         _isFlipped = false;
       });
+
       _updateFlashCardReviewCount();
     }
-    
+
     // 위로 스와이프하는 경우 카드 삭제
     if (direction == CardSwiperDirection.top) {
       _deleteCurrentCard();
     }
-    
+
     return true; // 스와이프 동작 허용
+  }
+
+  // 핑인 업데이트 메서드 추가
+  Future<void> _updatePinyin() async {
+    if (_flashCards.isEmpty || _currentIndex >= _flashCards.length) return;
+
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      final currentCard = _flashCards[_currentIndex];
+      final chineseText = currentCard.front;
+
+      // 성조가 포함된 핑인 생성
+      final updatedPinyin = PinyinHelper.getPinyin(chineseText,
+          separator: ' ', format: PinyinFormat.WITH_TONE_MARK);
+
+      // 플래시카드 업데이트
+      final updatedCard = currentCard.copyWith(pinyin: updatedPinyin);
+
+      // Firestore 업데이트
+      await FirebaseFirestore.instance
+          .collection('flashcards')
+          .doc(currentCard.id)
+          .update({'pinyin': updatedPinyin});
+
+      // 로컬 상태 업데이트
+      setState(() {
+        _flashCards[_currentIndex] = updatedCard;
+        _isLoading = false;
+      });
+
+      // 성공 메시지 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('핑인이 업데이트되었습니다.')),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('핑인 업데이트 중 오류가 발생했습니다: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -518,6 +571,14 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             onPressed: _flashCards.isNotEmpty ? _speakCurrentCard : null,
             iconSize: 32.0,
             color: _flashCards.isNotEmpty ? Colors.blue : Colors.grey,
+          ),
+          // 핑인 업데이트 버튼 추가
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _flashCards.isNotEmpty ? _updatePinyin : null,
+            iconSize: 32.0,
+            tooltip: '핑인 업데이트',
+            color: _flashCards.isNotEmpty ? Colors.green : Colors.grey,
           ),
           IconButton(
             icon: const Icon(Icons.delete),
