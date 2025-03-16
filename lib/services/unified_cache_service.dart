@@ -200,11 +200,15 @@ class UnifiedCacheService {
     if (pages.isEmpty) return;
 
     debugPrint('${pages.length}개 페이지 캐싱 시작 (노트 ID: $noteId)');
-    
+
     // 페이지 ID 목록 업데이트
-    final pageIds = pages.map((p) => p.id).where((id) => id != null).map((id) => id!).toList();
+    final pageIds = pages
+        .map((p) => p.id)
+        .where((id) => id != null)
+        .map((id) => id!)
+        .toList();
     _notePageIds[noteId] = pageIds;
-    
+
     // 메모리 캐시 업데이트 (병렬 처리)
     for (final page in pages) {
       if (page.id != null) {
@@ -212,94 +216,93 @@ class UnifiedCacheService {
         _cacheTimestamps[page.id!] = DateTime.now();
       }
     }
-    
+
     // 로컬 저장소 캐싱 (배치 처리)
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // 페이지 ID 목록 저장
       final pageIdsKey = 'note_pages_$noteId';
       await prefs.setStringList(pageIdsKey, pageIds);
-      await prefs.setString('${pageIdsKey}_timestamp', DateTime.now().toIso8601String());
-      
+      await prefs.setString(
+          '${pageIdsKey}_timestamp', DateTime.now().toIso8601String());
+
       // 페이지 데이터 배치 저장 (JSON 변환 병렬 처리)
       final futures = <Future<Map<String, String>>>[];
-      
+
       // 페이지를 배치로 나누어 처리 (최대 10개씩)
       const batchSize = 10;
       for (int i = 0; i < pages.length; i += batchSize) {
-        final end = (i + batchSize < pages.length) ? i + batchSize : pages.length;
+        final end =
+            (i + batchSize < pages.length) ? i + batchSize : pages.length;
         final batch = pages.sublist(i, end);
-        
+
         // 배치 내 페이지들의 JSON 변환을 병렬로 처리
         futures.add(compute(_serializePagesBatch, batch));
       }
-      
+
       // 모든 배치 처리 완료 대기
       final results = await Future.wait(futures);
-      
+
       // 결과를 SharedPreferences에 저장
       for (final pageDataMap in results) {
         for (final entry in pageDataMap.entries) {
           await prefs.setString(entry.key, entry.value);
         }
       }
-      
+
       debugPrint('${pages.length}개 페이지 캐싱 완료 (노트 ID: $noteId)');
     } catch (e) {
       debugPrint('페이지 배치 캐싱 중 오류 발생: $e');
     }
-    
+
     // 캐시 크기 제한 확인
     _checkPageCacheSize();
   }
-  
+
   /// 페이지 배치를 직렬화하는 격리 함수 (compute에서 사용)
   static Map<String, String> _serializePagesBatch(List<page_model.Page> pages) {
     final result = <String, String>{};
     final now = DateTime.now().toIso8601String();
-    
+
     for (final page in pages) {
       if (page.id != null) {
         final pageKey = 'page_${page.id}';
         final timestampKey = '${pageKey}_timestamp';
-        
+
         // 페이지 데이터 JSON 직렬화
         result[pageKey] = jsonEncode(page.toJson());
         result[timestampKey] = now;
       }
     }
-    
+
     return result;
   }
-  
-  /// 페이지 캐시 크기 확인 및 정리
+
+  /// 페이지 캐시 크기 확인 및 제한
   void _checkPageCacheSize() {
-    // 메모리 캐시 크기 제한
+    // 페이지 캐시 크기 제한
     if (_pageCache.length > _maxPageItems) {
-      debugPrint('페이지 캐시 크기 제한 초과: ${_pageCache.length}개 > $_maxPageItems개');
-      
       // 가장 오래된 항목부터 제거
-      final sortedEntries = _pageCache.keys.toList()
-        ..sort((a, b) {
-          final timeA = _cacheTimestamps[a] ?? DateTime.now();
-          final timeB = _cacheTimestamps[b] ?? DateTime.now();
-          return timeA.compareTo(timeB);
-        });
-      
-      // 제거할 항목 수 계산
-      final itemsToRemove = _pageCache.length - _maxPageItems;
-      
-      // 가장 오래된 항목부터 제거
-      for (int i = 0; i < itemsToRemove; i++) {
-        if (i < sortedEntries.length) {
-          final key = sortedEntries[i];
+      final sortedEntries = _cacheTimestamps.entries
+          .where((entry) => _pageCache.containsKey(entry.key))
+          .toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
+
+      final itemsToRemove = sortedEntries.length - _maxPageItems;
+      if (itemsToRemove > 0) {
+        debugPrint('페이지 캐시 크기 제한: $itemsToRemove개 항목 제거');
+        for (int i = 0; i < itemsToRemove; i++) {
+          final key = sortedEntries[i].key;
           _pageCache.remove(key);
           _cacheTimestamps.remove(key);
+
+          // 노트-페이지 관계에서도 제거
+          for (final noteId in _notePageIds.keys) {
+            _notePageIds[noteId]?.remove(key);
+          }
         }
       }
-      
-      debugPrint('페이지 캐시 정리 완료: $itemsToRemove개 항목 제거');
     }
   }
 
@@ -343,10 +346,26 @@ class UnifiedCacheService {
     final note = await getCachedNote(noteId);
     final pages = await getPagesForNote(noteId);
 
+    // 캐시된 페이지가 없거나 불완전한 경우 isFromCache를 false로 설정하여
+    // 호출자가 Firestore에서 다시 로드하도록 유도
+    final isFromCache = note != null && pages.isNotEmpty;
+
+    debugPrint(
+        'UnifiedCacheService.getNoteWithPages: noteId=$noteId, 페이지 수=${pages.length}, isFromCache=$isFromCache');
+
+    // 페이지 번호 순으로 정렬
+    pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+    // 페이지 번호 로깅
+    for (int i = 0; i < pages.length; i++) {
+      debugPrint(
+          '캐시된 페이지[$i]: id=${pages[i].id}, pageNumber=${pages[i].pageNumber}');
+    }
+
     return {
       'note': note,
       'pages': pages,
-      'isFromCache': note != null,
+      'isFromCache': isFromCache,
     };
   }
 
