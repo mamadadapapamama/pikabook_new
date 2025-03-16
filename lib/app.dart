@@ -23,7 +23,6 @@ class _AppState extends State<App> {
   bool _isFirebaseInitialized = false;
   bool _isUserAuthenticated = false;
   bool _isOnboardingCompleted = false;
-  bool _skipLogin = false;
   String? _error;
   final UserPreferencesService _preferencesService = UserPreferencesService();
 
@@ -92,16 +91,9 @@ class _AppState extends State<App> {
     });
   }
 
-  void _handleSkipLogin() {
-    setState(() {
-      _skipLogin = true;
-    });
-  }
-
   void _handleLogout() {
     setState(() {
       _isUserAuthenticated = false;
-      _skipLogin = false;
     });
   }
 
@@ -134,8 +126,8 @@ class _AppState extends State<App> {
 
     // Firebase 초기화가 완료된 경우
     if (_isFirebaseInitialized) {
-      // 사용자가 로그인되어 있거나 로그인을 건너뛴 경우
-      if (_isUserAuthenticated || _skipLogin) {
+      // 사용자가 로그인되어 있는 경우
+      if (_isUserAuthenticated) {
         // 온보딩 완료 여부에 따라 화면 결정
         if (_isOnboardingCompleted) {
           return const HomeScreen();
@@ -153,7 +145,6 @@ class _AppState extends State<App> {
         return LoginScreen(
           initializationService: widget.initializationService,
           onLoginSuccess: _handleLoginSuccess,
-          onSkipLogin: _handleSkipLogin,
         );
       }
     }
