@@ -166,7 +166,7 @@ class NoteService {
 
       // 사용량 추적 (제한은 적용하지 않음)
       await _usageLimitService.incrementNoteCount();
-      
+
       // 기본 노트 데이터 생성
       final now = DateTime.now();
       final noteData = {
@@ -238,7 +238,7 @@ class NoteService {
 
       // 페이지 캐시에서도 삭제
       await _cacheService.removePagesForNote(noteId);
-      
+
       // 사용량 추적 (노트 개수 감소)
       await _usageLimitService.decrementNoteCount();
     } catch (e) {
@@ -302,14 +302,23 @@ class NoteService {
       isProcessing = await _checkBackgroundProcessingStatus(noteId);
 
       // 4. 캐시에 페이지가 없거나 불완전하면 Firestore에서 가져오기
-      if (pages.isEmpty) {
+      if (pages.isEmpty || !isFromCache) {
         debugPrint('Firestore에서 노트 $noteId의 페이지 로드 시작');
-        pages = await _pageService.getPagesForNote(noteId);
+        final firestorePages = await _pageService.getPagesForNote(noteId);
 
-        // 페이지 캐싱 - 페이지 로드 완료 시점에 캐싱
-        if (pages.isNotEmpty) {
+        // Firestore에서 가져온 페이지가 있으면 업데이트
+        if (firestorePages.isNotEmpty) {
+          pages = firestorePages;
+
+          // 페이지 캐싱 - 페이지 로드 완료 시점에 캐싱
           await _cacheService.cachePages(noteId, pages);
           debugPrint('노트 $noteId의 페이지 ${pages.length}개 캐싱 완료');
+
+          // 페이지 번호 로깅
+          for (int i = 0; i < pages.length; i++) {
+            debugPrint(
+                'Firestore 페이지[$i]: id=${pages[i].id}, pageNumber=${pages[i].pageNumber}');
+          }
         }
       }
 
@@ -855,12 +864,18 @@ class NoteService {
         );
       }
 
+      // 현재 노트의 페이지 수 확인하여 페이지 번호 결정
+      final existingPages = await _pageService.getPagesForNote(noteId);
+      final pageNumber = existingPages.length + 1;
+
+      debugPrint('새 페이지 생성: 노트 ID=$noteId, 페이지 번호=$pageNumber');
+
       // 페이지 생성
       final page = await _pageService.createPage(
         noteId: noteId,
         originalText: extractedText,
         translatedText: translatedText,
-        pageNumber: 1,
+        pageNumber: pageNumber,
         imageFile: imageFile,
       );
 

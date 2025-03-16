@@ -252,8 +252,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   }
 
   // 카드 스와이프 처리
-  bool _onSwipe(
-      int previousIndex, int? currentIndex, CardSwiperDirection direction) {
+  bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
     if (currentIndex != null) {
       setState(() {
         _currentIndex = currentIndex;
@@ -261,12 +260,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       });
       _updateFlashCardReviewCount();
     }
-
+    
     // 위로 스와이프하는 경우 카드 삭제
     if (direction == CardSwiperDirection.top) {
       _deleteCurrentCard();
     }
-
+    
     return true; // 스와이프 동작 허용
   }
 

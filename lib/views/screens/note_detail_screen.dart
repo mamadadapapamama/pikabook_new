@@ -110,33 +110,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           _note = note;
           _isFavorite = note.isFavorite;
 
-          // 페이지 업데이트 (기존 페이지 유지하면서 새 페이지 추가)
-          if (_pages.isEmpty) {
-            // 첫 로드 시에는 모든 페이지 설정
-            _pages = pages.cast<page_model.Page>();
-          } else if (pages.isNotEmpty && pages.length > _pages.length) {
-            // 페이지가 추가된 경우 (백그라운드 처리 완료 등)
-            _pages = pages.cast<page_model.Page>();
-            debugPrint('페이지 수가 증가하여 전체 페이지 업데이트: ${_pages.length}개');
-          }
+          // 페이지 업데이트
+          _pages = pages.cast<page_model.Page>();
 
           // 페이지 번호 순으로 정렬
           _pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
 
-          // 이미지 파일 배열 초기화 (이미 로드된 이미지는 유지)
-          if (_imageFiles.length != _pages.length) {
-            final newImageFiles = List<File?>.filled(_pages.length, null);
-            // 기존 이미지 파일 복사
-            for (int i = 0; i < _imageFiles.length && i < _pages.length; i++) {
-              newImageFiles[i] = _imageFiles[i];
-            }
-            _imageFiles = newImageFiles;
-          }
+          // 이미지 파일 배열 초기화
+          _imageFiles = List<File?>.filled(_pages.length, null);
 
+          // 현재 페이지 인덱스 설정
           _currentPageIndex =
               _currentPageIndex >= 0 && _currentPageIndex < _pages.length
                   ? _currentPageIndex
                   : (_pages.isNotEmpty ? 0 : -1);
+
           _isLoading = false;
         });
 
