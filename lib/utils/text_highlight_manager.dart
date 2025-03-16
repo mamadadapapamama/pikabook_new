@@ -205,9 +205,12 @@ class TextHighlightManager {
               if (kDebugMode) {
                 debugPrint('하이라이트된 단어 탭됨: ${pos.word}');
               }
+              // 텍스트 선택 중에는 탭 이벤트를 발생시키지 않도록 함
+              // 선택 모드가 아닐 때만 탭 이벤트 처리
               onTap(pos.word);
             },
-          mouseCursor: SystemMouseCursors.click,
+          // 선택 가능하도록 설정
+          mouseCursor: SystemMouseCursors.text,
           semanticsLabel: 'flashcard:${pos.word}',
         ),
       );

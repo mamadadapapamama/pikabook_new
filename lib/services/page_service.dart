@@ -181,12 +181,11 @@ class PageService {
       // 2. 노트 문서에서 페이지 ID 목록 확인 (항상 먼저 확인)
       debugPrint('노트 문서에서 페이지 ID 목록을 확인합니다.');
       final noteDoc = await _firestore.collection('notes').doc(noteId).get();
-
+      
       if (noteDoc.exists) {
         final data = noteDoc.data();
         final pageIds = data?['pages'] as List<dynamic>?;
-        final processingCompleted =
-            data?['processingCompleted'] as bool? ?? false;
+        final processingCompleted = data?['processingCompleted'] as bool? ?? false;
 
         if (pageIds != null && pageIds.isNotEmpty) {
           debugPrint('노트 문서에서 ${pageIds.length}개의 페이지 ID를 찾았습니다.');
@@ -196,13 +195,11 @@ class PageService {
           final List<page_model.Page> pages = [];
           for (final pageId in pageIds) {
             try {
-              final pageDoc =
-                  await _pagesCollection.doc(pageId.toString()).get();
+              final pageDoc = await _pagesCollection.doc(pageId.toString()).get();
               if (pageDoc.exists) {
                 final page = page_model.Page.fromFirestore(pageDoc);
                 pages.add(page);
-                debugPrint(
-                    '페이지 ${page.id} 로드 성공 (pageNumber: ${page.pageNumber})');
+                debugPrint('페이지 ${page.id} 로드 성공 (pageNumber: ${page.pageNumber})');
               }
             } catch (e) {
               debugPrint('페이지 $pageId 로드 중 오류: $e');

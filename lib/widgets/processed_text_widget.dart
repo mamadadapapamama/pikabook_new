@@ -240,6 +240,29 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           showCursor: true,
           cursorWidth: 2.0,
           cursorColor: Colors.blue,
+          onSelectionChanged: (selection, cause) {
+            // 선택 변경 시 로깅
+            if (kDebugMode) {
+              debugPrint(
+                  '선택 변경: ${selection.start}-${selection.end}, 원인: $cause');
+            }
+
+            // 선택이 취소된 경우 (빈 선택)
+            if (selection.isCollapsed) {
+              if (kDebugMode) {
+                debugPrint('선택 취소됨 (빈 선택)');
+              }
+              // 선택된 텍스트 초기화
+              _selectedTextNotifier.value = '';
+              Future.microtask(() {
+                if (mounted) {
+                  setState(() {
+                    _selectedText = '';
+                  });
+                }
+              });
+            }
+          },
         );
       },
     );
