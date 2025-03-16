@@ -180,13 +180,13 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
   void _nextCard() {
     if (_currentIndex < _flashCards.length - 1) {
-      _cardController.swipeLeft();
+      _cardController.swipe(CardSwiperDirection.left);
     }
   }
 
   void _previousCard() {
     if (_currentIndex > 0) {
-      _cardController.swipeRight();
+      _cardController.swipe(CardSwiperDirection.right);
     }
   }
 
@@ -197,16 +197,35 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     final noteId = _flashCards[_currentIndex].noteId;
 
     try {
+      // 플래시카드 삭제
       await _flashCardService.deleteFlashCard(flashCardId, noteId: noteId);
 
       if (mounted) {
+        // 현재 인덱스 저장
+        final currentIdx = _currentIndex;
+        
         setState(() {
-          _flashCards.removeAt(_currentIndex);
-          if (_currentIndex >= _flashCards.length) {
-            _currentIndex = _flashCards.isEmpty ? 0 : _flashCards.length - 1;
+          // 플래시카드 목록에서 제거
+          _flashCards.removeAt(currentIdx);
+          
+          // 인덱스 조정
+          if (_flashCards.isEmpty) {
+            _currentIndex = 0;
+          } else if (currentIdx >= _flashCards.length) {
+            _currentIndex = _flashCards.length - 1;
+          } else {
+            _currentIndex = currentIdx;
           }
         });
 
+        // 카드가 모두 삭제된 경우 화면 갱신
+        if (_flashCards.isEmpty) {
+          setState(() {});
+        }
+
+        // 노트 페이지로 돌아갈 때 변경 사항을 알리기 위해 결과 설정
+        Navigator.of(context).pop(true);
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('플래시카드가 삭제되었습니다.')),
         );
@@ -233,21 +252,26 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   }
 
   // 카드 스와이프 처리
-  void _onSwipe(int previousIndex, int currentIndex, CardSwiperDirection direction) {
-    setState(() {
-      _currentIndex = currentIndex;
-      _isFlipped = false;
-    });
-    _updateFlashCardReviewCount();
+  bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
+    if (currentIndex != null) {
+      setState(() {
+        _currentIndex = currentIndex;
+        _isFlipped = false;
+      });
+      _updateFlashCardReviewCount();
+    }
+    return true; // 스와이프 동작 허용
   }
 
-  // 카드 스와이프 업 처리 (삭제)
-  bool _onSwipeUp(int index, CardSwiperDirection direction) {
-    if (direction == CardSwiperDirection.top) {
-      _deleteCurrentCard();
-      return false; // 실제 삭제는 _deleteCurrentCard에서 처리
+  // 카드 스와이프 방향 변경 처리
+  void _onSwipeDirectionChange(double horizontalDirection, double verticalDirection) {
+    // 위로 스와이프하는 경우 (수직 방향이 수평 방향보다 크고, 위쪽 방향인 경우)
+    if (verticalDirection < 0 && verticalDirection.abs() > horizontalDirection.abs()) {
+      // 임계값 이상으로 스와이프된 경우에만 삭제 처리
+      if (verticalDirection.abs() > 0.5) {
+        _deleteCurrentCard();
+      }
     }
-    return true;
   }
 
   @override
@@ -346,10 +370,11 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               cardsCount: _flashCards.length,
                               onSwipe: _onSwipe,
                               allowedSwipeDirection: AllowedSwipeDirection.all(),
-                              onUndo: _onSwipe,
+                              onUndo: (previousIndex, currentIndex, direction) => true,
                               numberOfCardsDisplayed: 1,
                               backCardOffset: const Offset(0, 0),
                               padding: const EdgeInsets.all(24.0),
+                              onSwipeDirectionChange: _onSwipeDirectionChange,
                               cardBuilder: (context, index, percentThresholdX, percentThresholdY) {
                                 return _buildFlashCard(index);
                               },
