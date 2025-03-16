@@ -203,11 +203,11 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       if (mounted) {
         // 현재 인덱스 저장
         final currentIdx = _currentIndex;
-        
+
         setState(() {
           // 플래시카드 목록에서 제거
           _flashCards.removeAt(currentIdx);
-          
+
           // 인덱스 조정
           if (_flashCards.isEmpty) {
             _currentIndex = 0;
@@ -225,7 +225,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
         // 노트 페이지로 돌아갈 때 변경 사항을 알리기 위해 결과 설정
         Navigator.of(context).pop(true);
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('플래시카드가 삭제되었습니다.')),
         );
@@ -252,7 +252,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   }
 
   // 카드 스와이프 처리
-  bool _onSwipe(int previousIndex, int? currentIndex, CardSwiperDirection direction) {
+  bool _onSwipe(
+      int previousIndex, int? currentIndex, CardSwiperDirection direction) {
     if (currentIndex != null) {
       setState(() {
         _currentIndex = currentIndex;
@@ -260,18 +261,13 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       });
       _updateFlashCardReviewCount();
     }
-    return true; // 스와이프 동작 허용
-  }
 
-  // 카드 스와이프 방향 변경 처리
-  void _onSwipeDirectionChange(double horizontalDirection, double verticalDirection) {
-    // 위로 스와이프하는 경우 (수직 방향이 수평 방향보다 크고, 위쪽 방향인 경우)
-    if (verticalDirection < 0 && verticalDirection.abs() > horizontalDirection.abs()) {
-      // 임계값 이상으로 스와이프된 경우에만 삭제 처리
-      if (verticalDirection.abs() > 0.5) {
-        _deleteCurrentCard();
-      }
+    // 위로 스와이프하는 경우 카드 삭제
+    if (direction == CardSwiperDirection.top) {
+      _deleteCurrentCard();
     }
+
+    return true; // 스와이프 동작 허용
   }
 
   @override
@@ -369,15 +365,19 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               controller: _cardController,
                               cardsCount: _flashCards.length,
                               onSwipe: _onSwipe,
-                              allowedSwipeDirection: AllowedSwipeDirection.all(),
-                              onUndo: (previousIndex, currentIndex, direction) => true,
+                              allowedSwipeDirection:
+                                  AllowedSwipeDirection.all(),
+                              onUndo:
+                                  (previousIndex, currentIndex, direction) =>
+                                      true,
                               numberOfCardsDisplayed: 1,
                               backCardOffset: const Offset(0, 0),
                               padding: const EdgeInsets.all(24.0),
-                              onSwipeDirectionChange: _onSwipeDirectionChange,
-                              cardBuilder: (context, index, percentThresholdX, percentThresholdY) {
+                              cardBuilder: (context, index, percentThresholdX,
+                                  percentThresholdY) {
                                 return _buildFlashCard(index);
                               },
+                              onSwipeDirectionChange: null,
                             ),
                           ),
                         ),
@@ -389,9 +389,9 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
   Widget _buildFlashCard(int index) {
     if (index >= _flashCards.length) return Container();
-    
+
     final card = _flashCards[index];
-    
+
     return FlipCard(
       key: index == _currentIndex ? _flipCardKey : null,
       direction: FlipDirection.HORIZONTAL,
@@ -418,7 +418,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     );
   }
 
-  Widget _buildCardSide(String text, String? pinyin, Color bgColor, Color textColor, bool isFront) {
+  Widget _buildCardSide(String text, String? pinyin, Color bgColor,
+      Color textColor, bool isFront) {
     return Container(
       decoration: BoxDecoration(
         color: bgColor,
@@ -527,9 +528,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.arrow_forward),
-            onPressed: _currentIndex < _flashCards.length - 1 ? _nextCard : null,
+            onPressed:
+                _currentIndex < _flashCards.length - 1 ? _nextCard : null,
             iconSize: 32.0,
-            color: _currentIndex < _flashCards.length - 1 ? Colors.blue : Colors.grey,
+            color: _currentIndex < _flashCards.length - 1
+                ? Colors.blue
+                : Colors.grey,
           ),
         ],
       ),
