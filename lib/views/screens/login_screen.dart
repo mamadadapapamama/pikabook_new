@@ -9,13 +9,13 @@ import '../../../widgets/loading_indicator.dart';
 class LoginScreen extends StatefulWidget {
   final InitializationService initializationService;
   final VoidCallback onLoginSuccess;
-  final VoidCallback onSkipLogin;
+  final VoidCallback? onSkipLogin;
 
   const LoginScreen({
     Key? key,
     required this.initializationService,
     required this.onLoginSuccess,
-    required this.onSkipLogin,
+    this.onSkipLogin,
   }) : super(key: key);
 
   @override
@@ -109,28 +109,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     backgroundColor: Colors.black,
                     textColor: Colors.white,
                   ),
-                  const SizedBox(height: 16),
-
-                  // 익명 로그인 버튼
-                  _buildLoginButton(
-                    text: '익명으로 로그인',
-                    icon: Icons.person_outline,
-                    onPressed: _handleAnonymousSignIn,
-                    backgroundColor: Colors.grey.shade200,
-                    textColor: Colors.black87,
-                  ),
                   const SizedBox(height: 24),
 
-                  // 로그인 건너뛰기 옵션
-                  TextButton(
-                    onPressed: () {
-                      widget.onSkipLogin();
-                    },
+                  // 로그인 안내 텍스트
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0, vertical: 8.0),
                     child: Text(
-                      '로그인 없이 계속하기',
+                      '소셜 계정으로 로그인하여 모든 기기에서 데이터를 동기화하고 백업할 수 있습니다.',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: ColorTokens.primary,
-                        fontSize: 16,
+                        fontSize: 14,
+                        color: Colors.grey[600],
                       ),
                     ),
                   ),
@@ -188,8 +178,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!Firebase.apps.isNotEmpty) {
         throw Exception('Firebase가 초기화되지 않았습니다.');
       }
-      
-      final userCredential = await widget.initializationService.signInWithGoogle();
+
+      final userCredential =
+          await widget.initializationService.signInWithGoogle();
       if (userCredential != null) {
         widget.onLoginSuccess();
       } else {
@@ -209,8 +200,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!Firebase.apps.isNotEmpty) {
         throw Exception('Firebase가 초기화되지 않았습니다.');
       }
-      
-      final userCredential = await widget.initializationService.signInWithApple();
+
+      final userCredential =
+          await widget.initializationService.signInWithApple();
       if (userCredential != null) {
         widget.onLoginSuccess();
       } else {
@@ -218,27 +210,6 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       _setError('Apple 로그인 중 오류가 발생했습니다: $e');
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  Future<void> _handleAnonymousSignIn() async {
-    _setLoading(true);
-    try {
-      // Firebase 초기화 확인
-      if (!Firebase.apps.isNotEmpty) {
-        throw Exception('Firebase가 초기화되지 않았습니다.');
-      }
-      
-      final userCredential = await widget.initializationService.signInAnonymously();
-      if (userCredential != null) {
-        widget.onLoginSuccess();
-      } else {
-        _setError('익명 로그인에 실패했습니다.');
-      }
-    } catch (e) {
-      _setError('익명 로그인 중 오류가 발생했습니다: $e');
     } finally {
       _setLoading(false);
     }

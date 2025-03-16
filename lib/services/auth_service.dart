@@ -79,30 +79,18 @@ class AuthService {
   }
 
   // Google 로그인
-  Future<UserCredential> signInWithGoogle() async {
+  Future<User?> signInWithGoogle() async {
     try {
-      // Firebase 초기화 확인
-      if (!Firebase.apps.isNotEmpty) {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-      }
-
-      // Google 로그인 시작
+      // Google 로그인 인스턴스 생성
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-
-      // 사용자가 로그인을 취소한 경우
       if (googleUser == null) {
-        throw FirebaseAuthException(
-          code: 'sign_in_canceled',
-          message: '사용자가 Google 로그인을 취소했습니다.',
-        );
+        // 사용자가 로그인을 취소한 경우
+        return null;
       }
 
       // 인증 정보 가져오기
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      
       // Firebase 인증 정보 생성
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
@@ -110,22 +98,17 @@ class AuthService {
       );
 
       // Firebase에 로그인
-      final userCredential = await _auth.signInWithCredential(credential);
-
+      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+      
       // 사용자 정보 Firestore에 저장
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'name': userCredential.user!.displayName,
-        'email': userCredential.user!.email,
-        'isAnonymous': false,
-        'profileImage': userCredential.user!.photoURL,
-        'createdAt': FieldValue.serverTimestamp(),
-        'lastLoginAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      return userCredential;
+      if (userCredential.user != null) {
+        await _saveUserToFirestore(userCredential.user!);
+      }
+      
+      return userCredential.user;
     } catch (e) {
-      debugPrint('Google 로그인 오류: $e');
-      rethrow;
+      debugPrint('Google 로그인 중 오류 발생: $e');
+      return null;
     }
   }
 
@@ -339,5 +322,16 @@ class AuthService {
     final bytes = utf8.encode(input);
     final digest = sha256.convert(bytes);
     return digest.toString();
+  }
+
+  Future<void> _saveUserToFirestore(User user) async {
+    await _firestore.collection('users').doc(user.uid).set({
+      'name': user.displayName,
+      'email': user.email,
+      'isAnonymous': false,
+      'profileImage': user.photoURL,
+      'createdAt': FieldValue.serverTimestamp(),
+      'lastLoginAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 }
