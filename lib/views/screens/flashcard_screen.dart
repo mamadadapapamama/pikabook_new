@@ -131,9 +131,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   Future<void> _speakCurrentCard() async {
     if (_flashCards.isEmpty || _currentIndex >= _flashCards.length) return;
 
-    final textToSpeak = _isFlipped
-        ? _flashCards[_currentIndex].back
-        : _flashCards[_currentIndex].front;
+    // 항상 중국어(front)만 읽도록 수정
+    final textToSpeak = _flashCards[_currentIndex].front;
 
     if (textToSpeak.isEmpty) return;
 
@@ -142,6 +141,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     });
 
     try {
+      // 항상 중국어 발음으로 설정
+      await _ttsService.setLanguage('zh-CN');
       await _ttsService.speak(textToSpeak);
     } catch (e) {
       debugPrint('TTS 실행 중 오류 발생: $e');
@@ -255,6 +256,10 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   // 카드 스와이프 처리
   bool _onSwipe(
       int? previousIndex, int? currentIndex, CardSwiperDirection direction) {
+    // 디버그 정보 출력
+    debugPrint(
+        '스와이프: 이전 인덱스=$previousIndex, 현재 인덱스=$currentIndex, 방향=$direction');
+
     if (currentIndex != null && currentIndex < _flashCards.length) {
       setState(() {
         _currentIndex = currentIndex;
@@ -501,7 +506,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  if (isFront && pinyin != null && pinyin.isNotEmpty) ...[
+                  if (pinyin != null && pinyin.isNotEmpty) ...[
                     const SizedBox(height: 16.0),
                     Text(
                       pinyin,
@@ -517,17 +522,19 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
               ),
             ),
           ),
-          Positioned(
-            top: 16.0,
-            right: 16.0,
-            child: IconButton(
-              icon: Icon(
-                _isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
-                color: textColor,
+          // TTS 버튼은 앞면(중국어)에서만 표시
+          if (isFront)
+            Positioned(
+              top: 16.0,
+              right: 16.0,
+              child: IconButton(
+                icon: Icon(
+                  _isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
+                  color: textColor,
+                ),
+                onPressed: _isSpeaking ? _stopSpeaking : _speakCurrentCard,
               ),
-              onPressed: _isSpeaking ? _stopSpeaking : _speakCurrentCard,
             ),
-          ),
           Positioned(
             bottom: 16.0,
             left: 0,
