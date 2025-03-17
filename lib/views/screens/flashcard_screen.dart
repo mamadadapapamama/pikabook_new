@@ -8,8 +8,10 @@ import '../../widgets/loading_indicator.dart';
 import '../../services/chinese_dictionary_service.dart';
 import '../widgets/flashcard_ui.dart';
 
-/// 플래시카드 화면 위젯
-/// 사용자가 생성한 플래시카드를 보여주고 관리하는 화면
+/// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
+/// 플래시카드 UI interaction 담당 (swipe, flip, tts, delete )
+/// 사전 검색 및 플래시카드 내용 추가
+///
 class FlashCardScreen extends StatefulWidget {
   final String? noteId; // 특정 노트의 플래시카드만 표시할 때 사용
 
@@ -32,6 +34,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   int _currentIndex = 0; // 현재 보고 있는 카드 인덱스
   bool _isFlipped = false; // 카드 뒤집힘 상태
   bool _isSpeaking = false; // TTS 실행 중 상태
+  String? _error; // 오류 메시지
 
   @override
   void initState() {
@@ -168,31 +171,18 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     debugPrint(
         '스와이프: 이전 인덱스=$previousIndex, 현재 인덱스=$currentIndex, 방향=$direction');
 
-    setState(() {
-      // 왼쪽으로 스와이프: 다음 카드
-      if (direction == CardSwiperDirection.left) {
-        if (_currentIndex < _flashCards.length - 1) {
-          _currentIndex++;
-        } else {
-          // 마지막 카드에서 첫 번째 카드로 순환
-          _currentIndex = 0;
-        }
-      }
-      // 오른쪽으로 스와이프: 이전 카드
-      else if (direction == CardSwiperDirection.right) {
-        if (_currentIndex > 0) {
-          _currentIndex--;
-        } else {
-          // 첫 번째 카드에서 마지막 카드로 순환
-          _currentIndex = _flashCards.length - 1;
-        }
-      }
-      // 위로 스와이프: 카드 삭제
-      else if (direction == CardSwiperDirection.top) {
-        _deleteCurrentCard();
-      }
-      _isFlipped = false;
-    });
+    // CardSwiper가 자동으로 인덱스를 업데이트하므로, 현재 인덱스를 사용
+    if (currentIndex != null) {
+      setState(() {
+        _currentIndex = currentIndex;
+        _isFlipped = false;
+      });
+    }
+
+    // 위로 스와이프: 카드 삭제
+    if (direction == CardSwiperDirection.top) {
+      _deleteCurrentCard();
+    }
 
     _updateFlashCardReviewCount();
     return true;
@@ -379,14 +369,22 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           onSwipeDirectionChange: (_, direction) {
                             debugPrint('스와이프 방향 변경됨: $direction');
                           },
-                          // 카드 3개 겹쳐서 보이도록 설정 (더 명확한 레이어 효과)
-                          numberOfCardsDisplayed: 3,
-                          backCardOffset: const Offset(0, 30), // 간격 증가
-                          scale: 0.85, // 뒤 카드 크기 감소
+                          // 카드 2개 겹쳐서 보이도록 설정
+                          numberOfCardsDisplayed: 2,
                           padding: const EdgeInsets.all(24.0),
                           isLoop: true, // 순환 활성화
                           cardBuilder: (context, index, horizontalThreshold,
                               verticalThreshold) {
+                            // 카드 스케일 계산 (현재 카드는 100%, 뒤 카드는 점점 작아짐)
+                            final int indexDiff = (index - _currentIndex).abs();
+                            final double scale = index == _currentIndex
+                                ? 1.0
+                                : 1.0 - (0.05 * indexDiff);
+
+                            // 카드 오프셋 계산 (뒤 카드는 아래로 내려감)
+                            final double yOffset =
+                                index == _currentIndex ? 0 : 20.0 * indexDiff;
+
                             return FlashCardUI.buildFlashCard(
                               card: _flashCards[index],
                               index: index,
@@ -402,6 +400,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               getNextCardInfo: _getNextCardInfo,
                               getPreviousCardInfo: _getPreviousCardInfo,
                               onWordTap: _searchWordInDictionary,
+                              scale: scale,
+                              offset: Offset(0, yOffset),
                             );
                           },
                         ),

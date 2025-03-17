@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flip_card/flip_card.dart';
 import '../../models/flash_card.dart';
 
-/// 플래시카드 UI 관련 위젯과 메서드를 제공하는 클래스
+/// 플래시카드 한 장 내의 UI와 기능
+///
 class FlashCardUI {
   /// 플래시카드 위젯 생성
   static Widget buildFlashCard({
@@ -17,22 +18,15 @@ class FlashCardUI {
     required String? Function() getNextCardInfo,
     required String? Function() getPreviousCardInfo,
     Function(String)? onWordTap,
+    double scale = 1.0,
+    Offset offset = Offset.zero,
   }) {
     final bool isCurrentCard = index == currentIndex;
-
-    // 카드 스케일 계산 (현재 카드는 100%, 뒤 카드는 점점 작아짐)
-    // 인덱스 차이의 절대값을 사용하여 순환 문제 해결
-    final int indexDiff = (index - currentIndex).abs();
-    final double scale = isCurrentCard ? 1.0 : 1.0 - (0.05 * indexDiff);
-
-    // 카드 오프셋 계산 (뒤 카드는 아래로 내려감)
-    // Y 오프셋을 더 크게 설정하여 카드가 더 아래로 내려가도록 함
-    final double yOffset = isCurrentCard ? 0 : 20.0 * indexDiff;
 
     return Transform.scale(
       scale: scale,
       child: Transform.translate(
-        offset: Offset(0, yOffset),
+        offset: offset,
         child: FlipCard(
           key: isCurrentCard ? flipCardKey : null,
           direction: FlipDirection.HORIZONTAL,
