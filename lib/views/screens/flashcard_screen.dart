@@ -170,13 +170,22 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
     setState(() {
       // 왼쪽으로 스와이프: 다음 카드
-      if (direction == CardSwiperDirection.left &&
-          _currentIndex < _flashCards.length - 1) {
-        _currentIndex++;
+      if (direction == CardSwiperDirection.left) {
+        if (_currentIndex < _flashCards.length - 1) {
+          _currentIndex++;
+        } else {
+          // 마지막 카드에서 첫 번째 카드로 순환
+          _currentIndex = 0;
+        }
       }
       // 오른쪽으로 스와이프: 이전 카드
-      else if (direction == CardSwiperDirection.right && _currentIndex > 0) {
-        _currentIndex--;
+      else if (direction == CardSwiperDirection.right) {
+        if (_currentIndex > 0) {
+          _currentIndex--;
+        } else {
+          // 첫 번째 카드에서 마지막 카드로 순환
+          _currentIndex = _flashCards.length - 1;
+        }
       }
       // 위로 스와이프: 카드 삭제
       else if (direction == CardSwiperDirection.top) {
@@ -375,7 +384,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           backCardOffset: const Offset(0, 30), // 간격 증가
                           scale: 0.85, // 뒤 카드 크기 감소
                           padding: const EdgeInsets.all(24.0),
-                          isLoop: false, // 순환 비활성화
+                          isLoop: true, // 순환 활성화
                           cardBuilder: (context, index, horizontalThreshold,
                               verticalThreshold) {
                             return FlashCardUI.buildFlashCard(
