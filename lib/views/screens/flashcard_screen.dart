@@ -33,6 +33,9 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   bool _isFlipped = false; // 카드 뒤집힘 상태
   bool _isSpeaking = false; // TTS 실행 중 상태
 
+  // 카드 스와이프 방향 추적
+  CardSwiperDirection? _lastSwipeDirection;
+
   @override
   void initState() {
     super.initState();
@@ -161,7 +164,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
-  /// 카드 스와이프 처리
+  /// 카드 스와이프 처리 - 개선된 버전
   bool _onSwipe(
       int? previousIndex, int? currentIndex, CardSwiperDirection direction) {
     if (_flashCards.isEmpty) return false;
@@ -169,23 +172,26 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     debugPrint(
         '스와이프: 이전 인덱스=$previousIndex, 현재 인덱스=$currentIndex, 방향=$direction');
 
+    // 마지막 스와이프 방향 저장
+    _lastSwipeDirection = direction;
+
+    // 현재 인덱스가 null이면 기본값 설정
+    int newIndex = currentIndex ?? 0;
+
     setState(() {
-      // 왼쪽으로 스와이프: 다음 카드
-      if (direction == CardSwiperDirection.left &&
-          _currentIndex < _flashCards.length - 1) {
-        _currentIndex++;
-      }
-      // 오른쪽으로 스와이프: 이전 카드
-      else if (direction == CardSwiperDirection.right && _currentIndex > 0) {
-        _currentIndex--;
-      }
+      // 현재 인덱스 업데이트
+      _currentIndex = newIndex;
+
       // 위로 스와이프: 카드 삭제
-      else if (direction == CardSwiperDirection.top) {
+      if (direction == CardSwiperDirection.top) {
         _deleteCurrentCard();
       }
+
+      // 카드 뒤집힘 상태 초기화
       _isFlipped = false;
     });
 
+    // 복습 횟수 업데이트
     _updateFlashCardReviewCount();
     return true;
   }
@@ -262,21 +268,23 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           controller: _cardController,
                           cardsCount: _flashCards.length,
                           onSwipe: _onSwipe,
-                          // 스와이프 방향 설정 수정
+                          // 스와이프 방향 설정
                           allowedSwipeDirection:
                               AllowedSwipeDirection.symmetric(
                             horizontal: true,
                             vertical: true,
                           ),
-                          // 스와이프 방향 변경 콜백 수정
+                          // 스와이프 방향 변경 콜백
                           onSwipeDirectionChange: (_, direction) {
                             debugPrint('스와이프 방향 변경됨: $direction');
                           },
-                          // 카드 3개 겹쳐서 보이도록 설정
+                          // 카드 3개 겹쳐서 보이도록 설정 (더 명확한 레이어 효과)
                           numberOfCardsDisplayed: 3,
-                          backCardOffset: const Offset(0, 10),
+                          backCardOffset: const Offset(0, 20), // 간격 증가
+                          scale: 0.95, // 뒤 카드 크기 감소
                           padding: const EdgeInsets.all(24.0),
-                          cardBuilder: (context, index, _, __) {
+                          cardBuilder: (context, index, horizontalThreshold,
+                              verticalThreshold) {
                             return _buildFlashCard(index);
                           },
                         ),
@@ -316,37 +324,57 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     );
   }
 
-  /// 플래시카드 위젯 생성
+  /// 플래시카드 위젯 생성 - 개선된 버전
   Widget _buildFlashCard(int index) {
     if (index >= _flashCards.length) return Container();
 
     final card = _flashCards[index];
+    final bool isCurrentCard = index == _currentIndex;
 
-    return FlipCard(
-      key: index == _currentIndex ? _flipCardKey : null,
-      direction: FlipDirection.HORIZONTAL,
-      speed: 300,
-      onFlipDone: (isFront) => setState(() => _isFlipped = !isFront),
-      front: _buildCardSide(
-        card.front,
-        card.pinyin,
-        Colors.white,
-        Colors.blue.shade800,
-        true,
-      ),
-      back: _buildCardSide(
-        card.back,
-        card.pinyin,
-        Colors.blue.shade50,
-        Colors.blue.shade800,
-        false,
+    // 카드 스케일 계산 (현재 카드는 100%, 뒤 카드는 점점 작아짐)
+    final double scale =
+        isCurrentCard ? 1.0 : 1.0 - (0.05 * (index - _currentIndex));
+
+    // 카드 오프셋 계산 (뒤 카드는 아래로 내려감)
+    final double yOffset = isCurrentCard ? 0 : 10.0 * (index - _currentIndex);
+
+    return Transform.scale(
+      scale: scale,
+      child: Transform.translate(
+        offset: Offset(0, yOffset),
+        child: FlipCard(
+          key: isCurrentCard ? _flipCardKey : null,
+          direction: FlipDirection.HORIZONTAL,
+          speed: 300,
+          onFlipDone: (isFront) {
+            if (isCurrentCard) {
+              setState(() => _isFlipped = !isFront);
+            }
+          },
+          front: _buildCardSide(
+            card.front,
+            card.pinyin,
+            Colors.white,
+            Colors.blue.shade800,
+            true,
+            isCurrentCard,
+          ),
+          back: _buildCardSide(
+            card.back,
+            card.pinyin,
+            Colors.blue.shade50,
+            Colors.blue.shade800,
+            false,
+            isCurrentCard,
+          ),
+        ),
       ),
     );
   }
 
-  /// 카드 앞/뒷면 위젯 생성
+  /// 카드 앞/뒷면 위젯 생성 - 개선된 버전
   Widget _buildCardSide(String text, String? pinyin, Color bgColor,
-      Color textColor, bool isFront) {
+      Color textColor, bool isFront, bool isCurrentCard) {
     return Container(
       decoration: BoxDecoration(
         color: bgColor,
@@ -358,6 +386,11 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             offset: const Offset(0, 4),
           ),
         ],
+        border: Border.all(
+          color:
+              isCurrentCard ? Colors.blue.withOpacity(0.3) : Colors.transparent,
+          width: 2.0,
+        ),
       ),
       child: Stack(
         children: [
@@ -392,8 +425,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
               ),
             ),
           ),
-          // TTS 버튼은 앞면(중국어)에서만 표시
-          if (isFront)
+          // TTS 버튼은 앞면(중국어)에서만 표시하고 현재 카드일 때만 활성화
+          if (isFront && isCurrentCard)
             Positioned(
               top: 16.0,
               right: 16.0,
@@ -411,12 +444,36 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             right: 0,
             child: Center(
               child: Text(
-                isFront ? '왼쪽으로 스와이프하여 다음 카드, 오른쪽으로 이전 카드' : '탭하여 단어 보기',
+                isFront
+                    ? '왼쪽으로 스와이프: 다음 카드 (${_currentIndex < _flashCards.length - 1 ? _flashCards[_currentIndex + 1].front : "없음"})\n'
+                        '오른쪽으로 스와이프: 이전 카드 (${_currentIndex > 0 ? _flashCards[_currentIndex - 1].front : "없음"})'
+                    : '탭하여 단어 보기',
                 style: TextStyle(
                   fontSize: 12.0,
                   color: textColor.withOpacity(0.5),
                 ),
                 textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+          // 카드 번호 표시
+          Positioned(
+            top: 16.0,
+            left: 16.0,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+              decoration: BoxDecoration(
+                color: textColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12.0),
+              ),
+              child: Text(
+                '${_currentIndex + 1}',
+                style: TextStyle(
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
               ),
             ),
           ),
