@@ -5,13 +5,11 @@ import '../../models/flash_card.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
-import '../../services/dictionary_service.dart';
 import '../../services/chinese_dictionary_service.dart';
 import '../widgets/flashcard_ui.dart';
 
-/// 플래시카드 화면 상태 관리 및 interaction (스와이프, 제거)
-/// 실제 삭제 메서드는 Flashcard service 에서
-
+/// 플래시카드 화면 위젯
+/// 사용자가 생성한 플래시카드를 보여주고 관리하는 화면
 class FlashCardScreen extends StatefulWidget {
   final String? noteId; // 특정 노트의 플래시카드만 표시할 때 사용
 
@@ -24,7 +22,8 @@ class FlashCardScreen extends StatefulWidget {
 class _FlashCardScreenState extends State<FlashCardScreen> {
   final FlashCardService _flashCardService = FlashCardService();
   final TtsService _ttsService = TtsService();
-  final DictionaryService _dictionaryService = DictionaryService();
+  final ChineseDictionaryService _dictionaryService =
+      ChineseDictionaryService();
   final CardSwiperController _cardController = CardSwiperController();
   final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
 
@@ -33,17 +32,13 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   int _currentIndex = 0; // 현재 보고 있는 카드 인덱스
   bool _isFlipped = false; // 카드 뒤집힘 상태
   bool _isSpeaking = false; // TTS 실행 중 상태
-  ChineseDictionaryService? _chineseDictionary; // 중국어 사전
-
-  // 카드 스와이프 방향 추적
-  CardSwiperDirection? _lastSwipeDirection;
 
   @override
   void initState() {
     super.initState();
     _loadFlashCards(); // 플래시카드 로드
     _initTts(); // TTS 초기화
-    _loadChineseDictionary(); // 중국어 사전 로드
+    _dictionaryService.loadDictionary(); // 중국어 사전 로드
   }
 
   @override
@@ -87,7 +82,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
         setState(() {
           _isLoading = false;
         });
-        // 오류 메시지를 SnackBar로 표시
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('플래시카드를 불러오는 중 오류가 발생했습니다: $e')),
         );
@@ -174,26 +168,23 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     debugPrint(
         '스와이프: 이전 인덱스=$previousIndex, 현재 인덱스=$currentIndex, 방향=$direction');
 
-    // 마지막 스와이프 방향 저장
-    _lastSwipeDirection = direction;
-
-    // 현재 인덱스가 null이면 기본값 설정
-    int newIndex = currentIndex ?? 0;
-
     setState(() {
-      // 현재 인덱스 업데이트
-      _currentIndex = newIndex;
-
+      // 왼쪽으로 스와이프: 다음 카드
+      if (direction == CardSwiperDirection.left &&
+          _currentIndex < _flashCards.length - 1) {
+        _currentIndex++;
+      }
+      // 오른쪽으로 스와이프: 이전 카드
+      else if (direction == CardSwiperDirection.right && _currentIndex > 0) {
+        _currentIndex--;
+      }
       // 위로 스와이프: 카드 삭제
-      if (direction == CardSwiperDirection.top) {
+      else if (direction == CardSwiperDirection.top) {
         _deleteCurrentCard();
       }
-
-      // 카드 뒤집힘 상태 초기화
       _isFlipped = false;
     });
 
-    // 복습 횟수 업데이트
     _updateFlashCardReviewCount();
     return true;
   }
@@ -252,21 +243,10 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     return null;
   }
 
-  /// 중국어 사전 로드
-  Future<void> _loadChineseDictionary() async {
-    try {
-      _chineseDictionary = ChineseDictionaryService();
-      await _chineseDictionary!.loadDictionary();
-      debugPrint('중국어 사전 로드 완료');
-    } catch (e) {
-      debugPrint('중국어 사전 로드 중 오류 발생: $e');
-    }
-  }
-
   /// 단어를 사전에서 검색
   void _searchWordInDictionary(String word) {
-    if (_chineseDictionary == null || !_chineseDictionary!.isLoaded) {
-      _loadChineseDictionary().then((_) {
+    if (!_dictionaryService.isLoaded) {
+      _dictionaryService.loadDictionary().then((_) {
         _performDictionarySearch(word);
       });
     } else {
@@ -276,14 +256,14 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
   /// 사전 검색 수행
   void _performDictionarySearch(String word) {
-    if (_chineseDictionary == null || !_chineseDictionary!.isLoaded) {
+    if (!_dictionaryService.isLoaded) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('사전이 로드되지 않았습니다.')),
       );
       return;
     }
 
-    final entry = _chineseDictionary!.lookup(word);
+    final entry = _dictionaryService.lookup(word);
     if (entry != null) {
       showModalBottomSheet(
         context: context,
@@ -390,11 +370,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           onSwipeDirectionChange: (_, direction) {
                             debugPrint('스와이프 방향 변경됨: $direction');
                           },
-                          // 카드 2개 겹쳐서 보이도록 설정 (더 명확한 레이어 효과)
-                          numberOfCardsDisplayed: 2,
-                          backCardOffset: const Offset(0, 20), // 간격 증가
-                          scale: 0.90, // 뒤 카드 크기 감소
+                          // 카드 3개 겹쳐서 보이도록 설정 (더 명확한 레이어 효과)
+                          numberOfCardsDisplayed: 3,
+                          backCardOffset: const Offset(0, 30), // 간격 증가
+                          scale: 0.85, // 뒤 카드 크기 감소
                           padding: const EdgeInsets.all(24.0),
+                          isLoop: false, // 순환 비활성화
                           cardBuilder: (context, index, horizontalThreshold,
                               verticalThreshold) {
                             return FlashCardUI.buildFlashCard(

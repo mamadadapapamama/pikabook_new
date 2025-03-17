@@ -21,11 +21,13 @@ class FlashCardUI {
     final bool isCurrentCard = index == currentIndex;
 
     // 카드 스케일 계산 (현재 카드는 100%, 뒤 카드는 점점 작아짐)
-    final double scale =
-        isCurrentCard ? 1.0 : 1.0 - (0.05 * (index - currentIndex));
+    // 인덱스 차이의 절대값을 사용하여 순환 문제 해결
+    final int indexDiff = (index - currentIndex).abs();
+    final double scale = isCurrentCard ? 1.0 : 1.0 - (0.05 * indexDiff);
 
     // 카드 오프셋 계산 (뒤 카드는 아래로 내려감)
-    final double yOffset = isCurrentCard ? 0 : 10.0 * (index - currentIndex);
+    // Y 오프셋을 더 크게 설정하여 카드가 더 아래로 내려가도록 함
+    final double yOffset = isCurrentCard ? 0 : 20.0 * indexDiff;
 
     return Transform.scale(
       scale: scale,
