@@ -217,16 +217,101 @@ class FlashCardService {
     }
 
     try {
+      // 삭제할 플래시카드 정보 가져오기
+      final flashCardDoc = await _flashCardsCollection.doc(flashCardId).get();
+      String? deletedWord;
+
+      if (flashCardDoc.exists) {
+        final data = flashCardDoc.data() as Map<String, dynamic>?;
+        if (data != null) {
+          deletedWord = data['front'] as String?;
+          debugPrint('삭제할 플래시카드 단어: $deletedWord');
+        }
+      }
+
       // Firestore에서 삭제
       await _flashCardsCollection.doc(flashCardId).delete();
 
       // 노트의 플래시카드 카운터 업데이트
       if (noteId != null) {
         await _updateNoteFlashCardCounter(noteId);
+
+        // 노트 문서에서 하이라이트 정보 업데이트
+        if (deletedWord != null && deletedWord.isNotEmpty) {
+          await _updateNoteHighlights(noteId, deletedWord);
+        }
       }
     } catch (e) {
       debugPrint('플래시카드 삭제 중 오류 발생: $e');
       throw Exception('플래시카드를 삭제할 수 없습니다: $e');
+    }
+  }
+
+  // 노트 문서의 하이라이트 정보 업데이트
+  Future<void> _updateNoteHighlights(String noteId, String deletedWord) async {
+    try {
+      // 노트 문서 가져오기
+      final noteDoc = await _firestore.collection('notes').doc(noteId).get();
+
+      if (!noteDoc.exists) {
+        debugPrint('노트 문서가 존재하지 않습니다: $noteId');
+        return;
+      }
+
+      final data = noteDoc.data();
+      if (data == null) {
+        debugPrint('노트 데이터가 없습니다: $noteId');
+        return;
+      }
+
+      // 페이지 정보 가져오기
+      final pageIds = data['pages'] as List<dynamic>? ?? [];
+
+      // 각 페이지의 하이라이트 정보 업데이트
+      for (final pageId in pageIds) {
+        await _updatePageHighlights(pageId.toString(), deletedWord);
+      }
+
+      debugPrint('노트 $noteId의 하이라이트 정보 업데이트 완료');
+    } catch (e) {
+      debugPrint('노트 하이라이트 정보 업데이트 중 오류 발생: $e');
+    }
+  }
+
+  // 페이지 문서의 하이라이트 정보 업데이트
+  Future<void> _updatePageHighlights(String pageId, String deletedWord) async {
+    try {
+      // 페이지 문서 가져오기
+      final pageDoc = await _firestore.collection('pages').doc(pageId).get();
+
+      if (!pageDoc.exists) {
+        debugPrint('페이지 문서가 존재하지 않습니다: $pageId');
+        return;
+      }
+
+      final data = pageDoc.data();
+      if (data == null) {
+        debugPrint('페이지 데이터가 없습니다: $pageId');
+        return;
+      }
+
+      // 하이라이트된 단어 목록 가져오기
+      final highlightedWords = data['highlightedWords'] as List<dynamic>? ?? [];
+
+      // 삭제된 단어 제거
+      final updatedHighlightedWords = highlightedWords
+          .where((word) => word.toString() != deletedWord)
+          .toList();
+
+      // 변경된 경우에만 업데이트
+      if (updatedHighlightedWords.length != highlightedWords.length) {
+        await _firestore.collection('pages').doc(pageId).update({
+          'highlightedWords': updatedHighlightedWords,
+        });
+        debugPrint('페이지 $pageId의 하이라이트 정보 업데이트 완료');
+      }
+    } catch (e) {
+      debugPrint('페이지 하이라이트 정보 업데이트 중 오류 발생: $e');
     }
   }
 }
