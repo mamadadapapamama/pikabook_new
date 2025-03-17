@@ -131,7 +131,7 @@ class TextHighlightManager {
     return filteredPositions;
   }
 
-  /// 하이라이트된 텍스트 스팬 생성 (탭 액션 추가 버전)
+  /// 하이라이트된 텍스트 스팬 생성 (텍스트 선택 가능한 버전)
   static List<TextSpan> buildHighlightedText({
     required String text,
     required Set<String> flashcardWords,
@@ -196,12 +196,22 @@ class TextHighlightManager {
         ));
       }
 
-      // 하이라이트된 단어 추가 (탭 가능)
+      // 하이라이트된 단어 추가 (텍스트 선택 가능하도록 수정)
+      // 텍스트 선택과 탭 제스처가 충돌하지 않도록 개선
       final recognizer = TapGestureRecognizer()
+        ..onTapDown = (TapDownDetails details) {
+          // 탭 다운 이벤트 발생 시 로깅만 하고 다른 동작은 하지 않음
+          if (kDebugMode) {
+            debugPrint('하이라이트된 단어 탭 다운: ${pos.word}');
+          }
+        }
         ..onTap = () {
+          // 단어 탭 시 콜백 호출
           if (kDebugMode) {
             debugPrint('하이라이트된 단어 탭됨: ${pos.word}');
           }
+          // 선택된 텍스트가 없을 때만 탭 이벤트 처리
+          // 이렇게 하면 텍스트 선택 중에는 탭 이벤트가 발생하지 않음
           onTap(pos.word);
         };
 

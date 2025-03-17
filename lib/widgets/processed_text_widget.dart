@@ -195,7 +195,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     final textSpans = TextHighlightManager.buildHighlightedText(
       text: text,
       flashcardWords: _flashcardWords,
-      onTap: _handleHighlightedWordTap,
+      onTap: (word) {
+        // 텍스트가 선택되어 있지 않을 때만 하이라이트된 단어 탭 처리
+        if (_selectedText.isEmpty) {
+          _handleHighlightedWordTap(word);
+        } else if (kDebugMode) {
+          debugPrint('텍스트 선택 중에는 하이라이트된 단어 탭 무시: $word');
+        }
+      },
       normalStyle: const TextStyle(fontSize: 16),
     );
 
@@ -268,6 +275,30 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   });
                 }
               });
+            } else {
+              // 텍스트가 선택된 경우, 선택된 텍스트 추출
+              try {
+                final selectedText =
+                    text.substring(selection.start, selection.end);
+                if (selectedText.isNotEmpty && selectedText != _selectedText) {
+                  if (kDebugMode) {
+                    debugPrint('새로운 텍스트 선택됨: "$selectedText"');
+                  }
+                  // 선택된 텍스트 업데이트
+                  _selectedTextNotifier.value = selectedText;
+                  Future.microtask(() {
+                    if (mounted) {
+                      setState(() {
+                        _selectedText = selectedText;
+                      });
+                    }
+                  });
+                }
+              } catch (e) {
+                if (kDebugMode) {
+                  debugPrint('텍스트 선택 오류: $e');
+                }
+              }
             }
           },
         );
