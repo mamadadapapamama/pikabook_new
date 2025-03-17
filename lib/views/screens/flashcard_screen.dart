@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flip_card/flip_card.dart';
-import 'package:pinyin/pinyin.dart';
 import '../../models/flash_card.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../services/chinese_dictionary_service.dart';
+import '../widgets/flashcard_ui.dart';
 
 /// 플래시카드 화면 위젯
 /// 사용자가 생성한 플래시카드를 보여주고 관리하는 화면
+
 class FlashCardScreen extends StatefulWidget {
   final String? noteId; // 특정 노트의 플래시카드만 표시할 때 사용
 
@@ -164,7 +165,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
-  /// 카드 스와이프 처리 - 개선된 버전
+  /// 카드 스와이프 처리
   bool _onSwipe(
       int? previousIndex, int? currentIndex, CardSwiperDirection direction) {
     if (_flashCards.isEmpty) return false;
@@ -234,6 +235,22 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
+  /// 다음 카드 정보 가져오기
+  String? _getNextCardInfo() {
+    if (_currentIndex < _flashCards.length - 1) {
+      return _flashCards[_currentIndex + 1].front;
+    }
+    return null;
+  }
+
+  /// 이전 카드 정보 가져오기
+  String? _getPreviousCardInfo() {
+    if (_currentIndex > 0) {
+      return _flashCards[_currentIndex - 1].front;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -278,207 +295,40 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           onSwipeDirectionChange: (_, direction) {
                             debugPrint('스와이프 방향 변경됨: $direction');
                           },
-                          // 카드 3개 겹쳐서 보이도록 설정 (더 명확한 레이어 효과)
-                          numberOfCardsDisplayed: 3,
+                          // 카드 2개 겹쳐서 보이도록 설정 (더 명확한 레이어 효과)
+                          numberOfCardsDisplayed: 2,
                           backCardOffset: const Offset(0, 20), // 간격 증가
-                          scale: 0.95, // 뒤 카드 크기 감소
+                          scale: 0.90, // 뒤 카드 크기 감소
                           padding: const EdgeInsets.all(24.0),
                           cardBuilder: (context, index, horizontalThreshold,
                               verticalThreshold) {
-                            return _buildFlashCard(index);
+                            return FlashCardUI.buildFlashCard(
+                              card: _flashCards[index],
+                              index: index,
+                              currentIndex: _currentIndex,
+                              flipCardKey:
+                                  index == _currentIndex ? _flipCardKey : null,
+                              isSpeaking: _isSpeaking,
+                              onFlip: () {
+                                setState(() => _isFlipped = !_isFlipped);
+                              },
+                              onSpeak: _speakCurrentCard,
+                              onStopSpeaking: _stopSpeaking,
+                              getNextCardInfo: _getNextCardInfo,
+                              getPreviousCardInfo: _getPreviousCardInfo,
+                            );
                           },
                         ),
                       ),
                     ),
                     // 하단 버튼 영역
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.flip),
-                            onPressed:
-                                _flashCards.isNotEmpty ? _flipCard : null,
-                            iconSize: 32.0,
-                            color: _flashCards.isNotEmpty
-                                ? Colors.blue
-                                : Colors.grey,
-                          ),
-                          const SizedBox(width: 16),
-                          IconButton(
-                            icon: const Icon(Icons.delete),
-                            onPressed: _flashCards.isNotEmpty
-                                ? _deleteCurrentCard
-                                : null,
-                            iconSize: 32.0,
-                            color: _flashCards.isNotEmpty
-                                ? Colors.red
-                                : Colors.grey,
-                          ),
-                        ],
-                      ),
+                    FlashCardUI.buildBottomControls(
+                      hasCards: _flashCards.isNotEmpty,
+                      onFlip: _flipCard,
+                      onDelete: _deleteCurrentCard,
                     ),
                   ],
                 ),
-    );
-  }
-
-  /// 플래시카드 위젯 생성 - 개선된 버전
-  Widget _buildFlashCard(int index) {
-    if (index >= _flashCards.length) return Container();
-
-    final card = _flashCards[index];
-    final bool isCurrentCard = index == _currentIndex;
-
-    // 카드 스케일 계산 (현재 카드는 100%, 뒤 카드는 점점 작아짐)
-    final double scale =
-        isCurrentCard ? 1.0 : 1.0 - (0.05 * (index - _currentIndex));
-
-    // 카드 오프셋 계산 (뒤 카드는 아래로 내려감)
-    final double yOffset = isCurrentCard ? 0 : 10.0 * (index - _currentIndex);
-
-    return Transform.scale(
-      scale: scale,
-      child: Transform.translate(
-        offset: Offset(0, yOffset),
-        child: FlipCard(
-          key: isCurrentCard ? _flipCardKey : null,
-          direction: FlipDirection.HORIZONTAL,
-          speed: 300,
-          onFlipDone: (isFront) {
-            if (isCurrentCard) {
-              setState(() => _isFlipped = !isFront);
-            }
-          },
-          front: _buildCardSide(
-            card.front,
-            card.pinyin,
-            Colors.white,
-            Colors.blue.shade800,
-            true,
-            isCurrentCard,
-          ),
-          back: _buildCardSide(
-            card.back,
-            card.pinyin,
-            Colors.blue.shade50,
-            Colors.blue.shade800,
-            false,
-            isCurrentCard,
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 카드 앞/뒷면 위젯 생성 - 개선된 버전
-  Widget _buildCardSide(String text, String? pinyin, Color bgColor,
-      Color textColor, bool isFront, bool isCurrentCard) {
-    return Container(
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8.0,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(
-          color:
-              isCurrentCard ? Colors.blue.withOpacity(0.3) : Colors.transparent,
-          width: 2.0,
-        ),
-      ),
-      child: Stack(
-        children: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    text,
-                    style: TextStyle(
-                      fontSize: 32.0,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (pinyin != null && pinyin.isNotEmpty) ...[
-                    const SizedBox(height: 16.0),
-                    Text(
-                      pinyin,
-                      style: TextStyle(
-                        fontSize: 20.0,
-                        color: textColor.withOpacity(0.7),
-                        fontStyle: FontStyle.italic,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          // TTS 버튼은 앞면(중국어)에서만 표시하고 현재 카드일 때만 활성화
-          if (isFront && isCurrentCard)
-            Positioned(
-              top: 16.0,
-              right: 16.0,
-              child: IconButton(
-                icon: Icon(
-                  _isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
-                  color: textColor,
-                ),
-                onPressed: _isSpeaking ? _stopSpeaking : _speakCurrentCard,
-              ),
-            ),
-          Positioned(
-            bottom: 16.0,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Text(
-                isFront
-                    ? '왼쪽으로 스와이프: 다음 카드 (${_currentIndex < _flashCards.length - 1 ? _flashCards[_currentIndex + 1].front : "없음"})\n'
-                        '오른쪽으로 스와이프: 이전 카드 (${_currentIndex > 0 ? _flashCards[_currentIndex - 1].front : "없음"})'
-                    : '탭하여 단어 보기',
-                style: TextStyle(
-                  fontSize: 12.0,
-                  color: textColor.withOpacity(0.5),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-          // 카드 번호 표시
-          Positioned(
-            top: 16.0,
-            left: 16.0,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-              decoration: BoxDecoration(
-                color: textColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12.0),
-              ),
-              child: Text(
-                '${_currentIndex + 1}',
-                style: TextStyle(
-                  fontSize: 14.0,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

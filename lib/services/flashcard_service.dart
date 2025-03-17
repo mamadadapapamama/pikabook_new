@@ -6,6 +6,7 @@ import '../models/flash_card.dart';
 import 'package:pinyin/pinyin.dart';
 import 'dictionary_service.dart';
 import 'chinese_dictionary_service.dart';
+import 'pinyin_creation_service.dart';
 
 /// 플래시카드 생성 및 관리 기능(CRUD)을 제공합니다
 
@@ -16,6 +17,7 @@ class FlashCardService {
   final DictionaryService _dictionaryService = DictionaryService();
   final ChineseDictionaryService _chineseDictionaryService =
       ChineseDictionaryService();
+  final PinyinCreationService _pinyinService = PinyinCreationService();
 
   // 싱글톤 패턴 구현
   static final FlashCardService _instance = FlashCardService._internal();
@@ -42,9 +44,7 @@ class FlashCardService {
 
     try {
       // 병음 생성 (제공된 경우 사용, 아니면 자동 생성)
-      final finalPinyin = pinyin ??
-          PinyinHelper.getPinyin(front,
-              separator: ' ', format: PinyinFormat.WITH_TONE_MARK);
+      final finalPinyin = pinyin ?? await _pinyinService.generatePinyin(front);
 
       // 뜻이 비어있거나 제공되지 않은 경우 사전에서 검색
       String finalBack = back;
