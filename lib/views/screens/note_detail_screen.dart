@@ -115,10 +115,33 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           if (_pages.isEmpty) {
             // 첫 로드 시에는 모든 페이지 설정
             _pages = pages.cast<page_model.Page>();
-          } else if (pages.isNotEmpty && pages.length > _pages.length) {
-            // 페이지가 추가된 경우 (백그라운드 처리 완료 등)
-            _pages = pages.cast<page_model.Page>();
-            debugPrint('페이지 수가 증가하여 전체 페이지 업데이트: ${_pages.length}개');
+            debugPrint('첫 로드: ${_pages.length}개 페이지 설정');
+          } else if (pages.isNotEmpty) {
+            // 페이지 ID를 기준으로 병합
+            final Map<String, page_model.Page> pageMap = {};
+
+            // 기존 페이지를 맵에 추가
+            for (final page in _pages) {
+              if (page.id != null) {
+                pageMap[page.id!] = page;
+              }
+            }
+
+            // 새 페이지로 맵 업데이트 (기존 페이지 덮어쓰기)
+            for (final page in pages.cast<page_model.Page>()) {
+              if (page.id != null) {
+                pageMap[page.id!] = page;
+              }
+            }
+
+            // 맵에서 페이지 목록 생성
+            final mergedPages = pageMap.values.toList();
+
+            // 페이지 번호 순으로 정렬
+            mergedPages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+            _pages = mergedPages;
+            debugPrint('페이지 병합 후 총 페이지 수: ${_pages.length}개');
           }
 
           // 페이지 번호 순으로 정렬
@@ -127,10 +150,25 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           // 이미지 파일 배열 초기화 (이미 로드된 이미지는 유지)
           if (_imageFiles.length != _pages.length) {
             final newImageFiles = List<File?>.filled(_pages.length, null);
-            // 기존 이미지 파일 복사
-            for (int i = 0; i < _imageFiles.length && i < _pages.length; i++) {
-              newImageFiles[i] = _imageFiles[i];
+
+            // 기존 이미지 파일을 페이지 ID 기준으로 복사
+            for (int i = 0; i < _pages.length; i++) {
+              final pageId = _pages[i].id;
+              if (pageId != null) {
+                // 기존 이미지 파일 배열에서 같은 ID를 가진 페이지의 이미지 찾기
+                for (int j = 0;
+                    j < _imageFiles.length && j < _pages.length;
+                    j++) {
+                  if (_imageFiles.length > j &&
+                      _pages.length > j &&
+                      _pages[j].id == pageId) {
+                    newImageFiles[i] = _imageFiles[j];
+                    break;
+                  }
+                }
+              }
             }
+
             _imageFiles = newImageFiles;
           }
 
@@ -258,22 +296,73 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       }
 
       // 페이지 서비스에서 직접 페이지 목록 가져오기
-      final pages = await _pageService.getPagesForNote(widget.noteId);
+      final newPages = await _pageService.getPagesForNote(widget.noteId);
 
-      if (mounted && pages.isNotEmpty) {
+      // 디버그 로그 추가
+      debugPrint('서버에서 가져온 페이지 수: ${newPages.length}');
+      for (int i = 0; i < newPages.length; i++) {
+        final page = newPages[i];
+        debugPrint('서버 페이지[$i]: id=${page.id}, pageNumber=${page.pageNumber}');
+      }
+
+      debugPrint('현재 로컬 페이지 수: ${_pages.length}');
+      for (int i = 0; i < _pages.length; i++) {
+        final page = _pages[i];
+        debugPrint('로컬 페이지[$i]: id=${page.id}, pageNumber=${page.pageNumber}');
+      }
+
+      if (mounted && newPages.isNotEmpty) {
         setState(() {
           // 기존 페이지 수보다 많은 경우 또는 강제 로드 시 업데이트
-          if (forceReload || pages.length > _pages.length) {
-            _pages = pages;
+          if (forceReload || newPages.length > _pages.length) {
+            // 페이지 ID를 기준으로 병합
+            final Map<String, page_model.Page> pageMap = {};
+
+            // 기존 페이지를 맵에 추가
+            for (final page in _pages) {
+              if (page.id != null) {
+                pageMap[page.id!] = page;
+              }
+            }
+
+            // 새 페이지로 맵 업데이트 (기존 페이지 덮어쓰기)
+            for (final page in newPages) {
+              if (page.id != null) {
+                pageMap[page.id!] = page;
+              }
+            }
+
+            // 맵에서 페이지 목록 생성
+            final mergedPages = pageMap.values.toList();
+
+            // 페이지 번호 순으로 정렬
+            mergedPages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+            _pages = mergedPages;
+            debugPrint('페이지 병합 후 총 페이지 수: ${_pages.length}');
+
             // 이미지 파일 배열 크기 조정 (기존 이미지 유지)
             if (_imageFiles.length != _pages.length) {
               final newImageFiles = List<File?>.filled(_pages.length, null);
-              // 기존 이미지 파일 복사
-              for (int i = 0;
-                  i < _imageFiles.length && i < _pages.length;
-                  i++) {
-                newImageFiles[i] = _imageFiles[i];
+
+              // 기존 이미지 파일을 페이지 ID 기준으로 복사
+              for (int i = 0; i < _pages.length; i++) {
+                final pageId = _pages[i].id;
+                if (pageId != null) {
+                  // 기존 이미지 파일 배열에서 같은 ID를 가진 페이지의 이미지 찾기
+                  for (int j = 0;
+                      j < _imageFiles.length && j < _pages.length;
+                      j++) {
+                    if (_pages.length > j &&
+                        _pages[j].id == pageId &&
+                        _imageFiles.length > j) {
+                      newImageFiles[i] = _imageFiles[j];
+                      break;
+                    }
+                  }
+                }
               }
+
               _imageFiles = newImageFiles;
             }
 
@@ -285,7 +374,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             debugPrint('페이지 다시 로드 완료: ${_pages.length}개');
           } else {
             debugPrint(
-                '서버에서 가져온 페이지 수(${pages.length})가 현재 페이지 수(${_pages.length})보다 적거나 같아 업데이트하지 않음');
+                '서버에서 가져온 페이지 수(${newPages.length})가 현재 페이지 수(${_pages.length})보다 적거나 같아 업데이트하지 않음');
           }
 
           _isLoading = false;
