@@ -9,7 +9,6 @@ import '../../models/flash_card.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
-import '../../services/dictionary_service.dart' hide DictionaryEntry;
 import '../../services/chinese_dictionary_service.dart';
 import '../../services/pinyin_creation_service.dart';
 
@@ -28,6 +27,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   final PinyinCreationService _pinyinService = PinyinCreationService();
   final CardSwiperController _cardController = CardSwiperController();
   final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
+  final ChineseDictionaryService _dictionaryService =
+      ChineseDictionaryService();
 
   List<FlashCard> _flashCards = [];
   bool _isLoading = true;
@@ -41,9 +42,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     super.initState();
     _loadFlashCards();
     _initTts();
-
-    // 중국어 사전 로드
-    _loadChineseDictionary();
+    _dictionaryService.loadDictionary();
   }
 
   @override
@@ -254,19 +253,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
-  // 중국어 사전 로드
-  Future<void> _loadChineseDictionary() async {
-    final dictionaryService = ChineseDictionaryService();
-    await dictionaryService.loadDictionary();
-  }
-
-  // 중국어 사전에서 단어 정보 가져오기 (중복 코드 제거를 위한 메서드 추출)
+  // 중국어 사전에서 단어 정보 가져오기
   DictionaryEntry? _getDictionaryEntry(String word) {
-    final dictionaryService = ChineseDictionaryService();
-    return dictionaryService.lookup(word);
+    return _dictionaryService.lookup(word);
   }
 
-  // 핑인 업데이트 메서드 추가
+  // 핑인 업데이트 메서드
   Future<void> _updatePinyin() async {
     if (_flashCards.isEmpty || _currentIndex >= _flashCards.length) return;
 
@@ -296,13 +288,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
         _flashCards[_currentIndex] = updatedCard;
         _isLoading = false;
       });
-
-      // 성공 메시지 표시
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('핑인이 업데이트되었습니다.')),
-        );
-      }
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -430,7 +415,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                             ),
                           ),
                         ),
-                        // 핑인 업데이트 버튼만 남기고 하단 바 제거
+                        // 하단 버튼 영역 간소화
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 16.0),
                           child: Row(
@@ -443,18 +428,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                                 iconSize: 32.0,
                                 color: _flashCards.isNotEmpty
                                     ? Colors.blue
-                                    : Colors.grey,
-                              ),
-                              const SizedBox(width: 16),
-                              IconButton(
-                                icon: const Icon(Icons.refresh),
-                                onPressed: _flashCards.isNotEmpty
-                                    ? _updatePinyin
-                                    : null,
-                                iconSize: 32.0,
-                                tooltip: '핑인 업데이트',
-                                color: _flashCards.isNotEmpty
-                                    ? Colors.green
                                     : Colors.grey,
                               ),
                               const SizedBox(width: 16),
@@ -499,7 +472,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       ),
       back: _buildCardSide(
         card.back,
-        null,
+        card.pinyin,
         Colors.blue.shade50,
         Colors.blue.shade800,
         false,
