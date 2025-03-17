@@ -666,6 +666,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           debugPrint(
               '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
         });
+
+        // 노트 정보가 변경되었으므로 캐시도 무효화
+        await _cacheService.removeCachedNote(widget.noteId);
       } else if (result == true) {
         // 이전 방식과의 호환성을 위해 boolean 결과도 처리
         // 캐시 무효화

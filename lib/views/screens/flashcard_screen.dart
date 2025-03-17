@@ -213,6 +213,9 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       await _flashCardService.deleteFlashCard(flashCardId, noteId: noteId);
 
       if (mounted) {
+        // 삭제 전 플래시카드 개수 확인
+        final int cardCountBeforeDelete = _flashCards.length;
+
         setState(() {
           _flashCards.removeAt(_currentIndex);
           if (_currentIndex >= _flashCards.length && _flashCards.isNotEmpty) {
@@ -220,15 +223,17 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           }
         });
 
-        // 플래시카드가 모두 삭제된 경우에도 화면에 남아있음
-        if (_flashCards.isEmpty) {
-          setState(() {});
-        }
-
         // 노트 디테일 화면에 변경 사항을 알리기 위해 결과 값 설정
         if (widget.noteId != null) {
-          // 노트 정보 업데이트 (앱바 카운터 업데이트를 위해)
-          _updateNoteInfo(widget.noteId!);
+          // 플래시카드가 모두 삭제된 경우 노트 디테일 화면으로 돌아감
+          if (_flashCards.isEmpty) {
+            // 노트 정보 업데이트 후 노트 디테일 화면으로 돌아감
+            _updateNoteInfoAndNavigateBack(widget.noteId!);
+          } else if (cardCountBeforeDelete > 1) {
+            // 플래시카드가 2개 이상이었고 아직 남아있는 경우 현재 화면에 머무름
+            // 노트 정보만 업데이트 (앱바 카운터 업데이트를 위해)
+            _updateNoteInfoWithoutNavigating(widget.noteId!);
+          }
         }
 
         // 삭제 완료 메시지 표시
@@ -245,8 +250,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
-  /// 노트 정보 업데이트 (앱바 카운터 업데이트를 위해)
-  Future<void> _updateNoteInfo(String noteId) async {
+  /// 노트 정보 업데이트 후 노트 디테일 화면으로 돌아감
+  Future<void> _updateNoteInfoAndNavigateBack(String noteId) async {
     try {
       // Firestore에서 직접 노트 가져오기
       final noteDoc = await FirebaseFirestore.instance
@@ -260,6 +265,23 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
         // 결과 값 설정 (노트 디테일 화면으로 돌아갈 때 사용)
         Navigator.of(context).pop(updatedNote);
+      }
+    } catch (e) {
+      debugPrint('노트 정보 업데이트 중 오류 발생: $e');
+    }
+  }
+
+  /// 노트 정보 업데이트 (화면 전환 없음)
+  Future<void> _updateNoteInfoWithoutNavigating(String noteId) async {
+    try {
+      // Firestore에서 직접 노트 가져오기
+      final noteDoc = await FirebaseFirestore.instance
+          .collection('notes')
+          .doc(noteId)
+          .get();
+
+      if (noteDoc.exists) {
+        debugPrint('노트 정보 업데이트 완료 (화면 전환 없음)');
       }
     } catch (e) {
       debugPrint('노트 정보 업데이트 중 오류 발생: $e');
