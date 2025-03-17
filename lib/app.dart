@@ -25,12 +25,30 @@ class _AppState extends State<App> {
   bool _isOnboardingCompleted = false;
   String? _error;
   final UserPreferencesService _preferencesService = UserPreferencesService();
+  bool _isCheckingInitialization = false;
 
   @override
   void initState() {
     super.initState();
-    _checkInitializationStatus();
-    _checkOnboardingStatus();
+    // 초기화 상태 확인은 비동기로 시작하고 UI는 즉시 렌더링
+    _startInitializationCheck();
+  }
+
+  // 초기화 상태 확인 시작 (비동기)
+  void _startInitializationCheck() {
+    if (_isCheckingInitialization) return;
+    _isCheckingInitialization = true;
+
+    // 온보딩 상태와 초기화 상태를 병렬로 확인
+    Future.wait([
+      _checkOnboardingStatus(),
+      _checkInitializationStatus(),
+    ]).then((_) {
+      _isCheckingInitialization = false;
+    }).catchError((e) {
+      debugPrint('초기화 상태 확인 중 오류 발생: $e');
+      _isCheckingInitialization = false;
+    });
   }
 
   Future<void> _checkOnboardingStatus() async {
