@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flip_card/flip_card.dart';
-import 'package:pinyin/pinyin.dart';
 import '../../models/flash_card.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../services/chinese_dictionary_service.dart';
-import '../../services/pinyin_creation_service.dart';
 
 /// 플래시카드 화면 위젯
 /// 사용자가 생성한 플래시카드를 보여주고 관리하는 화면
@@ -24,7 +21,6 @@ class FlashCardScreen extends StatefulWidget {
 class _FlashCardScreenState extends State<FlashCardScreen> {
   final FlashCardService _flashCardService = FlashCardService();
   final TtsService _ttsService = TtsService();
-  final PinyinCreationService _pinyinService = PinyinCreationService();
   final ChineseDictionaryService _dictionaryService =
       ChineseDictionaryService();
   final CardSwiperController _cardController = CardSwiperController();
@@ -32,10 +28,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
   List<FlashCard> _flashCards = []; // 플래시카드 목록
   bool _isLoading = true; // 로딩 상태
-  String? _error; // 오류 메시지
   int _currentIndex = 0; // 현재 보고 있는 카드 인덱스
-  bool _isFlipped = false; // 카드 뒤집힘 상태
-  bool _isSpeaking = false; // TTS 실행 중 상태
 
   @override
   void initState() {
@@ -75,7 +68,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
         setState(() {
           _isLoading = false;
           _currentIndex = 0;
-          _isFlipped = false;
         });
 
         // 플래시카드가 있으면 첫 번째 카드의 복습 횟수 업데이트
@@ -84,9 +76,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = '플래시카드를 불러오는 중 오류가 발생했습니다: $e';
           _isLoading = false;
         });
+        // 오류 메시지를 SnackBar로 표시
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('플래시카드를 불러오는 중 오류가 발생했습니다: $e')),
+        );
       }
     }
   }
@@ -107,12 +102,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     } catch (e) {
       debugPrint('플래시카드 복습 횟수 업데이트 중 오류 발생: $e');
     }
-  }
-
-  /// 카드 뒤집기
-  void _flipCard() {
-    _flipCardKey.currentState?.toggleCard();
-    setState(() => _isFlipped = !_isFlipped);
   }
 
   /// 카드 스와이프 처리
@@ -137,7 +126,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       else if (direction == CardSwiperDirection.top) {
         _deleteCurrentCard();
       }
-      _isFlipped = false;
     });
 
     _updateFlashCardReviewCount();
@@ -230,7 +218,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       key: index == _currentIndex ? _flipCardKey : null,
       direction: FlipDirection.HORIZONTAL,
       speed: 300,
-      onFlipDone: (isFront) => setState(() => _isFlipped = !isFront),
+      onFlipDone: (_) {},
       front: _buildCardSide(card.front, Colors.white),
       back: _buildCardSide(card.back, Colors.blue.shade50),
     );
