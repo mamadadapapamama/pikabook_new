@@ -6,7 +6,7 @@ import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../services/chinese_dictionary_service.dart';
-import '../widgets/flashcard_ui.dart';
+import '../../widgets/flashcard_ui.dart';
 
 /// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
 /// 플래시카드 UI interaction 담당 (swipe, flip, tts, delete )
@@ -202,17 +202,17 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       if (mounted) {
         setState(() {
           _flashCards.removeAt(_currentIndex);
-          if (_currentIndex >= _flashCards.length) {
+          if (_currentIndex >= _flashCards.length && _flashCards.isNotEmpty) {
             _currentIndex = _flashCards.length - 1;
           }
         });
 
+        // 플래시카드가 모두 삭제된 경우에도 화면에 남아있음
         if (_flashCards.isEmpty) {
           setState(() {});
         }
 
-        // 노트 페이지로 돌아갈 때 변경 사항을 알리기 위해 결과 설정
-        Navigator.of(context).pop(true);
+        // 삭제 완료 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('플래시카드가 삭제되었습니다.')),
         );
@@ -409,10 +409,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                     ),
                     // 하단 버튼 영역
                     FlashCardUI.buildBottomControls(
-                      hasCards: _flashCards.isNotEmpty,
-                      onFlip: _flipCard,
-                      onDelete: _deleteCurrentCard,
-                    ),
+                        hasCards: _flashCards.isNotEmpty,
+                        onDelete: _deleteCurrentCard)
                   ],
                 ),
     );
