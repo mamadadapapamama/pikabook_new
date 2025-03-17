@@ -4,11 +4,11 @@ import '../models/page.dart' as page_model;
 import '../models/processed_text.dart';
 import '../models/text_processing_mode.dart';
 import '../models/flash_card.dart';
+import '../models/dictionary_entry.dart';
 import '../utils/text_display_mode.dart';
 import 'text_section_widget.dart';
 import 'processed_text_widget.dart';
 import '../services/page_content_service.dart';
-import '../services/dictionary_service.dart';
 import 'dictionary_result_widget.dart';
 import 'page_image_widget.dart';
 import 'text_display_toggle_widget.dart';
@@ -248,13 +248,11 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
     // 이미 플래시카드에 있는 단어인지 확인
     FlashCard? existingCard;
-    bool isExistingFlashcard = false;
 
     if (widget.flashCards != null) {
       for (final card in widget.flashCards!) {
         if (card.front == word) {
           existingCard = card;
-          isExistingFlashcard = true;
           debugPrint('플래시카드에 이미 있는 단어: $word');
           break;
         }

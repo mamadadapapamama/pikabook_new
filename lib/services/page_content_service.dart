@@ -4,6 +4,7 @@ import '../models/page.dart' as page_model;
 import '../models/processed_text.dart';
 import '../models/text_processing_mode.dart';
 import '../models/flash_card.dart';
+import '../models/dictionary_entry.dart';
 import '../services/dictionary_service.dart';
 import '../services/tts_service.dart';
 import '../services/enhanced_ocr_service.dart';
@@ -11,6 +12,8 @@ import '../services/page_service.dart';
 
 /// PageContentService는 페이지 콘텐츠 처리와 관련된 비즈니스 로직을 담당합니다.
 /// PageContentWidget에서 분리된 로직을 포함합니다.
+///
+///
 class PageContentService {
   // 싱글톤 패턴 구현
   static final PageContentService _instance = PageContentService._internal();

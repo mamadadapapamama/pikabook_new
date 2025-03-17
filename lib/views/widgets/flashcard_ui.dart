@@ -16,6 +16,7 @@ class FlashCardUI {
     required Function() onStopSpeaking,
     required String? Function() getNextCardInfo,
     required String? Function() getPreviousCardInfo,
+    Function(String)? onWordTap,
   }) {
     final bool isCurrentCard = index == currentIndex;
 
@@ -51,6 +52,7 @@ class FlashCardUI {
             onStopSpeaking: onStopSpeaking,
             getNextCardInfo: getNextCardInfo,
             getPreviousCardInfo: getPreviousCardInfo,
+            onWordTap: onWordTap,
           ),
           back: buildCardSide(
             card: card,
@@ -64,6 +66,7 @@ class FlashCardUI {
             onStopSpeaking: onStopSpeaking,
             getNextCardInfo: getNextCardInfo,
             getPreviousCardInfo: getPreviousCardInfo,
+            onWordTap: onWordTap,
           ),
         ),
       ),
@@ -83,6 +86,7 @@ class FlashCardUI {
     required Function() onStopSpeaking,
     required String? Function() getNextCardInfo,
     required String? Function() getPreviousCardInfo,
+    Function(String)? onWordTap,
   }) {
     // 표시할 텍스트와 핀인 결정
     final String displayText = isFront ? card.front : card.back;
@@ -99,7 +103,12 @@ class FlashCardUI {
       child: Stack(
         children: [
           // 카드 내용 (중앙)
-          buildCardContent(displayText, displayPinyin, textColor),
+          buildCardContent(
+            displayText,
+            displayPinyin,
+            textColor,
+            onWordTap: onWordTap,
+          ),
 
           // TTS 버튼 (앞면 & 현재 카드만)
           if (isFront && isCurrentCard)
@@ -136,22 +145,35 @@ class FlashCardUI {
   }
 
   /// 카드 내용 (텍스트, 핀인) 생성
-  static Widget buildCardContent(String text, String? pinyin, Color textColor) {
+  static Widget buildCardContent(
+    String text,
+    String? pinyin,
+    Color textColor, {
+    Function(String)? onWordTap,
+  }) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 단어/의미 텍스트
-            Text(
-              text,
-              style: TextStyle(
-                fontSize: 32.0,
-                fontWeight: FontWeight.bold,
-                color: textColor,
+            // 단어/의미 텍스트 (탭 가능)
+            GestureDetector(
+              onTap: onWordTap != null ? () => onWordTap(text) : null,
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 32.0,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                  decoration:
+                      onWordTap != null ? TextDecoration.underline : null,
+                  decorationStyle: TextDecorationStyle.dotted,
+                  decorationColor:
+                      onWordTap != null ? textColor.withOpacity(0.5) : null,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
             ),
             // 핀인 표시 (있는 경우)
             if (pinyin != null && pinyin.isNotEmpty) ...[
@@ -161,6 +183,19 @@ class FlashCardUI {
                 style: TextStyle(
                   fontSize: 20.0,
                   color: textColor.withOpacity(0.7),
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            // 단어 탭 힌트 (onWordTap이 제공된 경우)
+            if (onWordTap != null) ...[
+              const SizedBox(height: 8.0),
+              Text(
+                '단어를 탭하여 사전에서 검색',
+                style: TextStyle(
+                  fontSize: 12.0,
+                  color: textColor.withOpacity(0.5),
                   fontStyle: FontStyle.italic,
                 ),
                 textAlign: TextAlign.center,

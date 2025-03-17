@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../services/dictionary_service.dart';
 import '../services/page_content_service.dart';
+import '../models/dictionary_entry.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
 

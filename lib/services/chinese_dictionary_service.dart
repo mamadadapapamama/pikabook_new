@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../models/dictionary_entry.dart';
 
-/// 내부 중국어 사전 데이터를 로드 관리하는 서비스 
+/// 내부 중국어 사전 데이터를 로드 관리하는 서비스
 
 class ChineseDictionaryService {
   static final ChineseDictionaryService _instance =
@@ -83,17 +84,16 @@ class ChineseDictionaryService {
 
   // 사전이 로드되었는지 확인
   bool get isLoaded => _isLoaded;
-}
 
-// 사전 항목 클래스
-class DictionaryEntry {
-  final String word;
-  final String pinyin;
-  final String meaning;
+  // 사전에 단어 추가
+  void addEntry(DictionaryEntry entry) {
+    _entries[entry.word] = entry;
+    if (!_words.contains(entry.word)) {
+      _words.add(entry.word);
+    }
+    debugPrint('중국어 사전에 단어 추가됨: ${entry.word}');
+  }
 
-  DictionaryEntry({
-    required this.word,
-    required this.pinyin,
-    required this.meaning,
-  });
+  // 사전 항목 가져오기
+  Map<String, DictionaryEntry> get entries => _entries;
 }

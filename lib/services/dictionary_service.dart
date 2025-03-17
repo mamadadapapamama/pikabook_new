@@ -4,27 +4,12 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:io' show Platform;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../models/dictionary_entry.dart';
+import 'chinese_dictionary_service.dart';
 
 /// 외부 사전 서비스 (e.g papago, google translate) 를 관리하는 서비스
 /// 단어 검색 결과 캐싱
 /// 플래시카드 연동을 위한 단어 정보 제공
-
-
-class DictionaryEntry {
-  final String word;
-  final String pinyin;
-  final String meaning;
-  final List<String> examples;
-  final String? source; // 사전 출처 (JSON, 시스템 사전, 외부 사전 등)
-
-  DictionaryEntry({
-    required this.word,
-    required this.pinyin,
-    required this.meaning,
-    this.examples = const [],
-    this.source,
-  });
-}
 
 class DictionaryService {
   // 싱글톤 패턴 구현
@@ -33,11 +18,16 @@ class DictionaryService {
   DictionaryService._internal() {
     // 초기화 시 API 키 로드
     loadApiKeys();
+    // 중국어 사전 서비스 인스턴스 가져오기
+    _chineseDictionaryService = ChineseDictionaryService();
   }
 
   // API 키 저장 변수
   String? _papagoClientId;
   String? _papagoClientSecret;
+
+  // 중국어 사전 서비스 참조
+  late final ChineseDictionaryService _chineseDictionaryService;
 
   // 검색 결과 캐시 (메모리 캐시)
   final Map<String, DictionaryEntry> _searchResultCache = {};
@@ -147,6 +137,14 @@ class DictionaryService {
   // 단어 검색 - 단계별 폴백 구현
   Future<DictionaryEntry?> lookupWordWithFallback(String word) async {
     try {
+      // 0. 먼저 내부 중국어 사전 서비스에서 검색
+      await _chineseDictionaryService.loadDictionary();
+      final chineseDictResult = _chineseDictionaryService.lookup(word);
+      if (chineseDictResult != null) {
+        debugPrint('내부 중국어 사전에서 단어 찾음: $word');
+        return chineseDictResult;
+      }
+
       // API 키가 로드되지 않았으면 로드
       if (_papagoClientId == null || _papagoClientSecret == null) {
         await loadApiKeys();
@@ -167,6 +165,8 @@ class DictionaryService {
       // 3. Papago API 사용
       final papagoResult = await _lookupWithPapagoApi(word);
       if (papagoResult != null) {
+        // 내부 중국어 사전에도 추가
+        _chineseDictionaryService.addEntry(papagoResult);
         return papagoResult;
       }
 
@@ -494,6 +494,9 @@ class DictionaryService {
       if (papagoResult != null) {
         // 검색 결과를 사전에 추가
         _addToDictionary(papagoResult);
+
+        // 내부 중국어 사전에도 추가
+        _chineseDictionaryService.addEntry(papagoResult);
 
         // 캐시에 결과 저장
         _searchResultCache[cacheKey] = papagoResult;

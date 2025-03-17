@@ -5,11 +5,12 @@ import '../../models/flash_card.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
+import '../../services/dictionary_service.dart';
 import '../../services/chinese_dictionary_service.dart';
 import '../widgets/flashcard_ui.dart';
 
-/// 플래시카드 화면 위젯
-/// 사용자가 생성한 플래시카드를 보여주고 관리하는 화면
+/// 플래시카드 화면 상태 관리 및 interaction (스와이프, 제거)
+/// 실제 삭제 메서드는 Flashcard service 에서
 
 class FlashCardScreen extends StatefulWidget {
   final String? noteId; // 특정 노트의 플래시카드만 표시할 때 사용
@@ -23,8 +24,7 @@ class FlashCardScreen extends StatefulWidget {
 class _FlashCardScreenState extends State<FlashCardScreen> {
   final FlashCardService _flashCardService = FlashCardService();
   final TtsService _ttsService = TtsService();
-  final ChineseDictionaryService _dictionaryService =
-      ChineseDictionaryService();
+  final DictionaryService _dictionaryService = DictionaryService();
   final CardSwiperController _cardController = CardSwiperController();
   final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
 
@@ -33,6 +33,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   int _currentIndex = 0; // 현재 보고 있는 카드 인덱스
   bool _isFlipped = false; // 카드 뒤집힘 상태
   bool _isSpeaking = false; // TTS 실행 중 상태
+  ChineseDictionaryService? _chineseDictionary; // 중국어 사전
 
   // 카드 스와이프 방향 추적
   CardSwiperDirection? _lastSwipeDirection;
@@ -42,7 +43,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     super.initState();
     _loadFlashCards(); // 플래시카드 로드
     _initTts(); // TTS 초기화
-    _dictionaryService.loadDictionary(); // 중국어 사전 로드
+    _loadChineseDictionary(); // 중국어 사전 로드
   }
 
   @override
@@ -251,6 +252,100 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     return null;
   }
 
+  /// 중국어 사전 로드
+  Future<void> _loadChineseDictionary() async {
+    try {
+      _chineseDictionary = ChineseDictionaryService();
+      await _chineseDictionary!.loadDictionary();
+      debugPrint('중국어 사전 로드 완료');
+    } catch (e) {
+      debugPrint('중국어 사전 로드 중 오류 발생: $e');
+    }
+  }
+
+  /// 단어를 사전에서 검색
+  void _searchWordInDictionary(String word) {
+    if (_chineseDictionary == null || !_chineseDictionary!.isLoaded) {
+      _loadChineseDictionary().then((_) {
+        _performDictionarySearch(word);
+      });
+    } else {
+      _performDictionarySearch(word);
+    }
+  }
+
+  /// 사전 검색 수행
+  void _performDictionarySearch(String word) {
+    if (_chineseDictionary == null || !_chineseDictionary!.isLoaded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사전이 로드되지 않았습니다.')),
+      );
+      return;
+    }
+
+    final entry = _chineseDictionary!.lookup(word);
+    if (entry != null) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) {
+          return DraggableScrollableSheet(
+            initialChildSize: 0.4,
+            minChildSize: 0.3,
+            maxChildSize: 0.7,
+            expand: false,
+            builder: (context, scrollController) {
+              return Container(
+                padding: const EdgeInsets.all(16.0),
+                child: ListView(
+                  controller: scrollController,
+                  children: [
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 8.0),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              entry.word,
+                              style: const TextStyle(
+                                fontSize: 24.0,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4.0),
+                            Text(
+                              entry.pinyin,
+                              style: const TextStyle(
+                                fontSize: 18.0,
+                                fontStyle: FontStyle.italic,
+                                color: Colors.blue,
+                              ),
+                            ),
+                            const SizedBox(height: 8.0),
+                            Text(
+                              entry.meaning,
+                              style: const TextStyle(fontSize: 16.0),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('\'$word\'에 대한 검색 결과가 없습니다.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -316,6 +411,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               onStopSpeaking: _stopSpeaking,
                               getNextCardInfo: _getNextCardInfo,
                               getPreviousCardInfo: _getPreviousCardInfo,
+                              onWordTap: _searchWordInDictionary,
                             );
                           },
                         ),
