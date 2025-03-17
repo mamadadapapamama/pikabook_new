@@ -31,10 +31,13 @@ class UnifiedCacheService {
       debugPrint('UnifiedCacheService 초기화 중...');
       _isInitialized = true;
 
-      // 캐시 정리는 별도 Future로 실행
-      Future.delayed(Duration(seconds: 5), () {
+      // 캐시 정리는 별도 Future로 실행하여 앱 시작 시간에 영향을 주지 않도록 함
+      Future.delayed(const Duration(seconds: 10), () {
         _cleanupExpiredLocalCache();
       });
+
+      // 주기적인 캐시 정리 설정
+      _setupPeriodicCacheCleanup();
     } catch (e) {
       debugPrint('캐시 서비스 초기화 중 오류 발생: $e');
     }
@@ -124,6 +127,18 @@ class UnifiedCacheService {
     } catch (e) {
       debugPrint('만료된 로컬 캐시 정리 중 오류 발생: $e');
     }
+  }
+
+  // 주기적인 캐시 정리 설정
+  void _setupPeriodicCacheCleanup() {
+    // 30분마다 메모리 캐시 정리
+    Future.delayed(const Duration(minutes: 30), () {
+      if (_isInitialized) {
+        debugPrint('주기적인 캐시 정리 실행');
+        _clearMemoryCache();
+        _setupPeriodicCacheCleanup(); // 재귀적으로 다음 정리 예약
+      }
+    });
   }
 
   // 노트 캐시 (노트 ID -> 노트 객체)
@@ -772,6 +787,100 @@ class UnifiedCacheService {
       debugPrint('페이지 ID=$pageId의 처리된 텍스트 캐시 삭제 완료');
     } catch (e) {
       debugPrint('처리된 텍스트 캐시 삭제 중 오류 발생: $e');
+    }
+  }
+
+  // 메모리 캐시 정리
+  void _clearMemoryCache({bool aggressive = false}) {
+    int clearedItems = 0;
+
+    // 공격적 정리 모드인 경우 더 많은 항목 제거
+    final int maxNoteKeep = aggressive ? 10 : (_maxNoteItems ~/ 2);
+    final int maxPageKeep = aggressive ? 30 : (_maxPageItems ~/ 2);
+    final int maxTranslationKeep =
+        aggressive ? 50 : (_maxTranslationItems ~/ 2);
+
+    // 노트 캐시 정리
+    if (_noteCache.length > maxNoteKeep) {
+      debugPrint('노트 캐시 정리 시작');
+
+      // 노트 ID와 마지막 접근 시간으로 정렬
+      final entries = <MapEntry<String, DateTime>>[];
+      for (final key in _noteCache.keys) {
+        final timestamp = _cacheTimestamps['note_$key'] ?? DateTime.now();
+        entries.add(MapEntry(key, timestamp));
+      }
+
+      // 가장 오래된 항목부터 정렬
+      entries.sort((a, b) => a.value.compareTo(b.value));
+
+      // 오래된 항목부터 제거
+      final itemsToRemove = _noteCache.length - maxNoteKeep;
+      for (int i = 0; i < itemsToRemove; i++) {
+        if (i < entries.length) {
+          final key = entries[i].key;
+          _noteCache.remove(key);
+          _cacheTimestamps.remove('note_$key');
+          clearedItems++;
+        }
+      }
+    }
+
+    // 페이지 캐시 정리
+    if (_pageCache.length > maxPageKeep) {
+      debugPrint('페이지 캐시 정리 시작');
+
+      // 페이지 ID와 마지막 접근 시간으로 정렬
+      final entries = <MapEntry<String, DateTime>>[];
+      for (final key in _pageCache.keys) {
+        final timestamp = _cacheTimestamps['page_$key'] ?? DateTime.now();
+        entries.add(MapEntry(key, timestamp));
+      }
+
+      // 가장 오래된 항목부터 정렬
+      entries.sort((a, b) => a.value.compareTo(b.value));
+
+      // 오래된 항목부터 제거
+      final itemsToRemove = _pageCache.length - maxPageKeep;
+      for (int i = 0; i < itemsToRemove; i++) {
+        if (i < entries.length) {
+          final key = entries[i].key;
+          _pageCache.remove(key);
+          _cacheTimestamps.remove('page_$key');
+          clearedItems++;
+        }
+      }
+    }
+
+    // 번역 캐시 정리
+    if (_translationCache.length > maxTranslationKeep) {
+      debugPrint('번역 캐시 정리 시작');
+
+      // 번역 키와 마지막 접근 시간으로 정렬
+      final entries = <MapEntry<String, DateTime>>[];
+      for (final key in _translationCache.keys) {
+        final timestamp =
+            _cacheTimestamps['translation_$key'] ?? DateTime.now();
+        entries.add(MapEntry(key, timestamp));
+      }
+
+      // 가장 오래된 항목부터 정렬
+      entries.sort((a, b) => a.value.compareTo(b.value));
+
+      // 오래된 항목부터 제거
+      final itemsToRemove = _translationCache.length - maxTranslationKeep;
+      for (int i = 0; i < itemsToRemove; i++) {
+        if (i < entries.length) {
+          final key = entries[i].key;
+          _translationCache.remove(key);
+          _cacheTimestamps.remove('translation_$key');
+          clearedItems++;
+        }
+      }
+    }
+
+    if (clearedItems > 0) {
+      debugPrint('메모리 캐시 정리 완료: 총 $clearedItems개 항목 제거');
     }
   }
 }

@@ -27,6 +27,8 @@ class ChineseSegmenterService {
   static bool isSegmentationEnabled = false; // MVP에서는 비활성화
 
   bool _isInitialized = false;
+  bool _isInitializing = false;
+  Completer<void>? _initializationCompleter;
 
   // 사전 업데이트 감지 시 호출되는 콜백
   void _onDictionaryUpdated() {
@@ -34,29 +36,51 @@ class ChineseSegmenterService {
     // 필요한 경우 캐시 초기화 등의 작업 수행
   }
 
+  // 지연 로딩 방식으로 초기화 개선
   Future<void> initialize() async {
-    if (!_isInitialized) {
+    // 이미 초기화되었으면 바로 반환
+    if (_isInitialized) return;
+
+    // 초기화 중이면 완료될 때까지 대기
+    if (_isInitializing) {
+      return _initializationCompleter!.future;
+    }
+
+    // 초기화 시작
+    _isInitializing = true;
+    _initializationCompleter = Completer<void>();
+
+    try {
       debugPrint('ChineseSegmenterService 초기화 시작...');
-      await _dictionaryService.loadDictionary();
-      debugPrint('ChineseSegmenterService 초기화 완료: 사전 로드됨');
+
+      // 사전 로드 (필요한 경우에만)
+      if (isSegmentationEnabled) {
+        await _dictionaryService.loadDictionary();
+        debugPrint('ChineseSegmenterService 초기화 완료: 사전 로드됨');
+      } else {
+        debugPrint('ChineseSegmenterService 초기화 완료: 세그멘테이션 비활성화로 사전 로드 생략');
+      }
+
       _isInitialized = true;
+      _isInitializing = false;
+      _initializationCompleter!.complete();
+    } catch (e) {
+      debugPrint('ChineseSegmenterService 초기화 실패: $e');
+      _isInitializing = false;
+      _initializationCompleter!.completeError(e);
+      throw e;
     }
   }
 
   // 중국어 텍스트 분절 및 사전 정보 추가
   Future<List<SegmentedWord>> processText(String text) async {
-    await initialize();
-
-    // 세그멘테이션이 비활성화된 경우 전체 텍스트를 하나의 세그먼트로 반환
+    // 세그멘테이션이 비활성화된 경우 초기화 없이 바로 처리
     if (!isSegmentationEnabled) {
-      return [
-        SegmentedWord(
-          text: text,
-          meaning: '', // 의미는 비워둠
-          pinyin: '', // 병음도 비워둠
-        )
-      ];
+      return [SegmentedWord(text: text, pinyin: '', meaning: '')];
     }
+
+    // 필요한 경우에만 초기화
+    await initialize();
 
     // 각 단어에 사전 정보 추가
     List<SegmentedWord> result = [];
