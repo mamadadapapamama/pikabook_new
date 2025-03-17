@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/flash_card.dart';
+import '../models/dictionary_entry.dart';
 import 'package:pinyin/pinyin.dart';
 import 'dictionary_service.dart';
 import 'chinese_dictionary_service.dart';
@@ -44,31 +45,27 @@ class FlashCardService {
 
     try {
       // 병음 생성 (제공된 경우 사용, 아니면 자동 생성)
-      final finalPinyin = pinyin ?? await _pinyinService.generatePinyin(front);
+      String pinyinValue = pinyin ?? await _pinyinService.generatePinyin(front);
 
       // 뜻이 비어있거나 제공되지 않은 경우 사전에서 검색
       String finalBack = back;
       if (finalBack.isEmpty) {
-        // 1. 먼저 내부 중국어 사전에서 검색
-        await _chineseDictionaryService.loadDictionary();
-        final dictEntry = _chineseDictionaryService.lookup(front);
+        // 사전 서비스를 통해 단어 검색 (내부 사전 -> 외부 API 순으로 검색)
+        final dictEntry =
+            await _dictionaryService.lookupWordWithFallback(front);
 
         if (dictEntry != null) {
           finalBack = dictEntry.meaning;
-          debugPrint('내부 사전에서 뜻 찾음: $front -> $finalBack');
-        } else {
-          // 2. 내부 사전에 없으면 외부 API 호출
-          debugPrint('내부 사전에 없는 단어, API 호출: $front');
-          final apiEntry =
-              await _dictionaryService.lookupWordWithFallback(front);
+          debugPrint('사전에서 뜻 찾음: $front -> $finalBack');
 
-          if (apiEntry != null && apiEntry.meaning.isNotEmpty) {
-            finalBack = apiEntry.meaning;
-            debugPrint('API에서 뜻 찾음: $front -> $finalBack');
-          } else {
-            finalBack = '뜻을 찾을 수 없습니다';
-            debugPrint('API에서도 뜻을 찾을 수 없음: $front');
+          // 핀인이 비어있고 사전에서 핀인을 찾았다면 사용
+          if (pinyin == null && dictEntry.pinyin.isNotEmpty) {
+            pinyinValue = dictEntry.pinyin;
+            debugPrint('사전에서 핀인 찾음: $front -> $pinyinValue');
           }
+        } else {
+          finalBack = '뜻을 찾을 수 없습니다';
+          debugPrint('사전에서 뜻을 찾을 수 없음: $front');
         }
       }
 
@@ -80,7 +77,7 @@ class FlashCardService {
         id: id,
         front: front,
         back: finalBack,
-        pinyin: finalPinyin,
+        pinyin: pinyinValue,
         createdAt: DateTime.now(),
         noteId: noteId,
       );
@@ -96,10 +93,39 @@ class FlashCardService {
         await _updateNoteFlashCardCounter(noteId);
       }
 
+      // 플래시카드 생성 후 사전에 없는 단어라면 사전에 추가
+      await _addToDictionaryIfNeeded(front, finalBack, pinyinValue);
+
       return flashCard;
     } catch (e) {
       debugPrint('플래시카드 생성 중 오류 발생: $e');
       throw Exception('플래시카드를 생성할 수 없습니다: $e');
+    }
+  }
+
+  // 사전에 단어 추가 (필요한 경우)
+  Future<void> _addToDictionaryIfNeeded(
+      String word, String meaning, String pinyin) async {
+    try {
+      // 내부 중국어 사전에 단어가 있는지 확인
+      await _chineseDictionaryService.loadDictionary();
+      final existingEntry = _chineseDictionaryService.lookup(word);
+
+      // 사전에 없는 단어라면 추가
+      if (existingEntry == null) {
+        final newEntry = DictionaryEntry(
+          word: word,
+          pinyin: pinyin,
+          meaning: meaning,
+          source: 'flashcard',
+        );
+
+        // 내부 중국어 사전에 추가
+        _chineseDictionaryService.addEntry(newEntry);
+        debugPrint('플래시카드에서 사전에 단어 추가됨: $word');
+      }
+    } catch (e) {
+      debugPrint('사전에 단어 추가 중 오류 발생: $e');
     }
   }
 
