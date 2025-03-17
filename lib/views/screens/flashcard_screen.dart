@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:pinyin/pinyin.dart';
@@ -12,10 +10,12 @@ import '../../widgets/loading_indicator.dart';
 import '../../services/chinese_dictionary_service.dart';
 import '../../services/pinyin_creation_service.dart';
 
+/// 플래시카드 화면 위젯
+/// 사용자가 생성한 플래시카드를 보여주고 관리하는 화면
 class FlashCardScreen extends StatefulWidget {
-  final String? noteId; // 특정 노트의 플래시카드만 표시하려면 noteId 전달
+  final String? noteId; // 특정 노트의 플래시카드만 표시할 때 사용
 
-  const FlashCardScreen({Key? key, this.noteId}) : super(key: key);
+  const FlashCardScreen({super.key, this.noteId});
 
   @override
   State<FlashCardScreen> createState() => _FlashCardScreenState();
@@ -25,24 +25,24 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   final FlashCardService _flashCardService = FlashCardService();
   final TtsService _ttsService = TtsService();
   final PinyinCreationService _pinyinService = PinyinCreationService();
-  final CardSwiperController _cardController = CardSwiperController();
-  final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
   final ChineseDictionaryService _dictionaryService =
       ChineseDictionaryService();
+  final CardSwiperController _cardController = CardSwiperController();
+  final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
 
-  List<FlashCard> _flashCards = [];
-  bool _isLoading = true;
-  String? _error;
-  int _currentIndex = 0;
-  bool _isFlipped = false; // 카드가 뒤집혔는지 여부
-  bool _isSpeaking = false;
+  List<FlashCard> _flashCards = []; // 플래시카드 목록
+  bool _isLoading = true; // 로딩 상태
+  String? _error; // 오류 메시지
+  int _currentIndex = 0; // 현재 보고 있는 카드 인덱스
+  bool _isFlipped = false; // 카드 뒤집힘 상태
+  bool _isSpeaking = false; // TTS 실행 중 상태
 
   @override
   void initState() {
     super.initState();
-    _loadFlashCards();
-    _initTts();
-    _dictionaryService.loadDictionary();
+    _loadFlashCards(); // 플래시카드 로드
+    _initTts(); // TTS 초기화
+    _dictionaryService.loadDictionary(); // 중국어 사전 로드
   }
 
   @override
@@ -52,6 +52,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     super.dispose();
   }
 
+  /// TTS 서비스 초기화
   Future<void> _initTts() async {
     try {
       await _ttsService.init();
@@ -60,44 +61,25 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
+  /// 플래시카드 목록 로드
   Future<void> _loadFlashCards() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      List<FlashCard> flashCards;
-
-      if (widget.noteId != null) {
-        // 특정 노트의 플래시카드만 가져오기
-        try {
-          flashCards =
-              await _flashCardService.getFlashCardsForNote(widget.noteId!);
-        } catch (e) {
-          debugPrint('노트별 플래시카드 조회 중 오류 발생: $e');
-          // 인덱스 오류 발생 시 대체 방법으로 모든 플래시카드를 가져와서 필터링
-          final allCards = await _flashCardService.getAllFlashCards();
-          flashCards =
-              allCards.where((card) => card.noteId == widget.noteId).toList();
-        }
-      } else {
-        // 모든 플래시카드 가져오기
-        flashCards = await _flashCardService.getAllFlashCards();
-      }
+      // noteId가 있으면 해당 노트의 플래시카드만, 없으면 모든 플래시카드 로드
+      _flashCards = widget.noteId != null
+          ? await _flashCardService.getFlashCardsForNote(widget.noteId!)
+          : await _flashCardService.getAllFlashCards();
 
       if (mounted) {
         setState(() {
-          _flashCards = flashCards;
           _isLoading = false;
           _currentIndex = 0;
           _isFlipped = false;
         });
 
         // 플래시카드가 있으면 첫 번째 카드의 복습 횟수 업데이트
-        if (_flashCards.isNotEmpty) {
-          _updateFlashCardReviewCount();
-        }
+        if (_flashCards.isNotEmpty) _updateFlashCardReviewCount();
       }
     } catch (e) {
       if (mounted) {
@@ -109,13 +91,13 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
+  /// 플래시카드 복습 횟수 업데이트
   Future<void> _updateFlashCardReviewCount() async {
     if (_flashCards.isEmpty || _currentIndex >= _flashCards.length) return;
 
     try {
-      final updatedCard = await _flashCardService.updateFlashCard(
-        _flashCards[_currentIndex],
-      );
+      final updatedCard =
+          await _flashCardService.updateFlashCard(_flashCards[_currentIndex]);
 
       if (mounted) {
         setState(() {
@@ -127,83 +109,42 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
-  Future<void> _speakCurrentCard() async {
-    if (_flashCards.isEmpty || _currentIndex >= _flashCards.length) return;
-
-    // 항상 중국어(front)만 읽도록 수정
-    final textToSpeak = _flashCards[_currentIndex].front;
-
-    if (textToSpeak.isEmpty) return;
-
-    setState(() {
-      _isSpeaking = true;
-    });
-
-    try {
-      // 항상 중국어 발음으로 설정
-      await _ttsService.setLanguage('zh-CN');
-      await _ttsService.speak(textToSpeak);
-    } catch (e) {
-      debugPrint('TTS 실행 중 오류 발생: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('음성 재생 중 오류가 발생했습니다: $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSpeaking = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _stopSpeaking() async {
-    if (!_isSpeaking) return;
-
-    try {
-      await _ttsService.stop();
-      setState(() {
-        _isSpeaking = false;
-      });
-    } catch (e) {
-      debugPrint('TTS 중지 중 오류 발생: $e');
-    }
-  }
-
+  /// 카드 뒤집기
   void _flipCard() {
     _flipCardKey.currentState?.toggleCard();
-    setState(() {
-      _isFlipped = !_isFlipped;
-    });
+    setState(() => _isFlipped = !_isFlipped);
   }
 
-  // 카드 스와이프 처리
+  /// 카드 스와이프 처리
   bool _onSwipe(
       int? previousIndex, int? currentIndex, CardSwiperDirection direction) {
-    // 디버그 정보 출력
+    if (_flashCards.isEmpty) return false;
+
     debugPrint(
         '스와이프: 이전 인덱스=$previousIndex, 현재 인덱스=$currentIndex, 방향=$direction');
 
-    // CardSwiper 위젯이 제공하는 currentIndex를 그대로 사용
-    if (currentIndex != null && currentIndex < _flashCards.length) {
-      setState(() {
-        _currentIndex = currentIndex;
-        _isFlipped = false;
-      });
+    setState(() {
+      // 왼쪽으로 스와이프: 다음 카드
+      if (direction == CardSwiperDirection.left &&
+          _currentIndex < _flashCards.length - 1) {
+        _currentIndex++;
+      }
+      // 오른쪽으로 스와이프: 이전 카드
+      else if (direction == CardSwiperDirection.right && _currentIndex > 0) {
+        _currentIndex--;
+      }
+      // 위로 스와이프: 카드 삭제
+      else if (direction == CardSwiperDirection.top) {
+        _deleteCurrentCard();
+      }
+      _isFlipped = false;
+    });
 
-      _updateFlashCardReviewCount();
-    }
-
-    // 위로 스와이프하는 경우 카드 삭제
-    if (direction == CardSwiperDirection.top) {
-      _deleteCurrentCard();
-    }
-
-    return true; // 스와이프 동작 허용
+    _updateFlashCardReviewCount();
+    return true;
   }
 
+  /// 현재 카드 삭제
   Future<void> _deleteCurrentCard() async {
     if (_flashCards.isEmpty || _currentIndex >= _flashCards.length) return;
 
@@ -211,35 +152,23 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     final noteId = _flashCards[_currentIndex].noteId;
 
     try {
-      // 플래시카드 삭제
+      // 플래시카드 서비스를 통해 카드 삭제
       await _flashCardService.deleteFlashCard(flashCardId, noteId: noteId);
 
       if (mounted) {
-        // 현재 인덱스 저장
-        final currentIdx = _currentIndex;
-
         setState(() {
-          // 플래시카드 목록에서 제거
-          _flashCards.removeAt(currentIdx);
-
-          // 인덱스 조정
-          if (_flashCards.isEmpty) {
-            _currentIndex = 0;
-          } else if (currentIdx >= _flashCards.length) {
+          _flashCards.removeAt(_currentIndex);
+          if (_currentIndex >= _flashCards.length) {
             _currentIndex = _flashCards.length - 1;
-          } else {
-            _currentIndex = currentIdx;
           }
         });
 
-        // 카드가 모두 삭제된 경우 화면 갱신
         if (_flashCards.isEmpty) {
           setState(() {});
         }
 
         // 노트 페이지로 돌아갈 때 변경 사항을 알리기 위해 결과 설정
         Navigator.of(context).pop(true);
-
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('플래시카드가 삭제되었습니다.')),
         );
@@ -253,202 +182,45 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
-  // 중국어 사전에서 단어 정보 가져오기
-  DictionaryEntry? _getDictionaryEntry(String word) {
-    return _dictionaryService.lookup(word);
-  }
-
-  // 핑인 업데이트 메서드
-  Future<void> _updatePinyin() async {
-    if (_flashCards.isEmpty || _currentIndex >= _flashCards.length) return;
-
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      final currentCard = _flashCards[_currentIndex];
-      final chineseText = currentCard.front;
-
-      // 성조가 포함된 핑인 생성
-      final updatedPinyin = PinyinHelper.getPinyin(chineseText,
-          separator: ' ', format: PinyinFormat.WITH_TONE_MARK);
-
-      // 플래시카드 업데이트
-      final updatedCard = currentCard.copyWith(pinyin: updatedPinyin);
-
-      // Firestore 업데이트
-      await FirebaseFirestore.instance
-          .collection('flashcards')
-          .doc(currentCard.id)
-          .update({'pinyin': updatedPinyin});
-
-      // 로컬 상태 업데이트
-      setState(() {
-        _flashCards[_currentIndex] = updatedCard;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('핑인 업데이트 중 오류가 발생했습니다: $e')),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('플래시카드'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            // 플래시카드 변경 여부를 결과로 전달
-            Navigator.of(context).pop(true);
-          },
-        ),
-        actions: [
-          if (_flashCards.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Center(
-                child: Text(
-                  '${_currentIndex + 1} / ${_flashCards.length}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('플래시카드')),
       body: _isLoading
           ? const Center(child: LoadingIndicator(message: '플래시카드 로딩 중...'))
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          color: Colors.red,
-                          size: 48,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: _loadFlashCards,
-                          child: const Text('다시 시도'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : _flashCards.isEmpty
-                  ? Center(
+          : _flashCards.isEmpty
+              ? const Center(child: Text('플래시카드가 없습니다.'))
+              : Column(
+                  children: [
+                    Expanded(
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.info_outline,
-                              color: Colors.blue,
-                              size: 48,
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              '플래시카드가 없습니다.\n단어를 선택하고 플래시카드에 추가해보세요.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: 16),
-                            ),
-                            const SizedBox(height: 24),
-                            ElevatedButton(
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                              },
-                              child: const Text('돌아가기'),
-                            ),
-                          ],
+                        child: CardSwiper(
+                          controller: _cardController,
+                          cardsCount: _flashCards.length,
+                          onSwipe: _onSwipe,
+                          // 스와이프 방향 설정 수정
+                          allowedSwipeDirection:
+                              AllowedSwipeDirection.symmetric(
+                            horizontal: true,
+                            vertical: true,
+                          ),
+                          // 스와이프 방향 변경 콜백 수정
+                          onSwipeDirectionChange: (_, direction) {
+                            debugPrint('스와이프 방향 변경됨: $direction');
+                          },
+                          cardBuilder: (context, index, _, __) {
+                            return _buildFlashCard(index);
+                          },
                         ),
                       ),
-                    )
-                  : Column(
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: CardSwiper(
-                              controller: _cardController,
-                              cardsCount: _flashCards.length,
-                              onSwipe: _onSwipe,
-                              allowedSwipeDirection:
-                                  AllowedSwipeDirection.symmetric(
-                                horizontal: true,
-                                vertical: true,
-                              ),
-                              onUndo:
-                                  (previousIndex, currentIndex, direction) =>
-                                      true,
-                              numberOfCardsDisplayed: 1,
-                              backCardOffset: const Offset(0, 0),
-                              padding: const EdgeInsets.all(24.0),
-                              cardBuilder: (context, index, percentThresholdX,
-                                  percentThresholdY) {
-                                return _buildFlashCard(index);
-                              },
-                              onSwipeDirectionChange: null,
-                            ),
-                          ),
-                        ),
-                        // 하단 버튼 영역 간소화
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.flip),
-                                onPressed:
-                                    _flashCards.isNotEmpty ? _flipCard : null,
-                                iconSize: 32.0,
-                                color: _flashCards.isNotEmpty
-                                    ? Colors.blue
-                                    : Colors.grey,
-                              ),
-                              const SizedBox(width: 16),
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: _flashCards.isNotEmpty
-                                    ? _deleteCurrentCard
-                                    : null,
-                                iconSize: 32.0,
-                                color: _flashCards.isNotEmpty
-                                    ? Colors.red
-                                    : Colors.grey,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
                     ),
+                  ],
+                ),
     );
   }
 
+  /// 플래시카드 위젯 생성
   Widget _buildFlashCard(int index) {
     if (index >= _flashCards.length) return Container();
 
@@ -458,104 +230,23 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       key: index == _currentIndex ? _flipCardKey : null,
       direction: FlipDirection.HORIZONTAL,
       speed: 300,
-      onFlipDone: (isFront) {
-        setState(() {
-          _isFlipped = !isFront;
-        });
-      },
-      front: _buildCardSide(
-        card.front,
-        card.pinyin,
-        Colors.white,
-        Colors.blue.shade800,
-        true,
-      ),
-      back: _buildCardSide(
-        card.back,
-        card.pinyin,
-        Colors.blue.shade50,
-        Colors.blue.shade800,
-        false,
-      ),
+      onFlipDone: (isFront) => setState(() => _isFlipped = !isFront),
+      front: _buildCardSide(card.front, Colors.white),
+      back: _buildCardSide(card.back, Colors.blue.shade50),
     );
   }
 
-  Widget _buildCardSide(String text, String? pinyin, Color bgColor,
-      Color textColor, bool isFront) {
+  /// 카드 앞/뒷면 위젯 생성
+  Widget _buildCardSide(String text, Color bgColor) {
     return Container(
       decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 8.0,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    text,
-                    style: TextStyle(
-                      fontSize: 32.0,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (pinyin != null && pinyin.isNotEmpty) ...[
-                    const SizedBox(height: 16.0),
-                    Text(
-                      pinyin,
-                      style: TextStyle(
-                        fontSize: 20.0,
-                        color: textColor.withOpacity(0.7),
-                        fontStyle: FontStyle.italic,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          // TTS 버튼은 앞면(중국어)에서만 표시
-          if (isFront)
-            Positioned(
-              top: 16.0,
-              right: 16.0,
-              child: IconButton(
-                icon: Icon(
-                  _isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
-                  color: textColor,
-                ),
-                onPressed: _isSpeaking ? _stopSpeaking : _speakCurrentCard,
-              ),
-            ),
-          Positioned(
-            bottom: 16.0,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Text(
-                isFront ? '왼쪽으로 스와이프하여 다음 카드, 오른쪽으로 이전 카드' : '탭하여 단어 보기',
-                style: TextStyle(
-                  fontSize: 12.0,
-                  color: textColor.withOpacity(0.5),
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
+          color: bgColor, borderRadius: BorderRadius.circular(16.0)),
+      child: Center(
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 32.0, fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }
