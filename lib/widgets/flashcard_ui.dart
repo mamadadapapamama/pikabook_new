@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flip_card/flip_card.dart';
-import '../../models/flash_card.dart';
+import '../models/flash_card.dart';
 
 /// 플래시카드 한 장 내의 UI와 기능
 ///
@@ -86,7 +86,8 @@ class FlashCardUI {
   }) {
     // 표시할 텍스트와 핀인 결정
     final String displayText = isFront ? card.front : card.back;
-    final String? displayPinyin = card.pinyin;
+    // 핀인은 앞면에서만 표시
+    final String? displayPinyin = isFront ? card.pinyin : null;
 
     // 스와이프 안내 텍스트 생성
     final String swipeGuideText = isFront
@@ -103,7 +104,8 @@ class FlashCardUI {
             displayText,
             displayPinyin,
             textColor,
-            onWordTap: onWordTap,
+            // 단어 탭 기능 비활성화
+            onWordTap: null,
           ),
 
           // TTS 버튼 (앞면 & 현재 카드만)
@@ -153,23 +155,15 @@ class FlashCardUI {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 단어/의미 텍스트 (탭 가능)
-            GestureDetector(
-              onTap: onWordTap != null ? () => onWordTap(text) : null,
-              child: Text(
-                text,
-                style: TextStyle(
-                  fontSize: 32.0,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                  decoration:
-                      onWordTap != null ? TextDecoration.underline : null,
-                  decorationStyle: TextDecorationStyle.dotted,
-                  decorationColor:
-                      onWordTap != null ? textColor.withOpacity(0.5) : null,
-                ),
-                textAlign: TextAlign.center,
+            // 단어/의미 텍스트
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 32.0,
+                fontWeight: FontWeight.bold,
+                color: textColor,
               ),
+              textAlign: TextAlign.center,
             ),
             // 핀인 표시 (있는 경우)
             if (pinyin != null && pinyin.isNotEmpty) ...[
@@ -179,19 +173,6 @@ class FlashCardUI {
                 style: TextStyle(
                   fontSize: 20.0,
                   color: textColor.withOpacity(0.7),
-                  fontStyle: FontStyle.italic,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-            // 단어 탭 힌트 (onWordTap이 제공된 경우)
-            if (onWordTap != null) ...[
-              const SizedBox(height: 8.0),
-              Text(
-                '단어를 탭하여 사전에서 검색',
-                style: TextStyle(
-                  fontSize: 12.0,
-                  color: textColor.withOpacity(0.5),
                   fontStyle: FontStyle.italic,
                 ),
                 textAlign: TextAlign.center,
@@ -268,7 +249,7 @@ class FlashCardUI {
   /// 하단 버튼 영역 위젯 생성
   static Widget buildBottomControls({
     required bool hasCards,
-    required Function() onFlip,
+    Function()? onFlip,
     required Function() onDelete,
   }) {
     return Padding(
@@ -276,13 +257,17 @@ class FlashCardUI {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          IconButton(
-            icon: const Icon(Icons.flip),
-            onPressed: hasCards ? onFlip : null,
-            iconSize: 32.0,
-            color: hasCards ? Colors.blue : Colors.grey,
-          ),
-          const SizedBox(width: 16),
+          // Flip 버튼 (선택적)
+          if (onFlip != null) ...[
+            IconButton(
+              icon: const Icon(Icons.flip),
+              onPressed: hasCards ? onFlip : null,
+              iconSize: 32.0,
+              color: hasCards ? Colors.blue : Colors.grey,
+            ),
+            const SizedBox(width: 16),
+          ],
+          // 삭제 버튼
           IconButton(
             icon: const Icon(Icons.delete),
             onPressed: hasCards ? onDelete : null,
