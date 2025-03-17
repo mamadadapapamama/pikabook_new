@@ -18,24 +18,66 @@ class ChineseDictionaryService {
   Map<String, DictionaryEntry> _entries = {};
   List<String> _words = [];
   bool _isLoaded = false;
+  bool _isLoading = false;
+
+  // 사전 로드 지연 시간 (ms)
+  static const int _loadDelay = 500;
+
+  // 사전 로드 타이머
+  Future<void>? _loadFuture;
 
   // 사전 데이터 로드
   Future<void> loadDictionary() async {
+    // 이미 로드되었거나 로드 중이면 반환
     if (_isLoaded) return;
+    if (_isLoading) {
+      // 로드 중인 경우 완료될 때까지 대기
+      if (_loadFuture != null) {
+        return _loadFuture;
+      }
+      return;
+    }
 
+    _isLoading = true;
+    _loadFuture = _loadDictionaryInternal();
+    return _loadFuture;
+  }
+
+  // 내부 사전 로드 메서드
+  Future<void> _loadDictionaryInternal() async {
     try {
+      debugPrint('중국어 사전 로드 시작...');
+
+      // 사전 로드 지연 (앱 시작 시 다른 중요 작업에 우선순위 부여)
+      await Future.delayed(Duration(milliseconds: _loadDelay));
+
       final String jsonString =
           await rootBundle.loadString('assets/data/chinese_dictionary.json');
       final Map<String, dynamic> jsonData = json.decode(jsonString);
 
       // 사전 항목 로드
       final List<dynamic> dictionary = jsonData['dictionary'];
-      for (var entry in dictionary) {
-        _entries[entry['word']] = DictionaryEntry(
-          word: entry['word'],
-          pinyin: entry['pinyin'],
-          meaning: entry['meaning'],
-        );
+
+      // 메모리 효율성을 위해 배치 처리
+      const int batchSize = 1000;
+      for (int i = 0; i < dictionary.length; i += batchSize) {
+        final end = (i + batchSize < dictionary.length)
+            ? i + batchSize
+            : dictionary.length;
+
+        for (int j = i; j < end; j++) {
+          final entry = dictionary[j];
+          _entries[entry['word']] = DictionaryEntry(
+            word: entry['word'],
+            pinyin: entry['pinyin'],
+            meaning: entry['meaning'],
+          );
+        }
+
+        // 배치 처리 후 잠시 대기하여 UI 스레드 차단 방지
+        if (end < dictionary.length) {
+          await Future.delayed(Duration(milliseconds: 1));
+        }
       }
 
       // 분절용 단어 목록 로드
@@ -47,6 +89,7 @@ class ChineseDictionaryService {
       }
 
       _isLoaded = true;
+      _isLoading = false;
       debugPrint('중국어 사전 ${_entries.length}개 항목 로드 완료');
       debugPrint('분절용 단어 ${_words.length}개 로드 완료');
     } catch (e) {
@@ -61,13 +104,24 @@ class ChineseDictionaryService {
       };
       _words = ['我', '非常', '喜欢', '草莓'];
       _isLoaded = true;
+      _isLoading = false;
     }
   }
 
-  // 단어 검색
+  // 단어 검색 (지연 로드 지원)
+  Future<DictionaryEntry?> lookupAsync(String word) async {
+    if (!_isLoaded) {
+      await loadDictionary();
+    }
+    return _entries[word];
+  }
+
+  // 단어 검색 (동기식)
   DictionaryEntry? lookup(String word) {
     if (!_isLoaded) {
-      debugPrint('사전이 아직 로드되지 않았습니다.');
+      debugPrint('사전이 아직 로드되지 않았습니다. 비동기 메서드 lookupAsync를 사용하세요.');
+      // 사전이 로드되지 않았으면 로드 시작 (결과는 반환하지 않음)
+      loadDictionary();
       return null;
     }
     return _entries[word];
@@ -77,6 +131,8 @@ class ChineseDictionaryService {
   List<String> getWords() {
     if (!_isLoaded) {
       debugPrint('사전이 아직 로드되지 않았습니다.');
+      // 사전이 로드되지 않았으면 로드 시작
+      loadDictionary();
       return [];
     }
     return _words;
@@ -84,6 +140,9 @@ class ChineseDictionaryService {
 
   // 사전이 로드되었는지 확인
   bool get isLoaded => _isLoaded;
+
+  // 사전이 로드 중인지 확인
+  bool get isLoading => _isLoading;
 
   // 사전에 단어 추가
   void addEntry(DictionaryEntry entry) {
@@ -96,4 +155,16 @@ class ChineseDictionaryService {
 
   // 사전 항목 가져오기
   Map<String, DictionaryEntry> get entries => _entries;
+
+  // 메모리 최적화를 위한 사전 정리
+  void optimizeMemory() {
+    // 사용하지 않는 메모리 해제
+    if (_isLoaded && _entries.isNotEmpty) {
+      // 단어 목록 압축 (중복 제거)
+      final Set<String> uniqueWords = Set<String>.from(_words);
+      _words = uniqueWords.toList();
+
+      debugPrint('중국어 사전 메모리 최적화 완료: 단어 목록 ${_words.length}개');
+    }
+  }
 }

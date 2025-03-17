@@ -196,7 +196,7 @@ class EnhancedOcrService {
     final fullTranslatedText = await _translationService
         .translateText(cleanedText, targetLanguage: 'ko');
 
-    // 문장 분리 및 병렬 처리
+    // 문장을 병렬로 처리
     final segments = await _processTextSegmentsInParallel(cleanedText);
 
     return ProcessedText(
@@ -210,60 +210,65 @@ class EnhancedOcrService {
   /// 문장을 병렬로 처리
   Future<List<TextSegment>> _processTextSegmentsInParallel(String text) async {
     // 문장 분리
-    final sentences = _segmenterService.splitIntoSentences(text);
-    debugPrint('분리된 문장 수: ${sentences.length}개');
+    final sentences = await _segmenterService.splitIntoSentences(text);
+    debugPrint('분리된 문장 수: ${sentences.length}');
 
     if (sentences.isEmpty) {
       return [];
     }
 
-    // 병렬 처리를 위한 Future 목록
-    List<Future<TextSegment>> futures = [];
+    // 병렬 처리를 위한 배치 크기 설정
+    const int batchSize = 5;
+    final List<TextSegment> allSegments = [];
 
-    // 각 문장에 대한 처리 작업 생성
-    for (final sentence in sentences) {
-      if (sentence.trim().isEmpty) continue;
-      futures.add(_processSentence(sentence));
+    // 배치 단위로 처리하여 메모리 사용량 최적화
+    for (int i = 0; i < sentences.length; i += batchSize) {
+      final end =
+          (i + batchSize < sentences.length) ? i + batchSize : sentences.length;
+      final batch = sentences.sublist(i, end);
+
+      // 배치 내 문장들을 병렬로 처리
+      final batchResults = await Future.wait(
+        batch.map((sentence) => _processTextSegment(sentence)),
+      );
+
+      allSegments.addAll(batchResults);
+
+      // 배치 처리 후 잠시 대기하여 UI 스레드 차단 방지
+      if (end < sentences.length) {
+        await Future.delayed(Duration(milliseconds: 1));
+      }
     }
 
-    // 모든 작업 병렬 실행 및 결과 수집
-    final segments = await Future.wait(futures);
-
-    return segments;
+    return allSegments;
   }
 
-  /// 개별 문장 처리 (번역 및 핀인 생성)
-  Future<TextSegment> _processSentence(String sentence) async {
-    String translatedText = '';
-    String pinyin = '';
-
+  /// 개별 문장 처리
+  Future<TextSegment> _processTextSegment(String sentence) async {
     try {
-      // 중국어가 포함된 문장에 대해서만 핀인 생성
-      if (_textCleanerService.containsChinese(sentence)) {
-        // 번역과 핀인 생성을 병렬로 처리
-        final results = await Future.wait([
-          _translationService.translateText(sentence, targetLanguage: 'ko'),
-          _generatePinyinForSentence(sentence)
-        ]);
+      // 핀인 생성
+      final pinyin = await _generatePinyinForSentence(sentence);
 
-        translatedText = results[0];
-        pinyin = results[1];
-      } else {
-        // 중국어가 없는 문장은 번역만 수행
-        translatedText = await _translationService.translateText(sentence,
-            targetLanguage: 'ko');
-      }
+      // 번역
+      final translated = await _translationService.translateText(
+        sentence,
+        targetLanguage: 'ko',
+      );
+
+      return TextSegment(
+        originalText: sentence,
+        pinyin: pinyin,
+        translatedText: translated,
+      );
     } catch (e) {
       debugPrint('문장 처리 중 오류 발생: $e');
-      // 오류 발생 시 원본 문장 사용
-      translatedText = '(번역 오류)';
+      // 오류가 발생해도 기본 세그먼트 반환
+      return TextSegment(
+        originalText: sentence,
+        pinyin: '',
+        translatedText: '번역 오류',
+      );
     }
-
-    return TextSegment(
-      originalText: sentence,
-      translatedText: translatedText,
-      pinyin: pinyin,
-    );
   }
 
   /// 문장에서 중국어 문자만 추출하여 핀인 생성
