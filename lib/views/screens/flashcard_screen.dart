@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flip_card/flip_card.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/flash_card.dart';
+import '../../models/note.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
@@ -212,6 +214,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           setState(() {});
         }
 
+        // 노트 디테일 화면에 변경 사항을 알리기 위해 결과 값 설정
+        if (widget.noteId != null) {
+          // 노트 정보 업데이트 (앱바 카운터 업데이트를 위해)
+          _updateNoteInfo(widget.noteId!);
+        }
+
         // 삭제 완료 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('플래시카드가 삭제되었습니다.')),
@@ -223,6 +231,27 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           SnackBar(content: Text('플래시카드 삭제 중 오류가 발생했습니다: $e')),
         );
       }
+    }
+  }
+
+  /// 노트 정보 업데이트 (앱바 카운터 업데이트를 위해)
+  Future<void> _updateNoteInfo(String noteId) async {
+    try {
+      // Firestore에서 직접 노트 가져오기
+      final noteDoc = await FirebaseFirestore.instance
+          .collection('notes')
+          .doc(noteId)
+          .get();
+
+      if (noteDoc.exists && mounted) {
+        // 노트 정보 업데이트 (앱바 카운터 업데이트를 위해)
+        final updatedNote = Note.fromFirestore(noteDoc);
+
+        // 결과 값 설정 (노트 디테일 화면으로 돌아갈 때 사용)
+        Navigator.of(context).pop(updatedNote);
+      }
+    } catch (e) {
+      debugPrint('노트 정보 업데이트 중 오류 발생: $e');
     }
   }
 

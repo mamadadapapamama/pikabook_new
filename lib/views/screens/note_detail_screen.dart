@@ -658,22 +658,32 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
 
     // 플래시카드가 변경되었으면 노트 정보 다시 로드
-    if (result == true && mounted) {
-      // 캐시 무효화
-      await _cacheService.removeCachedNote(widget.noteId);
-
-      // Firestore에서 직접 노트 가져오기
-      final noteDoc = await FirebaseFirestore.instance
-          .collection('notes')
-          .doc(widget.noteId)
-          .get();
-
-      if (noteDoc.exists && mounted) {
+    if (result != null && mounted) {
+      if (result is Note) {
+        // 플래시카드 화면에서 직접 업데이트된 노트 객체를 받은 경우
         setState(() {
-          _note = Note.fromFirestore(noteDoc);
+          _note = result;
           debugPrint(
               '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
         });
+      } else if (result == true) {
+        // 이전 방식과의 호환성을 위해 boolean 결과도 처리
+        // 캐시 무효화
+        await _cacheService.removeCachedNote(widget.noteId);
+
+        // Firestore에서 직접 노트 가져오기
+        final noteDoc = await FirebaseFirestore.instance
+            .collection('notes')
+            .doc(widget.noteId)
+            .get();
+
+        if (noteDoc.exists && mounted) {
+          setState(() {
+            _note = Note.fromFirestore(noteDoc);
+            debugPrint(
+                '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
+          });
+        }
       }
     }
   }
