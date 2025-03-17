@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 
 /// 단어 위치 정보를 저장하는 클래스
 class WordPosition {
@@ -130,18 +131,15 @@ class TextHighlightManager {
     return filteredPositions;
   }
 
-  /// 하이라이트된 텍스트 스팬 생성 (최적화 버전)
-  /// GestureRecognizer를 사용하지 않고 단순히 스타일만 적용하여 하이라이트 효과를 줍니다.
+  /// 하이라이트된 텍스트 스팬 생성 (탭 액션 추가 버전)
   static List<TextSpan> buildHighlightedText({
     required String text,
     required Set<String> flashcardWords,
-    required Function(String) onTap, // 이 매개변수는 호환성을 위해 유지하지만 사용하지 않습니다.
+    required Function(String) onTap,
     TextStyle? normalStyle,
     TextStyle? highlightStyle,
   }) {
-    // 결과 목록 미리 할당 (메모리 최적화)
-    final List<TextSpan> spans = [];
-
+    // 디버그 로깅
     if (kDebugMode) {
       debugPrint(
           'buildHighlightedText 호출: 텍스트 길이=${text.length}, 플래시카드 단어 수=${flashcardWords.length}');
@@ -150,7 +148,10 @@ class TextHighlightManager {
       }
     }
 
-    // 텍스트가 비어있으면 빈 스팬 반환
+    // 결과 목록 미리 할당 (메모리 최적화)
+    final List<TextSpan> spans = [];
+
+    // 빠른 경로 처리: 텍스트가 비어있거나 플래시카드 단어가 없는 경우
     if (text.isEmpty) {
       if (kDebugMode) {
         debugPrint('텍스트가 비어있어 빈 스팬 반환');
@@ -158,7 +159,6 @@ class TextHighlightManager {
       return spans;
     }
 
-    // 플래시카드 단어가 없으면 일반 텍스트만 반환
     if (flashcardWords.isEmpty) {
       if (kDebugMode) {
         debugPrint('플래시카드 단어가 없어 일반 텍스트만 반환');
@@ -171,23 +171,24 @@ class TextHighlightManager {
     final List<WordPosition> wordPositions =
         findWordPositions(text, flashcardWords);
 
-    // 위치가 없으면 일반 텍스트만 반환 (최적화)
+    // 위치가 없으면 일반 텍스트만 반환
     if (wordPositions.isEmpty) {
       spans.add(TextSpan(text: text, style: normalStyle));
       return spans;
     }
 
-    // 하이라이트 스타일 미리 정의 (재사용)
-    final TextStyle highlightTextStyle = highlightStyle ??
+    // 하이라이트 스타일 정의 (한 번만 계산)
+    final TextStyle effectiveHighlightStyle = highlightStyle ??
         const TextStyle(
           backgroundColor: Colors.yellow,
           fontWeight: FontWeight.bold,
         );
 
-    // 텍스트 스팬 생성
+    // 텍스트 스팬 생성 (최적화 버전)
     int lastEnd = 0;
+
     for (final pos in wordPositions) {
-      // 일반 텍스트 추가
+      // 일반 텍스트 추가 (하이라이트 단어 사이의 텍스트)
       if (pos.start > lastEnd) {
         spans.add(TextSpan(
           text: text.substring(lastEnd, pos.start),
@@ -195,18 +196,27 @@ class TextHighlightManager {
         ));
       }
 
-      // 하이라이트된 단어 추가 - 제스처 인식기 없이 스타일만 적용
+      // 하이라이트된 단어 추가 (탭 가능)
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () {
+          if (kDebugMode) {
+            debugPrint('하이라이트된 단어 탭됨: ${pos.word}');
+          }
+          onTap(pos.word);
+        };
+
       spans.add(
         TextSpan(
           text: pos.word,
-          style: highlightTextStyle,
+          style: effectiveHighlightStyle,
+          recognizer: recognizer,
         ),
       );
 
       lastEnd = pos.end;
     }
 
-    // 남은 텍스트 추가
+    // 남은 텍스트 추가 (마지막 하이라이트 단어 이후의 텍스트)
     if (lastEnd < text.length) {
       spans.add(TextSpan(
         text: text.substring(lastEnd),

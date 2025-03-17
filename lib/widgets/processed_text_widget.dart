@@ -38,6 +38,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   final TextReaderService _textReaderService = TextReaderService();
   int? _playingSegmentIndex;
 
+  // 중복 사전 검색 방지를 위한 변수
+  bool _isProcessingDictionaryLookup = false;
+
   // 선택된 텍스트 상태 관리를 위한 ValueNotifier
   final ValueNotifier<String> _selectedTextNotifier = ValueNotifier<String>('');
 
@@ -155,6 +158,28 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     }
   }
 
+  /// 하이라이트된 단어 탭 처리
+  void _handleHighlightedWordTap(String word) {
+    if (_isProcessingDictionaryLookup) return;
+
+    if (kDebugMode) {
+      debugPrint('하이라이트된 단어 탭 처리: $word');
+    }
+
+    // 중복 호출 방지
+    _isProcessingDictionaryLookup = true;
+
+    // 사전 검색 콜백 호출
+    if (widget.onDictionaryLookup != null) {
+      widget.onDictionaryLookup!(word);
+    }
+
+    // 일정 시간 후 플래그 초기화 (중복 호출 방지)
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _isProcessingDictionaryLookup = false;
+    });
+  }
+
   /// **선택 가능한 텍스트 위젯 생성**
   Widget _buildSelectableText(String text) {
     // 텍스트가 비어있으면 빈 컨테이너 반환
@@ -170,12 +195,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     final textSpans = TextHighlightManager.buildHighlightedText(
       text: text,
       flashcardWords: _flashcardWords,
-      onTap: (word) {
-        // 이 콜백은 더 이상 사용되지 않지만 호환성을 위해 유지
-        if (kDebugMode) {
-          debugPrint('하이라이트된 단어 콜백 (사용되지 않음): $word');
-        }
-      },
+      onTap: _handleHighlightedWordTap,
       normalStyle: const TextStyle(fontSize: 16),
     );
 
@@ -248,50 +268,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   });
                 }
               });
-              return;
-            }
-
-            // 선택 범위가 유효한 경우
-            if (selection.start >= 0 &&
-                selection.end > selection.start &&
-                selection.end <= text.length) {
-              // 선택된 텍스트 추출
-              final selectedWord =
-                  text.substring(selection.start, selection.end);
-
-              // 선택된 텍스트가 플래시카드 단어인 경우 사전 검색 실행
-              if (_flashcardWords.contains(selectedWord) &&
-                  cause == SelectionChangedCause.tap) {
-                if (kDebugMode) {
-                  debugPrint('플래시카드 단어 탭됨: $selectedWord');
-                }
-
-                // 선택 취소
-                Future.microtask(() {
-                  if (mounted) {
-                    setState(() {
-                      _selectedText = '';
-                      _selectedTextNotifier.value = '';
-                    });
-                  }
-                });
-
-                // 사전 검색 실행
-                if (widget.onDictionaryLookup != null) {
-                  Future.microtask(
-                      () => widget.onDictionaryLookup!(selectedWord));
-                }
-              } else {
-                // 일반 텍스트 선택인 경우 선택된 텍스트 업데이트
-                Future.microtask(() {
-                  if (mounted) {
-                    setState(() {
-                      _selectedText = selectedWord;
-                      _selectedTextNotifier.value = selectedWord;
-                    });
-                  }
-                });
-              }
             }
           },
         );
