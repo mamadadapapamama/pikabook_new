@@ -178,51 +178,52 @@ class PageService {
         }
       }
 
-      // 2. 노트 문서에서 페이지 ID 목록 확인 (항상 먼저 확인)
-      debugPrint('노트 문서에서 페이지 ID 목록을 확인합니다.');
-      final noteDoc = await _firestore.collection('notes').doc(noteId).get();
-      
-      if (noteDoc.exists) {
-        final data = noteDoc.data();
-        final pageIds = data?['pages'] as List<dynamic>?;
-        final processingCompleted = data?['processingCompleted'] as bool? ?? false;
-
-        if (pageIds != null && pageIds.isNotEmpty) {
-          debugPrint('노트 문서에서 ${pageIds.length}개의 페이지 ID를 찾았습니다.');
-          debugPrint('백그라운드 처리 완료 상태: $processingCompleted');
-
-          // 각 페이지 ID로 페이지 문서 조회
-          final List<page_model.Page> pages = [];
-          for (final pageId in pageIds) {
-            try {
-              final pageDoc = await _pagesCollection.doc(pageId.toString()).get();
-              if (pageDoc.exists) {
-                final page = page_model.Page.fromFirestore(pageDoc);
-                pages.add(page);
-                debugPrint('페이지 ${page.id} 로드 성공 (pageNumber: ${page.pageNumber})');
-              }
-            } catch (e) {
-              debugPrint('페이지 $pageId 로드 중 오류: $e');
-            }
-          }
-
-          // 페이지 번호 순으로 정렬
-          pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-
-          // 페이지 로드 완료 시점에 캐싱
-          if (pages.isNotEmpty) {
-            await _cacheService.cachePages(noteId, pages);
-            debugPrint('노트 $noteId의 페이지 ${pages.length}개 캐시에 저장됨 (ID 목록 사용)');
-          }
-
-          return pages;
-        }
-      }
-
-      // 3. 페이지 컬렉션에서 쿼리로 페이지 가져오기 (ID 목록이 없는 경우)
-      debugPrint('Firestore에서 노트 $noteId의 페이지 로드 시작 (쿼리 사용)');
+      // 2. Firestore에서 페이지 가져오기
+      debugPrint('Firestore에서 노트 $noteId의 페이지 로드 시작');
       final snapshot = await getPagesForNoteQuery(noteId).get();
       debugPrint('노트 $noteId의 페이지 쿼리 결과: ${snapshot.docs.length}개 문서');
+
+      // 결과가 없으면 노트 문서에서 페이지 ID 목록 확인
+      if (snapshot.docs.isEmpty) {
+        debugPrint('페이지 쿼리 결과가 없어 노트 문서에서 페이지 ID 목록을 확인합니다.');
+        final noteDoc = await _firestore.collection('notes').doc(noteId).get();
+        if (noteDoc.exists) {
+          final data = noteDoc.data();
+          final pageIds = data?['pages'] as List<dynamic>?;
+
+          if (pageIds != null && pageIds.isNotEmpty) {
+            debugPrint('노트 문서에서 ${pageIds.length}개의 페이지 ID를 찾았습니다.');
+
+            // 각 페이지 ID로 페이지 문서 조회
+            final List<page_model.Page> pages = [];
+            for (final pageId in pageIds) {
+              try {
+                final pageDoc =
+                    await _pagesCollection.doc(pageId.toString()).get();
+                if (pageDoc.exists) {
+                  final page = page_model.Page.fromFirestore(pageDoc);
+                  pages.add(page);
+                  debugPrint(
+                      '페이지 ${page.id} 로드 성공 (pageNumber: ${page.pageNumber})');
+                }
+              } catch (e) {
+                debugPrint('페이지 $pageId 로드 중 오류: $e');
+              }
+            }
+
+            // 페이지 번호 순으로 정렬
+            pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+            // 페이지 로드 완료 시점에 캐싱
+            if (pages.isNotEmpty) {
+              await _cacheService.cachePages(noteId, pages);
+              debugPrint('노트 $noteId의 페이지 ${pages.length}개 캐시에 저장됨 (ID 목록 사용)');
+            }
+
+            return pages;
+          }
+        }
+      }
 
       final pages = snapshot.docs
           .map((doc) => page_model.Page.fromFirestore(doc))
