@@ -20,7 +20,7 @@ class InitializationService {
 
   // 인증 서비스 (지연 초기화)
   AuthService? _authService;
-
+  
   // 인증 서비스 getter
   AuthService get authService {
     if (_authService == null) {
@@ -31,11 +31,9 @@ class InitializationService {
 
   // 상태 확인 getter
   Future<bool> get isFirebaseInitialized => _firebaseInitialized.future;
-  Future<bool> get isUserAuthenticationChecked =>
-      _userAuthenticationChecked.future;
+  Future<bool> get isUserAuthenticationChecked => _userAuthenticationChecked.future;
   bool get isFirebaseInitializing => !_firebaseInitialized.isCompleted;
-  bool get isUserAuthenticationChecking =>
-      !_userAuthenticationChecked.isCompleted;
+  bool get isUserAuthenticationChecking => !_userAuthenticationChecked.isCompleted;
 
   // 오류 메시지 getter
   String? get firebaseError => _firebaseError;
@@ -43,8 +41,7 @@ class InitializationService {
 
   // 사용자 인증 상태 getter
   bool get isUserAuthenticated => FirebaseAuth.instance.currentUser != null;
-  bool get isAnonymousUser =>
-      FirebaseAuth.instance.currentUser?.isAnonymous ?? false;
+  bool get isAnonymousUser => FirebaseAuth.instance.currentUser?.isAnonymous ?? false;
 
   // Firebase 초기화 메서드
   Future<void> initializeFirebase({required FirebaseOptions options}) async {
@@ -53,7 +50,7 @@ class InitializationService {
     try {
       // Firebase 초기화 시작
       debugPrint('Firebase 초기화 시작...');
-
+      
       // Firebase 코어만 초기화하고 나머지 서비스는 필요할 때 초기화
       await Firebase.initializeApp(options: options);
       debugPrint('Firebase 코어 초기화 완료');
@@ -63,7 +60,7 @@ class InitializationService {
 
       // 사용자 인증 상태 확인 (필수 서비스)
       _checkAuthenticationState();
-
+      
       // 다른 Firebase 서비스는 필요할 때 초기화하도록 함
     } catch (e) {
       debugPrint('Firebase 초기화 실패: $e');
@@ -72,14 +69,14 @@ class InitializationService {
       _userAuthenticationChecked.complete(false);
     }
   }
-
+  
   // Firebase가 이미 초기화되었음을 표시하는 메서드
   Future<void> markFirebaseInitialized() async {
     if (_firebaseInitialized.isCompleted) return;
-
+    
     debugPrint('Firebase 초기화 완료 표시 (외부 초기화)');
     _firebaseInitialized.complete(true);
-
+    
     // 사용자 인증 상태 확인 (필수 서비스)
     await _checkAuthenticationState();
   }
@@ -90,11 +87,10 @@ class InitializationService {
 
     try {
       final auth = FirebaseAuth.instance;
-
+      
       // 현재 사용자 확인
       if (auth.currentUser != null) {
-        debugPrint(
-            '기존 사용자 발견: ${auth.currentUser?.uid} (익명: ${auth.currentUser?.isAnonymous})');
+        debugPrint('기존 사용자 발견: ${auth.currentUser?.uid} (익명: ${auth.currentUser?.isAnonymous})');
       } else {
         debugPrint('로그인된 사용자 없음');
       }

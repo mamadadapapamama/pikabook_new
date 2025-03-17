@@ -782,33 +782,31 @@ class UnifiedCacheService {
       if (_isInitialized) {
         debugPrint('주기적인 캐시 정리 실행');
         _clearMemoryCache();
-
+        
         // 메모리 사용량 모니터링 및 필요시 추가 정리
         _monitorMemoryUsage();
-
+        
         _setupPeriodicCacheCleanup(); // 재귀적으로 다음 정리 예약
       }
     });
   }
-
+  
   // 메모리 사용량 모니터링
   void _monitorMemoryUsage() {
     try {
       final noteStats = getNoteCacheStats();
       final pageStats = getPageCacheStats();
-
-      final totalItems = noteStats['memoryItems'] +
-          pageStats['memoryItems'] +
-          _translationCache.length +
-          _processedTextCache.length;
-
+      
+      final totalItems = noteStats['memoryItems'] + pageStats['memoryItems'] + 
+                         _translationCache.length + _processedTextCache.length;
+      
       debugPrint('현재 메모리 캐시 상태:');
       debugPrint('- 노트: ${noteStats['memoryItems']}개');
       debugPrint('- 페이지: ${pageStats['memoryItems']}개');
       debugPrint('- 번역: ${_translationCache.length}개');
       debugPrint('- 처리된 텍스트: ${_processedTextCache.length}개');
       debugPrint('- 총 항목 수: $totalItems개');
-
+      
       // 메모리 사용량이 많은 경우 추가 정리
       if (totalItems > 1000) {
         debugPrint('메모리 사용량이 많아 추가 정리 수행');
@@ -907,21 +905,21 @@ class UnifiedCacheService {
         }
       }
     }
-
+    
     // 처리된 텍스트 캐시 정리
     if (_processedTextCache.length > maxProcessedTextKeep) {
       debugPrint('처리된 텍스트 캐시 정리 시작');
-
+      
       // 키와 마지막 접근 시간으로 정렬
       final entries = <MapEntry<String, DateTime>>[];
       for (final key in _processedTextCache.keys) {
         final timestamp = _cacheTimestamps[key] ?? DateTime.now();
         entries.add(MapEntry(key, timestamp));
       }
-
+      
       // 가장 오래된 항목부터 정렬
       entries.sort((a, b) => a.value.compareTo(b.value));
-
+      
       // 오래된 항목부터 제거
       final itemsToRemove = _processedTextCache.length - maxProcessedTextKeep;
       for (int i = 0; i < itemsToRemove; i++) {
