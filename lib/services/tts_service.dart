@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../models/processed_text.dart';
+import '../utils/language_constants.dart';
 
 // 텍스트 음성 변환 서비스를 제공합니다
 
@@ -14,7 +15,7 @@ class TtsService {
 
   FlutterTts? _flutterTts;
   TtsState _ttsState = TtsState.stopped;
-  String _currentLanguage = 'zh-CN'; // 기본 언어: 중국어
+  String _currentLanguage = SourceLanguage.DEFAULT; // 기본 언어: 중국어
 
   // 현재 재생 중인 세그먼트 인덱스
   int? _currentSegmentIndex;
@@ -74,24 +75,41 @@ class TtsService {
     if (_flutterTts == null) await init();
 
     _currentLanguage = language;
-    await _flutterTts?.setLanguage(language);
+    
+    // TTS에 맞는 언어 코드로 변환
+    final ttsLanguageCode = TtsLanguage.getTtsLanguageCode(language);
+    await _flutterTts?.setLanguage(ttsLanguageCode);
 
     // 언어에 따른 음성 설정
-    if (language == 'zh-CN') {
-      // 중국어 음성 설정
-      await _flutterTts
-          ?.setVoice({"name": "zh-CN-Standard-A", "locale": "zh-CN"});
-      await _flutterTts?.setSpeechRate(0.5); // 중국어는 조금 느리게
-      await _flutterTts?.setVolume(1.0);
-      await _flutterTts?.setPitch(1.0);
-    } else if (language == 'ko-KR') {
-      // 한국어 음성 설정
-      await _flutterTts
-          ?.setVoice({"name": "ko-KR-Standard-A", "locale": "ko-KR"});
-      await _flutterTts?.setSpeechRate(0.5);
-      await _flutterTts?.setVolume(1.0);
-      await _flutterTts?.setPitch(1.0);
+    final voiceName = TtsLanguage.getVoiceName(ttsLanguageCode);
+    await _flutterTts?.setVoice({"name": voiceName, "locale": ttsLanguageCode});
+    
+    // 언어별 발화 속도 조정
+    double speechRate = 0.5;  // 기본값
+    
+    // MARK: 다국어 지원을 위한 확장 포인트
+    // 언어별로 다른 발화 속도 설정
+    switch (language) {
+      case SourceLanguage.CHINESE:
+      case SourceLanguage.CHINESE_TRADITIONAL:
+        speechRate = 0.5;  // 중국어는 조금 느리게
+        break;
+      case SourceLanguage.KOREAN:
+        speechRate = 0.5;  // 한국어
+        break;
+      case SourceLanguage.ENGLISH:
+        speechRate = 0.6;  // 영어는 조금 빠르게
+        break;
+      case SourceLanguage.JAPANESE:
+        speechRate = 0.5;  // 일본어
+        break;
+      default:
+        speechRate = 0.5;  // 기본값
     }
+    
+    await _flutterTts?.setSpeechRate(speechRate);
+    await _flutterTts?.setVolume(1.0);
+    await _flutterTts?.setPitch(1.0);
   }
 
   // 텍스트 읽기
@@ -127,6 +145,9 @@ class TtsService {
 
   // 현재 재생 중인 세그먼트 인덱스
   int? get currentSegmentIndex => _currentSegmentIndex;
+
+  // 현재 설정된 언어
+  String get currentLanguage => _currentLanguage;
 
   // 리소스 해제
   Future<void> dispose() async {
@@ -227,9 +248,27 @@ class TtsService {
         // TTS 재생
         await speak(segment.originalText);
 
-        // 재생 완료 대기 (대략적인 시간 계산)
+        // 재생 완료 대기 (언어별 대기 시간 조정)
+        // MARK: 다국어 지원을 위한 확장 포인트
+        int charReadTimeMs = 100;  // 기본값: 100ms/글자
+        switch (_currentLanguage) {
+          case SourceLanguage.CHINESE:
+          case SourceLanguage.CHINESE_TRADITIONAL:
+            charReadTimeMs = 100;  // 중국어: 각 글자를 천천히 읽음
+            break;
+          case SourceLanguage.ENGLISH:
+            charReadTimeMs = 80;   // 영어: 조금 더 빠르게 읽음
+            break;
+          case SourceLanguage.JAPANESE:
+            charReadTimeMs = 100;  // 일본어: 중국어와 비슷한 속도
+            break;
+          case SourceLanguage.KOREAN:
+            charReadTimeMs = 90;   // 한국어: 중간 속도
+            break;
+        }
+        
         await Future.delayed(
-            Duration(milliseconds: segment.originalText.length * 100 + 1000));
+            Duration(milliseconds: segment.originalText.length * charReadTimeMs + 1000));
 
         // 재생이 중단되었는지 확인
         if (_currentSegmentIndex == null) break;
@@ -240,9 +279,26 @@ class TtsService {
 
       await speak(processedText.fullOriginalText);
 
-      // 재생 완료 대기
+      // 재생 완료 대기 (언어별 대기 시간 적용)
+      int charReadTimeMs = 100;  // 기본값: 100ms/글자
+      switch (_currentLanguage) {
+        case SourceLanguage.CHINESE:
+        case SourceLanguage.CHINESE_TRADITIONAL:
+          charReadTimeMs = 100;
+          break;
+        case SourceLanguage.ENGLISH:
+          charReadTimeMs = 80;
+          break;
+        case SourceLanguage.JAPANESE:
+          charReadTimeMs = 100;
+          break;
+        case SourceLanguage.KOREAN:
+          charReadTimeMs = 90;
+          break;
+      }
+      
       await Future.delayed(Duration(
-          milliseconds: processedText.fullOriginalText.length * 100 + 1000));
+          milliseconds: processedText.fullOriginalText.length * charReadTimeMs + 1000));
     }
 
     // 재생 완료 후 상태 업데이트

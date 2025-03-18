@@ -6,9 +6,14 @@ import 'package:googleapis/translate/v3.dart' as translate;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import '../models/text_segment.dart';
+import '../utils/language_constants.dart';
 import 'usage_limit_service.dart';
 // 순환 참조 제거
 // import 'google_cloud_service.dart';
+
+/// 번역 서비스
+/// 다국어 지원을 위한 확장 포인트가 포함되어 있습니다.
+/// MARK: 다국어 지원을 위한 확장 포인트
 
 class TranslationService {
   // 싱글톤 패턴 구현
@@ -66,7 +71,7 @@ class TranslationService {
 
   // 번역 함수
   Future<String> translateText(String text,
-      {String sourceLanguage = 'auto', String? targetLanguage = 'ko'}) async {
+      {String sourceLanguage = 'auto', String? targetLanguage}) async {
     if (text.isEmpty) {
       return '';
     }
@@ -84,7 +89,8 @@ class TranslationService {
       }
 
       // 번역 요청
-      final target = targetLanguage ?? 'ko';
+      // 타겟 언어 기본값 설정
+      final target = targetLanguage ?? TargetLanguage.DEFAULT;
       final source = sourceLanguage == 'auto' ? null : sourceLanguage;
       final parent = 'projects/$_projectId/locations/global';
 
@@ -193,12 +199,14 @@ class TranslationService {
 
   // 기본 언어 목록
   List<Map<String, String>> _getDefaultLanguages() {
+    // MARK: 다국어 지원을 위한 확장 포인트
+    // 현재는 MVP 대상 언어만 반환
     return [
-      {'code': 'ko', 'name': '한국어'},
-      {'code': 'en', 'name': 'English'},
-      {'code': 'zh-CN', 'name': '중국어 (간체)'},
-      {'code': 'zh-TW', 'name': '중국어 (번체)'},
-      {'code': 'ja', 'name': '일본어'},
+      {'code': TargetLanguage.KOREAN, 'name': TargetLanguage.getName(TargetLanguage.KOREAN)},
+      {'code': TargetLanguage.ENGLISH, 'name': TargetLanguage.getName(TargetLanguage.ENGLISH)},
+      {'code': SourceLanguage.CHINESE, 'name': SourceLanguage.getName(SourceLanguage.CHINESE)},
+      {'code': SourceLanguage.CHINESE_TRADITIONAL, 'name': SourceLanguage.getName(SourceLanguage.CHINESE_TRADITIONAL)},
+      {'code': SourceLanguage.JAPANESE, 'name': SourceLanguage.getName(SourceLanguage.JAPANESE)},
     ];
   }
 
@@ -222,7 +230,7 @@ class TranslationService {
 
   /// 원본 문장과 번역 문장을 최대한 매핑하는 함수
   List<TextSegment> mapOriginalAndTranslatedSentences(
-      List<String> originalSentences, List<String> translatedSentences) {
+      List<String> originalSentences, List<String> translatedSentences, {String? sourceLanguage}) {
     final segments = <TextSegment>[];
     final int originalCount = originalSentences.length;
     final int translatedCount = translatedSentences.length;
@@ -236,6 +244,8 @@ class TranslationService {
           originalText: originalSentences[i],
           translatedText: translatedSentences[i],
           pinyin: '',
+          // 소스 언어 정보 추가
+          sourceLanguage: sourceLanguage ?? SourceLanguage.DEFAULT,
         ));
       }
       return segments;
@@ -250,38 +260,34 @@ class TranslationService {
         final String translatedText = translatedIndex < translatedCount
             ? translatedSentences[translatedIndex]
             : '';
-
+        
         segments.add(TextSegment(
           originalText: originalSentences[i],
           translatedText: translatedText,
           pinyin: '',
+          // 소스 언어 정보 추가
+          sourceLanguage: sourceLanguage ?? SourceLanguage.DEFAULT,
         ));
       }
+      return segments;
     }
+
     // 2. 번역 문장 수가 더 많은 경우: 원본 문장을 비율에 맞게 분배
-    else {
-      final double ratio = translatedCount / originalCount;
-      for (int i = 0; i < originalCount; i++) {
-        final int startIndex = (i * ratio).floor();
-        final int endIndex = ((i + 1) * ratio).floor();
-
-        // 해당 원본 문장에 매핑되는 번역 문장들을 결합
-        final StringBuffer combinedTranslation = StringBuffer();
-        for (int j = startIndex; j < endIndex && j < translatedCount; j++) {
-          if (combinedTranslation.isNotEmpty) {
-            combinedTranslation.write(' ');
-          }
-          combinedTranslation.write(translatedSentences[j]);
-        }
-
-        segments.add(TextSegment(
-          originalText: originalSentences[i],
-          translatedText: combinedTranslation.toString(),
-          pinyin: '',
-        ));
-      }
+    final double ratio = translatedCount / originalCount;
+    for (int i = 0; i < translatedCount; i++) {
+      final int originalIndex = (i / ratio).floor();
+      final String originalText = originalIndex < originalCount
+          ? originalSentences[originalIndex]
+          : '';
+      
+      segments.add(TextSegment(
+        originalText: originalText,
+        translatedText: translatedSentences[i],
+        pinyin: '',
+        // 소스 언어 정보 추가
+        sourceLanguage: sourceLanguage ?? SourceLanguage.DEFAULT,
+      ));
     }
-
     return segments;
   }
 }

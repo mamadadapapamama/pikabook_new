@@ -1,3 +1,8 @@
+// MARK: 다국어 지원을 위한 확장 포인트
+// 이 서비스는 향후 다국어 지원을 위해 리팩토링될 예정입니다.
+// 현재는 중국어 분절만 지원합니다.
+// 향후 각 언어별 분절 서비스로 분리될 예정입니다.
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'chinese_dictionary_service.dart';

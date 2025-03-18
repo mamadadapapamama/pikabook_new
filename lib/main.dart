@@ -15,6 +15,11 @@ import 'app.dart';
 import 'services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/chinese_segmenter_service.dart';
+import 'utils/language_constants.dart';
+
+// MARK: 다국어 지원을 위한 확장 포인트
+// 앱의 시작점에서 언어 설정을 초기화합니다.
+// 현재는 중국어만 지원하지만, 향후 다양한 언어를 지원할 예정입니다.
 
 void main() async {
   // Flutter 엔진 초기화
@@ -44,10 +49,17 @@ void main() async {
 Future<void> loadAppSettings() async {
   try {
     final prefs = await SharedPreferences.getInstance();
+    final userPreferences = UserPreferencesService();
 
     // 기본값은 false (비활성화)로 설정
     ChineseSegmenterService.isSegmentationEnabled =
         prefs.getBool('segmentation_enabled') ?? false;
+
+    // 언어 설정 초기화 - 아직 설정되지 않았다면 기본값 저장
+    final sourceLanguage = await userPreferences.getSourceLanguage();
+    final targetLanguage = await userPreferences.getTargetLanguage();
+    
+    debugPrint('언어 설정 로드 완료 - 소스 언어: $sourceLanguage, 타겟 언어: $targetLanguage');
 
     // 사전 로드는 필요할 때 지연 로딩으로 변경
     // 앱 시작 시 로드하지 않고, 실제로 필요할 때 로드하도록 함
@@ -56,6 +68,21 @@ Future<void> loadAppSettings() async {
     debugPrint('설정 로드 중 오류 발생: $e');
     // 오류 발생 시 기본값으로 비활성화
     ChineseSegmenterService.isSegmentationEnabled = false;
+  }
+}
+
+// 언어 설정 저장 함수 추가 (앱 종료 또는 백그라운드로 전환 시 호출)
+Future<void> saveLanguageSettings() async {
+  try {
+    final userPreferences = UserPreferencesService();
+    
+    // 현재 언어 설정 저장
+    final sourceLanguage = await userPreferences.getSourceLanguage();
+    final targetLanguage = await userPreferences.getTargetLanguage();
+    
+    debugPrint('언어 설정 저장 - 소스 언어: $sourceLanguage, 타겟 언어: $targetLanguage');
+  } catch (e) {
+    debugPrint('언어 설정 저장 중 오류 발생: $e');
   }
 }
 
