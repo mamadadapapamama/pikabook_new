@@ -4,7 +4,6 @@ import '../../services/initialization_service.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../services/user_preferences_service.dart';
 import '../../utils/language_constants.dart';
-import 'package:firebase_core/firebase_core.dart';
 
 class SettingsScreen extends StatefulWidget {
   final InitializationService initializationService;
@@ -32,7 +31,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _noteSpaceName = '';
   String _sourceLanguage = SourceLanguage.DEFAULT;
   String _targetLanguage = TargetLanguage.DEFAULT;
-  NoteViewMode _defaultNoteViewMode = NoteViewMode.segmentMode;
   
   @override
   void initState() {
@@ -76,16 +74,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final sourceLanguage = await _userPreferences.getSourceLanguage();
       final targetLanguage = await _userPreferences.getTargetLanguage();
       
-      // 노트 뷰 모드 로드
-      final noteViewMode = await _userPreferences.getDefaultNoteViewMode();
-      
       if (mounted) {
         setState(() {
           _userName = userName ?? '사용자';
           _noteSpaceName = defaultNoteSpace;
           _sourceLanguage = sourceLanguage;
           _targetLanguage = targetLanguage;
-          _defaultNoteViewMode = noteViewMode;
           _isLoading = false;
         });
       }
@@ -215,16 +209,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: _showTargetLanguageDialog,
           ),
           
-          // 기본 노트 뷰 설정
-          _buildSettingItem(
-            icon: Icons.visibility,
-            title: '기본 노트 뷰 (모든 노트에 적용)',
-            subtitle: _defaultNoteViewMode == NoteViewMode.segmentMode 
-                ? '문장별 학습 뷰(세그먼트 모드)' 
-                : '원문 전체 번역 뷰(전체 텍스트 모드)',
-            onTap: _showNoteViewModeDialog,
-          ),
-          
           const SizedBox(height: 24),
           
           // 3. 계정 관리 섹션
@@ -236,7 +220,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: '로그아웃',
             subtitle: '계정에서 로그아웃합니다',
             color: Colors.red,
-            onTap: _handleLogout,
+            onTap: _showLogoutConfirmation,
           ),
 
           // 익명 계정인 경우 소셜 계정 연결 옵션 표시
@@ -498,72 +482,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
   
-  // 기본 노트 뷰 모드 설정 다이얼로그
-  Future<void> _showNoteViewModeDialog() async {
-    final result = await showDialog<NoteViewMode>(
+  // 로그아웃 확인 다이얼로그 표시
+  Future<void> _showLogoutConfirmation() async {
+    final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('기본 노트 뷰 모드 설정'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                '모든 노트에 적용할 기본 보기 모드를 선택하세요.',
-                style: TextStyle(fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              RadioListTile<NoteViewMode>(
-                title: const Text('문장별 학습 뷰'),
-                subtitle: const Text('문장 단위로 끊어서 학습하기 좋은 형태'),
-                value: NoteViewMode.segmentMode,
-                groupValue: _defaultNoteViewMode,
-                onChanged: (value) {
-                  Navigator.pop(context, value);
-                },
-              ),
-              RadioListTile<NoteViewMode>(
-                title: const Text('원문 전체 번역 뷰'),
-                subtitle: const Text('원문과 번역을 전체적으로 확인하기 좋은 형태'),
-                value: NoteViewMode.fullTextMode,
-                groupValue: _defaultNoteViewMode,
-                onChanged: (value) {
-                  Navigator.pop(context, value);
-                },
-              ),
-            ],
-          ),
-        ),
+        title: const Text('로그아웃 확인'),
+        content: const Text('정말 로그아웃 하시겠어요?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('로그아웃'),
           ),
         ],
       ),
     );
     
-    if (result != null) {
-      try {
-        // 기본 노트 뷰 모드 저장
-        await _userPreferences.setDefaultNoteViewMode(result);
-        
-        // UI 다시 로드
-        await _loadUserPreferences();
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('기본 노트 뷰 모드가 변경되었습니다.')),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('기본 노트 뷰 모드 변경 중 오류가 발생했습니다: $e')),
-          );
-        }
-      }
+    if (result == true) {
+      _handleLogout();
     }
   }
   
