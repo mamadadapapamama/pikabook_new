@@ -41,8 +41,7 @@ class GoogleCloudService implements LanguageServiceInterface, ChineseLanguageSer
   /// 텍스트 번역
   /// 다양한 언어 지원 가능
   @override
-  Future<String> translateText({
-    required String text,
+  Future<String> translateText(String text, {
     String? sourceLanguage,
     String? targetLanguage,
   }) async {

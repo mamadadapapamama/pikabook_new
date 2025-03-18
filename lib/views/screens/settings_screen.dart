@@ -371,8 +371,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (result != null && result.isNotEmpty) {
-      await _userPreferences.setDefaultNoteSpace(result);
-      _loadUserPreferences();
+      try {
+        // 노트 스페이스 이름 변경 (이전 이름과 새 이름 전달)
+        final success = await _userPreferences.renameNoteSpace(_noteSpaceName, result);
+        
+        // 노트 스페이스 이름 저장
+        await _userPreferences.setDefaultNoteSpace(result);
+        
+        // UI 다시 로드
+        await _loadUserPreferences();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(success 
+                ? '노트 스페이스 이름이 변경되었습니다.' 
+                : '노트 스페이스 이름이 설정되었습니다.'),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('노트 스페이스 이름 변경 중 오류가 발생했습니다: $e')),
+          );
+        }
+      }
     }
   }
   
@@ -521,8 +545,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (result != null) {
-      await _userPreferences.setDefaultNoteViewMode(result);
-      _loadUserPreferences();
+      try {
+        // 기본 노트 뷰 모드 저장
+        await _userPreferences.setDefaultNoteViewMode(result);
+        
+        // UI 다시 로드
+        await _loadUserPreferences();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('기본 노트 뷰 모드가 변경되었습니다.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('기본 노트 뷰 모드 변경 중 오류가 발생했습니다: $e')),
+          );
+        }
+      }
     }
   }
   
@@ -534,12 +575,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     try {
       await FirebaseAuth.instance.signOut();
-      widget.onLogout();
+      if (mounted) {
+        // Navigator 관련 작업을 수행하기 전에 로그아웃 콜백 호출
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        widget.onLogout();
+      }
     } catch (e) {
       debugPrint('로그아웃 오류: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('로그아웃 중 오류가 발생했습니다: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('로그아웃 중 오류가 발생했습니다: $e')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -564,10 +611,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const SnackBar(content: Text('Apple 계정 연결 기능은 아직 구현되지 않았습니다.')),
     );
   }
-}
-
-/// 노트 보기 모드 정의
-enum NoteViewMode {
-  segmentMode,    // 세그먼트 모드 (문장별 번역)
-  fullTextMode,   // 전체 텍스트 모드 (전체 번역)
 }

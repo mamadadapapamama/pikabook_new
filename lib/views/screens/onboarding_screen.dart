@@ -396,7 +396,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 32),
-          _buildModeCard(
+          _buildTextModeCard(
             title: '언어 학습 모드',
             description: '문장을 분석하여 학습에 최적화된 형태로 표시합니다.',
             isSelected: _selectedMode == TextProcessingMode.languageLearning,
@@ -407,13 +407,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             },
           ),
           const SizedBox(height: 16),
-          _buildModeCard(
+          _buildTextModeCard(
             title: '빠른 읽기 모드',
             description: '분석을 최소화하여 빠르게 내용을 확인할 수 있습니다.',
-            isSelected: _selectedMode == TextProcessingMode.quickReading,
+            isSelected: _selectedMode == TextProcessingMode.professionalReading,
             onTap: () {
               setState(() {
-                _selectedMode = TextProcessingMode.quickReading;
+                _selectedMode = TextProcessingMode.professionalReading;
               });
             },
           ),
@@ -422,7 +422,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildModeCard({
+  Widget _buildTextModeCard({
     required String title,
     required String description,
     required bool isSelected,
