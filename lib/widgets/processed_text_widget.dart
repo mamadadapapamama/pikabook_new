@@ -17,6 +17,7 @@ class ProcessedTextWidget extends StatefulWidget {
   final Function(String)? onDictionaryLookup;
   final Function(String, String, {String? pinyin})? onCreateFlashCard;
   final List<FlashCard>? flashCards;
+  final Function(int)? onDeleteSegment;
 
   const ProcessedTextWidget({
     Key? key,
@@ -25,6 +26,7 @@ class ProcessedTextWidget extends StatefulWidget {
     this.onDictionaryLookup,
     this.onCreateFlashCard,
     this.flashCards,
+    this.onDeleteSegment,
   }) : super(key: key);
 
   @override
@@ -381,67 +383,88 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         continue;
       }
 
-      // 세그먼트 위젯 생성
+      // 세그먼트 위젯 생성 (Dismissible로 감싸기)
       segmentWidgets.add(
-        Container(
-          margin: const EdgeInsets.only(bottom: 16.0),
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.withOpacity(0.2)),
-            borderRadius: BorderRadius.circular(8.0),
+        Dismissible(
+          key: ValueKey('segment_$i'),
+          direction: DismissDirection.startToEnd, // 왼쪽에서 오른쪽으로 스와이프
+          background: Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: 20.0),
+            color: Colors.red,
+            child: const Icon(
+              Icons.delete,
+              color: Colors.white,
+            ),
           ),
-          padding: const EdgeInsets.all(8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // TTS 버튼 추가
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      _playingSegmentIndex == i
-                          ? Icons.stop_circle
-                          : Icons.play_circle,
-                      color:
-                          _playingSegmentIndex == i ? Colors.red : Colors.blue,
+          confirmDismiss: (direction) async {
+            // 세그먼트 삭제 콜백이 없으면 삭제하지 않음
+            if (widget.onDeleteSegment == null) return false;
+            
+            // 세그먼트 삭제 콜백 호출
+            widget.onDeleteSegment!(i);
+            return true;
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 16.0),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // TTS 버튼 추가
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _playingSegmentIndex == i
+                            ? Icons.stop_circle
+                            : Icons.play_circle,
+                        color:
+                            _playingSegmentIndex == i ? Colors.red : Colors.blue,
+                      ),
+                      onPressed: () {
+                        _playTts(segment.originalText, segmentIndex: i);
+                      },
+                      tooltip: _playingSegmentIndex == i ? '중지' : '읽기',
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
-                    onPressed: () {
-                      _playTts(segment.originalText, segmentIndex: i);
-                    },
-                    tooltip: _playingSegmentIndex == i ? '중지' : '읽기',
-                    iconSize: 24,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 4.0),
-
-              // 원본 텍스트 표시
-              _buildSelectableText(segment.originalText),
-
-              // 핀인 표시
-              if (segment.pinyin != null && segment.pinyin!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
-                  child: Text(
-                    segment.pinyin!,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey,
-                    ),
-                  ),
+                  ],
                 ),
 
-              // 번역 텍스트 표시
-              if (widget.showTranslation && segment.translatedText != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
-                  child: _buildSelectableText(segment.translatedText!),
-                ),
-            ],
+                const SizedBox(height: 4.0),
+
+                // 원본 텍스트 표시
+                _buildSelectableText(segment.originalText),
+
+                // 핀인 표시
+                if (segment.pinyin != null && segment.pinyin!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                    child: Text(
+                      segment.pinyin!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+
+                // 번역 텍스트 표시
+                if (widget.showTranslation && segment.translatedText != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                    child: _buildSelectableText(segment.translatedText!),
+                  ),
+              ],
+            ),
           ),
         ),
       );
