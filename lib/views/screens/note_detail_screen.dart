@@ -580,10 +580,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         onDeleteNote: _confirmDelete,
         onShowTextProcessingModeDialog: _showTextProcessingModeDialog,
         textProcessingMode: _textProcessingMode,
-        isProcessing: _isCreatingFlashCard,
-        onAddImage: _addImagePage,
-        onOpenFlashcards: _navigateToFlashcards,
-        flashcardCount: _note?.flashcardCount ?? 0,
       ),
     );
   }
@@ -880,17 +876,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             child: _buildCurrentPageContent(),
           ),
         ],
-      ),
-      // 액션 바텀 시트 추가
-      bottomNavigationBar: NoteActionBottomSheet(
-        onEditTitle: _showEditTitleDialog,
-        onDeleteNote: _confirmDelete,
-        onShowTextProcessingModeDialog: _showTextProcessingModeDialog,
-        textProcessingMode: _textProcessingMode,
-        isProcessing: _isCreatingFlashCard,
-        onAddImage: _addImagePage,
-        onOpenFlashcards: _navigateToFlashcards,
-        flashcardCount: _note?.flashcardCount ?? 0,
       ),
     );
   }
