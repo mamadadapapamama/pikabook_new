@@ -5,13 +5,10 @@ import '../models/processed_text.dart';
 import '../models/text_processing_mode.dart';
 import '../models/flash_card.dart';
 import '../models/dictionary_entry.dart';
-import '../utils/text_display_mode.dart';
 import 'text_section_widget.dart';
 import 'processed_text_widget.dart';
 import '../services/page_content_service.dart';
 import 'dictionary_result_widget.dart';
-import 'page_image_widget.dart';
-import 'text_display_toggle_widget.dart';
 
 /// 페이지 내의 이미지, 텍스트 처리상태, 처리된 텍스트 등을 표시
 /// 텍스트모드전환, 사전 검색 등 처리
@@ -44,7 +41,6 @@ class PageContentWidget extends StatefulWidget {
 }
 
 class _PageContentWidgetState extends State<PageContentWidget> {
-  TextDisplayMode _textDisplayMode = TextDisplayMode.both;
   final PageContentService _pageContentService = PageContentService();
 
   ProcessedText? _processedText;
@@ -134,17 +130,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 이미지 표시
-          if (widget.page.imageUrl != null) ...[
-            PageImageWidget(
-              imageFile: widget.imageFile,
-              imageUrl: widget.page.imageUrl,
-              pageId: widget.page.id,
-              isLoading: widget.isLoadingImage,
-            ),
-            const SizedBox(height: 20),
-          ],
-
+          // 이미지 표시 제거 (더 이상 필요하지 않음)
+          
           // 텍스트 처리 중 표시
           if (_isProcessingText)
             const Center(
@@ -198,46 +185,31 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           ]
           // 기존 방식으로 텍스트 표시 (처리된 텍스트가 없는 경우)
           else ...[
-            // 텍스트 표시 모드 토글 버튼
-            TextDisplayToggleWidget(
-              currentMode: _textDisplayMode,
-              onModeChanged: (mode) {
-                setState(() {
-                  _textDisplayMode = mode;
-                });
-              },
-              originalText: widget.page.originalText,
-            ),
-            const SizedBox(height: 20),
-
+            // 텍스트 표시 모드 토글 버튼 제거
+            // 하단 네비게이션 바로 이동함
+            
             // 원본 텍스트 표시
-            if (_textDisplayMode == TextDisplayMode.both ||
-                _textDisplayMode == TextDisplayMode.originalOnly) ...[
-              TextSectionWidget(
-                title: '원문',
-                text: widget.page.originalText,
-                isOriginal: true,
-                onDictionaryLookup: _showDictionaryResult,
-                onCreateFlashCard: widget.onCreateFlashCard,
-                translatedText: widget.page.translatedText,
-                flashcardWords: _flashcardWords,
-              ),
-              const SizedBox(height: 24),
-            ],
+            TextSectionWidget(
+              title: '원문',
+              text: widget.page.originalText,
+              isOriginal: true,
+              onDictionaryLookup: _showDictionaryResult,
+              onCreateFlashCard: widget.onCreateFlashCard,
+              translatedText: widget.page.translatedText,
+              flashcardWords: _flashcardWords,
+            ),
+            const SizedBox(height: 24),
 
             // 번역 텍스트 표시
-            if (_textDisplayMode == TextDisplayMode.both ||
-                _textDisplayMode == TextDisplayMode.translationOnly) ...[
-              TextSectionWidget(
-                title: '번역',
-                text: widget.page.translatedText,
-                isOriginal: false,
-                onDictionaryLookup: _showDictionaryResult,
-                onCreateFlashCard: widget.onCreateFlashCard,
-                translatedText: widget.page.originalText,
-                flashcardWords: _flashcardWords,
-              ),
-            ],
+            TextSectionWidget(
+              title: '번역',
+              text: widget.page.translatedText,
+              isOriginal: false,
+              onDictionaryLookup: _showDictionaryResult,
+              onCreateFlashCard: widget.onCreateFlashCard,
+              translatedText: widget.page.originalText,
+              flashcardWords: _flashcardWords,
+            ),
           ],
         ],
       ),
