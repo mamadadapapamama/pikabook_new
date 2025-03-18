@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'flash_card.dart';
 import 'page.dart';
+import '../utils/language_constants.dart';
 
 /// Straight forward! Note 의 모델
 
@@ -21,6 +22,9 @@ class Note {
   final String? userId;
   final bool processingCompleted;
   final bool isProcessingBackground;
+  final String sourceLanguage;
+  final String targetLanguage;
+  final String? noteSpaceId;
 
   Note({
     this.id,
@@ -39,18 +43,26 @@ class Note {
     this.userId,
     this.processingCompleted = false,
     this.isProcessingBackground = false,
+    String? sourceLanguage,
+    String? targetLanguage,
+    this.noteSpaceId,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
         tags = tags ?? [],
         flashCards = flashCards ?? [],
         pages = pages ?? [],
         flashcardCount = flashcardCount ?? 0,
-        reviewCount = reviewCount ?? 0;
+        reviewCount = reviewCount ?? 0,
+        sourceLanguage = sourceLanguage ?? SourceLanguage.DEFAULT,
+        targetLanguage = targetLanguage ?? TargetLanguage.DEFAULT;
 
   factory Note.create({
     required String userId,
     required String title,
     String content = '',
+    String? sourceLanguage,
+    String? targetLanguage,
+    String? noteSpaceId,
   }) {
     final now = DateTime.now();
     return Note(
@@ -70,6 +82,9 @@ class Note {
       userId: userId,
       processingCompleted: false,
       isProcessingBackground: false,
+      sourceLanguage: sourceLanguage ?? SourceLanguage.DEFAULT,
+      targetLanguage: targetLanguage ?? TargetLanguage.DEFAULT,
+      noteSpaceId: noteSpaceId,
     );
   }
 
@@ -134,6 +149,9 @@ class Note {
       userId: data['userId'],
       processingCompleted: data['processingCompleted'] ?? false,
       isProcessingBackground: data['isProcessingBackground'] ?? false,
+      sourceLanguage: data['sourceLanguage'] ?? SourceLanguage.DEFAULT,
+      targetLanguage: data['targetLanguage'] ?? TargetLanguage.DEFAULT,
+      noteSpaceId: data['noteSpaceId'],
     );
   }
 
@@ -154,6 +172,9 @@ class Note {
       'userId': userId,
       'processingCompleted': processingCompleted,
       'isProcessingBackground': isProcessingBackground,
+      'sourceLanguage': sourceLanguage,
+      'targetLanguage': targetLanguage,
+      'noteSpaceId': noteSpaceId,
     };
   }
 
@@ -176,6 +197,9 @@ class Note {
       'userId': userId,
       'processingCompleted': processingCompleted,
       'isProcessingBackground': isProcessingBackground,
+      'sourceLanguage': sourceLanguage,
+      'targetLanguage': targetLanguage,
+      'noteSpaceId': noteSpaceId,
     };
   }
 
@@ -205,6 +229,9 @@ class Note {
       userId: json['userId'],
       processingCompleted: json['processingCompleted'] ?? false,
       isProcessingBackground: json['isProcessingBackground'] ?? false,
+      sourceLanguage: json['sourceLanguage'] ?? SourceLanguage.DEFAULT,
+      targetLanguage: json['targetLanguage'] ?? TargetLanguage.DEFAULT,
+      noteSpaceId: json['noteSpaceId'],
     );
   }
 
@@ -225,6 +252,9 @@ class Note {
     String? userId,
     bool? processingCompleted,
     bool? isProcessingBackground,
+    String? sourceLanguage,
+    String? targetLanguage,
+    String? noteSpaceId,
   }) {
     return Note(
       id: id ?? this.id,
@@ -244,6 +274,9 @@ class Note {
       processingCompleted: processingCompleted ?? this.processingCompleted,
       isProcessingBackground:
           isProcessingBackground ?? this.isProcessingBackground,
+      sourceLanguage: sourceLanguage ?? this.sourceLanguage,
+      targetLanguage: targetLanguage ?? this.targetLanguage,
+      noteSpaceId: noteSpaceId ?? this.noteSpaceId,
     );
   }
 

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/language_constants.dart';
 
 /// Straight forward! Page 의 모델
 
@@ -10,6 +11,10 @@ class Page {
   final int pageNumber;
   final DateTime createdAt;
   final DateTime updatedAt;
+  // 언어 관련 필드 추가
+  final String sourceLanguage; // 원문 언어
+  final String targetLanguage; // 번역 언어
+  final String? noteId; // 페이지가 속한 노트 ID
 
   Page({
     this.id,
@@ -19,8 +24,15 @@ class Page {
     required this.pageNumber,
     DateTime? createdAt,
     DateTime? updatedAt,
+    // 언어 관련 필드
+    String? sourceLanguage,
+    String? targetLanguage,
+    this.noteId,
   })  : this.createdAt = createdAt ?? DateTime.now(),
-        this.updatedAt = updatedAt ?? DateTime.now();
+        this.updatedAt = updatedAt ?? DateTime.now(),
+        // 언어 기본값 설정
+        this.sourceLanguage = sourceLanguage ?? SourceLanguage.DEFAULT,
+        this.targetLanguage = targetLanguage ?? TargetLanguage.DEFAULT;
 
   // Firestore에서 데이터 가져오기
   factory Page.fromFirestore(DocumentSnapshot doc) {
@@ -34,6 +46,10 @@ class Page {
       pageNumber: data['pageNumber'] ?? 0,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      // 언어 관련 필드
+      sourceLanguage: data['sourceLanguage'] ?? SourceLanguage.DEFAULT,
+      targetLanguage: data['targetLanguage'] ?? TargetLanguage.DEFAULT,
+      noteId: data['noteId'],
     );
   }
 
@@ -46,6 +62,10 @@ class Page {
       'pageNumber': pageNumber,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      // 언어 관련 필드
+      'sourceLanguage': sourceLanguage,
+      'targetLanguage': targetLanguage,
+      'noteId': noteId,
     };
   }
 
@@ -59,6 +79,10 @@ class Page {
       'pageNumber': pageNumber,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      // 언어 관련 필드
+      'sourceLanguage': sourceLanguage,
+      'targetLanguage': targetLanguage,
+      'noteId': noteId,
     };
   }
 
@@ -74,6 +98,10 @@ class Page {
           json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
       updatedAt:
           json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
+      // 언어 관련 필드
+      sourceLanguage: json['sourceLanguage'] ?? SourceLanguage.DEFAULT,
+      targetLanguage: json['targetLanguage'] ?? TargetLanguage.DEFAULT,
+      noteId: json['noteId'],
     );
   }
 
@@ -86,6 +114,10 @@ class Page {
     int? pageNumber,
     DateTime? createdAt,
     DateTime? updatedAt,
+    // 언어 관련 필드
+    String? sourceLanguage,
+    String? targetLanguage,
+    String? noteId,
   }) {
     return Page(
       id: id ?? this.id,
@@ -95,6 +127,10 @@ class Page {
       pageNumber: pageNumber ?? this.pageNumber,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      // 언어 관련 필드
+      sourceLanguage: sourceLanguage ?? this.sourceLanguage,
+      targetLanguage: targetLanguage ?? this.targetLanguage,
+      noteId: noteId ?? this.noteId,
     );
   }
 }

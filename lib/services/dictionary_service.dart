@@ -1,3 +1,7 @@
+// MARK: 다국어 지원을 위한 확장 포인트
+// 이 서비스는 향후 다국어 지원을 위해 확장될 예정입니다.
+// 현재는 중국어만 지원합니다.
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -6,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../models/dictionary_entry.dart';
 import 'chinese_dictionary_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// 외부 사전 서비스 (e.g papago, google translate) 를 관리하는 서비스
 /// 단어 검색 결과 캐싱

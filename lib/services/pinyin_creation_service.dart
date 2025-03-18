@@ -1,3 +1,8 @@
+// MARK: 다국어 지원을 위한 확장 포인트
+// 이 서비스는 향후 다국어 지원을 위해 리팩토링될 예정입니다.
+// 현재는 중국어 핀인 생성만 지원합니다.
+// 향후 언어별 발음 표기 서비스로 확장될 예정입니다 (예: 일본어 후리가나).
+
 import 'package:flutter/foundation.dart';
 import 'package:pinyin/pinyin.dart';
 
