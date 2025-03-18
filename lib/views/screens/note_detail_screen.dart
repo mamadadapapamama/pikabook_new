@@ -3,6 +3,8 @@ import 'dart:io';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/text_processing_mode.dart';
+import '../../models/text_segment.dart';
+import '../../models/processed_text.dart';
 import '../../services/note_service.dart';
 import '../../services/page_service.dart';
 import '../../services/image_service.dart';
@@ -11,16 +13,19 @@ import '../../services/dictionary_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/enhanced_ocr_service.dart';
 import '../../services/user_preferences_service.dart';
+import '../../services/page_content_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/note_detail_app_bar.dart';
 import '../../widgets/note_action_bottom_sheet.dart';
 import '../../widgets/note_page_view.dart';
+import '../../widgets/page_content_widget.dart';
 import '../../widgets/edit_title_dialog.dart';
 import 'flashcard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async'; // Timer 클래스를 사용하기 위한 import 추가
 import '../../services/unified_cache_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -49,6 +54,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UserPreferencesService _preferencesService = UserPreferencesService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
+  final PageContentService _pageContentService = PageContentService();
 
   // 상태 변수
   Note? _note;
@@ -553,24 +559,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // ===== 페이지 탐색 관련 메서드 =====
 
-  void _changePage(int newIndex) {
-    if (newIndex < 0 ||
-        newIndex >= _pages.length ||
-        newIndex == _currentPageIndex) {
-      return;
-    }
-
-    debugPrint('페이지 전환: $_currentPageIndex -> $newIndex');
-
-    // TTS 중지
-    _ttsService.stop();
-
+  void _changePage(int index) {
+    if (index < 0 || index >= _pages.length) return;
+    
     setState(() {
-      _currentPageIndex = newIndex;
+      _currentPageIndex = index;
     });
-
-    // 새 페이지의 이미지 로드
-    _loadPageImages();
+    
+    // 현재 페이지 이미지 로드
+    _loadPageImage(_currentPageIndex);
   }
 
   // ===== 메뉴 및 다이얼로그 관련 메서드 =====
@@ -583,6 +580,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         onDeleteNote: _confirmDelete,
         onShowTextProcessingModeDialog: _showTextProcessingModeDialog,
         textProcessingMode: _textProcessingMode,
+        isProcessing: _isCreatingFlashCard,
+        onAddImage: _addImagePage,
+        onOpenFlashcards: _navigateToFlashcards,
+        flashcardCount: _note?.flashcardCount ?? 0,
       ),
     );
   }
@@ -696,16 +697,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // ===== 플래시카드 화면 이동 관련 메서드 =====
 
-  Future<void> _navigateToFlashCardScreen() async {
+  Future<void> _navigateToFlashcards() async {
     if (_note == null) return;
-
-    // 플래시카드 화면으로 이동하고 결과를 받음
-    final result = await Navigator.of(context).push(
+    
+    final result = await Navigator.push(
+      context,
       MaterialPageRoute(
-        builder: (context) => FlashCardScreen(noteId: _note!.id),
+        builder: (context) => FlashCardScreen(
+          noteId: widget.noteId,
+        ),
       ),
     );
-
+    
     // 플래시카드가 변경되었으면 노트 정보 다시 로드
     if (result != null && mounted) {
       if (result is Note) {
@@ -740,63 +743,199 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
+  // 세그먼트 삭제 처리 메서드
+  void _handleDeleteSegment(int segmentIndex) {
+    if (_currentPageIndex < 0 || _currentPageIndex >= _pages.length) return;
+    
+    final page = _pages[_currentPageIndex];
+    
+    // 현재 페이지의 processedText 객체 가져오기
+    if (_pageContentService.hasProcessedText(page.id!)) {
+      final processedText = _pageContentService.getProcessedText(page.id!);
+      
+      if (processedText != null && 
+          processedText.segments != null && 
+          segmentIndex < processedText.segments!.length) {
+        
+        // 세그먼트 목록에서 해당 인덱스의 세그먼트 제거
+        final updatedSegments = List<TextSegment>.from(processedText.segments!);
+        updatedSegments.removeAt(segmentIndex);
+        
+        // 업데이트된 세그먼트 목록으로 새 ProcessedText 생성
+        final updatedProcessedText = processedText.copyWith(
+          segments: updatedSegments,
+        );
+        
+        // 업데이트된 ProcessedText 저장
+        _pageContentService.setProcessedText(page.id!, updatedProcessedText);
+        
+        // UI 갱신
+        setState(() {});
+      }
+    }
+  }
+
   // ===== UI 빌드 메서드 =====
 
   @override
   Widget build(BuildContext context) {
+    // 노트 또는 현재 페이지 인덱스가 유효하지 않은 경우 로딩 표시
+    if (_note == null || _currentPageIndex < 0) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('로딩 중...')),
+        body: _isLoading
+            ? const Center(child: LoadingIndicator(message: '노트 로딩 중...'))
+            : Center(child: Text(_error ?? '노트를 불러올 수 없습니다.')),
+      );
+    }
+
     return Scaffold(
       appBar: NoteDetailAppBar(
-        note: _note,
+        note: _note!,
         isFavorite: _isFavorite,
         onEditTitle: _showEditTitleDialog,
         onToggleFavorite: _toggleFavorite,
         onShowMoreOptions: _showMoreOptions,
-        onFlashCardPressed: _navigateToFlashCardScreen,
+        onFlashCardPressed: _navigateToFlashcards,
       ),
-      body: _buildBody(),
+      body: Column(
+        children: [
+          // 페이지 인디케이터 (여러 페이지가 있는 경우)
+          if (_pages.length > 1)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios, size: 18),
+                    onPressed: _currentPageIndex > 0
+                        ? () => _changePage(_currentPageIndex - 1)
+                        : null,
+                  ),
+                  Text('${_currentPageIndex + 1} / ${_pages.length}'),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward_ios, size: 18),
+                    onPressed: _currentPageIndex < _pages.length - 1
+                        ? () => _changePage(_currentPageIndex + 1)
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+          
+          // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
+          Expanded(
+            child: _buildCurrentPageContent(),
+          ),
+        ],
+      ),
+      // 액션 바텀 시트 추가
+      bottomNavigationBar: NoteActionBottomSheet(
+        onEditTitle: _showEditTitleDialog,
+        onDeleteNote: _confirmDelete,
+        onShowTextProcessingModeDialog: _showTextProcessingModeDialog,
+        textProcessingMode: _textProcessingMode,
+        isProcessing: _isCreatingFlashCard,
+        onAddImage: _addImagePage,
+        onOpenFlashcards: _navigateToFlashcards,
+        flashcardCount: _note?.flashcardCount ?? 0,
+      ),
     );
   }
-
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const LoadingIndicator(message: '노트 불러오는 중...');
+  
+  // 현재 페이지 내용 빌드
+  Widget _buildCurrentPageContent() {
+    if (_currentPageIndex >= _pages.length) {
+      return const Center(child: Text('페이지를 찾을 수 없습니다.'));
     }
 
-    if (_error != null) {
-      return Center(
+    final currentPage = _pages[_currentPageIndex];
+    final imageFile = _imageFiles[_currentPageIndex];
+    final bool isLoadingImage =
+        imageFile == null && currentPage.imageUrl != null;
+
+    // 이미지가 로딩 중이면 로딩 인디케이터 표시
+    if (isLoadingImage) {
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Colors.red,
-            ),
-            const SizedBox(height: 16),
-            Text(_error!, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadNote,
-              child: const Text('다시 시도'),
-            ),
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('페이지 로딩 중...', style: TextStyle(fontSize: 16)),
           ],
         ),
       );
     }
 
-    if (_note == null) {
-      return const Center(child: Text('노트를 찾을 수 없습니다.'));
-    }
-
-    return NotePageView(
-      pages: _pages,
-      imageFiles: _imageFiles,
-      currentPageIndex: _currentPageIndex,
-      onPageChanged: _changePage,
+    return PageContentWidget(
+      key: ValueKey('page_content_${currentPage.id}_$_currentPageIndex'),
+      page: currentPage,
+      imageFile: imageFile,
+      isLoadingImage: false,
       noteId: widget.noteId,
       onCreateFlashCard: _createFlashCard,
       textProcessingMode: _textProcessingMode,
       flashCards: _note?.flashCards,
+      onDeleteSegment: _handleDeleteSegment,
     );
+  }
+
+  // 이미지 페이지 추가 메서드
+  Future<void> _addImagePage() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      // 이미지 선택 및 처리
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      
+      if (pickedFile == null) {
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+      
+      final imageFile = File(pickedFile.path);
+
+      // 새 페이지 번호 계산
+      final int newPageNumber = _pages.isEmpty ? 1 : _pages.last.pageNumber + 1;
+
+      // 페이지 생성 및 이미지 업로드
+      final newPage = await _pageService.createPageWithImage(
+        noteId: widget.noteId,
+        pageNumber: newPageNumber,
+        imageFile: imageFile,
+      );
+
+      // 페이지 목록 업데이트
+      setState(() {
+        _pages.add(newPage);
+        _imageFiles.add(imageFile); // 이미지 파일 배열에 추가
+        _currentPageIndex = _pages.length - 1; // 새 페이지로 이동
+        _isLoading = false;
+      });
+
+      // 성공 메시지
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('페이지가 추가되었습니다')),
+        );
+      }
+    } catch (e) {
+      debugPrint('이미지 페이지 추가 중 오류 발생: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('페이지 추가 중 오류가 발생했습니다: $e')),
+        );
+      }
+    }
   }
 }

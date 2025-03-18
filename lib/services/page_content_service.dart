@@ -24,9 +24,33 @@ class PageContentService {
   final TtsService _ttsService = TtsService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final PageService _pageService = PageService();
+  
+  // 페이지 ID를 키로 사용하여 ProcessedText 객체 캐싱
+  final Map<String, ProcessedText> _processedTextCache = {};
 
   PageContentService._internal() {
     _initTts();
+  }
+
+  // ProcessedText 캐시 메서드들
+  bool hasProcessedText(String pageId) {
+    return _processedTextCache.containsKey(pageId);
+  }
+
+  ProcessedText? getProcessedText(String pageId) {
+    return _processedTextCache[pageId];
+  }
+
+  void setProcessedText(String pageId, ProcessedText processedText) {
+    _processedTextCache[pageId] = processedText;
+  }
+
+  void removeProcessedText(String pageId) {
+    _processedTextCache.remove(pageId);
+  }
+
+  void clearProcessedTextCache() {
+    _processedTextCache.clear();
   }
 
   // TTS 초기화

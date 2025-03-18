@@ -25,6 +25,7 @@ class PageContentWidget extends StatefulWidget {
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
   final TextProcessingMode textProcessingMode;
   final List<FlashCard>? flashCards;
+  final Function(int)? onDeleteSegment;
 
   const PageContentWidget({
     super.key,
@@ -35,6 +36,7 @@ class PageContentWidget extends StatefulWidget {
     required this.onCreateFlashCard,
     this.textProcessingMode = TextProcessingMode.languageLearning,
     this.flashCards,
+    this.onDeleteSegment,
   });
 
   @override
@@ -190,6 +192,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 },
                 flashCards: widget.flashCards,
                 showTranslation: true,
+                onDeleteSegment: widget.onDeleteSegment,
               );
             }),
           ]
