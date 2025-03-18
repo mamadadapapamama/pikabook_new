@@ -9,14 +9,14 @@ class SourceLanguage {
   static const String ENGLISH = 'en';
   static const String KOREAN = 'ko';
   
-  // MVP에서는 중국어만 지원
+  // MVP에서는 중국어(간체)만 지원
   static const String DEFAULT = CHINESE;
   
-  // 향후 지원 예정인 언어들
-  static const List<String> SUPPORTED = [CHINESE, CHINESE_TRADITIONAL];
+  // 현재 지원 언어 (MVP)
+  static const List<String> SUPPORTED = [CHINESE];
   
   // 확장 단계에서 지원 예정인 언어들
-  static const List<String> FUTURE_SUPPORTED = [JAPANESE, ENGLISH, KOREAN];
+  static const List<String> FUTURE_SUPPORTED = [CHINESE_TRADITIONAL, JAPANESE, ENGLISH, KOREAN];
   
   // 언어 코드에 해당하는 언어 이름을 반환
   static String getName(String code) {
@@ -44,14 +44,14 @@ class TargetLanguage {
   static const String CHINESE = 'zh-CN';
   static const String JAPANESE = 'ja';
   
-  // MVP에서는 한국어와 영어만 지원
+  // MVP에서는 한국어만 지원
   static const String DEFAULT = KOREAN;
   
-  // 현재 지원 언어
-  static const List<String> SUPPORTED = [KOREAN, ENGLISH];
+  // 현재 지원 언어 (MVP)
+  static const List<String> SUPPORTED = [KOREAN];
   
   // 확장 단계에서 지원 예정인 언어들
-  static const List<String> FUTURE_SUPPORTED = [CHINESE, JAPANESE];
+  static const List<String> FUTURE_SUPPORTED = [ENGLISH];
   
   // 언어 코드에 해당하는 언어 이름을 반환
   static String getName(String code) {
@@ -59,7 +59,7 @@ class TargetLanguage {
       case KOREAN:
         return '한국어';
       case ENGLISH:
-        return 'English';
+        return 'English (Coming Soon)';
       case CHINESE:
         return '중국어';
       case JAPANESE:
