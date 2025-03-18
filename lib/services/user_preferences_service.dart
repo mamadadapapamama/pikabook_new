@@ -2,6 +2,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/text_processing_mode.dart';
 import '../utils/language_constants.dart';
 
+// 노트 뷰 모드 enum - 클래스 외부로 이동
+enum NoteViewMode {
+  segmentMode,    // 문장별 학습 뷰(세그먼트 모드)
+  fullTextMode    // 원문 전체 번역 뷰(전체 텍스트 모드)
+}
+
 /// 사용자 기본 설정을 관리하는 서비스
 class UserPreferencesService {
   // 싱글톤 패턴 구현
@@ -20,12 +26,6 @@ class UserPreferencesService {
   static const String _defaultNoteViewModeKey = 'default_note_view_mode';
   static const String _defaultNoteSpaceKey = 'default_note_space';
   static const String _noteSpacesKey = 'note_spaces';
-
-  // 노트 뷰 모드 enum
-  enum NoteViewMode {
-    segmentMode,    // 문장별 학습 뷰(세그먼트 모드)
-    fullTextMode    // 원문 전체 번역 뷰(전체 텍스트 모드)
-  }
 
   // 기본 텍스트 처리 모드 (온보딩에서 설정)
   Future<void> setDefaultTextProcessingMode(TextProcessingMode mode) async {
@@ -143,8 +143,9 @@ class UserPreferencesService {
     return prefs.getStringList(_noteSpacesKey) ?? ['기본 노트 스페이스'];
   }
 
-  // 노트 스페이스 추가
+  // 노트 스페이스 추가 (MVP에서는 사용하지 않음)
   Future<void> addNoteSpace(String name) async {
+    // MVP에서는 사용하지 않지만 호환성을 위해 유지
     final prefs = await SharedPreferences.getInstance();
     final spaces = await getNoteSpaces();
     
@@ -182,28 +183,10 @@ class UserPreferencesService {
     return false;
   }
 
-  // 노트 스페이스 삭제
+  // 노트 스페이스 삭제 (MVP에서는 사용하지 않음)
   Future<bool> deleteNoteSpace(String name) async {
-    final prefs = await SharedPreferences.getInstance();
-    final spaces = await getNoteSpaces();
-    
-    // 마지막 노트 스페이스는 삭제 불가
-    if (spaces.length <= 1) {
-      return false;
-    }
-    
-    final success = spaces.remove(name);
-    if (success) {
-      await prefs.setStringList(_noteSpacesKey, spaces);
-      
-      // 기본 노트 스페이스가 삭제된 경우 첫 번째 항목으로 설정
-      final defaultSpace = await getDefaultNoteSpace();
-      if (defaultSpace == name) {
-        await setDefaultNoteSpace(spaces.first);
-      }
-    }
-    
-    return success;
+    // MVP에서는 사용하지 않지만 호환성을 위해 유지
+    return false;
   }
 
   // 기본 노트 스페이스 설정

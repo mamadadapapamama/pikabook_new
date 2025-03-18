@@ -8,7 +8,7 @@ import 'views/screens/splash_screen.dart';
 import 'views/screens/onboarding_screen.dart';
 import 'firebase_options.dart';
 import 'views/screens/login_screen.dart';
-import 'views/screens/profile_screen.dart';
+import 'views/screens/settings_screen.dart';
 
 class App extends StatefulWidget {
   final InitializationService initializationService;
@@ -122,7 +122,7 @@ class _AppState extends State<App> {
       theme: AppTheme.lightTheme,
       home: _buildHomeScreen(),
       routes: {
-        '/profile': (context) => ProfileScreen(
+        '/settings': (context) => SettingsScreen(
               initializationService: widget.initializationService,
               onLogout: _handleLogout,
             ),

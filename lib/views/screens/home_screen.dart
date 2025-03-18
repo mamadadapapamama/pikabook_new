@@ -8,14 +8,38 @@ import '../../widgets/loading_dialog.dart';
 import '../../services/note_service.dart';
 import '../../services/page_service.dart';
 import '../../services/image_service.dart';
+import '../../services/user_preferences_service.dart';
 import '../../models/note.dart';
 import 'note_detail_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// 향후 유저 세팅 화면으로 바꾸어 사용. 현재는 사용되지 않음
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final UserPreferencesService _userPreferences = UserPreferencesService();
+  String _noteSpaceName = '';
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadNoteSpaceName();
+  }
+  
+  Future<void> _loadNoteSpaceName() async {
+    final noteSpaceName = await _userPreferences.getDefaultNoteSpace();
+    if (mounted) {
+      setState(() {
+        _noteSpaceName = noteSpaceName;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,15 +47,18 @@ class HomeScreen extends StatelessWidget {
       create: (_) => HomeViewModel(),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Pikabook'),
+          title: Text(_noteSpaceName),
           actions: [
-            // 프로필 버튼
+            // 설정 버튼
             IconButton(
-              icon: const Icon(Icons.account_circle),
+              icon: const Icon(Icons.settings),
               onPressed: () {
-                Navigator.pushNamed(context, '/profile');
+                Navigator.pushNamed(context, '/settings').then((_) {
+                  // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
+                  _loadNoteSpaceName();
+                });
               },
-              tooltip: '프로필',
+              tooltip: '설정',
             ),
           ],
         ),
