@@ -15,6 +15,9 @@ class TextReaderService {
 
   // 현재 재생 중인 세그먼트 인덱스
   int? get currentSegmentIndex => _ttsService.currentSegmentIndex;
+  
+  // 현재 재생 중인지 여부
+  bool get isPlaying => currentSegmentIndex != null;
 
   // 재생 상태 변경 콜백
   void setOnPlayingStateChanged(Function(int?) callback) {

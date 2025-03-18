@@ -20,12 +20,17 @@ import '../../widgets/note_action_bottom_sheet.dart';
 import '../../widgets/note_page_view.dart';
 import '../../widgets/page_content_widget.dart';
 import '../../widgets/edit_title_dialog.dart';
+import '../../widgets/page_indicator_widget.dart';
+import '../../widgets/text_display_toggle_widget.dart';
+import '../../utils/text_display_mode.dart';
 import 'flashcard_screen.dart';
+import 'full_image_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async'; // Timer 클래스를 사용하기 위한 import 추가
 import '../../services/unified_cache_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../services/text_reader_service.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -55,6 +60,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   final UserPreferencesService _preferencesService = UserPreferencesService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final PageContentService _pageContentService = PageContentService();
+  final TextReaderService _textReaderService = TextReaderService();
 
   // 상태 변수
   Note? _note;
@@ -836,6 +842,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       );
     }
 
+    final currentPage = _currentPageIndex < _pages.length ? _pages[_currentPageIndex] : null;
+    final imageFile = _currentPageIndex < _imageFiles.length ? _imageFiles[_currentPageIndex] : null;
+
     return Scaffold(
       appBar: NoteDetailAppBar(
         note: _note!,
@@ -847,36 +856,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ),
       body: Column(
         children: [
-          // 페이지 인디케이터 (여러 페이지가 있는 경우)
-          if (_pages.length > 1)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios, size: 18),
-                    onPressed: _currentPageIndex > 0
-                        ? () => _changePage(_currentPageIndex - 1)
-                        : null,
-                  ),
-                  Text('${_currentPageIndex + 1} / ${_pages.length}'),
-                  IconButton(
-                    icon: const Icon(Icons.arrow_forward_ios, size: 18),
-                    onPressed: _currentPageIndex < _pages.length - 1
-                        ? () => _changePage(_currentPageIndex + 1)
-                        : null,
-                  ),
-                ],
-              ),
-            ),
-          
           // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
           Expanded(
             child: _buildCurrentPageContent(),
           ),
         ],
       ),
+      bottomNavigationBar: _buildBottomNavigationBar(currentPage, imageFile),
     );
   }
   
@@ -915,6 +901,168 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       textProcessingMode: _textProcessingMode,
       flashCards: _note?.flashCards,
       onDeleteSegment: _handleDeleteSegment,
+    );
+  }
+
+  // 바텀 네비게이션 바 빌드
+  Widget _buildBottomNavigationBar(page_model.Page? currentPage, File? imageFile) {
+    if (currentPage == null) return const SizedBox.shrink();
+    
+    final processedText = _pageContentService.getProcessedText(currentPage.id ?? '');
+    final bool hasSegments = processedText != null && 
+                            processedText.segments != null && 
+                            processedText.segments!.isNotEmpty;
+    
+    // TTS 재생 중인지 확인
+    final bool isPlaying = _textReaderService.isPlaying;
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 페이지 인디케이터 위젯 사용
+        if (_pages.length > 1)
+          PageIndicatorWidget(
+            currentPageIndex: _currentPageIndex,
+            totalPages: _pages.length,
+            onPageChanged: _changePage,
+          ),
+          
+        // 바텀 바 컨테이너  
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 4,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 상단 행: 텍스트 토글 위젯과 TTS 버튼
+              if (hasSegments)
+                Row(
+                  children: [
+                    // TextDisplayToggleWidget 추가
+                    Expanded(
+                      child: TextDisplayToggleWidget(
+                        currentMode: TextDisplayMode.both, // 기본값 설정
+                        onModeChanged: (mode) {
+                          // 모드 변경 처리
+                          setState(() {});
+                        },
+                        originalText: currentPage.originalText,
+                      ),
+                    ),
+                    
+                    // 전체 읽기/멈춤 버튼 (토글)
+                    IconButton(
+                      icon: Icon(
+                        isPlaying ? Icons.stop : Icons.play_arrow, 
+                        size: 20
+                      ),
+                      tooltip: isPlaying ? '읽기 중지' : '전체 읽기',
+                      onPressed: () {
+                        if (isPlaying) {
+                          _textReaderService.stop();
+                        } else if (currentPage.originalText.isNotEmpty) {
+                          _textReaderService.readTextBySentences(currentPage.originalText);
+                        }
+                        setState(() {});
+                      },
+                    ),
+                  ],
+                ),
+              
+              const SizedBox(height: 8),
+              
+              // 하단 행: 이미지 썸네일
+              if (imageFile != null || currentPage.imageUrl != null)
+                GestureDetector(
+                  onTap: () {
+                    // FullImageScreen으로 이동
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => FullImageScreen(
+                          imageFile: imageFile,
+                          imageUrl: currentPage.imageUrl,
+                          title: '페이지 이미지',
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    height: 60,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      children: [
+                        // 이미지 썸네일
+                        if (imageFile != null)
+                          SizedBox(
+                            width: 80,
+                            height: 60,
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(4),
+                                bottomLeft: Radius.circular(4),
+                              ),
+                              child: Image.file(
+                                imageFile,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        
+                        const SizedBox(width: 8),
+                        
+                        // 이미지 설명 텍스트
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '페이지 이미지',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                '눌러서 원본 이미지 보기',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        // 화살표 아이콘
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: 16,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
