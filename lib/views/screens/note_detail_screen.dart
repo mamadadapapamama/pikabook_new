@@ -941,47 +941,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 상단 행: 텍스트 토글 위젯과 TTS 버튼
-              if (hasSegments)
-                Row(
-                  children: [
-                    // TextDisplayToggleWidget 추가
-                    Expanded(
-                      child: TextDisplayToggleWidget(
-                        currentMode: TextDisplayMode.both, // 기본값 설정
-                        onModeChanged: (mode) {
-                          // 모드 변경 처리
-                          setState(() {});
-                        },
-                        originalText: currentPage.originalText,
-                      ),
-                    ),
-                    
-                    // 전체 읽기/멈춤 버튼 (토글)
-                    IconButton(
-                      icon: Icon(
-                        isPlaying ? Icons.stop : Icons.play_arrow, 
-                        size: 20
-                      ),
-                      tooltip: isPlaying ? '읽기 중지' : '전체 읽기',
-                      onPressed: () {
-                        if (isPlaying) {
-                          _textReaderService.stop();
-                        } else if (currentPage.originalText.isNotEmpty) {
-                          _textReaderService.readTextBySentences(currentPage.originalText);
-                        }
-                        setState(() {});
-                      },
-                    ),
-                  ],
-                ),
-              
-              const SizedBox(height: 8),
-              
-              // 하단 행: 이미지 썸네일
+              // 이미지 썸네일 (작게 표시)
               if (imageFile != null || currentPage.imageUrl != null)
                 GestureDetector(
                   onTap: () {
@@ -998,67 +961,70 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                     );
                   },
                   child: Container(
+                    width: 60,
                     height: 60,
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.withOpacity(0.3)),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: Row(
-                      children: [
-                        // 이미지 썸네일
-                        if (imageFile != null)
-                          SizedBox(
-                            width: 80,
-                            height: 60,
-                            child: ClipRRect(
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(4),
-                                bottomLeft: Radius.circular(4),
-                              ),
-                              child: Image.file(
-                                imageFile,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
+                    child: imageFile != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Image.file(
+                            imageFile,
+                            fit: BoxFit.cover,
                           ),
-                        
-                        const SizedBox(width: 8),
-                        
-                        // 이미지 설명 텍스트
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '페이지 이미지',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                '눌러서 원본 이미지 보기',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        
-                        // 화살표 아이콘
-                        Icon(
-                          Icons.arrow_forward_ios,
-                          size: 16,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                    ),
+                        )
+                      : const Icon(Icons.image, color: Colors.grey),
                   ),
                 ),
+                
+              const SizedBox(width: 12),
+              
+              // 텍스트 표시 컨트롤 및 재생 버튼
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 텍스트 표시 모드 토글 위젯
+                    if (hasSegments)
+                      TextDisplayToggleWidget(
+                        currentMode: TextDisplayMode.both,
+                        onModeChanged: (mode) {
+                          setState(() {});
+                        },
+                        originalText: currentPage.originalText,
+                      ),
+                    
+                    // 전체 재생/멈춤 버튼 행
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // 전체 읽기/멈춤 버튼
+                        ElevatedButton.icon(
+                          icon: Icon(
+                            isPlaying ? Icons.stop : Icons.play_arrow,
+                            size: 18
+                          ),
+                          label: Text(isPlaying ? '멈춤' : '전체 읽기'),
+                          onPressed: () {
+                            if (isPlaying) {
+                              _textReaderService.stop();
+                            } else if (currentPage.originalText.isNotEmpty) {
+                              _textReaderService.readTextBySentences(currentPage.originalText);
+                            }
+                            setState(() {});
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: const Size(0, 36),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
