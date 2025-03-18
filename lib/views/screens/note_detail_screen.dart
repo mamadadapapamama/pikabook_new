@@ -744,10 +744,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   }
 
   // 세그먼트 삭제 처리 메서드
-  void _handleDeleteSegment(int segmentIndex) {
+  void _handleDeleteSegment(int segmentIndex) async {
     if (_currentPageIndex < 0 || _currentPageIndex >= _pages.length) return;
     
     final page = _pages[_currentPageIndex];
+    if (page.id == null) return;
     
     // 현재 페이지의 processedText 객체 가져오기
     if (_pageContentService.hasProcessedText(page.id!)) {
@@ -759,18 +760,68 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         
         // 세그먼트 목록에서 해당 인덱스의 세그먼트 제거
         final updatedSegments = List<TextSegment>.from(processedText.segments!);
-        updatedSegments.removeAt(segmentIndex);
+        final removedSegment = updatedSegments.removeAt(segmentIndex);
+        
+        // 전체 원문에서도 해당 세그먼트 문장 제거
+        String updatedFullOriginalText = processedText.fullOriginalText;
+        String updatedFullTranslatedText = processedText.fullTranslatedText ?? '';
+        
+        // 원문에서 해당 세그먼트 문장 제거
+        if (removedSegment.originalText.isNotEmpty) {
+          updatedFullOriginalText = updatedFullOriginalText.replaceAll(removedSegment.originalText, '');
+          // 연속된 공백 제거
+          updatedFullOriginalText = updatedFullOriginalText.replaceAll(RegExp(r'\s+'), ' ').trim();
+        }
+        
+        // 번역본에서 해당 세그먼트 문장 제거
+        if (removedSegment.translatedText != null && removedSegment.translatedText!.isNotEmpty) {
+          updatedFullTranslatedText = updatedFullTranslatedText.replaceAll(
+              removedSegment.translatedText!, '');
+          // 연속된 공백 제거
+          updatedFullTranslatedText = updatedFullTranslatedText.replaceAll(RegExp(r'\s+'), ' ').trim();
+        }
         
         // 업데이트된 세그먼트 목록으로 새 ProcessedText 생성
         final updatedProcessedText = processedText.copyWith(
           segments: updatedSegments,
+          fullOriginalText: updatedFullOriginalText,
+          fullTranslatedText: updatedFullTranslatedText,
         );
         
         // 업데이트된 ProcessedText 저장
         _pageContentService.setProcessedText(page.id!, updatedProcessedText);
         
-        // UI 갱신
-        setState(() {});
+        // Firestore 업데이트
+        try {
+          // 페이지 내용 업데이트
+          await _pageService.updatePageContent(
+            page.id!,
+            updatedFullOriginalText,
+            updatedFullTranslatedText,
+          );
+          
+          // 캐시 업데이트
+          final updatedPage = page.copyWith(
+            originalText: updatedFullOriginalText,
+            translatedText: updatedFullTranslatedText,
+            updatedAt: DateTime.now(),
+          );
+          
+          setState(() {
+            // 페이지 목록 업데이트
+            _pages[_currentPageIndex] = updatedPage;
+          });
+          
+          // 캐시 업데이트
+          await _cacheService.cachePage(widget.noteId, updatedPage);
+          
+          debugPrint('세그먼트 삭제 후 Firestore 및 캐시 업데이트 완료');
+        } catch (e) {
+          debugPrint('세그먼트 삭제 후 페이지 업데이트 중 오류 발생: $e');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('세그먼트 삭제 후 저장 중 오류가 발생했습니다: $e')),
+          );
+        }
       }
     }
   }
