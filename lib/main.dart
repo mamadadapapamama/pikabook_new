@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:ui' show PlatformDispatcher;
 import 'package:provider/provider.dart';
 import 'services/note_service.dart';
 import 'services/image_service.dart';
@@ -41,56 +40,9 @@ void main() async {
     // 통합 캐시 서비스 초기화 (비동기로 실행하고 결과를 기다리지 않음)
     UnifiedCacheService().initialize(),
   ]);
-  
-  // 정기적인 캐시 정리 예약 (앱 시작 후 1분 후부터 15분마다 실행)
-  Future.delayed(Duration(minutes: 1), () {
-    _setupPeriodicCacheCleanup();
-  });
-  
-  // 저메모리 경고 리스너 등록
-  _setupLowMemoryListener();
 
   // 앱 실행
   runApp(App(initializationService: initializationService));
-}
-
-// 정기적인 캐시 정리 설정
-void _setupPeriodicCacheCleanup() {
-  // 15분마다 캐시 정리
-  final cachePeriod = Duration(minutes: 15);
-  Stream.periodic(cachePeriod).listen((_) {
-    debugPrint('정기 캐시 정리 실행 중...');
-    UnifiedCacheService().cleanupOldCache();
-    
-    // 각 서비스의 캐시 정리 메서드 호출
-    NoteService().cleanupCache();
-    ImageService().cleanupTempFiles();
-    
-    // GC 힌트 추가 - 최소한 시스템에 알림
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      debugPrint('메모리 정리 힌트 전송');
-    });
-  });
-}
-
-// 저메모리 상태 감지 리스너
-void _setupLowMemoryListener() {
-  // 시스템 메모리 경고 리스너
-  WidgetsBinding.instance.addObserver(MemoryPressureObserver());
-}
-
-// 메모리 압박 감지 클래스
-class MemoryPressureObserver extends WidgetsBindingObserver {
-  @override
-  void didHaveMemoryPressure() {
-    debugPrint('메모리 압박 감지 - 긴급 캐시 정리 실행');
-    
-    // 즉시 캐시 정리 수행
-    UnifiedCacheService().clearNonEssentialCache();
-    ImageService().clearImageCache();
-    
-    debugPrint('메모리 정리 작업 완료');
-  }
 }
 
 // 앱 설정 로드 함수 개선

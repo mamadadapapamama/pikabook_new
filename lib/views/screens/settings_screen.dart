@@ -514,11 +514,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     
     try {
-      await FirebaseAuth.instance.signOut();
+      // Firebase Auth 대신 InitializationService 사용
+      await widget.initializationService.signOut();
+      
       if (mounted) {
         // Navigator 관련 작업을 수행하기 전에 로그아웃 콜백 호출
-        Navigator.of(context).popUntil((route) => route.isFirst);
         widget.onLogout();
+        Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } catch (e) {
       debugPrint('로그아웃 오류: $e');
