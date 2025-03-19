@@ -383,14 +383,85 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         continue;
       }
 
-      // 세그먼트 위젯 생성 (Dismissible로 감싸기)
-      segmentWidgets.add(
-        Dismissible(
+      // 세그먼트 컨테이너
+      Widget segmentContainer = Container(
+        margin: const EdgeInsets.only(bottom: 16.0),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          borderRadius: BorderRadius.circular(8.0),
+        ),
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 상단 컨트롤 바 (TTS 재생 버튼 등)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // 드래그 핸들 아이콘 (좌측)
+                const Icon(Icons.drag_handle, size: 16, color: Colors.grey),
+                
+                // TTS 재생 버튼 (우측)
+                IconButton(
+                  icon: Icon(
+                    _playingSegmentIndex == i
+                        ? Icons.stop_circle
+                        : Icons.play_circle,
+                    color:
+                        _playingSegmentIndex == i ? Colors.red : Colors.blue,
+                  ),
+                  onPressed: () {
+                    _playTts(segment.originalText, segmentIndex: i);
+                  },
+                  tooltip: _playingSegmentIndex == i ? '중지' : '읽기',
+                  iconSize: 24,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 4.0),
+
+            // 원본 텍스트 표시 (항상 표시)
+            _buildSelectableText(segment.originalText),
+
+            // 병음 표시 - 직접 processedText의 showPinyin 값 사용
+            if (segment.pinyin != null && 
+                segment.pinyin!.isNotEmpty && 
+                widget.processedText.showPinyin) // 직접 값 참조
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                child: Text(
+                  segment.pinyin!,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+
+            // 번역 표시 (번역 표시 조건 명확하게 수정)
+            if (segment.translatedText != null &&
+                segment.translatedText!.isNotEmpty &&
+                widget.processedText.showTranslation)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                child: _buildSelectableText(segment.translatedText!),
+              ),
+          ],
+        ),
+      );
+      
+      // 삭제 가능 조건: 세그먼트 모드(showFullText=false)이고 onDeleteSegment 콜백이 있을 때만
+      if (widget.onDeleteSegment != null && !widget.processedText.showFullText) {
+        segmentContainer = Dismissible(
           key: ValueKey('segment_$i'),
-          direction: DismissDirection.startToEnd, // 왼쪽에서 오른쪽으로 스와이프
+          direction: DismissDirection.endToStart, // 오른쪽에서 왼쪽으로 스와이프
           background: Container(
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.only(left: 20.0),
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20.0),
             color: Colors.red,
             child: const Icon(
               Icons.delete,
@@ -398,9 +469,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             ),
           ),
           confirmDismiss: (direction) async {
-            // 세그먼트 삭제 콜백이 없으면 삭제하지 않음
-            if (widget.onDeleteSegment == null) return false;
-            
             // 사용자 확인 다이얼로그 표시
             final bool? confirmed = await showDialog<bool>(
               context: context,
@@ -429,77 +497,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             
             return false;
           },
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 16.0),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.withOpacity(0.2)),
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 상단 컨트롤 바 (TTS 재생 버튼 등)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // 드래그 핸들 아이콘 (좌측)
-                    const Icon(Icons.drag_handle, size: 16, color: Colors.grey),
-                    
-                    // TTS 재생 버튼 (우측)
-                    IconButton(
-                      icon: Icon(
-                        _playingSegmentIndex == i
-                            ? Icons.stop_circle
-                            : Icons.play_circle,
-                        color:
-                            _playingSegmentIndex == i ? Colors.red : Colors.blue,
-                      ),
-                      onPressed: () {
-                        _playTts(segment.originalText, segmentIndex: i);
-                      },
-                      tooltip: _playingSegmentIndex == i ? '중지' : '읽기',
-                      iconSize: 24,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
+          child: segmentContainer,
+        );
+      }
 
-                const SizedBox(height: 4.0),
-
-                // 원본 텍스트 표시 (항상 표시)
-                _buildSelectableText(segment.originalText),
-
-                // 병음 표시 - 직접 processedText의 showPinyin 값 사용
-                if (segment.pinyin != null && 
-                    segment.pinyin!.isNotEmpty && 
-                    widget.processedText.showPinyin) // 직접 값 참조
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
-                    child: Text(
-                      segment.pinyin!,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontStyle: FontStyle.italic,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ),
-
-                // 번역 표시 (번역 표시 조건 명확하게 수정)
-                if (segment.translatedText != null &&
-                    segment.translatedText!.isNotEmpty &&
-                    widget.processedText.showTranslation)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
-                    child: _buildSelectableText(segment.translatedText!),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      );
+      segmentWidgets.add(segmentContainer);
     }
 
     // 세그먼트 위젯이 없으면 전체 텍스트 표시
