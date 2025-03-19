@@ -609,27 +609,92 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
   }
 
-  // 세그먼트 삭제 처리 메서드
-  void _handleDeleteSegment(int segmentIndex) async {
-    final currentPage = _pageManager.currentPage;
-    if (currentPage == null || currentPage.id == null) return;
+  // 세그먼트 삭제 처리
+  Future<void> _handleDeleteSegment(int segmentIndex) async {
+    debugPrint('세그먼트 삭제 요청: index=$segmentIndex');
     
-    // 세그먼트 매니저로 세그먼트 삭제
-    final updatedPage = await _segmentManager.deleteSegment(
-      noteId: widget.noteId,
-      page: currentPage,
-      segmentIndex: segmentIndex,
+    final currentPage = _pageManager.currentPage;
+    if (currentPage == null || currentPage.id == null) {
+      debugPrint('현재 페이지 없음 - 삭제할 수 없음');
+      return;
+    }
+    
+    // 캐시된 processedText 가져오기
+    final processedText = _pageContentService.getProcessedText(currentPage.id!);
+    if (processedText == null || 
+        processedText.segments == null || 
+        segmentIndex >= processedText.segments!.length) {
+      debugPrint('ProcessedText가 없거나 잘못된 세그먼트 인덱스 - 삭제할 수 없음');
+      return;
+    }
+    
+    // 전체 텍스트 모드에서는 삭제 불가능
+    if (processedText.showFullText) {
+      debugPrint('전체 텍스트 모드에서는 세그먼트 삭제 불가 - 작업 취소');
+      return;
+    }
+    
+    // 세그먼트 삭제
+    final segments = List.of(processedText.segments!);
+    segments.removeAt(segmentIndex);
+    
+    // 업데이트된 ProcessedText 생성
+    final updatedText = processedText.copyWith(
+      segments: segments,
+      // 현재 모드 유지
+      showFullText: processedText.showFullText,
+      showPinyin: processedText.showPinyin,
+      showTranslation: processedText.showTranslation,
     );
     
-    if (updatedPage != null && mounted) {
-      setState(() {
-        // 페이지 매니저 업데이트
-        _pageManager.updateCurrentPage(updatedPage);
-      });
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('세그먼트 삭제 중 오류가 발생했습니다.')),
+    // 메모리 캐시 업데이트
+    _pageContentService.setProcessedText(currentPage.id!, updatedText);
+    
+    // 화면 갱신
+    setState(() {
+      debugPrint('세그먼트 삭제 후 UI 업데이트');
+    });
+    
+    try {
+      // Firestore 업데이트 - 전체 원문과 번역문 재구성
+      String fullOriginalText = '';
+      String fullTranslatedText = '';
+      
+      for (final segment in segments) {
+        fullOriginalText += segment.originalText;
+        if (segment.translatedText != null) {
+          fullTranslatedText += segment.translatedText!;
+        }
+      }
+      
+      // 업데이트된 전체 텍스트도 ProcessedText에 저장
+      final updatedWithFullText = updatedText.copyWith(
+        fullOriginalText: fullOriginalText,
+        fullTranslatedText: fullTranslatedText,
       );
+      
+      // 메모리 캐시 업데이트 (전체 텍스트 포함)
+      _pageContentService.setProcessedText(currentPage.id!, updatedWithFullText);
+      
+      // 페이지 서비스를 통해 Firestore 업데이트
+      await _pageService.updatePageContent(
+        currentPage.id!, 
+        fullOriginalText,
+        fullTranslatedText,
+      );
+      
+      // 페이지 캐시 업데이트
+      await _pageContentService.updatePageCache(
+        currentPage.id!,
+        updatedWithFullText,
+        TextProcessingMode.languageLearning,
+      );
+      
+      debugPrint('세그먼트 삭제 후 Firestore 및 캐시 업데이트 완료');
+      debugPrint('업데이트된 전체 텍스트: $fullOriginalText');
+      debugPrint('업데이트된 번역 텍스트: $fullTranslatedText');
+    } catch (e) {
+      debugPrint('세그먼트 삭제 후 저장 중 오류 발생: $e');
     }
   }
 
