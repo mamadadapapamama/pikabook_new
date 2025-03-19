@@ -9,6 +9,7 @@ import 'text_section_widget.dart';
 import 'processed_text_widget.dart';
 import '../services/page_content_service.dart';
 import 'dictionary_result_widget.dart';
+import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
 
 /// 페이지 내의 이미지, 텍스트 처리상태, 처리된 텍스트 등을 표시
 /// 텍스트모드전환, 사전 검색 등 처리
@@ -130,8 +131,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 이미지 표시 제거 (더 이상 필요하지 않음)
-          
           // 텍스트 처리 중 표시
           if (_isProcessingText)
             const Center(
@@ -146,71 +145,68 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           // 처리된 텍스트가 있는 경우
           else if (_processedText != null) ...[
             Builder(builder: (context) {
-              debugPrint(
-                  'ProcessedText 표시: 원본 텍스트 ${_processedText!.fullOriginalText.length}자, '
-                  '번역 텍스트 ${_processedText!.fullTranslatedText?.length ?? 0}자, '
-                  '세그먼트 ${_processedText!.segments?.length ?? 0}개, '
-                  '전체 텍스트 모드: ${_processedText!.showFullText}');
-
-              // 플래시카드 목록 디버그 출력
-              if (widget.flashCards != null) {
-                debugPrint(
-                    'ProcessedTextWidget에 전달할 flashCards 수: ${widget.flashCards!.length}');
-                if (widget.flashCards!.isNotEmpty) {
-                  debugPrint(
-                      '첫 번째 플래시카드: ${widget.flashCards![0].front} - ${widget.flashCards![0].back}');
-                }
+              // 항상 최신 ProcessedText 객체를 가져옴
+              final ProcessedText displayedText;
+              if (widget.page.id != null) {
+                // 캐시에서 최신 상태 가져오기 (있으면)
+                final cachedText = _pageContentService.getProcessedText(widget.page.id!);
+                displayedText = cachedText ?? _processedText!;
+                
+                // 상태 디버깅
+                debugPrint('표시할 ProcessedText: hashCode=${displayedText.hashCode}, '
+                    'showFullText=${displayedText.showFullText}, '
+                    'showPinyin=${displayedText.showPinyin}, '
+                    'showTranslation=${displayedText.showTranslation}');
               } else {
-                debugPrint('ProcessedTextWidget에 전달할 flashCards가 null입니다.');
+                displayedText = _processedText!;
               }
-
-              // _flashcardWords 디버그 출력
-              debugPrint('현재 _flashcardWords 수: ${_flashcardWords.length}');
-              if (_flashcardWords.isNotEmpty) {
-                debugPrint(
-                    '_flashcardWords 첫 5개: ${_flashcardWords.take(5).join(', ')}');
-              }
-
+            
+              debugPrint(
+                  'ProcessedText 표시: 원본 텍스트 ${displayedText.fullOriginalText.length}자, '
+                  '번역 텍스트 ${displayedText.fullTranslatedText?.length ?? 0}자, '
+                  'segments ${displayedText.segments?.length ?? 0}개');
+                  
               return ProcessedTextWidget(
-                processedText: _processedText!,
-                onDictionaryLookup: _showDictionaryResult,
-                onCreateFlashCard: (word, meaning, {String? pinyin}) {
-                  widget.onCreateFlashCard(word, meaning, pinyin: pinyin);
-                },
+                // 캐시 무효화를 위한 키 추가 (ProcessedText 상태가 변경될 때마다 새 위젯 생성)
+                key: ValueKey('pt_${widget.page.id}_${displayedText.hashCode}_'
+                    '${displayedText.showFullText}_'
+                    '${displayedText.showPinyin}_'
+                    '${displayedText.showTranslation}'),
+                processedText: displayedText,
+                onDictionaryLookup: _lookupWord,
+                onCreateFlashCard: widget.onCreateFlashCard,
                 flashCards: widget.flashCards,
-                showTranslation: true,
                 onDeleteSegment: widget.onDeleteSegment,
               );
             }),
           ]
-          // 기존 방식으로 텍스트 표시 (처리된 텍스트가 없는 경우)
-          else ...[
-            // 텍스트 표시 모드 토글 버튼 제거
-            // 하단 네비게이션 바로 이동함
-            
-            // 원본 텍스트 표시
-            TextSectionWidget(
-              title: '원문',
-              text: widget.page.originalText,
-              isOriginal: true,
-              onDictionaryLookup: _showDictionaryResult,
-              onCreateFlashCard: widget.onCreateFlashCard,
-              translatedText: widget.page.translatedText,
-              flashcardWords: _flashcardWords,
+          // 처리된 텍스트가 없는 경우
+          else if (widget.page.originalText.isNotEmpty || widget.isLoadingImage)
+            const Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('텍스트 처리 중...'),
+                ],
+              ),
+            )
+          // 빈 페이지인 경우
+          else
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.text_snippet_outlined, size: 48, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text('아직 텍스트가 없습니다.'),
+                  if (widget.page.id != null) ...[
+                    const SizedBox(height: 16),
+                    _buildAddTextButton(),
+                  ],
+                ],
+              ),
             ),
-            const SizedBox(height: 24),
-
-            // 번역 텍스트 표시
-            TextSectionWidget(
-              title: '번역',
-              text: widget.page.translatedText,
-              isOriginal: false,
-              onDictionaryLookup: _showDictionaryResult,
-              onCreateFlashCard: widget.onCreateFlashCard,
-              translatedText: widget.page.originalText,
-              flashcardWords: _flashcardWords,
-            ),
-          ],
         ],
       ),
     );
@@ -321,5 +317,231 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           _pageContentService.extractFlashcardWords(widget.flashCards);
       debugPrint('플래시카드 단어 목록 업데이트: ${_flashcardWords.length}개');
     });
+  }
+
+  Widget _buildAddTextButton() {
+    // Implementation of _buildAddTextButton method
+    // This method should return a Widget representing the "Add Text" button
+    // For now, we'll return a placeholder
+    return TextButton(
+      onPressed: () {
+        // Implementation of onPressed
+      },
+      child: const Text('텍스트 추가'),
+    );
+  }
+
+  void _lookupWord(String word) {
+    // Implementation of _lookupWord method
+  }
+
+  /// **세그먼트별 텍스트 표시 위젯**
+  Widget _buildSegmentedView() {
+    // 디버그 로그 추가
+    debugPrint('_buildSegmentedView 호출 - 세그먼트 모드 렌더링');
+    
+    // _processedText 체크
+    if (_processedText == null) {
+      return const SizedBox.shrink();
+    }
+    
+    // 세그먼트가 없으면 빈 컨테이너 반환
+    if (_processedText!.segments == null ||
+        _processedText!.segments!.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('세그먼트가 없습니다.');
+      }
+
+      // 세그먼트가 없으면 전체 텍스트 표시
+      return _buildFullTextView();
+    }
+
+    if (kDebugMode) {
+      debugPrint('세그먼트 수: ${_processedText!.segments!.length}');
+      debugPrint('표시 설정: 원문=${true}, 병음=${_processedText!.showPinyin}, 번역=${_processedText!.showTranslation}');
+    }
+
+    // 세그먼트 목록을 위젯 목록으로 변환
+    List<Widget> segmentWidgets = [];
+
+    for (int i = 0; i < _processedText!.segments!.length; i++) {
+      final segment = _processedText!.segments![i];
+
+      // 디버깅 정보 출력
+      if (kDebugMode) {
+        debugPrint('세그먼트 $i 원본 텍스트: "${segment.originalText}"');
+        debugPrint('세그먼트 $i 번역 텍스트: "${segment.translatedText}"');
+        debugPrint('세그먼트 $i 핀인: "${segment.pinyin}"');
+      }
+
+      // 원본 텍스트가 비어있으면 건너뜀
+      if (segment.originalText.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('세그먼트 $i 원본 텍스트가 비어있어 건너뜁니다.');
+        }
+        continue;
+      }
+
+      // 세그먼트 위젯 생성 (Dismissible로 감싸기)
+      segmentWidgets.add(
+        Dismissible(
+          key: ValueKey('segment_$i'),
+          direction: DismissDirection.startToEnd, // 왼쪽에서 오른쪽으로 스와이프
+          background: Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: 20.0),
+            color: Colors.red,
+            child: const Icon(
+              Icons.delete,
+              color: Colors.white,
+            ),
+          ),
+          confirmDismiss: (direction) async {
+            // 세그먼트 삭제 콜백이 없으면 삭제하지 않음
+            if (widget.onDeleteSegment == null) return false;
+            
+            // 세그먼트 삭제 콜백 호출
+            widget.onDeleteSegment!(i);
+            return true;
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 16.0),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // TTS 버튼 추가
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _playingSegmentIndex == i
+                            ? Icons.stop_circle
+                            : Icons.play_circle,
+                        color:
+                            _playingSegmentIndex == i ? Colors.red : Colors.blue,
+                      ),
+                      onPressed: () {
+                        _playTts(segment.originalText, segmentIndex: i);
+                      },
+                      tooltip: _playingSegmentIndex == i ? '중지' : '읽기',
+                      iconSize: 24,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 4.0),
+
+                // 원본 텍스트 표시 (항상 표시)
+                _buildSelectableText(segment.originalText),
+
+                // 핀인 표시 (showPinyin이 true일 때만)
+                if (segment.pinyin != null && 
+                    segment.pinyin!.isNotEmpty && 
+                    _processedText!.showPinyin)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                    child: Text(
+                      segment.pinyin!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+
+                // 번역 텍스트 표시 (showTranslation이 true일 때만)
+                if (_processedText!.showTranslation && 
+                    segment.translatedText != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                    child: _buildSelectableText(segment.translatedText!),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 세그먼트 위젯이 없으면 전체 텍스트 표시
+    if (segmentWidgets.isEmpty) {
+      if (kDebugMode) {
+        debugPrint('세그먼트 위젯이 없어 전체 텍스트를 표시합니다.');
+      }
+      return _buildFullTextView();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: segmentWidgets,
+    );
+  }
+  
+  /// **전체 텍스트 표시 위젯**
+  Widget _buildFullTextView() {
+    // _processedText 체크
+    if (_processedText == null) {
+      return const SizedBox.shrink();
+    }
+    
+    // 디버그 로그 추가
+    debugPrint('_buildFullTextView 호출 - 전체 문장 모드 렌더링');
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 원본 텍스트 표시
+        _buildSelectableText(_processedText!.fullOriginalText),
+
+        // 번역 텍스트 표시 (번역이 있고 showTranslation이 true인 경우)
+        if (_processedText!.fullTranslatedText != null && 
+            _processedText!.showTranslation)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child:
+                _buildSelectableText(_processedText!.fullTranslatedText!),
+          ),
+      ],
+    );
+  }
+  
+  // TTS 재생용 임시 변수 및 메서드
+  int? _playingSegmentIndex;
+  
+  void _playTts(String text, {int? segmentIndex}) {
+    if (text.isEmpty) return;
+    
+    setState(() {
+      if (_playingSegmentIndex == segmentIndex) {
+        // 이미 재생 중이면 중지
+        _playingSegmentIndex = null;
+        _pageContentService.stopSpeaking();
+      } else {
+        // 새로 재생
+        _playingSegmentIndex = segmentIndex;
+        _pageContentService.speakText(text);
+      }
+    });
+  }
+  
+  // 선택 가능한 텍스트 위젯 생성
+  Widget _buildSelectableText(String text) {
+    if (text.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return SelectableText(
+      text,
+      style: const TextStyle(fontSize: 16),
+    );
   }
 }

@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
-import '../models/text_processing_mode.dart';
 
 class NoteActionBottomSheet extends StatelessWidget {
   final VoidCallback onEditTitle;
   final VoidCallback onDeleteNote;
-  final VoidCallback onShowTextProcessingModeDialog;
-  final TextProcessingMode textProcessingMode;
+  final VoidCallback onToggleFullTextMode;
+  final bool isFullTextMode;
 
   const NoteActionBottomSheet({
     Key? key,
     required this.onEditTitle,
     required this.onDeleteNote,
-    required this.onShowTextProcessingModeDialog,
-    required this.textProcessingMode,
+    required this.onToggleFullTextMode,
+    required this.isFullTextMode,
   }) : super(key: key);
 
   @override
@@ -21,34 +20,90 @@ class NoteActionBottomSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // 상단 타이틀
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            width: double.infinity,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade300),
+              ),
+            ),
+            child: const Text(
+              '노트 옵션',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          
+          // 노트 제목 변경
           ListTile(
-            leading: const Icon(Icons.edit),
+            leading: const Icon(Icons.edit, color: Colors.blue),
             title: const Text('노트 제목 변경'),
             onTap: () {
               Navigator.pop(context);
               onEditTitle();
             },
           ),
-          // 텍스트 처리 모드 선택 옵션
+          
+          // 구분선
+          const Divider(height: 1),
+          
+          // 텍스트 모드 그룹 타이틀
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                const Icon(Icons.format_align_left, size: 18, color: Colors.grey),
+                const SizedBox(width: 8),
+                const Text(
+                  '텍스트 모드',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // 문장별 구분 모드
           ListTile(
-            leading: Icon(
-              textProcessingMode == TextProcessingMode.professionalReading
-                  ? Icons.menu_book
-                  : Icons.school,
-            ),
-            title: const Text('텍스트 처리 모드'),
-            subtitle: Text(
-              textProcessingMode == TextProcessingMode.professionalReading
-                  ? '전문 서적 모드 (전체 텍스트 번역)'
-                  : '언어 학습 모드 (문장별 번역 및 핀인)',
-            ),
+            leading: const SizedBox(width: 24),
+            title: const Text('문장별 구분'),
+            trailing: !isFullTextMode ? const Icon(Icons.check, color: Colors.green) : null,
             onTap: () {
               Navigator.pop(context);
-              onShowTextProcessingModeDialog();
+              if (isFullTextMode) {
+                onToggleFullTextMode();
+              }
             },
           ),
+          
+          // 원문 전체 모드
           ListTile(
-            leading: const Icon(Icons.delete),
+            leading: const SizedBox(width: 24),
+            title: const Text('원문 전체'),
+            trailing: isFullTextMode ? const Icon(Icons.check, color: Colors.green) : null,
+            onTap: () {
+              Navigator.pop(context);
+              if (!isFullTextMode) {
+                onToggleFullTextMode();
+              }
+            },
+          ),
+          
+          // 구분선
+          const Divider(height: 1),
+          
+          // 노트 삭제
+          ListTile(
+            leading: const Icon(Icons.delete, color: Colors.red),
             title: const Text('노트 삭제'),
             onTap: () {
               Navigator.pop(context);
@@ -57,59 +112,6 @@ class NoteActionBottomSheet extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class TextProcessingModeDialog extends StatelessWidget {
-  final TextProcessingMode currentMode;
-  final Function(TextProcessingMode) onModeChanged;
-
-  const TextProcessingModeDialog({
-    Key? key,
-    required this.currentMode,
-    required this.onModeChanged,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('텍스트 처리 모드 선택'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          RadioListTile<TextProcessingMode>(
-            title: const Text('전문 서적 모드'),
-            subtitle: const Text('전체 텍스트 번역 제공'),
-            value: TextProcessingMode.professionalReading,
-            groupValue: currentMode,
-            onChanged: (value) {
-              Navigator.pop(context);
-              if (value != null) {
-                onModeChanged(value);
-              }
-            },
-          ),
-          RadioListTile<TextProcessingMode>(
-            title: const Text('언어 학습 모드'),
-            subtitle: const Text('문장별 번역 및 핀인 제공'),
-            value: TextProcessingMode.languageLearning,
-            groupValue: currentMode,
-            onChanged: (value) {
-              Navigator.pop(context);
-              if (value != null) {
-                onModeChanged(value);
-              }
-            },
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('취소'),
-        ),
-      ],
     );
   }
 }

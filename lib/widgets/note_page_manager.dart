@@ -6,7 +6,7 @@ import '../services/image_service.dart';
 import '../services/unified_cache_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// 노트 페이지 관리 클래스
+/// 노트 페이지 관리 클래스 (note_detail_screen.dart 에서 사용)
 /// 페이지 로드, 병합, 이미지 로드 등의 기능 제공
 class NotePageManager {
   final String noteId;

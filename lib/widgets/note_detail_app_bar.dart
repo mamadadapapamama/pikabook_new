@@ -44,7 +44,6 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
           : const Text('노트 상세'),
       actions: [
         if (note != null) ...[
-          // 플래시카드 버튼
           IconButton(
             icon: note!.flashcardCount > 0
                 ? badges.Badge(
