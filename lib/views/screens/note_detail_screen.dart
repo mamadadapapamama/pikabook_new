@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
-import '../../models/text_processing_mode.dart';
 import '../../models/text_segment.dart';
 import '../../models/processed_text.dart';
 import '../../services/note_service.dart';
@@ -30,6 +29,8 @@ import '../../services/unified_cache_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/text_reader_service.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import '../../services/auth_service.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -281,7 +282,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       final processedText = await _pageContentService.processPageText(
         page: currentPage,
         imageFile: _pageManager.currentImageFile,
-        textProcessingMode: TextProcessingMode.languageLearning, // 기본값 사용
       );
       
       if (processedText != null && currentPage.id != null) {
@@ -614,87 +614,46 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     debugPrint('세그먼트 삭제 요청: index=$segmentIndex');
     
     final currentPage = _pageManager.currentPage;
-    if (currentPage == null || currentPage.id == null) {
-      debugPrint('현재 페이지 없음 - 삭제할 수 없음');
+    if (currentPage == null || currentPage.id == null || _note == null || _note!.id == null) {
+      debugPrint('현재 페이지 또는 노트 없음 - 삭제할 수 없음');
       return;
     }
     
-    // 캐시된 processedText 가져오기
-    final processedText = _pageContentService.getProcessedText(currentPage.id!);
-    if (processedText == null || 
-        processedText.segments == null || 
-        segmentIndex >= processedText.segments!.length) {
-      debugPrint('ProcessedText가 없거나 잘못된 세그먼트 인덱스 - 삭제할 수 없음');
-      return;
-    }
-    
-    // 전체 텍스트 모드에서는 삭제 불가능
-    if (processedText.showFullText) {
-      debugPrint('전체 텍스트 모드에서는 세그먼트 삭제 불가 - 작업 취소');
-      return;
-    }
-    
-    // 세그먼트 삭제
-    final segments = List.of(processedText.segments!);
-    segments.removeAt(segmentIndex);
-    
-    // 업데이트된 ProcessedText 생성
-    final updatedText = processedText.copyWith(
-      segments: segments,
-      // 현재 모드 유지
-      showFullText: processedText.showFullText,
-      showPinyin: processedText.showPinyin,
-      showTranslation: processedText.showTranslation,
+    // NoteSegmentManager를 사용하여 세그먼트 삭제
+    final segmentManager = NoteSegmentManager();
+    final updatedPage = await segmentManager.deleteSegment(
+      noteId: _note!.id!,
+      page: currentPage,
+      segmentIndex: segmentIndex,
     );
     
-    // 메모리 캐시 업데이트
-    _pageContentService.setProcessedText(currentPage.id!, updatedText);
+    if (updatedPage == null) {
+      debugPrint('세그먼트 삭제 실패');
+      return;
+    }
     
-    // 화면 갱신
+    // 화면 갱신을 위한 페이지 업데이트
     setState(() {
-      debugPrint('세그먼트 삭제 후 UI 업데이트');
-    });
-    
-    try {
-      // Firestore 업데이트 - 전체 원문과 번역문 재구성
-      String fullOriginalText = '';
-      String fullTranslatedText = '';
+      // 페이지 매니저의 현재 페이지 업데이트
+      _pageManager.updateCurrentPage(updatedPage);
       
-      for (final segment in segments) {
-        fullOriginalText += segment.originalText;
-        if (segment.translatedText != null) {
-          fullTranslatedText += segment.translatedText!;
+      // 페이지 콘텐츠 서비스에서 ProcessedText 다시 가져오기
+      if (updatedPage.id != null) {
+        final processedText = _pageContentService.getProcessedText(updatedPage.id!);
+        if (processedText != null) {
+          debugPrint('삭제 후 ProcessedText 업데이트: ${processedText.segments?.length ?? 0}개 세그먼트');
         }
       }
       
-      // 업데이트된 전체 텍스트도 ProcessedText에 저장
-      final updatedWithFullText = updatedText.copyWith(
-        fullOriginalText: fullOriginalText,
-        fullTranslatedText: fullTranslatedText,
-      );
-      
-      // 메모리 캐시 업데이트 (전체 텍스트 포함)
-      _pageContentService.setProcessedText(currentPage.id!, updatedWithFullText);
-      
-      // 페이지 서비스를 통해 Firestore 업데이트
-      await _pageService.updatePageContent(
-        currentPage.id!, 
-        fullOriginalText,
-        fullTranslatedText,
-      );
-      
-      // 페이지 캐시 업데이트
-      await _pageContentService.updatePageCache(
-        currentPage.id!,
-        updatedWithFullText,
-        TextProcessingMode.languageLearning,
-      );
-      
-      debugPrint('세그먼트 삭제 후 Firestore 및 캐시 업데이트 완료');
-      debugPrint('업데이트된 전체 텍스트: $fullOriginalText');
-      debugPrint('업데이트된 번역 텍스트: $fullTranslatedText');
+      debugPrint('세그먼트 삭제 후 UI 업데이트 완료');
+    });
+    
+    // 노트 캐시 업데이트를 위해 노트 서비스 호출
+    try {
+      await _noteService.getNoteWithPages(_note!.id!);
+      debugPrint('세그먼트 삭제 후 노트 및 페이지 캐시 새로고침 완료');
     } catch (e) {
-      debugPrint('세그먼트 삭제 후 저장 중 오류 발생: $e');
+      debugPrint('세그먼트 삭제 후 노트 캐시 새로고침 중 오류 발생: $e');
     }
   }
 
@@ -908,71 +867,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       isLoadingImage: false,
       noteId: widget.noteId,
       onCreateFlashCard: _createFlashCard,
-      textProcessingMode: TextProcessingMode.languageLearning, // 기본값 사용
       flashCards: _note?.flashCards,
       onDeleteSegment: _handleDeleteSegment,
-    );
-  }
-}
-
-// TextProcessingMode 대화상자 (코드 길이 줄이기)
-class TextProcessingModeDialog extends StatelessWidget {
-  final TextProcessingMode currentMode;
-  final Function(TextProcessingMode) onModeChanged;
-
-  const TextProcessingModeDialog({
-    super.key,
-    required this.currentMode,
-    required this.onModeChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('텍스트 처리 모드'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildModeOption(
-            context,
-            TextProcessingMode.professionalReading,
-            '원본 텍스트',
-            '텍스트를 가공하지 않고 원본 그대로 표시합니다.',
-          ),
-          _buildModeOption(
-            context,
-            TextProcessingMode.languageLearning,
-            '언어 학습 모드',
-            '문장별로 분리하여 병음, 번역, 단어 검색 기능을 제공합니다.',
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('닫기'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildModeOption(
-    BuildContext context,
-    TextProcessingMode mode,
-    String title,
-    String description,
-  ) {
-    return RadioListTile<TextProcessingMode>(
-      title: Text(title),
-      subtitle: Text(description),
-      value: mode,
-      groupValue: currentMode,
-      onChanged: (value) {
-        if (value != null) {
-          onModeChanged(value);
-          Navigator.pop(context);
-        }
-      },
     );
   }
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../models/page.dart' as page_model;
 import '../models/processed_text.dart';
-import '../models/text_processing_mode.dart';
 import '../models/flash_card.dart';
 import '../models/dictionary_entry.dart';
 import 'text_section_widget.dart';
@@ -21,7 +20,6 @@ class PageContentWidget extends StatefulWidget {
   final bool isLoadingImage;
   final String noteId;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
-  final TextProcessingMode textProcessingMode;
   final List<FlashCard>? flashCards;
   final Function(int)? onDeleteSegment;
 
@@ -32,7 +30,6 @@ class PageContentWidget extends StatefulWidget {
     required this.isLoadingImage,
     required this.noteId,
     required this.onCreateFlashCard,
-    this.textProcessingMode = TextProcessingMode.languageLearning,
     this.flashCards,
     this.onDeleteSegment,
   });
@@ -64,11 +61,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       _processPageText();
     }
 
-    // 텍스트 처리 모드가 변경되면 다시 처리
-    if (oldWidget.textProcessingMode != widget.textProcessingMode) {
-      _processPageText();
-    }
-
     // 플래시카드 목록이 변경되면 업데이트
     if (oldWidget.flashCards != widget.flashCards) {
       _updateFlashcardWords();
@@ -92,7 +84,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       final processedText = await _pageContentService.processPageText(
         page: widget.page,
         imageFile: widget.imageFile,
-        textProcessingMode: widget.textProcessingMode,
       );
 
       final endTime = DateTime.now();

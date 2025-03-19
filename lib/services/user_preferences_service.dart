@@ -1,5 +1,4 @@
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/text_processing_mode.dart';
 import '../utils/language_constants.dart';
 
 // 노트 뷰 모드 enum - 클래스 외부로 이동
@@ -17,7 +16,7 @@ class UserPreferencesService {
   UserPreferencesService._internal();
 
   // SharedPreferences 키
-  static const String _textProcessingModeKey = 'text_processing_mode';
+  static const String _useSegmentModeKey = 'use_segment_mode';
   static const String _onboardingCompletedKey = 'onboarding_completed';
   static const String _sourceLanguageKey = 'source_language';
   static const String _targetLanguageKey = 'target_language';
@@ -27,28 +26,21 @@ class UserPreferencesService {
   static const String _defaultNoteSpaceKey = 'default_note_space';
   static const String _noteSpacesKey = 'note_spaces';
 
-  // 기본 텍스트 처리 모드 (온보딩에서 설정)
-  Future<void> setDefaultTextProcessingMode(TextProcessingMode mode) async {
+  // 세그먼트 모드 사용 여부 설정 (온보딩에서 설정)
+  Future<void> setUseSegmentMode(bool useSegmentMode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_textProcessingModeKey, mode.index);
+    await prefs.setBool(_useSegmentModeKey, useSegmentMode);
+    
+    // 노트 뷰 모드도 함께 설정
+    await setDefaultNoteViewMode(
+      useSegmentMode ? NoteViewMode.segmentMode : NoteViewMode.fullTextMode
+    );
   }
 
-  // 현재 텍스트 처리 모드 가져오기
-  Future<TextProcessingMode> getTextProcessingMode() async {
+  // 현재 세그먼트 모드 사용 여부 가져오기
+  Future<bool> getUseSegmentMode() async {
     final prefs = await SharedPreferences.getInstance();
-    final modeIndex = prefs.getInt(_textProcessingModeKey);
-
-    // 저장된 값이 없으면 기본값 반환
-    if (modeIndex == null) {
-      return TextProcessingMode.languageLearning; // 기본값
-    }
-
-    // 저장된 인덱스가 유효한지 확인
-    if (modeIndex >= 0 && modeIndex < TextProcessingMode.values.length) {
-      return TextProcessingMode.values[modeIndex];
-    }
-
-    return TextProcessingMode.languageLearning; // 기본값
+    return prefs.getBool(_useSegmentModeKey) ?? true; // 기본값은 세그먼트 모드 사용
   }
 
   // 온보딩 완료 여부 설정
@@ -237,21 +229,21 @@ class UserPreferencesService {
     // 기본 노트 뷰 모드
     await prefs.setInt(_defaultNoteViewModeKey, NoteViewMode.segmentMode.index);
     
-    // 기본 텍스트 처리 모드
-    await prefs.setInt(_textProcessingModeKey, TextProcessingMode.languageLearning.index);
+    // 세그먼트 모드 기본 사용
+    await prefs.setBool(_useSegmentModeKey, true);
   }
 
   // 사용자 설정 정보를 Map으로 반환 (디버깅용)
   Future<Map<String, dynamic>> getAllPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    final textProcessingMode = await getTextProcessingMode();
+    final useSegmentMode = await getUseSegmentMode();
     final noteViewMode = await getDefaultNoteViewMode();
     final noteSpaces = await getNoteSpaces();
     final defaultNoteSpace = await getDefaultNoteSpace();
     
     return {
       'onboardingCompleted': prefs.getBool(_onboardingCompletedKey) ?? false,
-      'textProcessingMode': textProcessingMode.toString(),
+      'useSegmentMode': useSegmentMode,
       'sourceLanguage': prefs.getString(_sourceLanguageKey) ?? SourceLanguage.DEFAULT,
       'targetLanguage': prefs.getString(_targetLanguageKey) ?? TargetLanguage.DEFAULT,
       'userName': prefs.getString(_userNameKey) ?? '',

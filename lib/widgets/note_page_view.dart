@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import '../models/page.dart' as page_model;
-import '../models/text_processing_mode.dart';
+import '../models/processed_text.dart';
 import '../models/flash_card.dart';
+import '../services/page_content_service.dart';
 import 'page_content_widget.dart';
 import 'page_indicator_widget.dart';
 
@@ -13,7 +14,6 @@ class NotePageView extends StatelessWidget {
   final Function(int) onPageChanged;
   final String noteId;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
-  final TextProcessingMode textProcessingMode;
   final List<FlashCard>? flashCards;
 
   const NotePageView({
@@ -24,7 +24,6 @@ class NotePageView extends StatelessWidget {
     required this.onPageChanged,
     required this.noteId,
     required this.onCreateFlashCard,
-    required this.textProcessingMode,
     this.flashCards,
   }) : super(key: key);
 
@@ -119,7 +118,6 @@ class NotePageView extends StatelessWidget {
       isLoadingImage: false,
       noteId: noteId,
       onCreateFlashCard: onCreateFlashCard,
-      textProcessingMode: textProcessingMode,
       flashCards: flashCards,
     );
   }
