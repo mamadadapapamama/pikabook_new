@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class TypographyTokens {
+  // 폰트 패밀리
+  static final TextStyle poppins = GoogleFonts.poppins();
+  static final TextStyle notoSansKr = GoogleFonts.notoSansKr();
+  static final TextStyle notoSansSc = GoogleFonts.notoSansSc();
+
   // 헤드라인
   static TextStyle headline1 = GoogleFonts.poppins(
     fontSize: 40,

@@ -7,6 +7,9 @@ import '../services/note_service.dart';
 import '../views/screens/flashcard_screen.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
+import '../theme/tokens/spacing_tokens.dart';
+import '../theme/tokens/ui_tokens.dart';
+import 'flashcard_counter_badge.dart';
 
 /// 홈페이지 노트리스트 화면에서 사용되는 카드 위젯
 
@@ -80,8 +83,8 @@ class _NoteListItemState extends State<NoteListItem> {
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20.0),
-        color: Colors.red,
+        padding: EdgeInsets.only(right: SpacingTokens.md),
+        color: ColorTokens.error,
         child: const Icon(
           Icons.delete,
           color: Colors.white,
@@ -94,16 +97,19 @@ class _NoteListItemState extends State<NoteListItem> {
         widget.onDelete();
       },
       child: Card(
-        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+        margin: EdgeInsets.symmetric(
+          vertical: SpacingTokens.sm,
+          horizontal: 0,
+        ),
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
         ),
         child: InkWell(
           onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
           child: Padding(
-            padding: const EdgeInsets.all(12.0),
+            padding: EdgeInsets.all(SpacingTokens.md+2),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -111,7 +117,7 @@ class _NoteListItemState extends State<NoteListItem> {
                 Stack(
                   children: [
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(SpacingTokens.xs),
                       child: SizedBox(
                         width: 80,
                         height: 80,
@@ -128,11 +134,11 @@ class _NoteListItemState extends State<NoteListItem> {
                                 },
                               )
                             : _isLoadingImage
-                                ? const Center(
+                                ? Center(
                                     child: SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
+                                      width: SpacingTokens.lg,
+                                      height: SpacingTokens.lg,
+                                      child: const CircularProgressIndicator(
                                           strokeWidth: 2),
                                     ),
                                   )
@@ -142,28 +148,9 @@ class _NoteListItemState extends State<NoteListItem> {
                                   ),
                       ),
                     ),
-                    // 페이지 수 표시
-                    Positioned(
-                      bottom: 4,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 2),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '${widget.note.pages.length} pages',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: SpacingTokens.md),
                 
                 // 노트 내용
                 Expanded(
@@ -178,116 +165,92 @@ class _NoteListItemState extends State<NoteListItem> {
                             widget.note.originalText.length > 50
                                 ? widget.note.originalText.substring(0, 50) + "..."
                                 : widget.note.originalText,
-                            style: TextStyle(
-                              fontSize: 16,
+                            style: TypographyTokens.poppins.copyWith(
+                              fontSize: 20,
                               fontWeight: FontWeight.w600,
-                              color: const Color(0xFF0E2823),
-                              fontFamily: 'Poppins',
+                              color: ColorTokens.textPrimary,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            DateFormatter.formatDate(widget.note.updatedAt),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: const Color(0xFFB2B2B2),
-                              fontFamily: 'Poppins',
-                            ),
+                          SizedBox(height: SpacingTokens.xs / 2),
+                          Row(
+                            children: [
+                              Text(
+                                DateFormatter.formatDate(widget.note.updatedAt),
+                                style: TypographyTokens.poppins.copyWith(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
+                                  color: const Color(0xFF969696),
+                                ),
+                              ),
+                              SizedBox(width: SpacingTokens.xs),
+                              Text(
+                                '|',
+                                style: TypographyTokens.poppins.copyWith(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
+                                  color: const Color(0xFF969696),
+                                ),
+                              ),
+                              SizedBox(width: SpacingTokens.xs),
+                              Text(
+                                '${widget.note.pages.length} pages',
+                                style: TypographyTokens.poppins.copyWith(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
+                                  color: const Color(0xFF969696),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: SpacingTokens.sm),
                       
                       // 플래시카드 표시
                       if (widget.note.flashcardCount > 0 || widget.note.flashCards.isNotEmpty)
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => FlashCardScreen(noteId: widget.note.id),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: ColorTokens.tertiary,
-                              borderRadius: BorderRadius.circular(100),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: Center(
-                                    child: Stack(
-                                      children: [
-                                        Container(
-                                          width: 14,
-                                          height: 14,
-                                          decoration: BoxDecoration(
-                                            color: ColorTokens.tertiary,
-                                            borderRadius: BorderRadius.circular(4),
-                                            border: Border.all(
-                                              color: const Color(0xFF665518),
-                                              width: 2,
-                                            ),
-                                          ),
-                                        ),
-                                        Positioned(
-                                          top: 6,
-                                          left: 6,
-                                          child: Container(
-                                            width: 14,
-                                            height: 14,
-                                            decoration: BoxDecoration(
-                                              color: Colors.white,
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(
-                                                color: const Color(0xFF665518),
-                                                width: 2,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${widget.note.flashcardCount > 0 ? widget.note.flashcardCount : widget.note.flashCards.length}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: ColorTokens.secondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        FlashcardCounterBadge(
+                          count: widget.note.flashcardCount > 0 
+                              ? widget.note.flashcardCount 
+                              : widget.note.flashCards.length,
+                          noteId: widget.note.id,
                         ),
                     ],
                   ),
                 ),
                 
                 // 즐겨찾기 아이콘
-                IconButton(
-                  icon: Icon(
-                    widget.note.isFavorite 
-                        ? Icons.favorite 
-                        : Icons.favorite_border,
-                    color: widget.note.isFavorite 
-                        ? ColorTokens.primary
-                        : const Color(0xFFB2B2B2),
-                    size: 24,
+                InkWell(
+                  onTap: () => widget.onFavoriteToggle(!widget.note.isFavorite),
+                  child: Padding(
+                    padding: EdgeInsets.all(SpacingTokens.xs),
+                    child: widget.note.isFavorite
+                        ? Image.asset(
+                            'assets/images/icon_like_fill.png',
+                            width: SpacingTokens.iconSizeMedium,
+                            height: SpacingTokens.iconSizeMedium,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.favorite,
+                                color: ColorTokens.primary,
+                                size: SpacingTokens.iconSizeMedium,
+                              );
+                            },
+                          )
+                        : Image.asset(
+                            'assets/images/icon_like.png',
+                            width: SpacingTokens.iconSizeMedium,
+                            height: SpacingTokens.iconSizeMedium,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.favorite_border,
+                                color: const Color(0xFFB2B2B2),
+                                size: SpacingTokens.iconSizeMedium,
+                              );
+                            },
+                          ),
                   ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () => widget.onFavoriteToggle(!widget.note.isFavorite),
                 ),
               ],
             ),
@@ -301,16 +264,16 @@ class _NoteListItemState extends State<NoteListItem> {
     return await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('노트 삭제'),
-        content: const Text('이 노트를 삭제하시겠습니까?'),
+        title: Text('노트 삭제', style: TypographyTokens.headline3),
+        content: Text('이 노트를 삭제하시겠습니까?', style: TypographyTokens.body1),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
+            child: Text('취소', style: TypographyTokens.button),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('삭제'),
+            child: Text('삭제', style: TypographyTokens.button.copyWith(color: ColorTokens.error)),
           ),
         ],
       ),

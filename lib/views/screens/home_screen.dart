@@ -12,10 +12,13 @@ import '../../services/user_preferences_service.dart';
 import '../../models/note.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
+import '../../theme/tokens/spacing_tokens.dart';
+import '../../theme/tokens/ui_tokens.dart';
 import 'note_detail_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// 향후 유저 세팅 화면으로 바꾸어 사용. 현재는 사용되지 않음
+/// 노트 카드 리스트를 보여주는 홈 화면
+/// profile setting, note detail, flashcard 화면으로 이동 가능
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -45,63 +48,66 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final backgroundColor = const Color(0xFFFFF9F1);
-    
     return ChangeNotifierProvider(
       create: (_) => HomeViewModel(),
       child: Scaffold(
-        backgroundColor: backgroundColor,
+        backgroundColor: UITokens.homeBackground,
         appBar: AppBar(
-          backgroundColor: backgroundColor,
+          backgroundColor: UITokens.homeBackground,
           elevation: 0,
           automaticallyImplyLeading: false,
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 앱 로고
-              Image.asset(
-                'assets/images/logo_small.png',
-                width: 71,
-                height: 21,
-                errorBuilder: (context, error, stackTrace) {
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.menu_book,
-                        color: ColorTokens.primary,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Pikabook',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: ColorTokens.primary,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 4),
-              // 노트 스페이스 이름
-              Text(
-                _noteSpaceName,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0E2823),
-                  fontFamily: 'Poppins',
+          titleSpacing: 0,
+          title: Padding(
+            padding: const EdgeInsets.only(left: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 앱 로고
+                Container(
+                  alignment: Alignment.centerLeft,
+                  child: Image.asset(
+                    'assets/images/logo_small.png',
+                    width: SpacingTokens.appLogoWidth,
+                    height: SpacingTokens.appLogoHeight,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.menu_book,
+                            color: ColorTokens.primary,
+                            size: SpacingTokens.iconSizeSmall,
+                          ),
+                          SizedBox(width: SpacingTokens.xs),
+                          Text(
+                            'Pikabook',
+                            style: TypographyTokens.poppins.copyWith(
+                              fontSize: SpacingTokens.md,
+                              fontWeight: FontWeight.bold,
+                              color: ColorTokens.primary,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+                SizedBox(height: SpacingTokens.xs),
+                // 노트 스페이스 이름
+                Text(
+                  _noteSpaceName,
+                  style: TypographyTokens.headline3.copyWith(
+                    color: ColorTokens.textPrimary,
+                  ),
+                  textAlign: TextAlign.left,
+                ),
+              ],
+            ),
           ),
           actions: [
             // 설정 버튼
             Padding(
-              padding: const EdgeInsets.only(right: 16.0),
+              padding: EdgeInsets.only(right: SpacingTokens.md),
               child: InkWell(
                 onTap: () {
                   Navigator.pushNamed(context, '/settings').then((_) {
@@ -110,134 +116,147 @@ class _HomeScreenState extends State<HomeScreen> {
                   });
                 },
                 child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
+                  width: SpacingTokens.profileIconSize,
+                  height: SpacingTokens.profileIconSize,
+                  decoration: UITokens.circleContainerDecoration,
+                  child: Icon(
                     Icons.person,
                     color: ColorTokens.secondary,
-                    size: 24,
+                    size: SpacingTokens.iconSizeMedium,
                   ),
                 ),
               ),
             ),
           ],
         ),
-        body: Consumer<HomeViewModel>(
-          builder: (context, viewModel, child) {
-            if (viewModel.isLoading) {
-              return const LoadingIndicator(message: '노트 불러오는 중...');
-            }
+        body: SafeArea(
+          bottom: false,
+          child: Consumer<HomeViewModel>(
+            builder: (context, viewModel, child) {
+              if (viewModel.isLoading) {
+                return const LoadingIndicator(message: '노트 불러오는 중...');
+              }
 
-            if (viewModel.error != null) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline,
-                        size: 48, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text(viewModel.error!, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => viewModel.refreshNotes(),
-                      child: const Text('다시 시도'),
-                    ),
-                  ],
-                ),
-              );
-            }
+              if (viewModel.error != null) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: SpacingTokens.iconSizeXLarge,
+                        color: ColorTokens.error,
+                      ),
+                      SizedBox(height: SpacingTokens.md),
+                      Text(
+                        viewModel.error!,
+                        textAlign: TextAlign.center,
+                        style: TypographyTokens.body1,
+                      ),
+                      SizedBox(height: SpacingTokens.md),
+                      ElevatedButton(
+                        onPressed: () => viewModel.refreshNotes(),
+                        child: const Text('다시 시도'),
+                        style: UITokens.primaryButtonStyle,
+                      ),
+                    ],
+                  ),
+                );
+              }
 
-            if (!viewModel.hasNotes) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.note_alt_outlined,
-                        size: 64, color: Colors.grey),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '저장된 노트가 없습니다.\n새 노트를 만들어보세요!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: () => _showImagePickerBottomSheet(context),
-                      icon: const Icon(Icons.add),
-                      label: const Text('새 노트 만들기'),
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: ColorTokens.primary,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+              if (!viewModel.hasNotes) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.note_alt_outlined,
+                        size: SpacingTokens.iconSizeXLarge + 16,
+                        color: Colors.grey,
+                      ),
+                      SizedBox(height: SpacingTokens.md),
+                      Text(
+                        '저장된 노트가 없습니다.\n새 노트를 만들어보세요!',
+                        textAlign: TextAlign.center,
+                        style: TypographyTokens.body1,
+                      ),
+                      SizedBox(height: SpacingTokens.lg),
+                      ElevatedButton.icon(
+                        onPressed: () => _showImagePickerBottomSheet(context),
+                        icon: const Icon(Icons.add),
+                        label: const Text('새 노트 만들기'),
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: ColorTokens.primary,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: SpacingTokens.md,
+                            vertical: SpacingTokens.sm + 4,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                );
+              }
+
+              // RefreshIndicator로 감싸서 pull to refresh 기능 추가
+              return RefreshIndicator(
+                onRefresh: () => viewModel.refreshNotes(),
+                color: ColorTokens.primary,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: SpacingTokens.md,
+                    vertical: SpacingTokens.sm,
+                  ),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: viewModel.notes.length,
+                    itemBuilder: (context, index) {
+                      // 일반 노트 아이템
+                      final note = viewModel.notes[index];
+                      return NoteListItem(
+                        note: note,
+                        onTap: () => _navigateToNoteDetail(context, note.id!),
+                        onFavoriteToggle: (isFavorite) {
+                          if (note.id != null) {
+                            viewModel.toggleFavorite(note.id!, isFavorite);
+                          }
+                        },
+                        onDelete: () {
+                          if (note.id != null) {
+                            viewModel.deleteNote(note.id!);
+                          }
+                        },
+                      );
+                    },
+                  ),
                 ),
               );
-            }
-
-            // RefreshIndicator로 감싸서 pull to refresh 기능 추가
-            return RefreshIndicator(
-              onRefresh: () => viewModel.refreshNotes(),
-              color: ColorTokens.primary,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12.0),
-                child: ListView.builder(
-                  itemCount: viewModel.notes.length,
-                  itemBuilder: (context, index) {
-                    // 일반 노트 아이템
-                    final note = viewModel.notes[index];
-                    return NoteListItem(
-                      note: note,
-                      onTap: () => _navigateToNoteDetail(context, note.id!),
-                      onFavoriteToggle: (isFavorite) {
-                        if (note.id != null) {
-                          viewModel.toggleFavorite(note.id!, isFavorite);
-                        }
-                      },
-                      onDelete: () {
-                        if (note.id != null) {
-                          viewModel.deleteNote(note.id!);
-                        }
-                      },
-                    );
-                  },
-                ),
-              ),
-            );
-          },
+            },
+          ),
         ),
         floatingActionButton: Container(
-          width: 64,
-          height: 64,
-          margin: const EdgeInsets.only(right: 8, bottom: 8),
+          width: SpacingTokens.fabSizeSmall,
+          height: SpacingTokens.fabSizeSmall,
+          margin: EdgeInsets.only(
+            right: SpacingTokens.sm,
+            bottom: SpacingTokens.lg,
+          ),
           child: FloatingActionButton(
             onPressed: () => _showImagePickerBottomSheet(context),
             tooltip: '새 노트 만들기',
             backgroundColor: ColorTokens.primary,
-            child: const Icon(
+            child: Icon(
               Icons.add,
               color: Colors.white,
-              size: 32,
+              size: SpacingTokens.iconSizeMedium,
             ),
             elevation: 4,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
             ),
           ),
         ),
@@ -248,10 +267,12 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showImagePickerBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(SpacingTokens.radiusLarge),
+        ),
       ),
-      backgroundColor: Colors.white,
+      backgroundColor: UITokens.cardBackground,
       builder: (context) => _ImagePickerBottomSheet(),
     );
   }
@@ -280,15 +301,15 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(SpacingTokens.lg),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             '새 노트 만들기',
-            style: Theme.of(context).textTheme.titleLarge,
+            style: TypographyTokens.subtitle1,
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: SpacingTokens.lg),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -306,7 +327,7 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: SpacingTokens.md),
         ],
       ),
     );
@@ -320,22 +341,26 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
       child: Container(
         width: 120,
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: EdgeInsets.symmetric(vertical: SpacingTokens.md),
         decoration: BoxDecoration(
           color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
         ),
         child: Column(
           children: [
-            Icon(icon, size: 48, color: Theme.of(context).primaryColor),
-            const SizedBox(height: 8),
+            Icon(
+              icon,
+              size: SpacingTokens.iconSizeXLarge, 
+              color: Theme.of(context).primaryColor,
+            ),
+            SizedBox(height: SpacingTokens.sm),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: TypographyTokens.button,
             ),
           ],
         ),
@@ -364,7 +389,12 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
         // 오류 발생 시 로딩 다이얼로그 닫기
         LoadingDialog.hide(navigatorContext);
         ScaffoldMessenger.of(navigatorContext).showSnackBar(
-          SnackBar(content: Text('이미지 선택 중 오류가 발생했습니다: $e')),
+          SnackBar(
+            content: Text('이미지 선택 중 오류가 발생했습니다: $e'),
+            backgroundColor: ColorTokens.error,
+            behavior: UITokens.snackBarTheme.behavior,
+            shape: UITokens.snackBarTheme.shape,
+          ),
         );
       }
     }
@@ -389,7 +419,12 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
         // 사용자가 사진 촬영을 취소한 경우
         if (navigatorContext.mounted) {
           ScaffoldMessenger.of(navigatorContext).showSnackBar(
-            const SnackBar(content: Text('사진 촬영이 취소되었습니다.')),
+            SnackBar(
+              content: const Text('사진 촬영이 취소되었습니다.'),
+              backgroundColor: ColorTokens.secondary,
+              behavior: UITokens.snackBarTheme.behavior,
+              shape: UITokens.snackBarTheme.shape,
+            ),
           );
         }
       }
@@ -398,7 +433,12 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
         // 오류 발생 시 로딩 다이얼로그 닫기
         LoadingDialog.hide(navigatorContext);
         ScaffoldMessenger.of(navigatorContext).showSnackBar(
-          SnackBar(content: Text('사진 촬영 중 오류가 발생했습니다: $e')),
+          SnackBar(
+            content: Text('사진 촬영 중 오류가 발생했습니다: $e'),
+            backgroundColor: ColorTokens.error,
+            behavior: UITokens.snackBarTheme.behavior,
+            shape: UITokens.snackBarTheme.shape,
+          ),
         );
       }
     }
@@ -432,7 +472,7 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
         LoadingDialog.hide(context);
         isLoadingDialogShowing = false;
         // 약간의 지연을 주어 다이얼로그가 확실히 닫히도록 함
-        await Future.delayed(Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 100));
       }
 
       if (result['success'] == true && result['noteId'] != null) {
@@ -461,7 +501,12 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message.toString())),
+            SnackBar(
+              content: Text(message.toString()),
+              backgroundColor: ColorTokens.error,
+              behavior: UITokens.snackBarTheme.behavior,
+              shape: UITokens.snackBarTheme.shape,
+            ),
           );
         }
       }
@@ -473,7 +518,12 @@ class _ImagePickerBottomSheetState extends State<_ImagePickerBottomSheet> {
         LoadingDialog.hide(context);
         isLoadingDialogShowing = false;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
+          SnackBar(
+            content: Text('노트 생성 중 오류가 발생했습니다: $e'),
+            backgroundColor: ColorTokens.error,
+            behavior: UITokens.snackBarTheme.behavior,
+            shape: UITokens.snackBarTheme.shape,
+          ),
         );
       }
     }
