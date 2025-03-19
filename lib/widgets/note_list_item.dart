@@ -5,6 +5,8 @@ import '../utils/date_formatter.dart';
 import '../services/image_service.dart';
 import '../services/note_service.dart';
 import '../views/screens/flashcard_screen.dart';
+import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
 
 /// 홈페이지 노트리스트 화면에서 사용되는 카드 위젯
 
@@ -73,201 +75,219 @@ class _NoteListItemState extends State<NoteListItem> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      elevation: 2,
-      child: GestureDetector(
-        onLongPress: () => _showContextMenu(context),
+    return Dismissible(
+      key: Key(widget.note.id ?? 'note-${DateTime.now().millisecondsSinceEpoch}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.red,
+        child: const Icon(
+          Icons.delete,
+          color: Colors.white,
+        ),
+      ),
+      confirmDismiss: (direction) async {
+        return await _confirmDelete(context);
+      },
+      onDismissed: (direction) {
+        widget.onDelete();
+      },
+      child: Card(
+        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: InkWell(
           onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(8),
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(12.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 이미지 썸네일
-                if (_imageFile != null) ...[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: 80,
-                      height: 80,
-                      child: Image.file(
-                        _imageFile!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            width: 80,
-                            height: 80,
-                            color: Colors.grey[200],
-                            child: const Icon(Icons.image_not_supported,
-                                color: Colors.grey),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                ] else if (_isLoadingImage) ...[
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Center(
+                Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
                       child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        width: 80,
+                        height: 80,
+                        child: _imageFile != null
+                            ? Image.file(
+                                _imageFile!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    color: Colors.grey[200],
+                                    child: const Icon(Icons.image_not_supported,
+                                        color: Colors.grey),
+                                  );
+                                },
+                              )
+                            : _isLoadingImage
+                                ? const Center(
+                                    child: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    ),
+                                  )
+                                : Image.asset(
+                                    'assets/images/note_thumbnail.png',
+                                    fit: BoxFit.cover,
+                                  ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                ],
-
+                    // 페이지 수 표시
+                    Positioned(
+                      bottom: 4,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 2),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '${widget.note.pages.length} pages',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 16),
+                
                 // 노트 내용
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      // 노트 제목 및 날짜
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              widget.note.originalText,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            widget.note.originalText.length > 50
+                                ? widget.note.originalText.substring(0, 50) + "..."
+                                : widget.note.originalText,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF0E2823),
+                              fontFamily: 'Poppins',
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          IconButton(
-                            icon: Icon(
-                              widget.note.isFavorite
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              color: widget.note.isFavorite
-                                  ? Colors.red
-                                  : Colors.grey,
-                            ),
-                            onPressed: () => widget
-                                .onFavoriteToggle(!widget.note.isFavorite),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        widget.note.translatedText,
-                        style: const TextStyle(fontSize: 14),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
+                          const SizedBox(height: 2),
                           Text(
                             DateFormatter.formatDate(widget.note.updatedAt),
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey[600],
+                              color: const Color(0xFFB2B2B2),
+                              fontFamily: 'Poppins',
                             ),
                           ),
-                          Row(
-                            children: [
-                              // 플래시카드 카운터 표시
-                              if (widget.note.flashcardCount > 0 ||
-                                  widget.note.flashCards.isNotEmpty) ...[
-                                InkWell(
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (context) => FlashCardScreen(
-                                            noteId: widget.note.id),
-                                      ),
-                                    );
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue[100],
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      // 플래시카드 표시
+                      if (widget.note.flashcardCount > 0 || widget.note.flashCards.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => FlashCardScreen(noteId: widget.note.id),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: ColorTokens.tertiary,
+                              borderRadius: BorderRadius.circular(100),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: Center(
+                                    child: Stack(
                                       children: [
-                                        const Icon(
-                                          Icons.school,
-                                          size: 14,
-                                          color: Colors.blue,
+                                        Container(
+                                          width: 14,
+                                          height: 14,
+                                          decoration: BoxDecoration(
+                                            color: ColorTokens.tertiary,
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: Border.all(
+                                              color: const Color(0xFF665518),
+                                              width: 2,
+                                            ),
+                                          ),
                                         ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          '${widget.note.flashcardCount > 0 ? widget.note.flashcardCount : widget.note.flashCards.length}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue,
+                                        Positioned(
+                                          top: 6,
+                                          left: 6,
+                                          child: Container(
+                                            width: 14,
+                                            height: 14,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: const Color(0xFF665518),
+                                                width: 2,
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                              ],
-                              // 페이지 수 표시
-                              if (widget.note.pages.isNotEmpty) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green[100],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.description,
-                                        size: 14,
-                                        color: Colors.green,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${widget.note.pages.length}',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green,
-                                        ),
-                                      ),
-                                    ],
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${widget.note.flashcardCount > 0 ? widget.note.flashcardCount : widget.note.flashCards.length}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: ColorTokens.secondary,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
                               ],
-                              IconButton(
-                                icon:
-                                    const Icon(Icons.delete_outline, size: 20),
-                                onPressed: () => _confirmDelete(context),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                              ),
-                            ],
+                            ),
                           ),
-                        ],
-                      ),
+                        ),
                     ],
                   ),
+                ),
+                
+                // 즐겨찾기 아이콘
+                IconButton(
+                  icon: Icon(
+                    widget.note.isFavorite 
+                        ? Icons.favorite 
+                        : Icons.favorite_border,
+                    color: widget.note.isFavorite 
+                        ? ColorTokens.primary
+                        : const Color(0xFFB2B2B2),
+                    size: 24,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => widget.onFavoriteToggle(!widget.note.isFavorite),
                 ),
               ],
             ),
@@ -277,131 +297,19 @@ class _NoteListItemState extends State<NoteListItem> {
     );
   }
 
-  void _showContextMenu(BuildContext context) {
-    final RenderBox renderBox = context.findRenderObject() as RenderBox;
-    final position = renderBox.localToGlobal(Offset.zero);
-    final size = renderBox.size;
-
-    showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy + size.height,
-        position.dx + size.width,
-        position.dy,
-      ),
-      items: [
-        PopupMenuItem(
-          child: Row(
-            children: const [
-              Icon(Icons.school, color: Colors.blue),
-              SizedBox(width: 8),
-              Text('플래시카드에 추가'),
-            ],
-          ),
-          onTap: () async {
-            // 메뉴가 닫힌 후 플래시카드에 추가하기 위해 지연 실행
-            Future.delayed(Duration.zero, () async {
-              if (context.mounted && widget.note.id != null) {
-                // 로딩 표시
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('플래시카드에 추가 중...')),
-                );
-
-                // 노트 내용을 플래시카드로 추가
-                final success =
-                    await _noteService.addNoteToFlashcards(widget.note.id!);
-
-                if (context.mounted) {
-                  if (success) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('플래시카드에 추가되었습니다.')),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('이미 추가된 플래시카드이거나 추가에 실패했습니다.')),
-                    );
-                  }
-                }
-              }
-            });
-          },
-        ),
-        PopupMenuItem(
-          child: Row(
-            children: const [
-              Icon(Icons.menu_book, color: Colors.green),
-              SizedBox(width: 8),
-              Text('플래시카드 학습'),
-            ],
-          ),
-          onTap: () {
-            // 메뉴가 닫힌 후 플래시카드 화면으로 이동하기 위해 지연 실행
-            Future.delayed(Duration.zero, () {
-              if (context.mounted) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        FlashCardScreen(noteId: widget.note.id),
-                  ),
-                );
-              }
-            });
-          },
-        ),
-        PopupMenuItem(
-          child: Row(
-            children: [
-              Icon(
-                widget.note.isFavorite ? Icons.favorite : Icons.favorite_border,
-                color: widget.note.isFavorite ? Colors.red : Colors.grey,
-              ),
-              const SizedBox(width: 8),
-              Text(widget.note.isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'),
-            ],
-          ),
-          onTap: () {
-            widget.onFavoriteToggle(!widget.note.isFavorite);
-          },
-        ),
-        PopupMenuItem(
-          child: Row(
-            children: const [
-              Icon(Icons.delete_outline, color: Colors.red),
-              SizedBox(width: 8),
-              Text('삭제'),
-            ],
-          ),
-          onTap: () {
-            // 메뉴가 닫힌 후 삭제 확인 대화상자를 표시하기 위해 지연 실행
-            Future.delayed(Duration.zero, () {
-              if (context.mounted) {
-                _confirmDelete(context);
-              }
-            });
-          },
-        ),
-      ],
-    );
-  }
-
-  void _confirmDelete(BuildContext context) {
-    showDialog(
+  Future<bool> _confirmDelete(BuildContext context) async {
+    return await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('노트 삭제'),
         content: const Text('이 노트를 삭제하시겠습니까?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).pop(false),
             child: const Text('취소'),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              widget.onDelete();
-            },
+            onPressed: () => Navigator.of(context).pop(true),
             child: const Text('삭제'),
           ),
         ],
