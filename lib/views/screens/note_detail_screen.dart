@@ -72,6 +72,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   int _currentPageIndex = 0;
   bool _isCreatingFlashCard = false;
   TextProcessingMode _textProcessingMode = TextProcessingMode.languageLearning;
+  TextDisplayMode _textDisplayMode = TextDisplayMode.both;
   Timer? _backgroundCheckTimer;
 
   @override
@@ -941,66 +942,81 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
             ],
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // 이미지 썸네일 (작게 표시)
-              if (imageFile != null || currentPage.imageUrl != null)
-                GestureDetector(
-                  onTap: () {
-                    // FullImageScreen으로 이동
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => FullImageScreen(
-                          imageFile: imageFile,
-                          imageUrl: currentPage.imageUrl,
-                          title: '페이지 이미지',
-                        ),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                      borderRadius: BorderRadius.circular(4),
+              // 텍스트 표시 모드 토글 위젯 (먼저 표시)
+              if (hasSegments)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: TextDisplayToggleWidget(
+                      currentMode: _textDisplayMode,
+                      onModeChanged: (mode) {
+                        setState(() {
+                          _textDisplayMode = mode;
+                          
+                          // ProcessedText가 있는 경우 텍스트 표시 모드 업데이트
+                          if (processedText != null) {
+                            // 각 모드에 맞게 표시 설정 변경
+                            final updatedText = processedText.copyWith(
+                              showFullText: mode == TextDisplayMode.originalOnly,
+                            );
+                            _pageContentService.setProcessedText(currentPage.id!, updatedText);
+                          }
+                        });
+                      },
+                      originalText: currentPage.originalText,
                     ),
-                    child: imageFile != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: Image.file(
-                            imageFile,
-                            fit: BoxFit.cover,
-                          ),
-                        )
-                      : const Icon(Icons.image, color: Colors.grey),
                   ),
                 ),
-                
-              const SizedBox(width: 12),
               
-              // 텍스트 표시 컨트롤 및 재생 버튼
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 텍스트 표시 모드 토글 위젯
-                    if (hasSegments)
-                      TextDisplayToggleWidget(
-                        currentMode: TextDisplayMode.both,
-                        onModeChanged: (mode) {
-                          setState(() {});
-                        },
-                        originalText: currentPage.originalText,
+              // 이미지 썸네일과 재생 버튼 행
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // 이미지 썸네일 (작게 표시)
+                  if (imageFile != null || currentPage.imageUrl != null)
+                    GestureDetector(
+                      onTap: () {
+                        // FullImageScreen으로 이동
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => FullImageScreen(
+                              imageFile: imageFile,
+                              imageUrl: currentPage.imageUrl,
+                              title: '페이지 이미지',
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: imageFile != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: Image.file(
+                                imageFile,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : const Icon(Icons.image, color: Colors.grey),
                       ),
+                    ),
                     
-                    // 전체 재생/멈춤 버튼 행
-                    Row(
+                  const SizedBox(width: 12),
+                  
+                  // 전체 읽기/멈춤 버튼
+                  Expanded(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        // 전체 읽기/멈춤 버튼
                         ElevatedButton.icon(
                           icon: Icon(
                             isPlaying ? Icons.stop : Icons.play_arrow,
@@ -1022,8 +1038,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
