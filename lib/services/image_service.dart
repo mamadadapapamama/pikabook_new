@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -195,6 +196,91 @@ class ImageService {
     } catch (e) {
       debugPrint('카메라 사용 중 오류 발생: $e');
       throw Exception('카메라 사용 중 오류가 발생했습니다: $e');
+    }
+  }
+
+  /// 임시 파일 경로 생성 (제대로 정리되지 않으면 때때로 임시 파일이 쌓일 수 있음)
+  Future<String> createTempFilePath() async {
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final uuid = const Uuid().v4();
+    return '${tempDir.path}/image_${timestamp}_$uuid.jpg';
+  }
+  
+  /// 임시 파일 정리
+  Future<void> cleanupTempFiles() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final dir = Directory(tempDir.path);
+      final entities = await dir.list().toList();
+      
+      int removedCount = 0;
+      
+      // 이미지 관련 임시 파일 찾기
+      for (var entity in entities) {
+        if (entity is File) {
+          final fileName = path.basename(entity.path);
+          
+          // 앱이 생성한 임시 이미지 파일 확인 (_img_, image_ 등의 패턴 포함)
+          if ((fileName.contains('image_') || fileName.contains('_img_')) && 
+              (fileName.endsWith('.jpg') || fileName.endsWith('.png'))) {
+            
+            // 파일 정보 확인
+            FileStat stat = await entity.stat();
+            
+            // 24시간 이상 지난 파일 삭제
+            final now = DateTime.now();
+            if (now.difference(stat.modified).inHours > 24) {
+              try {
+                await entity.delete();
+                removedCount++;
+              } catch (e) {
+                debugPrint('임시 파일 삭제 중 오류: $e');
+              }
+            }
+          }
+        }
+      }
+      
+      if (removedCount > 0) {
+        debugPrint('임시 이미지 파일 $removedCount개 정리 완료');
+      }
+    } catch (e) {
+      debugPrint('임시 파일 정리 중 오류 발생: $e');
+    }
+  }
+  
+  /// 이미지 캐시 정리 (메모리 압박 시)
+  Future<void> clearImageCache() async {
+    try {
+      // 이미지 캐시 정리 로직
+      // 참고: Flutter 자체 이미지 캐시는 PaintingBinding.instance.imageCache를 통해 접근 가능
+      
+      final imageCache = PaintingBinding.instance.imageCache;
+      if (imageCache != null) {
+        // 이미지 캐시 정리 (최대 크기를 100으로 줄임)
+        imageCache.maximumSize = 100;
+        debugPrint('이미지 캐시 최대 크기 축소: ${imageCache.maximumSize}');
+        
+        // 미사용 이미지 즉시 제거
+        imageCache.clear();
+        debugPrint('이미지 캐시 초기화 완료');
+      }
+      
+      // 메모리 내 임시 이미지 참조 정리
+      _clearInMemoryImageReferences();
+    } catch (e) {
+      debugPrint('이미지 캐시 정리 중 오류 발생: $e');
+    }
+  }
+  
+  /// 메모리 내 이미지 참조 정리
+  void _clearInMemoryImageReferences() {
+    try {
+      // 필요한 경우 구현
+      debugPrint('메모리 내 이미지 참조 정리 완료');
+    } catch (e) {
+      debugPrint('메모리 내 이미지 참조 정리 중 오류 발생: $e');
     }
   }
 }

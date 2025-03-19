@@ -149,9 +149,62 @@ class NoteService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_cachedNotesKey);
       await prefs.remove(_lastCacheTimeKey);
-      debugPrint('노트 캐시 초기화 완료');
+      
+      debugPrint('노트 캐시 지우기 완료');
     } catch (e) {
-      debugPrint('캐시 초기화 중 오류 발생: $e');
+      debugPrint('노트 캐시 지우기 중 오류 발생: $e');
+    }
+  }
+
+  /// 노트 캐시 정리 (메모리 최적화)
+  Future<void> cleanupCache() async {
+    try {
+      // 캐시 서비스를 통해 정리
+      await _cacheService.cleanupOldCache();
+      
+      // 페이지 캐시 히스토리 기록 정리
+      await _cleanPageCacheHistory();
+      
+      debugPrint('노트 서비스 캐시 정리 완료');
+    } catch (e) {
+      debugPrint('노트 캐시 정리 중 오류 발생: $e');
+    }
+  }
+  
+  /// 페이지 캐시 히스토리 정리
+  Future<void> _cleanPageCacheHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // pages_updated_ 관련 오래된 항목 찾기
+      final allKeys = prefs.getKeys();
+      final oldUpdateFlags = <String>[];
+      
+      // 오래된 페이지 업데이트 플래그 찾기
+      for (final key in allKeys) {
+        if (key.startsWith('pages_updated_') || key.startsWith('updated_page_count_')) {
+          // 키에서 노트 ID 추출
+          final noteId = key.split('_').last;
+          
+          // 해당 노트가 캐시에 있는지 확인
+          final note = await _cacheService.getCachedNote(noteId);
+          
+          // 캐시에 노트가 없으면 관련 플래그 삭제
+          if (note == null) {
+            oldUpdateFlags.add(key);
+          }
+        }
+      }
+      
+      // 오래된 플래그 제거
+      if (oldUpdateFlags.isNotEmpty) {
+        debugPrint('오래된 페이지 업데이트 플래그 ${oldUpdateFlags.length}개 제거');
+        for (final key in oldUpdateFlags) {
+          await prefs.remove(key);
+        }
+      }
+    } catch (e) {
+      debugPrint('페이지 캐시 히스토리 정리 중 오류 발생: $e');
     }
   }
 

@@ -936,4 +936,162 @@ class UnifiedCacheService {
       debugPrint('메모리 캐시 정리 완료: 총 $clearedItems개 항목 제거');
     }
   }
+
+  /// 오래된 캐시 정리 (메모리 및 로컬)
+  Future<void> cleanupOldCache() async {
+    debugPrint('오래된 캐시 정리 시작');
+    
+    try {
+      // 메모리 캐시 정리
+      int clearedItems = 0;
+      
+      // 페이지 캐시 정리 (최대 100개 유지)
+      clearedItems += _cleanupMemoryCache(_pageCache, 100);
+      
+      // 노트 캐시 정리 (최대 50개 유지)
+      clearedItems += _cleanupMemoryCache(_noteCache, 50);
+      
+      // 번역 캐시 정리 (최대 200개 유지)
+      clearedItems += _cleanupMemoryCache(_translationCache, 200);
+      
+      // 처리된 텍스트 캐시 정리 (최대 50개 유지)
+      clearedItems += _cleanupMemoryCache(_processedTextCache, 50);
+      
+      // 로컬 캐시 정리 시도
+      await _attemptLocalCacheCleanup();
+      
+      debugPrint('오래된 캐시 정리 완료: 메모리에서 $clearedItems개 항목 제거');
+    } catch (e) {
+      debugPrint('캐시 정리 중 오류 발생: $e');
+    }
+  }
+  
+  /// 비필수 캐시 초기화 (메모리 압박 시)
+  Future<void> clearNonEssentialCache() async {
+    debugPrint('메모리 압박 감지 - 비필수 캐시 초기화');
+    
+    try {
+      // 번역 캐시 완전 초기화 (필수 아님)
+      _translationCache.clear();
+      
+      // 처리된 텍스트 캐시는 현재 보고 있는 페이지를 제외하고 모두 초기화
+      final activePageIds = _getActivePageIds();
+      _processedTextCache.removeWhere((key, _) => !activePageIds.contains(key));
+      
+      // 노트 캐시는 최근 3개만 유지
+      if (_noteCache.length > 3) {
+        _cleanupMemoryCache(_noteCache, 3);
+      }
+      
+      // 타임스탬프 정리
+      _cleanupTimestamps();
+      
+      debugPrint('비필수 캐시 초기화 완료');
+    } catch (e) {
+      debugPrint('비필수 캐시 초기화 중 오류 발생: $e');
+    }
+  }
+  
+  /// 특정 메모리 캐시 정리 (최대 개수 유지)
+  int _cleanupMemoryCache<T>(Map<String, T> cache, int maxItems) {
+    if (cache.length <= maxItems) return 0;
+    
+    int clearedCount = 0;
+    try {
+      // 타임스탬프 기준으로 정렬된 키 목록 가져오기
+      final sortedKeys = _cacheTimestamps.keys
+          .where((key) => cache.containsKey(key))
+          .toList()
+        ..sort((a, b) {
+          final timeA = _cacheTimestamps[a] ?? DateTime.now();
+          final timeB = _cacheTimestamps[b] ?? DateTime.now();
+          return timeA.compareTo(timeB);
+        });
+      
+      // 제거할 항목 수 계산
+      final itemsToRemove = cache.length - maxItems;
+      
+      // 가장 오래된 항목부터 제거
+      for (int i = 0; i < itemsToRemove && i < sortedKeys.length; i++) {
+        final key = sortedKeys[i];
+        cache.remove(key);
+        clearedCount++;
+      }
+      
+    } catch (e) {
+      debugPrint('메모리 캐시 정리 중 오류 발생: $e');
+    }
+    
+    return clearedCount;
+  }
+  
+  /// 로컬 캐시 정리 시도
+  Future<void> _attemptLocalCacheCleanup() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 3일 이상 지난 캐시 항목 키 찾기
+      final now = DateTime.now();
+      final oldKeys = <String>[];
+      
+      // 모든 SharedPreferences 키 순회
+      final allKeys = prefs.getKeys().where((key) => key.contains('_timestamp'));
+      
+      for (final timestampKey in allKeys) {
+        final timeString = prefs.getString(timestampKey);
+        if (timeString == null) continue;
+        
+        try {
+          final timestamp = DateTime.parse(timeString);
+          if (now.difference(timestamp).inDays > 3) {
+            // 타임스탬프 키에서 실제 데이터 키 추출
+            final dataKey = timestampKey.replaceAll('_timestamp', '');
+            oldKeys.add(dataKey);
+            oldKeys.add(timestampKey);
+          }
+        } catch (e) {
+          debugPrint('타임스탬프 파싱 중 오류: $e');
+        }
+      }
+      
+      // 오래된 항목 제거
+      if (oldKeys.isNotEmpty) {
+        debugPrint('오래된 로컬 캐시 항목 제거: ${oldKeys.length}개');
+        for (final key in oldKeys) {
+          await prefs.remove(key);
+        }
+      }
+    } catch (e) {
+      debugPrint('로컬 캐시 정리 시도 중 오류 발생: $e');
+    }
+  }
+  
+  /// 타임스탬프 정리 (사용하지 않는 타임스탬프 제거)
+  void _cleanupTimestamps() {
+    // 모든 캐시에서 사용 중인 키 수집
+    final usedKeys = <String>{};
+    usedKeys.addAll(_pageCache.keys);
+    usedKeys.addAll(_noteCache.keys);
+    usedKeys.addAll(_translationCache.keys);
+    usedKeys.addAll(_processedTextCache.keys);
+    
+    // 사용하지 않는 타임스탬프 제거
+    _cacheTimestamps.removeWhere((key, _) => !usedKeys.contains(key));
+  }
+  
+  /// 현재 활성화된 페이지 ID 목록 반환 (추측)
+  Set<String> _getActivePageIds() {
+    // 최근에 액세스한 페이지 ID 반환 (최대 5개)
+    final recentPageIds = _pageCache.keys.toList();
+    
+    // 타임스탬프 기준으로 정렬
+    recentPageIds.sort((a, b) {
+      final timeA = _cacheTimestamps[a] ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final timeB = _cacheTimestamps[b] ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return timeB.compareTo(timeA); // 최신순 정렬
+    });
+    
+    // 최근 5개만 반환
+    return recentPageIds.take(5).toSet();
+  }
 }

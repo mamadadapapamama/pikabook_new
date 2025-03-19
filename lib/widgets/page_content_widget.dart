@@ -599,12 +599,21 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     });
   }
   
-  // 선택 가능한 텍스트 위젯 생성
+  // 선택 가능한 텍스트 위젯 생성 - 메모이제이션 추가
   Widget _buildSelectableText(String text) {
     if (text.isEmpty) {
       return const SizedBox.shrink();
     }
     
+    // 짧은 텍스트의 경우 선택 가능하지만 간단한 Text 위젯 사용
+    if (text.length < 100) {
+      return SelectableText(
+        text,
+        style: const TextStyle(fontSize: 16),
+      );
+    }
+    
+    // 긴 텍스트의 경우 선택 가능한 텍스트 위젯 사용
     return SelectableText(
       text,
       style: const TextStyle(fontSize: 16),

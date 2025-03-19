@@ -222,15 +222,27 @@ class EnhancedOcrService {
     
     debugPrint('필터링 후 문장 수: ${filteredSentences.length}');
 
+    // 문장이 적으면 일반 처리, 많으면 compute 함수로 격리 처리
+    if (filteredSentences.length <= 10) {
+      return _processTextSegmentsSequentially(filteredSentences);
+    } else {
+      return _processTextSegmentsIsolated(filteredSentences);
+    }
+  }
+  
+  // 문장을 순차적으로 처리 (문장 수가 적을 때)
+  Future<List<TextSegment>> _processTextSegmentsSequentially(List<String> sentences) async {
+    debugPrint('순차적 문장 처리 시작: ${sentences.length}개');
+    
     // 병렬 처리를 위한 배치 크기 설정
     const int batchSize = 5;
     final List<TextSegment> allSegments = [];
 
     // 배치 단위로 처리하여 메모리 사용량 최적화
-    for (int i = 0; i < filteredSentences.length; i += batchSize) {
+    for (int i = 0; i < sentences.length; i += batchSize) {
       final end =
-          (i + batchSize < filteredSentences.length) ? i + batchSize : filteredSentences.length;
-      final batch = filteredSentences.sublist(i, end);
+          (i + batchSize < sentences.length) ? i + batchSize : sentences.length;
+      final batch = sentences.sublist(i, end);
 
       // 배치 내 문장들을 병렬로 처리
       final batchResults = await Future.wait(
@@ -239,12 +251,56 @@ class EnhancedOcrService {
 
       allSegments.addAll(batchResults);
 
-      // 배치 처리 후 잠시 대기하여 UI 스레드 차단 방지
-      if (end < filteredSentences.length) {
+      // UI 스레드 차단 방지 (필요한 경우만)
+      if (end < sentences.length && allSegments.length > 10) {
         await Future.delayed(Duration(milliseconds: 1));
       }
     }
 
+    return allSegments;
+  }
+  
+  // 문장을 별도 isolate에서 처리 (문장 수가 많을 때)
+  Future<List<TextSegment>> _processTextSegmentsIsolated(List<String> sentences) async {
+    debugPrint('격리 처리 시작: ${sentences.length}개 문장');
+    
+    // 배치로 나누어 처리 (최대 20개씩)
+    const int maxBatchSize = 20;
+    final List<TextSegment> allSegments = [];
+    
+    // 계산된 배치 개수
+    final int batchCount = (sentences.length / maxBatchSize).ceil();
+    debugPrint('총 $batchCount개 배치로 처리');
+    
+    for (int b = 0; b < batchCount; b++) {
+      final int start = b * maxBatchSize;
+      final int end = (start + maxBatchSize < sentences.length) ? start + maxBatchSize : sentences.length;
+      final batch = sentences.sublist(start, end);
+      
+      try {
+        // compute 함수를 사용해 별도 isolate에서 처리
+        final batchParam = _BatchProcessParam(
+          sentences: batch,
+          translationService: _translationService,
+          pinyinService: _pinyinService,
+          textCleanerService: _textCleanerService,
+        );
+        
+        final batchResults = await compute(_processBatchInIsolate, batchParam);
+        allSegments.addAll(batchResults);
+        
+        debugPrint('배치 ${b+1}/$batchCount 처리 완료: ${batch.length}개 문장');
+      } catch (e) {
+        debugPrint('배치 처리 중 오류 발생: $e');
+        
+        // 오류 발생 시 대체 처리 (순차 처리)
+        final fallbackResults = await Future.wait(
+          batch.map((sentence) => _processTextSegment(sentence)),
+        );
+        allSegments.addAll(fallbackResults);
+      }
+    }
+    
     return allSegments;
   }
 
@@ -345,5 +401,79 @@ class EnhancedOcrService {
       debugPrint('텍스트 추출 중 오류 발생: $e');
       return '';
     }
+  }
+}
+
+// Isolate에서 사용할 배치 처리 파라미터 클래스
+class _BatchProcessParam {
+  final List<String> sentences;
+  final TranslationService translationService;
+  final PinyinCreationService pinyinService;
+  final TextCleanerService textCleanerService;
+  
+  _BatchProcessParam({
+    required this.sentences, 
+    required this.translationService,
+    required this.pinyinService,
+    required this.textCleanerService,
+  });
+}
+
+// Isolate에서 실행될 배치 처리 함수
+Future<List<TextSegment>> _processBatchInIsolate(_BatchProcessParam param) async {
+  final results = <TextSegment>[];
+  
+  for (final sentence in param.sentences) {
+    try {
+      // 핀인 생성
+      final pinyin = await _generatePinyinForSentenceStatic(
+        sentence, 
+        param.pinyinService, 
+        param.textCleanerService
+      );
+
+      // 번역
+      final translated = await param.translationService.translateText(
+        sentence,
+        targetLanguage: 'ko',
+      );
+
+      results.add(TextSegment(
+        originalText: sentence,
+        pinyin: pinyin,
+        translatedText: translated,
+      ));
+    } catch (e) {
+      print('문장 처리 중 오류 발생: $e');
+      // 오류가 발생해도 기본 세그먼트 반환
+      results.add(TextSegment(
+        originalText: sentence,
+        pinyin: '',
+        translatedText: '번역 오류',
+      ));
+    }
+  }
+  
+  return results;
+}
+
+// 격리된 환경에서 핀인 생성을 위한 정적 메서드
+Future<String> _generatePinyinForSentenceStatic(
+  String sentence, 
+  PinyinCreationService pinyinService,
+  TextCleanerService textCleanerService,
+) async {
+  try {
+    // 중국어 문자만 추출
+    final chineseCharsOnly = textCleanerService.extractChineseChars(sentence);
+    if (chineseCharsOnly.isEmpty) {
+      return '';
+    }
+
+    // 핀인 생성
+    return await pinyinService.generatePinyin(chineseCharsOnly);
+  } catch (e) {
+    print('핀인 생성 중 오류 발생: $e');
+    return '';
   }
 }
