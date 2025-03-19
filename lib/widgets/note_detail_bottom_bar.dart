@@ -67,6 +67,7 @@ class NoteDetailBottomBar extends StatelessWidget {
         // 페이지 인디케이터 위젯
         if (totalPages > 1)
           PageIndicatorWidget(
+            key: ValueKey('page_indicator_$currentPageIndex'),
             currentPageIndex: currentPageIndex,
             totalPages: totalPages,
             onPageChanged: onPageChanged,
@@ -99,7 +100,7 @@ class NoteDetailBottomBar extends StatelessWidget {
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                   child: KeyedSubtree(
-                    key: ValueKey('toggle_${textDisplayMode.toString()}'),
+                    key: ValueKey('toggle_${textDisplayMode.toString()}_${processedText.hashCode}'),
                     child: TextDisplayToggleWidget(
                       currentMode: textDisplayMode,
                       onModeChanged: (newMode) {
@@ -132,33 +133,37 @@ class NoteDetailBottomBar extends StatelessWidget {
                           ),
                         );
                       },
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0x45808080)),
-                          borderRadius: BorderRadius.circular(4),
-                          image: imageFile != null
-                              ? DecorationImage(
-                                  image: FileImage(imageFile!),
-                                  fit: BoxFit.cover,
-                                )
-                              : currentPage!.imageUrl != null
-                                  ? DecorationImage(
-                                      image: NetworkImage(currentPage!.imageUrl!),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : null,
+                      child: Hero(
+                        tag: 'image_${currentPage!.id}',
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          margin: const EdgeInsets.symmetric(horizontal: 8.0),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: const Color(0x45808080)),
+                            borderRadius: BorderRadius.circular(4),
+                            image: imageFile != null
+                                ? DecorationImage(
+                                    image: FileImage(imageFile!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : currentPage!.imageUrl != null
+                                    ? DecorationImage(
+                                        image: NetworkImage(currentPage!.imageUrl!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                          ),
+                          child: (imageFile == null && currentPage!.imageUrl == null)
+                              ? const Icon(Icons.image, color: Colors.grey, size: 18)
+                              : null,
                         ),
-                        child: (imageFile == null && currentPage!.imageUrl == null)
-                            ? const Icon(Icons.image, color: Colors.grey, size: 18)
-                            : null,
                       ),
                     ),
                     
                   // 전체 읽기/멈춤 아이콘 버튼
                   IconButton(
+                    key: ValueKey('play_button_${isPlaying ? 'playing' : 'stopped'}'),
                     icon: Icon(
                       isPlaying ? Icons.stop : Icons.play_arrow,
                       color: Colors.blue,
@@ -227,28 +232,31 @@ class NoteDetailBottomBar extends StatelessWidget {
                       ),
                     );
                   },
-                  child: Container(
-                    width: 30,
-                    height: 30,
-                    margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0x45808080)),
-                      borderRadius: BorderRadius.circular(4),
-                      image: imageFile != null
-                          ? DecorationImage(
-                              image: FileImage(imageFile!),
-                              fit: BoxFit.cover,
-                            )
-                          : currentPage!.imageUrl != null
-                              ? DecorationImage(
-                                  image: NetworkImage(currentPage!.imageUrl!),
-                                  fit: BoxFit.cover,
-                                )
-                              : null,
+                  child: Hero(
+                    tag: 'image_${currentPage!.id}',
+                    child: Container(
+                      width: 30,
+                      height: 30,
+                      margin: const EdgeInsets.symmetric(horizontal: 8.0),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: const Color(0x45808080)),
+                        borderRadius: BorderRadius.circular(4),
+                        image: imageFile != null
+                            ? DecorationImage(
+                                image: FileImage(imageFile!),
+                                fit: BoxFit.cover,
+                              )
+                            : currentPage!.imageUrl != null
+                                ? DecorationImage(
+                                    image: NetworkImage(currentPage!.imageUrl!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                      ),
+                      child: (imageFile == null && currentPage!.imageUrl == null)
+                          ? const Icon(Icons.image, color: Colors.grey, size: 18)
+                          : null,
                     ),
-                    child: (imageFile == null && currentPage!.imageUrl == null)
-                        ? const Icon(Icons.image, color: Colors.grey, size: 18)
-                        : null,
                   ),
                 ),
             ],

@@ -28,6 +28,12 @@ class PageContentService {
   
   // 페이지 ID를 키로 사용하여 ProcessedText 객체 캐싱 (메모리 캐시)
   final Map<String, ProcessedText> _processedTextCache = {};
+  // 캐시 타임스탬프 관리
+  final Map<String, DateTime> _cacheTimestamps = {};
+  // 캐시 크기 제한
+  static const int _maxCacheSize = 50;
+  // 캐시 유효 기간
+  static const Duration _cacheValidity = Duration(minutes: 30);
 
   PageContentService._internal() {
     _initTts();
@@ -39,7 +45,12 @@ class PageContentService {
   }
 
   ProcessedText? getProcessedText(String pageId) {
-    return _processedTextCache[pageId];
+    if (_processedTextCache.containsKey(pageId)) {
+      // 캐시 타임스탬프 업데이트
+      _cacheTimestamps[pageId] = DateTime.now();
+      return _processedTextCache[pageId];
+    }
+    return null;
   }
 
   void setProcessedText(String pageId, ProcessedText processedText) {
@@ -47,15 +58,75 @@ class PageContentService {
         'showFullText=${processedText.showFullText}, '
         'showPinyin=${processedText.showPinyin}, '
         'showTranslation=${processedText.showTranslation}');
+    
     _processedTextCache[pageId] = processedText;
+    _cacheTimestamps[pageId] = DateTime.now();
+    
+    // 캐시 크기 확인 및 정리
+    _cleanupCacheIfNeeded();
+  }
+  
+  // 캐시 크기가 제한을 초과하면 오래된 항목 제거
+  void _cleanupCacheIfNeeded() {
+    if (_processedTextCache.length > _maxCacheSize) {
+      // 캐시 정리 로그
+      debugPrint('ProcessedText 캐시 정리 시작: ${_processedTextCache.length}개 > $_maxCacheSize개');
+      
+      // 타임스탬프 기준으로 정렬된 키 목록 가져오기
+      final sortedKeys = _cacheTimestamps.keys.toList()
+        ..sort((a, b) {
+          final timeA = _cacheTimestamps[a] ?? DateTime.now();
+          final timeB = _cacheTimestamps[b] ?? DateTime.now();
+          return timeA.compareTo(timeB);
+        });
+      
+      // 제거할 항목 수 계산
+      final itemsToRemove = _processedTextCache.length - _maxCacheSize;
+      
+      // 가장 오래된 항목부터 제거
+      for (int i = 0; i < itemsToRemove && i < sortedKeys.length; i++) {
+        final key = sortedKeys[i];
+        _processedTextCache.remove(key);
+        _cacheTimestamps.remove(key);
+      }
+      
+      debugPrint('ProcessedText 캐시 정리 완료: $itemsToRemove개 항목 제거됨');
+    }
+  }
+  
+  // 오래된 캐시 항목 정리 (주기적으로 호출)
+  void cleanupExpiredCache() {
+    final now = DateTime.now();
+    final expiredKeys = <String>[];
+    
+    // 만료된 캐시 항목 찾기
+    for (final entry in _cacheTimestamps.entries) {
+      if (now.difference(entry.value) > _cacheValidity) {
+        expiredKeys.add(entry.key);
+      }
+    }
+    
+    // 만료된 항목 제거
+    if (expiredKeys.isNotEmpty) {
+      debugPrint('만료된 ProcessedText 캐시 정리: ${expiredKeys.length}개 항목');
+      
+      for (final key in expiredKeys) {
+        _processedTextCache.remove(key);
+        _cacheTimestamps.remove(key);
+      }
+    }
   }
 
+  // 특정 페이지의 캐시 제거
   void removeProcessedText(String pageId) {
     _processedTextCache.remove(pageId);
+    _cacheTimestamps.remove(pageId);
   }
 
+  // 모든 캐시 초기화
   void clearProcessedTextCache() {
     _processedTextCache.clear();
+    _cacheTimestamps.clear();
   }
 
   // TTS 초기화
