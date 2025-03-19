@@ -10,6 +10,8 @@ import '../../services/page_service.dart';
 import '../../services/image_service.dart';
 import '../../services/user_preferences_service.dart';
 import '../../models/note.dart';
+import '../../theme/tokens/color_tokens.dart';
+import '../../theme/tokens/typography_tokens.dart';
 import 'note_detail_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -43,22 +45,91 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final backgroundColor = const Color(0xFFFFF9F1);
+    
     return ChangeNotifierProvider(
       create: (_) => HomeViewModel(),
       child: Scaffold(
+        backgroundColor: backgroundColor,
         appBar: AppBar(
-          title: Text(_noteSpaceName),
+          backgroundColor: backgroundColor,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 앱 로고
+              Image.asset(
+                'assets/images/logo_small.png',
+                width: 71,
+                height: 21,
+                errorBuilder: (context, error, stackTrace) {
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.menu_book,
+                        color: ColorTokens.primary,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Pikabook',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: ColorTokens.primary,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 4),
+              // 노트 스페이스 이름
+              Text(
+                _noteSpaceName,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0E2823),
+                  fontFamily: 'Poppins',
+                ),
+              ),
+            ],
+          ),
           actions: [
             // 설정 버튼
-            IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed: () {
-                Navigator.pushNamed(context, '/settings').then((_) {
-                  // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
-                  _loadNoteSpaceName();
-                });
-              },
-              tooltip: '설정',
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: InkWell(
+                onTap: () {
+                  Navigator.pushNamed(context, '/settings').then((_) {
+                    // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
+                    _loadNoteSpaceName();
+                  });
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.person,
+                    color: ColorTokens.secondary,
+                    size: 24,
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -106,8 +177,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: const Icon(Icons.add),
                       label: const Text('새 노트 만들기'),
                       style: ElevatedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: ColorTokens.primary,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ],
@@ -118,34 +194,52 @@ class _HomeScreenState extends State<HomeScreen> {
             // RefreshIndicator로 감싸서 pull to refresh 기능 추가
             return RefreshIndicator(
               onRefresh: () => viewModel.refreshNotes(),
-              child: ListView.builder(
-                itemCount: viewModel.notes.length,
-                itemBuilder: (context, index) {
-                  // 일반 노트 아이템
-                  final note = viewModel.notes[index];
-                  return NoteListItem(
-                    note: note,
-                    onTap: () => _navigateToNoteDetail(context, note.id!),
-                    onFavoriteToggle: (isFavorite) {
-                      if (note.id != null) {
-                        viewModel.toggleFavorite(note.id!, isFavorite);
-                      }
-                    },
-                    onDelete: () {
-                      if (note.id != null) {
-                        viewModel.deleteNote(note.id!);
-                      }
-                    },
-                  );
-                },
+              color: ColorTokens.primary,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12.0),
+                child: ListView.builder(
+                  itemCount: viewModel.notes.length,
+                  itemBuilder: (context, index) {
+                    // 일반 노트 아이템
+                    final note = viewModel.notes[index];
+                    return NoteListItem(
+                      note: note,
+                      onTap: () => _navigateToNoteDetail(context, note.id!),
+                      onFavoriteToggle: (isFavorite) {
+                        if (note.id != null) {
+                          viewModel.toggleFavorite(note.id!, isFavorite);
+                        }
+                      },
+                      onDelete: () {
+                        if (note.id != null) {
+                          viewModel.deleteNote(note.id!);
+                        }
+                      },
+                    );
+                  },
+                ),
               ),
             );
           },
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => _showImagePickerBottomSheet(context),
-          tooltip: '새 노트 만들기',
-          child: const Icon(Icons.add),
+        floatingActionButton: Container(
+          width: 64,
+          height: 64,
+          margin: const EdgeInsets.only(right: 8, bottom: 8),
+          child: FloatingActionButton(
+            onPressed: () => _showImagePickerBottomSheet(context),
+            tooltip: '새 노트 만들기',
+            backgroundColor: ColorTokens.primary,
+            child: const Icon(
+              Icons.add,
+              color: Colors.white,
+              size: 32,
+            ),
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
         ),
       ),
     );
@@ -157,6 +251,7 @@ class _HomeScreenState extends State<HomeScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
+      backgroundColor: Colors.white,
       builder: (context) => _ImagePickerBottomSheet(),
     );
   }
