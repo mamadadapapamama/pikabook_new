@@ -197,16 +197,40 @@ class EnhancedOcrService {
     if (sentences.isEmpty) {
       return [];
     }
+    
+    // 유효한 문장만 필터링 - 특수문자만 있는 문장 제거
+    final filteredSentences = sentences.where((sentence) {
+      // 공백이나 단일 특수문자만 있는 경우 제외
+      final trimmed = sentence.trim();
+      if (trimmed.isEmpty) return false;
+      
+      // 단일 특수문자 (=, -, _, +, * 등)만 있는 문장 제외
+      if (trimmed.length <= 2 && RegExp(r'^[=\-_+*~#@\|\\/]+$').hasMatch(trimmed)) {
+        debugPrint('특수문자만 있는 문장 제외: "$trimmed"');
+        return false;
+      }
+      
+      // 공백이나 구분자 문자가 90% 이상인 경우 제외
+      final nonSpaceChars = trimmed.replaceAll(RegExp(r'[\s=\-_+*~#@\|\\/]'), '');
+      if (nonSpaceChars.length < trimmed.length * 0.1) {
+        debugPrint('구분자 문자가 대부분인 문장 제외: "$trimmed"');
+        return false;
+      }
+      
+      return true;
+    }).toList();
+    
+    debugPrint('필터링 후 문장 수: ${filteredSentences.length}');
 
     // 병렬 처리를 위한 배치 크기 설정
     const int batchSize = 5;
     final List<TextSegment> allSegments = [];
 
     // 배치 단위로 처리하여 메모리 사용량 최적화
-    for (int i = 0; i < sentences.length; i += batchSize) {
+    for (int i = 0; i < filteredSentences.length; i += batchSize) {
       final end =
-          (i + batchSize < sentences.length) ? i + batchSize : sentences.length;
-      final batch = sentences.sublist(i, end);
+          (i + batchSize < filteredSentences.length) ? i + batchSize : filteredSentences.length;
+      final batch = filteredSentences.sublist(i, end);
 
       // 배치 내 문장들을 병렬로 처리
       final batchResults = await Future.wait(
@@ -216,7 +240,7 @@ class EnhancedOcrService {
       allSegments.addAll(batchResults);
 
       // 배치 처리 후 잠시 대기하여 UI 스레드 차단 방지
-      if (end < sentences.length) {
+      if (end < filteredSentences.length) {
         await Future.delayed(Duration(milliseconds: 1));
       }
     }
