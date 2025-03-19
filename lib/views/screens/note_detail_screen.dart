@@ -4,6 +4,7 @@ import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/text_processing_mode.dart';
 import '../../models/text_segment.dart';
+import '../../models/processed_text.dart';
 import '../../services/note_service.dart';
 import '../../services/page_service.dart';
 import '../../services/image_service.dart';
@@ -70,9 +71,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   String? _error;
   bool _isFavorite = false;
   bool _isCreatingFlashCard = false;
-  TextProcessingMode _textProcessingMode = TextProcessingMode.languageLearning;
   TextDisplayMode _textDisplayMode = TextDisplayMode.all;
   Timer? _backgroundCheckTimer;
+  bool _isProcessingText = false;
+  File? _imageFile;
+  Note? _processingPage;
 
   @override
   void initState() {
@@ -137,6 +140,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
         // 각 페이지의 이미지 로드
         _pageManager.loadAllPageImages();
+        
+        // 현재 페이지의 ProcessedText 초기화
+        _processTextForCurrentPage();
 
         // 다음 조건에서 페이지 서비스에 다시 요청
         if ((_pageManager.pages.length <= 1 && isFromCache) || processingCompleted) {
@@ -254,6 +260,52 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // 텍스트 처리 메서드
+  Future<void> _processTextForCurrentPage() async {
+    final currentPage = _pageManager.currentPage;
+    if (currentPage == null) {
+      return;
+    }
+
+    setState(() {
+      _isProcessingText = true;
+    });
+
+    try {
+      // 텍스트 처리
+      final processedText = await _pageContentService.processPageText(
+        page: currentPage,
+        imageFile: _pageManager.currentImageFile,
+        textProcessingMode: TextProcessingMode.languageLearning, // 기본값 사용
+      );
+      
+      if (processedText != null && currentPage.id != null) {
+        // 기본 표시 설정 지정
+        final updatedProcessedText = processedText.copyWith(
+          showFullText: false, // 기본값: 세그먼트 모드
+          showPinyin: _textDisplayMode == TextDisplayMode.all, // 토글 모드에 따라 병음 표시
+          showTranslation: true, // 번역은 항상 표시
+        );
+        
+        // 업데이트된 텍스트 캐싱 (메모리 캐시만)
+        _pageContentService.setProcessedText(currentPage.id!, updatedProcessedText);
+        
+        debugPrint('텍스트 처리 완료: showFullText=${updatedProcessedText.showFullText}, '
+            'showPinyin=${updatedProcessedText.showPinyin}, '
+            'showTranslation=${updatedProcessedText.showTranslation}, '
+            'segments=${updatedProcessedText.segments?.length ?? 0}개');
+      }
+    } catch (e) {
+      debugPrint('텍스트 처리 중 오류 발생: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingText = false;
         });
       }
     }
@@ -404,6 +456,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   void _changePage(int index) {
     _pageManager.changePage(index);
+    // 페이지가 변경되면 새 페이지의 ProcessedText 초기화
+    _processTextForCurrentPage();
     setState(() {}); // UI 업데이트
   }
 
@@ -415,8 +469,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       builder: (context) => NoteActionBottomSheet(
         onEditTitle: _showEditTitleDialog,
         onDeleteNote: _confirmDelete,
-        onShowTextProcessingModeDialog: _showTextProcessingModeDialog,
-        textProcessingMode: _textProcessingMode,
+        onToggleFullTextMode: _toggleFullTextMode,
+        isFullTextMode: _pageManager.currentPage?.id != null 
+            ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? true
+            : true,
       ),
     );
   }
@@ -425,38 +481,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Future<void> _loadUserPreferences() async {
     try {
-      final mode = await _preferencesService.getTextProcessingMode();
+      // 변경된 로직: 항상 기본 모드를 사용
       if (mounted) {
         setState(() {
-          _textProcessingMode = mode;
+          _textDisplayMode = TextDisplayMode.all;
         });
       }
     } catch (e) {
       debugPrint('사용자 기본 설정 로드 중 오류 발생: $e');
     }
-  }
-
-  Future<void> _changeTextProcessingMode(TextProcessingMode mode) async {
-    setState(() {
-      _textProcessingMode = mode;
-    });
-
-    try {
-      // 앱 전체 설정 업데이트
-      await _preferencesService.setDefaultTextProcessingMode(mode);
-    } catch (e) {
-      debugPrint('텍스트 처리 모드 저장 중 오류 발생: $e');
-    }
-  }
-
-  void _showTextProcessingModeDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => TextProcessingModeDialog(
-        currentMode: _textProcessingMode,
-        onModeChanged: _changeTextProcessingMode,
-      ),
-    );
   }
 
   // ===== 플래시카드 관련 메서드 =====
@@ -602,20 +635,99 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   // 텍스트 디스플레이 모드 변경 처리
   void _handleTextDisplayModeChanged(TextDisplayMode mode) {
-    setState(() {
-      _textDisplayMode = mode;
+    debugPrint('=====================================================');
+    debugPrint('텍스트 디스플레이 모드 변경 요청: $mode');
+    
+    // 모드 변경
+    _textDisplayMode = mode;
+    
+    // 현재 페이지의 ProcessedText 업데이트
+    final currentPage = _pageManager.currentPage;
+    if (currentPage != null && currentPage.id != null) {
+      debugPrint('현재 페이지 ID: ${currentPage.id}');
       
-      // 현재 페이지의 ProcessedText 업데이트
-      final currentPage = _pageManager.currentPage;
-      if (currentPage != null && currentPage.id != null) {
-        // 텍스트 모드에 따라 표시 설정 변경
-        _segmentManager.updateTextDisplayMode(
-          pageId: currentPage.id!,
-          showFullText: mode == TextDisplayMode.original,
-          showPinyin: mode == TextDisplayMode.pinyin || mode == TextDisplayMode.all,
-          showTranslation: mode == TextDisplayMode.translation || mode == TextDisplayMode.all,
+      // 캐시된 processedText 가져오기
+      final processedText = _pageContentService.getProcessedText(currentPage.id!);
+      
+      if (processedText != null) {
+        // 기존 상태 로깅
+        debugPrint('기존 ProcessedText 상태: '
+            'showFullText=${processedText.showFullText}, '
+            'showPinyin=${processedText.showPinyin}, '
+            'showTranslation=${processedText.showTranslation}');
+            
+        // 병음 토글 처리
+        bool showPinyin = (mode == TextDisplayMode.all);
+        debugPrint('병음 표시 설정 변경: $showPinyin (모드: $mode)');
+        
+        // processedText 업데이트
+        final updatedText = processedText.copyWith(
+          showFullText: processedText.showFullText, // 전체/세그먼트 모드는 유지
+          showPinyin: showPinyin,           // 병음 표시 여부 업데이트
+          showTranslation: true,            // 번역은 항상 표시
         );
+        
+        // 업데이트 내용 확인
+        debugPrint('업데이트할 ProcessedText 상태: '
+            'showFullText=${updatedText.showFullText}, '
+            'showPinyin=${updatedText.showPinyin}, '
+            'showTranslation=${updatedText.showTranslation}');
+            
+        // 업데이트된 ProcessedText 저장
+        _pageContentService.setProcessedText(currentPage.id!, updatedText);
+        
+        // 상태 변경 알림 (화면 전체 갱신)
+        setState(() {
+          debugPrint('병음 표시 상태 변경 후 UI 업데이트');
+          
+          // 변경 후 캐시 상태 확인
+          final afterUpdate = _pageContentService.getProcessedText(currentPage.id!);
+          if (afterUpdate != null) {
+            debugPrint('업데이트 후 캐시된 ProcessedText 상태: '
+                'showFullText=${afterUpdate.showFullText}, '
+                'showPinyin=${afterUpdate.showPinyin}, '
+                'showTranslation=${afterUpdate.showTranslation}');
+          }
+        });
+      } else {
+        debugPrint('ProcessedText가 null임 - 업데이트 건너뜀');
       }
+    } else {
+      debugPrint('현재 페이지 없음 - 업데이트 건너뜀');
+    }
+    
+    debugPrint('=====================================================');
+  }
+  
+  // 세그먼트/전체 텍스트 모드 전환 처리 메서드
+  void _toggleFullTextMode() {
+    final currentPage = _pageManager.currentPage;
+    if (currentPage == null || currentPage.id == null) {
+      return;
+    }
+    
+    // 캐시된 processedText 가져오기
+    final processedText = _pageContentService.getProcessedText(currentPage.id!);
+    if (processedText == null) {
+      return;
+    }
+    
+    // 현재 상태 확인
+    final bool currentShowFullText = processedText.showFullText;
+    
+    // 상태 반전
+    final bool newShowFullText = !currentShowFullText;
+    
+    setState(() {
+      // 병음 표시 상태 유지하면서 전체 텍스트 모드만 전환
+      final updatedText = processedText.copyWith(
+        showFullText: newShowFullText,
+        showPinyin: processedText.showPinyin,
+        showTranslation: true, // 번역은 항상 표시
+      );
+      
+      // 업데이트된 ProcessedText 저장
+      _pageContentService.setProcessedText(currentPage.id!, updatedText);
     });
   }
   
@@ -705,15 +817,33 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         ),
       );
     }
+    
+    // 캐시된 설정 상태 가져오기
+    ProcessedText? cachedProcessedText;
+    if (currentPage.id != null) {
+      cachedProcessedText = _pageContentService.getProcessedText(currentPage.id!);
+      if (cachedProcessedText != null) {
+        debugPrint('현재 캐시된 ProcessedText 상태: '
+            'showFullText=${cachedProcessedText.showFullText}, '
+            'showPinyin=${cachedProcessedText.showPinyin}, '
+            'showTranslation=${cachedProcessedText.showTranslation}, '
+            'hashCode=${cachedProcessedText.hashCode}');
+      }
+    }
 
+    // 현재 텍스트 표시 모드 정보 로깅
+    debugPrint('현재 텍스트 디스플레이 모드: $_textDisplayMode');
+    
+    // ValueKey를 사용하여 페이지나 설정이 변경될 때마다 위젯 갱신
     return PageContentWidget(
-      key: ValueKey('page_content_${currentPage.id}_${_pageManager.currentPageIndex}'),
+      key: ValueKey('page_content_${currentPage.id}_${_pageManager.currentPageIndex}_'
+          '${_textDisplayMode}_${cachedProcessedText?.hashCode ?? 0}'),
       page: currentPage,
       imageFile: imageFile,
       isLoadingImage: false,
       noteId: widget.noteId,
       onCreateFlashCard: _createFlashCard,
-      textProcessingMode: _textProcessingMode,
+      textProcessingMode: TextProcessingMode.languageLearning, // 기본값 사용
       flashCards: _note?.flashCards,
       onDeleteSegment: _handleDeleteSegment,
     );

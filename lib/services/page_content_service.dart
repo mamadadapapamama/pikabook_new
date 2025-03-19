@@ -42,6 +42,10 @@ class PageContentService {
   }
 
   void setProcessedText(String pageId, ProcessedText processedText) {
+    debugPrint('페이지 ID $pageId의 ProcessedText 캐시 업데이트: '
+        'showFullText=${processedText.showFullText}, '
+        'showPinyin=${processedText.showPinyin}, '
+        'showTranslation=${processedText.showTranslation}');
     _processedTextCache[pageId] = processedText;
   }
 

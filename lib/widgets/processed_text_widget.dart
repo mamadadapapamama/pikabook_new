@@ -13,7 +13,6 @@ import '../utils/context_menu_manager.dart';
 
 class ProcessedTextWidget extends StatefulWidget {
   final ProcessedText processedText;
-  final bool showTranslation;
   final Function(String)? onDictionaryLookup;
   final Function(String, String, {String? pinyin})? onCreateFlashCard;
   final List<FlashCard>? flashCards;
@@ -22,7 +21,6 @@ class ProcessedTextWidget extends StatefulWidget {
   const ProcessedTextWidget({
     Key? key,
     required this.processedText,
-    this.showTranslation = true,
     this.onDictionaryLookup,
     this.onCreateFlashCard,
     this.flashCards,
@@ -89,22 +87,35 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
     // 플래시카드 목록이 변경된 경우
     if (oldWidget.flashCards != widget.flashCards) {
-      if (kDebugMode) {
-        debugPrint('플래시카드 목록 변경 감지: didUpdateWidget');
-      }
+      debugPrint('플래시카드 목록 변경 감지: didUpdateWidget');
       _extractFlashcardWords();
     }
 
-    // 처리된 텍스트가 변경된 경우
+    // ProcessedText 변경 감지
     if (oldWidget.processedText != widget.processedText) {
-      if (kDebugMode) {
-        debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
-      }
+      debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
+      
       // 선택된 텍스트 초기화
       setState(() {
         _selectedText = '';
         _selectedTextNotifier.value = '';
       });
+    }
+    
+    // 표시 설정 변경 감지 - 개별 속성 확인
+    if (oldWidget.processedText.showFullText != widget.processedText.showFullText) {
+      debugPrint('전체 텍스트 모드 변경 감지: ${oldWidget.processedText.showFullText} -> ${widget.processedText.showFullText}');
+      setState(() {});
+    }
+    
+    if (oldWidget.processedText.showPinyin != widget.processedText.showPinyin) {
+      debugPrint('병음 표시 설정 변경 감지: ${oldWidget.processedText.showPinyin} -> ${widget.processedText.showPinyin}');
+      setState(() {});
+    }
+    
+    if (oldWidget.processedText.showTranslation != widget.processedText.showTranslation) {
+      debugPrint('번역 표시 설정 변경 감지: ${oldWidget.processedText.showTranslation} -> ${widget.processedText.showTranslation}');
+      setState(() {});
     }
   }
 
@@ -333,9 +344,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         // 원본 텍스트 표시
         _buildSelectableText(widget.processedText.fullOriginalText),
 
-        // 번역 텍스트 표시 (showTranslation이 true이고 번역 텍스트가 있는 경우)
-        if (widget.showTranslation &&
-            widget.processedText.fullTranslatedText != null)
+        // 번역 텍스트 표시 (번역이 있고 showTranslation이 true인 경우)
+        if (widget.processedText.fullTranslatedText != null && 
+            widget.processedText.showTranslation)
           Padding(
             padding: const EdgeInsets.only(top: 8.0),
             child:
@@ -350,17 +361,16 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     // 세그먼트가 없으면 빈 컨테이너 반환
     if (widget.processedText.segments == null ||
         widget.processedText.segments!.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('세그먼트가 없습니다.');
-      }
-
-      // 세그먼트가 없으면 전체 텍스트 표시
       return _buildFullTextView();
     }
 
-    if (kDebugMode) {
-      debugPrint('세그먼트 수: ${widget.processedText.segments!.length}');
-    }
+    // 현재 표시 상태 정보 출력
+    debugPrint('세그먼트 뷰 빌드 정보:');
+    debugPrint(' - 병음 표시: ${widget.processedText.showPinyin}');
+    debugPrint(' - 번역 표시: ${widget.processedText.showTranslation}');
+    debugPrint(' - 전체 텍스트 모드: ${widget.processedText.showFullText}');
+    debugPrint(' - 위젯 hashCode: ${widget.hashCode}');
+    debugPrint(' - ProcessedText hashCode: ${widget.processedText.hashCode}');
 
     // 세그먼트 목록을 위젯 목록으로 변환
     List<Widget> segmentWidgets = [];
@@ -368,18 +378,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     for (int i = 0; i < widget.processedText.segments!.length; i++) {
       final segment = widget.processedText.segments![i];
 
-      // 디버깅 정보 출력
-      if (kDebugMode) {
-        debugPrint('세그먼트 $i 원본 텍스트: "${segment.originalText}"');
-        debugPrint('세그먼트 $i 번역 텍스트: "${segment.translatedText}"');
-        debugPrint('세그먼트 $i 핀인: "${segment.pinyin}"');
-      }
-
       // 원본 텍스트가 비어있으면 건너뜀
       if (segment.originalText.isEmpty) {
-        if (kDebugMode) {
-          debugPrint('세그먼트 $i 원본 텍스트가 비어있어 건너뜁니다.');
-        }
         continue;
       }
 
@@ -401,9 +401,33 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             // 세그먼트 삭제 콜백이 없으면 삭제하지 않음
             if (widget.onDeleteSegment == null) return false;
             
-            // 세그먼트 삭제 콜백 호출
-            widget.onDeleteSegment!(i);
-            return true;
+            // 사용자 확인 다이얼로그 표시
+            final bool? confirmed = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('세그먼트 삭제'),
+                content: const Text('이 세그먼트를 삭제하시겠습니까?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('취소'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('삭제'),
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                  ),
+                ],
+              ),
+            );
+            
+            if (confirmed == true) {
+              // 세그먼트 삭제 콜백 호출
+              widget.onDeleteSegment!(i);
+              return true;
+            }
+            
+            return false;
           },
           child: Container(
             margin: const EdgeInsets.only(bottom: 16.0),
@@ -415,10 +439,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // TTS 버튼 추가
+                // 상단 컨트롤 바 (TTS 재생 버튼 등)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    // 드래그 핸들 아이콘 (좌측)
+                    const Icon(Icons.drag_handle, size: 16, color: Colors.grey),
+                    
+                    // TTS 재생 버튼 (우측)
                     IconButton(
                       icon: Icon(
                         _playingSegmentIndex == i
@@ -440,11 +468,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
                 const SizedBox(height: 4.0),
 
-                // 원본 텍스트 표시
+                // 원본 텍스트 표시 (항상 표시)
                 _buildSelectableText(segment.originalText),
 
-                // 핀인 표시
-                if (segment.pinyin != null && segment.pinyin!.isNotEmpty)
+                // 병음 표시 - 직접 processedText의 showPinyin 값 사용
+                if (segment.pinyin != null && 
+                    segment.pinyin!.isNotEmpty && 
+                    widget.processedText.showPinyin) // 직접 값 참조
                   Padding(
                     padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
                     child: Text(
@@ -457,8 +487,10 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                     ),
                   ),
 
-                // 번역 텍스트 표시
-                if (widget.showTranslation && segment.translatedText != null)
+                // 번역 표시 (번역 표시 조건 명확하게 수정)
+                if (segment.translatedText != null &&
+                    segment.translatedText!.isNotEmpty &&
+                    widget.processedText.showTranslation)
                   Padding(
                     padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
                     child: _buildSelectableText(segment.translatedText!),
@@ -472,9 +504,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
     // 세그먼트 위젯이 없으면 전체 텍스트 표시
     if (segmentWidgets.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('세그먼트 위젯이 없어 전체 텍스트를 표시합니다.');
-      }
       return _buildFullTextView();
     }
 
@@ -486,20 +515,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // 디버깅 정보 출력
-    if (kDebugMode) {
-      debugPrint('ProcessedTextWidget.build 호출');
-      debugPrint('showFullText: ${widget.processedText.showFullText}');
-      debugPrint('segments 존재 여부: ${widget.processedText.segments != null}');
-      if (widget.processedText.segments != null) {
-        debugPrint('segments 개수: ${widget.processedText.segments!.length}');
-      }
-      debugPrint(
-          'fullOriginalText: "${widget.processedText.fullOriginalText}"');
-      debugPrint(
-          'fullTranslatedText: "${widget.processedText.fullTranslatedText}"');
-    }
-
     // 문장 바깥 탭 시 선택 취소를 위한 GestureDetector 추가
     return GestureDetector(
       onTap: () {
@@ -512,67 +527,25 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 모드에 따라 다른 위젯 표시
-          if (widget.processedText.segments != null &&
-              !widget.processedText.showFullText)
-            _buildSegmentedView()
-          else
-            _buildFullTextView(),
-
-          // 하단 컨트롤 바 추가
-          _buildBottomControlBar(),
-        ],
-      ),
-    );
-  }
-
-  /// **하단 컨트롤 바 위젯**
-  Widget _buildBottomControlBar() {
-    return Container(
-      margin: const EdgeInsets.only(top: 16.0),
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      decoration: BoxDecoration(
-        color: Colors.grey.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8.0),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // 모드 표시
+          // 텍스트 출력 전에 상태 확인 로그
           Text(
-            widget.processedText.segments != null &&
-                    !widget.processedText.showFullText
-                ? '세그먼트 모드'
-                : '전체 텍스트 모드',
-            style: const TextStyle(
-              fontSize: 12.0,
-              color: Colors.grey,
-            ),
+            'ProcessedText 표시: 원본 텍스트 ${widget.processedText.fullOriginalText.length}자, '
+            '번역 텍스트 ${widget.processedText.fullTranslatedText?.length ?? 0}자, '
+            'segments ${widget.processedText.segments?.length ?? 0}개',
+            style: const TextStyle(fontSize: 10, color: Colors.grey),
           ),
-
-          // 전체 TTS 재생 버튼
-          ElevatedButton.icon(
-            onPressed: _playingSegmentIndex != null
-                ? () {
-                    // 재생 중이면 중지
-                    _textReaderService.stop();
-                  }
-                : () {
-                    // 전체 텍스트 읽기
-                    _textReaderService.readAllSegments(widget.processedText);
-                  },
-            icon: Icon(
-              _playingSegmentIndex != null ? Icons.stop : Icons.play_arrow,
-              size: 18,
-            ),
-            label: Text(
-              _playingSegmentIndex != null ? '중지' : '전체 읽기',
-              style: const TextStyle(fontSize: 12),
-            ),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              minimumSize: const Size(0, 0),
-            ),
+          
+          // 모드에 따라 다른 위젯 표시 (키 추가)
+          // 모드나 설정이 변경될 때 항상 새 위젯을 생성하도록 고유 키 사용
+          KeyedSubtree(
+            key: ValueKey('processed_text_${widget.processedText.showFullText}_'
+                '${widget.processedText.showPinyin}_'
+                '${widget.processedText.showTranslation}_'
+                '${widget.processedText.hashCode}'),
+            child: widget.processedText.segments != null &&
+                !widget.processedText.showFullText
+                ? _buildSegmentedView()
+                : _buildFullTextView(),
           ),
         ],
       ),
