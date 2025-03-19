@@ -10,8 +10,6 @@ import '../models/dictionary_entry.dart';
 import '../models/text_segment.dart';
 import '../models/flash_card.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
 
 /// PageContentService는 페이지 콘텐츠 처리와 관련된 비즈니스 로직을 담당합니다.
 /// PageContentWidget에서 분리된 로직을 포함합니다.
@@ -28,14 +26,14 @@ class PageContentService {
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final PageService _pageService = PageService();
   
-  // 페이지 ID를 키로 사용하여 ProcessedText 객체 캐싱
+  // 페이지 ID를 키로 사용하여 ProcessedText 객체 캐싱 (메모리 캐시)
   final Map<String, ProcessedText> _processedTextCache = {};
 
   PageContentService._internal() {
     _initTts();
   }
 
-  // ProcessedText 캐시 메서드들
+  // ProcessedText 캐시 메서드들 (메모리 캐시만 관리)
   bool hasProcessedText(String pageId) {
     return _processedTextCache.containsKey(pageId);
   }
@@ -45,7 +43,7 @@ class PageContentService {
   }
 
   void setProcessedText(String pageId, ProcessedText processedText) {
-    debugPrint('페이지 ID $pageId의 ProcessedText 캐시 업데이트: '
+    debugPrint('페이지 ID $pageId의 ProcessedText 메모리 캐시 업데이트: '
         'showFullText=${processedText.showFullText}, '
         'showPinyin=${processedText.showPinyin}, '
         'showTranslation=${processedText.showTranslation}');
@@ -77,25 +75,31 @@ class PageContentService {
       if (pageId == null) {
         debugPrint('페이지 ID가 없어 캐시를 확인할 수 없습니다.');
       } else {
-        // 캐시된 ProcessedText 확인
+        // 메모리 캐시 확인
+        if (_processedTextCache.containsKey(pageId)) {
+          debugPrint('메모리 캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId');
+          return _processedTextCache[pageId];
+        }
+        
+        // UnifiedCacheService를 통한 캐시 확인
         final cachedProcessedText = await _pageService.getCachedProcessedText(
           pageId,
           "languageLearning", // 항상 languageLearning 모드 사용
         );
 
         if (cachedProcessedText != null) {
-          debugPrint(
-              '캐시된 처리 텍스트 사용: 페이지 ID=$pageId, 모드=languageLearning');
+          // 메모리 캐시에도 저장
+          _processedTextCache[pageId] = cachedProcessedText;
+          debugPrint('캐시에서 처리된 텍스트 로드 성공: 페이지 ID=$pageId');
           return cachedProcessedText;
         }
 
-        debugPrint(
-            '캐시된 처리 텍스트 없음: 페이지 ID=$pageId, 모드=languageLearning');
+        debugPrint('캐시된 처리 텍스트 없음: 페이지 ID=$pageId');
       }
 
       // 캐시된 텍스트 확인
       final originalText = page.originalText;
-      final translatedText = page.translatedText;
+      final translatedText = page.translatedText ?? ''; // null인 경우 빈 문자열로 처리
 
       debugPrint(
           '페이지 텍스트 처리 시작: 페이지 ID=$pageId, 원본 텍스트 ${originalText.length}자, 번역 텍스트 ${translatedText.length}자');
@@ -111,7 +115,15 @@ class PageContentService {
 
         // 처리된 텍스트를 페이지에 캐싱
         if (processedText.fullOriginalText.isNotEmpty && pageId != null) {
-          await updatePageCache(pageId, processedText, "languageLearning");
+          // 메모리 캐시에 저장
+          _processedTextCache[pageId] = processedText;
+          
+          // UnifiedCacheService를 통한 영구 캐싱
+          await _pageService.cacheProcessedText(
+            pageId,
+            processedText,
+            "languageLearning",
+          );
         }
 
         return processedText;
@@ -132,7 +144,11 @@ class PageContentService {
 
         // 페이지 ID가 있는 경우 캐시에 저장
         if (pageId != null) {
-          await updatePageCache(
+          // 메모리 캐시에 저장
+          _processedTextCache[pageId] = processedText;
+          
+          // UnifiedCacheService를 통한 영구 캐싱
+          await _pageService.cacheProcessedText(
             pageId,
             processedText,
             "languageLearning",
@@ -150,104 +166,26 @@ class PageContentService {
     return null;
   }
 
-  /// 페이지 캐시 업데이트 (메모리 + 디스크)
-  /// pageId: 페이지 ID
-  /// processedText: 처리된 텍스트 객체
-  /// mode: 처리 모드 (예: "languageLearning", "flashcard" 등)
-  Future<void> updatePageCache(String pageId, ProcessedText processedText, String mode) async {
+  // 페이지 캐시 업데이트 (메모리 + UnifiedCacheService)
+  Future<void> updatePageCache(
+    String pageId,
+    ProcessedText processedText,
+    String textProcessingMode,
+  ) async {
     try {
       // 메모리 캐시 업데이트
       setProcessedText(pageId, processedText);
       
-      // 텍스트 처리 모드 로깅
-      debugPrint('페이지 $pageId의 ProcessedText 캐시 업데이트 중 (모드: $mode)');
+      // UnifiedCacheService를 통한 영구 캐싱
+      await _pageService.cacheProcessedText(
+        pageId,
+        processedText,
+        textProcessingMode,
+      );
       
-      // SharedPreferences에 보관할 정보 추출
-      final Map<String, dynamic> cacheData = {
-        'pageId': pageId,
-        'mode': mode,
-        'fullOriginalText': processedText.fullOriginalText,
-        'fullTranslatedText': processedText.fullTranslatedText,
-        'showFullText': processedText.showFullText,
-        'showPinyin': processedText.showPinyin,
-        'showTranslation': processedText.showTranslation,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      };
-      
-      // 세그먼트 목록 포함 (null이 아닌 경우에만)
-      if (processedText.segments != null && processedText.segments!.isNotEmpty) {
-        cacheData['segmentsCount'] = processedText.segments!.length;
-        cacheData['segments'] = processedText.segments!.map((segment) => segment.toJson()).toList();
-      }
-      
-      // SharedPreferences에 사용자 정의 키로 저장
-      final prefs = await SharedPreferences.getInstance();
-      final key = 'processed_text_${pageId}_${mode}';
-      
-      // Map을 JSON 문자열로 변환하여 저장
-      await prefs.setString(key, jsonEncode(cacheData));
-      
-      debugPrint('페이지 $pageId의 ProcessedText 캐시 업데이트 완료 (모드: $mode, 세그먼트: ${processedText.segments?.length ?? 0}개)');
+      debugPrint('페이지 캐시 업데이트 완료: $pageId');
     } catch (e) {
-      debugPrint('페이지 $pageId의 ProcessedText 캐시 업데이트 중 오류 발생: $e');
-    }
-  }
-  
-  /// 페이지 캐시에서 ProcessedText 로드 (메모리 → 디스크 순)
-  Future<ProcessedText?> loadProcessedText(String pageId, String mode) async {
-    try {
-      // 1. 메모리 캐시에서 먼저 확인
-      debugPrint('메모리 캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId, 모드=$mode');
-      
-      if (_processedTextCache.containsKey(pageId)) {
-        debugPrint('캐시된 처리 텍스트 사용: 페이지 ID=$pageId, 모드=$mode');
-        return _processedTextCache[pageId];
-      }
-      
-      // 2. 메모리에 없으면 디스크(SharedPreferences)에서 로드
-      final prefs = await SharedPreferences.getInstance();
-      final key = 'processed_text_${pageId}_${mode}';
-      
-      final jsonStr = prefs.getString(key);
-      if (jsonStr != null && jsonStr.isNotEmpty) {
-        try {
-          // JSON 문자열을 Map으로 변환
-          final cacheData = jsonDecode(jsonStr) as Map<String, dynamic>;
-          
-          // 세그먼트 목록 복원
-          List<TextSegment>? segments;
-          if (cacheData.containsKey('segments')) {
-            segments = (cacheData['segments'] as List)
-                .map((segmentJson) => TextSegment.fromJson(segmentJson))
-                .toList();
-          }
-          
-          // ProcessedText 객체 생성
-          final processedText = ProcessedText(
-            fullOriginalText: cacheData['fullOriginalText'] as String? ?? '',
-            fullTranslatedText: cacheData['fullTranslatedText'] as String?,
-            segments: segments,
-            showFullText: cacheData['showFullText'] as bool? ?? false,
-            showPinyin: cacheData['showPinyin'] as bool? ?? true,
-            showTranslation: cacheData['showTranslation'] as bool? ?? true,
-          );
-          
-          // 메모리 캐시에도 저장
-          setProcessedText(pageId, processedText);
-          
-          debugPrint('디스크 캐시에서 처리된 텍스트 로드 성공: 페이지 ID=$pageId, 모드=$mode, 세그먼트=${segments?.length ?? 0}개');
-          return processedText;
-        } catch (e) {
-          debugPrint('디스크 캐시 데이터 파싱 중 오류 발생: $e');
-        }
-      }
-      
-      // 캐시에 없는 경우
-      debugPrint('캐시에 처리된 텍스트가 없음: 페이지 ID=$pageId, 모드=$mode');
-      return null;
-    } catch (e) {
-      debugPrint('처리된 텍스트 로드 중 오류 발생: $e');
-      return null;
+      debugPrint('페이지 캐시 업데이트 중 오류 발생: $e');
     }
   }
 
