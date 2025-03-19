@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../theme/tokens/color_tokens.dart';
+import '../../theme/tokens/typography_tokens.dart';
 
 /// 앱 초기화 중에 표시되는 스플래시 화면
 class SplashScreen extends StatefulWidget {
@@ -59,8 +61,8 @@ class _SplashScreenState extends State<SplashScreen>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.blue.shade100,
-              Colors.white,
+              ColorTokens.primary.withOpacity(0.1),
+              ColorTokens.background,
             ],
           ),
         ),
@@ -84,8 +86,8 @@ class _SplashScreenState extends State<SplashScreen>
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 10,
+                              color: ColorTokens.primary.withOpacity(0.2),
+                              blurRadius: 15,
                               spreadRadius: 2,
                             ),
                           ],
@@ -96,10 +98,10 @@ class _SplashScreenState extends State<SplashScreen>
                             width: 80,
                             height: 80,
                             errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
+                              return Icon(
                                 Icons.menu_book,
                                 size: 60,
-                                color: Colors.blue,
+                                color: ColorTokens.primary,
                               );
                             },
                           ),
@@ -108,22 +110,19 @@ class _SplashScreenState extends State<SplashScreen>
                       const SizedBox(height: 24),
 
                       // 앱 이름
-                      const Text(
+                      Text(
                         'Pikabook',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
+                        style: TypographyTokens.headline1.copyWith(
+                          color: ColorTokens.primary,
                         ),
                       ),
                       const SizedBox(height: 8),
 
                       // 앱 설명
-                      const Text(
+                      Text(
                         '언어 학습을 위한 최고의 도구',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
+                        style: TypographyTokens.subtitle2.copyWith(
+                          color: ColorTokens.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -134,7 +133,7 @@ class _SplashScreenState extends State<SplashScreen>
                         height: 40,
                         child: CircularProgressIndicator(
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.blue.shade300,
+                            ColorTokens.primary,
                           ),
                           strokeWidth: 3,
                         ),
@@ -142,11 +141,10 @@ class _SplashScreenState extends State<SplashScreen>
                       const SizedBox(height: 16),
 
                       // 로딩 메시지
-                      const Text(
+                      Text(
                         '앱을 준비하는 중입니다...',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
+                        style: TypographyTokens.caption.copyWith(
+                          color: ColorTokens.textSecondary,
                         ),
                       ),
                     ],

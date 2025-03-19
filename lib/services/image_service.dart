@@ -101,8 +101,34 @@ class ImageService {
         return file;
       }
 
+      // 이미지 디렉토리 확인 및 생성
+      final appDir = await getApplicationDocumentsDirectory();
+      final imagesDir = Directory('${appDir.path}/images');
+      if (!await imagesDir.exists()) {
+        await imagesDir.create(recursive: true);
+      }
+
+      // 이미지 파일을 찾을 수 없는 경우, 빈 파일 생성
       debugPrint('이미지 파일을 찾을 수 없음: $relativePath');
-      return null;
+      
+      // 이미지 파일 이름 추출
+      final fileName = relativePath.split('/').last;
+      
+      // 같은 파일명으로 빈 이미지 파일 생성
+      final newFile = File(fullPath);
+      if (!await newFile.exists()) {
+        // 디렉토리 확인 및 생성
+        final dir = Directory(path.dirname(fullPath));
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+        
+        // 빈 파일 생성
+        await newFile.create();
+        debugPrint('빈 이미지 파일 생성: $relativePath');
+      }
+      
+      return newFile;
     } catch (e) {
       debugPrint('이미지 파일 가져오기 중 오류 발생: $e');
       return null;

@@ -10,6 +10,7 @@ class AppTheme {
       colorScheme: const ColorScheme.light(
         primary: ColorTokens.primary,
         secondary: ColorTokens.secondary,
+        tertiary: ColorTokens.tertiary,
         surface: ColorTokens.surface,
         background: ColorTokens.background,
         error: ColorTokens.error,
@@ -18,10 +19,13 @@ class AppTheme {
         displayLarge: TypographyTokens.headline1,
         displayMedium: TypographyTokens.headline2,
         displaySmall: TypographyTokens.headline3,
+        headlineMedium: TypographyTokens.subtitle1,
+        headlineSmall: TypographyTokens.subtitle2,
         bodyLarge: TypographyTokens.body1,
         bodyMedium: TypographyTokens.body2,
         labelLarge: TypographyTokens.button,
         bodySmall: TypographyTokens.caption,
+        labelSmall: TypographyTokens.overline,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: ColorTokens.primary,

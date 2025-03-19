@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../../../services/initialization_service.dart';
-import '../../../theme/app_theme.dart';
 import '../../../theme/tokens/color_tokens.dart';
+import '../../../theme/tokens/typography_tokens.dart';
 import '../../../widgets/loading_indicator.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -22,113 +22,210 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   bool _isLoading = false;
   String? _errorMessage;
+  late AnimationController _animationController;
+  late Animation<double> _fadeInAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // 애니메이션 초기화
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1800),
+      vsync: this,
+    );
+
+    _fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.7, curve: Curves.easeIn),
+      ),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+      ),
+    );
+    
+    _slideAnimation = Tween<double>(begin: 30, end: 0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.2, 0.8, curve: Curves.easeOut),
+      ),
+    );
+
+    // 애니메이션 시작
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
-          child: Center(
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 앱 로고 또는 이미지
-                  Icon(
-                    Icons.menu_book,
-                    size: 80,
-                    color: ColorTokens.primary,
-                  ),
-                  const SizedBox(height: 24),
-
-                  // 앱 이름
-                  Text(
-                    'PikaBook',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: ColorTokens.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // 앱 설명
-                  const Text(
-                    '중국어 학습을 위한 최고의 도구',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 48),
-
-                  // 로딩 인디케이터 또는 오류 메시지
-                  if (_isLoading)
-                    const LoadingIndicator(message: '로그인 중...')
-                  else if (_errorMessage != null)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _errorMessage!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.red.shade800,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-
-                  const SizedBox(height: 24),
-
-                  // Google 로그인 버튼
-                  _buildLoginButton(
-                    text: 'Google로 로그인',
-                    icon: Icons.g_mobiledata,
-                    onPressed: _handleGoogleSignIn,
-                    backgroundColor: Colors.white,
-                    textColor: Colors.black87,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Apple 로그인 버튼
-                  _buildLoginButton(
-                    text: 'Apple로 로그인',
-                    icon: Icons.apple,
-                    onPressed: _handleAppleSignIn,
-                    backgroundColor: Colors.black,
-                    textColor: Colors.white,
-                  ),
-                  const SizedBox(height: 24),
-
-                  // 로그인 안내 텍스트
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16.0, vertical: 8.0),
-                    child: Text(
-                      '소셜 계정으로 로그인하여 모든 기기에서 데이터를 동기화하고 백업할 수 있습니다.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ),
-                ],
+      body: Stack(
+        children: [
+          // 배경 이미지
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/splash_background.png',
+              fit: BoxFit.cover,
+            ),
+          ),
+          // 그라데이션 오버레이
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.0),
+                    Colors.black.withOpacity(0.3),
+                    Colors.black.withOpacity(0.0),
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
               ),
             ),
           ),
-        ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              child: AnimatedBuilder(
+                animation: _animationController,
+                builder: (context, child) {
+                  return Opacity(
+                    opacity: _fadeInAnimation.value,
+                    child: Transform.translate(
+                      offset: Offset(0, _slideAnimation.value),
+                      child: Transform.scale(
+                        scale: _scaleAnimation.value,
+                        child: Center(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const SizedBox(height: 20),
+                                
+                                // 앱 로고
+                                Hero(
+                                  tag: 'app_logo',
+                                  child: Container(
+                                    width: 140,
+                                    height: 140,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(30),
+                                      child: Image.asset(
+                                        'assets/images/logo_bird.png',
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 40),
+
+                                // 앱 이름
+                                Text(
+                                  'Pikabook',
+                                  style: TypographyTokens.headline1.copyWith(
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+
+                                // 앱 설명
+                                Text(
+                                  '원서 공부,\n스마트하게',
+                                  textAlign: TextAlign.center,
+                                  style: TypographyTokens.subtitle1.copyWith(
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 60),
+
+                                // 로딩 인디케이터 또는 오류 메시지
+                                if (_isLoading)
+                                  const LoadingIndicator(message: '로그인 중...')
+                                else if (_errorMessage != null)
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    margin: const EdgeInsets.only(bottom: 16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.red.shade200,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _errorMessage!,
+                                      textAlign: TextAlign.center,
+                                      style: TypographyTokens.body2.copyWith(
+                                        color: Colors.red.shade800,
+                                      ),
+                                    ),
+                                  ),
+
+                                const SizedBox(height: 16),
+
+                                // Google 로그인 버튼
+                                _buildLoginButton(
+                                  text: 'Google 로 로그인',
+                                  icon: Icons.g_mobiledata,
+                                  onPressed: _handleGoogleSignIn,
+                                  backgroundColor: Colors.white,
+                                  textColor: const Color(0xFF031B31),
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Apple 로그인 버튼
+                                _buildLoginButton(
+                                  text: 'Apple 로 로그인',
+                                  icon: Icons.apple,
+                                  onPressed: _handleAppleSignIn,
+                                  backgroundColor: ColorTokens.primary,
+                                  textColor: Colors.white,
+                                ),
+                                const SizedBox(height: 40),
+
+                                // 로그인 안내 텍스트
+                                Text(
+                                  '소셜 계정으로 로그인하여 모든 기기에서 데이터를 동기화하고\n백업할수 있습니다.',
+                                  textAlign: TextAlign.center,
+                                  style: TypographyTokens.caption.copyWith(
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -140,33 +237,33 @@ class _LoginScreenState extends State<LoginScreen> {
     required Color backgroundColor,
     required Color textColor,
   }) {
-    return ElevatedButton(
-      onPressed: _isLoading ? null : onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: backgroundColor,
-        foregroundColor: textColor,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(
-            color: Colors.grey.shade300,
-            width: 1,
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: textColor,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon),
-          const SizedBox(width: 12),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 24),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: TypographyTokens.button.copyWith(
+                color: textColor,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
