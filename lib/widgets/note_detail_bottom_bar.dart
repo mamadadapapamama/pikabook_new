@@ -139,8 +139,21 @@ class NoteDetailBottomBar extends StatelessWidget {
                         decoration: BoxDecoration(
                           border: Border.all(color: const Color(0x45808080)),
                           borderRadius: BorderRadius.circular(4),
+                          image: imageFile != null
+                              ? DecorationImage(
+                                  image: FileImage(imageFile!),
+                                  fit: BoxFit.cover,
+                                )
+                              : currentPage!.imageUrl != null
+                                  ? DecorationImage(
+                                      image: NetworkImage(currentPage!.imageUrl!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
                         ),
-                        child: const Icon(Icons.image, color: Colors.grey, size: 18),
+                        child: (imageFile == null && currentPage!.imageUrl == null)
+                            ? const Icon(Icons.image, color: Colors.grey, size: 18)
+                            : null,
                       ),
                     ),
                     
@@ -221,8 +234,21 @@ class NoteDetailBottomBar extends StatelessWidget {
                     decoration: BoxDecoration(
                       border: Border.all(color: const Color(0x45808080)),
                       borderRadius: BorderRadius.circular(4),
+                      image: imageFile != null
+                          ? DecorationImage(
+                              image: FileImage(imageFile!),
+                              fit: BoxFit.cover,
+                            )
+                          : currentPage!.imageUrl != null
+                              ? DecorationImage(
+                                  image: NetworkImage(currentPage!.imageUrl!),
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
                     ),
-                    child: const Icon(Icons.image, color: Colors.grey, size: 18),
+                    child: (imageFile == null && currentPage!.imageUrl == null)
+                        ? const Icon(Icons.image, color: Colors.grey, size: 18)
+                        : null,
                   ),
                 ),
             ],
