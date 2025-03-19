@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../models/text_processing_mode.dart';
 import '../../services/user_preferences_service.dart';
 import 'home_screen.dart';
 
@@ -16,7 +15,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   final UserPreferencesService _userPreferences = UserPreferencesService();
   int _currentPage = 0;
-  TextProcessingMode _selectedMode = TextProcessingMode.languageLearning;
+  bool _isSegmentMode = true; // true: 세그먼트 모드, false: 전체 문장 모드
   final TextEditingController _nameController = TextEditingController();
   bool _isProcessing = false;
 
@@ -180,10 +179,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             icon: Icons.school,
             title: '언어 학습',
             description: '문장별 번역과 핀인을 제공하여 중국어 학습에 집중합니다.',
-            isSelected: _selectedMode == TextProcessingMode.languageLearning,
+            isSelected: _isSegmentMode,
             onTap: () {
               setState(() {
-                _selectedMode = TextProcessingMode.languageLearning;
+                _isSegmentMode = true;
               });
             },
           ),
@@ -195,10 +194,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             icon: Icons.menu_book,
             title: '전문 서적 읽기',
             description: '전체 텍스트 번역을 제공하여 내용 이해에 집중합니다.',
-            isSelected: _selectedMode == TextProcessingMode.professionalReading,
+            isSelected: !_isSegmentMode,
             onTap: () {
               setState(() {
-                _selectedMode = TextProcessingMode.professionalReading;
+                _isSegmentMode = false;
               });
             },
           ),
@@ -234,8 +233,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         await _userPreferences.setDefaultNoteSpace(noteSpaceName);
       }
       
-      // 선택한 모드 저장
-      await _userPreferences.setDefaultTextProcessingMode(_selectedMode);
+      // 선택한 모드 저장 (세그먼트 모드 또는 전체 문장 모드)
+      await _userPreferences.setUseSegmentMode(_isSegmentMode);
       
       // 온보딩 완료 표시
       await _userPreferences.setOnboardingCompleted(true);
@@ -300,7 +299,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            _selectedMode == TextProcessingMode.languageLearning
+            _isSegmentMode
                 ? '언어 학습 모드로 중국어 학습을 시작해보세요.'
                 : '전문 서적 모드로 중국어 텍스트를 읽어보세요.',
             style: const TextStyle(fontSize: 16),
@@ -399,10 +398,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           _buildTextModeCard(
             title: '언어 학습 모드',
             description: '문장을 분석하여 학습에 최적화된 형태로 표시합니다.',
-            isSelected: _selectedMode == TextProcessingMode.languageLearning,
+            isSelected: _isSegmentMode,
             onTap: () {
               setState(() {
-                _selectedMode = TextProcessingMode.languageLearning;
+                _isSegmentMode = true;
               });
             },
           ),
@@ -410,10 +409,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           _buildTextModeCard(
             title: '빠른 읽기 모드',
             description: '분석을 최소화하여 빠르게 내용을 확인할 수 있습니다.',
-            isSelected: _selectedMode == TextProcessingMode.professionalReading,
+            isSelected: !_isSegmentMode,
             onTap: () {
               setState(() {
-                _selectedMode = TextProcessingMode.professionalReading;
+                _isSegmentMode = false;
               });
             },
           ),

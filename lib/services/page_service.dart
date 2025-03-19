@@ -162,92 +162,70 @@ class PageService {
   // 노트의 모든 페이지 가져오기 (캐시 활용)
   Future<List<page_model.Page>> getPagesForNote(String noteId) async {
     try {
-      debugPrint('노트 $noteId의 페이지 조회 시작');
-
-      // 1. 캐시에서 모든 페이지 확인
-      if (await _cacheService.hasAllPagesForNote(noteId)) {
-        final cachedPages = await _cacheService.getPagesForNote(noteId);
-        debugPrint('캐시에서 노트 $noteId의 페이지 ${cachedPages.length}개 로드됨');
-
-        // 페이지가 비어있는 경우 Firestore에서 다시 확인
-        if (cachedPages.isEmpty) {
-          debugPrint('캐시에 페이지가 없어 Firestore에서 다시 확인합니다.');
-          // 캐시 무시하고 계속 진행
-        } else {
-          return cachedPages;
+      // 1. 캐시에서 먼저 페이지 확인
+      final cachedPages = await _cacheService.getPagesForNote(noteId);
+      debugPrint('캐시에서 노트 $noteId의 페이지 ${cachedPages.length}개 로드됨');
+      
+      // 2. Firestore에서 페이지 가져오기
+      final snapshot = await _pagesCollection
+        .where('noteId', isEqualTo: noteId)
+        .orderBy('pageNumber')
+        .get();
+      
+      final serverPages = snapshot.docs
+        .map((doc) => page_model.Page.fromFirestore(doc))
+        .toList();
+      debugPrint('Firestore에서 노트 $noteId의 페이지 ${serverPages.length}개 로드됨');
+      
+      // 3. 로컬 및 서버 페이지 병합
+      // ID 기준으로 페이지 맵 생성 
+      final Map<String, page_model.Page> mergedPagesMap = {};
+      
+      // 캐시된 페이지 먼저 추가 
+      for (final page in cachedPages) {
+        if (page.id != null) {
+          mergedPagesMap[page.id!] = page;
         }
       }
-
-      // 2. Firestore에서 페이지 가져오기
-      debugPrint('Firestore에서 노트 $noteId의 페이지 로드 시작');
-      final snapshot = await getPagesForNoteQuery(noteId).get();
-      debugPrint('노트 $noteId의 페이지 쿼리 결과: ${snapshot.docs.length}개 문서');
-
-      // 결과가 없으면 노트 문서에서 페이지 ID 목록 확인
-      if (snapshot.docs.isEmpty) {
-        debugPrint('페이지 쿼리 결과가 없어 노트 문서에서 페이지 ID 목록을 확인합니다.');
-        final noteDoc = await _firestore.collection('notes').doc(noteId).get();
-        if (noteDoc.exists) {
-          final data = noteDoc.data();
-          final pageIds = data?['pages'] as List<dynamic>?;
-
-          if (pageIds != null && pageIds.isNotEmpty) {
-            debugPrint('노트 문서에서 ${pageIds.length}개의 페이지 ID를 찾았습니다.');
-
-            // 각 페이지 ID로 페이지 문서 조회
-            final List<page_model.Page> pages = [];
-            for (final pageId in pageIds) {
-              try {
-                final pageDoc =
-                    await _pagesCollection.doc(pageId.toString()).get();
-                if (pageDoc.exists) {
-                  final page = page_model.Page.fromFirestore(pageDoc);
-                  pages.add(page);
-                  debugPrint(
-                      '페이지 ${page.id} 로드 성공 (pageNumber: ${page.pageNumber})');
-                }
-              } catch (e) {
-                debugPrint('페이지 $pageId 로드 중 오류: $e');
-              }
-            }
-
-            // 페이지 번호 순으로 정렬
-            pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-
-            // 페이지 로드 완료 시점에 캐싱
-            if (pages.isNotEmpty) {
-              await _cacheService.cachePages(noteId, pages);
-              debugPrint('노트 $noteId의 페이지 ${pages.length}개 캐시에 저장됨 (ID 목록 사용)');
-            }
-
-            return pages;
+      
+      // 서버 페이지 추가 (동일 ID는 서버 버전으로 업데이트)
+      for (final page in serverPages) {
+        if (page.id != null) {
+          mergedPagesMap[page.id!] = page;
+        }
+      }
+      
+      // 맵을 리스트로 변환하고 페이지 번호로 정렬
+      final mergedPages = mergedPagesMap.values.toList()
+        ..sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+      
+      // 페이지 번호가 연속되지 않은 경우 재정렬
+      for (int i = 0; i < mergedPages.length; i++) {
+        if (mergedPages[i].pageNumber != i) {
+          final updatedPage = mergedPages[i].copyWith(pageNumber: i);
+          mergedPages[i] = updatedPage;
+          
+          // 페이지 번호 업데이트가 필요한 경우 Firestore도 업데이트
+          if (updatedPage.id != null) {
+            _pagesCollection.doc(updatedPage.id).update({'pageNumber': i});
           }
         }
       }
-
-      final pages = snapshot.docs
-          .map((doc) => page_model.Page.fromFirestore(doc))
-          .toList();
-
-      // 페이지 번호 순으로 정렬
-      pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-
-      // 각 페이지 정보 로깅
-      for (final page in pages) {
-        debugPrint(
-            '페이지 정보: id=${page.id}, pageNumber=${page.pageNumber}, imageUrl=${page.imageUrl != null}');
+      
+      debugPrint('페이지 병합 결과: 로컬=${cachedPages.length}개, 서버=${serverPages.length}개, 병합 후=${mergedPages.length}개');
+      
+      // 결과가 비어있으면 서버 페이지만 반환
+      if (mergedPages.isEmpty && serverPages.isNotEmpty) {
+        return serverPages;
       }
-
-      // 페이지 로드 완료 시점에 캐싱
-      if (pages.isNotEmpty) {
-        await _cacheService.cachePages(noteId, pages);
-        debugPrint('노트 $noteId의 페이지 ${pages.length}개 캐시에 저장됨');
-      }
-
-      return pages;
+      
+      // 캐시 업데이트 - 병합된 결과를 캐시에 저장
+      await _cacheService.cachePages(noteId, mergedPages);
+      
+      return mergedPages;
     } catch (e) {
-      debugPrint('노트의 페이지 목록 조회 중 오류 발생: $e');
-      throw Exception('페이지 목록을 조회할 수 없습니다: $e');
+      debugPrint('노트 $noteId의 페이지를 가져오는 중 오류 발생: $e');
+      return [];
     }
   }
 
@@ -525,8 +503,8 @@ class PageService {
   // 처리된 텍스트 캐싱
   Future<void> cacheProcessedText(
     String pageId,
-    String textProcessingMode,
     dynamic processedText,
+    String textProcessingMode,
   ) async {
     try {
       await _cacheService.cacheProcessedText(

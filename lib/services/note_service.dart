@@ -464,35 +464,46 @@ class NoteService {
       }
 
       debugPrint(
-          '백그라운드 처리 완료: ${pageIds.length} 페이지의 내용 채우기 완료, 노트 ID: $noteId');
+          '백그라운드 처리 완료: ${processedCount} 페이지의 내용 채우기 완료, 노트 ID: $noteId');
 
       // 노트 객체 업데이트 (캐시 갱신) - 모든 페이지 처리 완료 시점에 캐싱
       try {
-        // 모든 페이지 ID 가져오기 (첫 번째 페이지 포함)
+        // 노트 문서의 모든 페이지 ID 가져오기
         final noteDoc = await _notesCollection.doc(noteId).get();
         if (noteDoc.exists) {
           final data = noteDoc.data() as Map<String, dynamic>?;
           List<String> allPageIds = [];
-
-          // 첫 번째 페이지 ID 가져오기
-          final firstPageSnapshot = await _firestore
-              .collection('pages')
-              .where('noteId', isEqualTo: noteId)
-              .where('pageNumber', isEqualTo: 0)
-              .limit(1)
-              .get();
-
-          if (firstPageSnapshot.docs.isNotEmpty) {
-            final firstPageId = firstPageSnapshot.docs.first.id;
-            allPageIds = [firstPageId, ...pageIds];
-          } else {
-            allPageIds = pageIds;
+          
+          // 노트 문서에서 이미 저장된 전체 페이지 ID 목록 가져오기
+          if (data != null && data['pages'] is List) {
+            allPageIds = List<String>.from(data['pages'] as List);
+            debugPrint('노트 문서에서 가져온 전체 페이지 ID 목록: ${allPageIds.length}개');
+          }
+          
+          // 페이지 ID 목록이 비어있거나 완전하지 않다면 모든 페이지 쿼리하여 확인
+          if (allPageIds.isEmpty || allPageIds.length < pageIds.length + 1) {
+            debugPrint('노트의 전체 페이지 쿼리 시작');
+            // 노트에 속한 모든 페이지 쿼리 (페이지 번호순)
+            final pagesSnapshot = await _firestore
+                .collection('pages')
+                .where('noteId', isEqualTo: noteId)
+                .orderBy('pageNumber')
+                .get();
+            
+            if (pagesSnapshot.docs.isNotEmpty) {
+              allPageIds = pagesSnapshot.docs.map((doc) => doc.id).toList();
+              debugPrint('쿼리로 찾은 전체 페이지 ID 목록: ${allPageIds.length}개, 페이지 번호 순');
+            } else {
+              debugPrint('노트에 속한 페이지가 없거나 쿼리 실패');
+              // 백업 방법: 처리된 페이지 ID와 이번에 처리한 페이지 ID 합치기
+              allPageIds = pageIds;
+            }
           }
 
           // 노트 문서에 모든 페이지 ID 목록 업데이트
           await _notesCollection.doc(noteId).update({
             'pages': allPageIds,
-            'processedPageCount': processedPages.length,
+            'processedPageCount': processedCount,
             'totalPageCount': allPageIds.length,
             'isProcessingBackground': false,
             'processingCompleted': true,
@@ -502,9 +513,20 @@ class NoteService {
           debugPrint('노트 문서의 페이지 ID 목록 업데이트 완료: ${allPageIds.length}개');
 
           // 업데이트된 노트 객체 캐싱
-          final updatedNote = Note.fromFirestore(noteDoc);
+          final updatedNoteDoc = await _notesCollection.doc(noteId).get();
+          final updatedNote = Note.fromFirestore(updatedNoteDoc);
           await _cacheService.cacheNote(updatedNote);
           debugPrint('노트 캐시 업데이트 완료: $noteId');
+          
+          // 페이지 목록도 캐시 업데이트
+          await _cacheService.cachePages(noteId, processedPages);
+          debugPrint('${processedPages.length}개 페이지 캐싱 완료 (노트 ID: $noteId)');
+          
+          // 노트 상세 화면에 알림 전송 (페이지 업데이트 완료)
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('pages_updated_$noteId', true);
+          await prefs.setInt('updated_page_count_$noteId', processedPages.length);
+          debugPrint('페이지 업데이트 완료 알림 설정: $noteId');
         }
       } catch (e) {
         debugPrint('노트 캐시 업데이트 실패: $e');
@@ -512,24 +534,6 @@ class NoteService {
 
       // 백그라운드 처리 상태 업데이트
       await _setBackgroundProcessingStatus(noteId, false);
-
-      // 완료 후 페이지 캐시 강제 갱신 - 모든 처리 완료 시점에 캐싱
-      try {
-        if (processedPages.isNotEmpty) {
-          // 처리된 페이지들을 캐시에 저장
-          await _cacheService.cachePages(noteId, processedPages);
-          debugPrint('백그라운드 처리 완료 후 페이지 캐시 강제 갱신: ${processedPages.length}개');
-
-          // 노트 상세 화면에 알림 전송 (페이지 업데이트 완료)
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('pages_updated_$noteId', true);
-          await prefs.setInt(
-              'updated_page_count_$noteId', processedPages.length);
-          debugPrint('페이지 업데이트 완료 알림 설정: $noteId');
-        }
-      } catch (e) {
-        debugPrint('페이지 캐시 강제 갱신 중 오류 발생: $e');
-      }
     } catch (e) {
       debugPrint('백그라운드 페이지 내용 채우기 중 오류 발생: $e');
       await _setBackgroundProcessingStatus(noteId, false);

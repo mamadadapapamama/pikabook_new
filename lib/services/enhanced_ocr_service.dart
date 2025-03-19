@@ -13,7 +13,6 @@ import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:pinyin/pinyin.dart';
-import '../models/text_processing_mode.dart';
 import '../models/processed_text.dart';
 import '../models/text_segment.dart';
 import 'translation_service.dart';
@@ -110,106 +109,83 @@ class EnhancedOcrService {
   }
 
   /// 이미지에서 텍스트 추출 및 처리
-  /// 모드에 따라 다른 처리를 수행합니다.
   Future<ProcessedText> processImage(
-      File imageFile, TextProcessingMode mode) async {
+    File imageFile,
+    String mode,
+  ) async {
     try {
-      await initialize();
-
-      if (_visionApi == null) {
-        throw Exception('Vision API가 초기화되지 않았습니다.');
+      // 이미지에서 텍스트 추출
+      final extractedText = await extractText(imageFile);
+      if (extractedText.isEmpty) {
+        return ProcessedText(fullOriginalText: '');
       }
 
-      // 이미지 파일을 base64로 인코딩
-      final bytes = await imageFile.readAsBytes();
-      final base64Image = base64Encode(bytes);
-
-      // API 요청 생성
-      final request = vision.AnnotateImageRequest()
-        ..image = (vision.Image()..content = base64Image)
-        ..features = [
-          vision.Feature()
-            ..type = 'TEXT_DETECTION'
-            ..maxResults = 50
-        ]
-        ..imageContext =
-            (vision.ImageContext()..languageHints = [_targetLanguage, 'en']);
-
-      // API 호출
-      final response = await _visionApi!.images.annotate(
-        vision.BatchAnnotateImagesRequest()..requests = [request],
-      );
-
-      // 결과 처리
-      final annotations = response.responses?[0];
-      if (annotations?.textAnnotations != null &&
-          annotations!.textAnnotations!.isNotEmpty) {
-        // 전체 텍스트 (첫 번째 항목)
-        final fullText = annotations.textAnnotations![0].description ?? '';
-        debugPrint('감지된 전체 텍스트: $fullText');
-
-        // 불필요한 텍스트 제거
-        final cleanedText = _textCleanerService.cleanText(fullText);
-        debugPrint('정리된 텍스트: $cleanedText');
-
-        // 모드에 따라 다른 처리 수행
-        if (mode == TextProcessingMode.professionalReading) {
-          // 전문 서적 모드: 핀인 제거 후 전체 텍스트 처리
-          return await _processProfessionalReading(cleanedText);
-        } else {
-          // 언어 학습 모드: 문장별 처리
-          return await _processLanguageLearning(cleanedText);
-        }
-      }
-
-      // 텍스트가 감지되지 않은 경우
-      return ProcessedText(
-        fullOriginalText: '텍스트가 감지되지 않았습니다.',
-        fullTranslatedText: '텍스트가 감지되지 않았습니다.',
-      );
+      // 추출된 텍스트 처리
+      return await processText(extractedText, mode);
     } catch (e) {
-      debugPrint('OCR 텍스트 추출 중 오류 발생: $e');
-      throw Exception('이미지에서 텍스트를 추출할 수 없습니다: $e');
+      debugPrint('OCR 이미지 처리 오류: $e');
+      return ProcessedText(fullOriginalText: '');
     }
   }
 
-  /// 전문 서적 모드 처리
-  /// 핀인 제거 후 전체 텍스트 번역
-  Future<ProcessedText> _processProfessionalReading(String fullText) async {
-    // 핀인 줄 제거
-    final cleanedText = _textCleanerService.removePinyinLines(fullText);
+  /// 텍스트 처리 (모드에 따라 다르게 처리)
+  Future<ProcessedText> processText(
+    String text,
+    String mode,
+  ) async {
+    if (text.isEmpty) {
+      return ProcessedText(fullOriginalText: '');
+    }
 
-    // 번역
-    final translatedText = await _translationService.translateText(cleanedText,
-        targetLanguage: 'ko');
-
-    return ProcessedText(
-      fullOriginalText: cleanedText,
-      fullTranslatedText: translatedText,
-      segments: null, // 세그먼트 없음
-      showFullText: true, // 전체 텍스트 표시
-    );
+    try {
+      // 언어 학습 모드 처리 (항상 사용)
+      return await _processLanguageLearning(text);
+    } catch (e) {
+      debugPrint('텍스트 처리 오류: $e');
+      return ProcessedText(fullOriginalText: text);
+    }
   }
 
-  /// 언어 학습 모드 처리
-  /// 문장별로 분리하여 번역 및 핀인 처리
+  /// **언어 학습 모드 텍스트 처리**
   Future<ProcessedText> _processLanguageLearning(String fullText) async {
-    // 핀인 줄 제거한 전체 텍스트
-    final cleanedText = _textCleanerService.removePinyinLines(fullText);
+    try {
+      if (fullText.isEmpty) {
+        return ProcessedText(fullOriginalText: '');
+      }
 
-    // 전체 번역
-    final fullTranslatedText = await _translationService
-        .translateText(cleanedText, targetLanguage: 'ko');
+      // 핀인 줄 제거한 전체 텍스트
+      final cleanedText = _textCleanerService.removePinyinLines(fullText);
 
-    // 문장을 병렬로 처리
-    final segments = await _processTextSegmentsInParallel(cleanedText);
+      // 전체 번역
+      final fullTranslatedText = await _translationService
+          .translateText(cleanedText, targetLanguage: 'ko');
 
-    return ProcessedText(
-      fullOriginalText: cleanedText,
-      fullTranslatedText: fullTranslatedText,
-      segments: segments,
-      showFullText: false, // 세그먼트별 표시
-    );
+      // 문장을 병렬로 처리
+      final segments = await _processTextSegmentsInParallel(cleanedText);
+
+      return ProcessedText(
+        fullOriginalText: cleanedText,
+        fullTranslatedText: fullTranslatedText,
+        segments: segments,
+        showFullText: false, // 세그먼트별 표시
+      );
+    } catch (e) {
+      debugPrint('언어 학습 모드 처리 오류: $e');
+      return ProcessedText(fullOriginalText: fullText);
+    }
+  }
+
+  /// 전문 서적 모드 텍스트 처리 - 사용하지 않지만 호환성을 위해 유지
+  Future<ProcessedText> _processProfessionalReading(String fullText) async {
+    try {
+      // 단순히 원본 텍스트만 반환
+      return ProcessedText(
+        fullOriginalText: fullText,
+      );
+    } catch (e) {
+      debugPrint('전문 서적 모드 처리 오류: $e');
+      return ProcessedText(fullOriginalText: fullText);
+    }
   }
 
   /// 문장을 병렬로 처리
@@ -291,22 +267,6 @@ class EnhancedOcrService {
     } catch (e) {
       debugPrint('핀인 생성 중 오류 발생: $e');
       return '';
-    }
-  }
-
-  /// 텍스트 처리 (OCR 없이 기존 텍스트 처리)
-  Future<ProcessedText> processText(
-      String text, TextProcessingMode mode) async {
-    try {
-      // 모드에 따라 다른 처리 수행
-      if (mode == TextProcessingMode.professionalReading) {
-        return await _processProfessionalReading(text);
-      } else {
-        return await _processLanguageLearning(text);
-      }
-    } catch (e) {
-      debugPrint('텍스트 처리 중 오류 발생: $e');
-      throw Exception('텍스트를 처리할 수 없습니다: $e');
     }
   }
 
