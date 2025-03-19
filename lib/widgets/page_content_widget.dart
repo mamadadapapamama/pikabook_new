@@ -323,7 +323,82 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   }
 
   void _lookupWord(String word) {
-    // Implementation of _lookupWord method
+    if (word.isEmpty) return;
+    
+    debugPrint('단어 사전 검색 시작: "$word"');
+    
+    // 플래시카드 단어 목록에서 이미 있는지 확인
+    FlashCard? existingCard;
+    if (widget.flashCards != null) {
+      existingCard = widget.flashCards!.firstWhere(
+        (card) => card.front == word,
+        orElse: () => FlashCard(
+          id: '',
+          front: '',
+          back: '',
+          pinyin: '',
+          createdAt: DateTime.now(),
+        ),
+      );
+      if (existingCard.front.isEmpty) existingCard = null;
+    }
+    
+    // 사전 검색 및 바텀시트 표시
+    _showDictionaryBottomSheet(word, existingCard);
+  }
+  
+  // 사전 검색 결과 바텀시트 표시
+  Future<void> _showDictionaryBottomSheet(String word, FlashCard? existingCard) async {
+    try {
+      // 플래시카드에 이미 있는 단어인 경우, 플래시카드 정보로 사전 결과 표시
+      if (existingCard != null) {
+        if (!mounted) return;
+
+        final customEntry = DictionaryEntry(
+          word: existingCard.front,
+          pinyin: existingCard.pinyin ?? '',
+          meaning: existingCard.back,
+          examples: [],
+        );
+
+        DictionaryResultWidget.showDictionaryBottomSheet(
+          context: context,
+          entry: customEntry,
+          onCreateFlashCard: widget.onCreateFlashCard,
+          isExistingFlashcard: true,
+        );
+        return;
+      }
+
+      // 사전 서비스에서 단어 검색
+      final entry = await _pageContentService.lookupWord(word);
+
+      if (entry != null) {
+        if (mounted) {
+          DictionaryResultWidget.showDictionaryBottomSheet(
+            context: context,
+            entry: entry,
+            onCreateFlashCard: widget.onCreateFlashCard,
+            isExistingFlashcard: false,
+          );
+        }
+      } else {
+        if (mounted) {
+          // 사전에서 찾지 못한 경우 오류 메시지
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('단어 "$word"를 사전에서 찾을 수 없습니다.')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('사전 검색 중 오류 발생: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('사전 검색 중 오류가 발생했습니다: $e')),
+        );
+      }
+    }
   }
 
   /// **세그먼트별 텍스트 표시 위젯**
