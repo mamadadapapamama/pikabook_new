@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'unified_cache_service.dart';
 
 /// 이미지 관리 서비스
@@ -23,6 +24,9 @@ class ImageService {
   final UnifiedCacheService _cacheService = UnifiedCacheService();
 
   ImageService._internal();
+
+  // 현재 사용자 ID 가져오기
+  String? get _currentUserId => FirebaseAuth.instance.currentUser?.uid;
 
   /// 이미지 파일을 앱의 영구 저장소에 저장하고 최적화
   Future<String> saveAndOptimizeImage(File imageFile) async {
@@ -86,6 +90,58 @@ class ImageService {
     return '${appDir.path}/$relativePath';
   }
 
+  /// 이미지가 정말 존재하는지 확인
+  Future<bool> _isImageFileExists(String fullPath) async {
+    try {
+      final file = File(fullPath);
+      final exists = await file.exists();
+      
+      if (exists) {
+        // 파일 크기 확인 (0바이트 파일인지 체크)
+        final stat = await file.stat();
+        if (stat.size > 0) {
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      debugPrint('이미지 존재 여부 확인 중 오류: $e');
+      return false;
+    }
+  }
+
+  /// 대체 이미지 생성
+  Future<File> _createPlaceholderImage(String fullPath) async {
+    try {
+      // 디렉토리 확인 및 생성
+      final dir = Directory(path.dirname(fullPath));
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      
+      // 파일 생성
+      final file = File(fullPath);
+      if (!await file.exists()) {
+        // 빈 파일 생성
+        await file.create();
+        
+        // 여기서 간단한 플레이스홀더 이미지 데이터를 작성할 수 있음
+        // 웹에서는 실제 이미지 데이터가 필요할 수 있음
+        if (kIsWeb) {
+          // 웹 환경에서는 기본 이미지 데이터로 대체
+          // 실제 구현시에는 적절한 이미지 데이터를 추가해야 함
+          await file.writeAsBytes([]);
+        }
+      }
+      
+      debugPrint('플레이스홀더 이미지 생성: $fullPath');
+      return file;
+    } catch (e) {
+      debugPrint('플레이스홀더 이미지 생성 중 오류: $e');
+      throw Exception('플레이스홀더 이미지 생성 중 오류가 발생했습니다: $e');
+    }
+  }
+
   /// 이미지 파일 가져오기
   Future<File?> getImageFile(String? relativePath) async {
     if (relativePath == null || relativePath.isEmpty) {
@@ -95,40 +151,32 @@ class ImageService {
     try {
       // 디스크에서 로드
       final fullPath = await getFullImagePath(relativePath);
-      final file = File(fullPath);
-      if (await file.exists()) {
+      
+      // 이미지 파일이 실제로 존재하는지 확인
+      if (await _isImageFileExists(fullPath)) {
         debugPrint('디스크에서 이미지 로드: $relativePath');
-        return file;
+        return File(fullPath);
       }
-
-      // 이미지 디렉토리 확인 및 생성
-      final appDir = await getApplicationDocumentsDirectory();
-      final imagesDir = Directory('${appDir.path}/images');
-      if (!await imagesDir.exists()) {
-        await imagesDir.create(recursive: true);
-      }
-
-      // 이미지 파일을 찾을 수 없는 경우, 빈 파일 생성
+      
       debugPrint('이미지 파일을 찾을 수 없음: $relativePath');
       
-      // 이미지 파일 이름 추출
-      final fileName = relativePath.split('/').last;
-      
-      // 같은 파일명으로 빈 이미지 파일 생성
-      final newFile = File(fullPath);
-      if (!await newFile.exists()) {
-        // 디렉토리 확인 및 생성
-        final dir = Directory(path.dirname(fullPath));
-        if (!await dir.exists()) {
-          await dir.create(recursive: true);
+      // 웹 환경에서는 다른 방식으로 처리
+      if (kIsWeb) {
+        // 웹 환경에서는 상대 경로를 관리할 때 URL이나 assets 경로를 사용해야 함
+        debugPrint('웹 환경에서 이미지 경로 처리: $relativePath');
+        // 여기서는 빈 파일만 생성
+        return await _createPlaceholderImage(fullPath);
+      } else {
+        // 이미지 디렉토리 확인 및 생성
+        final appDir = await getApplicationDocumentsDirectory();
+        final imagesDir = Directory('${appDir.path}/images');
+        if (!await imagesDir.exists()) {
+          await imagesDir.create(recursive: true);
         }
         
-        // 빈 파일 생성
-        await newFile.create();
-        debugPrint('빈 이미지 파일 생성: $relativePath');
+        // 플레이스홀더 이미지 생성
+        return await _createPlaceholderImage(fullPath);
       }
-      
-      return newFile;
     } catch (e) {
       debugPrint('이미지 파일 가져오기 중 오류 발생: $e');
       return null;
@@ -145,12 +193,20 @@ class ImageService {
       // 파일 가져오기
       final file = await getImageFile(relativePath);
       if (file != null && await file.exists()) {
-        // 파일을 바이너리로 읽기
-        final bytes = await file.readAsBytes();
-        return bytes;
+        try {
+          // 파일을 바이너리로 읽기
+          final bytes = await file.readAsBytes();
+          // 빈 파일이 아닌지 확인
+          if (bytes.isNotEmpty) {
+            return bytes;
+          }
+        } catch (e) {
+          debugPrint('이미지 바이너리 읽기 중 오류: $e');
+        }
       }
-
-      return null;
+      
+      // 대체 이미지 데이터 제공 (실제 구현시 적절한 이미지 데이터 추가)
+      return Uint8List(0);
     } catch (e) {
       debugPrint('이미지 바이너리 가져오기 중 오류 발생: $e');
       return null;
