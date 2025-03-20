@@ -66,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   alignment: Alignment.centerLeft,
                   child: Image.asset(
-                    'assets/images/logo_pika_small.png',
+                    'assets/images/logo_pika_small.svg',
                     width: SpacingTokens.appLogoWidth,
                     height: SpacingTokens.appLogoHeight,
                     errorBuilder: (context, error, stackTrace) {
@@ -128,7 +128,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: SpacingTokens.iconSizeMedium,
                       height: SpacingTokens.iconSizeMedium,
                       child: Image.asset(
-                        'assets/images/icon_profile.png',
+                        'assets/images/btn_profile.svg',
                         width: SpacingTokens.iconSizeMedium,
                         height: SpacingTokens.iconSizeMedium,
                         errorBuilder: (context, error, stackTrace) {
