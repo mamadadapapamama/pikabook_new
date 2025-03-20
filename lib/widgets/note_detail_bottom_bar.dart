@@ -154,7 +154,7 @@ class NoteDetailBottomBar extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            isPlaying ? '정지' : '재생',
+                            isPlaying ? '정지' : '전체 재생',
                             style: GoogleFonts.notoSansKr(
                               fontSize: 12,
                               fontWeight: FontWeight.w400,
@@ -192,7 +192,7 @@ class NoteDetailBottomBar extends StatelessWidget {
     return Container(
       height: 4,
       width: double.infinity,
-      color: const Color(0xFFEEEEEE),
+      color: const Color(0xFFFFF0E8),
       child: Row(
         children: [
           // 진행된 부분 (현재 페이지까지)
@@ -230,7 +230,7 @@ class NoteDetailBottomBar extends StatelessWidget {
         Container(
           height: 4,
           width: double.infinity,
-          color: const Color(0xFFEEEEEE),
+          color: const Color(0xFFFFF0E8),
           child: Row(
             children: [
               // 진행된 부분 (현재 페이지까지)
@@ -312,7 +312,7 @@ class NoteDetailBottomBar extends StatelessWidget {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '재생',
+                          '전체 재생',
                           style: GoogleFonts.notoSansKr(
                             fontSize: 12,
                             fontWeight: FontWeight.w400,
