@@ -31,6 +31,10 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/text_reader_service.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../../services/auth_service.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:badges/badges.dart' as badges;
+import '../../theme/tokens/color_tokens.dart';
+import 'full_image_screen.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -470,9 +474,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         onEditTitle: _showEditTitleDialog,
         onDeleteNote: _confirmDelete,
         onToggleFullTextMode: _toggleFullTextMode,
+        onToggleFavorite: _toggleFavorite,
         isFullTextMode: _pageManager.currentPage?.id != null 
             ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? true
             : true,
+        isFavorite: _isFavorite,
       ),
     );
   }
@@ -783,17 +789,100 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       );
     }
 
+    // 현재 페이지 이미지 및 페이지 번호 정보
+    final currentImageFile = _pageManager.currentImageFile;
+    final String pageNumberText = 'page ${_pageManager.currentPageIndex + 1} / ${_pageManager.pages.length}';
+
     return Scaffold(
-      appBar: NoteDetailAppBar(
-        note: _note!,
-        isFavorite: _isFavorite,
-        onEditTitle: _showEditTitleDialog,
-        onToggleFavorite: _toggleFavorite,
-        onShowMoreOptions: _showMoreOptions,
-        onFlashCardPressed: _navigateToFlashcards,
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _note!.originalText,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.notoSansKr(
+                fontSize: 24, 
+                fontWeight: FontWeight.w700,
+                color: ColorTokens.textPrimary,
+              ),
+            ),
+            if (_pageManager.pages.isNotEmpty)
+              Text(
+                pageNumberText,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: const Color(0xFFB2B2B2),
+                ),
+              ),
+          ],
+        ),
+        titleSpacing: 0,
+        actions: [
+          if (_note != null) ...[
+            IconButton(
+              icon: _note!.flashcardCount > 0
+                  ? badges.Badge(
+                      badgeContent: Text(
+                        '${_note!.flashcardCount}',
+                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                      ),
+                      child: const Icon(Icons.flash_on, color: ColorTokens.tertiary),
+                    )
+                  : const Icon(Icons.flash_on, color: ColorTokens.tertiary),
+              onPressed: _navigateToFlashcards,
+            ),
+            IconButton(
+              icon: const Icon(Icons.more_vert),
+              onPressed: _showMoreOptions,
+              tooltip: '더 보기',
+            ),
+          ],
+        ],
       ),
       body: Column(
         children: [
+          // 현재 페이지 이미지가 있으면 표시
+          if (currentImageFile != null || _pageManager.currentPage?.imageUrl != null)
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => FullImageScreen(
+                      imageFile: currentImageFile,
+                      imageUrl: _pageManager.currentPage?.imageUrl,
+                      title: '이미지',
+                    ),
+                  ),
+                );
+              },
+              child: Container(
+                height: 100,
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(horizontal: 30, vertical: 16),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  image: currentImageFile != null
+                      ? DecorationImage(
+                          image: FileImage(currentImageFile),
+                          fit: BoxFit.cover,
+                        )
+                      : _pageManager.currentPage?.imageUrl != null
+                          ? DecorationImage(
+                              image: NetworkImage(_pageManager.currentPage!.imageUrl!),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                  color: Colors.grey.shade200,
+                ),
+                child: (currentImageFile == null && _pageManager.currentPage?.imageUrl == null)
+                    ? const Center(child: Icon(Icons.image, color: Colors.grey, size: 40))
+                    : null,
+              ),
+            ),
+          
           // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
           Expanded(
             child: _buildCurrentPageContent(),
@@ -802,7 +891,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ),
       bottomNavigationBar: NoteDetailBottomBar(
         currentPage: _pageManager.currentPage,
-        imageFile: _pageManager.currentImageFile,
         currentPageIndex: _pageManager.currentPageIndex,
         totalPages: _pageManager.pages.length,
         onPageChanged: _changePage,

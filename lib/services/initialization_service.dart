@@ -18,6 +18,9 @@ class InitializationService {
   String? _firebaseError;
   String? _authError;
 
+  // 초기화 시작 시간 기록
+  final DateTime _initStartTime = DateTime.now();
+
   // 인증 서비스 (지연 초기화)
   AuthService? _authService;
   
@@ -49,17 +52,21 @@ class InitializationService {
 
     try {
       // Firebase 초기화 시작
-      debugPrint('Firebase 초기화 시작...');
+      final initStartTime = DateTime.now();
+      debugPrint('Firebase 초기화 시작... (${initStartTime.toString()})');
       
       // Firebase 코어만 초기화하고 나머지 서비스는 필요할 때 초기화
       await Firebase.initializeApp(options: options);
-      debugPrint('Firebase 코어 초기화 완료');
+      
+      final initDuration = DateTime.now().difference(initStartTime);
+      debugPrint('Firebase 코어 초기화 완료 (소요시간: ${initDuration.inMilliseconds}ms)');
 
       // 초기화 완료 표시
       _firebaseInitialized.complete(true);
 
       // 사용자 인증 상태 확인 (필수 서비스)
-      _checkAuthenticationState();
+      // 백그라운드로 처리하여 UI 블로킹 방지
+      Future.microtask(() => _checkAuthenticationState());
       
       // 다른 Firebase 서비스는 필요할 때 초기화하도록 함
     } catch (e) {
@@ -74,11 +81,12 @@ class InitializationService {
   Future<void> markFirebaseInitialized() async {
     if (_firebaseInitialized.isCompleted) return;
     
-    debugPrint('Firebase 초기화 완료 표시 (외부 초기화)');
+    final elapsed = DateTime.now().difference(_initStartTime);
+    debugPrint('Firebase 초기화 완료 표시 (외부 초기화, 소요시간: ${elapsed.inMilliseconds}ms)');
     _firebaseInitialized.complete(true);
     
-    // 사용자 인증 상태 확인 (필수 서비스)
-    await _checkAuthenticationState();
+    // 사용자 인증 상태 확인 (필수 서비스) - 백그라운드로 처리
+    Future.microtask(() => _checkAuthenticationState());
   }
 
   // 사용자 인증 상태 확인 메서드
@@ -86,6 +94,9 @@ class InitializationService {
     if (_userAuthenticationChecked.isCompleted) return;
 
     try {
+      final authCheckStartTime = DateTime.now();
+      debugPrint('사용자 인증 상태 확인 시작 (${authCheckStartTime.toString()})');
+      
       final auth = FirebaseAuth.instance;
       
       // 현재 사용자 확인
@@ -97,6 +108,10 @@ class InitializationService {
 
       // 인증 상태 확인 완료 표시
       _userAuthenticationChecked.complete(true);
+      
+      final authCheckDuration = DateTime.now().difference(authCheckStartTime);
+      debugPrint('사용자 인증 상태 확인 완료 (소요시간: ${authCheckDuration.inMilliseconds}ms)');
+      
     } catch (e) {
       debugPrint('사용자 인증 상태 확인 실패: $e');
       _authError = '사용자 인증 상태 확인 중 오류가 발생했습니다: $e';
@@ -107,9 +122,14 @@ class InitializationService {
   // 익명 로그인 메서드
   Future<UserCredential?> signInAnonymously() async {
     try {
-      debugPrint('익명 인증 시작...');
+      final loginStartTime = DateTime.now();
+      debugPrint('익명 인증 시작... (${loginStartTime.toString()})');
+      
       final userCredential = await authService.signInAnonymously();
-      debugPrint('익명 인증 성공: ${userCredential.user?.uid}');
+      
+      final loginDuration = DateTime.now().difference(loginStartTime);
+      debugPrint('익명 인증 성공: ${userCredential.user?.uid} (소요시간: ${loginDuration.inMilliseconds}ms)');
+      
       return userCredential;
     } catch (e) {
       debugPrint('익명 인증 실패: $e');

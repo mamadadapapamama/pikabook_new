@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
+import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
 
 class NoteActionBottomSheet extends StatelessWidget {
   final VoidCallback onEditTitle;
   final VoidCallback onDeleteNote;
   final VoidCallback onToggleFullTextMode;
+  final VoidCallback onToggleFavorite;
   final bool isFullTextMode;
+  final bool isFavorite;
 
   const NoteActionBottomSheet({
     Key? key,
     required this.onEditTitle,
     required this.onDeleteNote,
     required this.onToggleFullTextMode,
+    required this.onToggleFavorite,
     required this.isFullTextMode,
+    required this.isFavorite,
   }) : super(key: key);
 
   @override
@@ -31,19 +37,34 @@ class NoteActionBottomSheet extends StatelessWidget {
                 bottom: BorderSide(color: Colors.grey.shade300),
               ),
             ),
-            child: const Text(
+            child: Text(
               '노트 옵션',
-              style: TextStyle(
-                fontSize: 16,
+              style: TypographyTokens.subtitle2.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
           
+          // 즐겨찾기 추가/제거
+          ListTile(
+            leading: Icon(
+              isFavorite ? Icons.favorite : Icons.favorite_border, 
+              color: isFavorite ? Colors.red : Colors.grey,
+            ),
+            title: Text(
+              isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가',
+              style: TypographyTokens.body1,
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              onToggleFavorite();
+            },
+          ),
+          
           // 노트 제목 변경
           ListTile(
             leading: const Icon(Icons.edit, color: Colors.blue),
-            title: const Text('노트 제목 변경'),
+            title: Text('노트 제목 변경', style: TypographyTokens.body1),
             onTap: () {
               Navigator.pop(context);
               onEditTitle();
@@ -60,10 +81,9 @@ class NoteActionBottomSheet extends StatelessWidget {
               children: [
                 const Icon(Icons.format_align_left, size: 18, color: Colors.grey),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   '텍스트 모드',
-                  style: TextStyle(
-                    fontSize: 14,
+                  style: TypographyTokens.caption.copyWith(
                     color: Colors.grey,
                     fontWeight: FontWeight.w500,
                   ),
@@ -75,8 +95,8 @@ class NoteActionBottomSheet extends StatelessWidget {
           // 문장별 구분 모드
           ListTile(
             leading: const SizedBox(width: 24),
-            title: const Text('문장별 구분'),
-            trailing: !isFullTextMode ? const Icon(Icons.check, color: Colors.green) : null,
+            title: Text('문장별 구분', style: TypographyTokens.body1),
+            trailing: !isFullTextMode ? const Icon(Icons.check, color: ColorTokens.success) : null,
             onTap: () {
               Navigator.pop(context);
               if (isFullTextMode) {
@@ -88,8 +108,8 @@ class NoteActionBottomSheet extends StatelessWidget {
           // 원문 전체 모드
           ListTile(
             leading: const SizedBox(width: 24),
-            title: const Text('원문 전체'),
-            trailing: isFullTextMode ? const Icon(Icons.check, color: Colors.green) : null,
+            title: Text('원문 전체', style: TypographyTokens.body1),
+            trailing: isFullTextMode ? const Icon(Icons.check, color: ColorTokens.success) : null,
             onTap: () {
               Navigator.pop(context);
               if (!isFullTextMode) {
@@ -104,7 +124,7 @@ class NoteActionBottomSheet extends StatelessWidget {
           // 노트 삭제
           ListTile(
             leading: const Icon(Icons.delete, color: Colors.red),
-            title: const Text('노트 삭제'),
+            title: Text('노트 삭제', style: TypographyTokens.body1),
             onTap: () {
               Navigator.pop(context);
               onDeleteNote();

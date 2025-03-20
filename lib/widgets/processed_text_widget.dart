@@ -8,6 +8,9 @@ import '../utils/text_selection_helper.dart';
 import '../services/text_reader_service.dart';
 import '../utils/text_highlight_manager.dart';
 import '../utils/context_menu_manager.dart';
+import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// 페이지의 텍스트 프로세싱(OCR, 번역, pinyin, highlight)이 완료되면, 텍스트 처리 결과를 표시하는 위젯
 
@@ -194,7 +197,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   }
 
   /// **선택 가능한 텍스트 위젯 생성**
-  Widget _buildSelectableText(String text) {
+  Widget _buildSelectableText(String text, {bool isOriginal = false}) {
     // 텍스트가 비어있으면 빈 컨테이너 반환
     if (text.isEmpty) {
       return const SizedBox.shrink();
@@ -216,7 +219,17 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           debugPrint('텍스트 선택 중에는 하이라이트된 단어 탭 무시: $word');
         }
       },
-      normalStyle: const TextStyle(fontSize: 16),
+      normalStyle: isOriginal 
+          ? GoogleFonts.notoSans(
+              fontSize: 20, 
+              fontWeight: FontWeight.w500,
+              color: Colors.black,
+            )
+          : GoogleFonts.notoSansKr(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: ColorTokens.textSecondary,
+            ),
     );
 
     // 클래스 멤버 ValueNotifier 사용
@@ -228,7 +241,17 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         return SelectableText.rich(
           TextSpan(
             children: textSpans,
-            style: const TextStyle(fontSize: 16),
+            style: isOriginal 
+                ? GoogleFonts.notoSans(
+                    fontSize: 20, 
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black,
+                  )
+                : GoogleFonts.notoSansKr(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: ColorTokens.textSecondary,
+                  ),
           ),
           contextMenuBuilder: (context, editableTextState) {
             return ContextMenuManager.buildContextMenu(
@@ -266,7 +289,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           enableInteractiveSelection: true,
           showCursor: true,
           cursorWidth: 2.0,
-          cursorColor: Colors.blue,
+          cursorColor: ColorTokens.primary,
           onSelectionChanged: (selection, cause) {
             // 선택 변경 시 로깅
             if (kDebugMode) {
@@ -342,15 +365,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 원본 텍스트 표시
-        _buildSelectableText(widget.processedText.fullOriginalText),
+        _buildSelectableText(widget.processedText.fullOriginalText, isOriginal: true),
 
         // 번역 텍스트 표시 (번역이 있고 showTranslation이 true인 경우)
         if (widget.processedText.fullTranslatedText != null && 
             widget.processedText.showTranslation)
           Padding(
             padding: const EdgeInsets.only(top: 8.0),
-            child:
-                _buildSelectableText(widget.processedText.fullTranslatedText!),
+            child: _buildSelectableText(widget.processedText.fullTranslatedText!),
           ),
       ],
     );
@@ -387,67 +409,70 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       Widget segmentContainer = Container(
         margin: const EdgeInsets.only(bottom: 16.0),
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.withOpacity(0.2)),
+          color: Colors.white,
+          border: Border.all(color: const Color(0xFFFFF0E8)),
           borderRadius: BorderRadius.circular(8.0),
         ),
-        padding: const EdgeInsets.all(8.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 상단 컨트롤 바 (TTS 재생 버튼 등)
+            // 원본 텍스트와 TTS 버튼을 함께 표시하는 행
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 드래그 핸들 아이콘 (좌측)
-                const Icon(Icons.drag_handle, size: 16, color: Colors.grey),
+                // 원본 텍스트 (확장 가능하게)
+                Expanded(
+                  child: _buildSelectableText(segment.originalText, isOriginal: true),
+                ),
                 
-                // TTS 재생 버튼 (우측)
-                IconButton(
-                  icon: Icon(
-                    _playingSegmentIndex == i
-                        ? Icons.stop_circle
-                        : Icons.play_circle,
-                    color:
-                        _playingSegmentIndex == i ? Colors.red : Colors.blue,
-                  ),
-                  onPressed: () {
+                // TTS 재생 버튼
+                GestureDetector(
+                  onTap: () {
                     _playTts(segment.originalText, segmentIndex: i);
                   },
-                  tooltip: _playingSegmentIndex == i ? '중지' : '읽기',
-                  iconSize: 24,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    margin: const EdgeInsets.only(left: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD3E0DD),
+                      borderRadius: BorderRadius.circular(100),
+                    ),
+                    child: Icon(
+                      _playingSegmentIndex == i
+                          ? Icons.stop
+                          : Icons.volume_up,
+                      color: ColorTokens.textSecondary,
+                      size: 14,
+                    ),
+                  ),
                 ),
               ],
             ),
 
-            const SizedBox(height: 4.0),
-
-            // 원본 텍스트 표시 (항상 표시)
-            _buildSelectableText(segment.originalText),
-
             // 병음 표시 - 직접 processedText의 showPinyin 값 사용
             if (segment.pinyin != null && 
                 segment.pinyin!.isNotEmpty && 
-                widget.processedText.showPinyin) // 직접 값 참조
+                widget.processedText.showPinyin)
               Padding(
-                padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
                   segment.pinyin!,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontStyle: FontStyle.italic,
-                    color: Colors.grey,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: const Color(0xFFB2B2B2),
                   ),
                 ),
               ),
 
-            // 번역 표시 (번역 표시 조건 명확하게 수정)
+            // 번역 표시
             if (segment.translatedText != null &&
                 segment.translatedText!.isNotEmpty &&
                 widget.processedText.showTranslation)
               Padding(
-                padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                padding: const EdgeInsets.only(top: 8.0),
                 child: _buildSelectableText(segment.translatedText!),
               ),
           ],
@@ -501,7 +526,19 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         );
       }
 
+      // 구분선을 포함한 위젯 추가
       segmentWidgets.add(segmentContainer);
+      
+      // 마지막 세그먼트가 아닌 경우 구분선 추가
+      if (i < widget.processedText.segments!.length - 1) {
+        segmentWidgets.add(
+          Container(
+            height: 1,
+            color: const Color(0xFFFFF0E8),
+            margin: const EdgeInsets.symmetric(vertical: 8.0),
+          ),
+        );
+      }
     }
 
     // 세그먼트 위젯이 없으면 전체 텍스트 표시
@@ -526,30 +563,25 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         });
       },
       behavior: HitTestBehavior.translucent,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 텍스트 출력 전에 상태 확인 로그
-          Text(
-            'ProcessedText 표시: 원본 텍스트 ${widget.processedText.fullOriginalText.length}자, '
-            '번역 텍스트 ${widget.processedText.fullTranslatedText?.length ?? 0}자, '
-            'segments ${widget.processedText.segments?.length ?? 0}개',
-            style: const TextStyle(fontSize: 10, color: Colors.grey),
-          ),
-          
-          // 모드에 따라 다른 위젯 표시 (키 추가)
-          // 모드나 설정이 변경될 때 항상 새 위젯을 생성하도록 고유 키 사용
-          KeyedSubtree(
-            key: ValueKey('processed_text_${widget.processedText.showFullText}_'
-                '${widget.processedText.showPinyin}_'
-                '${widget.processedText.showTranslation}_'
-                '${widget.processedText.hashCode}'),
-            child: widget.processedText.segments != null &&
-                !widget.processedText.showFullText
-                ? _buildSegmentedView()
-                : _buildFullTextView(),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 30.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 모드에 따라 다른 위젯 표시 (키 추가)
+            // 모드나 설정이 변경될 때 항상 새 위젯을 생성하도록 고유 키 사용
+            KeyedSubtree(
+              key: ValueKey('processed_text_${widget.processedText.showFullText}_'
+                  '${widget.processedText.showPinyin}_'
+                  '${widget.processedText.showTranslation}_'
+                  '${widget.processedText.hashCode}'),
+              child: widget.processedText.segments != null &&
+                  !widget.processedText.showFullText
+                  ? _buildSegmentedView()
+                  : _buildFullTextView(),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -19,10 +19,11 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
+    debugPrint('SplashScreen initState 호출됨');
 
     // 애니메이션 컨트롤러 초기화
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 1000), // 애니메이션 시간 단축
       vsync: this,
     );
 
@@ -35,26 +36,30 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     // 스케일 애니메이션
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.9, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
       ),
     );
 
-    // 애니메이션 시작
+    // 애니메이션 즉시 시작
     _controller.forward();
+    debugPrint('SplashScreen 애니메이션 시작됨');
   }
 
   @override
   void dispose() {
+    debugPrint('SplashScreen dispose 호출됨');
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('SplashScreen build 호출됨');
     return Scaffold(
+      backgroundColor: ColorTokens.background, // 즉시 배경색 표시
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -98,6 +103,7 @@ class _SplashScreenState extends State<SplashScreen>
                             width: 80,
                             height: 80,
                             errorBuilder: (context, error, stackTrace) {
+                              debugPrint('SplashScreen 로고 로드 실패: $error');
                               return Icon(
                                 Icons.menu_book,
                                 size: 60,

@@ -26,10 +26,14 @@ class _AppState extends State<App> {
   String? _error;
   final UserPreferencesService _preferencesService = UserPreferencesService();
   bool _isCheckingInitialization = false;
+  
+  // 앱 시작 시간 기록
+  final DateTime _appStartTime = DateTime.now();
 
   @override
   void initState() {
     super.initState();
+    debugPrint('App initState 호출됨 (${DateTime.now().toString()})');
     // 초기화 상태 확인은 비동기로 시작하고 UI는 즉시 렌더링
     _startInitializationCheck();
   }
@@ -38,27 +42,41 @@ class _AppState extends State<App> {
   void _startInitializationCheck() {
     if (_isCheckingInitialization) return;
     _isCheckingInitialization = true;
+    
+    debugPrint('앱 초기화 상태 확인 시작 (${DateTime.now().toString()})');
 
-    // 온보딩 상태와 초기화 상태를 병렬로 확인
-    Future.wait([
-      _checkOnboardingStatus(),
-      _checkInitializationStatus(),
-    ]).then((_) {
-      _isCheckingInitialization = false;
-    }).catchError((e) {
-      debugPrint('초기화 상태 확인 중 오류 발생: $e');
-      _isCheckingInitialization = false;
+    // 첫 화면이 보이도록 약간의 지연 후 초기화 진행
+    Future.delayed(const Duration(milliseconds: 300), () {
+      // 온보딩 상태와 초기화 상태를 병렬로 확인
+      Future.wait([
+        _checkOnboardingStatus(),
+        _checkInitializationStatus(),
+      ]).then((results) {
+        final elapsed = DateTime.now().difference(_appStartTime);
+        debugPrint('앱 초기화 완료 (소요시간: ${elapsed.inMilliseconds}ms)');
+        _isCheckingInitialization = false;
+      }).catchError((e) {
+        debugPrint('초기화 상태 확인 중 오류 발생: $e');
+        _isCheckingInitialization = false;
+      });
     });
   }
 
   Future<void> _checkOnboardingStatus() async {
     try {
+      final startTime = DateTime.now();
+      debugPrint('온보딩 상태 확인 시작 (${startTime.toString()})');
+      
       final isCompleted = await _preferencesService.isOnboardingCompleted();
+      
       if (mounted) {
         setState(() {
           _isOnboardingCompleted = isCompleted;
         });
       }
+      
+      final duration = DateTime.now().difference(startTime);
+      debugPrint('온보딩 상태 확인 완료: $_isOnboardingCompleted (소요시간: ${duration.inMilliseconds}ms)');
     } catch (e) {
       debugPrint('온보딩 상태 확인 중 오류 발생: $e');
     }
@@ -66,6 +84,9 @@ class _AppState extends State<App> {
 
   Future<void> _checkInitializationStatus() async {
     try {
+      final startTime = DateTime.now();
+      debugPrint('Firebase 초기화 상태 확인 시작 (${startTime.toString()})');
+      
       // Firebase 초기화 상태 확인
       final firebaseInitialized =
           await widget.initializationService.isFirebaseInitialized;
@@ -74,14 +95,21 @@ class _AppState extends State<App> {
         setState(() {
           _error = widget.initializationService.firebaseError;
         });
+        debugPrint('Firebase 초기화 실패: $_error');
         return;
       }
 
       setState(() {
         _isFirebaseInitialized = true;
       });
+      
+      final firebaseDuration = DateTime.now().difference(startTime);
+      debugPrint('Firebase 초기화 상태 확인 완료 (소요시간: ${firebaseDuration.inMilliseconds}ms)');
 
       // 사용자 인증 상태 확인
+      final authStartTime = DateTime.now();
+      debugPrint('사용자 인증 상태 확인 시작 (${authStartTime.toString()})');
+      
       final userAuthenticationChecked =
           await widget.initializationService.isUserAuthenticationChecked;
 
@@ -89,6 +117,7 @@ class _AppState extends State<App> {
         setState(() {
           _error = widget.initializationService.authError;
         });
+        debugPrint('사용자 인증 상태 확인 실패: $_error');
         return;
       }
 
@@ -96,10 +125,15 @@ class _AppState extends State<App> {
       setState(() {
         _isUserAuthenticated = widget.initializationService.isUserAuthenticated;
       });
+      
+      final authDuration = DateTime.now().difference(authStartTime);
+      debugPrint('사용자 인증 상태 확인 완료: $_isUserAuthenticated (소요시간: ${authDuration.inMilliseconds}ms)');
+      
     } catch (e) {
       setState(() {
         _error = '앱 초기화 중 오류가 발생했습니다: $e';
       });
+      debugPrint('초기화 상태 확인 중 예외 발생: $e');
     }
   }
 
@@ -107,16 +141,19 @@ class _AppState extends State<App> {
     setState(() {
       _isUserAuthenticated = true;
     });
+    debugPrint('로그인 성공 처리됨: _isUserAuthenticated = $_isUserAuthenticated');
   }
 
   void _handleLogout() {
     setState(() {
       _isUserAuthenticated = false;
     });
+    debugPrint('로그아웃 처리됨: _isUserAuthenticated = $_isUserAuthenticated');
   }
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('App build 호출됨 (${DateTime.now().toString()})');
     return MaterialApp(
       title: 'Pikabook',
       theme: AppTheme.lightTheme,
@@ -131,6 +168,12 @@ class _AppState extends State<App> {
   }
 
   Widget _buildHomeScreen() {
+    // 앱 상태 디버깅 로그
+    debugPrint('현재 앱 상태: Firebase initialized=$_isFirebaseInitialized, '
+        'User authenticated=$_isUserAuthenticated, '
+        'Onboarding completed=$_isOnboardingCompleted, '
+        'Error=$_error');
+        
     // 오류가 있는 경우
     if (_error != null) {
       return _buildErrorScreen();
