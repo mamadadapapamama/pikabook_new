@@ -789,10 +789,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       );
     }
 
-    // 현재 페이지 이미지 및 페이지 번호 정보
+    // 메인 UI 구성 (로딩 및 오류 처리 이후)
+    return _buildMainContent();
+  }
+  
+  // 메인 UI 구성 (로딩 및 오류 처리 이후)
+  Widget _buildMainContent() {
     final currentImageFile = _pageManager.currentImageFile;
     final String pageNumberText = 'page ${_pageManager.currentPageIndex + 1} / ${_pageManager.pages.length}';
-
+    
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -843,7 +848,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       ),
       body: Column(
         children: [
-          // 현재 페이지 이미지가 있으면 표시
+          // 페이지 썸네일 이미지 (있는 경우)
           if (currentImageFile != null || _pageManager.currentPage?.imageUrl != null)
             GestureDetector(
               onTap: () {
