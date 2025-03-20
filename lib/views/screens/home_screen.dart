@@ -66,7 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Container(
                   alignment: Alignment.centerLeft,
                   child: Image.asset(
-                    'assets/images/logo_small.png',
+                    'assets/images/logo_pika_small.png',
                     width: SpacingTokens.appLogoWidth,
                     height: SpacingTokens.appLogoHeight,
                     errorBuilder: (context, error, stackTrace) {
@@ -108,21 +108,38 @@ class _HomeScreenState extends State<HomeScreen> {
             // 설정 버튼
             Padding(
               padding: EdgeInsets.only(right: SpacingTokens.md),
-              child: InkWell(
-                onTap: () {
-                  Navigator.pushNamed(context, '/settings').then((_) {
-                    // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
-                    _loadNoteSpaceName();
-                  });
-                },
-                child: Container(
-                  width: SpacingTokens.profileIconSize,
-                  height: SpacingTokens.profileIconSize,
-                  decoration: UITokens.circleContainerDecoration,
-                  child: Icon(
-                    Icons.person,
-                    color: ColorTokens.secondary,
-                    size: SpacingTokens.iconSizeMedium,
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(24),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () {
+                    Navigator.pushNamed(context, '/settings').then((_) {
+                      // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
+                      _loadNoteSpaceName();
+                    });
+                  },
+                  splashColor: ColorTokens.primary.withOpacity(0.1),
+                  highlightColor: ColorTokens.primary.withOpacity(0.05),
+                  customBorder: const CircleBorder(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: SizedBox(
+                      width: SpacingTokens.iconSizeMedium,
+                      height: SpacingTokens.iconSizeMedium,
+                      child: Image.asset(
+                        'assets/images/icon_profile.png',
+                        width: SpacingTokens.iconSizeMedium,
+                        height: SpacingTokens.iconSizeMedium,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Icon(
+                            Icons.person,
+                            color: ColorTokens.secondary,
+                            size: SpacingTokens.iconSizeMedium,
+                          );
+                        },
+                      ),
+                    ),
                   ),
                 ),
               ),

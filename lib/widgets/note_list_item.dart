@@ -195,7 +195,7 @@ class _NoteListItemState extends State<NoteListItem> {
                               ),
                               SizedBox(width: SpacingTokens.xs),
                               Text(
-                                '${widget.note.pages.length} pages',
+                                '${widget.note.pages.isNotEmpty ? widget.note.pages.length : "-"} pages',
                                 style: TypographyTokens.poppins.copyWith(
                                   fontSize: 12,
                                   fontWeight: FontWeight.normal,
@@ -221,35 +221,43 @@ class _NoteListItemState extends State<NoteListItem> {
                 ),
                 
                 // 즐겨찾기 아이콘
-                InkWell(
-                  onTap: () => widget.onFavoriteToggle(!widget.note.isFavorite),
-                  child: Padding(
-                    padding: EdgeInsets.all(SpacingTokens.xs),
-                    child: widget.note.isFavorite
-                        ? Image.asset(
-                            'assets/images/icon_like_fill.png',
-                            width: SpacingTokens.iconSizeMedium,
-                            height: SpacingTokens.iconSizeMedium,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(
-                                Icons.favorite,
-                                color: ColorTokens.primary,
-                                size: SpacingTokens.iconSizeMedium,
-                              );
-                            },
-                          )
-                        : Image.asset(
-                            'assets/images/icon_like.png',
-                            width: SpacingTokens.iconSizeMedium,
-                            height: SpacingTokens.iconSizeMedium,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Icon(
-                                Icons.favorite_border,
-                                color: const Color(0xFFB2B2B2),
-                                size: SpacingTokens.iconSizeMedium,
-                              );
-                            },
-                          ),
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(20),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: () => widget.onFavoriteToggle(!widget.note.isFavorite),
+                    splashColor: ColorTokens.primary.withOpacity(0.1),
+                    highlightColor: ColorTokens.primary.withOpacity(0.05),
+                    customBorder: const CircleBorder(),
+                    child: Padding(
+                      padding: EdgeInsets.all(SpacingTokens.xs),
+                      child: widget.note.isFavorite
+                          ? Image.asset(
+                              'assets/images/icon_like_fill.png',
+                              width: SpacingTokens.iconSizeMedium,
+                              height: SpacingTokens.iconSizeMedium,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Icon(
+                                  Icons.favorite,
+                                  color: ColorTokens.primary,
+                                  size: SpacingTokens.iconSizeMedium,
+                                );
+                              },
+                            )
+                          : Image.asset(
+                              'assets/images/icon_like.png',
+                              width: SpacingTokens.iconSizeMedium,
+                              height: SpacingTokens.iconSizeMedium,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Icon(
+                                  Icons.favorite_border,
+                                  color: const Color(0xFFB2B2B2),
+                                  size: SpacingTokens.iconSizeMedium,
+                                );
+                              },
+                            ),
+                    ),
                   ),
                 ),
               ],
