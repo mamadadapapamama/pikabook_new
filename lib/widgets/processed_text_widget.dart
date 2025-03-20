@@ -406,66 +406,58 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       }
 
       // 세그먼트 컨테이너
-      Widget segmentContainer = Container(
-        margin: const EdgeInsets.only(bottom: 16.0),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFFFFF0E8)),
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 원본 텍스트와 TTS 버튼을 함께 표시하는 행
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 원본 텍스트 (확장 가능하게)
-                Expanded(
-                  child: _buildSelectableText(segment.originalText, isOriginal: true),
-                ),
-                
-                // TTS 재생 버튼
-                GestureDetector(
-                  onTap: () {
-                    _playTts(segment.originalText, segmentIndex: i);
-                  },
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    margin: const EdgeInsets.only(left: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFD3E0DD),
-                      borderRadius: BorderRadius.circular(100),
-                    ),
-                    child: Icon(
-                      _playingSegmentIndex == i
-                          ? Icons.stop
-                          : Icons.volume_up,
-                      color: ColorTokens.textSecondary,
-                      size: 14,
-                    ),
+      Widget segmentContainer = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 원본 텍스트와 TTS 버튼을 함께 표시하는 행
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 원본 텍스트 (확장 가능하게)
+              Expanded(
+                child: _buildSelectableText(segment.originalText, isOriginal: true),
+              ),
+              
+              // TTS 재생 버튼
+              GestureDetector(
+                onTap: () {
+                  _playTts(segment.originalText, segmentIndex: i);
+                },
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  margin: const EdgeInsets.only(left: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD3E0DD),
+                    borderRadius: BorderRadius.circular(100),
                   ),
-                ),
-              ],
-            ),
-
-            // 병음 표시 - 직접 processedText의 showPinyin 값 사용
-            if (segment.pinyin != null && 
-                segment.pinyin!.isNotEmpty && 
-                widget.processedText.showPinyin)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0),
-                child: Text(
-                  segment.pinyin!,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: const Color(0xFFB2B2B2),
+                  child: Icon(
+                    _playingSegmentIndex == i
+                        ? Icons.stop
+                        : Icons.volume_up,
+                    color: ColorTokens.textSecondary,
+                    size: 14,
                   ),
                 ),
               ),
+            ],
+          ),
+
+          // 병음 표시 - 직접 processedText의 showPinyin 값 사용
+          if (segment.pinyin != null && 
+              segment.pinyin!.isNotEmpty && 
+              widget.processedText.showPinyin)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(
+                segment.pinyin!,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: const Color(0xFFB2B2B2),
+                ),
+              ),
+            ),
 
             // 번역 표시
             if (segment.translatedText != null &&
@@ -475,8 +467,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 padding: const EdgeInsets.only(top: 8.0),
                 child: _buildSelectableText(segment.translatedText!),
               ),
-          ],
-        ),
+          
+          // 구분선 추가 (마지막 세그먼트가 아닌 경우)
+          if (i < widget.processedText.segments!.length - 1)
+            const Padding(
+              padding: EdgeInsets.only(top: 16.0, bottom: 16.0),
+              child: Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
+            ),
+        ],
       );
       
       // 삭제 가능 조건: 세그먼트 모드(showFullText=false)이고 onDeleteSegment 콜백이 있을 때만
@@ -528,17 +526,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
       // 구분선을 포함한 위젯 추가
       segmentWidgets.add(segmentContainer);
-      
-      // 마지막 세그먼트가 아닌 경우 구분선 추가
-      if (i < widget.processedText.segments!.length - 1) {
-        segmentWidgets.add(
-          Container(
-            height: 1,
-            color: const Color(0xFFFFF0E8),
-            margin: const EdgeInsets.symmetric(vertical: 8.0),
-          ),
-        );
-      }
     }
 
     // 세그먼트 위젯이 없으면 전체 텍스트 표시

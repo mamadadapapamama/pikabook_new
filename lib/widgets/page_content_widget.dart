@@ -11,7 +11,7 @@ import 'dictionary_result_widget.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
 
 /// 페이지 내의 이미지, 텍스트 처리상태, 처리된 텍스트 등을 표시
-/// 텍스트모드전환, 사전 검색 등 처리
+/// 텍스트 모드전환, 사전 검색 등 처리
 /// 텍스트 처리중 상태, 플래시카드 단어 목록 등 관리 (counter와 하이라이터를 위해)
 
 class PageContentWidget extends StatefulWidget {
@@ -118,7 +118,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       key: ValueKey('page_${widget.page.id}'),
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -470,69 +470,69 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             widget.onDeleteSegment!(i);
             return true;
           },
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 16.0),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.withOpacity(0.2)),
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // TTS 버튼 추가
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        _playingSegmentIndex == i
-                            ? Icons.stop_circle
-                            : Icons.play_circle,
-                        color:
-                            _playingSegmentIndex == i ? Colors.red : Colors.blue,
-                      ),
-                      onPressed: () {
-                        _playTts(segment.originalText, segmentIndex: i);
-                      },
-                      tooltip: _playingSegmentIndex == i ? '중지' : '읽기',
-                      iconSize: 24,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // TTS 버튼 추가
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      _playingSegmentIndex == i
+                          ? Icons.stop_circle
+                          : Icons.play_circle,
+                      color:
+                          _playingSegmentIndex == i ? Colors.red : Colors.blue,
                     ),
-                  ],
+                    onPressed: () {
+                      _playTts(segment.originalText, segmentIndex: i);
+                    },
+                    tooltip: _playingSegmentIndex == i ? '중지' : '읽기',
+                    iconSize: 24,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 4.0),
+
+              // 원본 텍스트 표시 (항상 표시)
+              _buildSelectableText(segment.originalText),
+
+              // 핀인 표시 (showPinyin이 true일 때만)
+              if (segment.pinyin != null && 
+                  segment.pinyin!.isNotEmpty && 
+                  _processedText!.showPinyin)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                  child: Text(
+                    segment.pinyin!,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey,
+                    ),
+                  ),
                 ),
 
-                const SizedBox(height: 4.0),
-
-                // 원본 텍스트 표시 (항상 표시)
-                _buildSelectableText(segment.originalText),
-
-                // 핀인 표시 (showPinyin이 true일 때만)
-                if (segment.pinyin != null && 
-                    segment.pinyin!.isNotEmpty && 
-                    _processedText!.showPinyin)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
-                    child: Text(
-                      segment.pinyin!,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontStyle: FontStyle.italic,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  ),
-
-                // 번역 텍스트 표시 (showTranslation이 true일 때만)
-                if (_processedText!.showTranslation && 
-                    segment.translatedText != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
-                    child: _buildSelectableText(segment.translatedText!),
-                  ),
-              ],
-            ),
+              // 번역 텍스트 표시 (showTranslation이 true일 때만)
+              if (_processedText!.showTranslation && 
+                  segment.translatedText != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+                  child: _buildSelectableText(segment.translatedText!),
+                ),
+                
+              // 구분선 추가 (마지막 세그먼트가 아닌 경우)
+              if (i < _processedText!.segments!.length - 1)
+                const Divider(height: 24, thickness: 1),
+              
+              // 마지막 세그먼트에는 여백 추가
+              if (i == _processedText!.segments!.length - 1)
+                const SizedBox(height: 16),
+            ],
           ),
         ),
       );
