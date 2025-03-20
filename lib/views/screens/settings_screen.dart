@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../services/initialization_service.dart';
 import '../../theme/tokens/color_tokens.dart';
+import '../../theme/tokens/typography_tokens.dart';
+import '../../theme/tokens/spacing_tokens.dart';
 import '../../services/user_preferences_service.dart';
 import '../../utils/language_constants.dart';
 
@@ -96,12 +99,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: ColorTokens.background,
       appBar: AppBar(
-        title: const Text('설정'),
-        backgroundColor: ColorTokens.primary,
+        title: Text(
+          '설정',
+          style: TypographyTokens.headline3,
+        ),
+        centerTitle: false,
+        backgroundColor: ColorTokens.background,
+        elevation: 0,
+        leadingWidth: 44,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 20.0),
+          child: GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: SvgPicture.asset(
+              'assets/images/icon_arrow_left.svg',
+              width: 24,
+              height: 24,
+            ),
+          ),
+        ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: ColorTokens.primary))
           : _buildProfileContent(),
     );
   }
@@ -113,137 +134,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final String? photoUrl = _currentUser?.photoURL;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 32),
+          
           // 1. 프로필 정보 섹션
-          _buildSectionTitle('프로필 정보'),
-          Card(
-            elevation: 2,
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                children: [
-                  // 프로필 이미지
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: Colors.grey.shade200,
-                    backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-                    child: photoUrl == null
-                        ? const Icon(Icons.person, size: 24, color: Colors.grey)
-                        : null,
-                  ),
-                  const SizedBox(width: 16),
-                  // 사용자 정보
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          displayName,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          email,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isAnonymous ? Colors.amber.shade100 : Colors.green.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildSectionTitle('프로필'),
+          const SizedBox(height: 12),
+          _buildProfileCard(displayName, email, photoUrl),
           
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
           
-          // 2. 설정 섹션
-          _buildSectionTitle('설정'),
+          // 2. 노트 설정 섹션
+          _buildSectionTitle('노트 설정'),
+          const SizedBox(height: 12),
           
           // 학습자 이름 설정
           _buildSettingItem(
-            icon: Icons.person,
             title: '학습자 이름',
-            subtitle: _userName,
+            value: _userName,
             onTap: _showUserNameDialog,
           ),
           
+          const SizedBox(height: 8),
+          
           // 노트 스페이스 이름 설정
           _buildSettingItem(
-            icon: Icons.edit,
-            title: '노트 스페이스 이름',
-            subtitle: _noteSpaceName,
+            title: '노트스페이스 이름',
+            value: _noteSpaceName,
             onTap: _showNoteSpaceNameDialog,
           ),
           
+          const SizedBox(height: 8),
+          
           // 원문 언어 설정
           _buildSettingItem(
-            icon: Icons.language,
             title: '원문 언어',
-            subtitle: SourceLanguage.getName(_sourceLanguage),
+            value: SourceLanguage.getName(_sourceLanguage),
             onTap: _showSourceLanguageDialog,
           ),
           
+          const SizedBox(height: 8),
+          
           // 번역 언어 설정
           _buildSettingItem(
-            icon: Icons.translate,
             title: '번역 언어',
-            subtitle: TargetLanguage.getName(_targetLanguage),
+            value: TargetLanguage.getName(_targetLanguage),
             onTap: _showTargetLanguageDialog,
           ),
           
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
           
           // 3. 계정 관리 섹션
-          _buildSectionTitle('계정 관리'),
+          _buildSectionTitle('계정관리'),
+          const SizedBox(height: 12),
           
           // 로그아웃 버튼
-          _buildSettingItem(
-            icon: Icons.logout,
-            title: '로그아웃',
-            subtitle: '계정에서 로그아웃합니다',
-            color: Colors.red,
-            onTap: _showLogoutConfirmation,
-          ),
-
-          // 익명 계정인 경우 소셜 계정 연결 옵션 표시
-          if (isAnonymous) ...[
-            const SizedBox(height: 16),
-            _buildSectionTitle('계정 연결'),
-            
-            _buildSettingItem(
-              icon: Icons.g_mobiledata,
-              title: 'Google 계정 연결',
-              subtitle: '익명 계정을 Google 계정으로 업그레이드합니다',
-              color: Colors.blue,
-              onTap: _linkWithGoogle,
-            ),
-            
-            _buildSettingItem(
-              icon: Icons.apple,
-              title: 'Apple 계정 연결',
-              subtitle: '익명 계정을 Apple 계정으로 업그레이드합니다',
-              color: Colors.black,
-              onTap: _linkWithApple,
-            ),
-          ],
+          _buildLogoutCard(email),
           
           const SizedBox(height: 32),
         ],
@@ -251,38 +200,150 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
   
+  // 프로필 카드 위젯
+  Widget _buildProfileCard(String displayName, String email, String? photoUrl) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        color: ColorTokens.surface,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          // 프로필 이미지
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: Colors.grey.shade200,
+            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+            child: photoUrl == null
+                ? const Icon(Icons.person, size: 24, color: Colors.grey)
+                : null,
+          ),
+          const SizedBox(width: 16),
+          
+          // 사용자 정보
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayName,
+                  style: TypographyTokens.buttonEn,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  email,
+                  style: TypographyTokens.captionEn.copyWith(
+                    color: ColorTokens.textPrimary.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
   // 섹션 제목 위젯
   Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: ColorTokens.primary,
-        ),
+    return Text(
+      title,
+      style: TypographyTokens.button.copyWith(
+        color: ColorTokens.textSecondary,
       ),
     );
   }
   
   // 설정 항목 위젯
   Widget _buildSettingItem({
-    required IconData icon,
     required String title,
-    required String subtitle,
+    required String value,
     required VoidCallback onTap,
-    Color? color,
   }) {
-    return Card(
-      elevation: 1,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Icon(icon, color: color ?? ColorTokens.primary),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
+    return Container(
+      width: double.infinity,
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: ColorTokens.surface,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: InkWell(
         onTap: onTap,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  style: TypographyTokens.captionEn.copyWith(
+                    color: ColorTokens.textSecondary,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: TypographyTokens.body2,
+                ),
+              ],
+            ),
+            SvgPicture.asset(
+              'assets/images/icon_arrow_right.svg',
+              width: 24,
+              height: 24,
+              colorFilter: const ColorFilter.mode(
+                ColorTokens.secondary,
+                BlendMode.srcIn,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  // 로그아웃 카드 위젯
+  Widget _buildLogoutCard(String email) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        color: ColorTokens.surface,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: InkWell(
+        onTap: _showLogoutConfirmation,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '아래 계정에서 로그아웃합니다',
+                    style: TypographyTokens.buttonEn,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    email,
+                    style: TypographyTokens.captionEn.copyWith(
+                      color: ColorTokens.error,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SvgPicture.asset(
+              'assets/images/icon_logout.svg',
+              width: 24,
+              height: 24,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -294,23 +355,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('학습자 이름 설정'),
+        title: Text('학습자 이름 설정', style: TypographyTokens.subtitle2),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: '이름',
             hintText: '학습자 이름을 입력하세요',
+            labelStyle: TypographyTokens.caption.copyWith(
+              color: ColorTokens.textSecondary,
+            ),
+            hintStyle: TypographyTokens.caption.copyWith(
+              color: ColorTokens.textTertiary,
+            ),
+            border: const OutlineInputBorder(),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: ColorTokens.primary, width: 2),
+            ),
           ),
           autofocus: true,
+          style: TypographyTokens.body1,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
+            child: Text(
+              '취소',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.textTertiary,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('저장'),
+            child: Text(
+              '저장',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.primary,
+              ),
+            ),
           ),
         ],
       ),
@@ -332,23 +414,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('노트 스페이스 이름 변경'),
+        title: Text('노트 스페이스 이름 변경', style: TypographyTokens.subtitle2),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: '이름',
             hintText: '노트 스페이스 이름을 입력하세요',
+            labelStyle: TypographyTokens.caption.copyWith(
+              color: ColorTokens.textSecondary,
+            ),
+            hintStyle: TypographyTokens.caption.copyWith(
+              color: ColorTokens.textTertiary,
+            ),
+            border: const OutlineInputBorder(),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(color: ColorTokens.primary, width: 2),
+            ),
           ),
           autofocus: true,
+          style: TypographyTokens.body1,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
+            child: Text(
+              '취소',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.textTertiary,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('저장'),
+            child: Text(
+              '저장',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.primary,
+              ),
+            ),
           ),
         ],
       ),
@@ -368,16 +471,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(success 
-                ? '노트 스페이스 이름이 변경되었습니다.' 
-                : '노트 스페이스 이름이 설정되었습니다.'),
+              content: Text(
+                success 
+                  ? '노트 스페이스 이름이 변경되었습니다.' 
+                  : '노트 스페이스 이름이 설정되었습니다.',
+                style: TypographyTokens.caption.copyWith(
+                  color: ColorTokens.textLight,
+                ),
+              ),
+              backgroundColor: ColorTokens.primary,
             ),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('노트 스페이스 이름 변경 중 오류가 발생했습니다: $e')),
+            SnackBar(
+              content: Text(
+                '노트 스페이스 이름 변경 중 오류가 발생했습니다: $e',
+                style: TypographyTokens.caption.copyWith(
+                  color: ColorTokens.textLight,
+                ),
+              ),
+              backgroundColor: ColorTokens.error,
+            ),
           );
         }
       }
@@ -391,7 +508,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('원문 언어 설정'),
+        title: Text('원문 언어 설정', style: TypographyTokens.subtitle2),
         content: SizedBox(
           width: double.maxFinite,
           height: 300,
@@ -403,12 +520,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               final bool isFutureSupported = SourceLanguage.FUTURE_SUPPORTED.contains(language);
               
               return RadioListTile<String>(
-                title: Text(SourceLanguage.getName(language)),
+                title: Text(
+                  SourceLanguage.getName(language),
+                  style: TypographyTokens.body2,
+                ),
                 subtitle: isFutureSupported 
-                    ? const Text('향후 지원 예정', style: TextStyle(color: Colors.grey))
+                    ? Text(
+                        '향후 지원 예정',
+                        style: TypographyTokens.caption.copyWith(
+                          color: ColorTokens.textTertiary,
+                        ),
+                      )
                     : null,
                 value: language,
                 groupValue: _sourceLanguage,
+                activeColor: ColorTokens.primary,
                 onChanged: isFutureSupported 
                     ? null 
                     : (value) {
@@ -421,7 +547,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
+            child: Text(
+              '취소',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.textTertiary,
+              ),
+            ),
           ),
         ],
       ),
@@ -440,7 +571,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('번역 언어 설정'),
+        title: Text('번역 언어 설정', style: TypographyTokens.subtitle2),
         content: SizedBox(
           width: double.maxFinite,
           height: 300,
@@ -452,12 +583,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               final bool isFutureSupported = TargetLanguage.FUTURE_SUPPORTED.contains(language);
               
               return RadioListTile<String>(
-                title: Text(TargetLanguage.getName(language)),
+                title: Text(
+                  TargetLanguage.getName(language),
+                  style: TypographyTokens.body2,
+                ),
                 subtitle: isFutureSupported 
-                    ? const Text('향후 지원 예정', style: TextStyle(color: Colors.grey))
+                    ? Text(
+                        '향후 지원 예정',
+                        style: TypographyTokens.caption.copyWith(
+                          color: ColorTokens.textTertiary,
+                        ),
+                      )
                     : null,
                 value: language,
                 groupValue: _targetLanguage,
+                activeColor: ColorTokens.primary,
                 onChanged: isFutureSupported 
                     ? null 
                     : (value) {
@@ -470,7 +610,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
+            child: Text(
+              '취소',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.textTertiary,
+              ),
+            ),
           ),
         ],
       ),
@@ -487,16 +632,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('로그아웃 확인'),
-        content: const Text('정말 로그아웃 하시겠어요?'),
+        title: Text('로그아웃 확인', style: TypographyTokens.subtitle2),
+        content: Text(
+          '정말 로그아웃 하시겠어요?',
+          style: TypographyTokens.body2,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
+            child: Text(
+              '취소',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.textTertiary,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('로그아웃'),
+            child: Text(
+              '로그아웃',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.error,
+              ),
+            ),
           ),
         ],
       ),
@@ -526,7 +684,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debugPrint('로그아웃 오류: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('로그아웃 중 오류가 발생했습니다: $e')),
+          SnackBar(
+            content: Text(
+              '로그아웃 중 오류가 발생했습니다: $e',
+              style: TypographyTokens.caption.copyWith(
+                color: ColorTokens.textLight,
+              ),
+            ),
+            backgroundColor: ColorTokens.error,
+          ),
         );
       }
     } finally {
@@ -536,21 +702,5 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     }
-  }
-  
-  // Google 계정 연결
-  Future<void> _linkWithGoogle() async {
-    // 구현 예정
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Google 계정 연결 기능은 아직 구현되지 않았습니다.')),
-    );
-  }
-  
-  // Apple 계정 연결
-  Future<void> _linkWithApple() async {
-    // 구현 예정
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Apple 계정 연결 기능은 아직 구현되지 않았습니다.')),
-    );
   }
 }

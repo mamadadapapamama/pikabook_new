@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/note.dart';
 import '../utils/date_formatter.dart';
 import '../services/image_service.dart';
@@ -235,7 +236,7 @@ class _NoteListItemState extends State<NoteListItem> {
                             widget.note.originalText.length > 50
                                 ? widget.note.originalText.substring(0, 50) + "..."
                                 : widget.note.originalText,
-                            style: TypographyTokens.poppins.copyWith(
+                            style: GoogleFonts.poppins(
                               fontSize: 20,
                               fontWeight: FontWeight.w600,
                               color: ColorTokens.textPrimary,
@@ -248,7 +249,7 @@ class _NoteListItemState extends State<NoteListItem> {
                             children: [
                               Text(
                                 DateFormatter.formatDate(widget.note.updatedAt),
-                                style: TypographyTokens.poppins.copyWith(
+                                style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   fontWeight: FontWeight.normal,
                                   color: const Color(0xFF969696),
@@ -257,7 +258,7 @@ class _NoteListItemState extends State<NoteListItem> {
                               SizedBox(width: SpacingTokens.xs),
                               Text(
                                 '|',
-                                style: TypographyTokens.poppins.copyWith(
+                                style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   fontWeight: FontWeight.normal,
                                   color: const Color(0xFF969696),
@@ -286,7 +287,7 @@ class _NoteListItemState extends State<NoteListItem> {
                                       _isLoadingPageCount 
                                         ? '로딩 중...' 
                                         : '$_pageCount 페이지',
-                                      style: TypographyTokens.poppins.copyWith(
+                                      style: GoogleFonts.poppins(
                                         fontSize: 10,
                                         fontWeight: FontWeight.bold,
                                         color: ColorTokens.primary,
@@ -374,7 +375,10 @@ class _NoteListItemState extends State<NoteListItem> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text('삭제', style: TypographyTokens.button.copyWith(color: ColorTokens.error)),
+            child: Text(
+              '삭제', 
+              style: TypographyTokens.button.copyWith(color: ColorTokens.error),
+            ),
           ),
         ],
       ),

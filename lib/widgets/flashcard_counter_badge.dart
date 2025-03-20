@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
@@ -73,7 +74,7 @@ class FlashcardCounterBadge extends StatelessWidget {
           SizedBox(width: SpacingTokens.xs),
           Text(
             '$count',
-            style: TypographyTokens.poppins.copyWith(
+            style: GoogleFonts.poppins(
               fontSize: 12,
               fontWeight: FontWeight.bold,
               color: ColorTokens.secondary,

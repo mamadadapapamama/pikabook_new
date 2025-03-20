@@ -17,6 +17,7 @@ import '../../theme/tokens/spacing_tokens.dart';
 import '../../theme/tokens/ui_tokens.dart';
 import 'note_detail_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -81,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         SizedBox(width: SpacingTokens.xs),
                         Text(
                           'Pikabook',
-                          style: TypographyTokens.poppins.copyWith(
+                          style: GoogleFonts.poppins(
                             fontSize: SpacingTokens.md,
                             fontWeight: FontWeight.bold,
                             color: ColorTokens.primary,
