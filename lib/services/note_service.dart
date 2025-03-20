@@ -558,6 +558,7 @@ class NoteService {
             'pages': allPageIds,
             'processedPageCount': processedCount,
             'totalPageCount': allPageIds.length,
+            'imageCount': imageFiles.length,
             'isProcessingBackground': false,
             'processingCompleted': true,
             'updatedAt': FieldValue.serverTimestamp(),
@@ -786,11 +787,12 @@ class NoteService {
           await _firestore.collection('notes').doc(noteId).update({
             'pages': pageIds,
             'totalPageCount': pageIds.length,
+            'imageCount': imageFiles.length,
             'isProcessingBackground': imageFiles.length > 1,
             'processingCompleted': imageFiles.length <= 1,
             'updatedAt': FieldValue.serverTimestamp(),
           });
-          print('노트 문서 업데이트 완료: $noteId, 페이지 수: ${pageIds.length}');
+          print('노트 문서 업데이트 완료: $noteId, 페이지 수: ${pageIds.length}, 이미지 수: ${imageFiles.length}');
         } catch (e) {
           print('노트 문서 업데이트 실패: $e');
         }
