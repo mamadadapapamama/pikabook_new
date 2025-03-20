@@ -8,7 +8,7 @@ import '../theme/tokens/color_tokens.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// 노트 상세 화면 하단 내비게이션 바
-/// 텍스트 표시 모드 토글, 전체 읽기 버튼 등 제공
+/// 페이지 탐색, 텍스트 표시 모드 토글, 전체 읽기 버튼, 진행률 바 제공
 
 class NoteDetailBottomBar extends StatelessWidget {
   final page_model.Page? currentPage;
@@ -44,162 +44,297 @@ class NoteDetailBottomBar extends StatelessWidget {
         ? pageContentService.getProcessedText(currentPage!.id!) 
         : null;
         
-    if (processedText == null) {
-      // ProcessedText가 없는 경우 최소한의 UI만 표시
-      return _buildMinimalBottomBar(context);
-    }
-    
     // 세그먼트 존재 여부 확인
-    final bool hasSegments = processedText.segments != null && 
+    final bool hasSegments = processedText != null && 
+                             processedText.segments != null && 
                              processedText.segments!.isNotEmpty; 
     
     // 병음 표시 여부 확인
-    final bool showPinyin = processedText.showPinyin;
+    final bool showPinyin = processedText?.showPinyin ?? false;
     
     // 디버그 정보 출력
-    debugPrint('NoteDetailBottomBar - 현재 모드: $textDisplayMode, 병음 표시: ${processedText.showPinyin}');
-    debugPrint('세그먼트 정보: ${processedText.segments?.length ?? 0}개, hasSegments: $hasSegments');
-      
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 24.0),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Color(0xFFFFF0E8), width: 4),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 8,
-            offset: Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 병음 토글 버튼
-          GestureDetector(
-            onTap: () {
-              // 토글: 현재 모드가 all이면 nopinyin으로, 아니면 all로 변경
-              final newMode = showPinyin ? TextDisplayMode.nopinyin : TextDisplayMode.all;
-              onTextDisplayModeChanged(newMode);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: showPinyin ? ColorTokens.secondary : Colors.white,
-                borderRadius: BorderRadius.circular(100),
-                border: Border.all(color: ColorTokens.secondary),
+    debugPrint('NoteDetailBottomBar - 현재 모드: $textDisplayMode, 페이지: ${currentPageIndex + 1}/$totalPages');
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 페이지 진행률 바
+        _buildProgressBar(context),
+        
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              top: BorderSide(color: Color(0xFFFFF0E8), width: 1),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x26000000),
+                blurRadius: 8,
+                offset: Offset(0, -2),
               ),
-              child: Row(
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // 이전 페이지 버튼
+              _buildNavigationButton(
+                icon: Icons.arrow_back_ios_rounded,
+                onTap: currentPageIndex > 0 
+                    ? () => onPageChanged(currentPageIndex - 1) 
+                    : null,
+              ),
+              
+              // 중앙 컨트롤 영역 (병음 토글 + 재생 버튼)
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    '한어병음',
-                    style: GoogleFonts.notoSansKr(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: showPinyin ? Colors.white : ColorTokens.secondary,
-                    ),
-                  ),
-                  if (showPinyin)
-                    Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.only(left: 4),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
+                  // 병음 토글 버튼
+                  GestureDetector(
+                    onTap: () {
+                      // 토글: 현재 모드가 all이면 nopinyin으로, 아니면 all로 변경
+                      final newMode = showPinyin ? TextDisplayMode.nopinyin : TextDisplayMode.all;
+                      onTextDisplayModeChanged(newMode);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: showPinyin ? ColorTokens.secondary : Colors.white,
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border.all(color: ColorTokens.secondary),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '한어병음',
+                            style: GoogleFonts.notoSansKr(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              color: showPinyin ? Colors.white : ColorTokens.secondary,
+                            ),
+                          ),
+                          if (showPinyin)
+                            Container(
+                              width: 8,
+                              height: 8,
+                              margin: const EdgeInsets.only(left: 4),
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
+                  ),
+                  
+                  const SizedBox(width: 16),
+                  
+                  // 전체 읽기/멈춤 버튼 (page_content_widget과 동일한 디자인)
+                  InkWell(
+                    onTap: onPlayPausePressed,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isPlaying ? ColorTokens.secondary : Colors.white,
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border.all(color: ColorTokens.secondary),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isPlaying ? Icons.stop : Icons.volume_up,
+                            color: isPlaying ? Colors.white : ColorTokens.secondary,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            isPlaying ? '정지' : '재생',
+                            style: GoogleFonts.notoSansKr(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                              color: isPlaying ? Colors.white : ColorTokens.secondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
-            ),
+              
+              // 다음 페이지 버튼
+              _buildNavigationButton(
+                icon: Icons.arrow_forward_ios_rounded,
+                onTap: currentPageIndex < totalPages - 1 
+                    ? () => onPageChanged(currentPageIndex + 1) 
+                    : null,
+              ),
+            ],
           ),
-          
-          // 전체 읽기/멈춤 버튼
-          IconButton(
-            key: ValueKey('play_button_${isPlaying ? 'playing' : 'stopped'}'),
-            icon: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: ColorTokens.secondary),
-              ),
-              child: Icon(
-                isPlaying ? Icons.stop : Icons.volume_up,
-                color: ColorTokens.secondary,
-                size: 20,
-              ),
-            ),
-            onPressed: onPlayPausePressed,
-            tooltip: isPlaying ? '읽기 중지' : '전체 읽기',
-            constraints: const BoxConstraints(),
-            padding: EdgeInsets.zero,
+        ),
+      ],
+    );
+  }
+  
+  // 페이지 진행률 바 위젯
+  Widget _buildProgressBar(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final progressWidth = totalPages > 0 
+        ? (currentPageIndex + 1) / totalPages * screenWidth 
+        : 0.0;
+    
+    return Container(
+      height: 4,
+      width: double.infinity,
+      color: const Color(0xFFEEEEEE),
+      child: Row(
+        children: [
+          // 진행된 부분 (현재 페이지까지)
+          Container(
+            width: progressWidth,
+            color: ColorTokens.primary,
           ),
         ],
       ),
     );
   }
   
+  // 네비게이션 버튼 위젯
+  Widget _buildNavigationButton({required IconData icon, VoidCallback? onTap}) {
+    return IconButton(
+      onPressed: onTap,
+      icon: Icon(
+        icon, 
+        color: onTap != null ? ColorTokens.secondary : Colors.grey.shade300,
+        size: 24,
+      ),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
+      visualDensity: VisualDensity.compact,
+      splashRadius: 24,
+    );
+  }
+  
   // 최소한의 UI를 가진 바텀 바 (ProcessedText가 없는 경우)
   Widget _buildMinimalBottomBar(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 24.0),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Color(0xFFFFF0E8), width: 4),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 8,
-            offset: Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 병음 토글 버튼 (비활성화 상태)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(100),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Text(
-              '한어병음',
-              style: GoogleFonts.notoSansKr(
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-                color: Colors.grey.shade400,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 페이지 진행률 바 (비활성화 상태)
+        Container(
+          height: 4,
+          width: double.infinity,
+          color: const Color(0xFFEEEEEE),
+          child: Row(
+            children: [
+              // 진행된 부분 (현재 페이지까지)
+              Container(
+                width: totalPages > 0 
+                    ? (currentPageIndex + 1) / totalPages * MediaQuery.of(context).size.width 
+                    : 0,
+                color: ColorTokens.primary,
               ),
-            ),
+            ],
           ),
-          
-          // 전체 읽기 버튼 (비활성화 상태)
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.grey.shade300),
+        ),
+        
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              top: BorderSide(color: Color(0xFFFFF0E8), width: 1),
             ),
-            child: Icon(
-              Icons.volume_up,
-              color: Colors.grey.shade400,
-              size: 20,
-            ),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x26000000),
+                blurRadius: 8,
+                offset: Offset(0, -2),
+              ),
+            ],
           ),
-        ],
-      ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // 이전 페이지 버튼 (비활성화)
+              Icon(
+                Icons.arrow_back_ios_rounded, 
+                color: Colors.grey.shade300,
+                size: 24,
+              ),
+              
+              // 중앙 컨트롤 영역 (비활성화 상태)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 병음 토글 버튼 (비활성화)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(100),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Text(
+                      '한어병음',
+                      style: GoogleFonts.notoSansKr(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.grey.shade400,
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(width: 16),
+                  
+                  // 재생 버튼 (비활성화)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(100),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.volume_up,
+                          color: Colors.grey.shade400,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '재생',
+                          style: GoogleFonts.notoSansKr(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.grey.shade400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              
+              // 다음 페이지 버튼 (비활성화)
+              Icon(
+                Icons.arrow_forward_ios_rounded, 
+                color: Colors.grey.shade300,
+                size: 24,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 } 
