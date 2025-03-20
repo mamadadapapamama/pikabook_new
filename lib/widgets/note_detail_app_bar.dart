@@ -29,6 +29,8 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             )
           : const Text('노트 상세'),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       actions: [
         if (note != null) ...[
           IconButton(

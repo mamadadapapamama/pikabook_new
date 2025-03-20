@@ -766,13 +766,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final currentPage = _pageManager.currentPage;
     if (currentPage == null) return;
     
-    if (_textReaderService.isPlaying) {
-      _textReaderService.stop();
-    } else if (currentPage.originalText.isNotEmpty) {
-      _textReaderService.readTextBySentences(currentPage.originalText);
-    }
-    
-    setState(() {});
+    setState(() {
+      if (_textReaderService.isPlaying) {
+        _textReaderService.stop();
+      } else if (currentPage.originalText.isNotEmpty) {
+        _textReaderService.readTextBySentences(currentPage.originalText);
+      }
+    });
   }
 
   // ===== UI 빌드 메서드 =====
