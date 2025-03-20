@@ -823,6 +823,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
               ),
           ],
         ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         titleSpacing: 0,
         actions: [
           if (_note != null) ...[
