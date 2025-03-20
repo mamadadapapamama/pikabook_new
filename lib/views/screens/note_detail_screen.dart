@@ -426,8 +426,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     });
 
     try {
+      // 기존 flashCards를 복사하여 사용 (deep copy 방지)
+      final updatedNote = _note!.copyWith();
+      
       // Firestore 업데이트
-      await _noteService.updateNote(_note!.id!, _note!);
+      await _noteService.updateNote(_note!.id!, updatedNote);
 
       // 업데이트 완료
       if (mounted) {
@@ -796,31 +799,42 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   // 메인 UI 구성 (로딩 및 오류 처리 이후)
   Widget _buildMainContent() {
     final currentImageFile = _pageManager.currentImageFile;
-    final String pageNumberText = 'page ${_pageManager.currentPageIndex + 1} / ${_pageManager.pages.length}';
+    final String pageNumberText = '${_pageManager.currentPageIndex + 1}/${_pageManager.pages.length}';
     
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          color: ColorTokens.textPrimary, // 뒤로가기 버튼 색상을 textPrimary로 변경
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Row(
           children: [
-            Text(
-              _note!.originalText,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.notoSansKr(
-                fontSize: 24, 
-                fontWeight: FontWeight.w700,
-                color: ColorTokens.textPrimary,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _note!.originalText,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.notoSansKr(
+                      fontSize: 24, 
+                      fontWeight: FontWeight.w700,
+                      color: ColorTokens.textPrimary,
+                    ),
+                  ),
+                  if (_pageManager.pages.isNotEmpty)
+                    Text(
+                      'page $pageNumberText',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: const Color(0xFFB2B2B2), // 회색 색상 사용
+                      ),
+                    ),
+                ],
               ),
             ),
-            if (_pageManager.pages.isNotEmpty)
-              Text(
-                pageNumberText,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: const Color(0xFFB2B2B2),
-                ),
-              ),
           ],
         ),
         backgroundColor: Colors.transparent,
@@ -835,15 +849,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
                         '${_note!.flashcardCount}',
                         style: const TextStyle(color: Colors.white, fontSize: 10),
                       ),
-                      child: const Icon(Icons.flash_on, color: ColorTokens.tertiary),
+                      child: const Icon(Icons.flash_on),
                     )
-                  : const Icon(Icons.flash_on, color: ColorTokens.tertiary),
+                  : const Icon(Icons.flash_on),
               onPressed: _navigateToFlashcards,
+              color: ColorTokens.primary, // 플래시카드 버튼 색상 변경
             ),
             IconButton(
               icon: const Icon(Icons.more_vert),
               onPressed: _showMoreOptions,
               tooltip: '더 보기',
+              color: const Color(0xFFB2B2B2), // 회색 색상 사용
             ),
           ],
         ],
@@ -852,47 +868,70 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         children: [
           // 페이지 썸네일 이미지 (있는 경우)
           if (currentImageFile != null || _pageManager.currentPage?.imageUrl != null)
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => FullImageScreen(
-                      imageFile: currentImageFile,
-                      imageUrl: _pageManager.currentPage?.imageUrl,
-                      title: '이미지',
+            Stack(
+              children: [
+                // 이미지 컨테이너
+                Container(
+                  height: 200, // 높이를 200으로 고정
+                  width: double.infinity, // 화면 너비를 꽉 채움
+                  decoration: BoxDecoration(
+                    image: currentImageFile != null
+                        ? DecorationImage(
+                            image: FileImage(currentImageFile),
+                            fit: BoxFit.cover,
+                          )
+                        : _pageManager.currentPage?.imageUrl != null
+                            ? DecorationImage(
+                                image: NetworkImage(_pageManager.currentPage!.imageUrl!),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                    color: Colors.grey.shade200,
+                  ),
+                  child: (currentImageFile == null && _pageManager.currentPage?.imageUrl == null)
+                      ? const Center(child: Icon(Icons.image, color: Colors.grey, size: 40))
+                      : null,
+                ),
+                
+                // '이미지 전체보기' 버튼
+                Positioned(
+                  bottom: 12,
+                  right: 12,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FullImageScreen(
+                            imageFile: currentImageFile,
+                            imageUrl: _pageManager.currentPage?.imageUrl,
+                            title: '이미지',
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.fullscreen, size: 16),
+                    label: const Text('이미지 전체보기'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black.withOpacity(0.7),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      textStyle: GoogleFonts.notoSansKr(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                      ),
                     ),
                   ),
-                );
-              },
-              child: Container(
-                height: 100,
-                width: double.infinity,
-                margin: const EdgeInsets.symmetric(horizontal: 30, vertical: 16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  image: currentImageFile != null
-                      ? DecorationImage(
-                          image: FileImage(currentImageFile),
-                          fit: BoxFit.cover,
-                        )
-                      : _pageManager.currentPage?.imageUrl != null
-                          ? DecorationImage(
-                              image: NetworkImage(_pageManager.currentPage!.imageUrl!),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
-                  color: Colors.grey.shade200,
                 ),
-                child: (currentImageFile == null && _pageManager.currentPage?.imageUrl == null)
-                    ? const Center(child: Icon(Icons.image, color: Colors.grey, size: 40))
-                    : null,
-              ),
+              ],
             ),
           
           // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
           Expanded(
-            child: _buildCurrentPageContent(),
+            child: Container(
+              color: Colors.white, // 배경색 흰색
+              child: _buildCurrentPageContent(),
+            ),
           ),
         ],
       ),
