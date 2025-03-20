@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../viewmodels/home_viewmodel.dart';
 import '../../widgets/note_list_item.dart';
 import '../../widgets/loading_indicator.dart';
@@ -65,41 +66,49 @@ class _HomeScreenState extends State<HomeScreen> {
                 // 앱 로고
                 Container(
                   alignment: Alignment.centerLeft,
-                  child: Image.asset(
+                  child: SvgPicture.asset(
                     'assets/images/logo_pika_small.svg',
                     width: SpacingTokens.appLogoWidth,
                     height: SpacingTokens.appLogoHeight,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.menu_book,
+                    placeholderBuilder: (context) => Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.menu_book,
+                          color: ColorTokens.primary,
+                          size: SpacingTokens.iconSizeSmall,
+                        ),
+                        SizedBox(width: SpacingTokens.xs),
+                        Text(
+                          'Pikabook',
+                          style: TypographyTokens.poppins.copyWith(
+                            fontSize: SpacingTokens.md,
+                            fontWeight: FontWeight.bold,
                             color: ColorTokens.primary,
-                            size: SpacingTokens.iconSizeSmall,
                           ),
-                          SizedBox(width: SpacingTokens.xs),
-                          Text(
-                            'Pikabook',
-                            style: TypographyTokens.poppins.copyWith(
-                              fontSize: SpacingTokens.md,
-                              fontWeight: FontWeight.bold,
-                              color: ColorTokens.primary,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 SizedBox(height: SpacingTokens.xs),
                 // 노트 스페이스 이름
-                Text(
-                  _noteSpaceName,
-                  style: TypographyTokens.headline3.copyWith(
-                    color: ColorTokens.textPrimary,
-                  ),
-                  textAlign: TextAlign.left,
+                Row(
+                  children: [
+                    Text(
+                      _noteSpaceName,
+                      style: TypographyTokens.headline3.copyWith(
+                        color: ColorTokens.textPrimary,
+                      ),
+                      textAlign: TextAlign.left,
+                    ),
+                    SizedBox(width: SpacingTokens.xs),
+                    Icon(
+                      Icons.keyboard_arrow_down,
+                      color: ColorTokens.textPrimary,
+                      size: SpacingTokens.iconSizeSmall,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -127,17 +136,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: SizedBox(
                       width: SpacingTokens.iconSizeMedium,
                       height: SpacingTokens.iconSizeMedium,
-                      child: Image.asset(
-                        'assets/images/btn_profile.svg',
+                      child: SvgPicture.asset(
+                        'assets/images/icon_profile.svg',
                         width: SpacingTokens.iconSizeMedium,
                         height: SpacingTokens.iconSizeMedium,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Icon(
-                            Icons.person,
-                            color: ColorTokens.secondary,
-                            size: SpacingTokens.iconSizeMedium,
-                          );
-                        },
+                        placeholderBuilder: (context) => Icon(
+                          Icons.person,
+                          color: ColorTokens.secondary,
+                          size: SpacingTokens.iconSizeMedium,
+                        ),
                       ),
                     ),
                   ),
@@ -182,39 +189,78 @@ class _HomeScreenState extends State<HomeScreen> {
               }
 
               if (!viewModel.hasNotes) {
+                // Zero State 디자인
                 return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.note_alt_outlined,
-                        size: SpacingTokens.iconSizeXLarge + 16,
-                        color: Colors.grey,
-                      ),
-                      SizedBox(height: SpacingTokens.md),
-                      Text(
-                        '저장된 노트가 없습니다.\n새 노트를 만들어보세요!',
-                        textAlign: TextAlign.center,
-                        style: TypographyTokens.body1,
-                      ),
-                      SizedBox(height: SpacingTokens.lg),
-                      ElevatedButton.icon(
-                        onPressed: () => _showImagePickerBottomSheet(context),
-                        icon: const Icon(Icons.add),
-                        label: const Text('새 노트 만들기'),
-                        style: ElevatedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: ColorTokens.primary,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: SpacingTokens.md,
-                            vertical: SpacingTokens.sm + 4,
+                  child: Container(
+                    width: 360,
+                    height: 259,
+                    margin: const EdgeInsets.symmetric(horizontal: 16.0),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SvgPicture.asset(
+                          'assets/images/icon_addnote.svg',
+                          width: 48,
+                          height: 48,
+                        ),
+                        const SizedBox(height: 16),
+                        Column(
+                          children: [
+                            Text(
+                              '먼저,\n원서 이미지를 올려주세요!',
+                              textAlign: TextAlign.center,
+                              style: TypographyTokens.subtitle1.copyWith(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20,
+                                color: ColorTokens.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '번역이 필요한 원서의 페이지 사진을 올려주세요. \n여러 이미지도 선택해 하나의 챕터로 올릴수 있어요',
+                              textAlign: TextAlign.center,
+                              style: TypographyTokens.body2.copyWith(
+                                fontSize: 12,
+                                color: ColorTokens.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: () => _showImagePickerBottomSheet(context),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: ColorTokens.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 8,
+                            ),
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+                          child: Text(
+                            '원서 이미지 올리기',
+                            style: TypographyTokens.button.copyWith(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               }
@@ -255,27 +301,35 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
         ),
-        floatingActionButton: Container(
-          width: SpacingTokens.fabSizeSmall,
-          height: SpacingTokens.fabSizeSmall,
-          margin: EdgeInsets.only(
-            right: SpacingTokens.sm,
-            bottom: SpacingTokens.lg,
-          ),
-          child: FloatingActionButton(
-            onPressed: () => _showImagePickerBottomSheet(context),
-            tooltip: '새 노트 만들기',
-            backgroundColor: ColorTokens.primary,
-            child: Icon(
-              Icons.add,
-              color: Colors.white,
-              size: SpacingTokens.iconSizeMedium,
-            ),
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
-            ),
-          ),
+        // 노트가 있을 때만 FAB 표시
+        floatingActionButton: Consumer<HomeViewModel>(
+          builder: (context, viewModel, _) {
+            if (viewModel.hasNotes) {
+              return Container(
+                width: SpacingTokens.fabSizeSmall,
+                height: SpacingTokens.fabSizeSmall,
+                margin: EdgeInsets.only(
+                  right: SpacingTokens.sm,
+                  bottom: SpacingTokens.lg,
+                ),
+                child: FloatingActionButton(
+                  onPressed: () => _showImagePickerBottomSheet(context),
+                  tooltip: '새 노트 만들기',
+                  backgroundColor: ColorTokens.primary,
+                  child: Icon(
+                    Icons.add,
+                    color: Colors.white,
+                    size: SpacingTokens.iconSizeMedium,
+                  ),
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
+                  ),
+                ),
+              );
+            }
+            return const SizedBox.shrink(); // 노트가 없을 때는 FAB 숨김
+          },
         ),
       ),
     );

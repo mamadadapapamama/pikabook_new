@@ -25,6 +25,7 @@ class Note {
   final String sourceLanguage;
   final String targetLanguage;
   final String? noteSpaceId;
+  final int? imageCount;
 
   Note({
     this.id,
@@ -46,6 +47,7 @@ class Note {
     String? sourceLanguage,
     String? targetLanguage,
     this.noteSpaceId,
+    this.imageCount,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
         tags = tags ?? [],
@@ -152,6 +154,7 @@ class Note {
       sourceLanguage: data['sourceLanguage'] ?? SourceLanguage.DEFAULT,
       targetLanguage: data['targetLanguage'] ?? TargetLanguage.DEFAULT,
       noteSpaceId: data['noteSpaceId'],
+      imageCount: data['imageCount'] as int?,
     );
   }
 
@@ -175,6 +178,7 @@ class Note {
       'sourceLanguage': sourceLanguage,
       'targetLanguage': targetLanguage,
       'noteSpaceId': noteSpaceId,
+      'imageCount': imageCount,
     };
   }
 
@@ -200,6 +204,7 @@ class Note {
       'sourceLanguage': sourceLanguage,
       'targetLanguage': targetLanguage,
       'noteSpaceId': noteSpaceId,
+      'imageCount': imageCount,
     };
   }
 
@@ -232,6 +237,7 @@ class Note {
       sourceLanguage: json['sourceLanguage'] ?? SourceLanguage.DEFAULT,
       targetLanguage: json['targetLanguage'] ?? TargetLanguage.DEFAULT,
       noteSpaceId: json['noteSpaceId'],
+      imageCount: json['imageCount'] as int?,
     );
   }
 
@@ -255,6 +261,7 @@ class Note {
     String? sourceLanguage,
     String? targetLanguage,
     String? noteSpaceId,
+    int? imageCount,
   }) {
     return Note(
       id: id ?? this.id,
@@ -277,6 +284,7 @@ class Note {
       sourceLanguage: sourceLanguage ?? this.sourceLanguage,
       targetLanguage: targetLanguage ?? this.targetLanguage,
       noteSpaceId: noteSpaceId ?? this.noteSpaceId,
+      imageCount: imageCount ?? this.imageCount,
     );
   }
 
