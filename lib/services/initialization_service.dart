@@ -101,23 +101,17 @@ class InitializationService {
       final currentUser = auth.currentUser;
 
       if (currentUser != null) {
-        // 로그아웃 후 로그인 화면으로 전환해야 하는 상황에서 
-        // 이전 사용자 세션이 남아있는 경우를 방지
-        if (currentUser.isAnonymous) {
-          // 익명 사용자인 경우 강제 로그아웃 처리
-          await signOut();
-          debugPrint('익명 사용자 자동 로그아웃 처리됨');
-        } else {
-          // 일반 사용자인 경우 마지막 로그인 정보 업데이트
-          await _saveLastLoginActivity(currentUser);
-        }
+        // 일반 사용자인 경우 마지막 로그인 정보 업데이트
+        await _saveLastLoginActivity(currentUser);
       }
 
       // 인증 상태 확인 완료 설정
       _firebaseInitialized.complete(true);
+      debugPrint('인증 상태 확인 완료: ${currentUser != null ? '로그인 상태' : '로그아웃 상태'}');
     } catch (e) {
       _authError = '인증 상태를 확인하는 중 오류가 발생했습니다: $e';
       _firebaseInitialized.complete(false);
+      debugPrint('인증 상태 확인 오류: $e');
     }
   }
   
