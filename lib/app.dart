@@ -196,8 +196,17 @@ class _AppState extends State<App> {
 
     // Firebase가 초기화되지 않았거나 초기화 확인 중인 경우
     if (!_isFirebaseInitialized) {
-      debugPrint('Firebase 초기화 중 - 스플래시 화면 표시');
-      return const SplashScreen();
+      debugPrint('Firebase 초기화 중 - 로그인 화면으로 바로 이동');
+      return LoginScreen(
+        initializationService: widget.initializationService,
+        onLoginSuccess: _handleLoginSuccess,
+        isInitializing: true,
+        onSkipLogin: () {
+          setState(() {
+            _isUserAuthenticated = true;
+          });
+        },
+      );
     }
 
     // 사용자가 로그인되어 있는 경우
