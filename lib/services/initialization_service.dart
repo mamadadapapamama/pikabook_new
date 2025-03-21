@@ -325,8 +325,10 @@ class InitializationService {
       await authService.signOut();
       
       // 로그아웃 이후 인증 상태 재설정
+      // 이전과 동일하게 Future를 완료하되, 익명 로그인을 하지 않고 로그인 화면으로 전환하기 위해
+      // 인증 실패로 설정
       _userAuthenticationChecked = Completer<bool>();
-      _userAuthenticationChecked.complete(false); // 인증되지 않은 상태로 설정
+      _userAuthenticationChecked.complete(true); // 인증 체크는 완료되었지만 로그인은 되지 않은 상태
       
       debugPrint('로그아웃 성공 - 인증 상태 초기화됨');
       
@@ -350,6 +352,7 @@ class InitializationService {
   }
 
   // 초기화 재시도 메서드
+  /*
   void retryInitialization({required FirebaseOptions options}) {
     if (isFirebaseInitializing || isUserAuthenticationChecking) return;
 
@@ -362,6 +365,24 @@ class InitializationService {
     // 초기화 다시 시작
     initializeFirebase(options: options);
   }
+  */
+  
+  // 새 초기화 재시도 메서드 (로그아웃 후 사용)
+  void retryInitialization({required FirebaseOptions options}) {
+    if (isFirebaseInitializing) return;
+
+    // 인증 상태만 초기화 (Firebase는 이미 초기화됨)
+    if (_userAuthenticationChecked.isCompleted) {
+      _userAuthenticationChecked = Completer<bool>();
+    }
+    _authError = null;
+    
+    // Firebase 초기화 상태는 유지
+    debugPrint('인증 상태 초기화 완료, 로그인 화면으로 이동 준비됨');
+    
+    // 사용자 인증 상태 확인 (로그인 화면에서 적절히 처리할 수 있게 함)
+    _userAuthenticationChecked.complete(true);
+  }
 
   // 사용자 로그인 처리 및 온보딩 상태 관리
   Future<void> handleUserLogin(User user) async {
@@ -371,6 +392,16 @@ class InitializationService {
       // Firestore에서 사용자 데이터 확인
       final firestore = FirebaseFirestore.instance;
       final userDoc = await firestore.collection('users').doc(user.uid).get();
+      
+      // 사용자의 노트 데이터 확인
+      final notesSnapshot = await firestore
+          .collection('notes')
+          .where('userId', isEqualTo: user.uid)
+          .limit(1)
+          .get();
+      
+      final hasNotes = notesSnapshot.docs.isNotEmpty;
+      debugPrint('사용자 노트 데이터 확인: ${hasNotes ? "있음" : "없음"}');
       
       // 계정 첫 로그인 여부 확인
       final isNewUser = !userDoc.exists || userDoc.data()?['onboardingCompleted'] != true;
@@ -391,10 +422,28 @@ class InitializationService {
       } else {
         debugPrint('기존 사용자 계정 확인: 마지막 로그인 시간 업데이트');
         
-        // 기존 사용자 마지막 로그인 시간 업데이트
-        await firestore.collection('users').doc(user.uid).update({
-          'lastLogin': FieldValue.serverTimestamp(),
-        });
+        // 노트 데이터가 없는 경우에만 온보딩 표시
+        if (!hasNotes) {
+          debugPrint('기존 사용자지만 노트 데이터가 없음: 온보딩 표시');
+          final UserPreferencesService prefs = UserPreferencesService();
+          await prefs.setOnboardingCompleted(false);
+          
+          // Firestore 사용자 정보 업데이트
+          await firestore.collection('users').doc(user.uid).update({
+            'onboardingCompleted': false,
+            'lastLogin': FieldValue.serverTimestamp(),
+          });
+        } else {
+          debugPrint('기존 사용자이고 노트 데이터가 있음: 온보딩 건너뜀');
+          final UserPreferencesService prefs = UserPreferencesService();
+          await prefs.setOnboardingCompleted(true);
+          
+          // 기존 사용자 마지막 로그인 시간 업데이트
+          await firestore.collection('users').doc(user.uid).update({
+            'onboardingCompleted': true,
+            'lastLogin': FieldValue.serverTimestamp(),
+          });
+        }
       }
     } catch (e) {
       debugPrint('사용자 로그인 처리 중 오류: $e');
