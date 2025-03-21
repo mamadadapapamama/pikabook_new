@@ -5,7 +5,6 @@ import 'services/note_service.dart';
 import 'services/image_service.dart';
 import 'services/unified_cache_service.dart';
 import 'services/user_preferences_service.dart';
-import 'views/screens/splash_screen.dart';
 import 'views/screens/home_screen.dart';
 import 'views/screens/onboarding_screen.dart';
 import 'package:firebase_core/firebase_core.dart';

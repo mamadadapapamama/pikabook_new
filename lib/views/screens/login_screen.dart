@@ -84,11 +84,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     return Scaffold(
       body: Stack(
         children: [
-          // 배경 이미지
+          // 배경 색상
           Positioned.fill(
-            child: Image.asset(
-              'assets/images/splash_background.png',
-              fit: BoxFit.cover,
+            child: Container(
+              color: ColorTokens.secondary, // secondary 색상 사용 (#226357)
             ),
           ),
           // 그라데이션 오버레이
@@ -196,22 +195,40 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 // Google 로그인 버튼
                                 _buildLoginButton(
                                   text: 'Google 로 로그인',
-                                  icon: null,
-                                  iconAsset: 'assets/images/social_icons/google.png',
                                   onPressed: _handleGoogleSignIn,
                                   backgroundColor: Colors.white,
                                   textColor: const Color(0xFF031B31),
+                                  leadingIcon: Padding(
+                                    padding: const EdgeInsets.only(right: 8.0),
+                                    child: Image.asset(
+                                      'assets/images/social_icons/google_2x.png',
+                                      width: 24,
+                                      height: 24,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Icon(Icons.g_translate, color: const Color(0xFF031B31));
+                                      },
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
 
                                 // Apple 로그인 버튼
                                 _buildLoginButton(
                                   text: 'Apple 로 로그인',
-                                  icon: null,
-                                  iconAsset: 'assets/images/social_icons/apple.png',
                                   onPressed: _handleAppleSignIn,
-                                  backgroundColor: ColorTokens.primary,
-                                  textColor: Colors.white,
+                                  backgroundColor: Colors.white,
+                                  textColor: Colors.black,
+                                  leadingIcon: Padding(
+                                    padding: const EdgeInsets.only(right: 8.0),
+                                    child: Image.asset(
+                                      'assets/images/social_icons/apple.png',
+                                      width: 24,
+                                      height: 24,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Icon(Icons.apple, color: Colors.black);
+                                      },
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(height: 40),
 
@@ -242,11 +259,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Widget _buildLoginButton({
     required String text,
-    required IconData? icon,
     required VoidCallback onPressed,
     required Color backgroundColor,
     required Color textColor,
-    String? iconAsset,
+    required Widget leadingIcon,
   }) {
     return Container(
       width: double.infinity,
@@ -257,7 +273,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           backgroundColor: backgroundColor,
           foregroundColor: textColor,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),
@@ -265,20 +281,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (iconAsset != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 12.0),
-                child: Image.asset(
-                  iconAsset,
-                  width: 24,
-                  height: 24,
-                ),
-              )
-            else if (icon != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 12.0),
-                child: Icon(icon, size: 24),
-              ),
+            leadingIcon,
             Text(
               text,
               style: TypographyTokens.button.copyWith(
@@ -358,7 +361,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   // Firebase 초기화 메서드
   Future<void> _initializeFirebase() async {
     try {
-      await widget.initializationService.initializeFirebase(options: DefaultFirebaseOptions.currentPlatform);
+      // Future already completed 오류 방지를 위해 조건 검사 추가
+      if (Firebase.apps.isEmpty) {
+        await widget.initializationService.initializeFirebase(options: DefaultFirebaseOptions.currentPlatform);
+      } else {
+        debugPrint('Firebase가 이미 초기화되어 있습니다.');
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
