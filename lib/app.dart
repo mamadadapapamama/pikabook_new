@@ -157,10 +157,12 @@ class _AppState extends State<App> {
     // 앱 상태 초기화
     setState(() {
       _error = null;
+      // Firebase는 이미 초기화되어 있으므로 _isFirebaseInitialized는 true 유지
     });
     
-    // 초기화 상태 확인 다시 시작
-    _startInitializationCheck();
+    // 로그아웃 후에는 사용자가 로그인 화면으로 돌아가도록 설정
+    // 초기화 상태 확인 다시 시작하지 않고 명시적으로 로그인 화면으로 전환
+    debugPrint('로그아웃 후 로그인 화면으로 전환 준비됨');
   }
 
   @override
