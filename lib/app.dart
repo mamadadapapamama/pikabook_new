@@ -4,7 +4,6 @@ import 'theme/app_theme.dart';
 import 'views/screens/home_screen.dart';
 import 'services/initialization_service.dart';
 import 'services/user_preferences_service.dart';
-import 'views/screens/splash_screen.dart';
 import 'views/screens/onboarding_screen.dart';
 import 'firebase_options.dart';
 import 'views/screens/login_screen.dart';
@@ -45,20 +44,18 @@ class _AppState extends State<App> {
     
     debugPrint('앱 초기화 상태 확인 시작 (${DateTime.now().toString()})');
 
-    // 첫 화면이 보이도록 약간의 지연 후 초기화 진행
-    Future.delayed(const Duration(milliseconds: 300), () {
-      // 온보딩 상태와 초기화 상태를 병렬로 확인
-      Future.wait([
-        _checkOnboardingStatus(),
-        _checkInitializationStatus(),
-      ]).then((results) {
-        final elapsed = DateTime.now().difference(_appStartTime);
-        debugPrint('앱 초기화 완료 (소요시간: ${elapsed.inMilliseconds}ms)');
-        _isCheckingInitialization = false;
-      }).catchError((e) {
-        debugPrint('초기화 상태 확인 중 오류 발생: $e');
-        _isCheckingInitialization = false;
-      });
+    // 초기화 즉시 진행
+    // 온보딩 상태와 초기화 상태를 병렬로 확인
+    Future.wait([
+      _checkOnboardingStatus(),
+      _checkInitializationStatus(),
+    ]).then((results) {
+      final elapsed = DateTime.now().difference(_appStartTime);
+      debugPrint('앱 초기화 완료 (소요시간: ${elapsed.inMilliseconds}ms)');
+      _isCheckingInitialization = false;
+    }).catchError((e) {
+      debugPrint('초기화 상태 확인 중 오류 발생: $e');
+      _isCheckingInitialization = false;
     });
   }
 
