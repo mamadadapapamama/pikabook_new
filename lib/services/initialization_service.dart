@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'unified_cache_service.dart';
 import 'auth_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'user_preferences_service.dart';
 
 /// 앱 초기화를 관리하는 서비스
 ///
@@ -48,32 +50,34 @@ class InitializationService {
 
   // Firebase 초기화 메서드
   Future<void> initializeFirebase({required FirebaseOptions options}) async {
-    if (_firebaseInitialized.isCompleted) return;
-
+    final startTime = DateTime.now();
+    final initElapsed = startTime.difference(_initStartTime);
+    debugPrint('Firebase 초기화 시작 (앱 시작 후 ${initElapsed.inMilliseconds}ms)');
+    
     try {
-      // Firebase 초기화 시작
-      final initStartTime = DateTime.now();
-      debugPrint('Firebase 초기화 시작... (${initStartTime.toString()})');
-      
-      // Firebase 코어만 초기화하고 나머지 서비스는 필요할 때 초기화
+      // Firebase 앱이 이미 초기화되었는지 확인
+      if (Firebase.apps.isNotEmpty) {
+        debugPrint('Firebase가 이미 초기화되어 있음');
+        _firebaseInitialized.complete(true);
+        return;
+      }
+
+      // Firebase 초기화
+      debugPrint('Firebase 초기화 중...');
       await Firebase.initializeApp(options: options);
-      
-      final initDuration = DateTime.now().difference(initStartTime);
-      debugPrint('Firebase 코어 초기화 완료 (소요시간: ${initDuration.inMilliseconds}ms)');
 
-      // 초기화 완료 표시
+      // 초기화 완료
       _firebaseInitialized.complete(true);
-
-      // 사용자 인증 상태 확인 (필수 서비스)
-      // 백그라운드로 처리하여 UI 블로킹 방지
-      Future.microtask(() => _checkAuthenticationState());
       
-      // 다른 Firebase 서비스는 필요할 때 초기화하도록 함
+      final duration = DateTime.now().difference(startTime);
+      debugPrint('Firebase 초기화 성공 (소요시간: ${duration.inMilliseconds}ms)');
+      
+      // Firebase 초기화 후 백그라운드에서 인증 상태 확인
+      Future.microtask(() => _checkAuthenticationState());
     } catch (e) {
       debugPrint('Firebase 초기화 실패: $e');
       _firebaseError = '앱 초기화 중 오류가 발생했습니다: $e';
       _firebaseInitialized.complete(false);
-      _userAuthenticationChecked.complete(false);
     }
   }
   
@@ -91,77 +95,142 @@ class InitializationService {
 
   // 사용자 인증 상태 확인 메서드
   Future<void> _checkAuthenticationState() async {
-    if (_userAuthenticationChecked.isCompleted) return;
-
+    final startTime = DateTime.now();
+    debugPrint('사용자 인증 상태 확인 시작 (${startTime.toString()})');
+    
     try {
-      final authCheckStartTime = DateTime.now();
-      debugPrint('사용자 인증 상태 확인 시작 (${authCheckStartTime.toString()})');
-      
+      // 이미 완료된 경우 스킵
+      if (_userAuthenticationChecked.isCompleted) {
+        debugPrint('사용자 인증 상태가 이미 확인됨');
+        return;
+      }
+
+      // Firebase Auth 인스턴스 가져오기
       final auth = FirebaseAuth.instance;
-      
-      // 현재 사용자 확인
-      if (auth.currentUser != null) {
-        debugPrint('기존 사용자 발견: ${auth.currentUser?.uid} (익명: ${auth.currentUser?.isAnonymous})');
+      debugPrint('Firebase Auth 인스턴스 가져옴, 현재 사용자 확인 중...');
+
+      // 현재 사용자 확인 (null이면 로그인되지 않은 상태)
+      final currentUser = auth.currentUser;
+
+      if (currentUser != null) {
+        debugPrint('사용자가 이미 로그인되어 있음: ${currentUser.uid} (익명: ${currentUser.isAnonymous})');
       } else {
         debugPrint('로그인된 사용자 없음');
       }
 
-      // 인증 상태 확인 완료 표시
+      // 인증 상태 확인 완료
       _userAuthenticationChecked.complete(true);
       
-      final authCheckDuration = DateTime.now().difference(authCheckStartTime);
-      debugPrint('사용자 인증 상태 확인 완료 (소요시간: ${authCheckDuration.inMilliseconds}ms)');
-      
+      final duration = DateTime.now().difference(startTime);
+      debugPrint('인증 상태 확인 완료 (소요시간: ${duration.inMilliseconds}ms)');
     } catch (e) {
-      debugPrint('사용자 인증 상태 확인 실패: $e');
-      _authError = '사용자 인증 상태 확인 중 오류가 발생했습니다: $e';
+      debugPrint('인증 상태 확인 실패: $e');
+      _authError = '인증 상태를 확인하는 중 오류가 발생했습니다: $e';
       _userAuthenticationChecked.complete(false);
     }
   }
 
   // 익명 로그인 메서드
-  Future<UserCredential?> signInAnonymously() async {
+  Future<User?> anonymousSignIn() async {
+    final startTime = DateTime.now();
+    debugPrint('익명 로그인 시작 (${startTime.toString()})');
+    
     try {
-      final loginStartTime = DateTime.now();
-      debugPrint('익명 인증 시작... (${loginStartTime.toString()})');
-      
+      // Firebase 초기화 대기
+      final firebaseReady = await isFirebaseInitialized;
+      if (!firebaseReady) {
+        debugPrint('Firebase 초기화 실패로 익명 로그인 불가');
+        return null;
+      }
+
+      // 인증 서비스를 통해 익명 로그인
+      debugPrint('익명 로그인 요청 중...');
       final userCredential = await authService.signInAnonymously();
       
-      final loginDuration = DateTime.now().difference(loginStartTime);
-      debugPrint('익명 인증 성공: ${userCredential.user?.uid} (소요시간: ${loginDuration.inMilliseconds}ms)');
+      if (userCredential.user != null) {
+        debugPrint('익명 로그인 성공: ${userCredential.user!.uid}');
+      } else {
+        debugPrint('익명 로그인 실패: 사용자 객체가 null임');
+      }
       
-      return userCredential;
+      final duration = DateTime.now().difference(startTime);
+      debugPrint('익명 로그인 처리 완료 (소요시간: ${duration.inMilliseconds}ms)');
+      
+      return userCredential.user;
     } catch (e) {
-      debugPrint('익명 인증 실패: $e');
-      _authError = '익명 인증 중 오류가 발생했습니다: $e';
+      debugPrint('익명 로그인 중 오류 발생: $e');
       return null;
     }
   }
 
-  // Google 로그인 메서드
+  // 구글 로그인
   Future<User?> signInWithGoogle() async {
+    final startTime = DateTime.now();
+    debugPrint('구글 로그인 시작 (${startTime.toString()})');
+    
     try {
-      debugPrint('Google 인증 시작...');
+      // Firebase 초기화 대기
+      final firebaseReady = await isFirebaseInitialized;
+      if (!firebaseReady) {
+        debugPrint('Firebase 초기화 실패로 구글 로그인 불가');
+        return null;
+      }
+
+      // 인증 서비스를 통해 Google 로그인
+      debugPrint('구글 로그인 요청 중...');
       final user = await authService.signInWithGoogle();
-      debugPrint('Google 인증 성공: ${user?.uid}');
+      
+      if (user != null) {
+        debugPrint('구글 로그인 성공: ${user.uid}');
+        
+        // 새 사용자 계정 확인 및 온보딩 설정
+        await handleUserLogin(user);
+      } else {
+        debugPrint('구글 로그인 실패: 사용자 객체가 null임');
+      }
+      
+      final duration = DateTime.now().difference(startTime);
+      debugPrint('구글 로그인 처리 완료 (소요시간: ${duration.inMilliseconds}ms)');
+      
       return user;
     } catch (e) {
-      debugPrint('Google 인증 실패: $e');
-      _authError = 'Google 인증 중 오류가 발생했습니다: $e';
+      debugPrint('구글 로그인 중 오류 발생: $e');
       return null;
     }
   }
 
-  // Apple 로그인 메서드
+  // Apple 로그인
   Future<User?> signInWithApple() async {
+    final startTime = DateTime.now();
+    debugPrint('Apple 로그인 시작 (${startTime.toString()})');
+    
     try {
-      debugPrint('Apple 인증 시작...');
+      // Firebase 초기화 대기
+      final firebaseReady = await isFirebaseInitialized;
+      if (!firebaseReady) {
+        debugPrint('Firebase 초기화 실패로 Apple 로그인 불가');
+        return null;
+      }
+
+      // 인증 서비스를 통해 Apple 로그인
+      debugPrint('Apple 로그인 요청 중...');
       final user = await authService.signInWithApple();
-      debugPrint('Apple 인증 성공: ${user?.uid}');
+      
+      if (user != null) {
+        debugPrint('Apple 로그인 성공: ${user.uid}');
+        
+        // 새 사용자 계정 확인 및 온보딩 설정
+        await handleUserLogin(user);
+      } else {
+        debugPrint('Apple 로그인 실패: 사용자 객체가 null임');
+      }
+      
+      final duration = DateTime.now().difference(startTime);
+      debugPrint('Apple 로그인 처리 완료 (소요시간: ${duration.inMilliseconds}ms)');
+      
       return user;
     } catch (e) {
-      debugPrint('Apple 인증 실패: $e');
-      _authError = 'Apple 인증 중 오류가 발생했습니다: $e';
+      debugPrint('Apple 로그인 중 오류 발생: $e');
       return null;
     }
   }
@@ -217,5 +286,43 @@ class InitializationService {
 
     // 초기화 다시 시작
     initializeFirebase(options: options);
+  }
+
+  // 사용자 로그인 처리 및 온보딩 상태 관리
+  Future<void> handleUserLogin(User user) async {
+    debugPrint('새 로그인 사용자 처리 중: ${user.uid}');
+    
+    try {
+      // Firestore에서 사용자 데이터 확인
+      final firestore = FirebaseFirestore.instance;
+      final userDoc = await firestore.collection('users').doc(user.uid).get();
+      
+      // 계정 첫 로그인 여부 확인
+      final isNewUser = !userDoc.exists || userDoc.data()?['onboardingCompleted'] != true;
+      
+      if (isNewUser) {
+        debugPrint('새 사용자 계정 확인: 온보딩 상태 초기화');
+        
+        // 온보딩 상태 초기화 (새 계정이면 온보딩 표시)
+        final UserPreferencesService prefs = UserPreferencesService();
+        await prefs.setOnboardingCompleted(false);
+        
+        // Firestore에 사용자 정보 업데이트
+        await firestore.collection('users').doc(user.uid).set({
+          'isNew': true,
+          'onboardingCompleted': false,
+          'lastLogin': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } else {
+        debugPrint('기존 사용자 계정 확인: 마지막 로그인 시간 업데이트');
+        
+        // 기존 사용자 마지막 로그인 시간 업데이트
+        await firestore.collection('users').doc(user.uid).update({
+          'lastLogin': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('사용자 로그인 처리 중 오류: $e');
+    }
   }
 }

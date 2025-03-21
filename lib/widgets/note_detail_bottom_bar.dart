@@ -55,150 +55,120 @@ class NoteDetailBottomBar extends StatelessWidget {
     // 디버그 정보 출력
     debugPrint('NoteDetailBottomBar - 현재 모드: $textDisplayMode, 페이지: ${currentPageIndex + 1}/$totalPages');
     
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 페이지 진행률 바
-        _buildProgressBar(context),
-        
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(
-              top: BorderSide(color: Color(0xFFFFF0E8), width: 1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x26000000),
-                blurRadius: 8,
-                offset: Offset(0, -2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // 이전 페이지 버튼
-              _buildNavigationButton(
-                icon: Icons.arrow_back_ios_rounded,
-                onTap: currentPageIndex > 0 
-                    ? () => onPageChanged(currentPageIndex - 1) 
-                    : null,
-              ),
-              
-              // 중앙 컨트롤 영역 (병음 토글 + 재생 버튼)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 병음 토글 버튼
-                  GestureDetector(
-                    onTap: () {
-                      // 토글: 현재 모드가 all이면 nopinyin으로, 아니면 all로 변경
-                      final newMode = showPinyin ? TextDisplayMode.nopinyin : TextDisplayMode.all;
-                      onTextDisplayModeChanged(newMode);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: showPinyin ? ColorTokens.secondary : Colors.white,
-                        borderRadius: BorderRadius.circular(100),
-                        border: Border.all(color: ColorTokens.secondary),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '한어병음',
-                            style: GoogleFonts.notoSansKr(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w400,
-                              color: showPinyin ? Colors.white : ColorTokens.secondary,
-                            ),
-                          ),
-                          if (showPinyin)
-                            Container(
-                              width: 8,
-                              height: 8,
-                              margin: const EdgeInsets.only(left: 4),
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(width: 16),
-                  
-                  // 전체 읽기/멈춤 버튼 (page_content_widget과 동일한 디자인)
-                  InkWell(
-                    onTap: onPlayPausePressed,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isPlaying ? ColorTokens.secondary : Colors.white,
-                        borderRadius: BorderRadius.circular(100),
-                        border: Border.all(color: ColorTokens.secondary),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            isPlaying ? Icons.stop : Icons.volume_up,
-                            color: isPlaying ? Colors.white : ColorTokens.secondary,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            isPlaying ? '정지' : '전체 재생',
-                            style: GoogleFonts.notoSansKr(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w400,
-                              color: isPlaying ? Colors.white : ColorTokens.secondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              
-              // 다음 페이지 버튼
-              _buildNavigationButton(
-                icon: Icons.arrow_forward_ios_rounded,
-                onTap: currentPageIndex < totalPages - 1 
-                    ? () => onPageChanged(currentPageIndex + 1) 
-                    : null,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-  
-  // 페이지 진행률 바 위젯
-  Widget _buildProgressBar(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final progressWidth = totalPages > 0 
-        ? (currentPageIndex + 1) / totalPages * screenWidth 
-        : 0.0;
-    
+    // 프로그레스 바를 제거하고 컨트롤 부분만 표시
     return Container(
-      height: 4,
-      width: double.infinity,
-      color: const Color(0xFFFFF0E8),
+      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: Color(0xFFFFF0E8), width: 1),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x26000000),
+            blurRadius: 8,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // 진행된 부분 (현재 페이지까지)
-          Container(
-            width: progressWidth,
-            color: ColorTokens.primary,
+          // 이전 페이지 버튼
+          _buildNavigationButton(
+            icon: Icons.arrow_back_ios_rounded,
+            onTap: currentPageIndex > 0 
+                ? () => onPageChanged(currentPageIndex - 1) 
+                : null,
+          ),
+          
+          // 중앙 컨트롤 영역 (병음 토글 + 재생 버튼)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 병음 토글 버튼
+              GestureDetector(
+                onTap: () {
+                  // 토글: 현재 모드가 all이면 nopinyin으로, 아니면 all로 변경
+                  final newMode = showPinyin ? TextDisplayMode.nopinyin : TextDisplayMode.all;
+                  onTextDisplayModeChanged(newMode);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: showPinyin ? ColorTokens.secondary : Colors.white,
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(color: ColorTokens.secondary),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '한어병음',
+                        style: GoogleFonts.notoSansKr(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: showPinyin ? Colors.white : ColorTokens.secondary,
+                        ),
+                      ),
+                      if (showPinyin)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(left: 4),
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              const SizedBox(width: 16),
+              
+              // 전체 읽기/멈춤 버튼 (page_content_widget과 동일한 디자인)
+              InkWell(
+                onTap: onPlayPausePressed,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isPlaying ? ColorTokens.secondary : Colors.white,
+                    borderRadius: BorderRadius.circular(100),
+                    border: Border.all(color: ColorTokens.secondary),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isPlaying ? Icons.stop : Icons.volume_up,
+                        color: isPlaying ? Colors.white : ColorTokens.secondary,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isPlaying ? '정지' : '전체 재생',
+                        style: GoogleFonts.notoSansKr(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                          color: isPlaying ? Colors.white : ColorTokens.secondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          // 다음 페이지 버튼
+          _buildNavigationButton(
+            icon: Icons.arrow_forward_ios_rounded,
+            onTap: currentPageIndex < totalPages - 1 
+                ? () => onPageChanged(currentPageIndex + 1) 
+                : null,
           ),
         ],
       ),
