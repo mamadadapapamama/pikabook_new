@@ -804,8 +804,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          color: ColorTokens.textPrimary, // 뒤로가기 버튼 색상을 textPrimary로 변경
+          icon: const Icon(Icons.arrow_back_ios_rounded),
+          color: ColorTokens.secondary, // 뒤로가기 버튼 색상을 secondary로 변경
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Row(
@@ -840,6 +840,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         titleSpacing: 0,
+        toolbarHeight: 70, // AppBar 높이 기본값(56)보다 10 더 크게 설정
         actions: [
           if (_note != null) ...[
             IconButton(
@@ -930,6 +931,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
           Expanded(
             child: Container(
               color: Colors.white, // 배경색 흰색
+              padding: const EdgeInsets.all(0), // 패딩 0으로 설정 (ProcessedTextWidget에서 패딩 적용)
               child: _buildCurrentPageContent(),
             ),
           ),

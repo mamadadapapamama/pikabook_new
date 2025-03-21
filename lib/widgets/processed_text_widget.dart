@@ -541,6 +541,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // 로딩 확인용
+    debugPrint('[${DateTime.now()}] ProcessedTextWidget build 호출');
+    
     // 문장 바깥 탭 시 선택 취소를 위한 GestureDetector 추가
     return GestureDetector(
       onTap: () {
@@ -550,8 +553,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         });
       },
       behavior: HitTestBehavior.translucent,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 30.0),
+      child: Container(
+        color: Colors.white, // 배경색을 흰색으로 설정
+        padding: const EdgeInsets.all(0), // 패딩 제거 (PageContentWidget에서 패딩 적용)
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

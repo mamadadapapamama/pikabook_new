@@ -103,7 +103,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: Text(
           '설정',
-          style: TypographyTokens.headline3,
+          style: TypographyTokens.headline3.copyWith(
+            color: ColorTokens.textPrimary,
+          ),
         ),
         centerTitle: false,
         backgroundColor: ColorTokens.background,
