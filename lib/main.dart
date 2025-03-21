@@ -108,15 +108,12 @@ Future<void> _initializeInBackground(InitializationService initializationService
     final firebaseTimer = Stopwatch()..start();
     debugPrint('Firebase 초기화 시작...');
     
-    await Firebase.initializeApp(
+    // InitializationService를 통해 Firebase 초기화
+    await initializationService.initializeFirebase(
       options: DefaultFirebaseOptions.currentPlatform,
-    ).then((_) {
-      debugPrint('Firebase 초기화 완료 (${firebaseTimer.elapsedMilliseconds}ms)');
-      initializationService.markFirebaseInitialized();
-    }).catchError((e) {
-      debugPrint('Firebase 초기화 실패: $e');
-      initializationService.setFirebaseError('Firebase 초기화 실패: $e');
-    });
+    );
+    
+    debugPrint('Firebase 초기화 완료 (${firebaseTimer.elapsedMilliseconds}ms)');
     
     // 2. 앱 설정 로드 (상대적으로 가벼운 작업)
     final settingsTimer = Stopwatch()..start();

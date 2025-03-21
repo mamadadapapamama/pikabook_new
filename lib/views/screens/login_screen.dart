@@ -201,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   leadingIcon: Padding(
                                     padding: const EdgeInsets.only(right: 8.0),
                                     child: Image.asset(
-                                      'assets/images/social_icons/google_2x.png',
+                                      'assets/images/social_icons/google.png',
                                       width: 24,
                                       height: 24,
                                       errorBuilder: (context, error, stackTrace) {
@@ -361,11 +361,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   // Firebase 초기화 메서드
   Future<void> _initializeFirebase() async {
     try {
-      // Future already completed 오류 방지를 위해 조건 검사 추가
-      if (Firebase.apps.isEmpty) {
-        await widget.initializationService.initializeFirebase(options: DefaultFirebaseOptions.currentPlatform);
-      } else {
-        debugPrint('Firebase가 이미 초기화되어 있습니다.');
+      final isInitialized = await widget.initializationService.initializeFirebase(
+        options: DefaultFirebaseOptions.currentPlatform
+      );
+      
+      if (!isInitialized && mounted) {
+        setState(() {
+          final error = widget.initializationService.firebaseError;
+          _errorMessage = error ?? '앱 초기화 중 오류가 발생했습니다.';
+        });
       }
     } catch (e) {
       if (mounted) {

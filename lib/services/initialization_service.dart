@@ -66,7 +66,7 @@ class InitializationService {
   bool get isAnonymousUser => FirebaseAuth.instance.currentUser?.isAnonymous ?? false;
 
   // Firebase 초기화 메서드
-  Future<void> initializeFirebase({required FirebaseOptions options}) async {
+  Future<bool> initializeFirebase({required FirebaseOptions options}) async {
     final startTime = DateTime.now();
     final initElapsed = startTime.difference(_initStartTime);
     debugPrint('Firebase 초기화 시작 (앱 시작 후 ${initElapsed.inMilliseconds}ms)');
@@ -75,8 +75,10 @@ class InitializationService {
       // Firebase 앱이 이미 초기화되었는지 확인
       if (Firebase.apps.isNotEmpty) {
         debugPrint('Firebase가 이미 초기화되어 있음');
-        _firebaseInitialized.complete(true);
-        return;
+        if (!_firebaseInitialized.isCompleted) {
+          _firebaseInitialized.complete(true);
+        }
+        return true;
       }
 
       // Firebase 초기화
@@ -84,23 +86,33 @@ class InitializationService {
       await Firebase.initializeApp(options: options);
 
       // 초기화 완료
-      _firebaseInitialized.complete(true);
+      if (!_firebaseInitialized.isCompleted) {
+        _firebaseInitialized.complete(true);
+      }
       
       final duration = DateTime.now().difference(startTime);
       debugPrint('Firebase 초기화 성공 (소요시간: ${duration.inMilliseconds}ms)');
       
       // Firebase 초기화 후 백그라운드에서 인증 상태 확인
       Future.microtask(() => _checkAuthenticationState());
+      
+      return true;
     } catch (e) {
       debugPrint('Firebase 초기화 실패: $e');
       _firebaseError = '앱 초기화 중 오류가 발생했습니다: $e';
-      _firebaseInitialized.complete(false);
+      if (!_firebaseInitialized.isCompleted) {
+        _firebaseInitialized.complete(false);
+      }
+      return false;
     }
   }
   
   // Firebase가 이미 초기화되었음을 표시하는 메서드
   Future<void> markFirebaseInitialized() async {
-    if (_firebaseInitialized.isCompleted) return;
+    if (_firebaseInitialized.isCompleted) {
+      debugPrint('Firebase 초기화가 이미 완료되어 있어 markFirebaseInitialized()를 건너뜁니다.');
+      return;
+    }
     
     final elapsed = DateTime.now().difference(_initStartTime);
     debugPrint('Firebase 초기화 완료 표시 (외부 초기화, 소요시간: ${elapsed.inMilliseconds}ms)');
