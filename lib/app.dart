@@ -27,6 +27,7 @@ class _AppState extends State<App> {
   String? _error;
   final UserPreferencesService _preferencesService = UserPreferencesService();
   bool _isCheckingInitialization = false;
+  bool _isLoadingUserData = false;
   
   // 앱 시작 시간 기록
   final DateTime _appStartTime = DateTime.now();
@@ -80,6 +81,10 @@ class _AppState extends State<App> {
   // 사용자가 로그인했을 때 노트 데이터에 따라 온보딩 상태 확인
   Future<void> _checkOnboardingForUser(User user) async {
     try {
+      setState(() {
+        _isLoadingUserData = true;
+      });
+      
       // InitializationService의 handleUserLogin을 호출하여 온보딩 상태 업데이트
       await widget.initializationService.handleUserLogin(user);
       
@@ -91,12 +96,18 @@ class _AppState extends State<App> {
         setState(() {
           // 노트 데이터가 있으면 온보딩 건너뛰기
           _isOnboardingCompleted = hasOnboarded || isOnboardingCompleted;
+          _isLoadingUserData = false;
         });
       }
       
       debugPrint('로그인 사용자 온보딩 상태 확인: hasOnboarded=$hasOnboarded, _isOnboardingCompleted=$_isOnboardingCompleted');
     } catch (e) {
       debugPrint('사용자 온보딩 상태 확인 중 오류 발생: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingUserData = false;
+        });
+      }
     }
   }
 
@@ -229,10 +240,25 @@ class _AppState extends State<App> {
   }
 
   void _handleLoginSuccess() {
+    debugPrint('로그인 성공 처리됨');
+    
+    // 로그인 상태 업데이트
     setState(() {
       _isUserAuthenticated = true;
+      _isLoadingUserData = true; // 데이터 로딩 시작
     });
-    debugPrint('로그인 성공 처리됨: _isUserAuthenticated = $_isUserAuthenticated');
+    
+    // 현재 로그인한 사용자 정보 가져오기
+    final user = widget.initializationService.getCurrentUser();
+    if (user != null) {
+      // 사용자 데이터 처리 및 온보딩 상태 확인
+      _checkOnboardingForUser(user);
+    } else {
+      // 사용자 정보가 없는 경우 로딩 상태 해제
+      setState(() {
+        _isLoadingUserData = false;
+      });
+    }
   }
 
   void _handleLogout() async {
@@ -284,11 +310,12 @@ class _AppState extends State<App> {
     debugPrint('현재 앱 상태: Firebase initialized=$_isFirebaseInitialized, '
         'User authenticated=$_isUserAuthenticated, '
         'Onboarding completed=$_isOnboardingCompleted, '
+        'Loading user data=$_isLoadingUserData, '
         'Error=$_error');
         
     // 앱 초기화 중인 경우 로딩 화면 표시 (스플래시 역할)
     if (!_isFirebaseInitialized || _isCheckingInitialization) {
-      return _buildLoadingScreen();
+      return _buildLoadingScreen(message: '초기화 중...');
     }
 
     // 오류가 있는 경우
@@ -298,6 +325,11 @@ class _AppState extends State<App> {
 
     // 사용자가 로그인되어 있는 경우
     if (_isUserAuthenticated) {
+      // 사용자 데이터 로딩 중인 경우 로딩 화면 표시
+      if (_isLoadingUserData) {
+        return _buildLoadingScreen(message: '데이터 로드 중...');
+      }
+      
       // 온보딩 완료 여부에 따라 화면 결정
       if (_isOnboardingCompleted) {
         debugPrint('로그인 완료 및 온보딩 완료 - 홈 화면 표시');
@@ -324,7 +356,7 @@ class _AppState extends State<App> {
   }
 
   // 로딩 화면 (스플래시 화면 역할)
-  Widget _buildLoadingScreen() {
+  Widget _buildLoadingScreen({String message = '로딩 중...'}) {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -348,6 +380,17 @@ class _AppState extends State<App> {
                   ),
                 ),
                 const SizedBox(height: 32),
+                
+                // 로딩 메시지
+                Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Color(0xFF3A3A3A),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
                 
                 // 로딩 인디케이터
                 const SizedBox(

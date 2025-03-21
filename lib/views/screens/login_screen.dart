@@ -30,46 +30,26 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   String? _errorMessage;
   late AnimationController _animationController;
   late Animation<double> _fadeInAnimation;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
-    
-    // Firebase 초기화가 필요한 경우
-    if (widget.isInitializing) {
-      _initializeFirebase();
-    }
-    
-    // 애니메이션 초기화 - 매우 빠르게 실행되도록 수정
+    _setupAnimation();
+  }
+
+  void _setupAnimation() {
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 600),
       vsync: this,
+      duration: const Duration(milliseconds: 800),
     );
 
     _fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
+        curve: Curves.easeIn,
       ),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.98, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
-      ),
-    );
-    
-    _slideAnimation = Tween<double>(begin: 10, end: 0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
-      ),
-    );
-
-    // 애니메이션 시작
     _animationController.forward();
   }
 
@@ -117,9 +97,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   return Opacity(
                     opacity: _fadeInAnimation.value,
                     child: Transform.translate(
-                      offset: Offset(0, _slideAnimation.value),
+                      offset: Offset(0, 0),
                       child: Transform.scale(
-                        scale: _scaleAnimation.value,
+                        scale: 1.0,
                         child: Center(
                           child: SingleChildScrollView(
                             child: Column(
@@ -173,10 +153,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 else if (_errorMessage != null)
                                   Container(
                                     padding: const EdgeInsets.all(12),
-                                    margin: const EdgeInsets.only(bottom: 16),
+                                    margin: const EdgeInsets.symmetric(vertical: 8),
                                     decoration: BoxDecoration(
                                       color: Colors.red.shade50,
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(8),
                                       border: Border.all(
                                         color: Colors.red.shade200,
                                         width: 1,
@@ -298,79 +278,63 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     );
   }
 
+  // 구글 로그인 처리
   Future<void> _handleGoogleSignIn() async {
-    _setLoading(true);
     try {
-      // Firebase 초기화 확인 없이 바로 로그인 시도
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
       final user = await widget.initializationService.signInWithGoogle();
-      if (user != null) {
+
+      if (user != null && mounted) {
+        debugPrint('Google 로그인 성공: ${user.email}');
         widget.onLoginSuccess();
-      } else {
-        _setError('Google 로그인에 실패했습니다.');
       }
     } catch (e) {
-      _setError('Google 로그인 중 오류가 발생했습니다: $e');
+      debugPrint('Google 로그인 오류: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = '로그인 실패: $e';
+        });
+      }
     } finally {
-      _setLoading(false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
+  // 애플 로그인 처리
   Future<void> _handleAppleSignIn() async {
-    _setLoading(true);
     try {
-      // Firebase 초기화 확인 없이 바로 로그인 시도
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
       final user = await widget.initializationService.signInWithApple();
-      if (user != null) {
+
+      if (user != null && mounted) {
+        debugPrint('Apple 로그인 성공: ${user.email}');
         widget.onLoginSuccess();
-      } else {
-        _setError('Apple 로그인에 실패했습니다.');
       }
     } catch (e) {
-      _setError('Apple 로그인 중 오류가 발생했습니다: $e');
+      debugPrint('Apple 로그인 오류: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = '로그인 실패: $e';
+        });
+      }
     } finally {
-      _setLoading(false);
-    }
-  }
-
-  void _setLoading(bool isLoading) {
-    if (mounted) {
-      setState(() {
-        _isLoading = isLoading;
-        if (isLoading) {
-          _errorMessage = null;
-        }
-      });
-    }
-  }
-
-  void _setError(String message) {
-    if (mounted) {
-      setState(() {
-        _errorMessage = message;
-        _isLoading = false;
-      });
-    }
-  }
-
-  // Firebase 초기화 메서드
-  Future<void> _initializeFirebase() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    
-    try {
-      final result = await widget.initializationService.initializeFirebase();
-      
-      if (!result) {
-        _setError(widget.initializationService.firebaseError ?? '초기화 중 알 수 없는 오류가 발생했습니다.');
-      } else {
-        // 초기화 성공 시 로딩 상태 해제
-        _setLoading(false);
-        debugPrint('Firebase 초기화 완료 및 로딩 상태 해제');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
-    } catch (e) {
-      _setError('Firebase 초기화 중 오류가 발생했습니다: $e');
     }
   }
 }
