@@ -802,72 +802,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     final String pageNumberText = '${_pageManager.currentPageIndex + 1}/${_pageManager.pages.length}';
     
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_rounded),
-          color: ColorTokens.secondary, // 뒤로가기 버튼 색상을 secondary로 변경
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _note!.originalText,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.notoSansKr(
-                      fontSize: 24, 
-                      fontWeight: FontWeight.w700,
-                      color: ColorTokens.textPrimary,
-                    ),
-                  ),
-                  if (_pageManager.pages.isNotEmpty)
-                    Text(
-                      'page $pageNumberText',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: const Color(0xFFB2B2B2), // 회색 색상 사용
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        titleSpacing: 0,
-        toolbarHeight: 70, // AppBar 높이 기본값(56)보다 10 더 크게 설정
-        actions: [
-          if (_note != null) ...[
-            IconButton(
-              icon: _note!.flashcardCount > 0
-                  ? badges.Badge(
-                      badgeContent: Text(
-                        '${_note!.flashcardCount}',
-                        style: const TextStyle(color: Colors.white, fontSize: 10),
-                      ),
-                      child: const Icon(Icons.flash_on),
-                    )
-                  : const Icon(Icons.flash_on),
-              onPressed: _navigateToFlashcards,
-              color: ColorTokens.primary, // 플래시카드 버튼 색상 변경
-            ),
-            IconButton(
-              icon: const Icon(Icons.more_vert),
-              onPressed: _showMoreOptions,
-              tooltip: '더 보기',
-              color: const Color(0xFFB2B2B2), // 회색 색상 사용
-            ),
-          ],
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4.0),
-          child: _buildProgressBar(),
-        ),
+      appBar: NoteDetailAppBar(
+        note: _note,
+        onShowMoreOptions: _showMoreOptions,
+        onFlashCardPressed: _navigateToFlashcards,
+        currentPageIndex: _pageManager.currentPageIndex,
+        totalPages: _pageManager.pages.length,
       ),
       body: Column(
         children: [

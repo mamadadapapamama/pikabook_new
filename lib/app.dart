@@ -222,6 +222,11 @@ class _AppState extends State<App> {
       return LoginScreen(
         initializationService: widget.initializationService,
         onLoginSuccess: _handleLoginSuccess,
+        onSkipLogin: () {
+          setState(() {
+            _isUserAuthenticated = true;
+          });
+        },
       );
     }
   }
