@@ -22,27 +22,54 @@ import 'utils/language_constants.dart';
 // 현재는 중국어만 지원하지만, 향후 다양한 언어를 지원할 예정입니다.
 
 void main() async {
-  // Flutter 엔진 초기화
-  WidgetsFlutterBinding.ensureInitialized();
+  // 앱 시작 시간 로깅
+  final startTime = DateTime.now();
+  debugPrint('========================================');
+  debugPrint('| 앱 시작: ${startTime.toString()} |');
+  debugPrint('========================================');
 
-  // 초기화 서비스 생성
-  final initializationService = InitializationService();
+  try {
+    // 앱 초기화 전 로깅
+    debugPrint('앱 초기화 시작: Flutter 바인딩 초기화 중...');
+    WidgetsFlutterBinding.ensureInitialized();
+    debugPrint('Flutter 바인딩 초기화 완료');
 
-  // 병렬로 초기화 작업 실행
-  await Future.wait([
+    // Firebase 설정 및 초기화 서비스 생성
+    debugPrint('InitializationService 인스턴스 생성 중...');
+    final initializationService = InitializationService();
+    debugPrint('InitializationService 인스턴스 생성 완료');
+
     // Firebase 초기화
-    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
-        .then((_) => initializationService.markFirebaseInitialized()),
+    debugPrint('Firebase 초기화 중...');
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
+        .then((_) => initializationService.markFirebaseInitialized());
+    debugPrint('Firebase 초기화 완료');
 
-    // 앱 설정 로드 (비동기로 실행하고 결과를 기다리지 않음)
-    loadAppSettings(),
+    // 통합 캐시 서비스 초기화
+    debugPrint('통합 캐시 서비스 초기화 중...');
+    await UnifiedCacheService().initialize();
+    debugPrint('통합 캐시 서비스 초기화 완료');
 
-    // 통합 캐시 서비스 초기화 (비동기로 실행하고 결과를 기다리지 않음)
-    UnifiedCacheService().initialize(),
-  ]);
+    // 앱 초기화 후 로깅
+    final duration = DateTime.now().difference(startTime);
+    debugPrint('====================================================');
+    debugPrint('| 초기화 완료 (${duration.inMilliseconds}ms) - 앱 실행 시작 |');
+    debugPrint('====================================================');
 
-  // 앱 실행
-  runApp(App(initializationService: initializationService));
+    // 앱 실행
+    runApp(App(initializationService: initializationService));
+  } catch (e) {
+    // 오류 로깅
+    debugPrint('앱 초기화 중 심각한 오류 발생: $e');
+    // 최소한의 오류 표시 UI
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Text('앱 초기화 오류: $e', textAlign: TextAlign.center),
+        ),
+      ),
+    ));
+  }
 }
 
 // 앱 설정 로드 함수 개선

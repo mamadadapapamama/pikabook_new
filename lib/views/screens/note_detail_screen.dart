@@ -864,6 +864,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
           ],
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(4.0),
+          child: _buildProgressBar(),
+        ),
       ),
       body: Column(
         children: [
@@ -1005,6 +1009,29 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       onCreateFlashCard: _createFlashCard,
       flashCards: _note?.flashCards,
       onDeleteSegment: _handleDeleteSegment,
+    );
+  }
+
+  // 프로그레스 바 위젯 (NoteDetailBottomBar에서 가져옴)
+  Widget _buildProgressBar() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final progressWidth = _pageManager.pages.isNotEmpty 
+        ? (_pageManager.currentPageIndex + 1) / _pageManager.pages.length * screenWidth 
+        : 0.0;
+    
+    return Container(
+      height: 4,
+      width: double.infinity,
+      color: const Color(0xFFFFF0E8),
+      child: Row(
+        children: [
+          // 진행된 부분 (현재 페이지까지)
+          Container(
+            width: progressWidth,
+            color: ColorTokens.primary,
+          ),
+        ],
+      ),
     );
   }
 }
