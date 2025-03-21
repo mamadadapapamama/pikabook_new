@@ -16,59 +16,133 @@ import 'services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/chinese_segmenter_service.dart';
 import 'utils/language_constants.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'dart:async';
 
 // MARK: 다국어 지원을 위한 확장 포인트
 // 앱의 시작점에서 언어 설정을 초기화합니다.
 // 현재는 중국어만 지원하지만, 향후 다양한 언어를 지원할 예정입니다.
 
-void main() async {
-  // 앱 시작 시간 로깅
-  final startTime = DateTime.now();
+// 앱 초기화 상태를 추적하기 위한 전역 타이머
+Stopwatch? _globalInitTimer;
+
+void main() {
+  // 앱 시작 시간 추적 시작
+  _globalInitTimer = Stopwatch()..start();
   debugPrint('========================================');
-  debugPrint('| 앱 시작: ${startTime.toString()} |');
+  debugPrint('| 앱 시작: ${DateTime.now().toString()} |');
   debugPrint('========================================');
 
-  try {
-    // 앱 초기화 전 로깅
-    debugPrint('앱 초기화 시작: Flutter 바인딩 초기화 중...');
-    WidgetsFlutterBinding.ensureInitialized();
-    debugPrint('Flutter 바인딩 초기화 완료');
-
-    // Firebase 설정 및 초기화 서비스 생성
-    debugPrint('InitializationService 인스턴스 생성 중...');
-    final initializationService = InitializationService();
-    debugPrint('InitializationService 인스턴스 생성 완료');
-
-    // Firebase 초기화
-    debugPrint('Firebase 초기화 중...');
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
-        .then((_) => initializationService.markFirebaseInitialized());
-    debugPrint('Firebase 초기화 완료');
-
-    // 통합 캐시 서비스 초기화
-    debugPrint('통합 캐시 서비스 초기화 중...');
-    await UnifiedCacheService().initialize();
-    debugPrint('통합 캐시 서비스 초기화 완료');
-
-    // 앱 초기화 후 로깅
-    final duration = DateTime.now().difference(startTime);
-    debugPrint('====================================================');
-    debugPrint('| 초기화 완료 (${duration.inMilliseconds}ms) - 앱 실행 시작 |');
-    debugPrint('====================================================');
-
-    // 앱 실행
-    runApp(App(initializationService: initializationService));
-  } catch (e) {
-    // 오류 로깅
-    debugPrint('앱 초기화 중 심각한 오류 발생: $e');
-    // 최소한의 오류 표시 UI
-    runApp(MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('앱 초기화 오류: $e', textAlign: TextAlign.center),
+  // 모든 예외를 캡처하여 앱이 충돌하지 않도록 함
+  runZonedGuarded(() async {
+    try {
+      // 1. 가능한 빨리 Flutter 엔진 초기화
+      debugPrint('Flutter 엔진 초기화 시작...');
+      WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+      debugPrint('Flutter 엔진 초기화 완료 (${_globalInitTimer?.elapsedMilliseconds}ms)');
+      
+      // 2. 네이티브 스플래시 화면 유지
+      FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+      
+      // 3. 초기화 서비스 인스턴스 생성 (가벼운 동기 작업)
+      debugPrint('초기화 서비스 생성 중...');
+      final initializationService = InitializationService();
+      debugPrint('초기화 서비스 생성 완료 (${_globalInitTimer?.elapsedMilliseconds}ms)');
+      
+      // 4. 앱 실행 (UI 렌더링 시작)
+      debugPrint('앱 UI 렌더링 시작...');
+      runApp(App(initializationService: initializationService));
+      debugPrint('앱 UI 렌더링 시작됨 (${_globalInitTimer?.elapsedMilliseconds}ms)');
+      
+      // 5. 백그라운드에서 무거운 초기화 작업 비동기 실행 (UI 블로킹 방지)
+      _initializeInBackground(initializationService);
+      
+    } catch (e, stackTrace) {
+      // 초기화 중 오류 발생 시 로깅 및 간단한 오류 화면 표시
+      debugPrint('앱 초기화 중 치명적 오류: $e');
+      debugPrint(stackTrace.toString());
+      
+      // 네이티브 스플래시 제거 (오류 발생해도 제거해야 함)
+      FlutterNativeSplash.remove();
+      
+      // 간단한 오류 화면 표시
+      runApp(MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.white,
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                const SizedBox(height: 20),
+                Text('앱 초기화 오류: $e', 
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    // 앱 재시작 (실제로는 프로세스 재시작이 필요할 수 있음)
+                    main();
+                  },
+                  child: const Text('다시 시도'),
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
-    ));
+      ));
+    }
+  }, (error, stack) {
+    // 글로벌 예외 핸들러
+    debugPrint('예상치 못한 오류 발생: $error');
+    debugPrint(stack.toString());
+  });
+}
+
+// 백그라운드에서 무거운 초기화 작업 실행 (UI 블로킹 방지)
+Future<void> _initializeInBackground(InitializationService initializationService) async {
+  debugPrint('백그라운드 초기화 시작...');
+  
+  try {
+    // 1. Firebase 초기화 (무거운 작업)
+    final firebaseTimer = Stopwatch()..start();
+    debugPrint('Firebase 초기화 시작...');
+    
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    ).then((_) {
+      debugPrint('Firebase 초기화 완료 (${firebaseTimer.elapsedMilliseconds}ms)');
+      initializationService.markFirebaseInitialized();
+    }).catchError((e) {
+      debugPrint('Firebase 초기화 실패: $e');
+      initializationService.setFirebaseError('Firebase 초기화 실패: $e');
+    });
+    
+    // 2. 앱 설정 로드 (상대적으로 가벼운 작업)
+    final settingsTimer = Stopwatch()..start();
+    debugPrint('앱 설정 로드 시작...');
+    await loadAppSettings();
+    debugPrint('앱 설정 로드 완료 (${settingsTimer.elapsedMilliseconds}ms)');
+    
+    // 3. 캐시 서비스 초기화 (무거운 작업일 수 있음)
+    final cacheTimer = Stopwatch()..start();
+    debugPrint('캐시 서비스 초기화 시작...');
+    await UnifiedCacheService().initialize();
+    debugPrint('캐시 서비스 초기화 완료 (${cacheTimer.elapsedMilliseconds}ms)');
+    
+    // 4. 기타 필요한 서비스 초기화 (필요시 추가)
+    
+    // 모든 초기화 완료 후 네이티브 스플래시 제거
+    debugPrint('모든 백그라운드 초기화 작업 완료 (${_globalInitTimer?.elapsedMilliseconds}ms)');
+    FlutterNativeSplash.remove();
+    debugPrint('네이티브 스플래시 제거됨');
+    
+  } catch (e) {
+    debugPrint('백그라운드 초기화 중 오류 발생: $e');
+    // 오류가 발생해도 스플래시는 제거해야 함
+    FlutterNativeSplash.remove();
+    debugPrint('오류 발생으로 네이티브 스플래시 제거됨');
   }
 }
 
