@@ -1094,4 +1094,36 @@ class UnifiedCacheService {
     // 최근 5개만 반환
     return recentPageIds.take(5).toSet();
   }
+
+  /// 모든 캐시 지우기 (로그아웃 또는 로그인 시 호출)
+  Future<void> clearAllCache() async {
+    try {
+      debugPrint('모든 캐시 지우기 시작...');
+      
+      // 메모리 캐시 초기화
+      _noteCache.clear();
+      _pageCache.clear();
+      _notePageIds.clear();
+      _cacheTimestamps.clear();
+      _translationCache.clear();
+      
+      // 로컬 저장소 캐시 초기화
+      final prefs = await SharedPreferences.getInstance();
+      final allKeys = prefs.getKeys();
+      
+      // 캐시 키만 삭제 (앱 설정 등 다른 데이터는 유지)
+      for (final key in allKeys) {
+        if (key.startsWith(_noteKeyPrefix) || 
+            key.startsWith(_pageKeyPrefix) || 
+            key.contains('timestamp_') || 
+            key.startsWith(_translationKeyPrefix)) {
+          await prefs.remove(key);
+        }
+      }
+      
+      debugPrint('모든 캐시 지우기 완료');
+    } catch (e) {
+      debugPrint('캐시 지우기 중 오류 발생: $e');
+    }
+  }
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'theme/app_theme.dart';
 import 'views/screens/home_screen.dart';
 import 'services/initialization_service.dart';
@@ -28,13 +30,74 @@ class _AppState extends State<App> {
   
   // 앱 시작 시간 기록
   final DateTime _appStartTime = DateTime.now();
-
+  
+  // 인증 상태 변경 구독 취소용 변수
+  late final Stream<User?> _authStateStream;
+  
   @override
   void initState() {
     super.initState();
     debugPrint('App initState 호출됨 (${DateTime.now().toString()})');
     // 초기화 상태 확인은 비동기로 시작하고 UI는 즉시 렌더링
     _startInitializationCheck();
+    
+    // 인증 상태 변경 리스너 설정
+    _authStateStream = widget.initializationService.authStateChanges;
+    _setupAuthStateListener();
+  }
+
+  // 인증 상태 변경 리스너 설정
+  void _setupAuthStateListener() {
+    _authStateStream.listen((User? user) {
+      debugPrint('인증 상태 변경 감지: ${user != null ? '로그인' : '로그아웃'}');
+      
+      if (mounted) {
+        // 로그인 상태 변경
+        setState(() {
+          _isUserAuthenticated = user != null;
+        });
+        
+        if (user != null) {
+          debugPrint('사용자 로그인됨: ${user.uid}');
+          
+          // 로그인 시 노트 데이터에 따라 온보딩 상태 다시 확인
+          _checkOnboardingForUser(user);
+        } else {
+          debugPrint('사용자 로그아웃됨');
+          // 로그아웃 상태일 때 온보딩 초기화
+          _preferencesService.setOnboardingCompleted(false);
+          _preferencesService.setHasOnboarded(false);
+          setState(() {
+            _isOnboardingCompleted = false;
+          });
+        }
+      }
+    }, onError: (error) {
+      debugPrint('인증 상태 변경 리스너 오류: $error');
+    });
+  }
+
+  // 사용자가 로그인했을 때 노트 데이터에 따라 온보딩 상태 확인
+  Future<void> _checkOnboardingForUser(User user) async {
+    try {
+      // InitializationService의 handleUserLogin을 호출하여 온보딩 상태 업데이트
+      await widget.initializationService.handleUserLogin(user);
+      
+      // 업데이트 후 온보딩 상태 다시 확인
+      final hasOnboarded = await _preferencesService.hasOnboarded();
+      final isOnboardingCompleted = await _preferencesService.isOnboardingCompleted();
+      
+      if (mounted) {
+        setState(() {
+          // 노트 데이터가 있으면 온보딩 건너뛰기
+          _isOnboardingCompleted = hasOnboarded || isOnboardingCompleted;
+        });
+      }
+      
+      debugPrint('로그인 사용자 온보딩 상태 확인: hasOnboarded=$hasOnboarded, _isOnboardingCompleted=$_isOnboardingCompleted');
+    } catch (e) {
+      debugPrint('사용자 온보딩 상태 확인 중 오류 발생: $e');
+    }
   }
 
   // 초기화 상태 확인 시작 (비동기)
@@ -64,6 +127,42 @@ class _AppState extends State<App> {
       final startTime = DateTime.now();
       debugPrint('온보딩 상태 확인 시작 (${startTime.toString()})');
       
+      // 현재 로그인된 사용자가 있는지 확인
+      final user = widget.initializationService.getCurrentUser();
+      if (user != null) {
+        // Firestore에서 사용자 정보 확인
+        final firestore = FirebaseFirestore.instance;
+        final userDoc = await firestore.collection('users').doc(user.uid).get();
+        
+        // Firestore에 hasOnboarded 필드가 있으면 그 값 사용
+        if (userDoc.exists && userDoc.data()!.containsKey('hasOnboarded')) {
+          final hasOnboarded = userDoc.data()!['hasOnboarded'] as bool;
+          await _preferencesService.setOnboardingCompleted(hasOnboarded);
+          debugPrint('Firestore에서 온보딩 상태 확인: $hasOnboarded');
+        } else {
+          // 노트 데이터 확인
+          final notesQuery = await firestore
+              .collection('notes')
+              .where('userId', isEqualTo: user.uid)
+              .limit(1)
+              .get();
+          
+          final hasNotes = notesQuery.docs.isNotEmpty;
+          await _preferencesService.setOnboardingCompleted(hasNotes);
+          debugPrint('노트 데이터 기반 온보딩 상태 설정: $hasNotes');
+          
+          // Firestore에 상태 업데이트
+          await firestore.collection('users').doc(user.uid).update({
+            'hasOnboarded': hasNotes,
+            'onboardingCompleted': hasNotes
+          });
+        }
+      } else {
+        // 로그인되지 않은 경우 기본값으로 온보딩 필요
+        await _preferencesService.setOnboardingCompleted(false);
+        debugPrint('로그인되지 않음: 온보딩 필요로 설정');
+      }
+      
       final isCompleted = await _preferencesService.isOnboardingCompleted();
       
       if (mounted) {
@@ -76,6 +175,12 @@ class _AppState extends State<App> {
       debugPrint('온보딩 상태 확인 완료: $_isOnboardingCompleted (소요시간: ${duration.inMilliseconds}ms)');
     } catch (e) {
       debugPrint('온보딩 상태 확인 중 오류 발생: $e');
+      // 오류 발생 시 기본값으로 온보딩 필요
+      if (mounted) {
+        setState(() {
+          _isOnboardingCompleted = false;
+        });
+      }
     }
   }
 
@@ -103,22 +208,11 @@ class _AppState extends State<App> {
       final firebaseDuration = DateTime.now().difference(startTime);
       debugPrint('Firebase 초기화 상태 확인 완료 (소요시간: ${firebaseDuration.inMilliseconds}ms)');
 
-      // 사용자 인증 상태 확인
+      // 사용자 인증 상태 확인 (userAuthenticationChecked 확인 단계 건너뛰기)
       final authStartTime = DateTime.now();
       debugPrint('사용자 인증 상태 확인 시작 (${authStartTime.toString()})');
       
-      final userAuthenticationChecked =
-          await widget.initializationService.isUserAuthenticationChecked;
-
-      if (!userAuthenticationChecked) {
-        setState(() {
-          _error = widget.initializationService.authError;
-        });
-        debugPrint('사용자 인증 상태 확인 실패: $_error');
-        return;
-      }
-
-      // 사용자가 로그인되어 있는지 확인
+      // 사용자가 로그인되어 있는지 직접 확인
       setState(() {
         _isUserAuthenticated = widget.initializationService.isUserAuthenticated;
       });
@@ -144,16 +238,25 @@ class _AppState extends State<App> {
   void _handleLogout() async {
     debugPrint('로그아웃 시작...');
     
-    // 먼저 InitializationService를 통해 로그아웃 처리
-    await widget.initializationService.signOut();
-    
-    // 그 다음 UI 상태 업데이트
-    setState(() {
-      _isUserAuthenticated = false;
-      _isOnboardingCompleted = false; // 온보딩 상태도 초기화
-    });
-    
-    debugPrint('로그아웃 처리 완료: _isUserAuthenticated = $_isUserAuthenticated, _isOnboardingCompleted = $_isOnboardingCompleted');
+    try {
+      // 로그아웃 처리 전 상태 초기화
+      setState(() {
+        _isUserAuthenticated = false;
+        _isOnboardingCompleted = false;
+      });
+      
+      // 로그아웃 처리
+      await widget.initializationService.signOut();
+      
+      // 화면 강제 갱신
+      if (mounted) {
+        setState(() {});
+      }
+      
+      debugPrint('로그아웃 처리 완료: _isUserAuthenticated = $_isUserAuthenticated, _isOnboardingCompleted = $_isOnboardingCompleted');
+    } catch (e) {
+      debugPrint('로그아웃 중 오류 발생: $e');
+    }
   }
 
   @override
@@ -211,11 +314,7 @@ class _AppState extends State<App> {
       return LoginScreen(
         initializationService: widget.initializationService,
         onLoginSuccess: _handleLoginSuccess,
-        onSkipLogin: () {
-          setState(() {
-            _isUserAuthenticated = true;
-          });
-        },
+        onSkipLogin: null, // 익명 로그인 기능 제거
       );
     }
   }
@@ -290,5 +389,10 @@ class _AppState extends State<App> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 }

@@ -301,11 +301,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   Future<void> _handleGoogleSignIn() async {
     _setLoading(true);
     try {
-      // Firebase 초기화 확인
-      if (!Firebase.apps.isNotEmpty) {
-        throw Exception('Firebase가 초기화되지 않았습니다.');
-      }
-
+      // Firebase 초기화 확인 없이 바로 로그인 시도
       final user = await widget.initializationService.signInWithGoogle();
       if (user != null) {
         widget.onLoginSuccess();
@@ -322,11 +318,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   Future<void> _handleAppleSignIn() async {
     _setLoading(true);
     try {
-      // Firebase 초기화 확인
-      if (!Firebase.apps.isNotEmpty) {
-        throw Exception('Firebase가 초기화되지 않았습니다.');
-      }
-
+      // Firebase 초기화 확인 없이 바로 로그인 시도
       final user = await widget.initializationService.signInWithApple();
       if (user != null) {
         widget.onLoginSuccess();
@@ -355,29 +347,30 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     if (mounted) {
       setState(() {
         _errorMessage = message;
+        _isLoading = false;
       });
     }
   }
 
   // Firebase 초기화 메서드
   Future<void> _initializeFirebase() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    
     try {
-      final isInitialized = await widget.initializationService.initializeFirebase(
-        options: DefaultFirebaseOptions.currentPlatform
-      );
+      final result = await widget.initializationService.initializeFirebase();
       
-      if (!isInitialized && mounted) {
-        setState(() {
-          final error = widget.initializationService.firebaseError;
-          _errorMessage = error ?? '앱 초기화 중 오류가 발생했습니다.';
-        });
+      if (!result) {
+        _setError(widget.initializationService.firebaseError ?? '초기화 중 알 수 없는 오류가 발생했습니다.');
+      } else {
+        // 초기화 성공 시 로딩 상태 해제
+        _setLoading(false);
+        debugPrint('Firebase 초기화 완료 및 로딩 상태 해제');
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = '앱 초기화 중 오류가 발생했습니다: $e';
-        });
-      }
+      _setError('Firebase 초기화 중 오류가 발생했습니다: $e');
     }
   }
 }

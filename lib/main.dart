@@ -22,7 +22,7 @@ import 'dart:async';
 // 현재는 중국어만 지원하지만, 향후 다양한 언어를 지원할 예정입니다.
 
 // 메인 함수 - 진입점 최소화
-void main() {
+Future<void> main() async {
   // 플러터 엔진 초기화만 수행하고 바로 앱 실행
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -31,23 +31,33 @@ void main() {
     debugPrint('Flutter 에러: ${details.exception}');
   };
 
-  // 초기화 서비스 인스턴스 생성 (가벼운 작업)
-  final initializationService = InitializationService();
+  try {
+    // Firebase를 먼저 초기화 - 이 부분이 중요
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    debugPrint('Firebase 초기화 성공');
   
-  // 앱 실행 (무거운 초기화 작업 없이 UI 먼저 표시)
-  runApp(App(initializationService: initializationService));
-  
-  // 백그라운드에서 비동기적으로 초기화 진행
-  _initializeInBackground(initializationService);
+    // 초기화 서비스 인스턴스 생성 (가벼운 작업)
+    final initializationService = InitializationService();
+    
+    // 앱 실행 (UI 먼저 표시)
+    runApp(App(initializationService: initializationService));
+    
+    // 백그라운드에서 비동기적으로 나머지 초기화 진행
+    _initializeInBackground(initializationService);
+  } catch (e) {
+    debugPrint('Firebase 초기화 오류: $e');
+    // 오류 발생 시 오류 화면 표시
+    runApp(ErrorApp(errorMessage: 'Firebase 초기화 중 오류가 발생했습니다: $e'));
+  }
 }
 
 // 백그라운드에서 Firebase 및 필수 서비스 초기화
 Future<void> _initializeInBackground(InitializationService initializationService) async {
   try {
-    // Firebase 초기화 (백그라운드 스레드에서)
-    await initializationService.initializeFirebase(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    // Firebase는 이미 초기화되었으므로 인증 상태만 확인
+    await initializationService.markFirebaseInitialized(true);
     
     // 필요한 다른 초기화 작업들은 여기서 수행
     // 앱 이미 실행된 후 비동기로 처리되므로 UI 블로킹 없음
@@ -126,22 +136,27 @@ class ErrorApp extends StatelessWidget {
                   SizedBox(
                     width: 120,
                     height: 120,
-                    child: Image.asset('assets/images/pikabook_logo.png'),
+                    child: Image.asset('assets/images/app_logo.png'),
                   ),
-                  const SizedBox(height: 32),
-                  
-                  // 오류 아이콘
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  const SizedBox(height: 16),
-                  
+                  const SizedBox(height: 24),
                   // 오류 메시지
+                  const Text(
+                    '오류가 발생했습니다',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Text(
                     errorMessage,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 16),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Colors.red,
+                    ),
                   ),
-                  const SizedBox(height: 32),
-                  
+                  const SizedBox(height: 24),
                   // 재시도 버튼
                   ElevatedButton(
                     onPressed: () {
