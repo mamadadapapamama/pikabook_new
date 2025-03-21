@@ -44,6 +44,23 @@ class InitializationService {
   String? get firebaseError => _firebaseError;
   String? get authError => _authError;
 
+  // 오류 메시지 setter
+  void setFirebaseError(String error) {
+    _firebaseError = error;
+    if (!_firebaseInitialized.isCompleted) {
+      _firebaseInitialized.complete(false);
+    }
+    debugPrint('Firebase 오류 설정됨: $error');
+  }
+
+  void setAuthError(String error) {
+    _authError = error;
+    if (!_userAuthenticationChecked.isCompleted) {
+      _userAuthenticationChecked.complete(false);
+    }
+    debugPrint('인증 오류 설정됨: $error');
+  }
+
   // 사용자 인증 상태 getter
   bool get isUserAuthenticated => FirebaseAuth.instance.currentUser != null;
   bool get isAnonymousUser => FirebaseAuth.instance.currentUser?.isAnonymous ?? false;

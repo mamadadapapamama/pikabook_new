@@ -179,39 +179,36 @@ class _AppState extends State<App> {
       return _buildErrorScreen();
     }
 
-    // 디버그 모드에서 테스트 화면 표시
-    if (kDebugMode) {
-      // 온보딩 화면 테스트를 위해 주석 해제
-      // return const OnboardingScreen();
+    // Firebase가 초기화되지 않았거나 초기화 확인 중인 경우
+    if (!_isFirebaseInitialized) {
+      debugPrint('Firebase 초기화 중 - 스플래시 화면 표시');
+      return const SplashScreen();
     }
 
-    // Firebase 초기화가 완료된 경우
-    if (_isFirebaseInitialized) {
-      // 사용자가 로그인되어 있는 경우
-      if (_isUserAuthenticated) {
-        // 온보딩 완료 여부에 따라 화면 결정
-        if (_isOnboardingCompleted) {
-          return const HomeScreen();
-        } else {
-          return OnboardingScreen(
-            onComplete: () {
-              setState(() {
-                _isOnboardingCompleted = true;
-              });
-            },
-          );
-        }
+    // 사용자가 로그인되어 있는 경우
+    if (_isUserAuthenticated) {
+      // 온보딩 완료 여부에 따라 화면 결정
+      if (_isOnboardingCompleted) {
+        debugPrint('로그인 완료 및 온보딩 완료 - 홈 화면 표시');
+        return const HomeScreen();
       } else {
-        // 로그인 화면 표시
-        return LoginScreen(
-          initializationService: widget.initializationService,
-          onLoginSuccess: _handleLoginSuccess,
+        debugPrint('로그인 완료, 온보딩 필요 - 온보딩 화면 표시');
+        return OnboardingScreen(
+          onComplete: () {
+            setState(() {
+              _isOnboardingCompleted = true;
+            });
+          },
         );
       }
+    } else {
+      // 로그인 화면 표시
+      debugPrint('로그인 필요 - 로그인 화면 표시');
+      return LoginScreen(
+        initializationService: widget.initializationService,
+        onLoginSuccess: _handleLoginSuccess,
+      );
     }
-
-    // 초기화 중인 경우
-    return const SplashScreen();
   }
 
   Widget _buildErrorScreen() {
