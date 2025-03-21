@@ -15,130 +15,44 @@ import 'services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/chinese_segmenter_service.dart';
 import 'utils/language_constants.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'dart:async';
 
 // MARK: 다국어 지원을 위한 확장 포인트
 // 앱의 시작점에서 언어 설정을 초기화합니다.
 // 현재는 중국어만 지원하지만, 향후 다양한 언어를 지원할 예정입니다.
 
-// 앱 초기화 상태를 추적하기 위한 전역 타이머
-Stopwatch? _globalInitTimer;
-
+// 메인 함수 - 진입점 최소화
 void main() {
-  // 앱 시작 시간 추적 시작
-  _globalInitTimer = Stopwatch()..start();
-  debugPrint('========================================');
-  debugPrint('| 앱 시작: ${DateTime.now().toString()} |');
-  debugPrint('========================================');
+  // 플러터 엔진 초기화만 수행하고 바로 앱 실행
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // 에러 로깅 설정
+  FlutterError.onError = (details) {
+    debugPrint('Flutter 에러: ${details.exception}');
+  };
 
-  // 모든 예외를 캡처하여 앱이 충돌하지 않도록 함
-  runZonedGuarded(() async {
-    try {
-      // 1. 가능한 빨리 Flutter 엔진 초기화
-      debugPrint('Flutter 엔진 초기화 시작...');
-      WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-      debugPrint('Flutter 엔진 초기화 완료 (${_globalInitTimer?.elapsedMilliseconds}ms)');
-      
-      // 2. 네이티브 스플래시 화면 유지
-      FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
-      
-      // 3. 초기화 서비스 인스턴스 생성 (가벼운 동기 작업)
-      debugPrint('초기화 서비스 생성 중...');
-      final initializationService = InitializationService();
-      debugPrint('초기화 서비스 생성 완료 (${_globalInitTimer?.elapsedMilliseconds}ms)');
-      
-      // 4. 앱 실행 (UI 렌더링 시작)
-      debugPrint('앱 UI 렌더링 시작...');
-      runApp(App(initializationService: initializationService));
-      debugPrint('앱 UI 렌더링 시작됨 (${_globalInitTimer?.elapsedMilliseconds}ms)');
-      
-      // 5. 백그라운드에서 무거운 초기화 작업 비동기 실행 (UI 블로킹 방지)
-      _initializeInBackground(initializationService);
-      
-    } catch (e, stackTrace) {
-      // 초기화 중 오류 발생 시 로깅 및 간단한 오류 화면 표시
-      debugPrint('앱 초기화 중 치명적 오류: $e');
-      debugPrint(stackTrace.toString());
-      
-      // 네이티브 스플래시 제거 (오류 발생해도 제거해야 함)
-      FlutterNativeSplash.remove();
-      
-      // 간단한 오류 화면 표시
-      runApp(MaterialApp(
-        home: Scaffold(
-          backgroundColor: Colors.white,
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                const SizedBox(height: 20),
-                Text('앱 초기화 오류: $e', 
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () {
-                    // 앱 재시작 (실제로는 프로세스 재시작이 필요할 수 있음)
-                    main();
-                  },
-                  child: const Text('다시 시도'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ));
-    }
-  }, (error, stack) {
-    // 글로벌 예외 핸들러
-    debugPrint('예상치 못한 오류 발생: $error');
-    debugPrint(stack.toString());
-  });
+  // 초기화 서비스 인스턴스 생성 (가벼운 작업)
+  final initializationService = InitializationService();
+  
+  // 앱 실행 (무거운 초기화 작업 없이 UI 먼저 표시)
+  runApp(App(initializationService: initializationService));
+  
+  // 백그라운드에서 비동기적으로 초기화 진행
+  _initializeInBackground(initializationService);
 }
 
-// 백그라운드에서 무거운 초기화 작업 실행 (UI 블로킹 방지)
+// 백그라운드에서 Firebase 및 필수 서비스 초기화
 Future<void> _initializeInBackground(InitializationService initializationService) async {
-  debugPrint('백그라운드 초기화 시작...');
-  
   try {
-    // 1. Firebase 초기화 (무거운 작업)
-    final firebaseTimer = Stopwatch()..start();
-    debugPrint('Firebase 초기화 시작...');
-    
-    // InitializationService를 통해 Firebase 초기화
+    // Firebase 초기화 (백그라운드 스레드에서)
     await initializationService.initializeFirebase(
       options: DefaultFirebaseOptions.currentPlatform,
     );
     
-    debugPrint('Firebase 초기화 완료 (${firebaseTimer.elapsedMilliseconds}ms)');
-    
-    // 2. 앱 설정 로드 (상대적으로 가벼운 작업)
-    final settingsTimer = Stopwatch()..start();
-    debugPrint('앱 설정 로드 시작...');
-    await loadAppSettings();
-    debugPrint('앱 설정 로드 완료 (${settingsTimer.elapsedMilliseconds}ms)');
-    
-    // 3. 캐시 서비스 초기화 (무거운 작업일 수 있음)
-    final cacheTimer = Stopwatch()..start();
-    debugPrint('캐시 서비스 초기화 시작...');
-    await UnifiedCacheService().initialize();
-    debugPrint('캐시 서비스 초기화 완료 (${cacheTimer.elapsedMilliseconds}ms)');
-    
-    // 4. 기타 필요한 서비스 초기화 (필요시 추가)
-    
-    // 모든 초기화 완료 후 네이티브 스플래시 제거
-    debugPrint('모든 백그라운드 초기화 작업 완료 (${_globalInitTimer?.elapsedMilliseconds}ms)');
-    FlutterNativeSplash.remove();
-    debugPrint('네이티브 스플래시 제거됨');
-    
+    // 필요한 다른 초기화 작업들은 여기서 수행
+    // 앱 이미 실행된 후 비동기로 처리되므로 UI 블로킹 없음
   } catch (e) {
-    debugPrint('백그라운드 초기화 중 오류 발생: $e');
-    // 오류가 발생해도 스플래시는 제거해야 함
-    FlutterNativeSplash.remove();
-    debugPrint('오류 발생으로 네이티브 스플래시 제거됨');
+    debugPrint('백그라운드 초기화 오류: $e');
   }
 }
 
@@ -180,6 +94,69 @@ Future<void> saveLanguageSettings() async {
     debugPrint('언어 설정 저장 - 소스 언어: $sourceLanguage, 타겟 언어: $targetLanguage');
   } catch (e) {
     debugPrint('언어 설정 저장 중 오류 발생: $e');
+  }
+}
+
+// 오류 앱 컴포넌트 - 앱 시작 중 오류 발생 시 표시
+class ErrorApp extends StatelessWidget {
+  final String errorMessage;
+
+  const ErrorApp({Key? key, required this.errorMessage}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Pikabook 오류',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFFF8F56),
+          primary: const Color(0xFFFF8F56),
+        ),
+        useMaterial3: true,
+      ),
+      home: Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 로고
+                  SizedBox(
+                    width: 120,
+                    height: 120,
+                    child: Image.asset('assets/images/pikabook_logo.png'),
+                  ),
+                  const SizedBox(height: 32),
+                  
+                  // 오류 아이콘
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  const SizedBox(height: 16),
+                  
+                  // 오류 메시지
+                  Text(
+                    errorMessage,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 32),
+                  
+                  // 재시도 버튼
+                  ElevatedButton(
+                    onPressed: () {
+                      // 앱 재시작
+                      main();
+                    },
+                    child: const Text('다시 시도'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -288,14 +288,13 @@ class AuthService {
 
   // 로그아웃
   Future<void> signOut() async {
-    debugPrint('AuthService: 로그아웃 시작');
+    // 로그아웃 전에 현재 사용자 정보 저장
+    final user = _auth.currentUser;
     
-    // 현재 로그인된 사용자 정보 기록
-    final User? user = _auth.currentUser;
     if (user != null) {
-      debugPrint('AuthService: 로그아웃 - 현재 사용자 ID: ${user.uid}, 익명여부: ${user.isAnonymous}');
+      debugPrint('AuthService: 로그아웃 - 사용자 ${user.uid} (익명: ${user.isAnonymous})');
       
-      // 필요한 경우 Firestore에 로그아웃 시간 기록
+      // 로그아웃 시간 기록
       try {
         await _firestore.collection('users').doc(user.uid).update({
           'lastLogoutAt': FieldValue.serverTimestamp(),
@@ -319,7 +318,7 @@ class AuthService {
     await _auth.signOut();
     debugPrint('AuthService: Firebase 로그아웃 완료');
     
-    // 익명 로그인 자동화 방지를 위한 추가 처리는 InitializationService에서 담당
+    // 어떠한 자동 로그인도 수행하지 않음 - 로그인 화면으로 돌아감
   }
 
   // 사용자 계정 삭제
