@@ -141,28 +141,19 @@ class _AppState extends State<App> {
     debugPrint('로그인 성공 처리됨: _isUserAuthenticated = $_isUserAuthenticated');
   }
 
-  void _handleLogout() {
+  void _handleLogout() async {
+    debugPrint('로그아웃 시작...');
+    
+    // 먼저 InitializationService를 통해 로그아웃 처리
+    await widget.initializationService.signOut();
+    
+    // 그 다음 UI 상태 업데이트
     setState(() {
       _isUserAuthenticated = false;
       _isOnboardingCompleted = false; // 온보딩 상태도 초기화
     });
-    debugPrint('로그아웃 처리됨: _isUserAuthenticated = $_isUserAuthenticated, _isOnboardingCompleted = $_isOnboardingCompleted');
     
-    // 로그아웃 후 앱 상태 초기화
-    _restartInitializationCheck();
-  }
-
-  // 초기화 확인 재시작 (로그아웃 후 호출)
-  void _restartInitializationCheck() {
-    // 앱 상태 초기화
-    setState(() {
-      _error = null;
-      // Firebase는 이미 초기화되어 있으므로 _isFirebaseInitialized는 true 유지
-    });
-    
-    // 로그아웃 후에는 사용자가 로그인 화면으로 돌아가도록 설정
-    // 초기화 상태 확인 다시 시작하지 않고 명시적으로 로그인 화면으로 전환
-    debugPrint('로그아웃 후 로그인 화면으로 전환 준비됨');
+    debugPrint('로그아웃 처리 완료: _isUserAuthenticated = $_isUserAuthenticated, _isOnboardingCompleted = $_isOnboardingCompleted');
   }
 
   @override
@@ -188,24 +179,14 @@ class _AppState extends State<App> {
         'Onboarding completed=$_isOnboardingCompleted, '
         'Error=$_error');
         
+    // 앱 초기화 중인 경우 로딩 화면 표시 (스플래시 역할)
+    if (!_isFirebaseInitialized || _isCheckingInitialization) {
+      return _buildLoadingScreen();
+    }
+
     // 오류가 있는 경우
     if (_error != null) {
       return _buildErrorScreen();
-    }
-
-    // Firebase가 초기화되지 않았거나 초기화 확인 중인 경우
-    if (!_isFirebaseInitialized) {
-      debugPrint('Firebase 초기화 중 - 로그인 화면으로 바로 이동');
-      return LoginScreen(
-        initializationService: widget.initializationService,
-        onLoginSuccess: _handleLoginSuccess,
-        isInitializing: true,
-        onSkipLogin: () {
-          setState(() {
-            _isUserAuthenticated = true;
-          });
-        },
-      );
     }
 
     // 사용자가 로그인되어 있는 경우
@@ -237,6 +218,48 @@ class _AppState extends State<App> {
         },
       );
     }
+  }
+
+  // 로딩 화면 (스플래시 화면 역할)
+  Widget _buildLoadingScreen() {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/splash_background.png'),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 로고 이미지
+                SizedBox(
+                  width: 160,
+                  height: 160,
+                  child: Image.asset(
+                    'assets/images/pikabook_logo.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                
+                // 로딩 인디케이터
+                const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF8F56)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildErrorScreen() {

@@ -42,30 +42,30 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       _initializeFirebase();
     }
     
-    // 애니메이션 초기화
+    // 애니메이션 초기화 - 매우 빠르게 실행되도록 수정
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1800),
+      duration: const Duration(milliseconds: 600),
       vsync: this,
     );
 
     _fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.0, 0.7, curve: Curves.easeIn),
+        curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
       ),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
+    _scaleAnimation = Tween<double>(begin: 0.98, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+        curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
       ),
     );
     
-    _slideAnimation = Tween<double>(begin: 30, end: 0).animate(
+    _slideAnimation = Tween<double>(begin: 10, end: 0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.2, 0.8, curve: Curves.easeOut),
+        curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
       ),
     );
 
@@ -84,10 +84,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     return Scaffold(
       body: Stack(
         children: [
-          // 배경 색상
+          // 배경 이미지
           Positioned.fill(
-            child: Container(
-              color: ColorTokens.secondary, // secondary 색상 사용 (#226357)
+            child: Image.asset(
+              'assets/images/splash_background.png',
+              fit: BoxFit.cover,
             ),
           ),
           // 그라데이션 오버레이
@@ -99,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.black.withOpacity(0.0),
-                    Colors.black.withOpacity(0.3),
+                    Colors.black.withOpacity(0.4),
                     Colors.black.withOpacity(0.0),
                   ],
                   stops: const [0.0, 0.5, 1.0],
@@ -139,8 +140,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(30),
                                       child: Image.asset(
-                                        'assets/images/logo_bird.png',
-                                        fit: BoxFit.cover,
+                                        'assets/images/pikabook_logo.png',
+                                        fit: BoxFit.contain,
                                       ),
                                     ),
                                   ),
@@ -201,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   leadingIcon: Padding(
                                     padding: const EdgeInsets.only(right: 8.0),
                                     child: Image.asset(
-                                      'assets/images/social_icons/google.png',
+                                      'assets/images/social_icons/google_2x.png',
                                       width: 24,
                                       height: 24,
                                       errorBuilder: (context, error, stackTrace) {

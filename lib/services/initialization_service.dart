@@ -67,98 +67,66 @@ class InitializationService {
 
   // Firebase 초기화 메서드
   Future<bool> initializeFirebase({required FirebaseOptions options}) async {
-    final startTime = DateTime.now();
-    final initElapsed = startTime.difference(_initStartTime);
-    debugPrint('Firebase 초기화 시작 (앱 시작 후 ${initElapsed.inMilliseconds}ms)');
-    
+    if (_firebaseInitialized.isCompleted) {
+      // 이미 초기화가 시작된 경우 결과 반환
+      return _firebaseInitialized.future;
+    }
+
     try {
-      // Firebase 앱이 이미 초기화되었는지 확인
-      if (Firebase.apps.isNotEmpty) {
-        debugPrint('Firebase가 이미 초기화되어 있음');
-        if (!_firebaseInitialized.isCompleted) {
-          _firebaseInitialized.complete(true);
-        }
-        return true;
-      }
-
       // Firebase 초기화
-      debugPrint('Firebase 초기화 중...');
       await Firebase.initializeApp(options: options);
-
-      // 초기화 완료
-      if (!_firebaseInitialized.isCompleted) {
-        _firebaseInitialized.complete(true);
-      }
       
-      final duration = DateTime.now().difference(startTime);
-      debugPrint('Firebase 초기화 성공 (소요시간: ${duration.inMilliseconds}ms)');
+      // Firestore 설정 - 최적화를 위한 캐시 설정
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true, // 오프라인 지원을 위한 캐시 활성화
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED, // 캐시 크기 최적화
+      );
       
-      // Firebase 초기화 후 백그라운드에서 인증 상태 확인
-      Future.microtask(() => _checkAuthenticationState());
+      // 초기화 완료 표시
+      await markFirebaseInitialized(true);
+      
+      // 사용자 인증 상태 확인 (별도의 비동기 작업으로 분리)
+      _checkAuthenticationState();
       
       return true;
     } catch (e) {
-      debugPrint('Firebase 초기화 실패: $e');
+      // 초기화 실패 기록
       _firebaseError = '앱 초기화 중 오류가 발생했습니다: $e';
-      if (!_firebaseInitialized.isCompleted) {
-        _firebaseInitialized.complete(false);
-      }
+      await markFirebaseInitialized(false);
       return false;
     }
   }
   
   // Firebase가 이미 초기화되었음을 표시하는 메서드
-  Future<void> markFirebaseInitialized() async {
-    if (_firebaseInitialized.isCompleted) {
-      debugPrint('Firebase 초기화가 이미 완료되어 있어 markFirebaseInitialized()를 건너뜁니다.');
-      return;
-    }
+  Future<void> markFirebaseInitialized(bool success) async {
+    // 중복 호출 방지
+    if (_firebaseInitialized.isCompleted) return;
     
-    final elapsed = DateTime.now().difference(_initStartTime);
-    debugPrint('Firebase 초기화 완료 표시 (외부 초기화, 소요시간: ${elapsed.inMilliseconds}ms)');
-    _firebaseInitialized.complete(true);
-    
-    // 사용자 인증 상태 확인 (필수 서비스) - 백그라운드로 처리
-    Future.microtask(() => _checkAuthenticationState());
+    _firebaseInitialized.complete(success);
   }
 
   // 사용자 인증 상태 확인 메서드
   Future<void> _checkAuthenticationState() async {
-    final startTime = DateTime.now();
-    debugPrint('사용자 인증 상태 확인 시작 (${startTime.toString()})');
-    
     try {
       // 이미 완료된 경우 스킵
       if (_userAuthenticationChecked.isCompleted) {
-        debugPrint('사용자 인증 상태가 이미 확인됨');
         return;
       }
 
       // Firebase Auth 인스턴스 가져오기
       final auth = FirebaseAuth.instance;
-      debugPrint('Firebase Auth 인스턴스 가져옴, 현재 사용자 확인 중...');
 
       // 현재 사용자 확인 (null이면 로그인되지 않은 상태)
       final currentUser = auth.currentUser;
 
       if (currentUser != null) {
-        debugPrint('사용자가 이미 로그인되어 있음: ${currentUser.uid} (익명: ${currentUser.isAnonymous})');
-        
-        // 추가: 사용자 정보 확인 
+        // 사용자 정보 확인 
         _saveLastLoginActivity(currentUser);
-      } else {
-        debugPrint('로그인된 사용자 없음 - 로그인 화면으로 이동');
-        // 중요: 이전에 여기서 자동 익명 로그인이 발생했을 수 있음
-        // 이제는 로그인 화면으로 이동하도록 명시적으로 처리
       }
 
-      // 인증 상태 확인 완료
+      // 인증 상태 확인 완료 (로그인 화면으로 이동할 수 있도록)
       _userAuthenticationChecked.complete(true);
-      
-      final duration = DateTime.now().difference(startTime);
-      debugPrint('인증 상태 확인 완료 (소요시간: ${duration.inMilliseconds}ms)');
     } catch (e) {
-      debugPrint('인증 상태 확인 실패: $e');
       _authError = '인증 상태를 확인하는 중 오류가 발생했습니다: $e';
       _userAuthenticationChecked.complete(false);
     }
@@ -386,67 +354,82 @@ class InitializationService {
 
   // 사용자 로그인 처리 및 온보딩 상태 관리
   Future<void> handleUserLogin(User user) async {
-    debugPrint('새 로그인 사용자 처리 중: ${user.uid}');
+    debugPrint('사용자 로그인 처리 시작: ${user.uid} (익명: ${user.isAnonymous})');
     
     try {
-      // Firestore에서 사용자 데이터 확인
       final firestore = FirebaseFirestore.instance;
+      final userPrefs = UserPreferencesService();
+      
+      // Firestore에서 사용자 데이터 확인
       final userDoc = await firestore.collection('users').doc(user.uid).get();
       
-      // 사용자의 노트 데이터 확인
-      final notesSnapshot = await firestore
+      // 사용자의 노트 데이터 확인 - userId 필드로 필터링
+      final notesQuery = await firestore
           .collection('notes')
           .where('userId', isEqualTo: user.uid)
           .limit(1)
           .get();
       
-      final hasNotes = notesSnapshot.docs.isNotEmpty;
+      final hasNotes = notesQuery.docs.isNotEmpty;
       debugPrint('사용자 노트 데이터 확인: ${hasNotes ? "있음" : "없음"}');
       
-      // 계정 첫 로그인 여부 확인
-      final isNewUser = !userDoc.exists || userDoc.data()?['onboardingCompleted'] != true;
+      // 계정 첫 로그인 여부 확인 - 완전히 새로운 사용자인 경우
+      final isNewUser = !userDoc.exists;
       
       if (isNewUser) {
-        debugPrint('새 사용자 계정 확인: 온보딩 상태 초기화');
+        debugPrint('새 사용자 계정: 온보딩 표시');
         
-        // 온보딩 상태 초기화 (새 계정이면 온보딩 표시)
-        final UserPreferencesService prefs = UserPreferencesService();
-        await prefs.setOnboardingCompleted(false);
+        // 온보딩 상태 설정 - 새 계정이면 온보딩 필요
+        await userPrefs.setOnboardingCompleted(false);
         
-        // Firestore에 사용자 정보 업데이트
+        // Firestore에 사용자 정보 생성
         await firestore.collection('users').doc(user.uid).set({
           'isNew': true,
-          'onboardingCompleted': false,
+          'createdAt': FieldValue.serverTimestamp(),
           'lastLogin': FieldValue.serverTimestamp(),
+          'onboardingCompleted': false,
+          'isAnonymous': user.isAnonymous,
+          'email': user.email,
+          'displayName': user.displayName,
         }, SetOptions(merge: true));
-      } else {
-        debugPrint('기존 사용자 계정 확인: 마지막 로그인 시간 업데이트');
         
-        // 노트 데이터가 없는 경우에만 온보딩 표시
+      } else {
+        // 기존 사용자인 경우 - 노트 데이터 기반으로 온보딩 결정
         if (!hasNotes) {
-          debugPrint('기존 사용자지만 노트 데이터가 없음: 온보딩 표시');
-          final UserPreferencesService prefs = UserPreferencesService();
-          await prefs.setOnboardingCompleted(false);
+          debugPrint('기존 사용자지만 노트 데이터 없음: 온보딩 표시');
           
-          // Firestore 사용자 정보 업데이트
+          // 노트가 없으면 온보딩 표시
+          await userPrefs.setOnboardingCompleted(false);
+          
+          // Firestore 사용자 상태 업데이트
           await firestore.collection('users').doc(user.uid).update({
             'onboardingCompleted': false,
             'lastLogin': FieldValue.serverTimestamp(),
           });
         } else {
-          debugPrint('기존 사용자이고 노트 데이터가 있음: 온보딩 건너뜀');
-          final UserPreferencesService prefs = UserPreferencesService();
-          await prefs.setOnboardingCompleted(true);
+          debugPrint('기존 사용자 & 노트 데이터 있음: 온보딩 건너뛰기');
           
-          // 기존 사용자 마지막 로그인 시간 업데이트
+          // 노트가 있으면 온보딩 건너뛰기
+          await userPrefs.setOnboardingCompleted(true);
+          
+          // Firestore 사용자 상태 업데이트
           await firestore.collection('users').doc(user.uid).update({
             'onboardingCompleted': true,
             'lastLogin': FieldValue.serverTimestamp(),
           });
         }
       }
+      
+      debugPrint('사용자 로그인 처리 완료: ${user.uid}');
     } catch (e) {
       debugPrint('사용자 로그인 처리 중 오류: $e');
+      // 오류 발생 시 기본값으로 온보딩 표시
+      try {
+        final userPrefs = UserPreferencesService();
+        await userPrefs.setOnboardingCompleted(false);
+      } catch (e2) {
+        debugPrint('기본 온보딩 상태 설정 중 오류: $e2');
+      }
     }
   }
 }
