@@ -5,17 +5,20 @@ import '../../../services/initialization_service.dart';
 import '../../../theme/tokens/color_tokens.dart';
 import '../../../theme/tokens/typography_tokens.dart';
 import '../../../widgets/loading_indicator.dart';
+import '../../../firebase_options.dart';
 
 class LoginScreen extends StatefulWidget {
   final InitializationService initializationService;
   final VoidCallback onLoginSuccess;
   final VoidCallback? onSkipLogin;
+  final bool isInitializing;
 
   const LoginScreen({
     Key? key,
     required this.initializationService,
     required this.onLoginSuccess,
     this.onSkipLogin,
+    this.isInitializing = false,
   }) : super(key: key);
 
   @override
@@ -33,6 +36,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
+    
+    // Firebase 초기화가 필요한 경우
+    if (widget.isInitializing) {
+      _initializeFirebase();
+    }
     
     // 애니메이션 초기화
     _animationController = AnimationController(
@@ -188,7 +196,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 // Google 로그인 버튼
                                 _buildLoginButton(
                                   text: 'Google 로 로그인',
-                                  icon: Icons.g_mobiledata,
+                                  icon: null,
+                                  iconAsset: 'assets/images/social_icons/google.png',
                                   onPressed: _handleGoogleSignIn,
                                   backgroundColor: Colors.white,
                                   textColor: const Color(0xFF031B31),
@@ -198,7 +207,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 // Apple 로그인 버튼
                                 _buildLoginButton(
                                   text: 'Apple 로 로그인',
-                                  icon: Icons.apple,
+                                  icon: null,
+                                  iconAsset: 'assets/images/social_icons/apple.png',
                                   onPressed: _handleAppleSignIn,
                                   backgroundColor: ColorTokens.primary,
                                   textColor: Colors.white,
@@ -232,10 +242,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   Widget _buildLoginButton({
     required String text,
-    required IconData icon,
+    required IconData? icon,
     required VoidCallback onPressed,
     required Color backgroundColor,
     required Color textColor,
+    String? iconAsset,
   }) {
     return Container(
       width: double.infinity,
@@ -254,12 +265,27 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 24),
-            const SizedBox(width: 8),
+            if (iconAsset != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 12.0),
+                child: Image.asset(
+                  iconAsset,
+                  width: 24,
+                  height: 24,
+                ),
+              )
+            else if (icon != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 12.0),
+                child: Icon(icon, size: 24),
+              ),
             Text(
               text,
               style: TypographyTokens.button.copyWith(
                 color: textColor,
+                fontFamily: 'Poppins',
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -326,6 +352,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       setState(() {
         _errorMessage = message;
       });
+    }
+  }
+
+  // Firebase 초기화 메서드
+  Future<void> _initializeFirebase() async {
+    try {
+      await widget.initializationService.initializeFirebase(options: DefaultFirebaseOptions.currentPlatform);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = '앱 초기화 중 오류가 발생했습니다: $e';
+        });
+      }
     }
   }
 }
