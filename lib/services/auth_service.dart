@@ -288,8 +288,38 @@ class AuthService {
 
   // 로그아웃
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
+    debugPrint('AuthService: 로그아웃 시작');
+    
+    // 현재 로그인된 사용자 정보 기록
+    final User? user = _auth.currentUser;
+    if (user != null) {
+      debugPrint('AuthService: 로그아웃 - 현재 사용자 ID: ${user.uid}, 익명여부: ${user.isAnonymous}');
+      
+      // 필요한 경우 Firestore에 로그아웃 시간 기록
+      try {
+        await _firestore.collection('users').doc(user.uid).update({
+          'lastLogoutAt': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        debugPrint('AuthService: 로그아웃 기록 저장 실패: $e');
+      }
+    } else {
+      debugPrint('AuthService: 로그아웃 - 로그인된 사용자 없음');
+    }
+    
+    // 소셜 로그인 연결 해제
+    try {
+      await _googleSignIn.signOut();
+      debugPrint('AuthService: Google 로그인 연결 해제 완료');
+    } catch (e) {
+      debugPrint('AuthService: Google 로그인 연결 해제 실패: $e');
+    }
+    
+    // Firebase 로그아웃
     await _auth.signOut();
+    debugPrint('AuthService: Firebase 로그아웃 완료');
+    
+    // 익명 로그인 자동화 방지를 위한 추가 처리는 InitializationService에서 담당
   }
 
   // 사용자 계정 삭제

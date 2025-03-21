@@ -147,8 +147,23 @@ class _AppState extends State<App> {
   void _handleLogout() {
     setState(() {
       _isUserAuthenticated = false;
+      _isOnboardingCompleted = false; // 온보딩 상태도 초기화
     });
-    debugPrint('로그아웃 처리됨: _isUserAuthenticated = $_isUserAuthenticated');
+    debugPrint('로그아웃 처리됨: _isUserAuthenticated = $_isUserAuthenticated, _isOnboardingCompleted = $_isOnboardingCompleted');
+    
+    // 로그아웃 후 앱 상태 초기화
+    _restartInitializationCheck();
+  }
+
+  // 초기화 확인 재시작 (로그아웃 후 호출)
+  void _restartInitializationCheck() {
+    // 앱 상태 초기화
+    setState(() {
+      _error = null;
+    });
+    
+    // 초기화 상태 확인 다시 시작
+    _startInitializationCheck();
   }
 
   @override
