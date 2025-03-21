@@ -239,23 +239,27 @@ class _AppState extends State<App> {
     debugPrint('로그아웃 시작...');
     
     try {
-      // 로그아웃 처리 전 상태 초기화
-      setState(() {
-        _isUserAuthenticated = false;
-        _isOnboardingCompleted = false;
-      });
-      
-      // 로그아웃 처리
+      // 캐시와 Firebase 로그아웃 처리
       await widget.initializationService.signOut();
       
-      // 화면 강제 갱신
+      // 상태 변경을 통해 LoginScreen으로 전환
       if (mounted) {
-        setState(() {});
+        setState(() {
+          _isUserAuthenticated = false;
+          _isOnboardingCompleted = false;
+        });
+        
+        // 앱 상태 디버깅
+        debugPrint('로그아웃 후 상태: _isUserAuthenticated=$_isUserAuthenticated, _isOnboardingCompleted=$_isOnboardingCompleted');
       }
-      
-      debugPrint('로그아웃 처리 완료: _isUserAuthenticated = $_isUserAuthenticated, _isOnboardingCompleted = $_isOnboardingCompleted');
     } catch (e) {
       debugPrint('로그아웃 중 오류 발생: $e');
+      // 오류 처리 - 사용자에게 알림 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('로그아웃 중 오류가 발생했습니다: $e')),
+        );
+      }
     }
   }
 

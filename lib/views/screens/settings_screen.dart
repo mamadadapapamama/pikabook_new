@@ -194,7 +194,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 12),
           
           // 로그아웃 버튼
-          _buildLogoutCard(email),
+          _buildLogoutButton(),
           
           const SizedBox(height: 32),
         ],
@@ -308,44 +308,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
   
-  // 로그아웃 카드 위젯
-  Widget _buildLogoutCard(String email) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(8.0),
-      decoration: BoxDecoration(
-        color: ColorTokens.surface,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: InkWell(
-        onTap: _showLogoutConfirmation,
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '아래 계정에서 로그아웃합니다',
-                    style: TypographyTokens.buttonEn,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    email,
-                    style: TypographyTokens.captionEn.copyWith(
-                      color: ColorTokens.error,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            SvgPicture.asset(
-              'assets/images/icon_logout.svg',
-              width: 24,
-              height: 24,
-            ),
-          ],
+  // 로그아웃 버튼
+  Widget _buildLogoutButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ElevatedButton(
+        onPressed: () async {
+          try {
+            // 로그아웃 함수 호출
+            widget.onLogout();
+            
+            // 로그인 화면으로 직접 이동 (백 스택 모두 제거)
+            if (mounted && Navigator.canPop(context)) {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/',
+                (route) => false, // 모든 이전 스택 제거
+              );
+            }
+          } catch (e) {
+            debugPrint('로그아웃 오류: $e');
+            // 실패 스낵바 표시
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('로그아웃 중 오류가 발생했습니다. 다시 시도해주세요.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.red[100],
+          foregroundColor: Colors.red[800],
+          minimumSize: const Size.fromHeight(48),
         ),
+        child: const Text('로그아웃'),
       ),
     );
   }
@@ -626,83 +625,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (result != null) {
       await _userPreferences.setTargetLanguage(result);
       _loadUserPreferences();
-    }
-  }
-  
-  // 로그아웃 확인 다이얼로그 표시
-  Future<void> _showLogoutConfirmation() async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('로그아웃 확인', style: TypographyTokens.subtitle2),
-        content: Text(
-          '정말 로그아웃 하시겠어요?',
-          style: TypographyTokens.body2,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              '취소',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textTertiary,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              '로그아웃',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.error,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-    
-    if (result == true) {
-      _handleLogout();
-    }
-  }
-  
-  // 로그아웃 처리
-  Future<void> _handleLogout() async {
-    setState(() {
-      _isLoading = true;
-    });
-    
-    try {
-      // Firebase Auth 대신 InitializationService 사용
-      await widget.initializationService.signOut();
-      
-      if (mounted) {
-        // Navigator 관련 작업을 수행하기 전에 로그아웃 콜백 호출
-        widget.onLogout();
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
-    } catch (e) {
-      debugPrint('로그아웃 오류: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '로그아웃 중 오류가 발생했습니다: $e',
-              style: TypographyTokens.caption.copyWith(
-                color: ColorTokens.textLight,
-              ),
-            ),
-            backgroundColor: ColorTokens.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
   }
 }
