@@ -131,8 +131,13 @@ class InitializationService {
 
       if (currentUser != null) {
         debugPrint('사용자가 이미 로그인되어 있음: ${currentUser.uid} (익명: ${currentUser.isAnonymous})');
+        
+        // 추가: 사용자 정보 확인 
+        _saveLastLoginActivity(currentUser);
       } else {
-        debugPrint('로그인된 사용자 없음');
+        debugPrint('로그인된 사용자 없음 - 로그인 화면으로 이동');
+        // 중요: 이전에 여기서 자동 익명 로그인이 발생했을 수 있음
+        // 이제는 로그인 화면으로 이동하도록 명시적으로 처리
       }
 
       // 인증 상태 확인 완료
@@ -144,6 +149,20 @@ class InitializationService {
       debugPrint('인증 상태 확인 실패: $e');
       _authError = '인증 상태를 확인하는 중 오류가 발생했습니다: $e';
       _userAuthenticationChecked.complete(false);
+    }
+  }
+  
+  // 마지막 로그인 활동 저장
+  Future<void> _saveLastLoginActivity(User user) async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      await firestore.collection('users').doc(user.uid).update({
+        'lastActivity': FieldValue.serverTimestamp(),
+        'lastAppVersion': '1.0.0', // 앱 버전 정보 추가
+      });
+      debugPrint('사용자 마지막 활동 정보 업데이트: ${user.uid}');
+    } catch (e) {
+      debugPrint('사용자 활동 정보 업데이트 실패: $e');
     }
   }
 
@@ -283,11 +302,38 @@ class InitializationService {
   // 로그아웃 메서드
   Future<void> signOut() async {
     try {
+      // 로그아웃 전 마지막 사용자 정보 기록
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final wasAnonymous = currentUser?.isAnonymous ?? false;
+      final userId = currentUser?.uid;
+      
+      debugPrint('로그아웃 시작 (UserId: $userId, 익명 여부: $wasAnonymous)');
+      
+      // 로그아웃 처리
       await authService.signOut();
-      debugPrint('로그아웃 성공');
+      
+      // 로그아웃 이후 인증 상태 재설정
+      _userAuthenticationChecked = Completer<bool>();
+      _userAuthenticationChecked.complete(false); // 인증되지 않은 상태로 설정
+      
+      debugPrint('로그아웃 성공 - 인증 상태 초기화됨');
+      
+      // 사용자 기본 설정 초기화 (선택적)
+      await _resetUserPreferences();
     } catch (e) {
       debugPrint('로그아웃 실패: $e');
       _authError = '로그아웃 중 오류가 발생했습니다: $e';
+    }
+  }
+  
+  // 사용자 기본 설정 초기화
+  Future<void> _resetUserPreferences() async {
+    try {
+      final userPreferences = UserPreferencesService();
+      await userPreferences.setOnboardingCompleted(false);
+      debugPrint('사용자 기본 설정 초기화 완료');
+    } catch (e) {
+      debugPrint('사용자 기본 설정 초기화 실패: $e');
     }
   }
 
