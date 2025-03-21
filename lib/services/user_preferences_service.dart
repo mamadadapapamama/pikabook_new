@@ -18,6 +18,7 @@ class UserPreferencesService {
   // SharedPreferences 키
   static const String _useSegmentModeKey = 'use_segment_mode';
   static const String _onboardingCompletedKey = 'onboarding_completed';
+  static const String _hasOnboardedKey = 'has_onboarded'; // 노트 데이터 기반 온보딩 완료 여부
   static const String _sourceLanguageKey = 'source_language';
   static const String _targetLanguageKey = 'target_language';
   static const String _userNameKey = 'user_name';
@@ -53,6 +54,18 @@ class UserPreferencesService {
   Future<bool> isOnboardingCompleted() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_onboardingCompletedKey) ?? false;
+  }
+
+  // 사용자가 노트 데이터 기반으로 온보딩을 진행했는지 여부 설정
+  Future<void> setHasOnboarded(bool hasOnboarded) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_hasOnboardedKey, hasOnboarded);
+  }
+
+  // 사용자가 노트 데이터 기반으로 온보딩을 진행했는지 여부 확인
+  Future<bool> hasOnboarded() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_hasOnboardedKey) ?? false; // 기본값은 온보딩 필요
   }
 
   // 소스 언어 설정 (학습하려는 언어)

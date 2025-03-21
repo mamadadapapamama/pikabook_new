@@ -6,6 +6,13 @@ import 'unified_cache_service.dart';
 import 'auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'user_preferences_service.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'package:crypto/crypto.dart';
+import '../firebase_options.dart';
 
 /// 앱 초기화를 관리하는 서비스
 ///
@@ -13,8 +20,7 @@ import 'user_preferences_service.dart';
 /// 앱 시작 시간을 단축합니다.
 class InitializationService {
   // 초기화 상태를 추적하는 컨트롤러
-  Completer<bool> _firebaseInitialized = Completer<bool>();
-  Completer<bool> _userAuthenticationChecked = Completer<bool>();
+  final Completer<bool> _firebaseInitialized = Completer<bool>();
 
   // 오류 메시지 저장
   String? _firebaseError;
@@ -36,9 +42,7 @@ class InitializationService {
 
   // 상태 확인 getter
   Future<bool> get isFirebaseInitialized => _firebaseInitialized.future;
-  Future<bool> get isUserAuthenticationChecked => _userAuthenticationChecked.future;
   bool get isFirebaseInitializing => !_firebaseInitialized.isCompleted;
-  bool get isUserAuthenticationChecking => !_userAuthenticationChecked.isCompleted;
 
   // 오류 메시지 getter
   String? get firebaseError => _firebaseError;
@@ -55,61 +59,38 @@ class InitializationService {
 
   void setAuthError(String error) {
     _authError = error;
-    if (!_userAuthenticationChecked.isCompleted) {
-      _userAuthenticationChecked.complete(false);
-    }
     debugPrint('인증 오류 설정됨: $error');
   }
 
   // 사용자 인증 상태 getter
   bool get isUserAuthenticated => FirebaseAuth.instance.currentUser != null;
-  bool get isAnonymousUser => FirebaseAuth.instance.currentUser?.isAnonymous ?? false;
 
-  // Firebase 초기화 메서드
-  Future<bool> initializeFirebase({required FirebaseOptions options}) async {
-    if (_firebaseInitialized.isCompleted) {
-      // 이미 초기화가 시작된 경우 결과 반환
-      return _firebaseInitialized.future;
-    }
-
-    try {
-      // Firebase 초기화
-      await Firebase.initializeApp(options: options);
-      
-      // Firestore 설정 - 최적화를 위한 캐시 설정
-      FirebaseFirestore.instance.settings = const Settings(
-        persistenceEnabled: true, // 오프라인 지원을 위한 캐시 활성화
-        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED, // 캐시 크기 최적화
-      );
-      
-      // 초기화 완료 표시
-      await markFirebaseInitialized(true);
-      
-      // 사용자 인증 상태 확인 (별도의 비동기 작업으로 분리)
-      _checkAuthenticationState();
-      
-      return true;
-    } catch (e) {
-      // 초기화 실패 기록
-      _firebaseError = '앱 초기화 중 오류가 발생했습니다: $e';
-      await markFirebaseInitialized(false);
-      return false;
-    }
-  }
-  
-  // Firebase가 이미 초기화되었음을 표시하는 메서드
-  Future<void> markFirebaseInitialized(bool success) async {
-    // 중복 호출 방지
-    if (_firebaseInitialized.isCompleted) return;
+  // 인증 상태 변경 스트림
+  Stream<User?> get authStateChanges {
+    debugPrint('authStateChanges 스트림 요청됨');
     
-    _firebaseInitialized.complete(success);
+    return _firebaseAuth.authStateChanges().map((user) {
+      debugPrint('Firebase 인증 상태 변경 감지: ${user != null ? '로그인' : '로그아웃'}');
+      return user;
+    });
   }
+
+  // GoogleSignIn 인스턴스 설정 (앱 이름 업데이트)
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    // clientId는 iOS에서만 필요하며, Android는 google-services.json에서 설정됨
+    clientId: Platform.isIOS ? DefaultFirebaseOptions.currentPlatform.iosClientId : null,
+    scopes: ['email', 'profile'],
+  );
+
+  final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+
+  InitializationService();
 
   // 사용자 인증 상태 확인 메서드
   Future<void> _checkAuthenticationState() async {
     try {
       // 이미 완료된 경우 스킵
-      if (_userAuthenticationChecked.isCompleted) {
+      if (_firebaseInitialized.isCompleted) {
         return;
       }
 
@@ -120,15 +101,23 @@ class InitializationService {
       final currentUser = auth.currentUser;
 
       if (currentUser != null) {
-        // 사용자 정보 확인 
-        _saveLastLoginActivity(currentUser);
+        // 로그아웃 후 로그인 화면으로 전환해야 하는 상황에서 
+        // 이전 사용자 세션이 남아있는 경우를 방지
+        if (currentUser.isAnonymous) {
+          // 익명 사용자인 경우 강제 로그아웃 처리
+          await signOut();
+          debugPrint('익명 사용자 자동 로그아웃 처리됨');
+        } else {
+          // 일반 사용자인 경우 마지막 로그인 정보 업데이트
+          await _saveLastLoginActivity(currentUser);
+        }
       }
 
-      // 인증 상태 확인 완료 (로그인 화면으로 이동할 수 있도록)
-      _userAuthenticationChecked.complete(true);
+      // 인증 상태 확인 완료 설정
+      _firebaseInitialized.complete(true);
     } catch (e) {
       _authError = '인증 상태를 확인하는 중 오류가 발생했습니다: $e';
-      _userAuthenticationChecked.complete(false);
+      _firebaseInitialized.complete(false);
     }
   }
   
@@ -136,226 +125,39 @@ class InitializationService {
   Future<void> _saveLastLoginActivity(User user) async {
     try {
       final firestore = FirebaseFirestore.instance;
-      await firestore.collection('users').doc(user.uid).update({
-        'lastActivity': FieldValue.serverTimestamp(),
-        'lastAppVersion': '1.0.0', // 앱 버전 정보 추가
-      });
+      final userRef = firestore.collection('users').doc(user.uid);
+      
+      // 문서가 존재하는지 확인
+      final userDoc = await userRef.get();
+      
+      if (userDoc.exists) {
+        // 문서가 있으면 업데이트
+        await userRef.update({
+          'lastActivity': FieldValue.serverTimestamp(),
+          'lastAppVersion': '1.0.0', // 앱 버전 정보
+        });
+      } else {
+        // 문서가 없으면 새로 생성
+        await userRef.set({
+          'uid': user.uid,
+          'email': user.email,
+          'displayName': user.displayName,
+          'photoURL': user.photoURL,
+          'lastActivity': FieldValue.serverTimestamp(),
+          'lastAppVersion': '1.0.0',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      
       debugPrint('사용자 마지막 활동 정보 업데이트: ${user.uid}');
     } catch (e) {
       debugPrint('사용자 활동 정보 업데이트 실패: $e');
+      // 오류가 발생해도 앱 실행에 영향 없음
     }
-  }
-
-  // 익명 로그인 메서드
-  Future<User?> anonymousSignIn() async {
-    final startTime = DateTime.now();
-    debugPrint('익명 로그인 시작 (${startTime.toString()})');
-    
-    try {
-      // Firebase 초기화 대기
-      final firebaseReady = await isFirebaseInitialized;
-      if (!firebaseReady) {
-        debugPrint('Firebase 초기화 실패로 익명 로그인 불가');
-        return null;
-      }
-
-      // 인증 서비스를 통해 익명 로그인
-      debugPrint('익명 로그인 요청 중...');
-      final userCredential = await authService.signInAnonymously();
-      
-      if (userCredential.user != null) {
-        debugPrint('익명 로그인 성공: ${userCredential.user!.uid}');
-      } else {
-        debugPrint('익명 로그인 실패: 사용자 객체가 null임');
-      }
-      
-      final duration = DateTime.now().difference(startTime);
-      debugPrint('익명 로그인 처리 완료 (소요시간: ${duration.inMilliseconds}ms)');
-      
-      return userCredential.user;
-    } catch (e) {
-      debugPrint('익명 로그인 중 오류 발생: $e');
-      return null;
-    }
-  }
-
-  // 구글 로그인
-  Future<User?> signInWithGoogle() async {
-    final startTime = DateTime.now();
-    debugPrint('구글 로그인 시작 (${startTime.toString()})');
-    
-    try {
-      // Firebase 초기화 대기
-      final firebaseReady = await isFirebaseInitialized;
-      if (!firebaseReady) {
-        debugPrint('Firebase 초기화 실패로 구글 로그인 불가');
-        return null;
-      }
-
-      // 인증 서비스를 통해 Google 로그인
-      debugPrint('구글 로그인 요청 중...');
-      final user = await authService.signInWithGoogle();
-      
-      if (user != null) {
-        debugPrint('구글 로그인 성공: ${user.uid}');
-        
-        // 새 사용자 계정 확인 및 온보딩 설정
-        await handleUserLogin(user);
-      } else {
-        debugPrint('구글 로그인 실패: 사용자 객체가 null임');
-      }
-      
-      final duration = DateTime.now().difference(startTime);
-      debugPrint('구글 로그인 처리 완료 (소요시간: ${duration.inMilliseconds}ms)');
-      
-      return user;
-    } catch (e) {
-      debugPrint('구글 로그인 중 오류 발생: $e');
-      return null;
-    }
-  }
-
-  // Apple 로그인
-  Future<User?> signInWithApple() async {
-    final startTime = DateTime.now();
-    debugPrint('Apple 로그인 시작 (${startTime.toString()})');
-    
-    try {
-      // Firebase 초기화 대기
-      final firebaseReady = await isFirebaseInitialized;
-      if (!firebaseReady) {
-        debugPrint('Firebase 초기화 실패로 Apple 로그인 불가');
-        return null;
-      }
-
-      // 인증 서비스를 통해 Apple 로그인
-      debugPrint('Apple 로그인 요청 중...');
-      final user = await authService.signInWithApple();
-      
-      if (user != null) {
-        debugPrint('Apple 로그인 성공: ${user.uid}');
-        
-        // 새 사용자 계정 확인 및 온보딩 설정
-        await handleUserLogin(user);
-      } else {
-        debugPrint('Apple 로그인 실패: 사용자 객체가 null임');
-      }
-      
-      final duration = DateTime.now().difference(startTime);
-      debugPrint('Apple 로그인 처리 완료 (소요시간: ${duration.inMilliseconds}ms)');
-      
-      return user;
-    } catch (e) {
-      debugPrint('Apple 로그인 중 오류 발생: $e');
-      return null;
-    }
-  }
-
-  // 익명 계정을 Google 계정과 연결하는 메서드
-  Future<UserCredential?> linkAnonymousAccountWithGoogle() async {
-    try {
-      debugPrint('익명 계정을 Google 계정과 연결 시작...');
-      final userCredential = await authService.linkAnonymousAccountWithGoogle();
-      debugPrint('Google 계정 연결 성공: ${userCredential.user?.uid}');
-      return userCredential;
-    } catch (e) {
-      debugPrint('Google 계정 연결 실패: $e');
-      _authError = 'Google 계정 연결 중 오류가 발생했습니다: $e';
-      return null;
-    }
-  }
-
-  // 익명 계정을 Apple 계정과 연결하는 메서드
-  Future<UserCredential?> linkAnonymousAccountWithApple() async {
-    try {
-      debugPrint('익명 계정을 Apple 계정과 연결 시작...');
-      final userCredential = await authService.linkAnonymousAccountWithApple();
-      debugPrint('Apple 계정 연결 성공: ${userCredential.user?.uid}');
-      return userCredential;
-    } catch (e) {
-      debugPrint('Apple 계정 연결 실패: $e');
-      _authError = 'Apple 계정 연결 중 오류가 발생했습니다: $e';
-      return null;
-    }
-  }
-
-  // 로그아웃 메서드
-  Future<void> signOut() async {
-    try {
-      // 로그아웃 전 마지막 사용자 정보 기록
-      final currentUser = FirebaseAuth.instance.currentUser;
-      final wasAnonymous = currentUser?.isAnonymous ?? false;
-      final userId = currentUser?.uid;
-      
-      debugPrint('로그아웃 시작 (UserId: $userId, 익명 여부: $wasAnonymous)');
-      
-      // 로그아웃 처리
-      await authService.signOut();
-      
-      // 로그아웃 이후 인증 상태 재설정
-      // 이전과 동일하게 Future를 완료하되, 익명 로그인을 하지 않고 로그인 화면으로 전환하기 위해
-      // 인증 실패로 설정
-      _userAuthenticationChecked = Completer<bool>();
-      _userAuthenticationChecked.complete(true); // 인증 체크는 완료되었지만 로그인은 되지 않은 상태
-      
-      debugPrint('로그아웃 성공 - 인증 상태 초기화됨');
-      
-      // 사용자 기본 설정 초기화 (선택적)
-      await _resetUserPreferences();
-    } catch (e) {
-      debugPrint('로그아웃 실패: $e');
-      _authError = '로그아웃 중 오류가 발생했습니다: $e';
-    }
-  }
-  
-  // 사용자 기본 설정 초기화
-  Future<void> _resetUserPreferences() async {
-    try {
-      final userPreferences = UserPreferencesService();
-      await userPreferences.setOnboardingCompleted(false);
-      debugPrint('사용자 기본 설정 초기화 완료');
-    } catch (e) {
-      debugPrint('사용자 기본 설정 초기화 실패: $e');
-    }
-  }
-
-  // 초기화 재시도 메서드
-  /*
-  void retryInitialization({required FirebaseOptions options}) {
-    if (isFirebaseInitializing || isUserAuthenticationChecking) return;
-
-    // 컨트롤러 재설정
-    _firebaseInitialized = Completer<bool>();
-    _userAuthenticationChecked = Completer<bool>();
-    _firebaseError = null;
-    _authError = null;
-
-    // 초기화 다시 시작
-    initializeFirebase(options: options);
-  }
-  */
-  
-  // 새 초기화 재시도 메서드 (로그아웃 후 사용)
-  void retryInitialization({required FirebaseOptions options}) {
-    if (isFirebaseInitializing) return;
-
-    // 인증 상태만 초기화 (Firebase는 이미 초기화됨)
-    if (_userAuthenticationChecked.isCompleted) {
-      _userAuthenticationChecked = Completer<bool>();
-    }
-    _authError = null;
-    
-    // Firebase 초기화 상태는 유지
-    debugPrint('인증 상태 초기화 완료, 로그인 화면으로 이동 준비됨');
-    
-    // 사용자 인증 상태 확인 (로그인 화면에서 적절히 처리할 수 있게 함)
-    _userAuthenticationChecked.complete(true);
   }
 
   // 사용자 로그인 처리 및 온보딩 상태 관리
   Future<void> handleUserLogin(User user) async {
-    debugPrint('사용자 로그인 처리 시작: ${user.uid} (익명: ${user.isAnonymous})');
-    
     try {
       final firestore = FirebaseFirestore.instance;
       final userPrefs = UserPreferencesService();
@@ -364,21 +166,26 @@ class InitializationService {
       final userDoc = await firestore.collection('users').doc(user.uid).get();
       
       // 사용자의 노트 데이터 확인 - userId 필드로 필터링
-      final notesQuery = await firestore
-          .collection('notes')
-          .where('userId', isEqualTo: user.uid)
-          .limit(1)
-          .get();
-      
-      final hasNotes = notesQuery.docs.isNotEmpty;
-      debugPrint('사용자 노트 데이터 확인: ${hasNotes ? "있음" : "없음"}');
+      bool hasNotes = false;
+      try {
+        final notesQuery = await firestore
+            .collection('notes')
+            .where('userId', isEqualTo: user.uid)
+            .limit(1)
+            .get();
+        
+        hasNotes = notesQuery.docs.isNotEmpty;
+        debugPrint('사용자 ${user.uid}의 노트 데이터 확인: ${hasNotes ? "노트 있음" : "노트 없음"}');
+      } catch (e) {
+        debugPrint('노트 데이터 확인 중 오류: $e');
+        // 노트 컬렉션이 없으면 노트가 없는 것으로 처리
+        hasNotes = false;
+      }
       
       // 계정 첫 로그인 여부 확인 - 완전히 새로운 사용자인 경우
       final isNewUser = !userDoc.exists;
       
       if (isNewUser) {
-        debugPrint('새 사용자 계정: 온보딩 표시');
-        
         // 온보딩 상태 설정 - 새 계정이면 온보딩 필요
         await userPrefs.setOnboardingCompleted(false);
         
@@ -388,16 +195,14 @@ class InitializationService {
           'createdAt': FieldValue.serverTimestamp(),
           'lastLogin': FieldValue.serverTimestamp(),
           'onboardingCompleted': false,
-          'isAnonymous': user.isAnonymous,
           'email': user.email,
           'displayName': user.displayName,
+          'hasOnboarded': false, // 온보딩 미완료 상태로 저장
         }, SetOptions(merge: true));
         
       } else {
         // 기존 사용자인 경우 - 노트 데이터 기반으로 온보딩 결정
         if (!hasNotes) {
-          debugPrint('기존 사용자지만 노트 데이터 없음: 온보딩 표시');
-          
           // 노트가 없으면 온보딩 표시
           await userPrefs.setOnboardingCompleted(false);
           
@@ -405,10 +210,9 @@ class InitializationService {
           await firestore.collection('users').doc(user.uid).update({
             'onboardingCompleted': false,
             'lastLogin': FieldValue.serverTimestamp(),
+            'hasOnboarded': false, // 온보딩 미완료 상태로 저장
           });
         } else {
-          debugPrint('기존 사용자 & 노트 데이터 있음: 온보딩 건너뛰기');
-          
           // 노트가 있으면 온보딩 건너뛰기
           await userPrefs.setOnboardingCompleted(true);
           
@@ -416,13 +220,17 @@ class InitializationService {
           await firestore.collection('users').doc(user.uid).update({
             'onboardingCompleted': true,
             'lastLogin': FieldValue.serverTimestamp(),
+            'hasOnboarded': true, // 온보딩 완료 상태로 저장
           });
         }
       }
       
-      debugPrint('사용자 로그인 처리 완료: ${user.uid}');
+      // 캐시 서비스 초기화 - 로그인마다 신선한 데이터 사용
+      final cacheService = UnifiedCacheService();
+      await cacheService.clearAllCache();
+      
     } catch (e) {
-      debugPrint('사용자 로그인 처리 중 오류: $e');
+      debugPrint('사용자 로그인 처리 오류: $e');
       // 오류 발생 시 기본값으로 온보딩 표시
       try {
         final userPrefs = UserPreferencesService();
@@ -430,6 +238,212 @@ class InitializationService {
       } catch (e2) {
         debugPrint('기본 온보딩 상태 설정 중 오류: $e2');
       }
+    }
+  }
+
+  // Firebase 초기화 상태 설정 (백그라운드 초기화 완료 시 호출)
+  Future<void> markFirebaseInitialized(bool initialized) async {
+    if (!_firebaseInitialized.isCompleted) {
+      _firebaseInitialized.complete(initialized);
+      debugPrint('Firebase 초기화 상태 업데이트: $initialized');
+    }
+  }
+
+  // Firebase 초기화 함수
+  Future<bool> initializeFirebase() async {
+    try {
+      // 이미 초기화되었는지 확인
+      if (Firebase.apps.isNotEmpty) {
+        await markFirebaseInitialized(true);
+        debugPrint('Firebase 이미 초기화됨');
+        return true;
+      }
+      
+      // 초기화되지 않은 경우 초기화 수행
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      
+      await markFirebaseInitialized(true);
+      debugPrint('Firebase 초기화 완료');
+      return true;
+    } catch (e) {
+      _firebaseError = '앱 초기화 중 오류가 발생했습니다: $e';
+      debugPrint('Firebase 초기화 오류: $e');
+      return false;
+    }
+  }
+
+  // Google 로그인
+  Future<User?> signInWithGoogle() async {
+    try {
+      // Firebase가 초기화되었는지 확인
+      if (!_firebaseInitialized.isCompleted && Firebase.apps.isEmpty) {
+        bool initialized = await initializeFirebase();
+        if (!initialized) {
+          throw Exception('Firebase를 초기화할 수 없습니다.');
+        }
+      }
+
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null;
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final UserCredential userCredential =
+          await _firebaseAuth.signInWithCredential(credential);
+      final User? user = userCredential.user;
+
+      if (user != null) {
+        // 사용자 데이터를 Firestore에 저장
+        await _saveUserToFirestore(user);
+      }
+
+      return user;
+    } catch (e) {
+      debugPrint('Google 로그인 오류: $e');
+      rethrow;
+    }
+  }
+
+  // Apple 로그인
+  Future<User?> signInWithApple() async {
+    try {
+      // Firebase가 초기화되었는지 확인
+      if (!_firebaseInitialized.isCompleted && Firebase.apps.isEmpty) {
+        bool initialized = await initializeFirebase();
+        if (!initialized) {
+          throw Exception('Firebase를 초기화할 수 없습니다.');
+        }
+      }
+
+      // Apple 로그인 요청에 필요한 nonce 생성
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+
+      // Apple로 인증 요청
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+
+      // OAuthCredential 생성
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: credential.identityToken,
+        rawNonce: rawNonce,
+      );
+
+      // Firebase에 로그인
+      final userCredential =
+          await _firebaseAuth.signInWithCredential(oauthCredential);
+      final user = userCredential.user;
+
+      // 이름 업데이트 (Apple은 첫 로그인에만 이름 정보 제공)
+      if (credential.givenName != null && user != null) {
+        String displayName = '${credential.givenName} ${credential.familyName ?? ''}';
+        await user.updateDisplayName(displayName.trim());
+      }
+
+      if (user != null) {
+        // 사용자 데이터를 Firestore에 저장
+        await _saveUserToFirestore(user);
+      }
+
+      return user;
+    } catch (e) {
+      debugPrint('Apple 로그인 오류: $e');
+      rethrow;
+    }
+  }
+
+  // 로그아웃
+  Future<void> signOut() async {
+    try {
+      // 캐시 서비스 가져오기
+      final cacheService = UnifiedCacheService();
+      
+      // 모든 캐시 지우기
+      await cacheService.clearAllCache();
+      debugPrint('로그아웃 시 캐시 정리 완료');
+      
+      // Google 로그인 연결 해제
+      await _googleSignIn.signOut();
+      
+      // Firebase 로그아웃
+      await _firebaseAuth.signOut();
+      debugPrint('Firebase 로그아웃 완료');
+    } catch (e) {
+      debugPrint('로그아웃 오류: $e');
+      rethrow;
+    }
+  }
+
+  // nonce 생성 메서드 (Apple 로그인에 필요)
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = DateTime.now().millisecondsSinceEpoch.toString();
+    return List.generate(length, (index) => charset[index % charset.length])
+        .join();
+  }
+
+  // nonce SHA256 해싱 (Apple 로그인 보안을 위해 필요)
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  // 현재 로그인된 사용자 가져오기
+  User? getCurrentUser() {
+    return FirebaseAuth.instance.currentUser;
+  }
+
+  // 사용자 정보를 Firestore에 저장하는 메서드
+  Future<void> _saveUserToFirestore(User user) async {
+    try {
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      
+      await userRef.set({
+        'uid': user.uid,
+        'email': user.email,
+        'displayName': user.displayName,
+        'photoURL': user.photoURL,
+        'lastSignIn': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      
+      debugPrint('사용자 정보가 Firestore에 저장되었습니다: ${user.uid}');
+    } catch (e) {
+      debugPrint('사용자 정보 저장 오류: $e');
+    }
+  }
+
+  // 초기화 재시도 메서드
+  Future<void> retryInitialization({required FirebaseOptions options}) async {
+    try {
+      // Firebase 초기화 상태 재설정
+      if (_firebaseInitialized.isCompleted) {
+        // 이미 완료된 경우, 새로운 Completer 생성
+        // (실제로는 더 복잡한 상태 관리가 필요할 수 있음)
+        debugPrint('초기화 재시도: Firebase 상태 재설정');
+      }
+      
+      // Firebase 재초기화 시도
+      await Firebase.initializeApp(options: options);
+      await markFirebaseInitialized(true);
+      
+      debugPrint('Firebase 초기화 재시도 완료');
+    } catch (e) {
+      debugPrint('Firebase 초기화 재시도 오류: $e');
+      _firebaseError = '앱 초기화 재시도 중 오류가 발생했습니다: $e';
     }
   }
 }

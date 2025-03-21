@@ -20,24 +20,6 @@ class AuthService {
   // 사용자 상태 변경 스트림
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  // 익명 로그인
-  Future<UserCredential> signInAnonymously() async {
-    try {
-      final userCredential = await _auth.signInAnonymously();
-
-      // 사용자 정보 Firestore에 저장
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'isAnonymous': true,
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      return userCredential;
-    } catch (e) {
-      debugPrint('익명 로그인 오류: $e');
-      rethrow;
-    }
-  }
-
   // 이메일/비밀번호로 회원가입
   Future<UserCredential> signUpWithEmailAndPassword(
       String email, String password, String name) async {
@@ -52,7 +34,6 @@ class AuthService {
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'name': name,
         'email': email,
-        'isAnonymous': false,
         'createdAt': FieldValue.serverTimestamp(),
         'profileImage': '',
       }, SetOptions(merge: true));
@@ -176,124 +157,11 @@ class AuthService {
     }
   }
 
-  // 익명 계정을 Google 계정으로 연결
-  Future<UserCredential> linkAnonymousAccountWithGoogle() async {
-    try {
-      final user = _auth.currentUser;
-
-      if (user == null) {
-        throw Exception('로그인된 사용자가 없습니다.');
-      }
-
-      if (!user.isAnonymous) {
-        throw Exception('이미 로그인된 계정입니다.');
-      }
-
-      // Google 로그인 프로세스 시작
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-
-      if (googleUser == null) {
-        throw Exception('Google 로그인이 취소되었습니다.');
-      }
-
-      // Google 인증 정보 가져오기
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
-      // Firebase 인증 정보 생성
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // 익명 계정과 Google 계정 연결
-      final userCredential = await user.linkWithCredential(credential);
-
-      // 사용자 정보 업데이트
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'name': userCredential.user!.displayName,
-        'email': userCredential.user!.email,
-        'isAnonymous': false,
-        'profileImage': userCredential.user!.photoURL,
-        'accountLinkedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      return userCredential;
-    } catch (e) {
-      debugPrint('Google 계정 연결 오류: $e');
-      rethrow;
-    }
-  }
-
-  // 익명 계정을 Apple 계정으로 연결
-  Future<UserCredential> linkAnonymousAccountWithApple() async {
-    try {
-      final user = _auth.currentUser;
-
-      if (user == null) {
-        throw Exception('로그인된 사용자가 없습니다.');
-      }
-
-      if (!user.isAnonymous) {
-        throw Exception('이미 로그인된 계정입니다.');
-      }
-
-      // nonce 생성
-      final rawNonce = _generateNonce();
-      final nonce = _sha256ofString(rawNonce);
-
-      // Apple 로그인 요청
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
-        nonce: nonce,
-      );
-
-      // OAuthCredential 생성
-      final oauthCredential = OAuthProvider('apple.com').credential(
-        idToken: appleCredential.identityToken,
-        rawNonce: rawNonce,
-      );
-
-      // 익명 계정과 Apple 계정 연결
-      final userCredential = await user.linkWithCredential(oauthCredential);
-
-      // 사용자 이름 설정 (Apple은 첫 로그인에만 이름 제공)
-      String? displayName = userCredential.user!.displayName;
-      if (displayName == null || displayName.isEmpty) {
-        displayName =
-            '${appleCredential.givenName ?? ''} ${appleCredential.familyName ?? ''}'
-                .trim();
-        if (displayName.isNotEmpty) {
-          await userCredential.user!.updateDisplayName(displayName);
-        }
-      }
-
-      // 사용자 정보 업데이트
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'name': displayName.isNotEmpty ? displayName : 'Apple 사용자',
-        'email': userCredential.user!.email,
-        'isAnonymous': false,
-        'accountLinkedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      return userCredential;
-    } catch (e) {
-      debugPrint('Apple 계정 연결 오류: $e');
-      rethrow;
-    }
-  }
-
   // 로그아웃
   Future<void> signOut() async {
-    // 로그아웃 전에 현재 사용자 정보 저장
     final user = _auth.currentUser;
     
     if (user != null) {
-      debugPrint('AuthService: 로그아웃 - 사용자 ${user.uid} (익명: ${user.isAnonymous})');
-      
       // 로그아웃 시간 기록
       try {
         await _firestore.collection('users').doc(user.uid).update({
@@ -302,23 +170,17 @@ class AuthService {
       } catch (e) {
         debugPrint('AuthService: 로그아웃 기록 저장 실패: $e');
       }
-    } else {
-      debugPrint('AuthService: 로그아웃 - 로그인된 사용자 없음');
     }
     
     // 소셜 로그인 연결 해제
     try {
       await _googleSignIn.signOut();
-      debugPrint('AuthService: Google 로그인 연결 해제 완료');
     } catch (e) {
       debugPrint('AuthService: Google 로그인 연결 해제 실패: $e');
     }
     
     // Firebase 로그아웃
     await _auth.signOut();
-    debugPrint('AuthService: Firebase 로그아웃 완료');
-    
-    // 어떠한 자동 로그인도 수행하지 않음 - 로그인 화면으로 돌아감
   }
 
   // 사용자 계정 삭제
@@ -361,7 +223,6 @@ class AuthService {
     await _firestore.collection('users').doc(user.uid).set({
       'name': user.displayName,
       'email': user.email,
-      'isAnonymous': false,
       'profileImage': user.photoURL,
       'createdAt': FieldValue.serverTimestamp(),
       'lastLoginAt': FieldValue.serverTimestamp(),
