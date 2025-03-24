@@ -103,7 +103,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: ColorTokens.primarylight,
+            color: ColorTokens.primary,
             width: 1,
           ),
         ),
