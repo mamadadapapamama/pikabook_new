@@ -20,7 +20,7 @@ class ColorTokens {
   static const Color textSecondary = Color(0xFF226357); // 부 텍스트 색상
   static const Color textTertiary = Color(0xFF90B1AB); // 보조 텍스트 색상
   static const Color textLight = Color(0xFFFFFFFF); // 밝은 배경에서 텍스트
-  static const Color textgrey = Color(0xFF969696); // 밝은 배경에서 텍스트
+  static const Color textGrey = Color(0xFF969696); // 밝은 배경에서 중요하지 않은 텍스트
   // 상태 컬러
   static const Color success = Color(0xFF34A853); // 성공 상태
   static const Color error = Color(0xFFCC0A0A); // 오류 상태

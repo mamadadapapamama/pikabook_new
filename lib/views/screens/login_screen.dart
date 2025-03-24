@@ -107,26 +107,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 const SizedBox(height: 20),
-                                
-                                // 앱 로고
-                                Hero(
-                                  tag: 'app_logo',
-                                  child: Container(
-                                    width: 140,
-                                    height: 140,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(30),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(30),
-                                      child: Image.asset(
-                                        'assets/images/pikabook_logo.png',
-                                        fit: BoxFit.contain,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 40),
+        
 
                                 // 앱 이름
                                 Text(
