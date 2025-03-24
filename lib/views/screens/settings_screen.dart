@@ -115,10 +115,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.only(left: 20.0),
           child: GestureDetector(
             onTap: () => Navigator.pop(context),
-            child: SvgPicture.asset(
-              'assets/images/icon_arrow_left.svg',
-              width: 24,
-              height: 24,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_rounded),
+              color: ColorTokens.secondary,
+              onPressed: () => Navigator.of(context).pop(),
             ),
           ),
         ),
