@@ -130,8 +130,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildProfileContent() {
-    final bool isAnonymous = _currentUser?.isAnonymous ?? true;
-    final String displayName = _currentUser?.displayName ?? '익명 사용자';
+    // 익명 사용자 체크 제거 (더 이상 익명 로그인 사용하지 않음)
+    final String displayName = _currentUser?.displayName ?? '사용자';
     final String email = _currentUser?.email ?? '이메일 없음';
     final String? photoUrl = _currentUser?.photoURL;
 
@@ -295,8 +295,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             SvgPicture.asset(
               'assets/images/icon_arrow_right.svg',
-              width: 24,
-              height: 24,
+              width: 20,
+              height: 20,
               colorFilter: const ColorFilter.mode(
                 ColorTokens.secondary,
                 BlendMode.srcIn,

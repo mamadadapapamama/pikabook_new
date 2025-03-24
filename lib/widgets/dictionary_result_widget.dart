@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/page_content_service.dart';
 import '../models/dictionary_entry.dart';
+import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
+import '../theme/tokens/spacing_tokens.dart';
+import '../theme/tokens/ui_tokens.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
 
@@ -21,86 +25,169 @@ class DictionaryResultWidget extends StatelessWidget {
     final pageContentService = PageContentService();
 
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: EdgeInsets.all(SpacingTokens.lg),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(SpacingTokens.md)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 단어 제목
-          Text(
-            entry.word,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(height: 8),
-
-          // 발음 정보
-          if (entry.pinyin.isNotEmpty)
-            Text(
-              '발음: ${entry.pinyin}',
-              style: const TextStyle(
-                fontSize: 16,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-
-          const SizedBox(height: 8),
-
-          // 의미 정보
-          Text(
-            '의미: ${entry.meaning}',
-            style: const TextStyle(fontSize: 16),
-          ),
-
-          const SizedBox(height: 16),
-
-          // 버튼 영역
+          // 헤더 (제목 및 닫기 버튼)
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // TTS 버튼
-              ElevatedButton.icon(
-                onPressed: () {
-                  pageContentService.speakText(entry.word);
-                  // Navigator.pop(context); // 바텀 시트를 닫지 않도록 제거
-                },
-                icon: const Icon(Icons.volume_up),
-                label: const Text('읽기'),
+              Text(
+                '사전',
+                style: TypographyTokens.subtitle1.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: ColorTokens.textPrimary,
+                ),
               ),
-
-              // 플래시카드 추가 버튼
-              ElevatedButton.icon(
-                onPressed: isExistingFlashcard
-                    ? null // 이미 플래시카드에 있는 경우 비활성화
-                    : () {
-                        onCreateFlashCard(
-                          entry.word,
-                          entry.meaning,
-                          pinyin: entry.pinyin,
-                        );
-                        Navigator.pop(context);
-
-                        // 추가 완료 메시지
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('플래시카드에 추가되었습니다'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                icon: Icon(isExistingFlashcard ? Icons.check : Icons.add_card),
-                label: Text(isExistingFlashcard ? '이미 추가됨' : '플래시카드 추가'),
-                style: isExistingFlashcard
-                    ? ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey[300],
-                        foregroundColor: Colors.grey[700],
-                      )
-                    : null,
+              InkWell(
+                onTap: () => Navigator.pop(context),
+                borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+                child: Padding(
+                  padding: EdgeInsets.all(SpacingTokens.xs),
+                  child: Icon(
+                    Icons.close,
+                    color: ColorTokens.textPrimary,
+                    size: SpacingTokens.iconSizeMedium,
+                  ),
+                ),
               ),
             ],
+          ),
+          
+          SizedBox(height: SpacingTokens.lg),
+          
+          // 단어 내용
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 원문 및 발음 듣기 버튼
+              Row(
+                children: [
+                  Text(
+                    entry.word,
+                    style: TypographyTokens.headline3.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: ColorTokens.textPrimary,
+                    ),
+                  ),
+                  SizedBox(width: SpacingTokens.xs),
+                  // 발음 듣기 버튼
+                  Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () {
+                        pageContentService.speakText(entry.word);
+                      },
+                      child: Padding(
+                        padding: EdgeInsets.all(SpacingTokens.xs),
+                        child: Icon(
+                          Icons.volume_up,
+                          color: ColorTokens.primary,
+                          size: SpacingTokens.iconSizeSmall,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
+              // 발음 (Pinyin)
+              if (entry.pinyin.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(top: SpacingTokens.xs),
+                  child: Text(
+                    entry.pinyin,
+                    style: TypographyTokens.body2.copyWith(
+                      color: ColorTokens.textSecondary,
+                    ),
+                  ),
+                ),
+              
+              // 의미
+              Padding(
+                padding: EdgeInsets.only(top: SpacingTokens.xs),
+                child: Text(
+                  entry.meaning,
+                  style: TypographyTokens.body1.copyWith(
+                    color: ColorTokens.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          SizedBox(height: SpacingTokens.lg),
+          
+          // 플래시카드 추가 버튼
+          Material(
+            color: isExistingFlashcard ? Colors.grey.shade200 : ColorTokens.secondary,
+            borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+            child: InkWell(
+              onTap: isExistingFlashcard
+                  ? null
+                  : () {
+                      onCreateFlashCard(
+                        entry.word,
+                        entry.meaning,
+                        pinyin: entry.pinyin,
+                      );
+                      Navigator.pop(context);
+
+                      // 추가 완료 메시지
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('플래시카드에 추가되었습니다'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+              borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(SpacingTokens.sm),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      'assets/images/icon_flashcard_dic.png',
+                      width: SpacingTokens.iconSizeMedium,
+                      height: SpacingTokens.iconSizeMedium,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Icon(
+                          Icons.card_membership,
+                          color: Colors.white,
+                          size: SpacingTokens.iconSizeMedium,
+                        );
+                      },
+                    ),
+                    SizedBox(width: SpacingTokens.xs),
+                    Text(
+                      isExistingFlashcard ? '이미 추가됨' : '플래시카드 추가',
+                      style: TypographyTokens.button.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -117,6 +204,7 @@ class DictionaryResultWidget extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
