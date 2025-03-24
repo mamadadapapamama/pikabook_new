@@ -206,8 +206,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFFFF9F1), // 배경색
+        decoration: BoxDecoration(
+          color: ColorTokens.background, // 디자인 토큰 사용
         ),
         child: SafeArea(
           child: Padding(
@@ -232,16 +232,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   padding: const EdgeInsets.only(top: 24.0),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Text(
-                      "${_currentPage + 1} / 3",
-                      style: _currentPage == 0 
-                          ? TypographyTokens.body1En.copyWith(
-                              fontWeight: FontWeight.w700, 
-                              color: ColorTokens.primary
-                            )
-                          : TypographyTokens.body1En.copyWith(
-                              fontWeight: FontWeight.w700
-                            ),
+                    child: Row(
+                      children: [
+                        Text(
+                          "${_currentPage + 1}",
+                          style: TypographyTokens.body1En.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: ColorTokens.primary,
+                          ),
+                        ),
+                        Text(
+                          " / 3",
+                          style: TypographyTokens.body1En.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -255,6 +261,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       setState(() {
                         _currentPage = index;
                       });
+                      // 키보드 숨기기
+                      FocusScope.of(context).unfocus();
                     },
                     children: [
                       _buildNameInputPage(),
@@ -276,9 +284,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           child: OutlinedButton(
                             onPressed: _prevPage,
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFFFE6A15),
-                              side: const BorderSide(
-                                color: Color(0xFFFE6A15),
+                              foregroundColor: ColorTokens.primary,
+                              side: BorderSide(
+                                color: ColorTokens.primary,
                                 width: 1,
                               ),
                               shape: RoundedRectangleBorder(
@@ -286,7 +294,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               ),
                               padding: const EdgeInsets.symmetric(vertical: 16),
                             ),
-                            child: const Text('뒤로'),
+                            child: Text('뒤로', style: TypographyTokens.button),
                           ),
                         ),
                         
@@ -316,7 +324,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                   ),
                                 )
-                              : Text(_currentPage == 2 ? '시작해요!' : '다음으로'),
+                              : Text(
+                                  _currentPage == 2 ? '시작해요!' : '다음으로',
+                                  style: TypographyTokens.button,
+                                ),
                         ),
                       ),
                     ],
@@ -327,115 +338,135 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         ),
       ),
+      // 키보드가 화면을 밀어올리지 않도록 설정
+      resizeToAvoidBottomInset: false,
     );
   }
 
   // 첫 번째 페이지: 이름 입력
   Widget _buildNameInputPage() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        const Text(
-          "Pikabook은 원서 속 글자를 \n인식해 스마트한 학습 노트를 \n만들어 드리는 서비스입니다.\n\n먼저, 학습하실 분의 이름을 \n알려주세요.",
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontWeight: FontWeight.w700,
-            fontSize: 24,
-            color: Color(0xFF143B34),
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 24),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: const Color(0xFFFFE1D0),
-              width: 2,
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: "Pikabook",
+                  style: TypographyTokens.subtitle2En,
+                ),
+                TextSpan(
+                  text: "은 원서 속 글자를 \n인식해 스마트한 학습 노트를 만들어 드리는 서비스입니다.\n\n먼저, 학습하실 분의 이름을 \n알려주세요.",
+                  style: TypographyTokens.subtitle2.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: ColorTokens.textPrimary,
+                  ),
+                ),
+              ],
             ),
           ),
-          child: TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(
-              hintText: '이름이나 별명을 알려주세요',
-              hintStyle: TextStyle(
-                fontFamily: 'Noto Sans KR',
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                color: Color(0xFF969696),
+          const SizedBox(height: 24),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: ColorTokens.primarylight,
+                width: 2,
               ),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             ),
-            style: const TextStyle(
-              fontFamily: 'Noto Sans KR',
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-              color: Colors.black,
+            child: TextField(
+              controller: _nameController,
+              decoration: InputDecoration(
+                hintText: '이름이나 별명을 알려주세요',
+                hintStyle: TypographyTokens.body2.copyWith(
+                  color: ColorTokens.textTertiary,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              ),
+              style: TypographyTokens.body2.copyWith(
+                color: ColorTokens.textPrimary,
+              ),
+              onEditingComplete: () {
+                // 입력 완료시 키보드 숨기기
+                FocusScope.of(context).unfocus();
+                _nextPage();
+              },
+              textInputAction: TextInputAction.done,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   // 두 번째 페이지: 사용 목적 선택
   Widget _buildPurposePage() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        const Text(
-          "Pikabook을 어떤 목적으로 \n사용하실 예정이세요?",
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontWeight: FontWeight.w700,
-            fontSize: 24,
-            color: Color(0xFF143B34),
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 24),
-        
-        // 사용 목적 옵션들
-        ..._purposeOptions.map((option) => _buildPurposeOption(option)),
-        
-        // 다른 목적 선택 시 직접 입력 필드 표시
-        if (_selectedPurpose == _purposeOptions[2])
-          Container(
-            margin: const EdgeInsets.only(top: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: const Color(0xFFFFE1D0),
-                width: 2,
-              ),
+    // 두 번째 페이지에서는 키보드 자동으로 숨기기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_currentPage == 1 && _selectedPurpose != _purposeOptions[2]) {
+        FocusScope.of(context).unfocus();
+      }
+    });
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          Text(
+            "Pikabook을 어떤 목적으로 \n사용하실 예정이세요?",
+            style: TypographyTokens.subtitle2.copyWith(
+              fontWeight: FontWeight.w700,
+              color: ColorTokens.textPrimary,
             ),
-            child: TextField(
-              controller: _otherPurposeController,
-              decoration: const InputDecoration(
-                hintText: '사용 목적을 알려주세요',
-                hintStyle: TextStyle(
-                  fontFamily: 'Noto Sans KR',
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                  color: Color(0xFF969696),
+          ),
+          const SizedBox(height: 24),
+          
+          // 사용 목적 옵션들
+          ..._purposeOptions.map((option) => _buildPurposeOption(option)),
+          
+          // 다른 목적 선택 시 직접 입력 필드 표시
+          if (_selectedPurpose == _purposeOptions[2])
+            Container(
+              width: double.infinity, // 전체 너비 사용
+              margin: const EdgeInsets.only(top: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: ColorTokens.primarylight,
+                  width: 2,
                 ),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               ),
-              style: const TextStyle(
-                fontFamily: 'Noto Sans KR',
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-                color: Colors.black,
+              child: TextField(
+                controller: _otherPurposeController,
+                autofocus: _selectedPurpose == _purposeOptions[2],
+                decoration: InputDecoration(
+                  hintText: '사용 목적을 알려주세요',
+                  hintStyle: TypographyTokens.body2.copyWith(
+                    color: ColorTokens.textTertiary,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                ),
+                style: TypographyTokens.body2.copyWith(
+                  color: ColorTokens.textPrimary,
+                ),
+                onEditingComplete: () {
+                  FocusScope.of(context).unfocus();
+                  _nextPage();
+                },
+                textInputAction: TextInputAction.done,
               ),
             ),
-          ),
-      ],
+          // 키보드가 표시될 때 추가 여백
+          SizedBox(height: _selectedPurpose == _purposeOptions[2] ? 200 : 0),
+        ],
+      ),
     );
   }
 
@@ -448,25 +479,47 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         setState(() {
           _selectedPurpose = option;
         });
+        
+        // 세 번째 옵션 선택 시 키보드 표시
+        if (option == _purposeOptions[2]) {
+          // 약간 딜레이를 주고 포커스 설정
+          Future.delayed(const Duration(milliseconds: 100), () {
+            // 입력 필드에 초점 맞추고 키보드 표시
+            FocusScope.of(context).requestFocus(FocusNode());
+            _otherPurposeController.clear();
+            
+            // 스크롤 조정
+            final ScrollController scrollController = ScrollController();
+            if (scrollController.hasClients) {
+              scrollController.animateTo(
+                200,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            }
+          });
+        } else {
+          // 다른 옵션 선택 시 키보드 숨기기
+          FocusScope.of(context).unfocus();
+        }
       },
       child: Container(
+        width: double.infinity, // 전체 너비 사용
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? const Color(0xFFFE6A15) : const Color(0xFFFFE1D0),
+            color: isSelected ? ColorTokens.primary : ColorTokens.primarylight,
             width: 2,
           ),
         ),
         child: Text(
           option,
-          style: TextStyle(
-            fontFamily: 'Noto Sans KR',
-            fontSize: 16,
+          style: TypographyTokens.body2.copyWith(
             fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
-            color: Colors.black,
+            color: ColorTokens.textPrimary,
           ),
         ),
       ),
@@ -475,63 +528,65 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   // 세 번째 페이지: 번역 모드 선택
   Widget _buildTranslationModePage() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        const Text(
-          "원서 번역을 어떻게 해드릴까요?",
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontWeight: FontWeight.w700,
-            fontSize: 24,
-            color: Colors.black,
-            height: 1.5,
+    // 세 번째 페이지에서는 키보드 자동으로 숨기기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_currentPage == 2) {
+        FocusScope.of(context).unfocus();
+      }
+    });
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          Text(
+            "원서 번역을 어떻게 해드릴까요?",
+            style: TypographyTokens.subtitle2.copyWith(
+              fontWeight: FontWeight.w700,
+              color: ColorTokens.textPrimary,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          "나중에 변경할수 있어요.",
-          style: TextStyle(
-            fontFamily: 'Noto Sans KR',
-            fontSize: 16,
-            fontWeight: FontWeight.w400,
-            color: Colors.black,
+          const SizedBox(height: 8),
+          Text(
+            "나중에 변경할수 있어요.",
+            style: TypographyTokens.body2.copyWith(
+              color: ColorTokens.textSecondary,
+            ),
           ),
-        ),
-        const SizedBox(height: 24),
-        
-        // 문장별 번역 옵션
-        _buildTranslationOption(
-          title: "문장별 번역",
-          description: "인식된 모든 문장을 한꺼번에 번역해 보여줍니다.\n모르는 단어는 사전 검색 합니다.",
-          isSelected: _isSegmentMode,
-          onTap: () {
-            setState(() {
-              _isSegmentMode = true;
-            });
-          },
-        ),
-        
-        const SizedBox(height: 16),
-        
-        // 통으로 번역 옵션
-        _buildTranslationOption(
-          title: "통으로 번역",
-          description: "인식된 모든 문장을 한꺼번에 번역해 보여줍니다.\n모르는 단어는 사전 검색 합니다.",
-          isSelected: !_isSegmentMode,
-          onTap: () {
-            setState(() {
-              _isSegmentMode = false;
-            });
-          },
-        ),
-      ],
+          const SizedBox(height: 24),
+          
+          // Figma 디자인에 맞게 번역 모드 옵션 업데이트
+          _buildUpdatedTranslationOption(
+            title: "문장별 번역",
+            description: "각 문장별로 번역해 보여줍니다.\n모르는 단어는 탭해서 사전 검색할 수 있어요.",
+            isSelected: _isSegmentMode,
+            onTap: () {
+              setState(() {
+                _isSegmentMode = true;
+              });
+            },
+          ),
+          
+          const SizedBox(height: 16),
+          
+          _buildUpdatedTranslationOption(
+            title: "통으로 번역",
+            description: "인식된 모든 문장을 통으로 번역해 보여줍니다.\n모르는 단어는 탭해서 사전 검색할 수 있어요.",
+            isSelected: !_isSegmentMode,
+            onTap: () {
+              setState(() {
+                _isSegmentMode = false;
+              });
+            },
+          ),
+        ],
+      ),
     );
   }
 
-  // 번역 모드 옵션 위젯
-  Widget _buildTranslationOption({
+  // 업데이트된 번역 모드 옵션 위젯 (Figma 디자인에 맞게)
+  Widget _buildUpdatedTranslationOption({
     required String title,
     required String description,
     required bool isSelected,
@@ -540,12 +595,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? const Color(0xFFFE6A15) : const Color(0xFFFFE1D0),
+            color: isSelected ? ColorTokens.primary : ColorTokens.primarylight,
             width: 2,
           ),
         ),
@@ -555,45 +611,90 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             // 옵션 제목
             Text(
               title,
-              style: const TextStyle(
-                fontFamily: 'Noto Sans KR',
-                fontSize: 16,
+              style: TypographyTokens.body2.copyWith(
                 fontWeight: FontWeight.w500,
-                color: Colors.black,
+                color: ColorTokens.textPrimary,
               ),
             ),
             const SizedBox(height: 10),
             
-            // 예시 이미지
+            // 예시 컨테이너
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: const Color(0xFFF8F8F8),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "学校开始了。我每天早上七点半上学。我们的学校有很多有趣的课外活动。",
-                    style: TextStyle(
+                  // 원문 텍스트
+                  Text(
+                    title == "문장별 번역" 
+                      ? "学校开始了。" 
+                      : "学校开始了。我每天早上七点半上学。我们的学校有很多有趣的课外活动。",
+                    style: TypographyTokens.body2.copyWith(
                       fontFamily: 'Noto Sans HK',
-                      fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      color: Colors.black,
+                      color: ColorTokens.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    "학교가 시작했습니다. 나는 매일 아침 7시 30분에 학교에...",
-                    style: TextStyle(
-                      fontFamily: 'Noto Sans KR',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: Color(0xFF226357),
+                  const SizedBox(height: 8),
+                  
+                  // 번역 텍스트
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: const Color(0xFFEEEEEE),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      title == "문장별 번역" 
+                        ? "학교가 시작했습니다." 
+                        : "학교가 시작했습니다. 나는 매일 아침 7시 30분에 등교합니다. 우리 학교에는 흥미로운 특별활동이 많이 있습니다.",
+                      style: TypographyTokens.body2.copyWith(
+                        color: ColorTokens.textSecondary,
+                      ),
                     ),
                   ),
+                  
+                  // 문장별 번역일 경우 다음 문장 표시
+                  if (title == "문장별 번역") ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      "我每天早上七点半上学。",
+                      style: TypographyTokens.body2.copyWith(
+                        fontFamily: 'Noto Sans HK',
+                        fontWeight: FontWeight.w500,
+                        color: ColorTokens.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: const Color(0xFFEEEEEE),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        "나는 매일 아침 7시 30분에 등교합니다.",
+                        style: TypographyTokens.body2.copyWith(
+                          color: ColorTokens.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -602,11 +703,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             // 설명 텍스트
             Text(
               description,
-              style: const TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF969696),
+              style: TypographyTokens.caption.copyWith(
+                color: ColorTokens.textTertiary,
               ),
             ),
           ],
