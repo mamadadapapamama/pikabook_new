@@ -47,8 +47,7 @@ class DictionaryResultWidget extends StatelessWidget {
             children: [
               Text(
                 '사전',
-                style: TypographyTokens.subtitle1.copyWith(
-                  fontWeight: FontWeight.w500,
+                style: TypographyTokens.button.copyWith(
                   color: ColorTokens.textPrimary,
                 ),
               ),
@@ -94,11 +93,11 @@ class DictionaryResultWidget extends StatelessWidget {
                         pageContentService.speakText(entry.word);
                       },
                       child: Padding(
-                        padding: EdgeInsets.all(SpacingTokens.xs),
+                        padding: EdgeInsets.all(SpacingTokens.md),
                         child: Icon(
                           Icons.volume_up,
-                          color: ColorTokens.primary,
-                          size: SpacingTokens.iconSizeSmall,
+                          color: ColorTokens.secondaryLight,
+                          size: SpacingTokens.iconSizeMedium,
                         ),
                       ),
                     ),
@@ -120,11 +119,11 @@ class DictionaryResultWidget extends StatelessWidget {
               
               // 의미
               Padding(
-                padding: EdgeInsets.only(top: SpacingTokens.xs),
+                padding: EdgeInsets.only(top: SpacingTokens.md),
                 child: Text(
                   entry.meaning,
                   style: TypographyTokens.body1.copyWith(
-                    color: ColorTokens.primary,
+                    color: ColorTokens.secondary,
                   ),
                 ),
               ),
@@ -135,7 +134,7 @@ class DictionaryResultWidget extends StatelessWidget {
           
           // 플래시카드 추가 버튼
           Material(
-            color: isExistingFlashcard ? Colors.grey.shade200 : ColorTokens.secondary,
+            color: isExistingFlashcard ? Colors.grey.shade200 : ColorTokens.primary,
             borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
             child: InkWell(
               onTap: isExistingFlashcard
