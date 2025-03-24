@@ -49,6 +49,7 @@ class DictionaryResultWidget extends StatelessWidget {
                 '사전',
                 style: TypographyTokens.button.copyWith(
                   color: ColorTokens.textPrimary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               InkWell(
@@ -66,7 +67,7 @@ class DictionaryResultWidget extends StatelessWidget {
             ],
           ),
           
-          SizedBox(height: SpacingTokens.lg),
+          SizedBox(height: SpacingTokens.md),
           
           // 단어 내용
           Column(
@@ -93,7 +94,7 @@ class DictionaryResultWidget extends StatelessWidget {
                         pageContentService.speakText(entry.word);
                       },
                       child: Padding(
-                        padding: EdgeInsets.all(SpacingTokens.md),
+                        padding: EdgeInsets.all(SpacingTokens.sm),
                         child: Icon(
                           Icons.volume_up,
                           color: ColorTokens.secondaryLight,
@@ -119,7 +120,7 @@ class DictionaryResultWidget extends StatelessWidget {
               
               // 의미
               Padding(
-                padding: EdgeInsets.only(top: SpacingTokens.md),
+                padding: EdgeInsets.only(top: SpacingTokens.sm),
                 child: Text(
                   entry.meaning,
                   style: TypographyTokens.body1.copyWith(
@@ -163,23 +164,11 @@ class DictionaryResultWidget extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Image.asset(
-                      'assets/images/icon_flashcard_dic.png',
-                      width: SpacingTokens.iconSizeMedium,
-                      height: SpacingTokens.iconSizeMedium,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Icon(
-                          Icons.card_membership,
-                          color: Colors.white,
-                          size: SpacingTokens.iconSizeMedium,
-                        );
-                      },
-                    ),
                     SizedBox(width: SpacingTokens.xs),
                     Text(
                       isExistingFlashcard ? '이미 추가됨' : '플래시카드 추가',
                       style: TypographyTokens.button.copyWith(
-                        color: Colors.white,
+                        color: ColorTokens.textGrey,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
