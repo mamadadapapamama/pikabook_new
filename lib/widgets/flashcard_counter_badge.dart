@@ -33,50 +33,59 @@ class FlashcardCounterBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 20,
-            height: 20,
-            child: Center(
-              child: Stack(
-                children: [
-                  Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: UITokens.flashcardBadgeBackground,
-                      borderRadius: BorderRadius.circular(SpacingTokens.xs),
-                      border: Border.all(
-                        color: UITokens.flashcardBadgeBorder,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 6,
-                    left: 6,
-                    child: Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(SpacingTokens.xs),
-                        border: Border.all(
-                          color: UITokens.flashcardBadgeBorder,
-                          width: 2,
+          // PNG 이미지 사용
+          Image.asset(
+            'assets/images/icon_flashcard_counter.png',
+            width: 18,
+            height: 18,
+            errorBuilder: (context, error, stackTrace) {
+              // 에러 시 대체 아이콘 표시 (기존 스택 방식)
+              return SizedBox(
+                width: 18,
+                height: 18,
+                child: Center(
+                  child: Stack(
+                    children: [
+                      Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: UITokens.flashcardBadgeBackground,
+                          borderRadius: BorderRadius.circular(SpacingTokens.xs),
+                          border: Border.all(
+                            color: UITokens.flashcardBadgeBorder,
+                            width: 2,
+                          ),
                         ),
                       ),
-                    ),
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(SpacingTokens.xs),
+                            border: Border.all(
+                              color: UITokens.flashcardBadgeBorder,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
           SizedBox(width: SpacingTokens.xs),
           Text(
             '$count',
             style: GoogleFonts.poppins(
               fontSize: 12,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w600,
               color: ColorTokens.secondary,
             ),
           ),

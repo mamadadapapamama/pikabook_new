@@ -42,27 +42,125 @@ class _NoteListItemState extends State<NoteListItem> {
   bool _isLoadingImage = false;
   int _pageCount = 0;
   bool _isLoadingPageCount = true;
+  bool _initialLoadCompleted = false;
 
   @override
   void initState() {
     super.initState();
     _loadImage();
     
-    // 페이지 카운트 초기화: 생성 시 이미지 개수가 있다면 이를 기본값으로 설정
-    _pageCount = (widget.note.imageCount ?? widget.note.pages.length) > 0 
-        ? (widget.note.imageCount ?? widget.note.pages.length) 
-        : 1; // 최소 1페이지
-    _loadPageCount();
+    // 페이지 카운트 초기화 로직 개선
+    // 노트 생성 직후에는 imageCount가 정확한 값을 가짐 (이미지 개수 = 페이지 개수)
+    if (widget.note.imageCount != null && widget.note.imageCount! > 0) {
+      _pageCount = widget.note.imageCount!;
+      // 이미 올바른 값을 가지고 있다면 불필요한 로딩 과정 생략 (깜빡임 방지)
+      _isLoadingPageCount = false;
+    } else if (widget.note.pages.isNotEmpty) {
+      _pageCount = widget.note.pages.length;
+      _isLoadingPageCount = false;
+    } else {
+      _pageCount = 1; // 기본값 설정
+    }
+    
+    // 백그라운드에서 추가 정보 로드 (UI 깜빡임 방지)
+    _loadPageCountInBackground();
+  }
+
+  /// 백그라운드에서 페이지 수 정보를 가져옵니다.
+  /// UI의 깜빡임 없이 업데이트하기 위해 로딩 상태를 표시하지 않습니다.
+  Future<void> _loadPageCountInBackground() async {
+    if (widget.note.id == null) return;
+    
+    try {
+      // 노트의 최신 정보 가져오기
+      final noteDoc = await FirebaseFirestore.instance.collection('notes').doc(widget.note.id).get();
+      if (noteDoc.exists && mounted) {
+        final data = noteDoc.data();
+        if (data != null) {
+          int? serverCount;
+          
+          // 우선순위 1: totalPageCount 필드
+          if (data.containsKey('totalPageCount') && data['totalPageCount'] is int) {
+            final count = data['totalPageCount'] as int;
+            if (count > 0) serverCount = count;
+          }
+          
+          // 우선순위 2: pages 배열
+          if (serverCount == null && data['pages'] is List) {
+            final count = (data['pages'] as List).length;
+            if (count > 0) serverCount = count;
+          }
+          
+          // 우선순위 3: imageCount
+          if (serverCount == null && data.containsKey('imageCount') && data['imageCount'] is int) {
+            final count = data['imageCount'] as int;
+            if (count > 0) serverCount = count;
+          }
+          
+          // 서버 값이 현재 값보다 클 때만 업데이트 (내림 방지)
+          if (serverCount != null && serverCount > _pageCount && mounted) {
+            setState(() {
+              _pageCount = serverCount!;
+              _isLoadingPageCount = false;
+              _initialLoadCompleted = true;
+            });
+          } else if (mounted) {
+            setState(() {
+              _isLoadingPageCount = false;
+              _initialLoadCompleted = true;
+            });
+          }
+          return;
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _isLoadingPageCount = false;
+          _initialLoadCompleted = true;
+        });
+      }
+    } catch (e) {
+      // 에러 발생 시 로딩 상태만 업데이트하고 카운트는 유지
+      debugPrint('백그라운드 페이지 수 로드 중 오류 발생: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingPageCount = false;
+          _initialLoadCompleted = true;
+        });
+      }
+    }
   }
 
   @override
   void didUpdateWidget(NoteListItem oldWidget) {
     super.didUpdateWidget(oldWidget);
+    
+    // 이미지 URL이 변경되면 새로 로드
     if (oldWidget.note.imageUrl != widget.note.imageUrl) {
       _loadImage();
     }
-    if (oldWidget.note.id != widget.note.id) {
-      _loadPageCount();
+    
+    // 노트 ID가 변경되거나 이미지 카운트가 증가한 경우에만 페이지 카운트 업데이트
+    // 이미지 카운트가 감소한 경우는 무시 (내림 방지)
+    bool shouldUpdateCount = oldWidget.note.id != widget.note.id;
+    
+    if (widget.note.imageCount != null && oldWidget.note.imageCount != null &&
+        widget.note.imageCount! > oldWidget.note.imageCount!) {
+      shouldUpdateCount = true;
+    }
+    
+    if (shouldUpdateCount) {
+      if (widget.note.imageCount != null && widget.note.imageCount! > 0) {
+        // 즉시 UI 업데이트
+        setState(() {
+          _pageCount = widget.note.imageCount!;
+          _isLoadingPageCount = false;
+        });
+      }
+      
+      // 백그라운드에서 추가 정보 로드
+      _loadPageCountInBackground();
     }
   }
 
@@ -86,67 +184,6 @@ class _NoteListItemState extends State<NoteListItem> {
       if (mounted) {
         setState(() {
           _isLoadingImage = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadPageCount() async {
-    if (widget.note.id == null) return;
-    
-    setState(() {
-      _isLoadingPageCount = true;
-    });
-    
-    try {
-      // 노트의 최신 정보 가져오기
-      final noteDoc = await FirebaseFirestore.instance.collection('notes').doc(widget.note.id).get();
-      if (noteDoc.exists) {
-        final data = noteDoc.data();
-        if (data != null) {
-          int count = 0;
-          
-          // 1. totalPageCount 필드 확인 (가장 정확한 정보)
-          if (data.containsKey('totalPageCount') && data['totalPageCount'] is int) {
-            count = data['totalPageCount'] as int;
-          }
-          // 2. pages 배열 확인 (다음으로 정확한 정보)
-          else if (data['pages'] is List) {
-            count = (data['pages'] as List).length;
-          }
-          // 3. 이미지 수로 추정 (노트 생성 시점에는 이미지 수 = 페이지 수)
-          else if (data.containsKey('imageCount') && data['imageCount'] is int) {
-            count = data['imageCount'] as int;
-          }
-          
-          if (mounted) {
-            setState(() {
-              _pageCount = count > 0 ? count : widget.note.imageCount ?? 1;
-              _isLoadingPageCount = false;
-            });
-          }
-          return;
-        }
-      }
-      
-      // 페이지 컬렉션에서 직접 조회 (가장 느린 방법이지만 정확함)
-      final pages = await _pageService.getPagesForNote(widget.note.id!);
-      if (mounted) {
-        setState(() {
-          _pageCount = pages.isNotEmpty ? pages.length : widget.note.imageCount ?? 1;
-          _isLoadingPageCount = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('페이지 수 로드 중 오류 발생: $e');
-      // 이미 위젯이 있는 pages 리스트를 사용
-      if (mounted) {
-        setState(() {
-          // 이미지 개수를 사용하되, 최소 1페이지 이상으로 표시
-          _pageCount = (widget.note.imageCount ?? widget.note.pages.length) > 0 
-              ? (widget.note.imageCount ?? widget.note.pages.length) 
-              : 1;
-          _isLoadingPageCount = false;
         });
       }
     }
