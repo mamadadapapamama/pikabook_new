@@ -7,16 +7,13 @@ import '../../widgets/note_list_item.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../widgets/loading_dialog.dart';
 import '../../services/note_service.dart';
-import '../../services/page_service.dart';
 import '../../services/image_service.dart';
 import '../../services/user_preferences_service.dart';
-import '../../models/note.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import '../../theme/tokens/ui_tokens.dart';
 import 'note_detail_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
@@ -102,13 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: ColorTokens.textPrimary,
                       ),
                       textAlign: TextAlign.left,
-                    ),
-                    SizedBox(width: SpacingTokens.xs),
-                    Icon(
-                      Icons.keyboard_arrow_down,
-                      color: ColorTokens.textPrimary,
-                      size: SpacingTokens.iconSizeSmall,
-                    ),
+                    )
                   ],
                 ),
               ],

@@ -17,6 +17,9 @@ class ProcessedText {
   final bool showFullText;
   final bool showPinyin;
   final bool showTranslation;
+  
+  /// 개별 노트에서 showFullText 값이 수정되었는지 여부
+  final bool showFullTextModified;
 
   ProcessedText({
     required this.fullOriginalText,
@@ -25,6 +28,7 @@ class ProcessedText {
     this.showFullText = false,
     this.showPinyin = true,
     this.showTranslation = true,
+    this.showFullTextModified = false,
   });
 
   /// JSON에서 생성
@@ -40,6 +44,7 @@ class ProcessedText {
       showFullText: json['showFullText'] as bool? ?? false,
       showPinyin: json['showPinyin'] as bool? ?? true,
       showTranslation: json['showTranslation'] as bool? ?? true,
+      showFullTextModified: json['showFullTextModified'] as bool? ?? false,
     );
   }
 
@@ -52,6 +57,7 @@ class ProcessedText {
       'showFullText': showFullText,
       'showPinyin': showPinyin,
       'showTranslation': showTranslation,
+      'showFullTextModified': showFullTextModified,
     };
   }
 
@@ -63,6 +69,7 @@ class ProcessedText {
     bool? showFullText,
     bool? showPinyin,
     bool? showTranslation,
+    bool? showFullTextModified,
   }) {
     // 디버그 로그 추가
     if (kDebugMode && (showFullText != this.showFullText || 
@@ -78,6 +85,9 @@ class ProcessedText {
       if (showTranslation != null && showTranslation != this.showTranslation) {
         debugPrint(' - showTranslation: ${this.showTranslation} -> $showTranslation');
       }
+      if (showFullTextModified != null && showFullTextModified != this.showFullTextModified) {
+        debugPrint(' - showFullTextModified: ${this.showFullTextModified} -> $showFullTextModified');
+      }
     }
     
     return ProcessedText(
@@ -87,12 +97,16 @@ class ProcessedText {
       showFullText: showFullText ?? this.showFullText,
       showPinyin: showPinyin ?? this.showPinyin,
       showTranslation: showTranslation ?? this.showTranslation,
+      showFullTextModified: showFullTextModified ?? this.showFullTextModified,
     );
   }
 
   /// 표시 모드 전환
   ProcessedText toggleDisplayMode() {
-    return copyWith(showFullText: !showFullText);
+    return copyWith(
+      showFullText: !showFullText,
+      showFullTextModified: true, // 수동으로 변경되었음을 표시
+    );
   }
   
   /// 디버그 정보 문자열 반환
@@ -102,6 +116,7 @@ class ProcessedText {
         'segments=${segments?.length ?? 0}, '
         'showFullText=$showFullText, '
         'showPinyin=$showPinyin, '
-        'showTranslation=$showTranslation)';
+        'showTranslation=$showTranslation, '
+        'showFullTextModified=$showFullTextModified)';
   }
 }

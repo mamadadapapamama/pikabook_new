@@ -22,6 +22,7 @@ class PageContentWidget extends StatefulWidget {
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
   final List<FlashCard>? flashCards;
   final Function(int)? onDeleteSegment;
+  final bool useSegmentMode;
 
   const PageContentWidget({
     super.key,
@@ -32,6 +33,7 @@ class PageContentWidget extends StatefulWidget {
     required this.onCreateFlashCard,
     this.flashCards,
     this.onDeleteSegment,
+    this.useSegmentMode = true,
   });
 
   @override
@@ -157,13 +159,41 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   '번역 텍스트 ${displayedText.fullTranslatedText?.length ?? 0}자, '
                   'segments ${displayedText.segments?.length ?? 0}개');
                   
+              // 개별 노트에 이미 설정된 값이 있으면 그것을 우선 사용
+              // 설정된 값이 없는 경우에만 전역 세그먼트 모드 설정 적용
+              final bool useExistingMode = displayedText.showFullTextModified;
+              final bool showFullText = useExistingMode 
+                  ? displayedText.showFullText 
+                  : !widget.useSegmentMode;
+                  
+              debugPrint('뷰 모드 적용: useExistingMode=$useExistingMode, '
+                  'existingMode=${displayedText.showFullText}, '
+                  'globalMode=${!widget.useSegmentMode}, '
+                  'finalMode=$showFullText');
+                  
+              final updatedText = displayedText.copyWith(
+                showFullText: showFullText,
+                showFullTextModified: true, // 수정됨 표시
+                showPinyin: displayedText.showPinyin,
+                showTranslation: displayedText.showTranslation,
+              );
+              
+              // 모드 변경 적용 로깅
+              debugPrint('세그먼트 모드 적용: useSegmentMode=${widget.useSegmentMode}, '
+                'showFullText=$showFullText');
+              
+              // 업데이트된 설정으로 ProcessedText 저장
+              if (widget.page.id != null) {
+                _pageContentService.setProcessedText(widget.page.id!, updatedText);
+              }
+                  
               return ProcessedTextWidget(
                 // 캐시 무효화를 위한 키 추가 (ProcessedText 상태가 변경될 때마다 새 위젯 생성)
-                key: ValueKey('pt_${widget.page.id}_${displayedText.hashCode}_'
-                    '${displayedText.showFullText}_'
-                    '${displayedText.showPinyin}_'
-                    '${displayedText.showTranslation}'),
-                processedText: displayedText,
+                key: ValueKey('pt_${widget.page.id}_${updatedText.hashCode}_'
+                    '${updatedText.showFullText}_'
+                    '${updatedText.showPinyin}_'
+                    '${updatedText.showTranslation}'),
+                processedText: updatedText,
                 onDictionaryLookup: _lookupWord,
                 onCreateFlashCard: widget.onCreateFlashCard,
                 flashCards: widget.flashCards,
