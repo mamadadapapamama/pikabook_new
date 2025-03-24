@@ -46,7 +46,6 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                 Text(
                   '번역 노트 만들기',
                   style: TypographyTokens.subtitle2.copyWith(
-                    fontWeight: FontWeight.w500,
                     color: Colors.black,
                   ),
                 ),
@@ -60,17 +59,6 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                 ),
               ],
             ),
-            
-            const SizedBox(height: 24),
-            
-            // 설명 텍스트
-            Text(
-              '이미지를 인식해, 번역, 원어 듣기, 사전, 플래시카드 기능이\n있는 스마트 노트를 만들어요.',
-              style: TypographyTokens.body2.copyWith(
-                color: ColorTokens.textPrimary,
-              ),
-            ),
-            
             const SizedBox(height: 24),
             
             // 갤러리 및 카메라 옵션 버튼

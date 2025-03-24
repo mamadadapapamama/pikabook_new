@@ -281,8 +281,8 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset(
-              'assets/images/add_note.svg',
+            SvgPicture.asset(
+              'assets/images/icon_addnote.svg',
               width: 48,
               height: 48,
               fit: BoxFit.contain,
@@ -299,7 +299,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 8),
             
             Text(
-              '이미지를 기반으로 학습 노트를 만들어드립니다.\n카메라 촬영도 가능합니다.',
+              '이미지를 기반으로 스마트 학습노트를 만들어드립니다.\n카메라 촬영도 가능합니다.',
               textAlign: TextAlign.center,
               style: TypographyTokens.body2.copyWith(
                 color: ColorTokens.textSecondary,

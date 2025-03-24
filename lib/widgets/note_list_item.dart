@@ -49,7 +49,9 @@ class _NoteListItemState extends State<NoteListItem> {
     _loadImage();
     
     // 페이지 카운트 초기화: 생성 시 이미지 개수가 있다면 이를 기본값으로 설정
-    _pageCount = widget.note.imageCount ?? widget.note.pages.length;
+    _pageCount = (widget.note.imageCount ?? widget.note.pages.length) > 0 
+        ? (widget.note.imageCount ?? widget.note.pages.length) 
+        : 1; // 최소 1페이지
     _loadPageCount();
   }
 
@@ -119,7 +121,7 @@ class _NoteListItemState extends State<NoteListItem> {
           
           if (mounted) {
             setState(() {
-              _pageCount = count;
+              _pageCount = count > 0 ? count : widget.note.imageCount ?? 1;
               _isLoadingPageCount = false;
             });
           }
@@ -131,7 +133,7 @@ class _NoteListItemState extends State<NoteListItem> {
       final pages = await _pageService.getPagesForNote(widget.note.id!);
       if (mounted) {
         setState(() {
-          _pageCount = pages.length;
+          _pageCount = pages.isNotEmpty ? pages.length : widget.note.imageCount ?? 1;
           _isLoadingPageCount = false;
         });
       }
@@ -140,7 +142,10 @@ class _NoteListItemState extends State<NoteListItem> {
       // 이미 위젯이 있는 pages 리스트를 사용
       if (mounted) {
         setState(() {
-          _pageCount = widget.note.imageCount ?? widget.note.pages.length;
+          // 이미지 개수를 사용하되, 최소 1페이지 이상으로 표시
+          _pageCount = (widget.note.imageCount ?? widget.note.pages.length) > 0 
+              ? (widget.note.imageCount ?? widget.note.pages.length) 
+              : 1;
           _isLoadingPageCount = false;
         });
       }
@@ -175,6 +180,10 @@ class _NoteListItemState extends State<NoteListItem> {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+          side: BorderSide(
+            color: ColorTokens.primarylight,
+            width: 1,
+          ),
         ),
         child: InkWell(
           onTap: widget.onTap,
