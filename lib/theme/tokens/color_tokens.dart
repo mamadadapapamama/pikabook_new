@@ -6,10 +6,11 @@ import 'package:flutter/material.dart';
 class ColorTokens {
   // 브랜드 컬러
   static const Color primary = Color(0xFFFE6A15); // 메인 브랜드 컬러
-  static const Color primarybitlight = Color(0xFfFE975B); // 메인 브랜드 컬러 연하게
+  static const Color primaryMedium= Color(0xFfFE975B); // 메인 브랜드 컬러 연하게
   static const Color primarylight = Color(0xFFFFE1D0); // 메인 브랜드 컬러 연하게
   static const Color primaryverylight = Color(0xFFFFF0E8); // 메인 브랜드 컬러 아주 연하게
   static const Color secondary = Color(0xFF226357); // 보조 브랜드 컬러
+  static const Color secondaryLight = Color(0xFFD3E0DD); // 보조 브랜드 컬러
   static const Color tertiary = Color(0xFFFFD53C); // 강조 브랜드 컬러
   
   // 중립 컬러
