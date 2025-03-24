@@ -81,6 +81,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   bool _isProcessingText = false;
   File? _imageFile;
   Note? _processingPage;
+  bool _useSegmentMode = true; // 기본값은 세그먼트 모드
 
   @override
   void initState() {
@@ -490,14 +491,29 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
 
   Future<void> _loadUserPreferences() async {
     try {
-      // 변경된 로직: 항상 기본 모드를 사용
+      // 사용자가 선택한 번역 모드 가져오기
+      final noteViewMode = await _preferencesService.getDefaultNoteViewMode();
+      final useSegmentMode = await _preferencesService.getUseSegmentMode();
+      
+      if (mounted) {
+        setState(() {
+          // TextDisplayMode는 병음 표시 여부에 관한 것이므로 별도로 처리
+          _textDisplayMode = TextDisplayMode.all; // 기본값으로 모든 정보 표시
+          
+          // 세그먼트 모드 여부는 별도 변수로 저장
+          _useSegmentMode = useSegmentMode;
+        });
+      }
+      debugPrint('노트 뷰 모드 로드됨: ${noteViewMode.toString()}, 세그먼트 모드 사용: $_useSegmentMode');
+    } catch (e) {
+      debugPrint('사용자 기본 설정 로드 중 오류 발생: $e');
+      // 오류 발생 시 기본 모드 사용
       if (mounted) {
         setState(() {
           _textDisplayMode = TextDisplayMode.all;
+          _useSegmentMode = true; // 기본값은 세그먼트 모드
         });
       }
-    } catch (e) {
-      debugPrint('사용자 기본 설정 로드 중 오류 발생: $e');
     }
   }
 
@@ -745,22 +761,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       return;
     }
     
-    // 현재 상태 확인
-    final bool currentShowFullText = processedText.showFullText;
-    
-    // 상태 반전
-    final bool newShowFullText = !currentShowFullText;
+    debugPrint('모드 전환 요청: 현재 showFullText=${processedText.showFullText}, '
+        'showFullTextModified=${processedText.showFullTextModified}');
     
     setState(() {
-      // 병음 표시 상태 유지하면서 전체 텍스트 모드만 전환
-      final updatedText = processedText.copyWith(
-        showFullText: newShowFullText,
-        showPinyin: processedText.showPinyin,
-        showTranslation: true, // 번역은 항상 표시
-      );
+      // toggleDisplayMode 메서드 사용 (showFullTextModified를 true로 설정)
+      final updatedText = processedText.toggleDisplayMode();
       
       // 업데이트된 ProcessedText 저장
       _pageContentService.setProcessedText(currentPage.id!, updatedText);
+      
+      debugPrint('모드 전환 완료: 변경 후 showFullText=${updatedText.showFullText}, '
+          'showFullTextModified=${updatedText.showFullTextModified}');
     });
   }
   
@@ -936,12 +948,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     }
 
     // 현재 텍스트 표시 모드 정보 로깅
-    debugPrint('현재 텍스트 디스플레이 모드: $_textDisplayMode');
+    debugPrint('현재 텍스트 디스플레이 모드: $_textDisplayMode, 세그먼트 모드 사용: $_useSegmentMode');
     
     // ValueKey를 사용하여 페이지나 설정이 변경될 때마다 위젯 갱신
     return PageContentWidget(
       key: ValueKey('page_content_${currentPage.id}_${_pageManager.currentPageIndex}_'
-          '${_textDisplayMode}_${cachedProcessedText?.hashCode ?? 0}'),
+          '${_textDisplayMode}_${_useSegmentMode}_${cachedProcessedText?.hashCode ?? 0}'),
       page: currentPage,
       imageFile: imageFile,
       isLoadingImage: false,
@@ -949,6 +961,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       onCreateFlashCard: _createFlashCard,
       flashCards: _note?.flashCards,
       onDeleteSegment: _handleDeleteSegment,
+      useSegmentMode: _useSegmentMode,
     );
   }
 
