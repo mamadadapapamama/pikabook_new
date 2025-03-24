@@ -22,116 +22,147 @@ class NoteActionBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 상단 타이틀
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            width: double.infinity,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              border: Border(
-                bottom: BorderSide(color: Colors.grey.shade300),
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 드래그 핸들
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: ColorTokens.disabled,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            child: Text(
-              '노트 옵션',
-              style: TypographyTokens.subtitle2.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            
+            // 즐겨찾기 추가/제거
+            _buildActionTile(
+              context: context,
+              icon: isFavorite ? Icons.favorite : Icons.favorite_border,
+              iconColor: isFavorite ? ColorTokens.error : ColorTokens.textSecondary,
+              title: isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가',
+              onTap: () {
+                Navigator.pop(context);
+                onToggleFavorite();
+              },
             ),
-          ),
-          
-          // 즐겨찾기 추가/제거
-          ListTile(
-            leading: Icon(
-              isFavorite ? Icons.favorite : Icons.favorite_border, 
-              color: isFavorite ? Colors.red : Colors.grey,
+            
+            // 노트 제목 변경
+            _buildActionTile(
+              context: context,
+              icon: Icons.edit,
+              iconColor: ColorTokens.primary,
+              title: '노트 제목 변경',
+              onTap: () {
+                Navigator.pop(context);
+                onEditTitle();
+              },
             ),
-            title: Text(
-              isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가',
-              style: TypographyTokens.body1,
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              onToggleFavorite();
-            },
-          ),
-          
-          // 노트 제목 변경
-          ListTile(
-            leading: const Icon(Icons.edit, color: Colors.blue),
-            title: Text('노트 제목 변경', style: TypographyTokens.body1),
-            onTap: () {
-              Navigator.pop(context);
-              onEditTitle();
-            },
-          ),
-          
-          // 구분선
-          const Divider(height: 1),
-          
-          // 텍스트 모드 그룹 타이틀
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: Row(
-              children: [
-                const Icon(Icons.format_align_left, size: 18, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text(
+            
+            // 구분선
+            Divider(color: ColorTokens.divider, height: 1),
+            
+            // 텍스트 모드 그룹 타이틀
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
                   '텍스트 모드',
                   style: TypographyTokens.caption.copyWith(
-                    color: Colors.grey,
-                    fontWeight: FontWeight.w500,
+                    color: ColorTokens.textSecondary,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-          
-          // 문장별 구분 모드
-          ListTile(
-            leading: const SizedBox(width: 24),
-            title: Text('문장별 구분', style: TypographyTokens.body1),
-            trailing: !isFullTextMode ? const Icon(Icons.check, color: ColorTokens.success) : null,
-            onTap: () {
-              Navigator.pop(context);
-              if (isFullTextMode) {
-                onToggleFullTextMode();
-              }
-            },
-          ),
-          
-          // 원문 전체 모드
-          ListTile(
-            leading: const SizedBox(width: 24),
-            title: Text('원문 전체', style: TypographyTokens.body1),
-            trailing: isFullTextMode ? const Icon(Icons.check, color: ColorTokens.success) : null,
-            onTap: () {
-              Navigator.pop(context);
-              if (!isFullTextMode) {
-                onToggleFullTextMode();
-              }
-            },
-          ),
-          
-          // 구분선
-          const Divider(height: 1),
-          
-          // 노트 삭제
-          ListTile(
-            leading: const Icon(Icons.delete, color: Colors.red),
-            title: Text('노트 삭제', style: TypographyTokens.body1),
-            onTap: () {
-              Navigator.pop(context);
-              onDeleteNote();
-            },
-          ),
-        ],
+            
+            // 문장별 구분 모드
+            _buildActionTile(
+              context: context,
+              leading: const SizedBox(width: 24),
+              title: '문장별 구분',
+              trailing: !isFullTextMode 
+                ? Icon(Icons.check_circle, color: ColorTokens.primary) 
+                : const SizedBox(width: 24),
+              onTap: () {
+                Navigator.pop(context);
+                if (isFullTextMode) {
+                  onToggleFullTextMode();
+                }
+              },
+            ),
+            
+            // 원문 전체 모드
+            _buildActionTile(
+              context: context,
+              leading: const SizedBox(width: 24),
+              title: '원문 전체',
+              trailing: isFullTextMode 
+                ? Icon(Icons.check_circle, color: ColorTokens.primary) 
+                : const SizedBox(width: 24),
+              onTap: () {
+                Navigator.pop(context);
+                if (!isFullTextMode) {
+                  onToggleFullTextMode();
+                }
+              },
+            ),
+            
+            // 구분선
+            Divider(color: ColorTokens.divider, height: 1),
+            
+            // 노트 삭제
+            _buildActionTile(
+              context: context,
+              icon: Icons.delete_outline,
+              iconColor: ColorTokens.error,
+              title: '노트 삭제',
+              onTap: () {
+                Navigator.pop(context);
+                onDeleteNote();
+              },
+            ),
+            
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
+    );
+  }
+  
+  Widget _buildActionTile({
+    required BuildContext context,
+    IconData? icon,
+    Color? iconColor,
+    Widget? leading,
+    required String title,
+    Widget? trailing,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: icon != null 
+          ? Icon(icon, color: iconColor ?? ColorTokens.textSecondary) 
+          : leading,
+      title: Text(
+        title, 
+        style: TypographyTokens.body2.copyWith(
+          color: ColorTokens.textPrimary,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: trailing,
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      minLeadingWidth: 24,
+      dense: true,
     );
   }
 }

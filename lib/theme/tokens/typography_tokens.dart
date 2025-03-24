@@ -142,20 +142,20 @@ class TypographyTokens {
   static TextStyle get body2 => TextStyle(
         fontFamily: notoSansKr,
         fontSize: 14,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w500,
         height: 1.2,
       );
 
   static TextStyle get body2En => GoogleFonts.poppins(
         fontSize: 14,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w500,
         height: 1.5,
       );
 
   static TextStyle get body2Cn => TextStyle(
         fontFamily: notoSansHk,
         fontSize: 14,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w500,
         height: 1.2,
       );
 
