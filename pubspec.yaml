@@ -73,6 +73,7 @@ dependencies:
   flutter_card_swiper: ^7.0.2
   flip_card: ^0.7.0
   flutter_svg: ^2.0.17
+  lpinyin: ^2.0.3
 
 
 dev_dependencies:

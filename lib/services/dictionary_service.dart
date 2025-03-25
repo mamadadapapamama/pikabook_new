@@ -11,6 +11,7 @@ import 'dart:convert';
 import '../models/dictionary_entry.dart';
 import 'chinese_dictionary_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'pinyin_creation_service.dart';
 
 /// 외부 사전 서비스 (e.g papago, google translate) 를 관리하는 서비스
 /// 단어 검색 결과 캐싱
@@ -39,6 +40,8 @@ class DictionaryService {
 
   // 사전 업데이트 콜백 리스트
   final List<Function()> _dictionaryUpdateListeners = [];
+
+  final PinyinCreationService _pinyinService = PinyinCreationService();
 
   // 사전 업데이트 리스너 추가
   void addDictionaryUpdateListener(Function() listener) {
@@ -146,6 +149,17 @@ class DictionaryService {
       await _chineseDictionaryService.loadDictionary();
       final chineseDictResult = _chineseDictionaryService.lookup(word);
       if (chineseDictResult != null) {
+        // 병음이 없는 경우에도 생성
+        if (chineseDictResult.pinyin.isEmpty) {
+          final pinyin = await _pinyinService.generatePinyin(word);
+          return DictionaryEntry(
+            word: chineseDictResult.word,
+            pinyin: pinyin,
+            meaning: chineseDictResult.meaning,
+            examples: chineseDictResult.examples,
+            source: chineseDictResult.source,
+          );
+        }
         debugPrint('내부 중국어 사전에서 단어 찾음: $word');
         return chineseDictResult;
       }
@@ -158,34 +172,78 @@ class DictionaryService {
       // 1. 앱 내 JSON 단어장에서 검색
       final jsonResult = _dictionary[word];
       if (jsonResult != null) {
+        // 병음이 없는 경우에도 생성
+        if (jsonResult.pinyin.isEmpty) {
+          final pinyin = await _pinyinService.generatePinyin(word);
+          return DictionaryEntry(
+            word: jsonResult.word,
+            pinyin: pinyin,
+            meaning: jsonResult.meaning,
+            examples: jsonResult.examples,
+            source: jsonResult.source,
+          );
+        }
         return jsonResult;
       }
 
       // 2. 시스템 사전 기능 활용 (iOS/Android)
       final systemDictResult = await _lookupInSystemDictionary(word);
       if (systemDictResult != null) {
+        // 병음이 없는 경우에도 생성
+        if (systemDictResult.pinyin.isEmpty) {
+          final pinyin = await _pinyinService.generatePinyin(word);
+          return DictionaryEntry(
+            word: systemDictResult.word,
+            pinyin: pinyin,
+            meaning: systemDictResult.meaning,
+            examples: systemDictResult.examples,
+            source: systemDictResult.source,
+          );
+        }
         return systemDictResult;
       }
 
       // 3. Papago API 사용
       final papagoResult = await _lookupWithPapagoApi(word);
       if (papagoResult != null) {
+        // 파파고는 병음을 제공하지 않으므로 항상 생성
+        final pinyin = await _pinyinService.generatePinyin(word);
+        final entryWithPinyin = DictionaryEntry(
+          word: papagoResult.word,
+          pinyin: pinyin,
+          meaning: papagoResult.meaning,
+          examples: papagoResult.examples,
+          source: papagoResult.source,
+        );
         // 내부 중국어 사전에도 추가
-        _chineseDictionaryService.addEntry(papagoResult);
-        return papagoResult;
+        _chineseDictionaryService.addEntry(entryWithPinyin);
+        return entryWithPinyin;
       }
 
-      // 4. 외부 사전 서비스 URL 생성 (실제 검색은 사용자가 URL을 통해 수행)
+      // 4. 모든 검색이 실패한 경우에도 병음은 생성
+      final pinyin = await _pinyinService.generatePinyin(word);
       return DictionaryEntry(
         word: word,
-        pinyin: '',
+        pinyin: pinyin,
         meaning: '사전에서 찾을 수 없습니다. 외부 사전에서 검색하려면 탭하세요.',
         examples: [],
         source: 'external',
       );
     } catch (e) {
       debugPrint('단어 검색 중 오류 발생: $e');
-      return null;
+      // 오류 발생시에도 병음은 생성 시도
+      try {
+        final pinyin = await _pinyinService.generatePinyin(word);
+        return DictionaryEntry(
+          word: word,
+          pinyin: pinyin,
+          meaning: '단어 검색 중 오류가 발생했습니다.',
+          examples: [],
+          source: 'error',
+        );
+      } catch (e) {
+        return null;
+      }
     }
   }
 
@@ -498,7 +556,7 @@ class DictionaryService {
       final papagoResult = await _lookupWithPapagoApi(word);
       if (papagoResult != null) {
         // 검색 결과를 사전에 추가
-        _addToDictionary(papagoResult);
+        addToDictionary(papagoResult);
 
         // 내부 중국어 사전에도 추가
         _chineseDictionaryService.addEntry(papagoResult);
@@ -529,7 +587,7 @@ class DictionaryService {
   }
 
   // 사전에 단어 추가
-  void _addToDictionary(DictionaryEntry entry) {
+  void addToDictionary(DictionaryEntry entry) {
     bool isNewEntry = false;
     if (!_dictionary.containsKey(entry.word)) {
       _dictionary[entry.word] = entry;
