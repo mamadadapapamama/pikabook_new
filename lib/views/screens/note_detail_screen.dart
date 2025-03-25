@@ -21,6 +21,7 @@ import '../../widgets/edit_title_dialog.dart';
 import '../../widgets/note_detail_bottom_bar.dart';
 import '../../widgets/note_page_manager.dart';
 import '../../widgets/note_segment_manager.dart';
+import '../../widgets/pikabook_loader.dart';
 import '../../utils/text_display_mode.dart';
 import 'flashcard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -821,77 +822,167 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         currentPageIndex: _pageManager.currentPageIndex,
         totalPages: _pageManager.pages.length,
       ),
-      body: Column(
-        children: [
-          // 페이지 썸네일 이미지 (있는 경우)
-          if (currentImageFile != null || _pageManager.currentPage?.imageUrl != null)
-            Stack(
+      body: PageView.builder(
+        itemCount: _pageManager.pages.length,
+        controller: PageController(initialPage: _pageManager.currentPageIndex),
+        onPageChanged: (index) {
+          _changePage(index);
+        },
+        itemBuilder: (context, index) {
+          // 현재 표시할 페이지 인덱스의 페이지 빌드
+          if (index == _pageManager.currentPageIndex) {
+            return Column(
               children: [
-                // 이미지 컨테이너
-                Container(
-                  height: 200, // 높이를 200으로 고정
-                  width: double.infinity, // 화면 너비를 꽉 채움
-                  decoration: BoxDecoration(
-                    image: currentImageFile != null
-                        ? DecorationImage(
-                            image: FileImage(currentImageFile),
-                            fit: BoxFit.cover,
-                          )
-                        : _pageManager.currentPage?.imageUrl != null
-                            ? DecorationImage(
-                                image: NetworkImage(_pageManager.currentPage!.imageUrl!),
-                                fit: BoxFit.cover,
-                              )
+                // 페이지 썸네일 이미지 (있는 경우)
+                if (currentImageFile != null || _pageManager.currentPage?.imageUrl != null)
+                  Stack(
+                    children: [
+                      // 이미지 컨테이너
+                      Container(
+                        height: 200, // 높이를 200으로 고정
+                        width: double.infinity, // 화면 너비를 꽉 채움
+                        decoration: BoxDecoration(
+                          image: currentImageFile != null
+                              ? DecorationImage(
+                                  image: FileImage(currentImageFile),
+                                  fit: BoxFit.cover,
+                                )
+                              : _pageManager.currentPage?.imageUrl != null
+                                  ? DecorationImage(
+                                      image: NetworkImage(_pageManager.currentPage!.imageUrl!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
+                          color: Colors.grey.shade200,
+                        ),
+                        child: (currentImageFile == null && _pageManager.currentPage?.imageUrl == null)
+                            ? const Center(child: Icon(Icons.image, color: Colors.grey, size: 40))
                             : null,
-                    color: Colors.grey.shade200,
-                  ),
-                  child: (currentImageFile == null && _pageManager.currentPage?.imageUrl == null)
-                      ? const Center(child: Icon(Icons.image, color: Colors.grey, size: 40))
-                      : null,
-                ),
-                
-                // '이미지 전체보기' 버튼
-                Positioned(
-                  bottom: 12,
-                  right: 12,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => FullImageScreen(
-                            imageFile: currentImageFile,
-                            imageUrl: _pageManager.currentPage?.imageUrl,
-                            title: '이미지',
+                      ),
+                      
+                      // '이미지 전체보기' 버튼
+                      Positioned(
+                        bottom: 12,
+                        right: 12,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => FullImageScreen(
+                                  imageFile: currentImageFile,
+                                  imageUrl: _pageManager.currentPage?.imageUrl,
+                                  title: '이미지',
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.fullscreen, size: 16),
+                          label: const Text('이미지 전체보기'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black.withOpacity(0.7),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            textStyle: GoogleFonts.notoSansKr(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                            ),
                           ),
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.fullscreen, size: 16),
-                    label: const Text('이미지 전체보기'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black.withOpacity(0.7),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      textStyle: GoogleFonts.notoSansKr(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
                       ),
+                    ],
+                  ),
+                
+                // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
+                Expanded(
+                  child: Container(
+                    color: Colors.white, // 배경색 흰색
+                    padding: const EdgeInsets.all(0), // 패딩 0으로 설정 (ProcessedTextWidget에서 패딩 적용)
+                    child: _buildCurrentPageContent(),
+                  ),
+                ),
+              ],
+            );
+          } else {
+            // 다른 페이지는 페이지 매니저에서 해당 인덱스의 페이지를 가져와서 미리 로드
+            final page = _pageManager.getPageAtIndex(index);
+            final imageFile = _pageManager.getImageFileForPage(page);
+            
+            return Column(
+              children: [
+                // 페이지 썸네일 이미지 (있는 경우)
+                if (imageFile != null || page?.imageUrl != null)
+                  Stack(
+                    children: [
+                      // 이미지 컨테이너
+                      Container(
+                        height: 200, // 높이를 200으로 고정
+                        width: double.infinity, // 화면 너비를 꽉 채움
+                        decoration: BoxDecoration(
+                          image: imageFile != null
+                              ? DecorationImage(
+                                  image: FileImage(imageFile),
+                                  fit: BoxFit.cover,
+                                )
+                              : page?.imageUrl != null
+                                  ? DecorationImage(
+                                      image: NetworkImage(page!.imageUrl!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
+                          color: Colors.grey.shade200,
+                        ),
+                        child: (imageFile == null && page?.imageUrl == null)
+                            ? const Center(child: Icon(Icons.image, color: Colors.grey, size: 40))
+                            : null,
+                      ),
+                      
+                      // '이미지 전체보기' 버튼
+                      Positioned(
+                        bottom: 12,
+                        right: 12,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => FullImageScreen(
+                                  imageFile: imageFile,
+                                  imageUrl: page?.imageUrl,
+                                  title: '이미지',
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.fullscreen, size: 16),
+                          label: const Text('이미지 전체보기'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black.withOpacity(0.7),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            textStyle: GoogleFonts.notoSansKr(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                
+                // 페이지 내용을 위한 공간
+                const Expanded(
+                  child: Center(
+                    child: PikabookLoader(
+                      title: '다음 페이지를 준비하고 있어요.',
+                      subtitle: '좌우로 스와이프하여 페이지를 이동할 수 있어요.',
                     ),
                   ),
                 ),
               ],
-            ),
-          
-          // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
-          Expanded(
-            child: Container(
-              color: Colors.white, // 배경색 흰색
-              padding: const EdgeInsets.all(0), // 패딩 0으로 설정 (ProcessedTextWidget에서 패딩 적용)
-              child: _buildCurrentPageContent(),
-            ),
-          ),
-        ],
+            );
+          }
+        },
       ),
       bottomNavigationBar: NoteDetailBottomBar(
         currentPage: _pageManager.currentPage,
