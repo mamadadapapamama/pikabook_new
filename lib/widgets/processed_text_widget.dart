@@ -359,20 +359,48 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     }
   }
 
-  /// **전체 텍스트 표시 위젯**
+  /// **전체 텍스트 표시**
   Widget _buildFullTextView() {
+    // 전체 텍스트를 위한 Column 위젯 (전체 너비 사용)
     return Column(
+      mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 원본 텍스트 표시
-        _buildSelectableText(widget.processedText.fullOriginalText, isOriginal: true),
+        if (widget.processedText.fullOriginalText.isNotEmpty)
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            padding: const EdgeInsets.all(16.0),
+            margin: const EdgeInsets.only(bottom: 8.0),
+            child: _buildSelectableText(
+              widget.processedText.fullOriginalText,
+              isOriginal: true,
+            ),
+          ),
 
-        // 번역 텍스트 표시 (번역이 있고 showTranslation이 true인 경우)
-        if (widget.processedText.fullTranslatedText != null && 
-            widget.processedText.showTranslation)
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: _buildSelectableText(widget.processedText.fullTranslatedText!),
+        // 번역 텍스트 표시
+        if (widget.processedText.showTranslation &&
+            widget.processedText.fullTranslatedText != null &&
+            widget.processedText.fullTranslatedText!.isNotEmpty)
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8.0),
+            ),
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              widget.processedText.fullTranslatedText!,
+              style: GoogleFonts.notoSansKr(
+                fontSize: 16.0,
+                height: 1.5,
+                color: Colors.black87,
+              ),
+            ),
           ),
       ],
     );
@@ -485,12 +513,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           background: Container(
             alignment: Alignment.centerRight,
             padding: const EdgeInsets.only(right: 20.0),
-            color: Colors.red,
+            color: ColorTokens.errorBackground,
             child: const Icon(
               Icons.delete,
               color: Colors.white,
             ),
           ),
+          behavior: HitTestBehavior.opaque,
+          movementDuration: const Duration(milliseconds: 200),
           confirmDismiss: (direction) async {
             // 사용자 확인 다이얼로그 표시
             final bool? confirmed = await showDialog<bool>(

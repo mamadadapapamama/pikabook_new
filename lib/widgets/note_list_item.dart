@@ -90,7 +90,7 @@ class _NoteListItemState extends State<NoteListItem> {
       background: Container(
         alignment: Alignment.centerRight,
         padding: EdgeInsets.only(right: SpacingTokens.md),
-        color: ColorTokens.error,
+        color: ColorTokens.errorBackground,
         child: const Icon(
           Icons.delete,
           color: Colors.white,
