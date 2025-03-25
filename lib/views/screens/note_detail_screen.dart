@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:async';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/text_segment.dart';
@@ -54,7 +55,7 @@ class NoteDetailScreen extends StatefulWidget {
   State<NoteDetailScreen> createState() => _NoteDetailScreenState();
 }
 
-class _NoteDetailScreenState extends State<NoteDetailScreen> {
+class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBindingObserver {
   // 서비스 인스턴스
   final NoteService _noteService = NoteService();
   final PageService _pageService = PageService();
@@ -83,10 +84,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   File? _imageFile;
   Note? _processingPage;
   bool _useSegmentMode = true; // 기본값은 세그먼트 모드
+  bool _isShowingScreenshotWarning = false;
+  Timer? _screenshotWarningTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pageManager = NotePageManager(noteId: widget.noteId);
     _segmentManager = NoteSegmentManager();
     _loadNote();
@@ -98,8 +102,69 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   @override
   void dispose() {
     _backgroundCheckTimer?.cancel();
+    _screenshotWarningTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _ttsService.stop();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // 앱이 다시 활성화되었을 때 스크린샷 감지를 시도합니다.
+    if (state == AppLifecycleState.resumed) {
+      _checkForScreenshot();
+    }
+  }
+
+  // 스크린샷 감지 함수
+  Future<void> _checkForScreenshot() async {
+    try {
+      // iOS와 Android에서 스크린샷 이벤트를 감지하는 메커니즘이 다를 수 있습니다.
+      // 간단하게 앱이 다시 활성화될 때 스크린샷이 있었다고 가정합니다.
+      // 실제 구현에서는 플랫폼 채널 또는 특정 API를 사용하여 실제 스크린샷 이벤트를 감지해야 합니다.
+      if (mounted && !_isShowingScreenshotWarning) {
+        _showScreenshotWarning();
+      }
+    } catch (e) {
+      debugPrint('스크린샷 감지 중 오류 발생: $e');
+    }
+  }
+
+  // 스크린샷 경고 메시지 표시
+  void _showScreenshotWarning() {
+    setState(() {
+      _isShowingScreenshotWarning = true;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '원서 내용을 무단으로 공유, 배포할 경우 법적 제재를 받을 수 있습니다.',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: ColorTokens.error,
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+    
+    // 일정 시간 후 경고 상태 초기화
+    _screenshotWarningTimer?.cancel();
+    _screenshotWarningTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted) {
+        setState(() {
+          _isShowingScreenshotWarning = false;
+        });
+      }
+    });
   }
 
   // ===== 데이터 로딩 관련 메서드 =====
