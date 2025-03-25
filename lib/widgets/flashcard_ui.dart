@@ -115,33 +115,6 @@ class FlashCardUI {
 
           // 카드 번호 표시 (좌상단)
           buildCardNumberBadge(cardIndex, const Color(0xFFFFD53C), const Color(0xFF1B4F46)),
-          
-          // 삭제 안내 텍스트 (상단)
-          Positioned(
-            top: 16.0,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.delete_outline,
-                    size: 16,
-                    color: const Color(0xFFD3E0DD),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '위로 스와이프 해서 삭제',
-                    style: TextStyle(
-                      fontSize: 12.0,
-                      color: const Color(0xFFD3E0DD),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
