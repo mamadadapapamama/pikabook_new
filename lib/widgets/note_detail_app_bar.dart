@@ -49,6 +49,7 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
                 // 왼쪽 부분: 뒤로가기 버튼 및 제목
                 Expanded(
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       // 뒤로가기 버튼
                       IconButton(
@@ -66,6 +67,7 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
                       // 제목 영역
                       Expanded(
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             // 노트 제목
                             Flexible(
@@ -99,6 +101,7 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
                 
                 // 오른쪽 부분: 플래시카드 및 더보기 버튼
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     // 플래시카드 버튼 - note_list_item과 동일한 디자인
                     if (note != null)

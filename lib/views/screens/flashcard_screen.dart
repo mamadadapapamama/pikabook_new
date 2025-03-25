@@ -459,6 +459,23 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                         ),
                       ),
                       
+                      // TTS 버튼 추가
+                      if (_flashCards.isNotEmpty && _currentIndex < _flashCards.length)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: IconButton(
+                            icon: Icon(
+                              _isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
+                              size: 20,
+                              color: const Color(0xFF226357),
+                            ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: _speakCurrentCard,
+                            tooltip: _isSpeaking ? '음성 중지' : '단어 읽기',
+                          ),
+                        ),
+                      
                       // 카드 카운터 표시
                       if (_flashCards.isNotEmpty)
                         Expanded(
