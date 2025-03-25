@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:badges/badges.dart' as badges;
-import 'package:google_fonts/google_fonts.dart';
 import '../models/note.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
+import '../widgets/flashcard_counter_badge.dart';
 
 class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Note? note;
@@ -41,9 +40,9 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
       children: [
         // AppBar 내용
         SizedBox(
-          height: 76, // 앱바 높이 조정 (홈 스크린 + 4px)
+          height: 100, // 앱바 높이 조정 (홈 스크린 + 4px)
           child: Padding(
-            padding: const EdgeInsets.only(top: 44.0, left: 24.0, right: 24.0),
+            padding: const EdgeInsets.only(top: 44.0, left: 24.0, right: 24.0, bottom:24),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -103,30 +102,10 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
                   children: [
                     // 플래시카드 버튼 - note_list_item과 동일한 디자인
                     if (note != null)
-                      badges.Badge(
-                        position: badges.BadgePosition.topEnd(top: -8, end: -4),
-                        badgeContent: Text(
-                          '${note!.flashcardCount}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        badgeStyle: const badges.BadgeStyle(
-                          badgeColor: ColorTokens.secondary,
-                          padding: EdgeInsets.all(4),
-                        ),
-                        child: InkWell(
-                          onTap: onFlashCardPressed,
-                          child: const Padding(
-                            padding: EdgeInsets.all(4.0),
-                            child: Icon(
-                              Icons.flash_on,
-                              color: ColorTokens.primary,
-                              size: 24,
-                            ),
-                          ),
+                      GestureDetector(
+                        onTap: onFlashCardPressed,
+                        child: FlashcardCounterBadge(
+                          count: note!.flashcardCount,
                         ),
                       ),
                       
