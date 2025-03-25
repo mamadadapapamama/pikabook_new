@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,6 +10,8 @@ import '../../services/tts_service.dart';
 import '../../widgets/loading_indicator.dart';
 import '../../services/chinese_dictionary_service.dart';
 import '../../widgets/flashcard_ui.dart';
+import '../../theme/tokens/color_tokens.dart';
+import '../../theme/tokens/typography_tokens.dart';
 
 /// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
 /// 플래시카드 UI interaction 담당 (swipe, flip, tts, delete )
@@ -402,6 +405,15 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 상태 표시줄 색상을 검정으로 설정
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+    );
+    
     return WillPopScope(
       // 화면을 나갈 때 노트 정보 업데이트
       onWillPop: () async {
@@ -413,23 +425,72 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
         return true; // 일반적인 뒤로 가기 동작 수행
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('플래시카드'),
-          actions: [
-            if (_flashCards.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Center(
-                  child: Text(
-                    '${_currentIndex + 1} / ${_flashCards.length}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+        backgroundColor: Colors.white,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(76), // 홈 스크린 + 4px
+          child: Column(
+            children: [
+              // AppBar 내용
+              SizedBox(
+                height: 76, // 앱바 높이 조정 (홈 스크린 + 4px)
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 44.0, left: 24.0, right: 24.0),
+                  child: Row(
+                    children: [
+                      // 뒤로가기 버튼
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_ios_rounded,
+                          color: Colors.black,
+                          size: 20,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => Navigator.of(context).pop(_error != null ? false : true),
+                      ),
+                      const SizedBox(width: 4),
+                      
+                      // 타이틀
+                      Text(
+                        '플래시카드',
+                        style: TypographyTokens.subtitle1.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: ColorTokens.textPrimary,
+                        ),
+                      ),
+                      
+                      // 카드 카운터 표시
+                      if (_flashCards.isNotEmpty)
+                        Expanded(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Container(
+                                height: 28,
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFD53C),
+                                  borderRadius: BorderRadius.circular(100),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${_currentIndex + 1} / ${_flashCards.length}',
+                                    style: TypographyTokens.button.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF1B4F46),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
-          ],
+            ],
+          ),
         ),
         body: _isLoading
             ? const Center(child: LoadingIndicator(message: '플래시카드 로딩 중...'))

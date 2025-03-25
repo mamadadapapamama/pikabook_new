@@ -191,6 +191,10 @@ class NoteDetailBottomBar extends StatelessWidget {
     );
   }
   
+  /*
+  // 현재 사용되지 않는 코드입니다 - 향후 참조를 위해 보존
+  // minimal UI 버전의 하단바가 필요할 때 활용할 수 있습니다
+  
   // 최소한의 UI를 가진 바텀 바 (ProcessedText가 없는 경우)
   Widget _buildMinimalBottomBar(BuildContext context) {
     return Column(
@@ -307,4 +311,5 @@ class NoteDetailBottomBar extends StatelessWidget {
       ],
     );
   }
+  */
 } 

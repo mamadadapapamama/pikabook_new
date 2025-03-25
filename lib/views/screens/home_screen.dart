@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -49,103 +50,118 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 상태 표시줄 색상을 검정으로 설정
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+    );
+    
     return ChangeNotifierProvider(
       create: (_) => HomeViewModel(),
       child: Scaffold(
         backgroundColor: UITokens.homeBackground,
-        appBar: AppBar(
-          backgroundColor: UITokens.homeBackground,
-          elevation: 0,
-          automaticallyImplyLeading: false,
-          titleSpacing: 0,
-          title: Padding(
-            padding: const EdgeInsets.only(left: 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 앱 로고
-                Container(
-                  alignment: Alignment.centerLeft,
-                  child: SvgPicture.asset(
-                    'assets/images/logo_pika_small.svg',
-                    width: SpacingTokens.appLogoWidth,
-                    height: SpacingTokens.appLogoHeight,
-                    placeholderBuilder: (context) => Row(
-                      mainAxisSize: MainAxisSize.min,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(120), // 앱바 높이 조정 (원래 높이 + 상단 패딩)
+          child: Padding(
+            padding: const EdgeInsets.only(top: 44.0),
+            child: AppBar(
+              backgroundColor: UITokens.homeBackground,
+              elevation: 0,
+              automaticallyImplyLeading: false,
+              titleSpacing: 0,
+              title: Padding(
+                padding: const EdgeInsets.only(left: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 앱 로고
+                    Container(
+                      alignment: Alignment.centerLeft,
+                      child: SvgPicture.asset(
+                        'assets/images/logo_pika_small.svg',
+                        width: SpacingTokens.appLogoWidth,
+                        height: SpacingTokens.appLogoHeight,
+                        placeholderBuilder: (context) => Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.menu_book,
+                              color: ColorTokens.primary,
+                              size: SpacingTokens.iconSizeSmall,
+                            ),
+                            SizedBox(width: SpacingTokens.xs),
+                            Text(
+                              'Pikabook',
+                              style: GoogleFonts.poppins(
+                                fontSize: SpacingTokens.md,
+                                fontWeight: FontWeight.bold,
+                                color: ColorTokens.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: SpacingTokens.xs),
+                    // 노트 스페이스 이름
+                    Row(
                       children: [
-                        Icon(
-                          Icons.menu_book,
-                          color: ColorTokens.primary,
-                          size: SpacingTokens.iconSizeSmall,
-                        ),
-                        SizedBox(width: SpacingTokens.xs),
                         Text(
-                          'Pikabook',
-                          style: GoogleFonts.poppins(
-                            fontSize: SpacingTokens.md,
-                            fontWeight: FontWeight.bold,
-                            color: ColorTokens.primary,
+                          _noteSpaceName,
+                          style: TypographyTokens.headline3.copyWith(
+                            color: ColorTokens.textPrimary,
                           ),
-                        ),
+                          textAlign: TextAlign.left,
+                        )
                       ],
                     ),
-                  ),
-                ),
-                SizedBox(height: SpacingTokens.xs),
-                // 노트 스페이스 이름
-                Row(
-                  children: [
-                    Text(
-                      _noteSpaceName,
-                      style: TypographyTokens.headline3.copyWith(
-                        color: ColorTokens.textPrimary,
-                      ),
-                      textAlign: TextAlign.left,
-                    )
                   ],
+                ),
+              ),
+              actions: [
+                // 설정 버튼
+                Padding(
+                  padding: EdgeInsets.only(right: SpacingTokens.md),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(24),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.pushNamed(context, '/settings').then((_) {
+                          // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
+                          _loadNoteSpaceName();
+                        });
+                      },
+                      splashColor: ColorTokens.primary.withOpacity(0.1),
+                      highlightColor: ColorTokens.primary.withOpacity(0.05),
+                      customBorder: const CircleBorder(),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: SizedBox(
+                          width: SpacingTokens.iconSizeMedium,
+                          height: SpacingTokens.iconSizeMedium,
+                          child: SvgPicture.asset(
+                            'assets/images/icon_profile.svg',
+                            width: SpacingTokens.iconSizeMedium,
+                            height: SpacingTokens.iconSizeMedium,
+                            placeholderBuilder: (context) => Icon(
+                              Icons.person,
+                              color: ColorTokens.secondary,
+                              size: SpacingTokens.iconSizeMedium,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-          actions: [
-            // 설정 버튼
-            Padding(
-              padding: EdgeInsets.only(right: SpacingTokens.md),
-              child: Material(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(24),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: () {
-                    Navigator.pushNamed(context, '/settings').then((_) {
-                      // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
-                      _loadNoteSpaceName();
-                    });
-                  },
-                  splashColor: ColorTokens.primary.withOpacity(0.1),
-                  highlightColor: ColorTokens.primary.withOpacity(0.05),
-                  customBorder: const CircleBorder(),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: SizedBox(
-                      width: SpacingTokens.iconSizeMedium,
-                      height: SpacingTokens.iconSizeMedium,
-                      child: SvgPicture.asset(
-                        'assets/images/icon_profile.svg',
-                        width: SpacingTokens.iconSizeMedium,
-                        height: SpacingTokens.iconSizeMedium,
-                        placeholderBuilder: (context) => Icon(
-                          Icons.person,
-                          color: ColorTokens.secondary,
-                          size: SpacingTokens.iconSizeMedium,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
         ),
         body: SafeArea(
           bottom: false,
