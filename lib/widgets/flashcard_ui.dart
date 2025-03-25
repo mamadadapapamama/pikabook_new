@@ -38,8 +38,8 @@ class FlashCardUI {
           },
           front: buildCardSide(
             card: card,
-            bgColor: Colors.white,
-            textColor: Colors.blue.shade800,
+            bgColor: const Color(0xFFFFF7D8),
+            textColor: Colors.black,
             isFront: true,
             isCurrentCard: isCurrentCard,
             cardIndex: index,
@@ -52,8 +52,8 @@ class FlashCardUI {
           ),
           back: buildCardSide(
             card: card,
-            bgColor: Colors.blue.shade50,
-            textColor: Colors.blue.shade800,
+            bgColor: Colors.white,
+            textColor: Colors.black,
             isFront: false,
             isCurrentCard: isCurrentCard,
             cardIndex: index,
@@ -90,10 +90,7 @@ class FlashCardUI {
     final String? displayPinyin = isFront ? card.pinyin : null;
 
     // 스와이프 안내 텍스트 생성
-    final String swipeGuideText = isFront
-        ? '왼쪽으로 스와이프: 다음 카드 (${getNextCardInfo() ?? "없음"})\n'
-            '오른쪽으로 스와이프: 이전 카드 (${getPreviousCardInfo() ?? "없음"})'
-        : '탭하여 단어 보기';
+    final String swipeGuideText = '좌우로 스와이프 해서 다음 카드로 이동';
 
     return Container(
       decoration: buildCardDecoration(bgColor, isCurrentCard),
@@ -106,17 +103,45 @@ class FlashCardUI {
             textColor,
             // 단어 탭 기능 비활성화
             onWordTap: null,
+            isFront: isFront,
           ),
 
           // TTS 버튼 (앞면 & 현재 카드만)
           if (isFront && isCurrentCard)
-            buildTtsButton(textColor, isSpeaking, onSpeak, onStopSpeaking),
+            buildTtsButton(const Color(0xFF226357), isSpeaking, onSpeak, onStopSpeaking),
 
           // 스와이프 안내 텍스트 (하단)
-          buildSwipeGuideText(swipeGuideText, textColor),
+          buildSwipeGuideText(swipeGuideText, const Color(0xFFD3E0DD)),
 
           // 카드 번호 표시 (좌상단)
-          buildCardNumberBadge(cardIndex, textColor),
+          buildCardNumberBadge(cardIndex, const Color(0xFFFFD53C), const Color(0xFF1B4F46)),
+          
+          // 삭제 안내 텍스트 (상단)
+          Positioned(
+            top: 16.0,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.delete_outline,
+                    size: 16,
+                    color: const Color(0xFFD3E0DD),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '위로 스와이프 해서 삭제',
+                    style: TextStyle(
+                      fontSize: 12.0,
+                      color: const Color(0xFFD3E0DD),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -126,17 +151,16 @@ class FlashCardUI {
   static BoxDecoration buildCardDecoration(Color bgColor, bool isCurrentCard) {
     return BoxDecoration(
       color: bgColor,
-      borderRadius: BorderRadius.circular(16.0),
+      borderRadius: BorderRadius.circular(20.0),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.2),
-          blurRadius: 8.0,
+          color: Colors.black.withOpacity(0.15),
+          blurRadius: 10.0,
           offset: const Offset(0, 4),
         ),
       ],
       border: Border.all(
-        color:
-            isCurrentCard ? Colors.blue.withOpacity(0.3) : Colors.transparent,
+        color: const Color(0xFFFFD53C),
         width: 2.0,
       ),
     );
@@ -148,6 +172,7 @@ class FlashCardUI {
     String? pinyin,
     Color textColor, {
     Function(String)? onWordTap,
+    bool isFront = true,
   }) {
     return Center(
       child: Padding(
@@ -159,21 +184,23 @@ class FlashCardUI {
             Text(
               text,
               style: TextStyle(
-                fontSize: 32.0,
-                fontWeight: FontWeight.bold,
+                fontSize: isFront ? 36.0 : 32.0,
+                fontWeight: FontWeight.w700,
                 color: textColor,
+                fontFamily: isFront ? 'Noto Sans KR' : 'Noto Sans KR',
               ),
               textAlign: TextAlign.center,
             ),
             // 핀인 표시 (있는 경우)
             if (pinyin != null && pinyin.isNotEmpty) ...[
-              const SizedBox(height: 16.0),
+              const SizedBox(height: 4.0),
               Text(
                 pinyin,
                 style: TextStyle(
-                  fontSize: 20.0,
-                  color: textColor.withOpacity(0.7),
-                  fontStyle: FontStyle.italic,
+                  fontSize: 14.0,
+                  color: const Color(0xFF969696),
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w500,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -186,7 +213,7 @@ class FlashCardUI {
 
   /// TTS 버튼 생성
   static Widget buildTtsButton(
-    Color textColor,
+    Color iconColor,
     bool isSpeaking,
     Function() onSpeak,
     Function() onStopSpeaking,
@@ -197,7 +224,8 @@ class FlashCardUI {
       child: IconButton(
         icon: Icon(
           isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
-          color: textColor,
+          color: iconColor,
+          size: 24,
         ),
         onPressed: isSpeaking ? onStopSpeaking : onSpeak,
       ),
@@ -215,7 +243,9 @@ class FlashCardUI {
           text,
           style: TextStyle(
             fontSize: 12.0,
-            color: textColor.withOpacity(0.5),
+            color: textColor,
+            fontFamily: 'Noto Sans KR',
+            fontWeight: FontWeight.w400,
           ),
           textAlign: TextAlign.center,
         ),
@@ -224,22 +254,26 @@ class FlashCardUI {
   }
 
   /// 카드 번호 배지 생성
-  static Widget buildCardNumberBadge(int index, Color textColor) {
+  static Widget buildCardNumberBadge(int index, Color bgColor, Color textColor) {
     return Positioned(
-      top: 16.0,
+      bottom: 16.0,
       left: 16.0,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+        width: 24,
+        height: 24,
         decoration: BoxDecoration(
-          color: textColor.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12.0),
+          color: bgColor,
+          borderRadius: BorderRadius.circular(100),
         ),
-        child: Text(
-          '${index + 1}',
-          style: TextStyle(
-            fontSize: 14.0,
-            fontWeight: FontWeight.bold,
-            color: textColor,
+        child: Center(
+          child: Text(
+            '${index + 1}',
+            style: TextStyle(
+              fontSize: 14.0,
+              fontWeight: FontWeight.w500,
+              color: textColor,
+              fontFamily: 'Poppins',
+            ),
           ),
         ),
       ),
