@@ -199,8 +199,32 @@ class NotePageManager {
   
   // 현재 페이지 업데이트
   void updateCurrentPage(page_model.Page updatedPage) {
-    if (_currentPageIndex >= 0 && _currentPageIndex < _pages.length) {
+    if (_currentPageIndex < 0 || _currentPageIndex >= _pages.length) return;
+    
+    // 페이지 ID가 일치하는지 확인
+    if (_pages[_currentPageIndex].id == updatedPage.id) {
       _pages[_currentPageIndex] = updatedPage;
     }
+  }
+  
+  // 특정 인덱스의 페이지 가져오기
+  page_model.Page? getPageAtIndex(int index) {
+    if (index >= 0 && index < _pages.length) {
+      return _pages[index];
+    }
+    return null;
+  }
+  
+  // 특정 페이지의 이미지 파일 가져오기
+  File? getImageFileForPage(page_model.Page? page) {
+    if (page == null || page.id == null) return null;
+    
+    // 페이지 ID로 인덱스 찾기
+    for (int i = 0; i < _pages.length; i++) {
+      if (_pages[i].id == page.id && i < _imageFiles.length) {
+        return _imageFiles[i];
+      }
+    }
+    return null;
   }
 } 

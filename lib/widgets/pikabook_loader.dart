@@ -127,7 +127,7 @@ class _PikabookDotPulseAnimationState extends State<_PikabookDotPulseAnimation>
           
           // 피카북 새 캐릭터 (고정된 상태)
           Image.asset(
-            'assets/images/pikabird_80x80.png',
+            'assets/images/pikabird_3x.png',
             width: 40,
             height: 40,
           ),

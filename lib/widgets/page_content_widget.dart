@@ -9,6 +9,7 @@ import 'processed_text_widget.dart';
 import '../services/page_content_service.dart';
 import 'dictionary_result_widget.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
+import 'pikabook_loader.dart';
 
 /// 페이지 내의 이미지, 텍스트 처리상태, 처리된 텍스트 등을 표시
 /// 텍스트 모드전환, 사전 검색 등 처리
@@ -126,14 +127,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         children: [
           // 텍스트 처리 중 표시
           if (_isProcessingText)
-            const Center(
-              child: Column(
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('텍스트 처리 중...'),
-                ],
-              ),
+            const PikabookLoader(
+              title: '페이지를 뚝딱 뚝딱 만들고 있어요.',
+              subtitle: '잠시만 기다려 주세요!',
             )
           // 처리된 텍스트가 있는 경우
           else if (_processedText != null) ...[
