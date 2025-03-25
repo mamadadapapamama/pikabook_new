@@ -371,7 +371,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: ColorTokens.surface,
               borderRadius: BorderRadius.circular(8.0),
             ),
             padding: const EdgeInsets.all(16.0),
@@ -389,7 +389,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: ColorTokens.greyLight,
               borderRadius: BorderRadius.circular(8.0),
             ),
             padding: const EdgeInsets.all(16.0),
@@ -398,7 +398,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               style: GoogleFonts.notoSansKr(
                 fontSize: 16.0,
                 height: 1.5,
-                color: Colors.black87,
+                color: ColorTokens.textPrimary,
               ),
             ),
           ),
@@ -456,7 +456,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   height: 24,
                   margin: const EdgeInsets.only(left: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFD3E0DD),
+                    color: ColorTokens.segmentButtonBackground,
                     borderRadius: BorderRadius.circular(100),
                   ),
                   child: Icon(
@@ -482,7 +482,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 style: GoogleFonts.poppins(
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
-                  color: const Color(0xFFB2B2B2),
+                  color: ColorTokens.pinyinText,
                 ),
               ),
             ),
@@ -500,7 +500,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           if (i < widget.processedText.segments!.length - 1)
             const Padding(
               padding: EdgeInsets.only(top: 16.0, bottom: 16.0),
-              child: Divider(height: 1, thickness: 1, color: Color(0xFFEEEEEE)),
+              child: Divider(height: 1, thickness: 1, color: ColorTokens.dividerLight),
             ),
         ],
       );
@@ -513,7 +513,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           background: Container(
             alignment: Alignment.centerRight,
             padding: const EdgeInsets.only(right: 20.0),
-            color: ColorTokens.errorBackground,
+            color: ColorTokens.deleteSwipeBackground,
             child: const Icon(
               Icons.delete,
               color: Colors.white,
@@ -536,7 +536,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(true),
                     child: const Text('삭제'),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    style: TextButton.styleFrom(foregroundColor: ColorTokens.error),
                   ),
                 ],
               ),
@@ -584,7 +584,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       },
       behavior: HitTestBehavior.translucent,
       child: Container(
-        color: Colors.white, // 배경색을 흰색으로 설정
+        color: ColorTokens.surface, // 배경색을 흰색으로 설정
         padding: const EdgeInsets.all(0), // 패딩 제거 (PageContentWidget에서 패딩 적용)
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

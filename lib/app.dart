@@ -295,6 +295,8 @@ class _AppState extends State<App> {
     return MaterialApp(
       title: 'Pikabook',
       theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.lightTheme,
+      themeMode: ThemeMode.light,
       home: _buildHomeScreen(),
       routes: {
         '/settings': (context) => SettingsScreen(

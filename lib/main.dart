@@ -124,6 +124,15 @@ class ErrorApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
+      // 다크 모드 비활성화
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFFF8F56),
+          primary: const Color(0xFFFF8F56),
+        ),
+        useMaterial3: true,
+      ),
+      themeMode: ThemeMode.light,
       home: Scaffold(
         body: SafeArea(
           child: Center(
@@ -186,6 +195,12 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
+      // 다크 모드 비활성화
+      darkTheme: ThemeData(
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
+      themeMode: ThemeMode.light,
       home: const HomeScreen(),
     );
   }
