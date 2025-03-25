@@ -21,9 +21,9 @@ class HomeScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return PreferredSize(
-      preferredSize: const Size.fromHeight(120), // 앱바 높이 조정 (원래 높이 + 상단 패딩)
+      preferredSize: const Size.fromHeight(61), // 앱바 높이 조정 (원래 높이 + 상단 패딩)
       child: Padding(
-        padding: const EdgeInsets.only(top: 44.0),
+        padding: const EdgeInsets.only(top: 20.0),
         child: AppBar(
           backgroundColor: UITokens.homeBackground,
           elevation: 0,
@@ -118,5 +118,5 @@ class HomeScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(120);
+  Size get preferredSize => const Size.fromHeight(80);
 } 
