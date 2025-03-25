@@ -7,7 +7,7 @@ import '../../models/flash_card.dart';
 import '../../models/note.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
-import '../../widgets/loading_indicator.dart';
+import '../../widgets/dot_loading_indicator.dart';
 import '../../services/chinese_dictionary_service.dart';
 import '../../widgets/flashcard_ui.dart';
 import '../../theme/tokens/color_tokens.dart';
@@ -482,7 +482,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           ),
         ),
         body: _isLoading
-            ? const Center(child: LoadingIndicator(message: '플래시카드 로딩 중...'))
+            ? const Center(child: DotLoadingIndicator(message: '플래시카드 로딩 중...'))
             : _error != null
                 ? Center(
                     child: Column(

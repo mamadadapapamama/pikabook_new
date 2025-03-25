@@ -8,6 +8,8 @@ import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import '../../services/user_preferences_service.dart';
 import '../../utils/language_constants.dart';
+import '../../widgets/dot_loading_indicator.dart';
+import 'package:provider/provider.dart';
 
 class SettingsScreen extends StatefulWidget {
   final InitializationService initializationService;
@@ -150,7 +152,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: ColorTokens.primary))
+          ? const Center(child: DotLoadingIndicator(
+              message: '설정 로딩 중...',
+              dotColor: ColorTokens.primary,
+            ))
           : _buildProfileContent(),
     );
   }

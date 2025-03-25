@@ -12,14 +12,14 @@ class PikabookLoader extends StatelessWidget {
 
   const PikabookLoader({
     Key? key,
-    this.title = '스마트한 번역 노트를 만들고 있어요.',
+    this.title = '스마트 노트를 만들고 있어요.',
     this.subtitle = '잠시만 기다려 주세요!',
   }) : super(key: key);
 
   /// 로더를 다이얼로그로 표시하는 정적 메서드
   static Future<void> show(
     BuildContext context, {
-    String title = '스마트한 번역 노트를 만들고 있어요.',
+    String title = '스마트 노트를 만들고 있어요.',
     String subtitle = '잠시만 기다려 주세요!',
   }) async {
     return showDialog(
@@ -65,9 +65,7 @@ class PikabookLoader extends StatelessWidget {
           // 텍스트 섹션
           Text(
             title,
-            style: TypographyTokens.body1.copyWith(
-              fontWeight: FontWeight.w500,
-            ),
+            style: TypographyTokens.body1Bold,
             textAlign: TextAlign.center,
           ),
           
@@ -76,7 +74,6 @@ class PikabookLoader extends StatelessWidget {
           Text(
             subtitle,
             style: TypographyTokens.body1.copyWith(
-              fontWeight: FontWeight.w500,
               color: ColorTokens.primary,
             ),
             textAlign: TextAlign.center,

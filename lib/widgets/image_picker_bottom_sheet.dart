@@ -44,7 +44,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '번역 노트 만들기',
+                  '스마트 노트 만들기',
                   style: TypographyTokens.subtitle2.copyWith(
                     color: Colors.black,
                   ),

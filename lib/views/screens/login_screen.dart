@@ -4,7 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import '../../../services/initialization_service.dart';
 import '../../../theme/tokens/color_tokens.dart';
 import '../../../theme/tokens/typography_tokens.dart';
-import '../../../widgets/loading_indicator.dart';
+import '../../../widgets/dot_loading_indicator.dart';
 import '../../../firebase_options.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -130,7 +130,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
                                 // 로딩 인디케이터 또는 오류 메시지
                                 if (_isLoading)
-                                  const LoadingIndicator(message: '로그인 중...')
+                                  const DotLoadingIndicator(message: '로그인 중...')
                                 else if (_errorMessage != null)
                                   Container(
                                     padding: const EdgeInsets.all(12),
