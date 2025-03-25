@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../viewmodels/home_viewmodel.dart';
 import '../../widgets/note_list_item.dart';
-import '../../widgets/loading_indicator.dart';
 import '../../widgets/loading_dialog.dart';
 import '../../widgets/home_screen_app_bar.dart';
 import '../../services/note_service.dart';
@@ -19,6 +18,7 @@ import '../../models/note.dart';
 import 'note_detail_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/image_picker_bottom_sheet.dart';
+import '../../widgets/dot_loading_indicator.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -78,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Consumer<HomeViewModel>(
             builder: (context, viewModel, child) {
               if (viewModel.isLoading) {
-                return const LoadingIndicator(message: '노트 불러오는 중...');
+                return const DotLoadingIndicator(message: '노트 불러오는 중...');
               }
 
               if (viewModel.error != null) {
@@ -225,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 8),
             
             Text(
-              '이미지를 기반으로 스마트 학습노트를 만들어드립니다.\n카메라 촬영도 가능합니다.',
+              '번역, 사전 검색, 플래시카드가 가능한 스마트 노트를 만들어드립니다. \n카메라 촬영도 가능합니다.',
               textAlign: TextAlign.center,
               style: TypographyTokens.body2.copyWith(
                 color: ColorTokens.textSecondary,
@@ -239,7 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: ElevatedButton.icon(
                 onPressed: () => _handleAddNote(context),
                 icon: const Icon(Icons.add),
-                label: const Text('번역 노트 만들기'),
+                label: const Text('스마트 노트 만들기'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: ColorTokens.primary,
                   foregroundColor: Colors.white,

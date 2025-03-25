@@ -14,7 +14,6 @@ import '../../services/tts_service.dart';
 import '../../services/enhanced_ocr_service.dart';
 import '../../services/user_preferences_service.dart';
 import '../../services/page_content_service.dart';
-import '../../widgets/loading_indicator.dart';
 import '../../widgets/note_detail_app_bar.dart';
 import '../../widgets/note_action_bottom_sheet.dart';
 import '../../widgets/page_content_widget.dart';
@@ -38,6 +37,8 @@ import 'package:badges/badges.dart' as badges;
 import '../../theme/tokens/color_tokens.dart';
 import 'full_image_screen.dart';
 import '../../services/screenshot_service.dart';
+import 'package:flutter/services.dart';
+import '../../widgets/dot_loading_indicator.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -580,7 +581,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       debugPrint('사용자 기본 설정 로드 중 오류 발생: $e');
       // 오류 발생 시 기본 모드 사용
       if (mounted) {
-        setState(() {
+    setState(() {
           _textDisplayMode = TextDisplayMode.all;
           _useSegmentMode = true; // 기본값은 세그먼트 모드
         });
@@ -661,7 +662,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   Future<void> _navigateToFlashcards() async {
     if (_note == null) return;
-    
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -670,7 +671,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         ),
       ),
     );
-    
+
     // 플래시카드가 변경되었으면 노트 정보 다시 로드
     if (result != null && mounted) {
       if (result is Note) {
@@ -870,7 +871,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       return Scaffold(
         appBar: AppBar(title: const Text('로딩 중...')),
         body: _isLoading
-            ? const Center(child: LoadingIndicator(message: '노트 로딩 중...'))
+            ? const Center(
+                child: DotLoadingIndicator(
+                  message: '노트 로딩 중...',
+                  dotColor: Color(0xFFFFD53C),
+                ),
+              )
             : Center(child: Text(_error ?? '노트를 불러올 수 없습니다.')),
       );
     }
@@ -979,7 +985,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             final imageFile = _pageManager.getImageFileForPage(page);
             
             return Column(
-              children: [
+          children: [
                 // 페이지 썸네일 이미지 (있는 경우)
                 if (imageFile != null || page?.imageUrl != null)
                   Stack(
@@ -1043,9 +1049,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                 // 페이지 내용을 위한 공간
                 const Expanded(
                   child: Center(
-                    child: PikabookLoader(
-                      title: '다음 페이지를 준비하고 있어요.',
-                      subtitle: '좌우로 스와이프하여 페이지를 이동할 수 있어요.',
+                    child: DotLoadingIndicator(
+                      message: '다음 페이지를 준비하고 있어요.',
+                      dotColor: Color(0xFFFFD53C),
                     ),
                   ),
                 ),
@@ -1065,10 +1071,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         onPlayPausePressed: _handlePlayPausePressed,
         pageContentService: _pageContentService,
         textReaderService: _textReaderService,
-      ),
-    );
-  }
-  
+        ),
+      );
+    }
+
   // 현재 페이지 내용 빌드
   Widget _buildCurrentPageContent() {
     final currentPage = _pageManager.currentPage;
@@ -1084,13 +1090,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 이미지가 로딩 중이면 로딩 인디케이터 표시
     if (isLoadingImage) {
       return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('페이지 로딩 중...', style: TextStyle(fontSize: 16)),
-          ],
+        child: DotLoadingIndicator(
+          message: '페이지 로딩 중...',
+          dotColor: Color(0xFFFFD53C),
         ),
       );
     }
@@ -1134,7 +1136,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         : 0.0;
     
     return Container(
-      height: 4,
+      height: 2,
       width: double.infinity,
       color: const Color(0xFFFFF0E8),
       child: Row(

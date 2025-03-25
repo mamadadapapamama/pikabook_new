@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import '../views/screens/full_image_screen.dart';
+import '../widgets/dot_loading_indicator.dart';
 
 /// 페이지 이미지를 표시하는 위젯
 class PageImageWidget extends StatelessWidget {
@@ -63,22 +64,10 @@ class PageImageWidget extends StatelessWidget {
 
   // 로딩 인디케이터 위젯
   Widget _buildLoadingIndicator() {
-    return Container(
-      width: double.infinity,
-      height: 200,
-      decoration: BoxDecoration(
-        color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('이미지 로딩 중...'),
-          ],
-        ),
+    return const Center(
+      child: DotLoadingIndicator(
+        message: '이미지 로딩 중...',
+        dotColor: Color(0xFFFFD53C),
       ),
     );
   }

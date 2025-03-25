@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/user_preferences_service.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
+import '../../widgets/dot_loading_indicator.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;

@@ -119,25 +119,45 @@ class TypographyTokens {
       );
 
   // 본문 스타일 - 일반 텍스트 내용
+
   static TextStyle get body1 => TextStyle(
         fontFamily: notoSansKr,
         fontSize: 16,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w500,
         height: 1.2,
       );
 
   static TextStyle get body1En => GoogleFonts.poppins(
         fontSize: 16,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w500,
         height: 1.5,
       );
 
   static TextStyle get body1Cn => TextStyle(
         fontFamily: notoSansHk,
         fontSize: 16,
-        fontWeight: FontWeight.w400,
+        fontWeight: FontWeight.w500,
         height: 1.2,
       );
+
+  static TextStyle get body1Bold => TextStyle(
+        fontFamily: notoSansKr,
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+      );
+   static TextStyle get body1BoldEn => GoogleFonts.poppins(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        height: 1.5,
+      );
+
+  static TextStyle get body1BoldCn => TextStyle(
+        fontFamily: notoSansHk,
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        height: 1.2,
+      ); 
 
   static TextStyle get body2 => TextStyle(
         fontFamily: notoSansKr,
