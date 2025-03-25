@@ -88,21 +88,27 @@ class _AppState extends State<App> {
       // InitializationService의 handleUserLogin을 호출하여 온보딩 상태 업데이트
       await widget.initializationService.handleUserLogin(user);
       
-      // 업데이트 후 온보딩 상태 다시 확인
-      final hasOnboarded = await _preferencesService.hasOnboarded();
-      final isOnboardingCompleted = await _preferencesService.isOnboardingCompleted();
+      // 사용자가 로그인했다면 온보딩을 완료한 것으로 처리
+      await _preferencesService.setOnboardingCompleted(true);
+      await _preferencesService.setHasOnboarded(true);
+      
+      // Firestore에도 온보딩 완료 상태 저장
+      final firestore = FirebaseFirestore.instance;
+      await firestore.collection('users').doc(user.uid).update({
+        'hasOnboarded': true,
+        'onboardingCompleted': true
+      });
       
       if (mounted) {
         setState(() {
-          // 노트 데이터가 있으면 온보딩 건너뛰기
-          _isOnboardingCompleted = hasOnboarded || isOnboardingCompleted;
+          _isOnboardingCompleted = true;
           _isLoadingUserData = false;
         });
       }
       
-      debugPrint('로그인 사용자 온보딩 상태 확인: hasOnboarded=$hasOnboarded, _isOnboardingCompleted=$_isOnboardingCompleted');
+      debugPrint('로그인 사용자의 온보딩 상태를 완료로 설정');
     } catch (e) {
-      debugPrint('사용자 온보딩 상태 확인 중 오류 발생: $e');
+      debugPrint('사용자 온보딩 상태 설정 중 오류 발생: $e');
       if (mounted) {
         setState(() {
           _isLoadingUserData = false;
@@ -141,45 +147,33 @@ class _AppState extends State<App> {
       // 현재 로그인된 사용자가 있는지 확인
       final user = widget.initializationService.getCurrentUser();
       if (user != null) {
-        // Firestore에서 사용자 정보 확인
-        final firestore = FirebaseFirestore.instance;
-        final userDoc = await firestore.collection('users').doc(user.uid).get();
+        // 로그인된 사용자는 항상 온보딩 완료 상태
+        await _preferencesService.setOnboardingCompleted(true);
+        await _preferencesService.setHasOnboarded(true);
         
-        // Firestore에 hasOnboarded 필드가 있으면 그 값 사용
-        if (userDoc.exists && userDoc.data()!.containsKey('hasOnboarded')) {
-          final hasOnboarded = userDoc.data()!['hasOnboarded'] as bool;
-          await _preferencesService.setOnboardingCompleted(hasOnboarded);
-          debugPrint('Firestore에서 온보딩 상태 확인: $hasOnboarded');
-        } else {
-          // 노트 데이터 확인
-          final notesQuery = await firestore
-              .collection('notes')
-              .where('userId', isEqualTo: user.uid)
-              .limit(1)
-              .get();
-          
-          final hasNotes = notesQuery.docs.isNotEmpty;
-          await _preferencesService.setOnboardingCompleted(hasNotes);
-          debugPrint('노트 데이터 기반 온보딩 상태 설정: $hasNotes');
-          
-          // Firestore에 상태 업데이트
-          await firestore.collection('users').doc(user.uid).update({
-            'hasOnboarded': hasNotes,
-            'onboardingCompleted': hasNotes
+        // Firestore에도 온보딩 완료 상태 저장
+        final firestore = FirebaseFirestore.instance;
+        await firestore.collection('users').doc(user.uid).update({
+          'hasOnboarded': true,
+          'onboardingCompleted': true
+        });
+        
+        if (mounted) {
+          setState(() {
+            _isOnboardingCompleted = true;
           });
         }
       } else {
         // 로그인되지 않은 경우 기본값으로 온보딩 필요
         await _preferencesService.setOnboardingCompleted(false);
+        await _preferencesService.setHasOnboarded(false);
+        
+        if (mounted) {
+          setState(() {
+            _isOnboardingCompleted = false;
+          });
+        }
         debugPrint('로그인되지 않음: 온보딩 필요로 설정');
-      }
-      
-      final isCompleted = await _preferencesService.isOnboardingCompleted();
-      
-      if (mounted) {
-        setState(() {
-          _isOnboardingCompleted = isCompleted;
-        });
       }
       
       final duration = DateTime.now().difference(startTime);

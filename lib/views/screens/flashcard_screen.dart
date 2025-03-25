@@ -535,19 +535,68 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            // 노트로 돌아가기 버튼
-                            GestureDetector(
-                              onTap: () => Navigator.of(context).pop(),
-                              child: const Text(
-                                '노트로 돌아가기',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
-                                  color: Color(0xFFFE6A15),
-                                  fontFamily: 'Noto Sans KR',
+                            const SizedBox(height: 24),
+                            // 버튼들을 Row로 배치
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // 뒤로가기 버튼
+                                GestureDetector(
+                                  onTap: () => Navigator.of(context).pop(),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: const Color(0xFFFE6A15),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      '뒤로가기',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFFFE6A15),
+                                        fontFamily: 'Noto Sans KR',
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 16),
+                                // 노트로 돌아가기 버튼
+                                GestureDetector(
+                                  onTap: () {
+                                    if (widget.noteId != null) {
+                                      Navigator.of(context).pop();
+                                    } else {
+                                      Navigator.of(context).pushReplacementNamed('/notes');
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFE6A15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      '노트로 돌아가기',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.white,
+                                        fontFamily: 'Noto Sans KR',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
