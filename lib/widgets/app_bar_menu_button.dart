@@ -3,6 +3,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/ui_tokens.dart';
 
+// 설정 버튼 (homescreen app bar 에서 사용)
+
 class AppBarMenuButton extends StatelessWidget {
   const AppBarMenuButton({Key? key}) : super(key: key);
 

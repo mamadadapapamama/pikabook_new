@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../services/initialization_service.dart';
@@ -98,29 +99,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 상태 표시줄 색상을 검정으로 설정
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+    );
+    
     return Scaffold(
       backgroundColor: ColorTokens.background,
-      appBar: AppBar(
-        title: Text(
-          '설정',
-          style: TypographyTokens.headline3.copyWith(
-            color: ColorTokens.textPrimary,
-          ),
-        ),
-        centerTitle: false,
-        backgroundColor: ColorTokens.background,
-        elevation: 0,
-        leadingWidth: 44,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 20.0),
-          child: GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_rounded),
-              color: ColorTokens.secondary,
-              onPressed: () => Navigator.of(context).pop(),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(76), // 홈 스크린 + 4px
+        child: Column(
+          children: [
+            // AppBar 내용
+            SizedBox(
+              height: 76, // 앱바 높이 조정 (홈 스크린 + 4px)
+              child: Padding(
+                padding: const EdgeInsets.only(top: 44.0, left: 24.0, right: 24.0),
+                child: Row(
+                  children: [
+                    // 뒤로가기 버튼
+                    IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios_rounded,
+                        color: Colors.black,
+                        size: 20,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 4),
+                    
+                    // 타이틀
+                    Text(
+                      '설정',
+                      style: TypographyTokens.subtitle1.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: ColorTokens.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
       body: _isLoading

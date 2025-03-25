@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:badges/badges.dart' as badges;
 import 'package:google_fonts/google_fonts.dart';
 import '../models/note.dart';
-import 'package:flutter/services.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
+import '../theme/tokens/spacing_tokens.dart';
 
 class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Note? note;
@@ -24,74 +25,134 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String pageNumberText = '${currentPageIndex + 1}/$totalPages';
-    
-    return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_rounded),
-        color: ColorTokens.secondary,
-        onPressed: () => Navigator.of(context).pop(),
+    // 상태 표시줄 색상을 검정으로 설정
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
       ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    );
+    
+    final String pageNumberText = 'page ${currentPageIndex + 1} / $totalPages';
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // AppBar 내용
+        SizedBox(
+          height: 76, // 앱바 높이 조정 (홈 스크린 + 4px)
+          child: Padding(
+            padding: const EdgeInsets.only(top: 44.0, left: 24.0, right: 24.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  note?.originalText ?? '노트 상세',
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.notoSansKr(
-                    fontSize: 24, 
-                    fontWeight: FontWeight.w700,
-                    color: ColorTokens.textPrimary,
+                // 왼쪽 부분: 뒤로가기 버튼 및 제목
+                Expanded(
+                  child: Row(
+                    children: [
+                      // 뒤로가기 버튼
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_ios_rounded,
+                          color: Colors.black,
+                          size: 20,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      const SizedBox(width: 4),
+                      
+                      // 제목 영역
+                      Expanded(
+                        child: Row(
+                          children: [
+                            // 노트 제목
+                            Flexible(
+                              child: Text(
+                                note?.originalText ?? 'Note',
+                                style: TypographyTokens.subtitle2En.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                  color: ColorTokens.textPrimary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            
+                            // 페이지 정보
+                            if (totalPages > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8.0),
+                                child: Text(
+                                  pageNumberText,
+                                  style: TypographyTokens.caption.copyWith(
+                                    color: ColorTokens.textGrey,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                if (totalPages > 0)
-                  Text(
-                    'page $pageNumberText',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: const Color(0xFFB2B2B2),
+                
+                // 오른쪽 부분: 플래시카드 및 더보기 버튼
+                Row(
+                  children: [
+                    // 플래시카드 버튼 - note_list_item과 동일한 디자인
+                    if (note != null)
+                      badges.Badge(
+                        position: badges.BadgePosition.topEnd(top: -8, end: -4),
+                        badgeContent: Text(
+                          '${note!.flashcardCount}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        badgeStyle: const badges.BadgeStyle(
+                          badgeColor: ColorTokens.secondary,
+                          padding: EdgeInsets.all(4),
+                        ),
+                        child: InkWell(
+                          onTap: onFlashCardPressed,
+                          child: const Padding(
+                            padding: EdgeInsets.all(4.0),
+                            child: Icon(
+                              Icons.flash_on,
+                              color: ColorTokens.primary,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                      
+                    const SizedBox(width: 8),
+                    
+                    // 더보기 버튼
+                    IconButton(
+                      icon: const Icon(
+                        Icons.more_vert,
+                        color: ColorTokens.textGrey,
+                      ),
+                      onPressed: onShowMoreOptions,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: '더 보기',
                     ),
-                  ),
+                  ],
+                ),
               ],
             ),
           ),
-        ],
-      ),
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      titleSpacing: 0,
-      toolbarHeight: 70,
-      actions: [
-        if (note != null) ...[
-          IconButton(
-            icon: note!.flashcardCount > 0
-                ? badges.Badge(
-                    badgeContent: Text(
-                      '${note!.flashcardCount}',
-                      style: const TextStyle(color: Colors.white, fontSize: 10),
-                    ),
-                    child: const Icon(Icons.flash_on),
-                  )
-                : const Icon(Icons.flash_on),
-            onPressed: onFlashCardPressed,
-            color: ColorTokens.primary,
-          ),
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: onShowMoreOptions,
-            tooltip: '더 보기',
-            color: const Color(0xFFB2B2B2),
-          ),
-        ],
+        ),
+        
+        // 프로그레스 바
+        _buildProgressBar(context),
       ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(4.0),
-        child: _buildProgressBar(context),
-      ),
     );
   }
 
@@ -101,15 +162,20 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
         ? (currentPageIndex + 1) / totalPages * screenWidth 
         : 0.0;
     
-    return Container(
+    return SizedBox(
       height: 4,
       width: double.infinity,
-      color: const Color(0xFFFFF0E8),
-      child: Row(
+      child: Stack(
         children: [
+          // 배경 바
+          Container(
+            width: double.infinity,
+            color: const Color(0xFFF1F3F3),
+          ),
+          // 진행 바
           Container(
             width: progressWidth,
-            color: ColorTokens.primary,
+            color: ColorTokens.secondary,
           ),
         ],
       ),
@@ -117,5 +183,5 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(74);  // 70(toolbar) + 4(progress bar)
+  Size get preferredSize => const Size.fromHeight(76);  // 72(toolbar) + 4(progress bar)
 }
