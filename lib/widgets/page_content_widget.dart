@@ -4,16 +4,10 @@ import '../models/page.dart' as page_model;
 import '../models/processed_text.dart';
 import '../models/flash_card.dart';
 import '../models/dictionary_entry.dart';
-import 'text_section_widget.dart';
 import 'processed_text_widget.dart';
 import '../services/page_content_service.dart';
 import 'dictionary_result_widget.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
-import 'pikabook_loader.dart';
-import 'package:flutter/services.dart';
-import '../services/dictionary_service.dart';
-import '../services/text_reader_service.dart';
-import '../utils/text_display_mode.dart';
 import 'dot_loading_indicator.dart';
 
 /// 페이지 내의 이미지, 텍스트 처리상태, 처리된 텍스트 등을 표시

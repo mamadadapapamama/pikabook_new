@@ -20,6 +20,7 @@ class FlashCardUI {
     required Function() onStopSpeaking,
     required String? Function() getNextCardInfo,
     required String? Function() getPreviousCardInfo,
+    required Function() onDelete,
     Function(String)? onWordTap,
     double scale = 1.0,
     Offset offset = Offset.zero,
@@ -30,43 +31,117 @@ class FlashCardUI {
       scale: scale,
       child: Transform.translate(
         offset: offset,
-        child: FlipCard(
-          key: isCurrentCard ? flipCardKey : null,
-          direction: FlipDirection.HORIZONTAL,
-          speed: 300,
-          onFlipDone: (isFront) {
-            if (isCurrentCard) {
-              onFlip();
-            }
-          },
-          front: buildCardSide(
-            card: card,
-            bgColor: ColorTokens.flashcardBackground,
-            textColor: ColorTokens.textPrimary,
-            isFront: true,
-            isCurrentCard: isCurrentCard,
-            cardIndex: index,
-            isSpeaking: isSpeaking,
-            onSpeak: onSpeak,
-            onStopSpeaking: onStopSpeaking,
-            getNextCardInfo: getNextCardInfo,
-            getPreviousCardInfo: getPreviousCardInfo,
-            onWordTap: onWordTap,
-          ),
-          back: buildCardSide(
-            card: card,
-            bgColor: ColorTokens.surface,
-            textColor: ColorTokens.textPrimary,
-            isFront: false,
-            isCurrentCard: isCurrentCard,
-            cardIndex: index,
-            isSpeaking: isSpeaking,
-            onSpeak: onSpeak,
-            onStopSpeaking: onStopSpeaking,
-            getNextCardInfo: getNextCardInfo,
-            getPreviousCardInfo: getPreviousCardInfo,
-            onWordTap: onWordTap,
-          ),
+        child: Stack(
+          children: [
+            // 플래시카드
+            FlipCard(
+              key: isCurrentCard ? flipCardKey : null,
+              direction: FlipDirection.HORIZONTAL,
+              speed: 300,
+              onFlipDone: (isFront) {
+                if (isCurrentCard) {
+                  onFlip();
+                }
+              },
+              front: buildCardSide(
+                card: card,
+                bgColor: ColorTokens.flashcardBackground,
+                textColor: ColorTokens.textPrimary,
+                isFront: true,
+                isCurrentCard: isCurrentCard,
+                cardIndex: index,
+                isSpeaking: isSpeaking,
+                onSpeak: onSpeak,
+                onStopSpeaking: onStopSpeaking,
+                getNextCardInfo: getNextCardInfo,
+                getPreviousCardInfo: getPreviousCardInfo,
+                onWordTap: onWordTap,
+              ),
+              back: buildCardSide(
+                card: card,
+                bgColor: ColorTokens.surface,
+                textColor: ColorTokens.textPrimary,
+                isFront: false,
+                isCurrentCard: isCurrentCard,
+                cardIndex: index,
+                isSpeaking: isSpeaking,
+                onSpeak: onSpeak,
+                onStopSpeaking: onStopSpeaking,
+                getNextCardInfo: getNextCardInfo,
+                getPreviousCardInfo: getPreviousCardInfo,
+                onWordTap: onWordTap,
+              ),
+            ),
+            
+            // 삭제 힌트와 버튼 (카드 위에 표시)
+            if (isCurrentCard)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: ColorTokens.primary.withOpacity(0.08),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(SpacingTokens.radiusMedium),
+                      topRight: Radius.circular(SpacingTokens.radiusMedium),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // 삭제 버튼
+                      GestureDetector(
+                        onTap: onDelete,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: ColorTokens.error.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete_outline,
+                                color: ColorTokens.error,
+                                size: 14,
+                              ),
+                              SizedBox(width: 2),
+                              Text(
+                                '삭제',
+                                style: TextStyle(
+                                  fontSize: 12.0,
+                                  color: ColorTokens.error,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      
+                      // 스와이프 안내
+                      Icon(
+                        Icons.arrow_upward,
+                        color: ColorTokens.textSecondary,
+                        size: 12,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        '위로 스와이프해도 삭제됩니다',
+                        style: TextStyle(
+                          fontSize: 12.0,
+                          color: ColorTokens.textSecondary,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -89,32 +164,32 @@ class FlashCardUI {
   }) {
     // 표시할 텍스트와 핀인 결정
     final String displayText = isFront ? card.front : card.back;
-    // 핀인은 앞면에서만 표시
-    final String? displayPinyin = isFront ? card.pinyin : null;
-
-    // 스와이프 안내 텍스트 생성
-    final String swipeGuideText = '좌우로 스와이프 해서 다음 카드로 이동';
+    // 핀인은 항상 표시
+    final String displayPinyin = card.pinyin;
 
     return Container(
       decoration: buildCardDecoration(bgColor, isCurrentCard),
       child: Stack(
         children: [
           // 카드 내용 (중앙)
-          buildCardContent(
-            displayText,
-            displayPinyin,
-            textColor,
-            // 단어 탭 기능 비활성화
-            onWordTap: null,
-            isFront: isFront,
-          ),
+          isFront 
+            ? buildFrontCardContent(
+                card.front,
+                displayPinyin,
+                textColor,
+                onWordTap: onWordTap,
+              )
+            : buildBackCardContent(
+                card.back,
+                card.front,
+                displayPinyin,
+                textColor,
+                onWordTap: onWordTap,
+              ),
 
-          // TTS 버튼 (앞면 & 현재 카드만)
-          if (isFront && isCurrentCard)
+          // TTS 버튼 (항상 표시)
+          if (isCurrentCard)
             buildTtsButton(ColorTokens.secondary, isSpeaking, onSpeak, onStopSpeaking),
-
-          // 스와이프 안내 텍스트 (하단)
-          buildSwipeGuideText(swipeGuideText, ColorTokens.secondaryLight),
 
           // 카드 번호 표시 (좌상단)
           buildCardNumberBadge(cardIndex, ColorTokens.tertiary, ColorTokens.secondary),
@@ -142,13 +217,12 @@ class FlashCardUI {
     );
   }
 
-  /// 카드 내용 (텍스트, 핀인) 생성
-  static Widget buildCardContent(
+  /// 카드 앞면 내용 (중국어, 핀인) 생성
+  static Widget buildFrontCardContent(
     String text,
-    String? pinyin,
+    String pinyin,
     Color textColor, {
     Function(String)? onWordTap,
-    bool isFront = true,
   }) {
     return Center(
       child: Padding(
@@ -160,27 +234,82 @@ class FlashCardUI {
             Text(
               text,
               style: TextStyle(
-                fontSize: isFront ? 36.0 : 32.0,
+                fontSize: 36.0,
                 fontWeight: FontWeight.w700,
                 color: textColor,
-                fontFamily: isFront ? 'Noto Sans KR' : 'Noto Sans KR',
+                fontFamily: 'Noto Sans KR',
               ),
               textAlign: TextAlign.center,
             ),
-            // 핀인 표시 (있는 경우)
-            if (pinyin != null && pinyin.isNotEmpty) ...[
-              SizedBox(height: SpacingTokens.xs),
-              Text(
-                pinyin,
-                style: TextStyle(
-                  fontSize: 14.0,
-                  color: ColorTokens.textGrey,
-                  fontFamily: 'Poppins',
-                  fontWeight: FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
+            // 핀인 표시 (항상 표시)
+            SizedBox(height: SpacingTokens.xs),
+            Text(
+              pinyin.isEmpty ? 'xíng zǒu' : pinyin,
+              style: TextStyle(
+                fontSize: 14.0,
+                color: ColorTokens.textGrey,
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w500,
               ),
-            ],
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 카드 뒷면 내용 (번역, 원문, 핀인) 생성
+  static Widget buildBackCardContent(
+    String translation,
+    String original,
+    String pinyin,
+    Color textColor, {
+    Function(String)? onWordTap,
+  }) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(SpacingTokens.lg),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // 번역 (의미)
+            Text(
+              translation,
+              style: TextStyle(
+                fontSize: 32.0,
+                fontWeight: FontWeight.w700,
+                color: textColor,
+                fontFamily: 'Noto Sans KR',
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: SpacingTokens.md),
+            
+            // 원문 (중국어)
+            Text(
+              original,
+              style: TextStyle(
+                fontSize: 24.0,
+                fontWeight: FontWeight.w500,
+                color: ColorTokens.secondary,
+                fontFamily: 'Noto Sans KR',
+              ),
+              textAlign: TextAlign.center,
+            ),
+            
+            // 핀인 표시 (항상 표시)
+            SizedBox(height: SpacingTokens.xs),
+            Text(
+              pinyin.isEmpty ? 'xíng zǒu' : pinyin,
+              style: TextStyle(
+                fontSize: 14.0,
+                color: ColorTokens.textGrey,
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
@@ -197,33 +326,18 @@ class FlashCardUI {
     return Positioned(
       top: SpacingTokens.md,
       right: SpacingTokens.md,
-      child: IconButton(
-        icon: Icon(
-          isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
-          color: iconColor,
-          size: SpacingTokens.iconSizeMedium,
+      child: Container(
+        decoration: BoxDecoration(
+          color: ColorTokens.secondary.withOpacity(0.1),
+          shape: BoxShape.circle,
         ),
-        onPressed: isSpeaking ? onStopSpeaking : onSpeak,
-      ),
-    );
-  }
-
-  /// 스와이프 안내 텍스트 생성
-  static Widget buildSwipeGuideText(String text, Color textColor) {
-    return Positioned(
-      bottom: SpacingTokens.md,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 12.0,
-            color: textColor,
-            fontFamily: 'Noto Sans KR',
-            fontWeight: FontWeight.w400,
+        child: IconButton(
+          icon: Icon(
+            isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
+            color: iconColor,
+            size: SpacingTokens.iconSizeMedium,
           ),
-          textAlign: TextAlign.center,
+          onPressed: isSpeaking ? onStopSpeaking : onSpeak,
         ),
       ),
     );

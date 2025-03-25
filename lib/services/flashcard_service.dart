@@ -44,29 +44,41 @@ class FlashCardService {
     }
 
     try {
-      // 병음 생성 (제공된 경우 사용, 아니면 자동 생성)
-      String pinyinValue = pinyin ?? await _pinyinService.generatePinyin(front);
+      // 병음 생성 (항상 병음을 생성하도록 처리)
+      String pinyinValue = pinyin ?? '';
 
-      // 뜻이 비어있거나 제공되지 않은 경우 사전에서 검색
-      String finalBack = back;
-      if (finalBack.isEmpty) {
-        // 사전 서비스를 통해 단어 검색 (내부 사전 -> 외부 API 순으로 검색)
-        final dictEntry =
-            await _dictionaryService.lookupWordWithFallback(front);
-
-        if (dictEntry != null) {
-          finalBack = dictEntry.meaning;
-          debugPrint('사전에서 뜻 찾음: $front -> $finalBack');
-
-          // 핀인이 비어있고 사전에서 핀인을 찾았다면 사용
-          if (pinyin == null && dictEntry.pinyin.isNotEmpty) {
-            pinyinValue = dictEntry.pinyin;
-            debugPrint('사전에서 핀인 찾음: $front -> $pinyinValue');
-          }
-        } else {
-          finalBack = '뜻을 찾을 수 없습니다';
-          debugPrint('사전에서 뜻을 찾을 수 없음: $front');
+      // 1. 먼저 사전에서 단어 검색
+      final dictEntry = await _dictionaryService.lookupWordWithFallback(front);
+      
+      // 2. 사전에서 찾은 경우
+      if (dictEntry != null) {
+        // 뜻이 비어있으면 사전의 뜻 사용
+        if (back.isEmpty) {
+          back = dictEntry.meaning;
+          debugPrint('사전에서 뜻 찾음: $front -> $back');
         }
+        
+        // 사전의 병음 사용 (있는 경우)
+        if (dictEntry.pinyin.isNotEmpty) {
+          pinyinValue = dictEntry.pinyin;
+          debugPrint('사전에서 핀인 찾음: $front -> $pinyinValue');
+        }
+      } else if (back.isEmpty) {
+        // 사전에서 찾지 못하고 뜻도 없는 경우
+        back = '뜻을 찾을 수 없습니다';
+        debugPrint('사전에서 뜻을 찾을 수 없음: $front');
+      }
+
+      // 3. 병음이 여전히 비어있으면 직접 생성
+      if (pinyinValue.isEmpty) {
+        pinyinValue = await _pinyinService.generatePinyin(front);
+        debugPrint('핀인 생성됨: $front -> $pinyinValue');
+      }
+
+      // 4. 핀인이 여전히 비어있으면 폴백으로 'xíng zǒu' 설정
+      if (pinyinValue.isEmpty) {
+        pinyinValue = 'xíng zǒu';
+        debugPrint('핀인 폴백 사용됨: $front');
       }
 
       // 플래시카드 ID 생성
@@ -76,7 +88,7 @@ class FlashCardService {
       final flashCard = FlashCard(
         id: id,
         front: front,
-        back: finalBack,
+        back: back,
         pinyin: pinyinValue,
         createdAt: DateTime.now(),
         noteId: noteId,
@@ -94,7 +106,7 @@ class FlashCardService {
       }
 
       // 플래시카드 생성 후 사전에 없는 단어라면 사전에 추가
-      await _addToDictionaryIfNeeded(front, finalBack, pinyinValue);
+      await _addToDictionaryIfNeeded(front, back, pinyinValue);
 
       return flashCard;
     } catch (e) {

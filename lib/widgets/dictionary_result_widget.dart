@@ -25,7 +25,12 @@ class DictionaryResultWidget extends StatelessWidget {
     final pageContentService = PageContentService();
 
     return Container(
-      padding: EdgeInsets.all(SpacingTokens.lg),
+      padding: EdgeInsets.fromLTRB(
+        SpacingTokens.lg, 
+        SpacingTokens.lg, 
+        SpacingTokens.lg, 
+        SpacingTokens.lg + 10 // 패딩 바텀 +10 추가
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(SpacingTokens.md)),
@@ -84,21 +89,27 @@ class DictionaryResultWidget extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: SpacingTokens.xs),
-                  // 발음 듣기 버튼
-                  Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () {
-                        pageContentService.speakText(entry.word);
-                      },
-                      child: Padding(
-                        padding: EdgeInsets.all(SpacingTokens.sm),
-                        child: Icon(
-                          Icons.volume_up,
-                          color: ColorTokens.secondaryLight,
-                          size: SpacingTokens.iconSizeMedium,
+                  // 발음 듣기 버튼 (원형 배경 추가)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: ColorTokens.secondary.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () {
+                          pageContentService.speakText(entry.word);
+                        },
+                        child: Padding(
+                          padding: EdgeInsets.all(SpacingTokens.sm),
+                          child: Icon(
+                            Icons.volume_up,
+                            color: ColorTokens.secondary,
+                            size: SpacingTokens.iconSizeMedium,
+                          ),
                         ),
                       ),
                     ),
@@ -106,17 +117,16 @@ class DictionaryResultWidget extends StatelessWidget {
                 ],
               ),
               
-              // 발음 (Pinyin)
-              if (entry.pinyin.isNotEmpty)
-                Padding(
-                  padding: EdgeInsets.only(top: SpacingTokens.xs),
-                  child: Text(
-                    entry.pinyin,
-                    style: TypographyTokens.body2.copyWith(
-                      color: ColorTokens.textSecondary,
-                    ),
+              // 발음 (Pinyin) - 항상 표시
+              Padding(
+                padding: EdgeInsets.only(top: SpacingTokens.xs),
+                child: Text(
+                  entry.pinyin.isEmpty ? '발음 정보 없음' : entry.pinyin,
+                  style: TypographyTokens.body2.copyWith(
+                    color: ColorTokens.textSecondary,
                   ),
                 ),
+              ),
               
               // 의미
               Padding(
@@ -164,11 +174,19 @@ class DictionaryResultWidget extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SizedBox(width: SpacingTokens.xs),
+                    // 아이콘 (이미 추가된 경우 표시하지 않음)
+                    if (!isExistingFlashcard) ...[
+                      Image.asset(
+                        'assets/images/icon_flashcard_dic.png',
+                        width: 24,
+                        height: 24,
+                      ),
+                      SizedBox(width: SpacingTokens.xs),
+                    ],
                     Text(
-                      isExistingFlashcard ? '이미 추가됨' : '플래시카드 추가',
+                      isExistingFlashcard ? '플래시카드로 설정됨' : '플래시카드 추가',
                       style: TypographyTokens.button.copyWith(
-                        color: ColorTokens.textGrey,
+                        color: ColorTokens.textLight,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
