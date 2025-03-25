@@ -4,7 +4,7 @@
 // 향후 언어별 발음 표기 서비스로 확장될 예정입니다 (예: 일본어 후리가나).
 
 import 'package:flutter/foundation.dart';
-import 'package:pinyin/pinyin.dart';
+import 'package:lpinyin/lpinyin.dart';
 
 /// 중국어 텍스트에 대한 핀인 생성 서비스
 class PinyinCreationService {
@@ -19,9 +19,13 @@ class PinyinCreationService {
     if (chineseText.isEmpty) return '';
 
     try {
-      // 핀인 라이브러리 사용
-      final pinyinResult = PinyinHelper.getPinyin(chineseText,
-          separator: ' ', format: PinyinFormat.WITH_TONE_MARK);
+      // lpinyin 라이브러리 사용
+      final pinyinResult = PinyinHelper.getPinyinE(
+        chineseText,
+        separator: ' ',
+        format: PinyinFormat.WITH_TONE_MARK,
+        defPinyin: '', // 변환할 수 없는 문자는 빈 문자열로
+      );
 
       return pinyinResult;
     } catch (e) {
@@ -45,8 +49,12 @@ class PinyinCreationService {
     if (chineseText.isEmpty) return '';
 
     try {
-      return PinyinHelper.getPinyin(chineseText,
-          separator: ' ', format: PinyinFormat.WITH_TONE_MARK);
+      return PinyinHelper.getPinyinE(
+        chineseText,
+        separator: ' ',
+        format: PinyinFormat.WITH_TONE_MARK,
+        defPinyin: '',
+      );
     } catch (e) {
       return '';
     }

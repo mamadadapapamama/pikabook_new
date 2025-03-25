@@ -132,10 +132,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         children: [
           // 텍스트 처리 중 표시
           if (_isProcessingText)
-            const PikabookLoader(
-              title: '페이지를 뚝딱 뚝딱 만들고 있어요.',
-              subtitle: '잠시만 기다려 주세요!',
-            )
+            const DotLoadingIndicator(message: '페이지 처리 중...')
           // 처리된 텍스트가 있는 경우
           else if (_processedText != null) ...[
             Builder(builder: (context) {
