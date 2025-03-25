@@ -37,6 +37,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:badges/badges.dart' as badges;
 import '../../theme/tokens/color_tokens.dart';
 import 'full_image_screen.dart';
+import '../../services/screenshot_service.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -67,6 +68,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final PageContentService _pageContentService = PageContentService();
   final TextReaderService _textReaderService = TextReaderService();
+  final ScreenshotService _screenshotService = ScreenshotService();
   
   // 관리자 클래스 인스턴스
   late NotePageManager _pageManager;
@@ -97,12 +99,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     _initTts();
     _loadUserPreferences();
     _setupBackgroundProcessingCheck();
+    _initScreenshotDetection();
   }
 
   @override
   void dispose() {
     _backgroundCheckTimer?.cancel();
     _screenshotWarningTimer?.cancel();
+    _screenshotService.stopDetection();
     WidgetsBinding.instance.removeObserver(this);
     _ttsService.stop();
     super.dispose();
@@ -111,24 +115,25 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // 앱이 다시 활성화되었을 때 스크린샷 감지를 시도합니다.
+    // 앱 상태 변경 감지
     if (state == AppLifecycleState.resumed) {
-      _checkForScreenshot();
+      // 앱이 다시 활성화되면 스크린샷 감지 재시작
+      _screenshotService.startDetection();
+    } else if (state == AppLifecycleState.paused) {
+      // 앱이 백그라운드로 가면 스크린샷 감지 중지
+      _screenshotService.stopDetection();
     }
   }
 
-  // 스크린샷 감지 함수
-  Future<void> _checkForScreenshot() async {
-    try {
-      // iOS와 Android에서 스크린샷 이벤트를 감지하는 메커니즘이 다를 수 있습니다.
-      // 간단하게 앱이 다시 활성화될 때 스크린샷이 있었다고 가정합니다.
-      // 실제 구현에서는 플랫폼 채널 또는 특정 API를 사용하여 실제 스크린샷 이벤트를 감지해야 합니다.
-      if (mounted && !_isShowingScreenshotWarning) {
+  /// 스크린샷 감지 초기화
+  Future<void> _initScreenshotDetection() async {
+    await _screenshotService.initialize(() {
+      if (mounted) {
         _showScreenshotWarning();
       }
-    } catch (e) {
-      debugPrint('스크린샷 감지 중 오류 발생: $e');
-    }
+    });
+    
+    await _screenshotService.startDetection();
   }
 
   // 스크린샷 경고 메시지 표시

@@ -90,7 +90,7 @@ class _NoteListItemState extends State<NoteListItem> {
       background: Container(
         alignment: Alignment.centerRight,
         padding: EdgeInsets.only(right: SpacingTokens.md),
-        color: ColorTokens.errorBackground,
+        color: ColorTokens.deleteSwipeBackground,
         child: const Icon(
           Icons.delete,
           color: Colors.white,
@@ -139,7 +139,7 @@ class _NoteListItemState extends State<NoteListItem> {
                                   return Container(
                                     color: Colors.grey[200],
                                     child: const Icon(Icons.image_not_supported,
-                                        color: Colors.grey),
+                                        color: ColorTokens.disabled),
                                   );
                                 },
                               )
@@ -149,7 +149,8 @@ class _NoteListItemState extends State<NoteListItem> {
                                       width: SpacingTokens.lg,
                                       height: SpacingTokens.lg,
                                       child: const CircularProgressIndicator(
-                                          strokeWidth: 2),
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary)),
                                     ),
                                   )
                                 : Image.asset(
@@ -191,7 +192,7 @@ class _NoteListItemState extends State<NoteListItem> {
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   fontWeight: FontWeight.normal,
-                                  color: const Color(0xFF969696),
+                                  color: ColorTokens.textGrey,
                                 ),
                               ),
                               SizedBox(width: SpacingTokens.xs),
@@ -200,7 +201,7 @@ class _NoteListItemState extends State<NoteListItem> {
                                 style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   fontWeight: FontWeight.normal,
-                                  color: const Color(0xFF969696),
+                                  color: ColorTokens.textGrey,
                                 ),
                               ),
                               SizedBox(width: SpacingTokens.xs),

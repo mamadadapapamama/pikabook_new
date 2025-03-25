@@ -26,6 +26,7 @@ class ColorTokens {
   // 상태 컬러
   static const Color success = Color(0xFF34A853); // 성공 상태
   static const Color error = Color(0xFFCC0A0A); // 오류 상태
+  static const Color errorBackground = Color(0xFFFF6D6D); // 오류 상태 배경
   static const Color warning = Color(0xFFFFC107); // 경고 상태
   static const Color info = Color(0xFF2196F3); // 정보 상태
   
@@ -37,4 +38,13 @@ class ColorTokens {
   // 구분선 및 비활성화
   static const Color divider = Color(0xFFE0E0E0); // 구분선
   static const Color disabled = Color(0xFFB8B8B8); // 비활성화 요소
+  
+  // 추가적인 UI 컬러
+  static const Color pinyinText = Color(0xFFB2B2B2); // 핀인 텍스트 색상
+  static const Color dividerLight = Color(0xFFEEEEEE); // 연한 구분선
+  static const Color greyLight = Color(0xFFF0F0F0); // 연한 회색 배경
+  static const Color greyMedium = Color(0xFFD3D3D3); // 중간 회색
+  static const Color flashcardBackground = Color(0xFFFFF7D8); // 플래시카드 배경
+  static const Color deleteSwipeBackground = ColorTokens.errorBackground; // 삭제 스와이프 배경색
+  static const Color segmentButtonBackground = Color(0xFFD3E0DD); // 세그먼트 버튼 배경
 }

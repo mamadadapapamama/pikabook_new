@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flip_card/flip_card.dart';
 import '../models/flash_card.dart';
+import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
+import '../theme/tokens/spacing_tokens.dart';
 
 /// 플래시카드 한 장 내의 UI와 기능
 ///
@@ -38,8 +41,8 @@ class FlashCardUI {
           },
           front: buildCardSide(
             card: card,
-            bgColor: const Color(0xFFFFF7D8),
-            textColor: Colors.black,
+            bgColor: ColorTokens.flashcardBackground,
+            textColor: ColorTokens.textPrimary,
             isFront: true,
             isCurrentCard: isCurrentCard,
             cardIndex: index,
@@ -52,8 +55,8 @@ class FlashCardUI {
           ),
           back: buildCardSide(
             card: card,
-            bgColor: Colors.white,
-            textColor: Colors.black,
+            bgColor: ColorTokens.surface,
+            textColor: ColorTokens.textPrimary,
             isFront: false,
             isCurrentCard: isCurrentCard,
             cardIndex: index,
@@ -108,13 +111,13 @@ class FlashCardUI {
 
           // TTS 버튼 (앞면 & 현재 카드만)
           if (isFront && isCurrentCard)
-            buildTtsButton(const Color(0xFF226357), isSpeaking, onSpeak, onStopSpeaking),
+            buildTtsButton(ColorTokens.secondary, isSpeaking, onSpeak, onStopSpeaking),
 
           // 스와이프 안내 텍스트 (하단)
-          buildSwipeGuideText(swipeGuideText, const Color(0xFFD3E0DD)),
+          buildSwipeGuideText(swipeGuideText, ColorTokens.secondaryLight),
 
           // 카드 번호 표시 (좌상단)
-          buildCardNumberBadge(cardIndex, const Color(0xFFFFD53C), const Color(0xFF1B4F46)),
+          buildCardNumberBadge(cardIndex, ColorTokens.tertiary, ColorTokens.secondary),
         ],
       ),
     );
@@ -124,16 +127,16 @@ class FlashCardUI {
   static BoxDecoration buildCardDecoration(Color bgColor, bool isCurrentCard) {
     return BoxDecoration(
       color: bgColor,
-      borderRadius: BorderRadius.circular(20.0),
+      borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.15),
-          blurRadius: 10.0,
-          offset: const Offset(0, 4),
+          color: ColorTokens.textPrimary.withOpacity(0.15),
+          blurRadius: SpacingTokens.md - 6,
+          offset: const Offset(0, SpacingTokens.xs),
         ),
       ],
       border: Border.all(
-        color: const Color(0xFFFFD53C),
+        color: ColorTokens.tertiary,
         width: 2.0,
       ),
     );
@@ -149,7 +152,7 @@ class FlashCardUI {
   }) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(SpacingTokens.lg),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -166,12 +169,12 @@ class FlashCardUI {
             ),
             // 핀인 표시 (있는 경우)
             if (pinyin != null && pinyin.isNotEmpty) ...[
-              const SizedBox(height: 4.0),
+              SizedBox(height: SpacingTokens.xs),
               Text(
                 pinyin,
                 style: TextStyle(
                   fontSize: 14.0,
-                  color: const Color(0xFF969696),
+                  color: ColorTokens.textGrey,
                   fontFamily: 'Poppins',
                   fontWeight: FontWeight.w500,
                 ),
@@ -192,13 +195,13 @@ class FlashCardUI {
     Function() onStopSpeaking,
   ) {
     return Positioned(
-      top: 16.0,
-      right: 16.0,
+      top: SpacingTokens.md,
+      right: SpacingTokens.md,
       child: IconButton(
         icon: Icon(
           isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
           color: iconColor,
-          size: 24,
+          size: SpacingTokens.iconSizeMedium,
         ),
         onPressed: isSpeaking ? onStopSpeaking : onSpeak,
       ),
@@ -208,7 +211,7 @@ class FlashCardUI {
   /// 스와이프 안내 텍스트 생성
   static Widget buildSwipeGuideText(String text, Color textColor) {
     return Positioned(
-      bottom: 16.0,
+      bottom: SpacingTokens.md,
       left: 0,
       right: 0,
       child: Center(
@@ -229,8 +232,8 @@ class FlashCardUI {
   /// 카드 번호 배지 생성
   static Widget buildCardNumberBadge(int index, Color bgColor, Color textColor) {
     return Positioned(
-      bottom: 16.0,
-      left: 16.0,
+      bottom: SpacingTokens.md,
+      left: SpacingTokens.md,
       child: Container(
         width: 24,
         height: 24,
@@ -260,7 +263,7 @@ class FlashCardUI {
     required Function() onDelete,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      padding: EdgeInsets.symmetric(vertical: SpacingTokens.md),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -269,17 +272,17 @@ class FlashCardUI {
             IconButton(
               icon: const Icon(Icons.flip),
               onPressed: hasCards ? onFlip : null,
-              iconSize: 32.0,
-              color: hasCards ? Colors.blue : Colors.grey,
+              iconSize: SpacingTokens.iconSizeLarge,
+              color: hasCards ? ColorTokens.info : ColorTokens.disabled,
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: SpacingTokens.md),
           ],
           // 삭제 버튼
           IconButton(
             icon: const Icon(Icons.delete),
             onPressed: hasCards ? onDelete : null,
-            iconSize: 32.0,
-            color: hasCards ? Colors.red : Colors.grey,
+            iconSize: SpacingTokens.iconSizeLarge,
+            color: hasCards ? ColorTokens.error : ColorTokens.disabled,
           ),
         ],
       ),
