@@ -42,7 +42,7 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
         SizedBox(
           height: 100, // 앱바 높이 조정 (홈 스크린 + 4px)
           child: Padding(
-            padding: const EdgeInsets.only(top: 44.0, left: 24.0, right: 24.0, bottom:24),
+            padding: const EdgeInsets.only(top: 50.0, left: 16.0, right: 16.0, bottom:24),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -149,12 +149,12 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
           // 배경 바
           Container(
             width: double.infinity,
-            color: const Color(0xFFF1F3F3),
+            color: ColorTokens.divider,
           ),
           // 진행 바
           Container(
             width: progressWidth,
-            color: ColorTokens.secondary,
+            color: ColorTokens.primary,
           ),
         ],
       ),
@@ -162,5 +162,5 @@ class NoteDetailAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(76);  // 72(toolbar) + 4(progress bar)
+  Size get preferredSize => const Size.fromHeight(80);  //homescreen 과 통일
 }

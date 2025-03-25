@@ -116,9 +116,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             // AppBar 내용
             SizedBox(
-              height: 76, // 앱바 높이 조정 (홈 스크린 + 4px)
+              height: 80, // 앱바 높이 조정 (홈 스크린 + 4px)
               child: Padding(
-                padding: const EdgeInsets.only(top: 44.0, left: 24.0, right: 24.0),
+                padding: const EdgeInsets.only(top: 50.0, left: 16.0, right: 16.0),
                 child: Row(
                   children: [
                     // 뒤로가기 버튼
