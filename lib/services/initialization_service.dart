@@ -208,10 +208,11 @@ class InitializationService {
         // 기존 사용자
         final userData = userDoc.data() as Map<String, dynamic>?;
         final onboardingCompleted = userData?['onboardingCompleted'] ?? false;
+        final hasOnboarded = userData?['hasOnboarded'] ?? false;
         
         // 온보딩 상태 로컬에 저장
         await userPrefs.setOnboardingCompleted(onboardingCompleted);
-        await userPrefs.setHasOnboarded(onboardingCompleted);
+        await userPrefs.setHasOnboarded(hasOnboarded);
         
         // 추가 사용자 설정 로드
         if (userData != null) {
@@ -231,11 +232,17 @@ class InitializationService {
           }
         }
         
-        debugPrint('기존 사용자 로그인: 온보딩 완료 상태=$onboardingCompleted');
+        debugPrint('기존 사용자 로그인: 온보딩 완료 상태=$onboardingCompleted, hasOnboarded=$hasOnboarded');
       } else {
         // 새 사용자는 온보딩 미완료 상태로 설정
         await userPrefs.setOnboardingCompleted(false);
         await userPrefs.setHasOnboarded(false);
+        
+        // Firestore에도 온보딩 상태 저장
+        await firestore.collection('users').doc(user.uid).update({
+          'onboardingCompleted': false,
+          'hasOnboarded': false,
+        });
         
         debugPrint('새 사용자 로그인: 온보딩 필요');
       }

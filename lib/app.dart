@@ -88,8 +88,9 @@ class _AppState extends State<App> {
       // InitializationService의 handleUserLogin을 호출하여 온보딩 상태 업데이트
       await widget.initializationService.handleUserLogin(user);
       
-      // 온보딩 상태 확인
+      // 온보딩 상태 확인 (Firestore와 로컬 상태 모두 확인)
       final hasCompletedOnboarding = await _preferencesService.isOnboardingCompleted();
+      final hasOnboarded = await _preferencesService.hasOnboarded();
       
       if (mounted) {
         setState(() {
@@ -98,7 +99,8 @@ class _AppState extends State<App> {
         });
       }
       
-      debugPrint('사용자의 온보딩 상태 확인: $hasCompletedOnboarding');
+      debugPrint('사용자의 온보딩 상태 확인: completed=$hasCompletedOnboarding, hasOnboarded=$hasOnboarded');
+      
     } catch (e) {
       debugPrint('사용자 온보딩 상태 확인 중 오류 발생: $e');
       if (mounted) {

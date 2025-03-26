@@ -10,6 +10,7 @@ import '../../services/user_preferences_service.dart';
 import '../../utils/language_constants.dart';
 import '../../widgets/dot_loading_indicator.dart';
 import 'package:provider/provider.dart';
+import '../../widgets/common/pika_button.dart';
 
 class SettingsScreen extends StatefulWidget {
   final InitializationService initializationService;
@@ -343,7 +344,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildLogoutButton() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: ElevatedButton(
+      child: PikaButton(
+        text: '로그아웃',
+        variant: PikaButtonVariant.warning,
         onPressed: () async {
           try {
             // 로그아웃 함수 호출
@@ -370,12 +373,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             }
           }
         },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.red[100],
-          foregroundColor: Colors.red[800],
-          minimumSize: const Size.fromHeight(48),
-        ),
-        child: const Text('로그아웃'),
+        isFullWidth: true,
       ),
     );
   }

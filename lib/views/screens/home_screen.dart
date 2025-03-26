@@ -20,6 +20,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/image_picker_bottom_sheet.dart';
 import '../../widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../widgets/common/pika_button.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -251,21 +252,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: Consumer<HomeViewModel>(
                     builder: (context, viewModel, _) {
                       if (viewModel.hasNotes) {
-                        return ElevatedButton.icon(
+                        return PikaButton(
+                          text: '스마트 노트 만들기',
+                          variant: PikaButtonVariant.floating,
+                          leadingIcon: const Icon(Icons.add),
                           onPressed: () => _showImagePickerBottomSheet(context),
-                          icon: const Icon(Icons.add),
-                          label: Text(
-                            '스마트 노트 만들기',
-                            style: TypographyTokens.button,
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: ColorTokens.primary,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: SpacingTokens.md),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-                            ),
-                          ),
                         );
                       }
                       return const SizedBox.shrink(); // 노트가 없을 때는 FAB 숨김
@@ -334,18 +325,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
+              child: PikaButton(
+                text: '스마트 노트 만들기',
+                variant: PikaButtonVariant.primary,
+                size: PikaButtonSize.large,
+                leadingIcon: const Icon(Icons.add),
                 onPressed: () => _handleAddNote(context),
-                icon: const Icon(Icons.add),
-                label: const Text('스마트 노트 만들기'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: ColorTokens.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
+                isFullWidth: true,
               ),
             ),
           ],

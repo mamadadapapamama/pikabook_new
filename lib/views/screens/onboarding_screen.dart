@@ -4,9 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../services/user_preferences_service.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
-import '../../widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/tokens/spacing_tokens.dart';
+import '../../widgets/common/pika_button.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -285,20 +285,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       // 뒤로 버튼 (첫 페이지에서는 숨김)
                       if (_currentPage > 0)
                         Expanded(
-                          child: OutlinedButton(
+                          child: PikaButton(
+                            text: '뒤로',
+                            variant: PikaButtonVariant.outline,
                             onPressed: _prevPage,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: ColorTokens.primary,
-                              side: BorderSide(
-                                color: ColorTokens.primary,
-                                width: 1,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                            child: Text('뒤로', style: TypographyTokens.button),
+                            isFullWidth: true,
                           ),
                         ),
                         
@@ -308,30 +299,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         
                       // 다음 버튼
                       Expanded(
-                        child: ElevatedButton(
+                        child: PikaButton(
+                          text: _currentPage == 2 ? '시작해요!' : '다음으로',
+                          variant: PikaButtonVariant.primary,
+                          size: _currentPage == 0 ? PikaButtonSize.large : PikaButtonSize.medium,
                           onPressed: _isNextButtonEnabled() ? _nextPage : null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: ColorTokens.primary,
-                            disabledBackgroundColor: ColorTokens.disabled,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          child: _isProcessing
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                )
-                              : Text(
-                                  _currentPage == 2 ? '시작해요!' : '다음으로',
-                                  style: TypographyTokens.button,
-                                ),
+                          isLoading: _isProcessing,
+                          isFullWidth: true,
                         ),
                       ),
                     ],

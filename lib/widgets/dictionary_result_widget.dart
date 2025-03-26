@@ -5,6 +5,7 @@ import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
 import '../theme/tokens/ui_tokens.dart';
+import '../widgets/common/pika_button.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
 
@@ -144,56 +145,35 @@ class DictionaryResultWidget extends StatelessWidget {
           SizedBox(height: SpacingTokens.lg),
           
           // 플래시카드 추가 버튼
-          Material(
-            color: isExistingFlashcard ? Colors.grey.shade200 : ColorTokens.primary,
-            borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-            child: InkWell(
-              onTap: isExistingFlashcard
-                  ? null
-                  : () {
-                      onCreateFlashCard(
-                        entry.word,
-                        entry.meaning,
-                        pinyin: entry.pinyin,
-                      );
-                      Navigator.pop(context);
+          PikaButton(
+            text: isExistingFlashcard ? '플래시카드로 설정됨' : '플래시카드 추가',
+            variant: isExistingFlashcard ? PikaButtonVariant.secondary : PikaButtonVariant.primary,
+            leadingIcon: !isExistingFlashcard 
+              ? Image.asset(
+                  'assets/images/icon_flashcard_dic.png',
+                  width: 24,
+                  height: 24,
+                )
+              : null,
+            onPressed: isExistingFlashcard
+                ? null
+                : () {
+                    onCreateFlashCard(
+                      entry.word,
+                      entry.meaning,
+                      pinyin: entry.pinyin,
+                    );
+                    Navigator.pop(context);
 
-                      // 추가 완료 메시지
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('플래시카드에 추가되었습니다'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    },
-              borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-              child: Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(SpacingTokens.sm),
-                alignment: Alignment.center,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // 아이콘 (이미 추가된 경우 표시하지 않음)
-                    if (!isExistingFlashcard) ...[
-                      Image.asset(
-                        'assets/images/icon_flashcard_dic.png',
-                        width: 24,
-                        height: 24,
+                    // 추가 완료 메시지
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('플래시카드에 추가되었습니다'),
+                        duration: Duration(seconds: 2),
                       ),
-                      SizedBox(width: SpacingTokens.xs),
-                    ],
-                    Text(
-                      isExistingFlashcard ? '플래시카드로 설정됨' : '플래시카드 추가',
-                      style: TypographyTokens.button.copyWith(
-                        color: ColorTokens.textLight,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+                    );
+                  },
+            isFullWidth: true,
           ),
         ],
       ),
