@@ -137,9 +137,26 @@ class _NoteListItemState extends State<NoteListItem> {
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) {
                                   return Container(
-                                    color: Colors.grey[200],
-                                    child: const Icon(Icons.image_not_supported,
-                                        color: ColorTokens.disabled),
+                                    color: Colors.grey[100],
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Image.asset(
+                                          'assets/images/thumbnail_empty.png',
+                                          width: 40,
+                                          height: 40,
+                                          fit: BoxFit.contain,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '이미지 없음',
+                                          style: GoogleFonts.notoSansKr(
+                                            fontSize: 10,
+                                            color: ColorTokens.textGrey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   );
                                 },
                               )
@@ -153,9 +170,27 @@ class _NoteListItemState extends State<NoteListItem> {
                                           valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary)),
                                     ),
                                   )
-                                : Image.asset(
-                                    'assets/images/note_thumbnail.png',
-                                    fit: BoxFit.cover,
+                                : Container(
+                                    color: Colors.grey[100],
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Image.asset(
+                                          'assets/images/thumbnail_empty.png',
+                                          width: 40,
+                                          height: 40,
+                                          fit: BoxFit.contain,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '이미지 없음',
+                                          style: GoogleFonts.notoSansKr(
+                                            fontSize: 10,
+                                            color: ColorTokens.textGrey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                       ),
                     ),
