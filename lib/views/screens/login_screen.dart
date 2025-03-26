@@ -165,57 +165,49 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // 로고 영역
+                          // 상단 여백
                           SizedBox(
-                            width: 160,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // 텍스트 로고
-                                Opacity(
-                                  opacity: _logoFadeAnimation.value,
-                                  child: Image.asset(
-                                    'assets/images/Pikabook_textlogo.png',
-                                    width: 160,
-                                    height: 27.42,
-                                    fit: BoxFit.contain,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                
-                                // 새 로고 (피카북 텍스트 로고 위에 위치)
-                                Positioned(
-                                  top: -55, // 새 로고가 완전히 보이도록 위치 조정
-                                  child: Opacity(
-                                    opacity: _birdFadeAnimation.value,
-                                    child: Image.asset(
-                                      'assets/images/pikabook_bird.png',
-                                      width: 60,
-                                      height: 60,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ),
-                                ),
-                                
-                                // 앱 설명 - 로고 위에 배치
-                                Positioned(
-                                  top: -105, // 새 로고보다 더 위에 위치
-                                  child: Opacity(
-                                    opacity: _textFadeAnimation.value,
-                                    child: const Text(
-                                      '원서 공부,\n스마트하게',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontFamily: 'Noto Sans KR',
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.white,
-                                        height: 1.4,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            height: MediaQuery.of(context).size.height * 0.15, // 상단 여백 조정
+                          ),
+                          
+                          // 새 로고 (bird) - 맨 위에 배치
+                          Opacity(
+                            opacity: _birdFadeAnimation.value,
+                            child: Image.asset(
+                              'assets/images/pikabook_bird.png',
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          
+                          // 원서 공부, 스마트하게 텍스트 - 중간에 배치
+                          Opacity(
+                            opacity: _textFadeAnimation.value,
+                            child: const Text(
+                              '원서 공부,\n스마트하게',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: 'Noto Sans KR',
+                                fontSize: 20,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          
+                          // 텍스트 로고 - 맨 아래에 배치
+                          Opacity(
+                            opacity: _logoFadeAnimation.value,
+                            child: Image.asset(
+                              'assets/images/pikabook_textlogo.png',
+                              width: 160,
+                              height: 27.42,
+                              fit: BoxFit.contain,
+                              color: Colors.white,
                             ),
                           ),
                           const SizedBox(height: 60),
@@ -280,7 +272,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   leadingIcon: Padding(
                                     padding: const EdgeInsets.only(right: 8.0),
                                     child: Image.asset(
-                                      'assets/images/social_icons/google.png',
+                                      'assets/images/google.png',
                                       width: 24,
                                       height: 24,
                                       errorBuilder: (context, error, stackTrace) {
@@ -298,9 +290,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   backgroundColor: Colors.white,
                                   textColor: Colors.black,
                                   leadingIcon: Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
+                                    padding: const EdgeInsets.only(right: 8.0, bottom: 4.0),
                                     child: Image.asset(
-                                      'assets/images/social_icons/apple.png',
+                                      'assets/images/apple.png',
                                       width: 24,
                                       height: 24,
                                       errorBuilder: (context, error, stackTrace) {

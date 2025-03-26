@@ -437,18 +437,34 @@ class InitializationService {
       final startTime = DateTime.now();
       debugPrint('Firebase 초기화 재시도 시작 (${startTime.toString()})');
       
-      // Firebase 초기화
+      // 이미 Firebase가 초기화되었는지 확인
       if (Firebase.apps.isNotEmpty) {
-        await Firebase.app().delete();
+        debugPrint('Firebase가 이미 초기화되어 있음, 추가 초기화 생략');
+        
+        // 앱 상태만 확인
+        await _checkAuthenticationState();
+        
+        // 초기화 완료 설정
+        if (!_firebaseInitialized.isCompleted) {
+          _firebaseInitialized.complete(true);
+        }
+        
+        final duration = DateTime.now().difference(startTime);
+        debugPrint('Firebase 상태 확인 완료 (소요시간: ${duration.inMilliseconds}ms)');
+        
+        return;
       }
       
+      // Firebase 초기화 (아직 초기화되지 않은 경우에만)
       await Firebase.initializeApp(options: options);
       
       // 앱 상태 확인
       await _checkAuthenticationState();
       
       // 초기화 완료 설정
-      await markFirebaseInitialized(true);
+      if (!_firebaseInitialized.isCompleted) {
+        _firebaseInitialized.complete(true);
+      }
       
       final duration = DateTime.now().difference(startTime);
       debugPrint('Firebase 초기화 재시도 완료 (소요시간: ${duration.inMilliseconds}ms)');
@@ -458,7 +474,9 @@ class InitializationService {
       debugPrint('Firebase 초기화 재시도 오류: $e');
       _firebaseError = '앱 초기화 재시도 중 오류가 발생했습니다: $e';
       // 초기화 실패 설정
-      await markFirebaseInitialized(false);
+      if (!_firebaseInitialized.isCompleted) {
+        _firebaseInitialized.complete(false);
+      }
       rethrow;
     }
   }

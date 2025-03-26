@@ -16,8 +16,8 @@ class DotLoadingIndicator extends StatefulWidget {
     Key? key,
     this.message,
     this.dotColor = const Color(0xFFFE6A15),
-    this.dotSize = 5.0,  // Figma 스펙에 맞게 크기 수정
-    this.spacing = 8.0,  // Figma 스펙에 맞게 간격 수정
+    this.dotSize = 10.0,  
+    this.spacing = 8.0,  
     this.isLoginScreen = false,
   }) : super(key: key);
 
