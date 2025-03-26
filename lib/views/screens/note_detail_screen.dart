@@ -152,7 +152,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: ColorTokens.error,
+        backgroundColor: ColorTokens.black,
         duration: const Duration(seconds: 5),
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
@@ -857,7 +857,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       if (_textReaderService.isPlaying) {
         _textReaderService.stop();
       } else if (currentPage.originalText.isNotEmpty) {
-        _textReaderService.readTextBySentences(currentPage.originalText);
+        // ProcessedText 가져오기
+        final processedText = _pageContentService.getProcessedText(currentPage.id!);
+        if (processedText != null) {
+          // 전체 텍스트 재생
+          _textReaderService.readText(currentPage.originalText);
+        }
       }
     });
   }

@@ -159,29 +159,13 @@ class InitializationService {
       // Firestore에서 사용자 데이터 확인
       final userDoc = await firestore.collection('users').doc(user.uid).get();
       
-      // 사용자의 노트 데이터 확인 - userId 필드로 필터링
-      bool hasNotes = false;
-      try {
-        final notesQuery = await firestore
-            .collection('notes')
-            .where('userId', isEqualTo: user.uid)
-            .limit(1)
-            .get();
-        
-        hasNotes = notesQuery.docs.isNotEmpty;
-        debugPrint('사용자 ${user.uid}의 노트 데이터 확인: ${hasNotes ? "노트 있음" : "노트 없음"}');
-      } catch (e) {
-        debugPrint('노트 데이터 확인 중 오류: $e');
-        // 노트 컬렉션이 없으면 노트가 없는 것으로 처리
-        hasNotes = false;
-      }
-      
       // 계정 첫 로그인 여부 확인 - 완전히 새로운 사용자인 경우
       final isNewUser = !userDoc.exists;
       
       if (isNewUser) {
         // 온보딩 상태 설정 - 새 계정이면 온보딩 필요
         await userPrefs.setOnboardingCompleted(false);
+        await userPrefs.setHasOnboarded(false);
         
         // Firestore에 사용자 정보 생성
         await firestore.collection('users').doc(user.uid).set({
@@ -191,47 +175,28 @@ class InitializationService {
           'onboardingCompleted': false,
           'email': user.email,
           'displayName': user.displayName,
-          'hasOnboarded': false, // 온보딩 미완료 상태로 저장
+          'hasOnboarded': false,
         }, SetOptions(merge: true));
         
       } else {
-        // 기존 사용자인 경우 - 노트 데이터 기반으로 온보딩 결정
-        if (!hasNotes) {
-          // 노트가 없으면 온보딩 표시
-          await userPrefs.setOnboardingCompleted(false);
-          
-          // Firestore 사용자 상태 업데이트
-          await firestore.collection('users').doc(user.uid).update({
-            'onboardingCompleted': false,
-            'lastLogin': FieldValue.serverTimestamp(),
-            'hasOnboarded': false, // 온보딩 미완료 상태로 저장
-          });
-        } else {
-          // 노트가 있으면 온보딩 건너뛰기
-          await userPrefs.setOnboardingCompleted(true);
-          
-          // Firestore 사용자 상태 업데이트
-          await firestore.collection('users').doc(user.uid).update({
-            'onboardingCompleted': true,
-            'lastLogin': FieldValue.serverTimestamp(),
-            'hasOnboarded': true, // 온보딩 완료 상태로 저장
-          });
-        }
+        // 기존 사용자인 경우 - 온보딩 상태 유지
+        final onboardingCompleted = userDoc.data()?['onboardingCompleted'] ?? false;
+        await userPrefs.setOnboardingCompleted(onboardingCompleted);
+        await userPrefs.setHasOnboarded(onboardingCompleted);
+        
+        // 마지막 로그인 시간만 업데이트
+        await firestore.collection('users').doc(user.uid).update({
+          'lastLogin': FieldValue.serverTimestamp(),
+        });
       }
       
-      // 캐시 서비스 초기화 - 로그인마다 신선한 데이터 사용
-      final cacheService = UnifiedCacheService();
-      await cacheService.clearAllCache();
-      
+      debugPrint('사용자 ${user.uid} 로그인 처리 완료 (새 사용자: $isNewUser)');
     } catch (e) {
-      debugPrint('사용자 로그인 처리 오류: $e');
-      // 오류 발생 시 기본값으로 온보딩 표시
-      try {
-        final userPrefs = UserPreferencesService();
-        await userPrefs.setOnboardingCompleted(false);
-      } catch (e2) {
-        debugPrint('기본 온보딩 상태 설정 중 오류: $e2');
-      }
+      debugPrint('사용자 로그인 처리 중 오류 발생: $e');
+      // 오류 발생 시 기본값으로 온보딩 필요 설정
+      final userPrefs = UserPreferencesService();
+      await userPrefs.setOnboardingCompleted(false);
+      await userPrefs.setHasOnboarded(false);
     }
   }
 
