@@ -74,6 +74,7 @@ dependencies:
   flip_card: ^0.7.0
   flutter_svg: ^2.0.17
   lpinyin: ^2.0.3
+  flutter_native_splash: ^2.4.5
 
 
 dev_dependencies:

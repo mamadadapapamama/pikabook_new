@@ -10,6 +10,8 @@ import 'views/screens/onboarding_screen.dart';
 import 'firebase_options.dart';
 import 'views/screens/login_screen.dart';
 import 'views/screens/settings_screen.dart';
+import 'views/screens/note_detail_screen.dart';
+import 'widgets/dot_loading_indicator.dart';
 
 class App extends StatefulWidget {
   final InitializationService initializationService;
@@ -298,10 +300,29 @@ class _AppState extends State<App> {
       themeMode: ThemeMode.light,
       home: _buildHomeScreen(),
       routes: {
+        '/login': (context) => LoginScreen(
+              initializationService: widget.initializationService,
+              onLoginSuccess: _handleLoginSuccess,
+              isInitializing: _isCheckingInitialization,
+            ),
+        '/onboarding': (context) => OnboardingScreen(
+              onComplete: () {
+                setState(() {
+                  _isOnboardingCompleted = true;
+                });
+                _saveOnboardingStatusToFirestore();
+              },
+            ),
+        '/home': (context) => const HomeScreen(),
         '/settings': (context) => SettingsScreen(
               initializationService: widget.initializationService,
               onLogout: _handleLogout,
             ),
+        // 노트 상세 화면은 noteId 파라미터가 필요하므로 라우팅 제외
+        // '/note-detail': (context) => const NoteDetailScreen(),
+        // 현재 구현되지 않은 화면들 제외
+        // '/image-picker': (context) => const ImagePickerScreen(),
+        // '/flashcard': (context) => const FlashcardScreen(),
       },
     );
   }
@@ -313,24 +334,14 @@ class _AppState extends State<App> {
         'Onboarding completed=$_isOnboardingCompleted, '
         'Loading user data=$_isLoadingUserData, '
         'Error=$_error');
-        
-    // 앱 초기화 중인 경우 로딩 화면 표시 (스플래시 역할)
-    if (!_isFirebaseInitialized || _isCheckingInitialization) {
-      return _buildLoadingScreen(message: '초기화 중...');
-    }
-
-    // 오류가 있는 경우
+    
+    // 오류가 있는 경우만 오류 화면 표시
     if (_error != null) {
       return _buildErrorScreen();
     }
 
-    // 사용자가 로그인되어 있는 경우
+    // 로그인 상태에 따라 화면 표시
     if (_isUserAuthenticated) {
-      // 사용자 데이터 로딩 중인 경우 로딩 화면 표시
-      if (_isLoadingUserData) {
-        return _buildLoadingScreen(message: '데이터 로드 중...');
-      }
-      
       // 온보딩 완료 여부에 따라 화면 결정
       if (_isOnboardingCompleted) {
         debugPrint('로그인 완료 및 온보딩 완료 - 홈 화면 표시');
@@ -348,8 +359,9 @@ class _AppState extends State<App> {
       }
     }
     
-    // 로그인 화면 표시
-    debugPrint('로그인 필요 - 로그인 화면 표시');
+    // 로그인 화면 표시 (Firebase 초기화와 상관없이 즉시 표시)
+    // 로그인 화면에서 초기화 상태를 확인하고 진행
+    debugPrint('로그인 화면 표시 (백그라운드에서 초기화 진행)');
     return LoginScreen(
       initializationService: widget.initializationService,
       onLoginSuccess: _handleLoginSuccess,
@@ -357,59 +369,7 @@ class _AppState extends State<App> {
     );
   }
 
-  // 로딩 화면 (스플래시 화면 역할)
-  Widget _buildLoadingScreen({String message = '로딩 중...'}) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/images/splash_background.png'),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 로고 이미지
-                SizedBox(
-                  width: 160,
-                  height: 160,
-                  child: Image.asset(
-                    'assets/images/pikabook_logo.png',
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                
-                // 로딩 메시지
-                Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Color(0xFF3A3A3A),
-                  ),
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // 로딩 인디케이터
-                const SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF8F56)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
+  // 오류 화면
   Widget _buildErrorScreen() {
     return Scaffold(
       body: Center(

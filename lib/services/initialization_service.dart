@@ -434,21 +434,32 @@ class InitializationService {
   // 초기화 재시도 메서드
   Future<void> retryInitialization({required FirebaseOptions options}) async {
     try {
-      // Firebase 초기화 상태 재설정
-      if (_firebaseInitialized.isCompleted) {
-        // 이미 완료된 경우, 새로운 Completer 생성
-        // (실제로는 더 복잡한 상태 관리가 필요할 수 있음)
-        debugPrint('초기화 재시도: Firebase 상태 재설정');
+      final startTime = DateTime.now();
+      debugPrint('Firebase 초기화 재시도 시작 (${startTime.toString()})');
+      
+      // Firebase 초기화
+      if (Firebase.apps.isNotEmpty) {
+        await Firebase.app().delete();
       }
       
-      // Firebase 재초기화 시도
       await Firebase.initializeApp(options: options);
+      
+      // 앱 상태 확인
+      await _checkAuthenticationState();
+      
+      // 초기화 완료 설정
       await markFirebaseInitialized(true);
       
-      debugPrint('Firebase 초기화 재시도 완료');
+      final duration = DateTime.now().difference(startTime);
+      debugPrint('Firebase 초기화 재시도 완료 (소요시간: ${duration.inMilliseconds}ms)');
+      
+      return;
     } catch (e) {
       debugPrint('Firebase 초기화 재시도 오류: $e');
       _firebaseError = '앱 초기화 재시도 중 오류가 발생했습니다: $e';
+      // 초기화 실패 설정
+      await markFirebaseInitialized(false);
+      rethrow;
     }
   }
 }

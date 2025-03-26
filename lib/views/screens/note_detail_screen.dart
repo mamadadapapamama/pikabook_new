@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:async';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
-import '../../models/text_segment.dart';
 import '../../models/processed_text.dart';
 import '../../services/note_service.dart';
 import '../../services/page_service.dart';
@@ -21,23 +20,16 @@ import '../../widgets/edit_title_dialog.dart';
 import '../../widgets/note_detail_bottom_bar.dart';
 import '../../widgets/note_page_manager.dart';
 import '../../widgets/note_segment_manager.dart';
-import '../../widgets/pikabook_loader.dart';
 import '../../utils/text_display_mode.dart';
 import 'flashcard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:async'; // Timer 클래스를 사용하기 위한 import 추가
 import '../../services/unified_cache_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../services/text_reader_service.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import '../../services/auth_service.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:badges/badges.dart' as badges;
 import '../../theme/tokens/color_tokens.dart';
 import 'full_image_screen.dart';
 import '../../services/screenshot_service.dart';
-import 'package:flutter/services.dart';
 import '../../widgets/dot_loading_indicator.dart';
 
 /// 노트 상세 화면
