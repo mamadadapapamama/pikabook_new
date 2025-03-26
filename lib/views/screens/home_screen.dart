@@ -251,18 +251,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: Consumer<HomeViewModel>(
                     builder: (context, viewModel, _) {
                       if (viewModel.hasNotes) {
-                        return FloatingActionButton(
+                        return ElevatedButton.icon(
                           onPressed: () => _showImagePickerBottomSheet(context),
-                          tooltip: '새 노트 만들기',
-                          backgroundColor: ColorTokens.primary,
-                          child: Icon(
-                            Icons.add,
-                            color: Colors.white,
-                            size: SpacingTokens.iconSizeMedium,
+                          icon: const Icon(Icons.add),
+                          label: Text(
+                            '스마트 노트 만들기',
+                            style: TypographyTokens.button,
                           ),
-                          elevation: 4,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: ColorTokens.primary,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(vertical: SpacingTokens.md),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+                            ),
                           ),
                         );
                       }
