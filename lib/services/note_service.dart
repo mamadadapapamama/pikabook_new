@@ -259,15 +259,22 @@ class NoteService {
   // 노트 업데이트
   Future<void> updateNote(String noteId, Note updatedNote) async {
     try {
-      // Firestore에 업데이트
-      await _notesCollection.doc(noteId).update({
+      // 업데이트할 필드 설정
+      final Map<String, dynamic> updateData = {
         'originalText': updatedNote.originalText,
         'translatedText': updatedNote.translatedText,
         'isFavorite': updatedNote.isFavorite,
         'flashcardCount': updatedNote.flashcardCount,
-        'flashCards': updatedNote.flashCards,
         'updatedAt': DateTime.now(),
-      });
+      };
+      
+      // flashCards 필드가 null이 아닌 경우에만 추가
+      if (updatedNote.flashCards != null) {
+        updateData['flashCards'] = updatedNote.flashCards;
+      }
+
+      // Firestore에 업데이트
+      await _notesCollection.doc(noteId).update(updateData);
 
       // 캐시 업데이트
       await _cacheService.cacheNote(updatedNote);
