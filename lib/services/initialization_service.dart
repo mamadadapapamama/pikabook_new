@@ -192,6 +192,10 @@ class InitializationService {
       final firestore = FirebaseFirestore.instance;
       final userPrefs = UserPreferencesService();
       
+      // 로그인 전에 기존 사용자 설정 초기화 (다른 계정 설정이 남아있을 수 있음)
+      await userPrefs.resetAllSettings();
+      debugPrint('다른 계정의 설정을 방지하기 위해 기존 설정 초기화');
+      
       // Firestore에서 사용자 데이터 확인
       final userDoc = await firestore.collection('users').doc(user.uid).get();
       final isNewUser = !userDoc.exists;
@@ -208,6 +212,24 @@ class InitializationService {
         // 온보딩 상태 로컬에 저장
         await userPrefs.setOnboardingCompleted(onboardingCompleted);
         await userPrefs.setHasOnboarded(onboardingCompleted);
+        
+        // 추가 사용자 설정 로드
+        if (userData != null) {
+          if (userData['userName'] != null) {
+            await userPrefs.setUserName(userData['userName']);
+          }
+          if (userData['learningPurpose'] != null) {
+            await userPrefs.setLearningPurpose(userData['learningPurpose']);
+          }
+          if (userData['translationMode'] != null) {
+            final useSegmentMode = userData['translationMode'] == 'segment';
+            await userPrefs.setUseSegmentMode(useSegmentMode);
+          }
+          if (userData['defaultNoteSpace'] != null) {
+            await userPrefs.setDefaultNoteSpace(userData['defaultNoteSpace']);
+            await userPrefs.addNoteSpace(userData['defaultNoteSpace']);
+          }
+        }
         
         debugPrint('기존 사용자 로그인: 온보딩 완료 상태=$onboardingCompleted');
       } else {

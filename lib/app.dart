@@ -252,6 +252,10 @@ class _AppState extends State<App> {
       // 캐시와 Firebase 로그아웃 처리
       await widget.initializationService.signOut();
       
+      // 사용자 설정 초기화 (모든 계정 관련 데이터 리셋)
+      await _preferencesService.resetAllSettings();
+      debugPrint('로그아웃 시 사용자 설정 초기화 완료');
+      
       // 상태 변경을 통해 LoginScreen으로 전환
       if (mounted) {
         setState(() {
