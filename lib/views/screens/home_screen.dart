@@ -21,6 +21,7 @@ import '../../widgets/image_picker_bottom_sheet.dart';
 import '../../widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/common/pika_button.dart';
+import '../../widgets/common/help_text_tooltip.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -135,41 +136,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           bottom: false,
           child: Column(
             children: [
-              if (_showTooltip)
-                Transform.translate(
-                  offset: Offset(0, _animation.value),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: ColorTokens.primarylight.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: ColorTokens.primary.withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "노트 저장 공간이 성공적으로 만들어졌어요!",
-                          style: TypographyTokens.body2.copyWith(
-                            color: ColorTokens.textPrimary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "이제 이미지를 올려, 스마트 노트를 만들어보세요.",
-                          style: TypographyTokens.body2.copyWith(
-                            color: ColorTokens.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               Expanded(
                 child: Consumer<HomeViewModel>(
                   builder: (context, viewModel, child) {
@@ -247,20 +213,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
               Padding(
                 padding: const EdgeInsets.all(16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: Consumer<HomeViewModel>(
-                    builder: (context, viewModel, _) {
-                      if (viewModel.hasNotes) {
-                        return PikaButton(
-                          text: '스마트 노트 만들기',
-                          variant: PikaButtonVariant.floating,
-                          leadingIcon: const Icon(Icons.add),
-                          onPressed: () => _showImagePickerBottomSheet(context),
-                        );
-                      }
-                      return const SizedBox.shrink(); // 노트가 없을 때는 FAB 숨김
-                    },
+                child: HelpTextTooltip(
+                  text: "노트 저장 공간이 성공적으로 만들어졌어요!\n이제 이미지를 올려, 스마트 노트를 만들어보세요.",
+                  showTooltip: _showTooltip,
+                  onDismiss: () {
+                    setState(() {
+                      _showTooltip = false;
+                    });
+                  },
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Consumer<HomeViewModel>(
+                      builder: (context, viewModel, _) {
+                        if (viewModel.hasNotes) {
+                          return PikaButton(
+                            text: '스마트 노트 만들기',
+                            variant: PikaButtonVariant.floating,
+                            leadingIcon: const Icon(Icons.add),
+                            onPressed: () => _showImagePickerBottomSheet(context),
+                          );
+                        }
+                        return const SizedBox.shrink(); // 노트가 없을 때는 FAB 숨김
+                      },
+                    ),
                   ),
                 ),
               ),
