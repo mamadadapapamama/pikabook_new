@@ -326,7 +326,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     required Widget leadingIcon,
   }) {
     return Container(
-      width: 209, // Figma 디자인 기준 고정 너비
+      width: 250, // 버튼 너비 209px에서 250px로 증가
       child: ElevatedButton(
         onPressed: _isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
