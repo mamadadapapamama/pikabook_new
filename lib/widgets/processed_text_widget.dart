@@ -476,13 +476,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               segment.pinyin!.isNotEmpty && 
               widget.processedText.showPinyin)
             Padding(
-              padding: const EdgeInsets.only(top: 4.0),
+              padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
               child: Text(
                 segment.pinyin!,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: ColorTokens.pinyinText,
+                style: TypographyTokens.body2En.copyWith(
+                  color: ColorTokens.textGrey,
+                  fontSize: 14,
+                  height: 1.4,
                 ),
               ),
             ),
@@ -492,8 +492,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 segment.translatedText!.isNotEmpty &&
                 widget.processedText.showTranslation)
               Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: _buildSelectableText(segment.translatedText!),
+                padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                child: Text(
+                  segment.translatedText!,
+                  style: TypographyTokens.body2.copyWith(
+                    color: ColorTokens.textSecondary,
+                  ),
+                ),
               ),
           
           // 구분선 추가 (마지막 세그먼트가 아닌 경우)

@@ -32,6 +32,7 @@ import 'full_image_screen.dart';
 import '../../services/screenshot_service.dart';
 import '../../widgets/dot_loading_indicator.dart';
 import '../../widgets/common/pika_app_bar.dart';
+import '../../theme/tokens/typography_tokens.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -492,11 +493,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     });
 
     try {
-      // 기존 flashCards를 복사하여 사용 (deep copy 방지)
-      final updatedNote = _note!.copyWith();
-      
       // Firestore 업데이트
-      await _noteService.updateNote(_note!.id!, updatedNote);
+      await _noteService.updateNote(_note!.id!, _note!);
 
       // 업데이트 완료
       if (mounted) {
@@ -985,7 +983,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                     Positioned(
                       bottom: 12,
                       right: 12,
-                      child: ElevatedButton.icon(
+                      child: ElevatedButton(
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -998,15 +996,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                             ),
                           );
                         },
-                        icon: const Icon(Icons.fullscreen, size: 16),
-                        label: const Text('이미지 전체보기'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black.withOpacity(0.7),
+                          backgroundColor: Colors.black.withOpacity(0.5),
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          textStyle: GoogleFonts.notoSansKr(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
+                        ),
+                        child: Text(
+                          '이미지 전체보기',
+                          style: TypographyTokens.caption.copyWith(
+                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -1083,7 +1081,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                     Positioned(
                       bottom: 12,
                       right: 12,
-                      child: ElevatedButton.icon(
+                      child: ElevatedButton(
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -1096,15 +1094,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                             ),
                           );
                         },
-                        icon: const Icon(Icons.fullscreen, size: 16),
-                        label: const Text('이미지 전체보기'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black.withOpacity(0.7),
+                          backgroundColor: Colors.black.withOpacity(0.5),
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          textStyle: GoogleFonts.notoSansKr(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
+                        ),
+                        child: Text(
+                          '이미지 전체보기',
+                          style: TypographyTokens.caption.copyWith(
+                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -1131,54 +1129,168 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   // 현재 페이지 내용 빌드
   Widget _buildCurrentPageContent() {
     final currentPage = _pageManager.currentPage;
-    final imageFile = _pageManager.currentImageFile;
+    final currentImageFile = _pageManager.currentImageFile;
     
+    // 페이지 없음 (비어있는 노트)
     if (currentPage == null) {
-      return const Center(child: Text('페이지를 찾을 수 없습니다.'));
-    }
-
-    final bool isLoadingImage =
-        imageFile == null && currentPage.imageUrl != null;
-
-    // 이미지가 로딩 중이면 로딩 인디케이터 표시
-    if (isLoadingImage) {
       return const Center(
-        child: DotLoadingIndicator(
-          message: '페이지 로딩 중...',
-          dotColor: Color(0xFFFFD53C),
+        child: Text('페이지가 없습니다. 페이지를 추가해주세요.'),
+      );
+    }
+    
+    // 디버그 로깅 - 현재 상태 확인 
+    debugPrint('현재 페이지 상태 확인 - ID: ${currentPage.id}, 텍스트 길이: ${currentPage.originalText.length}자');
+    
+    // 페이지 처리가 완료되지 않은 경우 (백그라운드 처리 중)
+    if (currentPage.originalText.isEmpty || currentPage.originalText == 'processing') {
+      // 이전 페이지와 같은 페이지인지 확인 (무한 로딩 방지)
+      if (_processingPage != null && _processingPage!.id == _note!.id) {
+        final now = DateTime.now();
+        final diff = now.difference(_processingPage!.updatedAt);
+        
+        // 5분 이상 처리 중이면 에러로 간주
+        if (diff.inMinutes > 5) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                const Text('페이지 처리 중 오류가 발생했습니다.'),
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: () {
+                    _loadNote(); // 다시 로드 시도
+                  },
+                  child: const Text('다시 시도'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+      
+      // 처리 중인 페이지 정보 저장
+      _processingPage = _note;
+      
+      // 페이지가 준비 중인 경우 - 백그라운드 처리를 체크하기 위한 로직 추가
+      if (currentPage.id != null) {
+        // 페이지 정보를 서버에서 다시 확인
+        _refreshPageFromServer(currentPage.id!);
+      }
+      
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 24),
+            Text(
+              '페이지 준비 중...',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: ColorTokens.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '이미지 인식 및 번역을 진행하고 있습니다.',
+              style: TextStyle(
+                fontSize: 14,
+                color: ColorTokens.textGrey,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => _forceRefreshPage(),
+              child: const Text('새로고침'),
+            ),
+          ],
         ),
       );
     }
     
-    // 캐시된 설정 상태 가져오기
-    ProcessedText? cachedProcessedText;
-    if (currentPage.id != null) {
-      cachedProcessedText = _pageContentService.getProcessedText(currentPage.id!);
-      if (cachedProcessedText != null) {
-        debugPrint('현재 캐시된 ProcessedText 상태: '
-            'showFullText=${cachedProcessedText.showFullText}, '
-            'showPinyin=${cachedProcessedText.showPinyin}, '
-            'showTranslation=${cachedProcessedText.showTranslation}, '
-            'hashCode=${cachedProcessedText.hashCode}');
-      }
+    // 텍스트 처리 중인 경우
+    if (_isProcessingText) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('텍스트 처리 중...'),
+          ],
+        ),
+      );
     }
-
-    // 현재 텍스트 표시 모드 정보 로깅
-    debugPrint('현재 텍스트 디스플레이 모드: $_textDisplayMode, 세그먼트 모드 사용: $_useSegmentMode');
     
-    // ValueKey를 사용하여 페이지나 설정이 변경될 때마다 위젯 갱신
+    // 일반 페이지 컨텐츠 표시
     return PageContentWidget(
-      key: ValueKey('page_content_${currentPage.id}_${_pageManager.currentPageIndex}_'
-          '${_textDisplayMode}_${_useSegmentMode}_${cachedProcessedText?.hashCode ?? 0}'),
+      key: ValueKey('page_content_${currentPage.id}_${currentPage.updatedAt.toString()}'),
       page: currentPage,
-      imageFile: imageFile,
-      isLoadingImage: false,
+      imageFile: currentImageFile,
+      isLoadingImage: _isProcessingText,
       noteId: widget.noteId,
       onCreateFlashCard: _createFlashCard,
       flashCards: _note?.flashCards,
       onDeleteSegment: _handleDeleteSegment,
       useSegmentMode: _useSegmentMode,
     );
+  }
+  
+  // 페이지 처리 상태 확인 메서드
+  Future<void> _refreshPageFromServer(String pageId) async {
+    debugPrint('서버에서 페이지 정보 새로 가져오기: $pageId');
+    
+    try {
+      // 페이지 정보를 서버에서 다시 가져오기 
+      final pageDoc = await FirebaseFirestore.instance
+        .collection('pages')
+        .doc(pageId)
+        .get();
+      
+      if (!pageDoc.exists) {
+        debugPrint('페이지를 찾을 수 없음: $pageId');
+        return;
+      }
+      
+      final serverPage = page_model.Page.fromFirestore(pageDoc);
+      
+      // 페이지가 이미 처리 완료되었으나 로컬 상태가 업데이트되지 않은 경우
+      if (serverPage.originalText.isNotEmpty && serverPage.originalText != 'processing') {
+        debugPrint('서버에서 처리 완료된 페이지 발견: $pageId, 로컬 상태 업데이트');
+        
+        if (mounted) {
+          // 페이지 매니저 내 페이지 목록 업데이트
+          final updatedPages = _pageManager.pages.map((p) {
+            return p.id == pageId ? serverPage : p;
+          }).toList();
+          _pageManager.setPages(updatedPages);
+          
+          _processTextForCurrentPage(); // 텍스트 처리 시작
+          setState(() {}); // UI 갱신
+        }
+      } else {
+        debugPrint('페이지 $pageId는 여전히 처리 중: 텍스트=${serverPage.originalText.substring(0, 
+          serverPage.originalText.length > 10 ? 10 : serverPage.originalText.length)}...');
+      }
+    } catch (e) {
+      debugPrint('페이지 정보 갱신 중 오류: $e');
+    }
+  }
+  
+  // 페이지 강제 새로고침 메서드
+  void _forceRefreshPage() {
+    debugPrint('페이지 강제 새로고침');
+    
+    // 캐시 무효화
+    if (_pageManager.currentPage?.id != null) {
+      _cacheService.removeCachedNote(widget.noteId);
+    }
+    
+    // 노트 다시 로드
+    _loadNote();
   }
 
   // 프로그레스 바 위젯 (NoteDetailBottomBar에서 가져옴)
