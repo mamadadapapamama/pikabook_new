@@ -22,6 +22,7 @@ import '../../widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/common/pika_button.dart';
 import '../../widgets/common/help_text_tooltip.dart';
+import '../../widgets/common/pika_app_bar.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -123,11 +124,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       create: (_) => HomeViewModel(),
       child: Scaffold(
         backgroundColor: UITokens.homeBackground,
-        appBar: HomeScreenAppBar(
+        appBar: PikaAppBar.home(
           noteSpaceName: _noteSpaceName,
           onSettingsPressed: () {
             Navigator.pushNamed(context, '/settings').then((_) {
               // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
+              setState(() {
+                // 노트 스페이스 이름 업데이트
+              });
               _loadNoteSpaceName();
             });
           },
