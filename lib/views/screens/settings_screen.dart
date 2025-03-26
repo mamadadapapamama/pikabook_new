@@ -11,6 +11,7 @@ import '../../utils/language_constants.dart';
 import '../../widgets/dot_loading_indicator.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/common/pika_button.dart';
+import '../../widgets/common/pika_app_bar.dart';
 
 class SettingsScreen extends StatefulWidget {
   final InitializationService initializationService;
@@ -113,44 +114,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     return Scaffold(
       backgroundColor: ColorTokens.background,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(76), // 홈 스크린 + 4px
-        child: Column(
-          children: [
-            // AppBar 내용
-            SizedBox(
-              height: 80, // 앱바 높이 조정 (홈 스크린 + 4px)
-              child: Padding(
-                padding: const EdgeInsets.only(top: 50.0, left: 16.0, right: 16.0),
-                child: Row(
-                  children: [
-                    // 뒤로가기 버튼
-                    IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back_ios_rounded,
-                        color: Colors.black,
-                        size: 20,
-                      ),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    const SizedBox(width: 4),
-                    
-                    // 타이틀
-                    Text(
-                      '설정',
-                      style: TypographyTokens.subtitle1.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: ColorTokens.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+      appBar: PikaAppBar.settings(
+        onBackPressed: () => Navigator.of(context).pop(),
       ),
       body: _isLoading
           ? const Center(child: DotLoadingIndicator(

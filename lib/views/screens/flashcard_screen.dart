@@ -12,6 +12,7 @@ import '../../services/chinese_dictionary_service.dart';
 import '../../widgets/flashcard_ui.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
+import '../../widgets/common/pika_app_bar.dart';
 
 /// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
 /// 플래시카드 UI interaction 담당 (swipe, flip, tts, delete )
@@ -426,60 +427,10 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.white,
-        appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(76), // 홈 스크린 + 4px
-          child: Column(
-            children: [
-              // AppBar 내용
-              SizedBox(
-                height: 76, // 앱바 높이 조정 (홈 스크린 + 4px)
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 44.0, left: 24.0, right: 24.0),
-                  child: Row(
-                    children: [
-                      // 뒤로가기 버튼
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_ios_rounded,
-                          color: Colors.black,
-                          size: 20,
-                        ),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () => Navigator.of(context).pop(_error != null ? false : true),
-                      ),
-                      const SizedBox(width: 4),
-                      
-                      // 타이틀
-                      Text(
-                        '플래시카드',
-                        style: TypographyTokens.subtitle1.copyWith(
-                          fontWeight: FontWeight.w500,
-                          color: ColorTokens.textPrimary,
-                        ),
-                      ),
-                      
-                      // 카드 카운터 표시
-                      if (_flashCards.isNotEmpty)
-                        Expanded(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Text(
-                                'card ${_currentIndex + 1} / ${_flashCards.length}',
-                                style: TypographyTokens.caption.copyWith(
-                                  color: ColorTokens.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+        appBar: PikaAppBar.flashcard(
+          onBackPressed: () => Navigator.of(context).pop(_error != null ? false : true),
+          currentCardIndex: _currentIndex,
+          totalCards: _flashCards.length,
         ),
         body: _isLoading
             ? const Center(child: DotLoadingIndicator(message: '플래시카드 로딩 중...'))
