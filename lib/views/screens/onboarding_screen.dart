@@ -5,6 +5,7 @@ import '../../services/user_preferences_service.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../widgets/dot_loading_indicator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -169,6 +170,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       
       // 사용 목적 저장
       await _userPreferences.setLearningPurpose(purpose ?? '');
+
+      // SharedPreferences 인스턴스 가져오기
+      final prefs = await SharedPreferences.getInstance();
+      // 툴팁을 아직 보지 않았다고 설정
+      await prefs.setBool('hasShownTooltip', false);
       
       // Firestore에 사용자 데이터 저장
       final user = FirebaseAuth.instance.currentUser;
@@ -187,19 +193,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await _userPreferences.setOnboardingCompleted(true);
       await _userPreferences.setHasOnboarded(true);
       
-      if (mounted) {
-        widget.onComplete();
-      }
+      // 온보딩 완료 콜백 호출
+      widget.onComplete();
+      
     } catch (e) {
+      debugPrint('온보딩 완료 처리 중 오류 발생: $e');
+      // 오류 처리
       setState(() {
         _isProcessing = false;
       });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('설정 저장 중 오류가 발생했습니다: $e')),
-        );
-      }
+      return;
     }
   }
 
@@ -351,25 +354,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: "Pikabook",
-                  style: TypographyTokens.subtitle1En.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: ColorTokens.primary,
-                  ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Pikabook",
+                style: TypographyTokens.subtitle1En.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: ColorTokens.primary,
                 ),
-                TextSpan(
-                  text: "은 원서 속 글자를 인식해 \n스마트한 학습 노트를 만들어 드리는 서비스입니다.",
-                  style: TypographyTokens.subtitle1En.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: ColorTokens.textPrimary,
-                  ),
+              ),
+              Text(
+                "은 원서 속 글자를 인식해\n스마트한 학습 노트를 만들어 드리는 \n서비스입니다.",
+                style: TypographyTokens.subtitle1En.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: ColorTokens.textPrimary,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           Text(
             "\n먼저, 학습하실 분의 이름을 알려주세요.",
@@ -428,25 +430,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: "Pikabook",
-                  style: TypographyTokens.subtitle1En.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: ColorTokens.primary,
-                  ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Pikabook",
+                style: TypographyTokens.subtitle1En.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: ColorTokens.primary,
                 ),
-                TextSpan(
-                  text: "을 어떤 목적으로 사용하실 예정이세요?",
-                  style: TypographyTokens.subtitle1En.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: ColorTokens.textPrimary,
-                  ),
+              ),
+              Text(
+                "을 어떤 목적으로 사용하실 예정이세요?",
+                style: TypographyTokens.subtitle1En.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: ColorTokens.textPrimary,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           // 사용 목적 옵션들
@@ -572,165 +573,69 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const SizedBox(height: 8),
           Text(
             "나중에 변경할수 있어요.",
-            style: TypographyTokens.body2.copyWith(
+            style: TypographyTokens.caption.copyWith(
               color: ColorTokens.textSecondary,
             ),
           ),
           const SizedBox(height: 24),
           
-          // Figma 디자인에 맞게 번역 모드 옵션 업데이트
-          _buildUpdatedTranslationOption(
-            title: "문장별 번역",
-            description: "각 문장별로 번역해 보여줍니다.\n모르는 단어는 탭해서 사전 검색할 수 있어요.",
-            isSelected: _isSegmentMode,
-            onTap: () {
-              setState(() {
-                _isSegmentMode = true;
-              });
-            },
-          ),
-          
-          const SizedBox(height: 16),
-          
-          _buildUpdatedTranslationOption(
-            title: "통으로 번역",
-            description: "인식된 모든 문장을 통으로 번역해 보여줍니다.\n모르는 단어는 탭해서 사전 검색할 수 있어요.",
-            isSelected: !_isSegmentMode,
-            onTap: () {
-              setState(() {
-                _isSegmentMode = false;
-              });
-            },
+          // 번역 모드 선택 옵션들
+          Column(
+            children: [
+              // 문장별 번역 옵션
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isSegmentMode = true;
+                  });
+                },
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _isSegmentMode ? ColorTokens.primary : ColorTokens.primarylight,
+                      width: 2,
+                    ),
+                  ),
+                  child: Image.asset(
+                    'assets/images/image_segment.png',
+                    width: double.infinity,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // 통으로 번역 옵션
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isSegmentMode = false;
+                  });
+                },
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: !_isSegmentMode ? ColorTokens.primary : ColorTokens.primarylight,
+                      width: 2,
+                    ),
+                  ),
+                  child: Image.asset(
+                    'assets/images/image_whole.png',
+                    width: double.infinity,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
-      ),
-    );
-  }
-
-  // 업데이트된 번역 모드 옵션 위젯 (Figma 디자인에 맞게)
-  Widget _buildUpdatedTranslationOption({
-    required String title,
-    required String description,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? ColorTokens.primary : ColorTokens.primarylight,
-            width: 2,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 옵션 제목
-            Text(
-              title,
-              style: TypographyTokens.body2.copyWith(
-                fontWeight: FontWeight.w500,
-                color: ColorTokens.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 10),
-            
-            // 예시 컨테이너
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8F8F8),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 원문 텍스트
-                  Text(
-                    title == "문장별 번역" 
-                      ? "学校开始了。" 
-                      : "学校开始了。我每天早上七点半上学。我们的学校有很多有趣的课外活动。",
-                    style: TypographyTokens.body2.copyWith(
-                      fontFamily: 'Noto Sans HK',
-                      fontWeight: FontWeight.w500,
-                      color: ColorTokens.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  // 번역 텍스트
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: const Color(0xFFEEEEEE),
-                        width: 1,
-                      ),
-                    ),
-                    child: Text(
-                      title == "문장별 번역" 
-                        ? "학교가 시작했습니다." 
-                        : "학교가 시작했습니다. 나는 매일 아침 7시 30분에 등교합니다. 우리 학교에는 흥미로운 특별활동이 많이 있습니다.",
-                      style: TypographyTokens.body2.copyWith(
-                        color: ColorTokens.textSecondary,
-                      ),
-                    ),
-                  ),
-                  
-                  // 문장별 번역일 경우 다음 문장 표시
-                  if (title == "문장별 번역") ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      "我每天早上七点半上学。",
-                      style: TypographyTokens.body2.copyWith(
-                        fontFamily: 'Noto Sans HK',
-                        fontWeight: FontWeight.w500,
-                        color: ColorTokens.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: const Color(0xFFEEEEEE),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        "나는 매일 아침 7시 30분에 등교합니다.",
-                        style: TypographyTokens.body2.copyWith(
-                          color: ColorTokens.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            
-            // 설명 텍스트
-            Text(
-              description,
-              style: TypographyTokens.caption.copyWith(
-                color: ColorTokens.textTertiary,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

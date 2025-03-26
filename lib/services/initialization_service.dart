@@ -150,53 +150,68 @@ class InitializationService {
     }
   }
 
+  // 사용자 정보를 Firestore에 저장하는 메서드
+  Future<void> _saveUserToFirestore(User user, {bool isNewUser = false}) async {
+    try {
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final userPrefs = UserPreferencesService();
+      
+      final baseData = {
+        'uid': user.uid,
+        'email': user.email,
+        'displayName': user.displayName,
+        'photoURL': user.photoURL,
+        'lastSignIn': FieldValue.serverTimestamp(),
+      };
+
+      if (isNewUser) {
+        // 새 사용자인 경우 추가 데이터
+        final newUserData = {
+          ...baseData,
+          'isNew': true,
+          'createdAt': FieldValue.serverTimestamp(),
+          'onboardingCompleted': false,
+          'hasOnboarded': false,
+        };
+        
+        await userRef.set(newUserData, SetOptions(merge: true));
+        await userPrefs.setOnboardingCompleted(false);
+        await userPrefs.setHasOnboarded(false);
+      } else {
+        // 기존 사용자인 경우 마지막 로그인만 업데이트
+        await userRef.update(baseData);
+        
+        // 온보딩 상태 확인 및 저장
+        final userDoc = await userRef.get();
+        final userData = userDoc.data() as Map<String, dynamic>?;
+        final onboardingCompleted = userData?['onboardingCompleted'] ?? false;
+        await userPrefs.setOnboardingCompleted(onboardingCompleted);
+        await userPrefs.setHasOnboarded(onboardingCompleted);
+      }
+      
+      debugPrint('사용자 정보가 Firestore에 저장되었습니다: ${user.uid} (새 사용자: $isNewUser)');
+    } catch (e) {
+      debugPrint('사용자 정보 저장 오류: $e');
+      rethrow;
+    }
+  }
+
   // 사용자 로그인 처리 및 온보딩 상태 관리
   Future<void> handleUserLogin(User user) async {
     try {
       final firestore = FirebaseFirestore.instance;
-      final userPrefs = UserPreferencesService();
       
       // Firestore에서 사용자 데이터 확인
       final userDoc = await firestore.collection('users').doc(user.uid).get();
-      
-      // 계정 첫 로그인 여부 확인 - 완전히 새로운 사용자인 경우
       final isNewUser = !userDoc.exists;
       
-      if (isNewUser) {
-        // 온보딩 상태 설정 - 새 계정이면 온보딩 필요
-        await userPrefs.setOnboardingCompleted(false);
-        await userPrefs.setHasOnboarded(false);
-        
-        // Firestore에 사용자 정보 생성
-        await firestore.collection('users').doc(user.uid).set({
-          'isNew': true,
-          'createdAt': FieldValue.serverTimestamp(),
-          'lastLogin': FieldValue.serverTimestamp(),
-          'onboardingCompleted': false,
-          'email': user.email,
-          'displayName': user.displayName,
-          'hasOnboarded': false,
-        }, SetOptions(merge: true));
-        
-      } else {
-        // 기존 사용자인 경우 - 온보딩 상태 유지
-        final onboardingCompleted = userDoc.data()?['onboardingCompleted'] ?? false;
-        await userPrefs.setOnboardingCompleted(onboardingCompleted);
-        await userPrefs.setHasOnboarded(onboardingCompleted);
-        
-        // 마지막 로그인 시간만 업데이트
-        await firestore.collection('users').doc(user.uid).update({
-          'lastLogin': FieldValue.serverTimestamp(),
-        });
-      }
+      // 사용자 정보 저장 (새 사용자 여부에 따라 다른 처리)
+      await _saveUserToFirestore(user, isNewUser: isNewUser);
       
       debugPrint('사용자 ${user.uid} 로그인 처리 완료 (새 사용자: $isNewUser)');
     } catch (e) {
       debugPrint('사용자 로그인 처리 중 오류 발생: $e');
-      // 오류 발생 시 기본값으로 온보딩 필요 설정
-      final userPrefs = UserPreferencesService();
-      await userPrefs.setOnboardingCompleted(false);
-      await userPrefs.setHasOnboarded(false);
+      rethrow;
     }
   }
 
@@ -364,25 +379,6 @@ class InitializationService {
   // 현재 로그인된 사용자 가져오기
   User? getCurrentUser() {
     return FirebaseAuth.instance.currentUser;
-  }
-
-  // 사용자 정보를 Firestore에 저장하는 메서드
-  Future<void> _saveUserToFirestore(User user) async {
-    try {
-      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
-      
-      await userRef.set({
-        'uid': user.uid,
-        'email': user.email,
-        'displayName': user.displayName,
-        'photoURL': user.photoURL,
-        'lastSignIn': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      
-      debugPrint('사용자 정보가 Firestore에 저장되었습니다: ${user.uid}');
-    } catch (e) {
-      debugPrint('사용자 정보 저장 오류: $e');
-    }
   }
 
   // 초기화 재시도 메서드
