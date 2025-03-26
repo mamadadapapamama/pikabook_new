@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
 
 /// 도트 애니메이션 로딩 인디케이터 위젯
-/// 
 /// 세 개의 도트가 애니메이션되는 심플한 로딩 인디케이터입니다.
-/// 텍스트 작업 중일 때 사용되는 더 심플한 로딩 표시를 위해 설계되었습니다.
+/// 
 class DotLoadingIndicator extends StatefulWidget {
   final String? message;
   final Color dotColor;
@@ -88,6 +88,12 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerPr
 
   @override
   Widget build(BuildContext context) {
+    // 현재 테마의 밝기 확인
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
+    // 테마에 따른 텍스트 색상 설정
+    final textColor = isDarkMode ? ColorTokens.textLight : ColorTokens.textPrimary;
+
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -134,9 +140,8 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerPr
             Text(
               widget.message!,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[700],
+              style: TypographyTokens.body2.copyWith(
+                color: textColor,
               ),
             ),
           ],

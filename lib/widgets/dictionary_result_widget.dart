@@ -147,7 +147,7 @@ class DictionaryResultWidget extends StatelessWidget {
           // 플래시카드 추가 버튼
           PikaButton(
             text: isExistingFlashcard ? '플래시카드로 설정됨' : '플래시카드 추가',
-            variant: isExistingFlashcard ? PikaButtonVariant.secondary : PikaButtonVariant.primary,
+            variant: isExistingFlashcard ? PikaButtonVariant.primary : PikaButtonVariant.primary,
             leadingIcon: !isExistingFlashcard 
               ? Image.asset(
                   'assets/images/icon_flashcard_dic.png',
