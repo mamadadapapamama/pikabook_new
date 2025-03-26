@@ -185,7 +185,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                     '${updatedText.showFullText}_'
                     '${updatedText.showPinyin}_'
                     '${updatedText.showTranslation}'),
-                processedText: updatedText,
+                processedText: updatedText.copyWith(
+                  showPinyin: true, // pinyin 표시 설정
+                ),
                 onDictionaryLookup: _lookupWord,
                 onCreateFlashCard: widget.onCreateFlashCard,
                 flashCards: widget.flashCards,

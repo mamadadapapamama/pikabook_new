@@ -6,6 +6,7 @@ import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../theme/tokens/spacing_tokens.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -218,41 +219,39 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Column(
               children: [
-                // 상단 로고 영역
-                const SizedBox(height: 44),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: Image.asset('assets/images/pikabird_80x80.png'),
-                    ),
-                  ],
-                ),
-                
-                // 페이지 인디케이터 (현재 페이지/전체 페이지)
+                // 상단 로고 영역과 페이지 인디케이터를 같은 줄에 배치
                 Padding(
-                  padding: const EdgeInsets.only(top: 24.0),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      children: [
-                        Text(
-                          "${_currentPage + 1}",
-                          style: TypographyTokens.body1En.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: ColorTokens.primary,
+                  padding: EdgeInsets.only(top: SpacingTokens.lg, bottom: SpacingTokens.md),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // 왼쪽: 페이지 인디케이터
+                      Row(
+                        children: [
+                          Text(
+                            "${_currentPage + 1}",
+                            style: TypographyTokens.body1En.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: ColorTokens.primary,
+                            ),
                           ),
-                        ),
-                        Text(
-                          " / 3",
-                          style: TypographyTokens.body1En.copyWith(
-                            fontWeight: FontWeight.w700,
+                          Text(
+                            " / 3",
+                            style: TypographyTokens.body1En.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                      
+                      // 오른쪽: 로고 이미지
+                      SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: Image.asset('assets/images/pikabird_80x80.png'),
+                      ),
+                    ],
                   ),
                 ),
 
