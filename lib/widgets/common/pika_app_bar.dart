@@ -179,7 +179,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   // 진행 상태 표시바 생성 함수
   static Widget _buildProgressBar(int currentPageIndex, int totalPages) {
     return SizedBox(
-      height: 4,
+      height: 2,
       width: double.infinity,
       child: LayoutBuilder(
         builder: (context, constraints) {
