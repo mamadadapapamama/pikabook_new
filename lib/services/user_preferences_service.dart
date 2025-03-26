@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/language_constants.dart';
+import 'package:flutter/foundation.dart';
 
 // 노트 뷰 모드 enum - 클래스 외부로 이동
 enum NoteViewMode {
@@ -46,8 +47,15 @@ class UserPreferencesService {
 
   // 온보딩 완료 여부 설정
   Future<void> setOnboardingCompleted(bool completed) async {
+    debugPrint('온보딩 완료 상태 설정: $completed');
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_onboardingCompletedKey, completed);
+    
+    // 온보딩을 완료하지 않은 경우, 툴팁 표시 상태도 초기화
+    if (!completed) {
+      await prefs.setBool('hasShownTooltip', false);
+      debugPrint('온보딩 미완료로 툴팁 표시 상태 초기화');
+    }
   }
 
   // 온보딩 완료 여부 확인

@@ -523,7 +523,14 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               const SizedBox(height: 4.0),
 
               // 원본 텍스트 표시 (항상 표시)
-              _buildSelectableText(segment.originalText),
+              _buildSelectableText(
+                segment.originalText,
+                TypographyTokens.body1.copyWith(
+                  fontSize: 18,
+                  height: 1.5,
+                  color: ColorTokens.textPrimary,
+                ),
+              ),
 
               // 핀인 표시 (showPinyin이 true일 때만)
               if (segment.pinyin != null && 
@@ -634,7 +641,11 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       return const SizedBox.shrink();
     }
     
-    final defaultStyle = const TextStyle(fontSize: 16);
+    final defaultStyle = TypographyTokens.subtitle2Cn.copyWith(
+      height: 1.5,
+      fontWeight: FontWeight.w600,
+      color: ColorTokens.textPrimary,
+    );
     final effectiveStyle = style ?? defaultStyle;
     
     // 짧은 텍스트의 경우 선택 가능하지만 간단한 Text 위젯 사용

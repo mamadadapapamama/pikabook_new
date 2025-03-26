@@ -12,6 +12,7 @@ import 'views/screens/login_screen.dart';
 import 'views/screens/settings_screen.dart';
 import 'views/screens/note_detail_screen.dart';
 import 'widgets/dot_loading_indicator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class App extends StatefulWidget {
   final InitializationService initializationService;
@@ -83,34 +84,43 @@ class _AppState extends State<App> {
   // 사용자가 로그인했을 때 노트 데이터에 따라 온보딩 상태 확인
   Future<void> _checkOnboardingForUser(User user) async {
     try {
-      setState(() {
-        _isLoadingUserData = true;
-      });
+      bool shouldLoad = true;
       
-      // 온보딩 상태 확인 (Firestore와 로컬 상태 모두 확인)
-      final firestore = FirebaseFirestore.instance;
-      final userDoc = await firestore.collection('users').doc(user.uid).get();
+      // Firestore에서 온보딩 상태 확인
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      
       final userData = userDoc.data();
+      final bool onboardingCompleted = userData?['onboardingCompleted'] ?? false;
+      final bool hasOnboarded = userData?['hasOnboarded'] ?? false;
       
-      // Firestore에서 온보딩 상태 직접 확인
-      final hasCompletedOnboarding = userData?['onboardingCompleted'] ?? false;
-      final hasOnboarded = userData?['hasOnboarded'] ?? false;
+      // 로컬 상태 확인
+      final prefs = await SharedPreferences.getInstance();
+      final bool localOnboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
       
-      debugPrint('사용자의 온보딩 상태 확인: completed=$hasCompletedOnboarding, hasOnboarded=$hasOnboarded');
+      debugPrint('사용자 ${user.uid} 온보딩 상태 - Firestore: completed=$onboardingCompleted, hasOnboarded=$hasOnboarded, 로컬: $localOnboardingCompleted');
       
-      // Firebase에서 직접 가져온 온보딩 상태를 로컬에 저장
-      await _preferencesService.setOnboardingCompleted(hasCompletedOnboarding);
-      await _preferencesService.setHasOnboarded(hasOnboarded);
+      // 로컬과 Firestore 상태 동기화
+      if (localOnboardingCompleted != onboardingCompleted) {
+        await prefs.setBool('onboarding_completed', onboardingCompleted);
+        debugPrint('로컬 온보딩 상태 동기화: $onboardingCompleted');
+      }
       
-      // 온보딩을 완료하지 않은 경우 온보딩 화면으로 이동
-      if (!hasCompletedOnboarding || !hasOnboarded) {
-        debugPrint('온보딩 미완료 사용자: 온보딩 화면으로 이동');
+      // 온보딩 상태에 따라 적절한 화면으로 이동
+      if (!hasOnboarded || !onboardingCompleted) {
+        // 온보딩이 필요한 경우 툴팁 상태 초기화
+        await prefs.setBool('hasShownTooltip', false);
+        
         if (mounted) {
           setState(() {
-            _isOnboardingCompleted = false;
             _isLoadingUserData = false;
+            _isOnboardingCompleted = false;
           });
         }
+        
+        debugPrint('온보딩이 필요함. 온보딩 화면으로 이동');
       } else {
         if (mounted) {
           setState(() {
@@ -118,10 +128,11 @@ class _AppState extends State<App> {
             _isLoadingUserData = false;
           });
         }
+        
+        debugPrint('온보딩 완료됨. 메인 화면으로 이동');
       }
-      
     } catch (e) {
-      debugPrint('사용자 온보딩 상태 확인 중 오류 발생: $e');
+      debugPrint('온보딩 상태 확인 중 오류 발생: $e');
       if (mounted) {
         setState(() {
           _isLoadingUserData = false;
