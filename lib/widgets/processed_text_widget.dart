@@ -378,7 +378,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             child: _buildSelectableText(
               widget.processedText.fullOriginalText,
               style: TypographyTokens.subtitle2Cn.copyWith(
-                fontWeight: FontWeight.w600, 
+                fontWeight: FontWeight.w500, 
                 height: 1.5,
                 color: ColorTokens.textPrimary,
               ),
@@ -450,7 +450,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 child: _buildSelectableText(
                   segment.originalText, 
                    style: TypographyTokens.subtitle2Cn.copyWith(
-                    fontWeight: FontWeight.w600, 
+                    fontWeight: FontWeight.w500, 
                     color: ColorTokens.textPrimary,
                   ),
                   isOriginal: true,
@@ -492,6 +492,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 segment.pinyin!,
                 style: TypographyTokens.body2En.copyWith(
                   color: ColorTokens.textGrey,
+                  fontWeight:FontWeight.w400,
                   fontSize: 14,
                   height: 1.4,
                 ),
