@@ -85,21 +85,29 @@ class _AppState extends State<App> {
         _isLoadingUserData = true;
       });
       
-      // InitializationService의 handleUserLogin을 호출하여 온보딩 상태 업데이트
-      await widget.initializationService.handleUserLogin(user);
-      
       // 온보딩 상태 확인 (Firestore와 로컬 상태 모두 확인)
       final hasCompletedOnboarding = await _preferencesService.isOnboardingCompleted();
       final hasOnboarded = await _preferencesService.hasOnboarded();
       
-      if (mounted) {
-        setState(() {
-          _isOnboardingCompleted = hasCompletedOnboarding;
-          _isLoadingUserData = false;
-        });
-      }
-      
       debugPrint('사용자의 온보딩 상태 확인: completed=$hasCompletedOnboarding, hasOnboarded=$hasOnboarded');
+      
+      // 온보딩을 완료하지 않은 경우 온보딩 화면으로 이동
+      if (!hasCompletedOnboarding || !hasOnboarded) {
+        debugPrint('온보딩 미완료 사용자: 온보딩 화면으로 이동');
+        if (mounted) {
+          setState(() {
+            _isOnboardingCompleted = false;
+            _isLoadingUserData = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isOnboardingCompleted = true;
+            _isLoadingUserData = false;
+          });
+        }
+      }
       
     } catch (e) {
       debugPrint('사용자 온보딩 상태 확인 중 오류 발생: $e');
@@ -247,7 +255,8 @@ class _AppState extends State<App> {
     }
   }
 
-  void _handleLogout() async {
+  // 로그아웃 처리
+  Future<void> _handleLogout() async {
     debugPrint('로그아웃 시작...');
     
     try {
@@ -344,7 +353,7 @@ class _AppState extends State<App> {
     return LoginScreen(
       initializationService: widget.initializationService,
       onLoginSuccess: _handleLoginSuccess,
-      onSkipLogin: null, // 익명 로그인 기능 제거
+      isInitializing: _isCheckingInitialization,
     );
   }
 
@@ -440,11 +449,17 @@ class _AppState extends State<App> {
         await firestore.collection('users').doc(user.uid).update({
           'onboardingCompleted': true,
           'hasOnboarded': true,
+          'onboardingCompletedAt': FieldValue.serverTimestamp(),
         });
-        debugPrint('온보딩 완료 상태가 Firestore에 저장되었습니다.');
+        
+        // 로컬 상태도 업데이트
+        await _preferencesService.setOnboardingCompleted(true);
+        await _preferencesService.setHasOnboarded(true);
+        
+        debugPrint('온보딩 완료 상태가 Firestore와 로컬에 저장됨');
       }
     } catch (e) {
-      debugPrint('온보딩 완료 상태 저장 중 오류 발생: $e');
+      debugPrint('온보딩 상태 저장 중 오류: $e');
     }
   }
 

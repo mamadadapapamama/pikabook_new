@@ -5,7 +5,6 @@ import '../../theme/tokens/spacing_tokens.dart';
 
 enum PikaButtonVariant {
   primary,
-  secondary,
   outline,
   text,
   warning,
@@ -127,7 +126,7 @@ class PikaButton extends StatelessWidget {
       case PikaButtonSize.large:
         return EdgeInsets.symmetric(
           horizontal: SpacingTokens.lg,
-          vertical: SpacingTokens.md,
+          vertical: SpacingTokens.sm,
         );
       default:
         return EdgeInsets.symmetric(
@@ -150,15 +149,7 @@ class PikaButton extends StatelessWidget {
           disabledBackgroundColor: ColorTokens.primary.withOpacity(0.5),
         );
       
-      case PikaButtonVariant.secondary:
-        return ElevatedButton.styleFrom(
-          backgroundColor: ColorTokens.secondary,
-          foregroundColor: ColorTokens.primary,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        );
+      
       
       case PikaButtonVariant.outline:
         return ElevatedButton.styleFrom(

@@ -214,25 +214,36 @@ class InitializationService {
         await userPrefs.setOnboardingCompleted(onboardingCompleted);
         await userPrefs.setHasOnboarded(hasOnboarded);
         
-        // 추가 사용자 설정 로드
-        if (userData != null) {
-          if (userData['userName'] != null) {
-            await userPrefs.setUserName(userData['userName']);
+        // 온보딩이 완료된 경우에만 추가 설정 로드
+        if (onboardingCompleted && hasOnboarded) {
+          if (userData != null) {
+            if (userData['userName'] != null) {
+              await userPrefs.setUserName(userData['userName']);
+            }
+            if (userData['learningPurpose'] != null) {
+              await userPrefs.setLearningPurpose(userData['learningPurpose']);
+            }
+            if (userData['translationMode'] != null) {
+              final useSegmentMode = userData['translationMode'] == 'segment';
+              await userPrefs.setUseSegmentMode(useSegmentMode);
+            }
+            if (userData['defaultNoteSpace'] != null) {
+              await userPrefs.setDefaultNoteSpace(userData['defaultNoteSpace']);
+              await userPrefs.addNoteSpace(userData['defaultNoteSpace']);
+            }
           }
-          if (userData['learningPurpose'] != null) {
-            await userPrefs.setLearningPurpose(userData['learningPurpose']);
-          }
-          if (userData['translationMode'] != null) {
-            final useSegmentMode = userData['translationMode'] == 'segment';
-            await userPrefs.setUseSegmentMode(useSegmentMode);
-          }
-          if (userData['defaultNoteSpace'] != null) {
-            await userPrefs.setDefaultNoteSpace(userData['defaultNoteSpace']);
-            await userPrefs.addNoteSpace(userData['defaultNoteSpace']);
-          }
+          
+          // 로컬 Storage에 현재 사용자 ID 저장 (앱 재시작 시 빠른 검증용)
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('current_user_id', user.uid);
+          
+          debugPrint('기존 사용자 로그인: 온보딩 완료 상태=$onboardingCompleted, hasOnboarded=$hasOnboarded');
+        } else {
+          // 온보딩이 완료되지 않은 경우 온보딩 화면으로 이동하도록 설정
+          debugPrint('온보딩 미완료 사용자: 온보딩 화면으로 이동');
+          await userPrefs.setOnboardingCompleted(false);
+          await userPrefs.setHasOnboarded(false);
         }
-        
-        debugPrint('기존 사용자 로그인: 온보딩 완료 상태=$onboardingCompleted, hasOnboarded=$hasOnboarded');
       } else {
         // 새 사용자는 온보딩 미완료 상태로 설정
         await userPrefs.setOnboardingCompleted(false);
@@ -244,7 +255,7 @@ class InitializationService {
           'hasOnboarded': false,
         });
         
-        debugPrint('새 사용자 로그인: 온보딩 필요');
+        debugPrint('새 사용자: 온보딩 필요');
       }
       
       debugPrint('사용자 ${user.uid} 로그인 처리 완료 (새 사용자: $isNewUser)');
