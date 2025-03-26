@@ -214,13 +214,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: HelpTextTooltip(
-                  text: "노트 저장 공간이 성공적으로 만들어졌어요!\n이제 이미지를 올려, 스마트 노트를 만들어보세요.",
+                  text: "노트 저장 공간이 성공적으로 만들어졌어요!",
+                  description: "이제 이미지를 올려, 스마트 노트를 만들어보세요.",
                   showTooltip: _showTooltip,
                   onDismiss: () {
                     setState(() {
                       _showTooltip = false;
                     });
                   },
+                  backgroundColor: ColorTokens.primarylight,
+                  borderColor: ColorTokens.primaryMedium,
+                  textColor: ColorTokens.textPrimary,
+                  tooltipPadding: const EdgeInsets.all(12),
+                  spacing: 4.0,
                   child: SizedBox(
                     width: double.infinity,
                     child: Consumer<HomeViewModel>(

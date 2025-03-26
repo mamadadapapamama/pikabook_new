@@ -3,91 +3,131 @@ import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 
-class HelpTextTooltip extends StatelessWidget {
+class HelpTextTooltip extends StatefulWidget {
   final String text;
+  final String? description;
   final Widget child;
   final bool showTooltip;
   final VoidCallback? onDismiss;
   final EdgeInsets? tooltipPadding;
   final double? tooltipWidth;
   final double? tooltipHeight;
-  final double? arrowSize;
   final Color? backgroundColor;
+  final Color? borderColor;
   final Color? textColor;
+  final double spacing; // 버튼과 툴팁 사이의 간격
 
   const HelpTextTooltip({
     Key? key,
     required this.text,
+    this.description,
     required this.child,
     required this.showTooltip,
     this.onDismiss,
     this.tooltipPadding,
     this.tooltipWidth,
     this.tooltipHeight,
-    this.arrowSize,
     this.backgroundColor,
+    this.borderColor,
     this.textColor,
+    this.spacing = 4.0, // 기본값 4px
   }) : super(key: key);
+
+  @override
+  State<HelpTextTooltip> createState() => _HelpTextTooltipState();
+}
+
+class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<Offset> _offsetAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 700),
+      vsync: this,
+    );
+    
+    _offsetAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.2),
+      end: const Offset(0, -0.2),
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+    
+    // 애니메이션 반복
+    _animationController.repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        child,
-        if (showTooltip)
+        widget.child,
+        if (widget.showTooltip)
           Positioned(
-            top: -8, // 위젯 바로 위에 위치
+            bottom: -widget.spacing, // 버튼과의 간격 4px
             left: 0,
             right: 0,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 툴팁 내용
-                Container(
-                  width: tooltipWidth ?? double.infinity,
-                  padding: tooltipPadding ?? const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: backgroundColor ?? ColorTokens.primary,
-                    borderRadius: BorderRadius.circular(8),
+            child: SlideTransition(
+              position: _offsetAnimation,
+              child: Container(
+                width: widget.tooltipWidth ?? double.infinity,
+                padding: widget.tooltipPadding ?? const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: widget.backgroundColor ?? ColorTokens.primarylight,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: widget.borderColor ?? ColorTokens.primaryMedium,
+                    width: 1,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 닫기 버튼
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          GestureDetector(
-                            onTap: onDismiss,
-                            child: Icon(
-                              Icons.close,
-                              size: 16,
-                              color: textColor ?? Colors.white,
-                            ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 닫기 버튼
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        GestureDetector(
+                          onTap: widget.onDismiss,
+                          child: Icon(
+                            Icons.close,
+                            size: 16,
+                            color: widget.textColor ?? ColorTokens.textPrimary,
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                    // 툴팁 제목
+                    Text(
+                      widget.text,
+                      style: TypographyTokens.body1.copyWith(
+                        color: widget.textColor ?? ColorTokens.textPrimary,
                       ),
-                      // 툴팁 텍스트
+                    ),
+                    // 설명이 있는 경우 추가
+                    if (widget.description != null) ...[
+                      const SizedBox(height: 4),
                       Text(
-                        text,
+                        widget.description!,
                         style: TypographyTokens.body2.copyWith(
-                          color: textColor ?? Colors.white,
+                          color: widget.textColor ?? ColorTokens.textPrimary,
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-                // 화살표
-                Center(
-                  child: CustomPaint(
-                    size: Size(arrowSize ?? 16, arrowSize ?? 8),
-                    painter: TrianglePainter(
-                      color: backgroundColor ?? ColorTokens.primary,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
       ],
@@ -95,11 +135,36 @@ class HelpTextTooltip extends StatelessWidget {
   }
 }
 
-// 삼각형 화살표를 그리는 CustomPainter
+// 아래쪽을 향하는 삼각형 화살표를 그리는 CustomPainter
 class TrianglePainter extends CustomPainter {
   final Color color;
 
   TrianglePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(size.width, 0)
+      ..close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// 위쪽을 향하는 삼각형 화살표를 그리는 CustomPainter
+class UpwardTrianglePainter extends CustomPainter {
+  final Color color;
+
+  UpwardTrianglePainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
