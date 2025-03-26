@@ -239,7 +239,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           Text(
                             " / 3",
                             style: TypographyTokens.body1En.copyWith(
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w600,
+                              color: ColorTokens.secondary
                             ),
                           ),
                         ],
@@ -364,9 +365,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                 ),
                 TextSpan(
-                  text: "은 원서 속 글자를 인식해\n스마트한 학습 노트를 만들어 드리는 \n서비스입니다.",
+                  text: "에 오신 것을 환영해요! \n Pikabook은 원서 속 글자를 인식해\n스마트한 학습 노트를 만들어 드리는 \n서비스입니다.",
                   style: TypographyTokens.subtitle1En.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: ColorTokens.textPrimary,
                   ),
                 ),
@@ -376,7 +377,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Text(
             "\n먼저, 학습하실 분의 이름을 알려주세요.",
             style: TypographyTokens.subtitle1.copyWith(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: ColorTokens.textPrimary,
             ),
           ),
@@ -394,13 +395,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               controller: _nameController,
               decoration: InputDecoration(
                 hintText: '이름이나 별명을 알려주세요',
-                hintStyle: TypographyTokens.body2.copyWith(
+                hintStyle: TypographyTokens.body1.copyWith(
                   color: ColorTokens.textTertiary,
                 ),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               ),
-              style: TypographyTokens.body2.copyWith(
+              style: TypographyTokens.body1.copyWith(
                 color: ColorTokens.textPrimary,
               ),
               onEditingComplete: () {
@@ -443,7 +444,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 TextSpan(
                   text: "을 어떤 목적으로 사용하실 예정이세요?",
                   style: TypographyTokens.subtitle1En.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     color: ColorTokens.textPrimary,
                   ),
                 ),
@@ -471,13 +472,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 autofocus: _selectedPurpose == _purposeOptions[2],
                 decoration: InputDecoration(
                   hintText: '사용 목적을 알려주세요',
-                  hintStyle: TypographyTokens.body2.copyWith(
+                  hintStyle: TypographyTokens.body1.copyWith(
                     color: ColorTokens.textTertiary,
                   ),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 ),
-                style: TypographyTokens.body2.copyWith(
+                style: TypographyTokens.body1.copyWith(
                   color: ColorTokens.textPrimary,
                 ),
                 onEditingComplete: () {
@@ -541,7 +542,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         child: Text(
           option,
-          style: TypographyTokens.body2.copyWith(
+          style: TypographyTokens.body1.copyWith(
             fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
             color: ColorTokens.textPrimary,
           ),
@@ -567,7 +568,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Text(
             "원서 번역을 어떻게 해드릴까요?",
             style: TypographyTokens.subtitle1.copyWith(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               color: ColorTokens.textPrimary,
             ),
           ),
