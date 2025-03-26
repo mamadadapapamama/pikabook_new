@@ -359,16 +359,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               children: [
                 TextSpan(
                   text: "Pikabook",
-                  style: TypographyTokens.subtitle1En.copyWith(
+                  style: TypographyTokens.subtitle2En.copyWith(
                     fontWeight: FontWeight.w800,
                     color: ColorTokens.primary,
                   ),
                 ),
                 TextSpan(
-                  text: "에 오신 것을 환영해요! \n Pikabook은 원서 속 글자를 인식해\n스마트한 학습 노트를 만들어 드리는 \n서비스입니다.",
-                  style: TypographyTokens.subtitle1En.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: ColorTokens.textPrimary,
+                  text: "에 오신 것을 환영해요!\nPikabook은 원서 속 글자를 인식해 스마트한 학습 노트를 만들어 드리는 서비스입니다.",
+                  style: TypographyTokens.subtitle2En.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: ColorTokens.textPrimary,
                   ),
                 ),
               ],
@@ -376,12 +376,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           Text(
             "\n먼저, 학습하실 분의 이름을 알려주세요.",
-            style: TypographyTokens.subtitle1.copyWith(
-              fontWeight: FontWeight.w500,
+            style: TypographyTokens.subtitle2En.copyWith(
+              fontWeight: FontWeight.w600,
               color: ColorTokens.textPrimary,
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -436,22 +436,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               children: [
                 TextSpan(
                   text: "Pikabook",
-                  style: TypographyTokens.subtitle1En.copyWith(
+                  style: TypographyTokens.subtitle2En.copyWith(
                     fontWeight: FontWeight.w800,
                     color: ColorTokens.primary,
                   ),
                 ),
                 TextSpan(
                   text: "을 어떤 목적으로 사용하실 예정이세요?",
-                  style: TypographyTokens.subtitle1En.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: ColorTokens.textPrimary,
+                  style: TypographyTokens.subtitle2En.copyWith(
+                  fontWeight: FontWeight.w600,
+                 color: ColorTokens.textPrimary,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           // 사용 목적 옵션들
           ..._purposeOptions.map((option) => _buildPurposeOption(option)),
           // 다른 목적 선택 시 직접 입력 필드 표시
@@ -567,8 +567,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const SizedBox(height: 8),
           Text(
             "원서 번역을 어떻게 해드릴까요?",
-            style: TypographyTokens.subtitle1.copyWith(
-              fontWeight: FontWeight.w500,
+            style: TypographyTokens.subtitle2En.copyWith(
+              fontWeight: FontWeight.w600,
               color: ColorTokens.textPrimary,
             ),
           ),
@@ -576,10 +576,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           Text(
             "나중에 변경할수 있어요.",
             style: TypographyTokens.caption.copyWith(
-              color: ColorTokens.textSecondary,
+              color: ColorTokens.textPrimary,
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           
           // 번역 모드 선택 옵션들
           Column(
