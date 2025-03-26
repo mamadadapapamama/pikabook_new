@@ -7,6 +7,7 @@ import '../widgets/loading_dialog.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/ui_tokens.dart';
+import '../widgets/common/pika_button.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);
@@ -64,63 +65,24 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             // 갤러리 및 카메라 옵션 버튼
             Column(
               children: [
-                _buildOptionButton(
-                  icon: Icons.photo_library,
-                  iconColor: ColorTokens.primary,
-                  label: '갤러리에서 선택',
-                  onTap: () => _pickImagesAndCreateNote(context),
+                PikaButton(
+                  text: '갤러리에서 선택',
+                  variant: PikaButtonVariant.outline,
+                  leadingIcon: Icon(Icons.photo_library, color: ColorTokens.primary),
+                  onPressed: () => _pickImagesAndCreateNote(context),
+                  isFullWidth: true,
                 ),
                 
                 const SizedBox(height: 16),
                 
-                _buildOptionButton(
-                  icon: Icons.camera_alt,
-                  iconColor: ColorTokens.primary,
-                  label: '카메라로 촬영',
-                  onTap: () => _takePhotoAndCreateNote(context),
+                PikaButton(
+                  text: '카메라로 촬영',
+                  variant: PikaButtonVariant.outline,
+                  leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.primary),
+                  onPressed: () => _takePhotoAndCreateNote(context),
+                  isFullWidth: true,
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOptionButton({
-    required IconData icon,
-    required Color iconColor,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: ColorTokens.primary,
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: iconColor,
-              size: 24,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textPrimary,
-              ),
             ),
           ],
         ),
