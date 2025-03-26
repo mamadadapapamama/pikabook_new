@@ -57,11 +57,28 @@ class TextReaderService {
 
   /// ProcessedText의 모든 세그먼트 읽기
   Future<void> readAllSegments(ProcessedText processedText) async {
+    // 이미 재생 중이면 중지
+    if (isPlaying) {
+      await stop();
+      return;
+    }
+
+    // 전체 텍스트 읽기
     await _ttsService.speakAllSegments(processedText);
   }
 
   /// 전체 텍스트 읽기
   Future<void> readText(String text) async {
+    // 이미 재생 중이면 중지
+    if (isPlaying) {
+      await stop();
+      return;
+    }
+
+    // 빈 텍스트는 무시
+    if (text.isEmpty) return;
+
+    // 전체 텍스트 읽기
     await _ttsService.speak(text);
   }
 

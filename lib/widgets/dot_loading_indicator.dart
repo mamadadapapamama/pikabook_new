@@ -14,7 +14,7 @@ class DotLoadingIndicator extends StatefulWidget {
   const DotLoadingIndicator({
     Key? key,
     this.message,
-    this.dotColor = const Color(0xFFFFD53C),
+    this.dotColor = const Color(0xFFFE6A15),
     this.dotSize = 10.0,
     this.spacing = 5.0,
   }) : super(key: key);

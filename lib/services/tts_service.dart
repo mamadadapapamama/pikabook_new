@@ -227,81 +227,28 @@ class TtsService {
   Future<void> speakAllSegments(ProcessedText processedText) async {
     if (_flutterTts == null) await init();
 
-    // 이미 재생 중인 경우 중지
-    if (_currentSegmentIndex != null) {
+    // 이미 재생 중이면 중지
+    if (_ttsState == TtsState.playing) {
       await stop();
       return;
     }
 
-    // 세그먼트 모드인 경우
-    if (processedText.segments != null &&
-        !processedText.showFullText &&
-        processedText.segments!.isNotEmpty) {
-      // 각 세그먼트를 순차적으로 읽기
-      for (int i = 0; i < processedText.segments!.length; i++) {
-        final segment = processedText.segments![i];
-        if (segment.originalText.isEmpty) continue;
-
-        // 현재 세그먼트 재생 중 표시
-        _updateCurrentSegment(i);
-
-        // TTS 재생
-        await speak(segment.originalText);
-
-        // 재생 완료 대기 (언어별 대기 시간 조정)
-        // MARK: 다국어 지원을 위한 확장 포인트
-        int charReadTimeMs = 100;  // 기본값: 100ms/글자
-        switch (_currentLanguage) {
-          case SourceLanguage.CHINESE:
-          case SourceLanguage.CHINESE_TRADITIONAL:
-            charReadTimeMs = 100;  // 중국어: 각 글자를 천천히 읽음
-            break;
-          case SourceLanguage.ENGLISH:
-            charReadTimeMs = 80;   // 영어: 조금 더 빠르게 읽음
-            break;
-          case SourceLanguage.JAPANESE:
-            charReadTimeMs = 100;  // 일본어: 중국어와 비슷한 속도
-            break;
-          case SourceLanguage.KOREAN:
-            charReadTimeMs = 90;   // 한국어: 중간 속도
-            break;
-        }
-        
-        await Future.delayed(
-            Duration(milliseconds: segment.originalText.length * charReadTimeMs + 1000));
-
-        // 재생이 중단되었는지 확인
-        if (_currentSegmentIndex == null) break;
-      }
-    } else {
-      // 전체 텍스트 모드인 경우
-      _updateCurrentSegment(0); // 재생 중 표시
-
+    // 전체 원문 텍스트 읽기
+    if (processedText.fullOriginalText.isNotEmpty) {
+      _ttsState = TtsState.playing;
       await speak(processedText.fullOriginalText);
-
-      // 재생 완료 대기 (언어별 대기 시간 적용)
-      int charReadTimeMs = 100;  // 기본값: 100ms/글자
-      switch (_currentLanguage) {
-        case SourceLanguage.CHINESE:
-        case SourceLanguage.CHINESE_TRADITIONAL:
-          charReadTimeMs = 100;
-          break;
-        case SourceLanguage.ENGLISH:
-          charReadTimeMs = 80;
-          break;
-        case SourceLanguage.JAPANESE:
-          charReadTimeMs = 100;
-          break;
-        case SourceLanguage.KOREAN:
-          charReadTimeMs = 90;
-          break;
-      }
-      
-      await Future.delayed(Duration(
-          milliseconds: processedText.fullOriginalText.length * charReadTimeMs + 1000));
+      return;
     }
 
-    // 재생 완료 후 상태 업데이트
-    _updateCurrentSegment(null);
+    // 세그먼트가 있는 경우 각 세그먼트 순차 재생
+    if (processedText.segments != null && processedText.segments!.isNotEmpty) {
+      _ttsState = TtsState.playing;
+      for (var segment in processedText.segments!) {
+        if (_ttsState != TtsState.playing) break;
+        await speak(segment.originalText);
+        // 세그먼트 간 짧은 간격 추가
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+    }
   }
 }
