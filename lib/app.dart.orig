@@ -99,6 +99,7 @@ class _AppState extends State<App> {
       }
       
       debugPrint('사용자의 온보딩 상태 확인: $hasCompletedOnboarding');
+      
     } catch (e) {
       debugPrint('사용자 온보딩 상태 확인 중 오류 발생: $e');
       if (mounted) {

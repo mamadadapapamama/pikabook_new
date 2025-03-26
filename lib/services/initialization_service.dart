@@ -154,7 +154,6 @@ class InitializationService {
   Future<void> _saveUserToFirestore(User user, {bool isNewUser = false}) async {
     try {
       final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
-      final userPrefs = UserPreferencesService();
       
       final baseData = {
         'uid': user.uid,
@@ -175,18 +174,9 @@ class InitializationService {
         };
         
         await userRef.set(newUserData, SetOptions(merge: true));
-        await userPrefs.setOnboardingCompleted(false);
-        await userPrefs.setHasOnboarded(false);
       } else {
         // 기존 사용자인 경우 마지막 로그인만 업데이트
         await userRef.update(baseData);
-        
-        // 온보딩 상태 확인 및 저장
-        final userDoc = await userRef.get();
-        final userData = userDoc.data() as Map<String, dynamic>?;
-        final onboardingCompleted = userData?['onboardingCompleted'] ?? false;
-        await userPrefs.setOnboardingCompleted(onboardingCompleted);
-        await userPrefs.setHasOnboarded(onboardingCompleted);
       }
       
       debugPrint('사용자 정보가 Firestore에 저장되었습니다: ${user.uid} (새 사용자: $isNewUser)');
@@ -200,6 +190,7 @@ class InitializationService {
   Future<void> handleUserLogin(User user) async {
     try {
       final firestore = FirebaseFirestore.instance;
+      final userPrefs = UserPreferencesService();
       
       // Firestore에서 사용자 데이터 확인
       final userDoc = await firestore.collection('users').doc(user.uid).get();
@@ -207,6 +198,25 @@ class InitializationService {
       
       // 사용자 정보 저장 (새 사용자 여부에 따라 다른 처리)
       await _saveUserToFirestore(user, isNewUser: isNewUser);
+      
+      // 온보딩 상태 확인 및 저장
+      if (!isNewUser) {
+        // 기존 사용자
+        final userData = userDoc.data() as Map<String, dynamic>?;
+        final onboardingCompleted = userData?['onboardingCompleted'] ?? false;
+        
+        // 온보딩 상태 로컬에 저장
+        await userPrefs.setOnboardingCompleted(onboardingCompleted);
+        await userPrefs.setHasOnboarded(onboardingCompleted);
+        
+        debugPrint('기존 사용자 로그인: 온보딩 완료 상태=$onboardingCompleted');
+      } else {
+        // 새 사용자는 온보딩 미완료 상태로 설정
+        await userPrefs.setOnboardingCompleted(false);
+        await userPrefs.setHasOnboarded(false);
+        
+        debugPrint('새 사용자 로그인: 온보딩 필요');
+      }
       
       debugPrint('사용자 ${user.uid} 로그인 처리 완료 (새 사용자: $isNewUser)');
     } catch (e) {
