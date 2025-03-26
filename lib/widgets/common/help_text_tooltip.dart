@@ -50,8 +50,8 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
     );
     
     _offsetAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.2),
-      end: const Offset(0, -0.2),
+      begin: const Offset(0, 0.05),
+      end: const Offset(0, -0.05),
     ).animate(CurvedAnimation(
       parent: _animationController,
       curve: Curves.easeInOut,

@@ -214,6 +214,8 @@ class InitializationService {
         await userPrefs.setOnboardingCompleted(onboardingCompleted);
         await userPrefs.setHasOnboarded(hasOnboarded);
         
+        debugPrint('기존 사용자 로그인: Firestore에서 확인한 온보딩 상태 - onboardingCompleted=$onboardingCompleted, hasOnboarded=$hasOnboarded');
+        
         // 온보딩이 완료된 경우에만 추가 설정 로드
         if (onboardingCompleted && hasOnboarded) {
           if (userData != null) {
@@ -236,13 +238,6 @@ class InitializationService {
           // 로컬 Storage에 현재 사용자 ID 저장 (앱 재시작 시 빠른 검증용)
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('current_user_id', user.uid);
-          
-          debugPrint('기존 사용자 로그인: 온보딩 완료 상태=$onboardingCompleted, hasOnboarded=$hasOnboarded');
-        } else {
-          // 온보딩이 완료되지 않은 경우 온보딩 화면으로 이동하도록 설정
-          debugPrint('온보딩 미완료 사용자: 온보딩 화면으로 이동');
-          await userPrefs.setOnboardingCompleted(false);
-          await userPrefs.setHasOnboarded(false);
         }
       } else {
         // 새 사용자는 온보딩 미완료 상태로 설정

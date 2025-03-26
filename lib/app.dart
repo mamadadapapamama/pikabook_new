@@ -88,10 +88,19 @@ class _AppState extends State<App> {
       });
       
       // 온보딩 상태 확인 (Firestore와 로컬 상태 모두 확인)
-      final hasCompletedOnboarding = await _preferencesService.isOnboardingCompleted();
-      final hasOnboarded = await _preferencesService.hasOnboarded();
+      final firestore = FirebaseFirestore.instance;
+      final userDoc = await firestore.collection('users').doc(user.uid).get();
+      final userData = userDoc.data();
+      
+      // Firestore에서 온보딩 상태 직접 확인
+      final hasCompletedOnboarding = userData?['onboardingCompleted'] ?? false;
+      final hasOnboarded = userData?['hasOnboarded'] ?? false;
       
       debugPrint('사용자의 온보딩 상태 확인: completed=$hasCompletedOnboarding, hasOnboarded=$hasOnboarded');
+      
+      // Firebase에서 직접 가져온 온보딩 상태를 로컬에 저장
+      await _preferencesService.setOnboardingCompleted(hasCompletedOnboarding);
+      await _preferencesService.setHasOnboarded(hasOnboarded);
       
       // 온보딩을 완료하지 않은 경우 온보딩 화면으로 이동
       if (!hasCompletedOnboarding || !hasOnboarded) {
@@ -347,7 +356,8 @@ class _AppState extends State<App> {
         debugPrint('로그인 완료 및 온보딩 완료 - 홈 화면 표시');
         return const HomeScreen();
       } else {
-        debugPrint('로그인 완료, 온보딩 필요 - 온보딩 화면 표시');
+        final user = widget.initializationService.getCurrentUser();
+        debugPrint('로그인 완료, 온보딩 필요 - 온보딩 화면 표시 (사용자: ${user?.uid})');
         return OnboardingScreen(
           onComplete: () {
             setState(() {
