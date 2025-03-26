@@ -192,11 +192,13 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               // 배경 바
               Container(
                 width: double.infinity,
+                height: 4,
                 color: ColorTokens.divider,
               ),
               // 진행 바
               Container(
                 width: progressWidth,
+                height: 4,
                 color: ColorTokens.primary,
               ),
             ],
@@ -221,159 +223,163 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
         ? 'page ${currentPageIndex! + 1} / $totalPages'
         : null;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // AppBar 메인 컨텐츠
-        SizedBox(
-          height: bottom != null ? height - 4 : height, // 프로그레스 바가 있으면 높이 조정
-          child: Padding(
-            padding: const EdgeInsets.only(top: 50.0, left: 16.0, right: 16.0, bottom: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // 왼쪽 부분: 뒤로가기 버튼, 로고 또는 제목
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // 뒤로가기 버튼 (옵션)
-                      if (showBackButton)
-                        IconButton(
-                          icon: const Icon(
-                            Icons.arrow_back_ios_rounded,
-                            color: Colors.black,
-                            size: 20,
+    return SafeArea(
+      top: true,
+      bottom: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // AppBar 메인 컨텐츠
+          SizedBox(
+            height: height - (bottom != null ? 4 : 0), // 프로그레스 바가 있으면 높이 조정
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // 왼쪽 부분: 뒤로가기 버튼, 로고 또는 제목
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // 뒤로가기 버튼 (옵션)
+                        if (showBackButton)
+                          IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back_ios_rounded,
+                              color: Colors.black,
+                              size: 20,
+                            ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
                           ),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
-                        ),
-                      if (showBackButton)
-                        const SizedBox(width: 4),
-                      
-                      // 커스텀 leading 위젯
-                      if (leading != null)
-                        leading!,
-                      
-                      // 로고 표시 (홈 스크린)
-                      if (showLogo)
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // 앱 로고
-                              Container(
-                                alignment: Alignment.centerLeft,
-                                child: SvgPicture.asset(
-                                  'assets/images/pikabook_textlogo_primary.svg',
-                                  width: SpacingTokens.appLogoWidth,
-                                  height: SpacingTokens.appLogoHeight,
-                                  placeholderBuilder: (context) => Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.menu_book,
-                                        color: ColorTokens.primary,
-                                        size: SpacingTokens.iconSizeSmall,
-                                      ),
-                                      SizedBox(width: SpacingTokens.xs),
-                                      Text(
-                                        'Pikabook',
-                                        style: TypographyTokens.body1En.copyWith(
-                                          fontWeight: FontWeight.bold,
+                        if (showBackButton)
+                          const SizedBox(width: 4),
+                        
+                        // 커스텀 leading 위젯
+                        if (leading != null)
+                          leading!,
+                        
+                        // 로고 표시 (홈 스크린)
+                        if (showLogo)
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // 앱 로고
+                                Container(
+                                  alignment: Alignment.centerLeft,
+                                  child: SvgPicture.asset(
+                                    'assets/images/pikabook_textlogo_primary.svg',
+                                    width: SpacingTokens.appLogoWidth,
+                                    height: SpacingTokens.appLogoHeight,
+                                    placeholderBuilder: (context) => Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.menu_book,
                                           color: ColorTokens.primary,
+                                          size: SpacingTokens.iconSizeSmall,
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: SpacingTokens.xs),
-                              // 노트 스페이스 이름
-                              if (noteSpaceName != null)
-                                Text(
-                                  noteSpaceName!,
-                                  style: TypographyTokens.headline3.copyWith(
-                                    color: ColorTokens.textPrimary,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                            ],
-                          ),
-                        ),
-                      
-                      // 제목 (일반 스크린)
-                      if (!showLogo && title != null)
-                        Expanded(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              // 타이틀
-                              Flexible(
-                                child: Text(
-                                  title!,
-                                  style: TypographyTokens.subtitle1.copyWith(
-                                    fontWeight: FontWeight.w500,
-                                    color: ColorTokens.textPrimary,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              
-                              // 페이지 정보 (노트 상세)
-                              if (pageNumberText != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 8.0),
-                                  child: Text(
-                                    pageNumberText,
-                                    style: TypographyTokens.caption.copyWith(
-                                      color: ColorTokens.textGrey,
+                                        SizedBox(width: SpacingTokens.xs),
+                                        Text(
+                                          'Pikabook',
+                                          style: TypographyTokens.body1En.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: ColorTokens.primary,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                            ],
+                                SizedBox(height: SpacingTokens.xs),
+                                // 노트 스페이스 이름
+                                if (noteSpaceName != null)
+                                  Text(
+                                    noteSpaceName!,
+                                    style: TypographyTokens.headline3.copyWith(
+                                      color: ColorTokens.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        
+                        // 제목 (일반 스크린)
+                        if (!showLogo && title != null)
+                          Expanded(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // 타이틀
+                                Flexible(
+                                  child: Text(
+                                    title!,
+                                    style: TypographyTokens.subtitle1.copyWith(
+                                      fontWeight: FontWeight.w500,
+                                      color: ColorTokens.textPrimary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                
+                                // 페이지 정보 (노트 상세)
+                                if (pageNumberText != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 8.0),
+                                    child: Text(
+                                      pageNumberText,
+                                      style: TypographyTokens.caption.copyWith(
+                                        color: ColorTokens.textGrey,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  
+                  // 오른쪽 부분: 액션 버튼들
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // 플래시카드 카운터 (노트 상세)
+                      if (flashcardCount != null && flashcardCount! > 0)
+                        GestureDetector(
+                          onTap: onFlashCardPressed,
+                          child: FlashcardCounterBadge(
+                            count: flashcardCount!,
+                            noteId: noteId,
                           ),
                         ),
+                      
+                      if (flashcardCount != null)
+                        const SizedBox(width: 8),
+                      
+                      // 추가 액션 버튼들
+                      if (actions != null)
+                        ...actions!,
                     ],
                   ),
-                ),
-                
-                // 오른쪽 부분: 액션 버튼들
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // 플래시카드 카운터 (노트 상세)
-                    if (flashcardCount != null && flashcardCount! > 0)
-                      GestureDetector(
-                        onTap: onFlashCardPressed,
-                        child: FlashcardCounterBadge(
-                          count: flashcardCount!,
-                          noteId: noteId,
-                        ),
-                      ),
-                    
-                    if (flashcardCount != null)
-                      const SizedBox(width: 8),
-                    
-                    // 추가 액션 버튼들
-                    if (actions != null)
-                      ...actions!,
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        
-        // 하단 위젯 (프로그레스 바 등)
-        if (bottom != null)
-          bottom!,
-      ],
+          
+          // 하단 위젯 (프로그레스 바 등)
+          if (bottom != null)
+            bottom!,
+        ],
+      ),
     );
   }
 
   @override
-  Size get preferredSize => Size.fromHeight(bottom != null ? height : height);
+  Size get preferredSize => Size.fromHeight(height);
 } 

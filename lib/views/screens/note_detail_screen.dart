@@ -888,6 +888,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           : _error != null
               ? Center(child: Text(_error ?? '노트를 불러올 수 없습니다.'))
               : _buildBody(),
+      bottomNavigationBar: !_isLoading && _error == null && _note != null 
+          ? NoteDetailBottomBar(
+              currentPage: _pageManager.currentPage,
+              currentPageIndex: _pageManager.currentPageIndex,
+              totalPages: _pageManager.pages.length,
+              onPageChanged: _changePage,
+              textDisplayMode: _textDisplayMode,
+              onTextDisplayModeChanged: _handleTextDisplayModeChanged,
+              isPlaying: _textReaderService.isPlaying,
+              onPlayPausePressed: _handlePlayPausePressed,
+              pageContentService: _pageContentService,
+              textReaderService: _textReaderService,
+            )
+          : null,
     );
   }
   
