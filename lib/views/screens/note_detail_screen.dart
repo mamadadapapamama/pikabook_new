@@ -937,7 +937,28 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                           color: Colors.grey.shade200,
                         ),
                         child: (currentImageFile == null && _pageManager.currentPage?.imageUrl == null)
-                            ? const Center(child: Icon(Icons.image, color: Colors.grey, size: 40))
+                            ? Container(
+                                color: Colors.grey[100],
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Image.asset(
+                                      'assets/images/image_empty.png',
+                                      width: 60,
+                                      height: 60,
+                                      fit: BoxFit.contain,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      '이미지를 추가해주세요',
+                                      style: GoogleFonts.notoSansKr(
+                                        fontSize: 14,
+                                        color: ColorTokens.textGrey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
                             : null,
                       ),
                       
@@ -1014,7 +1035,28 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                           color: Colors.grey.shade200,
                         ),
                         child: (imageFile == null && page?.imageUrl == null)
-                            ? const Center(child: Icon(Icons.image, color: Colors.grey, size: 40))
+                            ? Container(
+                                color: Colors.grey[100],
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Image.asset(
+                                      'assets/images/image_empty.png',
+                                      width: 60,
+                                      height: 60,
+                                      fit: BoxFit.contain,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      '이미지를 추가해주세요',
+                                      style: GoogleFonts.notoSansKr(
+                                        fontSize: 14,
+                                        color: ColorTokens.textGrey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
                             : null,
                       ),
                       

@@ -216,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 48),
             
             Text(
-              '번역이 필요한 이미지를 올려주세요.',
+              '번역이 필요한 \n이미지를 올려주세요.',
               style: TypographyTokens.subtitle1.copyWith(
                 color: ColorTokens.textPrimary,
                 fontWeight: FontWeight.w600,
@@ -225,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 8),
             
             Text(
-              '번역, 사전 검색, 플래시카드가 가능한 스마트 노트를 만들어드립니다. \n카메라 촬영도 가능합니다.',
+              '이미지를 기반으로 학습 노트를 만들어드립니다. \n카메라 촬영도 가능합니다.',
               textAlign: TextAlign.center,
               style: TypographyTokens.body2.copyWith(
                 color: ColorTokens.textSecondary,
