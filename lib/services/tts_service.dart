@@ -233,22 +233,48 @@ class TtsService {
       return;
     }
 
-    // 전체 원문 텍스트 읽기
-    if (processedText.fullOriginalText.isNotEmpty) {
+    // 세그먼트가 없거나 비어있는 경우 전체 원문 텍스트 읽기
+    if (processedText.segments == null || processedText.segments!.isEmpty) {
+      debugPrint("세그먼트가 없어 전체 원문 텍스트 읽기: ${processedText.fullOriginalText.length}자");
       _ttsState = TtsState.playing;
       await speak(processedText.fullOriginalText);
       return;
     }
 
     // 세그먼트가 있는 경우 각 세그먼트 순차 재생
-    if (processedText.segments != null && processedText.segments!.isNotEmpty) {
-      _ttsState = TtsState.playing;
-      for (var segment in processedText.segments!) {
-        if (_ttsState != TtsState.playing) break;
-        await speak(segment.originalText);
-        // 세그먼트 간 짧은 간격 추가
-        await Future.delayed(const Duration(milliseconds: 500));
+    debugPrint("세그먼트 ${processedText.segments!.length}개 순차 재생 시작");
+    _ttsState = TtsState.playing;
+    
+    for (int i = 0; i < processedText.segments!.length; i++) {
+      if (_ttsState != TtsState.playing) {
+        debugPrint("재생 중단됨: _ttsState=$_ttsState");
+        break;
       }
+      
+      final segment = processedText.segments![i];
+      if (segment.originalText.isEmpty) {
+        debugPrint("세그먼트 $i: 텍스트가 비어있어 건너뜀");
+        continue;
+      }
+      
+      debugPrint("세그먼트 $i 재생 시작: ${segment.originalText.length}자");
+      
+      // 현재 재생 중인 세그먼트 인덱스 업데이트
+      _updateCurrentSegment(i);
+      
+      // 텍스트 읽기
+      await _flutterTts!.speak(segment.originalText);
+      
+      // 재생 완료 대기 (발화 속도에 따라 적절한 대기 시간 계산)
+      final waitTime = segment.originalText.length * 100 + 1000; // 1자당 약 100ms + 기본 1초
+      await Future.delayed(Duration(milliseconds: waitTime));
+      
+      debugPrint("세그먼트 $i 재생 완료");
     }
+    
+    // 모든 세그먼트 재생 완료
+    _updateCurrentSegment(null);
+    _ttsState = TtsState.stopped;
+    debugPrint("모든 세그먼트 재생 완료");
   }
 }
