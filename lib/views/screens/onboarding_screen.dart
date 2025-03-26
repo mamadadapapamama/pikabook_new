@@ -354,24 +354,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Pikabook",
-                style: TypographyTokens.subtitle1En.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: ColorTokens.primary,
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: "Pikabook",
+                  style: TypographyTokens.subtitle1En.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: ColorTokens.primary,
+                  ),
                 ),
-              ),
-              Text(
-                "은 원서 속 글자를 인식해\n스마트한 학습 노트를 만들어 드리는 \n서비스입니다.",
-                style: TypographyTokens.subtitle1En.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: ColorTokens.textPrimary,
+                TextSpan(
+                  text: "은 원서 속 글자를 인식해\n스마트한 학습 노트를 만들어 드리는 \n서비스입니다.",
+                  style: TypographyTokens.subtitle1En.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: ColorTokens.textPrimary,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           Text(
             "\n먼저, 학습하실 분의 이름을 알려주세요.",
@@ -430,24 +431,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Pikabook",
-                style: TypographyTokens.subtitle1En.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: ColorTokens.primary,
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: "Pikabook",
+                  style: TypographyTokens.subtitle1En.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: ColorTokens.primary,
+                  ),
                 ),
-              ),
-              Text(
-                "을 어떤 목적으로 사용하실 예정이세요?",
-                style: TypographyTokens.subtitle1En.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: ColorTokens.textPrimary,
+                TextSpan(
+                  text: "을 어떤 목적으로 사용하실 예정이세요?",
+                  style: TypographyTokens.subtitle1En.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: ColorTokens.textPrimary,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           // 사용 목적 옵션들
