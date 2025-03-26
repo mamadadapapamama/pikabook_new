@@ -752,47 +752,44 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     debugPrint('=====================================================');
     debugPrint('텍스트 디스플레이 모드 변경 요청: $mode');
     
-    // 모드 변경
-    _textDisplayMode = mode;
-    
-    // 현재 페이지의 ProcessedText 업데이트
-    final currentPage = _pageManager.currentPage;
-    if (currentPage != null && currentPage.id != null) {
-      debugPrint('현재 페이지 ID: ${currentPage.id}');
+    setState(() {
+      // 모드 변경
+      _textDisplayMode = mode;
       
-      // 캐시된 processedText 가져오기
-      final processedText = _pageContentService.getProcessedText(currentPage.id!);
-      
-      if (processedText != null) {
-        // 기존 상태 로깅
-        debugPrint('기존 ProcessedText 상태: '
-            'showFullText=${processedText.showFullText}, '
-            'showPinyin=${processedText.showPinyin}, '
-            'showTranslation=${processedText.showTranslation}');
-            
-        // 병음 토글 처리
-        bool showPinyin = (mode == TextDisplayMode.all);
-        debugPrint('병음 표시 설정 변경: $showPinyin (모드: $mode)');
+      // 현재 페이지의 ProcessedText 업데이트
+      final currentPage = _pageManager.currentPage;
+      if (currentPage != null && currentPage.id != null) {
+        debugPrint('현재 페이지 ID: ${currentPage.id}');
         
-        // processedText 업데이트
-        final updatedText = processedText.copyWith(
-          showFullText: processedText.showFullText, // 전체/세그먼트 모드는 유지
-          showPinyin: showPinyin,           // 병음 표시 여부 업데이트
-          showTranslation: true,            // 번역은 항상 표시
-        );
+        // 캐시된 processedText 가져오기
+        final processedText = _pageContentService.getProcessedText(currentPage.id!);
         
-        // 업데이트 내용 확인
-        debugPrint('업데이트할 ProcessedText 상태: '
-            'showFullText=${updatedText.showFullText}, '
-            'showPinyin=${updatedText.showPinyin}, '
-            'showTranslation=${updatedText.showTranslation}');
-            
-        // 업데이트된 ProcessedText 저장
-        _pageContentService.setProcessedText(currentPage.id!, updatedText);
-        
-        // 상태 변경 알림 (화면 전체 갱신)
-        setState(() {
-          debugPrint('병음 표시 상태 변경 후 UI 업데이트');
+        if (processedText != null) {
+          // 기존 상태 로깅
+          debugPrint('기존 ProcessedText 상태: '
+              'showFullText=${processedText.showFullText}, '
+              'showPinyin=${processedText.showPinyin}, '
+              'showTranslation=${processedText.showTranslation}');
+              
+          // 병음 토글 처리
+          bool showPinyin = (mode == TextDisplayMode.all);
+          debugPrint('병음 표시 설정 변경: $showPinyin (모드: $mode)');
+          
+          // processedText 업데이트
+          final updatedText = processedText.copyWith(
+            showFullText: processedText.showFullText, // 전체/세그먼트 모드는 유지
+            showPinyin: showPinyin,           // 병음 표시 여부 업데이트
+            showTranslation: true,            // 번역은 항상 표시
+          );
+          
+          // 업데이트 내용 확인
+          debugPrint('업데이트할 ProcessedText 상태: '
+              'showFullText=${updatedText.showFullText}, '
+              'showPinyin=${updatedText.showPinyin}, '
+              'showTranslation=${updatedText.showTranslation}');
+              
+          // 업데이트된 ProcessedText 저장
+          _pageContentService.setProcessedText(currentPage.id!, updatedText);
           
           // 변경 후 캐시 상태 확인
           final afterUpdate = _pageContentService.getProcessedText(currentPage.id!);
@@ -802,13 +799,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                 'showPinyin=${afterUpdate.showPinyin}, '
                 'showTranslation=${afterUpdate.showTranslation}');
           }
-        });
+        } else {
+          debugPrint('ProcessedText가 null임 - 업데이트 건너뜀');
+        }
       } else {
-        debugPrint('ProcessedText가 null임 - 업데이트 건너뜀');
+        debugPrint('현재 페이지 없음 - 업데이트 건너뜀');
       }
-    } else {
-      debugPrint('현재 페이지 없음 - 업데이트 건너뜀');
-    }
+    });
     
     debugPrint('=====================================================');
   }
@@ -846,18 +843,33 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     final currentPage = _pageManager.currentPage;
     if (currentPage == null) return;
     
-    setState(() {
-      if (_textReaderService.isPlaying) {
-        _textReaderService.stop();
-      } else if (currentPage.originalText.isNotEmpty) {
-        // ProcessedText 가져오기
-        final processedText = _pageContentService.getProcessedText(currentPage.id!);
-        if (processedText != null) {
-          // 전체 텍스트 재생
+    debugPrint('재생/일시정지 버튼 클릭: isPlaying=${_textReaderService.isPlaying}');
+    
+    if (_textReaderService.isPlaying) {
+      _textReaderService.stop();
+      setState(() {});
+    } else if (currentPage.originalText.isNotEmpty) {
+      // ProcessedText 가져오기
+      final processedText = _pageContentService.getProcessedText(currentPage.id!);
+      if (processedText != null) {
+        debugPrint('텍스트 재생 시작: 길이=${currentPage.originalText.length}자, 세그먼트=${processedText.segments?.length ?? 0}개');
+        
+        // 세그먼트 모드일 때는 readAllSegments, 전체 텍스트 모드일 때는 readText 사용
+        if (processedText.segments != null && processedText.segments!.isNotEmpty) {
+          debugPrint('세그먼트 모드로 텍스트 재생');
+          _textReaderService.readAllSegments(processedText);
+        } else {
+          debugPrint('전체 텍스트 모드로 텍스트 재생');
           _textReaderService.readText(currentPage.originalText);
         }
+        
+        setState(() {});
+      } else {
+        debugPrint('ProcessedText가 null임 - 재생할 수 없음');
       }
-    });
+    } else {
+      debugPrint('텍스트가 비어 있음 - 재생할 수 없음');
+    }
   }
 
   // ===== UI 빌드 메서드 =====

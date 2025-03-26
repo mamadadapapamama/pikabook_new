@@ -9,6 +9,8 @@ import '../services/page_content_service.dart';
 import 'dictionary_result_widget.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
 import 'dot_loading_indicator.dart';
+import '../theme/tokens/typography_tokens.dart';
+import '../theme/tokens/color_tokens.dart';
 
 /// 페이지 내의 이미지, 텍스트 처리상태, 처리된 텍스트 등을 표시
 /// 텍스트 모드전환, 사전 검색 등 처리
@@ -185,9 +187,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                     '${updatedText.showFullText}_'
                     '${updatedText.showPinyin}_'
                     '${updatedText.showTranslation}'),
-                processedText: updatedText.copyWith(
-                  showPinyin: true, // pinyin 표시 설정
-                ),
+                processedText: updatedText,
                 onDictionaryLookup: _lookupWord,
                 onCreateFlashCard: widget.onCreateFlashCard,
                 flashCards: widget.flashCards,
@@ -533,10 +533,10 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
                   child: Text(
                     segment.pinyin!,
-                    style: const TextStyle(
+                    style: TypographyTokens.body2En.copyWith(
+                      color: ColorTokens.textGrey,
                       fontSize: 14,
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey,
+                      height: 1.4,
                     ),
                   ),
                 ),
@@ -546,7 +546,12 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   segment.translatedText != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
-                  child: _buildSelectableText(segment.translatedText!),
+                  child: _buildSelectableText(
+                    segment.translatedText!,
+                    TypographyTokens.body2.copyWith(
+                      color: ColorTokens.textSecondary,
+                    ),
+                  ),
                 ),
                 
               // 구분선 추가 (마지막 세그먼트가 아닌 경우)
@@ -624,23 +629,26 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   }
   
   // 선택 가능한 텍스트 위젯 생성 - 메모이제이션 추가
-  Widget _buildSelectableText(String text) {
+  Widget _buildSelectableText(String text, [TextStyle? style]) {
     if (text.isEmpty) {
       return const SizedBox.shrink();
     }
+    
+    final defaultStyle = const TextStyle(fontSize: 16);
+    final effectiveStyle = style ?? defaultStyle;
     
     // 짧은 텍스트의 경우 선택 가능하지만 간단한 Text 위젯 사용
     if (text.length < 100) {
       return SelectableText(
         text,
-        style: const TextStyle(fontSize: 16),
+        style: effectiveStyle,
       );
     }
     
     // 긴 텍스트의 경우 선택 가능한 텍스트 위젯 사용
     return SelectableText(
       text,
-      style: const TextStyle(fontSize: 16),
+      style: effectiveStyle,
     );
   }
 }

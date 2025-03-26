@@ -44,7 +44,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.backgroundColor = Colors.white,
     this.centerTitle = false,
     this.subtitle,
-    this.height = 80,
+    this.height = 70,
     this.showBackButton = false,
     this.showLogo = false,
     this.noteSpaceName,
@@ -122,6 +122,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       onFlashCardPressed: onFlashCardPressed,
       currentPageIndex: currentPageIndex,
       totalPages: totalPages,
+      height: 70,
       actions: [
         IconButton(
           icon: const Icon(
@@ -192,13 +193,13 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               // 배경 바
               Container(
                 width: double.infinity,
-                height: 4,
+                height: 2,
                 color: ColorTokens.divider,
               ),
               // 진행 바
               Container(
                 width: progressWidth,
-                height: 4,
+                height: 2,
                 color: ColorTokens.primary,
               ),
             ],
@@ -319,8 +320,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                                 Flexible(
                                   child: Text(
                                     title!,
-                                    style: TypographyTokens.subtitle1.copyWith(
-                                      fontWeight: FontWeight.w500,
+                                    style: TypographyTokens.headline3.copyWith(
                                       color: ColorTokens.textPrimary,
                                     ),
                                     overflow: TextOverflow.ellipsis,
@@ -333,7 +333,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                                     padding: const EdgeInsets.only(left: 8.0),
                                     child: Text(
                                       pageNumberText,
-                                      style: TypographyTokens.caption.copyWith(
+                                      style: TypographyTokens.body2En.copyWith(
                                         color: ColorTokens.textGrey,
                                       ),
                                     ),
