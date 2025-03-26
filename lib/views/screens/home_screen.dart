@@ -19,6 +19,7 @@ import 'note_detail_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/image_picker_bottom_sheet.dart';
 import '../../widgets/dot_loading_indicator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -33,11 +34,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final UserPreferencesService _userPreferences = UserPreferencesService();
   String _noteSpaceName = '';
+  bool _showTooltip = false;
   
   @override
   void initState() {
     super.initState();
     _loadNoteSpaceName();
+    _checkOnboardingStatus();
   }
   
   Future<void> _loadNoteSpaceName() async {
@@ -45,6 +48,29 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {
         _noteSpaceName = noteSpaceName;
+      });
+    }
+  }
+
+  Future<void> _checkOnboardingStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
+    final hasCompletedOnboarding = prefs.getBool('hasCompletedOnboarding') ?? false;
+    
+    if (hasCompletedOnboarding && !hasShownTooltip) {
+      setState(() {
+        _showTooltip = true;
+      });
+      // 툴팁을 표시했다고 표시
+      await prefs.setBool('hasShownTooltip', true);
+      
+      // 3초 후에 툴팁 숨기기
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _showTooltip = false;
+          });
+        }
       });
     }
   }
