@@ -1,0 +1,15 @@
+flutter_native_splash:
+  color: "#FE6A15"
+  image: assets/images/Pikabook_textlogo.png
+  android_gravity: center
+  ios_content_mode: center
+  fullscreen: true
+  
+  android_12:
+    color: "#FE6A15"
+    image: assets/images/Pikabook_textlogo.png
+    android_gravity: center
+    ios_content_mode: center
+    fullscreen: true
+
+  web: false 

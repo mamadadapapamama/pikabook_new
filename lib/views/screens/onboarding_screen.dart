@@ -250,7 +250,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       SizedBox(
                         width: 40,
                         height: 40,
-                        child: Image.asset('assets/images/pikabird_80x80.png'),
+                        child: Image.asset('assets/images/pikabook_bird.png'),
                       ),
                     ],
                   ),

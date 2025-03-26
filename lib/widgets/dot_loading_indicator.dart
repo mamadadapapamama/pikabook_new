@@ -10,13 +10,15 @@ class DotLoadingIndicator extends StatefulWidget {
   final Color dotColor;
   final double dotSize;
   final double spacing;
+  final bool isLoginScreen;
 
   const DotLoadingIndicator({
     Key? key,
     this.message,
     this.dotColor = const Color(0xFFFE6A15),
-    this.dotSize = 10.0,
-    this.spacing = 5.0,
+    this.dotSize = 5.0,  // Figma 스펙에 맞게 크기 수정
+    this.spacing = 8.0,  // Figma 스펙에 맞게 간격 수정
+    this.isLoginScreen = false,
   }) : super(key: key);
 
   @override
@@ -51,17 +53,32 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerPr
       duration: const Duration(milliseconds: 600),
     );
     
-    _animation1 = Tween<double>(begin: 0.0, end: 8.0).animate(
-      CurvedAnimation(parent: _controller1, curve: Curves.easeInOut),
-    );
-    
-    _animation2 = Tween<double>(begin: 0.0, end: 8.0).animate(
-      CurvedAnimation(parent: _controller2, curve: Curves.easeInOut),
-    );
-    
-    _animation3 = Tween<double>(begin: 0.0, end: 8.0).animate(
-      CurvedAnimation(parent: _controller3, curve: Curves.easeInOut),
-    );
+    // 로그인 화면에서는 다른 애니메이션 효과 적용
+    if (widget.isLoginScreen) {
+      _animation1 = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _controller1, curve: Curves.easeInOut),
+      );
+      
+      _animation2 = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _controller2, curve: Curves.easeInOut),
+      );
+      
+      _animation3 = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _controller3, curve: Curves.easeInOut),
+      );
+    } else {
+      _animation1 = Tween<double>(begin: 0.0, end: 8.0).animate(
+        CurvedAnimation(parent: _controller1, curve: Curves.easeInOut),
+      );
+      
+      _animation2 = Tween<double>(begin: 0.0, end: 8.0).animate(
+        CurvedAnimation(parent: _controller2, curve: Curves.easeInOut),
+      );
+      
+      _animation3 = Tween<double>(begin: 0.0, end: 8.0).animate(
+        CurvedAnimation(parent: _controller3, curve: Curves.easeInOut),
+      );
+    }
     
     // 두 번째 도트 애니메이션 지연
     Future.delayed(const Duration(milliseconds: 150), () {
@@ -102,37 +119,43 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerPr
             mainAxisSize: MainAxisSize.min,
             children: [
               // 첫 번째 도트
-              AnimatedBuilder(
-                animation: _animation1,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(0, -_animation1.value),
-                    child: _buildDot(),
-                  );
-                },
-              ),
+              widget.isLoginScreen 
+                ? _buildLoginDot(_animation1)
+                : AnimatedBuilder(
+                    animation: _animation1,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(0, -_animation1.value),
+                        child: _buildDot(),
+                      );
+                    },
+                  ),
               SizedBox(width: widget.spacing),
               // 두 번째 도트
-              AnimatedBuilder(
-                animation: _animation2,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(0, -_animation2.value),
-                    child: _buildDot(),
-                  );
-                },
-              ),
+              widget.isLoginScreen 
+                ? _buildLoginDot(_animation2)
+                : AnimatedBuilder(
+                    animation: _animation2,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(0, -_animation2.value),
+                        child: _buildDot(),
+                      );
+                    },
+                  ),
               SizedBox(width: widget.spacing),
               // 세 번째 도트
-              AnimatedBuilder(
-                animation: _animation3,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(0, -_animation3.value),
-                    child: _buildDot(),
-                  );
-                },
-              ),
+              widget.isLoginScreen 
+                ? _buildLoginDot(_animation3)
+                : AnimatedBuilder(
+                    animation: _animation3,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(0, -_animation3.value),
+                        child: _buildDot(),
+                      );
+                    },
+                  ),
             ],
           ),
           if (widget.message != null) ...[
@@ -158,6 +181,23 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerPr
         color: widget.dotColor,
         shape: BoxShape.circle,
       ),
+    );
+  }
+
+  // 로그인 화면용 도트 빌더 - 투명도 애니메이션
+  Widget _buildLoginDot(Animation<double> animation) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        return Container(
+          width: widget.dotSize,
+          height: widget.dotSize,
+          decoration: BoxDecoration(
+            color: widget.dotColor.withOpacity(animation.value),
+            shape: BoxShape.circle,
+          ),
+        );
+      },
     );
   }
 } 

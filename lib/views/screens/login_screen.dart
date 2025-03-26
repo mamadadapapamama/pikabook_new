@@ -28,29 +28,94 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   bool _isLoading = false;
   String? _errorMessage;
+  
+  // 애니메이션 컨트롤러 및 애니메이션 변수
   late AnimationController _animationController;
-  late Animation<double> _fadeInAnimation;
+  late Animation<double> _logoFadeAnimation;
+  late Animation<double> _textFadeAnimation;
+  late Animation<double> _birdFadeAnimation;
+  late Animation<double> _buttonsFadeAnimation;
 
   @override
   void initState() {
     super.initState();
     _setupAnimation();
+    
+    // Firebase 초기화가 완료되지 않은 경우, 백그라운드에서 초기화 진행
+    if (widget.isInitializing) {
+      _startBackgroundInitialization();
+    }
   }
 
   void _setupAnimation() {
+    // 애니메이션 컨트롤러 설정 (전체 애니메이션 지속 시간: 2.4초)
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 2400),
     );
 
-    _fadeInAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    // 로고 페이드인 애니메이션 (0~0.25)
+    _logoFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: Curves.easeIn,
+        curve: const Interval(0.0, 0.25, curve: Curves.easeIn),
+      ),
+    );
+    
+    // 텍스트 페이드인 애니메이션 (0.25~0.5)
+    _textFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.25, 0.5, curve: Curves.easeIn),
+      ),
+    );
+    
+    // 새 로고 페이드인 애니메이션 (0.5~0.75)
+    _birdFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.5, 0.75, curve: Curves.easeIn),
+      ),
+    );
+    
+    // 버튼 페이드인 애니메이션 (0.75~1.0)
+    _buttonsFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.75, 1.0, curve: Curves.easeIn),
       ),
     );
 
+    // 애니메이션 시작
     _animationController.forward();
+  }
+
+  // 백그라운드에서 Firebase 초기화 작업 시작
+  void _startBackgroundInitialization() {
+    debugPrint('백그라운드에서 Firebase 초기화 시작');
+    
+    // 초기화 작업 시작
+    widget.initializationService.retryInitialization(
+      options: DefaultFirebaseOptions.currentPlatform,
+    ).then((_) {
+      debugPrint('백그라운드 Firebase 초기화 완료');
+      
+      // 초기화 완료 후 로그인 화면 갱신
+      if (mounted) {
+        setState(() {
+          // 화면 갱신
+        });
+      }
+    }).catchError((error) {
+      debugPrint('백그라운드 Firebase 초기화 실패: $error');
+      
+      // 초기화 실패 시 오류 메시지 표시
+      if (mounted) {
+        setState(() {
+          _errorMessage = '앱 초기화 실패: $error';
+        });
+      }
+    });
   }
 
   @override
@@ -80,7 +145,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.black.withOpacity(0.0),
-                    Colors.black.withOpacity(0.4),
+                    Colors.black.withOpacity(0.3),
                     Colors.black.withOpacity(0.0),
                   ],
                   stops: const [0.0, 0.5, 1.0],
@@ -94,76 +159,128 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               child: AnimatedBuilder(
                 animation: _animationController,
                 builder: (context, child) {
-                  return Opacity(
-                    opacity: _fadeInAnimation.value,
-                    child: Transform.translate(
-                      offset: Offset(0, 0),
-                      child: Transform.scale(
-                        scale: 1.0,
-                        child: Center(
-                          child: SingleChildScrollView(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.center,
+                  return Center(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // 로고 영역
+                          SizedBox(
+                            width: 160,
+                            child: Stack(
+                              alignment: Alignment.center,
                               children: [
-                                const SizedBox(height: 20),
-        
-
-                                // 앱 이름
-                                Text(
-                                  'Pikabook',
-                                  style: TypographyTokens.headline1.copyWith(
+                                // 텍스트 로고
+                                Opacity(
+                                  opacity: _logoFadeAnimation.value,
+                                  child: Image.asset(
+                                    'assets/images/Pikabook_textlogo.png',
+                                    width: 160,
+                                    height: 27.42,
+                                    fit: BoxFit.contain,
                                     color: Colors.white,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
-
-                                // 앱 설명
-                                Text(
-                                  '원서 공부,\n스마트하게',
-                                  textAlign: TextAlign.center,
-                                  style: TypographyTokens.subtitle1.copyWith(
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 60),
-
-                                // 로딩 인디케이터 또는 오류 메시지
-                                if (_isLoading)
-                                  const DotLoadingIndicator(message: '로그인 중...')
-                                else if (_errorMessage != null)
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    margin: const EdgeInsets.symmetric(vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: Colors.red.shade200,
-                                        width: 1,
-                                      ),
+                                
+                                // 새 로고 (피카북 텍스트 로고 위에 위치)
+                                Positioned(
+                                  top: -55, // 새 로고가 완전히 보이도록 위치 조정
+                                  child: Opacity(
+                                    opacity: _birdFadeAnimation.value,
+                                    child: Image.asset(
+                                      'assets/images/pikabook_bird.png',
+                                      width: 60,
+                                      height: 60,
+                                      fit: BoxFit.contain,
                                     ),
-                                    child: Text(
-                                      _errorMessage!,
+                                  ),
+                                ),
+                                
+                                // 앱 설명 - 로고 위에 배치
+                                Positioned(
+                                  top: -105, // 새 로고보다 더 위에 위치
+                                  child: Opacity(
+                                    opacity: _textFadeAnimation.value,
+                                    child: const Text(
+                                      '원서 공부,\n스마트하게',
                                       textAlign: TextAlign.center,
-                                      style: TypographyTokens.body2.copyWith(
-                                        color: Colors.red.shade800,
+                                      style: TextStyle(
+                                        fontFamily: 'Noto Sans KR',
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.white,
+                                        height: 1.4,
                                       ),
                                     ),
                                   ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 60),
 
-                                const SizedBox(height: 16),
+                          // 로딩 인디케이터 또는 오류 메시지
+                          if (_isLoading)
+                            const DotLoadingIndicator(
+                              dotColor: Colors.white,
+                            )
+                          else if (_errorMessage != null)
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.red.shade200,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: TypographyTokens.body2.copyWith(
+                                  color: Colors.red.shade800,
+                                ),
+                              ),
+                            ),
+
+                          const SizedBox(height: 16),
+
+                          // 소셜 로그인 버튼들 (애니메이션 적용)
+                          Opacity(
+                            opacity: _buttonsFadeAnimation.value,
+                            child: Column(
+                              children: [
+                                // Facebook 로그인 버튼
+                                _buildLoginButton(
+                                  text: 'Facebook으로 로그인',
+                                  onPressed: () {
+                                    // Facebook 로그인 기능 추가
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Facebook 로그인은 아직 지원되지 않습니다.')),
+                                    );
+                                  },
+                                  backgroundColor: Colors.white,
+                                  textColor: const Color(0xFF031B31),
+                                  leadingIcon: Padding(
+                                    padding: const EdgeInsets.only(right: 8.0),
+                                    child: Icon(Icons.facebook, color: const Color(0xFF1877F2), size: 24),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
 
                                 // Google 로그인 버튼
                                 _buildLoginButton(
-                                  text: 'Google 로 로그인',
+                                  text: 'Google로 로그인',
                                   onPressed: _handleGoogleSignIn,
                                   backgroundColor: Colors.white,
                                   textColor: const Color(0xFF031B31),
                                   leadingIcon: Padding(
                                     padding: const EdgeInsets.only(right: 8.0),
                                     child: Image.asset(
-                                      'assets/images/social_icons/google_2x.png',
+                                      'assets/images/social_icons/google.png',
                                       width: 24,
                                       height: 24,
                                       errorBuilder: (context, error, stackTrace) {
@@ -172,11 +289,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 8),
 
                                 // Apple 로그인 버튼
                                 _buildLoginButton(
-                                  text: 'Apple 로 로그인',
+                                  text: 'Apple로 로그인',
                                   onPressed: _handleAppleSignIn,
                                   backgroundColor: Colors.white,
                                   textColor: Colors.black,
@@ -192,21 +309,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 40),
-
-                                // 로그인 안내 텍스트
-                                Text(
-                                  '소셜 계정으로 로그인하여 모든 기기에서 데이터를 동기화하고\n백업할수 있습니다.',
-                                  textAlign: TextAlign.center,
-                                  style: TypographyTokens.caption.copyWith(
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
                               ],
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 40),
+                        ],
                       ),
                     ),
                   );
@@ -227,15 +334,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     required Widget leadingIcon,
   }) {
     return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      width: 209, // Figma 디자인 기준 고정 너비
       child: ElevatedButton(
         onPressed: _isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: backgroundColor,
           foregroundColor: textColor,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), // 패딩 2px 추가
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),
@@ -246,11 +352,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             leadingIcon,
             Text(
               text,
-              style: TypographyTokens.button.copyWith(
-                color: textColor,
+              style: const TextStyle(
                 fontFamily: 'Poppins',
-                fontSize: 16,
+                fontSize: 14,
                 fontWeight: FontWeight.w500,
+                color: Color(0xFF031B31),
+                height: 1.5,
               ),
             ),
           ],

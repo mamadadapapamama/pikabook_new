@@ -38,7 +38,7 @@ class HomeScreenAppBar extends StatelessWidget implements PreferredSizeWidget {
                 Container(
                   alignment: Alignment.centerLeft,
                   child: SvgPicture.asset(
-                    'assets/images/logo_pika_small.svg',
+                    'assets/images/pikabook_textlogo_primary.svg',
                     width: SpacingTokens.appLogoWidth,
                     height: SpacingTokens.appLogoHeight,
                     placeholderBuilder: (context) => Row(
