@@ -214,6 +214,13 @@ class InitializationService {
         await userPrefs.setOnboardingCompleted(onboardingCompleted);
         await userPrefs.setHasOnboarded(hasOnboarded);
         
+        // 툴팁 상태 초기화 (온보딩 미완료시)
+        if (!onboardingCompleted || !hasOnboarded) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('hasShownTooltip', false);
+          debugPrint('온보딩 미완료로 툴팁 표시 상태 초기화');
+        }
+        
         debugPrint('기존 사용자 로그인: Firestore에서 확인한 온보딩 상태 - onboardingCompleted=$onboardingCompleted, hasOnboarded=$hasOnboarded');
         
         // 온보딩이 완료된 경우에만 추가 설정 로드
@@ -244,13 +251,17 @@ class InitializationService {
         await userPrefs.setOnboardingCompleted(false);
         await userPrefs.setHasOnboarded(false);
         
+        // 툴팁 상태 초기화
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('hasShownTooltip', false);
+        
         // Firestore에도 온보딩 상태 저장
         await firestore.collection('users').doc(user.uid).update({
           'onboardingCompleted': false,
           'hasOnboarded': false,
         });
         
-        debugPrint('새 사용자: 온보딩 필요');
+        debugPrint('새 사용자: 온보딩 필요, 툴팁 표시 상태 초기화');
       }
       
       debugPrint('사용자 ${user.uid} 로그인 처리 완료 (새 사용자: $isNewUser)');

@@ -83,6 +83,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   bool _useSegmentMode = true; // 기본값은 세그먼트 모드
   bool _isShowingScreenshotWarning = false;
   Timer? _screenshotWarningTimer;
+  Set<int> _previouslyVisitedPages = <int>{};
+  late PageController _pageController;
 
   @override
   void initState() {
@@ -90,6 +92,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     WidgetsBinding.instance.addObserver(this);
     _pageManager = NotePageManager(noteId: widget.noteId);
     _segmentManager = NoteSegmentManager();
+    _previouslyVisitedPages = <int>{};
+    _pageController = PageController();
     _loadNote();
     _initTts();
     _loadUserPreferences();
@@ -104,6 +108,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     _screenshotService.stopDetection();
     WidgetsBinding.instance.removeObserver(this);
     _ttsService.stop();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -205,6 +210,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           _pageManager.setPages(typedServerPages);
           
           _isLoading = false;
+          
+          // 첫 번째 페이지를 방문한 페이지로 표시
+          if (_pageManager.pages.isNotEmpty) {
+            _previouslyVisitedPages.add(0);
+          }
         });
 
         // 페이지 수 로그 출력
@@ -526,10 +536,48 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   // ===== 페이지 탐색 관련 메서드 =====
 
   void _changePage(int index) {
+    if (index < 0 || index >= _pageManager.pages.length) return;
+    
+    final previousPageIndex = _pageManager.currentPageIndex;
+    final isSwitchingBack = _previouslyVisitedPages.contains(index);
+    
+    debugPrint('페이지 변경: $previousPageIndex -> $index (이전에 방문한 페이지: $isSwitchingBack)');
+    
+    // PageController를 통한 페이지 이동 (화살표 버튼으로 이동할 때)
+    // PageView의 onPageChanged에서 호출되는 경우에는 이미 페이지가 변경된 상태
+    if (index != _pageManager.currentPageIndex) {
+      try {
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      } catch (e) {
+        debugPrint('페이지 애니메이션 오류: $e');
+      }
+    }
+    
+    // 페이지 매니저에서 페이지 변경
     _pageManager.changePage(index);
+    
+    // 이전에 방문한 페이지가 아닌 경우에만 방문 기록 추가
+    if (!_previouslyVisitedPages.contains(index)) {
+      _previouslyVisitedPages.add(index);
+      debugPrint('방문 기록 추가: $index, 총 방문 페이지: ${_previouslyVisitedPages.length}개');
+    }
+    
     // 페이지가 변경되면 새 페이지의 ProcessedText 초기화
     _processTextForCurrentPage();
-    setState(() {}); // UI 업데이트
+    
+    // UI 업데이트
+    setState(() {});
+  }
+  
+  // 페이지가 완전히 로드되었는지 확인
+  bool _isPageFullyLoaded(page_model.Page? page) {
+    if (page == null) return false;
+    if (page.originalText.isEmpty || page.originalText == 'processing') return false;
+    return true;
   }
 
   // ===== 메뉴 및 다이얼로그 관련 메서드 =====
@@ -922,8 +970,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     
     return PageView.builder(
       itemCount: _pageManager.pages.length,
-      controller: PageController(initialPage: _pageManager.currentPageIndex),
+      controller: _pageController,
       onPageChanged: (index) {
+        debugPrint('PageView 스와이프: 페이지 변경 ($index) - 이전 방문: ${_previouslyVisitedPages.contains(index)}');
+        
+        // 이전에 방문하지 않은 페이지라면 방문 기록에 추가
+        _previouslyVisitedPages.add(index);
+        
         _changePage(index);
       },
       itemBuilder: (context, index) {
@@ -1141,8 +1194,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 디버그 로깅 - 현재 상태 확인 
     debugPrint('현재 페이지 상태 확인 - ID: ${currentPage.id}, 텍스트 길이: ${currentPage.originalText.length}자');
     
+    // 이전에 방문한 페이지인지 확인 (현재 페이지 인덱스가 이미 방문 기록에 있는지)
+    final bool wasVisitedBefore = _previouslyVisitedPages.contains(_pageManager.currentPageIndex);
+    
     // 페이지 처리가 완료되지 않은 경우 (백그라운드 처리 중)
-    if (currentPage.originalText.isEmpty || currentPage.originalText == 'processing') {
+    if ((currentPage.originalText.isEmpty || currentPage.originalText == 'processing') && !wasVisitedBefore) {
       // 이전 페이지와 같은 페이지인지 확인 (무한 로딩 방지)
       if (_processingPage != null && _processingPage!.id == _note!.id) {
         final now = DateTime.now();
@@ -1179,6 +1235,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         _refreshPageFromServer(currentPage.id!);
       }
       
+      debugPrint('페이지 준비 중 화면 표시 (이전 방문: $wasVisitedBefore)');
+      
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1213,6 +1271,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     
     // 텍스트 처리 중인 경우
     if (_isProcessingText) {
+      debugPrint('텍스트 처리 중 화면 표시');
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1226,6 +1285,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     }
     
     // 일반 페이지 컨텐츠 표시
+    debugPrint('일반 페이지 컨텐츠 표시 (이전 방문: $wasVisitedBefore)');
     return PageContentWidget(
       key: ValueKey('page_content_${currentPage.id}_${currentPage.updatedAt.toString()}'),
       page: currentPage,

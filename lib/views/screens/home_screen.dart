@@ -88,7 +88,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
     final hasCompletedOnboarding = prefs.getBool('onboarding_completed') ?? false;
     
+    // 온보딩을 완료했고, 아직 툴팁을 표시하지 않은 경우에만 툴팁 표시
     if (hasCompletedOnboarding && !hasShownTooltip) {
+      debugPrint('온보딩 완료 상태: $hasCompletedOnboarding, 툴팁 표시 상태: $hasShownTooltip');
+      // 앱을 처음 사용할 때만 툴팁 표시
       if (mounted) {
         setState(() {
           _showTooltip = true;
@@ -106,6 +109,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           });
         }
       });
+    } else {
+      // 툴팁이 아직 표시되지 않았으면서 온보딩이 완료되지 않은 경우
+      if (!hasCompletedOnboarding) {
+        // 온보딩이 끝나지 않은 경우 툴팁 표시 상태를 초기화
+        await prefs.setBool('hasShownTooltip', false);
+      }
+      
+      setState(() {
+        _showTooltip = false;
+      });
+      
+      debugPrint('툴팁 표시 안함. 온보딩 완료: $hasCompletedOnboarding, 이전에 표시함: $hasShownTooltip');
     }
   }
 

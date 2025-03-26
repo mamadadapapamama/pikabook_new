@@ -178,7 +178,14 @@ class NoteDetailBottomBar extends StatelessWidget {
   // 네비게이션 버튼 위젯
   Widget _buildNavigationButton({required IconData icon, VoidCallback? onTap}) {
     return IconButton(
-      onPressed: onTap,
+      onPressed: onTap != null ? () {
+        // 탭이 가능한 상태일 때만 실행
+        debugPrint('네비게이션 버튼 클릭: ${icon == Icons.arrow_back_ios_rounded ? "이전" : "다음"}');
+        
+        // 페이지 전환 직후 텍스트 렌더링 지연 방지를 위한 short delay
+        // 페이지 변경 콜백 호출
+        onTap();
+      } : null,
       icon: Icon(
         icon, 
         color: onTap != null ? ColorTokens.secondary : Colors.grey.shade300,

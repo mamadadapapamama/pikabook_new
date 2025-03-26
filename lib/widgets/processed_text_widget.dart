@@ -197,7 +197,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   }
 
   /// **선택 가능한 텍스트 위젯 생성**
-  Widget _buildSelectableText(String text, {bool isOriginal = false}) {
+  Widget _buildSelectableText(
+    String text, {
+    TextStyle? style,
+    bool isOriginal = false,
+  }) {
     // 텍스트가 비어있으면 빈 컨테이너 반환
     if (text.isEmpty) {
       return const SizedBox.shrink();
@@ -206,6 +210,21 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     if (kDebugMode) {
       debugPrint('_buildSelectableText 호출: 텍스트 길이=${text.length}');
     }
+    
+    // 기본 스타일 설정
+    final TextStyle defaultStyle = isOriginal 
+      ? TypographyTokens.body1.copyWith(
+          fontSize: 18, 
+          height: 1.5,
+          color: ColorTokens.textPrimary,
+        )
+      : TypographyTokens.body2.copyWith(
+          fontSize: 14,
+          color: ColorTokens.textSecondary,
+        );
+        
+    // 제공된 스타일 또는 기본 스타일 사용
+    final effectiveStyle = style ?? defaultStyle;
 
     // 하이라이트된 텍스트 스팬 생성
     final textSpans = TextHighlightManager.buildHighlightedText(
@@ -219,17 +238,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           debugPrint('텍스트 선택 중에는 하이라이트된 단어 탭 무시: $word');
         }
       },
-      normalStyle: isOriginal 
-          ? GoogleFonts.notoSans(
-              fontSize: 20, 
-              fontWeight: FontWeight.w500,
-              color: Colors.black,
-            )
-          : GoogleFonts.notoSansKr(
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              color: ColorTokens.textSecondary,
-            ),
+      normalStyle: effectiveStyle,
     );
 
     // 클래스 멤버 ValueNotifier 사용
@@ -241,17 +250,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         return SelectableText.rich(
           TextSpan(
             children: textSpans,
-            style: isOriginal 
-                ? GoogleFonts.notoSans(
-                    fontSize: 20, 
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black,
-                  )
-                : GoogleFonts.notoSansKr(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: ColorTokens.textSecondary,
-                  ),
+            style: effectiveStyle,
           ),
           contextMenuBuilder: (context, editableTextState) {
             return ContextMenuManager.buildContextMenu(
@@ -378,6 +377,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             margin: const EdgeInsets.only(bottom: 8.0),
             child: _buildSelectableText(
               widget.processedText.fullOriginalText,
+              style: TypographyTokens.subtitle2Cn.copyWith(
+                fontWeight: FontWeight.w600, 
+                height: 1.5,
+                color: ColorTokens.textPrimary,
+              ),
               isOriginal: true,
             ),
           ),
@@ -443,7 +447,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             children: [
               // 원본 텍스트 (확장 가능하게)
               Expanded(
-                child: _buildSelectableText(segment.originalText, isOriginal: true),
+                child: _buildSelectableText(
+                  segment.originalText, 
+                   style: TypographyTokens.subtitle2Cn.copyWith(
+                    fontWeight: FontWeight.w600, 
+                    color: ColorTokens.textPrimary,
+                  ),
+                  isOriginal: true,
+                ),
               ),
               
               // TTS 재생 버튼
@@ -495,7 +506,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
                 child: Text(
                   segment.translatedText!,
-                  style: TypographyTokens.body2.copyWith(
+                  style: TypographyTokens.body1.copyWith(
                     color: ColorTokens.textSecondary,
                   ),
                 ),
