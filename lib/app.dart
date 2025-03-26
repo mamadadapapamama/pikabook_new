@@ -88,14 +88,8 @@ class _AppState extends State<App> {
       // InitializationService의 handleUserLogin을 호출하여 온보딩 상태 업데이트
       await widget.initializationService.handleUserLogin(user);
       
-      // Firestore에서 사용자의 온보딩 상태 확인
-      final firestore = FirebaseFirestore.instance;
-      final userDoc = await firestore.collection('users').doc(user.uid).get();
-      final hasCompletedOnboarding = userDoc.data()?['onboardingCompleted'] ?? false;
-      
-      // 로컬 저장소에도 온보딩 상태 저장
-      await _preferencesService.setOnboardingCompleted(hasCompletedOnboarding);
-      await _preferencesService.setHasOnboarded(hasCompletedOnboarding);
+      // 온보딩 상태 확인
+      final hasCompletedOnboarding = await _preferencesService.isOnboardingCompleted();
       
       if (mounted) {
         setState(() {
@@ -336,15 +330,15 @@ class _AppState extends State<App> {
           },
         );
       }
-    } else {
-      // 로그인 화면 표시
-      debugPrint('로그인 필요 - 로그인 화면 표시');
-      return LoginScreen(
-        initializationService: widget.initializationService,
-        onLoginSuccess: _handleLoginSuccess,
-        onSkipLogin: null, // 익명 로그인 기능 제거
-      );
     }
+    
+    // 로그인 화면 표시
+    debugPrint('로그인 필요 - 로그인 화면 표시');
+    return LoginScreen(
+      initializationService: widget.initializationService,
+      onLoginSuccess: _handleLoginSuccess,
+      onSkipLogin: null, // 익명 로그인 기능 제거
+    );
   }
 
   // 로딩 화면 (스플래시 화면 역할)

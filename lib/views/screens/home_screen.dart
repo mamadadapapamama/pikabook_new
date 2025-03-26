@@ -31,16 +31,44 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   final UserPreferencesService _userPreferences = UserPreferencesService();
   String _noteSpaceName = '';
   bool _showTooltip = false;
+  late AnimationController _animationController;
+  late Animation<double> _animation;
   
   @override
   void initState() {
     super.initState();
     _loadNoteSpaceName();
     _checkOnboardingStatus();
+    
+    // 애니메이션 컨트롤러 초기화
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+    
+    // 위아래로 움직이는 애니메이션 설정
+    _animation = Tween<double>(
+      begin: -4.0,
+      end: 4.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ))..addListener(() {
+      setState(() {});
+    });
+    
+    // 애니메이션 반복 설정
+    _animationController.repeat(reverse: true);
+  }
+  
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
   
   Future<void> _loadNoteSpaceName() async {
@@ -55,17 +83,20 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _checkOnboardingStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
-    final hasCompletedOnboarding = prefs.getBool('hasCompletedOnboarding') ?? false;
+    final hasCompletedOnboarding = prefs.getBool('onboarding_completed') ?? false;
     
     if (hasCompletedOnboarding && !hasShownTooltip) {
-      setState(() {
-        _showTooltip = true;
-      });
+      if (mounted) {
+        setState(() {
+          _showTooltip = true;
+        });
+      }
+      
       // 툴팁을 표시했다고 표시
       await prefs.setBool('hasShownTooltip', true);
       
-      // 3초 후에 툴팁 숨기기
-      Future.delayed(const Duration(seconds: 3), () {
+      // 10초 후에 툴팁 숨기기
+      Future.delayed(const Duration(seconds: 10), () {
         if (mounted) {
           setState(() {
             _showTooltip = false;
@@ -101,109 +132,147 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         body: SafeArea(
           bottom: false,
-          child: Consumer<HomeViewModel>(
-            builder: (context, viewModel, child) {
-              if (viewModel.isLoading) {
-                return const DotLoadingIndicator(message: '노트 불러오는 중...');
-              }
-
-              if (viewModel.error != null) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: SpacingTokens.iconSizeXLarge,
-                        color: ColorTokens.error,
+          child: Column(
+            children: [
+              if (_showTooltip)
+                Transform.translate(
+                  offset: Offset(0, _animation.value),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: ColorTokens.primarylight.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: ColorTokens.primary.withOpacity(0.3),
+                        width: 1,
                       ),
-                      SizedBox(height: SpacingTokens.md),
-                      Text(
-                        viewModel.error!,
-                        textAlign: TextAlign.center,
-                        style: TypographyTokens.body1,
-                      ),
-                      SizedBox(height: SpacingTokens.md),
-                      ElevatedButton(
-                        onPressed: () => viewModel.refreshNotes(),
-                        child: const Text('다시 시도'),
-                        style: UITokens.primaryButtonStyle,
-                      ),
-                    ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "노트 저장 공간이 성공적으로 만들어졌어요!",
+                          style: TypographyTokens.body2.copyWith(
+                            color: ColorTokens.textPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "이제 이미지를 올려, 스마트 노트를 만들어보세요.",
+                          style: TypographyTokens.body2.copyWith(
+                            color: ColorTokens.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                );
-              }
+                ),
+              Expanded(
+                child: Consumer<HomeViewModel>(
+                  builder: (context, viewModel, child) {
+                    if (viewModel.isLoading) {
+                      return const DotLoadingIndicator(message: '노트 불러오는 중...');
+                    }
 
-              if (!viewModel.hasNotes) {
-                // Zero State 디자인
-                return _buildZeroState(context);
-              }
-
-              // RefreshIndicator로 감싸서 pull to refresh 기능 추가
-              return RefreshIndicator(
-                onRefresh: () => viewModel.refreshNotes(),
-                color: ColorTokens.primary,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: SpacingTokens.md,
-                    vertical: SpacingTokens.sm,
-                  ),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: viewModel.notes.length,
-                    itemBuilder: (context, index) {
-                      // 일반 노트 아이템
-                      final note = viewModel.notes[index];
-                      return NoteListItem(
-                        note: note,
-                        onTap: () => _navigateToNoteDetail(context, note.id!),
-                        onFavoriteToggle: (isFavorite) {
-                          if (note.id != null) {
-                            viewModel.toggleFavorite(note.id!, isFavorite);
-                          }
-                        },
-                        onDelete: () {
-                          if (note.id != null) {
-                            viewModel.deleteNote(note.id!);
-                          }
-                        },
+                    if (viewModel.error != null) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: SpacingTokens.iconSizeXLarge,
+                              color: ColorTokens.error,
+                            ),
+                            SizedBox(height: SpacingTokens.md),
+                            Text(
+                              viewModel.error!,
+                              textAlign: TextAlign.center,
+                              style: TypographyTokens.body1,
+                            ),
+                            SizedBox(height: SpacingTokens.md),
+                            ElevatedButton(
+                              onPressed: () => viewModel.refreshNotes(),
+                              child: const Text('다시 시도'),
+                              style: UITokens.primaryButtonStyle,
+                            ),
+                          ],
+                        ),
                       );
+                    }
+
+                    if (!viewModel.hasNotes) {
+                      // Zero State 디자인
+                      return _buildZeroState(context);
+                    }
+
+                    // RefreshIndicator로 감싸서 pull to refresh 기능 추가
+                    return RefreshIndicator(
+                      onRefresh: () => viewModel.refreshNotes(),
+                      color: ColorTokens.primary,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: SpacingTokens.md,
+                          vertical: SpacingTokens.sm,
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: viewModel.notes.length,
+                          itemBuilder: (context, index) {
+                            // 일반 노트 아이템
+                            final note = viewModel.notes[index];
+                            return NoteListItem(
+                              note: note,
+                              onTap: () => _navigateToNoteDetail(context, note.id!),
+                              onFavoriteToggle: (isFavorite) {
+                                if (note.id != null) {
+                                  viewModel.toggleFavorite(note.id!, isFavorite);
+                                }
+                              },
+                              onDelete: () {
+                                if (note.id != null) {
+                                  viewModel.deleteNote(note.id!);
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Consumer<HomeViewModel>(
+                    builder: (context, viewModel, _) {
+                      if (viewModel.hasNotes) {
+                        return FloatingActionButton(
+                          onPressed: () => _showImagePickerBottomSheet(context),
+                          tooltip: '새 노트 만들기',
+                          backgroundColor: ColorTokens.primary,
+                          child: Icon(
+                            Icons.add,
+                            color: Colors.white,
+                            size: SpacingTokens.iconSizeMedium,
+                          ),
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink(); // 노트가 없을 때는 FAB 숨김
                     },
                   ),
                 ),
-              );
-            },
+              ),
+            ],
           ),
-        ),
-        // 노트가 있을 때만 FAB 표시
-        floatingActionButton: Consumer<HomeViewModel>(
-          builder: (context, viewModel, _) {
-            if (viewModel.hasNotes) {
-              return Container(
-                width: SpacingTokens.fabSizeSmall,
-                height: SpacingTokens.fabSizeSmall,
-                margin: EdgeInsets.only(
-                  right: SpacingTokens.sm,
-                  bottom: SpacingTokens.lg,
-                ),
-                child: FloatingActionButton(
-                  onPressed: () => _showImagePickerBottomSheet(context),
-                  tooltip: '새 노트 만들기',
-                  backgroundColor: ColorTokens.primary,
-                  child: Icon(
-                    Icons.add,
-                    color: Colors.white,
-                    size: SpacingTokens.iconSizeMedium,
-                  ),
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
-                  ),
-                ),
-              );
-            }
-            return const SizedBox.shrink(); // 노트가 없을 때는 FAB 숨김
-          },
         ),
       ),
     );
@@ -242,7 +311,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 48),
             
             Text(
-              '번역이 필요한 \n이미지를 올려주세요.',
+              '번역이 필요한\n이미지를 올려주세요.',
+              textAlign: TextAlign.center,
               style: TypographyTokens.subtitle1.copyWith(
                 color: ColorTokens.textPrimary,
                 fontWeight: FontWeight.w600,
