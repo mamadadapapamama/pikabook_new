@@ -367,42 +367,26 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       children: [
         // 원본 텍스트 표시
         if (widget.processedText.fullOriginalText.isNotEmpty)
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: ColorTokens.surface,
-              borderRadius: BorderRadius.circular(8.0),
+          _buildSelectableText(
+            widget.processedText.fullOriginalText,
+            style: TypographyTokens.subtitle2Cn.copyWith(
+              fontWeight: FontWeight.w500, 
+              height: 1.5,
+              color: ColorTokens.textPrimary,
             ),
-            padding: const EdgeInsets.all(16.0),
-            margin: const EdgeInsets.only(bottom: 8.0),
-            child: _buildSelectableText(
-              widget.processedText.fullOriginalText,
-              style: TypographyTokens.subtitle2Cn.copyWith(
-                fontWeight: FontWeight.w500, 
-                height: 1.5,
-                color: ColorTokens.textPrimary,
-              ),
-              isOriginal: true,
-            ),
+            isOriginal: true,
           ),
 
-        // 번역 텍스트 표시
+        // 번역 텍스트 표시 - 래퍼 제거하고 직접 표시
         if (widget.processedText.showTranslation &&
             widget.processedText.fullTranslatedText != null &&
             widget.processedText.fullTranslatedText!.isNotEmpty)
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: ColorTokens.greyLight,
-              borderRadius: BorderRadius.circular(8.0),
-            ),
-            padding: const EdgeInsets.all(16.0),
+          Padding(
+            padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
             child: Text(
               widget.processedText.fullTranslatedText!,
-              style: GoogleFonts.notoSansKr(
-                fontSize: 16.0,
-                height: 1.5,
-                color: ColorTokens.textPrimary,
+              style: TypographyTokens.body1.copyWith(
+                color: ColorTokens.textSecondary,
               ),
             ),
           ),
@@ -602,7 +586,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       behavior: HitTestBehavior.translucent,
       child: Container(
         color: ColorTokens.surface, // 배경색을 흰색으로 설정
-        padding: const EdgeInsets.all(0), // 패딩 제거 (PageContentWidget에서 패딩 적용)
+        padding: const EdgeInsets.only(top: 8.0), // 첫 번째 세그먼트를 위한 상단 패딩 추가
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

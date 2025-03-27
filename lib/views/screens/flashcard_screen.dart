@@ -13,6 +13,7 @@ import '../../widgets/flashcard_ui.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../widgets/common/pika_app_bar.dart';
+import '../../services/unified_cache_service.dart';
 
 /// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
 /// 플래시카드 UI interaction 담당 (swipe, flip, tts, delete )
@@ -273,6 +274,11 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       if (noteDoc.exists && mounted) {
         // 노트 정보 업데이트 (앱바 카운터 업데이트를 위해)
         final updatedNote = Note.fromFirestore(noteDoc);
+        
+        // 노트 캐시 업데이트
+        await UnifiedCacheService().cacheNote(updatedNote);
+        
+        debugPrint('플래시카드 삭제 후 노트 캐시 업데이트 완료: 플래시카드 수 ${updatedNote.flashcardCount}개');
 
         // 결과 값 설정 (노트 디테일 화면으로 돌아갈 때 사용)
         Navigator.of(context).pop(updatedNote);
