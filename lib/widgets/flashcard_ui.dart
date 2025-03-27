@@ -27,123 +27,101 @@ class FlashCardUI {
   }) {
     final bool isCurrentCard = index == currentIndex;
 
-    return Transform.scale(
-      scale: scale,
-      child: Transform.translate(
-        offset: offset,
-        child: Stack(
-          children: [
-            // 플래시카드
-            FlipCard(
-              key: isCurrentCard ? flipCardKey : null,
-              direction: FlipDirection.HORIZONTAL,
-              speed: 300,
-              onFlipDone: (isFront) {
-                if (isCurrentCard) {
-                  onFlip();
-                }
-              },
-              front: buildCardSide(
-                card: card,
-                bgColor: ColorTokens.flashcardBackground,
-                textColor: ColorTokens.textPrimary,
-                isFront: true,
-                isCurrentCard: isCurrentCard,
-                cardIndex: index,
-                isSpeaking: isSpeaking,
-                onSpeak: onSpeak,
-                onStopSpeaking: onStopSpeaking,
-                getNextCardInfo: getNextCardInfo,
-                getPreviousCardInfo: getPreviousCardInfo,
-                onWordTap: onWordTap,
-              ),
-              back: buildCardSide(
-                card: card,
-                bgColor: ColorTokens.surface,
-                textColor: ColorTokens.textPrimary,
-                isFront: false,
-                isCurrentCard: isCurrentCard,
-                cardIndex: index,
-                isSpeaking: isSpeaking,
-                onSpeak: onSpeak,
-                onStopSpeaking: onStopSpeaking,
-                getNextCardInfo: getNextCardInfo,
-                getPreviousCardInfo: getPreviousCardInfo,
-                onWordTap: onWordTap,
-              ),
-            ),
-            
-            // 삭제 힌트와 버튼 (카드 위에 표시)
-            if (isCurrentCard)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: ColorTokens.primary.withOpacity(0.08),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(SpacingTokens.radiusMedium),
-                      topRight: Radius.circular(SpacingTokens.radiusMedium),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // 삭제 버튼
-                      GestureDetector(
-                        onTap: onDelete,
-                        child: Container(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: ColorTokens.error.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.delete_outline,
-                                color: ColorTokens.error,
-                                size: 14,
-                              ),
-                              SizedBox(width: 2),
-                              Text(
-                                '삭제',
-                                style: TextStyle(
-                                  fontSize: 12.0,
-                                  color: ColorTokens.error,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      
-                      // 스와이프 안내
-                      Icon(
-                        Icons.arrow_upward,
-                        color: ColorTokens.textSecondary,
-                        size: 12,
-                      ),
-                      SizedBox(width: 4),
-                      Text(
-                        '위로 스와이프해도 삭제됩니다',
-                        style: TextStyle(
-                          fontSize: 12.0,
-                          color: ColorTokens.textSecondary,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
+    return Column(
+      children: [
+        // 삭제 힌트와 버튼 (카드 위에 별도로 표시)
+        if (isCurrentCard)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 삭제 버튼
+                Icon(
+                  Icons.delete_outline,
+                  color: const Color(0xFFD3E0DD),
+                  size: 24,
+                ),
+                const SizedBox(height: 4),
+                // 스와이프 안내 텍스트
+                Text(
+                  '위로 스와이프 해도 삭제 됩니다.',
+                  style: TextStyle(
+                    fontSize: 12.0,
+                    color: const Color(0xFFD3E0DD),
+                    fontWeight: FontWeight.w400,
+                    fontFamily: 'Noto Sans KR',
                   ),
                 ),
+              ],
+            ),
+          ),
+        
+        // 플래시카드 본체
+        Transform.scale(
+          scale: scale,
+          child: Transform.translate(
+            offset: offset,
+            child: SizedBox(
+              width: 330, // 카드 너비를 피그마 디자인에 맞게 조정
+              height: 400, // 카드 높이를 피그마 디자인에 맞게 조정
+              child: FlipCard(
+                key: isCurrentCard ? flipCardKey : null,
+                direction: FlipDirection.HORIZONTAL,
+                speed: 300,
+                onFlipDone: (isFront) {
+                  if (isCurrentCard) {
+                    onFlip();
+                  }
+                },
+                front: buildCardSide(
+                  card: card,
+                  bgColor: const Color(0xFFFFF7D8), // Figma에서 가져온 색상
+                  textColor: ColorTokens.textPrimary,
+                  isFront: true,
+                  isCurrentCard: isCurrentCard,
+                  cardIndex: index,
+                  isSpeaking: isSpeaking,
+                  onSpeak: onSpeak,
+                  onStopSpeaking: onStopSpeaking,
+                  getNextCardInfo: getNextCardInfo,
+                  getPreviousCardInfo: getPreviousCardInfo,
+                  onWordTap: onWordTap,
+                ),
+                back: buildCardSide(
+                  card: card,
+                  bgColor: Colors.white, // 뒷면은 흰색 배경
+                  textColor: ColorTokens.textPrimary,
+                  isFront: false,
+                  isCurrentCard: isCurrentCard,
+                  cardIndex: index,
+                  isSpeaking: isSpeaking,
+                  onSpeak: onSpeak,
+                  onStopSpeaking: onStopSpeaking,
+                  getNextCardInfo: getNextCardInfo,
+                  getPreviousCardInfo: getPreviousCardInfo,
+                  onWordTap: onWordTap,
+                ),
               ),
-          ],
+            ),
+          ),
         ),
-      ),
+        
+        // 하단 가이드 텍스트
+        if (isCurrentCard)
+          Padding(
+            padding: const EdgeInsets.only(top: 12.0),
+            child: Text(
+              '좌우로 스와이프 해서 다음 카드로 이동',
+              style: TextStyle(
+                fontSize: 12.0,
+                color: const Color(0xFFD3E0DD),
+                fontWeight: FontWeight.w400,
+                fontFamily: 'Noto Sans KR',
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -189,10 +167,10 @@ class FlashCardUI {
 
           // TTS 버튼 (항상 표시)
           if (isCurrentCard)
-            buildTtsButton(ColorTokens.secondary, isSpeaking, onSpeak, onStopSpeaking),
+            buildTtsButton(const Color(0xFF226357), isSpeaking, onSpeak, onStopSpeaking),
 
-          // 카드 번호 표시 (좌상단)
-          buildCardNumberBadge(cardIndex, ColorTokens.tertiary, ColorTokens.secondary),
+          // 카드 번호 표시 (좌하단)
+          buildCardNumberBadge(cardIndex, const Color(0xFFFFD53C), Colors.white),
         ],
       ),
     );
@@ -202,16 +180,16 @@ class FlashCardUI {
   static BoxDecoration buildCardDecoration(Color bgColor, bool isCurrentCard) {
     return BoxDecoration(
       color: bgColor,
-      borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
+      borderRadius: BorderRadius.circular(20), // 피그마에서 가져온 값으로 조정
       boxShadow: [
         BoxShadow(
-          color: ColorTokens.textPrimary.withOpacity(0.15),
-          blurRadius: SpacingTokens.md - 6,
-          offset: const Offset(0, SpacingTokens.xs),
+          color: Colors.black.withOpacity(0.15),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
         ),
       ],
       border: Border.all(
-        color: ColorTokens.tertiary,
+        color: const Color(0xFFFFD53C), // 피그마에서 가져온 테두리 색상
         width: 2.0,
       ),
     );
@@ -226,7 +204,7 @@ class FlashCardUI {
   }) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(SpacingTokens.lg),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -236,18 +214,18 @@ class FlashCardUI {
               style: TextStyle(
                 fontSize: 36.0,
                 fontWeight: FontWeight.w700,
-                color: textColor,
-                fontFamily: 'Noto Sans KR',
+                color: Colors.black,
+                fontFamily: 'Noto Sans HK',
               ),
               textAlign: TextAlign.center,
             ),
             // 핀인 표시 (항상 표시)
-            SizedBox(height: SpacingTokens.xs),
+            const SizedBox(height: 20),
             Text(
               pinyin.isEmpty ? 'xíng zǒu' : pinyin,
               style: TextStyle(
                 fontSize: 14.0,
-                color: ColorTokens.textGrey,
+                color: const Color(0xFF969696),
                 fontFamily: 'Poppins',
                 fontWeight: FontWeight.w500,
               ),
@@ -269,7 +247,7 @@ class FlashCardUI {
   }) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(SpacingTokens.lg),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -279,32 +257,32 @@ class FlashCardUI {
               style: TextStyle(
                 fontSize: 32.0,
                 fontWeight: FontWeight.w700,
-                color: textColor,
+                color: Colors.black,
                 fontFamily: 'Noto Sans KR',
               ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: SpacingTokens.md),
+            const SizedBox(height: 20),
             
             // 원문 (중국어)
             Text(
               original,
               style: TextStyle(
-                fontSize: 24.0,
+                fontSize: 22.0,
                 fontWeight: FontWeight.w500,
-                color: ColorTokens.secondary,
-                fontFamily: 'Noto Sans KR',
+                color: const Color(0xFF969696),
+                fontFamily: 'Noto Sans HK',
               ),
               textAlign: TextAlign.center,
             ),
             
             // 핀인 표시 (항상 표시)
-            SizedBox(height: SpacingTokens.xs),
+            const SizedBox(height: 8),
             Text(
               pinyin.isEmpty ? 'xíng zǒu' : pinyin,
               style: TextStyle(
                 fontSize: 14.0,
-                color: ColorTokens.textGrey,
+                color: const Color(0xFF969696),
                 fontFamily: 'Poppins',
                 fontWeight: FontWeight.w500,
               ),
@@ -324,20 +302,18 @@ class FlashCardUI {
     Function() onStopSpeaking,
   ) {
     return Positioned(
-      top: SpacingTokens.md,
-      right: SpacingTokens.md,
-      child: Container(
-        decoration: BoxDecoration(
-          color: ColorTokens.secondary.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: IconButton(
-          icon: Icon(
+      top: 20,
+      right: 20,
+      child: InkWell(
+        onTap: isSpeaking ? onStopSpeaking : onSpeak,
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: Icon(
             isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
             color: iconColor,
-            size: SpacingTokens.iconSizeMedium,
+            size: 24,
           ),
-          onPressed: isSpeaking ? onStopSpeaking : onSpeak,
         ),
       ),
     );
@@ -346,8 +322,8 @@ class FlashCardUI {
   /// 카드 번호 배지 생성
   static Widget buildCardNumberBadge(int index, Color bgColor, Color textColor) {
     return Positioned(
-      bottom: SpacingTokens.md,
-      left: SpacingTokens.md,
+      bottom: 20,
+      left: 20,
       child: Container(
         width: 24,
         height: 24,

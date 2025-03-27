@@ -241,17 +241,17 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             _currentIndex = _flashCards.length - 1;
           }
         });
-
-        // 플래시카드가 모두 삭제된 경우 노트 디테일 화면으로 돌아감
-        if (_flashCards.isEmpty && widget.noteId != null) {
-          // 노트 정보 업데이트 후 노트 디테일 화면으로 돌아감
-          await _updateNoteInfoAndNavigateBack(widget.noteId!);
-        }
-
+        
         // 삭제 완료 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('플래시카드가 삭제되었습니다.')),
         );
+
+        // 플래시카드가 비어 있는 경우 노트 정보 업데이트 (삭제 후에도 화면은 그대로 유지)
+        if (_flashCards.isEmpty && widget.noteId != null) {
+          // 노트 정보만 업데이트 (화면 이동 없음)
+          await _updateNoteInfoWithoutNavigation(widget.noteId!);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -262,8 +262,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
-  /// 노트 정보 업데이트 후 노트 디테일 화면으로 돌아감
-  Future<void> _updateNoteInfoAndNavigateBack(String noteId) async {
+  /// 노트 정보 업데이트 (화면 이동 없음)
+  Future<void> _updateNoteInfoWithoutNavigation(String noteId) async {
     try {
       // Firestore에서 직접 노트 가져오기
       final noteDoc = await FirebaseFirestore.instance
@@ -279,21 +279,9 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
         await UnifiedCacheService().cacheNote(updatedNote);
         
         debugPrint('플래시카드 삭제 후 노트 캐시 업데이트 완료: 플래시카드 수 ${updatedNote.flashcardCount}개');
-
-        // 결과 값 설정 (노트 디테일 화면으로 돌아갈 때 사용)
-        Navigator.of(context).pop(updatedNote);
-      } else {
-        // 노트 문서가 없는 경우 그냥 돌아감
-        if (mounted) {
-          Navigator.of(context).pop(true);
-        }
       }
     } catch (e) {
       debugPrint('노트 정보 업데이트 중 오류 발생: $e');
-      // 오류 발생 시에도 화면은 돌아가도록 함
-      if (mounted) {
-        Navigator.of(context).pop(true);
-      }
     }
   }
 
@@ -424,10 +412,29 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     return WillPopScope(
       // 화면을 나갈 때 노트 정보 업데이트
       onWillPop: () async {
-        // noteId가 있고 플래시카드가 있는 경우에만 노트 정보 업데이트
-        if (widget.noteId != null && _flashCards.isNotEmpty) {
-          await _updateNoteInfoAndNavigateBack(widget.noteId!);
-          return false; // Navigator.pop이 이미 호출되었으므로 false 반환
+        // noteId가 있는 경우에는 항상 노트 정보 업데이트 (플래시카드가 없어도 0으로 표시하기 위함)
+        if (widget.noteId != null) {
+          try {
+            // Firestore에서 직접 노트 가져오기
+            final noteDoc = await FirebaseFirestore.instance
+                .collection('notes')
+                .doc(widget.noteId!)
+                .get();
+
+            if (noteDoc.exists && mounted) {
+              // 노트 정보 업데이트
+              final updatedNote = Note.fromFirestore(noteDoc);
+              
+              // 노트 캐시 업데이트
+              await UnifiedCacheService().cacheNote(updatedNote);
+              
+              // 결과 반환 (노트 디테일 화면으로 돌아갈 때 사용)
+              Navigator.of(context).pop(updatedNote);
+              return false; // Navigator.pop이 이미 호출되었으므로 false 반환
+            }
+          } catch (e) {
+            debugPrint('노트 정보 업데이트 중 오류 발생: $e');
+          }
         }
         return true; // 일반적인 뒤로 가기 동작 수행
       },
