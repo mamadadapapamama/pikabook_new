@@ -247,7 +247,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           const SnackBar(content: Text('플래시카드가 삭제되었습니다.')),
         );
 
-        // 플래시카드가 비어 있는 경우 즉시 노트 화면으로 돌아감
+        // 플래시카드가 비어 있는 경우에만 노트 화면으로 돌아감
+        // 그렇지 않으면 현재 화면에 남아 있음
         if (_flashCards.isEmpty && widget.noteId != null && mounted) {
           // 동일한 형식으로 결과 반환 (flashcardCount: 0)
           Navigator.of(context).pop({
