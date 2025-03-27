@@ -123,7 +123,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       onFlashCardPressed: onFlashCardPressed,
       currentPageIndex: currentPageIndex,
       totalPages: totalPages,
-      height: 70,
+      height: 80,
       actions: [
         if (totalPages > 0)
           Padding(
@@ -192,7 +192,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   // 진행 상태 표시바 생성 함수
   static Widget _buildProgressBar(int currentPageIndex, int totalPages) {
     return SizedBox(
-      height: 2,
+      height: 4, // 높이를 4px로 증가
       width: double.infinity,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -206,13 +206,13 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               // 배경 바
               Container(
                 width: double.infinity,
-                height: 2,
+                height: 4, // 높이를 4px로 증가
                 color: ColorTokens.divider,
               ),
               // 진행 바
               Container(
                 width: progressWidth,
-                height: 2,
+                height: 4, // 높이를 4px로 증가
                 color: ColorTokens.primary,
               ),
             ],

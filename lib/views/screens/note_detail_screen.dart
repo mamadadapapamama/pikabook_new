@@ -13,7 +13,6 @@ import '../../services/tts_service.dart';
 import '../../services/enhanced_ocr_service.dart';
 import '../../services/user_preferences_service.dart';
 import '../../services/page_content_service.dart';
-import '../../widgets/note_detail_app_bar.dart';
 import '../../widgets/note_action_bottom_sheet.dart';
 import '../../widgets/page_content_widget.dart';
 import '../../widgets/edit_title_dialog.dart';
@@ -944,7 +943,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           ? const Center(
               child: DotLoadingIndicator(
                 message: '노트 로딩 중...',
-                dotColor: Color(0xFFFFD53C),
               ),
             )
           : _error != null
