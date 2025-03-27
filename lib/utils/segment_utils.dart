@@ -17,64 +17,65 @@ class SegmentUtils {
     Future<bool?> Function(DismissDirection)? confirmDismiss,
     BorderRadius? borderRadius,
   }) {
-    return Dismissible(
-      key: key,
-      direction: direction,
-      background: Container(
-        alignment: direction == DismissDirection.endToStart 
-            ? Alignment.centerRight 
-            : Alignment.centerLeft,
-        padding: direction == DismissDirection.endToStart 
-            ? const EdgeInsets.only(right: 20.0)
-            : const EdgeInsets.only(left: 20.0),
-        decoration: BoxDecoration(
+    return ClipRRect(
+      borderRadius: borderRadius ?? BorderRadius.zero,
+      child: Dismissible(
+        key: key,
+        direction: direction,
+        // 커스텀 배경 위젯 - ClipRRect로 라운드 처리
+        background: Container(
           color: ColorTokens.deleteSwipeBackground,
-          borderRadius: borderRadius,
-        ),
-        child: const Icon(
-          Icons.delete,
-          color: Colors.white,
-        ),
-      ),
-      behavior: HitTestBehavior.opaque,
-      movementDuration: const Duration(milliseconds: 200),
-      confirmDismiss: confirmDismiss ?? ((direction) async {
-        // 기본 확인 다이얼로그
-        return await showDialog<bool>(
-          context: _getApplicationContext(),
-          builder: (context) => AlertDialog(
-            title: const Text('세그먼트 삭제'),
-            content: const Text('이 세그먼트를 삭제하시겠습니까?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('취소'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('삭제'),
-                style: TextButton.styleFrom(foregroundColor: ColorTokens.error),
-              ),
-            ],
+          alignment: direction == DismissDirection.endToStart 
+              ? Alignment.centerRight 
+              : Alignment.centerLeft,
+          child: Padding(
+            padding: direction == DismissDirection.endToStart 
+                ? const EdgeInsets.only(right: 20.0)
+                : const EdgeInsets.only(left: 20.0),
+            child: const Icon(
+              Icons.delete,
+              color: Colors.white,
+            ),
           ),
-        ) ?? false;
-      }),
-      onDismissed: (_) => onDelete(),
-      child: child,
+        ),
+        behavior: HitTestBehavior.opaque,
+        movementDuration: const Duration(milliseconds: 200),
+        confirmDismiss: confirmDismiss ?? ((direction) async {
+          // 기본 확인 다이얼로그
+          try {
+            return await showDialog<bool>(
+              context: _getApplicationContext(),
+              builder: (context) => AlertDialog(
+                title: const Text('항목 삭제'),
+                content: const Text('이 항목을 삭제하시겠습니까?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('취소'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('삭제'),
+                    style: TextButton.styleFrom(foregroundColor: ColorTokens.error),
+                  ),
+                ],
+              ),
+            ) ?? false;
+          } catch (e) {
+            debugPrint('다이얼로그 표시 중 오류 발생: $e');
+            return false;
+          }
+        }),
+        onDismissed: (_) => onDelete(),
+        child: child,
+      ),
     );
   }
 
   // 현재 앱의 BuildContext를 얻기 위한 헬퍼 메서드
   static BuildContext _getApplicationContext() {
-    // GlobalKey를 통해 context를 가져올 수도 있지만, 
     // 여기서는 간단히 Navigator.of(context) 호출 시점에 context가 제공된다고 가정합니다.
     // 실제 사용 시에는 호출자가 context를 전달해야 합니다.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      debugPrint('AlertDialog Builder에 context가 필요합니다. 이 함수는 context가 제공된 상태에서 호출해야 합니다.');
-    });
-    
-    // 여기서 빈 BuildContext를 반환하면 오류가 발생할 수 있으므로,
-    // confirmDismiss 콜백을 사용할 때는 context를 명시적으로 전달하는 것이 좋습니다.
     throw UnimplementedError('confirmDismiss 콜백을 직접 제공하세요.');
   }
 } 

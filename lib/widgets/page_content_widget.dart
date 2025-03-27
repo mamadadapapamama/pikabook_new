@@ -65,20 +65,50 @@ class PageContentWidget extends StatefulWidget {
 }
 
 class _PageContentWidgetState extends State<PageContentWidget> {
-  final PageContentService _pageContentService = PageContentService();
-  final TextReaderService _textReaderService = TextReaderService(); // TTS 서비스 추가
-
-  ProcessedText? _processedText;
   bool _isProcessingText = false;
+  ProcessedText? _processedText;
+  
+  // 서비스 객체 선언 변경
+  late PageContentService _pageContentService;
+  late TextReaderService _textReaderService;
+  
   Set<String> _flashcardWords = {};
   int? _playingSegmentIndex; // 현재 재생 중인 세그먼트 인덱스 추가
+
+  // 클래스 레벨 변수로 스타일 정의
+  late final TextStyle _originalTextStyle;
+  late final TextStyle _pinyinTextStyle;
+  late final TextStyle _translatedTextStyle;
 
   @override
   void initState() {
     super.initState();
-    _processPageText();
+    
+    // 서비스 초기화
+    _pageContentService = PageContentService();
+    _textReaderService = TextReaderService();
+    
+    // 플래시카드 단어 목록 업데이트
     _updateFlashcardWords();
-    _initTextReader(); // TTS 초기화 추가
+    
+    // 스타일 초기화
+    _initStyles();
+    
+    // 비동기 데이터 로드
+    if (widget.page.id != null) {
+      // 이미 처리된 텍스트가 있는지 확인
+      _processedText = _pageContentService.getProcessedText(widget.page.id!);
+      
+      if (_processedText == null) {
+        // 텍스트 처리 상태로 변경
+        setState(() {
+          _isProcessingText = true;
+        });
+        
+        // 비동기로 페이지 처리
+        _processPageText();
+      }
+    }
   }
 
   @override
@@ -260,23 +290,10 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 onDeleteSegment: widget.onDeleteSegment,
                 onPlayTts: _playTts,
                 playingSegmentIndex: _playingSegmentIndex,
-                // UI 스타일 전달 - PageContentWidget에서 모든 스타일링 관리
-                originalTextStyle: TypographyTokens.subtitle2Cn.copyWith(
-                  fontSize: 22,
-                  height: 1.5,
-                  fontWeight: FontWeight.w500,
-                  color: ColorTokens.textPrimary,
-                ),
-                pinyinTextStyle: TypographyTokens.body2En.copyWith(
-                  color: ColorTokens.textGrey,
-                  fontWeight: FontWeight.w400,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
-                translatedTextStyle: TypographyTokens.body1.copyWith(
-                  color: ColorTokens.textSecondary,
-                  fontSize: 16,
-                ),
+                // UI 스타일 전달 - 클래스 레벨 스타일 변수 사용
+                originalTextStyle: _originalTextStyle,
+                pinyinTextStyle: _pinyinTextStyle,
+                translatedTextStyle: _translatedTextStyle,
               );
             }),
           ]
@@ -490,26 +507,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       return _buildFullTextView();
     }
     
-    // 스타일 정의 - ProcessedTextWidget에 전달하는 스타일과 일치시킴
-    final originalTextStyle = TypographyTokens.subtitle2Cn.copyWith(
-      fontSize: 20,
-      height: 1.4,
-      fontWeight: FontWeight.w500,
-      color: ColorTokens.textPrimary,
-    );
-    
-    final pinyinTextStyle = TypographyTokens.caption.copyWith(
-      color: ColorTokens.textGrey,
-      fontSize: 12,
-      fontWeight: FontWeight.w400,
-      height: 1.2,
-    );
-    
-    final translatedTextStyle = TypographyTokens.body2.copyWith(
-      color: ColorTokens.textSecondary,
-      fontSize: 14,
-    );
-
     // 세그먼트 위젯 생성
     for (int i = 0; i < _processedText!.segments!.length; i++) {
       final segment = _processedText!.segments![i];
@@ -531,64 +528,96 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
       // 세그먼트 위젯 생성 (Dismissible로 감싸기)
       segmentWidgets.add(
-        SegmentUtils.buildDismissibleSegment(
-          key: ValueKey('segment_$i'),
-          direction: DismissDirection.startToEnd,
-          borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-          onDelete: () {
-            if (widget.onDeleteSegment != null) {
-              widget.onDeleteSegment!(i);
-            }
-          },
-          confirmDismiss: (direction) async {
-            // 세그먼트 삭제 콜백이 없으면 삭제하지 않음
-            if (widget.onDeleteSegment == null) return false;
-            return true;
-          },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 첫번째 세그먼트 위에 여백 추가
-              if (i == 0)
-                const SizedBox(height: 8),
-                
-              // 원본 텍스트 표시 (항상 표시)
-              _buildSelectableText(
-                segment.originalText,
-                originalTextStyle,
+        Container(
+          margin: const EdgeInsets.only(bottom: 8.0),
+          child: SegmentUtils.buildDismissibleSegment(
+            key: ValueKey('segment_$i'),
+            direction: DismissDirection.startToEnd,
+            borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+            onDelete: () {
+              if (widget.onDeleteSegment != null) {
+                widget.onDeleteSegment!(i);
+              }
+            },
+            confirmDismiss: (direction) async {
+              // 세그먼트 삭제 콜백이 없으면 삭제하지 않음
+              if (widget.onDeleteSegment == null) return false;
+              return await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('세그먼트 삭제'),
+                  content: const Text('이 세그먼트를 삭제하시겠습니까?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('취소'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('삭제'),
+                      style: TextButton.styleFrom(foregroundColor: ColorTokens.error),
+                    ),
+                  ],
+                ),
+              ) ?? false;
+            },
+            // 콘텐츠 컨테이너
+            child: Material(
+              color: Colors.white,
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: ColorTokens.primarylight,
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 원본 텍스트 표시 (항상 표시)
+                      _buildSelectableText(
+                        segment.originalText,
+                        _originalTextStyle,
+                      ),
+
+                      // 핀인 표시 (showPinyin이 true일 때만)
+                      if (segment.pinyin != null && 
+                          segment.pinyin!.isNotEmpty && 
+                          _processedText!.showPinyin)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2.0),
+                          child: Text(
+                            segment.pinyin!,
+                            style: _pinyinTextStyle,
+                          ),
+                        ),
+
+                      // 번역 텍스트 표시 (showTranslation이 true일 때만)
+                      if (_processedText!.showTranslation && 
+                          segment.translatedText != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
+                          child: _buildSelectableText(
+                            segment.translatedText!,
+                            _translatedTextStyle,
+                          ),
+                        ),
+                      
+                      // 구분선 추가 (마지막 세그먼트가 아닌 경우)
+                      if (i < _processedText!.segments!.length - 1)
+                        const Divider(height: 24, thickness: 1),
+                      
+                      // 마지막 세그먼트에는 여백 추가
+                      if (i == _processedText!.segments!.length - 1)
+                        const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
               ),
-
-              // 핀인 표시 (showPinyin이 true일 때만)
-              if (segment.pinyin != null && 
-                  segment.pinyin!.isNotEmpty && 
-                  _processedText!.showPinyin)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2.0),
-                  child: Text(
-                    segment.pinyin!,
-                    style: pinyinTextStyle,
-                  ),
-                ),
-
-              // 번역 텍스트 표시 (showTranslation이 true일 때만)
-              if (_processedText!.showTranslation && 
-                  segment.translatedText != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
-                  child: _buildSelectableText(
-                    segment.translatedText!,
-                    translatedTextStyle,
-                  ),
-                ),
-                
-              // 구분선 추가 (마지막 세그먼트가 아닌 경우)
-              if (i < _processedText!.segments!.length - 1)
-                const Divider(height: 24, thickness: 1),
-              
-              // 마지막 세그먼트에는 여백 추가
-              if (i == _processedText!.segments!.length - 1)
-                const SizedBox(height: 24),
-            ],
+            ),
           ),
         ),
       );
@@ -618,24 +647,11 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     // 디버그 로그 추가
     debugPrint('_buildFullTextView 호출 - 전체 문장 모드 렌더링');
     
-    // 스타일 정의 - ProcessedTextWidget에 전달하는 스타일과 일치시킴
-    final originalTextStyle = TypographyTokens.subtitle2Cn.copyWith(
-      fontSize: 22,
-      height: 1.5,
-      fontWeight: FontWeight.w500,
-      color: ColorTokens.textPrimary,
-    );
-    
-    final translatedTextStyle = TypographyTokens.body1.copyWith(
-      color: ColorTokens.textSecondary,
-      fontSize: 16,
-    );
-    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 원본 텍스트 표시
-        _buildSelectableText(_processedText!.fullOriginalText, originalTextStyle),
+        _buildSelectableText(_processedText!.fullOriginalText, _originalTextStyle),
 
         // 번역 텍스트 표시 (번역이 있고 showTranslation이 true인 경우)
         if (_processedText!.fullTranslatedText != null && 
@@ -643,34 +659,46 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           Padding(
             padding: const EdgeInsets.only(top: 2.0),
             child:
-                _buildSelectableText(_processedText!.fullTranslatedText!, translatedTextStyle),
+                _buildSelectableText(_processedText!.fullTranslatedText!, _translatedTextStyle),
           ),
       ],
     );
   }
   
-  // 선택 가능한 텍스트 위젯 생성 - 메모이제이션 추가
+  // 선택 가능한 텍스트 위젯 생성
   Widget _buildSelectableText(String text, [TextStyle? style]) {
     if (text.isEmpty) {
       return const SizedBox.shrink();
     }
     
-    // 기본 스타일 설정
-    final defaultStyle = TypographyTokens.subtitle2Cn.copyWith(
-      fontSize: 22, // 폰트 사이즈 명시적 설정
-      height: 1.5,
-      fontWeight: FontWeight.w600,
-      color: ColorTokens.textPrimary,
-    );
-    
-    // 항상 제공된 스타일을 우선으로 사용
-    final effectiveStyle = style ?? defaultStyle;
-    
-    debugPrint('텍스트 스타일 적용: fontSize=${effectiveStyle.fontSize}, height=${effectiveStyle.height}');
+    // 항상 제공된 스타일을 사용
+    // 기본 스타일 정의는 이 메서드 밖에서 처리
+    final effectiveStyle = style;
     
     return SelectableText(
       text,
       style: effectiveStyle,
+    );
+  }
+
+  // 스타일 초기화 메서드
+  void _initStyles() {
+    _originalTextStyle = TypographyTokens.subtitle2Cn.copyWith(
+      fontSize: 20,
+      height: 1.2,
+      fontWeight: FontWeight.w500,
+      color: ColorTokens.textPrimary,
+    );
+    
+    _pinyinTextStyle = TypographyTokens.caption.copyWith(
+      color: ColorTokens.textGrey,
+      fontWeight: FontWeight.w400,
+      fontSize: 12,
+      height: 1.2,
+    );
+    
+    _translatedTextStyle = TypographyTokens.body2.copyWith(
+      color: ColorTokens.textSecondary,
     );
   }
 }
