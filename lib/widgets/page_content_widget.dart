@@ -525,7 +525,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   padding: const EdgeInsets.only(top: 2.0),
                   child: Text(
                     segment.pinyin!,
-                    style: TypographyTokens.body2En.copyWith(
+                    style: TypographyTokens.captionEn.copyWith(
                       color: ColorTokens.textGrey,
                     ),
                   ),
