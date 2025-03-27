@@ -11,6 +11,7 @@ import '../utils/context_menu_manager.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../utils/segment_utils.dart';
 
 /// 페이지의 텍스트 프로세싱(OCR, 번역, pinyin, highlight)이 완료되면, 텍스트 처리 결과를 표시하는 위젯
 
@@ -496,35 +497,28 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   ),
                 ),
               ),
-          
-          // 구분선 추가 (마지막 세그먼트가 아닌 경우)
-          if (i < widget.processedText.segments!.length - 1)
-            const Padding(
-              padding: EdgeInsets.only(top: 16.0, bottom: 16.0),
-              child: Divider(height: 1, thickness: 1, color: ColorTokens.dividerLight),
-            ),
         ],
+      );
+      
+      // 세그먼트 컨테이너 래핑
+      Widget wrappedSegmentContainer = Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4.0),
+        ),
+        child: segmentContainer,
       );
       
       // 삭제 가능 조건: 세그먼트 모드(showFullText=false)이고 onDeleteSegment 콜백이 있을 때만
       if (widget.onDeleteSegment != null && !widget.processedText.showFullText) {
-        segmentContainer = Dismissible(
+        final int segmentIndex = i;
+        wrappedSegmentContainer = SegmentUtils.buildDismissibleSegment(
           key: ValueKey('segment_$i'),
-          direction: DismissDirection.endToStart, // 오른쪽에서 왼쪽으로 스와이프
-          background: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20.0),
-            color: ColorTokens.deleteSwipeBackground,
-            child: const Icon(
-              Icons.delete,
-              color: Colors.white,
-            ),
-          ),
-          behavior: HitTestBehavior.opaque,
-          movementDuration: const Duration(milliseconds: 200),
+          direction: DismissDirection.endToStart,
+          onDelete: () {
+            widget.onDeleteSegment!(segmentIndex);
+          },
           confirmDismiss: (direction) async {
-            // 사용자 확인 다이얼로그 표시
-            final bool? confirmed = await showDialog<bool>(
+            return await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
                 title: const Text('세그먼트 삭제'),
@@ -542,21 +536,23 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 ],
               ),
             );
-            
-            if (confirmed == true) {
-              // 세그먼트 삭제 콜백 호출
-              widget.onDeleteSegment!(i);
-              return true;
-            }
-            
-            return false;
           },
-          child: segmentContainer,
+          child: wrappedSegmentContainer,
         );
       }
 
-      // 구분선을 포함한 위젯 추가
-      segmentWidgets.add(segmentContainer);
+      // 구분선을 포함한 위젯 목록에 추가
+      segmentWidgets.add(wrappedSegmentContainer);
+      
+      // 구분선 추가 (마지막 세그먼트가 아닌 경우)
+      if (i < widget.processedText.segments!.length - 1) {
+        segmentWidgets.add(
+          const Padding(
+            padding: EdgeInsets.only(top: 16.0, bottom: 16.0),
+            child: Divider(height: 1, thickness: 1, color: ColorTokens.dividerLight),
+          ),
+        );
+      }
     }
 
     // 세그먼트 위젯이 없으면 전체 텍스트 표시

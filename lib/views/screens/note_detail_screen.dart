@@ -1277,14 +1277,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     if (_isProcessingText) {
       debugPrint('텍스트 처리 중 화면 표시');
       return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('텍스트 처리 중...'),
-          ],
-        ),
+        child: DotLoadingIndicator(message: '텍스트 처리 중...'),
       );
     }
     

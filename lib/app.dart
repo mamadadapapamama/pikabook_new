@@ -84,7 +84,9 @@ class _AppState extends State<App> {
   // 사용자가 로그인했을 때 노트 데이터에 따라 온보딩 상태 확인
   Future<void> _checkOnboardingForUser(User user) async {
     try {
-      bool shouldLoad = true;
+      setState(() {
+        _isLoadingUserData = true;
+      });
       
       // Firestore에서 온보딩 상태 확인
       final userDoc = await FirebaseFirestore.instance
@@ -175,16 +177,19 @@ class _AppState extends State<App> {
         final firestore = FirebaseFirestore.instance;
         final userDoc = await firestore.collection('users').doc(user.uid).get();
         final hasCompletedOnboarding = userDoc.data()?['onboardingCompleted'] ?? false;
+        final hasOnboarded = userDoc.data()?['hasOnboarded'] ?? false;
         
         // 로컬 저장소에도 온보딩 상태 저장
         await _preferencesService.setOnboardingCompleted(hasCompletedOnboarding);
-        await _preferencesService.setHasOnboarded(hasCompletedOnboarding);
+        await _preferencesService.setHasOnboarded(hasOnboarded);
         
         if (mounted) {
           setState(() {
-            _isOnboardingCompleted = hasCompletedOnboarding;
+            _isOnboardingCompleted = hasCompletedOnboarding && hasOnboarded;
           });
         }
+        
+        debugPrint('사용자 온보딩 상태: onboardingCompleted=$hasCompletedOnboarding, hasOnboarded=$hasOnboarded, _isOnboardingCompleted=${hasCompletedOnboarding && hasOnboarded}');
       } else {
         // 로그인되지 않은 경우 기본값으로 온보딩 필요
         await _preferencesService.setOnboardingCompleted(false);

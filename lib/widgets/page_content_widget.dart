@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 impo
 import 'dot_loading_indicator.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/color_tokens.dart';
+import '../utils/segment_utils.dart';
 
 /// 페이지 내의 이미지, 텍스트 처리상태, 처리된 텍스트 등을 표시
 /// 텍스트 모드전환, 사전 검색 등 처리
@@ -198,13 +199,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           // 처리된 텍스트가 없는 경우
           else if (widget.page.originalText.isNotEmpty || widget.isLoadingImage)
             const Center(
-              child: Column(
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('텍스트 처리 중...'),
-                ],
-              ),
+              child: DotLoadingIndicator(message: '텍스트 처리 중...'),
             )
           // 빈 페이지인 경우
           else
@@ -474,24 +469,17 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
       // 세그먼트 위젯 생성 (Dismissible로 감싸기)
       segmentWidgets.add(
-        Dismissible(
+        SegmentUtils.buildDismissibleSegment(
           key: ValueKey('segment_$i'),
-          direction: DismissDirection.startToEnd, // 왼쪽에서 오른쪽으로 스와이프
-          background: Container(
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.only(left: 20.0),
-            color: Colors.red,
-            child: const Icon(
-              Icons.delete,
-              color: Colors.white,
-            ),
-          ),
+          direction: DismissDirection.startToEnd,
+          onDelete: () {
+            if (widget.onDeleteSegment != null) {
+              widget.onDeleteSegment!(i);
+            }
+          },
           confirmDismiss: (direction) async {
             // 세그먼트 삭제 콜백이 없으면 삭제하지 않음
             if (widget.onDeleteSegment == null) return false;
-            
-            // 세그먼트 삭제 콜백 호출
-            widget.onDeleteSegment!(i);
             return true;
           },
           child: Column(
@@ -608,7 +596,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         if (_processedText!.fullTranslatedText != null && 
             _processedText!.showTranslation)
           Padding(
-            padding: const EdgeInsets.only(top: 8.0),
+            padding: const EdgeInsets.only(top: 4.0),
             child:
                 _buildSelectableText(_processedText!.fullTranslatedText!),
           ),
