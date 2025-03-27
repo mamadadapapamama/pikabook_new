@@ -86,11 +86,13 @@ class _NoteListItemState extends State<NoteListItem> {
   @override
   Widget build(BuildContext context) {
     final dismissibleKey = Key(widget.note.id ?? 'note-${DateTime.now().millisecondsSinceEpoch}');
+    final borderRadius = BorderRadius.circular(SpacingTokens.radiusXs);
     
     return SegmentUtils.buildDismissibleSegment(
       key: dismissibleKey,
       onDelete: widget.onDelete,
       direction: DismissDirection.endToStart,
+      borderRadius: borderRadius,
       confirmDismiss: (direction) async {
         // 노트 삭제 확인 대화상자
         return await showDialog<bool>(

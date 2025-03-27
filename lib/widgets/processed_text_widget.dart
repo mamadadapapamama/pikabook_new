@@ -40,6 +40,9 @@ class ProcessedTextWidget extends StatefulWidget {
   final Function(int)? onDeleteSegment;
   final Function(String, {int? segmentIndex})? onPlayTts;
   final int? playingSegmentIndex;
+  final TextStyle? originalTextStyle;
+  final TextStyle? pinyinTextStyle;
+  final TextStyle? translatedTextStyle;
 
   const ProcessedTextWidget({
     Key? key,
@@ -50,6 +53,9 @@ class ProcessedTextWidget extends StatefulWidget {
     this.onDeleteSegment,
     this.onPlayTts,
     this.playingSegmentIndex,
+    this.originalTextStyle,
+    this.pinyinTextStyle,
+    this.translatedTextStyle,
   }) : super(key: key);
 
   @override
@@ -207,21 +213,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       debugPrint('_buildSelectableText 호출: 텍스트 길이=${text.length}');
     }
     
-    // 기본 스타일 설정
-    final TextStyle defaultStyle = isOriginal 
-      ? TypographyTokens.body1.copyWith(
-          fontSize: 18, 
-          height: 1.5,
-          color: ColorTokens.textPrimary,
-        )
-      : TypographyTokens.body2.copyWith(
-          fontSize: 14,
-          color: ColorTokens.textSecondary,
-        );
-        
-    // 제공된 스타일 또는 기본 스타일 사용
-    final effectiveStyle = style ?? defaultStyle;
-
+    // 스타일이 제공되지 않은 경우 경고
+    if (style == null) {
+      debugPrint('경고: ProcessedTextWidget에 스타일이 제공되지 않았습니다.');
+    }
+    
+    // 항상 제공된 스타일 사용 (PageContentWidget에서 관리)
+    final effectiveStyle = style;
+    
     // 하이라이트된 텍스트 스팬 생성
     final textSpans = TextHighlightManager.buildHighlightedText(
       text: text,
@@ -358,12 +357,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         if (widget.processedText.fullOriginalText.isNotEmpty)
           _buildSelectableText(
             widget.processedText.fullOriginalText,
-            style: TypographyTokens.subtitle2Cn.copyWith(
-              fontWeight: FontWeight.w500, 
-              height: 1.5,
-              color: ColorTokens.textPrimary,
-            ),
-            isOriginal: true,
+            style: widget.originalTextStyle,
           ),
 
         // 번역 텍스트 표시 - 래퍼 제거하고 직접 표시
@@ -374,9 +368,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
             child: Text(
               widget.processedText.fullTranslatedText!,
-              style: TypographyTokens.body1.copyWith(
-                color: ColorTokens.textSecondary,
-              ),
+              style: widget.translatedTextStyle,
             ),
           ),
       ],
@@ -422,10 +414,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               Expanded(
                 child: _buildSelectableText(
                   segment.originalText, 
-                   style: TypographyTokens.subtitle2Cn.copyWith(
-                    fontWeight: FontWeight.w500, 
-                    color: ColorTokens.textPrimary,
-                  ),
+                  style: widget.originalTextStyle,
                   isOriginal: true,
                 ),
               ),
@@ -460,15 +449,10 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               segment.pinyin!.isNotEmpty && 
               widget.processedText.showPinyin)
             Padding(
-              padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+              padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
               child: Text(
                 segment.pinyin!,
-                style: TypographyTokens.body2En.copyWith(
-                  color: ColorTokens.textGrey,
-                  fontWeight:FontWeight.w400,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
+                style: widget.pinyinTextStyle,
               ),
             ),
 
@@ -477,12 +461,10 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 segment.translatedText!.isNotEmpty &&
                 widget.processedText.showTranslation)
               Padding(
-                padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
                 child: Text(
                   segment.translatedText!,
-                  style: TypographyTokens.body1.copyWith(
-                    color: ColorTokens.textSecondary,
-                  ),
+                  style: widget.translatedTextStyle,
                 ),
               ),
         ],

@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 impo
 import 'dot_loading_indicator.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/spacing_tokens.dart';
 import '../utils/segment_utils.dart';
 import '../services/text_reader_service.dart'; // TTS 서비스 추가
 
@@ -257,8 +258,25 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 onCreateFlashCard: widget.onCreateFlashCard,
                 flashCards: widget.flashCards,
                 onDeleteSegment: widget.onDeleteSegment,
-                onPlayTts: _playTts, // TTS 콜백 추가
-                playingSegmentIndex: _playingSegmentIndex, // 현재 재생 중인 세그먼트 인덱스 추가
+                onPlayTts: _playTts,
+                playingSegmentIndex: _playingSegmentIndex,
+                // UI 스타일 전달 - PageContentWidget에서 모든 스타일링 관리
+                originalTextStyle: TypographyTokens.subtitle2Cn.copyWith(
+                  fontSize: 22,
+                  height: 1.5,
+                  fontWeight: FontWeight.w500,
+                  color: ColorTokens.textPrimary,
+                ),
+                pinyinTextStyle: TypographyTokens.body2En.copyWith(
+                  color: ColorTokens.textGrey,
+                  fontWeight: FontWeight.w400,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+                translatedTextStyle: TypographyTokens.body1.copyWith(
+                  color: ColorTokens.textSecondary,
+                  fontSize: 16,
+                ),
               );
             }),
           ]
@@ -461,16 +479,41 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     }
   }
 
-  /// **세그먼트별 텍스트 표시 위젯**
+  /// **세그먼트 텍스트 표시 위젯**
   Widget _buildSegmentedView() {
     List<Widget> segmentWidgets = [];
-    if (_processedText == null || _processedText!.segments == null) {
+    
+    // 세그먼트가 없으면 전체 텍스트 표시로 대체
+    if (_processedText == null ||
+        _processedText!.segments == null ||
+        _processedText!.segments!.isEmpty) {
       return _buildFullTextView();
     }
+    
+    // 스타일 정의 - ProcessedTextWidget에 전달하는 스타일과 일치시킴
+    final originalTextStyle = TypographyTokens.subtitle2Cn.copyWith(
+      fontSize: 20,
+      height: 1.4,
+      fontWeight: FontWeight.w500,
+      color: ColorTokens.textPrimary,
+    );
+    
+    final pinyinTextStyle = TypographyTokens.caption.copyWith(
+      color: ColorTokens.textGrey,
+      fontSize: 12,
+      fontWeight: FontWeight.w400,
+      height: 1.2,
+    );
+    
+    final translatedTextStyle = TypographyTokens.body2.copyWith(
+      color: ColorTokens.textSecondary,
+      fontSize: 14,
+    );
 
+    // 세그먼트 위젯 생성
     for (int i = 0; i < _processedText!.segments!.length; i++) {
       final segment = _processedText!.segments![i];
-
+      
       // 디버깅 정보 출력
       if (kDebugMode) {
         debugPrint('세그먼트 $i 원본 텍스트: "${segment.originalText}"');
@@ -478,7 +521,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         debugPrint('세그먼트 $i 핀인: "${segment.pinyin}"');
       }
 
-      // 원본 텍스트가 비어있으면 건너뜀
+      // 원본 텍스트가 비어있으면
       if (segment.originalText.isEmpty) {
         if (kDebugMode) {
           debugPrint('세그먼트 $i 원본 텍스트가 비어있어 건너뜁니다.');
@@ -491,6 +534,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         SegmentUtils.buildDismissibleSegment(
           key: ValueKey('segment_$i'),
           direction: DismissDirection.startToEnd,
+          borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
           onDelete: () {
             if (widget.onDeleteSegment != null) {
               widget.onDeleteSegment!(i);
@@ -511,11 +555,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               // 원본 텍스트 표시 (항상 표시)
               _buildSelectableText(
                 segment.originalText,
-                TypographyTokens.subtitle2Cn.copyWith(
-                  fontSize: 22,
-                  height: 1.5,
-                  color: ColorTokens.textPrimary,
-                ),
+                originalTextStyle,
               ),
 
               // 핀인 표시 (showPinyin이 true일 때만)
@@ -526,10 +566,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   padding: const EdgeInsets.only(top: 2.0),
                   child: Text(
                     segment.pinyin!,
-                    style: TypographyTokens.captionEn.copyWith(
-                      color: ColorTokens.textGrey,
-                      fontSize: 12,
-                    ),
+                    style: pinyinTextStyle,
                   ),
                 ),
 
@@ -540,9 +577,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
                   child: _buildSelectableText(
                     segment.translatedText!,
-                    TypographyTokens.body2.copyWith(
-                      color: ColorTokens.textSecondary,
-                    ),
+                    translatedTextStyle,
                   ),
                 ),
                 
@@ -583,11 +618,24 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     // 디버그 로그 추가
     debugPrint('_buildFullTextView 호출 - 전체 문장 모드 렌더링');
     
+    // 스타일 정의 - ProcessedTextWidget에 전달하는 스타일과 일치시킴
+    final originalTextStyle = TypographyTokens.subtitle2Cn.copyWith(
+      fontSize: 22,
+      height: 1.5,
+      fontWeight: FontWeight.w500,
+      color: ColorTokens.textPrimary,
+    );
+    
+    final translatedTextStyle = TypographyTokens.body1.copyWith(
+      color: ColorTokens.textSecondary,
+      fontSize: 16,
+    );
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 원본 텍스트 표시
-        _buildSelectableText(_processedText!.fullOriginalText),
+        _buildSelectableText(_processedText!.fullOriginalText, originalTextStyle),
 
         // 번역 텍스트 표시 (번역이 있고 showTranslation이 true인 경우)
         if (_processedText!.fullTranslatedText != null && 
@@ -595,7 +643,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           Padding(
             padding: const EdgeInsets.only(top: 2.0),
             child:
-                _buildSelectableText(_processedText!.fullTranslatedText!),
+                _buildSelectableText(_processedText!.fullTranslatedText!, translatedTextStyle),
           ),
       ],
     );
@@ -607,22 +655,19 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       return const SizedBox.shrink();
     }
     
+    // 기본 스타일 설정
     final defaultStyle = TypographyTokens.subtitle2Cn.copyWith(
+      fontSize: 22, // 폰트 사이즈 명시적 설정
       height: 1.5,
       fontWeight: FontWeight.w600,
       color: ColorTokens.textPrimary,
     );
+    
+    // 항상 제공된 스타일을 우선으로 사용
     final effectiveStyle = style ?? defaultStyle;
     
-    // 짧은 텍스트의 경우 선택 가능하지만 간단한 Text 위젯 사용
-    if (text.length < 100) {
-      return SelectableText(
-        text,
-        style: effectiveStyle,
-      );
-    }
+    debugPrint('텍스트 스타일 적용: fontSize=${effectiveStyle.fontSize}, height=${effectiveStyle.height}');
     
-    // 긴 텍스트의 경우 선택 가능한 텍스트 위젯 사용
     return SelectableText(
       text,
       style: effectiveStyle,
