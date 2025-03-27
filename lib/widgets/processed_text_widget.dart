@@ -38,6 +38,8 @@ class ProcessedTextWidget extends StatefulWidget {
   final Function(String, String, {String? pinyin})? onCreateFlashCard;
   final List<FlashCard>? flashCards;
   final Function(int)? onDeleteSegment;
+  final Function(String, {int? segmentIndex})? onPlayTts;
+  final int? playingSegmentIndex;
 
   const ProcessedTextWidget({
     Key? key,
@@ -46,6 +48,8 @@ class ProcessedTextWidget extends StatefulWidget {
     this.onCreateFlashCard,
     this.flashCards,
     this.onDeleteSegment,
+    this.onPlayTts,
+    this.playingSegmentIndex,
   }) : super(key: key);
 
   @override
@@ -56,8 +60,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   String _selectedText = '';
   late Set<String> _flashcardWords;
   final GlobalKey _textKey = GlobalKey();
-  final TextReaderService _textReaderService = TextReaderService();
-  int? _playingSegmentIndex;
 
   // 중복 사전 검색 방지를 위한 변수
   bool _isProcessingDictionaryLookup = false;
@@ -70,34 +72,10 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     super.initState();
     _flashcardWords = {};
     _extractFlashcardWords();
-    _initTextReader();
-  }
-
-  void _initTextReader() async {
-    await _textReaderService.init();
-
-    // TTS 상태 변경 콜백 설정
-    _textReaderService.setOnPlayingStateChanged((segmentIndex) {
-      if (mounted) {
-        setState(() {
-          _playingSegmentIndex = segmentIndex;
-        });
-      }
-    });
-
-    // TTS 재생 완료 콜백 설정
-    _textReaderService.setOnPlayingCompleted(() {
-      if (mounted) {
-        setState(() {
-          _playingSegmentIndex = null;
-        });
-      }
-    });
   }
 
   @override
   void dispose() {
-    _textReaderService.dispose();
     _selectedTextNotifier.dispose(); // ValueNotifier 정리
     super.dispose();
   }
@@ -363,16 +341,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   void _playTts(String text, {int? segmentIndex}) {
     if (text.isEmpty) return;
 
-    if (_playingSegmentIndex == segmentIndex) {
-      // 이미 재생 중인 세그먼트를 다시 클릭한 경우 중지
-      _textReaderService.stop();
-    } else {
-      // 새로운 세그먼트 재생
-      if (segmentIndex != null) {
-        _textReaderService.readSegment(text, segmentIndex);
-      } else {
-        _textReaderService.readText(text);
-      }
+    // 부모 위젯의 콜백 호출
+    if (widget.onPlayTts != null) {
+      widget.onPlayTts!(text, segmentIndex: segmentIndex);
     }
   }
 
@@ -473,7 +444,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                     borderRadius: BorderRadius.circular(100),
                   ),
                   child: Icon(
-                    _playingSegmentIndex == i
+                    widget.playingSegmentIndex == i
                         ? Icons.stop
                         : Icons.volume_up,
                     color: ColorTokens.textSecondary,

@@ -12,10 +12,30 @@ import 'dot_loading_indicator.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../utils/segment_utils.dart';
+import '../services/text_reader_service.dart'; // TTS 서비스 추가
 
-/// 페이지 내의 이미지, 텍스트 처리상태, 처리된 텍스트 등을 표시
-/// 텍스트 모드전환, 사전 검색 등 처리
-/// 텍스트 처리중 상태, 플래시카드 단어 목록 등 관리 (counter와 하이라이터를 위해)
+/// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
+///
+/// ## 주요 기능
+/// - 페이지 이미지 및 텍스트 로딩/처리 상태 관리
+/// - 사전 검색 및 바텀시트 표시
+/// - 플래시카드 관련 상태 관리
+/// - 텍스트 모드 전환(세그먼트/전체) 처리
+/// - TTS(Text-to-Speech) 기능 관리
+/// - ProcessedTextWidget과 상호작용 관리
+///
+/// ## ProcessedTextWidget과의 관계
+/// - PageContentWidget: 페이지 전체 관리 (컨테이너 역할)
+///   - 텍스트 처리 상태, 이미지 로딩, 사전 검색 등 페이지 수준의 기능 담당
+///   - 플래시카드 데이터 처리 및 관리
+///   - TTS(Text-to-Speech) 기능 담당
+///   - ProcessedTextWidget에 필요한 데이터와, 사용자 이벤트 콜백 제공
+///
+/// - ProcessedTextWidget: 텍스트 표시 전문 (컴포넌트 역할)
+///   - 텍스트 렌더링 및 텍스트 관련 상호작용만 담당
+///   - 세그먼트/전체 텍스트 표시, 병음/번역 표시, 하이라이팅 등
+///
+/// 이 구조를 통해 UI 로직과 텍스트 처리 로직이 깔끔하게 분리됨
 
 class PageContentWidget extends StatefulWidget {
   final page_model.Page page;
@@ -45,16 +65,19 @@ class PageContentWidget extends StatefulWidget {
 
 class _PageContentWidgetState extends State<PageContentWidget> {
   final PageContentService _pageContentService = PageContentService();
+  final TextReaderService _textReaderService = TextReaderService(); // TTS 서비스 추가
 
   ProcessedText? _processedText;
   bool _isProcessingText = false;
   Set<String> _flashcardWords = {};
+  int? _playingSegmentIndex; // 현재 재생 중인 세그먼트 인덱스 추가
 
   @override
   void initState() {
     super.initState();
     _processPageText();
     _updateFlashcardWords();
+    _initTextReader(); // TTS 초기화 추가
   }
 
   @override
@@ -116,7 +139,48 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   void dispose() {
     // 화면을 나갈 때 TTS 중지
     _pageContentService.stopSpeaking();
+    _textReaderService.dispose(); // TTS 서비스 정리
     super.dispose();
+  }
+
+  // TTS 초기화 메서드 추가
+  void _initTextReader() async {
+    await _textReaderService.init();
+    
+    // TTS 상태 변경 콜백 설정
+    _textReaderService.setOnPlayingStateChanged((segmentIndex) {
+      if (mounted) {
+        setState(() {
+          _playingSegmentIndex = segmentIndex;
+        });
+      }
+    });
+    
+    // TTS 재생 완료 콜백 설정
+    _textReaderService.setOnPlayingCompleted(() {
+      if (mounted) {
+        setState(() {
+          _playingSegmentIndex = null;
+        });
+      }
+    });
+  }
+
+  // TTS 재생 메서드 추가
+  void _playTts(String text, {int? segmentIndex}) {
+    if (text.isEmpty) return;
+    
+    if (_playingSegmentIndex == segmentIndex) {
+      // 이미 재생 중인 세그먼트를 다시 클릭한 경우 중지
+      _textReaderService.stop();
+    } else {
+      // 새로운 세그먼트 재생
+      if (segmentIndex != null) {
+        _textReaderService.readSegment(text, segmentIndex);
+      } else {
+        _textReaderService.readText(text);
+      }
+    }
   }
 
   @override
@@ -193,6 +257,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 onCreateFlashCard: widget.onCreateFlashCard,
                 flashCards: widget.flashCards,
                 onDeleteSegment: widget.onDeleteSegment,
+                onPlayTts: _playTts, // TTS 콜백 추가
+                playingSegmentIndex: _playingSegmentIndex, // 현재 재생 중인 세그먼트 인덱스 추가
               );
             }),
           ]
