@@ -6,7 +6,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../viewmodels/home_viewmodel.dart';
 import '../../widgets/note_list_item.dart';
 import '../../widgets/loading_dialog.dart';
-import '../../widgets/home_screen_app_bar.dart';
 import '../../services/note_service.dart';
 import '../../services/image_service.dart';
 import '../../services/user_preferences_service.dart';
