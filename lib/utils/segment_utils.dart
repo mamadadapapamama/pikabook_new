@@ -17,24 +17,31 @@ class SegmentUtils {
     Future<bool?> Function(DismissDirection)? confirmDismiss,
     BorderRadius? borderRadius,
   }) {
-    return ClipRRect(
-      borderRadius: borderRadius ?? BorderRadius.zero,
+    // Material 위젯 사용하여 클리핑 적용
+    return Material(
+      type: MaterialType.transparency, 
+      clipBehavior: Clip.antiAlias,
+      borderRadius: borderRadius,
       child: Dismissible(
         key: key,
         direction: direction,
-        // 커스텀 배경 위젯 - ClipRRect로 라운드 처리
-        background: Container(
+        // 배경 컨테이너
+        background: Material(
           color: ColorTokens.deleteSwipeBackground,
-          alignment: direction == DismissDirection.endToStart 
-              ? Alignment.centerRight 
-              : Alignment.centerLeft,
-          child: Padding(
-            padding: direction == DismissDirection.endToStart 
-                ? const EdgeInsets.only(right: 20.0)
-                : const EdgeInsets.only(left: 20.0),
-            child: const Icon(
-              Icons.delete,
-              color: Colors.white,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: borderRadius,
+          child: Align(
+            alignment: direction == DismissDirection.endToStart 
+                ? Alignment.centerRight 
+                : Alignment.centerLeft,
+            child: Padding(
+              padding: direction == DismissDirection.endToStart 
+                  ? const EdgeInsets.only(right: 20.0)
+                  : const EdgeInsets.only(left: 20.0),
+              child: const Icon(
+                Icons.delete,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
