@@ -528,8 +528,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
       // 세그먼트 위젯 생성 (Dismissible로 감싸기)
       segmentWidgets.add(
-        Container(
-          margin: const EdgeInsets.only(bottom: 8.0),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12.0),
           child: SegmentUtils.buildDismissibleSegment(
             key: ValueKey('segment_$i'),
             direction: DismissDirection.startToEnd,
@@ -561,7 +561,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 ),
               ) ?? false;
             },
-            // 세그먼트 내용 - 테두리와 배경색을 포함한 컨테이너
+            // 단일 컨테이너로 간소화
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -571,49 +571,47 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 ),
                 borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 원본 텍스트 표시 (항상 표시)
-                    _buildSelectableText(
-                      segment.originalText,
-                      _originalTextStyle,
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 원본 텍스트 표시 (항상 표시)
+                  _buildSelectableText(
+                    segment.originalText,
+                    _originalTextStyle,
+                  ),
+
+                  // 핀인 표시 (showPinyin이 true일 때만)
+                  if (segment.pinyin != null && 
+                      segment.pinyin!.isNotEmpty && 
+                      _processedText!.showPinyin)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2.0),
+                      child: Text(
+                        segment.pinyin!,
+                        style: _pinyinTextStyle,
+                      ),
                     ),
 
-                    // 핀인 표시 (showPinyin이 true일 때만)
-                    if (segment.pinyin != null && 
-                        segment.pinyin!.isNotEmpty && 
-                        _processedText!.showPinyin)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2.0),
-                        child: Text(
-                          segment.pinyin!,
-                          style: _pinyinTextStyle,
-                        ),
+                  // 번역 텍스트 표시 (showTranslation이 true일 때만)
+                  if (_processedText!.showTranslation && 
+                      segment.translatedText != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
+                      child: _buildSelectableText(
+                        segment.translatedText!,
+                        _translatedTextStyle,
                       ),
-
-                    // 번역 텍스트 표시 (showTranslation이 true일 때만)
-                    if (_processedText!.showTranslation && 
-                        segment.translatedText != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
-                        child: _buildSelectableText(
-                          segment.translatedText!,
-                          _translatedTextStyle,
-                        ),
-                      ),
-                    
-                    // 구분선 추가 (마지막 세그먼트가 아닌 경우)
-                    if (i < _processedText!.segments!.length - 1)
-                      const Divider(height: 24, thickness: 1),
-                    
-                    // 마지막 세그먼트에는 여백 추가
-                    if (i == _processedText!.segments!.length - 1)
-                      const SizedBox(height: 24),
-                  ],
-                ),
+                    ),
+                  
+                  // 구분선 추가 (마지막 세그먼트가 아닌 경우)
+                  if (i < _processedText!.segments!.length - 1)
+                    const Divider(height: 24, thickness: 1),
+                  
+                  // 마지막 세그먼트에는 여백 추가
+                  if (i == _processedText!.segments!.length - 1)
+                    const SizedBox(height: 24),
+                ],
               ),
             ),
           ),
@@ -692,12 +690,12 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       color: ColorTokens.textGrey,
       fontWeight: FontWeight.w400,
       fontSize: 12,
-      height: 1.4,
+      height: 1.2,
     );
     
     _translatedTextStyle = TypographyTokens.body2.copyWith(
       color: ColorTokens.textSecondary,
-      fontSize: 14,
+      fontSize: 15,
     );
   }
 }
