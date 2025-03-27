@@ -249,8 +249,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
         // 플래시카드가 비어 있는 경우 즉시 노트 화면으로 돌아감
         if (_flashCards.isEmpty && widget.noteId != null && mounted) {
-          // 명시적으로 Navigator.of(context).pop 사용
-          Navigator.of(context).pop(0); // 카드가 0개임을 전달하고 화면 닫기
+          // 동일한 형식으로 결과 반환 (flashcardCount: 0)
+          Navigator.of(context).pop({
+            'flashcardCount': 0,
+            'success': true,
+            'noteId': widget.noteId
+          });
         }
       }
     } catch (e) {
@@ -388,13 +392,15 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     
     return WillPopScope(
       onWillPop: () async {
-        // 화면을 나갈 때 현재 플래시카드 카운트를 전달
+        // 화면을 나갈 때 현재 플래시카드 카운트를 전달 (onBackPressed와 동일한 형식)
         if (widget.noteId != null && mounted) {
-          // int 값을 직접 전달
-          Navigator.of(context).pop(_flashCards.length);
+          Navigator.of(context).pop({
+            'flashcardCount': _flashCards.length,
+            'success': _error == null,
+            'noteId': widget.noteId
+          });
         }
-        // true를 반환하면 화면이 닫힘 (이미 명시적으로 pop을 호출했으므로 false 반환)
-        return false;
+        return false; // 이미 명시적으로 pop을 호출했으므로 false 반환
       },
       child: Scaffold(
         backgroundColor: Colors.white,
