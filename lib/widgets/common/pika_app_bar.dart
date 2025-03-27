@@ -109,6 +109,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     required VoidCallback onShowMoreOptions,
     required VoidCallback onFlashCardPressed,
     required int flashcardCount,
+    
     String? noteId,
     int currentPageIndex = 0,
     int totalPages = 0,
@@ -124,6 +125,18 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       totalPages: totalPages,
       height: 70,
       actions: [
+        if (totalPages > 0)
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Center(
+              child: Text(
+                'page ${currentPageIndex + 1} / $totalPages',
+                style: TypographyTokens.caption.copyWith(
+                  color: ColorTokens.textSecondary,
+                ),
+              ),
+            ),
+          ),
         IconButton(
           icon: const Icon(
             Icons.more_vert,
