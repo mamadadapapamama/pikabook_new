@@ -11,6 +11,7 @@ import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
 import '../theme/tokens/ui_tokens.dart';
+import '../utils/segment_utils.dart';
 import 'flashcard_counter_badge.dart';
 import 'page_count_badge.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -84,23 +85,34 @@ class _NoteListItemState extends State<NoteListItem> {
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: Key(widget.note.id ?? 'note-${DateTime.now().millisecondsSinceEpoch}'),
+    final dismissibleKey = Key(widget.note.id ?? 'note-${DateTime.now().millisecondsSinceEpoch}');
+    
+    return SegmentUtils.buildDismissibleSegment(
+      key: dismissibleKey,
+      onDelete: widget.onDelete,
       direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: EdgeInsets.only(right: SpacingTokens.md),
-        color: ColorTokens.deleteSwipeBackground,
-        child: const Icon(
-          Icons.delete,
-          color: Colors.white,
-        ),
-      ),
       confirmDismiss: (direction) async {
-        return await _confirmDelete(context);
-      },
-      onDismissed: (direction) {
-        widget.onDelete();
+        // 노트 삭제 확인 대화상자
+        return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('노트 삭제', style: TypographyTokens.headline3),
+            content: Text('이 노트를 삭제하시겠습니까?', style: TypographyTokens.body1),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text('취소', style: TypographyTokens.button),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(
+                  '삭제',
+                  style: TypographyTokens.button.copyWith(color: ColorTokens.error),
+                ),
+              ),
+            ],
+          ),
+        ) ?? false;
       },
       child: Card(
         margin: EdgeInsets.symmetric(
@@ -309,29 +321,6 @@ class _NoteListItemState extends State<NoteListItem> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Future<bool> _confirmDelete(BuildContext context) async {
-    return await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('노트 삭제', style: TypographyTokens.headline3),
-        content: Text('이 노트를 삭제하시겠습니까?', style: TypographyTokens.body1),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('취소', style: TypographyTokens.button),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(
-              '삭제', 
-              style: TypographyTokens.button.copyWith(color: ColorTokens.error),
-            ),
-          ),
-        ],
       ),
     );
   }
