@@ -512,6 +512,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               _buildSelectableText(
                 segment.originalText,
                 TypographyTokens.subtitle2Cn.copyWith(
+                  fontSize: 22,
                   height: 1.5,
                   color: ColorTokens.textPrimary,
                 ),
@@ -527,6 +528,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                     segment.pinyin!,
                     style: TypographyTokens.captionEn.copyWith(
                       color: ColorTokens.textGrey,
+                      fontSize: 12,
                     ),
                   ),
                 ),
@@ -535,7 +537,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               if (_processedText!.showTranslation && 
                   segment.translatedText != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                  padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
                   child: _buildSelectableText(
                     segment.translatedText!,
                     TypographyTokens.body2.copyWith(
@@ -591,7 +593,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         if (_processedText!.fullTranslatedText != null && 
             _processedText!.showTranslation)
           Padding(
-            padding: const EdgeInsets.only(top: 4.0),
+            padding: const EdgeInsets.only(top: 2.0),
             child:
                 _buildSelectableText(_processedText!.fullTranslatedText!),
           ),

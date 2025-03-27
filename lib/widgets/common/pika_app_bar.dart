@@ -43,7 +43,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.backgroundColor = Colors.white,
     this.centerTitle = false,
     this.subtitle,
-    this.height = 70,
+    this.height = 72,
     this.showBackButton = false,
     this.showLogo = false,
     this.noteSpaceName,
@@ -65,7 +65,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       showLogo: true,
       noteSpaceName: noteSpaceName,
       backgroundColor: UITokens.homeBackground,
-      height: 70, // HomeScreenAppBar와 일치시킴
+      height: 72,
       actions: [
         Padding(
           padding: EdgeInsets.only(right: SpacingTokens.md),
@@ -123,17 +123,28 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       onFlashCardPressed: onFlashCardPressed,
       currentPageIndex: currentPageIndex,
       totalPages: totalPages,
-      height: 80, // 높이 조정으로 HomeScreen과 일관되게
+      height: 72,
       actions: [
         if (totalPages > 0)
           Padding(
-            padding: const EdgeInsets.only(right: 16.0),
+            padding: const EdgeInsets.only(right: 8.0),
             child: Center(
               child: Text(
                 'page ${currentPageIndex + 1} / $totalPages',
                 style: TypographyTokens.caption.copyWith(
                   color: ColorTokens.textSecondary,
                 ),
+              ),
+            ),
+          ),
+        if (flashcardCount > 0)
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: GestureDetector(
+              onTap: onFlashCardPressed,
+              child: FlashcardCounterBadge(
+                count: flashcardCount,
+                noteId: noteId,
               ),
             ),
           ),
@@ -239,7 +250,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
 
     // 홈 스크린일 경우 상단 패딩 추가
     final bool isHomeScreen = showLogo && noteSpaceName != null;
-    final double topPadding = isHomeScreen ? 24.0 : 0.0; // 홈 스크린인 경우 상단 패딩 추가
+    final double topPadding = isHomeScreen ? 12.0 : 0.0; // 상단 패딩 24.0에서 12.0으로 줄임
     final double bottomPadding = isHomeScreen ? 2.0 : 8.0; // 홈 스크린인 경우 하단 패딩 감소
 
     return SafeArea(
@@ -349,18 +360,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                
-                                // 페이지 정보 (노트 상세)
-                                if (pageNumberText != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 8.0),
-                                    child: Text(
-                                      pageNumberText,
-                                      style: TypographyTokens.body2En.copyWith(
-                                        color: ColorTokens.textGrey,
-                                      ),
-                                    ),
-                                  ),
                               ],
                             ),
                           ),
@@ -372,18 +371,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // 플래시카드 카운터 (노트 상세)
-                      if (flashcardCount != null && flashcardCount! > 0)
-                        GestureDetector(
-                          onTap: onFlashCardPressed,
-                          child: FlashcardCounterBadge(
-                            count: flashcardCount!,
-                            noteId: noteId,
-                          ),
-                        ),
-                      
-                      if (flashcardCount != null)
-                        const SizedBox(width: 8),
+                      // 중복 제거: 플래시카드 카운터는 actions에만 표시하고 여기서는 제거
                       
                       // 추가 액션 버튼들
                       if (actions != null)
