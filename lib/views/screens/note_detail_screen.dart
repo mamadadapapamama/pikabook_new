@@ -721,8 +721,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
         });
 
-        // 노트 정보가 변경되었으므로 캐시도 무효화
-        await _cacheService.removeCachedNote(widget.noteId);
+        // 노트 정보가 변경되었으므로 캐시도 업데이트
+        await _cacheService.cacheNote(_note!);
       } else if (result == true) {
         // 이전 방식과의 호환성을 위해 boolean 결과도 처리
         // 캐시 무효화
@@ -735,11 +735,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             .get();
 
         if (noteDoc.exists && mounted) {
+          final updatedNote = Note.fromFirestore(noteDoc);
           setState(() {
-            _note = Note.fromFirestore(noteDoc);
+            _note = updatedNote;
             debugPrint(
                 '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
           });
+          
+          // 업데이트된 노트 캐싱
+          await _cacheService.cacheNote(updatedNote);
         }
       }
     }
