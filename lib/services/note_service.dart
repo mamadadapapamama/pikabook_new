@@ -266,18 +266,16 @@ class NoteService {
         'isFavorite': updatedNote.isFavorite,
         'flashcardCount': updatedNote.flashcardCount,
         'updatedAt': DateTime.now(),
+        'flashCards': updatedNote.flashCards ?? [], // null이면 빈 배열로 설정
       };
-      
-      // flashCards 필드가 null이 아닌 경우에만 추가
-      if (updatedNote.flashCards != null) {
-        updateData['flashCards'] = updatedNote.flashCards;
-      }
 
       // Firestore에 업데이트
       await _notesCollection.doc(noteId).update(updateData);
 
       // 캐시 업데이트
       await _cacheService.cacheNote(updatedNote);
+      
+      debugPrint('노트 업데이트 완료: $noteId, 제목: ${updatedNote.originalText}');
     } catch (e) {
       debugPrint('노트 업데이트 중 오류 발생: $e');
       rethrow;

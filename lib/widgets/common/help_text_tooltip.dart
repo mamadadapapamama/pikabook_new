@@ -84,7 +84,7 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                 width: widget.tooltipWidth ?? double.infinity,
                 padding: widget.tooltipPadding ?? const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: widget.backgroundColor ?? ColorTokens.primarylight,
+                  color: widget.backgroundColor ?? ColorTokens.primaryverylight,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: widget.borderColor ?? ColorTokens.primaryMedium,
