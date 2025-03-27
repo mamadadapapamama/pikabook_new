@@ -26,10 +26,7 @@ class SegmentUtils {
         padding: direction == DismissDirection.endToStart 
             ? const EdgeInsets.only(right: 20.0)
             : const EdgeInsets.only(left: 20.0),
-        decoration: BoxDecoration(
-          color: ColorTokens.deleteSwipeBackground,
-          borderRadius: BorderRadius.circular(4.0),
-        ),
+        color: ColorTokens.deleteSwipeBackground,
         child: const Icon(
           Icons.delete,
           color: Colors.white,
