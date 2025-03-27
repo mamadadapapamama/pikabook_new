@@ -696,54 +696,54 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     }
   }
 
-  // ===== 플래시카드 화면 이동 관련 메서드 =====
-
+  /// 플래시카드 화면으로 이동
   Future<void> _navigateToFlashcards() async {
     if (_note == null) return;
 
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => FlashCardScreen(
-          noteId: widget.noteId,
+    try {
+      // 플래시카드 화면으로 이동
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => FlashCardScreen(
+            noteId: _note!.id,
+          ),
         ),
-      ),
-    );
+      );
 
-    // 플래시카드가 변경되었으면 노트 정보 다시 로드
-    if (result != null && mounted) {
-      if (result is Note) {
-        // 플래시카드 화면에서 직접 업데이트된 노트 객체를 받은 경우
-        setState(() {
-          _note = result;
-          debugPrint(
-              '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
-        });
-
-        // 노트 정보가 변경되었으므로 캐시도 업데이트
-        await _cacheService.cacheNote(_note!);
-      } else if (result == true) {
-        // 이전 방식과의 호환성을 위해 boolean 결과도 처리
-        // 캐시 무효화
-        await _cacheService.removeCachedNote(widget.noteId);
-
-        // Firestore에서 직접 노트 가져오기
-        final noteDoc = await FirebaseFirestore.instance
-            .collection('notes')
-            .doc(widget.noteId)
-            .get();
-
-        if (noteDoc.exists && mounted) {
-          final updatedNote = Note.fromFirestore(noteDoc);
-          setState(() {
-            _note = updatedNote;
-            debugPrint(
-                '노트 ${widget.noteId}의 플래시카드 카운터 업데이트: ${_note!.flashcardCount}개');
-          });
+      // 결과가 있으면 노트 업데이트
+      if (result != null && mounted) {
+        if (result is Map && result.containsKey('flashcardCount')) {
+          // 플래시카드 화면에서 반환된 카운터 정보 활용
+          final int flashcardCount = result['flashcardCount'] as int;
+          final bool success = result['success'] as bool;
           
-          // 업데이트된 노트 캐싱
-          await _cacheService.cacheNote(updatedNote);
+          // 성공적으로 처리된 경우에만 상태 업데이트
+          if (success && _note != null) {
+            setState(() {
+              _note = _note!.copyWith(flashcardCount: flashcardCount);
+            });
+            
+            // 캐시 업데이트
+            if (result.containsKey('note') && result['note'] != null) {
+              await _cacheService.cacheNote(result['note'] as Note);
+            } else {
+              // note 객체가 없는 경우 현재 note에 flashcardCount만 업데이트
+              await _cacheService.cacheNote(_note!);
+            }
+          }
+        } else if (result is Note) {
+          // 기존 방식과 호환성 유지
+          setState(() {
+            _note = result;
+          });
         }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('플래시카드 화면 이동 중 오류가 발생했습니다: $e')),
+        );
       }
     }
   }

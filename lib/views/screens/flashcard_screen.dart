@@ -428,20 +428,37 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
               // 노트 캐시 업데이트
               await UnifiedCacheService().cacheNote(updatedNote);
               
-              // 결과 반환 (노트 디테일 화면으로 돌아갈 때 사용)
-              Navigator.of(context).pop(updatedNote);
+              // 현재 플래시카드 수를 결과로 반환 (노트 디테일 화면으로 돌아갈 때 사용)
+              Navigator.of(context).pop({
+                'note': updatedNote,
+                'flashcardCount': _flashCards.length,
+                'success': true
+              });
               return false; // Navigator.pop이 이미 호출되었으므로 false 반환
             }
           } catch (e) {
             debugPrint('노트 정보 업데이트 중 오류 발생: $e');
           }
         }
-        return true; // 일반적인 뒤로 가기 동작 수행
+        
+        // 결과 맵 반환 (홈 스크린에서도 플래시카드 수 업데이트를 위해)
+        Navigator.of(context).pop({
+          'flashcardCount': _flashCards.length,
+          'success': _error == null
+        });
+        return false; // 이미 pop을 호출했으므로 false 반환
       },
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: PikaAppBar.flashcard(
-          onBackPressed: () => Navigator.of(context).pop(_error != null ? false : true),
+          onBackPressed: () {
+            // 뒤로가기 버튼 클릭 시 현재 플래시카드 수 반환
+            Navigator.of(context).pop({
+              'flashcardCount': _flashCards.length,
+              'success': _error == null,
+              'noteId': widget.noteId
+            });
+          },
           currentCardIndex: _currentIndex,
           totalCards: _flashCards.length,
         ),

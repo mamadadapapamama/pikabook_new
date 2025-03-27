@@ -22,6 +22,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/common/pika_button.dart';
 import '../../widgets/common/help_text_tooltip.dart';
 import '../../widgets/common/pika_app_bar.dart';
+import 'flashcard_screen.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -342,5 +343,47 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   // Zero state에서 '새 노트 만들기' 버튼 클릭 핸들러
   void _handleAddNote(BuildContext context) {
     _showImagePickerBottomSheet(context);
+  }
+
+  /// 모든 플래시카드 보기 화면으로 이동
+  Future<void> _navigateToAllFlashcards() async {
+    try {
+      // 플래시카드 화면으로 이동
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const FlashCardScreen(),
+        ),
+      );
+
+      // 플래시카드 카운터 업데이트가 필요한 경우
+      if (result != null && result is Map && result.containsKey('flashcardCount')) {
+        final HomeViewModel viewModel = Provider.of<HomeViewModel>(context, listen: false);
+        
+        // 특정 노트의 플래시카드 카운터만 업데이트
+        if (result.containsKey('noteId') && result['noteId'] != null) {
+          String noteId = result['noteId'] as String;
+          
+          // 해당 노트 찾아서 카운터 업데이트
+          final int index = viewModel.notes.indexWhere((note) => note.id == noteId);
+          if (index >= 0) {
+            final int flashcardCount = result['flashcardCount'] as int;
+            final note = viewModel.notes[index].copyWith(flashcardCount: flashcardCount);
+            
+            // 노트 서비스를 통해 캐시 업데이트
+            NoteService().cacheNotes([note]);
+          }
+        }
+        
+        // 최신 데이터로 새로고침
+        viewModel.refreshNotes();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('플래시카드 화면 이동 중 오류가 발생했습니다: $e')),
+        );
+      }
+    }
   }
 }
