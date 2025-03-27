@@ -9,6 +9,9 @@ import '../theme/tokens/spacing_tokens.dart';
 ///
 class FlashCardUI {
   /// 플래시카드 위젯 생성
+  /// 
+  /// [중요]: 카드 삭제 시 FlashcardCounter를 업데이트하여 
+  /// note_detail_screen 및 home_screen에 반영되어야 함
   static Widget buildFlashCard({
     required FlashCard card,
     required int index,
@@ -26,102 +29,123 @@ class FlashCardUI {
     Offset offset = Offset.zero,
   }) {
     final bool isCurrentCard = index == currentIndex;
+    
+    // 앞 카드와 뒷 카드의 사이즈 조정
+    final double cardScale = isCurrentCard ? 1.0 : 0.8;
+    // 뒷 카드는 아래로 내려와 중첩이 보이도록 오프셋 조정
+    final double cardOffset = isCurrentCard ? 0 : 40;
 
-    return Column(
-      children: [
-        // 삭제 힌트와 버튼 (카드 위에 별도로 표시)
-        if (isCurrentCard)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 삭제 버튼
-                Icon(
-                  Icons.delete_outline,
-                  color: const Color(0xFFD3E0DD),
-                  size: 24,
-                ),
-                const SizedBox(height: 4),
-                // 스와이프 안내 텍스트
-                Text(
-                  '위로 스와이프 해도 삭제 됩니다.',
-                  style: TextStyle(
-                    fontSize: 12.0,
-                    color: const Color(0xFFD3E0DD),
-                    fontWeight: FontWeight.w400,
-                    fontFamily: 'Noto Sans KR',
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 화면의 95% 크기로 카드 너비 계산 (기존 80%에서 95%로 변경)
+        final double cardWidth = constraints.maxWidth * 0.95;
+        // 카드 높이는 화면 높이의 80%로 설정하여 전체 화면 활용
+        final double cardHeight = constraints.maxHeight * 0.8;
+        
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // 상단 삭제 힌트 (카드 위)
+              if (isCurrentCard)
+                Container(
+                  width: cardWidth,
+                  margin: const EdgeInsets.only(bottom: 8.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // 삭제 버튼
+                      Icon(
+                        Icons.delete_outline,
+                        color: const Color(0xFFD3E0DD),
+                        size: 24,
+                      ),
+                      const SizedBox(height: 4),
+                      // 스와이프 안내 텍스트
+                      Text(
+                        '위로 스와이프 해도 삭제 됩니다.',
+                        style: TextStyle(
+                          fontSize: 12.0,
+                          color: const Color(0xFFD3E0DD),
+                          fontWeight: FontWeight.w400,
+                          fontFamily: 'Noto Sans KR',
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        
-        // 플래시카드 본체
-        Transform.scale(
-          scale: scale,
-          child: Transform.translate(
-            offset: offset,
-            child: SizedBox(
-              width: 330, // 카드 너비를 피그마 디자인에 맞게 조정
-              height: 400, // 카드 높이를 피그마 디자인에 맞게 조정
-              child: FlipCard(
-                key: isCurrentCard ? flipCardKey : null,
-                direction: FlipDirection.HORIZONTAL,
-                speed: 300,
-                onFlipDone: (isFront) {
-                  if (isCurrentCard) {
-                    onFlip();
-                  }
-                },
-                front: buildCardSide(
-                  card: card,
-                  bgColor: const Color(0xFFFFF7D8), // Figma에서 가져온 색상
-                  textColor: ColorTokens.textPrimary,
-                  isFront: true,
-                  isCurrentCard: isCurrentCard,
-                  cardIndex: index,
-                  isSpeaking: isSpeaking,
-                  onSpeak: onSpeak,
-                  onStopSpeaking: onStopSpeaking,
-                  getNextCardInfo: getNextCardInfo,
-                  getPreviousCardInfo: getPreviousCardInfo,
-                  onWordTap: onWordTap,
-                ),
-                back: buildCardSide(
-                  card: card,
-                  bgColor: Colors.white, // 뒷면은 흰색 배경
-                  textColor: ColorTokens.textPrimary,
-                  isFront: false,
-                  isCurrentCard: isCurrentCard,
-                  cardIndex: index,
-                  isSpeaking: isSpeaking,
-                  onSpeak: onSpeak,
-                  onStopSpeaking: onStopSpeaking,
-                  getNextCardInfo: getNextCardInfo,
-                  getPreviousCardInfo: getPreviousCardInfo,
-                  onWordTap: onWordTap,
+                
+              // 플래시카드 본체
+              Transform.scale(
+                scale: cardScale * scale,
+                child: Transform.translate(
+                  offset: Offset(0, cardOffset) + offset,
+                  child: SizedBox(
+                    width: cardWidth,
+                    height: cardHeight,
+                    child: FlipCard(
+                      key: isCurrentCard ? flipCardKey : null,
+                      direction: FlipDirection.HORIZONTAL,
+                      speed: 300,
+                      onFlipDone: (isFront) {
+                        if (isCurrentCard) {
+                          onFlip();
+                        }
+                      },
+                      front: buildCardSide(
+                        card: card,
+                        bgColor: const Color(0xFFFFF7D8), // Figma에서 가져온 색상
+                        textColor: ColorTokens.textPrimary,
+                        isFront: true,
+                        isCurrentCard: isCurrentCard,
+                        cardIndex: index,
+                        isSpeaking: isSpeaking,
+                        onSpeak: onSpeak,
+                        onStopSpeaking: onStopSpeaking,
+                        getNextCardInfo: getNextCardInfo,
+                        getPreviousCardInfo: getPreviousCardInfo,
+                        onWordTap: onWordTap,
+                      ),
+                      back: buildCardSide(
+                        card: card,
+                        bgColor: Colors.white, // 뒷면은 흰색 배경
+                        textColor: ColorTokens.textPrimary,
+                        isFront: false,
+                        isCurrentCard: isCurrentCard,
+                        cardIndex: index,
+                        isSpeaking: isSpeaking,
+                        onSpeak: onSpeak,
+                        onStopSpeaking: onStopSpeaking,
+                        getNextCardInfo: getNextCardInfo,
+                        getPreviousCardInfo: getPreviousCardInfo,
+                        onWordTap: onWordTap,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              
+              // 하단 가이드 텍스트
+              if (isCurrentCard)
+                Container(
+                  width: cardWidth,
+                  margin: const EdgeInsets.only(top: 12.0),
+                  child: Text(
+                    '좌우로 스와이프 해서 다음 카드로 이동',
+                    style: TextStyle(
+                      fontSize: 12.0,
+                      color: const Color(0xFFD3E0DD),
+                      fontWeight: FontWeight.w400,
+                      fontFamily: 'Noto Sans KR',
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+            ],
           ),
-        ),
-        
-        // 하단 가이드 텍스트
-        if (isCurrentCard)
-          Padding(
-            padding: const EdgeInsets.only(top: 12.0),
-            child: Text(
-              '좌우로 스와이프 해서 다음 카드로 이동',
-              style: TextStyle(
-                fontSize: 12.0,
-                color: const Color(0xFFD3E0DD),
-                fontWeight: FontWeight.w400,
-                fontFamily: 'Noto Sans KR',
-              ),
-            ),
-          ),
-      ],
+        );
+      }
     );
   }
 
@@ -156,6 +180,9 @@ class FlashCardUI {
                 displayPinyin,
                 textColor,
                 onWordTap: onWordTap,
+                isSpeaking: isSpeaking,
+                onSpeak: onSpeak,
+                onStopSpeaking: onStopSpeaking,
               )
             : buildBackCardContent(
                 card.back,
@@ -163,13 +190,12 @@ class FlashCardUI {
                 displayPinyin,
                 textColor,
                 onWordTap: onWordTap,
+                isSpeaking: isSpeaking,
+                onSpeak: onSpeak,
+                onStopSpeaking: onStopSpeaking,
               ),
 
-          // TTS 버튼 (항상 표시)
-          if (isCurrentCard)
-            buildTtsButton(const Color(0xFF226357), isSpeaking, onSpeak, onStopSpeaking),
-
-          // 카드 번호 표시 (좌하단)
+          // 카드 번호 표시 (좌상단)
           buildCardNumberBadge(cardIndex, const Color(0xFFFFD53C), Colors.white),
         ],
       ),
@@ -201,6 +227,9 @@ class FlashCardUI {
     String pinyin,
     Color textColor, {
     Function(String)? onWordTap,
+    required bool isSpeaking,
+    required Function() onSpeak,
+    required Function() onStopSpeaking,
   }) {
     return Center(
       child: Padding(
@@ -208,6 +237,10 @@ class FlashCardUI {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // TTS 버튼 (단어 위에 위치)
+            buildTtsButtonInline(const Color(0xFF226357), isSpeaking, onSpeak, onStopSpeaking),
+            const SizedBox(height: 8), // 단어와 TTS 버튼 사이 간격
+            
             // 단어/의미 텍스트
             Text(
               text,
@@ -244,6 +277,9 @@ class FlashCardUI {
     String pinyin,
     Color textColor, {
     Function(String)? onWordTap,
+    required bool isSpeaking,
+    required Function() onSpeak,
+    required Function() onStopSpeaking,
   }) {
     return Center(
       child: Padding(
@@ -251,6 +287,10 @@ class FlashCardUI {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // TTS 버튼 (단어 위에 위치)
+            buildTtsButtonInline(const Color(0xFF226357), isSpeaking, onSpeak, onStopSpeaking),
+            const SizedBox(height: 8), // 단어와 TTS 버튼 사이 간격
+            
             // 번역 (의미)
             Text(
               translation,
@@ -294,26 +334,22 @@ class FlashCardUI {
     );
   }
 
-  /// TTS 버튼 생성
-  static Widget buildTtsButton(
+  /// 인라인 TTS 버튼 생성 (카드 내용에 포함)
+  static Widget buildTtsButtonInline(
     Color iconColor,
     bool isSpeaking,
     Function() onSpeak,
     Function() onStopSpeaking,
   ) {
-    return Positioned(
-      top: 20,
-      right: 20,
-      child: InkWell(
-        onTap: isSpeaking ? onStopSpeaking : onSpeak,
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: Icon(
-            isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
-            color: iconColor,
-            size: 24,
-          ),
+    return InkWell(
+      onTap: isSpeaking ? onStopSpeaking : onSpeak,
+      child: SizedBox(
+        width: 24,
+        height: 24,
+        child: Icon(
+          isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
+          color: iconColor,
+          size: 24,
         ),
       ),
     );
@@ -322,7 +358,7 @@ class FlashCardUI {
   /// 카드 번호 배지 생성
   static Widget buildCardNumberBadge(int index, Color bgColor, Color textColor) {
     return Positioned(
-      bottom: 20,
+      top: 20,
       left: 20,
       child: Container(
         width: 24,
@@ -346,36 +382,4 @@ class FlashCardUI {
     );
   }
 
-  /// 하단 버튼 영역 위젯 생성
-  static Widget buildBottomControls({
-    required bool hasCards,
-    Function()? onFlip,
-    required Function() onDelete,
-  }) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: SpacingTokens.md),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Flip 버튼 (선택적)
-          if (onFlip != null) ...[
-            IconButton(
-              icon: const Icon(Icons.flip),
-              onPressed: hasCards ? onFlip : null,
-              iconSize: SpacingTokens.iconSizeLarge,
-              color: hasCards ? ColorTokens.info : ColorTokens.disabled,
-            ),
-            SizedBox(width: SpacingTokens.md),
-          ],
-          // 삭제 버튼
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: hasCards ? onDelete : null,
-            iconSize: SpacingTokens.iconSizeLarge,
-            color: hasCards ? ColorTokens.error : ColorTokens.disabled,
-          ),
-        ],
-      ),
-    );
-  }
 }
