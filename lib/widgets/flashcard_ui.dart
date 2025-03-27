@@ -40,44 +40,44 @@ class FlashCardUI {
         // 화면의 95% 크기로 카드 너비 계산 (기존 80%에서 95%로 변경)
         final double cardWidth = constraints.maxWidth * 0.95;
         // 카드 높이는 화면 높이의 80%로 설정하여 전체 화면 활용
-        final double cardHeight = constraints.maxHeight * 0.8;
+        final double cardHeight = constraints.maxHeight * 0.9;
         
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // 상단 삭제 힌트 (카드 위)
-              if (isCurrentCard)
-                Container(
-                  width: cardWidth,
-                  margin: const EdgeInsets.only(bottom: 8.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // 삭제 버튼
-                      Icon(
-                        Icons.delete_outline,
+        return Stack(
+          children: [
+            // 삭제 힌트 (상단 고정)
+            if (isCurrentCard)
+              Positioned(
+                top: 8,
+                left: 0,
+                right: 0,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // 삭제 버튼
+                    Icon(
+                      Icons.delete_outline,
+                      color: const Color(0xFFD3E0DD),
+                      size: 24,
+                    ),
+                    const SizedBox(height: 4),
+                    // 스와이프 안내 텍스트
+                    Text(
+                      '위로 스와이프 해도 삭제 됩니다.',
+                      style: TextStyle(
+                        fontSize: 12.0,
                         color: const Color(0xFFD3E0DD),
-                        size: 24,
+                        fontWeight: FontWeight.w400,
+                        fontFamily: 'Noto Sans KR',
                       ),
-                      const SizedBox(height: 4),
-                      // 스와이프 안내 텍스트
-                      Text(
-                        '위로 스와이프 해도 삭제 됩니다.',
-                        style: TextStyle(
-                          fontSize: 12.0,
-                          color: const Color(0xFFD3E0DD),
-                          fontWeight: FontWeight.w400,
-                          fontFamily: 'Noto Sans KR',
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
-                
-              // 플래시카드 본체
-              Transform.scale(
+              ),
+              
+            // 플래시카드 본체 (중앙)
+            Center(
+              child: Transform.scale(
                 scale: cardScale * scale,
                 child: Transform.translate(
                   offset: Offset(0, cardOffset) + offset,
@@ -125,25 +125,26 @@ class FlashCardUI {
                   ),
                 ),
               ),
-              
-              // 하단 가이드 텍스트
-              if (isCurrentCard)
-                Container(
-                  width: cardWidth,
-                  margin: const EdgeInsets.only(top: 12.0),
-                  child: Text(
-                    '좌우로 스와이프 해서 다음 카드로 이동',
-                    style: TextStyle(
-                      fontSize: 12.0,
-                      color: const Color(0xFFD3E0DD),
-                      fontWeight: FontWeight.w400,
-                      fontFamily: 'Noto Sans KR',
-                    ),
-                    textAlign: TextAlign.center,
+            ),
+            
+            // 하단 가이드 텍스트 (하단 고정)
+            if (isCurrentCard)
+              Positioned(
+                bottom: 8,
+                left: 0,
+                right: 0,
+                child: Text(
+                  '좌우로 스와이프 해서 다음 카드로 이동',
+                  style: TextStyle(
+                    fontSize: 12.0,
+                    color: const Color(0xFFD3E0DD),
+                    fontWeight: FontWeight.w400,
+                    fontFamily: 'Noto Sans KR',
                   ),
+                  textAlign: TextAlign.center,
                 ),
-            ],
-          ),
+              ),
+          ],
         );
       }
     );
