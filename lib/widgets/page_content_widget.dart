@@ -561,60 +561,58 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 ),
               ) ?? false;
             },
-            // 콘텐츠 컨테이너
-            child: Material(
-              color: Colors.white,
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: ColorTokens.primarylight,
-                    width: 1,
-                  ),
-                  borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+            // 세그먼트 내용 - 테두리와 배경색을 포함한 컨테이너
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(
+                  color: ColorTokens.primarylight,
+                  width: 1,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 원본 텍스트 표시 (항상 표시)
-                      _buildSelectableText(
-                        segment.originalText,
-                        _originalTextStyle,
+                borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 원본 텍스트 표시 (항상 표시)
+                    _buildSelectableText(
+                      segment.originalText,
+                      _originalTextStyle,
+                    ),
+
+                    // 핀인 표시 (showPinyin이 true일 때만)
+                    if (segment.pinyin != null && 
+                        segment.pinyin!.isNotEmpty && 
+                        _processedText!.showPinyin)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2.0),
+                        child: Text(
+                          segment.pinyin!,
+                          style: _pinyinTextStyle,
+                        ),
                       ),
 
-                      // 핀인 표시 (showPinyin이 true일 때만)
-                      if (segment.pinyin != null && 
-                          segment.pinyin!.isNotEmpty && 
-                          _processedText!.showPinyin)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2.0),
-                          child: Text(
-                            segment.pinyin!,
-                            style: _pinyinTextStyle,
-                          ),
+                    // 번역 텍스트 표시 (showTranslation이 true일 때만)
+                    if (_processedText!.showTranslation && 
+                        segment.translatedText != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
+                        child: _buildSelectableText(
+                          segment.translatedText!,
+                          _translatedTextStyle,
                         ),
-
-                      // 번역 텍스트 표시 (showTranslation이 true일 때만)
-                      if (_processedText!.showTranslation && 
-                          segment.translatedText != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
-                          child: _buildSelectableText(
-                            segment.translatedText!,
-                            _translatedTextStyle,
-                          ),
-                        ),
-                      
-                      // 구분선 추가 (마지막 세그먼트가 아닌 경우)
-                      if (i < _processedText!.segments!.length - 1)
-                        const Divider(height: 24, thickness: 1),
-                      
-                      // 마지막 세그먼트에는 여백 추가
-                      if (i == _processedText!.segments!.length - 1)
-                        const SizedBox(height: 24),
-                    ],
-                  ),
+                      ),
+                    
+                    // 구분선 추가 (마지막 세그먼트가 아닌 경우)
+                    if (i < _processedText!.segments!.length - 1)
+                      const Divider(height: 24, thickness: 1),
+                    
+                    // 마지막 세그먼트에는 여백 추가
+                    if (i == _processedText!.segments!.length - 1)
+                      const SizedBox(height: 24),
+                  ],
                 ),
               ),
             ),
@@ -685,20 +683,21 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   void _initStyles() {
     _originalTextStyle = TypographyTokens.subtitle2Cn.copyWith(
       fontSize: 20,
-      height: 1.2,
+      height: 1.6,
       fontWeight: FontWeight.w500,
       color: ColorTokens.textPrimary,
     );
     
-    _pinyinTextStyle = TypographyTokens.caption.copyWith(
+    _pinyinTextStyle = TypographyTokens.body2.copyWith(
       color: ColorTokens.textGrey,
       fontWeight: FontWeight.w400,
       fontSize: 12,
-      height: 1.2,
+      height: 1.4,
     );
     
     _translatedTextStyle = TypographyTokens.body2.copyWith(
       color: ColorTokens.textSecondary,
+      fontSize: 14,
     );
   }
 }
