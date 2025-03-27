@@ -732,8 +732,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           
           // 성공적으로 처리되었고, 현재 노트와 일치하는 경우
           if (success && noteId == _note!.id) {
-            // 플래시카드 수가 변경되었다면 노트 정보 다시 로드
-            if (_note!.flashcardCount != flashcardCount) {
+            // 노트 객체를 업데이트하고 Firestore와 캐시에도 반영
+            if (_note != null && _note!.id != null) {
+              // 노트 객체 업데이트
+              final updatedNote = _note!.copyWith(flashcardCount: flashcardCount);
+              
+              // Firebase에 업데이트 반영
+              await FirebaseFirestore.instance
+                  .collection('notes')
+                  .doc(_note!.id)
+                  .update({'flashcardCount': flashcardCount});
+                  
+              // 노트 서비스에 캐시 업데이트
+              _noteService.cacheNotes([updatedNote]);
+              
+              // 노트 정보 새로 로드 (UI 갱신)
               _loadNote();
             }
           }
@@ -742,7 +755,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           if (result is int) {
             final flashcardCount = result;
             debugPrint('플래시카드 화면에서 돌아옴 (레거시 형식): 카드 수 $flashcardCount개');
-            _loadNote();
+            
+            // 노트 객체 업데이트
+            if (_note != null && _note!.id != null) {
+              final updatedNote = _note!.copyWith(flashcardCount: flashcardCount);
+              
+              // Firebase에 업데이트 반영
+              await FirebaseFirestore.instance
+                  .collection('notes')
+                  .doc(_note!.id)
+                  .update({'flashcardCount': flashcardCount});
+                  
+              // 노트 서비스에 캐시 업데이트
+              _noteService.cacheNotes([updatedNote]);
+              
+              // 노트 정보 새로 로드
+              _loadNote();
+            }
           }
         }
       }

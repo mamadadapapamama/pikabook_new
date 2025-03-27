@@ -235,10 +235,23 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       await _flashCardService.deleteFlashCard(flashCardId, noteId: noteId);
 
       if (mounted) {
+        // 삭제할 카드 인덱스 저장
+        final int indexToRemove = _currentIndex;
+        
         setState(() {
-          _flashCards.removeAt(_currentIndex);
-          if (_currentIndex >= _flashCards.length && _flashCards.isNotEmpty) {
-            _currentIndex = _flashCards.length - 1;
+          // 카드 삭제
+          _flashCards.removeAt(indexToRemove);
+          
+          // 인덱스 조정 (카드가 하나 이상 남아있을 때만)
+          if (_flashCards.isNotEmpty) {
+            // 마지막 카드였다면 이전 카드로 인덱스 이동
+            if (indexToRemove >= _flashCards.length) {
+              _currentIndex = _flashCards.length - 1;
+            }
+            // 그 외에는 현재 인덱스 유지 (자동으로 다음 카드가 보임)
+          } else {
+            // 카드가 모두 삭제된 경우 인덱스를 0으로 설정
+            _currentIndex = 0;
           }
         });
         
@@ -247,16 +260,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           const SnackBar(content: Text('플래시카드가 삭제되었습니다.')),
         );
 
-        // 플래시카드가 비어 있는 경우에만 노트 화면으로 돌아감
-        // 그렇지 않으면 현재 화면에 남아 있음
-        if (_flashCards.isEmpty && widget.noteId != null && mounted) {
-          // 동일한 형식으로 결과 반환 (flashcardCount: 0)
-          Navigator.of(context).pop({
-            'flashcardCount': 0,
-            'success': true,
-            'noteId': widget.noteId
-          });
-        }
+        // 노트 화면으로 돌아가지 않고 현재 화면에 남아있음
+        // (빈 화면이면 빈 상태 UI가 표시됨)
       }
     } catch (e) {
       if (mounted) {
@@ -382,15 +387,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 상태 표시줄 색상을 검정으로 설정
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-      ),
-    );
-    
     return WillPopScope(
       onWillPop: () async {
         // 화면을 나갈 때 현재 플래시카드 카운트를 전달 (onBackPressed와 동일한 형식)
@@ -472,67 +468,39 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               ],
                             ),
                             const SizedBox(height: 24),
-                            // 버튼들을 Row로 배치
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                // 뒤로가기 버튼
-                                GestureDetector(
-                                  onTap: () => Navigator.of(context).pop(),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: const Color(0xFFFE6A15),
-                                      ),
-                                    ),
-                                    child: const Text(
-                                      '뒤로가기',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Color(0xFFFE6A15),
-                                        fontFamily: 'Noto Sans KR',
-                                      ),
-                                    ),
+                            // 버튼들 - '노트로 돌아가기' 버튼만 표시
+                            GestureDetector(
+                              onTap: () {
+                                if (widget.noteId != null && mounted) {
+                                  // 노트 화면으로 돌아가면서 카드 개수 0 전달
+                                  Navigator.of(context).pop({
+                                    'flashcardCount': 0,
+                                    'success': true,
+                                    'noteId': widget.noteId
+                                  });
+                                } else {
+                                  Navigator.of(context).pushReplacementNamed('/notes');
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFE6A15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  '노트로 돌아가기',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white,
+                                    fontFamily: 'Noto Sans KR',
                                   ),
                                 ),
-                                const SizedBox(width: 16),
-                                // 노트로 돌아가기 버튼
-                                GestureDetector(
-                                  onTap: () {
-                                    if (widget.noteId != null) {
-                                      Navigator.of(context).pop();
-                                    } else {
-                                      Navigator.of(context).pushReplacementNamed('/notes');
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFE6A15),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Text(
-                                      '노트로 돌아가기',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.white,
-                                        fontFamily: 'Noto Sans KR',
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ],
                         ),

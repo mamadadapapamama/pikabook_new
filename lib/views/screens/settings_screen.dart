@@ -103,15 +103,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 상태 표시줄 색상을 검정으로 설정
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-      ),
-    );
-    
     return Scaffold(
       backgroundColor: ColorTokens.background,
       appBar: PikaAppBar.settings(
