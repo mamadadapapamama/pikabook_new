@@ -15,6 +15,7 @@ class SegmentUtils {
     required Function onDelete,
     DismissDirection direction = DismissDirection.endToStart,
     Future<bool?> Function(DismissDirection)? confirmDismiss,
+    BorderRadius? borderRadius,
   }) {
     return Dismissible(
       key: key,
@@ -26,7 +27,10 @@ class SegmentUtils {
         padding: direction == DismissDirection.endToStart 
             ? const EdgeInsets.only(right: 20.0)
             : const EdgeInsets.only(left: 20.0),
-        color: ColorTokens.deleteSwipeBackground,
+        decoration: BoxDecoration(
+          color: ColorTokens.deleteSwipeBackground,
+          borderRadius: borderRadius,
+        ),
         child: const Icon(
           Icons.delete,
           color: Colors.white,
