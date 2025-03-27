@@ -209,7 +209,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 children: [
                   const Icon(Icons.text_snippet_outlined, size: 48, color: Colors.grey),
                   const SizedBox(height: 16),
-                  const Text('아직 텍스트가 없습니다.'),
+                  const Text('처리된 텍스트가 없습니다.'),
                   if (widget.page.id != null) ...[
                     const SizedBox(height: 16),
                     _buildAddTextButton(),
@@ -274,37 +274,12 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           );
         }
       } else {
-        // 사전에서 찾을 수 없는 경우, 바로 플래시카드 추가 다이얼로그 표시
+        // 사전에서 찾을 수 없는 경우, API로도 찾을 수 없는 경우
         if (!mounted) return;
-
-        // 커스텀 다이얼로그 표시
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text('단어 찾기 결과'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('단어: $word'),
-                const SizedBox(height: 16),
-                const Text('사전에서 찾을 수 없습니다. 플래시카드에 추가하시겠습니까?'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('취소'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  widget.onCreateFlashCard(word, '직접 의미 입력 필요', pinyin: null);
-                },
-                child: const Text('추가'),
-              ),
-            ],
-          ),
+        
+        // 오류 메시지 표시
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('단어 "$word"를 사전에서 찾을 수 없습니다.')),
         );
       }
     } catch (e) {
@@ -422,32 +397,10 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   /// **세그먼트별 텍스트 표시 위젯**
   Widget _buildSegmentedView() {
-    // 디버그 로그 추가
-    debugPrint('_buildSegmentedView 호출 - 세그먼트 모드 렌더링');
-    
-    // _processedText 체크
-    if (_processedText == null) {
-      return const SizedBox.shrink();
-    }
-    
-    // 세그먼트가 없으면 빈 컨테이너 반환
-    if (_processedText!.segments == null ||
-        _processedText!.segments!.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('세그먼트가 없습니다.');
-      }
-
-      // 세그먼트가 없으면 전체 텍스트 표시
+    List<Widget> segmentWidgets = [];
+    if (_processedText == null || _processedText!.segments == null) {
       return _buildFullTextView();
     }
-
-    if (kDebugMode) {
-      debugPrint('세그먼트 수: ${_processedText!.segments!.length}');
-      debugPrint('표시 설정: 원문=${true}, 병음=${_processedText!.showPinyin}, 번역=${_processedText!.showTranslation}');
-    }
-
-    // 세그먼트 목록을 위젯 목록으로 변환
-    List<Widget> segmentWidgets = [];
 
     for (int i = 0; i < _processedText!.segments!.length; i++) {
       final segment = _processedText!.segments![i];
@@ -485,36 +438,14 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // TTS 버튼 추가
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      _playingSegmentIndex == i
-                          ? Icons.stop_circle
-                          : Icons.play_circle,
-                      color:
-                          _playingSegmentIndex == i ? Colors.red : Colors.blue,
-                    ),
-                    onPressed: () {
-                      _playTts(segment.originalText, segmentIndex: i);
-                    },
-                    tooltip: _playingSegmentIndex == i ? '중지' : '읽기',
-                    iconSize: 24,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 4.0),
-
+              // 첫번째 세그먼트 위에 여백 추가
+              if (i == 0)
+                const SizedBox(height: 8),
+                
               // 원본 텍스트 표시 (항상 표시)
               _buildSelectableText(
                 segment.originalText,
-                TypographyTokens.body1.copyWith(
-                  fontSize: 18,
+                TypographyTokens.subtitle2Cn.copyWith(
                   height: 1.5,
                   color: ColorTokens.textPrimary,
                 ),
@@ -525,13 +456,11 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   segment.pinyin!.isNotEmpty && 
                   _processedText!.showPinyin)
                 Padding(
-                  padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                  padding: const EdgeInsets.only(top: 2.0),
                   child: Text(
                     segment.pinyin!,
                     style: TypographyTokens.body2En.copyWith(
                       color: ColorTokens.textGrey,
-                      fontSize: 14,
-                      height: 1.4,
                     ),
                   ),
                 ),
@@ -540,7 +469,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               if (_processedText!.showTranslation && 
                   segment.translatedText != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+                  padding: const EdgeInsets.only(top: 4.0, bottom: 4.0),
                   child: _buildSelectableText(
                     segment.translatedText!,
                     TypographyTokens.body2.copyWith(
@@ -555,7 +484,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               
               // 마지막 세그먼트에는 여백 추가
               if (i == _processedText!.segments!.length - 1)
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
             ],
           ),
         ),
@@ -602,25 +531,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           ),
       ],
     );
-  }
-  
-  // TTS 재생용 임시 변수 및 메서드
-  int? _playingSegmentIndex;
-  
-  void _playTts(String text, {int? segmentIndex}) {
-    if (text.isEmpty) return;
-    
-    setState(() {
-      if (_playingSegmentIndex == segmentIndex) {
-        // 이미 재생 중이면 중지
-        _playingSegmentIndex = null;
-        _pageContentService.stopSpeaking();
-      } else {
-        // 새로 재생
-        _playingSegmentIndex = segmentIndex;
-        _pageContentService.speakText(text);
-      }
-    });
   }
   
   // 선택 가능한 텍스트 위젯 생성 - 메모이제이션 추가
