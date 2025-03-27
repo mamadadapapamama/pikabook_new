@@ -19,7 +19,17 @@ class FlashcardCounterBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (count <= 0) return const SizedBox.shrink();
+    // 플래시카드 개수에 따라 스타일 조정
+    final bool hasFlashcards = count > 0;
+    
+    // 배지 배경색과 텍스트 색상 결정
+    final Color bgColor = hasFlashcards 
+        ? UITokens.flashcardBadgeBackground
+        : UITokens.flashcardBadgeBackground.withOpacity(0.5);
+    
+    final Color textColor = hasFlashcards
+        ? ColorTokens.secondary
+        : ColorTokens.textGrey;
     
     Widget badge = Container(
       padding: EdgeInsets.symmetric(
@@ -27,58 +37,61 @@ class FlashcardCounterBadge extends StatelessWidget {
         vertical: SpacingTokens.xs / 2,
       ),
       decoration: BoxDecoration(
-        color: UITokens.flashcardBadgeBackground,
+        color: bgColor,
         borderRadius: BorderRadius.circular(100),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // PNG 이미지 사용
-          Image.asset(
-            'assets/images/icon_flashcard_counter.png',
-            width: 18,
-            height: 18,
-            errorBuilder: (context, error, stackTrace) {
-              // 에러 시 대체 아이콘 표시 (기존 스택 방식)
-              return SizedBox(
-                width: 18,
-                height: 18,
-                child: Center(
-                  child: Stack(
-                    children: [
-                      Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: UITokens.flashcardBadgeBackground,
-                          borderRadius: BorderRadius.circular(SpacingTokens.xs),
-                          border: Border.all(
-                            color: UITokens.flashcardBadgeBorder,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 6,
-                        left: 6,
-                        child: Container(
+          // 플래시카드 아이콘 (count가 0이면 흐리게 표시)
+          Opacity(
+            opacity: hasFlashcards ? 1.0 : 0.5,
+            child: Image.asset(
+              'assets/images/icon_flashcard_counter.png',
+              width: 18,
+              height: 18,
+              errorBuilder: (context, error, stackTrace) {
+                // 에러 시 대체 아이콘 표시 (기존 스택 방식)
+                return SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: Center(
+                    child: Stack(
+                      children: [
+                        Container(
                           width: 14,
                           height: 14,
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: bgColor,
                             borderRadius: BorderRadius.circular(SpacingTokens.xs),
                             border: Border.all(
-                              color: UITokens.flashcardBadgeBorder,
+                              color: hasFlashcards ? UITokens.flashcardBadgeBorder : ColorTokens.textGrey,
                               width: 2,
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                        Positioned(
+                          top: 6,
+                          left: 6,
+                          child: Container(
+                            width: 14,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(SpacingTokens.xs),
+                              border: Border.all(
+                                color: hasFlashcards ? UITokens.flashcardBadgeBorder : ColorTokens.textGrey,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
           SizedBox(width: SpacingTokens.xs),
           Text(
@@ -86,23 +99,23 @@ class FlashcardCounterBadge extends StatelessWidget {
             style: GoogleFonts.poppins(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: ColorTokens.secondary,
+              color: textColor,
             ),
           ),
         ],
       ),
     );
     
-    // noteId가 제공되면 GestureDetector로 감싸서 탭 시 플래시카드 화면으로 이동
+    // noteId가 제공되고 플래시카드가 있으면 GestureDetector로 감싸서 탭 시 플래시카드 화면으로 이동
     if (noteId != null) {
       return GestureDetector(
-        onTap: () {
+        onTap: hasFlashcards ? () {
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => FlashCardScreen(noteId: noteId!),
             ),
           );
-        },
+        } : null,
         child: badge,
       );
     }
