@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/language_constants.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // 노트 뷰 모드 enum - 클래스 외부로 이동
 enum NoteViewMode {
@@ -208,22 +209,23 @@ class UserPreferencesService {
     await prefs.setString(_defaultNoteSpaceKey, name);
   }
 
-  // 기본 노트 스페이스 가져오기
+  // 노트 스페이스 이름 가져오기
   Future<String> getDefaultNoteSpace() async {
     final prefs = await SharedPreferences.getInstance();
-    final defaultSpace = prefs.getString(_defaultNoteSpaceKey);
-    
-    if (defaultSpace != null) {
-      // 기본 노트 스페이스가 존재하는지 확인
-      final spaces = await getNoteSpaces();
-      if (spaces.contains(defaultSpace)) {
-        return defaultSpace;
-      }
+    return prefs.getString(_defaultNoteSpaceKey) ?? '나의 노트';
+  }
+
+  // 사용자 ID 가져오기
+  Future<String?> getUserId() async {
+    try {
+      // Firebase Auth에서 현재 사용자 ID 가져오기
+      final firebaseAuth = FirebaseAuth.instance;
+      final user = firebaseAuth.currentUser;
+      return user?.uid;
+    } catch (e) {
+      debugPrint('사용자 ID 가져오기 실패: $e');
+      return null;
     }
-    
-    // 기본값이 없거나 유효하지 않으면 첫 번째 노트 스페이스 반환
-    final spaces = await getNoteSpaces();
-    return spaces.first;
   }
 
   // 모든 언어 관련 설정 초기화 (기본값으로)

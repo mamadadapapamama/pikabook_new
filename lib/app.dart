@@ -88,51 +88,18 @@ class _AppState extends State<App> {
         _isLoadingUserData = true;
       });
       
-      // Firestore에서 온보딩 상태 확인
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      
-      final userData = userDoc.data();
-      final bool onboardingCompleted = userData?['onboardingCompleted'] ?? false;
-      final bool hasOnboarded = userData?['hasOnboarded'] ?? false;
-      
-      // 로컬 상태 확인
-      final prefs = await SharedPreferences.getInstance();
-      final bool localOnboardingCompleted = prefs.getBool('onboarding_completed') ?? false;
-      
-      debugPrint('사용자 ${user.uid} 온보딩 상태 - Firestore: completed=$onboardingCompleted, hasOnboarded=$hasOnboarded, 로컬: $localOnboardingCompleted');
-      
-      // 로컬과 Firestore 상태 동기화
-      if (localOnboardingCompleted != onboardingCompleted) {
-        await prefs.setBool('onboarding_completed', onboardingCompleted);
-        debugPrint('로컬 온보딩 상태 동기화: $onboardingCompleted');
+      // 로그인한 사용자는 항상 온보딩 완료 처리
+      if (mounted) {
+        setState(() {
+          _isOnboardingCompleted = true;
+          _isLoadingUserData = false;
+        });
       }
       
-      // 온보딩 상태에 따라 적절한 화면으로 이동
-      if (!hasOnboarded || !onboardingCompleted) {
-        // 온보딩이 필요한 경우 툴팁 상태 초기화
-        await prefs.setBool('hasShownTooltip', false);
-        
-        if (mounted) {
-          setState(() {
-            _isLoadingUserData = false;
-            _isOnboardingCompleted = false;
-          });
-        }
-        
-        debugPrint('온보딩이 필요함. 온보딩 화면으로 이동');
-      } else {
-        if (mounted) {
-          setState(() {
-            _isOnboardingCompleted = true;
-            _isLoadingUserData = false;
-          });
-        }
-        
-        debugPrint('온보딩 완료됨. 메인 화면으로 이동');
-      }
+      debugPrint('로그인한 사용자는 온보딩 완료 처리됨. 메인 화면으로 이동');
+      
+      // Firestore 사용자 데이터 업데이트 (백그라운드로 처리)
+      _updateUserOnboardingStatus(user.uid);
     } catch (e) {
       debugPrint('온보딩 상태 확인 중 오류 발생: $e');
       if (mounted) {
@@ -140,6 +107,29 @@ class _AppState extends State<App> {
           _isLoadingUserData = false;
         });
       }
+    }
+  }
+  
+  // 사용자의 온보딩 상태를 Firestore에 업데이트 (백그라운드)
+  Future<void> _updateUserOnboardingStatus(String userId) async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Firestore에 온보딩 완료 상태 저장
+      await firestore.collection('users').doc(userId).update({
+        'onboardingCompleted': true,
+        'hasOnboarded': true,
+        'onboardingCompletedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // 로컬 상태도 업데이트
+      await prefs.setBool('onboarding_completed', true);
+      await prefs.setBool('hasOnboarded', true);
+      
+      debugPrint('온보딩 완료 상태가 Firestore와 로컬에 저장됨');
+    } catch (e) {
+      debugPrint('온보딩 상태 업데이트 중 오류: $e');
     }
   }
 
@@ -173,23 +163,20 @@ class _AppState extends State<App> {
       // 현재 로그인된 사용자가 있는지 확인
       final user = widget.initializationService.getCurrentUser();
       if (user != null) {
-        // Firestore에서 사용자의 온보딩 상태 확인
-        final firestore = FirebaseFirestore.instance;
-        final userDoc = await firestore.collection('users').doc(user.uid).get();
-        final hasCompletedOnboarding = userDoc.data()?['onboardingCompleted'] ?? false;
-        final hasOnboarded = userDoc.data()?['hasOnboarded'] ?? false;
-        
-        // 로컬 저장소에도 온보딩 상태 저장
-        await _preferencesService.setOnboardingCompleted(hasCompletedOnboarding);
-        await _preferencesService.setHasOnboarded(hasOnboarded);
+        // 로그인된 사용자는 항상 온보딩 완료 처리
+        await _preferencesService.setOnboardingCompleted(true);
+        await _preferencesService.setHasOnboarded(true);
         
         if (mounted) {
           setState(() {
-            _isOnboardingCompleted = hasCompletedOnboarding && hasOnboarded;
+            _isOnboardingCompleted = true;
           });
         }
         
-        debugPrint('사용자 온보딩 상태: onboardingCompleted=$hasCompletedOnboarding, hasOnboarded=$hasOnboarded, _isOnboardingCompleted=${hasCompletedOnboarding && hasOnboarded}');
+        // Firestore에도 온보딩 완료 상태 저장 (백그라운드)
+        _updateUserOnboardingStatus(user.uid);
+        
+        debugPrint('로그인된 사용자는 온보딩 완료 처리됨');
       } else {
         // 로그인되지 않은 경우 기본값으로 온보딩 필요
         await _preferencesService.setOnboardingCompleted(false);

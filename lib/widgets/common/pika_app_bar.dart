@@ -43,7 +43,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.onBackPressed,
     this.actions,
     this.leading,
-    this.backgroundColor = Colors.white,
+    this.backgroundColor = Colors.transparent,
     this.centerTitle = false,
     this.subtitle,
     this.height = 72,
@@ -117,9 +117,12 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     required double progress,
     required VoidCallback onMorePressed,
     required VoidCallback onFlashcardTap,
+    VoidCallback? onBackPressed,
   }) {
     return PikaAppBar(
       title: title,
+      showBackButton: true,
+      onBackPressed: onBackPressed,
       automaticallyImplyLeading: true,
       height: 72,
       actions: [
@@ -211,7 +214,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     
     // 앱바 컨텐츠
     AppBar appBar = AppBar(
-      backgroundColor: backgroundColor,
+      backgroundColor: Colors.transparent,
       elevation: 0,
       centerTitle: centerTitle,
       automaticallyImplyLeading: automaticallyImplyLeading,
@@ -219,9 +222,11 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
           ? IconButton(
               icon: Icon(
                 Icons.arrow_back_ios_rounded,
-                color: ColorTokens.textPrimary,
+                color: ColorTokens.textSecondary,
                 size: 20,
               ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
               onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
             )
           : leading,
@@ -250,63 +255,51 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                 )
               : null,
     );
-
-    // 테두리 추가
-    if (showBorder) {
-      return Container(
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: Colors.grey.shade300,
-              width: 1,
-            ),
-          ),
-        ),
-        child: appBar,
-      );
-    }
-
     return appBar;
   }
 
   // 로고와 노트스페이스 이름 빌드
   Widget _buildLogoTitle(String? noteSpaceName) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 로고 이미지
-        SvgPicture.asset(
-          'assets/images/pikabook_textlogo_primary.svg',
-          height: SpacingTokens.appLogoHeight,
-          placeholderBuilder: (context) => Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.menu_book,
-                color: ColorTokens.primary,
-                size: SpacingTokens.iconSizeSmall,
-              ),
-              SizedBox(width: SpacingTokens.xs),
-              Text(
-                'Pikabook',
-                style: TypographyTokens.body1En.copyWith(
-                  fontWeight: FontWeight.bold,
+        // 앱 로고
+        Container(
+          alignment: Alignment.centerLeft,
+          child: SvgPicture.asset(
+            'assets/images/pikabook_textlogo_primary.svg',
+            width: SpacingTokens.appLogoWidth,
+            height: SpacingTokens.appLogoHeight,
+            placeholderBuilder: (context) => Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.menu_book,
                   color: ColorTokens.primary,
+                  size: SpacingTokens.iconSizeSmall,
                 ),
-              ),
-            ],
+                SizedBox(width: SpacingTokens.xs),
+                Text(
+                  'Pikabook',
+                  style: TypographyTokens.body1En.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: ColorTokens.primary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(height: SpacingTokens.xs),
+        // 노트 스페이스 이름
         if (noteSpaceName != null)
-          Expanded(
-            child: Text(
-              noteSpaceName,
-              style: TypographyTokens.headline3.copyWith(
-                color: ColorTokens.textPrimary,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          Text(
+            noteSpaceName,
+            style: TypographyTokens.headline3.copyWith(
+              color: ColorTokens.textPrimary,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
       ],
     );
@@ -325,7 +318,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
           height: bottomHeight,
           color: ColorTokens.divider,
         ),
-        // 진행 상태 (녹색 표시)
+        // 진행 상태 (오렌지색)
         Container(
           width: MediaQuery.of(context).size.width * clampedProgress,
           height: bottomHeight,

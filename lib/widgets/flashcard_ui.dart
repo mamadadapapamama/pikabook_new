@@ -31,7 +31,7 @@ class FlashCardUI {
     final bool isCurrentCard = index == currentIndex;
     
     // 앞 카드와 뒷 카드의 사이즈 조정
-    final double cardScale = isCurrentCard ? 1.0 : 0.8;
+    final double cardScale = isCurrentCard ? 1.0 : 0.9;
     // 뒷 카드는 아래로 내려와 중첩이 보이도록 오프셋 조정
     final double cardOffset = isCurrentCard ? 0 : 40;
 
@@ -39,7 +39,7 @@ class FlashCardUI {
       builder: (context, constraints) {
         // 화면의 95% 크기로 카드 너비 계산 (기존 80%에서 95%로 변경)
         final double cardWidth = constraints.maxWidth * 0.95;
-        // 카드 높이는 화면 높이의 80%로 설정하여 전체 화면 활용
+        // 카드 높이는 화면 높이의 90%로 설정하여 전체 화면 활용
         final double cardHeight = constraints.maxHeight * 0.9;
         
         return Stack(
@@ -47,7 +47,7 @@ class FlashCardUI {
             // 삭제 힌트 (상단 고정)
             if (isCurrentCard)
               Positioned(
-                top: 8,
+                top: 0, // 없애서 위로 올림
                 left: 0,
                 right: 0,
                 child: Column(
@@ -59,7 +59,7 @@ class FlashCardUI {
                       color: const Color(0xFFD3E0DD),
                       size: 24,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2), // 4에서 2로 줄여 간격 축소
                     // 스와이프 안내 텍스트
                     Text(
                       '위로 스와이프 해도 삭제 됩니다.',
@@ -80,7 +80,7 @@ class FlashCardUI {
               child: Transform.scale(
                 scale: cardScale * scale,
                 child: Transform.translate(
-                  offset: Offset(0, cardOffset) + offset,
+                  offset: Offset(0, cardOffset - 20) + offset, // 카드 위치를 20 픽셀 위로 올림
                   child: SizedBox(
                     width: cardWidth,
                     height: cardHeight,
@@ -130,7 +130,7 @@ class FlashCardUI {
             // 하단 가이드 텍스트 (하단 고정)
             if (isCurrentCard)
               Positioned(
-                bottom: 8,
+                bottom: 16, // 기존 8에서 16으로 변경하여 더 위로 올림
                 left: 0,
                 right: 0,
                 child: Text(

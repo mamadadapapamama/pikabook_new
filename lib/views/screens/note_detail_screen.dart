@@ -720,23 +720,31 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         ),
       );
       
-      // 결과 처리 (유형 변환 오류 방지)
+      // 결과 처리 (Map 형태로 받음)
       if (result != null && mounted && _note != null) {
-        int flashcardCount = 0;
-        
-        // 다양한 타입의 결과를 안전하게 처리
-        if (result is int) {
-          // 직접 int 값이 전달된 경우
-          flashcardCount = result;
-        } else if (result is Map<String, dynamic>) {
-          // Map 형태로 결과가 전달된 경우
-          flashcardCount = result['flashcardCount'] as int? ?? 0;
+        // Map<String, dynamic> 형태로 변환
+        if (result is Map) {
+          final flashcardCount = result['flashcardCount'] as int? ?? 0;
+          final success = result['success'] as bool? ?? false;
+          final noteId = result['noteId'] as String?;
+          
+          debugPrint('플래시카드 화면에서 돌아옴: 카드 수 $flashcardCount개');
+          
+          // 성공적으로 처리되었고, 현재 노트와 일치하는 경우
+          if (success && noteId == _note!.id) {
+            // 플래시카드 수가 변경되었다면 노트 정보 다시 로드
+            if (_note!.flashcardCount != flashcardCount) {
+              _loadNote();
+            }
+          }
+        } else {
+          // 이전 버전과의 호환성 유지 (Int 반환)
+          if (result is int) {
+            final flashcardCount = result;
+            debugPrint('플래시카드 화면에서 돌아옴 (레거시 형식): 카드 수 $flashcardCount개');
+            _loadNote();
+          }
         }
-        
-        debugPrint('플래시카드 화면에서 돌아옴: 카드 수 $flashcardCount개');
-        
-        // 노트 정보 다시 로드하여 카운터 업데이트
-        _loadNote();
       }
     } catch (e) {
       debugPrint('플래시카드 화면 처리 중 오류 발생: $e');
@@ -937,6 +945,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               progress: _calculateProgress(),
               onMorePressed: _showMoreOptions,
               onFlashcardTap: _navigateToFlashcards,
+              onBackPressed: () => Navigator.of(context).pop(),
             ),
       body: _isLoading
           ? const Center(
