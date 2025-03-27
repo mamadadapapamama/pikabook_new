@@ -137,10 +137,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // 스크린샷 경고 메시지 표시
   void _showScreenshotWarning() {
+    // 이미 경고 메시지가 표시 중이면 무시
+    if (_isShowingScreenshotWarning) {
+      return;
+    }
+    
+    // 경고 상태 설정
     setState(() {
       _isShowingScreenshotWarning = true;
     });
     
+    // 스낵바 표시
+    ScaffoldMessenger.of(context).clearSnackBars(); // 기존 스낵바 제거
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -157,18 +165,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
+        onVisible: () {
+          // 스낵바가 표시되었을 때 타이머 시작
+          _screenshotWarningTimer?.cancel();
+          _screenshotWarningTimer = Timer(const Duration(seconds: 5), () {
+            if (mounted) {
+              setState(() {
+                _isShowingScreenshotWarning = false;
+              });
+            }
+          });
+        },
       ),
     );
-    
-    // 일정 시간 후 경고 상태 초기화
-    _screenshotWarningTimer?.cancel();
-    _screenshotWarningTimer = Timer(const Duration(seconds: 6), () {
-      if (mounted) {
-        setState(() {
-          _isShowingScreenshotWarning = false;
-        });
-      }
-    });
   }
 
   // ===== 데이터 로딩 관련 메서드 =====
@@ -710,36 +719,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           ),
         ),
       );
-
-      // 결과가 있으면 노트 업데이트
-      if (result != null && mounted) {
-        if (result is Map && result.containsKey('flashcardCount')) {
-          // 플래시카드 화면에서 반환된 카운터 정보 활용
-          final int flashcardCount = result['flashcardCount'] as int;
-          final bool success = result['success'] as bool;
-          
-          // 성공적으로 처리된 경우에만 상태 업데이트
-          if (success && _note != null) {
-            setState(() {
-              _note = _note!.copyWith(flashcardCount: flashcardCount);
-            });
-            
-            // 캐시 업데이트
-            if (result.containsKey('note') && result['note'] != null) {
-              await _cacheService.cacheNote(result['note'] as Note);
-            } else {
-              // note 객체가 없는 경우 현재 note에 flashcardCount만 업데이트
-              await _cacheService.cacheNote(_note!);
-            }
-          }
-        } else if (result is Note) {
-          // 기존 방식과 호환성 유지
-          setState(() {
-            _note = result;
-          });
+      
+      // 결과 처리 (유형 변환 오류 방지)
+      if (result != null && mounted && _note != null) {
+        int flashcardCount = 0;
+        
+        // 다양한 타입의 결과를 안전하게 처리
+        if (result is int) {
+          // 직접 int 값이 전달된 경우
+          flashcardCount = result;
+        } else if (result is Map<String, dynamic>) {
+          // Map 형태로 결과가 전달된 경우
+          flashcardCount = result['flashcardCount'] as int? ?? 0;
         }
+        
+        debugPrint('플래시카드 화면에서 돌아옴: 카드 수 $flashcardCount개');
+        
+        // 노트 정보 다시 로드하여 카운터 업데이트
+        _loadNote();
       }
     } catch (e) {
+      debugPrint('플래시카드 화면 처리 중 오류 발생: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('플래시카드 화면 이동 중 오류가 발생했습니다: $e')),
@@ -931,13 +931,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           ? null // 로딩 중이거나 오류 상태에서는 앱바 없음
           : PikaAppBar.noteDetail(
               title: _note?.originalText ?? 'Note',
-              onBackPressed: () => Navigator.of(context).pop(),
-              onShowMoreOptions: _showMoreOptions,
-              onFlashCardPressed: _navigateToFlashcards,
-              flashcardCount: _note?.flashcardCount ?? 0,
-              noteId: widget.noteId,
-              currentPageIndex: _pageManager.currentPageIndex,
+              currentPage: _pageManager.currentPageIndex + 1,
               totalPages: _pageManager.pages.length,
+              flashcardCount: _note?.flashcardCount ?? 0,
+              progress: _calculateProgress(),
+              onMorePressed: _showMoreOptions,
+              onFlashcardTap: _navigateToFlashcards,
             ),
       body: _isLoading
           ? const Center(
@@ -1348,26 +1347,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     _loadNote();
   }
 
-  // 프로그레스 바 위젯 (NoteDetailBottomBar에서 가져옴)
-  Widget _buildProgressBar() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final progressWidth = _pageManager.pages.isNotEmpty 
-        ? (_pageManager.currentPageIndex + 1) / _pageManager.pages.length * screenWidth 
-        : 0.0;
-    
-    return Container(
-      height: 2,
-      width: double.infinity,
-      color: const Color(0xFFFFF0E8),
-      child: Row(
-        children: [
-          // 진행된 부분 (현재 페이지까지)
-          Container(
-            width: progressWidth,
-            color: ColorTokens.primary,
-          ),
-        ],
-      ),
-    );
+  // 프로그레스 계산 메서드
+  double _calculateProgress() {
+    if (_pageManager.pages.isEmpty) return 0.0;
+    return (_pageManager.currentPageIndex + 1) / _pageManager.pages.length;
   }
 }

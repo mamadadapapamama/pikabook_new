@@ -247,10 +247,10 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           const SnackBar(content: Text('플래시카드가 삭제되었습니다.')),
         );
 
-        // 플래시카드가 비어 있는 경우 노트 정보 업데이트 (삭제 후에도 화면은 그대로 유지)
-        if (_flashCards.isEmpty && widget.noteId != null) {
-          // 노트 정보만 업데이트 (화면 이동 없음)
-          await _updateNoteInfoWithoutNavigation(widget.noteId!);
+        // 플래시카드가 비어 있는 경우 즉시 노트 화면으로 돌아감
+        if (_flashCards.isEmpty && widget.noteId != null && mounted) {
+          // 명시적으로 Navigator.of(context).pop 사용
+          Navigator.of(context).pop(0); // 카드가 0개임을 전달하고 화면 닫기
         }
       }
     } catch (e) {
@@ -259,29 +259,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           SnackBar(content: Text('플래시카드 삭제 중 오류가 발생했습니다: $e')),
         );
       }
-    }
-  }
-
-  /// 노트 정보 업데이트 (화면 이동 없음)
-  Future<void> _updateNoteInfoWithoutNavigation(String noteId) async {
-    try {
-      // Firestore에서 직접 노트 가져오기
-      final noteDoc = await FirebaseFirestore.instance
-          .collection('notes')
-          .doc(noteId)
-          .get();
-
-      if (noteDoc.exists && mounted) {
-        // 노트 정보 업데이트 (앱바 카운터 업데이트를 위해)
-        final updatedNote = Note.fromFirestore(noteDoc);
-        
-        // 노트 캐시 업데이트
-        await UnifiedCacheService().cacheNote(updatedNote);
-        
-        debugPrint('플래시카드 삭제 후 노트 캐시 업데이트 완료: 플래시카드 수 ${updatedNote.flashcardCount}개');
-      }
-    } catch (e) {
-      debugPrint('노트 정보 업데이트 중 오류 발생: $e');
     }
   }
 
@@ -410,43 +387,14 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     );
     
     return WillPopScope(
-      // 화면을 나갈 때 노트 정보 업데이트
       onWillPop: () async {
-        // noteId가 있는 경우에는 항상 노트 정보 업데이트 (플래시카드가 없어도 0으로 표시하기 위함)
-        if (widget.noteId != null) {
-          try {
-            // Firestore에서 직접 노트 가져오기
-            final noteDoc = await FirebaseFirestore.instance
-                .collection('notes')
-                .doc(widget.noteId!)
-                .get();
-
-            if (noteDoc.exists && mounted) {
-              // 노트 정보 업데이트
-              final updatedNote = Note.fromFirestore(noteDoc);
-              
-              // 노트 캐시 업데이트
-              await UnifiedCacheService().cacheNote(updatedNote);
-              
-              // 현재 플래시카드 수를 결과로 반환 (노트 디테일 화면으로 돌아갈 때 사용)
-              Navigator.of(context).pop({
-                'note': updatedNote,
-                'flashcardCount': _flashCards.length,
-                'success': true
-              });
-              return false; // Navigator.pop이 이미 호출되었으므로 false 반환
-            }
-          } catch (e) {
-            debugPrint('노트 정보 업데이트 중 오류 발생: $e');
-          }
+        // 화면을 나갈 때 현재 플래시카드 카운트를 전달
+        if (widget.noteId != null && mounted) {
+          // int 값을 직접 전달
+          Navigator.of(context).pop(_flashCards.length);
         }
-        
-        // 결과 맵 반환 (홈 스크린에서도 플래시카드 수 업데이트를 위해)
-        Navigator.of(context).pop({
-          'flashcardCount': _flashCards.length,
-          'success': _error == null
-        });
-        return false; // 이미 pop을 호출했으므로 false 반환
+        // true를 반환하면 화면이 닫힘 (이미 명시적으로 pop을 호출했으므로 false 반환)
+        return false;
       },
       child: Scaffold(
         backgroundColor: Colors.white,

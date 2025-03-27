@@ -24,6 +24,9 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? noteSpaceName;
   final bool showBorder;
   final Widget? bottom;
+  final bool automaticallyImplyLeading;
+  final double bottomHeight;
+  final double progress;
   
   // 플래시카드 카운터 관련 속성
   final int? flashcardCount;
@@ -54,6 +57,9 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.onFlashCardPressed,
     this.currentPageIndex,
     this.totalPages,
+    this.automaticallyImplyLeading = true,
+    this.bottomHeight = 2,
+    this.progress = 0,
   }) : super(key: key);
 
   /// 홈 스크린용 앱바 팩토리 생성자
@@ -102,64 +108,56 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  /// 노트 상세 화면용 앱바 팩토리 생성자
+  /// 노트 상세 화면용 앱바
   factory PikaAppBar.noteDetail({
     required String title,
-    required VoidCallback onBackPressed,
-    required VoidCallback onShowMoreOptions,
-    required VoidCallback onFlashCardPressed,
+    required int currentPage,
+    required int totalPages,
     required int flashcardCount,
-    
-    String? noteId,
-    int currentPageIndex = 0,
-    int totalPages = 0,
+    required double progress,
+    required VoidCallback onMorePressed,
+    required VoidCallback onFlashcardTap,
   }) {
     return PikaAppBar(
       title: title,
-      showBackButton: true,
-      onBackPressed: onBackPressed,
-      flashcardCount: flashcardCount,
-      noteId: noteId,
-      onFlashCardPressed: onFlashCardPressed,
-      currentPageIndex: currentPageIndex,
-      totalPages: totalPages,
+      automaticallyImplyLeading: true,
       height: 72,
       actions: [
-        if (totalPages > 0)
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: Center(
-              child: Text(
-                'page ${currentPageIndex + 1} / $totalPages',
-                style: TypographyTokens.caption.copyWith(
-                  color: ColorTokens.textSecondary,
-                ),
+        // 페이지 정보
+        Padding(
+          padding: const EdgeInsets.only(right: 8.0),
+          child: Center(
+            child: Text(
+              'page $currentPage / $totalPages',
+              style: TypographyTokens.caption.copyWith(
+                color: ColorTokens.textSecondary,
               ),
             ),
           ),
-        if (flashcardCount > 0)
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: GestureDetector(
-              onTap: onFlashCardPressed,
-              child: FlashcardCounterBadge(
-                count: flashcardCount,
-                noteId: noteId,
-              ),
-            ),
+        ),
+        
+        // 플래시카드 카운터
+        GestureDetector(
+          onTap: onFlashcardTap,
+          child: FlashcardCounterBadge(
+            count: flashcardCount,
           ),
+        ),
+        
+        // 더보기 버튼
         IconButton(
           icon: const Icon(
             Icons.more_vert,
             color: ColorTokens.textGrey,
           ),
-          onPressed: onShowMoreOptions,
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
           tooltip: '더 보기',
+          onPressed: onMorePressed,
         ),
       ],
-      bottom: totalPages > 0 ? _buildProgressBar(currentPageIndex, totalPages) : null,
+      bottomHeight: 2,
+      progress: progress,
     );
   }
 
@@ -200,42 +198,9 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  // 진행 상태 표시바 생성 함수
-  static Widget _buildProgressBar(int currentPageIndex, int totalPages) {
-    return SizedBox(
-      height: 2, // 높이를 4px에서 2px로 줄임
-      width: double.infinity,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final screenWidth = constraints.maxWidth;
-          final progressWidth = totalPages > 0 
-            ? (currentPageIndex + 1) / totalPages * screenWidth 
-            : 0.0;
-          
-          return Stack(
-            children: [
-              // 배경 바
-              Container(
-                width: double.infinity,
-                height: 2, // 높이를 4px에서 2px로 줄임
-                color: ColorTokens.divider,
-              ),
-              // 진행 바
-              Container(
-                width: progressWidth,
-                height: 2, // 높이를 4px에서 2px로 줄임
-                color: ColorTokens.primary,
-              ),
-            ],
-          );
-        }
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    // 상태 표시줄 스타일 설정
+    // 시스템 UI 스타일 설정
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -243,151 +208,130 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
         statusBarBrightness: Brightness.light,
       ),
     );
-
-    final String? pageNumberText = (currentPageIndex != null && totalPages != null && totalPages! > 0)
-        ? 'page ${currentPageIndex! + 1} / $totalPages'
-        : null;
-
-    // 홈 스크린일 경우 상단 패딩 추가
-    final bool isHomeScreen = showLogo && noteSpaceName != null;
-    final double topPadding = isHomeScreen ? 12.0 : 0.0; // 상단 패딩 24.0에서 12.0으로 줄임
-    final double bottomPadding = isHomeScreen ? 2.0 : 8.0; // 홈 스크린인 경우 하단 패딩 감소
-
-    return SafeArea(
-      top: true,
-      bottom: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // AppBar 메인 컨텐츠
-          SizedBox(
-            height: height - (bottom != null ? 2 : 0), // 프로그레스 바가 있으면 높이 조정 (2px)
-            child: Padding(
-              padding: EdgeInsets.only(
-                top: topPadding, 
-                left: 16.0, 
-                right: 16.0, 
-                bottom: bottomPadding
+    
+    // 앱바 컨텐츠
+    AppBar appBar = AppBar(
+      backgroundColor: backgroundColor,
+      elevation: 0,
+      centerTitle: centerTitle,
+      automaticallyImplyLeading: automaticallyImplyLeading,
+      leading: showBackButton
+          ? IconButton(
+              icon: Icon(
+                Icons.arrow_back_ios_rounded,
+                color: ColorTokens.textPrimary,
+                size: 20,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // 왼쪽 부분: 뒤로가기 버튼, 로고 또는 제목
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // 뒤로가기 버튼 (옵션)
-                        if (showBackButton)
-                          IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back_ios_rounded,
-                              color: Colors.black,
-                              size: 20,
-                            ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
-                          ),
-                        if (showBackButton)
-                          const SizedBox(width: 4),
-                        
-                        // 커스텀 leading 위젯
-                        if (leading != null)
-                          leading!,
-                        
-                        // 로고 표시 (홈 스크린)
-                        if (showLogo)
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // 앱 로고
-                                Container(
-                                  alignment: Alignment.centerLeft,
-                                  child: SvgPicture.asset(
-                                    'assets/images/pikabook_textlogo_primary.svg',
-                                    width: SpacingTokens.appLogoWidth,
-                                    height: SpacingTokens.appLogoHeight,
-                                    placeholderBuilder: (context) => Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.menu_book,
-                                          color: ColorTokens.primary,
-                                          size: SpacingTokens.iconSizeSmall,
-                                        ),
-                                        SizedBox(width: SpacingTokens.xs),
-                                        Text(
-                                          'Pikabook',
-                                          style: TypographyTokens.body1En.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            color: ColorTokens.primary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: SpacingTokens.xs),
-                                // 노트 스페이스 이름
-                                if (noteSpaceName != null)
-                                  Text(
-                                    noteSpaceName!,
-                                    style: TypographyTokens.headline3.copyWith(
-                                      color: ColorTokens.textPrimary,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        
-                        // 제목 (일반 스크린)
-                        if (!showLogo && title != null)
-                          Expanded(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // 타이틀
-                                Flexible(
-                                  child: Text(
-                                    title!,
-                                    style: TypographyTokens.headline3.copyWith(
-                                      color: ColorTokens.textPrimary,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  
-                  // 오른쪽 부분: 액션 버튼들
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // 중복 제거: 플래시카드 카운터는 actions에만 표시하고 여기서는 제거
-                      
-                      // 추가 액션 버튼들
-                      if (actions != null)
-                        ...actions!,
-                    ],
-                  ),
-                ],
+              onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
+            )
+          : leading,
+      title: title != null
+          ? Text(
+              title!,
+              style: TypographyTokens.headline3.copyWith(
+                color: ColorTokens.textPrimary,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
+          : showLogo
+              ? _buildLogoTitle(noteSpaceName)
+              : null,
+      actions: actions,
+      bottom: progress > 0 
+          ? PreferredSize(
+              preferredSize: Size.fromHeight(bottomHeight),
+              child: _buildProgressBar(context, progress),
+            )
+          : bottom != null
+              ? PreferredSize(
+                  preferredSize: Size.fromHeight(bottomHeight),
+                  child: bottom!,
+                )
+              : null,
+    );
+
+    // 테두리 추가
+    if (showBorder) {
+      return Container(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Colors.grey.shade300,
+              width: 1,
             ),
           ),
-          
-          // 하단 위젯 (프로그레스 바 등)
-          if (bottom != null)
-            bottom!,
-        ],
-      ),
+        ),
+        child: appBar,
+      );
+    }
+
+    return appBar;
+  }
+
+  // 로고와 노트스페이스 이름 빌드
+  Widget _buildLogoTitle(String? noteSpaceName) {
+    return Row(
+      children: [
+        // 로고 이미지
+        SvgPicture.asset(
+          'assets/images/pikabook_textlogo_primary.svg',
+          height: SpacingTokens.appLogoHeight,
+          placeholderBuilder: (context) => Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.menu_book,
+                color: ColorTokens.primary,
+                size: SpacingTokens.iconSizeSmall,
+              ),
+              SizedBox(width: SpacingTokens.xs),
+              Text(
+                'Pikabook',
+                style: TypographyTokens.body1En.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: ColorTokens.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (noteSpaceName != null)
+          Expanded(
+            child: Text(
+              noteSpaceName,
+              style: TypographyTokens.headline3.copyWith(
+                color: ColorTokens.textPrimary,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// 프로그레스 바 위젯 빌드
+  Widget _buildProgressBar(BuildContext context, double progress) {
+    // progress는 0.0 ~ 1.0 사이 값
+    final double clampedProgress = progress.clamp(0.0, 1.0);
+    
+    return Stack(
+      children: [
+        // 배경 (회색 배경)
+        Container(
+          width: double.infinity,
+          height: bottomHeight,
+          color: ColorTokens.divider,
+        ),
+        // 진행 상태 (녹색 표시)
+        Container(
+          width: MediaQuery.of(context).size.width * clampedProgress,
+          height: bottomHeight,
+          color: ColorTokens.primary,
+        ),
+      ],
     );
   }
 
