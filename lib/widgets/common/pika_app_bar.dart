@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import '../dot_loading_indicator.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
@@ -66,7 +65,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       showLogo: true,
       noteSpaceName: noteSpaceName,
       backgroundColor: UITokens.homeBackground,
-      height: 80, // HomeScreenAppBar와 일치시킴
+      height: 70, // HomeScreenAppBar와 일치시킴
       actions: [
         Padding(
           padding: EdgeInsets.only(right: SpacingTokens.md),
@@ -124,7 +123,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       onFlashCardPressed: onFlashCardPressed,
       currentPageIndex: currentPageIndex,
       totalPages: totalPages,
-      height: 80,
+      height: 80, // 높이 조정으로 HomeScreen과 일관되게
       actions: [
         if (totalPages > 0)
           Padding(
@@ -193,7 +192,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   // 진행 상태 표시바 생성 함수
   static Widget _buildProgressBar(int currentPageIndex, int totalPages) {
     return SizedBox(
-      height: 4, // 높이를 4px로 증가
+      height: 2, // 높이를 4px에서 2px로 줄임
       width: double.infinity,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -207,13 +206,13 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               // 배경 바
               Container(
                 width: double.infinity,
-                height: 4, // 높이를 4px로 증가
+                height: 2, // 높이를 4px에서 2px로 줄임
                 color: ColorTokens.divider,
               ),
               // 진행 바
               Container(
                 width: progressWidth,
-                height: 4, // 높이를 4px로 증가
+                height: 2, // 높이를 4px에서 2px로 줄임
                 color: ColorTokens.primary,
               ),
             ],
@@ -238,6 +237,11 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
         ? 'page ${currentPageIndex! + 1} / $totalPages'
         : null;
 
+    // 홈 스크린일 경우 상단 패딩 추가
+    final bool isHomeScreen = showLogo && noteSpaceName != null;
+    final double topPadding = isHomeScreen ? 24.0 : 0.0; // 홈 스크린인 경우 상단 패딩 추가
+    final double bottomPadding = isHomeScreen ? 2.0 : 8.0; // 홈 스크린인 경우 하단 패딩 감소
+
     return SafeArea(
       top: true,
       bottom: false,
@@ -246,9 +250,14 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
         children: [
           // AppBar 메인 컨텐츠
           SizedBox(
-            height: height - (bottom != null ? 4 : 0), // 프로그레스 바가 있으면 높이 조정
+            height: height - (bottom != null ? 2 : 0), // 프로그레스 바가 있으면 높이 조정 (2px)
             child: Padding(
-              padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 8.0),
+              padding: EdgeInsets.only(
+                top: topPadding, 
+                left: 16.0, 
+                right: 16.0, 
+                bottom: bottomPadding
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
