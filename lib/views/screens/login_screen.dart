@@ -246,22 +246,22 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             child: Column(
                               children: [
                                 // Facebook 로그인 버튼
-                                _buildLoginButton(
-                                  text: 'Facebook으로 로그인',
-                                  onPressed: () {
+                                //_buildLoginButton(
+                                  //text: 'Facebook으로 로그인',
+                                  //onPressed: () {
                                     // Facebook 로그인 기능 추가
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Facebook 로그인은 아직 지원되지 않습니다.')),
-                                    );
-                                  },
-                                  backgroundColor: Colors.white,
-                                  textColor: const Color(0xFF031B31),
-                                  leadingIcon: Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
-                                    child: Icon(Icons.facebook, color: const Color(0xFF1877F2), size: 24),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
+                                    //ScaffoldMessenger.of(context).showSnackBar(
+                                      //const SnackBar(content: Text('Facebook 로그인은 아직 지원되지 않습니다.')),
+                                    //);
+                                  //},
+                                  //backgroundColor: Colors.white,
+                                  //textColor: const Color(0xFF031B31),
+                                  //leadingIcon: Padding(
+                                    //padding: const EdgeInsets.only(right: 8.0),
+                                    //child: Icon(Icons.facebook, color: const Color(0xFF1877F2), size: 24),
+                                  //),
+                                //),
+                                //const SizedBox(height: 8),
 
                                 // Google 로그인 버튼
                                 _buildLoginButton(
