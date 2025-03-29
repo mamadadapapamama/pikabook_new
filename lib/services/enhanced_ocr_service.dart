@@ -155,13 +155,48 @@ class EnhancedOcrService {
 
       // 핀인 줄 제거한 전체 텍스트
       final cleanedText = _textCleanerService.removePinyinLines(fullText);
+      debugPrint('OCR _processLanguageLearning: 정리된 텍스트 ${cleanedText.length}자');
 
-      // 전체 번역
-      final fullTranslatedText = await _translationService
-          .translateText(cleanedText, targetLanguage: 'ko');
+      // 전체 번역 시도 - 디버그 로그 추가
+      debugPrint('OCR _processLanguageLearning: 번역 요청 시작...');
+      
+      // 중국어에서 한국어로 명시적으로 언어 코드 설정
+      final fullTranslatedText = await _translationService.translateText(
+        cleanedText, 
+        sourceLanguage: 'zh-CN',  // 명시적으로 중국어 소스 언어 설정 
+        targetLanguage: 'ko'      // 명시적으로 한국어 타겟 언어 설정
+      );
+      
+      // 번역 결과 검증 로그
+      bool isTranslationSuccessful = fullTranslatedText != cleanedText;
+      
+      if (!isTranslationSuccessful) {
+        debugPrint('OCR _processLanguageLearning: 심각한 경고! 번역 결과가 원문과 동일함');
+        debugPrint('OCR _processLanguageLearning: 원본 샘플: "${cleanedText.length > 30 ? cleanedText.substring(0, 30) + '...' : cleanedText}"');
+        debugPrint('OCR _processLanguageLearning: 번역 샘플: "${fullTranslatedText.length > 30 ? fullTranslatedText.substring(0, 30) + '...' : fullTranslatedText}"');
+      } else {
+        debugPrint('OCR _processLanguageLearning: 번역 성공! 번역 결과 ${fullTranslatedText.length}자');
+        debugPrint('OCR _processLanguageLearning: 번역 결과 샘플: "${fullTranslatedText.length > 30 ? fullTranslatedText.substring(0, 30) + '...' : fullTranslatedText}"');
+      }
 
       // 문장을 병렬로 처리
       final segments = await _processTextSegmentsInParallel(cleanedText);
+      
+      // 최종 검증 로그
+      debugPrint('OCR _processLanguageLearning: 처리 완료. 원문: ${cleanedText.length}자, 번역: ${fullTranslatedText.length}자, 세그먼트: ${segments.length}개');
+
+      // 세그먼트가 있는 경우 세그먼트 번역 상태 확인
+      if (segments.isNotEmpty) {
+        int untranslatedCount = 0;
+        for (var segment in segments) {
+          if (segment.translatedText == segment.originalText) {
+            untranslatedCount++;
+          }
+        }
+        if (untranslatedCount > 0) {
+          debugPrint('OCR _processLanguageLearning: 경고! $untranslatedCount/${segments.length} 세그먼트의 번역이 원문과 동일함');
+        }
+      }
 
       return ProcessedText(
         fullOriginalText: cleanedText,
@@ -310,16 +345,27 @@ class EnhancedOcrService {
       // 핀인 생성
       final pinyin = await _generatePinyinForSentence(sentence);
 
-      // 번역
+      // 번역 시 언어 코드 명시적 설정
+      debugPrint('_processTextSegment: 문장 번역 시작 (${sentence.length}자)');
       final translated = await _translationService.translateText(
         sentence,
-        targetLanguage: 'ko',
+        sourceLanguage: 'zh-CN',  // 중국어 소스 언어 명시
+        targetLanguage: 'ko',     // 한국어 타겟 언어 명시
       );
+      
+      // 번역 결과 검증
+      if (translated == sentence) {
+        debugPrint('_processTextSegment: 경고 - 문장 번역 결과가 원문과 동일함');
+      } else {
+        debugPrint('_processTextSegment: 문장 번역 성공 (${translated.length}자)');
+      }
 
       return TextSegment(
         originalText: sentence,
         pinyin: pinyin,
         translatedText: translated,
+        sourceLanguage: 'zh-CN',  // 중국어 소스 언어 명시
+        targetLanguage: 'ko',     // 한국어 타겟 언어 명시
       );
     } catch (e) {
       debugPrint('문장 처리 중 오류 발생: $e');
@@ -328,6 +374,8 @@ class EnhancedOcrService {
         originalText: sentence,
         pinyin: '',
         translatedText: '번역 오류',
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko',
       );
     }
   }
@@ -425,6 +473,8 @@ Future<List<TextSegment>> _processBatchInIsolate(_BatchProcessParam param) async
   
   for (final sentence in param.sentences) {
     try {
+      print('Isolate: 문장 처리 시작 - ${sentence.length}자');
+      
       // 핀인 생성
       final pinyin = await _generatePinyinForSentenceStatic(
         sentence, 
@@ -432,28 +482,66 @@ Future<List<TextSegment>> _processBatchInIsolate(_BatchProcessParam param) async
         param.textCleanerService
       );
 
-      // 번역
-      final translated = await param.translationService.translateText(
-        sentence,
-        targetLanguage: 'ko',
-      );
+      // 번역 - sentence가 비어있는지 확인
+      if (sentence.trim().isEmpty) {
+        print('Isolate: 문장이 비어 있어 번역 건너뜀');
+        results.add(TextSegment(
+          originalText: sentence,
+          pinyin: pinyin,
+          translatedText: '',
+          sourceLanguage: 'zh-CN',
+          targetLanguage: 'ko',
+        ));
+        continue;
+      }
+
+      print('Isolate: 번역 시작 - "${sentence.length > 30 ? sentence.substring(0, 30) + '...' : sentence}"');
+      
+      String translatedText;
+      try {
+        // 번역 시도 - 언어 코드 명시적 설정
+        translatedText = await param.translationService.translateText(
+          sentence,
+          sourceLanguage: 'zh-CN',  // 중국어 소스 언어 명시
+          targetLanguage: 'ko',     // 한국어 타겟 언어 명시
+        );
+        
+        // 번역 결과 확인
+        if (translatedText == sentence) {
+          print('Isolate: 경고 - 번역 결과가 원문과 동일 (번역 실패)');
+          print('Isolate: 원문 샘플 - "${sentence.length > 20 ? sentence.substring(0, 20) + '...' : sentence}"');
+          print('Isolate: 번역 결과 샘플 - "${translatedText.length > 20 ? translatedText.substring(0, 20) + '...' : translatedText}"');
+        } else {
+          print('Isolate: 번역 성공 - ${translatedText.length}자');
+        }
+      } catch (e) {
+        print('Isolate: 번역 실패 - $e');
+        translatedText = '번역 오류';
+      }
 
       results.add(TextSegment(
         originalText: sentence,
         pinyin: pinyin,
-        translatedText: translated,
+        translatedText: translatedText,
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko',
       ));
+      
+      print('Isolate: 문장 처리 완료');
     } catch (e) {
-      print('문장 처리 중 오류 발생: $e');
+      print('Isolate: 문장 처리 중 오류 발생: $e');
       // 오류가 발생해도 기본 세그먼트 반환
       results.add(TextSegment(
         originalText: sentence,
         pinyin: '',
         translatedText: '번역 오류',
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko',
       ));
     }
   }
   
+  print('Isolate: 전체 배치 처리 완료 - ${results.length}개 문장');
   return results;
 }
 
