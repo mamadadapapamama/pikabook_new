@@ -306,7 +306,14 @@ class PageContentService {
 
   Future<ProcessedText> processText(String originalText, String translatedText,
       String textProcessingMode) async {
-    try {
+    
+      // 입력값 로깅
+      debugPrint('PageContentService.processText 호출:');
+      debugPrint(' - 원본 텍스트: ${originalText.length}자');
+      debugPrint(' - 번역 텍스트: ${translatedText.length}자');
+      debugPrint(' - 모드: $textProcessingMode');
+      
+      try {
       // 텍스트 처리
       ProcessedText processedText =
           await _ocrService.processText(originalText, textProcessingMode);
@@ -314,9 +321,21 @@ class PageContentService {
       // 번역 텍스트가 있는 경우 설정
       if (translatedText.isNotEmpty &&
           processedText.fullTranslatedText == null) {
+        debugPrint('PageContentService: 번역 텍스트 설정 (전달받은 값 사용)');
         processedText =
             processedText.copyWith(fullTranslatedText: translatedText);
+      } else if (processedText.fullTranslatedText != null) {
+        debugPrint('PageContentService: OCR 서비스에서 이미 번역 텍스트 제공됨 (${processedText.fullTranslatedText!.length}자)');
+      } else {
+        debugPrint('PageContentService: 번역 텍스트 없음 (null)');
       }
+
+      // 메소드 종료 시 결과 요약
+      final hasSegments = processedText.segments != null && processedText.segments!.isNotEmpty;
+      debugPrint('PageContentService.processText 완료:');
+      debugPrint(' - 원본 텍스트: ${processedText.fullOriginalText.length}자');
+      debugPrint(' - 번역 텍스트: ${processedText.fullTranslatedText?.length ?? 0}자');
+      debugPrint(' - 세그먼트: ${hasSegments ? processedText.segments!.length : 0}개');
 
       return processedText;
     } catch (e) {

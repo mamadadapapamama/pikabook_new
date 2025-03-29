@@ -39,33 +39,58 @@ class TranslationService {
 
     _isInitializing = true;
     try {
-      debugPrint('Google Cloud Translation API 초기화 중...');
+      debugPrint('TranslationService: Google Cloud Translation API 초기화 중...');
 
       // 서비스 계정 JSON 파일 로드
-      final serviceAccountJson = await rootBundle
-          .loadString('assets/credentials/service-account.json');
-      final Map<String, dynamic> jsonData = jsonDecode(serviceAccountJson);
+      final String serviceAccountPath = 'assets/credentials/service-account.json';
+      debugPrint('TranslationService: 서비스 계정 파일 로드 시도: $serviceAccountPath');
+      
+      String serviceAccountJson;
+      try {
+        serviceAccountJson = await rootBundle.loadString(serviceAccountPath);
+        debugPrint('TranslationService: 서비스 계정 JSON 파일 로드 성공 (${serviceAccountJson.length}바이트)');
+      } catch (e) {
+        throw Exception('서비스 계정 JSON 파일 로드 실패: $e');
+      }
+      
+      // JSON 데이터 파싱
+      Map<String, dynamic> jsonData;
+      try {
+        jsonData = jsonDecode(serviceAccountJson);
+        debugPrint('TranslationService: 서비스 계정 JSON 파싱 성공');
+      } catch (e) {
+        throw Exception('서비스 계정 JSON 파싱 실패: $e');
+      }
 
       // 프로젝트 ID 추출
       _projectId = jsonData['project_id'];
       if (_projectId == null) {
         throw Exception('서비스 계정 JSON에 project_id가 없습니다.');
       }
+      debugPrint('TranslationService: 프로젝트 ID 확인: $_projectId');
 
-      final serviceAccountCredentials =
-          ServiceAccountCredentials.fromJson(serviceAccountJson);
-
-      // 인증 클라이언트 생성
+      // 서비스 계정 인증 정보 생성
+      final accountCredentials = ServiceAccountCredentials.fromJson(jsonData);
+      
+      // 스코프 설정
       final scopes = ['https://www.googleapis.com/auth/cloud-platform'];
-      _httpClient =
-          await clientViaServiceAccount(serviceAccountCredentials, scopes);
+      
+      // 인증 클라이언트 생성
+      debugPrint('TranslationService: 인증 클라이언트 생성 중...');
+      _httpClient = await clientViaServiceAccount(accountCredentials, scopes);
+      debugPrint('TranslationService: 인증 클라이언트 생성 완료');
 
-      debugPrint('Google Cloud Translation API 초기화 완료 (프로젝트 ID: $_projectId)');
-    } catch (e) {
-      debugPrint('Google Cloud Translation API 초기화 실패: $e');
-      _projectId = null;
-    } finally {
       _isInitializing = false;
+      debugPrint('TranslationService: Google Cloud Translation API 초기화 완료');
+    } catch (e) {
+      _isInitializing = false;
+      _httpClient = null;
+      _projectId = null;
+      debugPrint('TranslationService: Google Cloud Translation API 초기화 실패: $e');
+      if (e.toString().contains('No such file') || e.toString().contains('Unable to load asset')) {
+        debugPrint('TranslationService: 서비스 계정 파일이 존재하지 않거나 접근할 수 없습니다. pubspec.yaml에 assets 정의가 있는지 확인하세요.');
+      }
+      // 초기화 실패 시 예외를 다시 던지지 않고, 호출자가 처리하도록 함
     }
   }
 
@@ -76,38 +101,50 @@ class TranslationService {
       return '';
     }
 
+    // 언어 코드 검증 및 기본값 설정
+    final effectiveTargetLanguage = targetLanguage ?? TargetLanguage.DEFAULT;
+    final effectiveSourceLanguage = sourceLanguage == 'auto' ? null : sourceLanguage;
+    
+    debugPrint('TranslationService: 검증된 언어 설정 - 소스: ${effectiveSourceLanguage ?? 'auto'}, 타겟: $effectiveTargetLanguage');
+
     try {
       // API가 초기화되지 않았으면 초기화
       if (_httpClient == null || _projectId == null) {
+        debugPrint('TranslationService: API 초기화 시도');
         await _initializeApi();
       }
 
       // API가 여전히 null이면 원본 텍스트 반환
       if (_httpClient == null || _projectId == null) {
-        debugPrint('Translation API 초기화 실패로 원본 텍스트 반환');
+        debugPrint('TranslationService: API 초기화 실패, 원본 텍스트 반환');
         return text;
       }
 
       // 번역 요청
-      // 타겟 언어 기본값 설정
-      final target = targetLanguage ?? TargetLanguage.DEFAULT;
-      final source = sourceLanguage == 'auto' ? null : sourceLanguage;
       final parent = 'projects/$_projectId/locations/global';
 
-      debugPrint('번역 요청: ${text.length}자, 소스: $source, 타겟: $target');
+      final requestStart = DateTime.now();
+      debugPrint('TranslationService: 번역 요청 시작 - 길이: ${text.length}자, 소스: ${effectiveSourceLanguage ?? 'auto'}, 타겟: $effectiveTargetLanguage');
 
-      // 요청 본문 생성
+      // 요청 본문에 포맷 지정
       final requestBody = {
         'contents': [text],
-        'targetLanguageCode': target,
-        if (source != null && source != 'auto') 'sourceLanguageCode': source,
+        'targetLanguageCode': effectiveTargetLanguage,
+        if (effectiveSourceLanguage != null) 'sourceLanguageCode': effectiveSourceLanguage,
         'mimeType': 'text/plain',
       };
+      
+      // 요청 본문 로깅 (길이가 긴 경우 일부만 출력)
+      final textSample = text.length > 50 ? '${text.substring(0, 50)}...' : text;
+      debugPrint('TranslationService: 요청 본문 샘플 - "$textSample"');
+      debugPrint('TranslationService: 타겟 언어: $effectiveTargetLanguage');
 
       // API 엔드포인트 URL
       final url = Uri.parse(
           'https://translation.googleapis.com/v3/$parent:translateText');
 
+      debugPrint('TranslationService: HTTP 요청 보내는 중... URL: $url');
+      
       // POST 요청 전송
       final response = await _httpClient!.post(
         url,
@@ -115,22 +152,46 @@ class TranslationService {
         headers: {'Content-Type': 'application/json'},
       );
 
+      final requestDuration = DateTime.now().difference(requestStart);
+      debugPrint('TranslationService: HTTP 응답 수신 - 상태 코드: ${response.statusCode}, 소요 시간: ${requestDuration.inMilliseconds}ms');
+
       String translatedText = text; // 기본값은 원본 텍스트
 
       if (response.statusCode == 200) {
+        debugPrint('TranslationService: HTTP 응답 본문 디코딩 중...');
+        debugPrint('TranslationService: 응답 내용 샘플: ${response.body.length > 100 ? response.body.substring(0, 100) + '...' : response.body}');
+        
         final Map<String, dynamic> data = jsonDecode(response.body);
+        
         final translations = data['translations'] as List<dynamic>?;
 
         if (translations != null && translations.isNotEmpty) {
           final translatedResult =
               translations.first['translatedText'] as String?;
+              
           if (translatedResult != null && translatedResult.isNotEmpty) {
-            debugPrint('번역 완료: ${translatedResult.length}자');
+            // 번역 결과가 원본과 다른지 확인
+            if (translatedResult == text) {
+              debugPrint('TranslationService: 경고 - 번역 결과가 원본과 동일 (번역이 수행되지 않았을 수 있음)');
+            } else {
+              final sampleResult = translatedResult.length > 50 ? '${translatedResult.substring(0, 50)}...' : translatedResult;
+              debugPrint('TranslationService: 번역 완료 - 원문: ${text.length}자, 번역: ${translatedResult.length}자');
+              debugPrint('TranslationService: 번역 결과 샘플: "$sampleResult"');
+            }
             translatedText = translatedResult;
+          } else {
+            debugPrint('TranslationService: 번역 결과가 비어있음');
           }
+        } else {
+          debugPrint('TranslationService: translations 필드 없음');
+          debugPrint('TranslationService: 응답 데이터 구조: ${data.keys.join(', ')}');
         }
       } else {
-        debugPrint('번역 API 호출 실패: ${response.statusCode}, ${response.body}');
+        debugPrint('TranslationService: 번역 API 호출 실패 - 상태 코드: ${response.statusCode}');
+        debugPrint('TranslationService: 응답 내용: ${response.body}');
+        
+        // 오류 발생 시 fallback 전략 - Papago API 등 다른 번역 서비스 사용 가능
+        // 현재는 fallback 구현 없이 원본 텍스트 반환
       }
 
       // 번역된 글자 수 기록 (제한 없이 사용량만 추적)
@@ -138,8 +199,9 @@ class TranslationService {
 
       return translatedText;
     } catch (e) {
-      debugPrint('번역 중 오류 발생: $e');
-      return text; // 오류 발생 시 원본 텍스트 반환
+      debugPrint('TranslationService: 번역 중 오류 발생 - $e');
+      // 오류 발생 시 원본 텍스트 반환
+      return text;
     }
   }
 

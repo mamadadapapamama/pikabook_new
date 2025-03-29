@@ -541,6 +541,28 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     // 로딩 확인용
     debugPrint('[${DateTime.now()}] ProcessedTextWidget build 호출');
     
+    // 번역 텍스트 체크 로그 추가
+    if (widget.processedText.fullTranslatedText != null && widget.processedText.fullTranslatedText!.isNotEmpty) {
+      final sample = widget.processedText.fullTranslatedText!.length > 50 
+          ? widget.processedText.fullTranslatedText!.substring(0, 50) + '...' 
+          : widget.processedText.fullTranslatedText!;
+      debugPrint('ProcessedTextWidget: 번역 텍스트 있음 (${widget.processedText.fullTranslatedText!.length}자)');
+      debugPrint('ProcessedTextWidget: 번역 텍스트 샘플 - "$sample"');
+    } else {
+      debugPrint('ProcessedTextWidget: 번역 텍스트 없음 (null 또는 빈 문자열)');
+    }
+    
+    // 세그먼트별 번역 체크
+    if (widget.processedText.segments != null && widget.processedText.segments!.isNotEmpty) {
+      int untranslatedSegments = 0;
+      for (final segment in widget.processedText.segments!) {
+        if (segment.translatedText == null || segment.translatedText!.isEmpty || segment.translatedText == segment.originalText) {
+          untranslatedSegments++;
+        }
+      }
+      debugPrint('ProcessedTextWidget: 세그먼트 ${widget.processedText.segments!.length}개 중 $untranslatedSegments개 번역 누락');
+    }
+
     // 문장 바깥 탭 시 선택 취소를 위한 GestureDetector 추가
     return GestureDetector(
       onTap: () {
