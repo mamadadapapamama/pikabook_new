@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>1113863334-oor36s7ega6i0q8tcvvlqa5tjiravd2t.apps.googleusercontent.com</string>
+	<string>1113863334-d5cquivc6973v53vkmdm60omm8unoa47.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.1113863334-oor36s7ega6i0q8tcvvlqa5tjiravd2t</string>
+	<string>com.googleusercontent.apps.1113863334-d5cquivc6973v53vkmdm60omm8unoa47</string>
 	<key>API_KEY</key>
-	<string>AIzaSyBid3pr9pUgXowZiVo4ZRuP0C-AFuGeC38</string>
+	<string>AIzaSyCL4Hy6kZdUSYpnBtATtJGwWtBmC8i-xSM</string>
 	<key>GCM_SENDER_ID</key>
 	<string>1113863334</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.example.pikabookNew</string>
+	<string>com.pikabook.app</string>
 	<key>PROJECT_ID</key>
 	<string>mylingowith</string>
 	<key>STORAGE_BUCKET</key>
@@ -29,6 +29,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:1113863334:ios:fdb6cef1e7585015353067</string>
+	<string>1:1113863334:ios:3c328f5e27ea21dd353067</string>
 </dict>
 </plist>

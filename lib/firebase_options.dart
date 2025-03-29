@@ -53,11 +53,12 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBid3pr9pUgXowZiVo4ZRuP0C-AFuGeC38',
-    appId: '1:1113863334:ios:fdb6cef1e7585015353067',
+    apiKey: 'AIzaSyCL4Hy6kZdUSYpnBtATtJGwWtBmC8i-xSM',
+    appId: '1:1113863334:ios:3c328f5e27ea21dd353067',
     messagingSenderId: '1113863334',
     projectId: 'mylingowith',
     storageBucket: 'mylingowith.firebasestorage.app',
-    iosBundleId: 'com.example.pikabookNew',
+    iosClientId: '1113863334-d5cquivc6973v53vkmdm60omm8unoa47.apps.googleusercontent.com',
+    iosBundleId: 'com.pikabook.app',
   );
 }
