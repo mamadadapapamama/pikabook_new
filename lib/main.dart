@@ -143,9 +143,9 @@ class ErrorApp extends StatelessWidget {
                 children: [
                   // 로고
                   SizedBox(
-                    width: 120,
-                    height: 120,
-                    child: Image.asset('assets/images/app_logo.png'),
+                    width: 40,
+                    height: 40,
+                    child: Image.asset('assets/images/pikabook_bird.png'),
                   ),
                   const SizedBox(height: 24),
                   // 오류 메시지

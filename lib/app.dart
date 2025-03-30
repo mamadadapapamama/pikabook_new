@@ -152,6 +152,22 @@ class _AppState extends State<App> {
       themeMode: ThemeMode.light,
       // 화면 방향 고정 (세로 모드만 지원)
       home: _buildHomeScreen(),
+      routes: {
+        '/settings': (context) => SettingsScreen(
+              initializationService: widget.initializationService,
+              onLogout: () async {
+                await widget.initializationService.handleLogout();
+                if (mounted) {
+                  setState(() {
+                    _isUserAuthenticated = false;
+                    _isOnboardingCompleted = false;
+                    _hasLoginHistory = false;
+                  });
+                }
+              },
+            ),
+        // 추가 라우트 설정이 필요한 경우 여기에 추가
+      },
     );
   }
 
@@ -164,9 +180,9 @@ class _AppState extends State<App> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               SizedBox(
-                width: 100,
-                height: 100,
-                child: Image.asset('assets/images/app_logo.png'),
+                width: 40,
+                height: 40,
+                child: Image.asset('assets/images/pikabook_bird.png'),
               ),
               const SizedBox(height: 24),
               const DotLoadingIndicator(),
@@ -266,6 +282,7 @@ class _AppState extends State<App> {
           });
         });
       },
+      initializationService: widget.initializationService, // InitializationService 전달
     );
   }
 

@@ -556,7 +556,7 @@ class InitializationService {
         debugPrint('Firebase가 이미 초기화되어 있음, 추가 초기화 생략');
         
         // 앱 상태만 확인
-        await _checkAuthenticationState();
+        await checkLoginState();
         
         // 초기화 완료 설정
         if (!_firebaseInitialized.isCompleted) {
@@ -573,7 +573,7 @@ class InitializationService {
       await Firebase.initializeApp(options: options);
       
       // 앱 상태 확인
-      await _checkAuthenticationState();
+      await checkLoginState();
       
       // 초기화 완료 설정
       if (!_firebaseInitialized.isCompleted) {
