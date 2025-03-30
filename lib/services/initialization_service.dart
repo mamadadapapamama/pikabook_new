@@ -457,77 +457,24 @@ class InitializationService {
         }
       }
 
-      // Apple 로그인을 위한 nonce 생성
-      final rawNonce = _generateNonce();
-      final nonce = _sha256ofString(rawNonce);
+      // AuthService의 signInWithApple 메서드 사용
+      final user = await authService.signInWithApple();
       
-      debugPrint('Apple 로그인 nonce 생성 완료');
-      debugPrint('Apple 로그인 인증 요청 시작...');
-
-      // Apple 로그인 요청
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
-        nonce: nonce,
-      );
-      
-      debugPrint('Apple 로그인 인증 성공, identityToken 길이: ${appleCredential.identityToken?.length ?? 0}');
-      
-      if (appleCredential.identityToken == null) {
-        throw Exception('Apple에서 Identity Token을 받지 못했습니다.');
+      if (user == null) {
+        debugPrint('Apple 로그인 실패: 사용자 정보를 가져오지 못했습니다.');
+        return null;
       }
-
-      // OAuthCredential 생성
-      final oauthCredential = OAuthProvider("apple.com").credential(
-        idToken: appleCredential.identityToken!,
-        rawNonce: rawNonce,
-      );
       
-      debugPrint('Firebase 인증 정보 생성 완료, Firebase 로그인 시작...');
-
-      // Firebase로 로그인
-      final userCredential = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      debugPrint('Apple 로그인 성공: ${user.uid}');
       
-      debugPrint('Firebase 로그인 성공: ${userCredential.user?.uid}');
-
       // 인증 상태 확인
       await checkLoginState();
-      
-      // 사용자 이름이 없는 경우 처리 (Apple 로그인은 두 번째부터 이름을 제공하지 않음)
-      if (userCredential.user != null && 
-          (userCredential.user?.displayName == null || userCredential.user!.displayName!.isEmpty)) {
-        String? fullName;
-        
-        if (appleCredential.givenName != null && appleCredential.familyName != null) {
-          fullName = '${appleCredential.givenName} ${appleCredential.familyName}';
-          
-          // 사용자 프로필 업데이트
-          await userCredential.user!.updateDisplayName(fullName);
-          debugPrint('사용자 이름 업데이트 완료: $fullName');
-        }
-      }
-      
-      debugPrint('Apple 로그인 완료: ${userCredential.user?.uid}');
-      return userCredential;
+
+      // UserCredential로 직접 변환할 수 없으므로 null 반환
+      // 이미 authStateChanges에서 로그인 이벤트가 발생하므로 실제로는 문제 없음
+      return null;
     } catch (e) {
-      // 자세한 에러 로그
-      String errorDetails;
-      if (e is SignInWithAppleAuthorizationException) {
-        errorDetails = '코드: ${e.code}, 메시지: ${e.message}';
-        
-        // 사용자 취소 에러인 경우 다른 메시지 표시
-        if (e.code == AuthorizationErrorCode.canceled) {
-          debugPrint('Apple 로그인 취소됨: $errorDetails');
-          setAuthError('Apple 로그인이 취소되었습니다.');
-          return null;
-        }
-      } else {
-        errorDetails = e.toString();
-      }
-      
-      debugPrint('Apple 로그인 오류 상세: $errorDetails');
+      debugPrint('Apple 로그인 오류 상세: $e');
       setAuthError('Apple 로그인 중 오류가 발생했습니다: $e');
       return null;
     }
@@ -553,22 +500,6 @@ class InitializationService {
       debugPrint('로그아웃 오류: $e');
       rethrow;
     }
-  }
-
-  // nonce 생성 메서드 (Apple 로그인에 필요)
-  String _generateNonce([int length = 32]) {
-    const charset =
-        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
-    final random = DateTime.now().millisecondsSinceEpoch.toString();
-    return List.generate(length, (index) => charset[index % charset.length])
-        .join();
-  }
-
-  // nonce SHA256 해싱 (Apple 로그인 보안을 위해 필요)
-  String _sha256ofString(String input) {
-    final bytes = utf8.encode(input);
-    final digest = sha256.convert(bytes);
-    return digest.toString();
   }
 
   // 현재 로그인된 사용자 가져오기

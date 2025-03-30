@@ -109,6 +109,9 @@ class AuthService {
       // nonce 생성
       final rawNonce = _generateNonce();
       final nonce = _sha256ofString(rawNonce);
+          debugPrint("🔐 rawNonce: $rawNonce");
+    debugPrint("🔐 nonce (SHA256): $nonce");
+
 
       // Apple 로그인 시작
       final appleCredential = await SignInWithApple.getAppleIDCredential(
@@ -126,10 +129,19 @@ class AuthService {
       debugPrint("Apple 인증 사용자 이름: ${appleCredential.givenName}, ${appleCredential.familyName}");
       debugPrint("Apple 인증 이메일: ${appleCredential.email}");
 
+
+ // JWT 디코딩
+    final Map<String, dynamic> decodedToken = _parseJwt(appleCredential.identityToken!);
+    debugPrint("📦 Decoded Apple identityToken payload:");
+    decodedToken.forEach((key, value) => debugPrint("    $key: $value"));
+    debugPrint("🎯 aud from token: ${decodedToken['aud']}");
+
+
       // OAuthCredential 생성
       final oauthCredential = OAuthProvider("apple.com").credential(
         idToken: appleCredential.identityToken,
         rawNonce: rawNonce,
+        accessToken: appleCredential.authorizationCode,
       );
 
       // Firebase에 로그인
@@ -164,30 +176,42 @@ class AuthService {
       return null;
     }
   }
-
-  // 로그아웃
-  Future<void> signOut() async {
-    try {
-      final userPrefs = UserPreferencesService();
-      
-      // 로그인 기록 초기화
-      await userPrefs.clearLoginHistory();
-      
-      // Firebase 로그아웃
-      await _auth.signOut();
-      
-      // Google 로그인을 사용한 경우 로그아웃
-      final googleSignIn = GoogleSignIn();
-      if (await googleSignIn.isSignedIn()) {
-        await googleSignIn.signOut();
-      }
-      
-      debugPrint('로그아웃 완료');
-    } catch (e) {
-      debugPrint('로그아웃 중 오류 발생: $e');
-      rethrow;
-    }
+// JWT 디코딩 함수 추가
+Map<String, dynamic> _parseJwt(String token) {
+  final parts = token.split('.');
+  if (parts.length != 3) {
+    throw Exception('Invalid JWT token');
   }
+
+  final payload = parts[1];
+  var normalized = base64Url.normalize(payload);
+  var decoded = utf8.decode(base64Url.decode(normalized));
+  return json.decode(decoded);
+}
+
+// 로그아웃
+Future<void> signOut() async {
+  try {
+    final userPrefs = UserPreferencesService();
+    
+    // 로그인 기록 초기화
+    await userPrefs.clearLoginHistory();
+    
+    // Firebase 로그아웃
+    await _auth.signOut();
+    
+    // Google 로그인을 사용한 경우 로그아웃
+    final googleSignIn = GoogleSignIn();
+    if (await googleSignIn.isSignedIn()) {
+      await googleSignIn.signOut();
+    }
+    
+    debugPrint('로그아웃 완료');
+  } catch (e) {
+    debugPrint('로그아웃 중 오류 발생: $e');
+    rethrow;
+  }
+}
 
   // 사용자 계정 삭제
   Future<void> deleteAccount() async {
