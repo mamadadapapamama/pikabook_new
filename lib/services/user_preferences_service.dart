@@ -28,6 +28,8 @@ class UserPreferencesService {
   static const String _defaultNoteViewModeKey = 'default_note_view_mode';
   static const String _defaultNoteSpaceKey = 'default_note_space';
   static const String _noteSpacesKey = 'note_spaces';
+  static const String _hasLoginHistoryKey = 'has_login_history';
+  static const String _lastLoginDateKey = 'last_login_date';
 
   // 세그먼트 모드 사용 여부 설정 (온보딩에서 설정)
   Future<void> setUseSegmentMode(bool useSegmentMode) async {
@@ -59,10 +61,17 @@ class UserPreferencesService {
     }
   }
 
-  // 온보딩 완료 여부 확인
-  Future<bool> isOnboardingCompleted() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_onboardingCompletedKey) ?? false;
+  // 온보딩 완료 여부 확인 - 새 메서드명
+  Future<bool> getOnboardingCompleted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final result = prefs.getBool(_onboardingCompletedKey) ?? false;
+      debugPrint('온보딩 완료 상태 확인: $result (${DateTime.now()})');
+      return result;
+    } catch (e) {
+      debugPrint('온보딩 상태 확인 중 오류 발생: $e');
+      return false; // 오류 발생 시 기본값으로 미완료 상태 반환
+    }
   }
 
   // 사용자가 노트 데이터 기반으로 온보딩을 진행했는지 여부 설정
@@ -275,5 +284,56 @@ class UserPreferencesService {
       'noteSpaces': noteSpaces,
       'defaultNoteSpace': defaultNoteSpace,
     };
+  }
+
+  // 로그인 기록 여부 확인
+  Future<bool> hasLoginHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final result = prefs.getBool(_hasLoginHistoryKey) ?? false;
+      debugPrint('로그인 기록 확인: $result (${DateTime.now()})');
+      return result;
+    } catch (e) {
+      debugPrint('로그인 기록 확인 중 오류 발생: $e');
+      return false;
+    }
+  }
+  
+  // 로그인 기록 저장
+  Future<void> saveLoginHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_hasLoginHistoryKey, true);
+      await prefs.setString(_lastLoginDateKey, DateTime.now().toIso8601String());
+      debugPrint('로그인 기록 저장 완료 (${DateTime.now()})');
+    } catch (e) {
+      debugPrint('로그인 기록 저장 중 오류 발생: $e');
+    }
+  }
+  
+  // 마지막 로그인 날짜 가져오기
+  Future<DateTime?> getLastLoginDate() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final dateStr = prefs.getString(_lastLoginDateKey);
+      if (dateStr == null) return null;
+      
+      return DateTime.parse(dateStr);
+    } catch (e) {
+      debugPrint('마지막 로그인 날짜 확인 중 오류 발생: $e');
+      return null;
+    }
+  }
+  
+  // 로그인 기록 초기화 (로그아웃 시 호출)
+  Future<void> clearLoginHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // 로그인 기록만 초기화하고 다른 사용자 설정은 유지
+      await prefs.setBool(_hasLoginHistoryKey, false);
+      debugPrint('로그인 기록 초기화 완료 (${DateTime.now()})');
+    } catch (e) {
+      debugPrint('로그인 기록 초기화 중 오류 발생: $e');
+    }
   }
 }

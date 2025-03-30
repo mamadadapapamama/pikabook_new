@@ -6,16 +6,18 @@ import '../../../theme/tokens/color_tokens.dart';
 import '../../../theme/tokens/typography_tokens.dart';
 import '../../../widgets/dot_loading_indicator.dart';
 import '../../../firebase_options.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginScreen extends StatefulWidget {
-  final InitializationService initializationService;
-  final VoidCallback onLoginSuccess;
+  final InitializationService? initializationService;
+  final Function(User) onLoginSuccess;
   final VoidCallback? onSkipLogin;
   final bool isInitializing;
 
   const LoginScreen({
     Key? key,
-    required this.initializationService,
+    this.initializationService,
     required this.onLoginSuccess,
     this.onSkipLogin,
     this.isInitializing = false,
@@ -95,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     debugPrint('백그라운드에서 Firebase 초기화 시작');
     
     // 초기화 작업 시작
-    widget.initializationService.retryInitialization(
+    widget.initializationService?.retryInitialization(
       options: DefaultFirebaseOptions.currentPlatform,
     ).then((_) {
       debugPrint('백그라운드 Firebase 초기화 완료');
@@ -266,7 +268,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 // Google 로그인 버튼
                                 _buildLoginButton(
                                   text: 'Google로 로그인',
-                                  onPressed: _handleGoogleSignIn,
+                                  onPressed: _handleGoogleLogin,
                                   backgroundColor: Colors.white,
                                   textColor: const Color(0xFF031B31),
                                   leadingIcon: Padding(
@@ -286,7 +288,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 // Apple 로그인 버튼
                                 _buildLoginButton(
                                   text: 'Apple로 로그인',
-                                  onPressed: _handleAppleSignIn,
+                                  onPressed: _handleAppleLogin,
                                   backgroundColor: Colors.white,
                                   textColor: Colors.black,
                                   leadingIcon: Padding(
@@ -358,63 +360,106 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     );
   }
 
-  // 구글 로그인 처리
-  Future<void> _handleGoogleSignIn() async {
+  // 로그인 처리
+  Future<void> _handleGoogleLogin() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
+      // 초기화 서비스가 제공되지 않은 경우 Firebase Auth 직접 사용
+      User? user;
+      UserCredential? userCredential;
 
-      final user = await widget.initializationService.signInWithGoogle();
+      if (widget.initializationService != null) {
+        // 기존 초기화 서비스 사용
+        userCredential = await widget.initializationService!.signInWithGoogle();
+        user = userCredential?.user;
+      } else {
+        // Firebase Auth 직접 사용
+        final googleSignIn = GoogleSignIn();
+        final googleUser = await googleSignIn.signIn();
+        if (googleUser == null) {
+          setState(() {
+            _isLoading = false;
+          });
+          return; // 로그인 취소
+        }
 
-      if (user != null && mounted) {
-        debugPrint('Google 로그인 성공: ${user.email}');
-        widget.onLoginSuccess();
+        final googleAuth = await googleUser.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+
+        userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+        user = userCredential.user;
+      }
+
+      if (user != null) {
+        // 로그인 성공
+        widget.onLoginSuccess(user); // User 객체 전달
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = '로그인에 실패했습니다';
+        });
       }
     } catch (e) {
       debugPrint('Google 로그인 오류: $e');
-      if (mounted) {
-        setState(() {
-          _errorMessage = '로그인 실패: $e';
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Google 로그인 중 오류가 발생했습니다: $e';
+      });
     }
   }
 
-  // 애플 로그인 처리
-  Future<void> _handleAppleSignIn() async {
+  // Apple 로그인 처리
+  Future<void> _handleAppleLogin() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
+      // 초기화 서비스가 제공되지 않은 경우 Firebase Auth 직접 사용
+      User? user;
+      UserCredential? userCredential;
 
-      final user = await widget.initializationService.signInWithApple();
+      if (widget.initializationService != null) {
+        // 기존 초기화 서비스 사용
+        userCredential = await widget.initializationService!.signInWithApple();
+        user = userCredential?.user;
+      } else {
+        // Apple 로그인 직접 구현
+        // 노트: Apple 로그인은 더 복잡한 구현이 필요합니다 (nonce 생성 등)
+        // 간단히 하기 위해 코드 샘플은 생략합니다
+        // 필요시 initializationService.dart의 signInWithApple 코드를 참조하세요
+        
+        // 임시 에러 메시지
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Apple 로그인이 현재 지원되지 않습니다';
+        });
+        return;
+      }
 
-      if (user != null && mounted) {
-        debugPrint('Apple 로그인 성공: ${user.email}');
-        widget.onLoginSuccess();
+      if (user != null) {
+        // 로그인 성공
+        widget.onLoginSuccess(user); // User 객체 전달
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = '로그인에 실패했습니다';
+        });
       }
     } catch (e) {
       debugPrint('Apple 로그인 오류: $e');
-      if (mounted) {
-        setState(() {
-          _errorMessage = '로그인 실패: $e';
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Apple 로그인 중 오류가 발생했습니다: $e';
+      });
     }
   }
 }

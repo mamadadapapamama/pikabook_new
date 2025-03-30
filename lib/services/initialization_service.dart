@@ -87,34 +87,194 @@ class InitializationService {
   InitializationService();
 
   // 사용자 인증 상태 확인 메서드
-  Future<void> _checkAuthenticationState() async {
+  Future<Map<String, dynamic>> checkLoginState() async {
     try {
-      // 이미 완료된 경우 스킵
-      if (_firebaseInitialized.isCompleted) {
-        return;
-      }
-
+      debugPrint('로그인 상태 확인 시작 (${DateTime.now()})');
+      final userPrefs = UserPreferencesService();
+      
       // Firebase Auth 인스턴스 가져오기
       final auth = FirebaseAuth.instance;
-
+      
       // 현재 사용자 확인 (null이면 로그인되지 않은 상태)
       final currentUser = auth.currentUser;
-
-      if (currentUser != null) {
-        // 일반 사용자인 경우 마지막 로그인 정보 업데이트
-        await _saveLastLoginActivity(currentUser);
+      
+      // 결과 객체 초기화
+      final result = {
+        'isLoggedIn': currentUser != null,
+        'hasLoginHistory': false,
+        'isOnboardingCompleted': false,
+        'isFirstEntry': true,
+        'user': currentUser,
+      };
+      
+      // 1. 로그인 상태 확인
+      if (currentUser == null) {
+        debugPrint('로그인 상태 확인 결과: 로그인되지 않음');
+        return result; // 로그인되지 않음 - 로그인 화면으로 이동
       }
-
-      // 인증 상태 확인 완료 설정
-      _firebaseInitialized.complete(true);
-      debugPrint('인증 상태 확인 완료: ${currentUser != null ? '로그인 상태' : '로그아웃 상태'}');
+      
+      // 2. 로그인 기록 여부 확인
+      final hasLoginHistory = await userPrefs.hasLoginHistory();
+      result['hasLoginHistory'] = hasLoginHistory;
+      
+      if (!hasLoginHistory) {
+        // 로그인 기록 저장
+        await userPrefs.saveLoginHistory();
+        debugPrint('로그인 상태 확인 결과: 로그인됨, 이전 로그인 기록 없음');
+        return result; // 이전 로그인 기록 없음 - 온보딩 화면으로 이동
+      }
+      
+      // 3. 온보딩 완료 여부 확인
+      final isOnboardingCompleted = await userPrefs.getOnboardingCompleted();
+      result['isOnboardingCompleted'] = isOnboardingCompleted;
+      
+      if (!isOnboardingCompleted) {
+        debugPrint('로그인 상태 확인 결과: 로그인됨, 로그인 기록 있음, 온보딩 미완료');
+        return result; // 온보딩 미완료 - 온보딩 화면으로 이동
+      }
+      
+      // 4. 첫 진입 여부 확인 (툴팁 표시 여부)
+      final prefs = await SharedPreferences.getInstance();
+      final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
+      result['isFirstEntry'] = !hasShownTooltip;
+      
+      // 로그인 활동 정보 업데이트
+      await _saveLastLoginActivity(currentUser);
+      
+      debugPrint('로그인 상태 확인 결과: 로그인됨, 로그인 기록 있음, 온보딩 완료, 첫 진입: ${!hasShownTooltip}');
+      return result; // 온보딩 완료 - 홈 화면으로 이동 (첫 진입 여부에 따라 툴팁 표시)
     } catch (e) {
-      _authError = '인증 상태를 확인하는 중 오류가 발생했습니다: $e';
-      _firebaseInitialized.complete(false);
-      debugPrint('인증 상태 확인 오류: $e');
+      debugPrint('로그인 상태 확인 중 오류 발생: $e');
+      _authError = '로그인 상태를 확인하는 중 오류가 발생했습니다: $e';
+      
+      // 에러 발생 시 기본값 반환
+      return {
+        'isLoggedIn': false,
+        'hasLoginHistory': false,
+        'isOnboardingCompleted': false,
+        'isFirstEntry': true,
+        'user': null,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  // 사용자 로그인 처리 및 온보딩 상태 관리
+  Future<Map<String, dynamic>> handleUserLogin(User user) async {
+    try {
+      debugPrint('사용자 로그인 처리 시작: ${user.uid} (${DateTime.now()})');
+      final firestore = FirebaseFirestore.instance;
+      final userPrefs = UserPreferencesService();
+      
+      // Firestore에서 사용자 데이터 확인
+      final userDoc = await firestore.collection('users').doc(user.uid).get();
+      final isNewUser = !userDoc.exists;
+      
+      // 사용자 정보 저장 (새 사용자 여부에 따라 다른 처리)
+      await _saveUserToFirestore(user, isNewUser: isNewUser);
+      
+      // 로그인 기록 저장
+      await userPrefs.saveLoginHistory();
+      
+      // 결과 객체 초기화
+      final result = {
+        'isLoggedIn': true,
+        'isNewUser': isNewUser,
+        'hasLoginHistory': true,
+        'isOnboardingCompleted': false,
+        'isFirstEntry': true,
+      };
+      
+      // 온보딩 상태 확인 및 저장
+      if (!isNewUser) {
+        // 기존 사용자
+        final userData = userDoc.data() as Map<String, dynamic>?;
+        final onboardingCompleted = userData?['onboardingCompleted'] ?? false;
+        
+        // 온보딩 상태 로컬에 저장
+        await userPrefs.setOnboardingCompleted(onboardingCompleted);
+        result['isOnboardingCompleted'] = onboardingCompleted;
+        
+        // 툴팁 상태 확인
+        final prefs = await SharedPreferences.getInstance();
+        final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
+        result['isFirstEntry'] = !hasShownTooltip;
+        
+        debugPrint('기존 사용자 로그인: 온보딩 상태=$onboardingCompleted, 툴팁 표시 여부=${!hasShownTooltip}');
+        
+        // 온보딩이 완료된 경우에만 추가 설정 로드
+        if (onboardingCompleted && userData != null) {
+          await _loadUserSettings(userData, userPrefs);
+        }
+      } else {
+        // 새 사용자는 온보딩 미완료 상태로 설정
+        await userPrefs.setOnboardingCompleted(false);
+        debugPrint('새 사용자 로그인: 온보딩 필요');
+      }
+      
+      return result;
+    } catch (e) {
+      debugPrint('사용자 로그인 처리 중 오류 발생: $e');
+      return {
+        'isLoggedIn': true,
+        'error': e.toString(),
+        'isOnboardingCompleted': false,
+        'isFirstEntry': true,
+      };
     }
   }
   
+  // 사용자 설정 로드 (재사용을 위한 별도 메서드)
+  Future<void> _loadUserSettings(Map<String, dynamic> userData, UserPreferencesService userPrefs) async {
+    try {
+      if (userData['userName'] != null) {
+        await userPrefs.setUserName(userData['userName']);
+      }
+      if (userData['learningPurpose'] != null) {
+        await userPrefs.setLearningPurpose(userData['learningPurpose']);
+      }
+      if (userData['translationMode'] != null) {
+        final useSegmentMode = userData['translationMode'] == 'segment';
+        await userPrefs.setUseSegmentMode(useSegmentMode);
+      }
+      if (userData['defaultNoteSpace'] != null) {
+        await userPrefs.setDefaultNoteSpace(userData['defaultNoteSpace']);
+        await userPrefs.addNoteSpace(userData['defaultNoteSpace']);
+      }
+      
+      // 로컬 Storage에 현재 사용자 ID 저장 (앱 재시작 시 빠른 검증용)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('current_user_id', userData['uid']);
+      
+      debugPrint('사용자 설정 로드 완료');
+    } catch (e) {
+      debugPrint('사용자 설정 로드 중 오류 발생: $e');
+    }
+  }
+
+  // 로그아웃 처리
+  Future<void> handleLogout() async {
+    try {
+      debugPrint('로그아웃 처리 시작 (${DateTime.now()})');
+      final userPrefs = UserPreferencesService();
+      
+      // 로그인 기록 초기화 (기록은 유지하되 다시 로그인 여부 확인 필요)
+      await userPrefs.clearLoginHistory();
+      
+      // Firebase 로그아웃
+      await FirebaseAuth.instance.signOut();
+      
+      // Google 로그아웃 (Google 로그인을 사용한 경우)
+      if (await _googleSignIn.isSignedIn()) {
+        await _googleSignIn.signOut();
+      }
+      
+      debugPrint('로그아웃 처리 완료');
+    } catch (e) {
+      debugPrint('로그아웃 처리 중 오류 발생: $e');
+    }
+  }
+
   // 마지막 로그인 활동 저장
   Future<void> _saveLastLoginActivity(User user) async {
     try {
@@ -186,178 +346,121 @@ class InitializationService {
     }
   }
 
-  // 사용자 로그인 처리 및 온보딩 상태 관리
-  Future<void> handleUserLogin(User user) async {
-    try {
-      final firestore = FirebaseFirestore.instance;
-      final userPrefs = UserPreferencesService();
-      
-      // 로그인 전에 기존 사용자 설정 초기화 (다른 계정 설정이 남아있을 수 있음)
-      await userPrefs.resetAllSettings();
-      debugPrint('다른 계정의 설정을 방지하기 위해 기존 설정 초기화');
-      
-      // Firestore에서 사용자 데이터 확인
-      final userDoc = await firestore.collection('users').doc(user.uid).get();
-      final isNewUser = !userDoc.exists;
-      
-      // 사용자 정보 저장 (새 사용자 여부에 따라 다른 처리)
-      await _saveUserToFirestore(user, isNewUser: isNewUser);
-      
-      // 온보딩 상태 확인 및 저장
-      if (!isNewUser) {
-        // 기존 사용자
-        final userData = userDoc.data() as Map<String, dynamic>?;
-        final onboardingCompleted = userData?['onboardingCompleted'] ?? false;
-        final hasOnboarded = userData?['hasOnboarded'] ?? false;
-        
-        // 온보딩 상태 로컬에 저장
-        await userPrefs.setOnboardingCompleted(onboardingCompleted);
-        await userPrefs.setHasOnboarded(hasOnboarded);
-        
-        // 툴팁 상태 초기화 (온보딩 미완료시)
-        if (!onboardingCompleted || !hasOnboarded) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('hasShownTooltip', false);
-          debugPrint('온보딩 미완료로 툴팁 표시 상태 초기화');
-        }
-        
-        debugPrint('기존 사용자 로그인: Firestore에서 확인한 온보딩 상태 - onboardingCompleted=$onboardingCompleted, hasOnboarded=$hasOnboarded');
-        
-        // 온보딩이 완료된 경우에만 추가 설정 로드
-        if (onboardingCompleted && hasOnboarded) {
-          if (userData != null) {
-            if (userData['userName'] != null) {
-              await userPrefs.setUserName(userData['userName']);
-            }
-            if (userData['learningPurpose'] != null) {
-              await userPrefs.setLearningPurpose(userData['learningPurpose']);
-            }
-            if (userData['translationMode'] != null) {
-              final useSegmentMode = userData['translationMode'] == 'segment';
-              await userPrefs.setUseSegmentMode(useSegmentMode);
-            }
-            if (userData['defaultNoteSpace'] != null) {
-              await userPrefs.setDefaultNoteSpace(userData['defaultNoteSpace']);
-              await userPrefs.addNoteSpace(userData['defaultNoteSpace']);
-            }
-          }
-          
-          // 로컬 Storage에 현재 사용자 ID 저장 (앱 재시작 시 빠른 검증용)
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('current_user_id', user.uid);
-        }
-      } else {
-        // 새 사용자는 온보딩 미완료 상태로 설정
-        await userPrefs.setOnboardingCompleted(false);
-        await userPrefs.setHasOnboarded(false);
-        
-        // 툴팁 상태 초기화
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('hasShownTooltip', false);
-        
-        // Firestore에도 온보딩 상태 저장
-        await firestore.collection('users').doc(user.uid).update({
-          'onboardingCompleted': false,
-          'hasOnboarded': false,
-        });
-        
-        debugPrint('새 사용자: 온보딩 필요, 툴팁 표시 상태 초기화');
-      }
-      
-      debugPrint('사용자 ${user.uid} 로그인 처리 완료 (새 사용자: $isNewUser)');
-    } catch (e) {
-      debugPrint('사용자 로그인 처리 중 오류 발생: $e');
-      rethrow;
-    }
-  }
-
   // Firebase 초기화 상태 설정 (백그라운드 초기화 완료 시 호출)
-  Future<void> markFirebaseInitialized(bool initialized) async {
+  Future<void> markFirebaseInitialized(bool success) async {
     if (!_firebaseInitialized.isCompleted) {
-      _firebaseInitialized.complete(initialized);
-      debugPrint('Firebase 초기화 상태 업데이트: $initialized');
+      try {
+        // 인증 상태 확인
+        await checkLoginState();
+        
+        _firebaseInitialized.complete(success);
+        debugPrint('Firebase 초기화 상태 설정: $success');
+      } catch (e) {
+        _firebaseError = '인증 상태 확인 중 오류가 발생했습니다: $e';
+        _firebaseInitialized.complete(false);
+        debugPrint('인증 상태 확인 오류: $e');
+      }
     }
   }
 
-  // Firebase 초기화 함수
-  Future<bool> initializeFirebase() async {
+  /// 앱 초기화 메서드
+  /// Firebase를 초기화하고 사용자 인증 상태를 확인합니다.
+  Future<bool> initializeApp() async {
     try {
-      // 이미 초기화되었는지 확인
-      if (Firebase.apps.isNotEmpty) {
-        await markFirebaseInitialized(true);
-        debugPrint('Firebase 이미 초기화됨');
-        return true;
-      }
-      
-      // 초기화되지 않은 경우 초기화 수행
+      // 초기화 시작 로그
+      debugPrint('앱 초기화 시작 (${_initStartTime.toIso8601String()})');
+
+      // Firebase Core 초기화
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
       
-      await markFirebaseInitialized(true);
-      debugPrint('Firebase 초기화 완료');
+      // 인증 상태 확인
+      await checkLoginState();
+      
+      // 초기화 완료 시간 및 소요 시간 계산
+      final initEndTime = DateTime.now();
+      final duration = initEndTime.difference(_initStartTime);
+      
+      debugPrint('앱 초기화 완료 (소요 시간: ${duration.inMilliseconds}ms)');
+      
+      // Firebase 초기화 상태가 아직 완료되지 않은 경우에만 완료 처리
+      if (!_firebaseInitialized.isCompleted) {
+        _firebaseInitialized.complete(true);
+      }
+      
       return true;
     } catch (e) {
-      _firebaseError = '앱 초기화 중 오류가 발생했습니다: $e';
+      // 오류 발생 시 처리
+      setFirebaseError('Firebase 초기화 중 오류가 발생했습니다: $e');
       debugPrint('Firebase 초기화 오류: $e');
+      
+      // 초기화 실패 반환
       return false;
     }
   }
 
   // Google 로그인
-  Future<User?> signInWithGoogle() async {
+  Future<UserCredential?> signInWithGoogle() async {
     try {
       // Firebase가 초기화되었는지 확인
       if (!_firebaseInitialized.isCompleted && Firebase.apps.isEmpty) {
-        bool initialized = await initializeFirebase();
+        bool initialized = await initializeApp();
         if (!initialized) {
           throw Exception('Firebase를 초기화할 수 없습니다.');
         }
       }
 
+      // Google 로그인 UI 표시
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return null;
+      
+      // 로그인 취소된 경우
+      if (googleUser == null) {
+        debugPrint('Google 로그인 취소됨');
+        return null;
+      }
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+      // 인증 정보 가져오기
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // 인증 정보로 Firebase 인증 정보 생성
       final OAuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential =
-          await _firebaseAuth.signInWithCredential(credential);
-      final User? user = userCredential.user;
+      // Firebase로 로그인
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
 
-      if (user != null) {
-        // 사용자 데이터를 Firestore에 저장
-        await _saveUserToFirestore(user);
-      }
-
-      return user;
+      // 인증 상태 확인
+      await checkLoginState();
+      
+      debugPrint('Google 로그인 완료: ${userCredential.user?.uid}');
+      return userCredential;
     } catch (e) {
       debugPrint('Google 로그인 오류: $e');
-      rethrow;
+      setAuthError('Google 로그인 중 오류가 발생했습니다: $e');
+      return null;
     }
   }
 
   // Apple 로그인
-  Future<User?> signInWithApple() async {
+  Future<UserCredential?> signInWithApple() async {
     try {
       // Firebase가 초기화되었는지 확인
       if (!_firebaseInitialized.isCompleted && Firebase.apps.isEmpty) {
-        bool initialized = await initializeFirebase();
+        bool initialized = await initializeApp();
         if (!initialized) {
           throw Exception('Firebase를 초기화할 수 없습니다.');
         }
       }
 
-      // Apple 로그인 요청에 필요한 nonce 생성
+      // Apple 로그인을 위한 nonce 생성
       final rawNonce = _generateNonce();
       final nonce = _sha256ofString(rawNonce);
 
-      // Apple로 인증 요청
-      final credential = await SignInWithApple.getAppleIDCredential(
+      // Apple 로그인 요청
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
           AppleIDAuthorizationScopes.fullName,
@@ -366,31 +469,36 @@ class InitializationService {
       );
 
       // OAuthCredential 생성
-      final oauthCredential = OAuthProvider('apple.com').credential(
-        idToken: credential.identityToken,
+      final oauthCredential = OAuthProvider("apple.com").credential(
+        idToken: appleCredential.identityToken,
         rawNonce: rawNonce,
       );
 
-      // Firebase에 로그인
-      final userCredential =
-          await _firebaseAuth.signInWithCredential(oauthCredential);
-      final user = userCredential.user;
-
-      // 이름 업데이트 (Apple은 첫 로그인에만 이름 정보 제공)
-      if (credential.givenName != null && user != null) {
-        String displayName = '${credential.givenName} ${credential.familyName ?? ''}';
-        await user.updateDisplayName(displayName.trim());
+      // Firebase로 로그인
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      
+      // 인증 상태 확인
+      await checkLoginState();
+      
+      // 사용자 이름이 없는 경우 처리 (Apple 로그인은 두 번째부터 이름을 제공하지 않음)
+      if (userCredential.user != null && 
+          (userCredential.user?.displayName == null || userCredential.user!.displayName!.isEmpty)) {
+        String? fullName;
+        
+        if (appleCredential.givenName != null && appleCredential.familyName != null) {
+          fullName = '${appleCredential.givenName} ${appleCredential.familyName}';
+          
+          // 사용자 프로필 업데이트
+          await userCredential.user!.updateDisplayName(fullName);
+        }
       }
-
-      if (user != null) {
-        // 사용자 데이터를 Firestore에 저장
-        await _saveUserToFirestore(user);
-      }
-
-      return user;
+      
+      debugPrint('Apple 로그인 완료: ${userCredential.user?.uid}');
+      return userCredential;
     } catch (e) {
       debugPrint('Apple 로그인 오류: $e');
-      rethrow;
+      setAuthError('Apple 로그인 중 오류가 발생했습니다: $e');
+      return null;
     }
   }
 

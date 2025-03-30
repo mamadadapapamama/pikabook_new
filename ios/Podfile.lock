@@ -1397,6 +1397,7 @@ PODS:
     - Flutter
 
 DEPENDENCIES:
+  - AppAuth (>= 1.7.4)
   - cloud_firestore (from `.symlinks/plugins/cloud_firestore/ios`)
   - firebase_auth (from `.symlinks/plugins/firebase_auth/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
@@ -1510,6 +1511,6 @@ SPEC CHECKSUMS:
   sign_in_with_apple: c5dcc141574c8c54d5ac99dd2163c0c72ad22418
   url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
 
-PODFILE CHECKSUM: ccf6d4e4a4e6a91c168c88a355b3ec7c5c32d1a4
+PODFILE CHECKSUM: 255723f0f84345f3b192030ba7a63f26cd6f1e45
 
 COCOAPODS: 1.16.2

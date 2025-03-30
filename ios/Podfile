@@ -29,10 +29,14 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
+  use_frameworks! :linkage => :static
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  
+  # AppAuth 직접 추가 (추가)
+  pod 'AppAuth', '>= 1.7.4'
+  
   target 'RunnerTests' do
     inherit! :search_paths
   end
@@ -51,9 +55,18 @@ target 'Runner' do
         
         # BoringSSL 충돌 해결
         config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
+        config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+        config.build_settings['LD_RUNPATH_SEARCH_PATHS'] = [
+          '$(FRAMEWORK_SEARCH_PATHS)',
+          '$(inherited)',
+          '@executable_path/Frameworks',
+          '@loader_path/Frameworks'
+        ]
       end
     end
   end
 
   pod 'GoogleSignIn'
 end
+
+

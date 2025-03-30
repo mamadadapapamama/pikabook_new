@@ -8,6 +8,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../firebase_options.dart';
+import '../services/user_preferences_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -159,28 +160,26 @@ class AuthService {
 
   // 로그아웃
   Future<void> signOut() async {
-    final user = _auth.currentUser;
-    
-    if (user != null) {
-      // 로그아웃 시간 기록
-      try {
-        await _firestore.collection('users').doc(user.uid).update({
-          'lastLogoutAt': FieldValue.serverTimestamp(),
-        });
-      } catch (e) {
-        debugPrint('AuthService: 로그아웃 기록 저장 실패: $e');
-      }
-    }
-    
-    // 소셜 로그인 연결 해제
     try {
-      await _googleSignIn.signOut();
+      final userPrefs = UserPreferencesService();
+      
+      // 로그인 기록 초기화
+      await userPrefs.clearLoginHistory();
+      
+      // Firebase 로그아웃
+      await _auth.signOut();
+      
+      // Google 로그인을 사용한 경우 로그아웃
+      final googleSignIn = GoogleSignIn();
+      if (await googleSignIn.isSignedIn()) {
+        await googleSignIn.signOut();
+      }
+      
+      debugPrint('로그아웃 완료');
     } catch (e) {
-      debugPrint('AuthService: Google 로그인 연결 해제 실패: $e');
+      debugPrint('로그아웃 중 오류 발생: $e');
+      rethrow;
     }
-    
-    // Firebase 로그아웃
-    await _auth.signOut();
   }
 
   // 사용자 계정 삭제

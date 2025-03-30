@@ -29,7 +29,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// profile setting, note detail, flashcard 화면으로 이동 가능
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  final bool showTooltip;
+  final VoidCallback? onCloseTooltip;
+
+  const HomeScreen({
+    Key? key, 
+    this.showTooltip = false,
+    this.onCloseTooltip,
+  }) : super(key: key);
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -46,7 +53,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _loadNoteSpaceName();
-    _checkOnboardingStatus();
+    
+    // 외부에서 전달받은 툴팁 표시 여부 적용
+    _showTooltip = widget.showTooltip;
+    
+    // 기존 온보딩 상태 확인은 제거하고, 외부에서 제어하도록 수정
+    if (_showTooltip) {
+      // 10초 후에 툴팁 자동으로 숨기기
+      Future.delayed(const Duration(seconds: 10), () {
+        if (mounted) {
+          setState(() {
+            _showTooltip = false;
+          });
+          
+          // 툴팁 닫기 콜백 호출
+          if (widget.onCloseTooltip != null) {
+            widget.onCloseTooltip!();
+          }
+        }
+      });
+    }
     
     // 애니메이션 컨트롤러 초기화
     _animationController = AnimationController(
@@ -80,94 +106,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (mounted) {
       setState(() {
         _noteSpaceName = noteSpaceName;
-      });
-    }
-  }
-
-  Future<void> _checkOnboardingStatus() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
-      final hasCompletedOnboarding = prefs.getBool('onboarding_completed') ?? false;
-      
-      // Firestore에서 사용자 정보 가져오기
-      final userService = Provider.of<UserPreferencesService>(context, listen: false);
-      final userId = await userService.getUserId();
-      
-      if (userId != null) {
-        // Firestore에서 사용자의 도움말 표시 상태 확인
-        final firestore = FirebaseFirestore.instance;
-        final userDoc = await firestore.collection('users').doc(userId).get();
-        
-        // Firestore에 저장된 도움말 표시 상태 가져오기
-        final bool hasShownTooltipFirestore = userDoc.data()?['hasShownTooltip'] ?? false;
-        
-        // Firestore의 상태가 우선순위를 가짐 (로그인 상태 유지에 중요)
-        if (hasShownTooltipFirestore) {
-          // 이미 도움말을 본 사용자이므로 로컬 상태도 업데이트
-          await prefs.setBool('hasShownTooltip', true);
-          
-          setState(() {
-            _showTooltip = false;
-          });
-          
-          debugPrint('Firestore에서 도움말 표시 상태 확인: 이미 표시됨');
-          return;
-        }
-      }
-      
-      // 기존 로직: 온보딩을 완료했고, 아직 툴팁을 표시하지 않은 경우에만 툴팁 표시
-      if (hasCompletedOnboarding && !hasShownTooltip) {
-        debugPrint('온보딩 완료 상태: $hasCompletedOnboarding, 툴팁 표시 상태: $hasShownTooltip');
-        
-        // 앱을 처음 사용할 때만 툴팁 표시
-        if (mounted) {
-          setState(() {
-            _showTooltip = true;
-          });
-        }
-        
-        // 툴팁 표시 상태를 로컬과 Firestore 모두에 저장
-        await prefs.setBool('hasShownTooltip', true);
-        
-        // Firestore에도 도움말 표시 상태 저장
-        final userService = Provider.of<UserPreferencesService>(context, listen: false);
-        final userId = await userService.getUserId();
-        
-        if (userId != null) {
-          try {
-            final firestore = FirebaseFirestore.instance;
-            await firestore.collection('users').doc(userId).update({
-              'hasShownTooltip': true,
-            });
-            
-            debugPrint('Firestore에 도움말 표시 상태 저장 완료');
-          } catch (e) {
-            debugPrint('Firestore에 도움말 표시 상태 저장 실패: $e');
-          }
-        }
-        
-        // 10초 후에 툴팁 숨기기
-        Future.delayed(const Duration(seconds: 10), () {
-          if (mounted) {
-            setState(() {
-              _showTooltip = false;
-            });
-          }
-        });
-      } else {
-        // 온보딩이 완료되었고 도움말이 이미 표시된 경우 -> 숨김 상태 유지
-        setState(() {
-          _showTooltip = false;
-        });
-        
-        debugPrint('툴팁 표시 안함. 온보딩 완료: $hasCompletedOnboarding, 이전에 표시함: $hasShownTooltip');
-      }
-    } catch (e) {
-      debugPrint('도움말 상태 확인 중 오류 발생: $e');
-      // 오류 발생 시 도움말 표시 안함
-      setState(() {
-        _showTooltip = false;
       });
     }
   }
@@ -275,11 +213,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   text: "노트 저장 공간이 성공적으로 만들어졌어요!",
                   description: "이제 이미지를 올려, 스마트 노트를 만들어보세요.",
                   showTooltip: _showTooltip,
-                  onDismiss: () {
-                    setState(() {
-                      _showTooltip = false;
-                    });
-                  },
+                  onDismiss: _handleCloseTooltip,
                   backgroundColor: ColorTokens.primarylight,
                   borderColor: ColorTokens.primaryMedium,
                   textColor: ColorTokens.textPrimary,
@@ -423,6 +357,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           SnackBar(content: Text('플래시카드 화면 이동 중 오류가 발생했습니다: $e')),
         );
       }
+    }
+  }
+
+  // 툴팁 닫기 처리 메서드
+  void _handleCloseTooltip() {
+    setState(() {
+      _showTooltip = false;
+    });
+    
+    // 툴팁 닫기 콜백 호출
+    if (widget.onCloseTooltip != null) {
+      widget.onCloseTooltip!();
     }
   }
 }
