@@ -10,11 +10,17 @@ import 'package:firebase_core/firebase_core.dart';
 import '../firebase_options.dart';
 import '../services/user_preferences_service.dart';
 import '../services/unified_cache_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:io';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    forceCodeForRefreshToken: true,
+    signInOption: SignInOption.standard,
+    scopes: ['email', 'profile'],
+  );
 
   // 현재 사용자 가져오기
   User? get currentUser => _auth.currentUser;
@@ -25,6 +31,16 @@ class AuthService {
   // Google 로그인
   Future<User?> signInWithGoogle() async {
     try {
+      // 기존 로그인 상태를 확인하고 있으면 로그아웃
+      try {
+        if (await _googleSignIn.isSignedIn()) {
+          await _googleSignIn.signOut();
+          debugPrint('기존 Google 로그인 세션 정리');
+        }
+      } catch (e) {
+        debugPrint('Google 기존 세션 확인 중 오류: $e');
+      }
+      
       // Google 로그인 인스턴스 생성
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
@@ -164,6 +180,9 @@ Future<void> signOut() async {
   try {
     final userPrefs = UserPreferencesService();
     
+    // 소셜 로그인 상태 확인 및 연결 해제
+    await _clearSocialLoginSessions();
+
     // 로그인 기록 초기화
     await userPrefs.clearLoginHistory();
     
@@ -174,16 +193,62 @@ Future<void> signOut() async {
     // Firebase 로그아웃
     await _auth.signOut();
     
-    // Google 로그인을 사용한 경우 로그아웃
-    final googleSignIn = GoogleSignIn();
-    if (await googleSignIn.isSignedIn()) {
-      await googleSignIn.signOut();
-    }
-    
     debugPrint('로그아웃 완료');
   } catch (e) {
     debugPrint('로그아웃 중 오류 발생: $e');
     rethrow;
+  }
+}
+
+// 소셜 로그인 세션 완전 정리
+Future<void> _clearSocialLoginSessions() async {
+  try {
+    // 1. Google 로그인 연결 해제 (Google 계정 연결 권한까지 철회)
+    try {
+      final googleSignIn = GoogleSignIn();
+      if (await googleSignIn.isSignedIn()) {
+        // 단순 로그아웃이 아닌 disconnect() 사용해 계정 연결 자체를 끊어야 계정 선택 화면이 나타남
+        await googleSignIn.disconnect();
+        await googleSignIn.signOut();
+        debugPrint('Google 계정 연결 완전 해제됨');
+      }
+    } catch (e) {
+      debugPrint('Google 계정 연결 해제 중 오류: $e');
+    }
+    
+    // 2. Apple 로그인 상태 정리
+    try {
+      // Apple은 앱 수준에서 연결 해제가 제한적이라 로컬 저장소에서 관련 정보 제거
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Apple 관련 모든 캐시 키 삭제
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.contains('apple') || 
+            key.contains('Apple') || 
+            key.contains('sign_in') || 
+            key.contains('oauth') ||
+            key.contains('token') ||
+            key.contains('credential')) {
+          await prefs.remove(key);
+        }
+      }
+      
+      debugPrint('Apple 로그인 관련 정보 정리 완료');
+    } catch (e) {
+      debugPrint('Apple 로그인 정보 정리 중 오류: $e');
+    }
+    
+    // 3. 로컬 캐시 완전 초기화
+    try {
+      final cacheService = UnifiedCacheService();
+      await cacheService.clearAllCache();
+      debugPrint('모든 캐시 데이터 초기화 완료');
+    } catch (e) {
+      debugPrint('캐시 데이터 초기화 중 오류: $e');
+    }
+  } catch (e) {
+    debugPrint('소셜 로그인 세션 정리 중 오류: $e');
   }
 }
 

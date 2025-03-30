@@ -80,6 +80,10 @@ class InitializationService {
     // clientId는 iOS에서만 필요하며, Android는 google-services.json에서 설정됨
     clientId: Platform.isIOS ? DefaultFirebaseOptions.currentPlatform.iosClientId : null,
     scopes: ['email', 'profile'],
+    // 계정 선택 화면을 항상 보여주는 설정
+    signInOption: SignInOption.standard,
+    // 로그아웃 후에도 계정 선택 화면이 나타나도록 함
+    forceCodeForRefreshToken: true,
   );
 
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
@@ -317,13 +321,31 @@ class InitializationService {
       await prefs.remove('last_signin_provider');
       await prefs.remove('has_multiple_accounts');
       await prefs.remove('cache_current_user_id'); // 캐시 서비스에서 사용하는 사용자 ID
+      
+      // 소셜 로그인 관련 토큰 정보도 삭제
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.contains('apple') || 
+            key.contains('Apple') || 
+            key.contains('google') ||
+            key.contains('Google') ||
+            key.contains('sign_in') || 
+            key.contains('oauth') ||
+            key.contains('token') ||
+            key.contains('auth') ||
+            key.contains('credential')) {
+          await prefs.remove(key);
+        }
+      }
+      
       debugPrint('SharedPreferences 사용자 정보 삭제 완료');
       
       // 4. Google 로그인 상태 확인 및 로그아웃
       try {
-        if (await _googleSignIn.isSignedIn()) {
-          await _googleSignIn.disconnect(); // 모든 계정 연결 해제 (단순 signOut보다 더 철저함)
-          await _googleSignIn.signOut();
+        final googleSignIn = GoogleSignIn();
+        if (await googleSignIn.isSignedIn()) {
+          await googleSignIn.disconnect(); // 모든 계정 연결 해제 (단순 signOut보다 더 철저함)
+          await googleSignIn.signOut();
           debugPrint('Google 로그인 연결 해제 및 로그아웃 완료');
         }
       } catch (e) {
@@ -334,8 +356,13 @@ class InitializationService {
       await _firebaseAuth.signOut();
       debugPrint('Firebase 로그아웃 완료');
       
-      // 6. 추가: Apple 로그인 토큰 무효화 시도 (시스템 수준에서는 불가능)
-      // Apple은 앱 수준에서 완전한 로그아웃이 어렵기 때문에 로컬 정보만 제거
+      // 6. 추가: Apple 로그인 관련 추가 정리
+      // Apple 관련 모든 키 삭제
+      for (final key in keys) {
+        if (key.contains('apple') || key.contains('Apple')) {
+          await prefs.remove(key);
+        }
+      }
       
       // 7. 로그인 기록 초기화 (다시 로그인할 때 새 계정으로 인식하도록)
       await userPrefs.clearLoginHistory();
@@ -488,6 +515,16 @@ class InitializationService {
         if (!initialized) {
           throw Exception('Firebase를 초기화할 수 없습니다.');
         }
+      }
+
+      // 기존 로그인 상태를 확인하고 있으면 로그아웃 (계정 선택 화면 표시 위함)
+      try {
+        if (await _googleSignIn.isSignedIn()) {
+          await _googleSignIn.signOut();
+          debugPrint('기존 Google 로그인 세션 정리');
+        }
+      } catch (e) {
+        debugPrint('Google 기존 세션 확인 중 오류: $e');
       }
 
       // Google 로그인 UI 표시
