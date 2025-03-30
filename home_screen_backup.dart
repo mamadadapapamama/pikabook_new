@@ -51,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final UserPreferencesService _userPreferences = UserPreferencesService();
   String _noteSpaceName = '';
   bool _showTooltip = false;
+  HomeViewModel? _viewModel;
 
   @override
   void initState() {
@@ -59,6 +60,13 @@ class _HomeScreenState extends State<HomeScreen> {
     
     // 외부에서 전달받은 툴팁 표시 여부 적용
     _showTooltip = widget.showTooltip;
+    
+    // 뷰모델을 초기화
+    Future.microtask(() {
+      if (mounted) {
+        _viewModel = Provider.of<HomeViewModel>(context, listen: false);
+      }
+    });
     
     // 툴팁 표시 여부 결정 (최초 1회만)
     _checkFirstTimeExperience();
@@ -91,146 +99,150 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 부모 Provider에서 HomeViewModel 가져오기
-    final viewModel = Provider.of<HomeViewModel>(context);
-    
-    return Scaffold(
-      backgroundColor: UITokens.homeBackground,
-      appBar: PikaAppBar.home(
-        noteSpaceName: _noteSpaceName,
-        onSettingsPressed: () {
-          // initializationService가 null인지 확인
-          if (widget.initializationService == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('설정을 로드할 수 없습니다. 앱을 다시 시작해주세요.'))
-            );
-            return;
-          }
-          
-          // 설정 화면으로 이동 (라우팅 사용)
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => SettingsScreen(
-                initializationService: widget.initializationService!, // null이 아님을 보장했으므로 ! 사용
-                onLogout: () async {
-                  // 로그아웃 처리
-                  await FirebaseAuth.instance.signOut();
-                  Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-                },
-              ),
-            ),
-          ).then((_) {
-            // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
-            _loadNoteSpaceName();
-          });
-        },
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: _buildContent(viewModel),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-              child: HelpTextTooltip(
-                text: "노트 저장 공간이 성공적으로 만들어졌어요!",
-                description: "이제 이미지를 올려, 스마트 노트를 만들어보세요.",
-                showTooltip: _showTooltip,
-                onDismiss: _handleCloseTooltip,
-                backgroundColor: ColorTokens.primarylight,
-                borderColor: ColorTokens.primaryMedium,
-                textColor: ColorTokens.textPrimary,
-                tooltipPadding: const EdgeInsets.all(12),
-                spacing: 4.0,
-                child: SizedBox(
-                  width: double.infinity,
-                  child: viewModel.hasNotes 
-                    ? PikaButton(
-                        text: '스마트 노트 만들기',
-                        variant: PikaButtonVariant.floating,
-                        leadingIcon: const Icon(Icons.add),
-                        onPressed: () => _showImagePickerBottomSheet(context),
-                      )
-                    : const SizedBox.shrink(), // 노트가 없을 때는 FAB 숨김
+    return ChangeNotifierProvider(
+      create: (_) => HomeViewModel(),
+      child: Scaffold(
+        backgroundColor: UITokens.homeBackground,
+        appBar: PikaAppBar.home(
+          noteSpaceName: _noteSpaceName,
+          onSettingsPressed: () {
+            // initializationService가 null인지 확인
+            if (widget.initializationService == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('설정을 로드할 수 없습니다. 앱을 다시 시작해주세요.'))
+              );
+              return;
+            }
+            
+            // 설정 화면으로 이동 (라우팅 사용)
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => SettingsScreen(
+                  initializationService: widget.initializationService!, // null이 아님을 보장했으므로 ! 사용
+                  onLogout: () async {
+                    // 로그아웃 처리
+                    await FirebaseAuth.instance.signOut();
+                    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+                  },
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  // 메인 컨텐츠 빌드
-  Widget _buildContent(HomeViewModel viewModel) {
-    if (viewModel.isLoading) {
-      return const DotLoadingIndicator(message: '노트 불러오는 중...');
-    }
-
-    if (viewModel.error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline,
-              size: SpacingTokens.iconSizeXLarge,
-              color: ColorTokens.error,
-            ),
-            SizedBox(height: SpacingTokens.md),
-            Text(
-              viewModel.error!,
-              textAlign: TextAlign.center,
-              style: TypographyTokens.body1,
-            ),
-            SizedBox(height: SpacingTokens.md),
-            ElevatedButton(
-              onPressed: () => viewModel.refreshNotes(),
-              child: const Text('다시 시도'),
-              style: UITokens.primaryButtonStyle,
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (!viewModel.hasNotes) {
-      // Zero State 디자인
-      return _buildZeroState(context);
-    }
-
-    // RefreshIndicator로 감싸서 pull to refresh 기능 추가
-    return RefreshIndicator(
-      onRefresh: () => viewModel.refreshNotes(),
-      color: ColorTokens.primary,
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: SpacingTokens.md,
-          vertical: SpacingTokens.sm,
-        ),
-        child: ListView.builder(
-          padding: EdgeInsets.zero,
-          itemCount: viewModel.notes.length,
-          itemBuilder: (context, index) {
-            // 일반 노트 아이템
-            final note = viewModel.notes[index];
-            return NoteListItem(
-              note: note,
-              onTap: () => _navigateToNoteDetail(context, note.id!),
-              onFavoriteToggle: (isFavorite) {
-                if (note.id != null) {
-                  viewModel.toggleFavorite(note.id!, isFavorite);
-                }
-              },
-              onDelete: () {
-                if (note.id != null) {
-                  viewModel.deleteNote(note.id!);
-                }
-              },
-            );
+            ).then((_) {
+              // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
+              _loadNoteSpaceName();
+            });
           },
+        ),
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              Expanded(
+                child: Consumer<HomeViewModel>(
+                  builder: (context, viewModel, child) {
+                    if (viewModel.isLoading) {
+                      return const DotLoadingIndicator(message: '노트 불러오는 중...');
+                    }
+
+                    if (viewModel.error != null) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: SpacingTokens.iconSizeXLarge,
+                              color: ColorTokens.error,
+                            ),
+                            SizedBox(height: SpacingTokens.md),
+                            Text(
+                              viewModel.error!,
+                              textAlign: TextAlign.center,
+                              style: TypographyTokens.body1,
+                            ),
+                            SizedBox(height: SpacingTokens.md),
+                            ElevatedButton(
+                              onPressed: () => viewModel.refreshNotes(),
+                              child: const Text('다시 시도'),
+                              style: UITokens.primaryButtonStyle,
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (!viewModel.hasNotes) {
+                      // Zero State 디자인
+                      return _buildZeroState(context);
+                    }
+
+                    // RefreshIndicator로 감싸서 pull to refresh 기능 추가
+                    return RefreshIndicator(
+                      onRefresh: () => viewModel.refreshNotes(),
+                      color: ColorTokens.primary,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: SpacingTokens.md,
+                          vertical: SpacingTokens.sm,
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: viewModel.notes.length,
+                          itemBuilder: (context, index) {
+                            // 일반 노트 아이템
+                            final note = viewModel.notes[index];
+                            return NoteListItem(
+                              note: note,
+                              onTap: () => _navigateToNoteDetail(context, note.id!),
+                              onFavoriteToggle: (isFavorite) {
+                                if (note.id != null) {
+                                  viewModel.toggleFavorite(note.id!, isFavorite);
+                                }
+                              },
+                              onDelete: () {
+                                if (note.id != null) {
+                                  viewModel.deleteNote(note.id!);
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                child: HelpTextTooltip(
+                  text: "노트 저장 공간이 성공적으로 만들어졌어요!",
+                  description: "이제 이미지를 올려, 스마트 노트를 만들어보세요.",
+                  showTooltip: _showTooltip,
+                  onDismiss: _handleCloseTooltip,
+                  backgroundColor: ColorTokens.primarylight,
+                  borderColor: ColorTokens.primaryMedium,
+                  textColor: ColorTokens.textPrimary,
+                  tooltipPadding: const EdgeInsets.all(12),
+                  spacing: 4.0,
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Consumer<HomeViewModel>(
+                      builder: (context, viewModel, _) {
+                        if (viewModel.hasNotes) {
+                          return PikaButton(
+                            text: '스마트 노트 만들기',
+                            variant: PikaButtonVariant.floating,
+                            leadingIcon: const Icon(Icons.add),
+                            onPressed: () => _showImagePickerBottomSheet(context),
+                          );
+                        }
+                        return const SizedBox.shrink(); // 노트가 없을 때는 FAB 숨김
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

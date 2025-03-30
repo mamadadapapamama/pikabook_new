@@ -568,6 +568,8 @@ class UnifiedCacheService {
     _notePageIds.clear();
     _translationCache.clear();
     _cacheTimestamps.clear();
+    _cacheHitCount.clear();
+    _cacheMissCount.clear();
     debugPrint('메모리 캐시가 초기화되었습니다');
   }
   
@@ -696,66 +698,28 @@ class UnifiedCacheService {
   /// 모든 캐시 지우기 (로그아웃 또는 로그인 시 호출)
   Future<void> clearAllCache() async {
     try {
-      debugPrint('모든 캐시 지우기 시작...');
-      
-      // 현재 사용자 ID 가져오기
-      final userId = _currentUserId;
-      
       // 메모리 캐시 초기화
-      _noteCache.clear();
-      _pageCache.clear();
-      _notePageIds.clear();
-      _cacheTimestamps.clear();
-      _translationCache.clear();
+      _clearMemoryCache();
       
-      // 로컬 저장소 캐시 초기화 - 현재 사용자의 데이터만 삭제
-      if (userId != null && userId.isNotEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        final allKeys = prefs.getKeys();
-        
-        // 현재 사용자 관련 키만 삭제
-        final userKeys = allKeys.where((key) => key.startsWith('${userId}_')).toList();
-        
-        for (final key in userKeys) {
-          await prefs.remove(key);
-        }
-        
-        debugPrint('현재 사용자($userId)의 캐시 데이터 ${userKeys.length}개 삭제 완료');
-      } else {
-        // 사용자 ID가 없는 경우 모든 캐시 데이터 삭제
-        await _removeAllCacheData();
-      }
-      
-      debugPrint('모든 캐시 지우기 완료');
-    } catch (e) {
-      debugPrint('캐시 지우기 중 오류 발생: $e');
-    }
-  }
-  
-  /// 모든 캐시 데이터 제거 (사용자 ID 구분 없이)
-  Future<void> _removeAllCacheData() async {
-    try {
+      // 로컬 저장소 캐시 초기화
       final prefs = await SharedPreferences.getInstance();
       final allKeys = prefs.getKeys();
       
-      // 캐시 키만 삭제 (앱 설정 등 다른 데이터는 유지)
-      final cacheKeys = allKeys.where((key) => 
-        key.contains('_note_cache_') || 
-        key.contains('_page_cache_') || 
-        key.contains('_timestamp_') || 
-        key.contains('_translation_cache_') ||
-        key.startsWith(_noteKeyPrefix) ||
-        key.startsWith(_pageKeyPrefix) ||
-        key.startsWith(_translationKeyPrefix)
-      ).toList();
-      
-      for (final key in cacheKeys) {
-        await prefs.remove(key);
+      // 캐시 관련 키만 삭제
+      for (final key in allKeys) {
+        if (key.startsWith(_noteKeyPrefix) ||
+            key.startsWith(_pageKeyPrefix) ||
+            key.startsWith(_notePageIdsPrefix) ||
+            key.startsWith(_translationKeyPrefix) ||
+            key.startsWith('cache_') ||
+            key.startsWith('timestamp_')) {
+          await prefs.remove(key);
+        }
       }
       
-      debugPrint('모든 캐시 데이터 ${cacheKeys.length}개 삭제 완료');
+      debugPrint('모든 캐시 데이터가 성공적으로 초기화되었습니다');
     } catch (e) {
-      debugPrint('전체 캐시 데이터 제거 중 오류 발생: $e');
+      debugPrint('캐시 초기화 중 오류 발생: $e');
     }
   }
   

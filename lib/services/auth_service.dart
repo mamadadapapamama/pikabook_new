@@ -3,15 +3,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../firebase_options.dart';
 import '../services/user_preferences_service.dart';
 import '../services/unified_cache_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -261,44 +262,146 @@ Future<void> _clearSocialLoginSessions() async {
         throw Exception('로그인된 사용자가 없습니다.');
       }
       
-      // 먼저 사용자 정보를 가져옴
-      final userData = await _firestore.collection('users').doc(user.uid).get();
+      final userId = user.uid;
+      final userEmail = user.email;
+      final displayName = user.displayName;
       
-      // 탈퇴 정보 저장
-      if (userData.exists) {
-        // 탈퇴된 사용자 정보 저장
-        await _firestore.collection('deleted_users').doc(user.uid).set({
-          'userId': user.uid,
-          'email': user.email,
-          'displayName': user.displayName,
-          'photoURL': user.photoURL,
-          'deletedAt': FieldValue.serverTimestamp(),
-          'userInfo': userData.data(),
-        });
-        
-        debugPrint('탈퇴 사용자 정보가 저장되었습니다: ${user.uid}');
+      // 재인증이 필요한지 먼저 확인
+      try {
+        // 간단한 작업으로 토큰 갱신 테스트 - 재인증이 필요하면 예외 발생
+        await user.getIdToken(true);
+      } catch (e) {
+        if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+          // 자동 재인증 시도
+          try {
+            // 최근 로그인 제공자 정보 확인
+            final authProvider = user.providerData.firstOrNull?.providerId;
+            
+            if (authProvider?.contains('google') == true) {
+              // Google 로그인 재인증 시도
+              final googleUser = await _googleSignIn.signIn();
+              if (googleUser != null) {
+                final googleAuth = await googleUser.authentication;
+                final credential = GoogleAuthProvider.credential(
+                  accessToken: googleAuth.accessToken,
+                  idToken: googleAuth.idToken,
+                );
+                await user.reauthenticateWithCredential(credential);
+                debugPrint('Google 재인증 성공');
+              } else {
+                throw FirebaseAuthException(
+                  code: 'user-cancelled',
+                  message: '재인증 취소됨',
+                );
+              }
+            } else if (authProvider?.contains('apple') == true) {
+              // Apple 로그인 재인증 시도 (생략 - 직접 구현 필요)
+              throw Exception('Apple 로그인 재인증이 필요합니다.');
+            } else {
+              throw Exception('알 수 없는 로그인 방식으로 재인증이 필요합니다.');
+            }
+          } catch (reAuthError) {
+            debugPrint('자동 재인증 실패: $reAuthError');
+            rethrow; // 재인증 오류 전달
+          }
+        } else {
+          // 다른 오류는 그대로 전달
+          rethrow;
+        }
       }
-
-      // Firestore에서 사용자 데이터 삭제
-      await _firestore.collection('users').doc(user.uid).delete();
       
-      // Firebase Auth에서 사용자 삭제
+      // 1. Firestore에서 사용자 데이터 삭제
+      // 노트 컬렉션 삭제
+      final notesQuery = await _firestore.collection('notes')
+          .where('userId', isEqualTo: userId)
+          .get();
+      for (final doc in notesQuery.docs) {
+        await _firestore.collection('notes').doc(doc.id).delete();
+      }
+      
+      // 페이지 컬렉션 삭제
+      final pagesQuery = await _firestore.collection('pages')
+          .where('userId', isEqualTo: userId)
+          .get();
+      for (final doc in pagesQuery.docs) {
+        await _firestore.collection('pages').doc(doc.id).delete();
+      }
+      
+      // 플래시카드 삭제
+      final flashcardsQuery = await _firestore.collection('flashcards')
+          .where('userId', isEqualTo: userId)
+          .get();
+      for (final doc in flashcardsQuery.docs) {
+        await _firestore.collection('flashcards').doc(doc.id).delete();
+      }
+      
+      // 2. 이전에 탈퇴한 사용자 기록 제거 (재가입 시 문제 방지)
+      // 이메일로 검색
+      if (userEmail != null && userEmail.isNotEmpty) {
+        final deletedUsersByEmail = await _firestore.collection('deleted_users')
+            .where('email', isEqualTo: userEmail)
+            .get();
+        for (final doc in deletedUsersByEmail.docs) {
+          await _firestore.collection('deleted_users').doc(doc.id).delete();
+        }
+      }
+      
+      // UID로 검색
+      final deletedUserByUid = await _firestore.collection('deleted_users')
+          .doc(userId)
+          .get();
+      if (deletedUserByUid.exists) {
+        await _firestore.collection('deleted_users').doc(userId).delete();
+      }
+      
+      // 3. 사용자 문서 삭제 (마지막으로 삭제)
+      await _firestore.collection('users').doc(userId).delete();
+      
+      // 4. Firebase Auth에서 사용자 삭제
       await user.delete();
       
-      // 캐시 서비스에서 사용자 ID 정리
-      final cacheService = UnifiedCacheService();
-      await cacheService.clearCurrentUserId();
+      // 5. 로컬 캐시 및 사용자 설정 정리
+      await _clearAllUserData();
       
       debugPrint('계정이 성공적으로 삭제되었습니다');
     } catch (e) {
-      if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
-        debugPrint('계정 삭제를 위해 재인증이 필요합니다: ${e.message}');
-        // 재인증이 필요한 경우
-        throw Exception('계정 삭제를 위해 재로그인이 필요합니다. 로그아웃 후 다시 로그인해주세요.');
-      } else {
-        debugPrint('계정 삭제 오류: $e');
-        rethrow;
+      debugPrint('계정 삭제 오류: $e');
+      rethrow;
+    }
+  }
+  
+  // 모든 사용자 데이터 정리 (프라이버시 보호)
+  Future<void> _clearAllUserData() async {
+    try {
+      // 캐시 정리
+      final cacheService = UnifiedCacheService();
+      await cacheService.clearAllCache();
+      
+      // 사용자 설정 정리
+      final userPrefs = UserPreferencesService();
+      await userPrefs.clearAllUserPreferences();
+      
+      // SharedPreferences 정리
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+      
+      // 사용자 관련 데이터 정리
+      for (final key in keys) {
+        if (key.contains('user') || 
+            key.contains('login') || 
+            key.contains('auth') || 
+            key.contains('token') ||
+            key.contains('note') ||
+            key.contains('page') ||
+            key.contains('flash') ||
+            key.contains('setting')) {
+          await prefs.remove(key);
+        }
       }
+      
+      debugPrint('모든 사용자 데이터가 정리되었습니다');
+    } catch (e) {
+      debugPrint('사용자 데이터 정리 중 오류: $e');
     }
   }
 

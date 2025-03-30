@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'views/screens/home_screen.dart';
 import 'services/initialization_service.dart';
@@ -13,6 +14,7 @@ import 'views/screens/settings_screen.dart';
 import 'views/screens/note_detail_screen.dart';
 import 'widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'viewmodels/home_viewmodel.dart';
 
 class App extends StatefulWidget {
   final InitializationService initializationService;
@@ -145,29 +147,34 @@ class _AppState extends State<App> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Pikabook',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.lightTheme, // 다크 모드 비활성화
-      themeMode: ThemeMode.light,
-      // 화면 방향 고정 (세로 모드만 지원)
-      home: _buildHomeScreen(),
-      routes: {
-        '/settings': (context) => SettingsScreen(
-              initializationService: widget.initializationService,
-              onLogout: () async {
-                await widget.initializationService.signOut();
-                if (mounted) {
-                  setState(() {
-                    _isUserAuthenticated = false;
-                    _isOnboardingCompleted = false;
-                    _hasLoginHistory = false;
-                  });
-                }
-              },
-            ),
-        // 추가 라우트 설정이 필요한 경우 여기에 추가
-      },
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<HomeViewModel>(create: (_) => HomeViewModel()),
+      ],
+      child: MaterialApp(
+        title: 'Pikabook',
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.lightTheme, // 다크 모드 비활성화
+        themeMode: ThemeMode.light,
+        // 화면 방향 고정 (세로 모드만 지원)
+        home: _buildHomeScreen(),
+        routes: {
+          '/settings': (context) => SettingsScreen(
+                initializationService: widget.initializationService,
+                onLogout: () async {
+                  await widget.initializationService.signOut();
+                  if (mounted) {
+                    setState(() {
+                      _isUserAuthenticated = false;
+                      _isOnboardingCompleted = false;
+                      _hasLoginHistory = false;
+                    });
+                  }
+                },
+              ),
+          // 추가 라우트 설정이 필요한 경우 여기에 추가
+        },
+      ),
     );
   }
 
