@@ -75,6 +75,23 @@ class UnifiedCacheService {
     }
   }
   
+  // 사용자 ID 제거 - 로그아웃 또는 계정 삭제 시 호출됨
+  Future<void> clearCurrentUserId() async {
+    _currentUserId = null;
+    
+    // 메모리 캐시 초기화
+    _clearMemoryCache();
+    
+    // 저장된 사용자 ID 제거
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('cache_current_user_id');
+      debugPrint('캐시 서비스에서 사용자 ID 제거됨');
+    } catch (e) {
+      debugPrint('사용자 ID 제거 중 오류 발생: $e');
+    }
+  }
+  
   // 사용자 ID 가져오기 (로컬 저장소에서)
   Future<String?> _getStoredUserId() async {
     try {
@@ -544,11 +561,19 @@ class UnifiedCacheService {
   }
 
   /// 메모리 캐시 초기화
-  void clearCache() {
+  void _clearMemoryCache() {
+    _memoryCache.clear();
     _noteCache.clear();
     _pageCache.clear();
     _notePageIds.clear();
+    _translationCache.clear();
     _cacheTimestamps.clear();
+    debugPrint('메모리 캐시가 초기화되었습니다');
+  }
+  
+  /// 메모리 캐시 초기화 (공개 메서드)
+  void clearCache() {
+    _clearMemoryCache();
     debugPrint('모든 메모리 캐시가 초기화되었습니다.');
   }
 
@@ -645,63 +670,6 @@ class UnifiedCacheService {
     }
   }
 
-  /// 메모리 캐시 정리
-  void _clearMemoryCache() {
-    // 노트 캐시 크기 제한
-    if (_noteCache.length > _maxNoteItems) {
-      // 가장 오래된 항목부터 제거
-      final sortedEntries = _cacheTimestamps.entries
-          .where((entry) => _noteCache.containsKey(entry.key))
-          .toList()
-        ..sort((a, b) => a.value.compareTo(b.value));
-      
-      final itemsToRemove = _noteCache.length - _maxNoteItems;
-      for (int i = 0; i < itemsToRemove && i < sortedEntries.length; i++) {
-        final key = sortedEntries[i].key;
-        _noteCache.remove(key);
-        _cacheTimestamps.remove(key);
-      }
-      
-      debugPrint('노트 캐시 정리: $itemsToRemove개 항목 제거');
-    }
-    
-    // 페이지 캐시 크기 제한
-    if (_pageCache.length > _maxPageItems) {
-      // 가장 오래된 항목부터 제거
-      final sortedEntries = _cacheTimestamps.entries
-          .where((entry) => _pageCache.containsKey(entry.key))
-          .toList()
-        ..sort((a, b) => a.value.compareTo(b.value));
-      
-      final itemsToRemove = _pageCache.length - _maxPageItems;
-      for (int i = 0; i < itemsToRemove && i < sortedEntries.length; i++) {
-        final key = sortedEntries[i].key;
-        _pageCache.remove(key);
-        _cacheTimestamps.remove(key);
-      }
-      
-      debugPrint('페이지 캐시 정리: $itemsToRemove개 항목 제거');
-    }
-    
-    // 번역 캐시 정리
-    if (_translationCache.length > _maxTranslationItems) {
-      // 가장 오래된 항목부터 제거
-      final sortedEntries = _cacheTimestamps.entries
-          .where((entry) => _translationCache.containsKey(entry.key))
-          .toList()
-        ..sort((a, b) => a.value.compareTo(b.value));
-      
-      final itemsToRemove = _translationCache.length - _maxTranslationItems;
-      for (int i = 0; i < itemsToRemove && i < sortedEntries.length; i++) {
-        final key = sortedEntries[i].key;
-        _translationCache.remove(key);
-        _cacheTimestamps.remove(key);
-      }
-      
-      debugPrint('번역 캐시 정리: $itemsToRemove개 항목 제거');
-    }
-  }
-  
   /// 번역 캐시 크기 제한
   void _limitCacheSize() {
     // 번역 캐시 크기 제한

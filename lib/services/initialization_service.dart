@@ -615,7 +615,11 @@ class InitializationService {
   }
 
   /// 계정 탈퇴 처리 (사용자 데이터 완전 초기화)
-  Future<bool> handleAccountDeletion() async {
+  Future<Map<String, dynamic>> handleAccountDeletion({
+    String? password,
+    String? idToken,
+    AuthCredential? credential
+  }) async {
     try {
       debugPrint('사용자 계정 탈퇴 처리 시작...');
       final userPrefs = UserPreferencesService();
@@ -625,22 +629,101 @@ class InitializationService {
       final currentUser = _firebaseAuth.currentUser;
       if (currentUser == null) {
         debugPrint('탈퇴 처리 실패: 로그인된 사용자가 없습니다.');
-        return false;
+        return {
+          'success': false,
+          'requiresReauth': false,
+          'message': '로그인된 사용자가 없습니다.'
+        };
       }
       
       final userId = currentUser.uid;
       
-      // 1. Firebase Auth에서 사용자 계정 삭제
+      // 1. 재인증 수행 (필요한 경우)
       try {
+        // 재인증이 필요한지 테스트 (간단한 작업 시도)
+        await currentUser.getIdToken(true);
+        
+        // 재인증 시도 (자격 증명이 제공된 경우)
+        if (credential != null) {
+          await currentUser.reauthenticateWithCredential(credential);
+          debugPrint('사용자 재인증 성공');
+        } else if (password != null && currentUser.email != null) {
+          // 이메일/비밀번호 사용자인 경우 비밀번호로 재인증
+          final emailCredential = EmailAuthProvider.credential(
+            email: currentUser.email!,
+            password: password
+          );
+          await currentUser.reauthenticateWithCredential(emailCredential);
+          debugPrint('이메일/비밀번호로 사용자 재인증 성공');
+        } else if (idToken != null) {
+          // 소셜 로그인의 경우 idToken으로 재인증
+          final providerData = currentUser.providerData.firstOrNull;
+          if (providerData != null) {
+            final provider = providerData.providerId;
+            AuthCredential socialCredential;
+            
+            if (provider.contains('google')) {
+              socialCredential = GoogleAuthProvider.credential(idToken: idToken);
+            } else if (provider.contains('apple')) {
+              socialCredential = OAuthProvider('apple.com').credential(
+                idToken: idToken
+              );
+            } else {
+              throw Exception('지원되지 않는 인증 제공자입니다: $provider');
+            }
+            
+            await currentUser.reauthenticateWithCredential(socialCredential);
+            debugPrint('소셜 로그인으로 사용자 재인증 성공');
+          }
+        }
+      } catch (e) {
+        // 재인증 필요 여부 확인
+        if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+          debugPrint('계정 삭제를 위해 재인증이 필요합니다');
+          
+          // 사용자가 사용한 로그인 방식 확인
+          final providerData = currentUser.providerData.firstOrNull;
+          final provider = providerData?.providerId ?? 'unknown';
+          
+          return {
+            'success': false,
+            'requiresReauth': true,
+            'message': '보안을 위해 재로그인이 필요합니다.',
+            'provider': provider
+          };
+        } else {
+          debugPrint('계정 삭제 전 재인증 검사 중 오류: $e');
+        }
+      }
+      
+      // 2. Firebase Auth에서 사용자 계정 삭제
+      try {
+        // 사용자 정보 보존 (Firestore 데이터 삭제용)
+        final deletedUserEmail = currentUser.email;
+        final deletedUserDisplayName = currentUser.displayName;
+        
+        // Firebase Auth에서 계정 삭제
         await currentUser.delete();
         debugPrint('Firebase Auth에서 사용자 계정 삭제 완료');
+        
+        // Firestore에서 사용자 데이터 삭제 (백그라운드 작업)
+        _deleteUserDataFromFirestore(userId, deletedUserEmail, deletedUserDisplayName);
       } catch (e) {
         // 인증 재인증이 필요한 경우 등 처리 필요
         debugPrint('사용자 계정 삭제 중 오류: $e');
-        throw Exception('계정 삭제에 실패했습니다. 최근에 로그인했는지 확인하세요: $e');
+        
+        if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+          return {
+            'success': false,
+            'requiresReauth': true,
+            'message': '보안을 위해 재로그인이 필요합니다.'
+          };
+        }
+        
+        throw Exception('계정 삭제에 실패했습니다: $e');
       }
       
-      // 2. 모든 로컬 데이터 완전 초기화 (로그아웃보다 더 철저하게)
+      // 3. 모든 로컬 데이터 완전 초기화 (로그아웃보다 더 철저하게)
       // 캐시 데이터 삭제
       await cacheService.clearAllCache();
       
@@ -685,10 +768,65 @@ class InitializationService {
       }
       
       debugPrint('계정 탈퇴 및 모든 로컬 데이터 초기화 완료');
-      return true;
+      return {
+        'success': true,
+        'message': '계정이 성공적으로 삭제되었습니다.',
+      };
     } catch (e) {
       debugPrint('계정 탈퇴 처리 중 오류 발생: $e');
-      return false;
+      return {
+        'success': false,
+        'requiresReauth': false,
+        'message': '계정 삭제 중 오류가 발생했습니다: $e'
+      };
+    }
+  }
+  
+  /// Firestore에서 사용자 데이터 삭제 (백그라운드 작업)
+  Future<void> _deleteUserDataFromFirestore(
+    String userId, 
+    String? userEmail,
+    String? displayName
+  ) async {
+    try {
+      debugPrint('Firestore에서 사용자 데이터 삭제 시작: $userId');
+      final firestore = FirebaseFirestore.instance;
+      
+      // 1. 노트 문서 삭제
+      final notesQuery = await firestore.collection('notes')
+          .where('userId', isEqualTo: userId)
+          .get();
+          
+      for (final doc in notesQuery.docs) {
+        await firestore.collection('notes').doc(doc.id).delete();
+      }
+      debugPrint('사용자 노트 ${notesQuery.docs.length}개 삭제 완료');
+      
+      // 2. 페이지 문서 삭제
+      final pagesQuery = await firestore.collection('pages')
+          .where('userId', isEqualTo: userId)
+          .get();
+          
+      for (final doc in pagesQuery.docs) {
+        await firestore.collection('pages').doc(doc.id).delete();
+      }
+      debugPrint('사용자 페이지 ${pagesQuery.docs.length}개 삭제 완료');
+      
+      // 3. 탈퇴 사용자 목록에 추가 (재가입 감지용)
+      await firestore.collection('deleted_users').doc(userId).set({
+        'userId': userId,
+        'email': userEmail,
+        'displayName': displayName,
+        'deletedAt': FieldValue.serverTimestamp(),
+      });
+      
+      // 4. 마지막으로 사용자 문서 삭제
+      await firestore.collection('users').doc(userId).delete();
+      
+      debugPrint('Firestore에서 사용자 데이터 삭제 완료');
+    } catch (e) {
+      debugPrint('Firestore 사용자 데이터 삭제 중 오류 (백그라운드): $e');
+      // 백그라운드 작업이므로 오류가 발생해도 계속 진행
     }
   }
 }

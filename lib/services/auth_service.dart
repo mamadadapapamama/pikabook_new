@@ -22,53 +22,6 @@ class AuthService {
   // 사용자 상태 변경 스트림
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  // 이메일/비밀번호로 회원가입
-  Future<UserCredential> signUpWithEmailAndPassword(
-      String email, String password, String name) async {
-    try {
-      UserCredential userCredential =
-          await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      // 사용자 정보 Firestore에 저장
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
-        'name': name,
-        'email': email,
-        'createdAt': FieldValue.serverTimestamp(),
-        'profileImage': '',
-      }, SetOptions(merge: true));
-
-      return userCredential;
-    } catch (e) {
-      debugPrint('이메일 회원가입 오류: $e');
-      rethrow;
-    }
-  }
-
-  // 이메일/비밀번호로 로그인
-  Future<UserCredential> signInWithEmailAndPassword(
-      String email, String password) async {
-    try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      
-      // 사용자 로그인 성공 시 캐시 서비스에 사용자 ID 설정
-      if (userCredential.user != null) {
-        final cacheService = UnifiedCacheService();
-        await cacheService.setCurrentUserId(userCredential.user!.uid);
-      }
-      
-      return userCredential;
-    } catch (e) {
-      debugPrint('이메일 로그인 오류: $e');
-      rethrow;
-    }
-  }
-
   // Google 로그인
   Future<User?> signInWithGoogle() async {
     try {
@@ -95,7 +48,7 @@ class AuthService {
 
       // 사용자 정보 Firestore에 저장
       if (userCredential.user != null) {
-        await _saveUserToFirestore(userCredential.user!);
+        await _saveUserToFirestore(userCredential.user!, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
         
         // 캐시 서비스에 사용자 전환 알림
         final cacheService = UnifiedCacheService();
@@ -180,7 +133,7 @@ class AuthService {
           }
         }
 
-        await _saveUserToFirestore(userCredential.user!);
+        await _saveUserToFirestore(userCredential.user!, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
         
         // 캐시 서비스에 사용자 전환 알림
         final cacheService = UnifiedCacheService();
@@ -214,6 +167,10 @@ Future<void> signOut() async {
     // 로그인 기록 초기화
     await userPrefs.clearLoginHistory();
     
+    // 캐시 서비스에서 사용자 ID 제거
+    final cacheService = UnifiedCacheService();
+    await cacheService.clearCurrentUserId();
+    
     // Firebase 로그아웃
     await _auth.signOut();
     
@@ -238,15 +195,45 @@ Future<void> signOut() async {
       if (user == null) {
         throw Exception('로그인된 사용자가 없습니다.');
       }
+      
+      // 먼저 사용자 정보를 가져옴
+      final userData = await _firestore.collection('users').doc(user.uid).get();
+      
+      // 탈퇴 정보 저장
+      if (userData.exists) {
+        // 탈퇴된 사용자 정보 저장
+        await _firestore.collection('deleted_users').doc(user.uid).set({
+          'userId': user.uid,
+          'email': user.email,
+          'displayName': user.displayName,
+          'photoURL': user.photoURL,
+          'deletedAt': FieldValue.serverTimestamp(),
+          'userInfo': userData.data(),
+        });
+        
+        debugPrint('탈퇴 사용자 정보가 저장되었습니다: ${user.uid}');
+      }
 
       // Firestore에서 사용자 데이터 삭제
       await _firestore.collection('users').doc(user.uid).delete();
-
+      
       // Firebase Auth에서 사용자 삭제
       await user.delete();
+      
+      // 캐시 서비스에서 사용자 ID 정리
+      final cacheService = UnifiedCacheService();
+      await cacheService.clearCurrentUserId();
+      
+      debugPrint('계정이 성공적으로 삭제되었습니다');
     } catch (e) {
-      debugPrint('계정 삭제 오류: $e');
-      rethrow;
+      if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+        debugPrint('계정 삭제를 위해 재인증이 필요합니다: ${e.message}');
+        // 재인증이 필요한 경우
+        throw Exception('계정 삭제를 위해 재로그인이 필요합니다. 로그아웃 후 다시 로그인해주세요.');
+      } else {
+        debugPrint('계정 삭제 오류: $e');
+        rethrow;
+      }
     }
   }
 
@@ -266,13 +253,80 @@ Future<void> signOut() async {
     return digest.toString();
   }
 
-  Future<void> _saveUserToFirestore(User user) async {
-    await _firestore.collection('users').doc(user.uid).set({
-      'name': user.displayName,
-      'email': user.email,
-      'profileImage': user.photoURL,
-      'createdAt': FieldValue.serverTimestamp(),
-      'lastLoginAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+  Future<void> _saveUserToFirestore(User user, {bool isNewUser = false}) async {
+    try {
+      // 탈퇴된 사용자인지 먼저 확인
+      final isDeleted = await _checkIfUserWasDeleted(user.uid, user.email);
+      if (isDeleted) {
+        debugPrint('탈퇴된 사용자가 재가입을 시도했습니다: ${user.uid}, ${user.email}');
+        // 기존 탈퇴 기록 제거
+        try {
+          await FirebaseFirestore.instance
+              .collection('deleted_users')
+              .doc(user.uid)
+              .delete();
+          debugPrint('탈퇴 기록 제거 완료');
+        } catch (e) {
+          debugPrint('탈퇴 기록 제거 중 오류: $e');
+        }
+      }
+      
+      // 사용자 정보 업데이트
+      final userData = {
+        'userId': user.uid,
+        'email': user.email,
+        'displayName': user.displayName ?? '',
+        'photoURL': user.photoURL,
+        'lastLogin': FieldValue.serverTimestamp(),
+        'createdAt': isNewUser ? FieldValue.serverTimestamp() : null,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'onboardingCompleted': false,
+      };
+
+      // null 값 제거 (Firestore는 명시적 null 필드를 허용하지만 필터링하는 것이 좋음)
+      userData.removeWhere((key, value) => value == null);
+
+      // Firestore에 사용자 정보 저장
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set(userData, SetOptions(merge: true));
+
+      debugPrint('사용자 정보가 Firestore에 저장되었습니다: ${user.uid} (새 사용자: $isNewUser)');
+    } catch (error) {
+      debugPrint('Firestore에 사용자 정보 저장 중 오류 발생: $error');
+    }
+  }
+  
+  // 탈퇴된 사용자인지 확인
+  Future<bool> _checkIfUserWasDeleted(String uid, String? email) async {
+    try {
+      // UID로 확인
+      final deletedDoc = await FirebaseFirestore.instance
+          .collection('deleted_users')
+          .doc(uid)
+          .get();
+      
+      if (deletedDoc.exists) {
+        return true;
+      }
+      
+      // 이메일로 확인 (이메일이 있는 경우)
+      if (email != null && email.isNotEmpty) {
+        final querySnapshot = await FirebaseFirestore.instance
+            .collection('deleted_users')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+            
+        return querySnapshot.docs.isNotEmpty;
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('탈퇴 사용자 확인 중 오류: $e');
+      // 오류 발생 시 기본값 반환
+      return false;
+    }
   }
 }

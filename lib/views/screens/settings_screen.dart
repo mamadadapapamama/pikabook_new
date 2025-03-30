@@ -605,22 +605,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('계정 탈퇴'),
-        content: const Text(
-          '정말로 계정을 탈퇴하시겠습니까?\n\n'
-          '모든 데이터가 삭제되며 이 작업은 되돌릴 수 없습니다.'
+        title: Text(
+          '회원 탈퇴',
+          style: TypographyTokens.subtitle2.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '정말로 회원 탈퇴하시겠습니까?',
+              style: TypographyTokens.body2,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '• 회원 탈퇴 시 모든 노트와 데이터가 삭제됩니다.',
+              style: TypographyTokens.body2.copyWith(
+                color: ColorTokens.textPrimary,
+              ),
+            ),
+            Text(
+              '• 이 작업은 되돌릴 수 없습니다.',
+              style: TypographyTokens.body2.copyWith(
+                color: ColorTokens.textPrimary,
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
+            child: Text(
+              '취소',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.textSecondary,
+              ),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
+            child: Text(
+              '회원 탈퇴',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.error,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            child: const Text('탈퇴'),
           ),
         ],
       ),
@@ -629,56 +661,168 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirm != true) return;
     
     // 로딩 표시
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    setState(() {
+      _isLoading = true;
+    });
+    
+    // 재인증 시도 (소셜 로그인의 경우 토큰 새로 고침)
+    String? newIdToken;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        // ID 토큰 새로 고침 시도
+        newIdToken = await user.getIdToken(true);
+      } catch (e) {
+        debugPrint('ID 토큰 새로 고침 중 오류: $e');
+      }
+    }
     
     try {
-      // 탈퇴 처리
-      final success = await widget.initializationService.handleAccountDeletion();
+      // 탈퇴 처리 시도 (새로 고침된 토큰 사용)
+      final result = await widget.initializationService.handleAccountDeletion(
+        idToken: newIdToken,
+      );
       
-      // 로딩 닫기
-      Navigator.pop(context);
+      // 로딩 종료
+      setState(() {
+        _isLoading = false;
+      });
       
-      if (success) {
+      if (result['success'] == true) {
         // 성공 메시지 표시
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('계정이 삭제되었습니다.')),
-        );
-        
-        // 로그인 화면으로 이동
-        Navigator.pushNamedAndRemoveUntil(
-          context, 
-          '/', 
-          (route) => false
-        );
-        
-        // 로그아웃 콜백 호출 (UI 상태 변경)
-        widget.onLogout();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('계정이 삭제되었습니다.')),
+          );
+          
+          // 로그인 화면으로 이동
+          Navigator.pushNamedAndRemoveUntil(
+            context, 
+            '/', 
+            (route) => false
+          );
+          
+          // 로그아웃 콜백 호출 (UI 상태 변경)
+          widget.onLogout();
+        }
+      } else if (result['requiresReauth'] == true) {
+        // 재인증 필요 - 재로그인 유도
+        if (mounted) {
+          await _showReauthNeededDialog(context, result['provider']);
+        }
       } else {
         // 실패 메시지
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? '계정 삭제에 실패했습니다.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      // 로딩 종료
+      setState(() {
+        _isLoading = false;
+      });
+      
+      // 오류 메시지
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('계정 삭제에 실패했습니다. 나중에 다시 시도해주세요.'),
+          SnackBar(
+            content: Text('오류가 발생했습니다: $e'),
             backgroundColor: Colors.red,
           ),
         );
       }
-    } catch (e) {
-      // 로딩 닫기
-      Navigator.pop(context);
-      
-      // 오류 메시지
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('오류가 발생했습니다: $e'),
-          backgroundColor: Colors.red,
+    }
+  }
+  
+  // 재인증 필요 안내 다이얼로그
+  Future<void> _showReauthNeededDialog(BuildContext context, String? provider) async {
+    final providerName = _getProviderDisplayName(provider);
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          '재로그인 필요',
+          style: TypographyTokens.subtitle2.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
         ),
-      );
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '보안을 위해 다시 로그인이 필요합니다.',
+              style: TypographyTokens.body2,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '1. 먼저 로그아웃을 해주세요.',
+              style: TypographyTokens.body2,
+            ),
+            Text(
+              '2. $providerName로 다시 로그인 해주세요.',
+              style: TypographyTokens.body2,
+            ),
+            Text(
+              '3. 다시 회원 탈퇴를 시도해주세요.',
+              style: TypographyTokens.body2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              '확인',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.primary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // 바로 로그아웃 진행
+              widget.onLogout();
+              Navigator.pushNamedAndRemoveUntil(
+                context, 
+                '/', 
+                (route) => false
+              );
+            },
+            child: Text(
+              '지금 로그아웃',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // 인증 제공자 이름 가져오기
+  String _getProviderDisplayName(String? providerId) {
+    if (providerId == null) {
+      return '기존 방식';
+    }
+    
+    if (providerId.contains('google')) {
+      return 'Google';
+    } else if (providerId.contains('apple')) {
+      return 'Apple';
+    } else if (providerId.contains('password')) {
+      return '이메일/비밀번호';
+    } else {
+      return '기존 로그인 방식';
     }
   }
 }
