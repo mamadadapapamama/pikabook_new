@@ -119,6 +119,13 @@ class AuthService {
         nonce: nonce,
       );
 
+      // 디버그 로그 추가
+      debugPrint("Apple 인증 토큰: ${appleCredential.identityToken}");
+      debugPrint("Apple 인증 ID 상세: ${appleCredential.toString()}");
+      debugPrint("Apple 인증 코드: ${appleCredential.authorizationCode}");
+      debugPrint("Apple 인증 사용자 이름: ${appleCredential.givenName}, ${appleCredential.familyName}");
+      debugPrint("Apple 인증 이메일: ${appleCredential.email}");
+
       // OAuthCredential 생성
       final oauthCredential = OAuthProvider("apple.com").credential(
         idToken: appleCredential.identityToken,

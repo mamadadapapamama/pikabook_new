@@ -135,6 +135,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 12),
           _buildProfileCard(displayName, email, photoUrl),
           
+          const SizedBox(height: 16),
+          
+          // 로그아웃 버튼 (위치 변경: 프로필 바로 아래로)
+          _buildLogoutButton(),
+          
           const SizedBox(height: 32),
           
           // 2. 노트 설정 섹션
@@ -181,8 +186,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSectionTitle('계정관리'),
           const SizedBox(height: 12),
           
-          // 로그아웃 버튼
-          _buildLogoutButton(),
+          // 회원 탈퇴 버튼 추가
+          _buildDeleteAccountButton(),
           
           const SizedBox(height: 32),
         ],
@@ -610,6 +615,143 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (result != null) {
       await _userPreferences.setTargetLanguage(result);
       _loadUserPreferences();
+    }
+  }
+  
+  // 회원 탈퇴 버튼
+  Widget _buildDeleteAccountButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: PikaButton(
+        text: '회원 탈퇴',
+        variant: PikaButtonVariant.warning,
+        onPressed: _showDeleteAccountConfirmation,
+        isFullWidth: true,
+      ),
+    );
+  }
+  
+  // 회원 탈퇴 확인 다이얼로그
+  Future<void> _showDeleteAccountConfirmation() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          '회원 탈퇴',
+          style: TypographyTokens.subtitle2.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '정말로 회원 탈퇴하시겠습니까?',
+              style: TypographyTokens.body2,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '• 회원 탈퇴 시 모든 노트와 데이터가 삭제됩니다.',
+              style: TypographyTokens.body2.copyWith(
+                color: ColorTokens.textPrimary,
+              ),
+            ),
+            Text(
+              '• 이 작업은 되돌릴 수 없습니다.',
+              style: TypographyTokens.body2.copyWith(
+                color: ColorTokens.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              '취소',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              '회원 탈퇴',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.error,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      await _deleteAccount();
+    }
+  }
+  
+  // 회원 탈퇴 처리
+  Future<void> _deleteAccount() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      // 현재 사용자 가져오기
+      final user = FirebaseAuth.instance.currentUser;
+      
+      if (user == null) {
+        throw Exception('로그인된 사용자가 없습니다.');
+      }
+      
+      // 사용자 계정 삭제
+      await user.delete();
+      
+      // 로그아웃 처리하고 로그인 화면으로 이동
+      widget.onLogout();
+      
+      // 성공 메시지 표시 후 로그인 화면으로 이동
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('회원 탈퇴가 완료되었습니다.'),
+            backgroundColor: ColorTokens.secondary,
+          ),
+        );
+        
+        // 로그인 화면으로 이동 (모든 스택 제거)
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/',
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      debugPrint('회원 탈퇴 중 오류 발생: $e');
+      
+      String errorMessage = '회원 탈퇴 중 오류가 발생했습니다.';
+      
+      // 재인증 필요 오류 처리
+      if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+        errorMessage = '보안을 위해 재로그인이 필요합니다. 로그아웃 후 다시 로그인해주세요.';
+      }
+      
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: ColorTokens.error,
+          ),
+        );
+      }
     }
   }
 }
