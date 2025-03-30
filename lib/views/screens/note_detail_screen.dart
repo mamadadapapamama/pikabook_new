@@ -1423,7 +1423,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               tooltipPadding: const EdgeInsets.all(16),
               spacing: 4.0,
               image: Image.asset(
-                'assets/images/tooltip_guide.png',
+                'assets/images/image_tooltip_2.png',
                 width: 100,
                 height: 100,
                 fit: BoxFit.contain,

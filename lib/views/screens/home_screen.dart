@@ -223,12 +223,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   textColor: ColorTokens.textPrimary,
                   tooltipPadding: const EdgeInsets.all(12),
                   spacing: 4.0,
-                  image: Image.asset(
-                    'assets/images/tooltip_guide.png',
-                    width: 120,
-                    height: 120,
-                    fit: BoxFit.contain,
-                  ),
                   child: SizedBox(
                     width: double.infinity,
                     child: Consumer<HomeViewModel>(
