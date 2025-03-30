@@ -388,6 +388,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             'showPinyin=${updatedProcessedText.showPinyin}, '
             'showTranslation=${updatedProcessedText.showTranslation}, '
             'segments=${updatedProcessedText.segments?.length ?? 0}개');
+        
+        // 첫 노트의 첫 페이지 텍스트 처리 완료 기록 저장
+        _checkFirstNoteTextProcessing();
       }
     } catch (e) {
       debugPrint('텍스트 처리 중 오류 발생: $e');
@@ -397,6 +400,43 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           _isProcessingText = false;
         });
       }
+    }
+  }
+  
+  // 첫 노트의 첫 페이지 텍스트 처리 완료 여부 확인 및 기록
+  Future<void> _checkFirstNoteTextProcessing() async {
+    if (!mounted) return;
+    
+    try {
+      // 현재 첫 번째 페이지인지 확인
+      final isFirstPage = _pageManager.currentPageIndex == 0;
+      if (!isFirstPage) return;
+      
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 첫 노트 생성 여부 확인 (홈 화면에서 설정됨)
+      final bool isFirstNote = prefs.getBool('first_note_created') ?? true; // 기본값 true로 설정하여 기존 사용자도 체험할 수 있게 함
+      
+      // 이미 텍스트 처리 완료 상태인지 확인
+      final bool textProcessingCompleted = prefs.getBool('first_note_text_processing_completed') ?? false;
+      final bool tooltipShown = prefs.getBool('tooltip_shown_after_first_page') ?? false;
+      
+      debugPrint('첫 노트 텍스트 처리 체크: 첫 노트=$isFirstNote, 첫 페이지=$isFirstPage, 텍스트 처리 완료=$textProcessingCompleted, 툴팁 표시됨=$tooltipShown');
+      
+      // 첫 노트의 첫 페이지이고 아직 텍스트 처리가 완료되지 않은 경우
+      if (isFirstNote && isFirstPage && !textProcessingCompleted) {
+        // 텍스트 처리 완료 기록
+        await prefs.setBool('first_note_text_processing_completed', true);
+        
+        // 노트 생성 기록도 저장 (홈 화면에서 설정되지 않았을 경우를 대비)
+        if (!isFirstNote) {
+          await prefs.setBool('first_note_created', true);
+        }
+        
+        debugPrint('첫 노트의 첫 페이지 텍스트 처리 완료 기록 저장');
+      }
+    } catch (e) {
+      debugPrint('첫 노트 텍스트 처리 체크 중 오류 발생: $e');
     }
   }
 
@@ -1391,5 +1431,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   double _calculateProgress() {
     if (_pageManager.pages.isEmpty) return 0.0;
     return (_pageManager.currentPageIndex + 1) / _pageManager.pages.length;
+  }
+
+  // 노트 액션 바 위젯 생성
+  Widget _buildActionBar(ProcessedText? processedText) {
+    return NoteDetailBottomBar(
+      hasProcessedText: processedText != null,
+      onTextModeToggle: _toggleTextDisplayMode,
+      onSegmentModeToggle: _toggleSegmentMode,
+      isSegmentMode: _useSegmentMode,
+      textDisplayMode: _textDisplayMode,
+      onTextToSpeech: () => _handleTts(processedText),
+      currentPage: _pageManager.currentPageIndex + 1,
+      totalPages: _pageManager.pages.length,
+      onPageChanged: _navigateToPage,
+      onCreateFlashcard: _createFlashcard,
+    );
   }
 }

@@ -6,6 +6,7 @@ import '../../theme/tokens/spacing_tokens.dart';
 class HelpTextTooltip extends StatefulWidget {
   final String text;
   final String? description;
+  final Widget? image;
   final Widget child;
   final bool showTooltip;
   final VoidCallback? onDismiss;
@@ -21,6 +22,7 @@ class HelpTextTooltip extends StatefulWidget {
     Key? key,
     required this.text,
     this.description,
+    this.image,
     required this.child,
     required this.showTooltip,
     this.onDismiss,
@@ -94,6 +96,11 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // 이미지가 있는 경우 먼저 표시
+                    if (widget.image != null) ...[
+                      Center(child: widget.image!),
+                      const SizedBox(height: 8),
+                    ],
                     // 툴팁 제목
                     Text(
                       widget.text,
