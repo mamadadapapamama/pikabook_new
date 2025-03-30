@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:async';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
-import '../../models/processed_text.dart';
 import '../../services/note_service.dart';
 import '../../services/page_service.dart';
 import '../../services/image_service.dart';
@@ -32,6 +31,7 @@ import '../../services/screenshot_service.dart';
 import '../../widgets/dot_loading_indicator.dart';
 import '../../widgets/common/pika_app_bar.dart';
 import '../../theme/tokens/typography_tokens.dart';
+import '../../widgets/common/help_text_tooltip.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -84,6 +84,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   Timer? _screenshotWarningTimer;
   Set<int> _previouslyVisitedPages = <int>{};
   late PageController _pageController;
+  bool _showTooltip = false; // 툴팁 표시 여부
 
   @override
   void initState() {
@@ -434,6 +435,28 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         }
         
         debugPrint('첫 노트의 첫 페이지 텍스트 처리 완료 기록 저장');
+        
+        // 툴팁을 아직 표시하지 않았다면 표시
+        if (!tooltipShown) {
+          // 툴팁 표시 상태 설정
+          setState(() {
+            _showTooltip = true;
+          });
+          
+          // 툴팁 표시 기록 저장
+          await prefs.setBool('tooltip_shown_after_first_page', true);
+          
+          debugPrint('노트 상세 화면에서 첫 페이지 툴팁 표시');
+          
+          // 10초 후에 툴팁 자동으로 숨기기
+          Future.delayed(const Duration(seconds: 10), () {
+            if (mounted) {
+              setState(() {
+                _showTooltip = false;
+              });
+            }
+          });
+        }
       }
     } catch (e) {
       debugPrint('첫 노트 텍스트 처리 체크 중 오류 발생: $e');
@@ -1049,214 +1072,218 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     final currentImageFile = _pageManager.currentImageFile;
     final String pageNumberText = '${_pageManager.currentPageIndex + 1}/${_pageManager.pages.length}';
     
-    return PageView.builder(
-      itemCount: _pageManager.pages.length,
-      controller: _pageController,
-      onPageChanged: (index) {
-        debugPrint('PageView 스와이프: 페이지 변경 ($index) - 이전 방문: ${_previouslyVisitedPages.contains(index)}');
-        
-        // 이전에 방문하지 않은 페이지라면 방문 기록에 추가
-        _previouslyVisitedPages.add(index);
-        
-        _changePage(index);
-      },
-      itemBuilder: (context, index) {
-        // 현재 표시할 페이지 인덱스의 페이지 빌드
-        if (index == _pageManager.currentPageIndex) {
-          return Column(
-            children: [
-              // 페이지 썸네일 이미지 (있는 경우)
-              if (currentImageFile != null || _pageManager.currentPage?.imageUrl != null)
-                Stack(
-                  children: [
-                    // 이미지 컨테이너
-                    Container(
-                      height: 200, // 높이를 200으로 고정
-                      width: double.infinity, // 화면 너비를 꽉 채움
-                      decoration: BoxDecoration(
-                        image: currentImageFile != null
-                            ? DecorationImage(
-                                image: FileImage(currentImageFile),
-                                fit: BoxFit.cover,
-                              )
-                            : _pageManager.currentPage?.imageUrl != null
+    return Stack(
+      children: [
+        PageView.builder(
+          itemCount: _pageManager.pages.length,
+          controller: _pageController,
+          onPageChanged: (index) {
+            debugPrint('PageView 스와이프: 페이지 변경 ($index) - 이전 방문: ${_previouslyVisitedPages.contains(index)}');
+            
+            // 이전에 방문하지 않은 페이지라면 방문 기록에 추가
+            _previouslyVisitedPages.add(index);
+            
+            _changePage(index);
+          },
+          itemBuilder: (context, index) {
+            // 현재 표시할 페이지 인덱스의 페이지 빌드
+            if (index == _pageManager.currentPageIndex) {
+              return Column(
+                children: [
+                  // 페이지 썸네일 이미지 (있는 경우)
+                  if (currentImageFile != null || _pageManager.currentPage?.imageUrl != null)
+                    Stack(
+                      children: [
+                        // 이미지 컨테이너
+                        Container(
+                          height: 200, // 높이를 200으로 고정
+                          width: double.infinity, // 화면 너비를 꽉 채움
+                          decoration: BoxDecoration(
+                            image: currentImageFile != null
                                 ? DecorationImage(
-                                    image: NetworkImage(_pageManager.currentPage!.imageUrl!),
+                                    image: FileImage(currentImageFile),
                                     fit: BoxFit.cover,
                                   )
-                                : null,
-                        color: Colors.grey.shade200,
-                      ),
-                      child: (currentImageFile == null && _pageManager.currentPage?.imageUrl == null)
-                          ? Container(
-                              color: Colors.grey[100],
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Image.asset(
-                                    'assets/images/image_empty.png',
-                                    width: 60,
-                                    height: 60,
-                                    fit: BoxFit.contain,
+                                : _pageManager.currentPage?.imageUrl != null
+                                    ? DecorationImage(
+                                        image: NetworkImage(_pageManager.currentPage!.imageUrl!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                            color: Colors.grey.shade200,
+                          ),
+                          child: (currentImageFile == null && _pageManager.currentPage?.imageUrl == null)
+                              ? Container(
+                                  color: Colors.grey[100],
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Image.asset(
+                                        'assets/images/image_empty.png',
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.contain,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        '이미지를 추가해주세요',
+                                        style: GoogleFonts.notoSansKr(
+                                          fontSize: 14,
+                                          color: ColorTokens.textGrey,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '이미지를 추가해주세요',
-                                    style: GoogleFonts.notoSansKr(
-                                      fontSize: 14,
-                                      color: ColorTokens.textGrey,
-                                    ),
+                                )
+                              : null,
+                        ),
+                        
+                        // '이미지 전체보기' 버튼
+                        Positioned(
+                          bottom: 12,
+                          right: 12,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FullImageScreen(
+                                    imageFile: currentImageFile,
+                                    imageUrl: _pageManager.currentPage?.imageUrl,
+                                    title: '이미지',
                                   ),
-                                ],
-                              ),
-                            )
-                          : null,
-                    ),
-                    
-                    // '이미지 전체보기' 버튼
-                    Positioned(
-                      bottom: 12,
-                      right: 12,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => FullImageScreen(
-                                imageFile: currentImageFile,
-                                imageUrl: _pageManager.currentPage?.imageUrl,
-                                title: '이미지',
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black.withOpacity(0.5),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                            ),
+                            child: Text(
+                              '이미지 전체보기',
+                              style: TypographyTokens.caption.copyWith(
+                                color: Colors.white,
                               ),
                             ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black.withOpacity(0.5),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          '이미지 전체보기',
-                          style: TypographyTokens.caption.copyWith(
-                            color: Colors.white,
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
-              
-              // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
-              Expanded(
-                child: Container(
-                  color: Colors.white, // 배경색 흰색
-                  padding: const EdgeInsets.all(0), // 패딩 0으로 설정 (ProcessedTextWidget에서 패딩 적용)
-                  child: _buildCurrentPageContent(),
-                ),
-              ),
-            ],
-          );
-        } else {
-          // 다른 페이지는 페이지 매니저에서 해당 인덱스의 페이지를 가져와서 미리 로드
-          final page = _pageManager.getPageAtIndex(index);
-          final imageFile = _pageManager.getImageFileForPage(page);
-          
-          return Column(
-        children: [
-              // 페이지 썸네일 이미지 (있는 경우)
-              if (imageFile != null || page?.imageUrl != null)
-                Stack(
-                  children: [
-                    // 이미지 컨테이너
-                    Container(
-                      height: 200, // 높이를 200으로 고정
-                      width: double.infinity, // 화면 너비를 꽉 채움
-                      decoration: BoxDecoration(
-                        image: imageFile != null
-                            ? DecorationImage(
-                                image: FileImage(imageFile),
-                                fit: BoxFit.cover,
-                              )
-                            : page?.imageUrl != null
-                                ? DecorationImage(
-                                    image: NetworkImage(page!.imageUrl!),
-                                    fit: BoxFit.cover,
-                                  )
-                                : null,
-                        color: Colors.grey.shade200,
-                      ),
-                      child: (imageFile == null && page?.imageUrl == null)
-                          ? Container(
-                              color: Colors.grey[100],
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Image.asset(
-                                    'assets/images/image_empty.png',
-                                    width: 60,
-                                    height: 60,
-                                    fit: BoxFit.contain,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '이미지를 추가해주세요',
-                                    style: GoogleFonts.notoSansKr(
-                                      fontSize: 14,
-                                      color: ColorTokens.textGrey,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : null,
+                  
+                  // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
+                  Expanded(
+                    child: Container(
+                      color: Colors.white, // 배경색 흰색
+                      padding: const EdgeInsets.all(0), // 패딩 0으로 설정 (ProcessedTextWidget에서 패딩 적용)
+                      child: _buildCurrentPageContent(),
                     ),
-                    
-                    // '이미지 전체보기' 버튼
-                    Positioned(
-                      bottom: 12,
-                      right: 12,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => FullImageScreen(
-                                imageFile: imageFile,
-                                imageUrl: page?.imageUrl,
-                                title: '이미지',
-                              ),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black.withOpacity(0.5),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                        ),
-                        child: Text(
-                          '이미지 전체보기',
-                          style: TypographyTokens.caption.copyWith(
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              
-              // 페이지 내용을 위한 공간
-              const Expanded(
-                child: Center(
-                  child: DotLoadingIndicator(
-                    message: '다음 페이지를 준비하고 있어요.',
-                    dotColor: Color(0xFFFFD53C),
                   ),
-                ),
-              ),
-            ],
-          );
-        }
-      },
+                ],
+              );
+            } else {
+              // 다른 페이지는 페이지 매니저에서 해당 인덱스의 페이지를 가져와서 미리 로드
+              final page = _pageManager.getPageAtIndex(index);
+              final imageFile = _pageManager.getImageFileForPage(page);
+              
+              return Column(
+            children: [
+                  // 페이지 썸네일 이미지 (있는 경우)
+                  if (imageFile != null || page?.imageUrl != null)
+                    Stack(
+                      children: [
+                        // 이미지 컨테이너
+                        Container(
+                          height: 200, // 높이를 200으로 고정
+                          width: double.infinity, // 화면 너비를 꽉 채움
+                          decoration: BoxDecoration(
+                            image: imageFile != null
+                                ? DecorationImage(
+                                    image: FileImage(imageFile),
+                                    fit: BoxFit.cover,
+                                  )
+                                : page?.imageUrl != null
+                                    ? DecorationImage(
+                                        image: NetworkImage(page!.imageUrl!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                            color: Colors.grey.shade200,
+                          ),
+                          child: (imageFile == null && page?.imageUrl == null)
+                              ? Container(
+                                  color: Colors.grey[100],
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Image.asset(
+                                        'assets/images/image_empty.png',
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.contain,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        '이미지를 추가해주세요',
+                                        style: GoogleFonts.notoSansKr(
+                                          fontSize: 14,
+                                          color: ColorTokens.textGrey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : null,
+                        ),
+                        
+                        // '이미지 전체보기' 버튼
+                        Positioned(
+                          bottom: 12,
+                          right: 12,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FullImageScreen(
+                                    imageFile: imageFile,
+                                    imageUrl: page?.imageUrl,
+                                    title: '이미지',
+                                  ),
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black.withOpacity(0.5),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                            ),
+                            child: Text(
+                              '이미지 전체보기',
+                              style: TypographyTokens.caption.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  
+                  // 페이지 내용을 위한 공간
+                  const Expanded(
+                    child: Center(
+                      child: DotLoadingIndicator(
+                        message: '다음 페이지를 준비하고 있어요.',
+                        dotColor: Color(0xFFFFD53C),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+          },
+        ),
+      ],
     );
   }
 
@@ -1360,16 +1387,51 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     
     // 일반 페이지 컨텐츠 표시
     debugPrint('일반 페이지 컨텐츠 표시 (이전 방문: $wasVisitedBefore)');
-    return PageContentWidget(
-      key: ValueKey('page_content_${currentPage.id}_${currentPage.updatedAt.toString()}'),
-      page: currentPage,
-      imageFile: currentImageFile,
-      isLoadingImage: _isProcessingText,
-      noteId: widget.noteId,
-      onCreateFlashCard: _createFlashCard,
-      flashCards: _note?.flashCards,
-      onDeleteSegment: _handleDeleteSegment,
-      useSegmentMode: _useSegmentMode,
+    return Stack(
+      children: [
+        // 메인 페이지 컨텐츠
+        PageContentWidget(
+          key: ValueKey('page_content_${currentPage.id}_${currentPage.updatedAt.toString()}'),
+          page: currentPage,
+          imageFile: currentImageFile,
+          isLoadingImage: _isProcessingText,
+          noteId: widget.noteId,
+          onCreateFlashCard: _createFlashCard,
+          flashCards: _note?.flashCards,
+          onDeleteSegment: _handleDeleteSegment,
+          useSegmentMode: _useSegmentMode,
+        ),
+        
+        // 툴팁 표시 (처음 텍스트 처리가 완료된 경우)
+        if (_showTooltip)
+          Positioned(
+            bottom: 20,
+            left: 16,
+            right: 16,
+            child: HelpTextTooltip(
+              text: "첫 노트 생성 완료!",
+              description: "텍스트 처리가 완료되었습니다. 이제 번역 결과를 확인해보세요.",
+              showTooltip: true,
+              onDismiss: () {
+                setState(() {
+                  _showTooltip = false;
+                });
+              },
+              backgroundColor: ColorTokens.primarylight,
+              borderColor: ColorTokens.primaryMedium,
+              textColor: ColorTokens.textPrimary,
+              tooltipPadding: const EdgeInsets.all(16),
+              spacing: 4.0,
+              image: Image.asset(
+                'assets/images/tooltip_guide.png',
+                width: 100,
+                height: 100,
+                fit: BoxFit.contain,
+              ),
+              child: Container(), // 빈 컨테이너 (툴팁만 표시)
+            ),
+          ),
+      ],
     );
   }
   
@@ -1431,21 +1493,5 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   double _calculateProgress() {
     if (_pageManager.pages.isEmpty) return 0.0;
     return (_pageManager.currentPageIndex + 1) / _pageManager.pages.length;
-  }
-
-  // 노트 액션 바 위젯 생성
-  Widget _buildActionBar(ProcessedText? processedText) {
-    return NoteDetailBottomBar(
-      hasProcessedText: processedText != null,
-      onTextModeToggle: _toggleTextDisplayMode,
-      onSegmentModeToggle: _toggleSegmentMode,
-      isSegmentMode: _useSegmentMode,
-      textDisplayMode: _textDisplayMode,
-      onTextToSpeech: () => _handleTts(processedText),
-      currentPage: _pageManager.currentPageIndex + 1,
-      totalPages: _pageManager.pages.length,
-      onPageChanged: _navigateToPage,
-      onCreateFlashcard: _createFlashcard,
-    );
   }
 }
