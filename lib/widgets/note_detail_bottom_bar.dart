@@ -8,7 +8,7 @@ import '../theme/tokens/color_tokens.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// 노트 상세 화면 하단 내비게이션 바
-/// 페이지 탐색, 텍스트 표시 모드 토글, 전체 읽기 버튼, 진행률 바 제공
+/// 페이지 탐색, 텍스트 표시 모드 토글, 모드 전환, 진행률 바 제공
 
 class NoteDetailBottomBar extends StatelessWidget {
   final page_model.Page? currentPage;
@@ -17,8 +17,8 @@ class NoteDetailBottomBar extends StatelessWidget {
   final Function(int) onPageChanged;
   final TextDisplayMode textDisplayMode;
   final Function(TextDisplayMode) onTextDisplayModeChanged;
-  final bool isPlaying;
-  final VoidCallback onPlayPausePressed;
+  final bool isFullTextMode;
+  final VoidCallback onToggleFullTextMode;
   final PageContentService pageContentService;
   final TextReaderService textReaderService;
 
@@ -30,8 +30,8 @@ class NoteDetailBottomBar extends StatelessWidget {
     required this.onPageChanged,
     required this.textDisplayMode,
     required this.onTextDisplayModeChanged,
-    required this.isPlaying,
-    required this.onPlayPausePressed,
+    required this.isFullTextMode,
+    required this.onToggleFullTextMode,
     required this.pageContentService,
     required this.textReaderService,
   });
@@ -53,7 +53,7 @@ class NoteDetailBottomBar extends StatelessWidget {
     final bool showPinyin = processedText?.showPinyin ?? false;
     
     // 디버그 정보 출력
-    debugPrint('NoteDetailBottomBar - 현재 모드: $textDisplayMode, 페이지: ${currentPageIndex + 1}/$totalPages');
+    debugPrint('NoteDetailBottomBar - 현재 모드: $textDisplayMode, 페이지: ${currentPageIndex + 1}/$totalPages, 전체보기: $isFullTextMode');
     
     // 프로그레스 바를 제거하고 컨트롤 부분만 표시
     return Container(
@@ -83,7 +83,7 @@ class NoteDetailBottomBar extends StatelessWidget {
                 : null,
           ),
           
-          // 중앙 컨트롤 영역 (병음 토글 + 재생 버튼)
+          // 중앙 컨트롤 영역 (병음 토글 + 모드 전환 버튼)
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -129,31 +129,25 @@ class NoteDetailBottomBar extends StatelessWidget {
               
               const SizedBox(width: 16),
               
-              // 전체 읽기/멈춤 버튼 (page_content_widget과 동일한 디자인)
-              InkWell(
-                onTap: onPlayPausePressed,
+              // 모드 전환 버튼 (문장별 구분/원문 전체)
+              GestureDetector(
+                onTap: onToggleFullTextMode,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: isPlaying ? ColorTokens.secondary : Colors.white,
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(100),
                     border: Border.all(color: ColorTokens.secondary),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        isPlaying ? Icons.stop : Icons.volume_up,
-                        color: isPlaying ? Colors.white : ColorTokens.secondary,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 4),
                       Text(
-                        isPlaying ? '정지' : '전체 재생',
+                        isFullTextMode ? '문장별 구분' : '원문 전체',
                         style: GoogleFonts.notoSansKr(
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
-                          color: isPlaying ? Colors.white : ColorTokens.secondary,
+                          color: ColorTokens.secondary,
                         ),
                       ),
                     ],

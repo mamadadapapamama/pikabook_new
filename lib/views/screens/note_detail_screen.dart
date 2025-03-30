@@ -599,8 +599,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         onToggleFullTextMode: _toggleFullTextMode,
         onToggleFavorite: _toggleFavorite,
         isFullTextMode: _pageManager.currentPage?.id != null 
-            ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? true
-            : true,
+            ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
+            : false,
         isFavorite: _isFavorite,
       ),
     );
@@ -993,8 +993,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               onPageChanged: _changePage,
               textDisplayMode: _textDisplayMode,
               onTextDisplayModeChanged: _handleTextDisplayModeChanged,
-              isPlaying: _textReaderService.isPlaying,
-              onPlayPausePressed: _handlePlayPausePressed,
+              isFullTextMode: _pageManager.currentPage?.id != null 
+                  ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
+                  : false,
+              onToggleFullTextMode: _toggleFullTextMode,
               pageContentService: _pageContentService,
               textReaderService: _textReaderService,
             )
