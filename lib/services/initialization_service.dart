@@ -89,73 +89,102 @@ class InitializationService {
   // 사용자 인증 상태 확인 메서드
   Future<Map<String, dynamic>> checkLoginState() async {
     try {
-      debugPrint('로그인 상태 확인 시작 (${DateTime.now()})');
-      final userPrefs = UserPreferencesService();
-      
-      // Firebase Auth 인스턴스 가져오기
-      final auth = FirebaseAuth.instance;
-      
-      // 현재 사용자 확인 (null이면 로그인되지 않은 상태)
-      final currentUser = auth.currentUser;
-      
-      // 결과 객체 초기화
-      final result = {
-        'isLoggedIn': currentUser != null,
-        'hasLoginHistory': false,
-        'isOnboardingCompleted': false,
-        'isFirstEntry': true,
-        'user': currentUser,
-      };
-      
-      // 1. 로그인 상태 확인
-      if (currentUser == null) {
-        debugPrint('로그인 상태 확인 결과: 로그인되지 않음');
-        return result; // 로그인되지 않음 - 로그인 화면으로 이동
-      }
-      
-      // 2. 로그인 기록 여부 확인
-      final hasLoginHistory = await userPrefs.hasLoginHistory();
-      result['hasLoginHistory'] = hasLoginHistory;
-      
-      if (!hasLoginHistory) {
-        // 로그인 기록 저장
-        await userPrefs.saveLoginHistory();
-        debugPrint('로그인 상태 확인 결과: 로그인됨, 이전 로그인 기록 없음');
-        return result; // 이전 로그인 기록 없음 - 온보딩 화면으로 이동
-      }
-      
-      // 3. 온보딩 완료 여부 확인
-      final isOnboardingCompleted = await userPrefs.getOnboardingCompleted();
-      result['isOnboardingCompleted'] = isOnboardingCompleted;
-      
-      if (!isOnboardingCompleted) {
-        debugPrint('로그인 상태 확인 결과: 로그인됨, 로그인 기록 있음, 온보딩 미완료');
-        return result; // 온보딩 미완료 - 온보딩 화면으로 이동
-      }
-      
-      // 4. 첫 진입 여부 확인 (툴팁 표시 여부)
+      debugPrint('로그인 상태 확인 시작');
+      // 로컬 저장소에서 로그인 기록 확인
       final prefs = await SharedPreferences.getInstance();
-      final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
-      result['isFirstEntry'] = !hasShownTooltip;
+      bool hasLoginHistory = prefs.getBool('login_history') ?? false;
+      bool hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
       
-      // 로그인 활동 정보 업데이트
-      await _saveLastLoginActivity(currentUser);
+      // Firebase 인증 상태 확인
+      final User? currentUser = _firebaseAuth.currentUser;
       
-      debugPrint('로그인 상태 확인 결과: 로그인됨, 로그인 기록 있음, 온보딩 완료, 첫 진입: ${!hasShownTooltip}');
-      return result; // 온보딩 완료 - 홈 화면으로 이동 (첫 진입 여부에 따라 툴팁 표시)
+      // 추가: 사용자 계정 유효성 검증
+      bool isValidUser = false;
+      if (currentUser != null) {
+        try {
+          // 사용자 ID가 유효한지 확인 (Firestore에 실제 존재하는지)
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .get();
+          
+          isValidUser = userDoc.exists;
+          
+          if (!isValidUser) {
+            debugPrint('Firebase에 사용자가 존재하지 않음 (계정 탈퇴 가능성): ${currentUser.uid}');
+            
+            // 사용자가 존재하지 않으면 로컬 데이터 모두 초기화 (탈퇴했을 가능성)
+            await _cleanupLocalDataAfterDeletion();
+            
+            // 강제 로그아웃 (Firebase에도 사용자가 없음)
+            await _firebaseAuth.signOut();
+          } else {
+            debugPrint('유효한 사용자 확인됨: ${currentUser.uid}');
+          }
+        } catch (e) {
+          debugPrint('사용자 유효성 검증 중 오류: $e');
+          // 오류 발생 시 기본값으로 처리 (혹시 모를 오류를 피하기 위해)
+          isValidUser = true;
+        }
+      }
+      
+      // 온보딩 완료 여부 확인
+      // '로그인' 상태와 '온보딩 완료' 상태는 별개로 처리
+      final userPrefs = UserPreferencesService();
+      final isOnboardingCompleted = await userPrefs.getOnboardingCompleted();
+      
+      // 결과 생성
+      final result = {
+        'isLoggedIn': currentUser != null && isValidUser,
+        'hasLoginHistory': hasLoginHistory,
+        'isOnboardingCompleted': isOnboardingCompleted,
+        'isFirstEntry': !hasShownTooltip,
+      };
+
+      debugPrint('로그인 상태 확인 결과: $result');
+      return result;
     } catch (e) {
       debugPrint('로그인 상태 확인 중 오류 발생: $e');
-      _authError = '로그인 상태를 확인하는 중 오류가 발생했습니다: $e';
-      
-      // 에러 발생 시 기본값 반환
       return {
         'isLoggedIn': false,
         'hasLoginHistory': false,
         'isOnboardingCompleted': false,
         'isFirstEntry': true,
-        'user': null,
-        'error': e.toString(),
       };
+    }
+  }
+  
+  /// 탈퇴 후 로컬 데이터 정리 (계정이 삭제된 경우 호출)
+  Future<void> _cleanupLocalDataAfterDeletion() async {
+    try {
+      debugPrint('탈퇴 감지: 로컬 데이터 정리 시작');
+      final userPrefs = UserPreferencesService();
+      final cacheService = UnifiedCacheService();
+      
+      // 캐시 초기화
+      await cacheService.clearAllCache();
+      
+      // 사용자 기본 설정 초기화
+      await userPrefs.clearAllUserPreferences();
+      
+      // SharedPreferences에서 모든 사용자 관련 정보 삭제
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 인증 관련 키 삭제
+      await prefs.remove('current_user_id');
+      await prefs.remove('last_signin_provider');
+      await prefs.remove('has_multiple_accounts');
+      await prefs.remove('cache_current_user_id');
+      
+      // 로그인 기록 관련 키 삭제
+      await prefs.remove('login_history');
+      await prefs.remove('has_shown_onboarding');
+      await prefs.remove('hasShownTooltip');
+      await prefs.remove('onboarding_completed');
+      
+      debugPrint('탈퇴 후 로컬 데이터 정리 완료');
+    } catch (e) {
+      debugPrint('탈퇴 후 로컬 데이터 정리 중 오류: $e');
     }
   }
 
@@ -582,6 +611,84 @@ class InitializationService {
         _firebaseInitialized.complete(false);
       }
       rethrow;
+    }
+  }
+
+  /// 계정 탈퇴 처리 (사용자 데이터 완전 초기화)
+  Future<bool> handleAccountDeletion() async {
+    try {
+      debugPrint('사용자 계정 탈퇴 처리 시작...');
+      final userPrefs = UserPreferencesService();
+      final cacheService = UnifiedCacheService();
+      
+      // 현재 사용자 확인
+      final currentUser = _firebaseAuth.currentUser;
+      if (currentUser == null) {
+        debugPrint('탈퇴 처리 실패: 로그인된 사용자가 없습니다.');
+        return false;
+      }
+      
+      final userId = currentUser.uid;
+      
+      // 1. Firebase Auth에서 사용자 계정 삭제
+      try {
+        await currentUser.delete();
+        debugPrint('Firebase Auth에서 사용자 계정 삭제 완료');
+      } catch (e) {
+        // 인증 재인증이 필요한 경우 등 처리 필요
+        debugPrint('사용자 계정 삭제 중 오류: $e');
+        throw Exception('계정 삭제에 실패했습니다. 최근에 로그인했는지 확인하세요: $e');
+      }
+      
+      // 2. 모든 로컬 데이터 완전 초기화 (로그아웃보다 더 철저하게)
+      // 캐시 데이터 삭제
+      await cacheService.clearAllCache();
+      
+      // 사용자 설정 초기화
+      await userPrefs.clearAllUserPreferences();
+      
+      // SharedPreferences에서 모든 사용자 관련 정보 삭제
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 인증 관련 키 삭제
+      await prefs.remove('current_user_id');
+      await prefs.remove('last_signin_provider');
+      await prefs.remove('has_multiple_accounts');
+      await prefs.remove('cache_current_user_id');
+      
+      // 로그인 기록 관련 키 삭제
+      await prefs.remove('login_history');
+      await prefs.remove('has_shown_onboarding');
+      await prefs.remove('hasShownTooltip');
+      await prefs.remove('onboarding_completed');
+      
+      // 사용자 ID로 시작하는 모든 키 삭제 (철저하게)
+      final allKeys = prefs.getKeys();
+      for (final key in allKeys) {
+        if (key.startsWith('${userId}_') || 
+            key.contains('_$userId') ||
+            key.contains('auth_') ||
+            key.contains('login_') ||
+            key.contains('user_')) {
+          await prefs.remove(key);
+        }
+      }
+      
+      // 3. Google 로그인 연결 해제 (있는 경우)
+      try {
+        if (await _googleSignIn.isSignedIn()) {
+          await _googleSignIn.disconnect();
+          await _googleSignIn.signOut();
+        }
+      } catch (e) {
+        debugPrint('Google 계정 연결 해제 중 오류 (무시됨): $e');
+      }
+      
+      debugPrint('계정 탈퇴 및 모든 로컬 데이터 초기화 완료');
+      return true;
+    } catch (e) {
+      debugPrint('계정 탈퇴 처리 중 오류 발생: $e');
+      return false;
     }
   }
 }
