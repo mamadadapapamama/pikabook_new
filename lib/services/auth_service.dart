@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../firebase_options.dart';
 import '../services/user_preferences_service.dart';
+import '../services/unified_cache_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -50,10 +51,18 @@ class AuthService {
   Future<UserCredential> signInWithEmailAndPassword(
       String email, String password) async {
     try {
-      return await _auth.signInWithEmailAndPassword(
+      final userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
+      
+      // 사용자 로그인 성공 시 캐시 서비스에 사용자 ID 설정
+      if (userCredential.user != null) {
+        final cacheService = UnifiedCacheService();
+        await cacheService.setCurrentUserId(userCredential.user!.uid);
+      }
+      
+      return userCredential;
     } catch (e) {
       debugPrint('이메일 로그인 오류: $e');
       rethrow;
@@ -87,6 +96,10 @@ class AuthService {
       // 사용자 정보 Firestore에 저장
       if (userCredential.user != null) {
         await _saveUserToFirestore(userCredential.user!);
+        
+        // 캐시 서비스에 사용자 전환 알림
+        final cacheService = UnifiedCacheService();
+        await cacheService.setCurrentUserId(userCredential.user!.uid);
       }
 
       return userCredential.user;
@@ -168,6 +181,10 @@ class AuthService {
         }
 
         await _saveUserToFirestore(userCredential.user!);
+        
+        // 캐시 서비스에 사용자 전환 알림
+        final cacheService = UnifiedCacheService();
+        await cacheService.setCurrentUserId(userCredential.user!.uid);
       }
 
       return userCredential.user;

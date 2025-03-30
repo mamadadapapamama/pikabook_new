@@ -336,4 +336,33 @@ class UserPreferencesService {
       debugPrint('로그인 기록 초기화 중 오류 발생: $e');
     }
   }
+
+  // 모든 사용자 기본 설정 초기화
+  Future<void> clearAllUserPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 언어 설정 초기화
+    await prefs.remove(_sourceLanguageKey);
+    await prefs.remove(_targetLanguageKey);
+    
+    // 사용자 정보 초기화
+    await prefs.remove(_userNameKey);
+    await prefs.remove(_learningPurposeKey);
+    
+    // 노트 관련 설정 초기화
+    await prefs.remove(_defaultNoteViewModeKey);
+    await prefs.remove(_defaultNoteSpaceKey);
+    await prefs.remove(_noteSpacesKey);
+    await prefs.remove(_useSegmentModeKey);
+    
+    // 온보딩 상태 초기화
+    await prefs.remove(_onboardingCompletedKey);
+    await prefs.remove(_hasOnboardedKey);
+    
+    // 로그인 관련 정보는 별도로 처리하므로 여기서는 초기화하지 않음
+    // 툴팁 및 기타 UI 상태 초기화
+    await prefs.remove('hasShownTooltip');
+    
+    debugPrint('모든 사용자 기본 설정이 초기화되었습니다.');
+  }
 }

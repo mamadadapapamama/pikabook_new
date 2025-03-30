@@ -156,7 +156,7 @@ class _AppState extends State<App> {
         '/settings': (context) => SettingsScreen(
               initializationService: widget.initializationService,
               onLogout: () async {
-                await widget.initializationService.handleLogout();
+                await widget.initializationService.signOut();
                 if (mounted) {
                   setState(() {
                     _isUserAuthenticated = false;

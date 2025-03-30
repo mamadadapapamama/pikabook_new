@@ -165,6 +165,10 @@ class InitializationService {
       debugPrint('사용자 로그인 처리 시작: ${user.uid} (${DateTime.now()})');
       final firestore = FirebaseFirestore.instance;
       final userPrefs = UserPreferencesService();
+      final cacheService = UnifiedCacheService();
+      
+      // 캐시 서비스에 현재 사용자 ID 설정
+      await cacheService.setCurrentUserId(user.uid);
       
       // Firestore에서 사용자 데이터 확인
       final userDoc = await firestore.collection('users').doc(user.uid).get();
@@ -252,26 +256,72 @@ class InitializationService {
     }
   }
 
-  // 로그아웃 처리
-  Future<void> handleLogout() async {
+  // 로그아웃
+  Future<void> signOut() async {
     try {
-      debugPrint('로그아웃 처리 시작 (${DateTime.now()})');
+      debugPrint('철저한 로그아웃 처리 시작...');
       final userPrefs = UserPreferencesService();
+      final cacheService = UnifiedCacheService();
       
-      // 로그인 기록 초기화 (기록은 유지하되 다시 로그인 여부 확인 필요)
-      await userPrefs.clearLoginHistory();
+      // 현재 사용자 ID 저장 (캐시 삭제용)
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final userId = currentUser?.uid;
       
-      // Firebase 로그아웃
-      await FirebaseAuth.instance.signOut();
-      
-      // Google 로그아웃 (Google 로그인을 사용한 경우)
-      if (await _googleSignIn.isSignedIn()) {
-        await _googleSignIn.signOut();
+      // 1. 모든 캐시 데이터 초기화 (사용자별)
+      if (userId != null && userId.isNotEmpty) {
+        // 사용자 ID 기반으로 해당 사용자의 캐시만 삭제
+        await cacheService.clearAllCache();
+        debugPrint('현재 사용자($userId)의 캐시 데이터 삭제 완료');
+      } else {
+        // 사용자 ID를 알 수 없는 경우 전체 캐시 삭제
+        await cacheService.clearAllCache();
+        debugPrint('알 수 없는 사용자의 캐시 데이터 삭제 완료');
       }
       
-      debugPrint('로그아웃 처리 완료');
+      // 2. 사용자 기본 설정 초기화
+      await userPrefs.clearAllUserPreferences();
+      debugPrint('사용자 설정 데이터 초기화 완료');
+      
+      // 3. SharedPreferences에서 사용자 관련 정보 삭제
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('current_user_id');
+      await prefs.remove('last_signin_provider');
+      await prefs.remove('has_multiple_accounts');
+      await prefs.remove('cache_current_user_id'); // 캐시 서비스에서 사용하는 사용자 ID
+      debugPrint('SharedPreferences 사용자 정보 삭제 완료');
+      
+      // 4. Google 로그인 상태 확인 및 로그아웃
+      try {
+        if (await _googleSignIn.isSignedIn()) {
+          await _googleSignIn.disconnect(); // 모든 계정 연결 해제 (단순 signOut보다 더 철저함)
+          await _googleSignIn.signOut();
+          debugPrint('Google 로그인 연결 해제 및 로그아웃 완료');
+        }
+      } catch (e) {
+        debugPrint('Google 로그아웃 중 오류 (무시됨): $e');
+      }
+      
+      // 5. Firebase 자체 로그아웃
+      await _firebaseAuth.signOut();
+      debugPrint('Firebase 로그아웃 완료');
+      
+      // 6. 추가: Apple 로그인 토큰 무효화 시도 (시스템 수준에서는 불가능)
+      // Apple은 앱 수준에서 완전한 로그아웃이 어렵기 때문에 로컬 정보만 제거
+      
+      // 7. 로그인 기록 초기화 (다시 로그인할 때 새 계정으로 인식하도록)
+      await userPrefs.clearLoginHistory();
+      debugPrint('로그인 기록 초기화 완료');
+      
+      // 8. 메모리 내 상태 초기화
+      _authError = null;
+      debugPrint('로그아웃 처리 완전히 완료됨');
     } catch (e) {
-      debugPrint('로그아웃 처리 중 오류 발생: $e');
+      debugPrint('로그아웃 중 오류 발생: $e');
+      // 오류가 발생해도 Firebase 로그아웃은 시도
+      try {
+        await _firebaseAuth.signOut();
+      } catch (_) {}
+      rethrow;
     }
   }
 
@@ -477,28 +527,6 @@ class InitializationService {
       debugPrint('Apple 로그인 오류 상세: $e');
       setAuthError('Apple 로그인 중 오류가 발생했습니다: $e');
       return null;
-    }
-  }
-
-  // 로그아웃
-  Future<void> signOut() async {
-    try {
-      // 캐시 서비스 가져오기
-      final cacheService = UnifiedCacheService();
-      
-      // 모든 캐시 지우기
-      await cacheService.clearAllCache();
-      debugPrint('로그아웃 시 캐시 정리 완료');
-      
-      // Google 로그인 연결 해제
-      await _googleSignIn.signOut();
-      
-      // Firebase 로그아웃
-      await _firebaseAuth.signOut();
-      debugPrint('Firebase 로그아웃 완료');
-    } catch (e) {
-      debugPrint('로그아웃 오류: $e');
-      rethrow;
     }
   }
 

@@ -5,6 +5,14 @@ import '../models/note.dart';
 import '../models/page.dart' as page_model;
 import '../models/processed_text.dart';
 import 'package:crypto/crypto.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+// 캐시 작업 유형 (통계용)
+enum CacheOperationType {
+  read,
+  write,
+  delete,
+}
 
 /// 노트, 페이지의 통합 캐싱 서비스입니다.
 /// 메모리 캐싱과 로컬 저장소 캐싱을 모두 지원합니다.
@@ -17,9 +25,65 @@ class UnifiedCacheService {
 
   // 초기화 완료 여부
   bool _isInitialized = false;
+  
+  // 현재 사용자 ID (캐시 분리를 위해 사용)
+  String? _currentUserId;
+  
+  // 메모리 캐시 맵 (범용)
+  final Map<String, dynamic> _memoryCache = {};
+  
+  // 캐시 사용 통계
+  final Map<String, int> _cacheHitCount = {};
+  final Map<String, int> _cacheMissCount = {};
 
   UnifiedCacheService._internal() {
     debugPrint('UnifiedCacheService 생성됨 - 메모리 캐싱만 활성화');
+    // 사용자 ID 초기화 시도
+    _initCurrentUserId();
+  }
+  
+  // 현재 사용자 ID 초기화
+  Future<void> _initCurrentUserId() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && user.uid.isNotEmpty) {
+        await setCurrentUserId(user.uid);
+      }
+    } catch (e) {
+      debugPrint('초기 사용자 ID 로드 중 오류 발생: $e');
+    }
+  }
+  
+  // 사용자 ID 설정 - 사용자 로그인 시 호출됨
+  Future<void> setCurrentUserId(String userId) async {
+    final oldUserId = _currentUserId;
+    _currentUserId = userId;
+    
+    // 사용자가 변경된 경우 메모리 캐시 초기화
+    if (oldUserId != null && oldUserId != userId) {
+      debugPrint('사용자 변경 감지: $oldUserId -> $userId. 메모리 캐시 초기화');
+      _clearMemoryCache();
+    }
+    
+    // 현재 사용자 ID를 로컬에 저장
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('cache_current_user_id', userId);
+      debugPrint('캐시 서비스에 사용자 ID 설정됨: $userId');
+    } catch (e) {
+      debugPrint('사용자 ID 저장 중 오류 발생: $e');
+    }
+  }
+  
+  // 사용자 ID 가져오기 (로컬 저장소에서)
+  Future<String?> _getStoredUserId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('cache_current_user_id');
+    } catch (e) {
+      debugPrint('저장된 사용자 ID 로드 중 오류 발생: $e');
+      return null;
+    }
   }
 
   // 명시적 초기화 메서드 추가
@@ -27,9 +91,22 @@ class UnifiedCacheService {
     if (_isInitialized) return;
 
     try {
-      // 간단한 초기화만 수행
-      debugPrint('UnifiedCacheService 초기화 중...');
+      // 사용자 ID 초기화
+      _currentUserId = await _getStoredUserId();
+      if (_currentUserId != null) {
+        debugPrint('캐시 서비스 초기화: 저장된 사용자 ID 로드됨 - $_currentUserId');
+      } else {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          _currentUserId = user.uid;
+          debugPrint('캐시 서비스 초기화: 현재 로그인된 사용자 ID 사용 - $_currentUserId');
+        } else {
+          debugPrint('캐시 서비스 초기화: 로그인된 사용자 없음');
+        }
+      }
+      
       _isInitialized = true;
+      debugPrint('UnifiedCacheService 초기화 완료');
 
       // 캐시 정리는 별도 Future로 실행
       Future.delayed(Duration(seconds: 5), () {
@@ -154,10 +231,20 @@ class UnifiedCacheService {
   static const String _pageKeyPrefix = 'page_cache_';
   static const String _notePageIdsPrefix = 'note_page_ids_';
   static const String _translationKeyPrefix = 'translation_cache_';
+  
+  // 사용자별 캐시 키 생성 (로컬 저장소용)
+  String _getUserSpecificKey(String baseKey) {
+    if (_currentUserId == null || _currentUserId!.isEmpty) {
+      // 사용자 ID가 없을 경우 기본 키 사용 (이전 버전과의 호환성)
+      return baseKey;
+    }
+    return '${_currentUserId}_$baseKey';
+  }
 
   /// 노트 캐싱 - 메모리에만 저장
   Future<void> cacheNote(Note note) async {
     if (note.id == null) return;
+    if (!_isInitialized) await initialize();
 
     final noteId = note.id!;
     _noteCache[noteId] = note;
@@ -166,6 +253,8 @@ class UnifiedCacheService {
 
   /// 노트 가져오기 - 메모리에서만 조회
   Future<Note?> getCachedNote(String noteId) async {
+    if (!_isInitialized) await initialize();
+    
     if (_noteCache.containsKey(noteId)) {
       final cachedTime = _cacheTimestamps[noteId];
       if (cachedTime != null &&
@@ -179,6 +268,7 @@ class UnifiedCacheService {
   /// 페이지 캐싱 - 메모리에만 저장
   Future<void> cachePage(String noteId, page_model.Page page) async {
     if (page.id == null) return;
+    if (!_isInitialized) await initialize();
 
     final pageId = page.id!;
     _pageCache[pageId] = page;
@@ -221,8 +311,8 @@ class UnifiedCacheService {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // 페이지 ID 목록 저장
-      final pageIdsKey = 'note_pages_$noteId';
+      // 페이지 ID 목록 저장 (사용자별)
+      final pageIdsKey = _getUserSpecificKey('note_pages_$noteId');
       await prefs.setStringList(pageIdsKey, pageIds);
       await prefs.setString(
           '${pageIdsKey}_timestamp', DateTime.now().toIso8601String());
@@ -237,8 +327,11 @@ class UnifiedCacheService {
             (i + batchSize < pages.length) ? i + batchSize : pages.length;
         final batch = pages.sublist(i, end);
 
-        // 배치 내 페이지들의 JSON 변환을 병렬로 처리
-        futures.add(compute(_serializePagesBatch, batch));
+        // 사용자 ID 포함하여 배치 처리
+        futures.add(compute(
+          _serializePagesBatch, 
+          {'pages': batch, 'userId': _currentUserId ?? ''}
+        ));
       }
 
       // 모든 배치 처리 완료 대기
@@ -261,13 +354,18 @@ class UnifiedCacheService {
   }
 
   /// 페이지 배치를 직렬화하는 격리 함수 (compute에서 사용)
-  static Map<String, String> _serializePagesBatch(List<page_model.Page> pages) {
+  static Map<String, String> _serializePagesBatch(Map<String, dynamic> params) {
+    final List<page_model.Page> pages = params['pages'];
+    final String userId = params['userId'] ?? '';
+    
     final result = <String, String>{};
     final now = DateTime.now().toIso8601String();
+    
+    final userPrefix = userId.isNotEmpty ? '${userId}_' : '';
 
     for (final page in pages) {
       if (page.id != null) {
-        final pageKey = 'page_${page.id}';
+        final pageKey = '${userPrefix}page_${page.id}';
         final timestampKey = '${pageKey}_timestamp';
 
         // 페이지 데이터 JSON 직렬화
@@ -311,6 +409,8 @@ class UnifiedCacheService {
 
   /// 페이지 가져오기 - 메모리에서만 조회
   Future<page_model.Page?> getCachedPage(String pageId) async {
+    if (!_isInitialized) await initialize();
+    
     if (_pageCache.containsKey(pageId)) {
       final cachedTime = _cacheTimestamps[pageId];
       if (cachedTime != null &&
@@ -323,6 +423,8 @@ class UnifiedCacheService {
 
   /// 노트의 페이지 ID 목록 가져오기 - 메모리에서만 조회
   Future<List<String>> getCachedNotePageIds(String noteId) async {
+    if (!_isInitialized) await initialize();
+    
     if (_notePageIds.containsKey(noteId)) {
       return List<String>.from(_notePageIds[noteId] ?? []);
     }
@@ -331,6 +433,8 @@ class UnifiedCacheService {
 
   /// 노트의 모든 페이지 가져오기 - 메모리에서만 조회
   Future<List<page_model.Page>> getPagesForNote(String noteId) async {
+    if (!_isInitialized) await initialize();
+    
     final pageIds = await getCachedNotePageIds(noteId);
     final pages = <page_model.Page>[];
 
@@ -346,6 +450,8 @@ class UnifiedCacheService {
 
   /// 노트와 페이지를 함께 가져오기
   Future<Map<String, dynamic>> getNoteWithPages(String noteId) async {
+    if (!_isInitialized) await initialize();
+    
     final note = await getCachedNote(noteId);
     final pages = await getPagesForNote(noteId);
 
@@ -358,18 +464,34 @@ class UnifiedCacheService {
 
   /// 노트의 모든 페이지가 캐시에 있는지 확인
   Future<bool> hasAllPagesForNote(String noteId) async {
+    if (!_isInitialized) await initialize();
+    
     return _notePageIds.containsKey(noteId) && _notePageIds[noteId]!.isNotEmpty;
   }
 
   /// 캐시에서 노트 삭제
   Future<void> removeCachedNote(String noteId) async {
+    if (!_isInitialized) await initialize();
+    
     _noteCache.remove(noteId);
     _cacheTimestamps.remove(noteId);
     _notePageIds.remove(noteId);
+    
+    // 로컬 저장소에서도 삭제
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userKey = _getUserSpecificKey('note_cache_$noteId');
+      await prefs.remove(userKey);
+      await prefs.remove('${userKey}_timestamp');
+    } catch (e) {
+      debugPrint('로컬 노트 캐시 삭제 중 오류: $e');
+    }
   }
 
   /// 캐시에서 페이지 삭제
   Future<void> removePage(String pageId) async {
+    if (!_isInitialized) await initialize();
+    
     _pageCache.remove(pageId);
     _cacheTimestamps.remove(pageId);
 
@@ -377,135 +499,87 @@ class UnifiedCacheService {
     for (final noteId in _notePageIds.keys) {
       _notePageIds[noteId]?.remove(pageId);
     }
+    
+    // 로컬 저장소에서도 삭제
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userKey = _getUserSpecificKey('page_cache_$pageId');
+      await prefs.remove(userKey);
+      await prefs.remove('${userKey}_timestamp');
+    } catch (e) {
+      debugPrint('로컬 페이지 캐시 삭제 중 오류: $e');
+    }
   }
 
   /// 노트의 모든 페이지를 캐시에서 삭제
   Future<void> removePagesForNote(String noteId) async {
+    if (!_isInitialized) await initialize();
+    
     final pageIds = List<String>.from(_notePageIds[noteId] ?? []);
     for (final pageId in pageIds) {
       _pageCache.remove(pageId);
       _cacheTimestamps.remove(pageId);
+      
+      // 로컬 저장소에서도 삭제
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final userKey = _getUserSpecificKey('page_cache_$pageId');
+        await prefs.remove(userKey);
+        await prefs.remove('${userKey}_timestamp');
+      } catch (e) {
+        debugPrint('로컬 페이지 캐시 삭제 중 오류: $e');
+      }
     }
     _notePageIds.remove(noteId);
+    
+    // 노트 페이지 ID 목록도 삭제
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userKey = _getUserSpecificKey('note_pages_$noteId');
+      await prefs.remove(userKey);
+      await prefs.remove('${userKey}_timestamp');
+    } catch (e) {
+      debugPrint('노트 페이지 ID 목록 삭제 중 오류: $e');
+    }
   }
 
-  /// 전체 캐시 초기화
+  /// 메모리 캐시 초기화
   void clearCache() {
     _noteCache.clear();
     _pageCache.clear();
     _notePageIds.clear();
     _cacheTimestamps.clear();
-    debugPrint('모든 캐시가 초기화되었습니다.');
-  }
-
-  /// 노트 캐시 통계 정보 (디버깅용)
-  Map<String, dynamic> getNoteCacheStats() {
-    return {
-      'memoryItems': _noteCache.length,
-      'oldestCacheTime': _cacheTimestamps.isEmpty
-          ? null
-          : _cacheTimestamps.entries
-              .where((entry) => _noteCache.containsKey(entry.key))
-              .map((entry) => entry.value)
-              .reduce((a, b) => a.isBefore(b) ? a : b),
-      'newestCacheTime': _cacheTimestamps.isEmpty
-          ? null
-          : _cacheTimestamps.entries
-              .where((entry) => _noteCache.containsKey(entry.key))
-              .map((entry) => entry.value)
-              .reduce((a, b) => a.isAfter(b) ? a : b),
-    };
-  }
-
-  /// 페이지 캐시 통계 정보 (디버깅용)
-  Map<String, dynamic> getPageCacheStats() {
-    return {
-      'memoryItems': _pageCache.length,
-      'notesWithCachedPages': _notePageIds.length,
-      'oldestCacheTime': _cacheTimestamps.isEmpty
-          ? null
-          : _cacheTimestamps.entries
-              .where((entry) => _pageCache.containsKey(entry.key))
-              .map((entry) => entry.value)
-              .reduce((a, b) => a.isBefore(b) ? a : b),
-      'newestCacheTime': _cacheTimestamps.isEmpty
-          ? null
-          : _cacheTimestamps.entries
-              .where((entry) => _pageCache.containsKey(entry.key))
-              .map((entry) => entry.value)
-              .reduce((a, b) => a.isAfter(b) ? a : b),
-    };
-  }
-
-  /// 텍스트 해시 생성
-  String _generateTextHash(String text) {
-    try {
-      // 텍스트가 너무 길 경우 앞부분만 사용
-      final String textToHash =
-          text.length > 1000 ? text.substring(0, 1000) : text;
-      final bytes = utf8.encode(textToHash);
-      final digest = sha256.convert(bytes);
-      return digest.toString();
-    } catch (e) {
-      debugPrint('텍스트 해시 생성 중 오류 발생: $e');
-      // 오류 발생 시 대체 해시 생성 (텍스트 길이와 현재 시간 기반)
-      return 'fallback_${text.length}_${DateTime.now().millisecondsSinceEpoch}';
-    }
-  }
-
-  /// 여러 노트 캐싱
-  Future<void> cacheNotes(List<Note> notes) async {
-    for (final note in notes) {
-      if (note.id != null) {
-        await cacheNote(note);
-      }
-    }
-  }
-
-  /// 캐시된 모든 노트 가져오기
-  Future<List<Note>> getCachedNotes() async {
-    final now = DateTime.now();
-    final validNotes = <Note>[];
-
-    for (final entry in _noteCache.entries) {
-      final cachedTime = _cacheTimestamps[entry.key];
-      if (cachedTime != null && now.difference(cachedTime) < _cacheValidity) {
-        validNotes.add(entry.value);
-      }
-    }
-
-    return validNotes;
+    debugPrint('모든 메모리 캐시가 초기화되었습니다.');
   }
 
   /// 번역 가져오기
   Future<String?> getTranslation(
       String originalText, String targetLanguage) async {
     if (originalText.isEmpty) return null;
+    if (!_isInitialized) await initialize();
 
     // 긴 텍스트의 경우 해시 사용
     final textHash = _generateTextHash(originalText);
-    final key =
-        _translationKeyPrefix + '${textHash}_${targetLanguage.toLowerCase()}';
+    final baseKey = '${textHash}_${targetLanguage.toLowerCase()}';
+    final key = _translationKeyPrefix + baseKey;
 
     // 메모리 캐시 확인
     if (_translationCache.containsKey(key)) {
-      debugPrint('메모리에서 캐시된 번역 찾음');
       return _translationCache[key];
     }
 
-    // 로컬 캐시 확인
+    // 로컬 캐시 확인 (사용자별)
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cachedData = prefs.getString(key);
-      final timestampKey =
-          '${_translationKeyPrefix}timestamp_${textHash}_${targetLanguage.toLowerCase()}';
+      final userKey = _getUserSpecificKey(key);
+      final cachedData = prefs.getString(userKey);
+      final timestampKey = _getUserSpecificKey('${_translationKeyPrefix}timestamp_$baseKey');
       final timestampStr = prefs.getString(timestampKey);
 
       if (cachedData != null && timestampStr != null) {
         try {
           final timestamp = DateTime.parse(timestampStr);
           if (DateTime.now().difference(timestamp) < _cacheValidity) {
-            debugPrint('로컬에서 캐시된 번역 찾음');
             // 메모리 캐시에도 저장
             _translationCache[key] = cachedData;
             _cacheTimestamps[key] = timestamp;
@@ -526,22 +600,26 @@ class UnifiedCacheService {
   Future<void> cacheTranslation(
       String originalText, String translatedText, String targetLanguage) async {
     if (originalText.isEmpty || translatedText.isEmpty) return;
+    if (!_isInitialized) await initialize();
 
     // 긴 텍스트의 경우 해시 사용
     final textHash = _generateTextHash(originalText);
-    final key =
-        _translationKeyPrefix + '${textHash}_${targetLanguage.toLowerCase()}';
+    final baseKey = '${textHash}_${targetLanguage.toLowerCase()}';
+    final key = _translationKeyPrefix + baseKey;
 
     // 메모리 캐시에 저장
     _translationCache[key] = translatedText;
     _cacheTimestamps[key] = DateTime.now();
 
-    // 로컬 캐시에 저장
+    // 로컬 캐시에 저장 (사용자별)
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(key, translatedText);
+      final userKey = _getUserSpecificKey(key);
+      final timestampKey = _getUserSpecificKey('${_translationKeyPrefix}timestamp_$baseKey');
+      
+      await prefs.setString(userKey, translatedText);
       await prefs.setString(
-          '${_translationKeyPrefix}timestamp_${textHash}_${targetLanguage.toLowerCase()}',
+          timestampKey,
           DateTime.now().toIso8601String());
     } catch (e) {
       debugPrint('번역 로컬 캐싱 중 오류: $e');
@@ -551,554 +629,109 @@ class UnifiedCacheService {
     _limitCacheSize();
   }
 
-  /// 캐시 크기 제한
+  /// 텍스트 해시 생성
+  String _generateTextHash(String text) {
+    try {
+      // 텍스트가 너무 길 경우 앞부분만 사용
+      final String textToHash =
+          text.length > 1000 ? text.substring(0, 1000) : text;
+      final bytes = utf8.encode(textToHash);
+      final digest = sha256.convert(bytes);
+      return digest.toString();
+    } catch (e) {
+      debugPrint('텍스트 해시 생성 중 오류 발생: $e');
+      // 오류 발생 시 대체 해시 생성 (텍스트 길이와 현재 시간 기반)
+      return 'fallback_${text.length}_${DateTime.now().millisecondsSinceEpoch}';
+    }
+  }
+
+  /// 메모리 캐시 정리
+  void _clearMemoryCache() {
+    // 노트 캐시 크기 제한
+    if (_noteCache.length > _maxNoteItems) {
+      // 가장 오래된 항목부터 제거
+      final sortedEntries = _cacheTimestamps.entries
+          .where((entry) => _noteCache.containsKey(entry.key))
+          .toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
+      
+      final itemsToRemove = _noteCache.length - _maxNoteItems;
+      for (int i = 0; i < itemsToRemove && i < sortedEntries.length; i++) {
+        final key = sortedEntries[i].key;
+        _noteCache.remove(key);
+        _cacheTimestamps.remove(key);
+      }
+      
+      debugPrint('노트 캐시 정리: $itemsToRemove개 항목 제거');
+    }
+    
+    // 페이지 캐시 크기 제한
+    if (_pageCache.length > _maxPageItems) {
+      // 가장 오래된 항목부터 제거
+      final sortedEntries = _cacheTimestamps.entries
+          .where((entry) => _pageCache.containsKey(entry.key))
+          .toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
+      
+      final itemsToRemove = _pageCache.length - _maxPageItems;
+      for (int i = 0; i < itemsToRemove && i < sortedEntries.length; i++) {
+        final key = sortedEntries[i].key;
+        _pageCache.remove(key);
+        _cacheTimestamps.remove(key);
+      }
+      
+      debugPrint('페이지 캐시 정리: $itemsToRemove개 항목 제거');
+    }
+    
+    // 번역 캐시 정리
+    if (_translationCache.length > _maxTranslationItems) {
+      // 가장 오래된 항목부터 제거
+      final sortedEntries = _cacheTimestamps.entries
+          .where((entry) => _translationCache.containsKey(entry.key))
+          .toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
+      
+      final itemsToRemove = _translationCache.length - _maxTranslationItems;
+      for (int i = 0; i < itemsToRemove && i < sortedEntries.length; i++) {
+        final key = sortedEntries[i].key;
+        _translationCache.remove(key);
+        _cacheTimestamps.remove(key);
+      }
+      
+      debugPrint('번역 캐시 정리: $itemsToRemove개 항목 제거');
+    }
+  }
+  
+  /// 번역 캐시 크기 제한
   void _limitCacheSize() {
     // 번역 캐시 크기 제한
     if (_translationCache.length > _maxTranslationItems) {
       // 가장 오래된 항목부터 제거
       final sortedEntries = _cacheTimestamps.entries
-          .where((entry) => entry.key.startsWith(_translationKeyPrefix))
+          .where((entry) => _translationCache.containsKey(entry.key))
           .toList()
         ..sort((a, b) => a.value.compareTo(b.value));
-
-      final itemsToRemove = sortedEntries.length - _maxTranslationItems;
+      
+      final itemsToRemove = _translationCache.length - (_maxTranslationItems * 0.8).toInt();
       if (itemsToRemove > 0) {
-        for (int i = 0; i < itemsToRemove; i++) {
+        for (int i = 0; i < itemsToRemove && i < sortedEntries.length; i++) {
           final key = sortedEntries[i].key;
           _translationCache.remove(key);
           _cacheTimestamps.remove(key);
         }
-      }
-    }
-  }
-
-  /// 텍스트 캐싱
-  Future<void> cacheText(String type, String id, String text) async {
-    try {
-      // 메모리 캐시에 저장
-      final key = '${type}_$id';
-      final now = DateTime.now();
-
-      // 메모리 캐시에 저장
-      _cacheTimestamps[key] = now;
-
-      // 타입에 따라 다른 캐시 맵에 저장
-      if (type == 'page_original' || type == 'page_translated') {
-        // 페이지 텍스트 캐싱
-        final pageId = id;
-        if (_pageCache.containsKey(pageId)) {
-          final page = _pageCache[pageId]!;
-          if (type == 'page_original') {
-            _pageCache[pageId] = page.copyWith(originalText: text);
-          } else {
-            _pageCache[pageId] = page.copyWith(translatedText: text);
-          }
-        }
-      }
-
-      // 로컬 저장소에 저장
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(key, text);
-        await prefs.setString('${type}_timestamp_$id', now.toIso8601String());
-        debugPrint('텍스트 캐싱 완료: $type, ID=$id, 길이=${text.length}');
-      } catch (e) {
-        debugPrint('로컬 저장소에 텍스트 캐싱 중 오류: $e');
-      }
-    } catch (e) {
-      debugPrint('텍스트 캐싱 중 오류 발생: $e');
-    }
-  }
-
-  /// 핀인 캐시 로드
-  Future<Map<String, String>> loadPinyinCache(String? pageId) async {
-    if (pageId == null || pageId.isEmpty) return {};
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = 'pinyin_cache_$pageId';
-      final cachedData = prefs.getString(cacheKey);
-
-      if (cachedData != null && cachedData.isNotEmpty) {
-        final Map<String, dynamic> jsonData = json.decode(cachedData);
-        final Map<String, String> pinyinCache = {};
-
-        jsonData.forEach((key, value) {
-          if (value is String) {
-            pinyinCache[key] = value;
-          }
-        });
-
-        debugPrint('핀인 캐시 로드 성공: ${pinyinCache.length}개 항목');
-        return pinyinCache;
-      }
-    } catch (e) {
-      debugPrint('핀인 캐시 로드 중 오류 발생: $e');
-    }
-    return {};
-  }
-
-  /// 핀인 캐시 저장
-  Future<void> savePinyinCache(
-      String? pageId, Map<String, String> cache) async {
-    if (pageId == null || pageId.isEmpty || cache.isEmpty) return;
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cacheKey = 'pinyin_cache_$pageId';
-      final jsonData = json.encode(cache);
-      await prefs.setString(cacheKey, jsonData);
-      debugPrint('핀인 캐시 저장 성공: ${cache.length}개 항목');
-    } catch (e) {
-      debugPrint('핀인 캐시 저장 중 오류 발생: $e');
-    }
-  }
-
-  // 처리된 텍스트 캐시 (캐시 키 -> ProcessedText 객체)
-  final Map<String, dynamic> _processedTextCache = {};
-
-  // 처리된 텍스트 캐싱
-  Future<void> cacheProcessedText(
-    String pageId,
-    String textProcessingMode,
-    dynamic processedText,
-  ) async {
-    try {
-      if (!_isInitialized) await initialize();
-
-      // 캐시 키 생성 (페이지 ID + 처리 모드)
-      final cacheKey = 'processed_text_${pageId}_${textProcessingMode}';
-      final now = DateTime.now();
-
-      // 메모리 캐시에 저장
-      _processedTextCache[cacheKey] = processedText;
-      _cacheTimestamps[cacheKey] = now;
-
-      // 로컬 저장소에 저장
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final jsonData = jsonEncode(processedText.toJson());
-        await prefs.setString(cacheKey, jsonData);
-        await prefs.setString('${cacheKey}_timestamp', now.toIso8601String());
-        debugPrint('처리된 텍스트 캐싱 완료: 페이지 ID=$pageId, 모드=$textProcessingMode');
-      } catch (e) {
-        debugPrint('로컬 저장소에 처리된 텍스트 캐싱 중 오류: $e');
-      }
-    } catch (e) {
-      debugPrint('처리된 텍스트 캐싱 중 오류 발생: $e');
-    }
-  }
-
-  // 처리된 텍스트 가져오기
-  Future<dynamic> getCachedProcessedText(
-    String pageId,
-    String textProcessingMode,
-  ) async {
-    try {
-      if (!_isInitialized) await initialize();
-
-      // 캐시 키 생성
-      final cacheKey = 'processed_text_${pageId}_${textProcessingMode}';
-
-      // 1. 메모리 캐시 확인
-      if (_processedTextCache.containsKey(cacheKey)) {
-        final cachedTime = _cacheTimestamps[cacheKey];
-        if (cachedTime != null &&
-            DateTime.now().difference(cachedTime) < _cacheValidity) {
-          debugPrint(
-              '메모리 캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId, 모드=$textProcessingMode');
-          return _processedTextCache[cacheKey];
-        }
-      }
-
-      // 2. 로컬 저장소 확인
-      final prefs = await SharedPreferences.getInstance();
-      final jsonData = prefs.getString(cacheKey);
-      final timestampStr = prefs.getString('${cacheKey}_timestamp');
-
-      if (jsonData != null && timestampStr != null) {
-        final timestamp = DateTime.parse(timestampStr);
-        if (DateTime.now().difference(timestamp) < _cacheValidity) {
-          try {
-            // JSON 데이터를 ProcessedText 객체로 변환
-            final Map<String, dynamic> jsonMap = jsonDecode(jsonData);
-            final processedText = ProcessedText.fromJson(jsonMap);
-
-            // 메모리 캐시에도 저장
-            _processedTextCache[cacheKey] = processedText;
-            _cacheTimestamps[cacheKey] = timestamp;
-
-            debugPrint(
-                '로컬 저장소에서 처리된 텍스트 로드: 페이지 ID=$pageId, 모드=$textProcessingMode');
-            return processedText;
-          } catch (e) {
-            debugPrint('처리된 텍스트 역직렬화 중 오류: $e');
-          }
-        }
-      }
-
-      // 캐시 없음
-      return null;
-    } catch (e) {
-      debugPrint('처리된 텍스트 캐시 조회 중 오류 발생: $e');
-      return null;
-    }
-  }
-
-  // 처리된 텍스트 캐시 삭제
-  Future<void> clearProcessedTextCache(String pageId) async {
-    try {
-      // 메모리 캐시에서 삭제
-      final keysToRemove = _processedTextCache.keys
-          .where((key) => key.startsWith('processed_text_${pageId}_'))
-          .toList();
-
-      for (final key in keysToRemove) {
-        _processedTextCache.remove(key);
-        _cacheTimestamps.remove(key);
-      }
-
-      // 로컬 저장소에서 삭제
-      final prefs = await SharedPreferences.getInstance();
-      final allKeys = prefs.getKeys();
-
-      for (final key in allKeys) {
-        if (key.startsWith('processed_text_${pageId}_')) {
-          await prefs.remove(key);
-          await prefs.remove('${key}_timestamp');
-        }
-      }
-
-      debugPrint('페이지 ID=$pageId의 처리된 텍스트 캐시 삭제 완료');
-    } catch (e) {
-      debugPrint('처리된 텍스트 캐시 삭제 중 오류 발생: $e');
-    }
-  }
-
-  // 주기적인 캐시 정리 설정
-  void _setupPeriodicCacheCleanup() {
-    // 30분마다 메모리 캐시 정리
-    Future.delayed(const Duration(minutes: 30), () {
-      if (_isInitialized) {
-        debugPrint('주기적인 캐시 정리 실행');
-        _clearMemoryCache();
         
-        // 메모리 사용량 모니터링 및 필요시 추가 정리
-        _monitorMemoryUsage();
-        
-        _setupPeriodicCacheCleanup(); // 재귀적으로 다음 정리 예약
-      }
-    });
-  }
-  
-  // 메모리 사용량 모니터링
-  void _monitorMemoryUsage() {
-    try {
-      final noteStats = getNoteCacheStats();
-      final pageStats = getPageCacheStats();
-      
-      final totalItems = noteStats['memoryItems'] + pageStats['memoryItems'] + 
-                         _translationCache.length + _processedTextCache.length;
-      
-      debugPrint('현재 메모리 캐시 상태:');
-      debugPrint('- 노트: ${noteStats['memoryItems']}개');
-      debugPrint('- 페이지: ${pageStats['memoryItems']}개');
-      debugPrint('- 번역: ${_translationCache.length}개');
-      debugPrint('- 처리된 텍스트: ${_processedTextCache.length}개');
-      debugPrint('- 총 항목 수: $totalItems개');
-      
-      // 메모리 사용량이 많은 경우 추가 정리
-      if (totalItems > 1000) {
-        debugPrint('메모리 사용량이 많아 추가 정리 수행');
-        _clearMemoryCache(aggressive: true);
-      }
-    } catch (e) {
-      debugPrint('메모리 사용량 모니터링 중 오류: $e');
-    }
-  }
-
-  // 메모리 캐시 정리
-  void _clearMemoryCache({bool aggressive = false}) {
-    int clearedItems = 0;
-
-    // 공격적 정리 모드인 경우 더 많은 항목 제거
-    final int maxNoteKeep = aggressive ? 10 : (_maxNoteItems ~/ 2);
-    final int maxPageKeep = aggressive ? 30 : (_maxPageItems ~/ 2);
-    final int maxTranslationKeep =
-        aggressive ? 50 : (_maxTranslationItems ~/ 2);
-    final int maxProcessedTextKeep = aggressive ? 20 : 50;
-
-    // 노트 캐시 정리
-    if (_noteCache.length > maxNoteKeep) {
-      debugPrint('노트 캐시 정리 시작');
-
-      // 노트 ID와 마지막 접근 시간으로 정렬
-      final entries = <MapEntry<String, DateTime>>[];
-      for (final key in _noteCache.keys) {
-        final timestamp = _cacheTimestamps[key] ?? DateTime.now();
-        entries.add(MapEntry(key, timestamp));
-      }
-
-      // 가장 오래된 항목부터 정렬
-      entries.sort((a, b) => a.value.compareTo(b.value));
-
-      // 오래된 항목부터 제거
-      final itemsToRemove = _noteCache.length - maxNoteKeep;
-      for (int i = 0; i < itemsToRemove; i++) {
-        if (i < entries.length) {
-          final key = entries[i].key;
-          _noteCache.remove(key);
-          _cacheTimestamps.remove(key);
-          clearedItems++;
-        }
+        debugPrint('번역 캐시 크기 제한: $itemsToRemove개 항목 제거');
       }
     }
-
-    // 페이지 캐시 정리
-    if (_pageCache.length > maxPageKeep) {
-      debugPrint('페이지 캐시 정리 시작');
-
-      // 페이지 ID와 마지막 접근 시간으로 정렬
-      final entries = <MapEntry<String, DateTime>>[];
-      for (final key in _pageCache.keys) {
-        final timestamp = _cacheTimestamps[key] ?? DateTime.now();
-        entries.add(MapEntry(key, timestamp));
-      }
-
-      // 가장 오래된 항목부터 정렬
-      entries.sort((a, b) => a.value.compareTo(b.value));
-
-      // 오래된 항목부터 제거
-      final itemsToRemove = _pageCache.length - maxPageKeep;
-      for (int i = 0; i < itemsToRemove; i++) {
-        if (i < entries.length) {
-          final key = entries[i].key;
-          _pageCache.remove(key);
-          _cacheTimestamps.remove(key);
-          clearedItems++;
-        }
-      }
-    }
-
-    // 번역 캐시 정리
-    if (_translationCache.length > maxTranslationKeep) {
-      debugPrint('번역 캐시 정리 시작');
-
-      // 번역 키와 마지막 접근 시간으로 정렬
-      final entries = <MapEntry<String, DateTime>>[];
-      for (final key in _translationCache.keys) {
-        final timestamp = _cacheTimestamps[key] ?? DateTime.now();
-        entries.add(MapEntry(key, timestamp));
-      }
-
-      // 가장 오래된 항목부터 정렬
-      entries.sort((a, b) => a.value.compareTo(b.value));
-
-      // 오래된 항목부터 제거
-      final itemsToRemove = _translationCache.length - maxTranslationKeep;
-      for (int i = 0; i < itemsToRemove; i++) {
-        if (i < entries.length) {
-          final key = entries[i].key;
-          _translationCache.remove(key);
-          _cacheTimestamps.remove(key);
-          clearedItems++;
-        }
-      }
-    }
-    
-    // 처리된 텍스트 캐시 정리
-    if (_processedTextCache.length > maxProcessedTextKeep) {
-      debugPrint('처리된 텍스트 캐시 정리 시작');
-      
-      // 키와 마지막 접근 시간으로 정렬
-      final entries = <MapEntry<String, DateTime>>[];
-      for (final key in _processedTextCache.keys) {
-        final timestamp = _cacheTimestamps[key] ?? DateTime.now();
-        entries.add(MapEntry(key, timestamp));
-      }
-      
-      // 가장 오래된 항목부터 정렬
-      entries.sort((a, b) => a.value.compareTo(b.value));
-      
-      // 오래된 항목부터 제거
-      final itemsToRemove = _processedTextCache.length - maxProcessedTextKeep;
-      for (int i = 0; i < itemsToRemove; i++) {
-        if (i < entries.length) {
-          final key = entries[i].key;
-          _processedTextCache.remove(key);
-          _cacheTimestamps.remove(key);
-          clearedItems++;
-        }
-      }
-    }
-
-    if (clearedItems > 0) {
-      debugPrint('메모리 캐시 정리 완료: 총 $clearedItems개 항목 제거');
-    }
-  }
-
-  /// 오래된 캐시 정리 (메모리 및 로컬)
-  Future<void> cleanupOldCache() async {
-    debugPrint('오래된 캐시 정리 시작');
-    
-    try {
-      // 메모리 캐시 정리
-      int clearedItems = 0;
-      
-      // 페이지 캐시 정리 (최대 100개 유지)
-      clearedItems += _cleanupMemoryCache(_pageCache, 100);
-      
-      // 노트 캐시 정리 (최대 50개 유지)
-      clearedItems += _cleanupMemoryCache(_noteCache, 50);
-      
-      // 번역 캐시 정리 (최대 200개 유지)
-      clearedItems += _cleanupMemoryCache(_translationCache, 200);
-      
-      // 처리된 텍스트 캐시 정리 (최대 50개 유지)
-      clearedItems += _cleanupMemoryCache(_processedTextCache, 50);
-      
-      // 로컬 캐시 정리 시도
-      await _attemptLocalCacheCleanup();
-      
-      debugPrint('오래된 캐시 정리 완료: 메모리에서 $clearedItems개 항목 제거');
-    } catch (e) {
-      debugPrint('캐시 정리 중 오류 발생: $e');
-    }
-  }
-  
-  /// 비필수 캐시 초기화 (메모리 압박 시)
-  Future<void> clearNonEssentialCache() async {
-    debugPrint('메모리 압박 감지 - 비필수 캐시 초기화');
-    
-    try {
-      // 번역 캐시 완전 초기화 (필수 아님)
-      _translationCache.clear();
-      
-      // 처리된 텍스트 캐시는 현재 보고 있는 페이지를 제외하고 모두 초기화
-      final activePageIds = _getActivePageIds();
-      _processedTextCache.removeWhere((key, _) => !activePageIds.contains(key));
-      
-      // 노트 캐시는 최근 3개만 유지
-      if (_noteCache.length > 3) {
-        _cleanupMemoryCache(_noteCache, 3);
-      }
-      
-      // 타임스탬프 정리
-      _cleanupTimestamps();
-      
-      debugPrint('비필수 캐시 초기화 완료');
-    } catch (e) {
-      debugPrint('비필수 캐시 초기화 중 오류 발생: $e');
-    }
-  }
-  
-  /// 특정 메모리 캐시 정리 (최대 개수 유지)
-  int _cleanupMemoryCache<T>(Map<String, T> cache, int maxItems) {
-    if (cache.length <= maxItems) return 0;
-    
-    int clearedCount = 0;
-    try {
-      // 타임스탬프 기준으로 정렬된 키 목록 가져오기
-      final sortedKeys = _cacheTimestamps.keys
-          .where((key) => cache.containsKey(key))
-          .toList()
-        ..sort((a, b) {
-          final timeA = _cacheTimestamps[a] ?? DateTime.now();
-          final timeB = _cacheTimestamps[b] ?? DateTime.now();
-          return timeA.compareTo(timeB);
-        });
-      
-      // 제거할 항목 수 계산
-      final itemsToRemove = cache.length - maxItems;
-      
-      // 가장 오래된 항목부터 제거
-      for (int i = 0; i < itemsToRemove && i < sortedKeys.length; i++) {
-        final key = sortedKeys[i];
-        cache.remove(key);
-        clearedCount++;
-      }
-      
-    } catch (e) {
-      debugPrint('메모리 캐시 정리 중 오류 발생: $e');
-    }
-    
-    return clearedCount;
-  }
-  
-  /// 로컬 캐시 정리 시도
-  Future<void> _attemptLocalCacheCleanup() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      // 3일 이상 지난 캐시 항목 키 찾기
-      final now = DateTime.now();
-      final oldKeys = <String>[];
-      
-      // 모든 SharedPreferences 키 순회
-      final allKeys = prefs.getKeys().where((key) => key.contains('_timestamp'));
-      
-      for (final timestampKey in allKeys) {
-        final timeString = prefs.getString(timestampKey);
-        if (timeString == null) continue;
-        
-        try {
-          final timestamp = DateTime.parse(timeString);
-          if (now.difference(timestamp).inDays > 3) {
-            // 타임스탬프 키에서 실제 데이터 키 추출
-            final dataKey = timestampKey.replaceAll('_timestamp', '');
-            oldKeys.add(dataKey);
-            oldKeys.add(timestampKey);
-          }
-        } catch (e) {
-          debugPrint('타임스탬프 파싱 중 오류: $e');
-        }
-      }
-      
-      // 오래된 항목 제거
-      if (oldKeys.isNotEmpty) {
-        debugPrint('오래된 로컬 캐시 항목 제거: ${oldKeys.length}개');
-        for (final key in oldKeys) {
-          await prefs.remove(key);
-        }
-      }
-    } catch (e) {
-      debugPrint('로컬 캐시 정리 시도 중 오류 발생: $e');
-    }
-  }
-  
-  /// 타임스탬프 정리 (사용하지 않는 타임스탬프 제거)
-  void _cleanupTimestamps() {
-    // 모든 캐시에서 사용 중인 키 수집
-    final usedKeys = <String>{};
-    usedKeys.addAll(_pageCache.keys);
-    usedKeys.addAll(_noteCache.keys);
-    usedKeys.addAll(_translationCache.keys);
-    usedKeys.addAll(_processedTextCache.keys);
-    
-    // 사용하지 않는 타임스탬프 제거
-    _cacheTimestamps.removeWhere((key, _) => !usedKeys.contains(key));
-  }
-  
-  /// 현재 활성화된 페이지 ID 목록 반환 (추측)
-  Set<String> _getActivePageIds() {
-    // 최근에 액세스한 페이지 ID 반환 (최대 5개)
-    final recentPageIds = _pageCache.keys.toList();
-    
-    // 타임스탬프 기준으로 정렬
-    recentPageIds.sort((a, b) {
-      final timeA = _cacheTimestamps[a] ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final timeB = _cacheTimestamps[b] ?? DateTime.fromMillisecondsSinceEpoch(0);
-      return timeB.compareTo(timeA); // 최신순 정렬
-    });
-    
-    // 최근 5개만 반환
-    return recentPageIds.take(5).toSet();
   }
 
   /// 모든 캐시 지우기 (로그아웃 또는 로그인 시 호출)
   Future<void> clearAllCache() async {
     try {
       debugPrint('모든 캐시 지우기 시작...');
+      
+      // 현재 사용자 ID 가져오기
+      final userId = _currentUserId;
       
       // 메모리 캐시 초기화
       _noteCache.clear();
@@ -1107,23 +740,259 @@ class UnifiedCacheService {
       _cacheTimestamps.clear();
       _translationCache.clear();
       
-      // 로컬 저장소 캐시 초기화
-      final prefs = await SharedPreferences.getInstance();
-      final allKeys = prefs.getKeys();
-      
-      // 캐시 키만 삭제 (앱 설정 등 다른 데이터는 유지)
-      for (final key in allKeys) {
-        if (key.startsWith(_noteKeyPrefix) || 
-            key.startsWith(_pageKeyPrefix) || 
-            key.contains('timestamp_') || 
-            key.startsWith(_translationKeyPrefix)) {
+      // 로컬 저장소 캐시 초기화 - 현재 사용자의 데이터만 삭제
+      if (userId != null && userId.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final allKeys = prefs.getKeys();
+        
+        // 현재 사용자 관련 키만 삭제
+        final userKeys = allKeys.where((key) => key.startsWith('${userId}_')).toList();
+        
+        for (final key in userKeys) {
           await prefs.remove(key);
         }
+        
+        debugPrint('현재 사용자($userId)의 캐시 데이터 ${userKeys.length}개 삭제 완료');
+      } else {
+        // 사용자 ID가 없는 경우 모든 캐시 데이터 삭제
+        await _removeAllCacheData();
       }
       
       debugPrint('모든 캐시 지우기 완료');
     } catch (e) {
       debugPrint('캐시 지우기 중 오류 발생: $e');
     }
+  }
+  
+  /// 모든 캐시 데이터 제거 (사용자 ID 구분 없이)
+  Future<void> _removeAllCacheData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final allKeys = prefs.getKeys();
+      
+      // 캐시 키만 삭제 (앱 설정 등 다른 데이터는 유지)
+      final cacheKeys = allKeys.where((key) => 
+        key.contains('_note_cache_') || 
+        key.contains('_page_cache_') || 
+        key.contains('_timestamp_') || 
+        key.contains('_translation_cache_') ||
+        key.startsWith(_noteKeyPrefix) ||
+        key.startsWith(_pageKeyPrefix) ||
+        key.startsWith(_translationKeyPrefix)
+      ).toList();
+      
+      for (final key in cacheKeys) {
+        await prefs.remove(key);
+      }
+      
+      debugPrint('모든 캐시 데이터 ${cacheKeys.length}개 삭제 완료');
+    } catch (e) {
+      debugPrint('전체 캐시 데이터 제거 중 오류 발생: $e');
+    }
+  }
+  
+  /// 사용자 전환 시 호출 - 이전 사용자의 메모리 캐시 정리
+  Future<void> handleUserSwitch(String newUserId) async {
+    if (_currentUserId == newUserId) return;
+    
+    // 메모리 캐시 초기화
+    clearCache();
+    
+    // 새 사용자 ID 설정
+    await setCurrentUserId(newUserId);
+    
+    debugPrint('사용자 전환 처리 완료: $newUserId');
+  }
+
+  /// 현재 사용자 ID 가져오기 (없으면 빈 문자열 반환)
+  Future<String> _getCurrentUserId() async {
+    if (_currentUserId != null && _currentUserId!.isNotEmpty) {
+      return _currentUserId!;
+    }
+    
+    // 로컬 저장소에서 사용자 ID 조회
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedUserId = prefs.getString('cache_current_user_id');
+      if (cachedUserId != null && cachedUserId.isNotEmpty) {
+        _currentUserId = cachedUserId;
+        return cachedUserId;
+      }
+    } catch (e) {
+      debugPrint('로컬에서 사용자 ID 로드 중 오류: $e');
+    }
+    
+    // Firebase에서 사용자 ID 조회
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && user.uid.isNotEmpty) {
+        _currentUserId = user.uid;
+        return user.uid;
+      }
+    } catch (e) {
+      debugPrint('Firebase에서 사용자 ID 로드 중 오류: $e');
+    }
+    
+    // 기본값 반환
+    return '';
+  }
+
+  /// 텍스트 캐싱 (원본 또는 번역 텍스트)
+  Future<void> cacheText(String textType, String pageId, String text) async {
+    if (!_isInitialized) await initialize();
+    
+    final userId = await _getCurrentUserId();
+    final key = '${userId}_${textType}_$pageId';
+    
+    // 메모리 캐시에 저장
+    _memoryCache[key] = text;
+    
+    // 로컬 저장소에도 저장
+    final prefs = await SharedPreferences.getInstance();
+    if (text.length < 1000) { // 텍스트 길이가 너무 길면 로컬 저장소에 저장하지 않음
+      await prefs.setString(key, text);
+    }
+    
+    // 캐시 사용 통계 업데이트
+    _updateCacheStats(key, CacheOperationType.write);
+  }
+  
+  /// 처리된 텍스트 캐싱 (가공된 데이터)
+  Future<void> cacheProcessedText(
+    String pageId,
+    String processingMode,
+    dynamic processedData,
+  ) async {
+    if (!_isInitialized) await initialize();
+    
+    final userId = await _getCurrentUserId();
+    final key = '${userId}_processed_${processingMode}_$pageId';
+    
+    // 캐시에 저장 (JSON 변환)
+    final jsonData = jsonEncode(processedData);
+    _memoryCache[key] = jsonData;
+    
+    // 캐시 사용 통계 업데이트
+    _updateCacheStats(key, CacheOperationType.write);
+  }
+  
+  /// 캐시된 처리 텍스트 조회
+  Future<dynamic> getCachedProcessedText(
+    String pageId,
+    String processingMode,
+  ) async {
+    if (!_isInitialized) await initialize();
+    
+    final userId = await _getCurrentUserId();
+    final key = '${userId}_processed_${processingMode}_$pageId';
+    
+    // 캐시에서 조회
+    final cachedData = _memoryCache[key];
+    if (cachedData == null) {
+      return null;
+    }
+    
+    // 캐시 사용 통계 업데이트
+    _updateCacheStats(key, CacheOperationType.read);
+    
+    // JSON 파싱하여 반환
+    try {
+      return jsonDecode(cachedData as String);
+    } catch (e) {
+      debugPrint('처리된 텍스트 디코딩 오류: $e');
+      return cachedData;
+    }
+  }
+
+  /// 캐시 사용 통계 업데이트
+  void _updateCacheStats(String key, CacheOperationType operation) {
+    if (operation == CacheOperationType.read) {
+      if (_cacheHitCount.containsKey(key)) {
+        _cacheHitCount[key] = _cacheHitCount[key]! + 1;
+      } else {
+        _cacheHitCount[key] = 1;
+      }
+    } else if (operation == CacheOperationType.write) {
+      if (_cacheMissCount.containsKey(key)) {
+        _cacheMissCount[key] = _cacheMissCount[key]! + 1;
+      } else {
+        _cacheMissCount[key] = 1;
+      }
+    } else if (operation == CacheOperationType.delete) {
+      _cacheHitCount.remove(key);
+      _cacheMissCount.remove(key);
+    }
+  }
+
+  /// 캐시된 노트 목록 가져오기
+  Future<List<Note>> getCachedNotes() async {
+    if (!_isInitialized) await initialize();
+    
+    final notes = _noteCache.values.toList();
+    
+    // 타임스탬프 기준 정렬 (최신순)
+    notes.sort((a, b) {
+      final timeA = _cacheTimestamps[a.id] ?? DateTime.now();
+      final timeB = _cacheTimestamps[b.id] ?? DateTime.now();
+      return timeB.compareTo(timeA); // 내림차순 (최신순)
+    });
+    
+    return notes;
+  }
+  
+  /// 노트 목록 캐싱
+  Future<void> cacheNotes(List<Note> notes) async {
+    if (!_isInitialized) await initialize();
+    if (notes.isEmpty) return;
+    
+    final now = DateTime.now();
+    
+    // 메모리 캐시에 저장
+    for (final note in notes) {
+      if (note.id != null) {
+        _noteCache[note.id!] = note;
+        _cacheTimestamps[note.id!] = now;
+      }
+    }
+    
+    // 캐시 크기 제한 확인
+    if (_noteCache.length > _maxNoteItems) {
+      _clearOldestNotes();
+    }
+  }
+  
+  /// 가장 오래된 노트 캐시 정리
+  void _clearOldestNotes() {
+    if (_noteCache.length <= _maxNoteItems) return;
+    
+    // 타임스탬프 기준으로 정렬
+    final sortedKeys = _noteCache.keys.toList()
+      ..sort((a, b) {
+        final timeA = _cacheTimestamps[a] ?? DateTime.now();
+        final timeB = _cacheTimestamps[b] ?? DateTime.now();
+        return timeA.compareTo(timeB); // 오름차순 (오래된 것부터)
+      });
+    
+    // 제거할 항목 수 계산
+    final removeCount = _noteCache.length - _maxNoteItems;
+    
+    // 오래된 항목부터 제거
+    for (int i = 0; i < removeCount && i < sortedKeys.length; i++) {
+      final key = sortedKeys[i];
+      _noteCache.remove(key);
+      _cacheTimestamps.remove(key);
+    }
+    
+    debugPrint('오래된 노트 캐시 $removeCount개 정리 완료');
+  }
+  
+  /// 오래된 캐시 정리
+  Future<void> cleanupOldCache() async {
+    // 메모리 캐시 정리
+    _clearOldestNotes();
+    _checkPageCacheSize();
+    
+    // 로컬 저장소 캐시 정리
+    await _cleanupExpiredLocalCache();
   }
 }
