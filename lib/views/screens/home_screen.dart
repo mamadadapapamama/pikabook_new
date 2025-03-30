@@ -309,16 +309,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SvgPicture.asset(
-              'assets/images/icon_addnote.svg',
-              width: 48,
-              height: 48,
+            Image.asset(
+              'assets/images/zeronote.png',
+              width: 214,
+              height: 160,
               fit: BoxFit.contain,
             ),
-            const SizedBox(height: 48),
+            const SizedBox(height: 30),
             
             Text(
-              '번역이 필요한\n이미지를 올려주세요.',
+              '먼저, 번역이 필요한\n이미지를 올려주세요.',
               textAlign: TextAlign.center,
               style: TypographyTokens.subtitle1.copyWith(
                 color: ColorTokens.textPrimary,
