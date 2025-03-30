@@ -33,6 +33,16 @@
 				<string>com.googleusercontent.apps.1113863334-d5cquivc6973v53vkmdm60omm8unoa47</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.pikabook.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.pikabook.app</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>

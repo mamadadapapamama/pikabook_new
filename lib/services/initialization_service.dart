@@ -447,6 +447,8 @@ class InitializationService {
   // Apple 로그인
   Future<UserCredential?> signInWithApple() async {
     try {
+      debugPrint('Apple 로그인 시작...');
+      
       // Firebase가 초기화되었는지 확인
       if (!_firebaseInitialized.isCompleted && Firebase.apps.isEmpty) {
         bool initialized = await initializeApp();
@@ -458,6 +460,9 @@ class InitializationService {
       // Apple 로그인을 위한 nonce 생성
       final rawNonce = _generateNonce();
       final nonce = _sha256ofString(rawNonce);
+      
+      debugPrint('Apple 로그인 nonce 생성 완료');
+      debugPrint('Apple 로그인 인증 요청 시작...');
 
       // Apple 로그인 요청
       final appleCredential = await SignInWithApple.getAppleIDCredential(
@@ -467,16 +472,26 @@ class InitializationService {
         ],
         nonce: nonce,
       );
+      
+      debugPrint('Apple 로그인 인증 성공, identityToken 길이: ${appleCredential.identityToken?.length ?? 0}');
+      
+      if (appleCredential.identityToken == null) {
+        throw Exception('Apple에서 Identity Token을 받지 못했습니다.');
+      }
 
       // OAuthCredential 생성
       final oauthCredential = OAuthProvider("apple.com").credential(
-        idToken: appleCredential.identityToken,
+        idToken: appleCredential.identityToken!,
         rawNonce: rawNonce,
       );
+      
+      debugPrint('Firebase 인증 정보 생성 완료, Firebase 로그인 시작...');
 
       // Firebase로 로그인
       final userCredential = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
       
+      debugPrint('Firebase 로그인 성공: ${userCredential.user?.uid}');
+
       // 인증 상태 확인
       await checkLoginState();
       
@@ -490,13 +505,29 @@ class InitializationService {
           
           // 사용자 프로필 업데이트
           await userCredential.user!.updateDisplayName(fullName);
+          debugPrint('사용자 이름 업데이트 완료: $fullName');
         }
       }
       
       debugPrint('Apple 로그인 완료: ${userCredential.user?.uid}');
       return userCredential;
     } catch (e) {
-      debugPrint('Apple 로그인 오류: $e');
+      // 자세한 에러 로그
+      String errorDetails;
+      if (e is SignInWithAppleAuthorizationException) {
+        errorDetails = '코드: ${e.code}, 메시지: ${e.message}';
+        
+        // 사용자 취소 에러인 경우 다른 메시지 표시
+        if (e.code == AuthorizationErrorCode.canceled) {
+          debugPrint('Apple 로그인 취소됨: $errorDetails');
+          setAuthError('Apple 로그인이 취소되었습니다.');
+          return null;
+        }
+      } else {
+        errorDetails = e.toString();
+      }
+      
+      debugPrint('Apple 로그인 오류 상세: $errorDetails');
       setAuthError('Apple 로그인 중 오류가 발생했습니다: $e');
       return null;
     }
