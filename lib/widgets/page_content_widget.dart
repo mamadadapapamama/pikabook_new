@@ -643,21 +643,26 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     // 디버그 로그 추가
     debugPrint('_buildFullTextView 호출 - 전체 문장 모드 렌더링');
     
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 원본 텍스트 표시
-        _buildSelectableText(_processedText!.fullOriginalText, _originalTextStyle),
+    // 전체 너비를 사용하도록 Container로 감싸기
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 0), // 가로 패딩 제거
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 원본 텍스트 표시
+          _buildSelectableText(_processedText!.fullOriginalText, _originalTextStyle),
 
-        // 번역 텍스트 표시 (번역이 있고 showTranslation이 true인 경우)
-        if (_processedText!.fullTranslatedText != null && 
-            _processedText!.showTranslation)
-          Padding(
-            padding: const EdgeInsets.only(top: 2.0),
-            child:
-                _buildSelectableText(_processedText!.fullTranslatedText!, _translatedTextStyle),
-          ),
-      ],
+          // 번역 텍스트 표시 (번역이 있고 showTranslation이 true인 경우)
+          if (_processedText!.fullTranslatedText != null && 
+              _processedText!.showTranslation)
+            Padding(
+              padding: const EdgeInsets.only(top: 2.0),
+              child:
+                  _buildSelectableText(_processedText!.fullTranslatedText!, _translatedTextStyle),
+            ),
+        ],
+      ),
     );
   }
   

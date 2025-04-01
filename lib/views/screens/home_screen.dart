@@ -54,45 +54,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late AnimationController _animationController;
   late Animation<double> _animation;
   
-  // 디버그 탭 카운터 (숨겨진 디버그 메뉴용)
-  int _debugTapCount = 0;
-  
   HomeViewModel? _viewModel;
 
   @override
   void initState() {
     super.initState();
     _loadNoteSpaceName();
-    
-    // 외부에서 전달받은 툴팁 표시 여부 적용
-    _showTooltip = widget.showTooltip;
-    
-    // 뷰모델을 초기화하고 리스너 등록
-    Future.microtask(() {
-      if (mounted) {
-        _viewModel = Provider.of<HomeViewModel>(context, listen: false);
-        _viewModel?.addListener(_onViewModelChanged);
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 도움말 표시
+      _checkAndShowTooltip();
     });
-    
-    // 툴팁 표시 여부 결정 (최초 1회만)
-    _checkFirstTimeExperience();
-    
-    // 10초 후에 툴팁 자동으로 숨기기 (표시 중인 경우)
-    if (_showTooltip) {
-      Future.delayed(const Duration(seconds: 10), () {
-        if (mounted) {
-          setState(() {
-            _showTooltip = false;
-          });
-          
-          // 툴팁 닫기 콜백 호출
-          if (widget.onCloseTooltip != null) {
-            widget.onCloseTooltip!();
-          }
-        }
-      });
-    }
     
     // 애니메이션 컨트롤러 초기화
     _animationController = AnimationController(
@@ -169,128 +140,112 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
         body: SafeArea(
           bottom: false,
-          // 앱 로고 부분에 탭 제스처 추가
-          child: GestureDetector(
-            onDoubleTap: () {
-              setState(() {
-                _debugTapCount++;
-              });
-              
-              // 5번 더블 탭하면 디버그 메뉴 표시
-              if (_debugTapCount >= 5) {
-                _showDebugMenu();
-                setState(() {
-                  _debugTapCount = 0; // 카운터 리셋
-                });
-              }
-            },
-            child: Column(
-              children: [
-                Expanded(
-                  child: Consumer<HomeViewModel>(
-                    builder: (context, viewModel, child) {
-                      if (viewModel.isLoading) {
-                        return const DotLoadingIndicator(message: '노트 불러오는 중...');
-                      }
+          child: Column(
+            children: [
+              Expanded(
+                child: Consumer<HomeViewModel>(
+                  builder: (context, viewModel, child) {
+                    if (viewModel.isLoading) {
+                      return const DotLoadingIndicator(message: '노트 불러오는 중...');
+                    }
 
-                      if (viewModel.error != null) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.error_outline,
-                                size: SpacingTokens.iconSizeXLarge,
-                                color: ColorTokens.error,
-                              ),
-                              SizedBox(height: SpacingTokens.md),
-                              Text(
-                                viewModel.error!,
-                                textAlign: TextAlign.center,
-                                style: TypographyTokens.body1,
-                              ),
-                              SizedBox(height: SpacingTokens.md),
-                              ElevatedButton(
-                                onPressed: () => viewModel.refreshNotes(),
-                                child: const Text('다시 시도'),
-                                style: UITokens.primaryButtonStyle,
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      if (!viewModel.hasNotes) {
-                        // Zero State 디자인
-                        return _buildZeroState(context);
-                      }
-
-                      // RefreshIndicator로 감싸서 pull to refresh 기능 추가
-                      return RefreshIndicator(
-                        onRefresh: () => viewModel.refreshNotes(),
-                        color: ColorTokens.primary,
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: SpacingTokens.md,
-                            vertical: SpacingTokens.sm,
-                          ),
-                          child: ListView.builder(
-                            padding: EdgeInsets.zero,
-                            itemCount: viewModel.notes.length,
-                            itemBuilder: (context, index) {
-                              // 일반 노트 아이템
-                              final note = viewModel.notes[index];
-                              return NoteListItem(
-                                note: note,
-                                onTap: () => _navigateToNoteDetail(context, note.id!),
-                                onFavoriteToggle: (isFavorite) {
-                                  if (note.id != null) {
-                                    viewModel.toggleFavorite(note.id!, isFavorite);
-                                  }
-                                },
-                                onDelete: () {
-                                  if (note.id != null) {
-                                    viewModel.deleteNote(note.id!);
-                                  }
-                                },
-                              );
-                            },
-                          ),
+                    if (viewModel.error != null) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: SpacingTokens.iconSizeXLarge,
+                              color: ColorTokens.error,
+                            ),
+                            SizedBox(height: SpacingTokens.md),
+                            Text(
+                              viewModel.error!,
+                              textAlign: TextAlign.center,
+                              style: TypographyTokens.body1,
+                            ),
+                            SizedBox(height: SpacingTokens.md),
+                            ElevatedButton(
+                              onPressed: () => viewModel.refreshNotes(),
+                              child: const Text('다시 시도'),
+                              style: UITokens.primaryButtonStyle,
+                            ),
+                          ],
                         ),
                       );
-                    },
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                  child: Consumer<HomeViewModel>(
-                    builder: (context, viewModel, _) {
-                      // 노트가 없을 때만 툴팁 표시 (첫 사용자 경험)
-                      final bool shouldShowTooltip = _showTooltip && !viewModel.hasNotes;
-                      
-                      return HelpTextTooltip(
-                        text: "노트 저장 공간이 성공적으로 만들어졌어요!",
-                        description: "이제 이미지를 올려, 스마트 노트를 만들어보세요.",
-                        showTooltip: shouldShowTooltip,
-                        onDismiss: _handleCloseTooltip,
-                        style: HelpTextTooltipStyle.primary, // 스타일 프리셋 사용
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: viewModel.hasNotes
-                              ? PikaButton(
-                                  text: '스마트 노트 만들기',
-                                  variant: PikaButtonVariant.floating,
-                                  leadingIcon: const Icon(Icons.add),
-                                  onPressed: () => _showImagePickerBottomSheet(context),
-                                )
-                              : const SizedBox.shrink(), // 노트가 없을 때는 FAB 숨김
+                    }
+
+                    if (!viewModel.hasNotes) {
+                      // Zero State 디자인
+                      return _buildZeroState(context);
+                    }
+
+                    // RefreshIndicator로 감싸서 pull to refresh 기능 추가
+                    return RefreshIndicator(
+                      onRefresh: () => viewModel.refreshNotes(),
+                      color: ColorTokens.primary,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: SpacingTokens.md,
+                          vertical: SpacingTokens.sm,
                         ),
-                      );
-                    },
-                  ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: viewModel.notes.length,
+                          itemBuilder: (context, index) {
+                            // 일반 노트 아이템
+                            final note = viewModel.notes[index];
+                            return NoteListItem(
+                              note: note,
+                              onTap: () => _navigateToNoteDetail(context, note.id!),
+                              onFavoriteToggle: (isFavorite) {
+                                if (note.id != null) {
+                                  viewModel.toggleFavorite(note.id!, isFavorite);
+                                }
+                              },
+                              onDelete: () {
+                                if (note.id != null) {
+                                  viewModel.deleteNote(note.id!);
+                                }
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              ],
-            ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                child: Consumer<HomeViewModel>(
+                  builder: (context, viewModel, _) {
+                    // 노트가 없을 때만 툴팁 표시 (첫 사용자 경험)
+                    final bool shouldShowTooltip = _showTooltip && !viewModel.hasNotes;
+                    
+                    return HelpTextTooltip(
+                      text: "노트 저장 공간이 성공적으로 만들어졌어요!",
+                      description: "이제 이미지를 올려, 스마트 노트를 만들어보세요.",
+                      showTooltip: shouldShowTooltip,
+                      onDismiss: _handleCloseTooltip,
+                      style: HelpTextTooltipStyle.primary, // 스타일 프리셋 사용
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: viewModel.hasNotes
+                            ? PikaButton(
+                                text: '스마트 노트 만들기',
+                                variant: PikaButtonVariant.floating,
+                                leadingIcon: const Icon(Icons.add),
+                                onPressed: () => _showImagePickerBottomSheet(context),
+                              )
+                            : const SizedBox.shrink(), // 노트가 없을 때는 FAB 숨김
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -349,16 +304,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             
             const SizedBox(height: 32),
             
-            SizedBox(
-              width: double.infinity,
-              child: PikaButton(
-                text: '스마트 노트 만들기',
-                variant: PikaButtonVariant.primary,
-                size: PikaButtonSize.large,
-                leadingIcon: const Icon(Icons.add),
-                onPressed: () => _handleAddNote(context),
-                isFullWidth: true,
-              ),
+            // CTA 버튼 - 이미지 업로드하기
+            PikaButton(
+              text: '이미지 올리기',
+              variant: PikaButtonVariant.primary,
+              onPressed: () => _showImagePickerBottomSheet(context),
             ),
           ],
         ),
@@ -425,59 +375,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  // 디버그 메뉴 표시
-  void _showDebugMenu() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('🐞 디버그 메뉴'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('개발 테스트용 메뉴입니다.'),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () async {
-                try {
-                  // 강제 로그아웃 실행
-                  await FirebaseAuth.instance.signOut();
-                  
-                  // 앱 다시 시작 (Navigator.pushNamedAndRemoveUntil)
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('로그아웃 완료. 앱을 다시 시작합니다.')),
-                    );
-                    
-                    // 모든 화면 제거하고 로그인 화면으로 이동
-                    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('로그아웃 오류: $e')),
-                    );
-                  }
-                }
-                Navigator.pop(context); // 다이얼로그 닫기
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('강제 로그아웃'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('닫기'),
-          ),
-        ],
-      ),
-    );
-  }
-
   // HomeViewModel 변경 시 호출될 메서드
   void _onViewModelChanged() {
     // 필요시 상태 업데이트
@@ -485,7 +382,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   // 최초 사용 경험 체크 (툴팁 표시 여부 결정)
-  Future<void> _checkFirstTimeExperience() async {
+  Future<void> _checkAndShowTooltip() async {
     // 외부에서 이미 설정된 경우 사용
     if (widget.showTooltip) {
       setState(() {

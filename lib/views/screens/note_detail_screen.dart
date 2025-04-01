@@ -1380,6 +1380,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 이전에 방문한 페이지인지 확인 (현재 페이지 인덱스가 이미 방문 기록에 있는지)
     final bool wasVisitedBefore = _previouslyVisitedPages.contains(_pageManager.currentPageIndex);
     
+    // 캐시에서 ProcessedText 가져오기
+    final processedText = currentPage.id != null
+        ? _pageContentService.getProcessedText(currentPage.id!)
+        : null;
+    
+    // 세그먼트/전체 모드 확인
+    final bool isFullTextMode = processedText?.showFullText ?? false;
+    
+    // 패딩 설정 - 전체 모드는 좌우 패딩 줄이기, 세그먼트 모드는 기본 패딩 유지
+    final EdgeInsets contentPadding = isFullTextMode
+        ? const EdgeInsets.symmetric(horizontal: 16.0)  // 전체 텍스트 모드일 때 좁은 패딩
+        : const EdgeInsets.symmetric(horizontal: 30.0); // 세그먼트 모드일 때 넓은 패딩
+    
     // 페이지 처리가 완료되지 않은 경우 (백그라운드 처리 중)
     if ((currentPage.originalText.isEmpty || currentPage.originalText == 'processing') && !wasVisitedBefore) {
       // 이전 페이지와 같은 페이지인지 확인 (무한 로딩 방지)

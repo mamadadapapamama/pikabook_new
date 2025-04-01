@@ -42,6 +42,19 @@ class NoteActionBottomSheet extends StatelessWidget {
               ),
             ),
             
+            // 바텀시트 타이틀 추가
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: 
+                Text(
+                '노트 설정',
+                style: TypographyTokens.button.copyWith(
+                  color: ColorTokens.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            
             // 즐겨찾기 추가/제거
             _buildActionTile(
               context: context,
