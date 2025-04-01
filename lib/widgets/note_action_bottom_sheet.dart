@@ -46,8 +46,10 @@ class NoteActionBottomSheet extends StatelessWidget {
             _buildActionTile(
               context: context,
               title: isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가',
-              icon: isFavorite ? Icons.favorite : Icons.favorite_border,
-              iconColor: isFavorite ? ColorTokens.primary : ColorTokens.greyMedium,
+              trailing: Icon(
+                isFavorite ? Icons.favorite : Icons.favorite_border,
+                color: isFavorite ? ColorTokens.primary : ColorTokens.greyMedium
+              ),
               onTap: () {
                 Navigator.pop(context);
                 onToggleFavorite();
@@ -58,8 +60,10 @@ class NoteActionBottomSheet extends StatelessWidget {
             _buildActionTile(
               context: context,
               title: '노트 제목 변경',
-              icon: Icons.edit,
-              iconColor: ColorTokens.primary,
+              trailing: Icon(
+                Icons.edit,
+                color: ColorTokens.primary
+              ),
               onTap: () {
                 Navigator.pop(context);
                 onEditTitle();
@@ -123,8 +127,10 @@ class NoteActionBottomSheet extends StatelessWidget {
             _buildActionTile(
               context: context,
               title: '노트 삭제',
-              icon: Icons.delete_outline,
-              iconColor: ColorTokens.error,
+              trailing: Icon(
+                Icons.delete_outline,
+                color: ColorTokens.error
+              ),
               onTap: () {
                 Navigator.pop(context);
                 onDeleteNote();
@@ -140,17 +146,11 @@ class NoteActionBottomSheet extends StatelessWidget {
   
   Widget _buildActionTile({
     required BuildContext context,
-    IconData? icon,
-    Color? iconColor,
-    Widget? leading,
     required String title,
     Widget? trailing,
     required VoidCallback onTap,
   }) {
     return ListTile(
-      leading: icon != null 
-          ? Icon(icon, color: iconColor ?? ColorTokens.textSecondary) 
-          : leading,
       title: Text(
         title, 
         style: TypographyTokens.body2.copyWith(
@@ -161,7 +161,6 @@ class NoteActionBottomSheet extends StatelessWidget {
       trailing: trailing,
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      minLeadingWidth: 24,
       dense: true,
     );
   }
