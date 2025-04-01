@@ -1484,8 +1484,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             left: 16,
             right: 16,
             child: HelpTextTooltip(
-              text: "첫 노트 생성 완료!",
-              description: "텍스트 처리가 완료되었습니다. 이제 번역 결과를 확인해보세요.",
+              text: "첫 스마트 노트가 만들어졌어요!",
+              description: "잘 모르는 단어는 선택하여 사전 검색 하거나 플래시카드로 만들어보세요.",
               showTooltip: true,
               onDismiss: () {
                 setState(() {
@@ -1499,8 +1499,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               spacing: 4.0,
               image: Image.asset(
                 'assets/images/image_tooltip_2.png',
-                width: 100,
-                height: 100,
+                width: 300,
                 fit: BoxFit.contain,
               ),
               child: Container(), // 빈 컨테이너 (툴팁만 표시)

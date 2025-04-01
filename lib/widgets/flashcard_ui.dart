@@ -44,37 +44,6 @@ class FlashCardUI {
         
         return Stack(
           children: [
-            // 삭제 힌트 (상단 고정)
-            if (isCurrentCard)
-              Positioned(
-                top: 0, // 없애서 위로 올림
-                left: 0,
-                right: 0,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // 삭제 버튼
-                    Icon(
-                      Icons.delete_outline,
-                      color: const Color(0xFFD3E0DD),
-                      size: 24,
-                    ),
-                    const SizedBox(height: 2), // 4에서 2로 줄여 간격 축소
-                    // 스와이프 안내 텍스트
-                    Text(
-                      '위로 스와이프 해도 삭제 됩니다.',
-                      style: TextStyle(
-                        fontSize: 12.0,
-                        color: const Color(0xFFD3E0DD),
-                        fontWeight: FontWeight.w400,
-                        fontFamily: 'Noto Sans KR',
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-              
             // 플래시카드 본체 (중앙)
             Center(
               child: Transform.scale(
@@ -126,24 +95,6 @@ class FlashCardUI {
                 ),
               ),
             ),
-            
-            // 하단 가이드 텍스트 (하단 고정)
-            if (isCurrentCard)
-              Positioned(
-                bottom: 16, // 기존 8에서 16으로 변경하여 더 위로 올림
-                left: 0,
-                right: 0,
-                child: Text(
-                  '좌우로 스와이프 해서 다음 카드로 이동',
-                  style: TextStyle(
-                    fontSize: 12.0,
-                    color: const Color(0xFFD3E0DD),
-                    fontWeight: FontWeight.w400,
-                    fontFamily: 'Noto Sans KR',
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
           ],
         );
       }
@@ -247,7 +198,7 @@ class FlashCardUI {
               text,
               style: TextStyle(
                 fontSize: 36.0,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
                 color: Colors.black,
                 fontFamily: 'Noto Sans HK',
               ),

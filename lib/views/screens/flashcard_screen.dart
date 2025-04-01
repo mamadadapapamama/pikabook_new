@@ -269,11 +269,23 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           // 다음 프레임에서 화면을 강제로 다시 빌드
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              // 초기 위치로 리셋
+              // UI를 완전히 재구성하기 위해 카드를 임시로 복사하고 새로 설정
+              final tempCard = _flashCards.first;
               setState(() {
-                _currentIndex = 0;
-                _isFlipped = false;
-                debugPrint('카드 1장 남음: 인덱스를 0으로 리셋하고 화면 갱신');
+                _flashCards = [];
+                debugPrint('카드 임시 제거: 플래시카드 배열 비움');
+              });
+              
+              // 약간의 지연 후 카드 다시 추가
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (mounted) {
+                  setState(() {
+                    _flashCards = [tempCard];
+                    _currentIndex = 0;
+                    _isFlipped = false;
+                    debugPrint('카드 다시 추가: 인덱스를 0으로 리셋하고 화면 갱신');
+                  });
+                }
               });
             }
           });
@@ -424,8 +436,15 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: PikaAppBar.flashcard(
-          onBackPressed: () {
+          onBackPressed: () async {
             // 뒤로가기 버튼 클릭 시 현재 플래시카드 수 반환
+            // TTS 실행 중인 경우 먼저 중지
+            if (_isSpeaking) {
+              await _ttsService.stop();
+              _isSpeaking = false;
+            }
+            
+            // 화면전환 깜빡임 최소화를 위해 즉시 처리
             Navigator.of(context).pop({
               'flashcardCount': _flashCards.length,
               'success': _error == null,
@@ -435,9 +454,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           currentCardIndex: _currentIndex,
           totalCards: _flashCards.length,
         ),
-        body: _isLoading
-            ? const Center(child: DotLoadingIndicator(message: '플래시카드 로딩 중...'))
-            : _error != null
+        body: Stack(
+          children: [
+            // 메인 카드 화면
+            _isLoading
+              ? const Center(child: DotLoadingIndicator(message: '플래시카드 로딩 중...'))
+              : _error != null
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -492,7 +514,13 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                             const SizedBox(height: 24),
                             // 버튼들 - '노트로 돌아가기' 버튼만 표시
                             GestureDetector(
-                              onTap: () {
+                              onTap: () async {
+                                // TTS 실행 중인 경우 먼저 중지
+                                if (_isSpeaking) {
+                                  await _ttsService.stop();
+                                  _isSpeaking = false;
+                                }
+                                
                                 if (widget.noteId != null && mounted) {
                                   // 노트 화면으로 돌아가면서 카드 개수 0 전달
                                   Navigator.of(context).pop({
@@ -597,6 +625,65 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           },
                         ),
                       ),
+                      
+            // 삭제 안내 텍스트 (가장 하단 레이어에 배치)
+            if (!_isLoading && _error == null && _flashCards.isNotEmpty)
+              Positioned(
+                top: 16,
+                left: 0,
+                right: 0,
+                // z-index 조정을 위해 Material 위젯 추가
+                child: Material(
+                  color: Colors.transparent,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // 삭제 버튼
+                      Icon(
+                        Icons.delete_outline,
+                        color: const Color(0xFFD3E0DD),
+                        size: 24,
+                      ),
+                      const SizedBox(height: 2),
+                      // 스와이프 안내 텍스트
+                      Text(
+                        '위로 스와이프 하면 삭제 됩니다.',
+                        style: TextStyle(
+                          fontSize: 12.0,
+                          color: const Color(0xFFD3E0DD),
+                          fontWeight: FontWeight.w400,
+                          fontFamily: 'Noto Sans KR',
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+            // 이동 안내 텍스트 (가장 하단 레이어에 배치)
+            if (!_isLoading && _error == null && _flashCards.isNotEmpty && _flashCards.length > 1)
+              Positioned(
+                bottom: 16,
+                left: 0,
+                right: 0,
+                // z-index 조정을 위해 Material 위젯 추가
+                child: Material(
+                  color: Colors.transparent,
+                  child: Text(
+                    '좌우로 스와이프 해서 다음 카드로 이동',
+                    style: TextStyle(
+                      fontSize: 12.0,
+                      color: const Color(0xFFD3E0DD),
+                      fontWeight: FontWeight.w400,
+                      fontFamily: 'Noto Sans KR',
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
