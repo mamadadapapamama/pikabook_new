@@ -355,9 +355,12 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       children: [
         // 원본 텍스트 표시
         if (widget.processedText.fullOriginalText.isNotEmpty)
-          _buildSelectableText(
-            widget.processedText.fullOriginalText,
-            style: widget.originalTextStyle,
+          Container(
+            width: double.infinity,
+            child: _buildSelectableText(
+              widget.processedText.fullOriginalText,
+              style: widget.originalTextStyle,
+            ),
           ),
 
         // 번역 텍스트 표시 - 래퍼 제거하고 직접 표시
@@ -366,9 +369,12 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             widget.processedText.fullTranslatedText!.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
-            child: Text(
-              widget.processedText.fullTranslatedText!,
-              style: widget.translatedTextStyle,
+            child: Container(
+              width: double.infinity,
+              child: Text(
+                widget.processedText.fullTranslatedText!,
+                style: widget.translatedTextStyle,
+              ),
             ),
           ),
       ],

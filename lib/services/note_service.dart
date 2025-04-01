@@ -259,15 +259,19 @@ class NoteService {
   // 노트 업데이트
   Future<void> updateNote(String noteId, Note updatedNote) async {
     try {
-      // 업데이트할 필드 설정
+      // 업데이트할 필드 설정 (flashCards는 제외하고 처리)
       final Map<String, dynamic> updateData = {
         'originalText': updatedNote.originalText,
         'translatedText': updatedNote.translatedText,
         'isFavorite': updatedNote.isFavorite,
         'flashcardCount': updatedNote.flashcardCount,
         'updatedAt': DateTime.now(),
-        'flashCards': updatedNote.flashCards ?? [], // null이면 빈 배열로 설정
       };
+
+      // 플래시카드가 있는 경우에만 추가 (객체 형식이 아닌 JSON 형식으로 저장)
+      if (updatedNote.flashCards.isNotEmpty) {
+        updateData['flashCards'] = updatedNote.flashCards.map((card) => card.toJson()).toList();
+      }
 
       // Firestore에 업데이트
       await _notesCollection.doc(noteId).update(updateData);
@@ -275,7 +279,7 @@ class NoteService {
       // 캐시 업데이트
       await _cacheService.cacheNote(updatedNote);
       
-      debugPrint('노트 업데이트 완료: $noteId, 제목: ${updatedNote.originalText}');
+      debugPrint('노트 업데이트 완료: $noteId, 제목: ${updatedNote.originalText}, 플래시카드: ${updatedNote.flashCards.length}개');
     } catch (e) {
       debugPrint('노트 업데이트 중 오류 발생: $e');
       rethrow;

@@ -218,7 +218,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       key: ValueKey('page_${widget.page.id}'),
-      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -571,7 +571,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 ),
                 borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
               ),
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(0.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

@@ -577,10 +577,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
     // 즉시 UI 업데이트 (낙관적 업데이트)
     final previousTitle = _note!.originalText;
+    final currentFlashCards = _note!.flashCards;
+    
     setState(() {
       _note = _note!.copyWith(
         originalText: newTitle,
         updatedAt: DateTime.now(),
+        flashCards: currentFlashCards, // 현재 플래시카드 유지
       );
       _isLoading = true;
     });
@@ -605,6 +608,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         setState(() {
           _note = _note!.copyWith(
             originalText: previousTitle,
+            flashCards: currentFlashCards, // 현재 플래시카드 유지
           );
           _isLoading = false;
         });
@@ -1400,7 +1404,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     
     // 패딩 설정 - 전체 모드는 좌우 패딩 줄이기, 세그먼트 모드는 기본 패딩 유지
     final EdgeInsets contentPadding = isFullTextMode
-        ? const EdgeInsets.symmetric(horizontal: 16.0)  // 전체 텍스트 모드일 때 좁은 패딩
+        ? const EdgeInsets.symmetric(horizontal: 30.0)  // 전체 텍스트 모드일 때 패딩
         : const EdgeInsets.symmetric(horizontal: 30.0); // 세그먼트 모드일 때 넓은 패딩
     
     // 페이지 처리가 완료되지 않은 경우 (백그라운드 처리 중)
