@@ -28,8 +28,8 @@ class SpacingTokens {
   static const double fabSize = 64.0;
   static const double fabSizeSmall = 40.0;
   static const double profileIconSize = 40.0;
-  static const double appLogoWidth = 71.0;
-  static const double appLogoHeight = 21.0;
+  static const double appLogoWidth = 140.0;
+  static const double appLogoHeight = 40.0;
   
   // 반경
   static const double radiusXs = 4.0;
