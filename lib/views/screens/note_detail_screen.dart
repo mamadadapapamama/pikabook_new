@@ -368,6 +368,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     });
 
     try {
+      debugPrint('페이지 텍스트 처리 시작: ${currentPage.id}');
+      
       // 텍스트 처리
       final processedText = await _pageContentService.processPageText(
         page: currentPage,
@@ -375,26 +377,35 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       );
       
       if (processedText != null && currentPage.id != null) {
-        // 기본 표시 설정 지정
-        final updatedProcessedText = processedText.copyWith(
-          showFullText: false, // 기본값: 세그먼트 모드
-          showPinyin: _textDisplayMode == TextDisplayMode.all, // 토글 모드에 따라 병음 표시
-          showTranslation: true, // 번역은 항상 표시
-        );
-        
-        // 업데이트된 텍스트 캐싱 (메모리 캐시만)
-        _pageContentService.setProcessedText(currentPage.id!, updatedProcessedText);
-        
-        debugPrint('텍스트 처리 완료: showFullText=${updatedProcessedText.showFullText}, '
-            'showPinyin=${updatedProcessedText.showPinyin}, '
-            'showTranslation=${updatedProcessedText.showTranslation}, '
-            'segments=${updatedProcessedText.segments?.length ?? 0}개');
-        
-        // 첫 노트의 첫 페이지 텍스트 처리 완료 기록 저장
-        _checkFirstNoteTextProcessing();
+        try {
+          // 기본 표시 설정 지정
+          final updatedProcessedText = processedText.copyWith(
+            showFullText: false, // 기본값: 세그먼트 모드
+            showPinyin: _textDisplayMode == TextDisplayMode.all, // 토글 모드에 따라 병음 표시
+            showTranslation: true, // 번역은 항상 표시
+          );
+          
+          // 업데이트된 텍스트 캐싱 (메모리 캐시만)
+          _pageContentService.setProcessedText(currentPage.id!, updatedProcessedText);
+          
+          debugPrint('텍스트 처리 완료: ${currentPage.id}');
+          debugPrint('텍스트 처리 결과: showFullText=${updatedProcessedText.showFullText}, '
+              'showPinyin=${updatedProcessedText.showPinyin}, '
+              'showTranslation=${updatedProcessedText.showTranslation}, '
+              'segments=${updatedProcessedText.segments?.length ?? 0}개');
+          
+          // 첫 노트의 첫 페이지 텍스트 처리 완료 기록 저장
+          _checkFirstNoteTextProcessing();
+        } catch (e) {
+          debugPrint('페이지 텍스트 처리 중 오류 발생: ProcessedText 객체 변환 실패: $e');
+          // 캐시 삭제 및 다시 로드 시도
+          _pageContentService.removeProcessedText(currentPage.id!);
+        }
+      } else {
+        debugPrint('페이지 텍스트 처리 결과가 null이거나 페이지 ID가 null임');
       }
     } catch (e) {
-      debugPrint('텍스트 처리 중 오류 발생: $e');
+      debugPrint('페이지 텍스트 처리 중 오류 발생: $e');
     } finally {
       if (mounted) {
         setState(() {

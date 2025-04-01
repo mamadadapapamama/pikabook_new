@@ -3,10 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/page.dart' as page_model;
+import '../models/processed_text.dart';
 import 'image_service.dart';
 import 'enhanced_ocr_service.dart';
 import 'translation_service.dart';
 import 'unified_cache_service.dart';
+import 'dart:convert';
 
 // 페이지 서비스: 페이지 관리 (CRUD) 기능을 제공합니다.
 
@@ -524,10 +526,37 @@ class PageService {
     String textProcessingMode,
   ) async {
     try {
-      return await _cacheService.getCachedProcessedText(
+      final cachedData = await _cacheService.getCachedProcessedText(
         pageId,
         textProcessingMode,
       );
+      
+      if (cachedData != null) {
+        // JSON 맵인 경우 ProcessedText 객체로 변환
+        if (cachedData is Map<String, dynamic>) {
+          try {
+            return ProcessedText.fromJson(cachedData);
+          } catch (e) {
+            debugPrint('캐시된 데이터에서 ProcessedText 변환 중 오류: $e');
+            return null;
+          }
+        } else if (cachedData is String) {
+          // 문자열인 경우 JSON으로 파싱 시도
+          try {
+            final Map<String, dynamic> jsonData = jsonDecode(cachedData);
+            return ProcessedText.fromJson(jsonData);
+          } catch (e) {
+            debugPrint('캐시된 문자열 파싱 중 오류: $e');
+            return null;
+          }
+        }
+        
+        // 이미 ProcessedText 객체인 경우
+        if (cachedData is ProcessedText) {
+          return cachedData;
+        }
+      }
+      return null;
     } catch (e) {
       debugPrint('캐시된 처리 텍스트 조회 중 오류 발생: $e');
       return null;

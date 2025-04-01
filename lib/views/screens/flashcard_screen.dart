@@ -230,6 +230,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     try {
       // 삭제 전 플래시카드 개수 확인
       final int cardCountBeforeDelete = _flashCards.length;
+      debugPrint('카드 삭제 시작: 총 카드 수=$cardCountBeforeDelete, 현재 인덱스=$_currentIndex');
 
       // 플래시카드 서비스를 통해 카드 삭제
       await _flashCardService.deleteFlashCard(flashCardId, noteId: noteId);
@@ -238,32 +239,53 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
         // 삭제할 카드 인덱스 저장
         final int indexToRemove = _currentIndex;
         
+        // 2장에서 1장으로 줄어드는 경우
+        final bool willBeOneCardLeft = cardCountBeforeDelete == 2;
+        
         setState(() {
           // 카드 삭제
           _flashCards.removeAt(indexToRemove);
+          debugPrint('카드 삭제 후: 남은 카드 수=${_flashCards.length}');
           
           // 인덱스 조정 (카드가 하나 이상 남아있을 때만)
           if (_flashCards.isNotEmpty) {
             // 마지막 카드였다면 이전 카드로 인덱스 이동
             if (indexToRemove >= _flashCards.length) {
               _currentIndex = _flashCards.length - 1;
+              debugPrint('마지막 카드였으므로 인덱스 조정: $_currentIndex');
             }
             // 그 외에는 현재 인덱스 유지 (자동으로 다음 카드가 보임)
           } else {
             // 카드가 모두 삭제된 경우 인덱스를 0으로 설정
             _currentIndex = 0;
+            debugPrint('카드가 모두 삭제되어 인덱스를 0으로 리셋');
           }
         });
+        
+        // 2장에서 1장으로 줄어든 경우, 다음 프레임에서 처리
+        if (willBeOneCardLeft && _flashCards.length == 1) {
+          debugPrint('2장에서 1장으로 줄어들어 UI 재구성 예약');
+          
+          // 다음 프레임에서 화면을 강제로 다시 빌드
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              // 초기 위치로 리셋
+              setState(() {
+                _currentIndex = 0;
+                _isFlipped = false;
+                debugPrint('카드 1장 남음: 인덱스를 0으로 리셋하고 화면 갱신');
+              });
+            }
+          });
+        }
         
         // 삭제 완료 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('플래시카드가 삭제되었습니다.')),
         );
-
-        // 노트 화면으로 돌아가지 않고 현재 화면에 남아있음
-        // (빈 화면이면 빈 상태 UI가 표시됨)
       }
     } catch (e) {
+      debugPrint('플래시카드 삭제 중 오류 발생: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('플래시카드 삭제 중 오류가 발생했습니다: $e')),
@@ -527,6 +549,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           isLoop: _flashCards.length > 1, // 카드가 2개 이상일 때만 순환 활성화
                           cardBuilder: (context, index, horizontalThreshold,
                               verticalThreshold) {
+                            debugPrint('CardSwiper가 카드 빌드: index=$index, 총 카드=${_flashCards.length}, 현재 인덱스=$_currentIndex');
+                            
                             // 카드 스케일 계산 (현재 카드는 100%, 뒤 카드는 점점 작아짐)
                             // 플래시카드가 1개일 때는 스케일링 없이 표시
                             final double scale;
@@ -536,6 +560,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               // 카드가 1개일 때는 스케일링과 오프셋 없음
                               scale = 1.0;
                               yOffset = 0.0;
+                              debugPrint('카드 1장만 표시: 스케일=$scale, 오프셋=$yOffset');
                             } else {
                               // 카드가 2개 이상일 때 스케일링과 오프셋 적용
                               final int indexDiff =
@@ -546,6 +571,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               yOffset = index == _currentIndex
                                   ? 0
                                   : 20.0 * indexDiff;
+                              debugPrint('여러 카드 표시: 인덱스=$index, 현재 인덱스=$_currentIndex, 스케일=$scale, 오프셋=$yOffset');
                             }
 
                             return FlashCardUI.buildFlashCard(

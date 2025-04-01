@@ -153,19 +153,39 @@ class PageContentService {
         }
         
         // UnifiedCacheService를 통한 캐시 확인
-        final cachedProcessedText = await _pageService.getCachedProcessedText(
-          pageId,
-          "languageLearning", // 항상 languageLearning 모드 사용
-        );
+        try {
+          final cachedProcessedText = await _pageService.getCachedProcessedText(
+            pageId,
+            "languageLearning", // 항상 languageLearning 모드 사용
+          );
 
-        if (cachedProcessedText != null) {
-          // 메모리 캐시에도 저장
-          _processedTextCache[pageId] = cachedProcessedText;
-          debugPrint('캐시에서 처리된 텍스트 로드 성공: 페이지 ID=$pageId');
-          return cachedProcessedText;
+          if (cachedProcessedText != null) {
+            debugPrint('캐시에서 로드된 처리 텍스트 타입: ${cachedProcessedText.runtimeType}');
+            
+            if (cachedProcessedText is ProcessedText) {
+              // 이미 ProcessedText 객체인 경우
+              _processedTextCache[pageId] = cachedProcessedText;
+              debugPrint('캐시에서 처리된 텍스트 로드 성공: 페이지 ID=$pageId');
+              return cachedProcessedText;
+            } else if (cachedProcessedText is Map<String, dynamic>) {
+              // Map 형태로 저장된 경우 변환 시도
+              try {
+                final convertedText = ProcessedText.fromJson(cachedProcessedText);
+                _processedTextCache[pageId] = convertedText;
+                debugPrint('캐시에서 Map으로 로드된 텍스트를 ProcessedText로 변환 성공: 페이지 ID=$pageId');
+                return convertedText;
+              } catch (e) {
+                debugPrint('캐시된 Map 데이터를 ProcessedText로 변환 중 오류: $e');
+                removeProcessedText(pageId); // 오류 발생 시 잘못된 캐시 제거
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('캐시된 처리 텍스트 로드 중 오류: $e');
+          removeProcessedText(pageId); // 오류 발생 시 캐시 제거
         }
 
-        debugPrint('캐시된 처리 텍스트 없음: 페이지 ID=$pageId');
+        debugPrint('캐시된 처리 텍스트 없음 또는 오류 발생: 페이지 ID=$pageId');
       }
 
       // 캐시된 텍스트 확인

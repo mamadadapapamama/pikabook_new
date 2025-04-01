@@ -816,9 +816,14 @@ class UnifiedCacheService {
     // 캐시 사용 통계 업데이트
     _updateCacheStats(key, CacheOperationType.read);
     
-    // JSON 파싱하여 반환
+    // JSON 파싱하여 반환 (맵 형태로 반환)
     try {
-      return jsonDecode(cachedData as String);
+      if (cachedData is String) {
+        final decoded = jsonDecode(cachedData);
+        debugPrint('처리된 텍스트를 맵으로 디코딩: ${decoded.runtimeType}');
+        return decoded; // Map<String, dynamic> 형태로 반환
+      }
+      return cachedData;
     } catch (e) {
       debugPrint('처리된 텍스트 디코딩 오류: $e');
       return cachedData;
