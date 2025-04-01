@@ -5,7 +5,8 @@ import '../services/page_content_service.dart';
 import '../services/text_reader_service.dart';
 import '../utils/text_display_mode.dart';
 import '../theme/tokens/color_tokens.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../theme/tokens/typography_tokens.dart';
+import '../theme/tokens/spacing_tokens.dart';
 
 /// 노트 상세 화면 하단 내비게이션 바
 /// 페이지 탐색, 텍스트 표시 모드 토글, 모드 전환, 진행률 바 제공
@@ -57,17 +58,17 @@ class NoteDetailBottomBar extends StatelessWidget {
     
     // 프로그레스 바를 제거하고 컨트롤 부분만 표시
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          top: BorderSide(color: Color(0xFFFFF0E8), width: 1),
+      padding: EdgeInsets.symmetric(vertical: SpacingTokens.sm + SpacingTokens.xs, horizontal: SpacingTokens.md),
+      decoration: BoxDecoration(
+        color: ColorTokens.surface,
+        border: const Border(
+          top: BorderSide(color: ColorTokens.primaryverylight, width: 1),
         ),
         boxShadow: [
           BoxShadow(
-            color: Color(0x26000000),
+            color: ColorTokens.black.withOpacity(0.15),
             blurRadius: 8,
-            offset: Offset(0, -2),
+            offset: const Offset(0, -2),
           ),
         ],
       ),
@@ -95,9 +96,12 @@ class NoteDetailBottomBar extends StatelessWidget {
                   onTextDisplayModeChanged(newMode);
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
+                    vertical: SpacingTokens.xs + SpacingTokens.xs/2
+                  ),
                   decoration: BoxDecoration(
-                    color: showPinyin ? ColorTokens.secondary : Colors.white,
+                    color: showPinyin ? ColorTokens.secondary : ColorTokens.surface,
                     borderRadius: BorderRadius.circular(100),
                     border: Border.all(color: ColorTokens.secondary),
                   ),
@@ -106,19 +110,17 @@ class NoteDetailBottomBar extends StatelessWidget {
                     children: [
                       Text(
                         '한어병음',
-                        style: GoogleFonts.notoSansKr(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                          color: showPinyin ? Colors.white : ColorTokens.secondary,
+                        style: TypographyTokens.caption.copyWith(
+                          color: showPinyin ? ColorTokens.textLight : ColorTokens.secondary,
                         ),
                       ),
                       if (showPinyin)
                         Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(left: 4),
+                          width: SpacingTokens.xs * 2,
+                          height: SpacingTokens.xs * 2,
+                          margin: EdgeInsets.only(left: SpacingTokens.xs),
                           decoration: const BoxDecoration(
-                            color: Colors.white,
+                            color: ColorTokens.textLight,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -127,15 +129,18 @@ class NoteDetailBottomBar extends StatelessWidget {
                 ),
               ),
               
-              const SizedBox(width: 16),
+              SizedBox(width: SpacingTokens.md),
               
               // 모드 전환 버튼 (문장별 구분/원문 전체)
               GestureDetector(
                 onTap: onToggleFullTextMode,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
+                    vertical: SpacingTokens.xs + SpacingTokens.xs/2
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: ColorTokens.surface,
                     borderRadius: BorderRadius.circular(100),
                     border: Border.all(color: ColorTokens.secondary),
                   ),
@@ -144,9 +149,7 @@ class NoteDetailBottomBar extends StatelessWidget {
                     children: [
                       Text(
                         isFullTextMode ? '문장별 구분' : '원문 전체',
-                        style: GoogleFonts.notoSansKr(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
+                        style: TypographyTokens.caption.copyWith(
                           color: ColorTokens.secondary,
                         ),
                       ),
@@ -182,13 +185,13 @@ class NoteDetailBottomBar extends StatelessWidget {
       } : null,
       icon: Icon(
         icon, 
-        color: onTap != null ? ColorTokens.secondary : Colors.grey.shade300,
-        size: 24,
+        color: onTap != null ? ColorTokens.secondary : ColorTokens.greyMedium,
+        size: SpacingTokens.iconSizeMedium,
       ),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
       visualDensity: VisualDensity.compact,
-      splashRadius: 24,
+      splashRadius: SpacingTokens.iconSizeMedium,
     );
   }
   

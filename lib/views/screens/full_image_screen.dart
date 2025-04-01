@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import '../../theme/tokens/color_tokens.dart';
+import '../../theme/tokens/typography_tokens.dart';
+import '../../theme/tokens/spacing_tokens.dart';
 
 /// 이미지를 전체 화면으로 표시하는 화면
 class FullImageScreen extends StatefulWidget {
@@ -67,12 +70,15 @@ class _FullImageScreenState extends State<FullImageScreen> {
     
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        title: Text(
+          widget.title,
+          style: TypographyTokens.subtitle2.copyWith(color: ColorTokens.textLight),
+        ),
+        backgroundColor: ColorTokens.black,
+        foregroundColor: ColorTokens.textLight,
         elevation: 0,
       ),
-      backgroundColor: Colors.black,
+      backgroundColor: ColorTokens.black,
       body: SafeArea(
         child: Center(
           child: GestureDetector(
@@ -130,12 +136,12 @@ class _FullImageScreenState extends State<FullImageScreen> {
                 ? loadingProgress.cumulativeBytesLoaded /
                     loadingProgress.expectedTotalBytes!
                 : null,
-            color: Colors.white,
+            color: ColorTokens.textLight,
           ),
-          const SizedBox(height: 16),
-          const Text(
+          SizedBox(height: SpacingTokens.md),
+          Text(
             '이미지 로딩 중...',
-            style: TextStyle(color: Colors.white),
+            style: TypographyTokens.body2.copyWith(color: ColorTokens.textLight),
           ),
         ],
       ),
@@ -146,15 +152,15 @@ class _FullImageScreenState extends State<FullImageScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(
+        Icon(
           Icons.broken_image,
-          size: 64,
-          color: Colors.white54,
+          size: SpacingTokens.iconSizeXLarge + SpacingTokens.iconSizeMedium,
+          color: ColorTokens.textLight.withOpacity(0.54),
         ),
-        const SizedBox(height: 16),
-        const Text(
+        SizedBox(height: SpacingTokens.md),
+        Text(
           '이미지를 불러올 수 없습니다',
-          style: TextStyle(color: Colors.white),
+          style: TypographyTokens.body2.copyWith(color: ColorTokens.textLight),
         ),
       ],
     );

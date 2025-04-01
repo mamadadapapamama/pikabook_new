@@ -9,6 +9,7 @@ import '../../widgets/loading_dialog.dart';
 import '../../services/note_service.dart';
 import '../../services/image_service.dart';
 import '../../services/user_preferences_service.dart';
+import '../../services/usage_limit_service.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
@@ -22,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/common/pika_button.dart';
 import '../../widgets/common/help_text_tooltip.dart';
 import '../../widgets/common/pika_app_bar.dart';
+import '../../widgets/common/usage_limit_dialog.dart';
 import 'flashcard_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -49,10 +51,16 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   final UserPreferencesService _userPreferences = UserPreferencesService();
+  final UsageLimitService _usageLimitService = UsageLimitService();
   String _noteSpaceName = '';
   bool _showTooltip = false;
   late AnimationController _animationController;
   late Animation<double> _animation;
+  
+  // 사용량 관련 상태 변수
+  Map<String, bool> _limitStatus = {};
+  Map<String, double> _usagePercentages = {};
+  bool _hasCheckedUsage = false;
   
   HomeViewModel? _viewModel;
 
@@ -63,6 +71,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // 도움말 표시
       _checkAndShowTooltip();
+      // 사용량 확인
+      _checkUsageLimits();
     });
     
     // 애니메이션 컨트롤러 초기화
@@ -237,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 text: '스마트 노트 만들기',
                                 variant: PikaButtonVariant.floating,
                                 leadingIcon: const Icon(Icons.add),
-                                onPressed: () => _showImagePickerBottomSheet(context),
+                                onPressed: () => _handleAddImage(context),
                               )
                             : const SizedBox.shrink(), // 노트가 없을 때는 FAB 숨김
                       ),
@@ -252,12 +262,63 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  // 사용량 제한 확인 및 다이얼로그 표시
+  Future<void> _checkUsageLimits() async {
+    try {
+      // 사용량 제한 상태 확인
+      final limitStatus = await _usageLimitService.checkFreeLimits();
+      final usagePercentages = await _usageLimitService.getUsagePercentages();
+      
+      setState(() {
+        _limitStatus = limitStatus;
+        _usagePercentages = usagePercentages;
+        _hasCheckedUsage = true;
+      });
+      
+      // 한도 초과 시 다이얼로그 표시
+      if (limitStatus['anyLimitReached'] == true && mounted) {
+        // 약간의 지연 후 다이얼로그 표시 (화면 전환 애니메이션 완료 후)
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            UsageLimitDialog.show(
+              context,
+              limitStatus: limitStatus,
+              usagePercentages: usagePercentages,
+              onContactSupport: _handleContactSupport,
+            );
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('사용량 확인 중 오류 발생: $e');
+    }
+  }
+  
+  // 지원팀 문의하기 처리
+  void _handleContactSupport() {
+    // 사용자 이메일 주소를 사용하여 mailto URL을 열거나 인앱 폼 표시
+    // 현재는 간단한 스낵바 메시지만 표시
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '관리자에게 직접 문의하시면 사용량 제한을 늘려드립니다.\n'
+          '이메일: support@pikabook.app',
+        ),
+        duration: const Duration(seconds: 10),
+        action: SnackBarAction(
+          label: '확인',
+          onPressed: () {},
+        ),
+      ),
+    );
+  }
+
   void _showImagePickerBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ImagePickerBottomSheet(),
+      builder: (BuildContext context) {
+        return ImagePickerBottomSheet();
+      },
     );
   }
 
@@ -422,5 +483,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     } catch (e) {
       debugPrint('최초 사용 경험 확인 중 오류: $e');
     }
+  }
+
+  // 이미지 추가 버튼 핸들러
+  void _handleAddImage(BuildContext context) async {
+    // 사용량 한도 초과 확인 (노트 개수 제한)
+    if (!_hasCheckedUsage) {
+      await _checkUsageLimits();
+    }
+    
+    // 노트 한도 초과 시 다이얼로그 표시
+    if (_limitStatus['noteLimitReached'] == true) {
+      if (mounted) {
+        UsageLimitDialog.show(
+          context,
+          limitStatus: _limitStatus,
+          usagePercentages: _usagePercentages,
+          onContactSupport: _handleContactSupport,
+        );
+      }
+      return;
+    }
+    
+    // 노트 한도 초과가 아닌 경우 정상 처리
+    if (!mounted) return;
+    
+    // 기존의 바텀 시트 표시 함수 호출
+    _showImagePickerBottomSheet(context);
   }
 } 

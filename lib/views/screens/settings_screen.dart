@@ -218,23 +218,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildProfileCard(String displayName, String email, String? photoUrl) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(8.0),
+      padding: EdgeInsets.all(SpacingTokens.sm),
       decoration: BoxDecoration(
         color: ColorTokens.surface,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
       ),
       child: Row(
         children: [
           // 프로필 이미지
           CircleAvatar(
-            radius: 24,
-            backgroundColor: Colors.grey.shade200,
+            radius: SpacingTokens.iconSizeMedium,
+            backgroundColor: ColorTokens.greyLight,
             backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
             child: photoUrl == null
-                ? const Icon(Icons.person, size: 24, color: Colors.grey)
+                ? Icon(Icons.person, 
+                    size: SpacingTokens.iconSizeMedium, 
+                    color: ColorTokens.greyMedium)
                 : null,
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: SpacingTokens.md),
           
           // 사용자 정보
           Expanded(
@@ -245,7 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   displayName,
                   style: TypographyTokens.buttonEn,
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: SpacingTokens.xs/2),
                 Text(
                   email,
                   style: TypographyTokens.captionEn.copyWith(
@@ -278,11 +280,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }) {
     return Container(
       width: double.infinity,
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      height: SpacingTokens.buttonHeight + SpacingTokens.sm,
+      padding: EdgeInsets.symmetric(
+        horizontal: SpacingTokens.md,
+        vertical: SpacingTokens.sm
+      ),
       decoration: BoxDecoration(
         color: ColorTokens.surface,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
       ),
       child: InkWell(
         onTap: onTap,
@@ -307,8 +312,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             SvgPicture.asset(
               'assets/images/icon_arrow_right.svg',
-              width: 20,
-              height: 20,
+              width: SpacingTokens.iconSizeSmall + SpacingTokens.xs,
+              height: SpacingTokens.iconSizeSmall + SpacingTokens.xs,
               colorFilter: const ColorFilter.mode(
                 ColorTokens.secondary,
                 BlendMode.srcIn,
@@ -342,6 +347,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             border: const OutlineInputBorder(),
             focusedBorder: OutlineInputBorder(
               borderSide: BorderSide(color: ColorTokens.primary, width: 2),
+              borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
             ),
           ),
           autofocus: true,

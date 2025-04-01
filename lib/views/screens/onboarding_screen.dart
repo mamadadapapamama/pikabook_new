@@ -358,8 +358,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const SizedBox(height: 20),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
+              color: ColorTokens.surface,
+              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
               border: Border.all(
                 color: ColorTokens.primarylight,
                 width: 2,
@@ -373,7 +373,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   color: ColorTokens.textTertiary,
                 ),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: SpacingTokens.lg,
+                  vertical: SpacingTokens.md,
+                ),
               ),
               style: TypographyTokens.body1.copyWith(
                 color: ColorTokens.textPrimary,
@@ -432,10 +435,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           if (_selectedPurpose == _purposeOptions[2])
             Container(
               width: double.infinity, // 전체 너비 사용
-              margin: const EdgeInsets.only(top: 16),
+              margin: EdgeInsets.only(top: SpacingTokens.md),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
+                color: ColorTokens.surface,
+                borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
                 border: Border.all(
                   color: ColorTokens.primarylight,
                   width: 2,
@@ -450,7 +453,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     color: ColorTokens.textTertiary,
                   ),
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: SpacingTokens.lg,
+                    vertical: SpacingTokens.md,
+                  ),
                 ),
                 style: TypographyTokens.body1.copyWith(
                   color: ColorTokens.textPrimary,
@@ -504,11 +510,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       },
       child: Container(
         width: double.infinity, // 전체 너비 사용
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        margin: EdgeInsets.only(bottom: SpacingTokens.md),
+        padding: EdgeInsets.symmetric(
+          horizontal: SpacingTokens.lg,
+          vertical: SpacingTokens.md,
+        ),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          color: ColorTokens.surface,
+          borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
           border: Border.all(
             color: isSelected ? ColorTokens.primary : ColorTokens.primarylight,
             width: 2,
@@ -568,8 +577,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
+                    color: ColorTokens.surface,
+                    borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
                     border: Border.all(
                       color: _isSegmentMode ? ColorTokens.primary : ColorTokens.primarylight,
                       width: 2,
@@ -595,8 +604,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 child: Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
+                    color: ColorTokens.surface,
+                    borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
                     border: Border.all(
                       color: !_isSegmentMode ? ColorTokens.primary : ColorTokens.primarylight,
                       width: 2,

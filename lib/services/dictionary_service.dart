@@ -12,6 +12,7 @@ import '../models/dictionary_entry.dart';
 import 'chinese_dictionary_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'pinyin_creation_service.dart';
+import 'usage_limit_service.dart';
 
 /// 외부 사전 서비스 (e.g papago, google translate) 를 관리하는 서비스
 /// 단어 검색 결과 캐싱
@@ -26,6 +27,8 @@ class DictionaryService {
     loadApiKeys();
     // 중국어 사전 서비스 인스턴스 가져오기
     _chineseDictionaryService = ChineseDictionaryService();
+    // 사용량 제한 서비스 초기화
+    _usageLimitService = UsageLimitService();
   }
 
   // API 키 저장 변수
@@ -34,6 +37,9 @@ class DictionaryService {
 
   // 중국어 사전 서비스 참조
   late final ChineseDictionaryService _chineseDictionaryService;
+  
+  // 사용량 제한 서비스
+  late final UsageLimitService _usageLimitService;
 
   // 검색 결과 캐시 (메모리 캐시)
   final Map<String, DictionaryEntry> _searchResultCache = {};
@@ -143,25 +149,62 @@ class DictionaryService {
   };
 
   // 단어 검색 - 단계별 폴백 구현
-  Future<DictionaryEntry?> lookupWordWithFallback(String word) async {
+  Future<Map<String, dynamic>> lookupWordWithFallback(String word) async {
     try {
-      // 0. 먼저 내부 중국어 사전 서비스에서 검색
+      // 캐시된 결과 있으면 바로 반환
+      if (_searchResultCache.containsKey(word)) {
+        debugPrint('캐시에서 단어 검색 결과 반환: $word');
+        return {
+          'entry': _searchResultCache[word],
+          'success': true,
+        };
+      }
+      
+      // 사용량 제한 체크 (로컬/내장 사전은 제외)
+      // 0. 먼저 내부 중국어 사전 서비스에서 검색 (사용량 제한 없음)
       await _chineseDictionaryService.loadDictionary();
       final chineseDictResult = _chineseDictionaryService.lookup(word);
       if (chineseDictResult != null) {
         // 병음이 없는 경우에도 생성
         if (chineseDictResult.pinyin.isEmpty) {
           final pinyin = await _pinyinService.generatePinyin(word);
-          return DictionaryEntry(
+          final entry = DictionaryEntry(
             word: chineseDictResult.word,
             pinyin: pinyin,
             meaning: chineseDictResult.meaning,
             examples: chineseDictResult.examples,
             source: chineseDictResult.source,
           );
+          
+          // 캐시에 저장
+          _searchResultCache[word] = entry;
+          
+          debugPrint('내부 중국어 사전에서 단어 찾음: $word');
+          return {
+            'entry': entry,
+            'success': true,
+          };
         }
+        
+        // 캐시에 저장
+        _searchResultCache[word] = chineseDictResult;
+        
         debugPrint('내부 중국어 사전에서 단어 찾음: $word');
-        return chineseDictResult;
+        return {
+          'entry': chineseDictResult,
+          'success': true,
+        };
+      }
+      
+      // 내부 사전에 없는 경우 사용량 제한 확인
+      final canLookup = await _usageLimitService.incrementDictionaryLookupCount();
+      if (!canLookup) {
+        debugPrint('사전 검색 사용량 한도 초과: $word');
+        return {
+          'success': false,
+          'message': '무료 버전 사전 검색 한도를 초과했습니다. 관리자에게 문의해주세요.',
+          'limitExceeded': true,
+        };
       }
 
       // API 키가 로드되지 않았으면 로드
@@ -175,15 +218,30 @@ class DictionaryService {
         // 병음이 없는 경우에도 생성
         if (jsonResult.pinyin.isEmpty) {
           final pinyin = await _pinyinService.generatePinyin(word);
-          return DictionaryEntry(
+          final entry = DictionaryEntry(
             word: jsonResult.word,
             pinyin: pinyin,
             meaning: jsonResult.meaning,
             examples: jsonResult.examples,
             source: jsonResult.source,
           );
+          
+          // 캐시에 저장
+          _searchResultCache[word] = entry;
+          
+          return {
+            'entry': entry,
+            'success': true,
+          };
         }
-        return jsonResult;
+        
+        // 캐시에 저장
+        _searchResultCache[word] = jsonResult;
+        
+        return {
+          'entry': jsonResult,
+          'success': true,
+        };
       }
 
       // 2. 시스템 사전 기능 활용 (iOS/Android)
@@ -192,15 +250,30 @@ class DictionaryService {
         // 병음이 없는 경우에도 생성
         if (systemDictResult.pinyin.isEmpty) {
           final pinyin = await _pinyinService.generatePinyin(word);
-          return DictionaryEntry(
+          final entry = DictionaryEntry(
             word: systemDictResult.word,
             pinyin: pinyin,
             meaning: systemDictResult.meaning,
             examples: systemDictResult.examples,
             source: systemDictResult.source,
           );
+          
+          // 캐시에 저장
+          _searchResultCache[word] = entry;
+          
+          return {
+            'entry': entry,
+            'success': true,
+          };
         }
-        return systemDictResult;
+        
+        // 캐시에 저장
+        _searchResultCache[word] = systemDictResult;
+        
+        return {
+          'entry': systemDictResult,
+          'success': true,
+        };
       }
 
       // 3. Papago API 사용
@@ -217,33 +290,27 @@ class DictionaryService {
         );
         // 내부 중국어 사전에도 추가
         _chineseDictionaryService.addEntry(entryWithPinyin);
-        return entryWithPinyin;
+        
+        // 캐시에 저장
+        _searchResultCache[word] = entryWithPinyin;
+        
+        return {
+          'entry': entryWithPinyin,
+          'success': true,
+        };
       }
 
-      // 4. 모든 검색이 실패한 경우에도 병음은 생성
-      final pinyin = await _pinyinService.generatePinyin(word);
-      return DictionaryEntry(
-        word: word,
-        pinyin: pinyin,
-        meaning: '사전에서 찾을 수 없습니다. 외부 사전에서 검색하려면 탭하세요.',
-        examples: [],
-        source: 'external',
-      );
+      // 검색 결과가 없는 경우
+      return {
+        'success': false,
+        'message': '사전에서 단어를 찾을 수 없습니다.',
+      };
     } catch (e) {
       debugPrint('단어 검색 중 오류 발생: $e');
-      // 오류 발생시에도 병음은 생성 시도
-      try {
-        final pinyin = await _pinyinService.generatePinyin(word);
-        return DictionaryEntry(
-          word: word,
-          pinyin: pinyin,
-          meaning: '단어 검색 중 오류가 발생했습니다.',
-          examples: [],
-          source: 'error',
-        );
-      } catch (e) {
-        return null;
-      }
+      return {
+        'success': false,
+        'message': '단어 검색 중 오류가 발생했습니다: $e',
+      };
     }
   }
 

@@ -12,6 +12,7 @@ import '../../services/chinese_dictionary_service.dart';
 import '../../widgets/flashcard_ui.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
+import '../../theme/tokens/spacing_tokens.dart';
 import '../../widgets/common/pika_app_bar.dart';
 import '../../services/unified_cache_service.dart';
 
@@ -464,14 +465,37 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.error_outline,
-                            size: 48, color: Colors.red),
-                        const SizedBox(height: 16),
-                        Text(_error!, textAlign: TextAlign.center),
-                        const SizedBox(height: 16),
+                        Icon(Icons.error_outline,
+                            size: SpacingTokens.iconSizeXLarge, 
+                            color: ColorTokens.error),
+                        SizedBox(height: SpacingTokens.md),
+                        Text(
+                          _error!, 
+                          textAlign: TextAlign.center,
+                          style: TypographyTokens.body1.copyWith(
+                            color: ColorTokens.textPrimary,
+                          ),
+                        ),
+                        SizedBox(height: SpacingTokens.md),
                         ElevatedButton(
                           onPressed: _loadFlashCards,
-                          child: const Text('다시 시도'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: ColorTokens.primary,
+                            foregroundColor: ColorTokens.textLight,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: SpacingTokens.md,
+                              vertical: SpacingTokens.sm,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+                            ),
+                          ),
+                          child: Text(
+                            '다시 시도',
+                            style: TypographyTokens.button.copyWith(
+                              color: ColorTokens.textLight,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -486,32 +510,29 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               children: [
                                 // 아이콘 (노란색)
                                 Container(
-                                  width: 80,
-                                  height: 80,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.white,
+                                  width: SpacingTokens.fabSize + SpacingTokens.iconSizeMedium,
+                                  height: SpacingTokens.fabSize + SpacingTokens.iconSizeMedium,
+                                  decoration: BoxDecoration(
+                                    color: ColorTokens.surface,
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.auto_awesome_motion_outlined,
-                                    size: 40,
-                                    color: Color(0xFFFFEA9D),
+                                    size: SpacingTokens.iconSizeXLarge,
+                                    color: ColorTokens.tertiary,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                SizedBox(height: SpacingTokens.md),
                                 // 메시지 텍스트
-                                const Text(
+                                Text(
                                   '플래시카드가 비어있어요.',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.black,
-                                    fontFamily: 'Noto Sans KR',
+                                  style: TypographyTokens.subtitle1.copyWith(
+                                    color: ColorTokens.textPrimary,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 24),
+                            SizedBox(height: SpacingTokens.lg),
                             // 버튼들 - '노트로 돌아가기' 버튼만 표시
                             GestureDetector(
                               onTap: () async {
@@ -533,21 +554,18 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                                 }
                               },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 12,
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: SpacingTokens.lg,
+                                  vertical: SpacingTokens.sm + SpacingTokens.xs
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFE6A15),
-                                  borderRadius: BorderRadius.circular(8),
+                                  color: ColorTokens.primary,
+                                  borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
                                 ),
-                                child: const Text(
+                                child: Text(
                                   '노트로 돌아가기',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white,
-                                    fontFamily: 'Noto Sans KR',
+                                  style: TypographyTokens.button.copyWith(
+                                    color: ColorTokens.textLight,
                                   ),
                                 ),
                               ),
@@ -556,7 +574,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                         ),
                       )
                     : Padding(
-                        padding: const EdgeInsets.all(16.0),
+                        padding: EdgeInsets.all(SpacingTokens.md),
                         child: CardSwiper(
                           controller: _cardController,
                           cardsCount: _flashCards.length,
@@ -573,7 +591,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           // 카드 개수에 따라 표시할 카드 수 조정 (1개일 때는 1개만, 그 외에는 2개)
                           numberOfCardsDisplayed:
                               _flashCards.length == 1 ? 1 : 2,
-                          padding: const EdgeInsets.all(24.0),
+                          padding: EdgeInsets.all(SpacingTokens.lg),
                           isLoop: _flashCards.length > 1, // 카드가 2개 이상일 때만 순환 활성화
                           cardBuilder: (context, index, horizontalThreshold,
                               verticalThreshold) {
@@ -629,12 +647,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             // 삭제 안내 텍스트 (가장 하단 레이어에 배치)
             if (!_isLoading && _error == null && _flashCards.isNotEmpty)
               Positioned(
-                top: 4,
+                top: SpacingTokens.xs,
                 left: 0,
                 right: 0,
                 // z-index 조정을 위해 Material 위젯 추가
                 child: Material(
-                  color: Colors.transparent,
+                  color: ColorTokens.surface.withOpacity(0),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -642,17 +660,14 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                       Icon(
                         Icons.delete_outline,
                         color: ColorTokens.disabled,
-                        size: 24,
+                        size: SpacingTokens.iconSizeMedium,
                       ),
-                      const SizedBox(height: 2),
+                      SizedBox(height: SpacingTokens.xs/2),
                       // 스와이프 안내 텍스트
                       Text(
                         '위로 스와이프 하면 삭제 됩니다.',
-                        style: TextStyle(
-                          fontSize: 12.0,
-                        color: ColorTokens.disabled,
-                          fontWeight: FontWeight.w400,
-                          fontFamily: 'Noto Sans KR',
+                        style: TypographyTokens.caption.copyWith(
+                          color: ColorTokens.disabled,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -664,19 +679,16 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             // 이동 안내 텍스트 (가장 하단 레이어에 배치)
             if (!_isLoading && _error == null && _flashCards.isNotEmpty && _flashCards.length > 1)
               Positioned(
-                bottom: 32,
+                bottom: SpacingTokens.xl,
                 left: 0,
                 right: 0,
                 // z-index 조정을 위해 Material 위젯 추가
                 child: Material(
-                  color: Colors.transparent,
+                  color: ColorTokens.surface.withOpacity(0),
                   child: Text(
                     '좌우로 스와이프 해서 다음 카드로 이동',
-                    style: TextStyle(
-                      fontSize: 12.0,
+                    style: TypographyTokens.caption.copyWith(
                       color: ColorTokens.disabled,
-                      fontWeight: FontWeight.w400,
-                      fontFamily: 'Noto Sans KR',
                     ),
                     textAlign: TextAlign.center,
                   ),

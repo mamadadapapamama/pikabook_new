@@ -64,7 +64,7 @@ class FlashCardUI {
                       },
                       front: buildCardSide(
                         card: card,
-                        bgColor: const Color(0xFFFFF7D8), // Figma에서 가져온 색상
+                        bgColor: ColorTokens.flashcardBackground,
                         textColor: ColorTokens.textPrimary,
                         isFront: true,
                         isCurrentCard: isCurrentCard,
@@ -78,7 +78,7 @@ class FlashCardUI {
                       ),
                       back: buildCardSide(
                         card: card,
-                        bgColor: Colors.white, // 뒷면은 흰색 배경
+                        bgColor: ColorTokens.surface,
                         textColor: ColorTokens.textPrimary,
                         isFront: false,
                         isCurrentCard: isCurrentCard,
@@ -148,7 +148,7 @@ class FlashCardUI {
               ),
 
           // 카드 번호 표시 (좌상단)
-          buildCardNumberBadge(cardIndex, const Color(0xFFFFD53C), Colors.white),
+          buildCardNumberBadge(cardIndex, ColorTokens.tertiary, ColorTokens.surface),
         ],
       ),
     );
@@ -158,16 +158,16 @@ class FlashCardUI {
   static BoxDecoration buildCardDecoration(Color bgColor, bool isCurrentCard) {
     return BoxDecoration(
       color: bgColor,
-      borderRadius: BorderRadius.circular(20), // 피그마에서 가져온 값으로 조정
+      borderRadius: BorderRadius.circular(SpacingTokens.radiusLarge),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.15),
+          color: ColorTokens.black.withOpacity(0.15),
           blurRadius: 10,
           offset: const Offset(0, 4),
         ),
       ],
       border: Border.all(
-        color: const Color(0xFFFFD53C), // 피그마에서 가져온 테두리 색상
+        color: ColorTokens.tertiary,
         width: 2.0,
       ),
     );
@@ -185,34 +185,29 @@ class FlashCardUI {
   }) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(SpacingTokens.lg),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TTS 버튼 (단어 위에 위치)
-            buildTtsButtonInline(const Color(0xFF226357), isSpeaking, onSpeak, onStopSpeaking),
-            const SizedBox(height: 8), // 단어와 TTS 버튼 사이 간격
+            buildTtsButtonInline(ColorTokens.secondary, isSpeaking, onSpeak, onStopSpeaking),
+            SizedBox(height: SpacingTokens.sm),
             
             // 단어/의미 텍스트
             Text(
               text,
-              style: TextStyle(
-                fontSize: 36.0,
-                fontWeight: FontWeight.w600,
-                color: Colors.black,
-                fontFamily: 'Noto Sans HK',
+              style: TypographyTokens.headline2Cn.copyWith(
+                color: ColorTokens.textPrimary,
               ),
               textAlign: TextAlign.center,
             ),
             // 핀인 표시 (항상 표시)
-            const SizedBox(height: 20),
+            SizedBox(height: SpacingTokens.lg),
             Text(
               pinyin.isEmpty ? 'xíng zǒu' : pinyin,
-              style: TextStyle(
-                fontSize: 14.0,
-                color: const Color(0xFF969696),
-                fontFamily: 'Poppins',
-                fontWeight: FontWeight.w500,
+              style: TypographyTokens.caption.copyWith(
+                color: ColorTokens.textGrey,
+                fontFamily: TypographyTokens.poppins,
               ),
               textAlign: TextAlign.center,
             ),
@@ -235,48 +230,40 @@ class FlashCardUI {
   }) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(SpacingTokens.lg),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TTS 버튼 (단어 위에 위치)
-            buildTtsButtonInline(const Color(0xFF226357), isSpeaking, onSpeak, onStopSpeaking),
-            const SizedBox(height: 8), // 단어와 TTS 버튼 사이 간격
+            buildTtsButtonInline(ColorTokens.secondary, isSpeaking, onSpeak, onStopSpeaking),
+            SizedBox(height: SpacingTokens.sm),
             
             // 번역 (의미)
             Text(
               translation,
-              style: TextStyle(
-                fontSize: 32.0,
-                fontWeight: FontWeight.w700,
-                color: Colors.black,
-                fontFamily: 'Noto Sans KR',
+              style: TypographyTokens.headline3.copyWith(
+                color: ColorTokens.textPrimary,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: SpacingTokens.lg),
             
             // 원문 (중국어)
             Text(
               original,
-              style: TextStyle(
-                fontSize: 22.0,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF969696),
-                fontFamily: 'Noto Sans HK',
+              style: TypographyTokens.body1Cn.copyWith(
+                color: ColorTokens.textGrey,
               ),
               textAlign: TextAlign.center,
             ),
             
             // 핀인 표시 (항상 표시)
-            const SizedBox(height: 8),
+            SizedBox(height: SpacingTokens.sm),
             Text(
               pinyin.isEmpty ? 'xíng zǒu' : pinyin,
-              style: TextStyle(
-                fontSize: 14.0,
-                color: const Color(0xFF969696),
-                fontFamily: 'Poppins',
-                fontWeight: FontWeight.w500,
+              style: TypographyTokens.caption.copyWith(
+                color: ColorTokens.textGrey,
+                fontFamily: TypographyTokens.poppins,
               ),
               textAlign: TextAlign.center,
             ),
@@ -296,12 +283,12 @@ class FlashCardUI {
     return InkWell(
       onTap: isSpeaking ? onStopSpeaking : onSpeak,
       child: SizedBox(
-        width: 24,
-        height: 24,
+        width: SpacingTokens.iconSizeMedium,
+        height: SpacingTokens.iconSizeMedium,
         child: Icon(
           isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
           color: iconColor,
-          size: 24,
+          size: SpacingTokens.iconSizeMedium,
         ),
       ),
     );
@@ -310,11 +297,11 @@ class FlashCardUI {
   /// 카드 번호 배지 생성
   static Widget buildCardNumberBadge(int index, Color bgColor, Color textColor) {
     return Positioned(
-      top: 20,
-      left: 20,
+      top: SpacingTokens.lg,
+      left: SpacingTokens.lg,
       child: Container(
-        width: 24,
-        height: 24,
+        width: SpacingTokens.iconSizeMedium,
+        height: SpacingTokens.iconSizeMedium,
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(100),
@@ -322,16 +309,13 @@ class FlashCardUI {
         child: Center(
           child: Text(
             '${index + 1}',
-            style: TextStyle(
-              fontSize: 14.0,
+            style: TypographyTokens.captionEn.copyWith(
               fontWeight: FontWeight.w500,
-              color: textColor,
-              fontFamily: 'Poppins',
+              color: ColorTokens.black,
             ),
           ),
         ),
       ),
     );
   }
-
 }

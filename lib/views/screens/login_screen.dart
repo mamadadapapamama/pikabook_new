@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import '../../../services/initialization_service.dart';
 import '../../../theme/tokens/color_tokens.dart';
 import '../../../theme/tokens/typography_tokens.dart';
+import '../../../theme/tokens/spacing_tokens.dart';
 import '../../../widgets/dot_loading_indicator.dart';
 import '../../../firebase_options.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -146,9 +147,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.0),
-                    Colors.black.withOpacity(0.3),
-                    Colors.black.withOpacity(0.0),
+                    ColorTokens.black.withOpacity(0.0),
+                    ColorTokens.black.withOpacity(0.3),
+                    ColorTokens.black.withOpacity(0.0),
                   ],
                   stops: const [0.0, 0.5, 1.0],
                 ),
@@ -157,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           ),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              padding: EdgeInsets.symmetric(horizontal: SpacingTokens.xxl - SpacingTokens.sm),
               child: AnimatedBuilder(
                 animation: _animationController,
                 builder: (context, child) {
@@ -177,24 +178,21 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             opacity: _birdFadeAnimation.value,
                             child: Image.asset(
                               'assets/images/pikabook_bird.png',
-                              width: 60,
-                              height: 60,
+                              width: SpacingTokens.iconSizeXLarge + SpacingTokens.xs,
+                              height: SpacingTokens.iconSizeXLarge + SpacingTokens.xs,
                               fit: BoxFit.contain,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: SpacingTokens.md),
                           
                           // 원서 공부, 스마트하게 텍스트 - 중간에 배치
                           Opacity(
                             opacity: _textFadeAnimation.value,
-                            child: const Text(
+                            child: Text(
                               '원서 공부,\n스마트하게',
                               textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontFamily: 'Noto Sans KR',
-                                fontSize: 20,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white,
+                              style: TypographyTokens.subtitle1.copyWith(
+                                color: ColorTokens.textLight,
                                 height: 1.4,
                               ),
                             ),
@@ -206,28 +204,28 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             opacity: _logoFadeAnimation.value,
                             child: Image.asset(
                               'assets/images/pikabook_textlogo.png',
-                              width: 160,
-                              height: 27.42,
+                              width: SpacingTokens.appLogoWidth,
+                              height: SpacingTokens.appLogoHeight,
                               fit: BoxFit.contain,
-                              color: Colors.white,
+                              color: ColorTokens.textLight,
                             ),
                           ),
-                          const SizedBox(height: 60),
+                          SizedBox(height: SpacingTokens.xxl + SpacingTokens.xs),
 
                           // 로딩 인디케이터 또는 오류 메시지
                           if (_isLoading)
                             const DotLoadingIndicator(
-                              dotColor: Colors.white,
+                              dotColor: ColorTokens.textLight,
                             )
                           else if (_errorMessage != null)
                             Container(
-                              padding: const EdgeInsets.all(12),
-                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              padding: EdgeInsets.all(SpacingTokens.sm + SpacingTokens.xs),
+                              margin: EdgeInsets.symmetric(vertical: SpacingTokens.sm),
                               decoration: BoxDecoration(
-                                color: Colors.red.shade50,
-                                borderRadius: BorderRadius.circular(8),
+                                color: ColorTokens.errorLight,
+                                borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
                                 border: Border.all(
-                                  color: Colors.red.shade200,
+                                  color: ColorTokens.error.withOpacity(0.3),
                                   width: 1,
                                 ),
                               ),
@@ -235,70 +233,52 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 _errorMessage!,
                                 textAlign: TextAlign.center,
                                 style: TypographyTokens.body2.copyWith(
-                                  color: Colors.red.shade800,
+                                  color: ColorTokens.error,
                                 ),
                               ),
                             ),
 
-                          const SizedBox(height: 16),
+                          SizedBox(height: SpacingTokens.md),
 
                           // 소셜 로그인 버튼들 (애니메이션 적용)
                           Opacity(
                             opacity: _buttonsFadeAnimation.value,
                             child: Column(
                               children: [
-                                // Facebook 로그인 버튼
-                                //_buildLoginButton(
-                                  //text: 'Facebook으로 로그인',
-                                  //onPressed: () {
-                                    // Facebook 로그인 기능 추가
-                                    //ScaffoldMessenger.of(context).showSnackBar(
-                                      //const SnackBar(content: Text('Facebook 로그인은 아직 지원되지 않습니다.')),
-                                    //);
-                                  //},
-                                  //backgroundColor: Colors.white,
-                                  //textColor: const Color(0xFF031B31),
-                                  //leadingIcon: Padding(
-                                    //padding: const EdgeInsets.only(right: 8.0),
-                                    //child: Icon(Icons.facebook, color: const Color(0xFF1877F2), size: 24),
-                                  //),
-                                //),
-                                //const SizedBox(height: 8),
-
                                 // Google 로그인 버튼
                                 _buildLoginButton(
                                   text: 'Google로 로그인',
                                   onPressed: _handleGoogleLogin,
-                                  backgroundColor: Colors.white,
-                                  textColor: const Color(0xFF031B31),
+                                  backgroundColor: ColorTokens.surface,
+                                  textColor: ColorTokens.textPrimary,
                                   leadingIcon: Padding(
-                                    padding: const EdgeInsets.only(right: 8.0),
+                                    padding: EdgeInsets.only(right: SpacingTokens.sm),
                                     child: Image.asset(
                                       'assets/images/google.png',
-                                      width: 24,
-                                      height: 24,
+                                      width: SpacingTokens.iconSizeMedium,
+                                      height: SpacingTokens.iconSizeMedium,
                                       errorBuilder: (context, error, stackTrace) {
-                                        return Icon(Icons.g_translate, color: const Color(0xFF031B31));
+                                        return Icon(Icons.g_translate, color: ColorTokens.textPrimary);
                                       },
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 8),
+                                SizedBox(height: SpacingTokens.sm),
 
                                 // Apple 로그인 버튼
                                 _buildLoginButton(
                                   text: 'Apple로 로그인',
                                   onPressed: _handleAppleLogin,
-                                  backgroundColor: Colors.white,
-                                  textColor: Colors.black,
+                                  backgroundColor: ColorTokens.surface,
+                                  textColor: ColorTokens.black,
                                   leadingIcon: Padding(
-                                    padding: const EdgeInsets.only(right: 8.0, bottom: 4.0),
+                                    padding: EdgeInsets.only(right: SpacingTokens.sm, bottom: SpacingTokens.xs),
                                     child: Image.asset(
                                       'assets/images/apple.png',
-                                      width: 24,
-                                      height: 24,
+                                      width: SpacingTokens.iconSizeMedium,
+                                      height: SpacingTokens.iconSizeMedium,
                                       errorBuilder: (context, error, stackTrace) {
-                                        return Icon(Icons.apple, color: Colors.black);
+                                        return Icon(Icons.apple, color: ColorTokens.black);
                                       },
                                     ),
                                   ),
@@ -306,7 +286,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               ],
                             ),
                           ),
-                          const SizedBox(height: 40),
+                          SizedBox(height: SpacingTokens.xl + SpacingTokens.sm),
                         ],
                       ),
                     ),
@@ -328,16 +308,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     required Widget leadingIcon,
   }) {
     return Container(
-      width: 250, // 버튼 너비 209px에서 250px로 증가
+      width: 250,
       child: ElevatedButton(
         onPressed: _isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: backgroundColor,
           foregroundColor: textColor,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8), // 패딩 2px 추가
+          padding: EdgeInsets.symmetric(vertical: SpacingTokens.sm + SpacingTokens.xs/2, horizontal: SpacingTokens.sm),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
           ),
         ),
         child: Row(
@@ -346,12 +326,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             leadingIcon,
             Text(
               text,
-              style: const TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF031B31),
-                height: 1.5,
+              style: TypographyTokens.buttonEn.copyWith(
+                color: ColorTokens.textPrimary,
               ),
             ),
           ],

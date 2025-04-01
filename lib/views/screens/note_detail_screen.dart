@@ -33,6 +33,7 @@ import '../../widgets/dot_loading_indicator.dart';
 import '../../widgets/common/pika_app_bar.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../widgets/common/help_text_tooltip.dart';
+import '../../theme/tokens/spacing_tokens.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -1403,9 +1404,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     final bool isFullTextMode = processedText?.showFullText ?? false;
     
     // 패딩 설정 - 전체 모드는 좌우 패딩 줄이기, 세그먼트 모드는 기본 패딩 유지
-    final EdgeInsets contentPadding = isFullTextMode
-        ? const EdgeInsets.symmetric(horizontal: 30.0)  // 전체 텍스트 모드일 때 패딩
-        : const EdgeInsets.symmetric(horizontal: 30.0); // 세그먼트 모드일 때 넓은 패딩
+    final EdgeInsets contentPadding = const EdgeInsets.symmetric(horizontal: SpacingTokens.md + SpacingTokens.sm); // 24.0 (통일된 패딩 값)
     
     // 페이지 처리가 완료되지 않은 경우 (백그라운드 처리 중)
     if ((currentPage.originalText.isEmpty || currentPage.originalText == 'processing') && !wasVisitedBefore) {
@@ -1420,10 +1419,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                const SizedBox(height: 16),
-                const Text('페이지 처리 중 오류가 발생했습니다.'),
-                const SizedBox(height: 8),
+                const Icon(Icons.error_outline, color: ColorTokens.error, size: 48),
+                SizedBox(height: SpacingTokens.md),
+                Text(
+                  '페이지 처리 중 오류가 발생했습니다.',
+                  style: TypographyTokens.body1,
+                ),
+                SizedBox(height: SpacingTokens.sm),
                 ElevatedButton(
                   onPressed: () {
                     _loadNote(); // 다시 로드 시도
@@ -1451,28 +1453,26 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 24),
+            const CircularProgressIndicator(color: ColorTokens.primary),
+            SizedBox(height: SpacingTokens.lg),
             Text(
               '페이지 준비 중...',
-              style: TextStyle(
-                fontSize: 16,
+              style: TypographyTokens.body1.copyWith(
                 fontWeight: FontWeight.bold,
                 color: ColorTokens.textSecondary,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: SpacingTokens.sm),
             Text(
               '이미지 인식 및 번역을 진행하고 있습니다.',
-              style: TextStyle(
-                fontSize: 14,
+              style: TypographyTokens.body2.copyWith(
                 color: ColorTokens.textGrey,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: SpacingTokens.sm),
             TextButton(
               onPressed: () => _forceRefreshPage(),
-              child: const Text('새로고침'),
+              child: Text('새로고침', style: TypographyTokens.button),
             ),
           ],
         ),
