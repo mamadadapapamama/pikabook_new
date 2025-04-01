@@ -15,6 +15,7 @@ import 'views/screens/note_detail_screen.dart';
 import 'widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'viewmodels/home_viewmodel.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 class App extends StatefulWidget {
   final InitializationService initializationService;
@@ -52,6 +53,12 @@ class _AppState extends State<App> {
     // 인증 상태 변경 리스너 설정
     _authStateStream = widget.initializationService.authStateChanges;
     _setupAuthStateListener();
+    
+    // 스플래시 화면 제거 (초기화 확인 이후)
+    Future.delayed(const Duration(milliseconds: 500), () {
+      FlutterNativeSplash.remove();
+      debugPrint('🎉 스플래시 화면 제거됨');
+    });
   }
 
   // 인증 상태 변경 리스너 설정

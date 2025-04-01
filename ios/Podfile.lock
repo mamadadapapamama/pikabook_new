@@ -1400,7 +1400,6 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
-  - AppAuth (>= 1.7.4)
   - cloud_firestore (from `.symlinks/plugins/cloud_firestore/ios`)
   - firebase_auth (from `.symlinks/plugins/firebase_auth/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
@@ -1518,6 +1517,6 @@ SPEC CHECKSUMS:
   url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
   webview_flutter_wkwebview: 1821ceac936eba6f7984d89a9f3bcb4dea99ebb2
 
-PODFILE CHECKSUM: 255723f0f84345f3b192030ba7a63f26cd6f1e45
+PODFILE CHECKSUM: f5fedb931fa34c4bb306dc2395acb79fe6f5e18d
 
 COCOAPODS: 1.16.2

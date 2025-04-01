@@ -15,6 +15,8 @@ import '../services/user_preferences_service.dart';
 import '../services/unified_cache_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import '../services/page_content_service.dart';
+import '../main.dart'; // firebaseApp 전역 변수 가져오기
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -34,6 +36,12 @@ class AuthService {
   // Google 로그인
   Future<User?> signInWithGoogle() async {
     try {
+      // Firebase 초기화 확인 (main.dart 전역 변수 사용)
+      if (firebaseApp == null) {
+        debugPrint('⚠️ AuthService: Firebase가 초기화되지 않았습니다. Google 로그인을 진행할 수 없습니다.');
+        throw Exception('Firebase가 초기화되지 않았습니다.');
+      }
+      
       // 기존 로그인 상태를 확인하고 있으면 로그아웃
       try {
         if (await _googleSignIn.isSignedIn()) {
@@ -84,18 +92,19 @@ class AuthService {
   // Apple 로그인
   Future<User?> signInWithApple() async {
     try {
-      // Firebase 초기화 확인
-      if (!Firebase.apps.isNotEmpty) {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
+      // Firebase 초기화 확인 (main.dart 전역 변수 사용)
+      if (firebaseApp == null) {
+        debugPrint('⚠️ AuthService: Firebase가 초기화되지 않았습니다. Apple 로그인을 진행할 수 없습니다.');
+        throw Exception('Firebase가 초기화되지 않았습니다.');
       }
+      
+      debugPrint('🍎 AuthService: Apple 로그인 시작');
 
       // nonce 생성
       final rawNonce = _generateNonce();
       final nonce = _sha256ofString(rawNonce);
-          debugPrint("🔐 rawNonce: $rawNonce");
-    debugPrint("🔐 nonce (SHA256): $nonce");
+      debugPrint("🔐 rawNonce: $rawNonce");
+      debugPrint("🔐 nonce (SHA256): $nonce");
 
 
       // Apple 로그인 시작
@@ -134,25 +143,9 @@ class AuthService {
 
       // 사용자 정보 Firestore에 저장
       if (userCredential.user != null) {
-        // Apple은 처음 로그인할 때만 이름 정보를 제공
-        String? displayName = userCredential.user!.displayName;
-
-        // 이름 정보가 없고 Apple에서 제공한 이름이 있으면 사용
-        if ((displayName == null || displayName.isEmpty) &&
-            (appleCredential.givenName != null ||
-                appleCredential.familyName != null)) {
-          displayName = [
-            appleCredential.givenName ?? '',
-            appleCredential.familyName ?? ''
-          ].join(' ').trim();
-
-          // 이름 정보가 있으면 Firebase 사용자 프로필 업데이트
-          if (displayName.isNotEmpty) {
-            await userCredential.user!.updateDisplayName(displayName);
-          }
-        }
-
-        await _saveUserToFirestore(userCredential.user!, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
+        await _saveUserToFirestore(userCredential.user!, 
+                                 isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false,
+                                 appleCredential: appleCredential); // Apple 자격 증명 전달
         
         // 캐시 서비스에 사용자 전환 알림
         final cacheService = UnifiedCacheService();
@@ -222,7 +215,11 @@ Future<void> signOut() async {
     // 4. 캐시 서비스에서 현재 사용자 ID 제거
     await cacheService.clearCurrentUserId();
     
-    // 5. Firebase 로그아웃
+    // 5. 메모리 캐시 초기화
+    final pageContentService = PageContentService();
+    pageContentService.clearProcessedTextCache();
+    
+    // 6. Firebase 로그아웃
     await _auth.signOut();
     
     debugPrint('로그아웃 처리 완료');
@@ -448,89 +445,103 @@ Future<void> signOut() async {
     return digest.toString();
   }
 
-  Future<void> _saveUserToFirestore(User user, {bool isNewUser = false}) async {
+  // 사용자 정보를 Firestore에 저장하는 메서드 (InitializationService와 유사하게 수정)
+  Future<void> _saveUserToFirestore(User user, 
+                                  {bool isNewUser = false, 
+                                   AuthorizationCredentialAppleID? appleCredential}) async {
     try {
-      // 1. 탈퇴된 사용자인지 확인
-      final isDeleted = await _checkIfUserWasDeleted(user.uid, user.email);
+      final userRef = _firestore.collection('users').doc(user.uid);
       
-      // 2. 탈퇴 사용자이거나 새로운 사용자인 경우 기존 데이터 완전 삭제
-      if (isDeleted || isNewUser) {
-        debugPrint('새 사용자 또는 탈퇴 후 재가입 감지: ${user.uid}');
+      // 1. 탈퇴된 사용자인지 확인 (InitializationService의 로직 참조)
+      final wasDeleted = await _checkIfUserWasDeleted(user.uid, user.email);
+      
+      // 2. 탈퇴 사용자이거나 새로운 사용자인 경우 기존 데이터 완전 삭제 (Firestore만)
+      if (wasDeleted || isNewUser) {
+        debugPrint('AuthService: 새 사용자 또는 탈퇴 후 재가입 감지: ${user.uid}');
         
-        // 2-1. 기존 Firestore 데이터 삭제
-        await _deleteFirestoreData(user.uid);
+        // 2-1. 기존 Firestore 데이터 삭제 (노트, 페이지 등은 여기서 처리 안 함, 필요 시 추가)
+        // await _deleteFirestoreData(user.uid); // 주석 처리: InitializationService에서 처리
         
-        // 2-2. 로컬 데이터 초기화
-        await _clearAllLocalData();
-        
-        // 2-3. 디바이스 ID 초기화 (익명 노트 연결 해제)
-        await _resetDeviceId();
-        
-        // 2-4. 탈퇴 기록 삭제
-        if (isDeleted) {
+        // 2-2. 탈퇴 기록 삭제 (Firestore만)
+        if (wasDeleted) {
           try {
             await _firestore.collection('deleted_users').doc(user.uid).delete();
-            debugPrint('탈퇴 기록 삭제 완료');
+            debugPrint('AuthService: 탈퇴 기록 삭제 완료');
           } catch (e) {
-            debugPrint('탈퇴 기록 삭제 중 오류: $e');
+            debugPrint('AuthService: 탈퇴 기록 삭제 중 오류: $e');
           }
         }
       }
       
       // 3. 새로운 사용자 정보 저장
+      String? finalDisplayName = user.displayName;
+      
+      // Apple 로그인 시 이름 처리
+      if (appleCredential != null) {
+        if ((finalDisplayName == null || finalDisplayName.isEmpty) &&
+            (appleCredential.givenName != null || appleCredential.familyName != null)) {
+          final givenName = appleCredential.givenName ?? '';
+          final familyName = appleCredential.familyName ?? '';
+          final appleName = '$givenName $familyName'.trim();
+          
+          if (appleName.isNotEmpty) {
+            finalDisplayName = appleName;
+            try {
+              await user.updateDisplayName(finalDisplayName);
+              debugPrint('AuthService: Firebase Auth 프로필 이름 업데이트 완료: $finalDisplayName');
+            } catch (authError) {
+              debugPrint('AuthService: Firebase Auth 프로필 이름 업데이트 실패: $authError');
+            }
+          }
+        }
+      }
+      
       final userData = {
-        'userId': user.uid,
+        'uid': user.uid,
         'email': user.email,
-        'displayName': user.displayName ?? '',
+        'displayName': finalDisplayName, // 업데이트된 이름 사용
         'photoURL': user.photoURL,
-        'lastLogin': FieldValue.serverTimestamp(),
-        'createdAt': isNewUser ? FieldValue.serverTimestamp() : null,
+        'lastLogin': FieldValue.serverTimestamp(), // lastSignIn 대신 lastLogin 사용 (InitializationService와 통일)
         'updatedAt': FieldValue.serverTimestamp(),
-        'onboardingCompleted': false,
-        'deviceId': await _getDeviceId(), // 새로운 디바이스 ID 저장
+        'deviceId': await _getDeviceId(), // 디바이스 ID 저장
       };
+      
+      // 새 사용자인 경우 createdAt 추가
+      if (isNewUser) {
+        userData['createdAt'] = FieldValue.serverTimestamp();
+        userData['onboardingCompleted'] = false; // 새 사용자는 온보딩 미완료
+      }
 
       // null 값 제거
       userData.removeWhere((key, value) => value == null);
 
-      // Firestore에 사용자 정보 저장
-      await _firestore.collection('users').doc(user.uid).set(userData, SetOptions(merge: true));
+      // Firestore에 사용자 정보 저장 (merge: true로 기존 필드 유지)
+      await userRef.set(userData, SetOptions(merge: true));
 
-      debugPrint('사용자 정보가 Firestore에 저장되었습니다: ${user.uid} (새 사용자: $isNewUser)');
+      debugPrint('AuthService: 사용자 정보가 Firestore에 저장되었습니다: ${user.uid} (새 사용자: $isNewUser)');
     } catch (error) {
-      debugPrint('Firestore에 사용자 정보 저장 중 오류 발생: $error');
+      debugPrint('AuthService: Firestore에 사용자 정보 저장 중 오류 발생: $error');
       rethrow;
     }
   }
   
-  // 탈퇴된 사용자인지 확인
+  // 탈퇴된 사용자인지 확인 (InitializationService와 동일 로직)
   Future<bool> _checkIfUserWasDeleted(String uid, String? email) async {
     try {
-      // UID로 확인
-      final deletedDoc = await FirebaseFirestore.instance
-          .collection('deleted_users')
-          .doc(uid)
-          .get();
+      final deletedDoc = await _firestore.collection('deleted_users').doc(uid).get();
+      if (deletedDoc.exists) return true;
       
-      if (deletedDoc.exists) {
-        return true;
-      }
-      
-      // 이메일로 확인 (이메일이 있는 경우)
       if (email != null && email.isNotEmpty) {
-        final querySnapshot = await FirebaseFirestore.instance
-            .collection('deleted_users')
+        final querySnapshot = await _firestore.collection('deleted_users')
             .where('email', isEqualTo: email)
             .limit(1)
             .get();
-            
         return querySnapshot.docs.isNotEmpty;
       }
       
       return false;
     } catch (e) {
-      debugPrint('탈퇴 사용자 확인 중 오류: $e');
-      // 오류 발생 시 기본값 반환
+      debugPrint('AuthService: 탈퇴 사용자 확인 중 오류: $e');
       return false;
     }
   }

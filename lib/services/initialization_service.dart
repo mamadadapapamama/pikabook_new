@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart'; // PlatformException 추가
 import 'unified_cache_service.dart';
 import 'auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,7 +13,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
+import 'dart:math'; // Random 추가
 import '../firebase_options.dart';
+import '../main.dart'; // main.dart의 전역 Firebase 앱 변수를 사용
 
 /// 앱 초기화를 관리하는 서비스
 ///
@@ -251,7 +254,7 @@ class InitializationService {
           await userPrefs.setOnboardingCompleted(onboardingCompleted);
           result['isOnboardingCompleted'] = onboardingCompleted;
           
-          // 툴팁 상태 확인
+          // 툴큰 상태 확인
           final prefs = await SharedPreferences.getInstance();
           final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
           result['isFirstEntry'] = !hasShownTooltip;
@@ -410,14 +413,40 @@ class InitializationService {
   }
 
   // 사용자 정보를 Firestore에 저장하는 메서드
-  Future<void> _saveUserToFirestore(User user, {bool isNewUser = false}) async {
+  Future<void> _saveUserToFirestore(User user, 
+                                  {bool isNewUser = false, 
+                                   AuthorizationCredentialAppleID? appleCredential}) async {
     try {
       final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      
+      String? finalDisplayName = user.displayName;
+      
+      // Apple 로그인 시 이름 처리
+      if (appleCredential != null) {
+        // Firebase에 이름이 없거나 Apple에서 제공한 이름이 있는 경우
+        if ((finalDisplayName == null || finalDisplayName.isEmpty) &&
+            (appleCredential.givenName != null || appleCredential.familyName != null)) {
+          final givenName = appleCredential.givenName ?? '';
+          final familyName = appleCredential.familyName ?? '';
+          final appleName = '$givenName $familyName'.trim();
+          
+          if (appleName.isNotEmpty) {
+            finalDisplayName = appleName;
+            // Firebase Auth 프로필 업데이트 (선택 사항, 필요 시)
+            try {
+              await user.updateDisplayName(finalDisplayName);
+              debugPrint('Firebase Auth 프로필 이름 업데이트 완료: $finalDisplayName');
+            } catch (authError) {
+              debugPrint('Firebase Auth 프로필 이름 업데이트 실패: $authError');
+            }
+          }
+        }
+      }
       
       final baseData = {
         'uid': user.uid,
         'email': user.email,
-        'displayName': user.displayName,
+        'displayName': finalDisplayName, // 업데이트된 이름 사용
         'photoURL': user.photoURL,
         'lastSignIn': FieldValue.serverTimestamp(),
       };
@@ -434,429 +463,14 @@ class InitializationService {
         
         await userRef.set(newUserData, SetOptions(merge: true));
       } else {
-        // 기존 사용자인 경우 마지막 로그인만 업데이트
-        await userRef.update(baseData);
+        // 기존 사용자인 경우 업데이트 (merge: true로 필드 추가/수정)
+        await userRef.set(baseData, SetOptions(merge: true));
       }
       
       debugPrint('사용자 정보가 Firestore에 저장되었습니다: ${user.uid} (새 사용자: $isNewUser)');
     } catch (e) {
       debugPrint('사용자 정보 저장 오류: $e');
       rethrow;
-    }
-  }
-
-  // Firebase 초기화 상태 설정 (백그라운드 초기화 완료 시 호출)
-  Future<void> markFirebaseInitialized(bool success) async {
-    if (!_firebaseInitialized.isCompleted) {
-      try {
-        // 인증 상태 확인
-        await checkLoginState();
-        
-        _firebaseInitialized.complete(success);
-        debugPrint('Firebase 초기화 상태 설정: $success');
-      } catch (e) {
-        _firebaseError = '인증 상태 확인 중 오류가 발생했습니다: $e';
-        _firebaseInitialized.complete(false);
-        debugPrint('인증 상태 확인 오류: $e');
-      }
-    }
-  }
-
-  /// 앱 초기화 메서드
-  /// Firebase를 초기화하고 사용자 인증 상태를 확인합니다.
-  Future<bool> initializeApp() async {
-    try {
-      // 초기화 시작 로그
-      debugPrint('앱 초기화 시작 (${_initStartTime.toIso8601String()})');
-
-      // Firebase Core 초기화
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      
-      // 인증 상태 확인
-      await checkLoginState();
-      
-      // 초기화 완료 시간 및 소요 시간 계산
-      final initEndTime = DateTime.now();
-      final duration = initEndTime.difference(_initStartTime);
-      
-      debugPrint('앱 초기화 완료 (소요 시간: ${duration.inMilliseconds}ms)');
-      
-      // Firebase 초기화 상태가 아직 완료되지 않은 경우에만 완료 처리
-      if (!_firebaseInitialized.isCompleted) {
-        _firebaseInitialized.complete(true);
-      }
-      
-      return true;
-    } catch (e) {
-      // 오류 발생 시 처리
-      setFirebaseError('Firebase 초기화 중 오류가 발생했습니다: $e');
-      debugPrint('Firebase 초기화 오류: $e');
-      
-      // 초기화 실패 반환
-      return false;
-    }
-  }
-
-  // Google 로그인
-  Future<UserCredential?> signInWithGoogle() async {
-    try {
-      // Firebase가 초기화되었는지 확인
-      if (!_firebaseInitialized.isCompleted && Firebase.apps.isEmpty) {
-        bool initialized = await initializeApp();
-        if (!initialized) {
-          throw Exception('Firebase를 초기화할 수 없습니다.');
-        }
-      }
-
-      // 기존 로그인 상태를 확인하고 있으면 로그아웃 (계정 선택 화면 표시 위함)
-      try {
-        if (await _googleSignIn.isSignedIn()) {
-          await _googleSignIn.signOut();
-          debugPrint('기존 Google 로그인 세션 정리');
-        }
-      } catch (e) {
-        debugPrint('Google 기존 세션 확인 중 오류: $e');
-      }
-
-      // Google 로그인 UI 표시
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      
-      // 로그인 취소된 경우
-      if (googleUser == null) {
-        debugPrint('Google 로그인 취소됨');
-        return null;
-      }
-
-      // 인증 정보 가져오기
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-
-      // 인증 정보로 Firebase 인증 정보 생성
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-
-      // Firebase로 로그인
-      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-
-      // 인증 상태 확인
-      await checkLoginState();
-      
-      debugPrint('Google 로그인 완료: ${userCredential.user?.uid}');
-      return userCredential;
-    } catch (e) {
-      debugPrint('Google 로그인 오류: $e');
-      setAuthError('Google 로그인 중 오류가 발생했습니다: $e');
-      return null;
-    }
-  }
-
-  // Apple 로그인
-  Future<UserCredential?> signInWithApple() async {
-    try {
-      debugPrint('Apple 로그인 시작...');
-      
-      // Firebase가 초기화되었는지 확인
-      if (!_firebaseInitialized.isCompleted && Firebase.apps.isEmpty) {
-        bool initialized = await initializeApp();
-        if (!initialized) {
-          throw Exception('Firebase를 초기화할 수 없습니다.');
-        }
-      }
-
-      // AuthService의 signInWithApple 메서드 사용
-      final user = await authService.signInWithApple();
-      
-      if (user == null) {
-        debugPrint('Apple 로그인 실패: 사용자 정보를 가져오지 못했습니다.');
-        return null;
-      }
-      
-      debugPrint('Apple 로그인 성공: ${user.uid}');
-      
-      // 인증 상태 확인
-      await checkLoginState();
-
-      // UserCredential로 직접 변환할 수 없으므로 null 반환
-      // 이미 authStateChanges에서 로그인 이벤트가 발생하므로 실제로는 문제 없음
-      return null;
-    } catch (e) {
-      debugPrint('Apple 로그인 오류 상세: $e');
-      setAuthError('Apple 로그인 중 오류가 발생했습니다: $e');
-      return null;
-    }
-  }
-
-  // 현재 로그인된 사용자 가져오기
-  User? getCurrentUser() {
-    return FirebaseAuth.instance.currentUser;
-  }
-
-  // 초기화 재시도 메서드
-  Future<void> retryInitialization({required FirebaseOptions options}) async {
-    try {
-      final startTime = DateTime.now();
-      debugPrint('Firebase 초기화 재시도 시작 (${startTime.toString()})');
-      
-      // 이미 Firebase가 초기화되었는지 확인
-      if (Firebase.apps.isNotEmpty) {
-        debugPrint('Firebase가 이미 초기화되어 있음, 추가 초기화 생략');
-        
-        // 앱 상태만 확인
-        await checkLoginState();
-        
-        // 초기화 완료 설정
-        if (!_firebaseInitialized.isCompleted) {
-          _firebaseInitialized.complete(true);
-        }
-        
-        final duration = DateTime.now().difference(startTime);
-        debugPrint('Firebase 상태 확인 완료 (소요시간: ${duration.inMilliseconds}ms)');
-        
-        return;
-      }
-      
-      // Firebase 초기화 (아직 초기화되지 않은 경우에만)
-      await Firebase.initializeApp(options: options);
-      
-      // 앱 상태 확인
-      await checkLoginState();
-      
-      // 초기화 완료 설정
-      if (!_firebaseInitialized.isCompleted) {
-        _firebaseInitialized.complete(true);
-      }
-      
-      final duration = DateTime.now().difference(startTime);
-      debugPrint('Firebase 초기화 재시도 완료 (소요시간: ${duration.inMilliseconds}ms)');
-      
-      return;
-    } catch (e) {
-      debugPrint('Firebase 초기화 재시도 오류: $e');
-      _firebaseError = '앱 초기화 재시도 중 오류가 발생했습니다: $e';
-      // 초기화 실패 설정
-      if (!_firebaseInitialized.isCompleted) {
-        _firebaseInitialized.complete(false);
-      }
-      rethrow;
-    }
-  }
-
-  /// 계정 탈퇴 처리 (사용자 데이터 완전 초기화)
-  Future<Map<String, dynamic>> handleAccountDeletion({
-    String? password,
-    String? idToken,
-    AuthCredential? credential
-  }) async {
-    try {
-      debugPrint('사용자 계정 탈퇴 처리 시작...');
-      final userPrefs = UserPreferencesService();
-      final cacheService = UnifiedCacheService();
-      
-      // 현재 사용자 확인
-      final currentUser = _firebaseAuth.currentUser;
-      if (currentUser == null) {
-        debugPrint('탈퇴 처리 실패: 로그인된 사용자가 없습니다.');
-        return {
-          'success': false,
-          'requiresReauth': false,
-          'message': '로그인된 사용자가 없습니다.'
-        };
-      }
-      
-      final userId = currentUser.uid;
-      
-      // 1. 재인증 수행 (필요한 경우)
-      try {
-        // 재인증이 필요한지 테스트 (간단한 작업 시도)
-        await currentUser.getIdToken(true);
-        
-        // 재인증 시도 (자격 증명이 제공된 경우)
-        if (credential != null) {
-          await currentUser.reauthenticateWithCredential(credential);
-          debugPrint('사용자 재인증 성공');
-        } else if (password != null && currentUser.email != null) {
-          // 이메일/비밀번호 사용자인 경우 비밀번호로 재인증
-          final emailCredential = EmailAuthProvider.credential(
-            email: currentUser.email!,
-            password: password
-          );
-          await currentUser.reauthenticateWithCredential(emailCredential);
-          debugPrint('이메일/비밀번호로 사용자 재인증 성공');
-        } else if (idToken != null) {
-          // 소셜 로그인의 경우 idToken으로 재인증
-          final providerData = currentUser.providerData.firstOrNull;
-          if (providerData != null) {
-            final provider = providerData.providerId;
-            AuthCredential socialCredential;
-            
-            if (provider.contains('google')) {
-              socialCredential = GoogleAuthProvider.credential(idToken: idToken);
-            } else if (provider.contains('apple')) {
-              socialCredential = OAuthProvider('apple.com').credential(
-                idToken: idToken
-              );
-            } else {
-              throw Exception('지원되지 않는 인증 제공자입니다: $provider');
-            }
-            
-            await currentUser.reauthenticateWithCredential(socialCredential);
-            debugPrint('소셜 로그인으로 사용자 재인증 성공');
-          }
-        }
-      } catch (e) {
-        // 재인증 필요 여부 확인
-        if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
-          debugPrint('계정 삭제를 위해 재인증이 필요합니다');
-          
-          // 사용자가 사용한 로그인 방식 확인
-          final providerData = currentUser.providerData.firstOrNull;
-          final provider = providerData?.providerId ?? 'unknown';
-          
-          return {
-            'success': false,
-            'requiresReauth': true,
-            'message': '보안을 위해 재로그인이 필요합니다.',
-            'provider': provider
-          };
-        } else {
-          debugPrint('계정 삭제 전 재인증 검사 중 오류: $e');
-        }
-      }
-      
-      // 2. Firebase Auth에서 사용자 계정 삭제
-      try {
-        // 사용자 정보 보존 (Firestore 데이터 삭제용)
-        final deletedUserEmail = currentUser.email;
-        final deletedUserDisplayName = currentUser.displayName;
-        
-        // Firebase Auth에서 계정 삭제
-        await currentUser.delete();
-        debugPrint('Firebase Auth에서 사용자 계정 삭제 완료');
-        
-        // Firestore에서 사용자 데이터 삭제 (백그라운드 작업)
-        _deleteUserDataFromFirestore(userId, deletedUserEmail, deletedUserDisplayName);
-      } catch (e) {
-        // 인증 재인증이 필요한 경우 등 처리 필요
-        debugPrint('사용자 계정 삭제 중 오류: $e');
-        
-        if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
-          return {
-            'success': false,
-            'requiresReauth': true,
-            'message': '보안을 위해 재로그인이 필요합니다.'
-          };
-        }
-        
-        throw Exception('계정 삭제에 실패했습니다: $e');
-      }
-      
-      // 3. 모든 로컬 데이터 완전 초기화 (로그아웃보다 더 철저하게)
-      // 캐시 데이터 삭제
-      await cacheService.clearAllCache();
-      
-      // 사용자 설정 초기화
-      await userPrefs.clearAllUserPreferences();
-      
-      // SharedPreferences에서 모든 사용자 관련 정보 삭제
-      final prefs = await SharedPreferences.getInstance();
-      
-      // 인증 관련 키 삭제
-      await prefs.remove('current_user_id');
-      await prefs.remove('last_signin_provider');
-      await prefs.remove('has_multiple_accounts');
-      await prefs.remove('cache_current_user_id');
-      
-      // 로그인 기록 관련 키 삭제
-      await prefs.remove('login_history');
-      await prefs.remove('has_shown_onboarding');
-      await prefs.remove('hasShownTooltip');
-      await prefs.remove('onboarding_completed');
-      
-      // 사용자 ID로 시작하는 모든 키 삭제 (철저하게)
-      final allKeys = prefs.getKeys();
-      for (final key in allKeys) {
-        if (key.startsWith('${userId}_') || 
-            key.contains('_$userId') ||
-            key.contains('auth_') ||
-            key.contains('login_') ||
-            key.contains('user_')) {
-          await prefs.remove(key);
-        }
-      }
-      
-      // 3. Google 로그인 연결 해제 (있는 경우)
-      try {
-        if (await _googleSignIn.isSignedIn()) {
-          await _googleSignIn.disconnect();
-          await _googleSignIn.signOut();
-        }
-      } catch (e) {
-        debugPrint('Google 계정 연결 해제 중 오류 (무시됨): $e');
-      }
-      
-      debugPrint('계정 탈퇴 및 모든 로컬 데이터 초기화 완료');
-      return {
-        'success': true,
-        'message': '계정이 성공적으로 삭제되었습니다.',
-      };
-    } catch (e) {
-      debugPrint('계정 탈퇴 처리 중 오류 발생: $e');
-      return {
-        'success': false,
-        'requiresReauth': false,
-        'message': '계정 삭제 중 오류가 발생했습니다: $e'
-      };
-    }
-  }
-  
-  /// Firestore에서 사용자 데이터 삭제 (백그라운드 작업)
-  Future<void> _deleteUserDataFromFirestore(
-    String userId, 
-    String? userEmail,
-    String? displayName
-  ) async {
-    try {
-      debugPrint('Firestore에서 사용자 데이터 삭제 시작: $userId');
-      final firestore = FirebaseFirestore.instance;
-      
-      // 1. 노트 문서 삭제
-      final notesQuery = await firestore.collection('notes')
-          .where('userId', isEqualTo: userId)
-          .get();
-          
-      for (final doc in notesQuery.docs) {
-        await firestore.collection('notes').doc(doc.id).delete();
-      }
-      debugPrint('사용자 노트 ${notesQuery.docs.length}개 삭제 완료');
-      
-      // 2. 페이지 문서 삭제
-      final pagesQuery = await firestore.collection('pages')
-          .where('userId', isEqualTo: userId)
-          .get();
-          
-      for (final doc in pagesQuery.docs) {
-        await firestore.collection('pages').doc(doc.id).delete();
-      }
-      debugPrint('사용자 페이지 ${pagesQuery.docs.length}개 삭제 완료');
-      
-      // 3. 탈퇴 사용자 목록에 추가 (재가입 감지용)
-      await firestore.collection('deleted_users').doc(userId).set({
-        'userId': userId,
-        'email': userEmail,
-        'displayName': displayName,
-        'deletedAt': FieldValue.serverTimestamp(),
-      });
-      
-      // 4. 마지막으로 사용자 문서 삭제
-      await firestore.collection('users').doc(userId).delete();
-      
-      debugPrint('Firestore에서 사용자 데이터 삭제 완료');
-    } catch (e) {
-      debugPrint('Firestore 사용자 데이터 삭제 중 오류 (백그라운드): $e');
-      // 백그라운드 작업이므로 오류가 발생해도 계속 진행
     }
   }
 
@@ -883,6 +497,270 @@ class InitializationService {
     } catch (e) {
       debugPrint('탈퇴 사용자 확인 중 오류: $e');
       return false;
+    }
+  }
+
+  /// 앱 초기화 메서드
+  /// Firebase를 초기화하고 사용자 인증 상태를 확인합니다.
+  Future<bool> initializeApp() async {
+    try {
+      // 초기화 시작 로그
+      debugPrint('앱 초기화 상태 확인 시작 (${_initStartTime.toIso8601String()})');
+
+      // Firebase 초기화 여부 확인 (main.dart에서 초기화되었는지)
+      if (firebaseApp != null) {
+        // 이미 초기화된 경우 상태만 업데이트
+        debugPrint('✅ InitService: 전역 Firebase 앱 변수가 설정되어 있습니다');
+        _isFirebaseInitialized = true;
+        
+        // Completer가 아직 완료되지 않았다면 완료 처리
+        if (!_firebaseInitialized.isCompleted) {
+          _firebaseInitialized.complete(true);
+        }
+      } else {
+        // 아직 초기화되지 않은 경우
+        debugPrint('⚠️ InitService: 전역 Firebase 앱 변수가 설정되지 않았습니다');
+        _isFirebaseInitialized = false;
+        
+        // 중요: 여기서 Firebase를 직접 초기화하지 않음
+        setFirebaseError('Firebase가 main.dart에서 초기화되지 않았습니다');
+        
+        // Completer가 아직 완료되지 않았다면 완료 처리
+    if (!_firebaseInitialized.isCompleted) {
+          _firebaseInitialized.complete(false);
+        }
+        
+        return false;
+      }
+      
+      // Firebase 초기화 확인 후 로그인 상태 확인
+      final loginStateResult = await checkLoginState();
+      
+      // 초기화 완료 시간 및 소요 시간 계산
+      final initEndTime = DateTime.now();
+      final duration = initEndTime.difference(_initStartTime);
+      
+      debugPrint('앱 초기화 상태 확인 완료 (소요 시간: ${duration.inMilliseconds}ms)');
+      debugPrint('로그인 상태: ${loginStateResult['isLoggedIn'] ?? false}');
+            
+      return true;
+    } catch (e) {
+      // 오류 발생 시 처리
+      setFirebaseError('앱 초기화 상태 확인 중 오류가 발생했습니다: $e');
+      debugPrint('앱 초기화 상태 확인 오류: $e');
+      
+      // 초기화 실패를 명시적으로 반환
+      if (!_firebaseInitialized.isCompleted) {
+        _firebaseInitialized.complete(false);
+      }
+      return false;
+    }
+  }
+
+  // Google 로그인
+  Future<UserCredential?> signInWithGoogle() async {
+    try {
+      // Firebase가 초기화되었는지 확인 (전역 변수 사용)
+      if (firebaseApp == null) {
+         debugPrint('⚠️ InitService: Firebase가 초기화되지 않았습니다. Google 로그인 불가능');
+         throw Exception('Firebase가 초기화되지 않아 Google 로그인을 진행할 수 없습니다.');
+      }
+
+      // 기존 로그인 상태를 확인하고 있으면 로그아웃 (계정 선택 화면 표시 위함)
+      try {
+        if (await _googleSignIn.isSignedIn()) {
+          await _googleSignIn.signOut();
+          debugPrint('기존 Google 로그인 세션 정리');
+        }
+      } catch (e) {
+        debugPrint('Google 기존 세션 확인 중 오류: $e');
+      }
+
+      // Google 로그인 UI 표시
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      
+      // 로그인 취소된 경우
+      if (googleUser == null) {
+        debugPrint('Google 로그인 취소됨');
+        return null;
+      }
+      
+      debugPrint('Google 사용자 정보 가져옴: ${googleUser.email}');
+
+      // 인증 정보 가져오기
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      debugPrint('Google 인증 토큰 가져옴 (AccessToken: ${googleAuth.accessToken != null}, IDToken: ${googleAuth.idToken != null})');
+
+      // Firebase 인증 정보 생성
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Firebase에 로그인
+      debugPrint('Firebase에 Google 자격 증명으로 로그인 시도');
+      final UserCredential userCredential = await _firebaseAuth.signInWithCredential(credential);
+      debugPrint('Firebase 로그인 성공: ${userCredential.user?.uid}');
+      
+      // 사용자 정보 Firestore에 저장 (로그인 성공 후 처리)
+      if (userCredential.user != null) {
+        await _saveUserToFirestore(userCredential.user!, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
+        // 캐시 서비스에 사용자 전환 알림
+        await _cacheService.setCurrentUserId(userCredential.user!.uid);
+        // 마지막 활동 시간 저장
+        await _saveLastLoginActivity(userCredential.user!);
+      }
+
+      return userCredential;
+    } catch (e) {
+      debugPrint('Google 로그인 중 심각한 오류 발생: $e');
+      if (e is PlatformException) {
+        debugPrint('PlatformException details: ${e.code} - ${e.message}');
+      }
+      // 오류 발생 시 null 반환 또는 예외 다시 던지기
+      return null; 
+    }
+  }
+
+  // Apple 로그인
+  Future<UserCredential?> signInWithApple() async {
+    try {
+       // Firebase가 초기화되었는지 확인 (전역 변수 사용)
+      if (firebaseApp == null) {
+         debugPrint('⚠️ InitService: Firebase가 초기화되지 않았습니다. Apple 로그인 불가능');
+         throw Exception('Firebase가 초기화되지 않아 Apple 로그인을 진행할 수 없습니다.');
+      }
+
+      // nonce 생성 (Apple 로그인 보안 요구사항)
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+      debugPrint("🔐 Apple 로그인 시도 - nonce: $nonce");
+
+      // Apple 로그인 UI 표시
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+
+      debugPrint('Apple 자격 증명 받음 - ID 토큰 길이: ${appleCredential.identityToken?.length ?? 0}');
+
+      // Firebase OAuth 자격 증명 생성
+      final oauthCredential = OAuthProvider("apple.com").credential(
+        idToken: appleCredential.identityToken,
+        rawNonce: rawNonce,
+        accessToken: appleCredential.authorizationCode,
+      );
+
+      // Firebase에 로그인
+      debugPrint('Firebase에 Apple 자격 증명으로 로그인 시도');
+      final UserCredential userCredential = await _firebaseAuth.signInWithCredential(oauthCredential);
+      debugPrint('Firebase 로그인 성공: ${userCredential.user?.uid}');
+
+      // 사용자 정보 Firestore에 저장 (로그인 성공 후 처리)
+      if (userCredential.user != null) {
+        await _saveUserToFirestore(userCredential.user!, 
+                                 isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false,
+                                 appleCredential: appleCredential); // Apple 자격 증명 전달
+        // 캐시 서비스에 사용자 전환 알림
+        await _cacheService.setCurrentUserId(userCredential.user!.uid);
+         // 마지막 활동 시간 저장
+        await _saveLastLoginActivity(userCredential.user!);
+      }
+
+      return userCredential;
+    } on SignInWithAppleException catch (e) { // 구체적인 예외 타입 명시
+      debugPrint('Apple 로그인 중 오류 발생 (SignInWithAppleException): ${e.toString()}'); 
+      // 오류 코드를 확인하여 사용자에게 더 친절한 메시지 제공 가능
+      return null;
+    } catch (e) {
+      debugPrint('Apple 로그인 중 일반 오류 발생: $e');
+      return null;
+    }
+  }
+
+  // 현재 로그인된 사용자 가져오기
+  User? getCurrentUser() {
+    return FirebaseAuth.instance.currentUser;
+  }
+
+  // 초기화 재시도 메서드 (옵션 매개변수는 무시됨)
+  Future<void> retryInitialization({FirebaseOptions? options}) async {
+    debugPrint('앱 초기화 상태 재확인 시도...');
+    _firebaseError = null; // 이전 오류 초기화
+    
+    // Firebase 초기화 상태 확인
+    if (firebaseApp != null) {
+      debugPrint('✅ retryInit: Firebase가 성공적으로 초기화되어 있습니다');
+      _isFirebaseInitialized = true;
+      
+      // Completer가 아직 완료되지 않았다면 완료 처리
+      if (!_firebaseInitialized.isCompleted) {
+        _firebaseInitialized.complete(true);
+      }
+      
+      // 로그인 상태 확인 
+      await checkLoginState();
+    } else {
+      debugPrint('⚠️ retryInit: Firebase가 초기화되지 않았습니다');
+      
+      // 오류 설정
+      setFirebaseError('Firebase가 main.dart에서 초기화되지 않았습니다');
+      _isFirebaseInitialized = false;
+      
+      // Completer가 아직 완료되지 않았다면 완료 처리
+      if (!_firebaseInitialized.isCompleted) {
+        _firebaseInitialized.complete(false);
+      }
+    }
+  }
+
+  // Nonce 생성 및 해시 함수 (AuthService와 동일하게 유지)
+  String _generateNonce([int length = 32]) {
+    const charset = '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(length, (_) => charset[random.nextInt(charset.length)]).join();
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  // Firebase 초기화 상태 설정 (초기화 자체는 하지 않음)
+  Future<void> markFirebaseInitialized(bool success) async {
+    if (!_firebaseInitialized.isCompleted) {
+      try {
+        // 상태 업데이트 - 실제 초기화는 수행하지 않음
+        _isFirebaseInitialized = success;
+        
+        // 전역 변수가 설정되어 있는지 확인하고, 설정되어 있지 않다면 로그만 남김
+        if (firebaseApp == null) {
+          debugPrint('⚠️ markFirebaseInitialized: 전역 Firebase 앱 변수가 null 상태입니다');
+        } else {
+          debugPrint('✅ markFirebaseInitialized: Firebase 초기화 확인됨');
+        }
+        
+        // Completer 완료 처리
+        _firebaseInitialized.complete(success);
+        
+        // 성공 시에만 로그인 상태 확인
+        if (success) {
+          await checkLoginState();
+        }
+        
+        debugPrint('Firebase 초기화 상태 설정: $success');
+    } catch (e) {
+        // 오류 발생 시 처리
+        _firebaseError = '초기화 상태 설정 중 오류: $e';
+        if (!_firebaseInitialized.isCompleted) {
+          _firebaseInitialized.complete(false);
+        }
+        debugPrint('초기화 상태 설정 오류: $e');
+      }
     }
   }
 }

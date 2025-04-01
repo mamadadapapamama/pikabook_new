@@ -95,13 +95,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   // 백그라운드에서 Firebase 초기화 작업 시작
   void _startBackgroundInitialization() {
-    debugPrint('백그라운드에서 Firebase 초기화 시작');
+    debugPrint('백그라운드에서 Firebase 초기화 상태 확인 시작');
     
-    // 초기화 작업 시작
-    widget.initializationService?.retryInitialization(
-      options: DefaultFirebaseOptions.currentPlatform,
-    ).then((_) {
-      debugPrint('백그라운드 Firebase 초기화 완료');
+    // 초기화 작업 시작 (Firebase 초기화 자체를 시도하지 않음)
+    widget.initializationService?.retryInitialization().then((_) {
+      debugPrint('백그라운드 Firebase 초기화 상태 확인 완료');
       
       // 초기화 완료 후 로그인 화면 갱신
       if (mounted) {
