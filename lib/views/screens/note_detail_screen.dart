@@ -1473,21 +1473,26 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       );
     }
     
-    // 일반 페이지 컨텐츠 표시
-    debugPrint('일반 페이지 컨텐츠 표시 (이전 방문: $wasVisitedBefore)');
+    // 텍스트/이미지 세그먼트가 있는 경우
     return Stack(
       children: [
         // 메인 페이지 컨텐츠
-        PageContentWidget(
-          key: ValueKey('page_content_${currentPage.id}_${currentPage.updatedAt.toString()}'),
-          page: currentPage,
-          imageFile: currentImageFile,
-          isLoadingImage: _isProcessingText,
-          noteId: widget.noteId,
-          onCreateFlashCard: _createFlashCard,
-          flashCards: _note?.flashCards,
-          onDeleteSegment: _handleDeleteSegment,
-          useSegmentMode: _useSegmentMode,
+        SingleChildScrollView(
+          scrollDirection: Axis.vertical,
+          padding: contentPadding, // 여기에 패딩 적용
+          child: PageContentWidget(
+            key: ValueKey('processed_${currentPage.id}'),
+            page: currentPage,
+            imageFile: currentImageFile,
+            flashCards: _note?.flashCards,
+            useSegmentMode: _useSegmentMode,
+            isLoadingImage: false,
+            noteId: widget.noteId,
+            onCreateFlashCard: (front, back, {pinyin}) async {
+              await _createFlashCard(front, back, pinyin: pinyin);
+            },
+            onDeleteSegment: _handleDeleteSegment,
+          ),
         ),
         
         // 툴팁 표시 (처음 텍스트 처리가 완료된 경우)
