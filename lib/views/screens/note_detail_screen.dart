@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:async';
+import 'package:flutter/services.dart';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import '../../services/note_service.dart';
@@ -1100,6 +1101,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
+    // 상태바 아이콘 색상을 검은색으로 설정
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+    );
+    
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: _isLoading || _error != null

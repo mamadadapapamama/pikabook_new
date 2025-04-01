@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:flutter/services.dart';
 
 /// 이미지를 전체 화면으로 표시하는 화면
 class FullImageScreen extends StatefulWidget {
@@ -55,6 +56,15 @@ class _FullImageScreenState extends State<FullImageScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 검은색 배경에서는 흰색 아이콘으로 설정
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+      ),
+    );
+    
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),

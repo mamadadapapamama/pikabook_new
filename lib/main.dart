@@ -25,6 +25,15 @@ Future<void> main() async {
   // 플러터 엔진 초기화만 수행하고 바로 앱 실행
   WidgetsFlutterBinding.ensureInitialized();
   
+  // 시스템 UI 설정 - 상태바 아이콘을 검은색으로 설정
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+    ),
+  );
+  
   // 에러 로깅 설정
   FlutterError.onError = (details) {
     debugPrint('Flutter 에러: ${details.exception}');
