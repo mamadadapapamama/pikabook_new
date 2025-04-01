@@ -629,7 +629,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             // 삭제 안내 텍스트 (가장 하단 레이어에 배치)
             if (!_isLoading && _error == null && _flashCards.isNotEmpty)
               Positioned(
-                top: 16,
+                top: 4,
                 left: 0,
                 right: 0,
                 // z-index 조정을 위해 Material 위젯 추가
@@ -641,7 +641,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                       // 삭제 버튼
                       Icon(
                         Icons.delete_outline,
-                        color: const Color(0xFFD3E0DD),
+                        color: ColorTokens.disabled,
                         size: 24,
                       ),
                       const SizedBox(height: 2),
@@ -650,7 +650,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                         '위로 스와이프 하면 삭제 됩니다.',
                         style: TextStyle(
                           fontSize: 12.0,
-                          color: const Color(0xFFD3E0DD),
+                        color: ColorTokens.disabled,
                           fontWeight: FontWeight.w400,
                           fontFamily: 'Noto Sans KR',
                         ),
@@ -664,7 +664,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             // 이동 안내 텍스트 (가장 하단 레이어에 배치)
             if (!_isLoading && _error == null && _flashCards.isNotEmpty && _flashCards.length > 1)
               Positioned(
-                bottom: 16,
+                bottom: 32,
                 left: 0,
                 right: 0,
                 // z-index 조정을 위해 Material 위젯 추가
@@ -674,7 +674,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                     '좌우로 스와이프 해서 다음 카드로 이동',
                     style: TextStyle(
                       fontSize: 12.0,
-                      color: const Color(0xFFD3E0DD),
+                      color: ColorTokens.disabled,
                       fontWeight: FontWeight.w400,
                       fontFamily: 'Noto Sans KR',
                     ),

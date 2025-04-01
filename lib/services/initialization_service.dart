@@ -373,7 +373,7 @@ class InitializationService {
       rethrow;
     }
   }
-
+  
   // 마지막 로그인 활동 저장
   Future<void> _saveLastLoginActivity(User user) async {
     try {

@@ -218,6 +218,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       centerTitle: centerTitle,
       automaticallyImplyLeading: automaticallyImplyLeading,
+      titleSpacing: 0.0,
       leading: showBackButton
           ? IconButton(
               icon: Icon(

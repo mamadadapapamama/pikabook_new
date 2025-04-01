@@ -45,9 +45,9 @@ class NoteActionBottomSheet extends StatelessWidget {
             // 즐겨찾기 추가/제거
             _buildActionTile(
               context: context,
-              icon: isFavorite ? Icons.favorite : Icons.favorite_border,
-              iconColor: isFavorite ? ColorTokens.error : ColorTokens.textSecondary,
               title: isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가',
+              icon: isFavorite ? Icons.favorite : Icons.favorite_border,
+              iconColor: isFavorite ? ColorTokens.primary : ColorTokens.greyMedium,
               onTap: () {
                 Navigator.pop(context);
                 onToggleFavorite();
@@ -57,9 +57,9 @@ class NoteActionBottomSheet extends StatelessWidget {
             // 노트 제목 변경
             _buildActionTile(
               context: context,
+              title: '노트 제목 변경',
               icon: Icons.edit,
               iconColor: ColorTokens.primary,
-              title: '노트 제목 변경',
               onTap: () {
                 Navigator.pop(context);
                 onEditTitle();
@@ -87,11 +87,11 @@ class NoteActionBottomSheet extends StatelessWidget {
             // 문장별 구분 모드
             _buildActionTile(
               context: context,
-              leading: const SizedBox(width: 24),
               title: '문장별 구분',
-              trailing: !isFullTextMode 
-                ? Icon(Icons.check_circle, color: ColorTokens.primary) 
-                : const SizedBox(width: 24),
+              trailing: Icon(
+                Icons.check_circle,
+                color: !isFullTextMode ? ColorTokens.primary : ColorTokens.greyMedium
+              ),
               onTap: () {
                 Navigator.pop(context);
                 if (isFullTextMode) {
@@ -103,11 +103,11 @@ class NoteActionBottomSheet extends StatelessWidget {
             // 원문 전체 모드
             _buildActionTile(
               context: context,
-              leading: const SizedBox(width: 24),
               title: '원문 전체',
-              trailing: isFullTextMode 
-                ? Icon(Icons.check_circle, color: ColorTokens.primary) 
-                : const SizedBox(width: 24),
+              trailing: Icon(
+                Icons.check_circle,
+                color: isFullTextMode ? ColorTokens.primary : ColorTokens.greyMedium
+              ),
               onTap: () {
                 Navigator.pop(context);
                 if (!isFullTextMode) {
@@ -122,9 +122,9 @@ class NoteActionBottomSheet extends StatelessWidget {
             // 노트 삭제
             _buildActionTile(
               context: context,
+              title: '노트 삭제',
               icon: Icons.delete_outline,
               iconColor: ColorTokens.error,
-              title: '노트 삭제',
               onTap: () {
                 Navigator.pop(context);
                 onDeleteNote();
