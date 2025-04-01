@@ -87,6 +87,8 @@ class InitializationService {
   );
 
   final FirebaseAuth _firebaseAuth = FirebaseAuth.instance;
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
+  bool _isFirebaseInitialized = false;
 
   InitializationService();
 
@@ -195,25 +197,44 @@ class InitializationService {
   // 사용자 로그인 처리 및 온보딩 상태 관리
   Future<Map<String, dynamic>> handleUserLogin(User user) async {
     try {
-      debugPrint('사용자 로그인 처리 시작: ${user.uid} (${DateTime.now()})');
+      debugPrint('사용자 로그인 처리 시작: ${user.uid}');
       final firestore = FirebaseFirestore.instance;
       final userPrefs = UserPreferencesService();
       final cacheService = UnifiedCacheService();
       
-      // 캐시 서비스에 현재 사용자 ID 설정
+      // 1. 먼저 로컬 데이터 초기화 (이전 사용자 데이터 제거)
+      await _cleanupPreviousUserData();
+      
+      // 2. 캐시 서비스에 현재 사용자 ID 설정
       await cacheService.setCurrentUserId(user.uid);
       
-      // Firestore에서 사용자 데이터 확인
+      // 3. Firestore에서 사용자 데이터 확인
       final userDoc = await firestore.collection('users').doc(user.uid).get();
-      final isNewUser = !userDoc.exists;
       
-      // 사용자 정보 저장 (새 사용자 여부에 따라 다른 처리)
-      await _saveUserToFirestore(user, isNewUser: isNewUser);
+      // 4. 탈퇴 기록 확인 및 처리
+      final wasDeleted = await _checkIfUserWasDeleted(user.uid, user.email);
+      final isNewUser = !userDoc.exists || wasDeleted;
       
-      // 로그인 기록 저장
+      // 5. 사용자 정보 저장 (새 사용자 또는 탈퇴 후 재가입)
+      if (isNewUser) {
+        debugPrint('새 사용자 또는 탈퇴 후 재가입 감지: ${user.uid}');
+        // 탈퇴 기록이 있으면 삭제
+        if (wasDeleted) {
+          await _clearDeletedUserRecord(user.uid, user.email);
+        }
+        // 새 사용자로 처리
+        await _saveUserToFirestore(user, isNewUser: true);
+        // 온보딩 상태 초기화
+        await userPrefs.setOnboardingCompleted(false);
+      } else {
+        // 기존 사용자 데이터 업데이트
+        await _saveUserToFirestore(user, isNewUser: false);
+      }
+      
+      // 6. 로그인 기록 저장
       await userPrefs.saveLoginHistory();
       
-      // 결과 객체 초기화
+      // 7. 결과 객체 구성
       final result = {
         'isLoggedIn': true,
         'isNewUser': isNewUser,
@@ -222,36 +243,32 @@ class InitializationService {
         'isFirstEntry': true,
       };
       
-      // 온보딩 상태 확인 및 저장
+      // 8. 기존 사용자의 경우 온보딩 상태 확인
       if (!isNewUser) {
-        // 기존 사용자
         final userData = userDoc.data() as Map<String, dynamic>?;
-        final onboardingCompleted = userData?['onboardingCompleted'] ?? false;
-        
-        // 온보딩 상태 로컬에 저장
-        await userPrefs.setOnboardingCompleted(onboardingCompleted);
-        result['isOnboardingCompleted'] = onboardingCompleted;
-        
-        // 툴팁 상태 확인
-        final prefs = await SharedPreferences.getInstance();
-        final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
-        result['isFirstEntry'] = !hasShownTooltip;
-        
-        debugPrint('기존 사용자 로그인: 온보딩 상태=$onboardingCompleted, 툴팁 표시 여부=${!hasShownTooltip}');
-        
-        // 온보딩이 완료된 경우에만 추가 설정 로드
-        if (onboardingCompleted && userData != null) {
-          await _loadUserSettings(userData, userPrefs);
+        if (userData != null) {
+          final onboardingCompleted = userData['onboardingCompleted'] ?? false;
+          await userPrefs.setOnboardingCompleted(onboardingCompleted);
+          result['isOnboardingCompleted'] = onboardingCompleted;
+          
+          // 툴팁 상태 확인
+          final prefs = await SharedPreferences.getInstance();
+          final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
+          result['isFirstEntry'] = !hasShownTooltip;
+          
+          // 온보딩이 완료된 경우에만 추가 설정 로드
+          if (onboardingCompleted) {
+            await _loadUserSettings(userData, userPrefs);
+          }
         }
-      } else {
-        // 새 사용자는 온보딩 미완료 상태로 설정
-        await userPrefs.setOnboardingCompleted(false);
-        debugPrint('새 사용자 로그인: 온보딩 필요');
       }
       
+      debugPrint('로그인 처리 완료: $result');
       return result;
     } catch (e) {
       debugPrint('사용자 로그인 처리 중 오류 발생: $e');
+      // 오류 발생 시 모든 데이터 초기화
+      await _cleanupPreviousUserData();
       return {
         'isLoggedIn': true,
         'error': e.toString(),
@@ -260,7 +277,64 @@ class InitializationService {
       };
     }
   }
-  
+
+  // 이전 사용자 데이터 정리
+  Future<void> _cleanupPreviousUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheService = UnifiedCacheService();
+      
+      // 1. 캐시 서비스 초기화
+      await cacheService.clearAllCache();
+      
+      // 2. 중요 상태 키 초기화
+      final keysToRemove = [
+        'current_user_id',
+        'login_history',
+        'onboarding_completed',
+        'has_shown_tooltip',
+        'last_signin_provider',
+        'has_multiple_accounts',
+        'cache_current_user_id',
+      ];
+      
+      for (final key in keysToRemove) {
+        await prefs.remove(key);
+      }
+      
+      debugPrint('이전 사용자 데이터 정리 완료');
+    } catch (e) {
+      debugPrint('이전 데이터 정리 중 오류: $e');
+    }
+  }
+
+  // 탈퇴 기록 삭제
+  Future<void> _clearDeletedUserRecord(String uid, String? email) async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final batch = firestore.batch();
+      
+      // UID로 삭제
+      final uidDoc = firestore.collection('deleted_users').doc(uid);
+      batch.delete(uidDoc);
+      
+      // 이메일로 검색하여 삭제
+      if (email != null && email.isNotEmpty) {
+        final emailQuery = await firestore.collection('deleted_users')
+            .where('email', isEqualTo: email)
+            .get();
+        for (var doc in emailQuery.docs) {
+          batch.delete(doc.reference);
+        }
+      }
+      
+      await batch.commit();
+      debugPrint('탈퇴 기록 삭제 완료');
+    } catch (e) {
+      debugPrint('탈퇴 기록 삭제 중 오류: $e');
+    }
+  }
+
   // 사용자 설정 로드 (재사용을 위한 별도 메서드)
   Future<void> _loadUserSettings(Map<String, dynamic> userData, UserPreferencesService userPrefs) async {
     try {
@@ -292,91 +366,10 @@ class InitializationService {
   // 로그아웃
   Future<void> signOut() async {
     try {
-      debugPrint('철저한 로그아웃 처리 시작...');
-      final userPrefs = UserPreferencesService();
-      final cacheService = UnifiedCacheService();
-      
-      // 현재 사용자 ID 저장 (캐시 삭제용)
-      final currentUser = FirebaseAuth.instance.currentUser;
-      final userId = currentUser?.uid;
-      
-      // 1. 모든 캐시 데이터 초기화 (사용자별)
-      if (userId != null && userId.isNotEmpty) {
-        // 사용자 ID 기반으로 해당 사용자의 캐시만 삭제
-        await cacheService.clearAllCache();
-        debugPrint('현재 사용자($userId)의 캐시 데이터 삭제 완료');
-      } else {
-        // 사용자 ID를 알 수 없는 경우 전체 캐시 삭제
-        await cacheService.clearAllCache();
-        debugPrint('알 수 없는 사용자의 캐시 데이터 삭제 완료');
-      }
-      
-      // 2. 사용자 기본 설정 초기화
-      await userPrefs.clearAllUserPreferences();
-      debugPrint('사용자 설정 데이터 초기화 완료');
-      
-      // 3. SharedPreferences에서 사용자 관련 정보 삭제
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('current_user_id');
-      await prefs.remove('last_signin_provider');
-      await prefs.remove('has_multiple_accounts');
-      await prefs.remove('cache_current_user_id'); // 캐시 서비스에서 사용하는 사용자 ID
-      
-      // 소셜 로그인 관련 토큰 정보도 삭제
-      final keys = prefs.getKeys();
-      for (final key in keys) {
-        if (key.contains('apple') || 
-            key.contains('Apple') || 
-            key.contains('google') ||
-            key.contains('Google') ||
-            key.contains('sign_in') || 
-            key.contains('oauth') ||
-            key.contains('token') ||
-            key.contains('auth') ||
-            key.contains('credential')) {
-          await prefs.remove(key);
-        }
-      }
-      
-      debugPrint('SharedPreferences 사용자 정보 삭제 완료');
-      
-      // 4. Google 로그인 상태 확인 및 로그아웃
-      try {
-        final googleSignIn = GoogleSignIn();
-        if (await googleSignIn.isSignedIn()) {
-          await googleSignIn.disconnect(); // 모든 계정 연결 해제 (단순 signOut보다 더 철저함)
-          await googleSignIn.signOut();
-          debugPrint('Google 로그인 연결 해제 및 로그아웃 완료');
-        }
-      } catch (e) {
-        debugPrint('Google 로그아웃 중 오류 (무시됨): $e');
-      }
-      
-      // 5. Firebase 자체 로그아웃
-      await _firebaseAuth.signOut();
-      debugPrint('Firebase 로그아웃 완료');
-      
-      // 6. 추가: Apple 로그인 관련 추가 정리
-      // Apple 관련 모든 키 삭제
-      for (final key in keys) {
-        if (key.contains('apple') || key.contains('Apple')) {
-          await prefs.remove(key);
-        }
-      }
-      
-      // 7. 로그인 기록 초기화 (다시 로그인할 때 새 계정으로 인식하도록)
-      await userPrefs.clearLoginHistory();
-      debugPrint('로그인 기록 초기화 완료');
-      
-      // 8. 메모리 내 상태 초기화
-      _authError = null;
-      debugPrint('로그아웃 처리 완전히 완료됨');
+      final authService = AuthService();
+      await authService.signOut();
     } catch (e) {
       debugPrint('로그아웃 중 오류 발생: $e');
-      // 오류가 발생해도 Firebase 로그아웃은 시도
-      try {
-        await _firebaseAuth.signOut();
-      } catch (_) {}
       rethrow;
     }
   }
@@ -864,6 +857,32 @@ class InitializationService {
     } catch (e) {
       debugPrint('Firestore 사용자 데이터 삭제 중 오류 (백그라운드): $e');
       // 백그라운드 작업이므로 오류가 발생해도 계속 진행
+    }
+  }
+
+  // 탈퇴한 사용자인지 확인
+  Future<bool> _checkIfUserWasDeleted(String uid, String? email) async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      
+      // 1. UID로 확인
+      final uidDoc = await firestore.collection('deleted_users').doc(uid).get();
+      if (uidDoc.exists) {
+        return true;
+      }
+      
+      // 2. 이메일로 확인 (있는 경우)
+      if (email != null && email.isNotEmpty) {
+        final emailQuery = await firestore.collection('deleted_users')
+            .where('email', isEqualTo: email)
+            .get();
+        return emailQuery.docs.isNotEmpty;
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('탈퇴 사용자 확인 중 오류: $e');
+      return false;
     }
   }
 }

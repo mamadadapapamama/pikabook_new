@@ -3,6 +3,15 @@ import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 
+/// 툴팁 스타일 프리셋
+enum HelpTextTooltipStyle {
+  primary,
+  success,
+  warning,
+  error,
+  info,
+}
+
 class HelpTextTooltip extends StatefulWidget {
   final String text;
   final String? description;
@@ -17,6 +26,7 @@ class HelpTextTooltip extends StatefulWidget {
   final Color? borderColor;
   final Color? textColor;
   final double spacing; // 버튼과 툴팁 사이의 간격
+  final HelpTextTooltipStyle style; // 추가된 스타일 프리셋
 
   const HelpTextTooltip({
     Key? key,
@@ -33,7 +43,50 @@ class HelpTextTooltip extends StatefulWidget {
     this.borderColor,
     this.textColor,
     this.spacing = 4.0, // 기본값 4px
+    this.style = HelpTextTooltipStyle.primary, // 기본 스타일
   }) : super(key: key);
+
+  // 스타일 프리셋에 따른 배경색 반환
+  Color get _getBackgroundColor {
+    if (backgroundColor != null) return backgroundColor!;
+    
+    switch (style) {
+      case HelpTextTooltipStyle.primary:
+        return ColorTokens.primaryverylight;
+      case HelpTextTooltipStyle.success:
+        return ColorTokens.successLight;
+      case HelpTextTooltipStyle.warning:
+        return ColorTokens.warningLight;
+      case HelpTextTooltipStyle.error:
+        return ColorTokens.errorLight;
+      case HelpTextTooltipStyle.info:
+        return ColorTokens.primaryverylight;
+    }
+  }
+  
+  // 스타일 프리셋에 따른 테두리색 반환
+  Color get _getBorderColor {
+    if (borderColor != null) return borderColor!;
+    
+    switch (style) {
+      case HelpTextTooltipStyle.primary:
+        return ColorTokens.primaryMedium;
+      case HelpTextTooltipStyle.success:
+        return ColorTokens.success;
+      case HelpTextTooltipStyle.warning:
+        return ColorTokens.warning;
+      case HelpTextTooltipStyle.error:
+        return ColorTokens.error;
+      case HelpTextTooltipStyle.info:
+        return ColorTokens.primaryMedium;
+    }
+  }
+  
+  // 스타일 프리셋에 따른 텍스트색 반환
+  Color get _getTextColor {
+    if (textColor != null) return textColor!;
+    return ColorTokens.textPrimary;
+  }
 
   @override
   State<HelpTextTooltip> createState() => _HelpTextTooltipState();
@@ -77,7 +130,7 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
         widget.child,
         if (widget.showTooltip)
           Positioned(
-            bottom: -widget.spacing, // 버튼과의 간격 4px
+            bottom: -widget.spacing, // 버튼과의 간격
             left: 0,
             right: 0,
             child: SlideTransition(
@@ -86,10 +139,10 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                 width: widget.tooltipWidth ?? double.infinity,
                 padding: widget.tooltipPadding ?? const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: widget.backgroundColor ?? ColorTokens.primaryverylight,
+                  color: widget._getBackgroundColor,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: widget.borderColor ?? ColorTokens.primaryMedium,
+                    color: widget._getBorderColor,
                     width: 1,
                   ),
                 ),
@@ -105,7 +158,7 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                     Text(
                       widget.text,
                       style: TypographyTokens.body1.copyWith(
-                        color: widget.textColor ?? ColorTokens.textPrimary,
+                        color: widget._getTextColor,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -115,7 +168,7 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                       Text(
                         widget.description!,
                         style: TypographyTokens.body2.copyWith(
-                          color: widget.textColor ?? ColorTokens.textPrimary,
+                          color: widget._getTextColor,
                         ),
                       ),
                     ],

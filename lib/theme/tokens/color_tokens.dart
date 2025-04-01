@@ -25,9 +25,12 @@ class ColorTokens {
   static const Color textGrey = Color(0xFF969696); // 밝은 배경에서 중요하지 않은 텍스트
   // 상태 컬러
   static const Color success = Color(0xFF34A853); // 성공 상태
+  static const Color successLight = Color(0xFFE7F7E9); // 성공 상태 배경색 (연한 녹색)
   static const Color error = Color(0xFFCC0A0A); // 오류 상태
+  static const Color errorLight = Color(0xFFFDE8E8); // 오류 상태 연한 배경색
   static const Color errorBackground = Color(0xFFFF6D6D); // 오류 상태 배경
   static const Color warning = Color(0xFFFFC107); // 경고 상태
+  static const Color warningLight = Color(0xFFFFF8E1); // 경고 상태 연한 배경색
   static const Color info = Color(0xFF2196F3); // 정보 상태
     
   // 구분선 및 비활성화

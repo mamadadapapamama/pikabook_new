@@ -795,57 +795,121 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           
           // 성공적으로 처리되었고, 현재 노트와 일치하는 경우
           if (success && noteId == _note!.id) {
-            // 노트 객체를 업데이트하고 Firestore와 캐시에도 반영
-            if (_note != null && _note!.id != null) {
-              // 노트 객체 업데이트
-              final updatedNote = _note!.copyWith(flashcardCount: flashcardCount);
-              
-              // Firebase에 업데이트 반영
-              await FirebaseFirestore.instance
-                  .collection('notes')
-                  .doc(_note!.id)
-                  .update({'flashcardCount': flashcardCount});
-                  
-              // 노트 서비스에 캐시 업데이트
-              _noteService.cacheNotes([updatedNote]);
-              
-              // 노트 정보 새로 로드 (UI 갱신)
-              _loadNote();
-            }
-          }
-        } else {
-          // 이전 버전과의 호환성 유지 (Int 반환)
-          if (result is int) {
-            final flashcardCount = result;
-            debugPrint('플래시카드 화면에서 돌아옴 (레거시 형식): 카드 수 $flashcardCount개');
-            
             // 노트 객체 업데이트
-            if (_note != null && _note!.id != null) {
-              final updatedNote = _note!.copyWith(flashcardCount: flashcardCount);
+            final updatedNote = _note!.copyWith(flashcardCount: flashcardCount);
+            
+            // Firebase에 업데이트 반영
+            await FirebaseFirestore.instance
+                .collection('notes')
+                .doc(_note!.id)
+                .update({'flashcardCount': flashcardCount});
+                
+            // 캐시 관련 초기화 작업
+            if (_pageManager.currentPage?.id != null) {
+              // 현재 페이지의 ProcessedText 캐시 삭제 - 플래시카드 단어 하이라이트 갱신을 위해
+              _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
+            }
+            
+            // 노트 서비스에 캐시 업데이트
+            _noteService.cacheNotes([updatedNote]);
+            
+            // 노트를 다시 로드하여 최신 데이터 가져오기
+            await _loadNote();
+            
+            // 현재 페이지의 플래시카드 단어 목록을 새로 로드
+            if (_pageManager.currentPageIndex >= 0 && _pageManager.currentPageIndex < _pageManager.pages.length) {
+              // 플래시카드 목록 새로 로드
+              final flashCardService = FlashCardService();
+              final flashCards = await flashCardService.getFlashCardsForNote(_note!.id!);
               
-              // Firebase에 업데이트 반영
-              await FirebaseFirestore.instance
-                  .collection('notes')
-                  .doc(_note!.id)
-                  .update({'flashcardCount': flashcardCount});
-                  
-              // 노트 서비스에 캐시 업데이트
-              _noteService.cacheNotes([updatedNote]);
+              // 노트 객체 업데이트
+              setState(() {
+                _note = _note!.copyWith(flashCards: flashCards);
+              });
               
-              // 노트 정보 새로 로드
-              _loadNote();
+              // 현재 페이지 텍스트 다시 처리하여 하이라이트 정보 갱신
+              await _processTextForCurrentPage();
+              
+              debugPrint('플래시카드 목록 및 페이지 텍스트 새로 로드 완료: ${flashCards.length}개 카드');
             }
           }
         }
       }
     } catch (e) {
-      debugPrint('플래시카드 화면 처리 중 오류 발생: $e');
       if (mounted) {
+        debugPrint('플래시카드 화면 이동 중 오류: $e');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('플래시카드 화면 이동 중 오류가 발생했습니다: $e')),
+          SnackBar(content: Text('오류가 발생했습니다: $e')),
         );
       }
     }
+  }
+
+  // 현재 페이지의 플래시카드 단어를 다시 로드하는 메서드 추가
+  Future<void> _loadFlashcardsForCurrentPage() async {
+    try {
+      if (_pageManager.currentPageIndex < 0 || _pageManager.currentPageIndex >= _pageManager.pages.length || _note == null) {
+        return;
+      }
+      
+      // 현재 노트의 모든 플래시카드를 로드
+      final flashCardService = FlashCardService();
+      final flashCards = await flashCardService.getFlashCardsForNote(_note!.id!);
+      
+      // UI 업데이트
+      if (mounted) {
+        setState(() {
+          _note = _note!.copyWith(flashCards: flashCards);
+        });
+        
+        // ProcessedTextWidget이 플래시카드 단어 목록 업데이트를 인식할 수 있도록 
+        // 메모리 캐시를 클리어하거나 강제로 리빌드
+        _setPageDisplayMode(_textDisplayMode);
+      }
+      
+      debugPrint('현재 페이지의 플래시카드 단어 목록 새로 로드됨: ${flashCards.length}개');
+    } catch (e) {
+      debugPrint('플래시카드 목록 로드 중 오류: $e');
+    }
+  }
+
+  // 페이지 디스플레이 모드 설정 메서드
+  void _setPageDisplayMode(TextDisplayMode mode) {
+    debugPrint('페이지 디스플레이 모드 설정: $mode');
+    
+    // 현재 페이지 확인
+    final currentPage = _pageManager.currentPage;
+    if (currentPage == null || currentPage.id == null) {
+      debugPrint('현재 페이지 없음 - 디스플레이 모드 설정 불가');
+      return;
+    }
+    
+    // 캐시된 processedText 가져오기
+    final processedText = _pageContentService.getProcessedText(currentPage.id!);
+    if (processedText == null) {
+      debugPrint('ProcessedText가 null임 - 디스플레이 모드 설정 불가');
+      return;
+    }
+    
+    // 병음 토글 처리
+    bool showPinyin = (mode == TextDisplayMode.all);
+    
+    // processedText 업데이트
+    final updatedText = processedText.copyWith(
+      showFullText: processedText.showFullText, // 전체/세그먼트 모드는 유지
+      showPinyin: showPinyin,           // 병음 표시 여부 업데이트
+      showTranslation: true,            // 번역은 항상 표시
+    );
+    
+    // 업데이트된 ProcessedText 저장
+    _pageContentService.setProcessedText(currentPage.id!, updatedText);
+    
+    // UI 갱신
+    setState(() {
+      _textDisplayMode = mode;
+    });
+    
+    debugPrint('페이지 디스플레이 모드 설정 완료: showPinyin=$showPinyin');
   }
 
   // 세그먼트 삭제 처리

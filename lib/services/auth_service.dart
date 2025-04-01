@@ -13,6 +13,8 @@ import 'package:firebase_core/firebase_core.dart';
 import '../firebase_options.dart';
 import '../services/user_preferences_service.dart';
 import '../services/unified_cache_service.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -179,77 +181,54 @@ Map<String, dynamic> _parseJwt(String token) {
 // 로그아웃
 Future<void> signOut() async {
   try {
-    final userPrefs = UserPreferencesService();
-    
-    // 소셜 로그인 상태 확인 및 연결 해제
-    await _clearSocialLoginSessions();
-
-    // 로그인 기록 초기화
-    await userPrefs.clearLoginHistory();
-    
-    // 캐시 서비스에서 사용자 ID 제거
+    debugPrint('로그아웃 처리 시작...');
     final cacheService = UnifiedCacheService();
+    
+    // 1. 민감한 인증 관련 데이터만 삭제
+    final prefs = await SharedPreferences.getInstance();
+    final sensitiveKeys = [
+      'current_user_id',
+      'last_signin_provider',
+      'has_multiple_accounts',
+      'auth_token',
+      'refresh_token',
+    ];
+    
+    for (final key in sensitiveKeys) {
+      await prefs.remove(key);
+    }
+    
+    // 2. 소셜 로그인 토큰 삭제
+    final keys = prefs.getKeys();
+    for (final key in keys) {
+      if (key.contains('token') || 
+          key.contains('auth') || 
+          key.contains('credential') ||
+          key.contains('oauth')) {
+        await prefs.remove(key);
+      }
+    }
+    
+    // 3. Google 로그인 연결 해제
+    try {
+      if (await _googleSignIn.isSignedIn()) {
+        await _googleSignIn.signOut(); // disconnect() 대신 signOut() 사용
+        debugPrint('Google 로그인 연결 해제 완료');
+      }
+    } catch (e) {
+      debugPrint('Google 로그아웃 중 오류 (무시됨): $e');
+    }
+    
+    // 4. 캐시 서비스에서 현재 사용자 ID 제거
     await cacheService.clearCurrentUserId();
     
-    // Firebase 로그아웃
+    // 5. Firebase 로그아웃
     await _auth.signOut();
     
-    debugPrint('로그아웃 완료');
+    debugPrint('로그아웃 처리 완료');
   } catch (e) {
     debugPrint('로그아웃 중 오류 발생: $e');
     rethrow;
-  }
-}
-
-// 소셜 로그인 세션 완전 정리
-Future<void> _clearSocialLoginSessions() async {
-  try {
-    // 1. Google 로그인 연결 해제 (Google 계정 연결 권한까지 철회)
-    try {
-      final googleSignIn = GoogleSignIn();
-      if (await googleSignIn.isSignedIn()) {
-        // 단순 로그아웃이 아닌 disconnect() 사용해 계정 연결 자체를 끊어야 계정 선택 화면이 나타남
-        await googleSignIn.disconnect();
-        await googleSignIn.signOut();
-        debugPrint('Google 계정 연결 완전 해제됨');
-      }
-    } catch (e) {
-      debugPrint('Google 계정 연결 해제 중 오류: $e');
-    }
-    
-    // 2. Apple 로그인 상태 정리
-    try {
-      // Apple은 앱 수준에서 연결 해제가 제한적이라 로컬 저장소에서 관련 정보 제거
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Apple 관련 모든 캐시 키 삭제
-      final keys = prefs.getKeys();
-      for (final key in keys) {
-        if (key.contains('apple') || 
-            key.contains('Apple') || 
-            key.contains('sign_in') || 
-            key.contains('oauth') ||
-            key.contains('token') ||
-            key.contains('credential')) {
-          await prefs.remove(key);
-        }
-      }
-      
-      debugPrint('Apple 로그인 관련 정보 정리 완료');
-    } catch (e) {
-      debugPrint('Apple 로그인 정보 정리 중 오류: $e');
-    }
-    
-    // 3. 로컬 캐시 완전 초기화
-    try {
-      final cacheService = UnifiedCacheService();
-      await cacheService.clearAllCache();
-      debugPrint('모든 캐시 데이터 초기화 완료');
-    } catch (e) {
-      debugPrint('캐시 데이터 초기화 중 오류: $e');
-    }
-  } catch (e) {
-    debugPrint('소셜 로그인 세션 정리 중 오류: $e');
   }
 }
 
@@ -257,7 +236,6 @@ Future<void> _clearSocialLoginSessions() async {
   Future<void> deleteAccount() async {
     try {
       final user = _auth.currentUser;
-
       if (user == null) {
         throw Exception('로그인된 사용자가 없습니다.');
       }
@@ -266,102 +244,14 @@ Future<void> _clearSocialLoginSessions() async {
       final userEmail = user.email;
       final displayName = user.displayName;
       
-      // 재인증이 필요한지 먼저 확인
-      try {
-        // 간단한 작업으로 토큰 갱신 테스트 - 재인증이 필요하면 예외 발생
-        await user.getIdToken(true);
-      } catch (e) {
-        if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
-          // 자동 재인증 시도
-          try {
-            // 최근 로그인 제공자 정보 확인
-            final authProvider = user.providerData.firstOrNull?.providerId;
-            
-            if (authProvider?.contains('google') == true) {
-              // Google 로그인 재인증 시도
-              final googleUser = await _googleSignIn.signIn();
-              if (googleUser != null) {
-                final googleAuth = await googleUser.authentication;
-                final credential = GoogleAuthProvider.credential(
-                  accessToken: googleAuth.accessToken,
-                  idToken: googleAuth.idToken,
-                );
-                await user.reauthenticateWithCredential(credential);
-                debugPrint('Google 재인증 성공');
-              } else {
-                throw FirebaseAuthException(
-                  code: 'user-cancelled',
-                  message: '재인증 취소됨',
-                );
-              }
-            } else if (authProvider?.contains('apple') == true) {
-              // Apple 로그인 재인증 시도 (생략 - 직접 구현 필요)
-              throw Exception('Apple 로그인 재인증이 필요합니다.');
-            } else {
-              throw Exception('알 수 없는 로그인 방식으로 재인증이 필요합니다.');
-            }
-          } catch (reAuthError) {
-            debugPrint('자동 재인증 실패: $reAuthError');
-            rethrow; // 재인증 오류 전달
-          }
-        } else {
-          // 다른 오류는 그대로 전달
-          rethrow;
-        }
-      }
+      // 1. 재인증 처리
+      await _handleReauthentication(user);
       
-      // 1. Firestore에서 사용자 데이터 삭제
-      // 노트 컬렉션 삭제
-      final notesQuery = await _firestore.collection('notes')
-          .where('userId', isEqualTo: userId)
-          .get();
-      for (final doc in notesQuery.docs) {
-        await _firestore.collection('notes').doc(doc.id).delete();
-      }
+      // 2. 먼저 모든 데이터 삭제 작업을 수행
+      await _deleteAllUserData(userId, userEmail, displayName);
       
-      // 페이지 컬렉션 삭제
-      final pagesQuery = await _firestore.collection('pages')
-          .where('userId', isEqualTo: userId)
-          .get();
-      for (final doc in pagesQuery.docs) {
-        await _firestore.collection('pages').doc(doc.id).delete();
-      }
-      
-      // 플래시카드 삭제
-      final flashcardsQuery = await _firestore.collection('flashcards')
-          .where('userId', isEqualTo: userId)
-          .get();
-      for (final doc in flashcardsQuery.docs) {
-        await _firestore.collection('flashcards').doc(doc.id).delete();
-      }
-      
-      // 2. 이전에 탈퇴한 사용자 기록 제거 (재가입 시 문제 방지)
-      // 이메일로 검색
-      if (userEmail != null && userEmail.isNotEmpty) {
-        final deletedUsersByEmail = await _firestore.collection('deleted_users')
-            .where('email', isEqualTo: userEmail)
-            .get();
-        for (final doc in deletedUsersByEmail.docs) {
-          await _firestore.collection('deleted_users').doc(doc.id).delete();
-        }
-      }
-      
-      // UID로 검색
-      final deletedUserByUid = await _firestore.collection('deleted_users')
-          .doc(userId)
-          .get();
-      if (deletedUserByUid.exists) {
-        await _firestore.collection('deleted_users').doc(userId).delete();
-      }
-      
-      // 3. 사용자 문서 삭제 (마지막으로 삭제)
-      await _firestore.collection('users').doc(userId).delete();
-      
-      // 4. Firebase Auth에서 사용자 삭제
+      // 3. 마지막으로 Firebase Auth에서 사용자 삭제
       await user.delete();
-      
-      // 5. 로컬 캐시 및 사용자 설정 정리
-      await _clearAllUserData();
       
       debugPrint('계정이 성공적으로 삭제되었습니다');
     } catch (e) {
@@ -369,39 +259,176 @@ Future<void> _clearSocialLoginSessions() async {
       rethrow;
     }
   }
-  
-  // 모든 사용자 데이터 정리 (프라이버시 보호)
-  Future<void> _clearAllUserData() async {
+
+  // 재인증 처리를 위한 별도 메서드
+  Future<void> _handleReauthentication(User user) async {
     try {
-      // 캐시 정리
-      final cacheService = UnifiedCacheService();
-      await cacheService.clearAllCache();
-      
-      // 사용자 설정 정리
-      final userPrefs = UserPreferencesService();
-      await userPrefs.clearAllUserPreferences();
-      
-      // SharedPreferences 정리
-      final prefs = await SharedPreferences.getInstance();
-      final keys = prefs.getKeys();
-      
-      // 사용자 관련 데이터 정리
-      for (final key in keys) {
-        if (key.contains('user') || 
-            key.contains('login') || 
-            key.contains('auth') || 
-            key.contains('token') ||
-            key.contains('note') ||
-            key.contains('page') ||
-            key.contains('flash') ||
-            key.contains('setting')) {
-          await prefs.remove(key);
+      await user.getIdToken(true);
+    } catch (e) {
+      if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+        final authProvider = user.providerData.firstOrNull?.providerId;
+        
+        if (authProvider?.contains('google') == true) {
+          final googleUser = await _googleSignIn.signIn();
+          if (googleUser != null) {
+            final googleAuth = await googleUser.authentication;
+            final credential = GoogleAuthProvider.credential(
+              accessToken: googleAuth.accessToken,
+              idToken: googleAuth.idToken,
+            );
+            await user.reauthenticateWithCredential(credential);
+          } else {
+            throw FirebaseAuthException(
+              code: 'user-cancelled',
+              message: '재인증 취소됨',
+            );
+          }
+        } else if (authProvider?.contains('apple') == true) {
+          throw Exception('Apple 로그인 재인증이 필요합니다.');
         }
+      } else {
+        rethrow;
+      }
+    }
+  }
+
+  // 모든 사용자 데이터 삭제를 처리하는 별도 메서드
+  Future<void> _deleteAllUserData(String userId, String? email, String? displayName) async {
+    try {
+      // 1. 로컬 데이터 삭제 (이미지 파일 포함)
+      await _clearAllLocalData();
+      
+      // 2. Firestore 데이터 삭제
+      await _deleteFirestoreData(userId);
+      
+      // 3. 소셜 로그인 연결 해제
+      await _clearSocialLoginSessions();
+      
+      // 4. 디바이스 ID 초기화
+      await _resetDeviceId();
+      
+      // 5. 탈퇴 기록 저장
+      await _saveDeletedUserRecord(userId, email, displayName);
+      
+      debugPrint('모든 사용자 데이터 삭제 완료');
+    } catch (e) {
+      debugPrint('사용자 데이터 삭제 중 오류: $e');
+      rethrow;
+    }
+  }
+
+  // 로컬 데이터 완전 삭제 (이미지 파일 포함)
+  Future<void> _clearAllLocalData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheService = UnifiedCacheService();
+      
+      // 1. 이미지 파일 삭제
+      final appDir = await getApplicationDocumentsDirectory();
+      final imageDir = Directory('${appDir.path}/images');
+      if (await imageDir.exists()) {
+        await imageDir.delete(recursive: true);
+        debugPrint('이미지 디렉토리 삭제 완료');
       }
       
-      debugPrint('모든 사용자 데이터가 정리되었습니다');
+      // 2. SharedPreferences 완전 초기화
+      await prefs.clear();
+      
+      // 3. 캐시 서비스 초기화
+      await cacheService.clearAllCache();
+      
+      // 4. 중요 키 개별 삭제 (혹시 모를 잔여 데이터 제거)
+      final keys = [
+        'current_user_id',
+        'login_history',
+        'onboarding_completed',
+        'has_shown_tooltip',
+        'last_signin_provider',
+        'has_multiple_accounts',
+        'cache_current_user_id',
+      ];
+      
+      for (final key in keys) {
+        await prefs.remove(key);
+      }
+      
+      debugPrint('로컬 데이터 완전 삭제 완료');
     } catch (e) {
-      debugPrint('사용자 데이터 정리 중 오류: $e');
+      debugPrint('로컬 데이터 삭제 중 오류: $e');
+      rethrow;
+    }
+  }
+
+  // Firestore 데이터 완전 삭제
+  Future<void> _deleteFirestoreData(String userId) async {
+    try {
+      final batch = _firestore.batch();
+      
+      // 1. 사용자 문서 삭제
+      batch.delete(_firestore.collection('users').doc(userId));
+      
+      // 2. 노트 삭제 (익명 노트 포함)
+      final notesQuery = await _firestore.collection('notes')
+          .where('userId', isEqualTo: userId)
+          .get();
+      for (var doc in notesQuery.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // 2-1. 익명 노트도 함께 삭제
+      final anonymousNotesQuery = await _firestore.collection('notes')
+          .where('deviceId', isEqualTo: await _getDeviceId())
+          .get();
+      for (var doc in anonymousNotesQuery.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // 3. 페이지 삭제
+      final pagesQuery = await _firestore.collection('pages')
+          .where('userId', isEqualTo: userId)
+          .get();
+      for (var doc in pagesQuery.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // 4. 플래시카드 삭제
+      final flashcardsQuery = await _firestore.collection('flashcards')
+          .where('userId', isEqualTo: userId)
+          .get();
+      for (var doc in flashcardsQuery.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // 5. 이전 탈퇴 기록 삭제
+      final deletedUserQuery = await _firestore.collection('deleted_users')
+          .where('userId', isEqualTo: userId)
+          .get();
+      for (var doc in deletedUserQuery.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // 배치 작업 실행
+      await batch.commit();
+      debugPrint('Firestore 데이터 완전 삭제 완료');
+    } catch (e) {
+      debugPrint('Firestore 데이터 삭제 중 오류: $e');
+      rethrow;
+    }
+  }
+
+  // 탈퇴 기록 저장
+  Future<void> _saveDeletedUserRecord(String userId, String? email, String? displayName) async {
+    try {
+      await _firestore.collection('deleted_users').doc(userId).set({
+        'userId': userId,
+        'email': email,
+        'displayName': displayName,
+        'deletedAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint('탈퇴 기록 저장 완료');
+    } catch (e) {
+      debugPrint('탈퇴 기록 저장 중 오류: $e');
+      // 핵심 기능이 아니므로 오류를 전파하지 않음
     }
   }
 
@@ -423,23 +450,34 @@ Future<void> _clearSocialLoginSessions() async {
 
   Future<void> _saveUserToFirestore(User user, {bool isNewUser = false}) async {
     try {
-      // 탈퇴된 사용자인지 먼저 확인
+      // 1. 탈퇴된 사용자인지 확인
       final isDeleted = await _checkIfUserWasDeleted(user.uid, user.email);
-      if (isDeleted) {
-        debugPrint('탈퇴된 사용자가 재가입을 시도했습니다: ${user.uid}, ${user.email}');
-        // 기존 탈퇴 기록 제거
-        try {
-          await FirebaseFirestore.instance
-              .collection('deleted_users')
-              .doc(user.uid)
-              .delete();
-          debugPrint('탈퇴 기록 제거 완료');
-        } catch (e) {
-          debugPrint('탈퇴 기록 제거 중 오류: $e');
+      
+      // 2. 탈퇴 사용자이거나 새로운 사용자인 경우 기존 데이터 완전 삭제
+      if (isDeleted || isNewUser) {
+        debugPrint('새 사용자 또는 탈퇴 후 재가입 감지: ${user.uid}');
+        
+        // 2-1. 기존 Firestore 데이터 삭제
+        await _deleteFirestoreData(user.uid);
+        
+        // 2-2. 로컬 데이터 초기화
+        await _clearAllLocalData();
+        
+        // 2-3. 디바이스 ID 초기화 (익명 노트 연결 해제)
+        await _resetDeviceId();
+        
+        // 2-4. 탈퇴 기록 삭제
+        if (isDeleted) {
+          try {
+            await _firestore.collection('deleted_users').doc(user.uid).delete();
+            debugPrint('탈퇴 기록 삭제 완료');
+          } catch (e) {
+            debugPrint('탈퇴 기록 삭제 중 오류: $e');
+          }
         }
       }
       
-      // 사용자 정보 업데이트
+      // 3. 새로운 사용자 정보 저장
       final userData = {
         'userId': user.uid,
         'email': user.email,
@@ -449,20 +487,19 @@ Future<void> _clearSocialLoginSessions() async {
         'createdAt': isNewUser ? FieldValue.serverTimestamp() : null,
         'updatedAt': FieldValue.serverTimestamp(),
         'onboardingCompleted': false,
+        'deviceId': await _getDeviceId(), // 새로운 디바이스 ID 저장
       };
 
-      // null 값 제거 (Firestore는 명시적 null 필드를 허용하지만 필터링하는 것이 좋음)
+      // null 값 제거
       userData.removeWhere((key, value) => value == null);
 
       // Firestore에 사용자 정보 저장
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .set(userData, SetOptions(merge: true));
+      await _firestore.collection('users').doc(user.uid).set(userData, SetOptions(merge: true));
 
       debugPrint('사용자 정보가 Firestore에 저장되었습니다: ${user.uid} (새 사용자: $isNewUser)');
     } catch (error) {
       debugPrint('Firestore에 사용자 정보 저장 중 오류 발생: $error');
+      rethrow;
     }
   }
   
@@ -495,6 +532,75 @@ Future<void> _clearSocialLoginSessions() async {
       debugPrint('탈퇴 사용자 확인 중 오류: $e');
       // 오류 발생 시 기본값 반환
       return false;
+    }
+  }
+
+  // 디바이스 ID 가져오기
+  Future<String> _getDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? deviceId = prefs.getString('device_id');
+    if (deviceId == null) {
+      deviceId = const Uuid().v4();
+      await prefs.setString('device_id', deviceId);
+    }
+    return deviceId;
+  }
+
+  // 디바이스 ID 초기화
+  Future<void> _resetDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('device_id');
+  }
+
+  // 소셜 로그인 세션 완전 정리
+  Future<void> _clearSocialLoginSessions() async {
+    try {
+      // 1. Google 로그인 연결 해제 (Google 계정 연결 권한까지 철회)
+      try {
+        final googleSignIn = GoogleSignIn();
+        if (await googleSignIn.isSignedIn()) {
+          // 단순 로그아웃이 아닌 disconnect() 사용해 계정 연결 자체를 끊어야 계정 선택 화면이 나타남
+          await googleSignIn.disconnect();
+          await googleSignIn.signOut();
+          debugPrint('Google 계정 연결 완전 해제됨');
+        }
+      } catch (e) {
+        debugPrint('Google 계정 연결 해제 중 오류: $e');
+      }
+      
+      // 2. Apple 로그인 상태 정리
+      try {
+        // Apple은 앱 수준에서 연결 해제가 제한적이라 로컬 저장소에서 관련 정보 제거
+        final prefs = await SharedPreferences.getInstance();
+        
+        // Apple 관련 모든 캐시 키 삭제
+        final keys = prefs.getKeys();
+        for (final key in keys) {
+          if (key.contains('apple') || 
+              key.contains('Apple') || 
+              key.contains('sign_in') || 
+              key.contains('oauth') ||
+              key.contains('token') ||
+              key.contains('credential')) {
+            await prefs.remove(key);
+          }
+        }
+        
+        debugPrint('Apple 로그인 관련 정보 정리 완료');
+      } catch (e) {
+        debugPrint('Apple 로그인 정보 정리 중 오류: $e');
+      }
+      
+      // 3. 로컬 캐시 완전 초기화
+      try {
+        final cacheService = UnifiedCacheService();
+        await cacheService.clearAllCache();
+        debugPrint('모든 캐시 데이터 초기화 완료');
+      } catch (e) {
+        debugPrint('캐시 데이터 초기화 중 오류: $e');
+      }
+    } catch (e) {
+      debugPrint('소셜 로그인 세션 정리 중 오류: $e');
     }
   }
 }

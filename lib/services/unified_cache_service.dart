@@ -36,6 +36,9 @@ class UnifiedCacheService {
   final Map<String, int> _cacheHitCount = {};
   final Map<String, int> _cacheMissCount = {};
 
+  // SharedPreferences 인스턴스
+  SharedPreferences? _prefs;
+
   UnifiedCacheService._internal() {
     debugPrint('UnifiedCacheService 생성됨 - 메모리 캐싱만 활성화');
     // 사용자 ID 초기화 시도
@@ -56,6 +59,7 @@ class UnifiedCacheService {
   
   // 사용자 ID 설정 - 사용자 로그인 시 호출됨
   Future<void> setCurrentUserId(String userId) async {
+    await _ensureInitialized();
     final oldUserId = _currentUserId;
     _currentUserId = userId;
     
@@ -66,13 +70,9 @@ class UnifiedCacheService {
     }
     
     // 현재 사용자 ID를 로컬에 저장
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('cache_current_user_id', userId);
-      debugPrint('캐시 서비스에 사용자 ID 설정됨: $userId');
-    } catch (e) {
-      debugPrint('사용자 ID 저장 중 오류 발생: $e');
-    }
+    await _prefs!.setString('cache_current_user_id', userId);
+    _memoryCache['cache_current_user_id'] = userId;
+    debugPrint('캐시 서비스에 사용자 ID 설정됨: $userId');
   }
   
   // 사용자 ID 제거 - 로그아웃 또는 계정 삭제 시 호출됨
@@ -83,24 +83,15 @@ class UnifiedCacheService {
     _clearMemoryCache();
     
     // 저장된 사용자 ID 제거
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('cache_current_user_id');
-      debugPrint('캐시 서비스에서 사용자 ID 제거됨');
-    } catch (e) {
-      debugPrint('사용자 ID 제거 중 오류 발생: $e');
-    }
+    await _prefs!.remove('cache_current_user_id');
+    _memoryCache.remove('cache_current_user_id');
+    debugPrint('캐시 서비스에서 사용자 ID 제거됨');
   }
   
   // 사용자 ID 가져오기 (로컬 저장소에서)
   Future<String?> _getStoredUserId() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return prefs.getString('cache_current_user_id');
-    } catch (e) {
-      debugPrint('저장된 사용자 ID 로드 중 오류 발생: $e');
-      return null;
-    }
+    await _ensureInitialized();
+    return _prefs!.getString('cache_current_user_id');
   }
 
   // 명시적 초기화 메서드 추가
@@ -698,28 +689,26 @@ class UnifiedCacheService {
   /// 모든 캐시 지우기 (로그아웃 또는 로그인 시 호출)
   Future<void> clearAllCache() async {
     try {
+      await _ensureInitialized();
+      
       // 메모리 캐시 초기화
       _clearMemoryCache();
       
-      // 로컬 저장소 캐시 초기화
-      final prefs = await SharedPreferences.getInstance();
-      final allKeys = prefs.getKeys();
+      // SharedPreferences 초기화
+      final keys = [
+        'cache_current_user_id',
+        sourceLanguageKey,
+        targetLanguageKey,
+      ];
       
-      // 캐시 관련 키만 삭제
-      for (final key in allKeys) {
-        if (key.startsWith(_noteKeyPrefix) ||
-            key.startsWith(_pageKeyPrefix) ||
-            key.startsWith(_notePageIdsPrefix) ||
-            key.startsWith(_translationKeyPrefix) ||
-            key.startsWith('cache_') ||
-            key.startsWith('timestamp_')) {
-          await prefs.remove(key);
-        }
+      for (final key in keys) {
+        await _prefs!.remove(key);
       }
       
-      debugPrint('모든 캐시 데이터가 성공적으로 초기화되었습니다');
+      debugPrint('모든 캐시가 초기화되었습니다.');
     } catch (e) {
       debugPrint('캐시 초기화 중 오류 발생: $e');
+      rethrow;
     }
   }
   
@@ -926,5 +915,45 @@ class UnifiedCacheService {
     
     // 로컬 저장소 캐시 정리
     await _cleanupExpiredLocalCache();
+  }
+
+  // 언어 설정 관련 키
+  static const String sourceLanguageKey = 'source_language';
+  static const String targetLanguageKey = 'target_language';
+
+  // 소스 언어 가져오기
+  Future<String> getSourceLanguage() async {
+    await _ensureInitialized();
+    return _memoryCache[sourceLanguageKey] as String? ?? 
+           _prefs?.getString(sourceLanguageKey) ?? 'zh'; // 기본값: 중국어
+  }
+
+  // 타겟 언어 가져오기
+  Future<String> getTargetLanguage() async {
+    await _ensureInitialized();
+    return _memoryCache[targetLanguageKey] as String? ?? 
+           _prefs?.getString(targetLanguageKey) ?? 'ko'; // 기본값: 한국어
+  }
+
+  // 소스 언어 설정
+  Future<void> setSourceLanguage(String language) async {
+    await _ensureInitialized();
+    await _prefs!.setString(sourceLanguageKey, language);
+    _memoryCache[sourceLanguageKey] = language;
+  }
+
+  // 타겟 언어 설정
+  Future<void> setTargetLanguage(String language) async {
+    await _ensureInitialized();
+    await _prefs!.setString(targetLanguageKey, language);
+    _memoryCache[targetLanguageKey] = language;
+  }
+
+  // 초기화 확인 및 수행
+  Future<void> _ensureInitialized() async {
+    if (!_isInitialized) {
+      _prefs = await SharedPreferences.getInstance();
+      _isInitialized = true;
+    }
   }
 }

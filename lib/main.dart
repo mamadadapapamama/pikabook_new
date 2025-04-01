@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'services/note_service.dart';
 import 'services/image_service.dart';
 import 'services/unified_cache_service.dart';
-import 'services/user_preferences_service.dart';
 import 'views/screens/home_screen.dart';
 import 'views/screens/onboarding_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -70,20 +69,18 @@ Future<void> _initializeInBackground(InitializationService initializationService
 Future<void> loadAppSettings() async {
   try {
     final prefs = await SharedPreferences.getInstance();
-    final userPreferences = UserPreferencesService();
+    final cacheService = UnifiedCacheService();
 
     // 기본값은 false (비활성화)로 설정
     ChineseSegmenterService.isSegmentationEnabled =
         prefs.getBool('segmentation_enabled') ?? false;
 
     // 언어 설정 초기화 - 아직 설정되지 않았다면 기본값 저장
-    final sourceLanguage = await userPreferences.getSourceLanguage();
-    final targetLanguage = await userPreferences.getTargetLanguage();
+    final sourceLanguage = await cacheService.getSourceLanguage();
+    final targetLanguage = await cacheService.getTargetLanguage();
     
     debugPrint('언어 설정 로드 완료 - 소스 언어: $sourceLanguage, 타겟 언어: $targetLanguage');
 
-    // 사전 로드는 필요할 때 지연 로딩으로 변경
-    // 앱 시작 시 로드하지 않고, 실제로 필요할 때 로드하도록 함
     debugPrint('앱 설정 로드 완료');
   } catch (e) {
     debugPrint('설정 로드 중 오류 발생: $e');
@@ -95,11 +92,11 @@ Future<void> loadAppSettings() async {
 // 언어 설정 저장 함수 추가 (앱 종료 또는 백그라운드로 전환 시 호출)
 Future<void> saveLanguageSettings() async {
   try {
-    final userPreferences = UserPreferencesService();
+    final cacheService = UnifiedCacheService();
     
     // 현재 언어 설정 저장
-    final sourceLanguage = await userPreferences.getSourceLanguage();
-    final targetLanguage = await userPreferences.getTargetLanguage();
+    final sourceLanguage = await cacheService.getSourceLanguage();
+    final targetLanguage = await cacheService.getTargetLanguage();
     
     debugPrint('언어 설정 저장 - 소스 언어: $sourceLanguage, 타겟 언어: $targetLanguage');
   } catch (e) {
