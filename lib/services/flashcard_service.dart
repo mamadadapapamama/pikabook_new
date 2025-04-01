@@ -48,10 +48,11 @@ class FlashCardService {
       String pinyinValue = pinyin ?? '';
 
       // 1. 먼저 사전에서 단어 검색
-      final dictEntry = await _dictionaryService.lookupWordWithFallback(front);
+      final dictResult = await _dictionaryService.lookupWordWithFallback(front);
       
       // 2. 사전에서 찾은 경우
-      if (dictEntry != null) {
+      if (dictResult['success'] == true && dictResult['entry'] != null) {
+        final dictEntry = dictResult['entry'];
         // 뜻이 비어있으면 사전의 뜻 사용
         if (back.isEmpty) {
           back = dictEntry.meaning;

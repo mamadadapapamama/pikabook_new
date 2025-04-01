@@ -34,8 +34,6 @@ target 'Runner' do
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   
-  # AppAuth 직접 추가 (추가)
-  pod 'AppAuth', '>= 1.7.4'
   
   target 'RunnerTests' do
     inherit! :search_paths

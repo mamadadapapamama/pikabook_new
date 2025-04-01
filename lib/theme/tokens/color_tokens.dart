@@ -35,7 +35,7 @@ class ColorTokens {
     
   // 구분선 및 비활성화
   static const Color divider = Color(0xFFE0E0E0); // 구분선
-  static const Color disabled = Color(0xFFB8B8B8); // 비활성화 요소
+  static const Color disabled = Color(0xFFB8B8B8); // 비활성화 요소, help text
   static const Color black = Color(0xFF000000); // 블랙
 
   // 추가적인 UI 컬러

@@ -134,15 +134,16 @@ class ChineseSegmenterService {
       );
     } else {
       // 2. 폴백 사전 서비스 사용 (DictionaryService)
-      final fallbackEntry =
+      final fallbackResult =
           await _fallbackDictionaryService.lookupWordWithFallback(segment);
 
-      if (fallbackEntry != null) {
+      if (fallbackResult['success'] == true && fallbackResult['entry'] != null) {
         // 폴백 사전에서 찾은 경우
+        final entry = fallbackResult['entry'];
         return SegmentedWord(
           text: segment,
-          meaning: fallbackEntry.meaning,
-          pinyin: fallbackEntry.pinyin,
+          meaning: entry.meaning,
+          pinyin: entry.pinyin,
           source: 'external',
         );
       } else {
@@ -223,18 +224,24 @@ class ChineseSegmenterService {
       );
     } else {
       // 2. 폴백 사전 서비스 사용 (DictionaryService)
-      final fallbackEntry =
+      final fallbackResult =
           await _fallbackDictionaryService.lookupWordWithFallback(word);
 
-      if (fallbackEntry != null) {
+      if (fallbackResult['success'] == true && fallbackResult['entry'] != null) {
         // 폴백 사전에서 찾은 경우
+        final entry = fallbackResult['entry'];
+        String pinyin = entry.pinyin;
+        
+        // 핀인이 비어있으면 생성
+        if (pinyin.isEmpty) {
+          pinyin = await _generatePinyin(word);
+        }
+        
         return SegmentedWord(
           text: word,
-          meaning: fallbackEntry.meaning,
-          pinyin: fallbackEntry.pinyin.isEmpty
-              ? await _generatePinyin(word)
-              : fallbackEntry.pinyin,
-          source: fallbackEntry.source ?? 'external',
+          meaning: entry.meaning,
+          pinyin: pinyin,
+          source: entry.source ?? 'external',
         );
       } else {
         // 3. 사전에 없는 경우 - 외부 사전 서비스 필요

@@ -318,7 +318,13 @@ class PageContentService {
     if (entry == null) {
       // 사전에 없는 단어일 경우 Papago API로 검색 시도
       debugPrint('사전에 없는 단어, Papago API로 검색 시도: $word');
-      return await _dictionaryService.lookupWordWithFallback(word);
+      final fallbackResult = await _dictionaryService.lookupWordWithFallback(word);
+      
+      // 결과에서 entry 추출하여 반환
+      if (fallbackResult['success'] == true && fallbackResult['entry'] != null) {
+        return fallbackResult['entry'];
+      }
+      return null;
     }
 
     return entry;
