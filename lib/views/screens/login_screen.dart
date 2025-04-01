@@ -195,15 +195,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               ),
                             ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 12),
                           
                           // 텍스트 로고 - 맨 아래에 배치
                           Opacity(
                             opacity: _logoFadeAnimation.value,
                             child: Image.asset(
                               'assets/images/pikabook_textlogo.png',
-                              width: SpacingTokens.appLogoWidth,
-                              height: SpacingTokens.appLogoHeight,
+                              width: SpacingTokens.appLogoWidth2x,
+                              height: SpacingTokens.appLogoHeight2x,
                               fit: BoxFit.contain,
                               color: ColorTokens.textLight,
                             ),
