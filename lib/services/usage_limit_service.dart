@@ -305,23 +305,7 @@ class UsageLimitService {
   
   // 노트 추가 가능 여부 확인
   Future<bool> canAddNote() async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw Exception('로그인된 사용자가 없습니다.');
-    }
-    
-    // 현재 사용량 확인
-    final usage = await getUserUsage();
-    final bool isPremium = usage['isPremium'] ?? false;
-    
-    // 프리미엄 사용자는 제한 없음
-    if (isPremium) {
-      return true;
-    }
-    
-    // 무료 사용자는 제한 확인
-    final int noteCount = usage['noteCount'] ?? 0;
-    return noteCount < MAX_FREE_NOTES;
+    return true; // 항상 노트 추가 가능
   }
   
   // 페이지 추가 가능 여부 확인
@@ -497,7 +481,6 @@ class UsageLimitService {
     }
     
     final int translatedChars = usage['translatedChars'] ?? 0;
-    final int noteCount = usage['noteCount'] ?? 0;
     final int pageCount = usage['pageCount'] ?? 0;
     final int ocrRequests = usage['ocrRequests'] ?? 0;
     final int dictionaryLookups = usage['dictionaryLookups'] ?? 0;
@@ -505,7 +488,6 @@ class UsageLimitService {
     final int ttsRequests = usage['ttsRequests'] ?? 0;
     
     final bool translationLimitReached = translatedChars >= MAX_FREE_TRANSLATION_CHARS;
-    final bool noteLimitReached = noteCount >= MAX_FREE_NOTES;
     final bool pageLimitReached = pageCount >= MAX_FREE_PAGES;
     final bool ocrLimitReached = ocrRequests >= MAX_FREE_OCR_REQUESTS;
     final bool dictionaryLimitReached = dictionaryLookups >= MAX_FREE_DICTIONARY_LOOKUPS;
@@ -513,7 +495,6 @@ class UsageLimitService {
     final bool ttsLimitReached = ttsRequests >= MAX_FREE_TTS_REQUESTS;
     
     final bool anyLimitReached = translationLimitReached || 
-                               noteLimitReached || 
                                pageLimitReached || 
                                ocrLimitReached || 
                                dictionaryLimitReached || 
@@ -522,7 +503,7 @@ class UsageLimitService {
     
     return {
       'translationLimitReached': translationLimitReached,
-      'noteLimitReached': noteLimitReached,
+      'noteLimitReached': false, // 항상 false 반환
       'pageLimitReached': pageLimitReached,
       'ocrLimitReached': ocrLimitReached,
       'dictionaryLimitReached': dictionaryLimitReached,
@@ -552,7 +533,6 @@ class UsageLimitService {
     }
     
     final int translatedChars = usage['translatedChars'] ?? 0;
-    final int noteCount = usage['noteCount'] ?? 0;
     final int pageCount = usage['pageCount'] ?? 0;
     final int ocrRequests = usage['ocrRequests'] ?? 0;
     final int dictionaryLookups = usage['dictionaryLookups'] ?? 0;
@@ -560,7 +540,7 @@ class UsageLimitService {
     final int ttsRequests = usage['ttsRequests'] ?? 0;
     
     final double translationPercent = translatedChars / MAX_FREE_TRANSLATION_CHARS;
-    final double notePercent = noteCount / MAX_FREE_NOTES;
+    final double notePercent = 0.0; // 항상 0.0 반환
     final double pagePercent = pageCount / MAX_FREE_PAGES;
     final double ocrPercent = ocrRequests / MAX_FREE_OCR_REQUESTS;
     final double dictionaryPercent = dictionaryLookups / MAX_FREE_DICTIONARY_LOOKUPS;
@@ -570,7 +550,6 @@ class UsageLimitService {
     // 전체 사용량은 가장 높은 사용량으로 계산
     final double overallPercent = [
       translationPercent,
-      notePercent,
       pagePercent,
       ocrPercent,
       dictionaryPercent,

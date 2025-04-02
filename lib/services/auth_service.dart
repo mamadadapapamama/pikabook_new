@@ -1,5 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:crypto/crypto.dart';
@@ -17,6 +17,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../services/page_content_service.dart';
 import '../main.dart'; // firebaseApp 전역 변수 가져오기
+import 'package:get_it/get_it.dart';
+import '../services/image_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -174,55 +176,33 @@ Map<String, dynamic> _parseJwt(String token) {
 // 로그아웃
 Future<void> signOut() async {
   try {
-    debugPrint('로그아웃 처리 시작...');
+    debugPrint('로그아웃 시작...');
+    
+    // 1. 현재 UID 저장
+    final currentUid = _auth.currentUser?.uid;
+    
+    // 2. 현재 사용자 ID를 캐시 서비스에서 제거
     final cacheService = UnifiedCacheService();
-    
-    // 1. 민감한 인증 관련 데이터만 삭제
-    final prefs = await SharedPreferences.getInstance();
-    final sensitiveKeys = [
-      'current_user_id',
-      'last_signin_provider',
-      'has_multiple_accounts',
-      'auth_token',
-      'refresh_token',
-    ];
-    
-    for (final key in sensitiveKeys) {
-      await prefs.remove(key);
-    }
-    
-    // 2. 소셜 로그인 토큰 삭제
-    final keys = prefs.getKeys();
-    for (final key in keys) {
-      if (key.contains('token') || 
-          key.contains('auth') || 
-          key.contains('credential') ||
-          key.contains('oauth')) {
-        await prefs.remove(key);
-      }
-    }
-    
-    // 3. Google 로그인 연결 해제
-    try {
-      if (await _googleSignIn.isSignedIn()) {
-        await _googleSignIn.signOut(); // disconnect() 대신 signOut() 사용
-        debugPrint('Google 로그인 연결 해제 완료');
-      }
-    } catch (e) {
-      debugPrint('Google 로그아웃 중 오류 (무시됨): $e');
-    }
-    
-    // 4. 캐시 서비스에서 현재 사용자 ID 제거
     await cacheService.clearCurrentUserId();
     
-    // 5. 메모리 캐시 초기화
-    final pageContentService = PageContentService();
-    pageContentService.clearProcessedTextCache();
+    // 3. 메모리 캐시 초기화
+    cacheService.clearCache();
+    
+    // 4. 이미지 캐시 정리
+    await ImageService().clearImageCache();
+    
+    // 5. 처리된 텍스트 캐시 정리
+    GetIt.I<PageContentService>().clearProcessedTextCache();
     
     // 6. Firebase 로그아웃
     await _auth.signOut();
     
-    debugPrint('로그아웃 처리 완료');
+    debugPrint('로그아웃 완료');
+    
+    // 7. 세션 종료 처리 (필요시)
+    if (currentUid != null) {
+      await _endUserSession(currentUid);
+    }
   } catch (e) {
     debugPrint('로그아웃 중 오류 발생: $e');
     rethrow;
@@ -612,6 +592,22 @@ Future<void> signOut() async {
       }
     } catch (e) {
       debugPrint('소셜 로그인 세션 정리 중 오류: $e');
+    }
+  }
+
+  /// 사용자 세션 종료 처리 (필요한 정리 작업 수행)
+  Future<void> _endUserSession(String userId) async {
+    try {
+      // 사용자 세션 상태 업데이트 (활성 상태 false로 설정)
+      await _firestore.collection('user_sessions').doc(userId).update({
+        'isActive': false,
+        'lastLogoutAt': FieldValue.serverTimestamp(),
+      });
+      
+      debugPrint('사용자 세션 종료 처리 완료: $userId');
+    } catch (e) {
+      debugPrint('사용자 세션 종료 처리 중 오류 (무시됨): $e');
+      // 세션 종료 처리 실패는 치명적이지 않으므로 오류를 무시함
     }
   }
 }

@@ -3,11 +3,15 @@ import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import '../../services/usage_limit_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class UsageLimitDialog extends StatelessWidget {
   final Map<String, bool> limitStatus;
   final Map<String, double> usagePercentages;
   final VoidCallback? onContactSupport;
+  
+  // 프리미엄 문의 구글 폼 URL
+  static const String _premiumRequestFormUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSdgdd_qD3Dd_UKcHoeo432pMIDl0u9pPHjlTjadM5JbRAeoIQ/viewform?usp=header';
   
   const UsageLimitDialog({
     Key? key,
@@ -15,6 +19,18 @@ class UsageLimitDialog extends StatelessWidget {
     required this.usagePercentages,
     this.onContactSupport,
   }) : super(key: key);
+  
+  // 구글 폼 열기
+  Future<void> _openPremiumRequestForm() async {
+    final Uri url = Uri.parse(_premiumRequestFormUrl);
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        throw '지원팀에 문의하기를 열 수 없습니다';
+      }
+    } catch (e) {
+      debugPrint('URL 열기 오류: $e');
+    }
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -188,14 +204,7 @@ class UsageLimitDialog extends StatelessWidget {
                 ),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: onContactSupport ?? () {
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('지원팀에 문의하기 기능은 준비 중입니다.'),
-                        ),
-                      );
-                    },
+                    onPressed: onContactSupport ?? _openPremiumRequestForm,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: ColorTokens.primary,
                       foregroundColor: ColorTokens.textLight,
