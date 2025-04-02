@@ -10,11 +10,12 @@ class UsageLimitService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
   // 월별 무료 사용 제한
-  static const int MAX_FREE_TRANSLATION_CHARS = 5000;   // 번역 최대 글자 수
-  static const int MAX_FREE_NOTES = 10;                 // 노트 최대 개수
-  static const int MAX_FREE_OCR_REQUESTS = 10;          // OCR 요청 최대 횟수
-  static const int MAX_FREE_DICTIONARY_LOOKUPS = 50;    // 외부 사전 조회 최대 횟수
-  static const int MAX_FREE_FLASHCARDS = 30;            // 플래시카드 최대 개수
+  static const int MAX_FREE_TRANSLATION_CHARS = 500;   // 번역 최대 글자 수
+  static const int MAX_FREE_NOTES = 2;                 // 노트 최대 개수
+  static const int MAX_FREE_OCR_REQUESTS = 5;          // OCR 요청 최대 횟수
+  static const int MAX_FREE_DICTIONARY_LOOKUPS = 5;    // 외부 사전 조회 최대 횟수
+  static const int MAX_FREE_FLASHCARDS = 2;            // 플래시카드 최대 개수
+  static const int MAX_FREE_TTS_REQUESTS = 30;         // TTS 요청 최대 횟수 (월별)
   
   // 현재 월 정보 가져오기
   String _getCurrentMonth() {
@@ -46,6 +47,7 @@ class UsageLimitService {
         'ocrRequests': 0,
         'dictionaryLookups': 0,
         'flashcardCount': 0,
+        'ttsRequests': 0, // TTS 요청 초기값 추가
         'isPremium': false,
         'lastPaymentDate': null,
         'subscriptionTier': 'free',
@@ -58,6 +60,7 @@ class UsageLimitService {
       'ocrRequests': 0,
       'dictionaryLookups': 0,
       'flashcardCount': 0,
+      'ttsRequests': 0, // TTS 요청 초기값 추가
       'isPremium': false,
       'lastPaymentDate': null,
       'subscriptionTier': 'free',
@@ -77,6 +80,7 @@ class UsageLimitService {
       'ocrRequests': 0,
       'dictionaryLookups': 0,
       'flashcardCount': 0,
+      'ttsRequests': 0, // TTS 요청 초기값 추가
       'isPremium': false,
       'lastPaymentDate': null,
       'subscriptionTier': 'free',
@@ -223,6 +227,49 @@ class UsageLimitService {
     return true;
   }
   
+  // TTS 요청 횟수 추가
+  Future<bool> addTtsRequest() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('로그인된 사용자가 없습니다.');
+    }
+    
+    // 현재 사용량 확인
+    final usage = await getUserUsage();
+    final bool isPremium = usage['isPremium'] ?? false;
+    
+    // 프리미엄 사용자는 제한 없음 (실제로는 더 높은 제한을 설정할 수 있음)
+    if (isPremium) {
+      await _updateUsageField(user.uid, 'ttsRequests', 1);
+      return true;
+    }
+    
+    // 무료 사용자는 제한 확인
+    final int currentRequests = usage['ttsRequests'] ?? 0;
+    if (currentRequests >= MAX_FREE_TTS_REQUESTS) {
+      return false; // 제한 초과
+    }
+    
+    // 사용량 업데이트
+    await _updateUsageField(user.uid, 'ttsRequests', 1);
+    return true;
+  }
+  
+  // TTS 요청 횟수 감소 (오류 발생 시 등)
+  Future<void> decrementTtsRequest() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('로그인된 사용자가 없습니다.');
+    }
+    
+    final usage = await getUserUsage();
+    final int ttsRequests = usage['ttsRequests'] ?? 0;
+    
+    if (ttsRequests > 0) {
+      await _updateUsageField(user.uid, 'ttsRequests', -1);
+    }
+  }
+  
   // 사용량 필드 업데이트 공통 함수
   Future<void> _updateUsageField(String userId, String field, int increment) async {
     final currentMonth = _getCurrentMonth();
@@ -360,6 +407,7 @@ class UsageLimitService {
         'ocrLimitReached': false,
         'dictionaryLimitReached': false,
         'flashcardLimitReached': false,
+        'ttsLimitReached': false,
         'anyLimitReached': false,
       };
     }
@@ -369,18 +417,21 @@ class UsageLimitService {
     final int ocrRequests = usage['ocrRequests'] ?? 0;
     final int dictionaryLookups = usage['dictionaryLookups'] ?? 0;
     final int flashcardCount = usage['flashcardCount'] ?? 0;
+    final int ttsRequests = usage['ttsRequests'] ?? 0;
     
     final bool translationLimitReached = translatedChars >= MAX_FREE_TRANSLATION_CHARS;
     final bool noteLimitReached = noteCount >= MAX_FREE_NOTES;
     final bool ocrLimitReached = ocrRequests >= MAX_FREE_OCR_REQUESTS;
     final bool dictionaryLimitReached = dictionaryLookups >= MAX_FREE_DICTIONARY_LOOKUPS;
     final bool flashcardLimitReached = flashcardCount >= MAX_FREE_FLASHCARDS;
+    final bool ttsLimitReached = ttsRequests >= MAX_FREE_TTS_REQUESTS;
     
     final bool anyLimitReached = translationLimitReached || 
                                noteLimitReached || 
                                ocrLimitReached || 
                                dictionaryLimitReached || 
-                               flashcardLimitReached;
+                               flashcardLimitReached || 
+                               ttsLimitReached;
     
     return {
       'translationLimitReached': translationLimitReached,
@@ -388,6 +439,7 @@ class UsageLimitService {
       'ocrLimitReached': ocrLimitReached,
       'dictionaryLimitReached': dictionaryLimitReached,
       'flashcardLimitReached': flashcardLimitReached,
+      'ttsLimitReached': ttsLimitReached,
       'anyLimitReached': anyLimitReached,
     };
   }
@@ -405,6 +457,7 @@ class UsageLimitService {
         'ocrPercent': 0.0,
         'dictionaryPercent': 0.0,
         'flashcardPercent': 0.0,
+        'ttsPercent': 0.0,
         'overallPercent': 0.0,
       };
     }
@@ -414,12 +467,14 @@ class UsageLimitService {
     final int ocrRequests = usage['ocrRequests'] ?? 0;
     final int dictionaryLookups = usage['dictionaryLookups'] ?? 0;
     final int flashcardCount = usage['flashcardCount'] ?? 0;
+    final int ttsRequests = usage['ttsRequests'] ?? 0;
     
     final double translationPercent = translatedChars / MAX_FREE_TRANSLATION_CHARS;
     final double notePercent = noteCount / MAX_FREE_NOTES;
     final double ocrPercent = ocrRequests / MAX_FREE_OCR_REQUESTS;
     final double dictionaryPercent = dictionaryLookups / MAX_FREE_DICTIONARY_LOOKUPS;
     final double flashcardPercent = flashcardCount / MAX_FREE_FLASHCARDS;
+    final double ttsPercent = ttsRequests / MAX_FREE_TTS_REQUESTS;
     
     // 전체 사용량은 가장 높은 사용량으로 계산
     final double overallPercent = [
@@ -428,6 +483,7 @@ class UsageLimitService {
       ocrPercent,
       dictionaryPercent,
       flashcardPercent,
+      ttsPercent,
     ].reduce((curr, next) => curr > next ? curr : next);
     
     return {
@@ -436,6 +492,7 @@ class UsageLimitService {
       'ocrPercent': ocrPercent,
       'dictionaryPercent': dictionaryPercent,
       'flashcardPercent': flashcardPercent,
+      'ttsPercent': ttsPercent,
       'overallPercent': overallPercent,
     };
   }

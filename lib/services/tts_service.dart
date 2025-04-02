@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../models/processed_text.dart';
 import '../utils/language_constants.dart';
+import 'usage_limit_service.dart';
 
 // 텍스트 음성 변환 서비스를 제공합니다
 
@@ -25,6 +26,12 @@ class TtsService {
 
   // 재생 완료 콜백
   Function? _onPlayingCompleted;
+
+  // 캐시된 음성 데이터 (텍스트 -> 사용 가능 여부)
+  final Map<String, bool> _ttsCache = {};
+
+  // 사용량 제한 서비스
+  final UsageLimitService _usageLimitService = UsageLimitService();
 
   // 초기화
   Future<void> init() async {
@@ -115,9 +122,36 @@ class TtsService {
   // 텍스트 읽기
   Future<void> speak(String text) async {
     if (_flutterTts == null) await init();
+    if (text.isEmpty) return;
 
-    if (text.isNotEmpty) {
+    // 이미 캐시된 텍스트인지 확인 (같은 단어를 반복해서 API 호출하지 않도록)
+    if (_ttsCache.containsKey(text)) {
+      if (_ttsCache[text] == true) {
+        await _flutterTts?.speak(text);
+      } else {
+        debugPrint('TTS 사용량 제한으로 재생 불가: $text');
+        // 여기서 알림을 표시하거나 다른 처리를 할 수 있음
+      }
+      return;
+    }
+
+    // 사용량 제한 확인
+    try {
+      final canUseTts = await _usageLimitService.addTtsRequest();
+      if (!canUseTts) {
+        _ttsCache[text] = false; // 사용 불가로 캐싱
+        debugPrint('TTS 사용량 제한 초과로 재생 불가: $text');
+        
+        // 여기서 사용자에게 알림을 표시하거나 다른 처리를 할 수 있음
+        return;
+      }
+      
+      // 사용량 제한이 없으면 재생
+      _ttsCache[text] = true; // 사용 가능으로 캐싱
       await _flutterTts?.speak(text);
+    } catch (e) {
+      debugPrint('TTS 사용량 확인 중 오류: $e');
+      // 오류 발생 시 캐싱하지 않음 (다음에 다시 시도)
     }
   }
 
@@ -208,6 +242,7 @@ class TtsService {
   /// - text: 재생할 텍스트
   Future<void> speakSegment(String text, int segmentIndex) async {
     if (_flutterTts == null) await init();
+    if (text.isEmpty) return;
 
     // 이미 재생 중인 경우 중지
     if (_currentSegmentIndex != null) {
@@ -217,9 +252,33 @@ class TtsService {
     // 현재 재생 중인 세그먼트 업데이트
     _updateCurrentSegment(segmentIndex);
 
-    // 텍스트 재생
-    if (text.isNotEmpty) {
+    // 이미 캐시된 텍스트인지 확인
+    if (_ttsCache.containsKey(text)) {
+      if (_ttsCache[text] == true) {
+        await _flutterTts?.speak(text);
+      } else {
+        debugPrint('TTS 사용량 제한으로 세그먼트 재생 불가: $text');
+        _updateCurrentSegment(null);
+      }
+      return;
+    }
+
+    // 사용량 제한 확인
+    try {
+      final canUseTts = await _usageLimitService.addTtsRequest();
+      if (!canUseTts) {
+        _ttsCache[text] = false; // 사용 불가로 캐싱
+        debugPrint('TTS 사용량 제한 초과로 세그먼트 재생 불가: $text');
+        _updateCurrentSegment(null);
+        return;
+      }
+      
+      // 사용량 제한이 없으면 재생
+      _ttsCache[text] = true; // 사용 가능으로 캐싱
       await _flutterTts?.speak(text);
+    } catch (e) {
+      debugPrint('TTS 사용량 확인 중 오류: $e');
+      _updateCurrentSegment(null);
     }
   }
 
@@ -231,6 +290,24 @@ class TtsService {
     if (_ttsState == TtsState.playing) {
       await stop();
       return;
+    }
+
+    // 사용 가능 여부 확인 (세그먼트 개수만큼 사용량 필요)
+    final segmentCount = processedText.segments?.length ?? 1;
+    
+    try {
+      // 남은 사용량 확인
+      final remainingCount = await getRemainingTtsCount();
+      
+      // 남은 사용량이 부족한 경우
+      if (remainingCount < segmentCount) {
+        debugPrint('TTS 사용량 부족: 필요=$segmentCount, 남음=$remainingCount');
+        // 여기서 사용자에게 알림 표시
+        return;
+      }
+    } catch (e) {
+      debugPrint('TTS 사용량 확인 중 오류: $e');
+      // 오류 발생 시 계속 진행
     }
 
     // 세그먼트가 없거나 비어있는 경우 전체 원문 텍스트 읽기
@@ -250,31 +327,85 @@ class TtsService {
         debugPrint("재생 중단됨: _ttsState=$_ttsState");
         break;
       }
-      
+
       final segment = processedText.segments![i];
-      if (segment.originalText.isEmpty) {
-        debugPrint("세그먼트 $i: 텍스트가 비어있어 건너뜀");
-        continue;
-      }
+      final text = segment.originalText;
       
-      debugPrint("세그먼트 $i 재생 시작: ${segment.originalText.length}자");
-      
-      // 현재 재생 중인 세그먼트 인덱스 업데이트
+      // 각 세그먼트 발화
       _updateCurrentSegment(i);
-      
-      // 텍스트 읽기
-      await _flutterTts!.speak(segment.originalText);
-      
-      // 재생 완료 대기 (발화 속도에 따라 적절한 대기 시간 계산)
-      final waitTime = segment.originalText.length * 100 + 1000; // 1자당 약 100ms + 기본 1초
-      await Future.delayed(Duration(milliseconds: waitTime));
-      
-      debugPrint("세그먼트 $i 재생 완료");
+
+      // 이미 캐시된 텍스트인지 확인
+      if (_ttsCache.containsKey(text)) {
+        if (_ttsCache[text] == true) {
+          await _flutterTts?.speak(text);
+        } else {
+          debugPrint('TTS 사용량 제한으로 세그먼트 재생 불가: $text');
+          continue; // 다음 세그먼트로 진행
+        }
+      } else {
+        // 사용량 제한 확인
+        try {
+          final canUseTts = await _usageLimitService.addTtsRequest();
+          if (!canUseTts) {
+            _ttsCache[text] = false; // 사용 불가로 캐싱
+            debugPrint('TTS 사용량 제한 초과로 세그먼트 재생 불가: $text');
+            continue; // 다음 세그먼트로 진행
+          }
+          
+          _ttsCache[text] = true; // 사용 가능으로 캐싱
+          await _flutterTts?.speak(text);
+        } catch (e) {
+          debugPrint('TTS 사용량 확인 중 오류: $e');
+          continue; // 다음 세그먼트로 진행
+        }
+      }
+
+      // 발화 완료 대기
+      await _waitForSpeechCompletion();
     }
-    
-    // 모든 세그먼트 재생 완료
+
+    // 재생 완료 후 처리
     _updateCurrentSegment(null);
     _ttsState = TtsState.stopped;
-    debugPrint("모든 세그먼트 재생 완료");
+  }
+
+  // TTS 사용 가능 여부 확인
+  Future<bool> canUseTts() async {
+    try {
+      final limits = await _usageLimitService.checkFreeLimits();
+      return !limits['ttsLimitReached']!;
+    } catch (e) {
+      debugPrint('TTS 사용량 제한 확인 중 오류: $e');
+      return true; // 오류 시 기본적으로 사용 가능하도록
+    }
+  }
+
+  // 남은 TTS 사용량 확인
+  Future<int> getRemainingTtsCount() async {
+    try {
+      final usage = await _usageLimitService.getUserUsage();
+      final currentUsage = usage['ttsRequests'] as int? ?? 0;
+      return UsageLimitService.MAX_FREE_TTS_REQUESTS - currentUsage;
+    } catch (e) {
+      debugPrint('TTS 남은 사용량 확인 중 오류: $e');
+      return 0;
+    }
+  }
+
+  // 캐시 비우기
+  void clearCache() {
+    _ttsCache.clear();
+  }
+
+  // 발화 완료 대기
+  Future<void> _waitForSpeechCompletion() async {
+    // 최대 10초 대기 (안전장치)
+    final maxWait = 10;
+    int waitCount = 0;
+    
+    while (_ttsState == TtsState.playing && waitCount < maxWait) {
+      await Future.delayed(const Duration(seconds: 1));
+      waitCount++;
+    }
   }
 }

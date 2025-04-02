@@ -66,7 +66,7 @@ class UsageLimitDialog extends StatelessWidget {
                 SizedBox(width: SpacingTokens.sm),
                 Expanded(
                   child: Text(
-                    '⚠️ 사용량이 월 한도를 초과했어요',
+                    '사용량이 월 한도를 초과했어요',
                     style: TypographyTokens.subtitle2.copyWith(
                       color: ColorTokens.textPrimary,
                       fontWeight: FontWeight.bold,

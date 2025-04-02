@@ -745,10 +745,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // ===== 플래시카드 관련 메서드 =====
 
-  Future<void> _createFlashCard(String front, String back,
-      {String? pinyin}) async {
-    if (_isCreatingFlashCard) return;
-
+  Future<void> _createFlashCard(String front, String back, {String? pinyin}) async {
     setState(() {
       _isCreatingFlashCard = true;
     });
@@ -775,13 +772,38 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           finalPinyin = pinyin;
         }
 
-        // 플래시카드 생성
-        await _flashCardService.createFlashCard(
-          front: front,
-          back: finalBack,
-          pinyin: finalPinyin,
-          noteId: widget.noteId,
-        );
+        try {
+          // 플래시카드 생성
+          await _flashCardService.createFlashCard(
+            front: front,
+            back: finalBack,
+            pinyin: finalPinyin,
+            noteId: widget.noteId,
+          );
+        } catch (flashcardError) {
+          debugPrint('플래시카드 생성 오류: $flashcardError');
+          
+          // 사용량 제한 오류인 경우 사용자에게 알림
+          if (flashcardError.toString().contains('무료 플래시카드 사용량 한도를 초과했습니다')) {
+            if (mounted) {
+              // 오류 메시지를 표시하고 빠르게 함수 종료
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('무료 플래시카드 사용량 한도를 초과했습니다. 프리미엄으로 업그레이드하세요.'),
+                  duration: Duration(seconds: 5),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+              setState(() {
+                _isCreatingFlashCard = false;
+              });
+              return; // 함수 종료
+            }
+          }
+          
+          // 다른 오류는 다시 던지기
+          rethrow;
+        }
       }
 
       // 캐시 무효화
@@ -803,6 +825,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       }
     } catch (e) {
       debugPrint('플래시카드 생성 중 오류 발생: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('플래시카드 생성 중 오류가 발생했습니다: $e'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
