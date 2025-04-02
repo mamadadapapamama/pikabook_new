@@ -598,6 +598,13 @@ class NoteService {
 
       // 백그라운드 처리 상태 업데이트
       await _setBackgroundProcessingStatus(noteId, false);
+
+      // 모든 이미지 처리 완료 후 플래그 업데이트
+      await _notesCollection.doc(noteId).update({
+        'isProcessingBackground': false,
+        'processedImagesCount': processedCount,
+        'imageCount': totalCount, // 전체 이미지 수 재확인
+      });
     } catch (e) {
       debugPrint('백그라운드 페이지 내용 채우기 중 오류 발생: $e');
       await _setBackgroundProcessingStatus(noteId, false);
@@ -799,6 +806,8 @@ class NoteService {
         'updatedAt': now,
         'tags': tags ?? [],
         'noteSpace': noteSpace ?? 'default',
+        'imageCount': imageFiles.length, // 전체 이미지 수 설정
+        'pages': [], // 빈 페이지 배열 초기화
       };
       
       // 2. Firestore에 노트 추가

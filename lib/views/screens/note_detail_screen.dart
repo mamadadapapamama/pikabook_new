@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import '../../services/note_service.dart';
@@ -25,7 +27,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/unified_cache_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/text_reader_service.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../theme/tokens/color_tokens.dart';
 import 'full_image_screen.dart';
 import '../../services/screenshot_service.dart';
@@ -1248,7 +1249,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           : PikaAppBar.noteDetail(
               title: _note?.originalText ?? 'Note',
               currentPage: _pageManager.currentPageIndex + 1,
-              totalPages: _pageManager.pages.length,
+              totalPages: (_note?.isProcessingBackground ?? false) && _note?.imageCount != null
+                  ? max(_note!.imageCount!, _pageManager.pages.length)
+                  : _pageManager.pages.length,
               flashcardCount: _note?.flashcardCount ?? 0,
               progress: _calculateProgress(),
               onMorePressed: _showMoreOptions,
