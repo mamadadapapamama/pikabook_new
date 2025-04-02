@@ -122,19 +122,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         appBar: PikaAppBar.home(
           noteSpaceName: _noteSpaceName,
           onSettingsPressed: () {
-            // initializationService가 null인지 확인
-            if (widget.initializationService == null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('설정을 로드할 수 없습니다. 앱을 다시 시작해주세요.'))
-              );
-              return;
-            }
-            
             // 설정 화면으로 이동 (라우팅 사용)
             Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (context) => SettingsScreen(
-                  initializationService: widget.initializationService!, // null이 아님을 보장했으므로 ! 사용
                   onLogout: () async {
                     // 로그아웃 처리
                     await FirebaseAuth.instance.signOut();

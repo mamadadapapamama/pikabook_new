@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'enhanced_ocr_service.dart';
 import 'translation_service.dart';
-import 'language_service_interface.dart';
+import '.language_service_interface.dart';
 import '../utils/language_constants.dart';
 
 /// Google Cloud 서비스를 통합적으로 관리하는 클래스

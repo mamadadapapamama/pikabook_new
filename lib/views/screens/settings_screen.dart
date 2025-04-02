@@ -12,14 +12,15 @@ import '../../widgets/dot_loading_indicator.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/common/pika_button.dart';
 import '../../widgets/common/pika_app_bar.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class SettingsScreen extends StatefulWidget {
-  final InitializationService initializationService;
+  final InitializationService? initializationService;
   final VoidCallback onLogout;
 
   const SettingsScreen({
     Key? key,
-    required this.initializationService,
+    this.initializationService,
     required this.onLogout,
   }) : super(key: key);
 
@@ -672,8 +673,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     
     try {
-      // AuthService를 통해 계정 삭제 처리
-      await widget.initializationService.authService.deleteAccount();
+      // 회원 탈퇴 처리
+      await _deleteAccount();
       
       // 로딩 종료
       setState(() {
@@ -697,6 +698,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
         widget.onLogout();
       }
     } catch (e) {
+      // 오류 처리
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('계정 삭제 중 오류가 발생했습니다: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  // 회원 탈퇴 처리
+  Future<void> _deleteAccount() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      // 현재 사용자 가져오기
+      final user = FirebaseAuth.instance.currentUser;
+      
+      if (user == null) {
+        throw '로그인된 사용자 정보를 찾을 수 없습니다.';
+      }
+      
+      // Firebase Auth를 통해 계정 삭제
+      await user.delete();
+      
+      // Firestore에서 사용자 데이터 삭제
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+      
+      // 로딩 종료
+      setState(() {
+        _isLoading = false;
+      });
+      
+      // 로그아웃 콜백 호출
+      widget.onLogout();
+      
+    } catch (e) {
+      debugPrint('계정 삭제 오류: $e');
+      
       // 오류 처리
       setState(() {
         _isLoading = false;

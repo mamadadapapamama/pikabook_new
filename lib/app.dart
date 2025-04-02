@@ -5,37 +5,39 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'views/screens/home_screen.dart';
-import 'services/initialization_service.dart';
+import 'services/initialization_manager.dart';
 import 'services/user_preferences_service.dart';
 import 'views/screens/onboarding_screen.dart';
-import 'firebase_options.dart';
 import 'views/screens/login_screen.dart';
 import 'views/screens/settings_screen.dart';
-import 'views/screens/note_detail_screen.dart';
-import 'widgets/dot_loading_indicator.dart';
+import 'widgets/loading_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'viewmodels/home_viewmodel.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 class App extends StatefulWidget {
-  final InitializationService initializationService;
-
-  const App({Key? key, required this.initializationService}) : super(key: key);
+  const App({Key? key}) : super(key: key);
 
   @override
   State<App> createState() => _AppState();
 }
 
 class _AppState extends State<App> {
-  bool _isFirebaseInitialized = false;
   bool _isUserAuthenticated = false;
   bool _isOnboardingCompleted = false;
   bool _hasLoginHistory = false;
   bool _isFirstEntry = true; // 첫 진입 여부 (툴팁 표시)
   String? _error;
   final UserPreferencesService _preferencesService = UserPreferencesService();
-  bool _isCheckingInitialization = false;
-  bool _isLoadingUserData = false;
+  
+  // 초기화 관리자 인스턴스
+  late final InitializationManager _initializationManager;
+  
+  // 초기화 상태 관리
+  bool _isInitialized = false;
+  InitializationStep _currentStep = InitializationStep.preparing;
+  double _progress = 0.0;
+  String _message = '준비 중...';
+  String? _subMessage;
   
   // 앱 시작 시간 기록
   final DateTime _appStartTime = DateTime.now();
@@ -47,18 +49,90 @@ class _AppState extends State<App> {
   void initState() {
     super.initState();
     debugPrint('App initState 호출됨 (${DateTime.now().toString()})');
-    // 초기화 상태 확인은 비동기로 시작하고 UI는 즉시 렌더링
-    _startInitializationCheck();
+    
+    // 초기화 관리자 생성
+    _initializationManager = InitializationManager();
+    
+    // 초기화 관리자 리스너 등록 - 무명 함수 사용
+    _initializationManager.addListener((step, progress, message, subMessage) {
+      _handleInitProgress(step, progress, message, subMessage);
+      // 콘솔에 초기화 상태 출력
+      debugPrint('초기화 상태: $step ($progress%) - $message ${subMessage ?? ""}');
+    });
     
     // 인증 상태 변경 리스너 설정
-    _authStateStream = widget.initializationService.authStateChanges;
+    _authStateStream = FirebaseAuth.instance.authStateChanges();
     _setupAuthStateListener();
     
-    // 스플래시 화면 제거 (초기화 확인 이후)
-    Future.delayed(const Duration(milliseconds: 500), () {
-      FlutterNativeSplash.remove();
-      debugPrint('🎉 스플래시 화면 제거됨');
-    });
+    // Firestore 오프라인 지원 설정
+    _setupFirestore();
+    
+    // 초기화 시작
+    _startInitialization();
+  }
+  
+  // Firestore 설정
+  Future<void> _setupFirestore() async {
+    try {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      );
+      debugPrint('💾 Firestore 설정 완료 (오프라인 지원 활성화)');
+    } catch (e) {
+      debugPrint('⚠️ Firestore 설정 중 오류: $e');
+    }
+  }
+
+  // 초기화 진행 상황 처리
+  void _handleInitProgress(
+    InitializationStep step, 
+    double progress, 
+    String message, 
+    String? subMessage
+  ) {
+    if (mounted) {
+      setState(() {
+        _currentStep = step;
+        _progress = progress;
+        _message = message;
+        _subMessage = subMessage;
+        
+        // 사용자 데이터 단계까지 완료되면 앱 표시 시작
+        if (step == InitializationStep.userData && progress >= 0.6) {
+          _isInitialized = true;
+        }
+      });
+    }
+  }
+
+  // 초기화 시작
+  void _startInitialization() async {
+    try {
+      // 초기화 시작
+      final result = await _initializationManager.initialize();
+      
+      if (mounted) {
+        setState(() {
+          _isUserAuthenticated = result['isLoggedIn'] ?? false;
+          _hasLoginHistory = result['hasLoginHistory'] ?? false;
+          _isOnboardingCompleted = result['isOnboardingCompleted'] ?? false;
+          _isFirstEntry = result['isFirstEntry'] ?? true;
+          _error = result['error'];
+        });
+      }
+      
+      final elapsed = DateTime.now().difference(_appStartTime);
+      debugPrint('앱 초기화 완료 (소요시간: ${elapsed.inMilliseconds}ms)');
+      debugPrint('로그인 상태: $_isUserAuthenticated, 로그인 기록: $_hasLoginHistory, 온보딩 완료: $_isOnboardingCompleted');
+    } catch (e) {
+      debugPrint('초기화 중 오류 발생: $e');
+      if (mounted) {
+        setState(() {
+          _error = '앱 초기화 중 오류가 발생했습니다: $e';
+        });
+      }
+    }
   }
 
   // 인증 상태 변경 리스너 설정
@@ -90,66 +164,66 @@ class _AppState extends State<App> {
   Future<void> _handleUserLogin(User user) async {
     try {
       setState(() {
-        _isLoadingUserData = true;
         _isUserAuthenticated = true;
       });
       
-      // 초기화 서비스를 통해 로그인 처리
-      final result = await widget.initializationService.handleUserLogin(user);
-      
-      if (mounted) {
-        setState(() {
-          _isUserAuthenticated = true;
-          _hasLoginHistory = result['hasLoginHistory'] ?? false;
-          _isOnboardingCompleted = result['isOnboardingCompleted'] ?? false;
-          _isFirstEntry = result['isFirstEntry'] ?? true;
-          _isLoadingUserData = false;
-        });
+      // 사용자 정보 확인 - 기본 정보만 빠르게 로드
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+          
+      if (userDoc.exists) {
+        final userData = userDoc.data();
+        if (userData != null) {
+          // 사용자 기본 설정 로드 (필수적인 정보만)
+          if (userData['userName'] != null) {
+            await _preferencesService.setUserName(userData['userName']);
+          }
+          
+          if (userData['defaultNoteSpace'] != null) {
+            await _preferencesService.setDefaultNoteSpace(userData['defaultNoteSpace']);
+          }
+          
+          // 로그인 기록 저장
+          await _preferencesService.saveLoginHistory();
+          
+          // 온보딩 완료 여부 확인
+          final isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
+          
+          if (mounted) {
+            setState(() {
+              _isOnboardingCompleted = isOnboardingCompleted;
+              _hasLoginHistory = true;
+            });
+          }
+          
+          // 나머지 설정 정보는 백그라운드에서 로드
+          _loadRemainingUserPreferences(userData);
+        }
       }
       
-      debugPrint('사용자 로그인 처리 완료: 로그인 기록=${result['hasLoginHistory']}, 온보딩 완료=${result['isOnboardingCompleted']}');
+      debugPrint('사용자 로그인 처리 완료: 온보딩 완료=$_isOnboardingCompleted');
     } catch (e) {
       debugPrint('사용자 로그인 처리 중 오류 발생: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingUserData = false;
-        });
-      }
     }
   }
-
-  // 초기화 상태 확인 시작 (비동기)
-  void _startInitializationCheck() {
-    if (_isCheckingInitialization) return;
-    _isCheckingInitialization = true;
-    
-    debugPrint('앱 초기화 상태 확인 시작 (${DateTime.now().toString()})');
-
-    // 로그인 상태 확인
-    widget.initializationService.checkLoginState().then((result) {
-      if (mounted) {
-        setState(() {
-          _isUserAuthenticated = result['isLoggedIn'] ?? false;
-          _hasLoginHistory = result['hasLoginHistory'] ?? false;
-          _isOnboardingCompleted = result['isOnboardingCompleted'] ?? false;
-          _isFirstEntry = result['isFirstEntry'] ?? true;
-          _isFirebaseInitialized = true;
-          _isCheckingInitialization = false;
-        });
+  
+  // 나머지 사용자 설정 정보 백그라운드에서 로드
+  Future<void> _loadRemainingUserPreferences(Map<String, dynamic> userData) async {
+    try {
+      // 우선순위가 낮은 설정 정보 로드
+      if (userData['learningPurpose'] != null) {
+        await _preferencesService.setLearningPurpose(userData['learningPurpose']);
       }
       
-      final elapsed = DateTime.now().difference(_appStartTime);
-      debugPrint('앱 초기화 완료 (소요시간: ${elapsed.inMilliseconds}ms)');
-      debugPrint('로그인 상태: $_isUserAuthenticated, 로그인 기록: $_hasLoginHistory, 온보딩 완료: $_isOnboardingCompleted');
-    }).catchError((e) {
-      debugPrint('초기화 상태 확인 중 오류 발생: $e');
-      if (mounted) {
-        setState(() {
-          _error = '앱 초기화 중 오류가 발생했습니다: $e';
-          _isCheckingInitialization = false;
-        });
-      }
-    });
+      final useSegmentMode = userData['translationMode'] == 'segment';
+      await _preferencesService.setUseSegmentMode(useSegmentMode);
+      
+      debugPrint('사용자 추가 설정 로드 완료');
+    } catch (e) {
+      debugPrint('사용자 추가 설정 로드 중 오류: $e');
+    }
   }
 
   @override
@@ -165,115 +239,91 @@ class _AppState extends State<App> {
         themeMode: ThemeMode.light,
         // 화면 방향 고정 (세로 모드만 지원)
         home: _buildHomeScreen(),
-        routes: {
-          '/settings': (context) => SettingsScreen(
-                initializationService: widget.initializationService,
-                onLogout: () async {
-                  await widget.initializationService.signOut();
-                  if (mounted) {
-                    setState(() {
-                      _isUserAuthenticated = false;
-                      _isOnboardingCompleted = false;
-                      _hasLoginHistory = false;
-                    });
-                  }
-                },
-              ),
-          // 추가 라우트 설정이 필요한 경우 여기에 추가
-        },
       ),
     );
   }
 
   Widget _buildHomeScreen() {
-    // 초기화 중이거나 사용자 데이터 로딩 중인 경우 로딩 화면 표시
-    if (!_isFirebaseInitialized || _isLoadingUserData) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 40,
-                height: 40,
-                child: Image.asset('assets/images/pikabook_bird.png'),
-              ),
-              const SizedBox(height: 24),
-              const DotLoadingIndicator(),
-              const SizedBox(height: 24),
-              Text(
-                _isLoadingUserData 
-                    ? '사용자 데이터 로드 중...' 
-                    : '앱 초기화 중...',
-                style: const TextStyle(fontSize: 16),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // 오류 발생 시 오류 화면 표시
+    // 에러 발생한 경우
     if (_error != null) {
       return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              const Text(
-                '오류가 발생했습니다',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 로고
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Image.asset('assets/images/pikabook_bird.png'),
+                  ),
+                  const SizedBox(height: 24),
+                  // 오류 메시지
+                  const Text(
+                    '오류가 발생했습니다',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Colors.red,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // 재시도 버튼
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _error = null;
+                      });
+                      _startInitialization();
+                    },
+                    child: const Text('다시 시도'),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16),
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    _error = null;
-                  });
-                  _startInitializationCheck();
-                },
-                child: const Text('다시 시도'),
-              ),
-            ],
+            ),
           ),
         ),
       );
     }
 
-    // 1. 로그인되지 않은 경우 로그인 화면으로 이동
+    // 초기화 중인 경우 로딩 화면 표시
+    if (!_isInitialized) {
+      return LoadingScreen(
+        progress: _progress,
+        message: _message,
+        subMessage: _subMessage,
+        onSkip: () {
+          if (mounted) {
+            setState(() {
+              _isInitialized = true;
+            });
+          }
+        },
+      );
+    }
+
+    // 로그인 되지 않은 경우
     if (!_isUserAuthenticated) {
       return LoginScreen(
-        initializationService: widget.initializationService,
         onLoginSuccess: (user) {
           _handleUserLogin(user);
         },
+        isInitializing: false,
       );
     }
 
-    // 2. 로그인 됐지만 로그인 기록이 없는 경우 온보딩 화면으로 이동
-    if (!_hasLoginHistory) {
-      return OnboardingScreen(
-        onComplete: () {
-          setState(() {
-            _isOnboardingCompleted = true;
-            _hasLoginHistory = true;
-          });
-        },
-      );
-    }
-
-    // 3. 로그인 됐고 로그인 기록이 있지만 온보딩이 완료되지 않은 경우 온보딩 화면으로 이동
+    // 온보딩이 필요한 경우
     if (!_isOnboardingCompleted) {
       return OnboardingScreen(
         onComplete: () {
@@ -284,24 +334,18 @@ class _AppState extends State<App> {
       );
     }
 
-    // 4. 로그인 및 온보딩이 모두 완료된 경우 홈 화면으로 이동
+    // 모든 조건 통과 - 홈 화면 표시
     return HomeScreen(
-      showTooltip: _isFirstEntry, // 첫 진입 시 툴팁 표시
-      onCloseTooltip: () {
+      showTooltip: _isFirstEntry,
+      onCloseTooltip: () async {
         // 툴팁 표시 여부 업데이트
-        SharedPreferences.getInstance().then((prefs) {
-          prefs.setBool('hasShownTooltip', true);
-          setState(() {
-            _isFirstEntry = false;
-          });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('hasShownTooltip', true);
+        setState(() {
+          _isFirstEntry = false;
         });
       },
-      initializationService: widget.initializationService, // InitializationService 전달
+      initializationService: null, // 이전 방식에서 필요했던 객체는 null로 설정
     );
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 }

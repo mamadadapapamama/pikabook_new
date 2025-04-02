@@ -5,7 +5,7 @@ import '../services/page_service.dart';
 import '../services/page_content_service.dart';
 import '../services/unified_cache_service.dart';
 
-/// 노트 세그먼트 관리 클래스
+/// 노트 세그먼트 관리 클래스 입니다
 /// 페이지 내 세그먼트 처리 관련 기능 제공
 class NoteSegmentManager {
   final PageService _pageService = PageService();
