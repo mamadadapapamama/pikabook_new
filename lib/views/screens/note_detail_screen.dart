@@ -1464,7 +1464,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     
     return Container(
       margin: EdgeInsets.only(top: 16, left: 16, right: 16),
-      height: MediaQuery.of(context).size.height * 0.34,
+      height: 200, // 높이를 200으로 고정
       width: MediaQuery.of(context).size.width,
       child: SingleChildScrollView(
         physics: const NeverScrollableScrollPhysics(),
@@ -1480,7 +1480,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               )
             ],
           ),
-          height: MediaQuery.of(context).size.height * 0.34,
+          height: 200, // 내부 컨테이너 높이도 200으로 고정
           width: MediaQuery.of(context).size.width,
           child: Stack(
             children: [
