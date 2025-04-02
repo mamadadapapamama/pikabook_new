@@ -573,7 +573,7 @@ class PageService {
       });
       
       // 캐시에서 페이지 제거 (다음에 불러올 때 최신 정보로 로드)
-      await _cacheService.removeCachedPage(pageId);
+      await _cacheService.removePage(pageId);
       
       return true;
     } catch (e) {

@@ -147,18 +147,8 @@ class ImageService {
     if (relativePath == null || relativePath.isEmpty) {
       return null;
     }
-
-    // 캐시 키 생성 - 사용자 ID와 경로를 결합하여 고유한 키 생성
-    final String cacheKey = 'image_${_currentUserId ?? "anonymous"}_$relativePath';
     
-    try {
-      // 메모리 캐시에서 확인
-      final cachedFile = _cacheService.getGenericValue(cacheKey) as File?;
-      if (cachedFile != null && await cachedFile.exists() && await cachedFile.length() > 0) {
-        debugPrint('메모리 캐시에서 이미지 로드: $relativePath');
-        return cachedFile;
-      }
-      
+    try {      
       // 디스크에서 로드
       final fullPath = await getFullImagePath(relativePath);
       final file = File(fullPath);
@@ -166,10 +156,6 @@ class ImageService {
       // 이미지 파일이 실제로 존재하는지 확인
       if (await file.exists() && await file.length() > 0) {
         debugPrint('디스크에서 이미지 로드: $relativePath');
-        
-        // 메모리 캐시에 저장
-        _cacheService.setGenericValue(cacheKey, file);
-        
         return file;
       }
       
