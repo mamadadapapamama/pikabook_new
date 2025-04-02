@@ -322,11 +322,20 @@ class DictionaryService {
         debugPrint('유효한 Papago API 키가 없습니다.');
         return null;
       }
+      
+      // 사용량 제한 확인 (외부 API 호출 전 확인)
+      final canLookup = await _usageLimitService.incrementDictionaryLookupCount();
+      if (!canLookup) {
+        debugPrint('Papago API 호출 사용량 한도 초과: $word');
+        return null;
+      }
 
       // 이미 사전에 있는지 확인 (중복 API 호출 방지)
       final existingEntry = _dictionary[word];
       if (existingEntry != null) {
         debugPrint('이미 사전에 있는 단어 반환: $word');
+        // 이미 사전에 있으므로 사용량을 다시 감소
+        await _usageLimitService.decrementDictionaryLookupCount();
         return existingEntry;
       }
 

@@ -762,7 +762,24 @@ class NoteService {
         return {'success': false, 'message': '이미지가 없습니다.'};
       }
       
-      // 사용량 제한 확인
+      // 사용자 확인
+      final user = _auth.currentUser;
+      if (user == null) {
+        return {'success': false, 'message': '로그인이 필요합니다.'};
+      }
+      
+      // 페이지 사용량 제한 확인 - 이미지 수만큼 페이지를 추가할 수 있는지 확인
+      final int pageCount = imageFiles.length;
+      final canAddPages = await _usageLimitService.canAddPage(pageCount);
+      if (!canAddPages) {
+        return {
+          'success': false,
+          'message': '무료 페이지 사용량 한도를 초과했습니다. 관리자에게 문의해주세요.',
+          'limitExceeded': true,
+        };
+      }
+      
+      // 노트 사용량 제한 확인
       final canAddNote = await _usageLimitService.incrementNoteCount();
       if (!canAddNote) {
         return {
@@ -782,13 +799,10 @@ class NoteService {
         };
       }
       
-      debugPrint('Starting note creation with multiple images: ${imageFiles.length}');
+      // 페이지 카운트 증가 - 이미지 수만큼 증가
+      await _usageLimitService.incrementPageCount(pageCount);
       
-      // 현재 사용자 확인
-      final user = _auth.currentUser;
-      if (user == null) {
-        return {'success': false, 'message': '로그인이 필요합니다.'};
-      }
+      debugPrint('Starting note creation with multiple images: ${imageFiles.length}');
       
       // 노트 기본 정보 생성
       final now = DateTime.now();
@@ -833,6 +847,8 @@ class NoteService {
           }
         } catch (e) {
           debugPrint('첫 번째 이미지 처리 중 오류: $e');
+          // 첫 페이지 처리 실패 시 페이지 카운트 감소
+          await _usageLimitService.decrementPageCount();
           // 오류가 있더라도 계속 진행
         }
       }
@@ -888,6 +904,7 @@ class NoteService {
     
     int processedCount = 1; // 첫 이미지는 이미 처리됨
     final totalCount = imageFiles.length + 1; // 총 이미지 수
+    int errorCount = 0; // 오류 발생 이미지 수
     
     try {
       // 각 이미지에 대해 순차적으로 처리
@@ -919,6 +936,9 @@ class NoteService {
           debugPrint('이미지 $pageNumber/$totalCount 처리 완료');
         } catch (e) {
           debugPrint('이미지 ${i + 2} 처리 중 오류: $e');
+          // 이미지 처리 실패 시 페이지 카운트 감소
+          await _usageLimitService.decrementPageCount();
+          errorCount++;
           // 개별 이미지 오류가 있어도 계속 진행
         }
       }
@@ -927,17 +947,27 @@ class NoteService {
       await _notesCollection.doc(noteId).update({
         'isProcessingBackground': false,
         'processedImagesCount': processedCount,
+        'errorCount': errorCount,
       });
       
-      debugPrint('모든 이미지 처리 완료 ($processedCount/$totalCount)');
+      debugPrint('모든 이미지 처리 완료 ($processedCount/$totalCount), 오류: $errorCount');
     } catch (e) {
       debugPrint('백그라운드 이미지 처리 중 오류 발생: $e');
+      
+      // 처리되지 않은 이미지에 대한 페이지 카운트 감소
+      final remainingCount = imageFiles.length - (processedCount - 1);
+      if (remainingCount > 0) {
+        for (int i = 0; i < remainingCount; i++) {
+          await _usageLimitService.decrementPageCount();
+        }
+      }
       
       // 오류가 발생해도 처리 상태 업데이트
       await _notesCollection.doc(noteId).update({
         'isProcessingBackground': false,
         'processedImagesCount': processedCount,
         'processingError': e.toString(),
+        'errorCount': errorCount,
       });
     }
   }

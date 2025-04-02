@@ -11,7 +11,8 @@ class UsageLimitService {
   
   // 월별 무료 사용 제한
   static const int MAX_FREE_TRANSLATION_CHARS = 500;   // 번역 최대 글자 수
-  static const int MAX_FREE_NOTES = 2;                 // 노트 최대 개수
+  static const int MAX_FREE_NOTES = 2;                 // 노트 최대 개수 (페이지 수로 대체)
+  static const int MAX_FREE_PAGES = 30;                // 페이지 최대 개수
   static const int MAX_FREE_OCR_REQUESTS = 5;          // OCR 요청 최대 횟수
   static const int MAX_FREE_DICTIONARY_LOOKUPS = 5;    // 외부 사전 조회 최대 횟수
   static const int MAX_FREE_FLASHCARDS = 2;            // 플래시카드 최대 개수
@@ -44,6 +45,7 @@ class UsageLimitService {
       return {
         'translatedChars': 0,
         'noteCount': 0,
+        'pageCount': 0,
         'ocrRequests': 0,
         'dictionaryLookups': 0,
         'flashcardCount': 0,
@@ -57,6 +59,7 @@ class UsageLimitService {
     return docSnapshot.data() ?? {
       'translatedChars': 0,
       'noteCount': 0,
+      'pageCount': 0,
       'ocrRequests': 0,
       'dictionaryLookups': 0,
       'flashcardCount': 0,
@@ -77,6 +80,7 @@ class UsageLimitService {
         .set({
       'translatedChars': 0,
       'noteCount': 0,
+      'pageCount': 0,
       'ocrRequests': 0,
       'dictionaryLookups': 0,
       'flashcardCount': 0,
@@ -176,6 +180,21 @@ class UsageLimitService {
   // 사전 조회 횟수 추가 (다른 이름 - 호환성 유지)
   Future<bool> incrementDictionaryLookupCount() async {
     return addDictionaryLookup();
+  }
+  
+  // 사전 조회 횟수 감소
+  Future<void> decrementDictionaryLookupCount() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('로그인된 사용자가 없습니다.');
+    }
+    
+    final usage = await getUserUsage();
+    final int lookupCount = usage['dictionaryLookups'] ?? 0;
+    
+    if (lookupCount > 0) {
+      await _updateUsageField(user.uid, 'dictionaryLookups', -1);
+    }
   }
   
   // 플래시카드 추가 가능 여부 확인
@@ -305,6 +324,70 @@ class UsageLimitService {
     return noteCount < MAX_FREE_NOTES;
   }
   
+  // 페이지 추가 가능 여부 확인
+  Future<bool> canAddPage([int count = 1]) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('로그인된 사용자가 없습니다.');
+    }
+    
+    // 현재 사용량 확인
+    final usage = await getUserUsage();
+    final bool isPremium = usage['isPremium'] ?? false;
+    
+    // 프리미엄 사용자는 제한 없음
+    if (isPremium) {
+      return true;
+    }
+    
+    // 무료 사용자는 제한 확인
+    final int pageCount = usage['pageCount'] ?? 0;
+    return pageCount + count <= MAX_FREE_PAGES;
+  }
+  
+  // 페이지 개수 증가
+  Future<bool> incrementPageCount([int count = 1]) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('로그인된 사용자가 없습니다.');
+    }
+    
+    // 현재 사용량 확인
+    final usage = await getUserUsage();
+    final bool isPremium = usage['isPremium'] ?? false;
+    
+    // 프리미엄 사용자는 제한 없음
+    if (isPremium) {
+      await _updateUsageField(user.uid, 'pageCount', count);
+      return true;
+    }
+    
+    // 무료 사용자는 제한 확인
+    final int currentCount = usage['pageCount'] ?? 0;
+    if (currentCount + count > MAX_FREE_PAGES) {
+      return false; // 제한 초과
+    }
+    
+    // 사용량 업데이트
+    await _updateUsageField(user.uid, 'pageCount', count);
+    return true;
+  }
+  
+  // 페이지 개수 감소
+  Future<void> decrementPageCount() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('로그인된 사용자가 없습니다.');
+    }
+    
+    final usage = await getUserUsage();
+    final int pageCount = usage['pageCount'] ?? 0;
+    
+    if (pageCount > 0) {
+      await _updateUsageField(user.uid, 'pageCount', -1);
+    }
+  }
+  
   // 노트 개수 증가
   Future<bool> incrementNoteCount() async {
     final user = _auth.currentUser;
@@ -404,6 +487,7 @@ class UsageLimitService {
       return {
         'translationLimitReached': false,
         'noteLimitReached': false,
+        'pageLimitReached': false,
         'ocrLimitReached': false,
         'dictionaryLimitReached': false,
         'flashcardLimitReached': false,
@@ -414,6 +498,7 @@ class UsageLimitService {
     
     final int translatedChars = usage['translatedChars'] ?? 0;
     final int noteCount = usage['noteCount'] ?? 0;
+    final int pageCount = usage['pageCount'] ?? 0;
     final int ocrRequests = usage['ocrRequests'] ?? 0;
     final int dictionaryLookups = usage['dictionaryLookups'] ?? 0;
     final int flashcardCount = usage['flashcardCount'] ?? 0;
@@ -421,6 +506,7 @@ class UsageLimitService {
     
     final bool translationLimitReached = translatedChars >= MAX_FREE_TRANSLATION_CHARS;
     final bool noteLimitReached = noteCount >= MAX_FREE_NOTES;
+    final bool pageLimitReached = pageCount >= MAX_FREE_PAGES;
     final bool ocrLimitReached = ocrRequests >= MAX_FREE_OCR_REQUESTS;
     final bool dictionaryLimitReached = dictionaryLookups >= MAX_FREE_DICTIONARY_LOOKUPS;
     final bool flashcardLimitReached = flashcardCount >= MAX_FREE_FLASHCARDS;
@@ -428,6 +514,7 @@ class UsageLimitService {
     
     final bool anyLimitReached = translationLimitReached || 
                                noteLimitReached || 
+                               pageLimitReached || 
                                ocrLimitReached || 
                                dictionaryLimitReached || 
                                flashcardLimitReached || 
@@ -436,6 +523,7 @@ class UsageLimitService {
     return {
       'translationLimitReached': translationLimitReached,
       'noteLimitReached': noteLimitReached,
+      'pageLimitReached': pageLimitReached,
       'ocrLimitReached': ocrLimitReached,
       'dictionaryLimitReached': dictionaryLimitReached,
       'flashcardLimitReached': flashcardLimitReached,
@@ -454,6 +542,7 @@ class UsageLimitService {
       return {
         'translationPercent': 0.0,
         'notePercent': 0.0,
+        'pagePercent': 0.0,
         'ocrPercent': 0.0,
         'dictionaryPercent': 0.0,
         'flashcardPercent': 0.0,
@@ -464,6 +553,7 @@ class UsageLimitService {
     
     final int translatedChars = usage['translatedChars'] ?? 0;
     final int noteCount = usage['noteCount'] ?? 0;
+    final int pageCount = usage['pageCount'] ?? 0;
     final int ocrRequests = usage['ocrRequests'] ?? 0;
     final int dictionaryLookups = usage['dictionaryLookups'] ?? 0;
     final int flashcardCount = usage['flashcardCount'] ?? 0;
@@ -471,6 +561,7 @@ class UsageLimitService {
     
     final double translationPercent = translatedChars / MAX_FREE_TRANSLATION_CHARS;
     final double notePercent = noteCount / MAX_FREE_NOTES;
+    final double pagePercent = pageCount / MAX_FREE_PAGES;
     final double ocrPercent = ocrRequests / MAX_FREE_OCR_REQUESTS;
     final double dictionaryPercent = dictionaryLookups / MAX_FREE_DICTIONARY_LOOKUPS;
     final double flashcardPercent = flashcardCount / MAX_FREE_FLASHCARDS;
@@ -480,6 +571,7 @@ class UsageLimitService {
     final double overallPercent = [
       translationPercent,
       notePercent,
+      pagePercent,
       ocrPercent,
       dictionaryPercent,
       flashcardPercent,
@@ -489,6 +581,7 @@ class UsageLimitService {
     return {
       'translationPercent': translationPercent,
       'notePercent': notePercent,
+      'pagePercent': pagePercent,
       'ocrPercent': ocrPercent,
       'dictionaryPercent': dictionaryPercent,
       'flashcardPercent': flashcardPercent,
