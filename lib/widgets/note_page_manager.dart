@@ -183,11 +183,23 @@ class NotePageManager {
     if (_imageFiles[index] != null) return; // 이미 로드된 경우 스킵
 
     try {
+      // 이미지 로드 시도
       final imageFile = await _imageService.getImageFile(page.imageUrl);
+      
       // 인덱스 범위 확인
       if (index < _imageFiles.length) {
         _imageFiles[index] = imageFile;
-        debugPrint('페이지 $index 이미지 로드 완료: ${page.imageUrl}');
+        
+        // 이미지가 로드되었는지 추가 확인
+        if (imageFile != null) {
+          // 이미지 맵에도 추가
+          if (page.id != null) {
+            _imageFileMap[page.id!] = imageFile;
+          }
+          debugPrint('페이지 $index 이미지 로드 완료: ${page.imageUrl}');
+        } else {
+          debugPrint('페이지 $index 이미지 로드 실패: 파일을 찾을 수 없음 - ${page.imageUrl}');
+        }
       }
     } catch (e) {
       debugPrint('이미지 로드 중 오류 발생: $e');

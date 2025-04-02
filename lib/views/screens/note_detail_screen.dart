@@ -1271,7 +1271,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           ? NoteDetailBottomBar(
               currentPage: _pageManager.currentPage,
               currentPageIndex: _pageManager.currentPageIndex,
-              totalPages: _pageManager.pages.length,
+              totalPages: (_note?.isProcessingBackground ?? false) && _note?.imageCount != null
+                  ? max(_note!.imageCount!, _pageManager.pages.length)
+                  : _pageManager.pages.length,
               onPageChanged: _changePage,
               textDisplayMode: _textDisplayMode,
               onTextDisplayModeChanged: _handleTextDisplayModeChanged,
@@ -1309,89 +1311,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           if (index == _pageManager.currentPageIndex) {
             return Column(
               children: [
-                // 페이지 썸네일 이미지 (있는 경우)
-                if (currentImageFile != null || _pageManager.currentPage?.imageUrl != null)
-                  Stack(
-                    children: [
-                      // 이미지 컨테이너
-                      Container(
-                        height: 200, // 높이를 200으로 고정
-                        width: double.infinity, // 화면 너비를 꽉 채움
-                        decoration: BoxDecoration(
-                          image: currentImageFile != null
-                              ? DecorationImage(
-                                  image: FileImage(currentImageFile),
-                                  fit: BoxFit.cover,
-                                )
-                              : _pageManager.currentPage?.imageUrl != null
-                                  ? DecorationImage(
-                                      image: NetworkImage(_pageManager.currentPage!.imageUrl!),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : null,
-                          color: Colors.grey.shade200,
-                        ),
-                        child: (currentImageFile == null && _pageManager.currentPage?.imageUrl == null)
-                            ? InkWell(
-                                onTap: _showImagePicker,
-                                child: Container(
-                                  color: Colors.grey[100],
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Image.asset(
-                                        'assets/images/image_empty.png',
-                                        width: 60,
-                                        height: 60,
-                                        fit: BoxFit.contain,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        '이미지를 추가해주세요',
-                                        style: GoogleFonts.notoSansKr(
-                                          fontSize: 14,
-                                          color: ColorTokens.textGrey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            : null,
-                      ),
-                      
-                      // '이미지 전체보기' 버튼
-                      Positioned(
-                        bottom: 12,
-                        right: 12,
-                          child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => FullImageScreen(
-                                  imageFile: currentImageFile,
-                                  imageUrl: _pageManager.currentPage?.imageUrl,
-                                  title: '이미지',
-                                ),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black.withOpacity(0.5),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            ),
-                            child: Text(
-                              '이미지 전체보기',
-                              style: TypographyTokens.caption.copyWith(
-                                color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                // 첫 번째 이미지 컨테이너
+                _buildFirstImageContainer(),
                 
                 // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
                 Expanded(
@@ -1409,34 +1330,61 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             final imageFile = _pageManager.getImageFileForPage(page);
             
             return Column(
-          children: [
+              children: [
                 // 페이지 썸네일 이미지 (있는 경우)
                 if (imageFile != null || page?.imageUrl != null)
-                  Stack(
-                    children: [
-                      // 이미지 컨테이너
-                      Container(
-                        height: 200, // 높이를 200으로 고정
-                        width: double.infinity, // 화면 너비를 꽉 채움
-                        decoration: BoxDecoration(
-                          image: imageFile != null
-                              ? DecorationImage(
-                                  image: FileImage(imageFile),
-                                  fit: BoxFit.cover,
-                                )
-                              : page?.imageUrl != null
-                                  ? DecorationImage(
-                                      image: NetworkImage(page!.imageUrl!),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : null,
-                          color: Colors.grey.shade200,
-                        ),
-                        child: (imageFile == null && page?.imageUrl == null)
-                            ? InkWell(
-                                onTap: _showImagePicker,
-                                child: Container(
-                                  color: Colors.grey[100],
+                  Container(
+                    margin: EdgeInsets.only(top: 16, left: 16, right: 16),
+                    height: 200, // 높이를 200으로 고정
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        )
+                      ],
+                    ),
+                    child: Stack(
+                      children: [
+                        if (imageFile != null)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(
+                              imageFile,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                              errorBuilder: (context, error, stackTrace) {
+                                debugPrint('이미지 로드 오류: $error');
+                                return Center(child: Text('이미지를 불러올 수 없습니다.'));
+                              },
+                            ),
+                          )
+                        else if (page?.imageUrl != null)
+                          FutureBuilder<File?>(
+                            future: _imageService.getImageFile(page!.imageUrl),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting) {
+                                return Center(child: CircularProgressIndicator());
+                              } else if (snapshot.hasData && snapshot.data != null) {
+                                return ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.file(
+                                    snapshot.data!,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      debugPrint('이미지 로드 오류: $error');
+                                      return Center(child: Text('이미지를 불러올 수 없습니다.'));
+                                    },
+                                  ),
+                                );
+                              } else {
+                                return Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -1444,54 +1392,48 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                                         'assets/images/image_empty.png',
                                         width: 60,
                                         height: 60,
-                                        fit: BoxFit.contain,
                                       ),
                                       const SizedBox(height: 8),
-                                      Text(
-                                        '이미지를 추가해주세요',
-                                        style: GoogleFonts.notoSansKr(
-                                          fontSize: 14,
-                                          color: ColorTokens.textGrey,
-                                        ),
-                                      ),
+                                      Text('이미지를 찾을 수 없습니다'),
                                     ],
                                   ),
-                                ),
-                              )
-                            : null,
-                      ),
-                      
-                      // '이미지 전체보기' 버튼
-                      Positioned(
-                        bottom: 12,
-                        right: 12,
+                                );
+                              }
+                            },
+                          ),
+                          
+                        // '이미지 전체보기' 버튼
+                        Positioned(
+                          bottom: 12,
+                          right: 12,
                           child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => FullImageScreen(
-                                  imageFile: imageFile,
-                                  imageUrl: page?.imageUrl,
-                                  title: '이미지',
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FullImageScreen(
+                                    imageFile: imageFile,
+                                    imageUrl: page?.imageUrl,
+                                    title: '이미지',
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.black.withOpacity(0.5),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
                             ),
                             child: Text(
                               '이미지 전체보기',
                               style: TypographyTokens.caption.copyWith(
                                 color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 
                 // 페이지 내용을 위한 공간
@@ -1511,6 +1453,134 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       ],
       );
     }
+
+  // 첫 번째 이미지 컨테이너
+  Widget _buildFirstImageContainer() {
+    // 현재 페이지의 이미지 파일을 가져옴
+    File? currentImageFile = _pageManager.getImageFileForPage(_pageManager.currentPage);
+    
+    // 현재 페이지 정보가 있는 경우
+    final currentPage = _pageManager.currentPage;
+    
+    return Container(
+      margin: EdgeInsets.only(top: 16, left: 16, right: 16),
+      height: MediaQuery.of(context).size.height * 0.34,
+      width: MediaQuery.of(context).size.width,
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              )
+            ],
+          ),
+          height: MediaQuery.of(context).size.height * 0.34,
+          width: MediaQuery.of(context).size.width,
+          child: Stack(
+            children: [
+              if (currentImageFile != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    currentImageFile,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: double.infinity,
+                    errorBuilder: (context, error, stackTrace) {
+                      debugPrint('이미지 로드 오류: $error');
+                      return Center(child: Text('이미지를 불러올 수 없습니다.'));
+                    },
+                  ),
+                )
+              else if (currentPage?.imageUrl != null)
+                FutureBuilder<File?>(
+                  future: _imageService.getImageFile(currentPage!.imageUrl),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    } else if (snapshot.hasData && snapshot.data != null) {
+                      // 이미지 파일을 찾은 경우, 페이지 매니저에도 업데이트
+                      if (currentPage.id != null) {
+                        // 이미지 파일과 URL 업데이트 (기존 NotePageManager 메서드 활용)
+                        _pageManager.updateCurrentPageImage(
+                          snapshot.data!, 
+                          currentPage.imageUrl!
+                        );
+                      }
+                      
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(
+                          snapshot.data!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                          errorBuilder: (context, error, stackTrace) {
+                            debugPrint('이미지 로드 오류: $error');
+                            return Center(child: Text('이미지를 불러올 수 없습니다.'));
+                          },
+                        ),
+                      );
+                    } else {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.asset(
+                              'assets/images/image_empty.png',
+                              width: 60,
+                              height: 60,
+                            ),
+                            const SizedBox(height: 8),
+                            Text('이미지를 찾을 수 없습니다'),
+                          ],
+                        ),
+                      );
+                    }
+                  },
+                ),
+              // 이미지 확대 버튼 추가
+              Positioned(
+                bottom: 12,
+                right: 12,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => FullImageScreen(
+                          imageFile: currentImageFile,
+                          imageUrl: _pageManager.currentPage?.imageUrl,
+                          title: '이미지',
+                        ),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black.withOpacity(0.5),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    '이미지 전체보기',
+                    style: TypographyTokens.caption.copyWith(
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   // 현재 페이지 내용 빌드
   Widget _buildCurrentPageContent() {
