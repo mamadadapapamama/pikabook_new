@@ -16,6 +16,8 @@ class NotePageManager {
   
   List<page_model.Page> _pages = [];
   List<File?> _imageFiles = [];
+  // 페이지 ID별 이미지 파일 맵
+  Map<String, File> _imageFileMap = {};
   int _currentPageIndex = 0;
   
   NotePageManager({required this.noteId});
@@ -226,5 +228,29 @@ class NotePageManager {
       }
     }
     return null;
+  }
+  
+  /// 현재 페이지의 이미지를 업데이트합니다.
+  /// 이미지 파일과 URL을 모두 업데이트하여 UI에 즉시 반영되도록 합니다.
+  void updateCurrentPageImage(File imageFile, String imageUrl) {
+    if (currentPage == null) return;
+    
+    // 현재 페이지의 이미지 URL 업데이트
+    final updatedPage = currentPage!.copyWith(imageUrl: imageUrl);
+    
+    // 현재 인덱스에 업데이트된 페이지 저장
+    if (currentPageIndex >= 0 && currentPageIndex < pages.length) {
+      _pages[currentPageIndex] = updatedPage;
+      
+      // 현재 인덱스의 이미지 파일 업데이트
+      _imageFiles[currentPageIndex] = imageFile;
+    }
+    
+    // 이미지 파일 캐싱 (맵에 저장)
+    if (updatedPage.id != null) {
+      _imageFileMap[updatedPage.id!] = imageFile;
+    }
+    
+    debugPrint('페이지 이미지 업데이트 완료: ${updatedPage.id}');
   }
 } 

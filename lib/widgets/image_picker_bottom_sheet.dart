@@ -8,6 +8,7 @@ import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/ui_tokens.dart';
 import '../widgets/common/pika_button.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);
@@ -129,7 +130,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     Navigator.pop(context); // 바텀 시트 닫기
 
     try {
-      final image = await _imageService.takePhoto();
+      final image = await _imageService.pickImage(source: ImageSource.camera);
 
       if (image != null) {
         // 저장된 컨텍스트를 사용하여 로딩 다이얼로그 표시
@@ -189,12 +190,19 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         silentProgress: true, // 진행 상황 업데이트 무시
       );
 
-      // 로딩 다이얼로그 닫기 (화면 전환 전)
+      // 로딩 다이얼로그 닫기 (로직 개선 - 확실하게 닫히도록)
       if (context.mounted && isLoadingDialogShowing) {
-        LoadingDialog.hide(context);
-        isLoadingDialogShowing = false;
-        // 약간의 지연을 주어 다이얼로그가 확실히 닫히도록 함
-        await Future.delayed(const Duration(milliseconds: 100));
+        try {
+          LoadingDialog.hide(context);
+          debugPrint("로딩 다이얼로그 명시적으로 닫힘");
+        } catch (e) {
+          debugPrint("로딩 다이얼로그 닫기 중 오류: $e");
+        } finally {
+          // 상태 업데이트
+          isLoadingDialogShowing = false;
+          // 약간의 지연을 주어 다이얼로그가 확실히 닫히도록 함
+          await Future.delayed(const Duration(milliseconds: 200));
+        }
       }
 
       if (result['success'] == true && result['noteId'] != null) {
@@ -209,7 +217,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             MaterialPageRoute(
               builder: (context) => NoteDetailScreen(
                 noteId: noteId,
-                isProcessingBackground: false, // 백그라운드 처리 알림 제거
+                isProcessingBackground: result['isProcessingBackground'] ?? false,
               ),
             ),
           );
@@ -237,8 +245,15 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
       // 오류 발생 시 로딩 다이얼로그 닫고 오류 메시지 표시
       if (context.mounted && isLoadingDialogShowing) {
-        LoadingDialog.hide(context);
-        isLoadingDialogShowing = false;
+        try {
+          LoadingDialog.hide(context);
+          debugPrint("오류 발생 후 로딩 다이얼로그 닫힘");
+        } catch (closeError) {
+          debugPrint("오류 발생 후 로딩 다이얼로그 닫기 중 오류: $closeError");
+        } finally {
+          isLoadingDialogShowing = false;
+        }
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('노트 생성 중 오류가 발생했습니다: $e'),

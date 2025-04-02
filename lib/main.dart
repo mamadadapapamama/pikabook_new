@@ -1,27 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'services/note_service.dart';
-import 'services/image_service.dart';
 import 'services/unified_cache_service.dart';
 import 'views/screens/home_screen.dart';
-import 'views/screens/onboarding_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'services/initialization_service.dart';
 import 'app.dart';
-import 'services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/chinese_segmenter_service.dart';
-import 'utils/language_constants.dart';
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'services/user_preferences_service.dart';
 
-// MARK: 다국어 지원을 위한 확장 포인트
-// 앱의 시작점에서 언어 설정을 초기화합니다.
+// 앱의 시작점
+// 언어 설정을 초기화합니다.
 // 현재는 중국어만 지원하지만, 향후 다양한 언어를 지원할 예정입니다.
 
 // Firebase 앱 인스턴스 전역 변수

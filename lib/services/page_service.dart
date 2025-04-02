@@ -562,4 +562,23 @@ class PageService {
       return null;
     }
   }
+
+  /// 페이지 이미지 URL 업데이트
+  Future<bool> updatePageImageUrl(String pageId, String imageUrl) async {
+    try {
+      // 페이지 문서 업데이트
+      await _pagesCollection.doc(pageId).update({
+        'imageUrl': imageUrl,
+        'updatedAt': DateTime.now(),
+      });
+      
+      // 캐시에서 페이지 제거 (다음에 불러올 때 최신 정보로 로드)
+      await _cacheService.removeCachedPage(pageId);
+      
+      return true;
+    } catch (e) {
+      debugPrint('페이지 이미지 URL 업데이트 중 오류 발생: $e');
+      return false;
+    }
+  }
 }

@@ -961,4 +961,49 @@ class UnifiedCacheService {
       _isInitialized = true;
     }
   }
+
+  /// 일반 값 캐싱 (모든 타입의 객체 저장)
+  void setGenericValue(String key, dynamic value) {
+    _memoryCache[key] = value;
+    debugPrint('일반 값 캐싱: $key');
+  }
+
+  /// 일반 값 가져오기
+  dynamic getGenericValue(String key) {
+    return _memoryCache[key];
+  }
+
+  /// 패턴에 일치하는 캐시 항목 제거
+  void clearCacheByPattern(String pattern) {
+    final keysToRemove = _memoryCache.keys
+        .where((key) => key.toString().contains(pattern))
+        .toList();
+    
+    for (final key in keysToRemove) {
+      _memoryCache.remove(key);
+    }
+    
+    debugPrint('패턴 "$pattern"에 일치하는 ${keysToRemove.length}개 항목 제거됨');
+  }
+
+  /// 페이지 캐시 제거
+  Future<void> removeCachedPage(String pageId) async {
+    // 페이지 객체 캐시 제거
+    _memoryCache.remove('page_$pageId');
+    
+    // 텍스트 캐시 제거
+    _memoryCache.remove('page_original_$pageId');
+    _memoryCache.remove('page_translated_$pageId');
+    
+    // 처리된 텍스트 캐시 제거
+    final processedTextKeys = _memoryCache.keys
+        .where((key) => key.toString().startsWith('processed_text_${pageId}_'))
+        .toList();
+    
+    for (final key in processedTextKeys) {
+      _memoryCache.remove(key);
+    }
+    
+    debugPrint('페이지 $pageId 캐시 제거됨');
+  }
 }

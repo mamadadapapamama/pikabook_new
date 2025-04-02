@@ -15,6 +15,7 @@ import '../utils/segment_utils.dart';
 import 'flashcard_counter_badge.dart';
 import 'page_count_badge.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 
 /// 홈페이지 노트리스트 화면에서 사용되는 카드 위젯
 
@@ -75,6 +76,116 @@ class _NoteListItemState extends State<NoteListItem> {
       }
     } catch (e) {
       debugPrint('이미지 로드 중 오류 발생: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingImage = false;
+        });
+      }
+    }
+  }
+
+  void _handleEmptyImageTap(BuildContext context) async {
+    // 이미지 업로드 로직 구현
+    try {
+      // 노트 ID 확인
+      if (widget.note.id == null) {
+        return;
+      }
+      
+      // 이미지 선택 대화상자 표시
+      await showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('갤러리에서 선택'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _pickImageFromGallery();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('카메라로 촬영'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _pickImageFromCamera();
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('이미지 선택 중 오류 발생: $e');
+    }
+  }
+  
+  // 갤러리에서 이미지 선택
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final imageFile = await _imageService.pickImage(source: ImageSource.gallery);
+      if (imageFile != null && widget.note.id != null) {
+        await _updateNoteImage(imageFile);
+      }
+    } catch (e) {
+      debugPrint('갤러리에서 이미지 선택 중 오류: $e');
+    }
+  }
+  
+  // 카메라로 이미지 촬영
+  Future<void> _pickImageFromCamera() async {
+    try {
+      final imageFile = await _imageService.pickImage(source: ImageSource.camera);
+      if (imageFile != null && widget.note.id != null) {
+        await _updateNoteImage(imageFile);
+      }
+    } catch (e) {
+      debugPrint('카메라로 이미지 촬영 중 오류: $e');
+    }
+  }
+  
+  // 노트 이미지 업데이트
+  Future<void> _updateNoteImage(File imageFile) async {
+    setState(() {
+      _isLoadingImage = true;
+    });
+    
+    try {
+      // 이미지 업로드
+      final imageUrl = await _imageService.uploadImage(imageFile);
+      
+      // 노트 이미지 URL 업데이트
+      await _noteService.updateNoteImageUrl(widget.note.id!, imageUrl);
+      
+      // 이미지 로드
+      await _loadImage();
+      
+      // 스낵바 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('노트 이미지가 업데이트되었습니다')),
+        );
+      }
+    } catch (e) {
+      debugPrint('노트 이미지 업데이트 중 오류: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('이미지 업데이트 중 오류가 발생했습니다')),
+        );
+      }
+    } finally {
       if (mounted) {
         setState(() {
           _isLoadingImage = false;
@@ -182,26 +293,29 @@ class _NoteListItemState extends State<NoteListItem> {
                                               valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary)),
                                         ),
                                       )
-                                    : Container(
-                                        color: Colors.grey[100],
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Image.asset(
-                                              'assets/images/thumbnail_empty.png',
-                                              width: 40,
-                                              height: 40,
-                                              fit: BoxFit.contain,
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '이미지 없음',
-                                              style: GoogleFonts.notoSansKr(
-                                                fontSize: 10,
-                                                color: ColorTokens.textGrey,
+                                    : InkWell(
+                                        onTap: () => _handleEmptyImageTap(context),
+                                        child: Container(
+                                          color: Colors.grey[100],
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Image.asset(
+                                                'assets/images/thumbnail_empty.png',
+                                                width: 40,
+                                                height: 40,
+                                                fit: BoxFit.contain,
                                               ),
-                                            ),
-                                          ],
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                '이미지 추가',
+                                                style: GoogleFonts.notoSansKr(
+                                                  fontSize: 10,
+                                                  color: ColorTokens.textGrey,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                           ),

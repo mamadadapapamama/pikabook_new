@@ -148,35 +148,33 @@ class ImageService {
       return null;
     }
 
+    // 캐시 키 생성 - 사용자 ID와 경로를 결합하여 고유한 키 생성
+    final String cacheKey = 'image_${_currentUserId ?? "anonymous"}_$relativePath';
+    
     try {
+      // 메모리 캐시에서 확인
+      final cachedFile = _cacheService.getGenericValue(cacheKey) as File?;
+      if (cachedFile != null && await cachedFile.exists() && await cachedFile.length() > 0) {
+        debugPrint('메모리 캐시에서 이미지 로드: $relativePath');
+        return cachedFile;
+      }
+      
       // 디스크에서 로드
       final fullPath = await getFullImagePath(relativePath);
+      final file = File(fullPath);
       
       // 이미지 파일이 실제로 존재하는지 확인
-      if (await _isImageFileExists(fullPath)) {
+      if (await file.exists() && await file.length() > 0) {
         debugPrint('디스크에서 이미지 로드: $relativePath');
-        return File(fullPath);
+        
+        // 메모리 캐시에 저장
+        _cacheService.setGenericValue(cacheKey, file);
+        
+        return file;
       }
       
       debugPrint('이미지 파일을 찾을 수 없음: $relativePath');
-      
-      // 웹 환경에서는 다른 방식으로 처리
-      if (kIsWeb) {
-        // 웹 환경에서는 상대 경로를 관리할 때 URL이나 assets 경로를 사용해야 함
-        debugPrint('웹 환경에서 이미지 경로 처리: $relativePath');
-        // 여기서는 빈 파일만 생성
-        return await _createPlaceholderImage(fullPath);
-      } else {
-        // 이미지 디렉토리 확인 및 생성
-        final appDir = await getApplicationDocumentsDirectory();
-        final imagesDir = Directory('${appDir.path}/images');
-        if (!await imagesDir.exists()) {
-          await imagesDir.create(recursive: true);
-        }
-        
-        // 플레이스홀더 이미지 생성
-        return await _createPlaceholderImage(fullPath);
-      }
+      return null;
     } catch (e) {
       debugPrint('이미지 파일 가져오기 중 오류 발생: $e');
       return null;
@@ -263,21 +261,20 @@ class ImageService {
     }
   }
 
-  /// 카메라로 이미지 촬영
-  Future<File?> takePhoto() async {
+  /// 사진 찍기/선택하기 (통합 메소드)
+  Future<File?> pickImage({required ImageSource source}) async {
     try {
       final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(source: ImageSource.camera);
+      final pickedFile = await picker.pickImage(source: source);
 
       if (pickedFile == null) {
         return null;
       }
 
-      // XFile을 File로 변환
       return File(pickedFile.path);
     } catch (e) {
-      debugPrint('카메라 사용 중 오류 발생: $e');
-      throw Exception('카메라 사용 중 오류가 발생했습니다: $e');
+      debugPrint('이미지 선택 중 오류 발생: $e');
+      return null;
     }
   }
 
@@ -335,9 +332,7 @@ class ImageService {
   /// 이미지 캐시 정리 (메모리 압박 시)
   Future<void> clearImageCache() async {
     try {
-      // 이미지 캐시 정리 로직
-      // 참고: Flutter 자체 이미지 캐시는 PaintingBinding.instance.imageCache를 통해 접근 가능
-      
+      // Flutter 이미지 캐시 정리
       final imageCache = PaintingBinding.instance.imageCache;
       if (imageCache != null) {
         // 이미지 캐시 정리 (최대 크기를 100으로 줄임)
@@ -346,11 +341,16 @@ class ImageService {
         
         // 미사용 이미지 즉시 제거
         imageCache.clear();
-        debugPrint('이미지 캐시 초기화 완료');
+        debugPrint('Flutter 이미지 캐시 초기화 완료');
       }
       
-      // 메모리 내 임시 이미지 참조 정리
+      // 메모리 내 이미지 참조 정리
       _clearInMemoryImageReferences();
+      
+      // 임시 이미지 파일 정리
+      await cleanupTempFiles();
+      
+      debugPrint('이미지 캐시 정리 완료');
     } catch (e) {
       debugPrint('이미지 캐시 정리 중 오류 발생: $e');
     }
@@ -359,7 +359,8 @@ class ImageService {
   /// 메모리 내 이미지 참조 정리
   void _clearInMemoryImageReferences() {
     try {
-      // 필요한 경우 구현
+      // UnifiedCacheService의 이미지 관련 캐시만 제거
+      _cacheService.clearCacheByPattern('image_');
       debugPrint('메모리 내 이미지 참조 정리 완료');
     } catch (e) {
       debugPrint('메모리 내 이미지 참조 정리 중 오류 발생: $e');
