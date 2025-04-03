@@ -13,6 +13,7 @@ class UserPreferencesService {
   static const String _loginHistoryKey = 'login_history';
   static const String _sourceLanguageKey = 'source_language';
   static const String _targetLanguageKey = 'target_language';
+  static const String _currentUserIdKey = 'current_user_id'; // 현재 로그인된 사용자 ID 저장 키
 
   // 온보딩 완료 여부 가져오기
   Future<bool> getOnboardingCompleted() async {
@@ -172,6 +173,47 @@ class UserPreferencesService {
     return prefs.getBool(_loginHistoryKey) ?? false;
   }
 
+  // 현재 사용자 ID 설정
+  Future<void> setCurrentUserId(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    // 이전 사용자 ID 가져오기
+    final previousUserId = prefs.getString(_currentUserIdKey);
+    
+    // 사용자가 변경되었으면 설정 초기화
+    if (previousUserId != null && previousUserId != userId) {
+      debugPrint('사용자가 변경됨: $previousUserId -> $userId, 사용자 데이터 초기화');
+      await clearUserData();
+    }
+    
+    // 새 사용자 ID 저장
+    await prefs.setString(_currentUserIdKey, userId);
+    debugPrint('캐시 서비스에 사용자 ID 설정됨: $userId');
+  }
+  
+  // 현재 사용자 ID 가져오기
+  Future<String?> getCurrentUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_currentUserIdKey);
+  }
+  
+  // 사용자 데이터만 초기화 (로그인 관련 데이터 유지)
+  Future<void> clearUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 사용자 데이터 관련 키만 삭제
+      await prefs.remove(_defaultNoteSpaceKey);
+      await prefs.remove(_userNameKey);
+      await prefs.remove(_learningPurposeKey);
+      await prefs.remove(_useSegmentModeKey);
+      await prefs.remove(_noteSpacesKey);
+      
+      debugPrint('사용자 데이터가 초기화되었습니다 (로그인 정보 유지)');
+    } catch (e) {
+      debugPrint('사용자 데이터 초기화 중 오류 발생: $e');
+    }
+  }
+
   // 모든 사용자 설정 초기화
   Future<void> clearAllUserPreferences() async {
     try {
@@ -185,6 +227,7 @@ class UserPreferencesService {
       await prefs.remove(_useSegmentModeKey);
       await prefs.remove(_noteSpacesKey);
       await prefs.remove(_loginHistoryKey);
+      await prefs.remove(_currentUserIdKey); // 사용자 ID도 초기화
       
       debugPrint('모든 사용자 설정이 초기화되었습니다.');
     } catch (e) {

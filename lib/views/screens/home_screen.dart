@@ -66,10 +66,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    
+    // 첫 로드
     _loadNoteSpaceName();
+    
+    // 화면 구성 완료 후 데이터 확인 및 새로고침
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 노트 스페이스 이름 다시 로드
+      _loadNoteSpaceName();
+      
       // 도움말 표시
       _checkAndShowTooltip();
+      
       // 사용량 확인
       _checkUsageLimits();
     });
@@ -104,11 +112,26 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
   
   Future<void> _loadNoteSpaceName() async {
-    final noteSpaceName = await _userPreferences.getDefaultNoteSpace();
-    if (mounted) {
-      setState(() {
-        _noteSpaceName = noteSpaceName;
-      });
+    try {
+      final noteSpaceName = await _userPreferences.getDefaultNoteSpace();
+      
+      // 디버깅을 위해 현재 사용자 ID 로깅
+      final currentUserId = await _userPreferences.getCurrentUserId();
+      debugPrint('노트 스페이스 이름 로드: "$noteSpaceName" (사용자 ID: $currentUserId)');
+      
+      if (mounted) {
+        setState(() {
+          _noteSpaceName = noteSpaceName;
+        });
+      }
+    } catch (e) {
+      debugPrint('노트 스페이스 이름 로드 오류: $e');
+      // 오류 발생 시 기본값 사용
+      if (mounted) {
+        setState(() {
+          _noteSpaceName = '학습 노트';
+        });
+      }
     }
   }
 

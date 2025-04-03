@@ -306,6 +306,9 @@ class _AppState extends State<App> {
         _isUserAuthenticated = true;
       });
       
+      // 사용자 ID 설정 (사용자 변경 감지 및 데이터 초기화)
+      await _preferencesService.setCurrentUserId(user.uid);
+      
       // 사용자 정보 확인 - 기본 정보만 빠르게 로드
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
@@ -320,8 +323,22 @@ class _AppState extends State<App> {
             await _preferencesService.setUserName(userData['userName']);
           }
           
+          // 노트 스페이스 명확하게 초기화
           if (userData['defaultNoteSpace'] != null) {
+            // 노트 스페이스 설정
             await _preferencesService.setDefaultNoteSpace(userData['defaultNoteSpace']);
+            debugPrint('사용자 노트 스페이스 설정: ${userData['defaultNoteSpace']}');
+          } else {
+            // 기본값으로 설정 (사용자 이름 기반)
+            final userName = userData['userName'] ?? '사용자';
+            final defaultNoteSpace = "${userName}의 학습노트";
+            await _preferencesService.setDefaultNoteSpace(defaultNoteSpace);
+            debugPrint('기본 노트 스페이스 생성: $defaultNoteSpace');
+            
+            // Firestore에 기본 노트 스페이스 저장
+            await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+              'defaultNoteSpace': defaultNoteSpace
+            });
           }
           
           // 로그인 기록 저장
