@@ -74,7 +74,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       height: 96,
       actions: [
         Padding(
-          padding: EdgeInsets.all(SpacingTokens.md),
+          padding: EdgeInsets.only(right:SpacingTokens.md, bottom:SpacingTokens.md),
           child: Material(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(30),
