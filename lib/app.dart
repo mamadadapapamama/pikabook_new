@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'dart:async'; // Timer 클래스를 위한 import
+import 'package:flutter/services.dart'; // SystemChrome 사용을 위한 import
 import 'theme/app_theme.dart';
 import 'views/screens/home_screen.dart';
 import 'services/initialization_manager.dart';
@@ -14,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'viewmodels/home_viewmodel.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'package:flutter/rendering.dart';
 
 class App extends StatefulWidget {
   const App({Key? key}) : super(key: key);
@@ -47,6 +49,15 @@ class _AppState extends State<App> {
   void initState() {
     super.initState();
     debugPrint('App initState 호출됨 (${DateTime.now().toString()})');
+    
+    // 시스템 UI 스타일 설정
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.dark,
+      ),
+    );
     
     // Firebase 초기화 시작
     _initializeFirebase();
@@ -84,6 +95,9 @@ class _AppState extends State<App> {
       });
       
       debugPrint('🔄 Firebase 초기화 시작...');
+      
+      // Firebase Auth 인증 지속성 설정
+      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
       
       // Firebase가 이미 초기화되었는지 확인
       if (Firebase.apps.isNotEmpty) {
@@ -217,6 +231,30 @@ class _AppState extends State<App> {
       // 기본 설정 로드
       final prefs = await SharedPreferences.getInstance();
       
+      // 설치 첫 실행 확인 키
+      const String appInstallKey = 'pikabook_installed';
+      final bool isAppAlreadyInstalled = prefs.getBool(appInstallKey) ?? false;
+      
+      // 앱이 새로 설치된 경우(이전에 설치된 적이 없는 경우) 로그아웃 처리
+      if (!isAppAlreadyInstalled) {
+        debugPrint('새로운 앱 설치 감지: 로그아웃 처리 수행');
+        // 설치 표시 설정
+        await prefs.setBool(appInstallKey, true);
+        
+        // Firebase 로그아웃 수행
+        if (FirebaseAuth.instance.currentUser != null) {
+          debugPrint('기존 자동 로그인 방지: 로그아웃 실행');
+          try {
+            await FirebaseAuth.instance.signOut();
+          } catch (e) {
+            debugPrint('로그아웃 중 오류: $e');
+          }
+        }
+        
+        // 새 설치 시 모든 기존 설정 초기화
+        await _preferencesService.clearAllUserPreferences();
+      }
+      
       // 로그인 기록 확인
       final hasLoginHistory = prefs.getBool('login_history') ?? false;
       
@@ -226,7 +264,7 @@ class _AppState extends State<App> {
       // 툴팁 표시 여부 확인
       final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
       
-      // 현재 사용자 상태 확인
+      // 현재 사용자 상태 확인 (새 설치 시에는 로그아웃 처리 후 확인)
       final isUserAuthenticated = FirebaseAuth.instance.currentUser != null;
       
       if (mounted) {
@@ -343,17 +381,15 @@ class _AppState extends State<App> {
               TargetPlatform.macOS: const CupertinoPageTransitionsBuilder(),
             },
           ),
-        ),
-        darkTheme: AppTheme.lightTheme.copyWith(
-          pageTransitionsTheme: PageTransitionsTheme(
-            builders: {
-              TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
-              TargetPlatform.android: const ZoomPageTransitionsBuilder(),
-              TargetPlatform.macOS: const CupertinoPageTransitionsBuilder(),
-            },
+          appBarTheme: AppBarTheme(
+            systemOverlayStyle: const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.dark, // 안드로이드용
+              statusBarBrightness: Brightness.light, // iOS용
+            ),
           ),
-        ), // 다크 모드 비활성화
-        themeMode: ThemeMode.light,
+        ),
+        themeMode: ThemeMode.light, // 항상 라이트 모드 사용
         // 화면 방향 고정 (세로 모드만 지원)
         home: _buildHomeScreen(),
       ),

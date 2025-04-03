@@ -497,8 +497,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             return await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
-                title: const Text('세그먼트 삭제'),
-                content: const Text('이 세그먼트를 삭제하시겠습니까?'),
+                title: const Text('문장 삭제'),
+                content: const Text('이 문장을 삭제하시겠습니까?'),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(false),

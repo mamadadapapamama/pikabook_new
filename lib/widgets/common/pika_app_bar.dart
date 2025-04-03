@@ -203,24 +203,18 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 시스템 UI 스타일 설정 - 강제로 적용
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      SystemChrome.setSystemUIOverlayStyle(
-        const SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.dark,
-          statusBarBrightness: Brightness.dark,
-        ),
-      );
-    });
-    
     // 앱바 컨텐츠
     AppBar appBar = AppBar(
-      backgroundColor: Colors.transparent,
+      backgroundColor: backgroundColor,
       elevation: 0,
       centerTitle: centerTitle,
       automaticallyImplyLeading: automaticallyImplyLeading,
       titleSpacing: showLogo ? 24.0 : 0.0,
+      systemOverlayStyle: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark, // 안드로이드용 (검정 아이콘)
+        statusBarBrightness: Brightness.light, // iOS용 (밝은 배경 = 검정 아이콘)
+      ),
       leading: showBackButton
           ? IconButton(
               icon: Icon(
@@ -256,9 +250,21 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                   preferredSize: Size.fromHeight(bottomHeight),
                   child: bottom!,
                 )
-              : null,
+              : showBorder
+                  ? PreferredSize(
+                      preferredSize: Size.fromHeight(1.0),
+                      child: Container(
+                        height: 1.0,
+                        color: Colors.grey.withOpacity(0.1),
+                      ),
+                    )
+                  : null,
     );
-    return appBar;
+
+    return Container(
+      height: preferredSize.height,
+      child: appBar,
+    );
   }
 
   // 로고와 노트스페이스 이름 빌드

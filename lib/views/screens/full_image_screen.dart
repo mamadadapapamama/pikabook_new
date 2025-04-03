@@ -30,15 +30,19 @@ class _FullImageScreenState extends State<FullImageScreen> {
   @override
   void initState() {
     super.initState();
-    // 화면 진입 시 상태표시줄을 흰색으로 설정
+    // 화면 진입 시 상태표시줄을 흰색으로 설정 (강제 적용)
+    _setLightStatusBar();
+  }
+
+  // 상태표시줄을 밝은색(흰색)으로 설정
+  void _setLightStatusBar() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      SystemChrome.setSystemUIOverlayStyle(
-        const SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light,
-          statusBarBrightness: Brightness.dark,
-        ),
-      );
+      // 상태표시줄 설정을 강제로 적용
+      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light, // 안드로이드용 (흰색 아이콘)
+        statusBarBrightness: Brightness.dark, // iOS용 (어두운 배경 = 흰색 아이콘)
+      ));
     });
   }
 
@@ -46,13 +50,11 @@ class _FullImageScreenState extends State<FullImageScreen> {
   void dispose() {
     _transformationController.dispose();
     // 화면을 떠날 때 상태표시줄을 다시 검은색으로 복원
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.dark,
-      ),
-    );
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark.copyWith(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark, // 안드로이드용 (검정 아이콘)
+      statusBarBrightness: Brightness.light, // iOS용 (밝은 배경 = 검정 아이콘)
+    ));
     super.dispose();
   }
 
@@ -82,17 +84,25 @@ class _FullImageScreenState extends State<FullImageScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 검은 배경에 흰색 상태표시줄을 설정
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    
     return Scaffold(
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: Text(
           widget.title,
           style: TypographyTokens.subtitle2.copyWith(color: ColorTokens.textLight),
         ),
-        backgroundColor: ColorTokens.black,
-        foregroundColor: ColorTokens.textLight,
+        backgroundColor: Colors.black.withOpacity(0.5),
         elevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light, // Android (흰색 아이콘)
+          statusBarBrightness: Brightness.dark, // iOS (어두운 배경 = 흰색 아이콘)
+        ),
       ),
-      backgroundColor: ColorTokens.black,
       body: SafeArea(
         child: Center(
           child: GestureDetector(

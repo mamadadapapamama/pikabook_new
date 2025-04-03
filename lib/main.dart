@@ -15,14 +15,12 @@ Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   
-  // 2. 시스템 UI 설정
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.dark,
-    ),
-  );
+  // 2. 시스템 UI 설정 - iOS와 Android 모두 상태표시줄 아이콘을 검정색으로 설정
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent, // 상태표시줄 배경 투명
+    statusBarIconBrightness: Brightness.dark, // Android용 - 검정 아이콘
+    statusBarBrightness: Brightness.light, // iOS용 - 밝은 배경(검정 아이콘)
+  ));
   
   // 3. 에러 로깅 설정
   FlutterError.onError = (details) {
