@@ -46,7 +46,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.backgroundColor = Colors.transparent,
     this.centerTitle = false,
     this.subtitle,
-    this.height = 72,
+    this.height = 96,
     this.showBackButton = false,
     this.showLogo = false,
     this.noteSpaceName,
@@ -71,13 +71,13 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       showLogo: true,
       noteSpaceName: noteSpaceName,
       backgroundColor: UITokens.homeBackground,
-      height: 72,
+      height: 96,
       actions: [
         Padding(
-          padding: EdgeInsets.only(right: SpacingTokens.md),
+          padding: EdgeInsets.only(right: SpacingTokens.md, bottom:SpacingTokens.xs),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(30),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: onSettingsPressed,
@@ -85,18 +85,18 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               highlightColor: ColorTokens.primary.withOpacity(0.05),
               customBorder: const CircleBorder(),
               child: Padding(
-                padding: const EdgeInsets.all(8.0),
+                padding: const EdgeInsets.all(6.0),
                 child: SizedBox(
-                  width: SpacingTokens.iconSizeMedium,
-                  height: SpacingTokens.iconSizeMedium,
+                  width: SpacingTokens.profileIconSize,
+                  height: SpacingTokens.profileIconSize,
                   child: SvgPicture.asset(
                     'assets/images/icon_profile.svg',
-                    width: SpacingTokens.iconSizeMedium,
-                    height: SpacingTokens.iconSizeMedium,
+                    width: SpacingTokens.profileIconSize,
+                    height: SpacingTokens.profileIconSize,
                     placeholderBuilder: (context) => Icon(
                       Icons.person,
                       color: ColorTokens.secondary,
-                      size: SpacingTokens.iconSizeMedium,
+                      size: SpacingTokens.profileIconSize,
                     ),
                   ),
                 ),
@@ -124,26 +124,34 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       showBackButton: true,
       onBackPressed: onBackPressed,
       automaticallyImplyLeading: true,
-      height: 72,
+      height: 96,
       actions: [
         // 페이지 정보
         Padding(
-          padding: const EdgeInsets.only(right: 8.0),
-          child: Center(
-            child: Text(
-              'page $currentPage / $totalPages',
-              style: TypographyTokens.caption.copyWith(
-                color: ColorTokens.textSecondary,
+          padding: const EdgeInsets.only(right: 8.0, bottom: SpacingTokens.xs),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                'page $currentPage / $totalPages',
+                style: TypographyTokens.caption.copyWith(
+                  color: ColorTokens.textSecondary,
+                  fontSize: 12,
+                ),
               ),
-            ),
+            ],
           ),
         ),
-        
+         
         // 플래시카드 카운터
         GestureDetector(
           onTap: onFlashcardTap,
-          child: FlashcardCounterBadge(
-            count: flashcardCount,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: FlashcardCounterBadge(
+              count: flashcardCount,
+            ),
           ),
         ),
         
@@ -152,8 +160,9 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
           icon: const Icon(
             Icons.more_vert,
             color: ColorTokens.textGrey,
+            size: 24,
           ),
-          padding: EdgeInsets.zero,
+          padding: const EdgeInsets.only(right: 8),
           constraints: const BoxConstraints(),
           tooltip: '더 보기',
           onPressed: onMorePressed,
@@ -172,6 +181,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: '설정',
       showBackButton: true,
       onBackPressed: onBackPressed,
+      height: 96,
     );
   }
 
@@ -185,6 +195,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: '플래시카드',
       showBackButton: true,
       onBackPressed: onBackPressed,
+      height: 96,
       actions: totalCards > 0 ? [
         Padding(
           padding: const EdgeInsets.only(right: 16.0),
@@ -193,6 +204,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               'card ${currentCardIndex + 1} / $totalCards',
               style: TypographyTokens.caption.copyWith(
                 color: ColorTokens.textSecondary,
+                fontSize: 12,
               ),
             ),
           ),
@@ -209,7 +221,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       centerTitle: centerTitle,
       automaticallyImplyLeading: automaticallyImplyLeading,
-      titleSpacing: showLogo ? 24.0 : 0.0,
+      titleSpacing: showLogo ? 24.0 : 4.0,
       systemOverlayStyle: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.dark, // 안드로이드용 (검정 아이콘)
@@ -220,7 +232,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               icon: Icon(
                 Icons.arrow_back_ios_rounded,
                 color: ColorTokens.textSecondary,
-                size: 20,
+                size: 24,
               ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
@@ -230,8 +242,9 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: title != null
           ? Text(
               title!,
-              style: TypographyTokens.headline3.copyWith(
+              style: TypographyTokens.subtitle2.copyWith(
                 color: ColorTokens.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -277,15 +290,15 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
           alignment: Alignment.centerLeft,
           child: SvgPicture.asset(
             'assets/images/pikabook_textlogo_primary.svg',
-            width: SpacingTokens.appLogoWidth,
-            height: SpacingTokens.appLogoHeight,
+            width: SpacingTokens.appLogoWidth * 1.2,
+            height: SpacingTokens.appLogoHeight * 1.2,
             placeholderBuilder: (context) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   Icons.menu_book,
                   color: ColorTokens.primary,
-                  size: SpacingTokens.iconSizeSmall,
+                  size: SpacingTokens.iconSizeMedium,
                 ),
                 SizedBox(width: SpacingTokens.xs),
                 Text(
@@ -293,6 +306,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                   style: TypographyTokens.body1En.copyWith(
                     fontWeight: FontWeight.bold,
                     color: ColorTokens.primary,
+                    fontSize: 18,
                   ),
                 ),
               ],
@@ -304,8 +318,9 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
         if (noteSpaceName != null)
           Text(
             noteSpaceName,
-            style: TypographyTokens.headline3.copyWith(
+            style: TypographyTokens.subtitle2.copyWith(
               color: ColorTokens.textPrimary,
+              fontWeight: FontWeight.w600,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

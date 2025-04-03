@@ -35,9 +35,34 @@ class AuthService {
   // 사용자 상태 변경 스트림
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
+  /// 앱 재설치 확인 메서드
+  Future<bool> _checkAppInstallation() async {
+    const String appInstallKey = 'pikabook_installed';
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 앱 설치 확인 키가 있는지 확인
+    final bool isAppAlreadyInstalled = prefs.getBool(appInstallKey) ?? false;
+    
+    // 키가 없으면 새 설치로 간주하고 설정
+    if (!isAppAlreadyInstalled) {
+      await prefs.setBool(appInstallKey, true);
+      // 기존에 로그인된 상태면 강제 로그아웃
+      if (FirebaseAuth.instance.currentUser != null) {
+        await FirebaseAuth.instance.signOut();
+        debugPrint('새 설치 감지: Auth Service에서 로그아웃 처리');
+        return true; // 새 설치
+      }
+    }
+    
+    return false; // 기존 설치
+  }
+
   // Google 로그인
   Future<User?> signInWithGoogle() async {
     try {
+      // 앱 재설치 여부 확인
+      await _checkAppInstallation();
+      
       // Firebase 초기화 확인
       _checkFirebaseInitialized();
       

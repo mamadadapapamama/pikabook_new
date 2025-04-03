@@ -27,7 +27,7 @@ class SpacingTokens {
   static const double buttonHeight = 48.0;
   static const double fabSize = 64.0;
   static const double fabSizeSmall = 40.0;
-  static const double profileIconSize = 40.0;
+  static const double profileIconSize = 24.0;
   static const double appLogoWidth = 70.0;
   static const double appLogoHeight = 20.0;
   static const double appLogoWidth2x = 140.0;

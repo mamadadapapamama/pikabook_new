@@ -145,6 +145,7 @@ class ImageService {
   /// 이미지 파일 가져오기
   Future<File?> getImageFile(String? relativePath) async {
     if (relativePath == null || relativePath.isEmpty) {
+      debugPrint('상대 경로가 비어있습니다');
       return null;
     }
     
@@ -155,29 +156,14 @@ class ImageService {
       
       // 이미지 파일이 실제로 존재하는지 확인
       if (await file.exists() && await file.length() > 0) {
-        debugPrint('디스크에서 이미지 로드: $relativePath');
+        debugPrint('디스크에서 이미지 로드: $relativePath (크기: ${await file.length()} 바이트)');
         return file;
       }
       
-      debugPrint('이미지 파일을 찾을 수 없음: $relativePath');
+      debugPrint('이미지 파일을 찾을 수 없음: $relativePath (경로: $fullPath)');
       
-      // 웹 환경에서는 다른 방식으로 처리
-      if (kIsWeb) {
-        // 웹 환경에서는 상대 경로를 관리할 때 URL이나 assets 경로를 사용해야 함
-        debugPrint('웹 환경에서 이미지 경로 처리: $relativePath');
-        // 여기서는 빈 파일만 생성
-        return await _createPlaceholderImage(fullPath);
-      } else {
-        // 이미지 디렉토리 확인 및 생성
-        final appDir = await getApplicationDocumentsDirectory();
-        final imagesDir = Directory('${appDir.path}/images');
-        if (!await imagesDir.exists()) {
-          await imagesDir.create(recursive: true);
-        }
-        
-        // 플레이스홀더 이미지 생성
-        return await _createPlaceholderImage(fullPath);
-      }
+      // 파일이 존재하지 않을 경우 null 반환
+      return null;
     } catch (e) {
       debugPrint('이미지 파일 가져오기 중 오류 발생: $e');
       return null;

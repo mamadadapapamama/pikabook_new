@@ -97,6 +97,11 @@ class _FullImageScreenState extends State<FullImageScreen> {
         ),
         backgroundColor: Colors.black.withOpacity(0.5),
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white), // 뒤로 가기 버튼 색상을 흰색으로 설정
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: Brightness.light, // Android (흰색 아이콘)
@@ -121,17 +126,21 @@ class _FullImageScreenState extends State<FullImageScreen> {
   }
 
   Widget _buildImage() {
-    if (widget.imageFile != null) {
+    // 이미지 파일이 있는 경우
+    if (widget.imageFile != null && widget.imageFile!.existsSync()) {
       return Image.file(
         widget.imageFile!,
         fit: BoxFit.contain,
         width: double.infinity,
         height: double.infinity,
         errorBuilder: (context, error, stackTrace) {
+          print('이미지 파일 로드 에러: $error');
           return _buildErrorWidget();
         },
       );
-    } else if (widget.imageUrl != null) {
+    } 
+    // 이미지 URL이 있는 경우
+    else if (widget.imageUrl != null && widget.imageUrl!.isNotEmpty) {
       return Image.network(
         widget.imageUrl!,
         fit: BoxFit.contain,
@@ -142,10 +151,13 @@ class _FullImageScreenState extends State<FullImageScreen> {
           return _buildLoadingWidget(loadingProgress);
         },
         errorBuilder: (context, error, stackTrace) {
+          print('이미지 URL 로드 에러: $error');
           return _buildErrorWidget();
         },
       );
-    } else {
+    } 
+    // 이미지 정보가 없거나 존재하지 않는 경우
+    else {
       return _buildErrorWidget();
     }
   }

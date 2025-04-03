@@ -96,8 +96,8 @@ class _AppState extends State<App> {
       
       debugPrint('🔄 Firebase 초기화 시작...');
       
-      // Firebase Auth 인증 지속성 설정
-      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      // Firebase Auth 인증 지속성 설정 - 웹에서만 작동하는 기능이므로 모바일에서는 제거
+      // 대신 앱 설치 여부 확인으로 처리
       
       // Firebase가 이미 초기화되었는지 확인
       if (Firebase.apps.isNotEmpty) {

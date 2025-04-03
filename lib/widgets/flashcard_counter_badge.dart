@@ -33,9 +33,10 @@ class FlashcardCounterBadge extends StatelessWidget {
     
     Widget badge = Container(
       padding: EdgeInsets.symmetric(
-        horizontal: SpacingTokens.sm,
-        vertical: SpacingTokens.xs / 2,
+        horizontal: SpacingTokens.sm + 2,
+        vertical: SpacingTokens.xs,
       ),
+      margin: EdgeInsets.only(right: SpacingTokens.xs),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(100),
@@ -48,13 +49,13 @@ class FlashcardCounterBadge extends StatelessWidget {
             opacity: hasFlashcards ? 1.0 : 0.5,
             child: Image.asset(
               'assets/images/icon_flashcard_counter.png',
-              width: 18,
-              height: 18,
+              width: 20,
+              height: 20,
               errorBuilder: (context, error, stackTrace) {
                 // 에러 시 대체 아이콘 표시 (기존 스택 방식)
                 return SizedBox(
-                  width: 18,
-                  height: 18,
+                  width: 20,
+                  height: 20,
                   child: Center(
                     child: Stack(
                       children: [
@@ -71,8 +72,8 @@ class FlashcardCounterBadge extends StatelessWidget {
                           ),
                         ),
                         Positioned(
-                          top: 6,
-                          left: 6,
+                          top: 7,
+                          left: 7,
                           child: Container(
                             width: 14,
                             height: 14,
@@ -98,7 +99,7 @@ class FlashcardCounterBadge extends StatelessWidget {
             '$count',
             style: GoogleFonts.poppins(
               fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               color: textColor,
             ),
           ),
