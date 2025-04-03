@@ -335,8 +335,24 @@ class _AppState extends State<App> {
       ],
       child: MaterialApp(
         title: 'Pikabook',
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.lightTheme, // 다크 모드 비활성화
+        theme: AppTheme.lightTheme.copyWith(
+          pageTransitionsTheme: PageTransitionsTheme(
+            builders: {
+              TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
+              TargetPlatform.android: const ZoomPageTransitionsBuilder(),
+              TargetPlatform.macOS: const CupertinoPageTransitionsBuilder(),
+            },
+          ),
+        ),
+        darkTheme: AppTheme.lightTheme.copyWith(
+          pageTransitionsTheme: PageTransitionsTheme(
+            builders: {
+              TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
+              TargetPlatform.android: const ZoomPageTransitionsBuilder(),
+              TargetPlatform.macOS: const CupertinoPageTransitionsBuilder(),
+            },
+          ),
+        ), // 다크 모드 비활성화
         themeMode: ThemeMode.light,
         // 화면 방향 고정 (세로 모드만 지원)
         home: _buildHomeScreen(),

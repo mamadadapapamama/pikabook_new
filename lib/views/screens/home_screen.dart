@@ -28,6 +28,7 @@ import 'flashcard_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'settings_screen.dart';
+import '../../app.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -126,7 +127,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   onLogout: () async {
                     // 로그아웃 처리
                     await FirebaseAuth.instance.signOut();
-                    Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+                    // 페이드 애니메이션을 사용한 로그인 화면 전환
+                    Navigator.of(context).pushAndRemoveUntil(
+                      PageRouteBuilder(
+                        pageBuilder: (context, animation, secondaryAnimation) => const App(),
+                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                          const begin = 0.0;
+                          const end = 1.0;
+                          const curve = Curves.easeInOut;
+                          
+                          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                          var fadeAnimation = animation.drive(tween);
+                          
+                          return FadeTransition(
+                            opacity: fadeAnimation,
+                            child: child,
+                          );
+                        },
+                        transitionDuration: const Duration(milliseconds: 500),
+                      ),
+                      (route) => false,
+                    );
                   },
                 ),
               ),

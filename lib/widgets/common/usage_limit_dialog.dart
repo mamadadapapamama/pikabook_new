@@ -11,7 +11,7 @@ class UsageLimitDialog extends StatelessWidget {
   final VoidCallback? onContactSupport;
   
   // 프리미엄 문의 구글 폼 URL
-  static const String _premiumRequestFormUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSdgdd_qD3Dd_UKcHoeo432pMIDl0u9pPHjlTjadM5JbRAeoIQ/viewform?usp=header';
+  static const String _premiumRequestFormUrl = 'https://forms.gle/9EBEV1vaLpNbkhxD9';
   
   const UsageLimitDialog({
     Key? key,
