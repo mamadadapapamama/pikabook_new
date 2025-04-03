@@ -622,7 +622,7 @@ class NoteService {
       // 현재 사용자의 노트 수 가져오기
       final user = _auth.currentUser;
       if (user == null) {
-        return '#1 Note';
+        return '노트 1';
       }
 
       // Firestore에서 직접 노트 수 조회
@@ -630,13 +630,13 @@ class NoteService {
           await _notesCollection.where('userId', isEqualTo: user.uid).get();
 
       final noteNumber = snapshot.docs.length + 1;
-      final title = '#$noteNumber Note';
+      final title = '노트 $noteNumber';
       debugPrint('자동 노트 제목 생성: $title (현재 노트 수: ${snapshot.docs.length})');
       return title;
     } catch (e) {
       debugPrint('자동 노트 제목 생성 중 오류 발생: $e');
       // 오류 발생 시 기본값 사용
-      return '#1 Note';
+      return '노트 1';
     }
   }
 
@@ -801,7 +801,8 @@ class NoteService {
       
       // 노트 기본 정보 생성
       final now = DateTime.now();
-      String defaultTitle = title ?? '새 노트';
+      String defaultTitle = title ?? await _generateNoteTitle();
+      debugPrint('생성할 노트 제목: $defaultTitle');
       
       // 1. 노트 생성
       final Map<String, dynamic> noteData = {
