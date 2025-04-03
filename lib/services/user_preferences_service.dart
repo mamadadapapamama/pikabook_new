@@ -142,7 +142,7 @@ class UserPreferencesService {
   // 언어 설정 추가
   Future<String> getSourceLanguage() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_sourceLanguageKey) ?? 'zh'; // 기본값: 중국어
+    return prefs.getString(_sourceLanguageKey) ?? 'zh-CN'; // 기본값: 중국어 간체자
   }
 
   Future<void> setSourceLanguage(String language) async {

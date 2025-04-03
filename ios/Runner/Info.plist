@@ -29,7 +29,6 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.1113863334-oor36s7ega6i0q8tcvvlqa5tjiravd2t</string>
 				<string>com.googleusercontent.apps.1113863334-d5cquivc6973v53vkmdm60omm8unoa47</string>
 			</array>
 		</dict>
@@ -40,7 +39,15 @@
 			<string>com.pikabook.app</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.pikabook.app</string>
+				<string>pikabook</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 			</array>
 		</dict>
 	</array>
@@ -87,5 +94,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>io.flutter.embedded_views_preview</key>
+	<true/>
 </dict>
 </plist>

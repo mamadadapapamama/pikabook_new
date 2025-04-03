@@ -81,11 +81,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final sourceLanguage = await _userPreferences.getSourceLanguage();
       final targetLanguage = await _userPreferences.getTargetLanguage();
       
+      // 언어 설정 유효성 검사 및 수정
+      String validSourceLanguage = sourceLanguage;
+      
+      // 'zh'와 같은 잘못된 언어 코드가 발견되면 'zh-CN'으로 수정
+      if (sourceLanguage == 'zh' || 
+          ![...SourceLanguage.SUPPORTED, ...SourceLanguage.FUTURE_SUPPORTED].contains(sourceLanguage)) {
+        validSourceLanguage = SourceLanguage.CHINESE;
+        // 언어 설정 저장
+        await _userPreferences.setSourceLanguage(validSourceLanguage);
+      }
+      
       if (mounted) {
         setState(() {
           _userName = userName ?? '사용자';
           _noteSpaceName = defaultNoteSpace;
-          _sourceLanguage = sourceLanguage;
+          _sourceLanguage = validSourceLanguage;
           _targetLanguage = targetLanguage;
           _isLoading = false;
         });

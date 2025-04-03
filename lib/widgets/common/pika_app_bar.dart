@@ -207,7 +207,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
+        statusBarIconBrightness: Brightness.dark,
         statusBarBrightness: Brightness.dark,
       ),
     );

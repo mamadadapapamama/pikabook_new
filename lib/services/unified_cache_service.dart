@@ -929,8 +929,8 @@ class UnifiedCacheService {
   // 소스 언어 가져오기
   Future<String> getSourceLanguage() async {
     await _ensureInitialized();
-    return _memoryCache[sourceLanguageKey] as String? ?? 
-           _prefs?.getString(sourceLanguageKey) ?? 'zh'; // 기본값: 중국어
+    return _memoryCache[sourceLanguageKey] as String? ??
+           _prefs?.getString(sourceLanguageKey) ?? 'zh-CN'; // 기본값: 중국어 간체자
   }
 
   // 타겟 언어 가져오기

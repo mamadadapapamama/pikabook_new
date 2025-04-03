@@ -94,85 +94,150 @@ class AuthService {
   // Apple로 로그인
   Future<User?> signInWithApple() async {
     try {
+      debugPrint('Apple login: 1. Starting authentication...');
       // Firebase 초기화 확인
       _checkFirebaseInitialized();
       
-      // Apple 로그인 시작
-      final nonce = _generateNonce(32);
-      final nativeAppleCredential = await SignInWithApple.getAppleIDCredential(
+      debugPrint('Apple login: 2. Generating nonce...');
+      // Apple 로그인 시작 - 간단하게 유지
+      final rawNonce = _generateNonce(32);
+      final nonce = _sha256ofString(rawNonce);
+      
+      // 디버그 로그 추가
+      debugPrint('Apple login raw nonce: $rawNonce');
+      debugPrint('Apple login hashed nonce: $nonce');
+      
+      debugPrint('Apple login: 3. Requesting Apple credential...');
+      final credential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
           AppleIDAuthorizationScopes.fullName,
         ],
-        nonce: _sha256ofString(nonce),
-        // 웹 서비스 요청 파라미터 추가
-        webAuthenticationOptions: WebAuthenticationOptions(
-          clientId: 'com.pikabook.app.service',  // 애플 개발자 계정에 등록된 서비스 ID
-          redirectUri: Uri.parse(
-            'https://mylingowith.firebaseapp.com/__/auth/handler'
-          ),
-        ),
+        nonce: nonce,
       );
       
-      // 로그 출력으로 디버깅
-      debugPrint('애플 로그인 응답 확인: ${nativeAppleCredential.identityToken?.substring(0, 20)}...');
-      
-      // identityToken이 비어있는지 확인
-      if (nativeAppleCredential.identityToken == null || nativeAppleCredential.identityToken!.isEmpty) {
-        throw Exception('애플 인증 토큰이 비어 있습니다.');
+      debugPrint('Apple login: 4. Received Apple credential');
+      // identityToken과 authorizationCode 로그
+      debugPrint('Apple identityToken exists: ${credential.identityToken != null}');
+      debugPrint('Apple authorizationCode exists: ${credential.authorizationCode != null}');
+      if (credential.identityToken != null) {
+        debugPrint('Apple identityToken first 10 chars: ${credential.identityToken!.substring(0, 10)}...');
       }
       
-      // Apple 인증 정보로 Firebase 로그인 정보 생성
+      // 토큰 검증
+      if (credential.identityToken == null) {
+        debugPrint('Apple login ERROR: Identity token is null!');
+        throw Exception('애플 인증 토큰이 없습니다');
+      }
+      
+      debugPrint('Apple login: 5. Creating Firebase credential...');
+      // Firebase 인증 정보 생성
       final oauthCredential = OAuthProvider("apple.com").credential(
-        idToken: nativeAppleCredential.identityToken,
-        rawNonce: nonce,
+        idToken: credential.identityToken!,
+        rawNonce: rawNonce,
+        accessToken: credential.authorizationCode, // 추가된 accessToken 파라미터
       );
       
-      // Firebase 로그인 처리
-      final UserCredential userCredential = 
-          await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      debugPrint('Apple login: 6. Signing in with Firebase...');
+      // Firebase 로그인
+      final userCredential = await _auth.signInWithCredential(oauthCredential);
+      final user = userCredential.user;
       
-      final User? user = userCredential.user;
-      
-      // 사용자 정보가 있다면 Firestore에 사용자 정보 업데이트
+      debugPrint('Apple login: 7. Firebase login successful');
+      // 사용자 정보 처리
       if (user != null) {
-        // 이름 정보 업데이트 (애플 인증 정보 전달)
-        await _saveUserToFirestore(
-          user, 
-          isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false,
-          appleCredential: nativeAppleCredential,  // 애플 인증 정보 전달
-        );
-        
-        // 이름 정보가 누락된 경우 사용자 프로필 확인
+        debugPrint('Apple login: 8. Saving user data to Firestore');
+        await _saveUserToFirestore(user, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
+        debugPrint('Apple login: 9. User data saved successfully');
+      }
+      
+      debugPrint('Apple login: 10. Process completed');
+      return user;
+    } catch (e) {
+      debugPrint('애플 로그인 오류: $e');
+      // 오류 세부 정보 출력
+      if (e is FirebaseAuthException) {
+        debugPrint('Firebase Auth Error Code: ${e.code}');
+        debugPrint('Firebase Auth Error Message: ${e.message}');
+      }
+      rethrow;
+    }
+  }
+
+  // Apple로 로그인 (대안적 방법)
+  Future<User?> signInWithAppleAlternative() async {
+    try {
+      debugPrint('Alternative Apple login: 1. Starting authentication...');
+      // Firebase 초기화 확인
+      _checkFirebaseInitialized();
+      
+      debugPrint('Alternative Apple login: 2. Generating nonce...');
+      // Nonce 생성
+      final rawNonce = _generateNonce(32);
+      final nonce = _sha256ofString(rawNonce);
+      
+      debugPrint('Alternative Apple login: 3. Requesting Apple credential...');
+      // Apple 로그인 실행
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+      
+      debugPrint('Alternative Apple login: 4. Received credential');
+      // 토큰 검증
+      if (appleCredential.identityToken == null) {
+        throw Exception('애플 인증 토큰이 없습니다');
+      }
+      
+      debugPrint('Alternative Apple login: 5. Creating provider...');
+      // 다른 방식으로 OAuthProvider 설정
+      final appleProvider = OAuthProvider('apple.com');
+      appleProvider.setCustomParameters({'nonce': rawNonce});
+      
+      debugPrint('Alternative Apple login: 6. Creating credential...');
+      // 인증 정보 생성
+      final authCredential = OAuthCredential(
+        providerId: 'apple.com',
+        signInMethod: 'oauth',
+        accessToken: appleCredential.authorizationCode,
+        idToken: appleCredential.identityToken,
+        rawNonce: rawNonce,
+      );
+      
+      debugPrint('Alternative Apple login: 7. Signing in with Firebase...');
+      // Firebase 로그인
+      final userCredential = await _auth.signInWithCredential(authCredential);
+      final user = userCredential.user;
+      
+      // 사용자 이름 처리
+      if (user != null) {
+        // 사용자 정보 업데이트
         if ((user.displayName == null || user.displayName!.isEmpty) &&
-            (nativeAppleCredential.givenName != null || nativeAppleCredential.familyName != null)) {
-          
-          // 이름 정보 설정 (한국 형식으로 성+이름)
-          final givenName = nativeAppleCredential.givenName ?? '';
-          final familyName = nativeAppleCredential.familyName ?? '';
+            (appleCredential.givenName != null || appleCredential.familyName != null)) {
+          final givenName = appleCredential.givenName ?? '';
+          final familyName = appleCredential.familyName ?? '';
           final displayName = (familyName + givenName).trim();
           
-          // 이름 정보가 있으면 Firebase Auth 프로필 업데이트
           if (displayName.isNotEmpty) {
-            try {
-              await user.updateDisplayName(displayName);
-              debugPrint('애플 로그인: 사용자 프로필 이름 업데이트 완료 ($displayName)');
-            } catch (updateError) {
-              debugPrint('애플 로그인: 사용자 프로필 이름 업데이트 실패: $updateError');
-            }
+            await user.updateDisplayName(displayName);
           }
         }
         
-        debugPrint('애플 로그인 성공: ${user.uid} (이름: ${user.displayName ?? "이름 없음"})');
+        // Firestore에 저장
+        await _saveUserToFirestore(user, 
+          isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false,
+        );
       }
       
       return user;
     } catch (e) {
-      // 오류 메시지 개선
-      if (e.toString().contains('canceled')) {
-        debugPrint('애플 로그인이 사용자에 의해 취소되었습니다.');
-      } else {
-        debugPrint('애플 로그인 오류: $e');
+      debugPrint('대안적 애플 로그인 오류: $e');
+      if (e is FirebaseAuthException) {
+        debugPrint('Firebase Auth Error Code: ${e.code}');
+        debugPrint('Firebase Auth Error Message: ${e.message}');
       }
       rethrow;
     }
