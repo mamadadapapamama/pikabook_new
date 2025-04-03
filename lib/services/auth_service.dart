@@ -105,7 +105,22 @@ class AuthService {
           AppleIDAuthorizationScopes.fullName,
         ],
         nonce: _sha256ofString(nonce),
+        // 웹 서비스 요청 파라미터 추가
+        webAuthenticationOptions: WebAuthenticationOptions(
+          clientId: 'com.pikabook.app.service',  // 애플 개발자 계정에 등록된 서비스 ID
+          redirectUri: Uri.parse(
+            'https://mylingowith.firebaseapp.com/__/auth/handler'
+          ),
+        ),
       );
+      
+      // 로그 출력으로 디버깅
+      debugPrint('애플 로그인 응답 확인: ${nativeAppleCredential.identityToken?.substring(0, 20)}...');
+      
+      // identityToken이 비어있는지 확인
+      if (nativeAppleCredential.identityToken == null || nativeAppleCredential.identityToken!.isEmpty) {
+        throw Exception('애플 인증 토큰이 비어 있습니다.');
+      }
       
       // Apple 인증 정보로 Firebase 로그인 정보 생성
       final oauthCredential = OAuthProvider("apple.com").credential(
@@ -119,31 +134,46 @@ class AuthService {
       
       final User? user = userCredential.user;
       
-      // Apple은 처음 로그인할 때만 이름 정보 제공
-      if (userCredential.additionalUserInfo?.isNewUser ?? false) {
-        // 이름 정보 처리
-        final givenName = nativeAppleCredential.givenName ?? '';
-        final familyName = nativeAppleCredential.familyName ?? '';
-        
-        // 서양식 이름: firstName(이름) + lastName(성)
-        // 동양식 이름: lastName(성) + firstName(이름)
-        final displayName = familyName + givenName;
-        
-        if (user != null && displayName.isNotEmpty) {
-          // Firebase 사용자 프로필 업데이트
-          await user.updateDisplayName(displayName);
-        }
-      }
-      
       // 사용자 정보가 있다면 Firestore에 사용자 정보 업데이트
       if (user != null) {
-        await _saveUserToFirestore(user, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
-        debugPrint('애플 로그인 성공: ${user.uid}');
+        // 이름 정보 업데이트 (애플 인증 정보 전달)
+        await _saveUserToFirestore(
+          user, 
+          isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false,
+          appleCredential: nativeAppleCredential,  // 애플 인증 정보 전달
+        );
+        
+        // 이름 정보가 누락된 경우 사용자 프로필 확인
+        if ((user.displayName == null || user.displayName!.isEmpty) &&
+            (nativeAppleCredential.givenName != null || nativeAppleCredential.familyName != null)) {
+          
+          // 이름 정보 설정 (한국 형식으로 성+이름)
+          final givenName = nativeAppleCredential.givenName ?? '';
+          final familyName = nativeAppleCredential.familyName ?? '';
+          final displayName = (familyName + givenName).trim();
+          
+          // 이름 정보가 있으면 Firebase Auth 프로필 업데이트
+          if (displayName.isNotEmpty) {
+            try {
+              await user.updateDisplayName(displayName);
+              debugPrint('애플 로그인: 사용자 프로필 이름 업데이트 완료 ($displayName)');
+            } catch (updateError) {
+              debugPrint('애플 로그인: 사용자 프로필 이름 업데이트 실패: $updateError');
+            }
+          }
+        }
+        
+        debugPrint('애플 로그인 성공: ${user.uid} (이름: ${user.displayName ?? "이름 없음"})');
       }
       
       return user;
     } catch (e) {
-      debugPrint('애플 로그인 오류: $e');
+      // 오류 메시지 개선
+      if (e.toString().contains('canceled')) {
+        debugPrint('애플 로그인이 사용자에 의해 취소되었습니다.');
+      } else {
+        debugPrint('애플 로그인 오류: $e');
+      }
       rethrow;
     }
   }

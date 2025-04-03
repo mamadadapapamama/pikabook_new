@@ -29,6 +29,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'settings_screen.dart';
 import '../../app.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -304,22 +305,35 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
   
   // 지원팀 문의하기 처리
-  void _handleContactSupport() {
-    // 사용자 이메일 주소를 사용하여 mailto URL을 열거나 인앱 폼 표시
-    // 현재는 간단한 스낵바 메시지만 표시
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '관리자에게 직접 문의하시면 사용량 제한을 늘려드립니다.\n'
-          '이메일: hello.pikabook@gmail.com',
-        ),
-        duration: const Duration(seconds: 10),
-        action: SnackBarAction(
-          label: '확인',
-          onPressed: () {},
-        ),
-      ),
-    );
+  void _handleContactSupport() async {
+    // 프리미엄 문의 구글 폼 URL
+    const String formUrl = 'https://forms.gle/9EBEV1vaLpNbkhxD9';
+    final Uri url = Uri.parse(formUrl);
+    
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        // URL을 열 수 없는 경우 스낵바로 알림
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('문의 폼을 열 수 없습니다. 직접 브라우저에서 다음 주소를 입력해 주세요: $formUrl'),
+              duration: const Duration(seconds: 10),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('URL 열기 오류: $e');
+      // 오류 발생 시 스낵바로 알림
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('문의 폼을 여는 중 오류가 발생했습니다. 이메일로 문의해 주세요: hello.pikabook@gmail.com'),
+            duration: const Duration(seconds: 10),
+          ),
+        );
+      }
+    }
   }
 
   void _showImagePickerBottomSheet(BuildContext context) {
