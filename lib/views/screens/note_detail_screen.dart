@@ -1529,30 +1529,40 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                         Positioned(
                           bottom: 12,
                           right: 12,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => FullImageScreen(
-                                    imageFile: imageFile,
-                                    imageUrl: page?.imageUrl,
-                                    title: '이미지',
+                          child: FutureBuilder<bool>(
+                            future: _imageExists(imageFile, page?.imageUrl),
+                            builder: (context, snapshot) {
+                              final bool hasImage = snapshot.data ?? false;
+                              
+                              return ElevatedButton(
+                                onPressed: hasImage ? () {
+                                  debugPrint('이미지 전체보기 버튼 클릭: imageFile=${imageFile != null}, imageUrl=${page?.imageUrl}');
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => FullImageScreen(
+                                        imageFile: imageFile,
+                                        imageUrl: page?.imageUrl,
+                                        title: '이미지',
+                                      ),
+                                    ),
+                                  );
+                                } : null, // 이미지가 없으면 버튼 비활성화
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.black.withOpacity(0.5),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  disabledBackgroundColor: Colors.grey.withOpacity(0.3),
+                                  disabledForegroundColor: Colors.white70,
+                                ),
+                                child: Text(
+                                  '이미지 전체보기',
+                                  style: TypographyTokens.caption.copyWith(
+                                    color: Colors.white,
                                   ),
                                 ),
                               );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black.withOpacity(0.5),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                            ),
-                            child: Text(
-                              '이미지 전체보기',
-                              style: TypographyTokens.caption.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
+                            }
                           ),
                         ),
                       ],
@@ -1672,30 +1682,40 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               Positioned(
                 bottom: 12,
                 right: 12,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => FullImageScreen(
-                          imageFile: currentImageFile,
-                          imageUrl: _pageManager.currentPage?.imageUrl,
-                          title: '이미지',
+                child: FutureBuilder<bool>(
+                  future: _imageExists(currentImageFile, currentPage?.imageUrl),
+                  builder: (context, snapshot) {
+                    final bool hasImage = snapshot.data ?? false;
+                    
+                    return ElevatedButton(
+                      onPressed: hasImage ? () {
+                        debugPrint('이미지 전체보기 버튼 클릭: imageFile=${currentImageFile != null}, imageUrl=${currentPage?.imageUrl}');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => FullImageScreen(
+                              imageFile: currentImageFile,
+                              imageUrl: currentPage?.imageUrl,
+                              title: '이미지',
+                            ),
+                          ),
+                        );
+                      } : null, // 이미지가 없으면 버튼 비활성화
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black.withOpacity(0.5),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        disabledBackgroundColor: Colors.grey.withOpacity(0.3),
+                        disabledForegroundColor: Colors.white70,
+                      ),
+                      child: Text(
+                        '이미지 전체보기',
+                        style: TypographyTokens.caption.copyWith(
+                          color: Colors.white,
                         ),
                       ),
                     );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black.withOpacity(0.5),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    '이미지 전체보기',
-                    style: TypographyTokens.caption.copyWith(
-                      color: Colors.white,
-                    ),
-                  ),
+                  }
                 ),
               ),
             ],
@@ -1927,5 +1947,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   double _calculateProgress() {
     if (_pageManager.pages.isEmpty) return 0.0;
     return (_pageManager.currentPageIndex + 1) / _pageManager.pages.length;
+  }
+
+  Future<bool> _imageExists(File? imageFile, String? imageUrl) async {
+    if (imageFile != null) return true;
+    if (imageUrl == null) return false;
+    return await _imageService.imageExists(imageUrl);
   }
 }

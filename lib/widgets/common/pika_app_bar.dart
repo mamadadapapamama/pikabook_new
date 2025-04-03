@@ -74,7 +74,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       height: 96,
       actions: [
         Padding(
-          padding: EdgeInsets.only(right: SpacingTokens.md, bottom:SpacingTokens.xs),
+          padding: EdgeInsets.all(SpacingTokens.md),
           child: Material(
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(30),
@@ -242,7 +242,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: title != null
           ? Text(
               title!,
-              style: TypographyTokens.subtitle2.copyWith(
+              style: TypographyTokens.headline3.copyWith(
                 color: ColorTokens.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
@@ -295,12 +295,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
             placeholderBuilder: (context) => Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.menu_book,
-                  color: ColorTokens.primary,
-                  size: SpacingTokens.iconSizeMedium,
-                ),
-                SizedBox(width: SpacingTokens.xs),
                 Text(
                   'Pikabook',
                   style: TypographyTokens.body1En.copyWith(
@@ -318,7 +312,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
         if (noteSpaceName != null)
           Text(
             noteSpaceName,
-            style: TypographyTokens.subtitle2.copyWith(
+            style: TypographyTokens.headline3.copyWith(
               color: ColorTokens.textPrimary,
               fontWeight: FontWeight.w600,
             ),

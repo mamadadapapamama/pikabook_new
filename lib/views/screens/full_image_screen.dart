@@ -127,20 +127,33 @@ class _FullImageScreenState extends State<FullImageScreen> {
 
   Widget _buildImage() {
     // 이미지 파일이 있는 경우
-    if (widget.imageFile != null && widget.imageFile!.existsSync()) {
-      return Image.file(
-        widget.imageFile!,
-        fit: BoxFit.contain,
-        width: double.infinity,
-        height: double.infinity,
-        errorBuilder: (context, error, stackTrace) {
-          print('이미지 파일 로드 에러: $error');
-          return _buildErrorWidget();
-        },
-      );
+    if (widget.imageFile != null) {
+      // 파일 존재 여부 확인 및 로깅
+      final bool fileExists = widget.imageFile!.existsSync();
+      final int fileSize = fileExists ? widget.imageFile!.lengthSync() : 0;
+      
+      print('이미지 파일 상태: 존재=${fileExists}, 파일 크기=${fileSize}바이트, 경로=${widget.imageFile!.path}');
+      
+      if (fileExists && fileSize > 0) {
+        return Image.file(
+          widget.imageFile!,
+          fit: BoxFit.contain,
+          width: double.infinity,
+          height: double.infinity,
+          errorBuilder: (context, error, stackTrace) {
+            print('이미지 파일 로드 에러: $error');
+            return _buildErrorWidget();
+          },
+        );
+      } else {
+        print('이미지 파일이 존재하지 않거나 빈 파일입니다: ${widget.imageFile!.path}');
+        return _buildErrorWidget();
+      }
     } 
     // 이미지 URL이 있는 경우
     else if (widget.imageUrl != null && widget.imageUrl!.isNotEmpty) {
+      print('이미지 URL로 로딩 시도: ${widget.imageUrl}');
+      
       return Image.network(
         widget.imageUrl!,
         fit: BoxFit.contain,
@@ -158,6 +171,7 @@ class _FullImageScreenState extends State<FullImageScreen> {
     } 
     // 이미지 정보가 없거나 존재하지 않는 경우
     else {
+      print('이미지 정보가 없음: 파일=${widget.imageFile}, URL=${widget.imageUrl}');
       return _buildErrorWidget();
     }
   }
