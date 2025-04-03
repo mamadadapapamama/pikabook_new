@@ -114,7 +114,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     required int currentPage,
     required int totalPages,
     required int flashcardCount,
-    required double progress,
     required VoidCallback onMorePressed,
     required VoidCallback onFlashcardTap,
     VoidCallback? onBackPressed,
@@ -168,8 +167,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
           onPressed: onMorePressed,
         ),
       ],
-      bottomHeight: 2,
-      progress: progress,
+      showBorder: true,
     );
   }
 

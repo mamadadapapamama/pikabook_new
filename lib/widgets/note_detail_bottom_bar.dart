@@ -56,119 +56,153 @@ class NoteDetailBottomBar extends StatelessWidget {
     // 디버그 정보 출력
     debugPrint('NoteDetailBottomBar - 현재 모드: $textDisplayMode, 페이지: ${currentPageIndex + 1}/$totalPages, 전체보기: $isFullTextMode');
     
-    // 프로그레스 바를 제거하고 컨트롤 부분만 표시
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: SpacingTokens.sm + SpacingTokens.xs, horizontal: SpacingTokens.md),
-      decoration: BoxDecoration(
-        color: ColorTokens.surface,
-        border: const Border(
-          top: BorderSide(color: ColorTokens.primaryverylight, width: 1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: ColorTokens.black.withOpacity(0.15),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 이전 페이지 버튼
-          _buildNavigationButton(
-            icon: Icons.arrow_back_ios_rounded,
-            onTap: currentPageIndex > 0 
-                ? () => onPageChanged(currentPageIndex - 1) 
-                : null,
-          ),
-          
-          // 중앙 컨트롤 영역 (병음 토글 + 모드 전환 버튼)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 병음 토글 버튼
-              GestureDetector(
-                onTap: () {
-                  // 토글: 현재 모드가 all이면 nopinyin으로, 아니면 all로 변경
-                  final newMode = showPinyin ? TextDisplayMode.nopinyin : TextDisplayMode.all;
-                  onTextDisplayModeChanged(newMode);
-                },
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
-                    vertical: SpacingTokens.xs + SpacingTokens.xs/2
-                  ),
-                  decoration: BoxDecoration(
-                    color: showPinyin ? ColorTokens.secondary : ColorTokens.surface,
-                    borderRadius: BorderRadius.circular(100),
-                    border: Border.all(color: ColorTokens.secondary),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '한어병음',
-                        style: TypographyTokens.caption.copyWith(
-                          color: showPinyin ? ColorTokens.textLight : ColorTokens.secondary,
-                        ),
-                      ),
-                      if (showPinyin)
-                        Container(
-                          width: SpacingTokens.xs * 2,
-                          height: SpacingTokens.xs * 2,
-                          margin: EdgeInsets.only(left: SpacingTokens.xs),
-                          decoration: const BoxDecoration(
-                            color: ColorTokens.textLight,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              
-              SizedBox(width: SpacingTokens.md),
-              
-              // 모드 전환 버튼 (문장별 구분/원문 전체)
-              GestureDetector(
-                onTap: onToggleFullTextMode,
-                child: Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
-                    vertical: SpacingTokens.xs + SpacingTokens.xs/2
-                  ),
-                  decoration: BoxDecoration(
-                    color: ColorTokens.surface,
-                    borderRadius: BorderRadius.circular(100),
-                    border: Border.all(color: ColorTokens.secondary),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        isFullTextMode ? '문장별 구분' : '원문 전체',
-                        style: TypographyTokens.caption.copyWith(
-                          color: ColorTokens.secondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+    // 현재 페이지 진행률 계산 (0.0 ~ 1.0 사이 값)
+    final double progress = totalPages > 0 ? (currentPageIndex + 1) / totalPages : 0.0;
+    
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 프로그레스 바
+        _buildProgressBar(context, progress),
+        
+        // 컨트롤 부분
+        Container(
+          padding: EdgeInsets.symmetric(vertical: SpacingTokens.sm + SpacingTokens.xs, horizontal: SpacingTokens.md),
+          decoration: BoxDecoration(
+            color: ColorTokens.surface,
+            border: const Border(
+              top: BorderSide(color: ColorTokens.primaryverylight, width: 1),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: ColorTokens.black.withOpacity(0.15),
+                blurRadius: 8,
+                offset: const Offset(0, -2),
               ),
             ],
           ),
-          
-          // 다음 페이지 버튼
-          _buildNavigationButton(
-            icon: Icons.arrow_forward_ios_rounded,
-            onTap: currentPageIndex < totalPages - 1 
-                ? () => onPageChanged(currentPageIndex + 1) 
-                : null,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // 이전 페이지 버튼
+              _buildNavigationButton(
+                icon: Icons.arrow_back_ios_rounded,
+                onTap: currentPageIndex > 0 
+                    ? () => onPageChanged(currentPageIndex - 1) 
+                    : null,
+              ),
+              
+              // 중앙 컨트롤 영역 (병음 토글 + 모드 전환 버튼)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 병음 토글 버튼
+                  GestureDetector(
+                    onTap: () {
+                      // 토글: 현재 모드가 all이면 nopinyin으로, 아니면 all로 변경
+                      final newMode = showPinyin ? TextDisplayMode.nopinyin : TextDisplayMode.all;
+                      onTextDisplayModeChanged(newMode);
+                    },
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
+                        vertical: SpacingTokens.xs + SpacingTokens.xs/2
+                      ),
+                      decoration: BoxDecoration(
+                        color: showPinyin ? ColorTokens.secondary : ColorTokens.surface,
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border.all(color: ColorTokens.secondary),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '한어병음',
+                            style: TypographyTokens.caption.copyWith(
+                              color: showPinyin ? ColorTokens.textLight : ColorTokens.secondary,
+                            ),
+                          ),
+                          if (showPinyin)
+                            Container(
+                              width: SpacingTokens.xs * 2,
+                              height: SpacingTokens.xs * 2,
+                              margin: EdgeInsets.only(left: SpacingTokens.xs),
+                              decoration: const BoxDecoration(
+                                color: ColorTokens.textLight,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  SizedBox(width: SpacingTokens.md),
+                  
+                  // 모드 전환 버튼 (문장별 구분/원문 전체)
+                  GestureDetector(
+                    onTap: onToggleFullTextMode,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
+                        vertical: SpacingTokens.xs + SpacingTokens.xs/2
+                      ),
+                      decoration: BoxDecoration(
+                        color: ColorTokens.surface,
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border.all(color: ColorTokens.secondary),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            isFullTextMode ? '문장별 구분' : '원문 전체',
+                            style: TypographyTokens.caption.copyWith(
+                              color: ColorTokens.secondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
+              // 다음 페이지 버튼
+              _buildNavigationButton(
+                icon: Icons.arrow_forward_ios_rounded,
+                onTap: currentPageIndex < totalPages - 1 
+                    ? () => onPageChanged(currentPageIndex + 1) 
+                    : null,
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+  
+  /// 프로그레스 바 위젯 빌드
+  Widget _buildProgressBar(BuildContext context, double progress) {
+    // progress는 0.0 ~ 1.0 사이 값
+    final double clampedProgress = progress.clamp(0.0, 1.0);
+    
+    return Stack(
+      children: [
+        // 배경 (회색 배경)
+        Container(
+          width: double.infinity,
+          height: 2,
+          color: ColorTokens.divider,
+        ),
+        // 진행 상태 (오렌지색)
+        Container(
+          width: MediaQuery.of(context).size.width * clampedProgress,
+          height: 2,
+          color: ColorTokens.primary,
+        ),
+      ],
     );
   }
   

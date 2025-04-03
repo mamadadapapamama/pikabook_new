@@ -1376,7 +1376,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   ? max(_note!.imageCount!, _pageManager.pages.length)
                   : _pageManager.pages.length,
               flashcardCount: _note?.flashcardCount ?? 0,
-              progress: _calculateProgress(),
               onMorePressed: _showMoreOptions,
               onFlashcardTap: _navigateToFlashcards,
               onBackPressed: () => Navigator.of(context).pop(),
