@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'dart:async'; // Timer 클래스를 위한 import
 import 'theme/app_theme.dart';
 import 'views/screens/home_screen.dart';
 import 'services/initialization_manager.dart';
 import 'services/user_preferences_service.dart';
 import 'views/screens/onboarding_screen.dart';
 import 'views/screens/login_screen.dart';
-import 'views/screens/settings_screen.dart';
 import 'widgets/loading_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'viewmodels/home_viewmodel.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 class App extends StatefulWidget {
   const App({Key? key}) : super(key: key);
@@ -29,46 +30,139 @@ class _AppState extends State<App> {
   String? _error;
   final UserPreferencesService _preferencesService = UserPreferencesService();
   
-  // 초기화 관리자 인스턴스
-  late final InitializationManager _initializationManager;
-  
   // 초기화 상태 관리
   bool _isInitialized = false;
   InitializationStep _currentStep = InitializationStep.preparing;
   double _progress = 0.0;
-  String _message = '준비 중...';
+  String _message = '앱 준비 중...';
   String? _subMessage;
   
   // 앱 시작 시간 기록
   final DateTime _appStartTime = DateTime.now();
   
   // 인증 상태 변경 구독 취소용 변수
-  late final Stream<User?> _authStateStream;
+  StreamSubscription<User?>? _authStateSubscription;
   
   @override
   void initState() {
     super.initState();
     debugPrint('App initState 호출됨 (${DateTime.now().toString()})');
     
-    // 초기화 관리자 생성
-    _initializationManager = InitializationManager();
+    // Firebase 초기화 시작
+    _initializeFirebase();
     
-    // 초기화 관리자 리스너 등록 - 무명 함수 사용
-    _initializationManager.addListener((step, progress, message, subMessage) {
-      _handleInitProgress(step, progress, message, subMessage);
-      // 콘솔에 초기화 상태 출력
-      debugPrint('초기화 상태: $step ($progress%) - $message ${subMessage ?? ""}');
+    // 타이머 추가 - 10초 후 강제로 진행 (최대 로딩 시간 제한)
+    // 이 타임아웃 기능은 Firebase 초기화가 완료되지 않더라도 사용자가 앱을 사용할 수 있도록 합니다.
+    // 초기화가 완료되지 않은 상태에서 다음 화면으로 넘어갈 경우:
+    // 1. 백그라운드에서 초기화가 계속 진행됩니다.
+    // 2. Firebase 관련 기능은 초기화가 완료될 때까지 사용할 수 없습니다.
+    // 3. 로그인 화면 등 초기화가 필요한 화면에서는 각 서비스가 초기화 상태를 확인하고 적절히 처리합니다.
+    Future.delayed(const Duration(seconds: 10), () {
+      if (!_isInitialized && mounted) {
+        debugPrint('타임아웃: 초기화 강제 진행');
+        setState(() {
+          _isInitialized = true;
+          _message = '초기화 완료 (타임아웃)';
+        });
+      }
     });
-    
-    // 인증 상태 변경 리스너 설정
-    _authStateStream = FirebaseAuth.instance.authStateChanges();
-    _setupAuthStateListener();
-    
-    // Firestore 오프라인 지원 설정
-    _setupFirestore();
-    
-    // 초기화 시작
-    _startInitialization();
+  }
+  
+  @override
+  void dispose() {
+    // 인증 상태 리스너 해제
+    _authStateSubscription?.cancel();
+    super.dispose();
+  }
+  
+  // Firebase 초기화 함수
+  Future<void> _initializeFirebase() async {
+    try {
+      setState(() {
+        _message = 'Firebase 초기화 중...';
+        _progress = 0.1;
+      });
+      
+      debugPrint('🔄 Firebase 초기화 시작...');
+      
+      // Firebase가 이미 초기화되었는지 확인
+      if (Firebase.apps.isNotEmpty) {
+        debugPrint('✅ Firebase 이미 초기화됨');
+        setState(() {
+          _progress = 0.3;
+          _message = 'Firebase 서비스 설정 중...';
+        });
+        _setupFirebaseServices();
+        return;
+      }
+      
+      // Firebase가 초기화되지 않은 경우에만 초기화 시도 (main.dart에서 이미 초기화했을 가능성 높음)
+      debugPrint('🔄 Firebase 새로 초기화 중...');
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        debugPrint('✅ Firebase 초기화 완료');
+      } catch (e) {
+        // 이미 초기화된 경우 발생하는 오류는 무시 (main.dart에서 이미 초기화했을 경우)
+        if (e.toString().contains('duplicate-app')) {
+          debugPrint('✅ Firebase가 이미 초기화되어 있습니다 (main.dart에서 초기화됨)');
+        } else {
+          // 다른 종류의 오류는 다시 던짐
+          throw e;
+        }
+      }
+      
+      // 초기화 성공 표시
+      setState(() {
+        _progress = 0.3;
+        _message = 'Firebase 서비스 설정 중...';
+      });
+      
+      // Firebase 서비스 설정 시작
+      _setupFirebaseServices();
+    } catch (e) {
+      debugPrint('❌ Firebase 초기화 오류: $e');
+      setState(() {
+        _error = 'Firebase 초기화 중 오류 발생: $e';
+        _progress = 0.0;
+      });
+      
+      // 3초 후 재시도
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          _initializeFirebase();
+        }
+      });
+    }
+  }
+  
+  // Firebase 서비스 설정
+  void _setupFirebaseServices() {
+    try {
+      // Firestore 오프라인 지원 설정
+      _setupFirestore();
+      
+      // 인증 상태 변경 리스너 설정
+      _setupAuthStateListener();
+      
+      // 앱 데이터 초기화
+      _loadAppData();
+      
+      setState(() {
+        _progress = 0.5;
+        _message = 'Firebase 서비스 초기화 완료';
+      });
+    } catch (e) {
+      debugPrint('Firebase 서비스 설정 중 오류: $e');
+      
+      // 오류 발생 시 1초 후에 재시도
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          _setupFirebaseServices();
+        }
+      });
+    }
   }
   
   // Firestore 설정
@@ -83,81 +177,88 @@ class _AppState extends State<App> {
       debugPrint('⚠️ Firestore 설정 중 오류: $e');
     }
   }
-
-  // 초기화 진행 상황 처리
-  void _handleInitProgress(
-    InitializationStep step, 
-    double progress, 
-    String message, 
-    String? subMessage
-  ) {
-    if (mounted) {
-      setState(() {
-        _currentStep = step;
-        _progress = progress;
-        _message = message;
-        _subMessage = subMessage;
+  
+  // 인증 상태 변경 리스너 설정
+  void _setupAuthStateListener() {
+    try {
+      // 기존 구독 취소
+      _authStateSubscription?.cancel();
+      
+      // 새 구독 설정
+      _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((User? user) {
+        debugPrint('인증 상태 변경 감지: ${user != null ? '로그인' : '로그아웃'}');
         
-        // 사용자 데이터 단계까지 완료되면 앱 표시 시작
-        if (step == InitializationStep.userData && progress >= 0.6) {
-          _isInitialized = true;
+        if (mounted) {
+          if (user != null) {
+            debugPrint('사용자 로그인됨: ${user.uid}');
+            // 로그인 상태 처리
+            _handleUserLogin(user);
+          } else {
+            debugPrint('사용자 로그아웃됨');
+            // 로그아웃 상태 처리
+            setState(() {
+              _isUserAuthenticated = false;
+              _isOnboardingCompleted = false;
+              _hasLoginHistory = false;
+            });
+          }
         }
+      }, onError: (error) {
+        debugPrint('인증 상태 변경 리스너 오류: $error');
       });
+    } catch (e) {
+      debugPrint('인증 상태 변경 리스너 설정 실패: $e');
     }
   }
-
-  // 초기화 시작
-  void _startInitialization() async {
+  
+  // 앱 데이터 초기화
+  Future<void> _loadAppData() async {
     try {
-      // 초기화 시작
-      final result = await _initializationManager.initialize();
+      // 기본 설정 로드
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 로그인 기록 확인
+      final hasLoginHistory = prefs.getBool('login_history') ?? false;
+      
+      // 온보딩 완료 여부 확인
+      final isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
+      
+      // 툴팁 표시 여부 확인
+      final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
+      
+      // 현재 사용자 상태 확인
+      final isUserAuthenticated = FirebaseAuth.instance.currentUser != null;
       
       if (mounted) {
         setState(() {
-          _isUserAuthenticated = result['isLoggedIn'] ?? false;
-          _hasLoginHistory = result['hasLoginHistory'] ?? false;
-          _isOnboardingCompleted = result['isOnboardingCompleted'] ?? false;
-          _isFirstEntry = result['isFirstEntry'] ?? true;
-          _error = result['error'];
+          _hasLoginHistory = hasLoginHistory;
+          _isOnboardingCompleted = isOnboardingCompleted;
+          _isFirstEntry = !hasShownTooltip;
+          _isUserAuthenticated = isUserAuthenticated;
+          
+          // 초기화 완료
+          _isInitialized = true;
+          _progress = 1.0;
+          _message = '앱 준비 완료';
         });
       }
+      
+      debugPrint('앱 데이터 초기화 완료 - 로그인: $_isUserAuthenticated, 온보딩: $_isOnboardingCompleted');
       
       final elapsed = DateTime.now().difference(_appStartTime);
       debugPrint('앱 초기화 완료 (소요시간: ${elapsed.inMilliseconds}ms)');
-      debugPrint('로그인 상태: $_isUserAuthenticated, 로그인 기록: $_hasLoginHistory, 온보딩 완료: $_isOnboardingCompleted');
     } catch (e) {
-      debugPrint('초기화 중 오류 발생: $e');
+      debugPrint('앱 데이터 초기화 중 오류: $e');
+      
+      // 오류가 있어도 앱은 계속 실행
       if (mounted) {
         setState(() {
-          _error = '앱 초기화 중 오류가 발생했습니다: $e';
+          _isInitialized = true;
+          _progress = 1.0;
+          _message = '앱 준비 완료 (일부 데이터 로드 실패)';
         });
       }
     }
-  }
-
-  // 인증 상태 변경 리스너 설정
-  void _setupAuthStateListener() {
-    _authStateStream.listen((User? user) {
-      debugPrint('인증 상태 변경 감지: ${user != null ? '로그인' : '로그아웃'}');
-      
-      if (mounted) {
-        if (user != null) {
-          debugPrint('사용자 로그인됨: ${user.uid}');
-          // 로그인 상태 처리
-          _handleUserLogin(user);
-        } else {
-          debugPrint('사용자 로그아웃됨');
-          // 로그아웃 상태 처리
-          setState(() {
-            _isUserAuthenticated = false;
-            _isOnboardingCompleted = false;
-            _hasLoginHistory = false;
-          });
-        }
-      }
-    }, onError: (error) {
-      debugPrint('인증 상태 변경 리스너 오류: $error');
-    });
   }
 
   // 로그인한 사용자 처리
@@ -285,7 +386,7 @@ class _AppState extends State<App> {
                       setState(() {
                         _error = null;
                       });
-                      _startInitialization();
+                      _initializeFirebase();
                     },
                     child: const Text('다시 시도'),
                   ),
@@ -345,7 +446,6 @@ class _AppState extends State<App> {
           _isFirstEntry = false;
         });
       },
-      initializationService: null, // 이전 방식에서 필요했던 객체는 null로 설정
     );
   }
 }

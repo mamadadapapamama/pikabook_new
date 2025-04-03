@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'unified_cache_service.dart';
-import 'initialization_service.dart';
 import 'user_preferences_service.dart';
 import 'auth_service.dart';
 import 'chinese_segmenter_service.dart';
@@ -39,10 +38,10 @@ class InitializationManager {
   static final InitializationManager _instance = InitializationManager._internal();
   factory InitializationManager() => _instance;
   
-  // 기존 서비스 참조
-  final InitializationService _initService = InitializationService();
+  // 서비스 참조
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final UserPreferencesService _prefsService = UserPreferencesService();
+  final AuthService _authService = AuthService();
   
   // 초기화 상태 관리
   InitializationStep _currentStep = InitializationStep.preparing;

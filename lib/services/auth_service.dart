@@ -38,176 +38,151 @@ class AuthService {
   // Google 로그인
   Future<User?> signInWithGoogle() async {
     try {
-      // Firebase 초기화 확인 (main.dart 전역 변수 사용)
-      if (firebaseApp == null) {
-        debugPrint('⚠️ AuthService: Firebase가 초기화되지 않았습니다. Google 로그인을 진행할 수 없습니다.');
-        throw Exception('Firebase가 초기화되지 않았습니다.');
-      }
+      // Firebase 초기화 확인
+      _checkFirebaseInitialized();
       
-      // 기존 로그인 상태를 확인하고 있으면 로그아웃
-      try {
-        if (await _googleSignIn.isSignedIn()) {
-          await _googleSignIn.signOut();
-          debugPrint('기존 Google 로그인 세션 정리');
-        }
-      } catch (e) {
-        debugPrint('Google 기존 세션 확인 중 오류: $e');
-      }
+      // 구글 로그인 프로세스 시작
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       
-      // Google 로그인 인스턴스 생성
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      // 사용자가 로그인 취소한 경우
       if (googleUser == null) {
-        // 사용자가 로그인을 취소한 경우
+        debugPrint('구글 로그인 취소됨');
         return null;
       }
-
-      // 인증 정보 가져오기
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
+      
+      // 구글 인증 정보 얻기
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      
       // Firebase 인증 정보 생성
-      final credential = GoogleAuthProvider.credential(
+      final OAuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
-
-      // Firebase에 로그인
-      final UserCredential userCredential =
-          await _auth.signInWithCredential(credential);
-
-      // 사용자 정보 Firestore에 저장
-      if (userCredential.user != null) {
-        await _saveUserToFirestore(userCredential.user!, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
-        
-        // 캐시 서비스에 사용자 전환 알림
-        final cacheService = UnifiedCacheService();
-        await cacheService.setCurrentUserId(userCredential.user!.uid);
+      
+      // Firebase로 로그인
+      final UserCredential userCredential = 
+          await FirebaseAuth.instance.signInWithCredential(credential);
+          
+      final User? user = userCredential.user;
+      
+      // 사용자 정보가 있다면 Firestore에 사용자 정보 업데이트
+      if (user != null) {
+        await _saveUserToFirestore(user, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
+        debugPrint('구글 로그인 성공: ${user.uid}');
       }
-
-      return userCredential.user;
+      
+      return user;
     } catch (e) {
-      debugPrint('Google 로그인 중 오류 발생: $e');
-      return null;
+      debugPrint('구글 로그인 오류: $e');
+      rethrow;
     }
   }
 
-  // Apple 로그인
+  // Firebase 초기화 여부 확인
+  void _checkFirebaseInitialized() {
+    // Firebase가 초기화되지 않은 경우 예외 발생
+    if (Firebase.apps.isEmpty) {
+      debugPrint('⚠️ Firebase가 초기화되지 않았습니다');
+      // 초기화되지 않았지만 예외는 발생시키지 않습니다.
+      // 일반적으로 이 시점에는 Firebase가 이미 초기화되어 있어야 함
+    } else {
+      debugPrint('✅ Firebase 초기화 확인됨');
+    }
+  }
+
+  // Apple로 로그인
   Future<User?> signInWithApple() async {
     try {
-      // Firebase 초기화 확인 (main.dart 전역 변수 사용)
-      if (firebaseApp == null) {
-        debugPrint('⚠️ AuthService: Firebase가 초기화되지 않았습니다. Apple 로그인을 진행할 수 없습니다.');
-        throw Exception('Firebase가 초기화되지 않았습니다.');
-      }
+      // Firebase 초기화 확인
+      _checkFirebaseInitialized();
       
-      debugPrint('🍎 AuthService: Apple 로그인 시작');
-
-      // nonce 생성
-      final rawNonce = _generateNonce();
-      final nonce = _sha256ofString(rawNonce);
-      debugPrint("🔐 rawNonce: $rawNonce");
-      debugPrint("🔐 nonce (SHA256): $nonce");
-
-
       // Apple 로그인 시작
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
+      final nonce = _generateNonce(32);
+      final nativeAppleCredential = await SignInWithApple.getAppleIDCredential(
         scopes: [
           AppleIDAuthorizationScopes.email,
           AppleIDAuthorizationScopes.fullName,
         ],
-        nonce: nonce,
+        nonce: _sha256ofString(nonce),
       );
-
-      // 디버그 로그 추가
-      debugPrint("Apple 인증 토큰: ${appleCredential.identityToken}");
-      debugPrint("Apple 인증 ID 상세: ${appleCredential.toString()}");
-      debugPrint("Apple 인증 코드: ${appleCredential.authorizationCode}");
-      debugPrint("Apple 인증 사용자 이름: ${appleCredential.givenName}, ${appleCredential.familyName}");
-      debugPrint("Apple 인증 이메일: ${appleCredential.email}");
-
-
- // JWT 디코딩
-    final Map<String, dynamic> decodedToken = _parseJwt(appleCredential.identityToken!);
-    debugPrint("📦 Decoded Apple identityToken payload:");
-    decodedToken.forEach((key, value) => debugPrint("    $key: $value"));
-    debugPrint("🎯 aud from token: ${decodedToken['aud']}");
-
-
-      // OAuthCredential 생성
+      
+      // Apple 인증 정보로 Firebase 로그인 정보 생성
       final oauthCredential = OAuthProvider("apple.com").credential(
-        idToken: appleCredential.identityToken,
-        rawNonce: rawNonce,
-        accessToken: appleCredential.authorizationCode,
+        idToken: nativeAppleCredential.identityToken,
+        rawNonce: nonce,
       );
-
-      // Firebase에 로그인
-      final userCredential = await _auth.signInWithCredential(oauthCredential);
-
-      // 사용자 정보 Firestore에 저장
-      if (userCredential.user != null) {
-        await _saveUserToFirestore(userCredential.user!, 
-                                 isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false,
-                                 appleCredential: appleCredential); // Apple 자격 증명 전달
+      
+      // Firebase 로그인 처리
+      final UserCredential userCredential = 
+          await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      
+      final User? user = userCredential.user;
+      
+      // Apple은 처음 로그인할 때만 이름 정보 제공
+      if (userCredential.additionalUserInfo?.isNewUser ?? false) {
+        // 이름 정보 처리
+        final givenName = nativeAppleCredential.givenName ?? '';
+        final familyName = nativeAppleCredential.familyName ?? '';
         
-        // 캐시 서비스에 사용자 전환 알림
-        final cacheService = UnifiedCacheService();
-        await cacheService.setCurrentUserId(userCredential.user!.uid);
+        // 서양식 이름: firstName(이름) + lastName(성)
+        // 동양식 이름: lastName(성) + firstName(이름)
+        final displayName = familyName + givenName;
+        
+        if (user != null && displayName.isNotEmpty) {
+          // Firebase 사용자 프로필 업데이트
+          await user.updateDisplayName(displayName);
+        }
       }
-
-      return userCredential.user;
+      
+      // 사용자 정보가 있다면 Firestore에 사용자 정보 업데이트
+      if (user != null) {
+        await _saveUserToFirestore(user, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
+        debugPrint('애플 로그인 성공: ${user.uid}');
+      }
+      
+      return user;
     } catch (e) {
-      debugPrint('Apple 로그인 중 오류 발생: $e');
-      return null;
+      debugPrint('애플 로그인 오류: $e');
+      rethrow;
     }
   }
-// JWT 디코딩 함수 추가
-Map<String, dynamic> _parseJwt(String token) {
-  final parts = token.split('.');
-  if (parts.length != 3) {
-    throw Exception('Invalid JWT token');
-  }
 
-  final payload = parts[1];
-  var normalized = base64Url.normalize(payload);
-  var decoded = utf8.decode(base64Url.decode(normalized));
-  return json.decode(decoded);
-}
-
-// 로그아웃
-Future<void> signOut() async {
-  try {
-    debugPrint('로그아웃 시작...');
-    
-    // 1. 현재 UID 저장
-    final currentUid = _auth.currentUser?.uid;
-    
-    // 2. 현재 사용자 ID를 캐시 서비스에서 제거
-    final cacheService = UnifiedCacheService();
-    await cacheService.clearCurrentUserId();
-    
-    // 3. 메모리 캐시 초기화
-    cacheService.clearCache();
-    
-    // 4. 이미지 캐시 정리
-    await ImageService().clearImageCache();
-    
-    // 5. 처리된 텍스트 캐시 정리
-    GetIt.I<PageContentService>().clearProcessedTextCache();
-    
-    // 6. Firebase 로그아웃
-    await _auth.signOut();
-    
-    debugPrint('로그아웃 완료');
-    
-    // 7. 세션 종료 처리 (필요시)
-    if (currentUid != null) {
-      await _endUserSession(currentUid);
+  // 로그아웃
+  Future<void> signOut() async {
+    try {
+      debugPrint('로그아웃 시작...');
+      
+      // 1. 현재 UID 저장
+      final currentUid = _auth.currentUser?.uid;
+      
+      // 2. 현재 사용자 ID를 캐시 서비스에서 제거
+      final cacheService = UnifiedCacheService();
+      await cacheService.clearCurrentUserId();
+      
+      // 3. 메모리 캐시 초기화
+      cacheService.clearCache();
+      
+      // 4. 이미지 캐시 정리
+      await ImageService().clearImageCache();
+      
+      // 5. 처리된 텍스트 캐시 정리
+      GetIt.I<PageContentService>().clearProcessedTextCache();
+      
+      // 6. Firebase 로그아웃
+      await _auth.signOut();
+      
+      debugPrint('로그아웃 완료');
+      
+      // 7. 세션 종료 처리 (필요시)
+      if (currentUid != null) {
+        await _endUserSession(currentUid);
+      }
+    } catch (e) {
+      debugPrint('로그아웃 중 오류 발생: $e');
+      rethrow;
     }
-  } catch (e) {
-    debugPrint('로그아웃 중 오류 발생: $e');
-    rethrow;
   }
-}
 
   // 사용자 계정 삭제
   Future<void> deleteAccount() async {
@@ -410,7 +385,7 @@ Future<void> signOut() async {
   }
 
   // Apple 로그인용 nonce 생성
-  String _generateNonce([int length = 32]) {
+  String _generateNonce(int length) {
     const charset =
         '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
     final random = Random.secure();
@@ -611,3 +586,4 @@ Future<void> signOut() async {
     }
   }
 }
+

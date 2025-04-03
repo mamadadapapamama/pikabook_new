@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import '../../services/initialization_service.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
@@ -13,14 +12,13 @@ import 'package:provider/provider.dart';
 import '../../widgets/common/pika_button.dart';
 import '../../widgets/common/pika_app_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../services/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
-  final InitializationService? initializationService;
   final VoidCallback onLogout;
 
   const SettingsScreen({
     Key? key,
-    this.initializationService,
     required this.onLogout,
   }) : super(key: key);
 
@@ -728,11 +726,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         throw '로그인된 사용자 정보를 찾을 수 없습니다.';
       }
       
-      // Firebase Auth를 통해 계정 삭제
-      await user.delete();
-      
-      // Firestore에서 사용자 데이터 삭제
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+      // AuthService의 deleteAccount 메서드 사용
+      // Firebase Auth 계정 삭제 + Firestore 데이터 삭제 + 로컬 데이터 삭제 모두 포함
+      final authService = AuthService();
+      await authService.deleteAccount();
       
       // 로딩 종료
       setState(() {

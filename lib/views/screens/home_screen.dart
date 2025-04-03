@@ -27,7 +27,6 @@ import '../../widgets/common/usage_limit_dialog.dart';
 import 'flashcard_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../services/initialization_service.dart';
 import 'settings_screen.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
@@ -35,16 +34,14 @@ import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final bool showTooltip;
-  final VoidCallback? onCloseTooltip;
-  final InitializationService? initializationService;
-
+  final VoidCallback onCloseTooltip;
+  
   const HomeScreen({
-    Key? key, 
+    Key? key,
     this.showTooltip = false,
-    this.onCloseTooltip,
-    this.initializationService,
+    required this.onCloseTooltip,
   }) : super(key: key);
-
+  
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -293,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       SnackBar(
         content: Text(
           '관리자에게 직접 문의하시면 사용량 제한을 늘려드립니다.\n'
-          '이메일: support@pikabook.app',
+          '이메일: hello.pikabook@gmail.com',
         ),
         duration: const Duration(seconds: 10),
         action: SnackBarAction(
@@ -422,9 +419,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
     
     // 툴팁 닫기 콜백 호출
-    if (widget.onCloseTooltip != null) {
-      widget.onCloseTooltip!();
-    }
+    widget.onCloseTooltip();
   }
 
   // HomeViewModel 변경 시 호출될 메서드
