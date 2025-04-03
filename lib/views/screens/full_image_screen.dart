@@ -28,8 +28,31 @@ class _FullImageScreenState extends State<FullImageScreen> {
   late TapDownDetails _doubleTapDetails;
 
   @override
+  void initState() {
+    super.initState();
+    // 화면 진입 시 상태표시줄을 흰색으로 설정
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SystemChrome.setSystemUIOverlayStyle(
+        const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
+      );
+    });
+  }
+
+  @override
   void dispose() {
     _transformationController.dispose();
+    // 화면을 떠날 때 상태표시줄을 다시 검은색으로 복원
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.dark,
+      ),
+    );
     super.dispose();
   }
 
@@ -59,15 +82,6 @@ class _FullImageScreenState extends State<FullImageScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 검은색 배경에서는 흰색 아이콘으로 설정
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
-    );
-    
     return Scaffold(
       appBar: AppBar(
         title: Text(

@@ -115,6 +115,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     _previouslyVisitedPages = <int>{};
     _pageController = PageController();
     
+    // 상태표시줄 설정
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SystemChrome.setSystemUIOverlayStyle(
+        const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.dark,
+        ),
+      );
+    });
+    
     // 의존성 관련 문제를 해결하기 위해 포스트 프레임 콜백 사용
     WidgetsBinding.instance.addPostFrameCallback((_) {
     _loadNote();
@@ -1359,16 +1370,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
-    // 상태바 아이콘 색상을 검은색으로 설정
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-      ),
-    );
+    // 상태바 아이콘 색상 설정은 initState로 이동하였으므로 여기서 제거
     
-      return Scaffold(
+    return Scaffold(
       backgroundColor: Colors.white,
       appBar: _isLoading || _error != null
           ? null // 로딩 중이거나 오류 상태에서는 앱바 없음
