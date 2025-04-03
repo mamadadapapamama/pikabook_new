@@ -135,8 +135,8 @@ class NotePageManager {
   }
   
   // 서버에서 페이지 로드
-  Future<List<page_model.Page>> loadPagesFromServer() async {
-    final serverPages = await _pageService.getPagesForNote(noteId);
+  Future<List<page_model.Page>> loadPagesFromServer({bool forceReload = false}) async {
+    final serverPages = await _pageService.getPagesForNote(noteId, forceReload: forceReload);
     mergePages(serverPages);
     return _pages;
   }

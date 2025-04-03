@@ -212,72 +212,98 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // ===== 데이터 로딩 관련 메서드 =====
 
+  /// 노트 데이터 로드
   Future<void> _loadNote() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
     try {
-      // 백그라운드 처리 중인 경우 스낵바 표시
-      if (widget.isProcessingBackground && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('추가 페이지를 백그라운드에서 처리 중입니다...'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
+      setState(() {
+        _isLoading = true;
+      });
 
-      // 노트와 페이지를 함께 로드 (캐싱 활용)
-      final result = await _noteService.getNoteWithPages(widget.noteId);
-      final note = result['note'] as Note;
-      final serverPages = result['pages'] as List<dynamic>;
-      final isFromCache = result['isFromCache'] as bool;
-      final isProcessingBackground =
-          result['isProcessingBackground'] as bool? ?? false;
-      final processingCompleted = note.processingCompleted ?? false;
-
-      if (mounted) {
+      // 노트 로드
+      final note = await _noteService.getNoteById(widget.noteId);
+      
+      if (note == null) {
         setState(() {
-          _note = note;
-          _isFavorite = note.isFavorite;
-
-          // 페이지 매니저에 페이지 설정
-          final typedServerPages = serverPages.cast<page_model.Page>();
-          _pageManager.setPages(typedServerPages);
-          
+          _error = '노트를 찾을 수 없습니다. 삭제되었거나 접근 권한이 없습니다.';
           _isLoading = false;
-          
-          // 첫 번째 페이지를 방문한 페이지로 표시
-          if (_pageManager.pages.isNotEmpty) {
-            _previouslyVisitedPages.add(0);
-          }
         });
-
-        // 페이지 수 로그 출력
-        debugPrint('노트에 ${_pageManager.pages.length}개의 페이지가 있습니다. (캐시에서 로드: $isFromCache)');
-
-        // 각 페이지의 이미지 로드
-        _pageManager.loadAllPageImages();
+        return;
+      }
+      
+      // 로드된 노트 정보 반영
+      setState(() {
+        _note = note;
+        _isFavorite = note.isFavorite;
+      });
+      
+      // 페이지 로드
+      await _pageManager.loadPagesFromServer();
+      
+      // 노트에 백그라운드 처리 상태 확인
+      final bool isProcessingBackground = await _checkBackgroundProcessingStatus(note.id!);
+      
+      // 백그라운드 처리 중이 아니라면 처리 완료된 페이지가 있는지 확인
+      if (!isProcessingBackground) {
+        final prefs = await SharedPreferences.getInstance();
+        final pagesUpdated = prefs.getBool('pages_updated_${widget.noteId}') ?? false;
         
-        // 현재 페이지의 ProcessedText 초기화
-        _processTextForCurrentPage();
-
-        // 다음 조건에서 페이지 서비스에 다시 요청
-        if ((_pageManager.pages.length <= 1 && isFromCache) || processingCompleted) {
-          debugPrint(
-              '페이지 다시 로드 조건 충족: 페이지 수=${_pageManager.pages.length}, 캐시=$isFromCache, 처리완료=$processingCompleted');
-          _reloadPages(forceReload: processingCompleted);
+        if (pagesUpdated) {
+          final updatedPageCount = prefs.getInt('updated_page_count_${widget.noteId}') ?? 0;
+          debugPrint('노트 로드 시 완료된 페이지 발견: $updatedPageCount개');
+          
+          // 플래그 초기화
+          await prefs.remove('pages_updated_${widget.noteId}');
+          await prefs.remove('updated_page_count_${widget.noteId}');
+          
+          // 메시지 표시
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('$updatedPageCount개의 추가 페이지가 처리되었습니다.'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
         }
       }
+      
+      // 텍스트 처리
+      await _processTextForCurrentPage();
+      
+      setState(() {
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = '노트를 불러오는 중 오류가 발생했습니다: $e';
-          _isLoading = false;
-        });
+      debugPrint('노트 로드 중 오류 발생: $e');
+      setState(() {
+        _error = '노트 로드 중 오류가 발생했습니다: $e';
+        _isLoading = false;
+      });
+    }
+  }
+  
+  /// 백그라운드 처리 상태 확인
+  Future<bool> _checkBackgroundProcessingStatus(String noteId) async {
+    try {
+      final noteDoc = await FirebaseFirestore.instance
+          .collection('notes')
+          .doc(noteId)
+          .get();
+          
+      if (noteDoc.exists) {
+        final data = noteDoc.data();
+        final isProcessingBackground = data?['isProcessingBackground'] as bool? ?? false;
+        final processingCompleted = data?['processingCompleted'] as bool? ?? false;
+        
+        debugPrint('백그라운드 처리 상태 확인: 처리 중=$isProcessingBackground, 완료=$processingCompleted');
+        
+        return isProcessingBackground && !processingCompleted;
       }
+      
+      return false;
+    } catch (e) {
+      debugPrint('백그라운드 처리 상태 확인 중 오류: $e');
+      return false;
     }
   }
 
@@ -298,29 +324,67 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       }
 
       try {
+        // 1. 공유 환경설정에서 페이지 업데이트 여부 확인
         final prefs = await SharedPreferences.getInstance();
         final pagesUpdated =
             prefs.getBool('pages_updated_${widget.noteId}') ?? false;
 
-        if (pagesUpdated) {
+        // 2. Firestore에서 직접 노트 문서 확인하여 최신 상태 체크
+        bool firestoreUpdated = false;
+        if (!pagesUpdated && _note != null && _note!.id != null) {
+          try {
+            final noteDoc = await FirebaseFirestore.instance
+                .collection('notes')
+                .doc(_note!.id)
+                .get();
+                
+            if (noteDoc.exists) {
+              final data = noteDoc.data();
+              final processingCompleted = data?['processingCompleted'] as bool? ?? false;
+              final isProcessingBackground = data?['isProcessingBackground'] as bool? ?? false;
+              
+              // 처리 완료 + 백그라운드 처리 플래그 False 인 경우 업데이트
+              if (processingCompleted && !isProcessingBackground) {
+                firestoreUpdated = true;
+                debugPrint('Firestore에서 백그라운드 처리 완료 확인됨');
+              }
+            }
+          } catch (e) {
+            debugPrint('Firestore 노트 확인 중 오류: $e');
+          }
+        }
+
+        if (pagesUpdated || firestoreUpdated) {
           // 페이지 업데이트가 완료된 경우
           final updatedPageCount =
-              prefs.getInt('updated_page_count_${widget.noteId}') ?? 0;
+              prefs.getInt('updated_page_count_${widget.noteId}') ?? _note?.imageCount ?? 0;
           debugPrint('백그라운드 처리 완료 감지: $updatedPageCount 페이지 업데이트됨');
 
           // 플래그 초기화
-          await prefs.remove('pages_updated_${widget.noteId}');
-          await prefs.remove('updated_page_count_${widget.noteId}');
+          if (pagesUpdated) {
+            await prefs.remove('pages_updated_${widget.noteId}');
+            await prefs.remove('updated_page_count_${widget.noteId}');
+          }
+          
+          // 현재 페이지 인덱스 저장
+          final currentIndex = _pageManager.currentPageIndex;
 
           // 페이지 다시 로드
-          _reloadPages(forceReload: true);
+          await _reloadPages(forceReload: true);
 
           // 완료 메시지 표시
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('$updatedPageCount개의 추가 페이지 처리가 완료되었습니다.'),
-                duration: Duration(seconds: 3),
+                content: Text('추가 페이지 처리가 완료되었습니다. 이제 다음 페이지로 이동할 수 있습니다.'),
+                duration: Duration(seconds: 5),
+                action: SnackBarAction(
+                  label: '다음 페이지',
+                  onPressed: () {
+                    // 다음 페이지로 즉시 이동
+                    _navigateToNextProcessedPage(currentIndex);
+                  },
+                ),
               ),
             );
           }
@@ -334,12 +398,29 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       }
     });
   }
+  
+  // 처리된 다음 페이지로 이동
+  void _navigateToNextProcessedPage(int currentIndex) {
+    try {
+      // 현재 총 페이지 수 확인
+      final int totalPages = _pageManager.pages.length;
+      
+      // 현재 페이지 이후의 페이지가 있는지 확인
+      if (currentIndex < totalPages - 1) {
+        // 다음 페이지로 이동
+        _changePage(currentIndex + 1);
+        debugPrint('다음 처리된 페이지(${currentIndex + 1})로 이동');
+      }
+    } catch (e) {
+      debugPrint('다음 페이지 이동 중 오류 발생: $e');
+    }
+  }
 
   // 페이지 다시 로드 
   Future<void> _reloadPages({bool forceReload = false}) async {
     try {
       // 이미 로드 중인지 확인
-      if (_isLoading) return;
+      if (_isLoading && !forceReload) return;
 
       setState(() {
         _isLoading = true;
@@ -368,7 +449,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       }
 
       // 페이지 매니저로 서버에서 페이지 로드
-      await _pageManager.loadPagesFromServer();
+      await _pageManager.loadPagesFromServer(forceReload: forceReload);
+      
+      // 이미지 로드
+      _pageManager.loadAllPageImages();
+      
+      // 방문한 페이지 초기화 - 첫 페이지만 방문한 것으로 설정
+      _previouslyVisitedPages.clear();
+      if (_pageManager.pages.isNotEmpty) {
+        _previouslyVisitedPages.add(_pageManager.currentPageIndex);
+      }
+      
+      // 현재 페이지 텍스트 처리
+      await _processTextForCurrentPage();
+      
+      debugPrint('페이지 다시 로드 완료: ${_pageManager.pages.length}개 페이지, 현재 페이지 인덱스: ${_pageManager.currentPageIndex}');
 
       if (mounted) {
         setState(() {

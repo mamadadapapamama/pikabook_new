@@ -162,11 +162,16 @@ class PageService {
   }
 
   // 노트의 모든 페이지 가져오기 (캐시 활용)
-  Future<List<page_model.Page>> getPagesForNote(String noteId) async {
+  Future<List<page_model.Page>> getPagesForNote(String noteId, {bool forceReload = false}) async {
     try {
-      // 1. 캐시에서 먼저 페이지 확인
-      final cachedPages = await _cacheService.getPagesForNote(noteId);
-      debugPrint('캐시에서 노트 $noteId의 페이지 ${cachedPages.length}개 로드됨');
+      // 1. forceReload가 true가 아니면 캐시에서 먼저 페이지 확인
+      List<page_model.Page> cachedPages = [];
+      if (!forceReload) {
+        cachedPages = await _cacheService.getPagesForNote(noteId);
+        debugPrint('캐시에서 노트 $noteId의 페이지 ${cachedPages.length}개 로드됨');
+      } else {
+        debugPrint('강제 로드 모드: 캐시를 건너뛰고 서버에서 직접 로드합니다.');
+      }
       
       // 2. Firestore에서 페이지 가져오기
       final snapshot = await _pagesCollection
@@ -178,6 +183,14 @@ class PageService {
         .map((doc) => page_model.Page.fromFirestore(doc))
         .toList();
       debugPrint('Firestore에서 노트 $noteId의 페이지 ${serverPages.length}개 로드됨');
+      
+      // 강제 로드 모드인 경우 서버 페이지만 사용
+      if (forceReload) {
+        // 서버 데이터로 캐시 갱신
+        await _cacheService.cachePages(noteId, serverPages);
+        debugPrint('강제 로드 모드: 서버 데이터로 캐시를 갱신했습니다.');
+        return serverPages;
+      }
       
       // 3. 로컬 및 서버 페이지 병합
       // ID 기준으로 페이지 맵 생성 

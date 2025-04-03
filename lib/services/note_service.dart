@@ -940,6 +940,17 @@ class NoteService {
       // 모든 이미지 처리 완료 후 플래그 업데이트
       await _setNoteBackgroundProcessingState(noteId, false);
       
+      // 노트 문서에 처리 완료 플래그 추가
+      await _notesCollection.doc(noteId).update({
+        'processingCompleted': true,
+        'updatedAt': DateTime.now(),
+      });
+      
+      // 처리 완료를 SharedPreferences에 저장하여 UI에 알림
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('pages_updated_$noteId', true);
+      await prefs.setInt('updated_page_count_$noteId', processedCount);
+      
       // 처리 결과 로그
       debugPrint('모든 이미지 처리 완료 ($processedCount/$totalCount), 오류: $errorCount');
     } catch (e) {
