@@ -389,13 +389,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               SnackBar(
                 content: Text('추가 페이지 처리가 완료되었습니다. 이제 다음 페이지로 이동할 수 있습니다.'),
                 duration: Duration(seconds: 5),
-                action: SnackBarAction(
-                  label: '다음 페이지',
-                  onPressed: () {
-                    // 다음 페이지로 즉시 이동
-                    _navigateToNextProcessedPage(currentIndex);
-                  },
-                ),
               ),
             );
           }

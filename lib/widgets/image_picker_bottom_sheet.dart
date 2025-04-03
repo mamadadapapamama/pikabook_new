@@ -179,6 +179,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
       // 로딩 다이얼로그 표시 - 첫 페이지 로딩까지만 표시
       if (context.mounted) {
+        // 새 로딩 다이얼로그 표시 (단순화 - 기존 다이얼로그 닫기 시도 제거)
         LoadingDialog.show(context, message: '노트 생성 중...');
         isLoadingDialogShowing = true;
       }
@@ -190,78 +191,96 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         silentProgress: true, // 진행 상황 업데이트 무시
       );
 
-      // 로딩 다이얼로그 닫기 (로직 개선 - 확실하게 닫히도록)
-      if (context.mounted && isLoadingDialogShowing) {
+      // 결과를 먼저 저장 (네비게이션 전)
+      final bool success = result['success'] == true;
+      final String? noteId = result['noteId'] as String?;
+      final bool isProcessingBackground = result['isProcessingBackground'] ?? false;
+      final String message = result['message'] ?? '노트 생성에 실패했습니다.';
+
+      // 로딩 다이얼로그 닫기 (단순화)
+      if (isLoadingDialogShowing && context.mounted) {
+        // 네비게이터 작업 감소를 위해 간단한 방식으로만 닫기
         try {
           LoadingDialog.hide(context);
-          debugPrint("로딩 다이얼로그 명시적으로 닫힘");
+          debugPrint("로딩 다이얼로그 닫기 시도");
+          
+          // 잠시 대기하여 다이얼로그가 닫힐 시간 제공
+          await Future.delayed(const Duration(milliseconds: 300));
         } catch (e) {
           debugPrint("로딩 다이얼로그 닫기 중 오류: $e");
         } finally {
-          // 상태 업데이트
           isLoadingDialogShowing = false;
-          // 약간의 지연을 주어 다이얼로그가 확실히 닫히도록 함
-          await Future.delayed(const Duration(milliseconds: 200));
         }
       }
 
-      if (result['success'] == true && result['noteId'] != null) {
-        final String noteId = result['noteId'] as String;
-
-        // 노트 상세 화면으로 이동
-        if (context.mounted) {
-          debugPrint("노트 상세 화면으로 이동 시도");
-
-          // 화면 전환
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => NoteDetailScreen(
-                noteId: noteId,
-                isProcessingBackground: result['isProcessingBackground'] ?? false,
+      // 결과에 따라 다음 화면으로 이동 또는 오류 메시지 표시
+      if (success && noteId != null && context.mounted) {
+        debugPrint("노트 상세 화면으로 이동 시도");
+        
+        // 비동기 작업을 사용하여 UI 스레드 차단 방지
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => NoteDetailScreen(
+                  noteId: noteId,
+                  isProcessingBackground: isProcessingBackground,
+                ),
               ),
-            ),
-          );
-
-          debugPrint("노트 상세 화면으로 이동 완료");
-        }
-      } else {
+            );
+            debugPrint("노트 상세 화면으로 이동 완료");
+          }
+        });
+      } else if (context.mounted) {
         // 오류 메시지 표시
-        final message = result['message'] ?? '노트 생성에 실패했습니다.';
         debugPrint("노트 생성 실패: $message");
-
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(message.toString()),
-              backgroundColor: ColorTokens.error,
-              behavior: UITokens.snackBarTheme.behavior,
-              shape: UITokens.snackBarTheme.shape,
-            ),
-          );
-        }
+        
+        // 비동기 작업을 사용하여 UI 스레드 차단 방지
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message.toString()),
+                backgroundColor: ColorTokens.error,
+                behavior: UITokens.snackBarTheme.behavior,
+                shape: UITokens.snackBarTheme.shape,
+              ),
+            );
+          }
+        });
       }
     } catch (e) {
       debugPrint("노트 생성 중 오류 발생: $e");
 
-      // 오류 발생 시 로딩 다이얼로그 닫고 오류 메시지 표시
-      if (context.mounted && isLoadingDialogShowing) {
+      // 오류 발생 시 로딩 다이얼로그 닫기
+      if (isLoadingDialogShowing && context.mounted) {
         try {
           LoadingDialog.hide(context);
           debugPrint("오류 발생 후 로딩 다이얼로그 닫힘");
+          
+          // 잠시 대기
+          await Future.delayed(const Duration(milliseconds: 300));
         } catch (closeError) {
           debugPrint("오류 발생 후 로딩 다이얼로그 닫기 중 오류: $closeError");
         } finally {
           isLoadingDialogShowing = false;
         }
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('노트 생성 중 오류가 발생했습니다: $e'),
-            backgroundColor: ColorTokens.error,
-            behavior: UITokens.snackBarTheme.behavior,
-            shape: UITokens.snackBarTheme.shape,
-          ),
-        );
+        // 비동기 작업을 사용하여 UI 스레드 차단 방지
+        if (context.mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('노트 생성 중 오류가 발생했습니다: $e'),
+                  backgroundColor: ColorTokens.error,
+                  behavior: UITokens.snackBarTheme.behavior,
+                  shape: UITokens.snackBarTheme.shape,
+                ),
+              );
+            }
+          });
+        }
       }
     }
   }

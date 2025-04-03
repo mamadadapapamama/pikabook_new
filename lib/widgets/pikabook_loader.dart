@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
+import 'dart:async';
 
 /// Pikabook 로딩 화면
 /// 
@@ -22,27 +23,67 @@ class PikabookLoader extends StatelessWidget {
     String title = '스마트 노트를 만들고 있어요.',
     String subtitle = '잠시만 기다려 주세요!',
   }) async {
-    return showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => WillPopScope(
-        onWillPop: () async => false, // 뒤로 가기 방지
-        child: Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(24),
-          elevation: 0,
-          child: PikabookLoader(
-            title: title,
-            subtitle: subtitle,
+    if (!context.mounted) {
+      debugPrint('PikabookLoader 표시 실패: context가 더 이상 유효하지 않습니다.');
+      return;
+    }
+    
+    // 이전에 열려 있는 다이얼로그 확인/닫기 시도 제거 - 중첩 네비게이션 방지
+    
+    // showDialog를 직접 호출하는 대신 addPostFrameCallback 사용
+    Completer<void> completer = Completer<void>();
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => WillPopScope(
+            onWillPop: () async => false, // 뒤로 가기 방지
+            child: Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.all(24),
+              elevation: 0,
+              child: PikabookLoader(
+                title: title,
+                subtitle: subtitle,
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        ).then((_) {
+          completer.complete();
+        }).catchError((e) {
+          debugPrint('PikabookLoader 표시 중 오류: $e');
+          completer.completeError(e);
+        });
+      } else {
+        completer.completeError('컨텍스트가 더 이상 유효하지 않습니다.');
+      }
+    });
+    
+    return completer.future;
   }
 
   /// 로더를 숨기는 정적 메서드
   static void hide(BuildContext context) {
-    Navigator.of(context, rootNavigator: true).pop();
+    if (!context.mounted) {
+      debugPrint('PikabookLoader 닫기 실패: context가 더 이상 유효하지 않습니다.');
+      return;
+    }
+    
+    // addPostFrameCallback 사용하여 안전하게 닫기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        try {
+          // 직접 네비게이터를 통해 닫기 시도
+          Navigator.of(context, rootNavigator: true).pop();
+          debugPrint('PikabookLoader 닫기 성공');
+        } catch (e) {
+          // 오류 발생 시 후속 조치 - 오류만 기록
+          debugPrint('PikabookLoader 닫기 중 오류: $e');
+        }
+      }
+    });
   }
 
   @override
