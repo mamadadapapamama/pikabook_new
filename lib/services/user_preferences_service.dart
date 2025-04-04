@@ -194,19 +194,41 @@ class UserPreferencesService {
 
   // 현재 사용자 ID 설정
   Future<void> setCurrentUserId(String userId) async {
+    if (userId.isEmpty) {
+      debugPrint('⚠️ 빈 사용자 ID가 전달됨 - 무시됨');
+      return;
+    }
+    
     final prefs = await SharedPreferences.getInstance();
+    
     // 이전 사용자 ID 가져오기
     final previousUserId = prefs.getString(_currentUserIdKey);
     
-    // 사용자가 변경되었으면 설정 초기화
-    if (previousUserId != null && previousUserId != userId) {
-      debugPrint('사용자가 변경됨: $previousUserId -> $userId, 사용자 데이터 초기화');
+    // 사용자 변경 여부 확인
+    final bool isUserChanged = previousUserId != null && previousUserId != userId;
+    
+    // 첫 로그인 또는 사용자 변경인 경우 로그 출력
+    if (previousUserId == null) {
+      debugPrint('🔑 새로운 사용자 로그인: $userId');
+    } else if (isUserChanged) {
+      debugPrint('🔄 사용자 전환 감지: $previousUserId → $userId');
+    } else {
+      debugPrint('🔒 동일 사용자 재인증: $userId');
+    }
+    
+    // 사용자가 변경된 경우에만 데이터 초기화
+    if (isUserChanged) {
+      debugPrint('📝 사용자 전환으로 이전 사용자 데이터 초기화 중...');
+      
+      // 이전 사용자 데이터 모두 초기화
       await clearUserData();
+      
+      debugPrint('✅ 사용자 데이터 초기화 완료');
     }
     
     // 새 사용자 ID 저장
     await prefs.setString(_currentUserIdKey, userId);
-    debugPrint('캐시 서비스에 사용자 ID 설정됨: $userId');
+    debugPrint('🔐 캐시 서비스에 현재 사용자 ID 설정: $userId');
   }
   
   // 현재 사용자 ID 가져오기
@@ -215,21 +237,27 @@ class UserPreferencesService {
     return prefs.getString(_currentUserIdKey);
   }
   
-  // 사용자 데이터만 초기화 (로그인 관련 데이터 유지)
+  // 사용자 데이터만 초기화 (로그인 ID 관련 정보만 유지)
   Future<void> clearUserData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // 사용자 데이터 관련 키만 삭제
+      // 사용자 데이터 관련 키 모두 삭제
+      await prefs.remove(_onboardingCompletedKey); // 온보딩 완료 상태도 초기화
       await prefs.remove(_defaultNoteSpaceKey);
       await prefs.remove(_userNameKey);
       await prefs.remove(_learningPurposeKey);
       await prefs.remove(_useSegmentModeKey);
       await prefs.remove(_noteSpacesKey);
+      await prefs.remove(_sourceLanguageKey);
+      await prefs.remove(_targetLanguageKey);
       
-      debugPrint('사용자 데이터가 초기화되었습니다 (로그인 정보 유지)');
+      // 'hasShownTooltip' 키도 초기화 (홈 화면 툴팁)
+      await prefs.remove('hasShownTooltip');
+      
+      debugPrint('⚠️ 사용자 전환 - 모든 사용자별 설정 데이터가 초기화되었습니다');
     } catch (e) {
-      debugPrint('사용자 데이터 초기화 중 오류 발생: $e');
+      debugPrint('⚠️ 사용자 데이터 초기화 중 오류 발생: $e');
     }
   }
 

@@ -198,7 +198,7 @@ class _AppState extends State<App> {
       _authStateSubscription?.cancel();
       
       // 새 구독 설정
-      _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((User? user) async {
         debugPrint('인증 상태 변경 감지: ${user != null ? '로그인' : '로그아웃'}');
         
         if (mounted) {
@@ -208,11 +208,27 @@ class _AppState extends State<App> {
             _handleUserLogin(user);
           } else {
             debugPrint('사용자 로그아웃됨');
+            
+            // 로그아웃 시 사용자 설정 초기화
+            try {
+              // 사용자 데이터 초기화
+              await _preferencesService.clearUserData();
+              
+              // 현재 사용자 ID도 초기화 (다음 로그인을 위해)
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('current_user_id');
+              
+              debugPrint('🔒 로그아웃 - 사용자 데이터 초기화 완료');
+            } catch (e) {
+              debugPrint('⚠️ 로그아웃 시 데이터 초기화 오류: $e');
+            }
+            
             // 로그아웃 상태 처리
             setState(() {
               _isUserAuthenticated = false;
               _isOnboardingCompleted = false;
               _hasLoginHistory = false;
+              _isFirstEntry = false; // 툴팁 표시 상태도 초기화
             });
           }
         }

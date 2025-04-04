@@ -49,13 +49,6 @@ class LoadingScreen extends StatelessWidget {
                       color: Colors.white,
                     ),
                     const SizedBox(height: 16),
-                    Text(
-                      'Pikabook',
-                      style: TypographyTokens.subtitle1.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
                   ],
                 ),
               ),

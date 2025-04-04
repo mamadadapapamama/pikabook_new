@@ -516,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         debugPrint('홈 화면 최초 방문 - 툴팁 표시');
         
         // 10초 후에 툴팁 자동으로 숨기기
-        Future.delayed(const Duration(seconds: 10), () {
+        Future.delayed(const Duration(seconds: 5), () {
           if (mounted) {
             setState(() {
               _showTooltip = false;
