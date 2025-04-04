@@ -122,7 +122,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                     : null,
               ),
               
-              // 중앙 컨트롤 영역 (병음 토글 + 모드 전환 버튼 + TTS 버튼)
+              // 중앙 컨트롤 영역 (병음 토글 + 모드 전환 버튼)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -166,61 +166,6 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                       ),
                     ),
                   ),
-                  
-                  SizedBox(width: SpacingTokens.md),
-                  
-                  // TTS 전체 재생 버튼
-                  if (processedText != null && 
-                      processedText!.fullOriginalText.isNotEmpty)
-                    FutureBuilder<bool>(
-                      future: _ttsService.isTtsAvailable(),
-                      builder: (context, snapshot) {
-                        final bool isEnabled = snapshot.hasData && snapshot.data == true;
-                        final String? ttsTooltip = isEnabled ? null : '무료 TTS 사용량을 모두 사용했습니다.';
-                        
-                        return GestureDetector(
-                          onTap: isEnabled ? () {} : null,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
-                              vertical: SpacingTokens.xs + SpacingTokens.xs/2
-                            ),
-                            decoration: BoxDecoration(
-                              color: ColorTokens.surface,
-                              borderRadius: BorderRadius.circular(100),
-                              border: Border.all(
-                                color: isEnabled 
-                                  ? ColorTokens.secondary 
-                                  : ColorTokens.greyMedium
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                TtsButton(
-                                  text: processedText!.fullOriginalText,
-                                  size: TtsButton.sizeMedium,
-                                  tooltip: ttsTooltip,
-                                  iconColor: isEnabled 
-                                    ? ColorTokens.secondary 
-                                    : ColorTokens.greyMedium,
-                                  useCircularShape: false,
-                                ),
-                                SizedBox(width: SpacingTokens.xs),
-                                Text(
-                                  '전체 재생',
-                                  style: TypographyTokens.caption.copyWith(
-                                    color: isEnabled 
-                                      ? ColorTokens.secondary 
-                                      : ColorTokens.greyMedium,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
                   
                   SizedBox(width: SpacingTokens.md),
                   

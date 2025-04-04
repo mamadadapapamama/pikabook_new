@@ -941,6 +941,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
   
+  // 사용량 제한 다이얼로그 표시
+  Future<void> _showUsageLimitDialog() async {
+    final limitStatus = await _planService.checkUserLimits();
+    
+    if (context.mounted) {
+      await UsageLimitDialog.show(
+        context,
+        limitStatus: limitStatus,
+        usagePercentages: _usagePercentages,
+        onContactSupport: _contactSupport,
+      );
+    }
+  }
+  
+  // 문의하기 기능
+  void _contactSupport() async {
+    try {
+      // 현재 사용량 및 플랜 정보를 포함한 문의 내용 생성
+      final planName = _planName;
+      final ocrUsage = _currentUsage['ocrPages'] ?? 0;
+      final storageUsage = _formatBytes(_currentUsage['storageUsageBytes'] ?? 0);
+      
+      final subject = '[피카북] 사용량 문의';
+      final body = '플랜: $planName\n'
+                 'OCR 사용량: $ocrUsage\n'
+                 '저장 공간: $storageUsage\n'
+                 '사용자 ID: ${_currentUser?.uid ?? '알 수 없음'}\n';
+      
+      // PlanService의 문의하기 기능 호출
+      await _planService.contactSupport(subject: subject, body: body);
+      
+      // 성공 메시지 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('문의가 등록되었습니다.'),
+            backgroundColor: ColorTokens.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('문의 등록 중 오류가 발생했습니다: $e'),
+            backgroundColor: ColorTokens.error,
+          ),
+        );
+      }
+    }
+  }
+  
   // 바이트 크기 포맷팅
   String _formatBytes(int bytes) {
     if (bytes < 1024) {
@@ -951,19 +1003,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     } else {
       return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-    }
-  }
-  
-  // 사용량 제한 다이얼로그 표시
-  Future<void> _showUsageLimitDialog() async {
-    final limitStatus = await _planService.checkUserLimits();
-    
-    if (context.mounted) {
-      await UsageLimitDialog.show(
-        context,
-        limitStatus: limitStatus,
-        usagePercentages: _usagePercentages,
-      );
     }
   }
 }

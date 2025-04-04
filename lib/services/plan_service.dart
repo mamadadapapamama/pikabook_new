@@ -76,7 +76,7 @@ class PlanService {
       case PLAN_PREMIUM:
         return '프리미엄';
       case PLAN_BETA:
-        return '베타 테스터';
+        return '베타 트라이얼';
       case PLAN_FREE:
       default:
         return '무료';
@@ -154,5 +154,17 @@ class PlanService {
   /// 사용자 제한 상태 확인
   Future<Map<String, dynamic>> checkUserLimits() async {
     return await _usageLimitService.checkFreeLimits();
+  }
+  
+  /// 문의하기 기능
+  Future<void> contactSupport({String? subject, String? body}) async {
+    try {
+      // 여기에 문의하기 기능 구현 (이메일 발송 등)
+      // 나중에 확장하기 위한 공간
+      debugPrint('문의하기 기능 호출됨: subject=$subject, body=$body');
+    } catch (e) {
+      debugPrint('문의하기 기능 오류: $e');
+      rethrow;
+    }
   }
 } 

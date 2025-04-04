@@ -63,23 +63,18 @@ class UsageLimitDialog extends StatelessWidget {
           ],
         ),
       ),
+      actionsPadding: EdgeInsets.all(SpacingTokens.md),
       actions: [
         // 1:1 문의하기 버튼
         if (onContactSupport != null)
-          TextButton(
+          PikaButton(
+            text: '문의하기',
+            variant: PikaButtonVariant.outline,
+            size: PikaButtonSize.small,
             onPressed: () {
               Navigator.of(context).pop();
               onContactSupport!();
             },
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-            ),
-            child: Text(
-              '1:1 문의하기',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.primary,
-              ),
-            ),
           ),
           
         // 확인 버튼
@@ -90,7 +85,6 @@ class UsageLimitDialog extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ],
-      actionsPadding: EdgeInsets.all(SpacingTokens.md),
     );
   }
 
@@ -124,21 +118,21 @@ class UsageLimitDialog extends StatelessWidget {
     
     // 저장 공간 제한
     if (limitStatus['storageLimitReached'] == true) {
-      return '베타 기간 동안 사용할 수 있는 저장 공간 한도에 도달했습니다. 불필요한 이미지나 노트를 삭제하여 공간을 확보하세요.';
+      return '베타 기간 동안 사용할 수 있는 저장 공간 한도에 도달했습니다. 더 많은 저장 공간을 원하시면 설정 > 내 플랜 > 문의하기 를 통해 문의주세요.';
     }
     
     // OCR 제한
     if (limitStatus['ocrLimitReached'] == true) {
-      return '베타 기간 동안 사용할 수 있는 OCR 인식 페이지 수 한도에 도달했습니다. 기능 테스트에 도움을 주셔서 감사합니다.';
+      return '베타 기간 동안 사용할 수 있는 OCR 인식 페이지 수 한도에 도달했습니다. 더 많은 기능을 원하시면 설정 > 내 플랜 > 문의하기 를 통해 문의주세요. ';
     }
     
     // TTS 제한
     if (limitStatus['ttsLimitReached'] == true) {
-      return '베타 기간 동안 사용할 수 있는 음성 읽기 횟수 한도에 도달했습니다. 기능 테스트에 도움을 주셔서 감사합니다.';
+      return '베타 기간 동안 사용할 수 있는 음성 읽기 횟수 한도에 도달했습니다. 더 많은 기능을 원하시면 설정 > 내 플랜 > 문의하기 를 통해 문의주세요.';
     }
     
     // 일반 메시지
-    return '베타 기간 동안 무료로 사용할 수 있는 한도에 도달했습니다. 더 많은 기능을 이용하시려면 정식 서비스 출시를 기다려주세요.';
+    return '일정 기능이 무료 사용 한도에 도달했습니다. 더 많은 기능을 이용하시려면 문의하기를 통해 요청해 주세요.';
   }
   
   // 베타 기간 정보를 표시할지 여부

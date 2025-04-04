@@ -168,7 +168,7 @@ class _TtsButtonState extends State<TtsButton> {
     
     // 배경색 설정
     final Color backgroundColor = _isPlaying 
-        ? widget.activeBackgroundColor ?? ColorTokens.primary.withOpacity(0.1)
+        ? widget.activeBackgroundColor ?? ColorTokens.secondaryLight
         : Colors.transparent;
     
     Widget buttonWidget;
@@ -181,10 +181,8 @@ class _TtsButtonState extends State<TtsButton> {
         decoration: BoxDecoration(
           color: backgroundColor,
           shape: BoxShape.circle,
-          border: Border.all(
-            color: _isEnabled ? ColorTokens.primary.withOpacity(0.2) : Colors.transparent,
-            width: 1,
-          ),
+          // 테두리 제거 (재생 상태에 관계없이 항상 테두리 없음)
+          border: null,
         ),
         child: IconButton(
           icon: Icon(
@@ -216,6 +214,10 @@ class _TtsButtonState extends State<TtsButton> {
         ),
         onPressed: _isEnabled ? _togglePlayback : null,
         splashRadius: widget.size / 2,
+        // 재생 중일 때 배경색 적용
+        style: IconButton.styleFrom(
+          backgroundColor: backgroundColor,
+        ),
       );
     }
     
