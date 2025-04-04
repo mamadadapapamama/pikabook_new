@@ -294,6 +294,11 @@ class PageContentService {
     }
   }
 
+  // TTS 서비스 반환 메서드 추가
+  TtsService getTtsService() {
+    return _ttsService;
+  }
+
   // TTS 중지
   Future<void> stopSpeaking() async {
     await _ttsService.stop();

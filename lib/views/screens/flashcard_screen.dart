@@ -127,26 +127,24 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     setState(() => _isFlipped = !_isFlipped);
   }
 
-  /// 현재 카드 음성 재생
-  Future<void> _speakCurrentCard() async {
-    if (_flashCards.isEmpty || _currentIndex >= _flashCards.length) return;
+  /// 음성 재생 기능 (TTS)
+  Future<void> _speakText() async {
+    if (_flashCards.isEmpty) return;
     if (_isSpeaking) {
       await _stopSpeaking();
       return;
     }
 
-    // TTS 제한 확인
+    // TTS 사용량 제한 확인
     final usageLimitService = UsageLimitService();
     final limitStatus = await usageLimitService.checkFreeLimits();
-    final usagePercentages = await usageLimitService.getUsagePercentages();
-    
-    // TTS 제한에 도달한 경우 다이얼로그 표시
     if (limitStatus['ttsLimitReached'] == true) {
+      // 제한에 도달한 경우 다이얼로그 표시
       if (mounted) {
         UsageLimitDialog.show(
-          context,
+          context, 
           limitStatus: limitStatus,
-          usagePercentages: usagePercentages,
+          usagePercentages: await usageLimitService.getUsagePercentages(),
           onContactSupport: () {
             // TODO: 지원팀 문의 기능 추가
           },
@@ -653,7 +651,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               onFlip: () {
                                 setState(() => _isFlipped = !_isFlipped);
                               },
-                              onSpeak: _speakCurrentCard,
+                              onSpeak: _speakText,
                               onStopSpeaking: _stopSpeaking,
                               getNextCardInfo: _getNextCardInfo,
                               getPreviousCardInfo: _getPreviousCardInfo,
@@ -661,6 +659,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               onDelete: _deleteCurrentCard,
                               scale: scale,
                               offset: Offset(0, yOffset),
+                              isTtsEnabled: _ttsService.isTtsAvailable().then((value) => value),
+                              ttsTooltip: _ttsService.getTtsLimitMessage(),
                             );
                           },
                         ),

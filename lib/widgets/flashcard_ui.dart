@@ -27,6 +27,8 @@ class FlashCardUI {
     Function(String)? onWordTap,
     double scale = 1.0,
     Offset offset = Offset.zero,
+    bool isTtsEnabled = true,
+    String? ttsTooltip,
   }) {
     final bool isCurrentCard = index == currentIndex;
     
@@ -75,6 +77,8 @@ class FlashCardUI {
                         getNextCardInfo: getNextCardInfo,
                         getPreviousCardInfo: getPreviousCardInfo,
                         onWordTap: onWordTap,
+                        isEnabled: isTtsEnabled,
+                        tooltip: ttsTooltip,
                       ),
                       back: buildCardSide(
                         card: card,
@@ -89,6 +93,8 @@ class FlashCardUI {
                         getNextCardInfo: getNextCardInfo,
                         getPreviousCardInfo: getPreviousCardInfo,
                         onWordTap: onWordTap,
+                        isEnabled: isTtsEnabled,
+                        tooltip: ttsTooltip,
                       ),
                     ),
                   ),
@@ -115,6 +121,8 @@ class FlashCardUI {
     required String? Function() getNextCardInfo,
     required String? Function() getPreviousCardInfo,
     Function(String)? onWordTap,
+    bool isEnabled = true,
+    String? tooltip,
   }) {
     // 표시할 텍스트와 핀인 결정
     final String displayText = isFront ? card.front : card.back;
@@ -135,6 +143,8 @@ class FlashCardUI {
                 isSpeaking: isSpeaking,
                 onSpeak: onSpeak,
                 onStopSpeaking: onStopSpeaking,
+                isEnabled: isEnabled,
+                tooltip: tooltip,
               )
             : buildBackCardContent(
                 card.back,
@@ -145,6 +155,8 @@ class FlashCardUI {
                 isSpeaking: isSpeaking,
                 onSpeak: onSpeak,
                 onStopSpeaking: onStopSpeaking,
+                isEnabled: isEnabled,
+                tooltip: tooltip,
               ),
 
           // 카드 번호 표시 (좌상단)
@@ -182,6 +194,8 @@ class FlashCardUI {
     required bool isSpeaking,
     required Function() onSpeak,
     required Function() onStopSpeaking,
+    bool isEnabled = true,
+    String? tooltip,
   }) {
     return Center(
       child: Padding(
@@ -190,7 +204,14 @@ class FlashCardUI {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TTS 버튼 (단어 위에 위치)
-            buildTtsButtonInline(ColorTokens.secondary, isSpeaking, onSpeak, onStopSpeaking),
+            buildTtsButtonInline(
+              ColorTokens.secondary, 
+              isSpeaking, 
+              onSpeak, 
+              onStopSpeaking,
+              isEnabled: isEnabled,
+              tooltip: tooltip,
+            ),
             SizedBox(height: SpacingTokens.sm),
             
             // 단어/의미 텍스트
@@ -227,6 +248,8 @@ class FlashCardUI {
     required bool isSpeaking,
     required Function() onSpeak,
     required Function() onStopSpeaking,
+    bool isEnabled = true,
+    String? tooltip,
   }) {
     return Center(
       child: Padding(
@@ -235,7 +258,14 @@ class FlashCardUI {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TTS 버튼 (단어 위에 위치)
-            buildTtsButtonInline(ColorTokens.secondary, isSpeaking, onSpeak, onStopSpeaking),
+            buildTtsButtonInline(
+              ColorTokens.secondary, 
+              isSpeaking, 
+              onSpeak, 
+              onStopSpeaking,
+              isEnabled: isEnabled,
+              tooltip: tooltip,
+            ),
             SizedBox(height: SpacingTokens.sm),
             
             // 번역 (의미)
@@ -278,20 +308,31 @@ class FlashCardUI {
     Color iconColor,
     bool isSpeaking,
     Function() onSpeak,
-    Function() onStopSpeaking,
-  ) {
-    return InkWell(
-      onTap: isSpeaking ? onStopSpeaking : onSpeak,
+    Function() onStopSpeaking, {
+    bool isEnabled = true,
+    String? tooltip,
+  }) {
+    final Widget button = InkWell(
+      onTap: !isEnabled ? null : (isSpeaking ? onStopSpeaking : onSpeak),
       child: SizedBox(
         width: SpacingTokens.iconSizeMedium,
         height: SpacingTokens.iconSizeMedium,
         child: Icon(
           isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
-          color: iconColor,
+          color: isEnabled ? iconColor : ColorTokens.textGrey.withOpacity(0.5),
           size: SpacingTokens.iconSizeMedium,
         ),
       ),
     );
+    
+    if (tooltip != null && !isEnabled) {
+      return Tooltip(
+        message: tooltip,
+        child: button,
+      );
+    }
+    
+    return button;
   }
 
   /// 카드 번호 배지 생성

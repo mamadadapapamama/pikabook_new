@@ -176,7 +176,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
     try {
       debugPrint("노트 생성 시작: ${images.length}개 이미지");
-
+      
       // 로딩 다이얼로그 표시 - 첫 페이지 로딩까지만 표시
       if (context.mounted) {
         // 새 로딩 다이얼로그 표시 (단순화 - 기존 다이얼로그 닫기 시도 제거)
@@ -251,7 +251,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
     } catch (e) {
       debugPrint("노트 생성 중 오류 발생: $e");
-
+      
       // 오류 발생 시 로딩 다이얼로그 닫기
       if (isLoadingDialogShowing && context.mounted) {
         try {

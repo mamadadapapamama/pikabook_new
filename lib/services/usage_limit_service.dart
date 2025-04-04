@@ -17,13 +17,13 @@ class UsageLimitService {
   
   // 베타 기간 동안의 무료 사용 제한 (테스트용)
   static const int MAX_FREE_TRANSLATION_CHARS = 100;  // 번역 최대 글자 수
-  static const int MAX_FREE_OCR_REQUESTS = 2;          // OCR 요청 최대 수
+  static const int MAX_FREE_OCR_PAGES = 5;           // OCR 최대 페이지 수 (요청당 아닌 총 페이지 수)
   static const int MAX_FREE_TTS_REQUESTS = 5;       // TTS 요청 최대 수
   static const int MAX_FREE_STORAGE_BYTES = 100 * 1024 * 1024; // 100MB 스토리지
   
   // 월별 기본 무료 사용 제한 (베타 이후)
-  static const int BASIC_FREE_TRANSLATION_CHARS = 500;   // 번역 최대 글자 수  static const int BASIC_FREE_PAGES = 5;                 // OCR 페이지 최대 개수
-  static const int BASIC_FREE_OCR_REQUESTS = 5;          // OCR 요청 최대 횟수
+  static const int BASIC_FREE_TRANSLATION_CHARS = 500;   // 번역 최대 글자 수
+  static const int BASIC_FREE_OCR_PAGES = 10;           // OCR 최대 페이지 수 (월별)
   static const int BASIC_FREE_TTS_REQUESTS = 100;        // TTS 요청 최대 글자 수
   static const int BASIC_FREE_STORAGE_MB = 20;           // 저장 공간 최대 크기 (MB)
   
@@ -34,7 +34,7 @@ class UsageLimitService {
   UsageLimitService._internal();
   
   // SharedPreferences 키
-  static const String _kOcrCountKey = 'ocr_count';
+  static const String _kOcrPagesKey = 'ocr_pages';
   static const String _kTranslationCharCountKey = 'translation_char_count';
   static const String _kTtsCharCountKey = 'tts_char_count';
   static const String _kDictionaryCountKey = 'dictionary_count';
@@ -86,9 +86,35 @@ class UsageLimitService {
     return userId != null ? '${userId}_$baseKey' : baseKey;
   }
   
-  /// OCR 사용량 증가
+  /// OCR 페이지 사용량 증가
+  Future<bool> incrementOcrPages(int pageCount) async {
+    final usageData = await _loadUsageData();
+    final int currentUsage = (usageData['ocrPages'] ?? 0) as int;
+    
+    // 현재 남은 페이지 수 계산
+    final int remainingPages = MAX_FREE_OCR_PAGES - currentUsage;
+    
+    // 남은 페이지가 없으면 실패 반환
+    if (remainingPages <= 0) {
+      return false;
+    }
+    
+    // 남은 페이지 내에서 최대한 처리 (초과해도 일단 처리)
+    final int newUsage = currentUsage + pageCount;
+    usageData['ocrPages'] = newUsage;
+    await _saveUsageData(usageData);
+    
+    debugPrint('OCR 페이지 사용량 증가: $newUsage/$MAX_FREE_OCR_PAGES (요청: $pageCount, 남은 페이지: $remainingPages)');
+    
+    // 요청을 처리했으므로 true 반환
+    return true;
+  }
+  
+  /// OCR 요청을 페이지 수 기준으로 증가 (기존 메서드 유지, 하위 호환성)
+  @Deprecated('incrementOcrPages 메서드를 대신 사용하세요')
   Future<bool> incrementOcrCount() async {
-    return await _incrementUsage('ocrRequests', 1, MAX_FREE_OCR_REQUESTS);
+    // 이전 버전 호환성을 위해 유지하지만 내부적으로는 페이지 1개로 처리
+    return await incrementOcrPages(1);
   }
   
   /// 번역 문자 사용량 증가
@@ -186,13 +212,13 @@ class UsageLimitService {
     final bool betaEnded = now.isAfter(betaEndDate);
     
     // 현재 사용량
-    final ocrUsage = usageData['ocrRequests'] ?? 0;
+    final ocrUsage = usageData['ocrPages'] ?? 0;
     final ttsUsage = usageData['ttsRequests'] ?? 0;
     final translatedChars = usageData['translatedChars'] ?? 0;
     final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
     
     // 각 제한 초과 여부 확인
-    final bool ocrLimitReached = ocrUsage >= MAX_FREE_OCR_REQUESTS;
+    final bool ocrLimitReached = ocrUsage >= MAX_FREE_OCR_PAGES;
     final bool ttsLimitReached = ttsUsage >= MAX_FREE_TTS_REQUESTS;
     final bool translationLimitReached = translatedChars >= MAX_FREE_TRANSLATION_CHARS;
     final bool storageLimitReached = storageUsageBytes >= MAX_FREE_STORAGE_BYTES;
@@ -231,7 +257,7 @@ class UsageLimitService {
       // 사용량 데이터 초기화
       await _saveUsageData({
         'betaStartDate': DateTime.now().toIso8601String(),
-        'ocrRequests': 0,
+        'ocrPages': 0,
         'ttsRequests': 0,
         'translatedChars': 0,
         'storageUsageBytes': 0,
@@ -345,7 +371,7 @@ class UsageLimitService {
     final usageData = await _loadUsageData();
     
     return {
-      'ocrRequests': usageData['ocrRequests'] ?? 0,
+      'ocrPages': usageData['ocrPages'] ?? 0,
       'ttsRequests': usageData['ttsRequests'] ?? 0,
       'translatedChars': usageData['translatedChars'] ?? 0,
       'storageUsageBytes': usageData['storageUsageBytes'] ?? 0,
@@ -380,13 +406,13 @@ class UsageLimitService {
     final usageData = await _loadUsageData();
     
     // 각 항목별 사용량 비율 계산
-    final ocrUsage = usageData['ocrRequests'] ?? 0;
+    final ocrUsage = usageData['ocrPages'] ?? 0;
     final ttsUsage = usageData['ttsRequests'] ?? 0;
     final translatedChars = usageData['translatedChars'] ?? 0;
     final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
     
     return {
-      'ocr': (ocrUsage / MAX_FREE_OCR_REQUESTS) * 100,
+      'ocr': (ocrUsage / MAX_FREE_OCR_PAGES) * 100,
       'tts': (ttsUsage / MAX_FREE_TTS_REQUESTS) * 100,
       'translation': (translatedChars / MAX_FREE_TRANSLATION_CHARS) * 100,
       'storage': (storageUsageBytes / MAX_FREE_STORAGE_BYTES) * 100,
@@ -493,5 +519,45 @@ class UsageLimitService {
       await _saveUsageData(usageData);
       debugPrint('pages 사용량 감소: ${currentUsage - 1}/무제한');
     }
+  }
+
+  /// 남은 OCR 페이지 수 얻기
+  Future<int> getRemainingOcrPages() async {
+    final usageData = await _loadUsageData();
+    final int usedPages = (usageData['ocrPages'] ?? 0) as int;
+    final int remaining = MAX_FREE_OCR_PAGES - usedPages;
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  /// OCR 페이지 사용량 얻기
+  Future<int> getUsedOcrPages() async {
+    final usageData = await _loadUsageData();
+    return usageData['ocrPages'] ?? 0;
+  }
+
+  /// OCR 페이지 사용량 감소 (오류 발생 시 롤백에 사용)
+  Future<void> decrementOcrPages(int pageCount) async {
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData['ocrPages'] ?? 0;
+    final newValue = (currentUsage - pageCount).clamp(0, double.maxFinite.toInt());
+    
+    usageData['ocrPages'] = newValue;
+    await _saveUsageData(usageData);
+    debugPrint('OCR 페이지 사용량 감소: $newValue/$MAX_FREE_OCR_PAGES');
+  }
+
+  /// OCR 페이지를 추가할 수 있는지 확인
+  Future<bool> canAddOcrPages(int pageCount) async {
+    // 0 또는 음수의 페이지 요청은 항상 가능
+    if (pageCount <= 0) return true;
+    
+    final usageData = await _loadUsageData();
+    final int currentUsage = (usageData['ocrPages'] ?? 0) as int;
+    
+    // 현재 남은 페이지 수 계산
+    final int remainingPages = MAX_FREE_OCR_PAGES - currentUsage;
+    
+    // 하나라도 더 추가할 수 있는지 확인 (최소 1페이지 이상 처리 가능해야 함)
+    return remainingPages > 0;
   }
 }

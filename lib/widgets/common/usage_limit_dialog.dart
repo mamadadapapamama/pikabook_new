@@ -129,7 +129,7 @@ class UsageLimitDialog extends StatelessWidget {
     
     // OCR 제한
     if (limitStatus['ocrLimitReached'] == true) {
-      return '베타 기간 동안 사용할 수 있는 OCR 인식 횟수 한도에 도달했습니다. 기능 테스트에 도움을 주셔서 감사합니다.';
+      return '베타 기간 동안 사용할 수 있는 OCR 인식 페이지 수 한도에 도달했습니다. 기능 테스트에 도움을 주셔서 감사합니다.';
     }
     
     // TTS 제한
@@ -247,7 +247,7 @@ class UsageLimitDialog extends StatelessWidget {
   String _getUsageLabel(String key) {
     switch (key) {
       case 'ocr':
-        return 'OCR 인식';
+        return 'OCR 페이지';
       case 'tts':
         return '음성 읽기';
       case 'translation':

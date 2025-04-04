@@ -276,12 +276,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       child: SizedBox(
                         width: double.infinity,
                         child: viewModel.hasNotes
-                            ? PikaButton(
-                                text: '스마트 노트 만들기',
-                                variant: PikaButtonVariant.floating,
-                                leadingIcon: const Icon(Icons.add),
-                                onPressed: () => _handleAddNote(context),
-                              )
+                            ? _isButtonDisabled()
+                              ? Tooltip(
+                                  message: '사용량 한도 초과로 비활성화되었습니다',
+                                  child: PikaButton(
+                                    text: '스마트 노트 만들기',
+                                    variant: PikaButtonVariant.floating,
+                                    leadingIcon: const Icon(Icons.add),
+                                    onPressed: null, // 비활성화
+                                  ),
+                                )
+                              : PikaButton(
+                                  text: '스마트 노트 만들기',
+                                  variant: PikaButtonVariant.floating,
+                                  leadingIcon: const Icon(Icons.add),
+                                  onPressed: () => _handleAddNote(context),
+                                )
                             : const SizedBox.shrink(), // 노트가 없을 때는 FAB 숨김
                       ),
                     );
@@ -580,5 +590,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     
     // 기존의 바텀 시트 표시 함수 호출
     _showImagePickerBottomSheet(context);
+  }
+  
+  // 버튼 비활성화 여부 확인
+  bool _isButtonDisabled() {
+    return _limitStatus['ocrLimitReached'] == true || 
+           _limitStatus['translationLimitReached'] == true || 
+           _limitStatus['storageLimitReached'] == true;
   }
 } 

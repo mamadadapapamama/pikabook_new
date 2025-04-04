@@ -392,6 +392,24 @@ class TtsService {
     }
   }
 
+  /// TTS 사용 가능 여부 확인 (UI에서 버튼 상태 결정에 사용)
+  Future<bool> isTtsAvailable() async {
+    try {
+      final limits = await _usageLimitService.checkFreeLimits();
+      final isLimitReached = limits['ttsLimitReached'] ?? false;
+      debugPrint('TTS 사용 가능 여부: ${!isLimitReached} (제한 도달: $isLimitReached)');
+      return !isLimitReached;
+    } catch (e) {
+      debugPrint('TTS 사용 가능 여부 확인 중 오류: $e');
+      return true; // 오류 시 기본적으로 활성화
+    }
+  }
+
+  /// TTS 제한 안내 메시지 가져오기
+  String getTtsLimitMessage() {
+    return '무료 TTS 사용량(${UsageLimitService.MAX_FREE_TTS_REQUESTS}회)을 모두 사용했습니다. 프리미엄으로 업그레이드하시면 더 많은 TTS를 사용할 수 있습니다.';
+  }
+  
   // 캐시 비우기
   void clearCache() {
     _ttsCache.clear();
@@ -407,5 +425,28 @@ class TtsService {
       await Future.delayed(const Duration(seconds: 1));
       waitCount++;
     }
+  }
+
+  /// 현재 TTS 사용 횟수 가져오기
+  Future<int> getCurrentTtsUsageCount() async {
+    try {
+      final usage = await _usageLimitService.getUserUsage();
+      return usage['ttsRequests'] as int? ?? 0;
+    } catch (e) {
+      debugPrint('TTS 현재 사용량 확인 중 오류: $e');
+      return 0;
+    }
+  }
+
+  /// 전체 TTS 사용 한도 가져오기
+  int getTtsUsageLimit() {
+    return UsageLimitService.MAX_FREE_TTS_REQUESTS;
+  }
+
+  /// TTS 사용량 안내 메시지 가져오기 (현재 사용량 포함)
+  Future<String> getTtsUsageMessage() async {
+    final currentCount = await getCurrentTtsUsageCount();
+    final limit = getTtsUsageLimit();
+    return '현재 TTS 사용량: $currentCount/$limit회';
   }
 }

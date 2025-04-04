@@ -91,29 +91,45 @@ class DictionaryResultWidget extends StatelessWidget {
                   ),
                   SizedBox(width: SpacingTokens.xs),
                   // 발음 듣기 버튼 (원형 배경 추가)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: ColorTokens.secondary.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: () {
-                          pageContentService.speakText(entry.word);
-                        },
-                        child: Padding(
-                          padding: EdgeInsets.all(SpacingTokens.sm),
-                          child: Icon(
-                            Icons.volume_up,
-                            color: ColorTokens.secondary,
-                            size: SpacingTokens.iconSizeMedium,
+                  FutureBuilder<bool>(
+                    future: pageContentService.getTtsService().isTtsAvailable(),
+                    builder: (context, snapshot) {
+                      final bool isTtsEnabled = snapshot.data ?? true;
+                      final Widget ttsButton = Container(
+                        decoration: BoxDecoration(
+                          color: ColorTokens.secondary.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: isTtsEnabled ? () {
+                              pageContentService.speakText(entry.word);
+                            } : null,
+                            child: Padding(
+                              padding: EdgeInsets.all(SpacingTokens.sm),
+                              child: Icon(
+                                Icons.volume_up,
+                                color: isTtsEnabled ? ColorTokens.secondary : ColorTokens.textGrey.withOpacity(0.5),
+                                size: SpacingTokens.iconSizeMedium,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
+                      );
+                      
+                      // TTS 비활성화된 경우 툴팁 표시
+                      if (!isTtsEnabled) {
+                        return Tooltip(
+                          message: pageContentService.getTtsService().getTtsLimitMessage(),
+                          child: ttsButton,
+                        );
+                      }
+                      
+                      return ttsButton;
+                    }
                   ),
                 ],
               ),

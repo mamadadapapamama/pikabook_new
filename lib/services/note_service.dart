@@ -784,15 +784,18 @@ class NoteService {
         };
       }
       
-      // OCR 요청 가능 여부 확인
-      final canUseOcr = await _usageLimitService.incrementOcrCount();
-      if (!canUseOcr) {
+      // OCR 페이지 추가 가능 여부 확인 (단, 페이지가 있으면 일부라도 처리)
+      final canAddOcrPages = await _usageLimitService.canAddOcrPages(pageCount);
+      if (!canAddOcrPages) {
         return {
           'success': false,
           'message': 'OCR 서비스 사용량 한도를 초과했습니다. 관리자에게 문의해주세요.',
           'limitExceeded': true,
         };
       }
+      
+      // OCR 페이지 카운트 증가 (허용된 만큼만 증가)
+      final ocrIncremented = await _usageLimitService.incrementOcrPages(pageCount);
       
       // 페이지 카운트 증가 - 이미지 수만큼 증가
       await _usageLimitService.incrementPageCount(pageCount);
@@ -934,6 +937,8 @@ class NoteService {
           debugPrint('이미지 ${i + 2} 처리 중 오류: $e');
           // 이미지 처리 실패 시 페이지 카운트 감소
           await _usageLimitService.decrementPageCount();
+          // OCR 페이지 카운트도 롤백
+          await _rollbackOcrPageCount();
           errorCount++;
         }
       }
@@ -1112,6 +1117,16 @@ class NoteService {
     } catch (e) {
       debugPrint('노트 이미지 URL 업데이트 중 오류 발생: $e');
       return false;
+    }
+  }
+
+  /// 이미지 처리 오류 시 OCR 페이지 카운트 롤백
+  Future<void> _rollbackOcrPageCount() async {
+    try {
+      await _usageLimitService.decrementOcrPages(1);
+      debugPrint('OCR 페이지 카운트 롤백 완료');
+    } catch (e) {
+      debugPrint('OCR 페이지 카운트 롤백 중 오류: $e');
     }
   }
 }
