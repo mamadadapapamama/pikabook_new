@@ -259,14 +259,25 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       final bool isProcessingBackground = result['isProcessingBackground'] ?? false;
       final String message = result['message'] ?? '노트 생성에 실패했습니다.';
 
-      // 로딩 다이얼로그 닫기 (단순화)
+      // 로딩 다이얼로그 닫기 - 결과 처리 전에 먼저 닫기
       if (isLoadingDialogShowing && context.mounted) {
-        // 네비게이터 작업 감소를 위해 간단한 방식으로만 닫기
         try {
+          // 1. 우선 LoadingDialog 클래스의 메서드로 닫기 시도
           LoadingDialog.hide(context);
-          debugPrint("로딩 다이얼로그 닫기 시도");
+          debugPrint("LoadingDialog.hide로 로딩 다이얼로그 닫기 시도");
           
-          // 잠시 대기하여 다이얼로그가 닫힐 시간 제공
+          // 2. 짧은 지연 후 직접 Navigator로 닫기 시도 (백업)
+          await Future.delayed(const Duration(milliseconds: 200));
+          if (context.mounted) {
+            // rootNavigator를 사용하여 최상위 Navigator에서 닫기
+            final navigator = Navigator.of(context, rootNavigator: true);
+            if (navigator.canPop()) {
+              navigator.pop();
+              debugPrint("Navigator.pop으로 로딩 다이얼로그 닫기 시도");
+            }
+          }
+          
+          // 3. 다이얼로그 닫힘 보장을 위한 추가 지연
           await Future.delayed(const Duration(milliseconds: 300));
         } catch (e) {
           debugPrint("로딩 다이얼로그 닫기 중 오류: $e");
@@ -317,10 +328,21 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       // 오류 발생 시 로딩 다이얼로그 닫기
       if (isLoadingDialogShowing && context.mounted) {
         try {
+          // 1. LoadingDialog 클래스의 메서드로 닫기 시도
           LoadingDialog.hide(context);
-          debugPrint("오류 발생 후 로딩 다이얼로그 닫힘");
+          debugPrint("오류 발생 후 LoadingDialog.hide로 로딩 다이얼로그 닫기 시도");
           
-          // 잠시 대기
+          // 2. 짧은 지연 후 직접 Navigator로 닫기 시도 (백업)
+          await Future.delayed(const Duration(milliseconds: 200));
+          if (context.mounted) {
+            final navigator = Navigator.of(context, rootNavigator: true);
+            if (navigator.canPop()) {
+              navigator.pop();
+              debugPrint("오류 발생 후 Navigator.pop으로 로딩 다이얼로그 닫기 시도");
+            }
+          }
+          
+          // 3. 다이얼로그 닫힘 보장을 위한 추가 지연
           await Future.delayed(const Duration(milliseconds: 300));
         } catch (closeError) {
           debugPrint("오류 발생 후 로딩 다이얼로그 닫기 중 오류: $closeError");

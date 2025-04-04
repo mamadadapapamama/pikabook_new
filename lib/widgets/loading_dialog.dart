@@ -82,12 +82,28 @@ class LoadingDialog {
         return;
       }
       
-      // 단순화된 닫기 로직: 단일 시도만 수행
+      // 즉시 닫기 시도
+      try {
+        final navigator = Navigator.of(effectiveContext, rootNavigator: true);
+        if (navigator.canPop()) {
+          navigator.pop();
+          debugPrint('로딩 다이얼로그 닫기 성공');
+        }
+      } catch (e) {
+        debugPrint('로딩 다이얼로그 닫기 실패: $e');
+      }
+      
+      // 추가 안전장치: addPostFrameCallback으로 한 번 더 시도
       WidgetsBinding.instance.addPostFrameCallback((_) {
         try {
-          // Navigator.pop 직접 호출 (PikabookLoader 사용하지 않음)
-          Navigator.of(effectiveContext, rootNavigator: true).pop();
-          debugPrint('로딩 다이얼로그 닫기 성공 (addPostFrameCallback)');
+          // 컨텍스트가 여전히 유효한지 확인
+          if (effectiveContext.mounted) {
+            final navigator = Navigator.of(effectiveContext, rootNavigator: true);
+            if (navigator.canPop()) {
+              navigator.pop();
+              debugPrint('로딩 다이얼로그 닫기 성공 (addPostFrameCallback)');
+            }
+          }
         } catch (e) {
           debugPrint('로딩 다이얼로그 닫기 실패 (addPostFrameCallback): $e');
         } finally {
