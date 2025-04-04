@@ -1573,7 +1573,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   child: Center(
                     child: DotLoadingIndicator(
                       message: '다음 페이지를 준비하고 있어요.',
-                      dotColor: Color(0xFFFFD53C),
                     ),
                   ),
                 ),

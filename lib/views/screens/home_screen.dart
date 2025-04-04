@@ -421,12 +421,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             
             const SizedBox(height: 32),
             
-            // CTA 버튼 - 이미지 업로드하기
-            PikaButton(
-              text: '이미지 올리기',
-              variant: PikaButtonVariant.primary,
-              onPressed: () => _showImagePickerBottomSheet(context),
-            ),
+            // CTA 버튼 - 이미지 업로드하기 (사용량 초과시 비활성화)
+            _isButtonDisabled()
+              ? Tooltip(
+                  message: '사용량 한도 초과로 비활성화되었습니다',
+                  child: PikaButton(
+                    text: '이미지 올리기',
+                    variant: PikaButtonVariant.primary,
+                    onPressed: null, // 비활성화
+                  ),
+                )
+              : PikaButton(
+                  text: '이미지 올리기',
+                  variant: PikaButtonVariant.primary,
+                  onPressed: () => _showImagePickerBottomSheet(context),
+                ),
           ],
         ),
       ),
