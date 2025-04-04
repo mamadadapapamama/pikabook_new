@@ -15,7 +15,7 @@ import '../theme/tokens/spacing_tokens.dart';
 import '../utils/segment_utils.dart';
 import '../services/text_reader_service.dart'; // TTS 서비스 추가
 import '../services/usage_limit_service.dart';
-import '../widgets/common/usage_limit_dialog.dart';
+import '../widgets/common/usage_dialog.dart';
 
 /// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
 ///
@@ -232,13 +232,12 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     if (isLimitReached) {
       // TTS 제한에 도달한 경우 다이얼로그 표시
       if (mounted) {
-        UsageLimitDialog.show(
+        UsageDialog.show(
           context,
           limitStatus: _ttsLimitStatus!,
           usagePercentages: _ttsUsagePercentages!,
           onContactSupport: () {
-            // 지원팀 문의하기
-            // 구현 필요시 나중에 추가
+            // TODO: 지원팀 문의 기능 구현
           },
         );
       }

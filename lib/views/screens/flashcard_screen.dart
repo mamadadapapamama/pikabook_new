@@ -16,7 +16,7 @@ import '../../theme/tokens/spacing_tokens.dart';
 import '../../widgets/common/pika_app_bar.dart';
 import '../../services/unified_cache_service.dart';
 import '../../services/usage_limit_service.dart';
-import '../../widgets/common/usage_limit_dialog.dart';
+import '../../widgets/common/usage_dialog.dart';
 
 /// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
 /// 플래시카드 UI interaction 담당 (swipe, flip, tts, delete )
@@ -142,8 +142,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     if (limitStatus['ttsLimitReached'] == true) {
       // 제한에 도달한 경우 다이얼로그 표시
       if (mounted) {
-        UsageLimitDialog.show(
-          context, 
+        UsageDialog.show(
+          context,
           limitStatus: limitStatus,
           usagePercentages: await usageLimitService.getUsagePercentages(),
           onContactSupport: () {

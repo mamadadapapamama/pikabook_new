@@ -23,7 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../widgets/common/pika_button.dart';
 import '../../widgets/common/help_text_tooltip.dart';
 import '../../widgets/common/pika_app_bar.dart';
-import '../../widgets/common/usage_limit_dialog.dart';
+import '../../widgets/common/usage_dialog.dart';
 import 'flashcard_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -323,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         // 약간의 지연 후 다이얼로그 표시 (화면 전환 애니메이션 완료 후)
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
-            UsageLimitDialog.show(
+            UsageDialog.show(
               context,
               limitStatus: limitStatus,
               usagePercentages: usagePercentages,

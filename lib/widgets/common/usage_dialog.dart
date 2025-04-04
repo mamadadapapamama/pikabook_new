@@ -4,16 +4,16 @@ import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import 'pika_button.dart';
 
-/// 사용량 제한 다이얼로그
-/// 베타 기간 동안 기능 제한에 도달했을 때 표시됩니다.
-class UsageLimitDialog extends StatelessWidget {
+/// 사용량 확인 다이얼로그
+/// 사용량 정보 및 제한 상태를 확인할 수 있습니다.
+class UsageDialog extends StatelessWidget {
   final String? title;
   final String? message;
   final Map<String, dynamic> limitStatus;
   final Map<String, double> usagePercentages;
   final Function? onContactSupport;
 
-  const UsageLimitDialog({
+  const UsageDialog({
     Key? key,
     this.title,
     this.message,
@@ -24,9 +24,17 @@ class UsageLimitDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 실제 제한 도달 정보 기반으로 제목과 메시지 설정
-    final String effectiveTitle = title ?? _getLimitTitle();
-    final String effectiveMessage = message ?? _getLimitMessage();
+    // 한도 초과 여부 확인
+    final bool hasReachedLimit = _hasReachedAnyLimit();
+    
+    // 상태에 따른 제목과 메시지 설정
+    final String effectiveTitle = title ?? (hasReachedLimit 
+        ? '사용량 제한에 도달했습니다' 
+        : '현재까지의 사용량');
+        
+    final String effectiveMessage = message ?? (hasReachedLimit 
+        ? '사용하시는 일정 기능이 한도에 도달했습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.' 
+        : '');
 
     return AlertDialog(
       shape: RoundedRectangleBorder(
@@ -52,14 +60,16 @@ class UsageLimitDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              effectiveMessage,
-              style: TypographyTokens.body2,
-            ),
-            SizedBox(height: SpacingTokens.md),
+            if (effectiveMessage.isNotEmpty) ...[
+              Text(
+                effectiveMessage,
+                style: TypographyTokens.body2,
+              ),
+              SizedBox(height: SpacingTokens.md),
+            ],
             
-            // 사용량 현황 그래프 (필요한 경우)
-            if (_shouldShowUsageGraph()) _buildUsageGraph(),
+            // 사용량 현황 그래프
+            _buildUsageGraph(),
           ],
         ),
       ),
@@ -88,51 +98,13 @@ class UsageLimitDialog extends StatelessWidget {
     );
   }
 
-  // 어떤 제한에 도달했는지 기반으로 제목 생성
-  String _getLimitTitle() {
-    if (limitStatus['betaEnded'] == true) {
-      return '베타 기간이 종료되었습니다';
-    }
-    
-    if (limitStatus['storageLimitReached'] == true) {
-      return '저장 공간 제한에 도달했습니다';
-    }
-    
-    if (limitStatus['ocrLimitReached'] == true) {
-      return 'OCR 사용량 제한에 도달했습니다';
-    }
-    
-    if (limitStatus['ttsLimitReached'] == true) {
-      return '음성 읽기 사용량 제한에 도달했습니다';
-    }
-    
-    return '사용량 제한에 도달했습니다';
-  }
-  
-  // 제한 종류에 맞는 메시지 생성
-  String _getLimitMessage() {
-    // 베타 종료
-    if (limitStatus['betaEnded'] == true) {
-      return '피카북 베타 테스트 기간이 종료되었습니다. 정식 서비스 출시를 기다려주세요.';
-    }
-    
-    // 저장 공간 제한
-    if (limitStatus['storageLimitReached'] == true) {
-      return '베타 기간 동안 사용할 수 있는 저장 공간 한도에 도달했습니다. 더 많은 저장 공간을 원하시면 설정 > 내 플랜 > 문의하기 를 통해 문의주세요.';
-    }
-    
-    // OCR 제한
-    if (limitStatus['ocrLimitReached'] == true) {
-      return '베타 기간 동안 사용할 수 있는 OCR 인식 페이지 수 한도에 도달했습니다. 더 많은 기능을 원하시면 설정 > 내 플랜 > 문의하기 를 통해 문의주세요. ';
-    }
-    
-    // TTS 제한
-    if (limitStatus['ttsLimitReached'] == true) {
-      return '베타 기간 동안 사용할 수 있는 음성 읽기 횟수 한도에 도달했습니다. 더 많은 기능을 원하시면 설정 > 내 플랜 > 문의하기 를 통해 문의주세요.';
-    }
-    
-    // 일반 메시지
-    return '일정 기능이 무료 사용 한도에 도달했습니다. 더 많은 기능을 이용하시려면 문의하기를 통해 요청해 주세요.';
+  // 어떤 한도든 초과했는지 확인
+  bool _hasReachedAnyLimit() {
+    return limitStatus['ocrLimitReached'] == true ||
+           limitStatus['ttsLimitReached'] == true ||
+           limitStatus['translationLimitReached'] == true ||
+           limitStatus['storageLimitReached'] == true ||
+           limitStatus['betaEnded'] == true;
   }
   
   // 베타 기간 정보를 표시할지 여부
@@ -172,11 +144,13 @@ class UsageLimitDialog extends StatelessWidget {
   
   // 사용량 그래프 위젯
   Widget _buildUsageGraph() {
-    // 사용량이 가장 많은 항목 3개만 표시
-    final sortedEntries = usagePercentages.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
-    final topEntries = sortedEntries.take(3).toList();
+    // 항상 4가지 주요 사용량을 표시 (ocr, tts, translation, storage)
+    final List<MapEntry<String, double>> entries = [
+      MapEntry('ocr', usagePercentages['ocr'] ?? 0.0),
+      MapEntry('tts', usagePercentages['tts'] ?? 0.0),
+      MapEntry('translation', usagePercentages['translation'] ?? 0.0),
+      MapEntry('storage', usagePercentages['storage'] ?? 0.0),
+    ];
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -188,7 +162,7 @@ class UsageLimitDialog extends StatelessWidget {
           ),
         ),
         SizedBox(height: SpacingTokens.sm),
-        ...topEntries.map((entry) {
+        ...entries.map((entry) {
           final String label = _getUsageLabel(entry.key);
           final double percentage = entry.value.clamp(0, 100);
           
@@ -247,7 +221,7 @@ class UsageLimitDialog extends StatelessWidget {
       case 'translation':
         return '번역';
       case 'storage':
-        return '저장 공간';
+        return '저장 공간 (100MB)';
       default:
         return key;
     }
@@ -264,7 +238,7 @@ class UsageLimitDialog extends StatelessWidget {
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return UsageLimitDialog(
+        return UsageDialog(
           limitStatus: limitStatus,
           usagePercentages: usagePercentages,
           onContactSupport: onContactSupport,

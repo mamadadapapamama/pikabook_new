@@ -11,7 +11,7 @@ import '../../widgets/dot_loading_indicator.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/common/pika_button.dart';
 import '../../widgets/common/pika_app_bar.dart';
-import '../../widgets/common/usage_limit_dialog.dart';
+import '../../widgets/common/usage_dialog.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_service.dart';
 import '../../services/plan_service.dart';
@@ -844,7 +844,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           // 사용량 확인 버튼
           GestureDetector(
-            onTap: _showUsageLimitDialog,
+            onTap: _showUsageDialog,
             child: Row(
               children: [
                 Text(
@@ -941,12 +941,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
   
-  // 사용량 제한 다이얼로그 표시
-  Future<void> _showUsageLimitDialog() async {
+  // 사용량 다이얼로그 표시
+  Future<void> _showUsageDialog() async {
     final limitStatus = await _planService.checkUserLimits();
     
     if (context.mounted) {
-      await UsageLimitDialog.show(
+      await UsageDialog.show(
         context,
         limitStatus: limitStatus,
         usagePercentages: _usagePercentages,
