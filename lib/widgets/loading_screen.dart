@@ -79,7 +79,7 @@ class LoadingScreen extends StatelessWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text('건너뛰기'),
+                            const Text('skip'),
                             const SizedBox(width: 4),
                             Icon(
                               Icons.arrow_forward,

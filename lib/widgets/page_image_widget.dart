@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../views/screens/full_image_screen.dart';
 import '../widgets/dot_loading_indicator.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 페이지 이미지를 표시하는 위젯
 class PageImageWidget extends StatelessWidget {
@@ -84,6 +85,27 @@ class PageImageWidget extends StatelessWidget {
           return _buildErrorWidget();
         },
       );
+    } else if (imageUrl != null && imageUrl!.isNotEmpty) {
+      return FutureBuilder<File?>(
+        future: _getImageFile(imageUrl!),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return _buildLoadingIndicator();
+          } else if (snapshot.hasData && snapshot.data != null) {
+            return Image.file(
+              snapshot.data!,
+              height: 200,
+              width: double.infinity,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return _buildErrorWidget();
+              },
+            );
+          } else {
+            return _buildErrorWidget();
+          }
+        },
+      );
     } else {
       return Container(
         width: double.infinity,
@@ -93,6 +115,26 @@ class PageImageWidget extends StatelessWidget {
           child: Text('이미지를 찾을 수 없습니다.'),
         ),
       );
+    }
+  }
+
+  // 이미지 URL을 파일로 변환
+  Future<File?> _getImageFile(String imageUrl) async {
+    try {
+      if (imageUrl.startsWith('images/')) {
+        // 로컬 파일 경로 가져오기
+        final directory = await getApplicationDocumentsDirectory();
+        final filePath = '${directory.path}/$imageUrl';
+        final file = File(filePath);
+        
+        if (await file.exists()) {
+          return file;
+        }
+      }
+      return null;
+    } catch (e) {
+      print('이미지 파일 로드 오류: $e');
+      return null;
     }
   }
 

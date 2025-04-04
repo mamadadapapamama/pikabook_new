@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 이미지를 전체 화면으로 표시하는 화면
 class FullImageScreen extends StatefulWidget {
@@ -154,20 +155,55 @@ class _FullImageScreenState extends State<FullImageScreen> {
     else if (widget.imageUrl != null && widget.imageUrl!.isNotEmpty) {
       print('이미지 URL로 로딩 시도: ${widget.imageUrl}');
       
-      return Image.network(
-        widget.imageUrl!,
-        fit: BoxFit.contain,
-        width: double.infinity,
-        height: double.infinity,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return _buildLoadingWidget(loadingProgress);
-        },
-        errorBuilder: (context, error, stackTrace) {
-          print('이미지 URL 로드 에러: $error');
-          return _buildErrorWidget();
-        },
-      );
+      // imageUrl이 상대 경로인 경우 (images/로 시작하는 경우) 파일로 로드
+      if (widget.imageUrl!.startsWith('images/')) {
+        return FutureBuilder<String>(
+          future: _getFullImagePath(widget.imageUrl!),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return _buildLoadingWidget(null);
+            } else if (snapshot.hasData && snapshot.data != null) {
+              final imagePath = snapshot.data!;
+              final imageFile = File(imagePath);
+              
+              // 파일 존재 여부 확인
+              if (imageFile.existsSync()) {
+                return Image.file(
+                  imageFile,
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                  height: double.infinity,
+                  errorBuilder: (context, error, stackTrace) {
+                    print('이미지 파일 로드 에러: $error');
+                    return _buildErrorWidget();
+                  },
+                );
+              } else {
+                print('이미지 파일이 존재하지 않습니다: $imagePath');
+                return _buildErrorWidget();
+              }
+            } else {
+              return _buildErrorWidget();
+            }
+          },
+        );
+      } else {
+        // 일반 URL인 경우 Image.network 사용
+        return Image.network(
+          widget.imageUrl!,
+          fit: BoxFit.contain,
+          width: double.infinity,
+          height: double.infinity,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return _buildLoadingWidget(loadingProgress);
+          },
+          errorBuilder: (context, error, stackTrace) {
+            print('이미지 URL 로드 에러: $error');
+            return _buildErrorWidget();
+          },
+        );
+      }
     } 
     // 이미지 정보가 없거나 존재하지 않는 경우
     else {
@@ -176,16 +212,16 @@ class _FullImageScreenState extends State<FullImageScreen> {
     }
   }
 
-  Widget _buildLoadingWidget(ImageChunkEvent loadingProgress) {
+  Widget _buildLoadingWidget(ImageChunkEvent? loadingProgress) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           CircularProgressIndicator(
-            value: loadingProgress.expectedTotalBytes != null
-                ? loadingProgress.cumulativeBytesLoaded /
-                    loadingProgress.expectedTotalBytes!
-                : null,
+            value: loadingProgress == null
+                ? null
+                : loadingProgress.cumulativeBytesLoaded /
+                    loadingProgress.expectedTotalBytes!,
             color: ColorTokens.textLight,
           ),
           SizedBox(height: SpacingTokens.md),
@@ -214,5 +250,11 @@ class _FullImageScreenState extends State<FullImageScreen> {
         ),
       ],
     );
+  }
+
+  // 상대 경로를 절대 경로로 변환
+  Future<String> _getFullImagePath(String relativePath) async {
+    final directory = await getApplicationDocumentsDirectory();
+    return '${directory.path}/$relativePath';
   }
 }

@@ -162,23 +162,37 @@ class ImageService {
 
   /// 저장된 이미지의 전체 경로 가져오기
   Future<String> getFullImagePath(String relativePath) async {
-    final appDir = await getApplicationDocumentsDirectory();
-    return '${appDir.path}/$relativePath';
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final fullPath = '${appDir.path}/$relativePath';
+      debugPrint('이미지 전체 경로 변환: $relativePath → $fullPath');
+      return fullPath;
+    } catch (e) {
+      debugPrint('이미지 경로 변환 중 오류: $e');
+      // 오류 발생 시 상대 경로 그대로 반환
+      return relativePath;
+    }
   }
 
   /// 이미지가 정말 존재하는지 확인
-  Future<bool> _isImageFileExists(String fullPath) async {
+  Future<bool> imageExists(String? relativePath) async {
+    if (relativePath == null || relativePath.isEmpty) {
+      debugPrint('이미지 존재 확인: 경로가 비어있음');
+      return false;
+    }
+    
     try {
+      final fullPath = await getFullImagePath(relativePath);
       final file = File(fullPath);
-      final exists = await file.exists();
       
-      if (exists) {
-        // 파일 크기 확인 (0바이트 파일인지 체크)
-        final stat = await file.stat();
-        if (stat.size > 0) {
-          return true;
-        }
+      if (await file.exists()) {
+        final fileSize = await file.length();
+        final exists = fileSize > 0;
+        debugPrint('이미지 존재 확인: $relativePath (${exists ? '존재함' : '크기가 0'}, 크기: $fileSize 바이트)');
+        return exists;
       }
+      
+      debugPrint('이미지 존재 확인: $relativePath (파일 없음)');
       return false;
     } catch (e) {
       debugPrint('이미지 존재 여부 확인 중 오류: $e');
@@ -561,28 +575,6 @@ class ImageService {
       return false;
     } catch (e) {
       debugPrint('이미지 저장소 초기화 중 오류: $e');
-      return false;
-    }
-  }
-
-  /// 이미지가 존재하는지 확인
-  Future<bool> imageExists(String? relativePath) async {
-    if (relativePath == null || relativePath.isEmpty) {
-      return false;
-    }
-    
-    try {
-      final fullPath = await getFullImagePath(relativePath);
-      final file = File(fullPath);
-      
-      if (await file.exists()) {
-        final fileSize = await file.length();
-        return fileSize > 0;
-      }
-      
-      return false;
-    } catch (e) {
-      debugPrint('이미지 존재 여부 확인 중 오류: $e');
       return false;
     }
   }
