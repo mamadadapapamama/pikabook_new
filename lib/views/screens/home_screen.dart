@@ -519,7 +519,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     
     try {
       final prefs = await SharedPreferences.getInstance();
-      final bool hasShownHomeTooltip = prefs.getBool('has_shown_home_tooltip') ?? false;
+      
+      // 현재 사용자 ID 가져오기
+      final String? userId = await _userPreferences.getCurrentUserId();
+      
+      // 사용자별 키 생성 (사용자 ID가 있는 경우에만)
+      final String tooltipKey = userId != null && userId.isNotEmpty 
+          ? 'has_shown_home_tooltip_$userId' 
+          : 'has_shown_home_tooltip';
+      
+      final bool hasShownHomeTooltip = prefs.getBool(tooltipKey) ?? false;
+      
+      debugPrint('툴팁 표시 확인: 키=$tooltipKey, 이미 표시됨=$hasShownHomeTooltip');
       
       // 뷰모델에 접근하여 노트 존재 여부 확인
       final viewModel = Provider.of<HomeViewModel>(context, listen: false);
@@ -532,16 +543,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           _showTooltip = true;
         });
         
-        // 툴팁 표시 기록 저장
-        await prefs.setBool('has_shown_home_tooltip', true);
-        debugPrint('홈 화면 최초 방문 - 툴팁 표시');
+        // 툴팁 표시 기록 저장 (사용자별)
+        await prefs.setBool(tooltipKey, true);
+        debugPrint('홈 화면 최초 방문 - 툴팁 표시 (사용자: $userId)');
         
-        // 10초 후에 툴팁 자동으로 숨기기
+        // 5초 후에 툴팁 자동으로 숨기기
         Future.delayed(const Duration(seconds: 5), () {
           if (mounted) {
             setState(() {
               _showTooltip = false;
             });
+            
+            // 툴팁 닫기 콜백 호출
+            widget.onCloseTooltip();
           }
         });
       }

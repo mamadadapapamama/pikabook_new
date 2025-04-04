@@ -154,13 +154,32 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                       Center(child: widget.image!),
                       const SizedBox(height: 8),
                     ],
-                    // 툴팁 제목
-                    Text(
-                      widget.text,
-                      style: TypographyTokens.body1.copyWith(
-                        color: widget._getTextColor,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    // 툴팁 제목과 닫기 버튼을 포함하는 Row
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.text,
+                            style: TypographyTokens.body1.copyWith(
+                              color: widget._getTextColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        // 닫기 버튼
+                        GestureDetector(
+                          onTap: widget.onDismiss,
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            child: Icon(
+                              Icons.close,
+                              size: 18,
+                              color: widget._getTextColor.withOpacity(0.7),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     // 설명이 있는 경우 추가
                     if (widget.description != null) ...[
