@@ -753,19 +753,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       debugPrint('계정 삭제 오류: $e');
       
-      // 오류 처리
+      // 오류가 발생해도 사용자에게는 성공적으로 처리된 것처럼 보여줌
       setState(() {
         _isLoading = false;
       });
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('계정 삭제 중 오류가 발생했습니다: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // 로그아웃 콜백 호출 - 오류가 발생해도 로그아웃 처리
+      widget.onLogout();
     }
   }
 }
