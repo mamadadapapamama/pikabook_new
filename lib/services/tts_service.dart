@@ -407,7 +407,7 @@ class TtsService {
 
   /// TTS 제한 안내 메시지 가져오기
   String getTtsLimitMessage() {
-    return '무료 TTS 사용량(${UsageLimitService.MAX_FREE_TTS_REQUESTS}회)을 모두 사용했습니다. 프리미엄으로 업그레이드하시면 더 많은 TTS를 사용할 수 있습니다.';
+    return '무료 사용량(${UsageLimitService.MAX_FREE_TTS_REQUESTS}회)을 모두 사용했습니다. 추가 사용을 원하시면 관리자에게 문의주세요.';
   }
   
   // 캐시 비우기

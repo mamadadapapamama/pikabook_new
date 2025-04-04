@@ -593,79 +593,78 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           ],
                         ),
                       )
-                    : Padding(
-                        padding: EdgeInsets.all(SpacingTokens.md),
-                        child: CardSwiper(
-                          controller: _cardController,
-                          cardsCount: _flashCards.length,
-                          onSwipe: _onSwipe,
-                          // 스와이프 방향 설정 (카드가 1개일 때는 위로만 스와이프 가능)
-                          allowedSwipeDirection: _flashCards.length == 1
-                              ? const AllowedSwipeDirection.only(up: true)
-                              : AllowedSwipeDirection.symmetric(
-                                  horizontal: true,
-                                  vertical: true,
-                                ),
-                          // 스와이프 방향 변경 콜백 (불필요한 로그 제거)
-                          onSwipeDirectionChange: (_, __) {},
-                          // 카드 개수에 따라 표시할 카드 수 조정 (1개일 때는 1개만, 그 외에는 2개)
-                          numberOfCardsDisplayed:
-                              _flashCards.length == 1 ? 1 : 2,
-                          padding: EdgeInsets.all(SpacingTokens.lg),
-                          isLoop: _flashCards.length > 1, // 카드가 2개 이상일 때만 순환 활성화
-                          cardBuilder: (context, index, horizontalThreshold,
-                              verticalThreshold) {
-                            debugPrint('CardSwiper가 카드 빌드: index=$index, 총 카드=${_flashCards.length}, 현재 인덱스=$_currentIndex');
-                            
-                            // 카드 스케일 계산 (현재 카드는 100%, 뒤 카드는 점점 작아짐)
-                            // 플래시카드가 1개일 때는 스케일링 없이 표시
-                            final double scale;
-                            final double yOffset;
+                    : FutureBuilder<bool>(
+                        future: _ttsService.isTtsAvailable(),
+                        builder: (context, snapshot) {
+                          final bool isTtsEnabled = snapshot.data ?? true;
+                          final String ttsTooltip = _ttsService.getTtsLimitMessage();
+                          
+                          return Padding(
+                            padding: EdgeInsets.all(SpacingTokens.md),
+                            child: CardSwiper(
+                              controller: _cardController,
+                              cardsCount: _flashCards.length,
+                              onSwipe: _onSwipe,
+                              allowedSwipeDirection: _flashCards.length == 1
+                                  ? const AllowedSwipeDirection.only(up: true)
+                                  : AllowedSwipeDirection.symmetric(
+                                      horizontal: true,
+                                      vertical: true,
+                                    ),
+                              onSwipeDirectionChange: (_, __) {},
+                              numberOfCardsDisplayed:
+                                  _flashCards.length == 1 ? 1 : 2,
+                              padding: EdgeInsets.all(SpacingTokens.lg),
+                              isLoop: _flashCards.length > 1,
+                              cardBuilder: (context, index, horizontalThreshold,
+                                  verticalThreshold) {
+                                debugPrint('CardSwiper가 카드 빌드: index=$index, 총 카드=${_flashCards.length}, 현재 인덱스=$_currentIndex');
+                                
+                                final double scale;
+                                final double yOffset;
 
-                            if (_flashCards.length == 1) {
-                              // 카드가 1개일 때는 스케일링과 오프셋 없음
-                              scale = 1.0;
-                              yOffset = 0.0;
-                              debugPrint('카드 1장만 표시: 스케일=$scale, 오프셋=$yOffset');
-                            } else {
-                              // 카드가 2개 이상일 때 스케일링과 오프셋 적용
-                              final int indexDiff =
-                                  (index - _currentIndex).abs();
-                              scale = index == _currentIndex
-                                  ? 1.0
-                                  : 1.0 - (0.05 * indexDiff);
-                              yOffset = index == _currentIndex
-                                  ? 0
-                                  : 20.0 * indexDiff;
-                              debugPrint('여러 카드 표시: 인덱스=$index, 현재 인덱스=$_currentIndex, 스케일=$scale, 오프셋=$yOffset');
-                            }
+                                if (_flashCards.length == 1) {
+                                  scale = 1.0;
+                                  yOffset = 0.0;
+                                  debugPrint('카드 1장만 표시: 스케일=$scale, 오프셋=$yOffset');
+                                } else {
+                                  final int indexDiff = (index - _currentIndex).abs();
+                                  scale = index == _currentIndex
+                                      ? 1.0
+                                      : 1.0 - (0.05 * indexDiff);
+                                  yOffset = index == _currentIndex
+                                      ? 0
+                                      : 20.0 * indexDiff;
+                                  debugPrint('여러 카드 표시: 인덱스=$index, 현재 인덱스=$_currentIndex, 스케일=$scale, 오프셋=$yOffset');
+                                }
 
-                            return FlashCardUI.buildFlashCard(
-                              card: _flashCards[index],
-                              index: index,
-                              currentIndex: _currentIndex,
-                              flipCardKey: index == _currentIndex
-                                  ? _flipCardKey
-                                  : null,
-                              isSpeaking: _isSpeaking,
-                              onFlip: () {
-                                setState(() => _isFlipped = !_isFlipped);
+                                return FlashCardUI.buildFlashCard(
+                                  card: _flashCards[index],
+                                  index: index,
+                                  currentIndex: _currentIndex,
+                                  flipCardKey: index == _currentIndex
+                                      ? _flipCardKey
+                                      : null,
+                                  isSpeaking: _isSpeaking,
+                                  onFlip: () {
+                                    setState(() => _isFlipped = !_isFlipped);
+                                  },
+                                  onSpeak: _speakText,
+                                  onStopSpeaking: _stopSpeaking,
+                                  getNextCardInfo: _getNextCardInfo,
+                                  getPreviousCardInfo: _getPreviousCardInfo,
+                                  onWordTap: _searchWordInDictionary,
+                                  onDelete: _deleteCurrentCard,
+                                  scale: scale,
+                                  offset: Offset(0, yOffset),
+                                  isTtsEnabled: isTtsEnabled,
+                                  ttsTooltip: !isTtsEnabled ? ttsTooltip : null,
+                                );
                               },
-                              onSpeak: _speakText,
-                              onStopSpeaking: _stopSpeaking,
-                              getNextCardInfo: _getNextCardInfo,
-                              getPreviousCardInfo: _getPreviousCardInfo,
-                              onWordTap: _searchWordInDictionary,
-                              onDelete: _deleteCurrentCard,
-                              scale: scale,
-                              offset: Offset(0, yOffset),
-                              isTtsEnabled: _ttsService.isTtsAvailable().then((value) => value),
-                              ttsTooltip: _ttsService.getTtsLimitMessage(),
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
                       ),
-                      
             // 삭제 안내 텍스트 (가장 하단 레이어에 배치)
             if (!_isLoading && _error == null && _flashCards.isNotEmpty)
               Positioned(
