@@ -1814,11 +1814,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             left: 16,
             right: 16,
             child: HelpTextTooltip(
+              key: const Key('note_detail_tooltip'),
               text: "첫 노트가 만들어졌어요!",
               description: "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요.",
               showTooltip: true,
               onDismiss: () {
-                debugPrint('노트 상세 화면에서 툴팁 닫기 버튼 클릭됨');
+                debugPrint('노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
                 setState(() {
                   _showTooltip = false;
                 });

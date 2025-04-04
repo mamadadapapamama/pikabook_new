@@ -268,6 +268,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     final bool shouldShowTooltip = _showTooltip;
                     
                     return HelpTextTooltip(
+                      key: const Key('home_screen_tooltip'),
                       text: "Pikabook에 오신걸 환영합니다!",
                       image: Image.asset(
                         'assets/images/home_help_beta.png',
@@ -276,7 +277,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       ),
                       description: "📷 책 사진: 100장까지 텍스트 자동 인식\n🌐 번역: 최대 5,000자\n🔊 듣기 기능: 1000번 음성 변환 가능\n💾 저장 공간: 이미지 400장 (100mb)",
                       showTooltip: shouldShowTooltip,
-                      onDismiss: _handleCloseTooltip,
+                      onDismiss: () {
+                        debugPrint('홈 화면 툴팁 닫기 콜백 호출됨!!');
+                        _handleCloseTooltip();
+                      },
                       style: HelpTextTooltipStyle.primary, // 스타일 프리셋 사용
                       child: SizedBox(
                         width: double.infinity,

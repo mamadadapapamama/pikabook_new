@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
+import '../../theme/tokens/ui_tokens.dart';
 
 /// 툴팁 스타일 프리셋
 enum HelpTextTooltipStyle {
@@ -104,86 +105,84 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> {
             bottom: -widget.spacing, // 버튼과의 간격
             left: 0,
             right: 0,
-            child: Container(
-              width: widget.tooltipWidth ?? 349,
-              padding: widget.tooltipPadding ?? const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: widget._getBackgroundColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: widget._getBorderColor,
-                  width: 1,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 제목과 닫기 버튼을 포함하는 Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // 툴팁 컨테이너
+                Container(
+                  width: widget.tooltipWidth ?? 349,
+                  padding: widget.tooltipPadding ?? const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: widget._getBackgroundColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: widget._getBorderColor,
+                      width: 1,
+                    ),
+                    boxShadow: UITokens.mediumShadow,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          widget.text,
-                          style: TypographyTokens.subtitle1.copyWith(
+                      // 제목
+                      Text(
+                        widget.text,
+                        style: TypographyTokens.body1.copyWith(
+                          color: widget._getTextColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+
+                      // 이미지가 있는 경우 표시
+                      if (widget.image != null) ...[
+                        const SizedBox(height: 12),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            width: double.infinity,
+                            child: widget.image!,
+                          ),
+                        ),
+                      ],
+                      
+                      // 설명이 있는 경우 추가
+                      if (widget.description != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.description!,
+                          style: TypographyTokens.body2.copyWith(
                             color: widget._getTextColor,
+                            fontSize: 14,
                             fontWeight: FontWeight.w500,
-                            fontSize: 16,
                           ),
                         ),
-                      ),
-                      // 닫기 버튼
-                      GestureDetector(
-                        onTap: () {
-                          debugPrint('HelpTextTooltip: 닫기 버튼 클릭됨');
-                          if (widget.onDismiss != null) {
-                            widget.onDismiss!();
-                          }
-                        },
-                        behavior: HitTestBehavior.opaque, // 투명 영역까지 탭 감지
-                        child: Container(
-                          padding: const EdgeInsets.all(8), // 탭 영역을 더 넓게 확장
-                          decoration: BoxDecoration(
-                            color: ColorTokens.greyLight.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Icon(
-                            Icons.close,
-                            size: 20,
-                            color: ColorTokens.textPrimary, // 더 명확한 색상으로 변경
-                          ),
-                        ),
-                      ),
+                      ],
                     ],
                   ),
-
-                  // 이미지가 있는 경우 표시
-                  if (widget.image != null) ...[
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        width: double.infinity,
-                        child: widget.image!,
-                      ),
+                ),
+                
+                // 닫기 버튼 (위치 변경)
+                Positioned(
+                  top: -15,
+                  right: -15,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      print('닫기 버튼 ElevatedButton 클릭됨!');
+                      if (widget.onDismiss != null) {
+                        widget.onDismiss!();
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: ColorTokens.primary,
+                      foregroundColor: Colors.white,
+                      padding: EdgeInsets.zero,
+                      shape: const CircleBorder(),
+                      minimumSize: const Size(40, 40),
                     ),
-                  ],
-                  
-                  // 설명이 있는 경우 추가
-                  if (widget.description != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      widget.description!,
-                      style: TypographyTokens.body2.copyWith(
-                        color: widget._getTextColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+                    child: const Icon(Icons.close, size: 24),
+                  ),
+                ),
+              ],
             ),
           ),
       ],

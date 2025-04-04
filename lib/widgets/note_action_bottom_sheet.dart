@@ -86,56 +86,6 @@ class NoteActionBottomSheet extends StatelessWidget {
             // 구분선
             Divider(color: ColorTokens.divider, height: 1),
             
-            // 텍스트 모드 그룹 타이틀
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '텍스트 모드',
-                  style: TypographyTokens.caption.copyWith(
-                    color: ColorTokens.textSecondary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-            
-            // 문장별 구분 모드
-            _buildActionTile(
-              context: context,
-              title: '문장별 구분',
-              trailing: Icon(
-                Icons.check_circle,
-                color: !isFullTextMode ? ColorTokens.primary : ColorTokens.greyMedium
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                if (isFullTextMode) {
-                  onToggleFullTextMode();
-                }
-              },
-            ),
-            
-            // 원문 전체 모드
-            _buildActionTile(
-              context: context,
-              title: '원문 전체',
-              trailing: Icon(
-                Icons.check_circle,
-                color: isFullTextMode ? ColorTokens.primary : ColorTokens.greyMedium
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                if (!isFullTextMode) {
-                  onToggleFullTextMode();
-                }
-              },
-            ),
-            
-            // 구분선
-            Divider(color: ColorTokens.divider, height: 1),
-            
             // 노트 삭제
             _buildActionTile(
               context: context,
