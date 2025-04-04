@@ -11,8 +11,10 @@ import '../../widgets/dot_loading_indicator.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/common/pika_button.dart';
 import '../../widgets/common/pika_app_bar.dart';
+import '../../widgets/common/usage_limit_dialog.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_service.dart';
+import '../../services/plan_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -32,6 +34,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   
   // 사용자 설정 서비스
   final UserPreferencesService _userPreferences = UserPreferencesService();
+  // 플랜 서비스 추가
+  final PlanService _planService = PlanService();
   
   // 설정 관련 상태 변수
   String _userName = '';
@@ -39,11 +43,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _sourceLanguage = SourceLanguage.DEFAULT;
   String _targetLanguage = TargetLanguage.DEFAULT;
   
+  // 플랜 정보 상태
+  String _planType = PlanService.PLAN_FREE;
+  String _planName = '무료';
+  bool _isBetaPeriod = false;
+  int _remainingDays = 0;
+  
+  // 사용량 정보
+  Map<String, int> _planLimits = {};
+  Map<String, dynamic> _currentUsage = {};
+  Map<String, double> _usagePercentages = {};
+  
   @override
   void initState() {
     super.initState();
     _loadUserData();
     _loadUserPreferences();
+    _loadPlanInfo();
   }
 
   Future<void> _loadUserData() async {
@@ -111,6 +127,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // 사용자 플랜 정보 로드
+  Future<void> _loadPlanInfo() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      final planDetails = await _planService.getPlanDetails();
+      
+      if (mounted) {
+        setState(() {
+          _planType = planDetails['planType'] as String;
+          _planName = planDetails['planName'] as String;
+          _planLimits = Map<String, int>.from(planDetails['planLimits'] as Map);
+          _currentUsage = planDetails['currentUsage'] as Map<String, dynamic>;
+          _usagePercentages = Map<String, double>.from(planDetails['usagePercentages'] as Map);
+          _isBetaPeriod = planDetails['isBetaPeriod'] as bool;
+          _remainingDays = planDetails['remainingDays'] as int;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('플랜 정보 로드 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -160,6 +207,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               isFullWidth: true,
             ),
           ),
+          
+          const SizedBox(height: 32),
+          
+          // 현재 사용 중인 플랜 정보 섹션 추가
+          _buildSectionTitle('내 플랜'),
+          const SizedBox(height: 12),
+          _buildPlanInfoCard(),
           
           const SizedBox(height: 32),
           
@@ -760,6 +814,193 @@ class _SettingsScreenState extends State<SettingsScreen> {
       
       // 로그아웃 콜백 호출 - 오류가 발생해도 로그아웃 처리
       widget.onLogout();
+    }
+  }
+
+  // 플랜 정보 카드 위젯
+  Widget _buildPlanInfoCard() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 플랜 이름과 상태
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      _planType == PlanService.PLAN_PREMIUM
+                          ? Icons.workspace_premium
+                          : Icons.account_circle,
+                      color: _planType == PlanService.PLAN_PREMIUM
+                          ? Colors.amber
+                          : ColorTokens.primary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _planName,
+                      style: TypographyTokens.subtitle2.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                // 베타 기간 배지
+                if (_isBetaPeriod)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: ColorTokens.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '베타 ${ _remainingDays > 0 ? '$_remainingDays일 남음' : '종료됨' }',
+                      style: TypographyTokens.caption.copyWith(
+                        color: ColorTokens.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          
+          // 사용량 프로그레스 바
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _buildUsageProgressBars(),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // 사용량 확인 버튼
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: PikaButton(
+              text: '사용량 확인하기',
+              variant: PikaButtonVariant.outline,
+              leadingIcon: const Icon(Icons.analytics_outlined),
+              onPressed: _showUsageLimitDialog,
+              isFullWidth: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // 사용량 프로그레스 바 위젯
+  Widget _buildUsageProgressBars() {
+    // 표시할 주요 사용량 항목
+    final List<Map<String, dynamic>> usageItems = [
+      {
+        'key': 'ocrPages',
+        'label': 'OCR 페이지',
+        'current': _currentUsage['ocrPages'] ?? 0,
+        'limit': _planLimits['ocrPages'] ?? 1,
+        'percentage': _usagePercentages['ocr'] ?? 0.0,
+      },
+      {
+        'key': 'storageBytes',
+        'label': '저장 공간',
+        'current': _formatBytes(_currentUsage['storageUsageBytes'] ?? 0),
+        'limit': _formatBytes(_planLimits['storageBytes'] ?? 1),
+        'percentage': _usagePercentages['storage'] ?? 0.0,
+      },
+    ];
+    
+    return Column(
+      children: usageItems.map((item) {
+        final double percentage = (item['percentage'] as double).clamp(0, 100);
+        final bool isWarning = percentage > 80;
+        
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    item['label'] as String,
+                    style: TypographyTokens.caption.copyWith(
+                      color: ColorTokens.textSecondary,
+                    ),
+                  ),
+                  Text(
+                    '${item['current']} / ${item['limit']}',
+                    style: TypographyTokens.caption.copyWith(
+                      color: isWarning ? ColorTokens.error : ColorTokens.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              LinearProgressIndicator(
+                value: percentage / 100,
+                backgroundColor: ColorTokens.divider,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  percentage > 90
+                      ? ColorTokens.error
+                      : percentage > 70
+                          ? Colors.orange
+                          : ColorTokens.primary,
+                ),
+                minHeight: 4,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+  
+  // 바이트 크기 포맷팅
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    } else {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+  }
+  
+  // 사용량 제한 다이얼로그 표시
+  Future<void> _showUsageLimitDialog() async {
+    final limitStatus = await _planService.checkUserLimits();
+    
+    if (context.mounted) {
+      await UsageLimitDialog.show(
+        context,
+        limitStatus: limitStatus,
+        usagePercentages: _usagePercentages,
+      );
     }
   }
 }
