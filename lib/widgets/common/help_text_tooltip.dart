@@ -169,13 +169,20 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                         ),
                         // 닫기 버튼
                         GestureDetector(
-                          onTap: widget.onDismiss,
+                          onTap: () {
+                            debugPrint('HelpTextTooltip: 닫기 버튼 클릭됨');
+                            if (widget.onDismiss != null) {
+                              widget.onDismiss!();
+                            }
+                          },
+                          behavior: HitTestBehavior.opaque, // 투명 영역까지 탭 감지
                           child: Container(
-                            padding: const EdgeInsets.all(2),
+                            padding: const EdgeInsets.all(8), // 탭 영역 확장
+                            margin: const EdgeInsets.only(top: -4, right: -4), // 위치 조정
                             child: Icon(
                               Icons.close,
-                              size: 18,
-                              color: widget._getTextColor.withOpacity(0.7),
+                              size: 20, // 약간 더 큰 사이즈
+                              color: widget._getTextColor.withOpacity(0.8), // 더 선명한 색상
                             ),
                           ),
                         ),

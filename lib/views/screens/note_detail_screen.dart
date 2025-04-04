@@ -1866,6 +1866,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               description: "잘 모르는 단어는 선택하여 사전 검색 하거나 플래시카드로 만들어보세요.",
               showTooltip: true,
               onDismiss: () {
+                debugPrint('노트 상세 화면에서 툴팁 닫기 버튼 클릭됨');
                 setState(() {
                   _showTooltip = false;
                 });

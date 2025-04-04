@@ -269,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     
                     return HelpTextTooltip(
                       text: "Pikabook Beta! 4월 30일까지 무료로 사용하세요.",
-                      description: "- 📷 이미지 OCR: 최대 60장 (사진으로 책 업로드 가능!)\n- 🌐 번역: 최대 5,000자\n- 🔊 듣기 기능: 1,000자까지 음성 변환 가능\n추후 유저 피드백을 기반으로 더 많은 기능과 요금제를 준비할 예정이에요!",
+                      description: "- 📷 책 사진: 100장까지 텍스트 자동 인식\n- 🌐 번역: 최대 5,000자\n- 🔊 듣기 기능: 1000번 음성 변환 가능\n추후 유저 피드백을 기반으로 더 많은 기능과 요금제를 준비할 예정이에요!",
                       showTooltip: shouldShowTooltip,
                       onDismiss: _handleCloseTooltip,
                       style: HelpTextTooltipStyle.primary, // 스타일 프리셋 사용
