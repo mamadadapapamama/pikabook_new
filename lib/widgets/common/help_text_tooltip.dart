@@ -178,7 +178,6 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                           behavior: HitTestBehavior.opaque, // 투명 영역까지 탭 감지
                           child: Container(
                             padding: const EdgeInsets.all(8), // 탭 영역 확장
-                            margin: const EdgeInsets.only(top: -4, right: -4), // 위치 조정
                             child: Icon(
                               Icons.close,
                               size: 20, // 약간 더 큰 사이즈

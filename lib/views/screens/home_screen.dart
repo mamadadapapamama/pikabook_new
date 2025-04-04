@@ -264,8 +264,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
                 child: Consumer<HomeViewModel>(
                   builder: (context, viewModel, _) {
-                    // 노트가 없을 때만 툴팁 표시 (첫 사용자 경험)
-                    final bool shouldShowTooltip = _showTooltip && !viewModel.hasNotes;
+                    // 노트 유무와 상관없이 _showTooltip 상태만 확인
+                    final bool shouldShowTooltip = _showTooltip;
                     
                     return HelpTextTooltip(
                       text: "Pikabook Beta! 4월 30일까지 무료로 사용하세요.",
@@ -493,12 +493,37 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   // 툴팁 닫기 처리 메서드
   void _handleCloseTooltip() {
+    debugPrint('홈 화면 툴팁 닫기 버튼 클릭됨');
     setState(() {
       _showTooltip = false;
     });
     
-    // 툴팁 닫기 콜백 호출
+    // SharedPreferences에 툴팁을 이미 봤다고 저장
+    _saveTooltipShownStatus();
+    
+    // 빈 콜백 호출 (컴파일 오류 방지)
     widget.onCloseTooltip();
+  }
+  
+  // 툴팁 표시 상태를 저장하는 메서드
+  Future<void> _saveTooltipShownStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 현재 사용자 ID 가져오기
+      final String? userId = await _userPreferences.getCurrentUserId();
+      
+      // 사용자별 키 생성 (사용자 ID가 있는 경우에만)
+      final String tooltipKey = userId != null && userId.isNotEmpty 
+          ? 'has_shown_home_tooltip_$userId' 
+          : 'has_shown_home_tooltip';
+      
+      // 툴팁 표시 기록 저장 (사용자별)
+      await prefs.setBool(tooltipKey, true);
+      debugPrint('툴팁 표시 상태 저장 완료: $tooltipKey=true');
+    } catch (e) {
+      debugPrint('툴팁 표시 상태 저장 중 오류: $e');
+    }
   }
 
   // HomeViewModel 변경 시 호출될 메서드
@@ -509,13 +534,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   // 최초 사용 경험 체크 (툴팁 표시 여부 결정)
   Future<void> _checkAndShowTooltip() async {
-    // 외부에서 이미 설정된 경우 사용
-    if (widget.showTooltip) {
-      setState(() {
-        _showTooltip = true;
-      });
-      return;
-    }
+    // 이미 툴팁이 표시되고 있으면 중복 체크 방지
+    if (_showTooltip) return;
     
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -536,26 +556,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       final viewModel = Provider.of<HomeViewModel>(context, listen: false);
       final bool hasNotes = viewModel.hasNotes;
       
-      // 노트가 없고, 툴팁이 아직 표시되지 않은 경우에만 표시
-      if (!hasShownHomeTooltip && !hasNotes) {
+      // 이전 코드: 노트가 없고, 툴팁이 아직 표시되지 않은 경우에만 표시
+      // 새 코드: 반드시 툴팁을 한 번도 표시하지 않은 사용자에게만 툴팁 표시
+      if (!hasShownHomeTooltip) {
         // 최초 방문 시 툴팁 표시
         setState(() {
           _showTooltip = true;
         });
         
         // 툴팁 표시 기록 저장 (사용자별)
-        await prefs.setBool(tooltipKey, true);
+        // 여기서는 저장하지 않고, 사용자가 직접 닫을 때 저장하도록 변경
         debugPrint('홈 화면 최초 방문 - 툴팁 표시 (사용자: $userId)');
         
-        // 5초 후에 툴팁 자동으로 숨기기
-        Future.delayed(const Duration(seconds: 5), () {
-          if (mounted) {
+        // 자동으로 툴팁 닫기는 10초로 연장
+        Future.delayed(const Duration(seconds: 10), () {
+          if (mounted && _showTooltip) {
             setState(() {
               _showTooltip = false;
             });
             
-            // 툴팁 닫기 콜백 호출
-            widget.onCloseTooltip();
+            // SharedPreferences에 툴팁을 이미 봤다고 저장
+            _saveTooltipShownStatus();
           }
         });
       }

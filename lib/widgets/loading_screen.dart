@@ -6,16 +6,10 @@ import 'dot_loading_indicator.dart';
 
 /// 앱 초기화 중 표시되는 로딩 화면
 ///
-/// 진행 상황을 표시하고, 특정 상황에서는 건너뛰기 버튼을 제공합니다.
+/// 진행 상황을 표시하는 단순한 화면입니다.
 class LoadingScreen extends StatelessWidget {
   /// 로딩 진행률 (0.0 ~ 1.0)
   final double progress;
-  
-  /// 주요 메시지
-  final String message;
-  
-  /// 부가 메시지 (선택적)
-  final String? subMessage;
   
   /// 건너뛰기 버튼 콜백 (null이면 버튼 표시 안 함)
   final VoidCallback? onSkip;
@@ -23,8 +17,6 @@ class LoadingScreen extends StatelessWidget {
   const LoadingScreen({
     Key? key,
     required this.progress,
-    required this.message,
-    this.subMessage,
     this.onSkip,
   }) : super(key: key);
 
@@ -75,28 +67,6 @@ class LoadingScreen extends StatelessWidget {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    
-                    // 주요 메시지
-                    Text(
-                      message,
-                      textAlign: TextAlign.center,
-                      style: TypographyTokens.body1.copyWith(
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                    ),
-                    
-                    // 부가 메시지 (있을 경우)
-                    if (subMessage != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        subMessage!,
-                        textAlign: TextAlign.center,
-                        style: TypographyTokens.caption.copyWith(
-                          color: Colors.white.withOpacity(0.7),
-                        ),
-                      ),
-                    ],
                     
                     // 건너뛰기 버튼 (제공된 경우)
                     if (onSkip != null) ...[

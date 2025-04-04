@@ -24,25 +24,29 @@ class App extends StatefulWidget {
 }
 
 class _AppState extends State<App> {
+  // 앱 상태 변수
+  bool _isInitialized = false;
   bool _isUserAuthenticated = false;
   bool _isOnboardingCompleted = false;
+  bool _isFirstEntry = false;
   bool _hasLoginHistory = false;
-  bool _isFirstEntry = true; // 첫 진입 여부 (툴팁 표시)
-  String? _error;
-  final UserPreferencesService _preferencesService = UserPreferencesService();
-  
-  // 초기화 상태 관리
-  bool _isInitialized = false;
-  InitializationStep _currentStep = InitializationStep.preparing;
   double _progress = 0.0;
+  String? _error;
+  
+  // 로딩 단계 추적을 위한 상태 메시지 (UI에는 표시되지 않음)
   String _message = '앱 준비 중...';
-  String? _subMessage;
+  
+  // 서비스들
+  final InitializationManager _initManager = InitializationManager();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final UserPreferencesService _preferencesService = UserPreferencesService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // 인증 상태 변경 구독 취소용 변수
+  StreamSubscription<User?>? _authStateSubscription;
   
   // 앱 시작 시간 기록
   final DateTime _appStartTime = DateTime.now();
-  
-  // 인증 상태 변경 구독 취소용 변수
-  StreamSubscription<User?>? _authStateSubscription;
   
   @override
   void initState() {
@@ -88,64 +92,42 @@ class _AppState extends State<App> {
   // Firebase 초기화 함수
   Future<void> _initializeFirebase() async {
     try {
-      setState(() {
-        _message = 'Firebase 초기화 중...';
-        _progress = 0.1;
-      });
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      // 인증 상태 변경 감지
+      _setupAuthStateListener();
       
-      debugPrint('🔄 Firebase 초기화 시작...');
-      
-      // Firebase Auth 인증 지속성 설정 - 웹에서만 작동하는 기능이므로 모바일에서는 제거
-      // 대신 앱 설치 여부 확인으로 처리
-      
-      // Firebase가 이미 초기화되었는지 확인
-      if (Firebase.apps.isNotEmpty) {
-        debugPrint('✅ Firebase 이미 초기화됨');
-        setState(() {
-          _progress = 0.3;
-          _message = 'Firebase 서비스 설정 중...';
-        });
-        _setupFirebaseServices();
-        return;
-      }
-      
-      // Firebase가 초기화되지 않은 경우에만 초기화 시도 (main.dart에서 이미 초기화했을 가능성 높음)
-      debugPrint('🔄 Firebase 새로 초기화 중...');
-      try {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-        debugPrint('✅ Firebase 초기화 완료');
-      } catch (e) {
-        // 이미 초기화된 경우 발생하는 오류는 무시 (main.dart에서 이미 초기화했을 경우)
-        if (e.toString().contains('duplicate-app')) {
-          debugPrint('✅ Firebase가 이미 초기화되어 있습니다 (main.dart에서 초기화됨)');
-        } else {
-          // 다른 종류의 오류는 다시 던짐
-          throw e;
-        }
-      }
-      
-      // 초기화 성공 표시
-      setState(() {
-        _progress = 0.3;
-        _message = 'Firebase 서비스 설정 중...';
-      });
-      
-      // Firebase 서비스 설정 시작
-      _setupFirebaseServices();
+      // 초기화 로직 실행
+      await _initializeApp();
     } catch (e) {
       debugPrint('❌ Firebase 초기화 오류: $e');
       setState(() {
         _error = 'Firebase 초기화 중 오류 발생: $e';
         _progress = 0.0;
       });
+    }
+  }
+  
+  // 앱 초기화 로직
+  Future<void> _initializeApp() async {
+    try {
+      // Firestore 설정
+      await _setupFirestore();
       
-      // 3초 후 재시도
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) {
-          _initializeFirebase();
-        }
+      // 앱 데이터 초기화
+      await _loadAppData();
+      
+      setState(() {
+        _progress = 1.0;
+        _message = '앱 준비 완료';
+        _isInitialized = true;
+      });
+    } catch (e) {
+      debugPrint('❌ 앱 초기화 오류: $e');
+      setState(() {
+        _error = '앱 초기화 중 오류 발생: $e';
+        _progress = 0.0;
       });
     }
   }
@@ -227,7 +209,6 @@ class _AppState extends State<App> {
             setState(() {
               _isUserAuthenticated = false;
               _isOnboardingCompleted = false;
-              _hasLoginHistory = false;
               _isFirstEntry = false; // 툴팁 표시 상태도 초기화
             });
           }
@@ -535,48 +516,41 @@ class _AppState extends State<App> {
       return Scaffold(
         body: SafeArea(
           child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // 로고
-                  SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: Image.asset('assets/images/pikabook_bird.png'),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  color: Colors.red,
+                  size: 80,
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  '앱 초기화 오류',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(height: 24),
-                  // 오류 메시지
-                  const Text(
-                    '오류가 발생했습니다',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 16,
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.red,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  // 재시도 버튼
-                  ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _error = null;
-                      });
-                      _initializeFirebase();
-                    },
-                    child: const Text('다시 시도'),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _error = null;
+                    });
+                    _initializeFirebase();
+                  },
+                  child: const Text('다시 시도'),
+                ),
+              ],
             ),
           ),
         ),
@@ -587,8 +561,6 @@ class _AppState extends State<App> {
     if (!_isInitialized) {
       return LoadingScreen(
         progress: _progress,
-        message: _message,
-        subMessage: _subMessage,
         onSkip: () {
           if (mounted) {
             setState(() {

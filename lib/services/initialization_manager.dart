@@ -26,7 +26,6 @@ typedef InitializationProgressListener = void Function(
   InitializationStep step,
   double progress,
   String message,
-  String? subMessage,
 );
 
 /// 앱 초기화를 단계별로 관리하는 클래스
@@ -47,7 +46,6 @@ class InitializationManager {
   InitializationStep _currentStep = InitializationStep.preparing;
   double _progress = 0.0;
   String _message = '준비 중...';
-  String? _subMessage;
   bool _isInitializing = false;
   bool _isCompleted = false;
   
@@ -67,7 +65,6 @@ class InitializationManager {
   InitializationStep get currentStep => _currentStep;
   double get progress => _progress;
   String get message => _message;
-  String? get subMessage => _subMessage;
   bool get isInitializing => _isInitializing;
   bool get isCompleted => _isCompleted;
   String? get error => _error;
@@ -81,7 +78,7 @@ class InitializationManager {
       _listeners.add(listener);
       
       // 즉시 현재 상태를 리스너에게 알림
-      listener(_currentStep, _progress, _message, _subMessage);
+      listener(_currentStep, _progress, _message);
     }
   }
   
@@ -94,21 +91,19 @@ class InitializationManager {
   void _updateProgress(
     InitializationStep step,
     double progress,
-    String message, {
-    String? subMessage,
-  }) {
+    String message,
+  ) {
     _currentStep = step;
     _progress = progress.clamp(0.0, 1.0);
     _message = message;
-    _subMessage = subMessage;
     
     // 모든 리스너에게 알림
     for (final listener in _listeners) {
-      listener(_currentStep, _progress, _message, _subMessage);
+      listener(_currentStep, _progress, _message);
     }
     
     // 디버그 로그
-    debugPrint('초기화 진행: ${(progress * 100).toStringAsFixed(1)}% - $message ${subMessage != null ? '($subMessage)' : ''}');
+    debugPrint('초기화 진행: ${(progress * 100).toStringAsFixed(1)}% - $message');
   }
   
   // 초기화 시작
@@ -160,7 +155,6 @@ class InitializationManager {
         InitializationStep.userData,
         0.6,
         '사용자 데이터 로드 중...',
-        subMessage: isLoggedIn ? '기본 정보를 불러오고 있습니다.' : null,
       );
       
       // 기본 초기화 결과
@@ -209,7 +203,6 @@ class InitializationManager {
         _currentStep, 
         _progress, 
         '오류가 발생했습니다',
-        subMessage: e.toString(),
       );
       
       return result;
@@ -303,7 +296,6 @@ class InitializationManager {
     _currentStep = InitializationStep.preparing;
     _progress = 0.0;
     _message = '준비 중...';
-    _subMessage = null;
     _error = null;
   }
 } 
