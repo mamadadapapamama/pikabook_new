@@ -33,6 +33,17 @@ class TextReaderService {
   Future<void> init() async {
     await _ttsService.init();
     await _segmenterService.initialize();
+    
+    // TTS 상태 변경 리스너 등록
+    _ttsService.setOnPlayingStateChanged((segmentIndex) {
+      // 별도의 로직 추가 가능
+      debugPrint('TextReaderService: TTS 상태 변경 - segmentIndex=$segmentIndex');
+    });
+    
+    // TTS 재생 완료 리스너 등록
+    _ttsService.setOnPlayingCompleted(() {
+      debugPrint('TextReaderService: TTS 재생 완료 이벤트 수신');
+    });
   }
 
   /// 리소스 해제
@@ -48,10 +59,12 @@ class TextReaderService {
   /// 텍스트 읽기 중지
   Future<void> stop() async {
     await _ttsService.stop();
+    debugPrint('TextReaderService: TTS 중지됨');
   }
 
   /// 단일 세그먼트 읽기
   Future<void> readSegment(String text, int segmentIndex) async {
+    debugPrint('TextReaderService: 세그먼트 읽기 시작 - segmentIndex=$segmentIndex, text="${text.substring(0, text.length > 20 ? 20 : text.length)}..."');
     await _ttsService.speakSegment(text, segmentIndex);
   }
 
@@ -79,6 +92,7 @@ class TextReaderService {
     if (text.isEmpty) return;
 
     // 전체 텍스트 읽기
+    debugPrint('TextReaderService: 전체 텍스트 읽기 - text="${text.substring(0, text.length > 20 ? 20 : text.length)}..."');
     await _ttsService.speak(text);
   }
 

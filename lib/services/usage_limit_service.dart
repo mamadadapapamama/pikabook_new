@@ -129,6 +129,11 @@ class UsageLimitService {
   /// TTS 문자 사용량 증가
   Future<bool> incrementTtsCharCount(int charCount) async {
     debugPrint('TTS 사용량 증가 시도: $charCount 문자');
+    
+    // 캐시 무효화하여 항상 최신 데이터 사용
+    _cachedUsageData = null;
+    
+    // 사용량 데이터 직접 로드
     final usageData = await _loadUsageData();
     final currentUsage = usageData['ttsRequests'] ?? 0;
     
@@ -142,7 +147,7 @@ class UsageLimitService {
     }
     
     // 실제 증가되는 카운트 (길이에 따라 달라짐)
-    final int incrementCount = (charCount / 20).ceil(); // 20자당 1회로 계산
+    final int incrementCount = 1; // 텍스트 길이에 상관없이 항상 1회로 카운트
     
     // 사용량 증가 후 값
     final int newUsage = currentUsage + incrementCount;
@@ -396,16 +401,16 @@ class UsageLimitService {
   /// 사용자의 현재 사용량 가져오기 (전체)
   /// forceRefresh가 true이면 캐시를 무시하고 최신 데이터를 가져옵니다.
   Future<Map<String, dynamic>> getUserUsage({bool forceRefresh = false}) async {
-    // 캐시 사용 결정 (5초 이내 요청은 캐시 사용)
+    // 캐시 사용 결정 (1초 이내 요청은 캐시 사용)
     final now = DateTime.now();
     final useCache = !forceRefresh && 
                     _cachedUsageData != null && 
                     _lastFetchTime != null &&
-                    now.difference(_lastFetchTime!).inSeconds < 5;
+                    now.difference(_lastFetchTime!).inSeconds < 1;
     
     if (useCache) {
       debugPrint('사용량 데이터 캐시 사용 (마지막 갱신: ${now.difference(_lastFetchTime!).inSeconds}초 전)');
-      return _cachedUsageData!;
+      return Map<String, dynamic>.from(_cachedUsageData!);
     }
     
     // 기존에 저장된 사용자 사용량 가져오기
@@ -428,7 +433,7 @@ class UsageLimitService {
       debugPrint('사용량 데이터 강제 새로고침 완료');
     }
     
-    return _cachedUsageData!;
+    return Map<String, dynamic>.from(_cachedUsageData!);
   }
 
   /// 무료 사용량 제한 확인 (전체)
@@ -618,5 +623,12 @@ class UsageLimitService {
     
     // 하나라도 더 추가할 수 있는지 확인 (최소 1페이지 이상 처리 가능해야 함)
     return remainingPages > 0;
+  }
+
+  /// 캐시된 사용량 데이터 무효화
+  void invalidateCache() {
+    _cachedUsageData = null;
+    _lastFetchTime = null;
+    debugPrint('사용량 데이터 캐시 무효화됨');
   }
 }

@@ -127,11 +127,24 @@ class _TtsButtonState extends State<TtsButton> {
   // TTS 사용 가능 여부 확인
   Future<void> _checkTtsAvailability() async {
     try {
+      // 항상 최신 데이터로 확인 (forceRefresh 사용)
       final isAvailable = await _ttsService.isTtsAvailable();
+      
       if (mounted && _isEnabled != isAvailable) {
         setState(() {
           _isEnabled = isAvailable;
         });
+        
+        // 상태 변경 로그
+        debugPrint('TTS 버튼 사용 가능 상태 변경: $_isEnabled');
+        
+        // 사용 불가로 변경된 경우 재생 중 상태도 리셋
+        if (!_isEnabled && _isPlaying) {
+          setState(() {
+            _isPlaying = false;
+          });
+          debugPrint('TTS 제한으로 인해 재생 상태 리셋');
+        }
       }
     } catch (e) {
       debugPrint('TTS 버튼 사용 가능 여부 확인 중 오류: $e');
@@ -148,6 +161,18 @@ class _TtsButtonState extends State<TtsButton> {
   void _togglePlayback() async {
     if (!_isEnabled) return;
     
+    // 사용 가능 여부 다시 확인 (최신 데이터로)
+    final isStillEnabled = await _ttsService.isTtsAvailable();
+    if (!isStillEnabled) {
+      if (mounted) {
+        setState(() {
+          _isEnabled = false;
+        });
+        debugPrint('TTS 재생 전 확인: 사용량 제한 도달');
+      }
+      return;
+    }
+    
     if (_isPlaying) {
       // 이미 재생 중이면 중지
       _ttsService.stop();
@@ -159,6 +184,8 @@ class _TtsButtonState extends State<TtsButton> {
       if (widget.onPlayEnd != null) {
         widget.onPlayEnd!();
       }
+      
+      debugPrint('TTS 재생 중지 (사용자에 의해)');
     } else {
       // 재생 시작
       setState(() {
@@ -171,6 +198,9 @@ class _TtsButtonState extends State<TtsButton> {
       }
       
       try {
+        // 재생 메서드 호출 전에 디버그 로그
+        debugPrint('TTS 재생 시작: "${widget.text}", 세그먼트=${widget.segmentIndex}');
+        
         if (widget.segmentIndex != null) {
           await _ttsService.speakSegment(widget.text, widget.segmentIndex!);
         } else {

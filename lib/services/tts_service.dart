@@ -38,40 +38,7 @@ class TtsService {
     _flutterTts = FlutterTts();
 
     // 이벤트 리스너 설정
-    _flutterTts?.setStartHandler(() {
-      debugPrint("TTS 재생 시작");
-      _ttsState = TtsState.playing;
-    });
-
-    _flutterTts?.setCompletionHandler(() {
-      debugPrint("TTS 재생 완료");
-      _ttsState = TtsState.stopped;
-
-      // 재생 완료 콜백 호출
-      if (_onPlayingCompleted != null) {
-        _onPlayingCompleted!();
-      }
-    });
-
-    _flutterTts?.setCancelHandler(() {
-      debugPrint("TTS 재생 취소");
-      _ttsState = TtsState.stopped;
-    });
-
-    _flutterTts?.setPauseHandler(() {
-      debugPrint("TTS 재생 일시정지");
-      _ttsState = TtsState.paused;
-    });
-
-    _flutterTts?.setContinueHandler(() {
-      debugPrint("TTS 재생 계속");
-      _ttsState = TtsState.continued;
-    });
-
-    _flutterTts?.setErrorHandler((msg) {
-      debugPrint("TTS 오류: $msg");
-      _ttsState = TtsState.stopped;
-    });
+    await _setupEventHandlers();
 
     // 언어 설정
     await setLanguage(_currentLanguage);
@@ -119,7 +86,7 @@ class TtsService {
     await _flutterTts?.setPitch(1.0);
   }
 
-  // 텍스트 읽기
+  /// 텍스트 읽기
   Future<void> speak(String text) async {
     if (_flutterTts == null) await init();
     if (text.isEmpty) return;
@@ -127,7 +94,9 @@ class TtsService {
     // 이미 캐시된 텍스트인지 확인 (같은 단어를 반복해서 API 호출하지 않도록)
     if (_ttsCache.containsKey(text)) {
       if (_ttsCache[text] == true) {
+        // 동일 단어 반복 재생 시, 재생 상태 업데이트만 하고 사용량은 증가시키지 않음
         await _flutterTts?.speak(text);
+        debugPrint('캐시된 TTS 재생 (사용량 변화 없음): $text');
       } else {
         debugPrint('TTS 사용량 제한으로 재생 불가: $text');
         // 여기서 알림을 표시하거나 다른 처리를 할 수 있음
@@ -150,6 +119,7 @@ class TtsService {
       // 사용량 제한이 없으면 재생
       _ttsCache[text] = true; // 사용 가능으로 캐싱
       await _flutterTts?.speak(text);
+      debugPrint('TTS 재생 시작 (사용량 증가): $text');
     } catch (e) {
       debugPrint('TTS 사용량 확인 중 오류: $e');
       // 오류 발생 시 캐싱하지 않음 (다음에 다시 시도)
@@ -245,35 +215,38 @@ class TtsService {
     if (_flutterTts == null) await init();
     if (text.isEmpty) return;
     
+    // 현재 재생 중인 세그먼트 설정 (즉시 업데이트)
+    _updateCurrentSegment(segmentIndex);
+    
     // 이미 캐시된 텍스트인지 확인
     if (_ttsCache.containsKey(text)) {
       if (_ttsCache[text] == true) {
-        // 현재 재생 중인 세그먼트 설정
-        _updateCurrentSegment(segmentIndex);
         await _flutterTts?.speak(text);
+        debugPrint('캐시된 세그먼트 TTS 재생 (사용량 변화 없음): $text (segmentIndex: $segmentIndex)');
       } else {
         debugPrint('TTS 사용량 제한으로 세그먼트 재생 불가: $text');
+        _updateCurrentSegment(null); // 재생 불가 시 세그먼트 인덱스 초기화
       }
       return;
     }
     
     // 사용량 제한 확인
     try {
-      debugPrint('TTS 세그먼트 요청: ${text.length} 글자');
+      debugPrint('TTS 세그먼트 요청: ${text.length} 글자 (segmentIndex: $segmentIndex)');
       final canUseTts = await _usageLimitService.incrementTtsCharCount(text.length);
       if (!canUseTts) {
         _ttsCache[text] = false; // 사용 불가로 캐싱
         debugPrint('TTS 사용량 제한 초과로 세그먼트 재생 불가: $text');
+        _updateCurrentSegment(null); // 재생 불가 시 세그먼트 인덱스 초기화
         return;
       }
       
-      // 현재 재생 중인 세그먼트 설정
-      _updateCurrentSegment(segmentIndex);
-      
       _ttsCache[text] = true; // 사용 가능으로 캐싱
       await _flutterTts?.speak(text);
+      debugPrint('세그먼트 TTS 재생 시작 (사용량 증가): $text (segmentIndex: $segmentIndex)');
     } catch (e) {
       debugPrint('TTS 사용량 확인 중 오류: $e');
+      _updateCurrentSegment(null); // 오류 발생 시 세그먼트 인덱스 초기화
     }
   }
 
@@ -394,6 +367,7 @@ class TtsService {
   Future<bool> isTtsAvailable() async {
     try {
       // 캐시 무효화하고 최신 데이터 가져오기
+      _usageLimitService.invalidateCache();
       final usageData = await _usageLimitService.getUserUsage(forceRefresh: true);
       
       // 현재 사용량 직접 확인 (타입 안전성 고려)
@@ -426,6 +400,7 @@ class TtsService {
   // 캐시 비우기
   void clearCache() {
     _ttsCache.clear();
+    debugPrint('TTS 캐시 비움');
   }
 
   // 발화 완료 대기
@@ -443,7 +418,9 @@ class TtsService {
   /// 현재 TTS 사용 횟수 가져오기
   Future<int> getCurrentTtsUsageCount() async {
     try {
-      final usage = await _usageLimitService.getUserUsage();
+      // 항상 최신 데이터 가져오기
+      _usageLimitService.invalidateCache();
+      final usage = await _usageLimitService.getUserUsage(forceRefresh: true);
       final int currentUsage = usage['ttsRequests'] is int 
           ? usage['ttsRequests'] as int 
           : 0;
@@ -464,5 +441,53 @@ class TtsService {
     final currentCount = await getCurrentTtsUsageCount();
     final limit = getTtsUsageLimit();
     return '현재 TTS 사용량: $currentCount/$limit회';
+  }
+
+  /// 이벤트 핸들러 초기화 (TTS 이벤트 리스너 설정)
+  Future<void> _setupEventHandlers() async {
+    // 이벤트 리스너 설정
+    _flutterTts?.setStartHandler(() {
+      debugPrint("TTS 재생 시작");
+      _ttsState = TtsState.playing;
+    });
+
+    _flutterTts?.setCompletionHandler(() {
+      debugPrint("TTS 재생 완료");
+      _ttsState = TtsState.stopped;
+      
+      // 재생 완료 시 현재 재생 중인 세그먼트 초기화
+      _updateCurrentSegment(null);
+
+      // 재생 완료 콜백 호출
+      if (_onPlayingCompleted != null) {
+        _onPlayingCompleted!();
+      }
+    });
+
+    _flutterTts?.setCancelHandler(() {
+      debugPrint("TTS 재생 취소");
+      _ttsState = TtsState.stopped;
+      
+      // 재생 취소 시 현재 재생 중인 세그먼트 초기화
+      _updateCurrentSegment(null);
+    });
+
+    _flutterTts?.setPauseHandler(() {
+      debugPrint("TTS 재생 일시정지");
+      _ttsState = TtsState.paused;
+    });
+
+    _flutterTts?.setContinueHandler(() {
+      debugPrint("TTS 재생 계속");
+      _ttsState = TtsState.continued;
+    });
+
+    _flutterTts?.setErrorHandler((msg) {
+      debugPrint("TTS 오류: $msg");
+      _ttsState = TtsState.stopped;
+      
+      // 오류 발생 시 현재 재생 중인 세그먼트 초기화
+      _updateCurrentSegment(null);
+    });
   }
 }
