@@ -15,21 +15,15 @@ class UsageLimitService {
   static const String BETA_END_DATE_STR = '2025-04-30'; // 베타 기간 종료일 (연도-월-일)
   static const int BETA_PERIOD_DAYS = 30; // 베타 기간 (30일)
   
-  // 베타 기간 동안의 무료 사용 제한
-  static const int MAX_FREE_TRANSLATION_CHARS = 100000;  // 번역 최대 글자 수
-  static const int MAX_FREE_PAGES = 50;                 // OCR 페이지 최대 개수
-  static const int MAX_FREE_OCR_REQUESTS = 50;          // OCR 요청 최대 수
-  static const int MAX_FREE_DICTIONARY_LOOKUPS = 200;   // 사전 검색 최대 수
-  static const int MAX_FREE_TTS_REQUESTS = 50000;       // TTS 요청 최대 수
+  // 베타 기간 동안의 무료 사용 제한 (테스트용)
+  static const int MAX_FREE_TRANSLATION_CHARS = 100;  // 번역 최대 글자 수
+  static const int MAX_FREE_OCR_REQUESTS = 2;          // OCR 요청 최대 수
+  static const int MAX_FREE_TTS_REQUESTS = 5;       // TTS 요청 최대 수
   static const int MAX_FREE_STORAGE_BYTES = 100 * 1024 * 1024; // 100MB 스토리지
-  static const int MAX_FREE_FLASHCARDS = 300;           // 플래시카드 최대 수
-  static const int MAX_FREE_NOTES = 50;                 // 노트 최대 수
   
   // 월별 기본 무료 사용 제한 (베타 이후)
-  static const int BASIC_FREE_TRANSLATION_CHARS = 500;   // 번역 최대 글자 수
-  static const int BASIC_FREE_PAGES = 5;                 // OCR 페이지 최대 개수
+  static const int BASIC_FREE_TRANSLATION_CHARS = 500;   // 번역 최대 글자 수  static const int BASIC_FREE_PAGES = 5;                 // OCR 페이지 최대 개수
   static const int BASIC_FREE_OCR_REQUESTS = 5;          // OCR 요청 최대 횟수
-  static const int BASIC_FREE_DICTIONARY_LOOKUPS = 50;   // 외부 사전 조회 최대 횟수
   static const int BASIC_FREE_TTS_REQUESTS = 100;        // TTS 요청 최대 글자 수
   static const int BASIC_FREE_STORAGE_MB = 20;           // 저장 공간 최대 크기 (MB)
   
@@ -107,9 +101,10 @@ class UsageLimitService {
     return await _incrementUsage('ttsRequests', charCount, MAX_FREE_TTS_REQUESTS);
   }
   
-  /// 사전 조회 사용량 증가
+  /// 사전 조회 사용량 증가 (제한 없음)
   Future<bool> incrementDictionaryCount() async {
-    return await _incrementUsage('dictionaryLookups', 1, MAX_FREE_DICTIONARY_LOOKUPS);
+    // 사전 검색은 제한 없이 항상 성공 반환
+    return true;
   }
   
   /// 범용 사용량 증가 메서드
@@ -195,20 +190,12 @@ class UsageLimitService {
     final ttsUsage = usageData['ttsRequests'] ?? 0;
     final translatedChars = usageData['translatedChars'] ?? 0;
     final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
-    final dictionaryLookups = usageData['dictionaryLookups'] ?? 0;
-    final pages = usageData['pages'] ?? 0;
-    final flashcards = usageData['flashcards'] ?? 0;
-    final notes = usageData['notes'] ?? 0;
     
     // 각 제한 초과 여부 확인
     final bool ocrLimitReached = ocrUsage >= MAX_FREE_OCR_REQUESTS;
     final bool ttsLimitReached = ttsUsage >= MAX_FREE_TTS_REQUESTS;
     final bool translationLimitReached = translatedChars >= MAX_FREE_TRANSLATION_CHARS;
     final bool storageLimitReached = storageUsageBytes >= MAX_FREE_STORAGE_BYTES;
-    final bool dictionaryLimitReached = dictionaryLookups >= MAX_FREE_DICTIONARY_LOOKUPS;
-    final bool pageLimitReached = pages >= MAX_FREE_PAGES;
-    final bool flashcardLimitReached = flashcards >= MAX_FREE_FLASHCARDS;
-    final bool noteLimitReached = notes >= MAX_FREE_NOTES;
     
     // 어느 하나라도 제한에 도달했는지 확인
     final bool anyLimitReached = 
@@ -216,10 +203,6 @@ class UsageLimitService {
         ttsLimitReached ||
         translationLimitReached ||
         storageLimitReached ||
-        dictionaryLimitReached ||
-        pageLimitReached ||
-        flashcardLimitReached ||
-        noteLimitReached ||
         betaEnded;
     
     return {
@@ -231,10 +214,10 @@ class UsageLimitService {
       'ttsLimitReached': ttsLimitReached,
       'translationLimitReached': translationLimitReached,
       'storageLimitReached': storageLimitReached,
-      'dictionaryLimitReached': dictionaryLimitReached,
-      'pageLimitReached': pageLimitReached,
-      'flashcardLimitReached': flashcardLimitReached,
-      'noteLimitReached': noteLimitReached,
+      'dictionaryLimitReached': false, 
+      'pageLimitReached': false,
+      'flashcardLimitReached': false, 
+      'noteLimitReached': false, 
       'anyLimitReached': anyLimitReached,
     };
   }
@@ -401,62 +384,18 @@ class UsageLimitService {
     final ttsUsage = usageData['ttsRequests'] ?? 0;
     final translatedChars = usageData['translatedChars'] ?? 0;
     final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
-    final dictionaryLookups = usageData['dictionaryLookups'] ?? 0;
-    final pages = usageData['pages'] ?? 0;
-    final flashcards = usageData['flashcards'] ?? 0;
-    final notes = usageData['notes'] ?? 0;
     
     return {
       'ocr': (ocrUsage / MAX_FREE_OCR_REQUESTS) * 100,
       'tts': (ttsUsage / MAX_FREE_TTS_REQUESTS) * 100,
       'translation': (translatedChars / MAX_FREE_TRANSLATION_CHARS) * 100,
       'storage': (storageUsageBytes / MAX_FREE_STORAGE_BYTES) * 100,
-      'dictionary': (dictionaryLookups / MAX_FREE_DICTIONARY_LOOKUPS) * 100,
-      'page': (pages / MAX_FREE_PAGES) * 100,
-      'flashcard': (flashcards / MAX_FREE_FLASHCARDS) * 100,
-      'note': (notes / MAX_FREE_NOTES) * 100,
+      // 제한 없는 기능은 항상 0% 사용량 반환
+      'dictionary': 0.0,
+      'flashcard': 0.0,
+      'note': 0.0,
+      'page': 0.0,
     };
-  }
-
-  /// 페이지 추가 가능 여부 확인
-  Future<bool> canAddPage(int count) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['pages'] ?? 0;
-    
-    // 추가하려는 페이지 수를 포함했을 때 제한을 초과하는지 확인
-    return (currentUsage + count) <= MAX_FREE_PAGES;
-  }
-  
-  /// 페이지 수 증가
-  Future<bool> incrementPageCount(int count) async {
-    return await _incrementUsage('pages', count, MAX_FREE_PAGES);
-  }
-  
-  /// 페이지 수 감소 (페이지 삭제 시)
-  Future<void> decrementPageCount() async {
-    await _decrementUsage('pages');
-  }
-  
-  /// 플래시카드 수 증가
-  Future<bool> incrementFlashcardCount() async {
-    return await _incrementUsage('flashcards', 1, MAX_FREE_FLASHCARDS);
-  }
-  
-  /// 플래시카드 수 감소 (플래시카드 삭제 시)
-  Future<void> decrementFlashcardCount() async {
-    await _decrementUsage('flashcards');
-  }
-  
-  /// 범용 사용량 감소 메서드
-  Future<void> _decrementUsage(String key) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData[key] ?? 0;
-    
-    if (currentUsage > 0) {
-      usageData[key] = currentUsage - 1;
-      await _saveUsageData(usageData);
-      debugPrint('$key 사용량 감소: ${currentUsage - 1}');
-    }
   }
 
   /// 사용자 사용량 데이터 로드
@@ -486,4 +425,73 @@ class UsageLimitService {
       debugPrint('사용량 데이터 저장 중 오류: $e');
     }
   }
-} 
+
+  /// 범용 사용량 감소 메서드
+  Future<void> decrementUsage(String key) async {
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData[key] ?? 0;
+    
+    if (currentUsage > 0) {
+      usageData[key] = currentUsage - 1;
+      await _saveUsageData(usageData);
+      debugPrint('$key 사용량 감소: ${currentUsage - 1}');
+    }
+  }
+
+  /// 플래시카드 사용량 증가
+  Future<bool> incrementFlashcardCount() async {
+    // 현재는 플래시카드에 제한이 없으므로 항상 true 반환
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData['flashcards'] ?? 0;
+    
+    // 사용량 증가
+    usageData['flashcards'] = currentUsage + 1;
+    await _saveUsageData(usageData);
+    
+    debugPrint('flashcards 사용량 증가: ${currentUsage + 1}/무제한');
+    return true;
+  }
+
+  /// 플래시카드 사용량 감소
+  Future<void> decrementFlashcardCount() async {
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData['flashcards'] ?? 0;
+    
+    if (currentUsage > 0) {
+      usageData['flashcards'] = currentUsage - 1;
+      await _saveUsageData(usageData);
+      debugPrint('flashcards 사용량 감소: ${currentUsage - 1}/무제한');
+    }
+  }
+
+  /// 페이지 추가 가능 여부 확인
+  Future<bool> canAddPage(int count) async {
+    // 현재는 페이지에 제한이 없으므로 항상 true 반환
+    return true;
+  }
+
+  /// 페이지 사용량 증가
+  Future<bool> incrementPageCount(int count) async {
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData['pages'] ?? 0;
+    
+    // 사용량 증가
+    usageData['pages'] = currentUsage + count;
+    await _saveUsageData(usageData);
+    
+    debugPrint('pages 사용량 증가: ${currentUsage + count}/무제한');
+    return true;
+  }
+
+  /// 페이지 사용량 감소
+  Future<void> decrementPageCount() async {
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData['pages'] ?? 0;
+    
+    if (currentUsage > 0) {
+      usageData['pages'] = currentUsage - 1;
+      await _saveUsageData(usageData);
+      debugPrint('pages 사용량 감소: ${currentUsage - 1}/무제한');
+    }
+  }
+}

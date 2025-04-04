@@ -785,7 +785,7 @@ class NoteService {
       }
       
       // OCR 요청 가능 여부 확인
-      final canUseOcr = await _usageLimitService.addOcrRequest();
+      final canUseOcr = await _usageLimitService.incrementOcrCount();
       if (!canUseOcr) {
         return {
           'success': false,

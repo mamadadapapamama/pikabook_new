@@ -197,7 +197,7 @@ class DictionaryService {
       }
       
       // 내부 사전에 없는 경우 사용량 제한 확인
-      final canLookup = await _usageLimitService.incrementDictionaryLookupCount();
+      final canLookup = await _usageLimitService.incrementDictionaryCount();
       if (!canLookup) {
         debugPrint('사전 검색 사용량 한도 초과: $word');
         return {
@@ -324,7 +324,7 @@ class DictionaryService {
       }
       
       // 사용량 제한 확인 (외부 API 호출 전 확인)
-      final canLookup = await _usageLimitService.incrementDictionaryLookupCount();
+      final canLookup = await _usageLimitService.incrementDictionaryCount();
       if (!canLookup) {
         debugPrint('Papago API 호출 사용량 한도 초과: $word');
         return null;
@@ -335,7 +335,7 @@ class DictionaryService {
       if (existingEntry != null) {
         debugPrint('이미 사전에 있는 단어 반환: $word');
         // 이미 사전에 있으므로 사용량을 다시 감소
-        await _usageLimitService.decrementDictionaryLookupCount();
+        await _usageLimitService.decrementUsage('dictionaryLookups');
         return existingEntry;
       }
 

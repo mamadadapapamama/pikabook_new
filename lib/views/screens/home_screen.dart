@@ -268,8 +268,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     final bool shouldShowTooltip = _showTooltip && !viewModel.hasNotes;
                     
                     return HelpTextTooltip(
-                      text: "노트 저장 공간이 성공적으로 만들어졌어요!",
-                      description: "이제 이미지를 올려, 스마트 노트를 만들어보세요.",
+                      text: "Pikabook Beta! 4월 30일까지 무료로 사용하세요.",
+                      description: "- 📷 이미지 OCR: 최대 60장 (사진으로 책 업로드 가능!)\n- 🌐 번역: 최대 5,000자\n- 🔊 듣기 기능: 1,000자까지 음성 변환 가능\n추후 유저 피드백을 기반으로 더 많은 기능과 요금제를 준비할 예정이에요!",
                       showTooltip: shouldShowTooltip,
                       onDismiss: _handleCloseTooltip,
                       style: HelpTextTooltipStyle.primary, // 스타일 프리셋 사용
@@ -280,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 text: '스마트 노트 만들기',
                                 variant: PikaButtonVariant.floating,
                                 leadingIcon: const Icon(Icons.add),
-                                onPressed: () => _handleAddImage(context),
+                                onPressed: () => _handleAddNote(context),
                               )
                             : const SizedBox.shrink(), // 노트가 없을 때는 FAB 숨김
                       ),
@@ -424,7 +424,31 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   // Zero state에서 '새 노트 만들기' 버튼 클릭 핸들러
-  void _handleAddNote(BuildContext context) {
+  void _handleAddNote(BuildContext context) async {
+    // 사용량 제한 확인
+    if (!_hasCheckedUsage) {
+      await _checkUsageLimits();
+    }
+    
+    // OCR, 번역 또는 저장 공간 제한이 있는 경우 다이얼로그 표시하고 노트 생성을 막음
+    if (_limitStatus['ocrLimitReached'] == true || 
+        _limitStatus['translationLimitReached'] == true || 
+        _limitStatus['storageLimitReached'] == true) {
+      if (mounted) {
+        UsageLimitDialog.show(
+          context,
+          limitStatus: _limitStatus,
+          usagePercentages: _usagePercentages,
+          onContactSupport: _handleContactSupport,
+        );
+      }
+      return;
+    }
+    
+    // 제한이 없는 경우 정상 처리
+    if (!mounted) return;
+    
+    // 기존의 바텀 시트 표시 함수 호출
     _showImagePickerBottomSheet(context);
   }
 
@@ -531,13 +555,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   // 이미지 추가 버튼 핸들러
   void _handleAddImage(BuildContext context) async {
-    // 사용량 한도 초과 확인 (노트 개수 제한)
+    // 사용량 한도 초과 확인
     if (!_hasCheckedUsage) {
       await _checkUsageLimits();
     }
     
-    // 노트 한도 초과 시 다이얼로그 표시
-    if (_limitStatus['noteLimitReached'] == true) {
+    // OCR, 번역 또는 저장 공간 제한이 있는 경우 다이얼로그 표시하고 노트 생성을 막음
+    if (_limitStatus['ocrLimitReached'] == true || 
+        _limitStatus['translationLimitReached'] == true || 
+        _limitStatus['storageLimitReached'] == true) {
       if (mounted) {
         UsageLimitDialog.show(
           context,
@@ -549,7 +575,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       return;
     }
     
-    // 노트 한도 초과가 아닌 경우 정상 처리
+    // 제한이 없는 경우 정상 처리
     if (!mounted) return;
     
     // 기존의 바텀 시트 표시 함수 호출

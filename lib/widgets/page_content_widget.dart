@@ -14,6 +14,8 @@ import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
 import '../utils/segment_utils.dart';
 import '../services/text_reader_service.dart'; // TTS 서비스 추가
+import '../services/usage_limit_service.dart';
+import '../widgets/common/usage_limit_dialog.dart';
 
 /// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
 ///
@@ -79,6 +81,11 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   late final TextStyle _originalTextStyle;
   late final TextStyle _pinyinTextStyle;
   late final TextStyle _translatedTextStyle;
+
+  // TTS 사용량 제한 확인 변수
+  bool _isCheckingTtsLimit = false;
+  Map<String, bool>? _ttsLimitStatus;
+  Map<String, double>? _ttsUsagePercentages;
 
   @override
   void initState() {
@@ -197,9 +204,46 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     });
   }
 
+  // TTS 제한 확인
+  Future<bool> _checkTtsLimit() async {
+    if (_isCheckingTtsLimit) return false;
+    _isCheckingTtsLimit = true;
+    
+    try {
+      final usageLimitService = UsageLimitService();
+      _ttsLimitStatus = await usageLimitService.checkFreeLimits();
+      _ttsUsagePercentages = await usageLimitService.getUsagePercentages();
+      
+      _isCheckingTtsLimit = false;
+      return _ttsLimitStatus?['ttsLimitReached'] == true;
+    } catch (e) {
+      debugPrint('TTS 제한 확인 중 오류: $e');
+      _isCheckingTtsLimit = false;
+      return false;
+    }
+  }
+
   // TTS 재생 메서드 추가
-  void _playTts(String text, {int? segmentIndex}) {
+  void _playTts(String text, {int? segmentIndex}) async {
     if (text.isEmpty) return;
+    
+    // TTS 제한 확인
+    bool isLimitReached = await _checkTtsLimit();
+    if (isLimitReached) {
+      // TTS 제한에 도달한 경우 다이얼로그 표시
+      if (mounted) {
+        UsageLimitDialog.show(
+          context,
+          limitStatus: _ttsLimitStatus!,
+          usagePercentages: _ttsUsagePercentages!,
+          onContactSupport: () {
+            // 지원팀 문의하기
+            // 구현 필요시 나중에 추가
+          },
+        );
+      }
+      return;
+    }
     
     if (_playingSegmentIndex == segmentIndex) {
       // 이미 재생 중인 세그먼트를 다시 클릭한 경우 중지

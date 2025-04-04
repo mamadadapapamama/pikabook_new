@@ -137,11 +137,6 @@ class UsageLimitDialog extends StatelessWidget {
       return '베타 기간 동안 사용할 수 있는 음성 읽기 횟수 한도에 도달했습니다. 기능 테스트에 도움을 주셔서 감사합니다.';
     }
     
-    // 노트 개수 제한
-    if (limitStatus['noteLimitReached'] == true) {
-      return '베타 기간 동안 생성할 수 있는 노트 개수 한도에 도달했습니다. 불필요한 노트를 삭제하여 공간을 확보하세요.';
-    }
-    
     // 일반 메시지
     return '베타 기간 동안 무료로 사용할 수 있는 한도에 도달했습니다. 더 많은 기능을 이용하시려면 정식 서비스 출시를 기다려주세요.';
   }
@@ -259,14 +254,6 @@ class UsageLimitDialog extends StatelessWidget {
         return '번역';
       case 'storage':
         return '저장 공간';
-      case 'dictionary':
-        return '사전 검색';
-      case 'page':
-        return '페이지 수';
-      case 'flashcard':
-        return '플래시카드';
-      case 'note':
-        return '노트 수';
       default:
         return key;
     }

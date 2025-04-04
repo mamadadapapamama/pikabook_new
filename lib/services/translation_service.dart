@@ -195,7 +195,7 @@ class TranslationService {
       }
 
       // 번역된 글자 수 기록 (제한 없이 사용량만 추적)
-      await _usageLimitService.addTranslatedChars(text.length);
+      await _usageLimitService.incrementTranslationCharCount(text.length);
 
       return translatedText;
     } catch (e) {

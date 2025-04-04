@@ -137,7 +137,7 @@ class TtsService {
 
     // 사용량 제한 확인
     try {
-      final canUseTts = await _usageLimitService.addTtsRequest();
+      final canUseTts = await _usageLimitService.incrementTtsCharCount(1);
       if (!canUseTts) {
         _ttsCache[text] = false; // 사용 불가로 캐싱
         debugPrint('TTS 사용량 제한 초과로 재생 불가: $text');
@@ -265,7 +265,7 @@ class TtsService {
 
     // 사용량 제한 확인
     try {
-      final canUseTts = await _usageLimitService.addTtsRequest();
+      final canUseTts = await _usageLimitService.incrementTtsCharCount(1);
       if (!canUseTts) {
         _ttsCache[text] = false; // 사용 불가로 캐싱
         debugPrint('TTS 사용량 제한 초과로 세그먼트 재생 불가: $text');
@@ -345,7 +345,7 @@ class TtsService {
       } else {
         // 사용량 제한 확인
         try {
-          final canUseTts = await _usageLimitService.addTtsRequest();
+          final canUseTts = await _usageLimitService.incrementTtsCharCount(1);
           if (!canUseTts) {
             _ttsCache[text] = false; // 사용 불가로 캐싱
             debugPrint('TTS 사용량 제한 초과로 세그먼트 재생 불가: $text');
