@@ -124,6 +124,13 @@ class _TtsButtonState extends State<TtsButton> {
         }
       }
       
+      // 재생 완료 후 자동으로 재생 상태 초기화
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+        });
+      }
+      
       // 사용량 확인 후 상태 업데이트
       _checkTtsAvailability();
     }
@@ -131,52 +138,29 @@ class _TtsButtonState extends State<TtsButton> {
 
   @override
   Widget build(BuildContext context) {
-    // 기본 색상 설정
-    final Color defaultIconColor = widget.iconColor ?? ColorTokens.textSecondary;
-    final Color defaultActiveBackground = widget.activeBackgroundColor ?? ColorTokens.primary.withOpacity(0.1);
-    
-    // 버튼 사이즈에 맞게 아이콘 사이즈 계산
-    final double iconSize = widget.size * 0.6;
-    
-    // 버튼 배경색 - 재생 중일 때와 비활성화 상태에 따라 다르게 설정
-    final Color backgroundColor = _isPlaying 
-        ? defaultActiveBackground 
-        : _isEnabled 
-            ? ColorTokens.segmentButtonBackground
-            : ColorTokens.textGrey.withOpacity(0.1); // 비활성화 시 회색 배경
-    
     // 아이콘 색상 - 활성화 상태에 따라 다르게 설정
     final Color iconColor = _isEnabled 
-        ? defaultIconColor 
+        ? widget.iconColor ?? ColorTokens.textSecondary 
         : ColorTokens.textGrey.withOpacity(0.5); // 비활성화 시 연한 회색
     
-    final Widget buttonContent = AnimatedContainer(
-      duration: const Duration(milliseconds: 200), // 상태 변화 시 애니메이션 효과
-      width: widget.size,
-      height: widget.size,
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(widget.size / 2), // 완전한 원형 버튼
-      ),
-      child: Icon(
+    // 일반 Flutter IconButton 사용
+    final Widget buttonContent = IconButton(
+      icon: Icon(
         _isPlaying ? Icons.stop : Icons.volume_up,
         color: iconColor,
-        size: iconSize,
       ),
+      iconSize: widget.size * 0.6,
+      padding: EdgeInsets.all(widget.size * 0.2),
+      constraints: BoxConstraints(
+        minWidth: widget.size,
+        minHeight: widget.size,
+      ),
+      onPressed: _isEnabled ? _togglePlayback : null,
+      splashRadius: widget.size / 2,
+      tooltip: !_isEnabled && widget.tooltip != null ? widget.tooltip : null,
     );
     
-    // 비활성화 상태이고 툴팁이 있는 경우 툴팁으로 감싸기
-    if (!_isEnabled && widget.tooltip != null) {
-      return Tooltip(
-        message: widget.tooltip!,
-        child: buttonContent,
-      );
-    }
-    
-    return GestureDetector(
-      onTap: _isEnabled ? _togglePlayback : null,
-      child: buttonContent,
-    );
+    return buttonContent;
   }
   
   @override

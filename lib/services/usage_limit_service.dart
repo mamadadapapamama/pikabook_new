@@ -124,7 +124,31 @@ class UsageLimitService {
   
   /// TTS 문자 사용량 증가
   Future<bool> incrementTtsCharCount(int charCount) async {
-    return await _incrementUsage('ttsRequests', charCount, MAX_FREE_TTS_REQUESTS);
+    debugPrint('TTS 사용량 증가 시도: $charCount 문자');
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData['ttsRequests'] ?? 0;
+    
+    // 현재 상태 로깅
+    debugPrint('TTS 현재 사용량: $currentUsage/$MAX_FREE_TTS_REQUESTS');
+    
+    // 사용량 제한 확인
+    if (currentUsage >= MAX_FREE_TTS_REQUESTS) {
+      debugPrint('TTS 사용량 제한 초과: $currentUsage/$MAX_FREE_TTS_REQUESTS');
+      return false;
+    }
+    
+    // 실제 증가되는 카운트 (길이에 따라 달라짐)
+    final int incrementCount = (charCount / 20).ceil(); // 20자당 1회로 계산
+    
+    // 사용량 증가 후 값
+    final int newUsage = currentUsage + incrementCount;
+    
+    // 사용량 증가
+    usageData['ttsRequests'] = newUsage;
+    await _saveUsageData(usageData);
+    
+    debugPrint('TTS 사용량 증가 완료: $newUsage/$MAX_FREE_TTS_REQUESTS (${incrementCount}회 증가)');
+    return newUsage <= MAX_FREE_TTS_REQUESTS;
   }
   
   /// 사전 조회 사용량 증가 (제한 없음)

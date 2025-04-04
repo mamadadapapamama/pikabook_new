@@ -290,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   text: '스마트 노트 만들기',
                                   variant: PikaButtonVariant.floating,
                                   leadingIcon: const Icon(Icons.add),
-                                  onPressed: () => _handleAddNote(context),
+                                  onPressed: () => _handleAddImage(context),
                                 )
                             : const SizedBox.shrink(), // 노트가 없을 때는 FAB 숨김
                       ),
@@ -443,31 +443,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   // Zero state에서 '새 노트 만들기' 버튼 클릭 핸들러
-  void _handleAddNote(BuildContext context) async {
-    // 사용량 제한 확인
-    if (!_hasCheckedUsage) {
-      await _checkUsageLimits();
-    }
-    
-    // OCR, 번역 또는 저장 공간 제한이 있는 경우 다이얼로그 표시하고 노트 생성을 막음
-    if (_limitStatus['ocrLimitReached'] == true || 
-        _limitStatus['translationLimitReached'] == true || 
-        _limitStatus['storageLimitReached'] == true) {
-      if (mounted) {
-        UsageLimitDialog.show(
-          context,
-          limitStatus: _limitStatus,
-          usagePercentages: _usagePercentages,
-          onContactSupport: _handleContactSupport,
-        );
-      }
-      return;
-    }
-    
-    // 제한이 없는 경우 정상 처리
+  void _handleAddImage(BuildContext context) async {
+    // 바로 이미지 피커 바텀 시트 표시
     if (!mounted) return;
-    
-    // 기존의 바텀 시트 표시 함수 호출
     _showImagePickerBottomSheet(context);
   }
 
@@ -572,35 +550,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  // 이미지 추가 버튼 핸들러
-  void _handleAddImage(BuildContext context) async {
-    // 사용량 한도 초과 확인
-    if (!_hasCheckedUsage) {
-      await _checkUsageLimits();
-    }
-    
-    // OCR, 번역 또는 저장 공간 제한이 있는 경우 다이얼로그 표시하고 노트 생성을 막음
-    if (_limitStatus['ocrLimitReached'] == true || 
-        _limitStatus['translationLimitReached'] == true || 
-        _limitStatus['storageLimitReached'] == true) {
-      if (mounted) {
-        UsageLimitDialog.show(
-          context,
-          limitStatus: _limitStatus,
-          usagePercentages: _usagePercentages,
-          onContactSupport: _handleContactSupport,
-        );
-      }
-      return;
-    }
-    
-    // 제한이 없는 경우 정상 처리
-    if (!mounted) return;
-    
-    // 기존의 바텀 시트 표시 함수 호출
-    _showImagePickerBottomSheet(context);
-  }
-  
   // 버튼 비활성화 여부 확인
   bool _isButtonDisabled() {
     return _limitStatus['ocrLimitReached'] == true || 

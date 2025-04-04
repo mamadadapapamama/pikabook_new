@@ -137,7 +137,8 @@ class TtsService {
 
     // 사용량 제한 확인
     try {
-      final canUseTts = await _usageLimitService.incrementTtsCharCount(1);
+      debugPrint('TTS 요청: ${text.length} 글자');
+      final canUseTts = await _usageLimitService.incrementTtsCharCount(text.length);
       if (!canUseTts) {
         _ttsCache[text] = false; // 사용 불가로 캐싱
         debugPrint('TTS 사용량 제한 초과로 재생 불가: $text');
@@ -243,42 +244,36 @@ class TtsService {
   Future<void> speakSegment(String text, int segmentIndex) async {
     if (_flutterTts == null) await init();
     if (text.isEmpty) return;
-
-    // 이미 재생 중인 경우 중지
-    if (_currentSegmentIndex != null) {
-      await stop();
-    }
-
-    // 현재 재생 중인 세그먼트 업데이트
-    _updateCurrentSegment(segmentIndex);
-
+    
     // 이미 캐시된 텍스트인지 확인
     if (_ttsCache.containsKey(text)) {
       if (_ttsCache[text] == true) {
+        // 현재 재생 중인 세그먼트 설정
+        _updateCurrentSegment(segmentIndex);
         await _flutterTts?.speak(text);
       } else {
         debugPrint('TTS 사용량 제한으로 세그먼트 재생 불가: $text');
-        _updateCurrentSegment(null);
       }
       return;
     }
-
+    
     // 사용량 제한 확인
     try {
-      final canUseTts = await _usageLimitService.incrementTtsCharCount(1);
+      debugPrint('TTS 세그먼트 요청: ${text.length} 글자');
+      final canUseTts = await _usageLimitService.incrementTtsCharCount(text.length);
       if (!canUseTts) {
         _ttsCache[text] = false; // 사용 불가로 캐싱
         debugPrint('TTS 사용량 제한 초과로 세그먼트 재생 불가: $text');
-        _updateCurrentSegment(null);
         return;
       }
       
-      // 사용량 제한이 없으면 재생
+      // 현재 재생 중인 세그먼트 설정
+      _updateCurrentSegment(segmentIndex);
+      
       _ttsCache[text] = true; // 사용 가능으로 캐싱
       await _flutterTts?.speak(text);
     } catch (e) {
       debugPrint('TTS 사용량 확인 중 오류: $e');
-      _updateCurrentSegment(null);
     }
   }
 
