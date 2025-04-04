@@ -62,22 +62,37 @@ class _TtsButtonState extends State<TtsButton> {
   void initState() {
     super.initState();
     _checkTtsAvailability();
-    
-    // TTS 상태 변경 리스너 등록
+    _setupListeners();
+  }
+  
+  // TTS 상태 변경 리스너 설정
+  void _setupListeners() {
+    // 재생 상태 변경 리스너
     _ttsService.setOnPlayingStateChanged((segmentIndex) {
       if (mounted) {
-        setState(() {
-          _isPlaying = widget.segmentIndex == segmentIndex;
-        });
+        // 현재 재생 중인 세그먼트인지 확인
+        final bool isThisSegmentPlaying = widget.segmentIndex != null && 
+                                         widget.segmentIndex == segmentIndex;
+        
+        // 상태가 변경된 경우에만 setState 호출
+        if (_isPlaying != isThisSegmentPlaying) {
+          setState(() {
+            _isPlaying = isThisSegmentPlaying;
+          });
+          
+          debugPrint('TTS 버튼 상태 변경: _isPlaying=$_isPlaying, segmentIndex=$segmentIndex, widget.segmentIndex=${widget.segmentIndex}');
+        }
       }
     });
     
-    // TTS 재생 완료 리스너 등록
+    // 재생 완료 리스너
     _ttsService.setOnPlayingCompleted(() {
-      if (mounted) {
+      if (mounted && _isPlaying) {
         setState(() {
           _isPlaying = false;
         });
+        
+        debugPrint('TTS 재생 완료: 버튼 상태 리셋');
         
         // 재생 완료 콜백 호출
         if (widget.onPlayEnd != null) {
@@ -85,6 +100,28 @@ class _TtsButtonState extends State<TtsButton> {
         }
       }
     });
+  }
+  
+  @override
+  void didUpdateWidget(TtsButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // 세그먼트 인덱스가 변경된 경우
+    if (oldWidget.segmentIndex != widget.segmentIndex) {
+      // TTS 서비스의 현재 재생 중인 세그먼트와 비교
+      final currentPlayingSegment = _ttsService.currentSegmentIndex;
+      final bool shouldBePlaying = widget.segmentIndex != null && 
+                                  widget.segmentIndex == currentPlayingSegment;
+      
+      // 상태 업데이트
+      if (_isPlaying != shouldBePlaying) {
+        setState(() {
+          _isPlaying = shouldBePlaying;
+        });
+        
+        debugPrint('세그먼트 인덱스 변경으로 인한 상태 업데이트: _isPlaying=$_isPlaying');
+      }
+    }
   }
   
   // TTS 사용 가능 여부 확인
@@ -139,6 +176,30 @@ class _TtsButtonState extends State<TtsButton> {
         } else {
           await _ttsService.speak(widget.text);
         }
+        
+        // speakSegment이 비동기적으로 완료된 후에도 상태 확인
+        // 3초 후에 TTS 서비스 상태를 확인하여 현재 재생 중인지 확인
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            final currentSegment = _ttsService.currentSegmentIndex;
+            final bool shouldStillBePlaying = widget.segmentIndex != null && 
+                                             widget.segmentIndex == currentSegment;
+            
+            // 상태가 불일치하는 경우 강제 업데이트
+            if (_isPlaying && !shouldStillBePlaying) {
+              setState(() {
+                _isPlaying = false;
+              });
+              
+              debugPrint('3초 타임아웃으로 TTS 버튼 상태 리셋');
+              
+              // 재생 종료 콜백 호출
+              if (widget.onPlayEnd != null) {
+                widget.onPlayEnd!();
+              }
+            }
+          }
+        });
       } catch (e) {
         debugPrint('TTS 재생 중 오류 발생: $e');
         // 오류 발생 시 재생 상태 업데이트
@@ -234,7 +295,10 @@ class _TtsButtonState extends State<TtsButton> {
   
   @override
   void dispose() {
-    // TTS 서비스에서 리스너 등록 해제는 필요없음 (싱글톤)
+    // 상태 정리를 위해 현재 재생 중인 경우 중지
+    if (_isPlaying) {
+      _ttsService.stop();
+    }
     super.dispose();
   }
 } 

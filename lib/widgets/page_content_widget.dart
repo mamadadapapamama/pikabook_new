@@ -191,6 +191,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         setState(() {
           _playingSegmentIndex = segmentIndex;
         });
+        debugPrint('페이지 콘텐츠 TTS 상태 변경: segmentIndex=$segmentIndex');
       }
     });
     
@@ -200,6 +201,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         setState(() {
           _playingSegmentIndex = null;
         });
+        debugPrint('페이지 콘텐츠 TTS 재생 완료');
       }
     });
   }
@@ -247,12 +249,47 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     if (_playingSegmentIndex == segmentIndex) {
       // 이미 재생 중인 세그먼트를 다시 클릭한 경우 중지
       _textReaderService.stop();
+      
+      // 명시적으로 상태 업데이트 (콜백이 호출되지 않을 수 있어 추가)
+      if (mounted) {
+        setState(() {
+          _playingSegmentIndex = null;
+        });
+        debugPrint('페이지 콘텐츠 TTS 중지 (사용자에 의해)');
+      }
     } else {
       // 새로운 세그먼트 재생
-      if (segmentIndex != null) {
-        _textReaderService.readSegment(text, segmentIndex);
-      } else {
-        _textReaderService.readText(text);
+      // 상태 먼저 업데이트
+      if (mounted) {
+        setState(() {
+          _playingSegmentIndex = segmentIndex;
+        });
+      }
+      
+      try {
+        if (segmentIndex != null) {
+          await _textReaderService.readSegment(text, segmentIndex);
+        } else {
+          await _textReaderService.readText(text);
+        }
+        
+        // 안전장치: 10초 후 재생이 여전히 진행 중인 경우 상태 리셋
+        Future.delayed(const Duration(seconds: 10), () {
+          if (mounted && _playingSegmentIndex == segmentIndex) {
+            setState(() {
+              _playingSegmentIndex = null;
+            });
+            debugPrint('페이지 콘텐츠 TTS 타임아웃으로 상태 리셋');
+          }
+        });
+      } catch (e) {
+        // 오류 발생 시 상태 리셋
+        if (mounted) {
+          setState(() {
+            _playingSegmentIndex = null;
+          });
+          debugPrint('페이지 콘텐츠 TTS 재생 중 오류: $e');
+        }
       }
     }
   }

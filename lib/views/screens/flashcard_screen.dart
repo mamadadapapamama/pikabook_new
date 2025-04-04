@@ -169,11 +169,23 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       await _ttsService.speak(textToSpeak);
 
       // 음성 재생이 완료되면 상태 업데이트
-      Future.delayed(const Duration(milliseconds: 500), () {
+      // CompletionHandler에서 처리하기 위해 특별한 콜백 등록
+      _ttsService.setOnPlayingCompleted(() {
         if (mounted && _isSpeaking) {
           setState(() {
             _isSpeaking = false;
           });
+          debugPrint('플래시카드 TTS 재생 완료 이벤트 수신');
+        }
+      });
+      
+      // 안전장치로 타임아웃 설정 (재생 시간이 길어도 최대 10초 후 상태 리셋)
+      Future.delayed(const Duration(seconds: 10), () {
+        if (mounted && _isSpeaking) {
+          setState(() {
+            _isSpeaking = false;
+          });
+          debugPrint('플래시카드 TTS 타임아웃으로 상태 리셋');
         }
       });
     } catch (e) {
