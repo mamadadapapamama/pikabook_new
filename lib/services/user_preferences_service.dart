@@ -18,7 +18,26 @@ class UserPreferencesService {
   // 온보딩 완료 여부 가져오기
   Future<bool> getOnboardingCompleted() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_onboardingCompletedKey) ?? false;
+    
+    // 1. 저장된 온보딩 상태 확인 (이제 기본값 true로 설정)
+    final onboardingCompleted = prefs.getBool(_onboardingCompletedKey);
+    
+    // 2. 로컬에 설정된 값이 있으면 그 값 사용
+    if (onboardingCompleted != null) {
+      return onboardingCompleted;
+    }
+    
+    // 3. 로그인 기록 확인 - 로그인 기록이 있으면 온보딩 완료로 간주
+    final hasLoginHistory = prefs.getBool(_loginHistoryKey) ?? false;
+    if (hasLoginHistory) {
+      // 로그인 기록이 있는 기존 사용자는 온보딩 완료로 간주하고 저장
+      await setOnboardingCompleted(true);
+      debugPrint('📝 로그인 기록 있는 사용자 - 온보딩 완료 상태로 자동 설정');
+      return true;
+    }
+    
+    // 4. 기본값은 false
+    return false;
   }
 
   // 온보딩 완료 여부 설정

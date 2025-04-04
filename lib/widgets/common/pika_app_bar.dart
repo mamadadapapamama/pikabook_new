@@ -71,7 +71,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       showLogo: true,
       noteSpaceName: noteSpaceName,
       backgroundColor: UITokens.homeBackground,
-      height: 96,
+      height: 100,
       actions: [
         Padding(
           padding: EdgeInsets.only(right:SpacingTokens.md, bottom:SpacingTokens.md),
@@ -167,7 +167,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
           onPressed: onMorePressed,
         ),
       ],
-      showBorder: true,
+      showBorder: false,
     );
   }
 

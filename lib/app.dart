@@ -15,7 +15,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'viewmodels/home_viewmodel.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'package:flutter/rendering.dart';
 
 class App extends StatefulWidget {
   const App({Key? key}) : super(key: key);
@@ -255,23 +254,69 @@ class _AppState extends State<App> {
         await _preferencesService.clearAllUserPreferences();
       }
       
-      // 로그인 기록 확인
+      // 1. 현재 사용자 로그인 상태 확인 (가장 우선)
+      final isUserAuthenticated = FirebaseAuth.instance.currentUser != null;
+      
+      // 2. 로그인된 경우 노트 존재 확인 및 온보딩 상태 체크
+      bool isOnboardingCompleted = false;
+      bool hasNotes = false;
+      
+      if (isUserAuthenticated) {
+        debugPrint('로그인된 사용자 감지: ${FirebaseAuth.instance.currentUser!.uid}');
+        
+        // 2.1 사용자의 노트 확인 - 노트가 있으면 온보딩 완료로 간주
+        try {
+          final notesSnapshot = await FirebaseFirestore.instance
+              .collection('notes')
+              .where('userId', isEqualTo: FirebaseAuth.instance.currentUser!.uid)
+              .limit(1)
+              .get();
+              
+          hasNotes = notesSnapshot.docs.isNotEmpty;
+          
+          if (hasNotes) {
+            debugPrint('🔍 노트가 있는 사용자 감지 (${notesSnapshot.docs.length}개)');
+            
+            // 노트가 있으면 온보딩 완료로 간주하고 설정 업데이트
+            isOnboardingCompleted = true;
+            await _preferencesService.setOnboardingCompleted(true);
+            
+            // Firestore에도 온보딩 완료 상태 업데이트
+            try {
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(FirebaseAuth.instance.currentUser!.uid)
+                  .update({'onboardingCompleted': true});
+              debugPrint('✅ Firestore 사용자 문서에 온보딩 완료 상태 업데이트됨');
+            } catch (e) {
+              debugPrint('⚠️ Firestore 사용자 온보딩 상태 업데이트 실패: $e');
+            }
+          } else {
+            debugPrint('🔍 노트가 없는 사용자');
+            // 노트가 없으면 온보딩 완료 여부 확인
+            isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
+          }
+        } catch (e) {
+          debugPrint('⚠️ 노트 확인 중 오류: $e');
+          // 오류 발생 시 기본 온보딩 상태 사용
+          isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
+        }
+        
+        // 로그인 기록 확인 및 저장
+        await _preferencesService.saveLoginHistory();
+      }
+      
+      // 3. 로그인 기록 확인 (UI에 표시 목적)
       final hasLoginHistory = prefs.getBool('login_history') ?? false;
       
-      // 온보딩 완료 여부 확인
-      final isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
-      
-      // 툴팁 표시 여부 확인
-      final hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
-      
-      // 현재 사용자 상태 확인 (새 설치 시에는 로그아웃 처리 후 확인)
-      final isUserAuthenticated = FirebaseAuth.instance.currentUser != null;
+      // 4. 툴팁 표시 여부 확인 - 온보딩 완료된 사용자만 관련 있음
+      final hasShownTooltip = isOnboardingCompleted ? (prefs.getBool('hasShownTooltip') ?? false) : false;
       
       if (mounted) {
         setState(() {
           _hasLoginHistory = hasLoginHistory;
           _isOnboardingCompleted = isOnboardingCompleted;
-          _isFirstEntry = !hasShownTooltip;
+          _isFirstEntry = isOnboardingCompleted && !hasShownTooltip; // 온보딩 완료된 사용자만 툴팁 관련
           _isUserAuthenticated = isUserAuthenticated;
           
           // 초기화 완료
@@ -281,7 +326,7 @@ class _AppState extends State<App> {
         });
       }
       
-      debugPrint('앱 데이터 초기화 완료 - 로그인: $_isUserAuthenticated, 온보딩: $_isOnboardingCompleted');
+      debugPrint('앱 데이터 초기화 완료 - 로그인: $_isUserAuthenticated, 노트 있음: $hasNotes, 온보딩: $_isOnboardingCompleted, 툴팁 표시: $_isFirstEntry');
       
       final elapsed = DateTime.now().difference(_appStartTime);
       debugPrint('앱 초기화 완료 (소요시간: ${elapsed.inMilliseconds}ms)');
@@ -306,10 +351,35 @@ class _AppState extends State<App> {
         _isUserAuthenticated = true;
       });
       
+      debugPrint('🔐 사용자 로그인 처리 시작: ${user.uid}');
+      
       // 사용자 ID 설정 (사용자 변경 감지 및 데이터 초기화)
       await _preferencesService.setCurrentUserId(user.uid);
       
-      // 사용자 정보 확인 - 기본 정보만 빠르게 로드
+      // 1. 사용자 노트 존재 여부 확인 (가장 중요)
+      bool hasNotes = false;
+      bool isOnboardingCompleted = false;
+      
+      try {
+        // 사용자의 노트 확인
+        final notesSnapshot = await FirebaseFirestore.instance
+            .collection('notes')
+            .where('userId', isEqualTo: user.uid)
+            .limit(1)
+            .get();
+            
+        hasNotes = notesSnapshot.docs.isNotEmpty;
+        
+        if (hasNotes) {
+          debugPrint('🔍 노트가 있는 사용자 감지 (${notesSnapshot.docs.length}개)');
+          // 노트가 있으면 온보딩을 자동으로 완료 처리
+          isOnboardingCompleted = true;
+        }
+      } catch (e) {
+        debugPrint('⚠️ 노트 확인 중 오류: $e');
+      }
+      
+      // 2. 사용자 정보 확인 - 기본 정보 로드
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -341,16 +411,46 @@ class _AppState extends State<App> {
             });
           }
           
+          // 3. 온보딩 상태 확인 및 업데이트
+          if (!hasNotes) {
+            // 노트가 없는 경우에만 기존 온보딩 상태 확인
+            isOnboardingCompleted = userData['onboardingCompleted'] ?? await _preferencesService.getOnboardingCompleted();
+            debugPrint('노트 없음 - 저장된 온보딩 상태: $isOnboardingCompleted');
+          }
+          
+          // 4. 온보딩 상태 업데이트 (노트가 있는데 온보딩 완료 표시가 안 된 경우)
+          if (hasNotes && !(userData['onboardingCompleted'] ?? false)) {
+            // Firestore와 로컬 둘 다 온보딩 완료 상태 저장
+            try {
+              await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                'onboardingCompleted': true
+              });
+              debugPrint('✅ Firestore 사용자 문서에 온보딩 완료 상태 업데이트됨');
+            } catch (e) {
+              debugPrint('⚠️ Firestore 온보딩 상태 업데이트 실패: $e');
+            }
+          }
+          
+          // 로컬에 온보딩 상태 저장
+          await _preferencesService.setOnboardingCompleted(isOnboardingCompleted);
+          
           // 로그인 기록 저장
           await _preferencesService.saveLoginHistory();
-          
-          // 온보딩 완료 여부 확인
-          final isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
           
           if (mounted) {
             setState(() {
               _isOnboardingCompleted = isOnboardingCompleted;
               _hasLoginHistory = true;
+              
+              // 온보딩 완료된 사용자만 툴팁 관련 설정
+              if (isOnboardingCompleted) {
+                final prefs = SharedPreferences.getInstance();
+                prefs.then((p) {
+                  _isFirstEntry = !(p.getBool('hasShownTooltip') ?? false);
+                });
+              } else {
+                _isFirstEntry = false;
+              }
             });
           }
           
@@ -359,7 +459,7 @@ class _AppState extends State<App> {
         }
       }
       
-      debugPrint('사용자 로그인 처리 완료: 온보딩 완료=$_isOnboardingCompleted');
+      debugPrint('사용자 로그인 처리 완료: 노트 있음=$hasNotes, 온보딩 완료=$_isOnboardingCompleted');
     } catch (e) {
       debugPrint('사용자 로그인 처리 중 오류 발생: $e');
     }
@@ -493,8 +593,23 @@ class _AppState extends State<App> {
       );
     }
 
-    // 온보딩이 필요한 경우
-    if (!_isOnboardingCompleted) {
+    // 로그인된 경우 홈 화면 표시
+    // 1. 온보딩이 이미 완료된 것으로 확인된 경우 홈 화면으로 이동
+    if (_isOnboardingCompleted) {
+      return HomeScreen(
+        showTooltip: _isFirstEntry,
+        onCloseTooltip: () async {
+          // 툴팁 표시 여부 업데이트
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('hasShownTooltip', true);
+          setState(() {
+            _isFirstEntry = false;
+          });
+        },
+      );
+    }
+    // 2. 온보딩이 필요한 경우 온보딩 화면으로 이동
+    else {
       return OnboardingScreen(
         onComplete: () {
           setState(() {
@@ -503,18 +618,5 @@ class _AppState extends State<App> {
         },
       );
     }
-
-    // 모든 조건 통과 - 홈 화면 표시
-    return HomeScreen(
-      showTooltip: _isFirstEntry,
-      onCloseTooltip: () async {
-        // 툴팁 표시 여부 업데이트
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('hasShownTooltip', true);
-        setState(() {
-          _isFirstEntry = false;
-        });
-      },
-    );
   }
 }
