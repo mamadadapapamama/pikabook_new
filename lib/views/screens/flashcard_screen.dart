@@ -535,75 +535,80 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                   )
                 : _flashCards.isEmpty
                     ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // 빈 상태 메시지 컨테이너
-                            Column(
-                              children: [
-                                // 아이콘 (노란색)
-                                Container(
-                                  width: SpacingTokens.fabSize + SpacingTokens.iconSizeMedium,
-                                  height: SpacingTokens.fabSize + SpacingTokens.iconSizeMedium,
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // 이미지
+                              Image.asset(
+                                'assets/images/flashcard_zero.png',
+                                width: 160,
+                                height: 232,
+                                fit: BoxFit.contain,
+                              ),
+                              SizedBox(height: SpacingTokens.lg),
+                              
+                              // 제목 텍스트
+                              Text(
+                                '잘 안외워지는 단어는,\n플래시카드로 만들어봐요!',
+                                textAlign: TextAlign.center,
+                                style: TypographyTokens.subtitle1.copyWith(
+                                  color: ColorTokens.textPrimary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              SizedBox(height: SpacingTokens.sm),
+                              
+                              // 설명 텍스트
+                              Text(
+                                '스마트 노트에서 단어를 선택해\n플래시카드로 추가하세요.',
+                                textAlign: TextAlign.center,
+                                style: TypographyTokens.body2.copyWith(
+                                  color: ColorTokens.textSecondary,
+                                ),
+                              ),
+                              SizedBox(height: SpacingTokens.xl),
+                              
+                              // 노트로 돌아가기 버튼
+                              GestureDetector(
+                                onTap: () async {
+                                  // TTS 실행 중인 경우 먼저 중지
+                                  if (_isSpeaking) {
+                                    await _ttsService.stop();
+                                    _isSpeaking = false;
+                                  }
+                                  
+                                  if (widget.noteId != null && mounted) {
+                                    // 노트 화면으로 돌아가면서 카드 개수 0 전달
+                                    Navigator.of(context).pop({
+                                      'flashcardCount': 0,
+                                      'success': true,
+                                      'noteId': widget.noteId
+                                    });
+                                  } else {
+                                    Navigator.of(context).pushReplacementNamed('/notes');
+                                  }
+                                },
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: SpacingTokens.lg,
+                                    vertical: SpacingTokens.sm + SpacingTokens.xs
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: ColorTokens.surface,
-                                    shape: BoxShape.circle,
+                                    color: ColorTokens.primary,
+                                    borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
                                   ),
-                                  child: Icon(
-                                    Icons.auto_awesome_motion_outlined,
-                                    size: SpacingTokens.iconSizeXLarge,
-                                    color: ColorTokens.tertiary,
-                                  ),
-                                ),
-                                SizedBox(height: SpacingTokens.md),
-                                // 메시지 텍스트
-                                Text(
-                                  '플래시카드가 비어있어요.',
-                                  style: TypographyTokens.subtitle1.copyWith(
-                                    color: ColorTokens.textPrimary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: SpacingTokens.lg),
-                            // 버튼들 - '노트로 돌아가기' 버튼만 표시
-                            GestureDetector(
-                              onTap: () async {
-                                // TTS 실행 중인 경우 먼저 중지
-                                if (_isSpeaking) {
-                                  await _ttsService.stop();
-                                  _isSpeaking = false;
-                                }
-                                
-                                if (widget.noteId != null && mounted) {
-                                  // 노트 화면으로 돌아가면서 카드 개수 0 전달
-                                  Navigator.of(context).pop({
-                                    'flashcardCount': 0,
-                                    'success': true,
-                                    'noteId': widget.noteId
-                                  });
-                                } else {
-                                  Navigator.of(context).pushReplacementNamed('/notes');
-                                }
-                              },
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: SpacingTokens.lg,
-                                  vertical: SpacingTokens.sm + SpacingTokens.xs
-                                ),
-                                decoration: BoxDecoration(
-                                  color: ColorTokens.primary,
-                                  borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-                                ),
-                                child: Text(
-                                  '노트로 돌아가기',
-                                  style: TypographyTokens.button.copyWith(
-                                    color: ColorTokens.textLight,
+                                  child: Text(
+                                    '노트로 돌아가기',
+                                    style: TypographyTokens.button.copyWith(
+                                      color: ColorTokens.textLight,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       )
                     : FutureBuilder<bool>(

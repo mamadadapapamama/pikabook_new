@@ -1318,11 +1318,34 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                 onMorePressed: _showMoreOptions,
                 onFlashcardTap: _navigateToFlashcards,
                 onBackPressed: () async {
-                  if (_textReaderService.isPlaying) {
-                    _textReaderService.stop();
+                  try {
+                    // 재생 중인 TTS 중지
+                    if (_textReaderService.isPlaying) {
+                      await _textReaderService.stop();
+                    }
+                    
+                    // TTS 서비스 완전히 중지
+                    await _ttsService.stop();
+                    
+                    // 필요한 리소스 정리
+                    if (_pageManager.currentPage?.id != null) {
+                      _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
+                    }
+                    
+                    // 추가 지연 시간으로 충분한 정리 시간 확보
+                    await Future.delayed(const Duration(milliseconds: 300));
+                    
+                    // 컨텍스트 체크 후 안전하게 네비게이션
+                    if (mounted && Navigator.canPop(context)) {
+                      Navigator.of(context).pop();
+                    }
+                  } catch (e) {
+                    debugPrint('노트 화면 back 버튼 처리 중 오류: $e');
+                    // 오류가 발생하더라도 화면은 닫히도록 시도
+                    if (mounted && Navigator.canPop(context)) {
+                      Navigator.of(context).pop();
+                    }
                   }
-                  await Future.delayed(const Duration(milliseconds: 100));
-                  Navigator.of(context).pop();
                 },
               ),
           body: _isLoading
@@ -1425,7 +1448,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                               height: double.infinity,
                               errorBuilder: (context, error, stackTrace) {
                                 debugPrint('이미지 로드 오류: $error');
-                                return Center(child: Text('이미지를 불러올 수 없습니다.'));
+                                return Center(
+                                  child: Image.asset(
+                                    'assets/images/image_empty.png',
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    fit: BoxFit.cover,
+                                  ),
+                                );
                               },
                             ),
                           )
@@ -1454,23 +1484,24 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                                     height: double.infinity,
                                     errorBuilder: (context, error, stackTrace) {
                                       debugPrint('이미지 로드 오류: $error');
-                                      return Center(child: Text('이미지를 불러올 수 없습니다.'));
+                                      return Center(
+                                        child: Image.asset(
+                                          'assets/images/image_empty.png',
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      );
                                     },
                                   ),
                                 );
                               } else {
                                 return Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Image.asset(
-                                        'assets/images/image_empty.png',
-                                        width: 60,
-                                        height: 60,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text('이미지를 찾을 수 없습니다'),
-                                    ],
+                                  child: Image.asset(
+                                    'assets/images/image_empty.png',
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    fit: BoxFit.cover,
                                   ),
                                 );
                               }
@@ -1578,7 +1609,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                     height: double.infinity,
                     errorBuilder: (context, error, stackTrace) {
                       debugPrint('이미지 로드 오류: $error');
-                      return Center(child: Text('이미지를 불러올 수 없습니다.'));
+                      return Center(
+                        child: Image.asset(
+                          'assets/images/image_empty.png',
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      );
                     },
                   ),
                 )
@@ -1607,23 +1645,24 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                           height: double.infinity,
                           errorBuilder: (context, error, stackTrace) {
                             debugPrint('이미지 로드 오류: $error');
-                            return Center(child: Text('이미지를 불러올 수 없습니다.'));
+                            return Center(
+                              child: Image.asset(
+                                'assets/images/image_empty.png',
+                                width: double.infinity,
+                                height: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
+                            );
                           },
                         ),
                       );
                     } else {
                       return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Image.asset(
-                              'assets/images/image_empty.png',
-                              width: 60,
-                              height: 60,
-                            ),
-                            const SizedBox(height: 8),
-                            Text('이미지를 찾을 수 없습니다'),
-                          ],
+                        child: Image.asset(
+                          'assets/images/image_empty.png',
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.cover,
                         ),
                       );
                     }
@@ -1775,8 +1814,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             left: 16,
             right: 16,
             child: HelpTextTooltip(
-              text: "첫 스마트 노트가 만들어졌어요!",
-              description: "잘 모르는 단어는 선택하여 사전 검색 하거나 플래시카드로 만들어보세요.",
+              text: "첫 노트가 만들어졌어요!",
+              description: "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요.",
               showTooltip: true,
               onDismiss: () {
                 debugPrint('노트 상세 화면에서 툴팁 닫기 버튼 클릭됨');
@@ -1790,8 +1829,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               tooltipPadding: const EdgeInsets.all(16),
               spacing: 4.0,
               image: Image.asset(
-                'assets/images/image_tooltip_2.png',
-                width: 300,
+                'assets/images/note_help.png',
+                width: double.infinity,
                 fit: BoxFit.contain,
               ),
               child: Container(), // 빈 컨테이너 (툴팁만 표시)
@@ -1867,13 +1906,29 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     return await _imageService.imageExists(imageUrl);
   }
 
+  // 뒤로가기 버튼 처리
   Future<bool> _onWillPop() async {
-    if (_textReaderService.isPlaying) {
-      _textReaderService.stop();
+    try {
+      // 재생 중인 TTS 중지
+      if (_textReaderService.isPlaying) {
+        await _textReaderService.stop();
+      }
+      
+      // TTS 서비스 완전히 중지
+      await _ttsService.stop();
+      
+      // 필요한 리소스 정리
+      if (_pageManager.currentPage?.id != null) {
+        _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
+      }
+      
+      // 추가 지연 시간으로 충분한 정리 시간 확보
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      return true;
+    } catch (e) {
+      debugPrint('onWillPop 처리 중 오류: $e');
+      return true; // 오류가 있어도 뒤로가기는 허용
     }
-    
-    await Future.delayed(const Duration(milliseconds: 100));
-    
-    return true;
   }
 }

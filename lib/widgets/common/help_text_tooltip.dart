@@ -92,36 +92,7 @@ class HelpTextTooltip extends StatefulWidget {
   State<HelpTextTooltip> createState() => _HelpTextTooltipState();
 }
 
-class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<Offset> _offsetAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 700),
-      vsync: this,
-    );
-    
-    _offsetAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.05),
-      end: const Offset(0, -0.05),
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ));
-    
-    // 애니메이션 반복
-    _animationController.repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
+class _HelpTextTooltipState extends State<HelpTextTooltip> {
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -133,126 +104,89 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
             bottom: -widget.spacing, // 버튼과의 간격
             left: 0,
             right: 0,
-            child: SlideTransition(
-              position: _offsetAnimation,
-              child: Container(
-                width: widget.tooltipWidth ?? double.infinity,
-                padding: widget.tooltipPadding ?? const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: widget._getBackgroundColor,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: widget._getBorderColor,
-                    width: 1,
-                  ),
+            child: Container(
+              width: widget.tooltipWidth ?? 349,
+              padding: widget.tooltipPadding ?? const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: widget._getBackgroundColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: widget._getBorderColor,
+                  width: 1,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 이미지가 있는 경우 먼저 표시
-                    if (widget.image != null) ...[
-                      Center(child: widget.image!),
-                      const SizedBox(height: 8),
-                    ],
-                    // 툴팁 제목과 닫기 버튼을 포함하는 Row
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            widget.text,
-                            style: TypographyTokens.body1.copyWith(
-                              color: widget._getTextColor,
-                              fontWeight: FontWeight.w500,
-                            ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 제목과 닫기 버튼을 포함하는 Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.text,
+                          style: TypographyTokens.subtitle1.copyWith(
+                            color: widget._getTextColor,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 16,
                           ),
                         ),
-                        // 닫기 버튼
-                        GestureDetector(
-                          onTap: () {
-                            debugPrint('HelpTextTooltip: 닫기 버튼 클릭됨');
-                            if (widget.onDismiss != null) {
-                              widget.onDismiss!();
-                            }
-                          },
-                          behavior: HitTestBehavior.opaque, // 투명 영역까지 탭 감지
-                          child: Container(
-                            padding: const EdgeInsets.all(8), // 탭 영역 확장
-                            child: Icon(
-                              Icons.close,
-                              size: 20, // 약간 더 큰 사이즈
-                              color: widget._getTextColor.withOpacity(0.8), // 더 선명한 색상
-                            ),
+                      ),
+                      // 닫기 버튼
+                      GestureDetector(
+                        onTap: () {
+                          debugPrint('HelpTextTooltip: 닫기 버튼 클릭됨');
+                          if (widget.onDismiss != null) {
+                            widget.onDismiss!();
+                          }
+                        },
+                        behavior: HitTestBehavior.opaque, // 투명 영역까지 탭 감지
+                        child: Container(
+                          padding: const EdgeInsets.all(8), // 탭 영역을 더 넓게 확장
+                          decoration: BoxDecoration(
+                            color: ColorTokens.greyLight.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                        ),
-                      ],
-                    ),
-                    // 설명이 있는 경우 추가
-                    if (widget.description != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        widget.description!,
-                        style: TypographyTokens.body2.copyWith(
-                          color: widget._getTextColor,
+                          child: Icon(
+                            Icons.close,
+                            size: 20,
+                            color: ColorTokens.textPrimary, // 더 명확한 색상으로 변경
+                          ),
                         ),
                       ),
                     ],
+                  ),
+
+                  // 이미지가 있는 경우 표시
+                  if (widget.image != null) ...[
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        width: double.infinity,
+                        child: widget.image!,
+                      ),
+                    ),
                   ],
-                ),
+                  
+                  // 설명이 있는 경우 추가
+                  if (widget.description != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      widget.description!,
+                      style: TypographyTokens.body2.copyWith(
+                        color: widget._getTextColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
       ],
     );
   }
-}
-
-// 아래쪽을 향하는 삼각형 화살표를 그리는 CustomPainter
-class TrianglePainter extends CustomPainter {
-  final Color color;
-
-  TrianglePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..lineTo(size.width, 0)
-      ..close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// 위쪽을 향하는 삼각형 화살표를 그리는 CustomPainter
-class UpwardTrianglePainter extends CustomPainter {
-  final Color color;
-
-  UpwardTrianglePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    final path = Path()
-      ..moveTo(0, size.height)
-      ..lineTo(size.width / 2, 0)
-      ..lineTo(size.width, size.height)
-      ..close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 } 

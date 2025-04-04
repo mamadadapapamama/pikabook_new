@@ -854,7 +854,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     fontWeight: FontWeight.normal,
                   ),
                 ),
-                SizedBox(width: SpacingTokens.xs),
+                SizedBox(width: SpacingTokens.md),
                 SvgPicture.asset(
                   'assets/images/icon_arrow_right.svg',
                   width: 20,
