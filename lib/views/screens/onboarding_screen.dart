@@ -7,6 +7,7 @@ import '../../theme/tokens/typography_tokens.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import '../../widgets/common/pika_button.dart';
+import 'package:flutter/services.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -210,6 +211,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        toolbarHeight: 0,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark, // 안드로이드용
+          statusBarBrightness: Brightness.light, // iOS용
+        ),
+      ),
       body: Container(
         decoration: BoxDecoration(
           color: ColorTokens.background, // 디자인 토큰 사용

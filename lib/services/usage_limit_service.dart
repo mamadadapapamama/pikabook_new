@@ -11,18 +11,19 @@ class UsageLimitService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
-  // 베타 기간 종료일 (2025년 4월 30일)
-  static final DateTime BETA_END_DATE = DateTime(2025, 4, 30);
+  // 베타 기간 정보
+  static const String BETA_END_DATE_STR = '2025-04-30'; // 베타 기간 종료일 (연도-월-일)
+  static const int BETA_PERIOD_DAYS = 30; // 베타 기간 (30일)
   
   // 베타 기간 동안의 무료 사용 제한
-  static const int MAX_FREE_TRANSLATION_CHARS = 1000;  // 번역 최대 글자 수
-  static const int MAX_FREE_PAGES = 2;                // OCR 페이지 최대 개수
-  static const int MAX_FREE_OCR_REQUESTS = 2;         // OCR 요청 최대 수
-  static const int MAX_FREE_DICTIONARY_LOOKUPS = 200;    // 사전 검색 최대 수
-  static const int MAX_FREE_TTS_REQUESTS = 200;         // TTS 요청 최대 수
-  static const int MAX_FREE_STORAGE_BYTES = 50 * 1024 * 1024; // 50MB 스토리지
-  static const int MAX_FREE_FLASHCARDS = 300;          // 플래시카드 최대 수
-  static const int MAX_FREE_NOTES = 50;                // 노트 최대 수
+  static const int MAX_FREE_TRANSLATION_CHARS = 100000;  // 번역 최대 글자 수
+  static const int MAX_FREE_PAGES = 50;                 // OCR 페이지 최대 개수
+  static const int MAX_FREE_OCR_REQUESTS = 50;          // OCR 요청 최대 수
+  static const int MAX_FREE_DICTIONARY_LOOKUPS = 200;   // 사전 검색 최대 수
+  static const int MAX_FREE_TTS_REQUESTS = 50000;       // TTS 요청 최대 수
+  static const int MAX_FREE_STORAGE_BYTES = 100 * 1024 * 1024; // 100MB 스토리지
+  static const int MAX_FREE_FLASHCARDS = 300;           // 플래시카드 최대 수
+  static const int MAX_FREE_NOTES = 50;                 // 노트 최대 수
   
   // 월별 기본 무료 사용 제한 (베타 이후)
   static const int BASIC_FREE_TRANSLATION_CHARS = 500;   // 번역 최대 글자 수
@@ -48,19 +49,6 @@ class UsageLimitService {
   static const String _kMonthlyLimitsKey = 'monthly_limits';
   static const String _kBetaPeriodEndKey = 'beta_period_end';
   
-  // 베타 기간 정보
-  static const String _kBetaPeriodEnd = '2025-04-30'; // 베타 기간 종료일 (연도-월-일)
-  
-  // 무료 사용 제한 (베타 기간)
-  static const int _kFreeOcrLimit = 50; // OCR 노트 생성 수
-  static const int _kFreeTranslationCharLimit = 100000; // 번역 문자 수
-  static const int _kFreeTtsCharLimit = 50000; // TTS 문자 수
-  static const int _kFreeDictionaryLimit = 200; // 외부 사전 조회 수
-  static const int _kFreeStorageLimit = 100 * 1024 * 1024; // 저장 공간 (100MB)
-  
-  // 베타 기간 (30일)
-  static const int BETA_PERIOD_DAYS = 30;
-  
   // 사용량 데이터 키
   static const String _USAGE_KEY = 'user_usage_data';
   
@@ -70,14 +58,14 @@ class UsageLimitService {
   /// 베타 기간 종료 날짜 가져오기
   Future<DateTime> getBetaPeriodEndDate() async {
     final prefs = await SharedPreferences.getInstance();
-    final endDateStr = prefs.getString(_kBetaPeriodEndKey) ?? _kBetaPeriodEnd;
+    final endDateStr = prefs.getString(_kBetaPeriodEndKey) ?? BETA_END_DATE_STR;
     
     try {
       return DateFormat('yyyy-MM-dd').parse(endDateStr);
     } catch (e) {
       debugPrint('베타 기간 종료일 파싱 오류: $e');
-      // 기본값: 2025년 4월 30일
-      return DateTime(2025, 4, 30);
+      // 기본값: 문자열 상수에서 파싱
+      return DateFormat('yyyy-MM-dd').parse(BETA_END_DATE_STR);
     }
   }
   
@@ -106,119 +94,74 @@ class UsageLimitService {
   
   /// OCR 사용량 증가
   Future<bool> incrementOcrCount() async {
-    // 먼저 제한 확인
-    final usage = await getBetaUsageLimits();
-    if (usage['ocrLimitReached'] == true) {
-      return false;
-    }
-    
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getUserKey(_kOcrCountKey);
-    
-    int count = prefs.getInt(key) ?? 0;
-    count++;
-    
-    await prefs.setInt(key, count);
-    debugPrint('OCR 사용량 증가: $count/$_kFreeOcrLimit');
-    
-    return count <= _kFreeOcrLimit;
+    return await _incrementUsage('ocrRequests', 1, MAX_FREE_OCR_REQUESTS);
   }
   
   /// 번역 문자 사용량 증가
   Future<bool> incrementTranslationCharCount(int charCount) async {
-    // 먼저 제한 확인
-    final usage = await getBetaUsageLimits();
-    if (usage['translationLimitReached'] == true) {
-      return false;
-    }
-    
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getUserKey(_kTranslationCharCountKey);
-    
-    int count = prefs.getInt(key) ?? 0;
-    count += charCount;
-    
-    await prefs.setInt(key, count);
-    debugPrint('번역 문자 사용량 증가: $count/$_kFreeTranslationCharLimit');
-    
-    return count <= _kFreeTranslationCharLimit;
+    return await _incrementUsage('translatedChars', charCount, MAX_FREE_TRANSLATION_CHARS);
   }
   
   /// TTS 문자 사용량 증가
   Future<bool> incrementTtsCharCount(int charCount) async {
-    // 먼저 제한 확인
-    final usage = await getBetaUsageLimits();
-    if (usage['ttsLimitReached'] == true) {
-      return false;
-    }
-    
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getUserKey(_kTtsCharCountKey);
-    
-    int count = prefs.getInt(key) ?? 0;
-    count += charCount;
-    
-    await prefs.setInt(key, count);
-    debugPrint('TTS 문자 사용량 증가: $count/$_kFreeTtsCharLimit');
-    
-    return count <= _kFreeTtsCharLimit;
+    return await _incrementUsage('ttsRequests', charCount, MAX_FREE_TTS_REQUESTS);
   }
   
   /// 사전 조회 사용량 증가
   Future<bool> incrementDictionaryCount() async {
-    // 먼저 제한 확인
-    final usage = await getBetaUsageLimits();
-    if (usage['dictionaryLimitReached'] == true) {
+    return await _incrementUsage('dictionaryLookups', 1, MAX_FREE_DICTIONARY_LOOKUPS);
+  }
+  
+  /// 범용 사용량 증가 메서드
+  Future<bool> _incrementUsage(String key, int amount, int limit) async {
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData[key] ?? 0;
+    
+    // 사용량 제한 확인
+    if (currentUsage >= limit) {
       return false;
     }
     
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getUserKey(_kDictionaryCountKey);
+    // 사용량 증가
+    usageData[key] = currentUsage + amount;
+    await _saveUsageData(usageData);
     
-    int count = prefs.getInt(key) ?? 0;
-    count++;
-    
-    await prefs.setInt(key, count);
-    debugPrint('사전 조회 사용량 증가: $count/$_kFreeDictionaryLimit');
-    
-    return count <= _kFreeDictionaryLimit;
+    debugPrint('$key 사용량 증가: ${currentUsage + amount}/$limit');
+    return (currentUsage + amount) <= limit;
   }
   
   /// 저장 공간 사용량 증가
   Future<bool> addStorageUsage(int bytes) async {
-    // 먼저 제한 확인
-    final usage = await getBetaUsageLimits();
-    if (usage['storageLimitReached'] == true) {
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData['storageUsageBytes'] ?? 0;
+    
+    // 사용량 제한 확인
+    if (currentUsage >= MAX_FREE_STORAGE_BYTES) {
       return false;
     }
     
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getUserKey(_kStorageUsageKey);
+    // 사용량 증가
+    usageData['storageUsageBytes'] = currentUsage + bytes;
+    await _saveUsageData(usageData);
     
-    int currentUsage = prefs.getInt(key) ?? 0;
-    currentUsage += bytes;
-    
-    await prefs.setInt(key, currentUsage);
-    
-    final usageInMB = (currentUsage / (1024 * 1024)).toStringAsFixed(2);
-    final limitInMB = (_kFreeStorageLimit / (1024 * 1024)).toStringAsFixed(0);
+    final usageInMB = ((currentUsage + bytes) / (1024 * 1024)).toStringAsFixed(2);
+    final limitInMB = (MAX_FREE_STORAGE_BYTES / (1024 * 1024)).toStringAsFixed(0);
     debugPrint('저장 공간 사용량 증가: ${usageInMB}MB/${limitInMB}MB');
     
-    return currentUsage <= _kFreeStorageLimit;
+    return (currentUsage + bytes) <= MAX_FREE_STORAGE_BYTES;
   }
   
   /// 저장 공간 사용량 감소
   Future<void> reduceStorageUsage(int bytes) async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getUserKey(_kStorageUsageKey);
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData['storageUsageBytes'] ?? 0;
     
-    int currentUsage = prefs.getInt(key) ?? 0;
-    currentUsage = (currentUsage - bytes).clamp(0, double.maxFinite.toInt());
+    final newUsage = (currentUsage - bytes).clamp(0, double.maxFinite.toInt());
+    usageData['storageUsageBytes'] = newUsage;
+    await _saveUsageData(usageData);
     
-    await prefs.setInt(key, currentUsage);
-    
-    final usageInMB = (currentUsage / (1024 * 1024)).toStringAsFixed(2);
-    final limitInMB = (_kFreeStorageLimit / (1024 * 1024)).toStringAsFixed(0);
+    final usageInMB = (newUsage / (1024 * 1024)).toStringAsFixed(2);
+    final limitInMB = (MAX_FREE_STORAGE_BYTES / (1024 * 1024)).toStringAsFixed(0);
     debugPrint('저장 공간 사용량 감소: ${usageInMB}MB/${limitInMB}MB');
   }
   
@@ -299,17 +242,22 @@ class UsageLimitService {
   /// 모든 사용량 초기화 (테스트용)
   Future<void> resetAllUsage() async {
     final prefs = await SharedPreferences.getInstance();
-    final ocrKey = _getUserKey(_kOcrCountKey);
-    final translationKey = _getUserKey(_kTranslationCharCountKey);
-    final ttsKey = _getUserKey(_kTtsCharCountKey);
-    final dictionaryKey = _getUserKey(_kDictionaryCountKey);
-    final storageKey = _getUserKey(_kStorageUsageKey);
+    final userId = _currentUserId;
     
-    await prefs.setInt(ocrKey, 0);
-    await prefs.setInt(translationKey, 0);
-    await prefs.setInt(ttsKey, 0);
-    await prefs.setInt(dictionaryKey, 0);
-    await prefs.setInt(storageKey, 0);
+    if (userId != null) {
+      // 사용량 데이터 초기화
+      await _saveUsageData({
+        'betaStartDate': DateTime.now().toIso8601String(),
+        'ocrRequests': 0,
+        'ttsRequests': 0,
+        'translatedChars': 0,
+        'storageUsageBytes': 0,
+        'dictionaryLookups': 0,
+        'pages': 0,
+        'flashcards': 0,
+        'notes': 0,
+      });
+    }
     
     debugPrint('모든 사용량 초기화 완료');
   }
@@ -404,7 +352,7 @@ class UsageLimitService {
     return {
       'isBetaPeriod': isBeta,
       'remainingDays': remainingDays,
-      'betaEndDate': _kBetaPeriodEnd,
+      'betaEndDate': BETA_END_DATE_STR,
     };
   }
 
@@ -470,76 +418,6 @@ class UsageLimitService {
     };
   }
 
-  /// TTS 요청 추가
-  Future<bool> addTtsRequest() async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['ttsRequests'] ?? 0;
-    
-    // 사용량 제한 확인
-    if (currentUsage >= MAX_FREE_TTS_REQUESTS) {
-      return false;
-    }
-    
-    // 사용량 증가
-    usageData['ttsRequests'] = currentUsage + 1;
-    await _saveUsageData(usageData);
-    return true;
-  }
-
-  /// 번역된 문자 수 추가
-  Future<bool> addTranslatedChars(int charCount) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['translatedChars'] ?? 0;
-    
-    // 문자 수 제한은 일단 없음 (사용량만 추적)
-    usageData['translatedChars'] = currentUsage + charCount;
-    await _saveUsageData(usageData);
-    return true;
-  }
-
-  /// 사전 검색 횟수 증가
-  Future<bool> incrementDictionaryLookupCount() async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['dictionaryLookups'] ?? 0;
-    
-    // 사용량 제한 확인
-    if (currentUsage >= MAX_FREE_DICTIONARY_LOOKUPS) {
-      return false;
-    }
-    
-    // 사용량 증가
-    usageData['dictionaryLookups'] = currentUsage + 1;
-    await _saveUsageData(usageData);
-    return true;
-  }
-  
-  /// 사전 검색 횟수 감소 (이미 캐시에 있는 경우)
-  Future<void> decrementDictionaryLookupCount() async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['dictionaryLookups'] ?? 0;
-    
-    if (currentUsage > 0) {
-      usageData['dictionaryLookups'] = currentUsage - 1;
-      await _saveUsageData(usageData);
-    }
-  }
-  
-  /// OCR 요청 추가
-  Future<bool> addOcrRequest() async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['ocrRequests'] ?? 0;
-    
-    // 사용량 제한 확인
-    if (currentUsage >= MAX_FREE_OCR_REQUESTS) {
-      return false;
-    }
-    
-    // 사용량 증가
-    usageData['ocrRequests'] = currentUsage + 1;
-    await _saveUsageData(usageData);
-    return true;
-  }
-  
   /// 페이지 추가 가능 여부 확인
   Future<bool> canAddPage(int count) async {
     final usageData = await _loadUsageData();
@@ -551,55 +429,33 @@ class UsageLimitService {
   
   /// 페이지 수 증가
   Future<bool> incrementPageCount(int count) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['pages'] ?? 0;
-    
-    // 사용량 제한 확인
-    if (currentUsage + count > MAX_FREE_PAGES) {
-      return false;
-    }
-    
-    // 사용량 증가
-    usageData['pages'] = currentUsage + count;
-    await _saveUsageData(usageData);
-    return true;
+    return await _incrementUsage('pages', count, MAX_FREE_PAGES);
   }
   
   /// 페이지 수 감소 (페이지 삭제 시)
   Future<void> decrementPageCount() async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['pages'] ?? 0;
-    
-    if (currentUsage > 0) {
-      usageData['pages'] = currentUsage - 1;
-      await _saveUsageData(usageData);
-    }
+    await _decrementUsage('pages');
   }
   
   /// 플래시카드 수 증가
   Future<bool> incrementFlashcardCount() async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['flashcards'] ?? 0;
-    
-    // 사용량 제한 확인
-    if (currentUsage >= MAX_FREE_FLASHCARDS) {
-      return false;
-    }
-    
-    // 사용량 증가
-    usageData['flashcards'] = currentUsage + 1;
-    await _saveUsageData(usageData);
-    return true;
+    return await _incrementUsage('flashcards', 1, MAX_FREE_FLASHCARDS);
   }
   
   /// 플래시카드 수 감소 (플래시카드 삭제 시)
   Future<void> decrementFlashcardCount() async {
+    await _decrementUsage('flashcards');
+  }
+  
+  /// 범용 사용량 감소 메서드
+  Future<void> _decrementUsage(String key) async {
     final usageData = await _loadUsageData();
-    final currentUsage = usageData['flashcards'] ?? 0;
+    final currentUsage = usageData[key] ?? 0;
     
     if (currentUsage > 0) {
-      usageData['flashcards'] = currentUsage - 1;
+      usageData[key] = currentUsage - 1;
       await _saveUsageData(usageData);
+      debugPrint('$key 사용량 감소: ${currentUsage - 1}');
     }
   }
 
@@ -607,7 +463,7 @@ class UsageLimitService {
   Future<Map<String, dynamic>> _loadUsageData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String? jsonData = prefs.getString(_USAGE_KEY);
+      final String? jsonData = prefs.getString(_getUserKey(_USAGE_KEY));
       
       if (jsonData == null || jsonData.isEmpty) {
         return {};
@@ -625,7 +481,7 @@ class UsageLimitService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String jsonData = json.encode(usageData);
-      await prefs.setString(_USAGE_KEY, jsonData);
+      await prefs.setString(_getUserKey(_USAGE_KEY), jsonData);
     } catch (e) {
       debugPrint('사용량 데이터 저장 중 오류: $e');
     }

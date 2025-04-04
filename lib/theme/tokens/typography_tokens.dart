@@ -114,7 +114,7 @@ class TypographyTokens {
   static TextStyle get subtitle2Cn => TextStyle(
         fontFamily: notoSansHk,
         fontSize: 20,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
         height: 1.2,
       );
 
