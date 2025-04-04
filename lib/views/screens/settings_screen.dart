@@ -823,85 +823,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
       width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(4),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // 플랜 이름과 상태
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      _planType == PlanService.PLAN_PREMIUM
-                          ? Icons.workspace_premium
-                          : Icons.account_circle,
-                      color: _planType == PlanService.PLAN_PREMIUM
-                          ? Colors.amber
-                          : ColorTokens.primary,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _planName,
-                      style: TypographyTokens.subtitle2.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+          // 플랜 이름
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _planName,
+                style: TypographyTokens.body2.copyWith(
+                  color: ColorTokens.textPrimary,
                 ),
-                
-                // 베타 기간 배지
-                if (_isBetaPeriod)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: ColorTokens.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      '베타 ${ _remainingDays > 0 ? '$_remainingDays일 남음' : '종료됨' }',
-                      style: TypographyTokens.caption.copyWith(
-                        color: ColorTokens.primary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+              ),
+            ],
           ),
-          
-          // 사용량 프로그레스 바
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _buildUsageProgressBars(),
-          ),
-          
-          const SizedBox(height: 16),
           
           // 사용량 확인 버튼
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: PikaButton(
-              text: '사용량 확인하기',
-              variant: PikaButtonVariant.outline,
-              leadingIcon: const Icon(Icons.analytics_outlined),
-              onPressed: _showUsageLimitDialog,
-              isFullWidth: true,
+          GestureDetector(
+            onTap: _showUsageLimitDialog,
+            child: Row(
+              children: [
+                Text(
+                  '사용량 확인',
+                  style: TypographyTokens.body2.copyWith(
+                    color: ColorTokens.textPrimary,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+                SizedBox(width: SpacingTokens.xs),
+                SvgPicture.asset(
+                  'assets/images/icon_arrow_right.svg',
+                  width: 20,
+                  height: 20,
+                  colorFilter: const ColorFilter.mode(
+                    ColorTokens.secondary,
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
