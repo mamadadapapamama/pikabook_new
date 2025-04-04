@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// 사용자 설정을 관리하는 서비스
 /// SharedPreferences를 사용하여 로컬에 설정을 저장하고 관리합니다.
@@ -61,6 +62,19 @@ class UserPreferencesService {
   Future<void> setDefaultNoteSpace(String noteSpace) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_defaultNoteSpaceKey, noteSpace);
+    
+    // Firestore에도 노트 스페이스 이름 업데이트
+    try {
+      final userId = await getCurrentUserId();
+      if (userId != null && userId.isNotEmpty) {
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({
+          'defaultNoteSpace': noteSpace
+        });
+        debugPrint('✅ Firestore에 노트 스페이스 이름 업데이트: $noteSpace');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Firestore 노트 스페이스 이름 업데이트 실패: $e');
+    }
   }
 
   // 노트 스페이스 이름 변경 추가
@@ -76,15 +90,27 @@ class UserPreferencesService {
       // 기본 노트 스페이스 이름도 변경되었는지 확인 후 업데이트
       final defaultNoteSpace = await getDefaultNoteSpace();
       if (defaultNoteSpace == oldName) {
-        await setDefaultNoteSpace(newName);
+        await setDefaultNoteSpace(newName); // 이 메서드가 이제 Firestore도 업데이트함
+      } else {
+        // 기본 노트 스페이스가 아닌 경우에도 Firestore 업데이트 시도
+        try {
+          final userId = await getCurrentUserId();
+          if (userId != null && userId.isNotEmpty) {
+            // 노트 스페이스 배열 업데이트
+            await FirebaseFirestore.instance.collection('users').doc(userId).update({
+              'noteSpaces': noteSpaces
+            });
+            debugPrint('✅ Firestore에 노트 스페이스 목록 업데이트: $noteSpaces');
+          }
+        } catch (e) {
+          debugPrint('⚠️ Firestore 노트 스페이스 목록 업데이트 실패: $e');
+        }
       }
       return true; // 이름 변경 성공
     } else {
       // 기존 이름이 없다면 새 이름 추가 시도
       if (!noteSpaces.contains(newName)) {
          await addNoteSpace(newName);
-         // 기본 노트 스페이스도 새 이름으로 설정할 수 있음 (선택적)
-         // await setDefaultNoteSpace(newName);
          return false; // 이름 변경이 아닌 추가로 처리됨
       }
       return false; // 이미 존재하는 이름

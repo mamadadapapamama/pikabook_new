@@ -8,6 +8,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'unified_cache_service.dart';
 import 'usage_limit_service.dart';
 
@@ -26,6 +27,9 @@ class ImageService {
   
   // 사용량 제한 서비스
   final UsageLimitService _usageLimitService = UsageLimitService();
+  
+  // Firebase Storage 참조
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   ImageService._internal();
 
@@ -62,6 +66,13 @@ class ImageService {
       // 저장된 이미지의 상대 경로 반환
       final relativePath = 'images/$fileName';
       
+      // Firebase Storage에 업로드 시도
+      try {
+        await _uploadToFirebaseStorage(compressedFile, relativePath);
+      } catch (e) {
+        debugPrint('Firebase Storage 업로드 실패, 로컬만 저장됨: $e');
+      }
+      
       // 스토리지 사용량 추적 (사용량 제한 확인 후 업데이트)
       await _trackStorageUsage(compressedFileSize);
       
@@ -71,6 +82,42 @@ class ImageService {
     } catch (e) {
       debugPrint('이미지 저장 및 최적화 중 오류 발생: $e');
       throw Exception('이미지 저장 및 최적화 중 오류가 발생했습니다: $e');
+    }
+  }
+  
+  /// Firebase Storage에 이미지 업로드
+  Future<String> _uploadToFirebaseStorage(File file, String relativePath) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        throw Exception('로그인이 필요합니다');
+      }
+      
+      // 사용자별 경로 지정: users/{userId}/images/{fileName}
+      final storagePath = 'users/$userId/$relativePath';
+      final storageRef = _storage.ref().child(storagePath);
+      
+      // 이미지 업로드
+      debugPrint('Firebase Storage에 이미지 업로드 시작: $storagePath');
+      final uploadTask = storageRef.putFile(file);
+      
+      // 업로드 상태 모니터링 (선택적)
+      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+        final progress = snapshot.bytesTransferred / snapshot.totalBytes;
+        debugPrint('이미지 업로드 진행률: ${(progress * 100).toStringAsFixed(1)}%');
+      });
+      
+      // 업로드 완료 대기
+      final snapshot = await uploadTask;
+      
+      // 이미지 URL 가져오기
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+      debugPrint('Firebase Storage 업로드 완료: $downloadUrl');
+      
+      return downloadUrl;
+    } catch (e) {
+      debugPrint('Firebase Storage 업로드 중 오류: $e');
+      throw e;
     }
   }
   
@@ -159,11 +206,19 @@ class ImageService {
           return file;
         } else {
           debugPrint('이미지 서비스: 파일은 존재하지만 크기가 0입니다: $relativePath');
-          return null;
         }
       }
       
-      debugPrint('이미지 서비스: 이미지 파일을 찾을 수 없음: $relativePath (경로: $fullPath)');
+      debugPrint('이미지 서비스: 로컬 이미지 파일을 찾을 수 없음: $relativePath (경로: $fullPath), Firebase에서 시도합니다...');
+      
+      // 로컬에 없으면 Firebase Storage에서 다운로드 시도
+      final downloadedFile = await _downloadFromFirebaseStorage(relativePath, fullPath);
+      if (downloadedFile != null) {
+        debugPrint('이미지 서비스: Firebase에서 이미지 다운로드 성공: $relativePath');
+        return downloadedFile;
+      }
+      
+      debugPrint('이미지 서비스: 이미지 파일을 Firebase에서도 찾을 수 없음: $relativePath');
       
       // 파일이 존재하지 않을 경우 null 반환
       return null;
@@ -173,6 +228,54 @@ class ImageService {
     }
   }
   
+  /// Firebase Storage에서 이미지 다운로드
+  Future<File?> _downloadFromFirebaseStorage(String relativePath, String localPath) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return null;
+      }
+      
+      // 사용자별 경로 지정: users/{userId}/images/{fileName}
+      final storagePath = 'users/$userId/$relativePath';
+      final storageRef = _storage.ref().child(storagePath);
+      
+      // 파일이 존재하는지 메타데이터로 확인
+      try {
+        await storageRef.getMetadata();
+      } catch (e) {
+        debugPrint('Firebase Storage에 이미지가 없음: $storagePath');
+        return null;
+      }
+      
+      // 디렉토리 확인 및 생성
+      final dirPath = path.dirname(localPath);
+      final dir = Directory(dirPath);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      
+      // 로컬 파일 생성
+      final file = File(localPath);
+      
+      // 파일 다운로드
+      debugPrint('Firebase Storage에서 이미지 다운로드 시작: $storagePath');
+      await storageRef.writeToFile(file);
+      
+      // 다운로드된 파일 확인
+      if (await file.exists() && await file.length() > 0) {
+        debugPrint('Firebase Storage에서 다운로드 완료: $localPath (${await file.length()} 바이트)');
+        return file;
+      } else {
+        debugPrint('Firebase Storage에서 다운로드 실패: 파일이 비어있거나 없음');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Firebase Storage에서 다운로드 중 오류: $e');
+      return null;
+    }
+  }
+
   /// 앱 에셋에서 더미 이미지를 파일로 복사
   Future<File?> _copyAssetImageToFile(String fullPath) async {
     try {
