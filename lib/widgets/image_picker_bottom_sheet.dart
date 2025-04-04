@@ -37,13 +37,14 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       // 사용량 제한 상태 확인
       final limitStatus = await _usageLimitService.checkFreeLimits();
       
-      // OCR 또는 번역 제한에 도달했는지 확인
+      // OCR, 번역, 저장 공간 중 하나라도 제한에 도달했는지 확인
       final bool ocrLimitReached = limitStatus['ocrLimitReached'] == true;
       final bool translationLimitReached = limitStatus['translationLimitReached'] == true;
       final bool storageLimitReached = limitStatus['storageLimitReached'] == true;
       
       if (mounted) {
         setState(() {
+          // OCR, 번역, 저장 공간 중 하나라도 한도 도달 시 버튼 비활성화
           _isButtonDisabled = ocrLimitReached || translationLimitReached || storageLimitReached;
           
           // 툴팁 메시지 설정

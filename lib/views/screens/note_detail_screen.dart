@@ -36,6 +36,8 @@ import '../../theme/tokens/typography_tokens.dart';
 import '../../widgets/common/help_text_tooltip.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../widgets/common/usage_dialog.dart';
+import '../../services/usage_limit_service.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -146,6 +148,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     _screenshotWarningTimer?.cancel();
     _screenshotService.stopDetection();
     WidgetsBinding.instance.removeObserver(this);
+    if (_textReaderService.isPlaying) {
+      _textReaderService.stop();
+    }
     _ttsService.stop();
     _pageController.dispose();
     super.dispose();
@@ -1120,20 +1125,57 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     });
   }
   
+  // TTS 사용량 제한 확인 및 경고 다이얼로그 표시
+  Future<bool> _checkTtsUsageLimits() async {
+    try {
+      // UsageLimitService 인스턴스 가져오기
+      final usageLimitService = UsageLimitService();
+      
+      // 사용량 제한 상태 확인
+      final limitStatus = await usageLimitService.checkFreeLimits();
+      final usagePercentages = await usageLimitService.getUsagePercentages();
+      
+      // TTS 제한에 도달했는지 확인
+      final bool ttsLimitReached = limitStatus['ttsLimitReached'] as bool? ?? false;
+      
+      // 제한에 도달한 경우 다이얼로그 표시
+      if (ttsLimitReached && mounted) {
+        await UsageDialog.show(
+          context,
+          limitStatus: limitStatus,
+          usagePercentages: usagePercentages,
+        );
+        return false; // TTS 사용 불가
+      }
+      
+      return true; // TTS 사용 가능
+    } catch (e) {
+      debugPrint('TTS 사용량 제한 확인 중 오류: $e');
+      return true; // 오류 발생 시 기본적으로 사용 허용
+    }
+  }
+
   // 재생/일시정지 버튼 처리
-  void _handlePlayPausePressed() {
+  void _handlePlayPausePressed() async {
     final currentPage = _pageManager.currentPage;
     if (currentPage == null) return;
     
     debugPrint('재생/일시정지 버튼 클릭: isPlaying=${_textReaderService.isPlaying}');
     
-      if (_textReaderService.isPlaying) {
-        _textReaderService.stop();
+    if (_textReaderService.isPlaying) {
+      _textReaderService.stop();
       setState(() {});
-      } else if (currentPage.originalText.isNotEmpty) {
-        // ProcessedText 가져오기
-        final processedText = _pageContentService.getProcessedText(currentPage.id!);
-        if (processedText != null) {
+    } else if (currentPage.originalText.isNotEmpty) {
+      // TTS 사용량 제한 확인
+      final canUseTts = await _checkTtsUsageLimits();
+      if (!canUseTts) {
+        debugPrint('TTS 사용량 제한으로 재생 불가');
+        return;
+      }
+      
+      // ProcessedText 가져오기
+      final processedText = _pageContentService.getProcessedText(currentPage.id!);
+      if (processedText != null) {
         debugPrint('텍스트 재생 시작: 길이=${currentPage.originalText.length}자, 세그먼트=${processedText.segments?.length ?? 0}개');
         
         // 세그먼트 모드일 때는 readAllSegments, 전체 텍스트 모드일 때는 readText 사용
@@ -1260,50 +1302,59 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   Widget build(BuildContext context) {
     // 상태바 아이콘 색상 설정은 initState로 이동하였으므로 여기서 제거
     
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: _isLoading || _error != null
-          ? null // 로딩 중이거나 오류 상태에서는 앱바 없음
-          : PikaAppBar.noteDetail(
-              title: _note?.originalText ?? 'Note',
-              currentPage: _pageManager.currentPageIndex + 1,
-              totalPages: (_note?.isProcessingBackground ?? false) && _note?.imageCount != null
-                  ? max(_note!.imageCount!, _pageManager.pages.length)
-                  : _pageManager.pages.length,
-              flashcardCount: _note?.flashcardCount ?? 0,
-              onMorePressed: _showMoreOptions,
-              onFlashcardTap: _navigateToFlashcards,
-              onBackPressed: () => Navigator.of(context).pop(),
-            ),
-        body: _isLoading
-            ? const Center(
-                child: DotLoadingIndicator(
-                  message: '노트 로딩 중...',
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: _isLoading || _error != null
+            ? null // 로딩 중이거나 오류 상태에서는 앱바 없음
+            : PikaAppBar.noteDetail(
+                title: _note?.originalText ?? 'Note',
+                currentPage: _pageManager.currentPageIndex + 1,
+                totalPages: (_note?.isProcessingBackground ?? false) && _note?.imageCount != null
+                    ? max(_note!.imageCount!, _pageManager.pages.length)
+                    : _pageManager.pages.length,
+                flashcardCount: _note?.flashcardCount ?? 0,
+                onMorePressed: _showMoreOptions,
+                onFlashcardTap: _navigateToFlashcards,
+                onBackPressed: () async {
+                  if (_textReaderService.isPlaying) {
+                    _textReaderService.stop();
+                  }
+                  await Future.delayed(const Duration(milliseconds: 100));
+                  Navigator.of(context).pop();
+                },
               ),
-            )
-          : _error != null
-              ? Center(child: Text(_error ?? '노트를 불러올 수 없습니다.'))
-              : _buildBody(),
-      bottomNavigationBar: !_isLoading && _error == null && _note != null 
-          ? NoteDetailBottomBar(
-              currentPage: _pageManager.currentPage,
-              currentPageIndex: _pageManager.currentPageIndex,
-              totalPages: (_note?.isProcessingBackground ?? false) && _note?.imageCount != null
-                  ? max(_note!.imageCount!, _pageManager.pages.length)
-                  : _pageManager.pages.length,
-              onPageChanged: _changePage,
-              isFullTextMode: _pageManager.currentPage?.id != null 
-                  ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
-                  : false,
-              onToggleFullTextMode: _toggleFullTextMode,
-              pageContentService: _pageContentService,
-              textReaderService: _textReaderService,
-            )
-          : null,
-      );
-    }
+          body: _isLoading
+              ? const Center(
+                  child: DotLoadingIndicator(
+                    message: '노트 로딩 중...',
+                  ),
+                )
+              : _error != null
+                  ? Center(child: Text(_error ?? '노트를 불러올 수 없습니다.'))
+                  : _buildBody(),
+          bottomNavigationBar: !_isLoading && _error == null && _note != null 
+              ? NoteDetailBottomBar(
+                  currentPage: _pageManager.currentPage,
+                  currentPageIndex: _pageManager.currentPageIndex,
+                  totalPages: (_note?.isProcessingBackground ?? false) && _note?.imageCount != null
+                      ? max(_note!.imageCount!, _pageManager.pages.length)
+                      : _pageManager.pages.length,
+                  onPageChanged: _changePage,
+                  isFullTextMode: _pageManager.currentPage?.id != null 
+                      ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
+                      : false,
+                  onToggleFullTextMode: _toggleFullTextMode,
+                  pageContentService: _pageContentService,
+                  textReaderService: _textReaderService,
+                )
+              : null,
+        ),
+    );
+  }
 
-    // 메인 UI 구성 (로딩 및 오류 처리 이후)
+  // 메인 UI 구성 (로딩 및 오류 처리 이후)
   Widget _buildBody() {
     final currentImageFile = _pageManager.currentImageFile;
     final String pageNumberText = '${_pageManager.currentPageIndex + 1}/${_pageManager.pages.length}';
@@ -1814,5 +1865,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     if (imageFile != null) return true;
     if (imageUrl == null) return false;
     return await _imageService.imageExists(imageUrl);
+  }
+
+  Future<bool> _onWillPop() async {
+    if (_textReaderService.isPlaying) {
+      _textReaderService.stop();
+    }
+    
+    await Future.delayed(const Duration(milliseconds: 100));
+    
+    return true;
   }
 }

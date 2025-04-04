@@ -587,6 +587,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   // 버튼 비활성화 여부 확인
   bool _isButtonDisabled() {
+    // OCR, 번역, 저장 공간 중 하나라도 한도 도달 시 버튼 비활성화
     return _limitStatus['ocrLimitReached'] == true || 
            _limitStatus['translationLimitReached'] == true || 
            _limitStatus['storageLimitReached'] == true;

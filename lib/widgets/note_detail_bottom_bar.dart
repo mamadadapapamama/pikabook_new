@@ -139,7 +139,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            widget.isFullTextMode ? '문장별 구분' : '원문 전체',
+                            widget.isFullTextMode ? '문장별 보기' : '원문 전체 보기',
                             style: TypographyTokens.caption.copyWith(
                               color: ColorTokens.secondary,
                             ),
