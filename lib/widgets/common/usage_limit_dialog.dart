@@ -9,7 +9,7 @@ import 'pika_button.dart';
 class UsageLimitDialog extends StatelessWidget {
   final String? title;
   final String? message;
-  final Map<String, bool> limitStatus;
+  final Map<String, dynamic> limitStatus;
   final Map<String, double> usagePercentages;
   final Function? onContactSupport;
 
@@ -262,7 +262,7 @@ class UsageLimitDialog extends StatelessWidget {
   /// 다이얼로그 표시 정적 메서드
   static Future<void> show(
     BuildContext context, {
-    required Map<String, bool> limitStatus,
+    required Map<String, dynamic> limitStatus,
     required Map<String, double> usagePercentages,
     Function? onContactSupport,
   }) async {

@@ -4,6 +4,8 @@ import '../models/flash_card.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
+import '../services/tts_service.dart';
+import 'common/tts_button.dart';
 
 /// 플래시카드 한 장 내의 UI와 기능
 ///
@@ -185,7 +187,7 @@ class FlashCardUI {
     );
   }
 
-  /// 카드 앞면 내용 (중국어, 핀인) 생성
+  /// 카드 앞면 내용 (단어, 핀인) 생성
   static Widget buildFrontCardContent(
     String text,
     String pinyin,
@@ -204,13 +206,12 @@ class FlashCardUI {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TTS 버튼 (단어 위에 위치)
-            buildTtsButtonInline(
-              ColorTokens.secondary, 
-              isSpeaking, 
-              onSpeak, 
-              onStopSpeaking,
-              isEnabled: isEnabled,
-              tooltip: tooltip,
+            TtsButton(
+              text: text, // 실제 텍스트 전달
+              size: TtsButton.sizeMedium,
+              tooltip: isEnabled ? null : tooltip ?? '무료 TTS 사용량을 모두 사용했습니다.',
+              iconColor: ColorTokens.secondary,
+              activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
             ),
             SizedBox(height: SpacingTokens.sm),
             
@@ -258,13 +259,12 @@ class FlashCardUI {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TTS 버튼 (단어 위에 위치)
-            buildTtsButtonInline(
-              ColorTokens.secondary, 
-              isSpeaking, 
-              onSpeak, 
-              onStopSpeaking,
-              isEnabled: isEnabled,
-              tooltip: tooltip,
+            TtsButton(
+              text: original, // 원문 텍스트 전달
+              size: TtsButton.sizeMedium,
+              tooltip: isEnabled ? null : tooltip ?? '무료 TTS 사용량을 모두 사용했습니다.',
+              iconColor: ColorTokens.secondary,
+              activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
             ),
             SizedBox(height: SpacingTokens.sm),
             
@@ -311,28 +311,16 @@ class FlashCardUI {
     Function() onStopSpeaking, {
     bool isEnabled = true,
     String? tooltip,
+    String text = '',
   }) {
-    final Widget button = InkWell(
-      onTap: !isEnabled ? null : (isSpeaking ? onStopSpeaking : onSpeak),
-      child: SizedBox(
-        width: SpacingTokens.iconSizeMedium,
-        height: SpacingTokens.iconSizeMedium,
-        child: Icon(
-          isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
-          color: isEnabled ? iconColor : ColorTokens.textGrey.withOpacity(0.5),
-          size: SpacingTokens.iconSizeMedium,
-        ),
-      ),
+    // 표준 TtsButton 위젯으로 대체
+    return TtsButton(
+      text: text,
+      size: TtsButton.sizeMedium,
+      tooltip: isEnabled ? null : tooltip ?? '무료 TTS 사용량을 모두 사용했습니다.',
+      iconColor: iconColor,
+      activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
     );
-    
-    if (tooltip != null && !isEnabled) {
-      return Tooltip(
-        message: tooltip,
-        child: button,
-      );
-    }
-    
-    return button;
   }
 
   /// 카드 번호 배지 생성

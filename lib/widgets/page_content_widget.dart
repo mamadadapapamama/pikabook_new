@@ -84,7 +84,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   // TTS 사용량 제한 확인 변수
   bool _isCheckingTtsLimit = false;
-  Map<String, bool>? _ttsLimitStatus;
+  Map<String, dynamic>? _ttsLimitStatus;
   Map<String, double>? _ttsUsagePercentages;
 
   @override

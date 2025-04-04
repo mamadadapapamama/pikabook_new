@@ -384,7 +384,9 @@ class TtsService {
   Future<int> getRemainingTtsCount() async {
     try {
       final usage = await _usageLimitService.getUserUsage();
-      final currentUsage = usage['ttsRequests'] as int? ?? 0;
+      final int currentUsage = usage['ttsRequests'] is int 
+          ? usage['ttsRequests'] as int 
+          : 0;
       return UsageLimitService.MAX_FREE_TTS_REQUESTS - currentUsage;
     } catch (e) {
       debugPrint('TTS 남은 사용량 확인 중 오류: $e');
@@ -396,7 +398,19 @@ class TtsService {
   Future<bool> isTtsAvailable() async {
     try {
       final limits = await _usageLimitService.checkFreeLimits();
-      final isLimitReached = limits['ttsLimitReached'] ?? false;
+      // 타입 안전성을 위한 확인 로직 추가
+      bool isLimitReached;
+      
+      if (limits['ttsLimitReached'] is bool) {
+        isLimitReached = limits['ttsLimitReached'] as bool;
+      } else if (limits['ttsLimitReached'] is int) {
+        // int 타입으로 오는 경우 0이 아니면 제한에 도달한 것으로 처리
+        isLimitReached = (limits['ttsLimitReached'] as int) != 0;
+      } else {
+        // 기본값은 제한에 도달하지 않은 것으로 처리
+        isLimitReached = false;
+      }
+      
       debugPrint('TTS 사용 가능 여부: ${!isLimitReached} (제한 도달: $isLimitReached)');
       return !isLimitReached;
     } catch (e) {
@@ -431,7 +445,10 @@ class TtsService {
   Future<int> getCurrentTtsUsageCount() async {
     try {
       final usage = await _usageLimitService.getUserUsage();
-      return usage['ttsRequests'] as int? ?? 0;
+      final int currentUsage = usage['ttsRequests'] is int 
+          ? usage['ttsRequests'] as int 
+          : 0;
+      return currentUsage;
     } catch (e) {
       debugPrint('TTS 현재 사용량 확인 중 오류: $e');
       return 0;

@@ -389,7 +389,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (result != null && result.isNotEmpty) {
       await _userPreferences.setUserName(result);
       // 사용자 이름이 변경되면 노트 스페이스 이름도 업데이트
-      final noteSpaceName = "${result}의 Chinese Notes";
+      final noteSpaceName = "${result}의 학습 노트";
       await _userPreferences.setDefaultNoteSpace(noteSpaceName);
       _loadUserPreferences();
     }

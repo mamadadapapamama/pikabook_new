@@ -12,6 +12,7 @@ import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/segment_utils.dart';
+import '../widgets/common/tts_button.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 /// 
@@ -425,26 +426,15 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 ),
               ),
               
-              // TTS 재생 버튼
-              GestureDetector(
-                onTap: () {
-                  _playTts(segment.originalText, segmentIndex: i);
-                },
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  margin: const EdgeInsets.only(left: 8),
-                  decoration: BoxDecoration(
-                    color: ColorTokens.segmentButtonBackground,
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: Icon(
-                    widget.playingSegmentIndex == i
-                        ? Icons.stop
-                        : Icons.volume_up,
-                    color: ColorTokens.textSecondary,
-                    size: 14,
-                  ),
+              // TTS 재생 버튼 - 세그먼트 스타일로 통일
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0, top: 2.0),
+                child: TtsButton(
+                  text: segment.originalText,
+                  segmentIndex: i,
+                  size: TtsButton.sizeMedium, // 중간 크기로 통일
+                  tooltip: '무료 TTS 사용량을 모두 사용했습니다.',
+                  activeBackgroundColor: ColorTokens.primary.withOpacity(0.2), // 더 뚜렷한 활성화 색상
                 ),
               ),
             ],

@@ -45,6 +45,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   bool _isFlipped = false; // 카드 뒤집힘 상태
   bool _isSpeaking = false; // TTS 실행 중 상태
   String? _error; // 오류 메시지
+  String? _selectedNoteId;
 
   @override
   void initState() {

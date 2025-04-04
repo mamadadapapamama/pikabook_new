@@ -57,9 +57,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late Animation<double> _animation;
   
   // 사용량 관련 상태 변수
-  Map<String, bool> _limitStatus = {};
-  Map<String, double> _usagePercentages = {};
   bool _hasCheckedUsage = false;
+  Map<String, dynamic> _limitStatus = {};
+  Map<String, double> _usagePercentages = {};
   
   HomeViewModel? _viewModel;
 

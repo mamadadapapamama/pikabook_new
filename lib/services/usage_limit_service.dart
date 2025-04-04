@@ -384,21 +384,32 @@ class UsageLimitService {
   }
 
   /// 무료 사용량 제한 확인 (전체)
-  Future<Map<String, bool>> checkFreeLimits() async {
+  Future<Map<String, dynamic>> checkFreeLimits() async {
     final limits = await getBetaUsageLimits();
-    return {
-      'ocrLimitReached': limits['ocrLimitReached'] ?? false,
-      'ttsLimitReached': limits['ttsLimitReached'] ?? false,
-      'translationLimitReached': limits['translationLimitReached'] ?? false,
-      'storageLimitReached': limits['storageLimitReached'] ?? false,
-      'dictionaryLimitReached': limits['dictionaryLimitReached'] ?? false,
-      'pageLimitReached': limits['pageLimitReached'] ?? false,
-      'flashcardLimitReached': limits['flashcardLimitReached'] ?? false,
-      'noteLimitReached': limits['noteLimitReached'] ?? false,
-      'anyLimitReached': limits['anyLimitReached'] ?? false,
-      'betaEnded': limits['betaEnded'] ?? false,
-      'remainingDays': limits['remainingDays'] ?? 0,
-    };
+    
+    // 결과 맵 생성
+    final result = <String, dynamic>{};
+    
+    // 모든 키에 대해 타입 안전성 확보
+    limits.forEach((key, value) {
+      if (key.endsWith('LimitReached') || key == 'betaEnded' || key == 'anyLimitReached') {
+        // 불리언 값이어야 하는 키들
+        if (value is bool) {
+          result[key] = value;
+        } else if (value is int) {
+          // int 타입인 경우 0이 아니면 true로 간주
+          result[key] = value != 0;
+        } else {
+          // 기본값은 false
+          result[key] = false;
+        }
+      } else {
+        // 다른 타입의 값들은 그대로 유지
+        result[key] = value;
+      }
+    });
+    
+    return result;
   }
   
   /// 각 기능별 사용량 비율(%) 계산
