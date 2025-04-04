@@ -24,6 +24,13 @@ class TtsButton extends StatefulWidget {
   /// 커스텀 활성화 배경색
   final Color? activeBackgroundColor;
   
+  /// 커스텀 재생 시작/종료 콜백
+  final VoidCallback? onPlayStart;
+  final VoidCallback? onPlayEnd;
+  
+  /// 커스텀 모양 (원형 또는 표준)
+  final bool useCircularShape;
+  
   /// 버튼 크기 사전 정의값
   static const double sizeSmall = 24.0;
   static const double sizeMedium = 32.0;
@@ -33,10 +40,13 @@ class TtsButton extends StatefulWidget {
     Key? key,
     required this.text,
     this.segmentIndex,
-    this.size = sizeMedium, // 기본 크기를 medium으로 변경
+    this.size = sizeMedium,
     this.tooltip,
     this.iconColor,
     this.activeBackgroundColor,
+    this.onPlayStart,
+    this.onPlayEnd,
+    this.useCircularShape = true,
   }) : super(key: key);
 
   @override
@@ -68,6 +78,11 @@ class _TtsButtonState extends State<TtsButton> {
         setState(() {
           _isPlaying = false;
         });
+        
+        // 재생 완료 콜백 호출
+        if (widget.onPlayEnd != null) {
+          widget.onPlayEnd!();
+        }
       }
     });
   }
@@ -102,11 +117,21 @@ class _TtsButtonState extends State<TtsButton> {
       setState(() {
         _isPlaying = false;
       });
+      
+      // 재생 종료 콜백 호출
+      if (widget.onPlayEnd != null) {
+        widget.onPlayEnd!();
+      }
     } else {
       // 재생 시작
       setState(() {
         _isPlaying = true;
       });
+      
+      // 재생 시작 콜백 호출
+      if (widget.onPlayStart != null) {
+        widget.onPlayStart!();
+      }
       
       try {
         if (widget.segmentIndex != null) {
@@ -121,14 +146,12 @@ class _TtsButtonState extends State<TtsButton> {
           setState(() {
             _isPlaying = false;
           });
+          
+          // 재생 종료 콜백 호출
+          if (widget.onPlayEnd != null) {
+            widget.onPlayEnd!();
+          }
         }
-      }
-      
-      // 재생 완료 후 자동으로 재생 상태 초기화
-      if (mounted) {
-        setState(() {
-          _isPlaying = false;
-        });
       }
       
       // 사용량 확인 후 상태 업데이트
@@ -143,24 +166,68 @@ class _TtsButtonState extends State<TtsButton> {
         ? widget.iconColor ?? ColorTokens.textSecondary 
         : ColorTokens.textGrey.withOpacity(0.5); // 비활성화 시 연한 회색
     
-    // 일반 Flutter IconButton 사용
-    final Widget buttonContent = IconButton(
-      icon: Icon(
-        _isPlaying ? Icons.stop : Icons.volume_up,
-        color: iconColor,
-      ),
-      iconSize: widget.size * 0.6,
-      padding: EdgeInsets.all(widget.size * 0.2),
-      constraints: BoxConstraints(
-        minWidth: widget.size,
-        minHeight: widget.size,
-      ),
-      onPressed: _isEnabled ? _togglePlayback : null,
-      splashRadius: widget.size / 2,
-      tooltip: !_isEnabled && widget.tooltip != null ? widget.tooltip : null,
-    );
+    // 배경색 설정
+    final Color backgroundColor = _isPlaying 
+        ? widget.activeBackgroundColor ?? ColorTokens.primary.withOpacity(0.1)
+        : Colors.transparent;
     
-    return buttonContent;
+    Widget buttonWidget;
+    
+    if (widget.useCircularShape) {
+      // 원형 버튼 스타일
+      buttonWidget = Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: _isEnabled ? ColorTokens.primary.withOpacity(0.2) : Colors.transparent,
+            width: 1,
+          ),
+        ),
+        child: IconButton(
+          icon: Icon(
+            _isPlaying ? Icons.stop : Icons.volume_up,
+            color: iconColor,
+            size: widget.size * 0.5,
+          ),
+          onPressed: _isEnabled ? _togglePlayback : null,
+          padding: EdgeInsets.zero,
+          constraints: BoxConstraints(
+            minWidth: widget.size,
+            minHeight: widget.size,
+          ),
+          splashRadius: widget.size / 2,
+        ),
+      );
+    } else {
+      // 기본 IconButton 스타일
+      buttonWidget = IconButton(
+        icon: Icon(
+          _isPlaying ? Icons.stop : Icons.volume_up,
+          color: iconColor,
+        ),
+        iconSize: widget.size * 0.6,
+        padding: EdgeInsets.all(widget.size * 0.2),
+        constraints: BoxConstraints(
+          minWidth: widget.size,
+          minHeight: widget.size,
+        ),
+        onPressed: _isEnabled ? _togglePlayback : null,
+        splashRadius: widget.size / 2,
+      );
+    }
+    
+    // 비활성화된 경우 툴팁 표시
+    if (!_isEnabled && widget.tooltip != null) {
+      return Tooltip(
+        message: widget.tooltip!,
+        child: buttonWidget,
+      );
+    }
+    
+    return buttonWidget;
   }
   
   @override

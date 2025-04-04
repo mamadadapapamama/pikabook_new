@@ -340,7 +340,8 @@ class TtsService {
       } else {
         // 사용량 제한 확인
         try {
-          final canUseTts = await _usageLimitService.incrementTtsCharCount(1);
+          debugPrint('TTS 세그먼트 요청: ${text.length} 글자');
+          final canUseTts = await _usageLimitService.incrementTtsCharCount(text.length);
           if (!canUseTts) {
             _ttsCache[text] = false; // 사용 불가로 캐싱
             debugPrint('TTS 사용량 제한 초과로 세그먼트 재생 불가: $text');
@@ -392,25 +393,28 @@ class TtsService {
   /// TTS 사용 가능 여부 확인 (UI에서 버튼 상태 결정에 사용)
   Future<bool> isTtsAvailable() async {
     try {
-      final limits = await _usageLimitService.checkFreeLimits();
-      // 타입 안전성을 위한 확인 로직 추가
-      bool isLimitReached;
+      // 캐시 무효화하고 최신 데이터 가져오기
+      final usageData = await _usageLimitService.getUserUsage(forceRefresh: true);
       
-      if (limits['ttsLimitReached'] is bool) {
-        isLimitReached = limits['ttsLimitReached'] as bool;
-      } else if (limits['ttsLimitReached'] is int) {
-        // int 타입으로 오는 경우 0이 아니면 제한에 도달한 것으로 처리
-        isLimitReached = (limits['ttsLimitReached'] as int) != 0;
-      } else {
-        // 기본값은 제한에 도달하지 않은 것으로 처리
-        isLimitReached = false;
+      // 현재 사용량 직접 확인 (타입 안전성 고려)
+      final int currentUsage = usageData['ttsRequests'] is int 
+          ? usageData['ttsRequests'] as int 
+          : 0;
+      
+      // 제한 도달 여부 직접 계산 
+      final bool isLimitReached = currentUsage >= UsageLimitService.MAX_FREE_TTS_REQUESTS;
+      
+      debugPrint('TTS 사용 가능 여부 확인: 현재=${currentUsage}/${UsageLimitService.MAX_FREE_TTS_REQUESTS}, 제한 도달=${isLimitReached}');
+      
+      // 캐시 초기화 (이전 값 사용 방지)
+      if (isLimitReached) {
+        clearCache();
       }
       
-      debugPrint('TTS 사용 가능 여부: ${!isLimitReached} (제한 도달: $isLimitReached)');
       return !isLimitReached;
     } catch (e) {
       debugPrint('TTS 사용 가능 여부 확인 중 오류: $e');
-      return true; // 오류 시 기본적으로 활성화
+      return false;  // 오류 시 안전하게 사용 불가로 처리
     }
   }
 

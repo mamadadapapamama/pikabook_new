@@ -49,6 +49,10 @@ class UsageLimitService {
   // 현재 사용자 ID 가져오기
   String? get _currentUserId => _auth.currentUser?.uid;
   
+  // 캐시 변수를 클래스 레벨로 이동
+  Map<String, dynamic>? _cachedUsageData;
+  DateTime? _lastFetchTime;
+  
   /// 베타 기간 종료 날짜 가져오기
   Future<DateTime> getBetaPeriodEndDate() async {
     final prefs = await SharedPreferences.getInstance();
@@ -390,11 +394,25 @@ class UsageLimitService {
   }
 
   /// 사용자의 현재 사용량 가져오기 (전체)
-  Future<Map<String, dynamic>> getUserUsage() async {
+  /// forceRefresh가 true이면 캐시를 무시하고 최신 데이터를 가져옵니다.
+  Future<Map<String, dynamic>> getUserUsage({bool forceRefresh = false}) async {
+    // 캐시 사용 결정 (5초 이내 요청은 캐시 사용)
+    final now = DateTime.now();
+    final useCache = !forceRefresh && 
+                    _cachedUsageData != null && 
+                    _lastFetchTime != null &&
+                    now.difference(_lastFetchTime!).inSeconds < 5;
+    
+    if (useCache) {
+      debugPrint('사용량 데이터 캐시 사용 (마지막 갱신: ${now.difference(_lastFetchTime!).inSeconds}초 전)');
+      return _cachedUsageData!;
+    }
+    
     // 기존에 저장된 사용자 사용량 가져오기
     final usageData = await _loadUsageData();
     
-    return {
+    // 결과 캐싱
+    _cachedUsageData = {
       'ocrPages': usageData['ocrPages'] ?? 0,
       'ttsRequests': usageData['ttsRequests'] ?? 0,
       'translatedChars': usageData['translatedChars'] ?? 0,
@@ -402,9 +420,15 @@ class UsageLimitService {
       'dictionaryLookups': usageData['dictionaryLookups'] ?? 0,
       'pages': usageData['pages'] ?? 0,
       'flashcards': usageData['flashcards'] ?? 0,
-      'betaStartDate': usageData['betaStartDate'],
       'notes': usageData['notes'] ?? 0,
     };
+    _lastFetchTime = now;
+    
+    if (forceRefresh) {
+      debugPrint('사용량 데이터 강제 새로고침 완료');
+    }
+    
+    return _cachedUsageData!;
   }
 
   /// 무료 사용량 제한 확인 (전체)

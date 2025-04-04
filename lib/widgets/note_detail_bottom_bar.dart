@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import '../models/page.dart' as page_model;
+import '../models/processed_text.dart';
 import '../services/page_content_service.dart';
 import '../services/text_reader_service.dart';
+import '../services/tts_service.dart';
 import '../utils/text_display_mode.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
+import 'common/tts_button.dart';
 
 /// 노트 상세 화면 하단 내비게이션 바
 /// 페이지 탐색, 텍스트 표시 모드 토글, 모드 전환, 진행률 바 제공
 
-class NoteDetailBottomBar extends StatelessWidget {
+class NoteDetailBottomBar extends StatefulWidget {
   final page_model.Page? currentPage;
   final int currentPageIndex;
   final int totalPages;
@@ -38,26 +41,52 @@ class NoteDetailBottomBar extends StatelessWidget {
   });
 
   @override
+  State<NoteDetailBottomBar> createState() => _NoteDetailBottomBarState();
+}
+
+class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
+  final TtsService _ttsService = TtsService();
+  ProcessedText? processedText;
+  
+  @override
+  void initState() {
+    super.initState();
+    _updateProcessedText();
+  }
+  
+  @override
+  void didUpdateWidget(NoteDetailBottomBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentPage?.id != widget.currentPage?.id) {
+      _updateProcessedText();
+    }
+  }
+  
+  void _updateProcessedText() {
+    if (widget.currentPage?.id != null) {
+      processedText = widget.pageContentService.getProcessedText(widget.currentPage!.id!);
+    } else {
+      processedText = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (currentPage == null) return const SizedBox.shrink();
+    if (widget.currentPage == null) return const SizedBox.shrink();
     
-    final processedText = currentPage!.id != null 
-        ? pageContentService.getProcessedText(currentPage!.id!) 
-        : null;
-        
     // 세그먼트 존재 여부 확인
     final bool hasSegments = processedText != null && 
-                             processedText.segments != null && 
-                             processedText.segments!.isNotEmpty; 
+                             processedText!.segments != null && 
+                             processedText!.segments!.isNotEmpty; 
     
     // 병음 표시 여부 확인
     final bool showPinyin = processedText?.showPinyin ?? false;
     
     // 디버그 정보 출력
-    debugPrint('NoteDetailBottomBar - 현재 모드: $textDisplayMode, 페이지: ${currentPageIndex + 1}/$totalPages, 전체보기: $isFullTextMode');
+    debugPrint('NoteDetailBottomBar - 현재 모드: ${widget.textDisplayMode}, 페이지: ${widget.currentPageIndex + 1}/${widget.totalPages}, 전체보기: ${widget.isFullTextMode}');
     
     // 현재 페이지 진행률 계산 (0.0 ~ 1.0 사이 값)
-    final double progress = totalPages > 0 ? (currentPageIndex + 1) / totalPages : 0.0;
+    final double progress = widget.totalPages > 0 ? (widget.currentPageIndex + 1) / widget.totalPages : 0.0;
     
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -88,12 +117,12 @@ class NoteDetailBottomBar extends StatelessWidget {
               // 이전 페이지 버튼
               _buildNavigationButton(
                 icon: Icons.arrow_back_ios_rounded,
-                onTap: currentPageIndex > 0 
-                    ? () => onPageChanged(currentPageIndex - 1) 
+                onTap: widget.currentPageIndex > 0 
+                    ? () => widget.onPageChanged(widget.currentPageIndex - 1) 
                     : null,
               ),
               
-              // 중앙 컨트롤 영역 (병음 토글 + 모드 전환 버튼)
+              // 중앙 컨트롤 영역 (병음 토글 + 모드 전환 버튼 + TTS 버튼)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -102,7 +131,7 @@ class NoteDetailBottomBar extends StatelessWidget {
                     onTap: () {
                       // 토글: 현재 모드가 all이면 nopinyin으로, 아니면 all로 변경
                       final newMode = showPinyin ? TextDisplayMode.nopinyin : TextDisplayMode.all;
-                      onTextDisplayModeChanged(newMode);
+                      widget.onTextDisplayModeChanged(newMode);
                     },
                     child: Container(
                       padding: EdgeInsets.symmetric(
@@ -140,9 +169,64 @@ class NoteDetailBottomBar extends StatelessWidget {
                   
                   SizedBox(width: SpacingTokens.md),
                   
+                  // TTS 전체 재생 버튼
+                  if (processedText != null && 
+                      processedText!.fullOriginalText.isNotEmpty)
+                    FutureBuilder<bool>(
+                      future: _ttsService.isTtsAvailable(),
+                      builder: (context, snapshot) {
+                        final bool isEnabled = snapshot.hasData && snapshot.data == true;
+                        final String? ttsTooltip = isEnabled ? null : '무료 TTS 사용량을 모두 사용했습니다.';
+                        
+                        return GestureDetector(
+                          onTap: isEnabled ? () {} : null,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
+                              vertical: SpacingTokens.xs + SpacingTokens.xs/2
+                            ),
+                            decoration: BoxDecoration(
+                              color: ColorTokens.surface,
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(
+                                color: isEnabled 
+                                  ? ColorTokens.secondary 
+                                  : ColorTokens.greyMedium
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TtsButton(
+                                  text: processedText!.fullOriginalText,
+                                  size: TtsButton.sizeMedium,
+                                  tooltip: ttsTooltip,
+                                  iconColor: isEnabled 
+                                    ? ColorTokens.secondary 
+                                    : ColorTokens.greyMedium,
+                                  useCircularShape: false,
+                                ),
+                                SizedBox(width: SpacingTokens.xs),
+                                Text(
+                                  '전체 재생',
+                                  style: TypographyTokens.caption.copyWith(
+                                    color: isEnabled 
+                                      ? ColorTokens.secondary 
+                                      : ColorTokens.greyMedium,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  
+                  SizedBox(width: SpacingTokens.md),
+                  
                   // 모드 전환 버튼 (문장별 구분/원문 전체)
                   GestureDetector(
-                    onTap: onToggleFullTextMode,
+                    onTap: widget.onToggleFullTextMode,
                     child: Container(
                       padding: EdgeInsets.symmetric(
                         horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
@@ -157,7 +241,7 @@ class NoteDetailBottomBar extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            isFullTextMode ? '문장별 구분' : '원문 전체',
+                            widget.isFullTextMode ? '문장별 구분' : '원문 전체',
                             style: TypographyTokens.caption.copyWith(
                               color: ColorTokens.secondary,
                             ),
@@ -172,8 +256,8 @@ class NoteDetailBottomBar extends StatelessWidget {
               // 다음 페이지 버튼
               _buildNavigationButton(
                 icon: Icons.arrow_forward_ios_rounded,
-                onTap: currentPageIndex < totalPages - 1 
-                    ? () => onPageChanged(currentPageIndex + 1) 
+                onTap: widget.currentPageIndex < widget.totalPages - 1 
+                    ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
                     : null,
               ),
             ],
@@ -247,8 +331,8 @@ class NoteDetailBottomBar extends StatelessWidget {
             children: [
               // 진행된 부분 (현재 페이지까지)
               Container(
-                width: totalPages > 0 
-                    ? (currentPageIndex + 1) / totalPages * MediaQuery.of(context).size.width 
+                width: widget.totalPages > 0 
+                    ? (widget.currentPageIndex + 1) / widget.totalPages * MediaQuery.of(context).size.width 
                     : 0,
                 color: ColorTokens.primary,
               ),
