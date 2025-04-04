@@ -125,24 +125,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: true,
       height: 96,
       actions: [
-        // 페이지 정보
-        Padding(
-          padding: const EdgeInsets.only(right: 8.0, bottom: SpacingTokens.xs),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'page $currentPage / $totalPages',
-                style: TypographyTokens.caption.copyWith(
-                  color: ColorTokens.textSecondary,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-         
         // 플래시카드 카운터
         GestureDetector(
           onTap: onFlashcardTap,

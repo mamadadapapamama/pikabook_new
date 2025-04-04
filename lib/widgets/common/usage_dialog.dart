@@ -33,7 +33,7 @@ class UsageDialog extends StatelessWidget {
         : '현재까지의 사용량');
         
     final String effectiveMessage = message ?? (hasReachedLimit 
-        ? '사용하시는 일정 기능이 한도에 도달했습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.' 
+        ? '사용하시는 기능이 한도에 도달했습니다. \n더 많은 기능이 필요하시다면 문의하기를 눌러 요청해 주세요.' 
         : '');
 
     return AlertDialog(

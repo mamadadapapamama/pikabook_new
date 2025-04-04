@@ -78,7 +78,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   String? _error;
   bool _isFavorite = false;
   bool _isCreatingFlashCard = false;
-  TextDisplayMode _textDisplayMode = TextDisplayMode.all;
   Timer? _backgroundCheckTimer;
   bool _isProcessingText = false;
   File? _imageFile;
@@ -509,7 +508,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         // 기본 표시 설정 지정
         final updatedProcessedText = processedText.copyWith(
           showFullText: false, // 기본값: 세그먼트 모드
-          showPinyin: _textDisplayMode == TextDisplayMode.all, // 토글 모드에 따라 병음 표시
+          showPinyin: true, // 병음 표시는 기본적으로 활성화
           showTranslation: true, // 번역은 항상 표시
         );
         
@@ -822,9 +821,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       
       if (mounted) {
         setState(() {
-          // TextDisplayMode는 병음 표시 여부에 관한 것이므로 별도로 처리
-          _textDisplayMode = TextDisplayMode.all; // 기본값으로 모든 정보 표시
-          
           // 세그먼트 모드 여부는 별도 변수로 저장
           _useSegmentMode = useSegmentMode;
         });
@@ -834,8 +830,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       debugPrint('사용자 기본 설정 로드 중 오류 발생: $e');
       // 오류 발생 시 기본 모드 사용
       if (mounted) {
-    setState(() {
-          _textDisplayMode = TextDisplayMode.all;
+        setState(() {
           _useSegmentMode = true; // 기본값은 세그먼트 모드
         });
       }
@@ -1037,53 +1032,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         });
         
         // ProcessedTextWidget이 플래시카드 단어 목록 업데이트를 인식할 수 있도록 
-        // 메모리 캐시를 클리어하거나 강제로 리빌드
-        _setPageDisplayMode(_textDisplayMode);
+        // 현재 페이지 다시 처리
+        if (_pageManager.currentPage?.id != null) {
+          await _processTextForCurrentPage();
+        }
       }
       
       debugPrint('현재 페이지의 플래시카드 단어 목록 새로 로드됨: ${flashCards.length}개');
     } catch (e) {
       debugPrint('플래시카드 목록 로드 중 오류: $e');
     }
-  }
-
-  // 페이지 디스플레이 모드 설정 메서드
-  void _setPageDisplayMode(TextDisplayMode mode) {
-    debugPrint('페이지 디스플레이 모드 설정: $mode');
-    
-    // 현재 페이지 확인
-    final currentPage = _pageManager.currentPage;
-    if (currentPage == null || currentPage.id == null) {
-      debugPrint('현재 페이지 없음 - 디스플레이 모드 설정 불가');
-      return;
-    }
-    
-    // 캐시된 processedText 가져오기
-    final processedText = _pageContentService.getProcessedText(currentPage.id!);
-    if (processedText == null) {
-      debugPrint('ProcessedText가 null임 - 디스플레이 모드 설정 불가');
-      return;
-    }
-    
-    // 병음 토글 처리
-    bool showPinyin = (mode == TextDisplayMode.all);
-    
-    // processedText 업데이트
-    final updatedText = processedText.copyWith(
-      showFullText: processedText.showFullText, // 전체/세그먼트 모드는 유지
-      showPinyin: showPinyin,           // 병음 표시 여부 업데이트
-      showTranslation: true,            // 번역은 항상 표시
-    );
-    
-    // 업데이트된 ProcessedText 저장
-    _pageContentService.setProcessedText(currentPage.id!, updatedText);
-    
-    // UI 갱신
-    setState(() {
-      _textDisplayMode = mode;
-    });
-    
-    debugPrint('페이지 디스플레이 모드 설정 완료: showPinyin=$showPinyin');
   }
 
   // 세그먼트 삭제 처리
@@ -1134,69 +1092,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     }
   }
 
-  // 텍스트 디스플레이 모드 변경 처리
-  void _handleTextDisplayModeChanged(TextDisplayMode mode) {
-    debugPrint('=====================================================');
-    debugPrint('텍스트 디스플레이 모드 변경 요청: $mode');
-    
-    setState(() {
-    // 모드 변경
-    _textDisplayMode = mode;
-    
-    // 현재 페이지의 ProcessedText 업데이트
-    final currentPage = _pageManager.currentPage;
-    if (currentPage != null && currentPage.id != null) {
-      debugPrint('현재 페이지 ID: ${currentPage.id}');
-      
-      // 캐시된 processedText 가져오기
-      final processedText = _pageContentService.getProcessedText(currentPage.id!);
-      
-      if (processedText != null) {
-        // 기존 상태 로깅
-        debugPrint('기존 ProcessedText 상태: '
-            'showFullText=${processedText.showFullText}, '
-            'showPinyin=${processedText.showPinyin}, '
-            'showTranslation=${processedText.showTranslation}');
-            
-        // 병음 토글 처리
-        bool showPinyin = (mode == TextDisplayMode.all);
-        debugPrint('병음 표시 설정 변경: $showPinyin (모드: $mode)');
-        
-        // processedText 업데이트
-        final updatedText = processedText.copyWith(
-          showFullText: processedText.showFullText, // 전체/세그먼트 모드는 유지
-          showPinyin: showPinyin,           // 병음 표시 여부 업데이트
-          showTranslation: true,            // 번역은 항상 표시
-        );
-        
-        // 업데이트 내용 확인
-        debugPrint('업데이트할 ProcessedText 상태: '
-            'showFullText=${updatedText.showFullText}, '
-            'showPinyin=${updatedText.showPinyin}, '
-            'showTranslation=${updatedText.showTranslation}');
-            
-        // 업데이트된 ProcessedText 저장
-        _pageContentService.setProcessedText(currentPage.id!, updatedText);
-          
-          // 변경 후 캐시 상태 확인
-          final afterUpdate = _pageContentService.getProcessedText(currentPage.id!);
-          if (afterUpdate != null) {
-            debugPrint('업데이트 후 캐시된 ProcessedText 상태: '
-                'showFullText=${afterUpdate.showFullText}, '
-                'showPinyin=${afterUpdate.showPinyin}, '
-                'showTranslation=${afterUpdate.showTranslation}');
-          }
-      } else {
-        debugPrint('ProcessedText가 null임 - 업데이트 건너뜀');
-      }
-    } else {
-      debugPrint('현재 페이지 없음 - 업데이트 건너뜀');
-    }
-    });
-    
-    debugPrint('=====================================================');
-  }
-  
   // 세그먼트/전체 텍스트 모드 전환 처리 메서드
   void _toggleFullTextMode() {
     final currentPage = _pageManager.currentPage;
@@ -1397,8 +1292,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   ? max(_note!.imageCount!, _pageManager.pages.length)
                   : _pageManager.pages.length,
               onPageChanged: _changePage,
-              textDisplayMode: _textDisplayMode,
-              onTextDisplayModeChanged: _handleTextDisplayModeChanged,
               isFullTextMode: _pageManager.currentPage?.id != null 
                   ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
                   : false,
@@ -1492,6 +1385,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                               if (snapshot.connectionState == ConnectionState.waiting) {
                                 return Center(child: CircularProgressIndicator());
                               } else if (snapshot.hasData && snapshot.data != null) {
+                                // 이미지 파일을 찾은 경우, 페이지 매니저에도 업데이트
+                                if (page.id != null) {
+                                  // 이미지 파일과 URL 업데이트 (기존 NotePageManager 메서드 활용)
+                                  _pageManager.updateCurrentPageImage(
+                                    snapshot.data!, 
+                                    page.imageUrl!
+                                  );
+                                }
+                                
                                 return ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
                                   child: Image.file(
@@ -1524,23 +1426,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                             },
                           ),
                           
-                        // '이미지 전체보기' 버튼
+                        // 이미지 확대 버튼 추가
                         Positioned(
                           bottom: 12,
                           right: 12,
                           child: FutureBuilder<bool>(
-                            future: _imageExists(imageFile, page?.imageUrl),
+                            future: _imageExists(currentImageFile, page?.imageUrl),
                             builder: (context, snapshot) {
                               final bool hasImage = snapshot.data ?? false;
                               
                               return ElevatedButton(
                                 onPressed: hasImage ? () {
-                                  debugPrint('이미지 전체보기 버튼 클릭: imageFile=${imageFile != null}, imageUrl=${page?.imageUrl}');
+                                  debugPrint('이미지 전체보기 버튼 클릭: imageFile=${currentImageFile != null}, imageUrl=${page?.imageUrl}');
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (context) => FullImageScreen(
-                                        imageFile: imageFile,
+                                        imageFile: currentImageFile,
                                         imageUrl: page?.imageUrl,
                                         title: '이미지',
                                       ),
@@ -1676,46 +1578,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                     }
                   },
                 ),
-              // 이미지 확대 버튼 추가
-              Positioned(
-                bottom: 12,
-                right: 12,
-                child: FutureBuilder<bool>(
-                  future: _imageExists(currentImageFile, currentPage?.imageUrl),
-                  builder: (context, snapshot) {
-                    final bool hasImage = snapshot.data ?? false;
-                    
-                    return ElevatedButton(
-                      onPressed: hasImage ? () {
-                        debugPrint('이미지 전체보기 버튼 클릭: imageFile=${currentImageFile != null}, imageUrl=${currentPage?.imageUrl}');
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => FullImageScreen(
-                              imageFile: currentImageFile,
-                              imageUrl: currentPage?.imageUrl,
-                              title: '이미지',
-                            ),
-                          ),
-                        );
-                      } : null, // 이미지가 없으면 버튼 비활성화
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black.withOpacity(0.5),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        disabledBackgroundColor: Colors.grey.withOpacity(0.3),
-                        disabledForegroundColor: Colors.white70,
-                      ),
-                      child: Text(
-                        '이미지 전체보기',
-                        style: TypographyTokens.caption.copyWith(
-                          color: Colors.white,
-                        ),
-                      ),
-                    );
-                  }
-                ),
-              ),
             ],
           ),
         ),

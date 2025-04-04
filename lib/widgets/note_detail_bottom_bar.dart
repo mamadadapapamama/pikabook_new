@@ -19,8 +19,6 @@ class NoteDetailBottomBar extends StatefulWidget {
   final int currentPageIndex;
   final int totalPages;
   final Function(int) onPageChanged;
-  final TextDisplayMode textDisplayMode;
-  final Function(TextDisplayMode) onTextDisplayModeChanged;
   final bool isFullTextMode;
   final VoidCallback onToggleFullTextMode;
   final PageContentService pageContentService;
@@ -32,8 +30,6 @@ class NoteDetailBottomBar extends StatefulWidget {
     required this.currentPageIndex,
     required this.totalPages,
     required this.onPageChanged,
-    required this.textDisplayMode,
-    required this.onTextDisplayModeChanged,
     required this.isFullTextMode,
     required this.onToggleFullTextMode,
     required this.pageContentService,
@@ -83,7 +79,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     final bool showPinyin = processedText?.showPinyin ?? false;
     
     // 디버그 정보 출력
-    debugPrint('NoteDetailBottomBar - 현재 모드: ${widget.textDisplayMode}, 페이지: ${widget.currentPageIndex + 1}/${widget.totalPages}, 전체보기: ${widget.isFullTextMode}');
+    debugPrint('NoteDetailBottomBar - 현재 모드: ${widget.isFullTextMode}');
     
     // 현재 페이지 진행률 계산 (0.0 ~ 1.0 사이 값)
     final double progress = widget.totalPages > 0 ? (widget.currentPageIndex + 1) / widget.totalPages : 0.0;
@@ -126,49 +122,6 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 병음 토글 버튼
-                  GestureDetector(
-                    onTap: () {
-                      // 토글: 현재 모드가 all이면 nopinyin으로, 아니면 all로 변경
-                      final newMode = showPinyin ? TextDisplayMode.nopinyin : TextDisplayMode.all;
-                      widget.onTextDisplayModeChanged(newMode);
-                    },
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
-                        vertical: SpacingTokens.xs + SpacingTokens.xs/2
-                      ),
-                      decoration: BoxDecoration(
-                        color: showPinyin ? ColorTokens.secondary : ColorTokens.surface,
-                        borderRadius: BorderRadius.circular(100),
-                        border: Border.all(color: ColorTokens.secondary),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '한어병음',
-                            style: TypographyTokens.caption.copyWith(
-                              color: showPinyin ? ColorTokens.textLight : ColorTokens.secondary,
-                            ),
-                          ),
-                          if (showPinyin)
-                            Container(
-                              width: SpacingTokens.xs * 2,
-                              height: SpacingTokens.xs * 2,
-                              margin: EdgeInsets.only(left: SpacingTokens.xs),
-                              decoration: const BoxDecoration(
-                                color: ColorTokens.textLight,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  SizedBox(width: SpacingTokens.md),
-                  
                   // 모드 전환 버튼 (문장별 구분/원문 전체)
                   GestureDetector(
                     onTap: widget.onToggleFullTextMode,
@@ -199,11 +152,27 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
               ),
               
               // 다음 페이지 버튼
-              _buildNavigationButton(
-                icon: Icons.arrow_forward_ios_rounded,
-                onTap: widget.currentPageIndex < widget.totalPages - 1 
-                    ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
-                    : null,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 페이지 번호 텍스트
+                  Container(
+                    margin: EdgeInsets.only(right: 4),
+                    child: Text(
+                      '${widget.currentPageIndex + 1}/${widget.totalPages}',
+                      style: TypographyTokens.body2.copyWith(
+                        color: ColorTokens.textSecondary,
+                      ),
+                    ),
+                  ),
+                  // 화살표 버튼
+                  _buildNavigationButton(
+                    icon: Icons.arrow_forward_ios_rounded,
+                    onTap: widget.currentPageIndex < widget.totalPages - 1 
+                        ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
+                        : null,
+                  ),
+                ],
               ),
             ],
           ),
