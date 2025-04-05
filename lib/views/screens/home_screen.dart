@@ -30,6 +30,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'settings_screen.dart';
 import '../../app.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../utils/debug_utils.dart';
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -275,34 +276,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         width: double.infinity,
                         fit: BoxFit.contain,
                       ),
-                      description: "📷 책 사진: 100장까지 텍스트 자동 인식\n🌐 번역: 최대 5,000자\n🔊 듣기 기능: 1000번 음성 변환 가능\n💾 저장 공간: 이미지 400장 (100mb)",
+                      description: "📷 원서 이미지: 100장까지 텍스트 자동 인식\n🌐 번역: 최대 20,000자\n🔊 듣기 기능: 1000번 음성 변환 가능\n💾 저장 공간: 이미지 400장 (100mb)",
                       showTooltip: shouldShowTooltip,
                       onDismiss: () {
-                        debugPrint('홈 화면 툴팁 닫기 콜백 호출됨!!');
+                        DebugUtils.log('🏠 홈 화면 툴팁 닫기 콜백 호출됨!!');
                         _handleCloseTooltip();
-                      },
-                      style: HelpTextTooltipStyle.primary, // 스타일 프리셋 사용
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: viewModel.hasNotes
-                            ? _isButtonDisabled()
-                              ? Tooltip(
-                                  message: '사용량 한도 초과로 비활성화되었습니다',
-                                  child: PikaButton(
-                                    text: '스마트 노트 만들기',
-                                    variant: PikaButtonVariant.floating,
-                                    leadingIcon: const Icon(Icons.add),
-                                    onPressed: null, // 비활성화
-                                  ),
-                                )
-                              : PikaButton(
-                                  text: '스마트 노트 만들기',
-                                  variant: PikaButtonVariant.floating,
-                                  leadingIcon: const Icon(Icons.add),
-                                  onPressed: () => _handleAddImage(context),
-                                )
-                            : const SizedBox.shrink(), // 노트가 없을 때는 FAB 숨김
-                      ),
+                      }
                     );
                   },
                 ),
@@ -502,21 +481,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   // 툴팁 닫기 처리 메서드
   void _handleCloseTooltip() {
-    debugPrint('홈 화면 툴팁 닫기 버튼 클릭됨');
+    DebugUtils.log('🏠 홈 화면 _handleCloseTooltip 메서드 실행 시작');
     setState(() {
       _showTooltip = false;
     });
+    DebugUtils.log('🏠 홈 화면 _showTooltip 상태 변경됨: false');
     
     // SharedPreferences에 툴팁을 이미 봤다고 저장
     _saveTooltipShownStatus();
     
     // 빈 콜백 호출 (컴파일 오류 방지)
+    DebugUtils.log('🏠 홈 화면 onCloseTooltip 콜백 호출 시작');
     widget.onCloseTooltip();
+    DebugUtils.log('🏠 홈 화면 onCloseTooltip 콜백 호출 완료');
   }
   
   // 툴팁 표시 상태를 저장하는 메서드
   Future<void> _saveTooltipShownStatus() async {
     try {
+      DebugUtils.log('🏠 홈 화면 툴팁 표시 상태 저장 시작');
       final prefs = await SharedPreferences.getInstance();
       
       // 현재 사용자 ID 가져오기
@@ -529,9 +512,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       
       // 툴팁 표시 기록 저장 (사용자별)
       await prefs.setBool(tooltipKey, true);
-      debugPrint('툴팁 표시 상태 저장 완료: $tooltipKey=true');
+      DebugUtils.log('🏠 홈 화면 툴팁 표시 상태 저장 완료: $tooltipKey=true');
     } catch (e) {
-      debugPrint('툴팁 표시 상태 저장 중 오류: $e');
+      DebugUtils.error('🏠 홈 화면 툴팁 표시 상태 저장 중 오류: $e');
     }
   }
 
@@ -576,18 +559,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         // 툴팁 표시 기록 저장 (사용자별)
         // 여기서는 저장하지 않고, 사용자가 직접 닫을 때 저장하도록 변경
         debugPrint('홈 화면 최초 방문 - 툴팁 표시 (사용자: $userId)');
-        
-        // 자동으로 툴팁 닫기는 10초로 연장
-        Future.delayed(const Duration(seconds: 10), () {
-          if (mounted && _showTooltip) {
-            setState(() {
-              _showTooltip = false;
-            });
-            
-            // SharedPreferences에 툴팁을 이미 봤다고 저장
-            _saveTooltipShownStatus();
-          }
-        });
       }
     } catch (e) {
       debugPrint('최초 사용 경험 확인 중 오류: $e');

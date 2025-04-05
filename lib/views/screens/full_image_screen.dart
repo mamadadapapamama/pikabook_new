@@ -143,12 +143,25 @@ class _FullImageScreenState extends State<FullImageScreen> {
           height: double.infinity,
           errorBuilder: (context, error, stackTrace) {
             print('이미지 파일 로드 에러: $error');
-            return _buildErrorWidget();
+            return _buildPlaceholderImage();
+          },
+          // 이미지 로딩 중에도 기본 이미지 표시
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded || frame != null) {
+              return child;
+            } else {
+              return Stack(
+                children: [
+                  _buildPlaceholderImage(),
+                  child,
+                ],
+              );
+            }
           },
         );
       } else {
         print('이미지 파일이 존재하지 않거나 빈 파일입니다: ${widget.imageFile!.path}');
-        return _buildErrorWidget();
+        return _buildPlaceholderImage();
       }
     } 
     // 이미지 URL이 있는 경우
@@ -161,7 +174,7 @@ class _FullImageScreenState extends State<FullImageScreen> {
           future: _getFullImagePath(widget.imageUrl!),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return _buildLoadingWidget(null);
+              return _buildPlaceholderImage(); // 로딩 중에 placeholder 표시
             } else if (snapshot.hasData && snapshot.data != null) {
               final imagePath = snapshot.data!;
               final imageFile = File(imagePath);
@@ -175,15 +188,28 @@ class _FullImageScreenState extends State<FullImageScreen> {
                   height: double.infinity,
                   errorBuilder: (context, error, stackTrace) {
                     print('이미지 파일 로드 에러: $error');
-                    return _buildErrorWidget();
+                    return _buildPlaceholderImage();
+                  },
+                  // 이미지 로딩 중에도 기본 이미지 표시
+                  frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                    if (wasSynchronouslyLoaded || frame != null) {
+                      return child;
+                    } else {
+                      return Stack(
+                        children: [
+                          _buildPlaceholderImage(),
+                          child,
+                        ],
+                      );
+                    }
                   },
                 );
               } else {
                 print('이미지 파일이 존재하지 않습니다: $imagePath');
-                return _buildErrorWidget();
+                return _buildPlaceholderImage();
               }
             } else {
-              return _buildErrorWidget();
+              return _buildPlaceholderImage();
             }
           },
         );
@@ -196,11 +222,24 @@ class _FullImageScreenState extends State<FullImageScreen> {
           height: double.infinity,
           loadingBuilder: (context, child, loadingProgress) {
             if (loadingProgress == null) return child;
-            return _buildLoadingWidget(loadingProgress);
+            return Stack(
+              children: [
+                _buildPlaceholderImage(),
+                Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                        : null,
+                    color: ColorTokens.textLight,
+                  ),
+                ),
+              ],
+            );
           },
           errorBuilder: (context, error, stackTrace) {
             print('이미지 URL 로드 에러: $error');
-            return _buildErrorWidget();
+            return _buildPlaceholderImage();
           },
         );
       }
@@ -208,8 +247,21 @@ class _FullImageScreenState extends State<FullImageScreen> {
     // 이미지 정보가 없거나 존재하지 않는 경우
     else {
       print('이미지 정보가 없음: 파일=${widget.imageFile}, URL=${widget.imageUrl}');
-      return _buildErrorWidget();
+      return _buildPlaceholderImage();
     }
+  }
+
+  // 기본 이미지 위젯 (placeholder)
+  Widget _buildPlaceholderImage() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: Colors.grey[100],
+      child: Image.asset(
+        'assets/images/image_empty.png',
+        fit: BoxFit.contain,
+      ),
+    );
   }
 
   Widget _buildLoadingWidget(ImageChunkEvent? loadingProgress) {

@@ -261,63 +261,38 @@ class _NoteListItemState extends State<NoteListItem> {
                                     errorBuilder: (context, error, stackTrace) {
                                       return Container(
                                         color: Colors.grey[100],
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Image.asset(
-                                              'assets/images/thumbnail_empty.png',
-                                              width: 40,
-                                              height: 40,
-                                              fit: BoxFit.contain,
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '이미지 없음',
-                                              style: GoogleFonts.notoSansKr(
-                                                fontSize: 10,
-                                                color: ColorTokens.textGrey,
-                                              ),
-                                            ),
-                                          ],
+                                        child: Image.asset(
+                                          'assets/images/image_empty.png',
+                                          fit: BoxFit.cover,
                                         ),
                                       );
                                     },
+                                    frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                                      if (wasSynchronouslyLoaded || frame != null) {
+                                        return child;
+                                      } else {
+                                        return Stack(
+                                          children: [
+                                            Container(
+                                              color: Colors.grey[100],
+                                              child: Image.asset(
+                                                'assets/images/image_empty.png',
+                                                fit: BoxFit.cover,
+                                              ),
+                                            ),
+                                            child,
+                                          ],
+                                        );
+                                      }
+                                    },
                                   )
-                                : _isLoadingImage
-                                    ? Center(
-                                        child: SizedBox(
-                                          width: SpacingTokens.lg,
-                                          height: SpacingTokens.lg,
-                                          child: const CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary)),
-                                        ),
-                                      )
-                                    : InkWell(
-                                        onTap: () => _handleEmptyImageTap(context),
-                                        child: Container(
-                                          color: Colors.grey[100],
-                                          child: Column(
-                                            mainAxisAlignment: MainAxisAlignment.center,
-                                            children: [
-                                              Image.asset(
-                                                'assets/images/thumbnail_empty.png',
-                                                width: 40,
-                                                height: 40,
-                                                fit: BoxFit.contain,
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                '이미지 추가',
-                                                style: GoogleFonts.notoSansKr(
-                                                  fontSize: 10,
-                                                  color: ColorTokens.textGrey,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
+                                : Container(
+                                    color: Colors.grey[100],
+                                    child: Image.asset(
+                                      'assets/images/image_empty.png',
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
                           ),
                         ),
                       ],

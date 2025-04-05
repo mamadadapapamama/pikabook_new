@@ -641,14 +641,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           
           debugPrint('노트 상세 화면에서 첫 페이지 툴팁 표시');
           
-          // 10초 후에 툴팁 자동으로 숨기기
-          Future.delayed(const Duration(seconds: 10), () {
-            if (mounted) {
-              setState(() {
-                _showTooltip = false;
-              });
-            }
-          });
+          // 10초 후에 툴팁 자동으로 숨기기 - 제거
+          // Future.delayed(const Duration(seconds: 10), () {
+          //   if (mounted) {
+          //     setState(() {
+          //       _showTooltip = false;
+          //     });
+          //   }
+          // });
         }
       }
     } catch (e) {
@@ -1588,10 +1588,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               description: "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요.",
               showTooltip: true,
               onDismiss: () {
-                debugPrint('노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
+                DebugUtils.log('📝 노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
+                DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 시작: true -> false');
                 setState(() {
                   _showTooltip = false;
                 });
+                DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 완료');
               },
               backgroundColor: ColorTokens.primaryverylight,
               borderColor: ColorTokens.primaryMedium,

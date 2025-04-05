@@ -16,16 +16,16 @@ class UsageLimitService {
   static const int BETA_PERIOD_DAYS = 30; // 베타 기간 (30일)
   
   // 베타 기간 동안의 무료 사용 제한 (테스트용)
-  static const int MAX_FREE_TRANSLATION_CHARS = 1000;  // 번역 최대 글자 수
-  static const int MAX_FREE_OCR_PAGES = 50;           // OCR 최대 페이지 수 (요청당 아닌 총 페이지 수)
-  static const int MAX_FREE_TTS_REQUESTS = 500;       // TTS 요청 최대 수
+  static const int MAX_FREE_TRANSLATION_CHARS = 20000;  // 번역 최대 글자 수
+  static const int MAX_FREE_OCR_PAGES = 100;           // OCR 최대 페이지 수 (요청당 아닌 총 페이지 수)
+  static const int MAX_FREE_TTS_REQUESTS = 1000;       // TTS 요청 최대 수
   static const int MAX_FREE_STORAGE_BYTES = 100 * 1024 * 1024; // 100MB 스토리지
   
   // 월별 기본 무료 사용 제한 (베타 이후)
-  static const int BASIC_FREE_TRANSLATION_CHARS = 500;   // 번역 최대 글자 수
-  static const int BASIC_FREE_OCR_PAGES = 10;           // OCR 최대 페이지 수 (월별)
-  static const int BASIC_FREE_TTS_REQUESTS = 100;        // TTS 요청 최대 글자 수
-  static const int BASIC_FREE_STORAGE_MB = 20;           // 저장 공간 최대 크기 (MB)
+  static const int BASIC_FREE_TRANSLATION_CHARS = 999;   // 번역 최대 글자 수
+  static const int BASIC_FREE_OCR_PAGES = 999;           // OCR 최대 페이지 수 (월별)
+  static const int BASIC_FREE_TTS_REQUESTS = 999;        // TTS 요청 최대 글자 수
+  static const int BASIC_FREE_STORAGE_MB = 999;           // 저장 공간 최대 크기 (MB)
   
   // 싱글톤 패턴 구현
   static final UsageLimitService _instance = UsageLimitService._internal();
@@ -123,7 +123,47 @@ class UsageLimitService {
   
   /// 번역 문자 사용량 증가
   Future<bool> incrementTranslationCharCount(int charCount) async {
-    return await _incrementUsage('translatedChars', charCount, MAX_FREE_TRANSLATION_CHARS);
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData['translatedChars'] ?? 0;
+    
+    // 현재 상태 로깅
+    debugPrint('번역 현재 사용량: $currentUsage/$MAX_FREE_TRANSLATION_CHARS');
+    
+    // 사용량 제한 확인
+    if (currentUsage >= MAX_FREE_TRANSLATION_CHARS) {
+      debugPrint('번역 사용량 제한 초과: $currentUsage/$MAX_FREE_TRANSLATION_CHARS');
+      return false;
+    }
+    
+    // 사용량 증가
+    final int newUsage = currentUsage + charCount;
+    usageData['translatedChars'] = newUsage;
+    await _saveUsageData(usageData);
+    
+    // Google Translate API는 캐릭터 단위로 과금되므로 캐릭터 수를 정확히 기록
+    debugPrint('번역 사용량 증가: $newUsage/$MAX_FREE_TRANSLATION_CHARS (${charCount}자 추가, 남은 번역: ${MAX_FREE_TRANSLATION_CHARS - newUsage}자)');
+    
+    // Firestore에도 사용량 업데이트 (중요 지표)
+    _updateFirestoreUsage('translatedChars', newUsage);
+    
+    return newUsage <= MAX_FREE_TRANSLATION_CHARS;
+  }
+  
+  /// Firestore에 사용량 업데이트 (중요 지표)
+  Future<void> _updateFirestoreUsage(String key, int value) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) return;
+      
+      await _firestore.collection('users').doc(userId).update({
+        'usage.$key': value,
+        'usage.lastUpdated': FieldValue.serverTimestamp(),
+      });
+      
+      debugPrint('Firestore 사용량 업데이트 완료: $key=$value');
+    } catch (e) {
+      debugPrint('Firestore 사용량 업데이트 실패: $e');
+    }
   }
   
   /// TTS 문자 사용량 증가

@@ -65,11 +65,19 @@ class PageImageWidget extends StatelessWidget {
 
   // 로딩 인디케이터 위젯
   Widget _buildLoadingIndicator() {
-    return const Center(
-      child: DotLoadingIndicator(
-        message: '이미지 로딩 중...',
-        dotColor: Color(0xFFFFD53C),
-      ),
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // 기본 이미지 (배경)
+        _buildEmptyImageWidget(),
+        // 로딩 인디케이터 (전경)
+        const Center(
+          child: DotLoadingIndicator(
+            message: '이미지 로딩 중...',
+            dotColor: Color(0xFFFFD53C),
+          ),
+        ),
+      ],
     );
   }
 
@@ -82,7 +90,20 @@ class PageImageWidget extends StatelessWidget {
         width: double.infinity,
         fit: BoxFit.contain,
         errorBuilder: (context, error, stackTrace) {
-          return _buildErrorWidget();
+          return _buildEmptyImageWidget();
+        },
+        // 이미지 로딩 중에도 기본 이미지 표시
+        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+          if (wasSynchronouslyLoaded || frame != null) {
+            return child;
+          } else {
+            return Stack(
+              children: [
+                _buildEmptyImageWidget(),
+                child,
+              ],
+            );
+          }
         },
       );
     } else if (imageUrl != null && imageUrl!.isNotEmpty) {
@@ -90,7 +111,7 @@ class PageImageWidget extends StatelessWidget {
         future: _getImageFile(imageUrl!),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return _buildLoadingIndicator();
+            return _buildEmptyImageWidget();
           } else if (snapshot.hasData && snapshot.data != null) {
             return Image.file(
               snapshot.data!,
@@ -98,23 +119,29 @@ class PageImageWidget extends StatelessWidget {
               width: double.infinity,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) {
-                return _buildErrorWidget();
+                return _buildEmptyImageWidget();
+              },
+              // 이미지 로딩 중에도 기본 이미지 표시
+              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                if (wasSynchronouslyLoaded || frame != null) {
+                  return child;
+                } else {
+                  return Stack(
+                    children: [
+                      _buildEmptyImageWidget(),
+                      child,
+                    ],
+                  );
+                }
               },
             );
           } else {
-            return _buildErrorWidget();
+            return _buildEmptyImageWidget();
           }
         },
       );
     } else {
-      return Container(
-        width: double.infinity,
-        height: 150,
-        color: Colors.grey[200],
-        child: const Center(
-          child: Text('이미지를 찾을 수 없습니다.'),
-        ),
-      );
+      return _buildEmptyImageWidget();
     }
   }
 
@@ -136,6 +163,22 @@ class PageImageWidget extends StatelessWidget {
       print('이미지 파일 로드 오류: $e');
       return null;
     }
+  }
+
+  // 기본 빈 이미지 위젯
+  Widget _buildEmptyImageWidget() {
+    return Container(
+      width: double.infinity,
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Image.asset(
+        'assets/images/image_empty.png',
+        fit: BoxFit.cover,
+      ),
+    );
   }
 
   // 에러 위젯

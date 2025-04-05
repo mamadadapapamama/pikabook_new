@@ -211,7 +211,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
           ? IconButton(
               key: const Key('pika_app_bar_back_button'),
               icon: const Icon(Icons.arrow_back, color: ColorTokens.textSecondary),
-              onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
+              onPressed: onBackPressed ?? () => Navigator.of(context).popUntil((route) => route.isFirst),
             )
           : leading,
       title: title != null

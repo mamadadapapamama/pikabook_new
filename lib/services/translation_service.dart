@@ -173,10 +173,17 @@ class TranslationService {
             // 번역 결과가 원본과 다른지 확인
             if (translatedResult == text) {
               debugPrint('TranslationService: 경고 - 번역 결과가 원본과 동일 (번역이 수행되지 않았을 수 있음)');
+              
+              // 원본과 동일한 경우 사용량을 기록하지 않음
+              debugPrint('TranslationService: 사용량이 기록되지 않음 (원본과 번역 결과가 동일)');
             } else {
               final sampleResult = translatedResult.length > 50 ? '${translatedResult.substring(0, 50)}...' : translatedResult;
               debugPrint('TranslationService: 번역 완료 - 원문: ${text.length}자, 번역: ${translatedResult.length}자');
               debugPrint('TranslationService: 번역 결과 샘플: "$sampleResult"');
+              
+              // 번역된 글자 수 기록 (실제 번역 필요한 텍스트 길이만큼만 카운트)
+              await _usageLimitService.incrementTranslationCharCount(text.length);
+              debugPrint('TranslationService: 번역 사용량 ${text.length}자 기록됨');
             }
             translatedText = translatedResult;
           } else {
@@ -193,9 +200,6 @@ class TranslationService {
         // 오류 발생 시 fallback 전략 - Papago API 등 다른 번역 서비스 사용 가능
         // 현재는 fallback 구현 없이 원본 텍스트 반환
       }
-
-      // 번역된 글자 수 기록 (제한 없이 사용량만 추적)
-      await _usageLimitService.incrementTranslationCharCount(text.length);
 
       return translatedText;
     } catch (e) {
