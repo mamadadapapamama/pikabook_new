@@ -122,26 +122,32 @@ class HelpTextTooltip extends StatelessWidget {
                       Expanded(
                         child: Text(
                           text,
-                          style: TypographyTokens.subtitle1.copyWith(
+                          style: TypographyTokens.body1.copyWith(
                             color: _getTextColor,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
                       // 닫기 버튼 (최대한 단순하게 구현)
-                      IconButton(
-                        onPressed: () {
-                          print('닫기 버튼 클릭 - 단순 IconButton');
+                      GestureDetector(
+                        onTap: () {
+                          print('닫기 버튼 클릭 - GestureDetector 사용');
                           if (onDismiss != null) {
                             onDismiss!();
                           }
                         },
-                        icon: const Icon(Icons.close),
-                        color: ColorTokens.primary,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        splashRadius: 20,
-                        tooltip: '닫기',
+                        child: Container(
+                          padding: const EdgeInsets.all(8.0), // 패딩 추가로 터치 영역 확장
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            color: ColorTokens.primary,
+                            size: 24,
+                          ),
+                        ),
                       ),
                     ],
                   ),

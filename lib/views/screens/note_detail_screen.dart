@@ -335,81 +335,116 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 타이머 생성 전 로그 출력
     debugPrint('백그라운드 처리 확인 타이머 설정: ${widget.noteId}');
 
-    // 5초마다 백그라운드 처리 상태 확인하는 주기적 타이머 설정
-    _backgroundCheckTimer = Timer.periodic(Duration(seconds: 5), (timer) async {
-      if (!mounted) {
-        debugPrint('화면이 더 이상 마운트되지 않음 - 타이머 취소');
-        timer.cancel();
+    // 로컬에 저장된 처리 완료 상태 확인
+    _checkLocalProcessingCompletedStatus().then((bool alreadyProcessed) {
+      if (alreadyProcessed) {
+        debugPrint('이미 완료 처리된 노트 - 타이머 설정 생략');
         return;
       }
 
-      try {
-        // 1. 공유 환경설정에서 페이지 업데이트 여부 확인
-        final prefs = await SharedPreferences.getInstance();
-        final pagesUpdated =
-            prefs.getBool('pages_updated_${widget.noteId}') ?? false;
-
-        // 2. Firestore에서 직접 노트 문서 확인하여 최신 상태 체크
-        bool firestoreUpdated = false;
-        if (!pagesUpdated && _note != null && _note!.id != null) {
-          try {
-            final noteDoc = await FirebaseFirestore.instance
-                .collection('notes')
-                .doc(_note!.id)
-                .get();
-                
-            if (noteDoc.exists) {
-              final data = noteDoc.data();
-              final processingCompleted = data?['processingCompleted'] as bool? ?? false;
-              final isProcessingBackground = data?['isProcessingBackground'] as bool? ?? false;
-              
-              // 처리 완료 + 백그라운드 처리 플래그 False 인 경우 업데이트
-              if (processingCompleted && !isProcessingBackground) {
-                firestoreUpdated = true;
-                debugPrint('Firestore에서 백그라운드 처리 완료 확인됨');
-              }
-            }
-          } catch (e) {
-            debugPrint('Firestore 노트 확인 중 오류: $e');
-          }
-        }
-
-        if (pagesUpdated || firestoreUpdated) {
-          // 페이지 업데이트가 완료된 경우
-          final updatedPageCount =
-              prefs.getInt('updated_page_count_${widget.noteId}') ?? _note?.imageCount ?? 0;
-          debugPrint('백그라운드 처리 완료 감지: $updatedPageCount 페이지 업데이트됨');
-
-          // 플래그 초기화
-          if (pagesUpdated) {
-            await prefs.remove('pages_updated_${widget.noteId}');
-            await prefs.remove('updated_page_count_${widget.noteId}');
-          }
-          
-          // 현재 페이지 인덱스 저장
-          final currentIndex = _pageManager.currentPageIndex;
-
-          // 페이지 다시 로드
-          await _reloadPages(forceReload: true);
-
-          // 완료 메시지 표시
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('추가 페이지 처리가 완료되었습니다. 이제 다음 페이지로 이동할 수 있습니다.'),
-                duration: Duration(seconds: 5),
-              ),
-            );
-          }
-
-          // 업데이트가 완료되었으므로 타이머 취소
-          debugPrint('백그라운드 처리 완료 - 타이머 취소');
+      // 5초마다 백그라운드 처리 상태 확인하는 주기적 타이머 설정
+      _backgroundCheckTimer = Timer.periodic(Duration(seconds: 5), (timer) async {
+        if (!mounted) {
+          debugPrint('화면이 더 이상 마운트되지 않음 - 타이머 취소');
           timer.cancel();
+          return;
         }
-      } catch (e) {
-        debugPrint('백그라운드 처리 상태 확인 중 오류 발생: $e');
-      }
+
+        try {
+          // 1. 공유 환경설정에서 페이지 업데이트 여부 확인
+          final prefs = await SharedPreferences.getInstance();
+          final pagesUpdated =
+              prefs.getBool('pages_updated_${widget.noteId}') ?? false;
+
+          // 2. Firestore에서 직접 노트 문서 확인하여 최신 상태 체크
+          bool firestoreUpdated = false;
+          if (!pagesUpdated && _note != null && _note!.id != null) {
+            try {
+              final noteDoc = await FirebaseFirestore.instance
+                  .collection('notes')
+                  .doc(_note!.id)
+                  .get();
+                  
+              if (noteDoc.exists) {
+                final data = noteDoc.data();
+                final processingCompleted = data?['processingCompleted'] as bool? ?? false;
+                final isProcessingBackground = data?['isProcessingBackground'] as bool? ?? false;
+                
+                // 처리 완료 + 백그라운드 처리 플래그 False 인 경우 업데이트
+                if (processingCompleted && !isProcessingBackground) {
+                  firestoreUpdated = true;
+                  debugPrint('Firestore에서 백그라운드 처리 완료 확인됨');
+                }
+              }
+            } catch (e) {
+              debugPrint('Firestore 노트 확인 중 오류: $e');
+            }
+          }
+
+          if (pagesUpdated || firestoreUpdated) {
+            // 페이지 업데이트가 완료된 경우
+            final updatedPageCount =
+                prefs.getInt('updated_page_count_${widget.noteId}') ?? _note?.imageCount ?? 0;
+            debugPrint('백그라운드 처리 완료 감지: $updatedPageCount 페이지 업데이트됨');
+
+            // 플래그 초기화
+            if (pagesUpdated) {
+              await prefs.remove('pages_updated_${widget.noteId}');
+              await prefs.remove('updated_page_count_${widget.noteId}');
+            }
+            
+            // 현재 페이지 인덱스 저장
+            final currentIndex = _pageManager.currentPageIndex;
+
+            // 페이지 다시 로드
+            await _reloadPages(forceReload: true);
+
+            // 완료 메시지 표시
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('추가 페이지 처리가 완료되었습니다. 이제 다음 페이지로 이동할 수 있습니다.'),
+                  duration: Duration(seconds: 5),
+                ),
+              );
+            }
+
+            // 로컬에 처리 완료 상태 저장
+            await _saveLocalProcessingCompletedStatus();
+
+            // 업데이트가 완료되었으므로 타이머 취소
+            debugPrint('백그라운드 처리 완료 - 타이머 취소');
+            timer.cancel();
+          }
+        } catch (e) {
+          debugPrint('백그라운드 처리 상태 확인 중 오류 발생: $e');
+        }
+      });
     });
+  }
+  
+  // 로컬에 저장된 처리 완료 상태 확인
+  Future<bool> _checkLocalProcessingCompletedStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'note_processing_completed_${widget.noteId}';
+      return prefs.getBool(key) ?? false;
+    } catch (e) {
+      debugPrint('로컬 처리 완료 상태 확인 중 오류: $e');
+      return false;
+    }
+  }
+  
+  // 로컬에 처리 완료 상태 저장
+  Future<void> _saveLocalProcessingCompletedStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'note_processing_completed_${widget.noteId}';
+      await prefs.setBool(key, true);
+      debugPrint('노트 처리 완료 상태 로컬에 저장됨: ${widget.noteId}');
+    } catch (e) {
+      debugPrint('로컬 처리 완료 상태 저장 중 오류: $e');
+    }
   }
   
   // 처리된 다음 페이지로 이동
@@ -443,17 +478,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       bool processingCompleted = false;
       if (_note != null && _note!.id != null) {
         try {
-          final noteDoc = await FirebaseFirestore.instance
-              .collection('notes')
-              .doc(_note!.id)
-              .get();
-          if (noteDoc.exists) {
-            final data = noteDoc.data();
-            processingCompleted =
-                data?['processingCompleted'] as bool? ?? false;
-            if (processingCompleted) {
-              debugPrint('노트 문서에서 백그라운드 처리 완료 상태 확인: $processingCompleted');
-              forceReload = true; // 처리가 완료된 경우 강제 로드
+          // 로컬에서 처리 완료 상태 확인
+          final localCompleted = await _checkLocalProcessingCompletedStatus();
+          if (localCompleted && !forceReload) {
+            debugPrint('로컬에 저장된 처리 완료 상태 확인: 이미 처리 완료됨');
+            // 로컬 상태가 이미 완료인 경우 Firestore 검사 생략
+          } else {
+            final noteDoc = await FirebaseFirestore.instance
+                .collection('notes')
+                .doc(_note!.id)
+                .get();
+            if (noteDoc.exists) {
+              final data = noteDoc.data();
+              processingCompleted =
+                  data?['processingCompleted'] as bool? ?? false;
+              if (processingCompleted) {
+                debugPrint('노트 문서에서 백그라운드 처리 완료 상태 확인: $processingCompleted');
+                forceReload = true; // 처리가 완료된 경우 강제 로드
+                
+                // 로컬에 처리 완료 상태 저장 (중복 알림 방지)
+                await _saveLocalProcessingCompletedStatus();
+              }
             }
           }
         } catch (e) {
@@ -1548,7 +1593,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   _showTooltip = false;
                 });
               },
-              backgroundColor: ColorTokens.primarylight,
+              backgroundColor: ColorTokens.primaryverylight,
               borderColor: ColorTokens.primaryMedium,
               textColor: ColorTokens.textPrimary,
               tooltipPadding: const EdgeInsets.all(16),
@@ -1894,58 +1939,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     }
     
     // 텍스트/이미지 세그먼트가 있는 경우
-    return Stack(
-      children: [
-        // 메인 페이지 컨텐츠
-        SingleChildScrollView(
-          scrollDirection: Axis.vertical,
-          padding: contentPadding, // 여기에 패딩 적용
-          child: PageContentWidget(
-            key: ValueKey('processed_${currentPage.id}'),
-            page: currentPage,
-            imageFile: currentImageFile,
-            flashCards: _note?.flashCards,
-            useSegmentMode: _useSegmentMode,
-            isLoadingImage: false,
-            noteId: widget.noteId,
-            onCreateFlashCard: (front, back, {pinyin}) async {
-              await _createFlashCard(front, back, pinyin: pinyin);
-            },
-            onDeleteSegment: _handleDeleteSegment,
-          ),
-        ),
-        
-        // 툴팁 표시 (처음 텍스트 처리가 완료된 경우)
-        if (_showTooltip)
-          Positioned(
-            bottom: 20,
-            left: 16,
-            right: 16,
-            child: HelpTextTooltip(
-              key: const Key('note_detail_tooltip'),
-              text: "첫 노트가 만들어졌어요!",
-              description: "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요.",
-              showTooltip: true,
-              onDismiss: () {
-                debugPrint('노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
-                setState(() {
-                  _showTooltip = false;
-                });
-              },
-              backgroundColor: ColorTokens.primarylight,
-              borderColor: ColorTokens.primaryMedium,
-              textColor: ColorTokens.textPrimary,
-              tooltipPadding: const EdgeInsets.all(16),
-              spacing: 4.0,
-              image: Image.asset(
-                'assets/images/note_help.png',
-                width: double.infinity,
-                fit: BoxFit.contain,
-              ),
-              child: Container(), // 빈 컨테이너 (툴팁만 표시)
-            ),
-          ),
-      ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      padding: contentPadding, // 여기에 패딩 적용
+      child: PageContentWidget(
+        key: ValueKey('processed_${currentPage.id}'),
+        page: currentPage,
+        imageFile: currentImageFile,
+        flashCards: _note?.flashCards,
+        useSegmentMode: _useSegmentMode,
+        isLoadingImage: false,
+        noteId: widget.noteId,
+        onCreateFlashCard: (front, back, {pinyin}) async {
+          await _createFlashCard(front, back, pinyin: pinyin);
+        },
+        onDeleteSegment: _handleDeleteSegment,
+      ),
     );
   }
 }

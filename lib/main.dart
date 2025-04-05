@@ -18,6 +18,21 @@ void main() async {
   FlutterNativeSplash.preserve(widgetsBinding: WidgetsFlutterBinding.ensureInitialized());
   debugPrint('🚀 main: 스플래시 화면 유지 시작');
   
+  // 앱 스토어 심사를 위한 최적화: 메모리 사용량 최적화
+  final profileMode = true;
+  if (profileMode) {
+    debugPrint('🔧 메모리 최적화 모드 활성화');
+    // 메모리 관련 제약 조정
+    WidgetsBinding.instance.deferFirstFrame();
+    
+    // 이미지 캐시 크기 제한
+    PaintingBinding.instance.imageCache.maximumSize = 50;
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024; // 50MB
+    
+    // 첫 프레임 렌더링 허용
+    WidgetsBinding.instance.allowFirstFrame();
+  }
+  
   // 2. 시스템 UI 설정 (상태 표시줄 등)
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

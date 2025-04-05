@@ -13,15 +13,64 @@ class LoadingScreen extends StatelessWidget {
   
   /// 건너뛰기 버튼 콜백 (null이면 버튼 표시 안 함)
   final VoidCallback? onSkip;
+  
+  /// 앱 스토어 심사를 위한 최적화 여부
+  final bool optimizeForAppReview;
+  
+  /// 로딩 상태 메시지
+  final String? message;
+  
+  /// 오류 메시지
+  final String? error;
 
   const LoadingScreen({
     Key? key,
     required this.progress,
     this.onSkip,
+    this.optimizeForAppReview = false,
+    this.message,
+    this.error,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // 앱 스토어 심사를 위한 최적화: 성능 향상을 위한 렌더링 최적화
+    if (optimizeForAppReview) {
+      // 가벼운 로딩 화면으로 처리
+      return Scaffold(
+        backgroundColor: ColorTokens.primary,
+        body: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 로고 이미지
+                Image.asset(
+                  'assets/images/pikabook_textlogo.png',
+                  width: 80, // 크기 최적화
+                  color: Colors.white,
+                ),
+                const SizedBox(height: 16),
+                
+                // 간소화된 로딩 인디케이터
+                const DotLoadingIndicator(dotColor: Colors.white),
+                const SizedBox(height: 16),
+                
+                // 상태 메시지
+                Text(
+                  message ?? '앱을 준비하는 중이에요',
+                  style: TypographyTokens.button.copyWith(
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 기본 로딩 화면 (기존 구현)
     return Scaffold(
       backgroundColor: ColorTokens.primary,
       body: SafeArea(
@@ -62,7 +111,7 @@ class LoadingScreen extends StatelessWidget {
                     
                     // 진행률 텍스트
                     Text(
-                      '${(progress * 100).toInt()}% 완료',
+                      error ?? '${(progress * 100).toInt()}% 준비중이에요... ',
                       style: TypographyTokens.button.copyWith(
                         color: Colors.white,
                       ),

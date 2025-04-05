@@ -126,55 +126,37 @@ class UnifiedCacheService {
   }
 
   /// 로컬 저장소 캐시 정리 (오래된 항목 제거)
-  Future<void> _cleanupExpiredLocalCache() async {
-    if (!_isInitialized) return;
+  Future<int> _cleanupExpiredLocalCache([int? maxAgeHours]) async {
+    if (!_isInitialized) return 0;
 
     try {
-      debugPrint('만료된 로컬 캐시 정리 시작');
       final prefs = await SharedPreferences.getInstance();
       final allKeys = prefs.getKeys();
-      final now = DateTime.now();
-      int removedCount = 0;
-
-      // 타임스탬프 키만 필터링
-      final timestampKeys =
-          allKeys.where((key) => key.contains('timestamp_')).toList();
-
-      // 한 번에 최대 50개만 처리 (부하 방지)
+      
+      // 타임스탬프 포함된 키 찾기
+      final timestampKeys = allKeys.where((key) => key.contains('_timestamp')).toList();
+      
+      // 한 번에 50개 키만 처리 (메모리 최적화)
       final keysToProcess = timestampKeys.take(50).toList();
-
+      
+      int removedCount = 0;
+      
+      // 현재 시간
+      final now = DateTime.now();
+      
+      // 타임스탬프 확인
       for (final key in keysToProcess) {
         try {
           final timestampStr = prefs.getString(key);
           if (timestampStr == null) continue;
-
-          DateTime timestamp;
-          try {
-            timestamp = DateTime.parse(timestampStr);
-          } catch (e) {
-            // 타임스탬프 형식이 잘못된 경우 해당 항목 삭제
-            if (key.startsWith('${_noteKeyPrefix}timestamp_')) {
-              final originalKey = _noteKeyPrefix +
-                  key.substring('${_noteKeyPrefix}timestamp_'.length);
-              await prefs.remove(originalKey);
-            } else if (key.startsWith('${_pageKeyPrefix}timestamp_')) {
-              final originalKey = _pageKeyPrefix +
-                  key.substring('${_pageKeyPrefix}timestamp_'.length);
-              await prefs.remove(originalKey);
-            } else if (key.startsWith('${_translationKeyPrefix}timestamp_')) {
-              final originalKey = _translationKeyPrefix +
-                  key.substring('${_translationKeyPrefix}timestamp_'.length);
-              await prefs.remove(originalKey);
-            }
-            await prefs.remove(key);
-            removedCount++;
-            continue;
-          }
-
-          if (now.difference(timestamp) > _cacheValidity) {
+          
+          final timestamp = DateTime.parse(timestampStr);
+          
+          // 기본 캐시 유효 기간보다 오래된 항목 또는 maxAgeHours가 지정된 경우 그 시간을 초과한 항목
+          if (maxAgeHours != null && now.difference(timestamp).inHours > maxAgeHours) {
             String? originalKey;
             if (key.startsWith('${_noteKeyPrefix}timestamp_')) {
-              originalKey = _noteKeyPrefix +
+              originalKey = _noteKeyPrefix + 
                   key.substring('${_noteKeyPrefix}timestamp_'.length);
             } else if (key.startsWith('${_pageKeyPrefix}timestamp_')) {
               originalKey = _pageKeyPrefix +
@@ -203,11 +185,14 @@ class UnifiedCacheService {
       // 남은 키가 있으면 나중에 다시 정리
       if (timestampKeys.length > keysToProcess.length) {
         Future.delayed(Duration(minutes: 5), () {
-          _cleanupExpiredLocalCache();
+          _cleanupExpiredLocalCache(maxAgeHours);
         });
       }
+      
+      return removedCount;
     } catch (e) {
       debugPrint('만료된 로컬 캐시 정리 중 오류 발생: $e');
+      return 0;
     }
   }
 
@@ -385,34 +370,31 @@ class UnifiedCacheService {
     return result;
   }
 
-  /// 페이지 캐시 크기 확인 및 정리
-  void _checkPageCacheSize() {
-    // 메모리 캐시 크기 제한
-    if (_pageCache.length > _maxPageItems) {
-      debugPrint('페이지 캐시 크기 제한 초과: ${_pageCache.length}개 > $_maxPageItems개');
-
-      // 가장 오래된 항목부터 제거
-      final sortedEntries = _pageCache.keys.toList()
-        ..sort((a, b) {
-          final timeA = _cacheTimestamps[a] ?? DateTime.now();
-          final timeB = _cacheTimestamps[b] ?? DateTime.now();
-          return timeA.compareTo(timeB);
-        });
-
-      // 제거할 항목 수 계산
-      final itemsToRemove = _pageCache.length - _maxPageItems;
-
-      // 가장 오래된 항목부터 제거
-      for (int i = 0; i < itemsToRemove; i++) {
-        if (i < sortedEntries.length) {
-          final key = sortedEntries[i];
-          _pageCache.remove(key);
-          _cacheTimestamps.remove(key);
-        }
-      }
-
-      debugPrint('페이지 캐시 정리 완료: $itemsToRemove개 항목 제거');
+  /// 페이지 캐시 크기 확인 및 제한
+  void _checkPageCacheSize([int? maxPageItems]) {
+    final maxItems = maxPageItems ?? _maxPageItems;
+    
+    if (_pageCache.length <= maxItems) return;
+    
+    // 타임스탬프 기준으로 정렬
+    final sortedKeys = _pageCache.keys.toList()
+      ..sort((a, b) {
+        final timeA = _cacheTimestamps[a] ?? DateTime.now();
+        final timeB = _cacheTimestamps[b] ?? DateTime.now();
+        return timeA.compareTo(timeB); // 오름차순 (오래된 것부터)
+      });
+    
+    // 제거할 항목 수 계산
+    final removeCount = _pageCache.length - maxItems;
+    
+    // 오래된 항목부터 제거
+    for (int i = 0; i < removeCount && i < sortedKeys.length; i++) {
+      final key = sortedKeys[i];
+      _pageCache.remove(key);
+      _cacheTimestamps.remove(key);
     }
+    
+    debugPrint('오래된 페이지 캐시 $removeCount개 정리 완료');
   }
 
   /// 페이지 가져오기 - 메모리에서만 조회
@@ -888,8 +870,10 @@ class UnifiedCacheService {
   }
   
   /// 가장 오래된 노트 캐시 정리
-  void _clearOldestNotes() {
-    if (_noteCache.length <= _maxNoteItems) return;
+  void _clearOldestNotes([int? keepCount]) {
+    final maxItems = keepCount ?? _maxNoteItems;
+    
+    if (_noteCache.length <= maxItems) return;
     
     // 타임스탬프 기준으로 정렬
     final sortedKeys = _noteCache.keys.toList()
@@ -900,7 +884,7 @@ class UnifiedCacheService {
       });
     
     // 제거할 항목 수 계산
-    final removeCount = _noteCache.length - _maxNoteItems;
+    final removeCount = _noteCache.length - maxItems;
     
     // 오래된 항목부터 제거
     for (int i = 0; i < removeCount && i < sortedKeys.length; i++) {
@@ -920,6 +904,37 @@ class UnifiedCacheService {
     
     // 로컬 저장소 캐시 정리
     await _cleanupExpiredLocalCache();
+  }
+
+  /// 앱 스토어 심사를 위한 메모리 최적화
+  Future<void> optimizeForAppReview() async {
+    debugPrint('앱 스토어 심사를 위한 캐시 서비스 최적화 시작');
+    
+    // 1. 메모리 캐시 최적화
+    final noteCount = _noteCache.length;
+    if (noteCount > 10) {
+      // 최신 10개 노트만 유지
+      _clearOldestNotes(10);
+      debugPrint('메모리 최적화: 노트 캐시 축소 ($noteCount → ${_noteCache.length})');
+    }
+    
+    // 2. 페이지 캐시 최적화
+    final pageCount = _pageCache.length;
+    if (pageCount > 50) {
+      // 50개 페이지만 유지
+      _checkPageCacheSize(50);
+      debugPrint('메모리 최적화: 페이지 캐시 축소 ($pageCount → ${_pageCache.length})');
+    }
+    
+    // 3. 임시 캐시 데이터 제거
+    _memoryCache.clear();
+    debugPrint('메모리 최적화: 임시 캐시 데이터 모두 제거');
+    
+    // 4. 사용하지 않는 디스크 캐시 파일 정리
+    final expiredCount = await _cleanupExpiredLocalCache(24);
+    debugPrint('디스크 최적화: $expiredCount개 만료된 캐시 파일 제거');
+    
+    debugPrint('앱 스토어 심사를 위한 캐시 서비스 최적화 완료');
   }
 
   // 언어 설정 관련 키
