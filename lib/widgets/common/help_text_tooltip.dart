@@ -13,7 +13,7 @@ enum HelpTextTooltipStyle {
   info,
 }
 
-class HelpTextTooltip extends StatefulWidget {
+class HelpTextTooltip extends StatelessWidget {
   final String text;
   final String? description;
   final Widget? image;
@@ -90,99 +90,85 @@ class HelpTextTooltip extends StatefulWidget {
   }
 
   @override
-  State<HelpTextTooltip> createState() => _HelpTextTooltipState();
-}
-
-class _HelpTextTooltipState extends State<HelpTextTooltip> {
-  @override
   Widget build(BuildContext context) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        widget.child,
-        if (widget.showTooltip)
+        child,
+        if (showTooltip)
           Positioned(
-            bottom: -widget.spacing, // 버튼과의 간격
+            bottom: -spacing,
             left: 0,
             right: 0,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // 툴팁 컨테이너
-                Container(
-                  width: widget.tooltipWidth ?? 349,
-                  padding: widget.tooltipPadding ?? const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: widget._getBackgroundColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: widget._getBorderColor,
-                      width: 1,
-                    ),
-                    boxShadow: UITokens.mediumShadow,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            child: Container(
+              width: tooltipWidth ?? 349,
+              padding: tooltipPadding ?? const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: _getBackgroundColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _getBorderColor,
+                  width: 1,
+                ),
+                boxShadow: UITokens.mediumShadow,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 제목과 닫기 버튼
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // 제목
-                      Text(
-                        widget.text,
-                        style: TypographyTokens.body1.copyWith(
-                          color: widget._getTextColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-
-                      // 이미지가 있는 경우 표시
-                      if (widget.image != null) ...[
-                        const SizedBox(height: 12),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            width: double.infinity,
-                            child: widget.image!,
-                          ),
-                        ),
-                      ],
-                      
-                      // 설명이 있는 경우 추가
-                      if (widget.description != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          widget.description!,
-                          style: TypographyTokens.body2.copyWith(
-                            color: widget._getTextColor,
-                            fontSize: 14,
+                      Expanded(
+                        child: Text(
+                          text,
+                          style: TypographyTokens.subtitle1.copyWith(
+                            color: _getTextColor,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ],
+                      ),
+                      // 닫기 버튼 (최대한 단순하게 구현)
+                      IconButton(
+                        onPressed: () {
+                          print('닫기 버튼 클릭 - 단순 IconButton');
+                          if (onDismiss != null) {
+                            onDismiss!();
+                          }
+                        },
+                        icon: const Icon(Icons.close),
+                        color: ColorTokens.primary,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        splashRadius: 20,
+                        tooltip: '닫기',
+                      ),
                     ],
                   ),
-                ),
-                
-                // 닫기 버튼 (위치 변경)
-                Positioned(
-                  top: -15,
-                  right: -15,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      print('닫기 버튼 ElevatedButton 클릭됨!');
-                      if (widget.onDismiss != null) {
-                        widget.onDismiss!();
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: ColorTokens.primary,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.zero,
-                      shape: const CircleBorder(),
-                      minimumSize: const Size(40, 40),
+                  
+                  // 이미지
+                  if (image != null) ...[
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: image!,
                     ),
-                    child: const Icon(Icons.close, size: 24),
-                  ),
-                ),
-              ],
+                  ],
+                  
+                  // 설명
+                  if (description != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      description!,
+                      style: TypographyTokens.body2.copyWith(
+                        color: _getTextColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
       ],

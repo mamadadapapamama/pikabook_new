@@ -38,6 +38,7 @@ import '../../theme/tokens/spacing_tokens.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../widgets/common/usage_dialog.dart';
 import '../../services/usage_limit_service.dart';
+import '../../utils/debug_utils.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -1317,35 +1318,40 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                 flashcardCount: _note?.flashcardCount ?? 0,
                 onMorePressed: _showMoreOptions,
                 onFlashcardTap: _navigateToFlashcards,
-                onBackPressed: () async {
-                  try {
-                    // 재생 중인 TTS 중지
-                    if (_textReaderService.isPlaying) {
-                      await _textReaderService.stop();
-                    }
-                    
-                    // TTS 서비스 완전히 중지
-                    await _ttsService.stop();
-                    
-                    // 필요한 리소스 정리
-                    if (_pageManager.currentPage?.id != null) {
-                      _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
-                    }
-                    
-                    // 추가 지연 시간으로 충분한 정리 시간 확보
-                    await Future.delayed(const Duration(milliseconds: 300));
-                    
-                    // 컨텍스트 체크 후 안전하게 네비게이션
-                    if (mounted && Navigator.canPop(context)) {
-                      Navigator.of(context).pop();
-                    }
-                  } catch (e) {
-                    debugPrint('노트 화면 back 버튼 처리 중 오류: $e');
-                    // 오류가 발생하더라도 화면은 닫히도록 시도
-                    if (mounted && Navigator.canPop(context)) {
-                      Navigator.of(context).pop();
-                    }
+                onBackPressed: () {
+                  // 홈 화면으로 직접 이동
+                  DebugUtils.log('앱바 백버튼 터치됨 - 홈 화면으로 이동 시작');
+                  
+                  // 홈 화면으로 이동 (pop 대신 첫 화면까지 pop)
+                  if (mounted) {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
                   }
+                  
+                  // 화면 이동 후 리소스 정리 (백그라운드에서 처리)
+                  Future.microtask(() async {
+                    try {
+                      DebugUtils.log('백그라운드에서 TTS 리소스 정리 시작');
+                      
+                      // TTS 관련 서비스 중지
+                      if (_textReaderService.isPlaying) {
+                        DebugUtils.log('TextReaderService 중지 중...');
+                        await _textReaderService.stop();
+                      }
+                      
+                      DebugUtils.log('TtsService 중지 중...');
+                      await _ttsService.stop();
+                      
+                      // 필요한 리소스 정리
+                      if (_pageManager.currentPage?.id != null) {
+                        DebugUtils.log('ProcessedText 리소스 정리 중...');
+                        _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
+                      }
+                      
+                      DebugUtils.log('백그라운드 리소스 정리 완료');
+                    } catch (e) {
+                      DebugUtils.error('백그라운드 리소스 정리 중 오류: $e');
+                    }
+                  });
                 },
               ),
           body: _isLoading
@@ -1909,27 +1915,38 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // 뒤로가기 버튼 처리
   Future<bool> _onWillPop() async {
-    try {
-      // 재생 중인 TTS 중지
-      if (_textReaderService.isPlaying) {
-        await _textReaderService.stop();
+    DebugUtils.log('WillPopScope 호출됨 - 백버튼 이벤트');
+    
+    // 리소스 정리는 백그라운드에서 처리
+    Future.microtask(() async {
+      try {
+        // TTS 정리
+        if (_textReaderService.isPlaying) {
+          DebugUtils.log('백그라운드에서 TextReaderService 중지 중...');
+          await _textReaderService.stop();
+        }
+        
+        DebugUtils.log('백그라운드에서 TtsService 중지 중...');
+        await _ttsService.stop();
+        
+        // 리소스 정리
+        if (_pageManager.currentPage?.id != null) {
+          _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
+        }
+        
+        DebugUtils.log('백그라운드 리소스 정리 완료');
+      } catch (e) {
+        DebugUtils.error('백그라운드 리소스 정리 중 오류: $e');
       }
-      
-      // TTS 서비스 완전히 중지
-      await _ttsService.stop();
-      
-      // 필요한 리소스 정리
-      if (_pageManager.currentPage?.id != null) {
-        _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
-      }
-      
-      // 추가 지연 시간으로 충분한 정리 시간 확보
-      await Future.delayed(const Duration(milliseconds: 300));
-      
-      return true;
-    } catch (e) {
-      debugPrint('onWillPop 처리 중 오류: $e');
-      return true; // 오류가 있어도 뒤로가기는 허용
+    });
+    
+    // 항상 홈 화면으로 이동 (pop 대신 홈으로 이동)
+    if (mounted) {
+      DebugUtils.log('홈 화면으로 이동');
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return false; // false 반환하여 기본 pop 동작 방지
     }
+    
+    return true; // 만약 mounted가 아니면 기본 동작 수행
   }
 }

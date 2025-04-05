@@ -327,7 +327,12 @@ class _TtsButtonState extends State<TtsButton> {
   void dispose() {
     // 상태 정리를 위해 현재 재생 중인 경우 중지
     if (_isPlaying) {
-      _ttsService.stop();
+      debugPrint('TtsButton dispose: 재생 중인 TTS 정리');
+      // 동기 작업이 UI를 차단하지 않도록 별도 작업으로 분리
+      _isPlaying = false; // 먼저 상태 업데이트
+      Future.microtask(() {
+        _ttsService.stop();
+      });
     }
     super.dispose();
   }

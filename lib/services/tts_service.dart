@@ -130,11 +130,21 @@ class TtsService {
   Future<void> stop() async {
     if (_flutterTts == null) return;
 
-    await _flutterTts?.stop();
-    _ttsState = TtsState.stopped;
+    try {
+      debugPrint('TtsService: stop() 호출됨');
+      await _flutterTts?.stop();
+      _ttsState = TtsState.stopped;
 
-    // 현재 재생 중인 세그먼트 초기화
-    _updateCurrentSegment(null);
+      // 현재 재생 중인 세그먼트 초기화
+      _updateCurrentSegment(null);
+      
+      debugPrint('TtsService: stop() 완료');
+    } catch (e) {
+      debugPrint('TtsService: stop() 중 오류 발생: $e');
+      // 오류 발생시에도 상태 초기화
+      _ttsState = TtsState.stopped;
+      _updateCurrentSegment(null);
+    }
   }
 
   // 재생 일시정지

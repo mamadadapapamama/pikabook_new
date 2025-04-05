@@ -16,9 +16,9 @@ class UsageLimitService {
   static const int BETA_PERIOD_DAYS = 30; // 베타 기간 (30일)
   
   // 베타 기간 동안의 무료 사용 제한 (테스트용)
-  static const int MAX_FREE_TRANSLATION_CHARS = 100;  // 번역 최대 글자 수
-  static const int MAX_FREE_OCR_PAGES = 5;           // OCR 최대 페이지 수 (요청당 아닌 총 페이지 수)
-  static const int MAX_FREE_TTS_REQUESTS = 5;       // TTS 요청 최대 수
+  static const int MAX_FREE_TRANSLATION_CHARS = 1000;  // 번역 최대 글자 수
+  static const int MAX_FREE_OCR_PAGES = 50;           // OCR 최대 페이지 수 (요청당 아닌 총 페이지 수)
+  static const int MAX_FREE_TTS_REQUESTS = 500;       // TTS 요청 최대 수
   static const int MAX_FREE_STORAGE_BYTES = 100 * 1024 * 1024; // 100MB 스토리지
   
   // 월별 기본 무료 사용 제한 (베타 이후)
