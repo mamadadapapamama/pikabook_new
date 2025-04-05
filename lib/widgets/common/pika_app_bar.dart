@@ -208,9 +208,9 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
         statusBarBrightness: Brightness.light, // iOS용 (밝은 배경 = 검정 아이콘)
       ),
       leading: showBackButton
-          ? BackButton(
+          ? IconButton(
               key: const Key('pika_app_bar_back_button'),
-              color: ColorTokens.textSecondary,
+              icon: const Icon(Icons.arrow_back, color: ColorTokens.textSecondary),
               onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
             )
           : leading,

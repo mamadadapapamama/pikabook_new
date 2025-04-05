@@ -39,6 +39,10 @@ import 'package:image_picker/image_picker.dart';
 import '../../widgets/common/usage_dialog.dart';
 import '../../services/usage_limit_service.dart';
 import '../../utils/debug_utils.dart';
+import 'home_screen.dart';
+import '../../services/translation_service.dart';
+import '../../models/flash_card.dart';
+import '../../models/processed_text.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -1124,177 +1128,191 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       debugPrint('모드 전환 완료: 변경 후 showFullText=${updatedText.showFullText}, '
           'showFullTextModified=${updatedText.showFullTextModified}');
     });
+    
+    // 필요한 번역 데이터 확인 및 로드
+    _checkAndLoadTranslationData(processedText);
   }
   
-  // TTS 사용량 제한 확인 및 경고 다이얼로그 표시
-  Future<bool> _checkTtsUsageLimits() async {
-    try {
-      // UsageLimitService 인스턴스 가져오기
-      final usageLimitService = UsageLimitService();
+  // 번역 데이터 확인 및 필요시 로드
+  Future<void> _checkAndLoadTranslationData(ProcessedText processedText) async {
+    // 현재 전체 텍스트 모드
+    final bool isCurrentlyFullMode = processedText.showFullText;
+    // 모드 전환 후 (toggleDisplayMode 후)
+    final bool willBeFullMode = !isCurrentlyFullMode;
+    
+    // 1. 전체 모드로 전환하는데 전체 번역이 없는 경우
+    if (willBeFullMode && 
+        (processedText.fullTranslatedText == null || processedText.fullTranslatedText!.isEmpty)) {
+      debugPrint('전체 번역 모드로 전환했으나 번역이 없어 전체 번역 수행 시작...');
       
-      // 사용량 제한 상태 확인
-      final limitStatus = await usageLimitService.checkFreeLimits();
-      final usagePercentages = await usageLimitService.getUsagePercentages();
+      // 전체 번역 수행
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
       
-      // TTS 제한에 도달했는지 확인
-      final bool ttsLimitReached = limitStatus['ttsLimitReached'] as bool? ?? false;
-      
-      // 제한에 도달한 경우 다이얼로그 표시
-      if (ttsLimitReached && mounted) {
-        await UsageDialog.show(
-          context,
-          limitStatus: limitStatus,
-          usagePercentages: usagePercentages,
+      try {
+        final translationService = TranslationService();
+        final fullTranslatedText = await translationService.translateText(
+          processedText.fullOriginalText,
+          sourceLanguage: 'zh-CN',
+          targetLanguage: 'ko'
         );
-        return false; // TTS 사용 불가
-      }
-      
-      return true; // TTS 사용 가능
-    } catch (e) {
-      debugPrint('TTS 사용량 제한 확인 중 오류: $e');
-      return true; // 오류 발생 시 기본적으로 사용 허용
-    }
-  }
-
-  // 재생/일시정지 버튼 처리
-  void _handlePlayPausePressed() async {
-    final currentPage = _pageManager.currentPage;
-    if (currentPage == null) return;
-    
-    debugPrint('재생/일시정지 버튼 클릭: isPlaying=${_textReaderService.isPlaying}');
-    
-    if (_textReaderService.isPlaying) {
-      _textReaderService.stop();
-      setState(() {});
-    } else if (currentPage.originalText.isNotEmpty) {
-      // TTS 사용량 제한 확인
-      final canUseTts = await _checkTtsUsageLimits();
-      if (!canUseTts) {
-        debugPrint('TTS 사용량 제한으로 재생 불가');
-        return;
-      }
-      
-      // ProcessedText 가져오기
-      final processedText = _pageContentService.getProcessedText(currentPage.id!);
-      if (processedText != null) {
-        debugPrint('텍스트 재생 시작: 길이=${currentPage.originalText.length}자, 세그먼트=${processedText.segments?.length ?? 0}개');
         
-        // 세그먼트 모드일 때는 readAllSegments, 전체 텍스트 모드일 때는 readText 사용
-        if (processedText.segments != null && processedText.segments!.isNotEmpty) {
-          debugPrint('세그먼트 모드로 텍스트 재생');
-          _textReaderService.readAllSegments(processedText);
-        } else {
-          debugPrint('전체 텍스트 모드로 텍스트 재생');
-          _textReaderService.readText(currentPage.originalText);
+        // 번역 결과 업데이트
+        final updatedText = processedText.copyWith(
+          fullTranslatedText: fullTranslatedText,
+          showFullText: true,
+          showFullTextModified: true
+        );
+        
+        // 캐시 및 UI 업데이트
+        if (_pageManager.currentPage?.id != null) {
+          _pageContentService.setProcessedText(_pageManager.currentPage!.id!, updatedText);
+          
+          // 캐시 업데이트
+          await _pageContentService.updatePageCache(
+            _pageManager.currentPage!.id!,
+            updatedText,
+            "languageLearning"
+          );
+          
+          // 페이지 매니저 업데이트
+          setState(() {});
         }
         
-        setState(() {});
-      } else {
-        debugPrint('ProcessedText가 null임 - 재생할 수 없음');
+        debugPrint('전체 번역 완료: ${fullTranslatedText.length}자');
+      } catch (e) {
+        debugPrint('전체 번역 중 오류 발생: $e');
+      } finally {
+        // 로딩 다이얼로그 닫기
+        if (context.mounted) Navigator.of(context).pop();
       }
-    } else {
-      debugPrint('텍스트가 비어 있음 - 재생할 수 없음');
+    } 
+    // 2. 세그먼트 모드로 전환하는데 세그먼트가 없는 경우
+    else if (!willBeFullMode && 
+             (processedText.segments == null || processedText.segments!.isEmpty)) {
+      debugPrint('세그먼트 모드로 전환했으나 세그먼트가 없어 문장별 처리 시작...');
+      
+      // 로딩 다이얼로그 표시
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+      
+      try {
+        // 세그먼트 처리 (문장 분리 및 번역)
+        final ocrService = EnhancedOcrService();
+        final processedResult = await ocrService.processText(
+          processedText.fullOriginalText, 
+          "languageLearning"
+        );
+        
+        // 세그먼트 결과 업데이트
+        if (processedResult.segments != null && processedResult.segments!.isNotEmpty) {
+          final updatedText = processedText.copyWith(
+            segments: processedResult.segments,
+            showFullText: false,
+            showFullTextModified: true
+          );
+          
+          // 캐시 및 UI 업데이트
+          if (_pageManager.currentPage?.id != null) {
+            _pageContentService.setProcessedText(_pageManager.currentPage!.id!, updatedText);
+            
+            // 캐시 업데이트
+            await _pageContentService.updatePageCache(
+              _pageManager.currentPage!.id!,
+              updatedText,
+              "languageLearning"
+            );
+            
+            // 페이지 매니저 업데이트
+            setState(() {});
+          }
+          
+          debugPrint('세그먼트 처리 완료: ${processedResult.segments!.length}개 세그먼트');
+        } else {
+          debugPrint('세그먼트 처리 시도했으나 결과가 없음');
+        }
+      } catch (e) {
+        debugPrint('세그먼트 처리 중 오류 발생: $e');
+      } finally {
+        // 로딩 다이얼로그 닫기
+        if (context.mounted) Navigator.of(context).pop();
+      }
     }
+  }
+  
+  // 페이지 강제 새로고침 메서드
+  void _forceRefreshPage() {
+    debugPrint('페이지 강제 새로고침');
+    
+    // 캐시 무효화
+    if (_pageManager.currentPage?.id != null) {
+      _cacheService.removeCachedNote(widget.noteId);
+    }
+    
+    // 노트 다시 로드
+    _loadNote();
   }
 
-  // 이미지 선택 대화상자 표시
-  void _showImagePicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('갤러리에서 선택'),
-              onTap: () async {
-                Navigator.pop(context);
-                await _pickImageFromGallery();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('카메라로 촬영'),
-              onTap: () async {
-                Navigator.pop(context);
-                await _pickImageFromCamera();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
+  // 프로그레스 계산 메서드
+  double _calculateProgress() {
+    if (_pageManager.pages.isEmpty) return 0.0;
+    return (_pageManager.currentPageIndex + 1) / _pageManager.pages.length;
   }
-  
-  // 갤러리에서 이미지 선택
-  Future<void> _pickImageFromGallery() async {
-    try {
-      final imageService = ImageService();
-      final file = await imageService.pickImage(source: ImageSource.gallery);
-      if (file != null && _pageManager.currentPage != null) {
-        await _updatePageImage(file);
-      }
-    } catch (e) {
-      debugPrint('갤러리에서 이미지 선택 중 오류: $e');
-    }
+
+  Future<bool> _imageExists(File? imageFile, String? imageUrl) async {
+    if (imageFile != null) return true;
+    if (imageUrl == null) return false;
+    return await _imageService.imageExists(imageUrl);
   }
-  
-  // 카메라로 이미지 촬영
-  Future<void> _pickImageFromCamera() async {
-    try {
-      final imageService = ImageService();
-      final file = await imageService.pickImage(source: ImageSource.camera);
-      if (file != null && _pageManager.currentPage != null) {
-        await _updatePageImage(file);
-      }
-    } catch (e) {
-      debugPrint('카메라로 이미지 촬영 중 오류: $e');
-    }
-  }
-  
-  // 페이지 이미지 업데이트
-  Future<void> _updatePageImage(File imageFile) async {
-    if (_pageManager.currentPage == null) return;
+
+  // 뒤로가기 버튼 처리
+  Future<bool> _onWillPop() async {
+    DebugUtils.log('WillPopScope 호출됨 - 백버튼 이벤트');
     
-    setState(() {
-      _isLoading = true;
+    // 리소스 정리는 백그라운드에서 처리
+    Future.microtask(() async {
+      try {
+        // TTS 정리
+        if (_textReaderService.isPlaying) {
+          DebugUtils.log('백그라운드에서 TextReaderService 중지 중...');
+          await _textReaderService.stop();
+        }
+        
+        DebugUtils.log('백그라운드에서 TtsService 중지 중...');
+        await _ttsService.stop();
+        
+        // 리소스 정리
+        if (_pageManager.currentPage?.id != null) {
+          _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
+        }
+        
+        DebugUtils.log('백그라운드 리소스 정리 완료');
+      } catch (e) {
+        DebugUtils.error('백그라운드 리소스 정리 중 오류: $e');
+      }
     });
     
-    try {
-      // 이미지 업로드
-      final imageService = ImageService();
-      final imageUrl = await imageService.uploadImage(imageFile);
+    // 버그 해결: 기본 동작 방지하고 직접 네비게이션 처리
+    if (mounted) {
+      DebugUtils.log('홈 화면으로 이동 시작 (WillPopScope)');
       
-      // 페이지 이미지 URL 업데이트
-      final pageService = PageService();
-      await pageService.updatePageImageUrl(_pageManager.currentPage!.id!, imageUrl);
-      
-      // 페이지 매니저 업데이트 - 이미지 파일과 URL 반영
-      _pageManager.updateCurrentPageImage(imageFile, imageUrl);
-      
-      // 스낵바 표시
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('페이지 이미지가 업데이트되었습니다')),
+      // 직접 HomeScreen으로 이동 (pushReplacement 사용)
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => HomeScreen(
+          showTooltip: false,
+          onCloseTooltip: () {}, // 빈 콜백 함수 제공
+        ))
       );
-    } catch (e) {
-      debugPrint('페이지 이미지 업데이트 중 오류: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('이미지 업데이트 중 오류가 발생했습니다')),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      return false; // WillPopScope 기본 동작 중지
     }
+    
+    return false;
   }
 
   // ===== UI 빌드 메서드 =====
@@ -1322,9 +1340,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   // 홈 화면으로 직접 이동
                   DebugUtils.log('앱바 백버튼 터치됨 - 홈 화면으로 이동 시작');
                   
-                  // 홈 화면으로 이동 (pop 대신 첫 화면까지 pop)
+                  // 홈 화면으로 직접 이동 (pushReplacement 사용)
                   if (mounted) {
-                    Navigator.of(context).popUntil((route) => route.isFirst);
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (context) => HomeScreen(
+                        showTooltip: false,
+                        onCloseTooltip: () {}, // 빈 콜백 함수 제공
+                      ))
+                    );
                   }
                   
                   // 화면 이동 후 리소스 정리 (백그라운드에서 처리)
@@ -1442,128 +1465,30 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                         )
                       ],
                     ),
-                    child: Stack(
-                      children: [
-                        if (imageFile != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              imageFile,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              height: double.infinity,
-                              errorBuilder: (context, error, stackTrace) {
-                                debugPrint('이미지 로드 오류: $error');
-                                return Center(
-                                  child: Image.asset(
-                                    'assets/images/image_empty.png',
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    fit: BoxFit.cover,
-                                  ),
-                                );
-                              },
-                            ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: imageFile != null 
+                        ? Image.file(
+                            imageFile,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
                           )
-                        else if (page?.imageUrl != null)
-                          FutureBuilder<File?>(
-                            future: _imageService.getImageFile(page!.imageUrl),
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState == ConnectionState.waiting) {
-                                return Center(child: CircularProgressIndicator());
-                              } else if (snapshot.hasData && snapshot.data != null) {
-                                // 이미지 파일을 찾은 경우, 페이지 매니저에도 업데이트
-                                if (page.id != null) {
-                                  // 이미지 파일과 URL 업데이트 (기존 NotePageManager 메서드 활용)
-                                  _pageManager.updateCurrentPageImage(
-                                    snapshot.data!, 
-                                    page.imageUrl!
-                                  );
-                                }
-                                
-                                return ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.file(
-                                    snapshot.data!,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      debugPrint('이미지 로드 오류: $error');
-                                      return Center(
-                                        child: Image.asset(
-                                          'assets/images/image_empty.png',
-                                          width: double.infinity,
-                                          height: double.infinity,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              } else {
-                                return Center(
-                                  child: Image.asset(
-                                    'assets/images/image_empty.png',
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    fit: BoxFit.cover,
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                          
-                        // 이미지 확대 버튼 추가
-                        Positioned(
-                          bottom: 12,
-                          right: 12,
-                          child: FutureBuilder<bool>(
-                            future: _imageExists(currentImageFile, page?.imageUrl),
-                            builder: (context, snapshot) {
-                              final bool hasImage = snapshot.data ?? false;
-                              
-                              return ElevatedButton(
-                                onPressed: hasImage ? () {
-                                  debugPrint('이미지 전체보기 버튼 클릭: imageFile=${currentImageFile != null}, imageUrl=${page?.imageUrl}');
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => FullImageScreen(
-                                        imageFile: currentImageFile,
-                                        imageUrl: page?.imageUrl,
-                                        title: '이미지',
-                                      ),
-                                    ),
-                                  );
-                                } : null, // 이미지가 없으면 버튼 비활성화
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.black.withOpacity(0.5),
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  disabledBackgroundColor: Colors.grey.withOpacity(0.3),
-                                  disabledForegroundColor: Colors.white70,
-                                ),
-                                child: Text(
-                                  '이미지 전체보기',
-                                  style: TypographyTokens.caption.copyWith(
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              );
-                            }
-                          ),
-                        ),
-                      ],
+                        : (page?.imageUrl != null
+                            ? Image.network(
+                                page!.imageUrl!,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                              )
+                            : const Center(child: Text('이미지 없음'))),
                     ),
                   ),
                 
-                // 페이지 내용을 위한 공간
-                const Expanded(
+                // 페이지 내용 자리 표시자
+                Expanded(
                   child: Center(
-                    child: DotLoadingIndicator(
-                      message: '다음 페이지를 준비하고 있어요.',
-                    ),
+                    child: Text('페이지 ${index + 1} 로딩 중...'),
                   ),
                 ),
               ],
@@ -1571,111 +1496,172 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           }
         },
       ),
-      ],
-      );
-    }
-
-  // 첫 번째 이미지 컨테이너
-  Widget _buildFirstImageContainer() {
-    // 현재 페이지의 이미지 파일을 가져옴
-    File? currentImageFile = _pageManager.getImageFileForPage(_pageManager.currentPage);
-    
-    // 현재 페이지 정보가 있는 경우
-    final currentPage = _pageManager.currentPage;
-    
-    return Container(
-      margin: EdgeInsets.only(top: 16, left: 16, right: 16),
-      height: 200, // 높이를 200으로 고정
-      width: MediaQuery.of(context).size.width,
-      child: SingleChildScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black12,
-                blurRadius: 4,
-                offset: Offset(0, 2),
-              )
-            ],
+        
+        // 툴팁 표시 (처음 텍스트 처리가 완료된 경우)
+        if (_showTooltip)
+          Positioned(
+            bottom: 20,
+            left: 16,
+            right: 16,
+            child: HelpTextTooltip(
+              key: const Key('note_detail_tooltip'),
+              text: "첫 노트가 만들어졌어요!",
+              description: "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요.",
+              showTooltip: true,
+              onDismiss: () {
+                debugPrint('노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
+                setState(() {
+                  _showTooltip = false;
+                });
+              },
+              backgroundColor: ColorTokens.primarylight,
+              borderColor: ColorTokens.primaryMedium,
+              textColor: ColorTokens.textPrimary,
+              tooltipPadding: const EdgeInsets.all(16),
+              spacing: 4.0,
+              image: Image.asset(
+                'assets/images/note_help.png',
+                width: double.infinity,
+                fit: BoxFit.contain,
+              ),
+              child: Container(), // 빈 컨테이너 (툴팁만 표시)
+            ),
           ),
-          height: 200, // 내부 컨테이너 높이도 200으로 고정
-          width: MediaQuery.of(context).size.width,
-          child: Stack(
-            children: [
-              if (currentImageFile != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.file(
-                    currentImageFile,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                    errorBuilder: (context, error, stackTrace) {
-                      debugPrint('이미지 로드 오류: $error');
-                      return Center(
-                        child: Image.asset(
-                          'assets/images/image_empty.png',
-                          width: double.infinity,
-                          height: double.infinity,
-                          fit: BoxFit.cover,
-                        ),
-                      );
-                    },
+      ],
+    );
+  }
+
+  // 현재 페이지의 첫 번째 이미지 표시
+  Widget _buildFirstImageContainer() {
+    final currentPage = _pageManager.currentPage;
+    final currentImageFile = _pageManager.currentImageFile;
+    
+    // 이미지가 없는 경우 컨테이너 자체를 표시하지 않음
+    if (currentImageFile == null && (currentPage?.imageUrl == null || currentPage!.imageUrl!.isEmpty)) {
+      return SizedBox(height: 0);
+    }
+    
+    // 이미지 컨테이너
+    return GestureDetector(
+      onTap: () {
+        if (currentImageFile != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => FullImageScreen(
+                imageFile: currentImageFile,
+                title: _note?.originalText ?? '이미지',
+              ),
+            ),
+          );
+        } else if (currentPage?.imageUrl != null) {
+          _imageService.getImageFile(currentPage!.imageUrl).then((file) {
+            if (file != null && mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => FullImageScreen(
+                    imageFile: file,
+                    title: _note?.originalText ?? '이미지',
                   ),
-                )
-              else if (currentPage?.imageUrl != null)
-                FutureBuilder<File?>(
-                  future: _imageService.getImageFile(currentPage!.imageUrl),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: CircularProgressIndicator());
-                    } else if (snapshot.hasData && snapshot.data != null) {
-                      // 이미지 파일을 찾은 경우, 페이지 매니저에도 업데이트
-                      if (currentPage.id != null) {
-                        // 이미지 파일과 URL 업데이트 (기존 NotePageManager 메서드 활용)
-                        _pageManager.updateCurrentPageImage(
-                          snapshot.data!, 
-                          currentPage.imageUrl!
-                        );
-                      }
-                      
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          snapshot.data!,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: double.infinity,
-                          errorBuilder: (context, error, stackTrace) {
-                            debugPrint('이미지 로드 오류: $error');
-                            return Center(
-                              child: Image.asset(
-                                'assets/images/image_empty.png',
-                                width: double.infinity,
-                                height: double.infinity,
-                                fit: BoxFit.cover,
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    } else {
-                      return Center(
-                        child: Image.asset(
-                          'assets/images/image_empty.png',
-                          width: double.infinity,
-                          height: double.infinity,
-                          fit: BoxFit.cover,
-                        ),
-                      );
-                    }
+                ),
+              );
+            }
+          });
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.only(
+          top: 16,
+          left: 16,
+          right: 16,
+          bottom: 0,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            )
+          ],
+        ),
+        height: 200, // 내부 컨테이너 높이도 200으로 고정
+        width: MediaQuery.of(context).size.width,
+        child: Stack(
+          children: [
+            if (currentImageFile != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  currentImageFile,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  errorBuilder: (context, error, stackTrace) {
+                    debugPrint('이미지 로드 오류: $error');
+                    return Center(
+                      child: Image.asset(
+                        'assets/images/image_empty.png',
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    );
                   },
                 ),
-            ],
-          ),
+              )
+            else if (currentPage?.imageUrl != null)
+              FutureBuilder<File?>(
+                future: _imageService.getImageFile(currentPage!.imageUrl),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(child: CircularProgressIndicator());
+                  } else if (snapshot.hasData && snapshot.data != null) {
+                    // 이미지 파일을 찾은 경우, 페이지 매니저에도 업데이트
+                    if (currentPage.id != null) {
+                      // 이미지 파일과 URL 업데이트 (기존 NotePageManager 메서드 활용)
+                      _pageManager.updateCurrentPageImage(
+                        snapshot.data!, 
+                        currentPage.imageUrl!
+                      );
+                    }
+                    
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        snapshot.data!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                        errorBuilder: (context, error, stackTrace) {
+                          debugPrint('이미지 로드 오류: $error');
+                          return Center(
+                            child: Image.asset(
+                              'assets/images/image_empty.png',
+                              width: double.infinity,
+                              height: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  } else {
+                    return Center(
+                      child: Image.asset(
+                        'assets/images/image_empty.png',
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    );
+                  }
+                },
+              ),
+          ],
         ),
       ),
     );
@@ -1710,7 +1696,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 패딩 설정 - 전체 모드는 좌우 패딩 줄이기, 세그먼트 모드는 기본 패딩 유지
     final EdgeInsets contentPadding = const EdgeInsets.symmetric(horizontal: SpacingTokens.md + SpacingTokens.sm); // 24.0 (통일된 패딩 값)
     
-    // 페이지 처리가 완료되지 않은 경우 (백그라운드 처리 중)
+    // 페이지가 준비 중인 경우 - 백그라운드 처리를 체크하기 위한 로직 추가
     if ((currentPage.originalText.isEmpty || currentPage.originalText == 'processing') && !wasVisitedBefore) {
       // 이전 페이지와 같은 페이지인지 확인 (무한 로딩 방지)
       if (_processingPage != null && _processingPage!.id == _note!.id) {
@@ -1746,9 +1732,43 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       _processingPage = _note;
       
       // 페이지가 준비 중인 경우 - 백그라운드 처리를 체크하기 위한 로직 추가
-    if (currentPage.id != null) {
+      if (currentPage.id != null) {
         // 페이지 정보를 서버에서 다시 확인
-        _refreshPageFromServer(currentPage.id!);
+        (() async {
+          try {
+            // 서버에서 페이지 정보 가져오기
+            final pageDoc = await FirebaseFirestore.instance
+              .collection('pages')
+              .doc(currentPage.id!)
+              .get();
+            
+            if (!pageDoc.exists) {
+              debugPrint('페이지를 찾을 수 없음: ${currentPage.id!}');
+              return;
+            }
+            
+            if (!mounted) return;
+            
+            final serverPage = page_model.Page.fromFirestore(pageDoc);
+            
+            // 페이지가 이미 처리 완료되었으나 로컬 상태가 업데이트되지 않은 경우
+            if (serverPage.originalText.isNotEmpty && serverPage.originalText != 'processing') {
+              debugPrint('서버에서 처리 완료된 페이지 발견: ${currentPage.id}, 로컬 상태 업데이트');
+              
+              // 페이지 매니저 내 페이지 목록 업데이트
+              final updatedPages = _pageManager.pages.map((p) {
+                return p.id == currentPage.id ? serverPage : p;
+              }).toList();
+              _pageManager.setPages(updatedPages);
+              
+              // 텍스트 다시 처리
+              _processTextForCurrentPage();
+              setState(() {}); // UI 갱신
+            }
+          } catch (e) {
+            debugPrint('페이지 정보 갱신 중 오류 발생: $e');
+          }
+        })();
       }
       
       debugPrint('페이지 준비 중 화면 표시 (이전 방문: $wasVisitedBefore)');
@@ -1800,16 +1820,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           padding: contentPadding, // 여기에 패딩 적용
           child: PageContentWidget(
             key: ValueKey('processed_${currentPage.id}'),
-      page: currentPage,
+            page: currentPage,
             imageFile: currentImageFile,
             flashCards: _note?.flashCards,
             useSegmentMode: _useSegmentMode,
-      isLoadingImage: false,
-      noteId: widget.noteId,
+            isLoadingImage: false,
+            noteId: widget.noteId,
             onCreateFlashCard: (front, back, {pinyin}) async {
               await _createFlashCard(front, back, pinyin: pinyin);
             },
-      onDeleteSegment: _handleDeleteSegment,
+            onDeleteSegment: _handleDeleteSegment,
           ),
         ),
         
@@ -1845,108 +1865,5 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           ),
       ],
     );
-  }
-  
-  // 페이지 처리 상태 확인 메서드
-  Future<void> _refreshPageFromServer(String pageId) async {
-    debugPrint('서버에서 페이지 정보 새로 가져오기: $pageId');
-    
-    try {
-      // 페이지 정보를 서버에서 다시 가져오기 
-      final pageDoc = await FirebaseFirestore.instance
-        .collection('pages')
-        .doc(pageId)
-        .get();
-      
-      if (!pageDoc.exists) {
-        debugPrint('페이지를 찾을 수 없음: $pageId');
-        return;
-      }
-      
-      final serverPage = page_model.Page.fromFirestore(pageDoc);
-      
-      // 페이지가 이미 처리 완료되었으나 로컬 상태가 업데이트되지 않은 경우
-      if (serverPage.originalText.isNotEmpty && serverPage.originalText != 'processing') {
-        debugPrint('서버에서 처리 완료된 페이지 발견: $pageId, 로컬 상태 업데이트');
-        
-        if (mounted) {
-          // 페이지 매니저 내 페이지 목록 업데이트
-          final updatedPages = _pageManager.pages.map((p) {
-            return p.id == pageId ? serverPage : p;
-          }).toList();
-          _pageManager.setPages(updatedPages);
-          
-          _processTextForCurrentPage(); // 텍스트 처리 시작
-          setState(() {}); // UI 갱신
-        }
-      } else {
-        debugPrint('페이지 $pageId는 여전히 처리 중: 텍스트=${serverPage.originalText.substring(0, 
-          serverPage.originalText.length > 10 ? 10 : serverPage.originalText.length)}...');
-      }
-    } catch (e) {
-      debugPrint('페이지 정보 갱신 중 오류: $e');
-    }
-  }
-  
-  // 페이지 강제 새로고침 메서드
-  void _forceRefreshPage() {
-    debugPrint('페이지 강제 새로고침');
-    
-    // 캐시 무효화
-    if (_pageManager.currentPage?.id != null) {
-      _cacheService.removeCachedNote(widget.noteId);
-    }
-    
-    // 노트 다시 로드
-    _loadNote();
-  }
-
-  // 프로그레스 계산 메서드
-  double _calculateProgress() {
-    if (_pageManager.pages.isEmpty) return 0.0;
-    return (_pageManager.currentPageIndex + 1) / _pageManager.pages.length;
-  }
-
-  Future<bool> _imageExists(File? imageFile, String? imageUrl) async {
-    if (imageFile != null) return true;
-    if (imageUrl == null) return false;
-    return await _imageService.imageExists(imageUrl);
-  }
-
-  // 뒤로가기 버튼 처리
-  Future<bool> _onWillPop() async {
-    DebugUtils.log('WillPopScope 호출됨 - 백버튼 이벤트');
-    
-    // 리소스 정리는 백그라운드에서 처리
-    Future.microtask(() async {
-      try {
-        // TTS 정리
-        if (_textReaderService.isPlaying) {
-          DebugUtils.log('백그라운드에서 TextReaderService 중지 중...');
-          await _textReaderService.stop();
-        }
-        
-        DebugUtils.log('백그라운드에서 TtsService 중지 중...');
-        await _ttsService.stop();
-        
-        // 리소스 정리
-        if (_pageManager.currentPage?.id != null) {
-          _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
-        }
-        
-        DebugUtils.log('백그라운드 리소스 정리 완료');
-      } catch (e) {
-        DebugUtils.error('백그라운드 리소스 정리 중 오류: $e');
-      }
-    });
-    
-    // 항상 홈 화면으로 이동 (pop 대신 홈으로 이동)
-    if (mounted) {
-      DebugUtils.log('홈 화면으로 이동');
-      Navigator.of(context).popUntil((route) => route.isFirst);
-      return false; // false 반환하여 기본 pop 동작 방지
-    }
-    
-    return true; // 만약 mounted가 아니면 기본 동작 수행
   }
 }

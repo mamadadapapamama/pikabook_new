@@ -16,6 +16,8 @@ import '../utils/segment_utils.dart';
 import '../services/text_reader_service.dart'; // TTS 서비스 추가
 import '../services/usage_limit_service.dart';
 import '../widgets/common/usage_dialog.dart';
+import '../services/translation_service.dart';
+import '../services/enhanced_ocr_service.dart';
 
 /// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
 ///
@@ -86,6 +88,11 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   bool _isCheckingTtsLimit = false;
   Map<String, dynamic>? _ttsLimitStatus;
   Map<String, double>? _ttsUsagePercentages;
+
+  // 번역 서비스 추가
+  final TranslationService _translationService = TranslationService();
+  // OCR 서비스 추가
+  final EnhancedOcrService _ocrService = EnhancedOcrService();
 
   @override
   void initState() {
@@ -782,5 +789,103 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       color: ColorTokens.textSecondary,
       fontSize: 15,
     );
+  }
+
+  /// 뷰 모드 전환
+  Future<void> _toggleViewMode() async {
+    if (_processedText == null) return;
+
+    try {
+      // 현재 모드
+      final bool currentIsFullMode = _processedText!.showFullText;
+      // 새 모드 (전환)
+      final bool newIsFullMode = !currentIsFullMode;
+      
+      debugPrint('뷰 모드 전환: ${currentIsFullMode ? "전체" : "세그먼트"} -> ${newIsFullMode ? "전체" : "세그먼트"}');
+      
+      // 현재 ProcessedText 복제
+      ProcessedText updatedText = _processedText!.toggleDisplayMode();
+      
+      // 1. 전체 모드로 전환하는데 전체 번역이 없는 경우
+      if (newIsFullMode && 
+          (updatedText.fullTranslatedText == null || updatedText.fullTranslatedText!.isEmpty)) {
+        debugPrint('전체 번역 모드로 전환했으나 번역이 없어 전체 번역 수행 시작...');
+        
+        // 전체 번역 수행
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(child: CircularProgressIndicator()),
+        );
+        
+        try {
+          final fullTranslatedText = await _translationService.translateText(
+            updatedText.fullOriginalText,
+            sourceLanguage: 'zh-CN',
+            targetLanguage: 'ko'
+          );
+          
+          // 번역 결과 업데이트
+          updatedText = updatedText.copyWith(fullTranslatedText: fullTranslatedText);
+          debugPrint('전체 번역 완료: ${fullTranslatedText.length}자');
+        } catch (e) {
+          debugPrint('전체 번역 중 오류 발생: $e');
+        } finally {
+          // 로딩 다이얼로그 닫기
+          if (context.mounted) Navigator.of(context).pop();
+        }
+      } 
+      // 2. 세그먼트 모드로 전환하는데 세그먼트가 없는 경우
+      else if (!newIsFullMode && 
+               (updatedText.segments == null || updatedText.segments!.isEmpty)) {
+        debugPrint('세그먼트 모드로 전환했으나 세그먼트가 없어 문장별 처리 시작...');
+        
+        // 로딩 다이얼로그 표시
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(child: CircularProgressIndicator()),
+        );
+        
+        try {
+          // 세그먼트 처리 (문장 분리 및 번역)
+          // _processTextSegmentsInParallel은 private 메서드이므로 processText 사용
+          final processedResult = await _ocrService.processText(
+            updatedText.fullOriginalText, 
+            "languageLearning"
+          );
+          
+          // 세그먼트 결과 업데이트
+          if (processedResult.segments != null && processedResult.segments!.isNotEmpty) {
+            updatedText = updatedText.copyWith(segments: processedResult.segments);
+            debugPrint('세그먼트 처리 완료: ${processedResult.segments!.length}개 세그먼트');
+          } else {
+            debugPrint('세그먼트 처리 시도했으나 결과가 없음');
+          }
+        } catch (e) {
+          debugPrint('세그먼트 처리 중 오류 발생: $e');
+        } finally {
+          // 로딩 다이얼로그 닫기
+          if (context.mounted) Navigator.of(context).pop();
+        }
+      }
+      
+      // 상태 업데이트
+      setState(() {
+        _processedText = updatedText;
+      });
+      
+      // 업데이트된 ProcessedText 저장 (캐시 업데이트)
+      if (widget.page.id != null) {
+        _pageContentService.setProcessedText(widget.page.id!, updatedText);
+        await _pageContentService.updatePageCache(
+          widget.page.id!, 
+          updatedText, 
+          "languageLearning"
+        );
+      }
+    } catch (e) {
+      debugPrint('뷰 모드 전환 중 오류 발생: $e');
+    }
   }
 }

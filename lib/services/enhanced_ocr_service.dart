@@ -19,6 +19,7 @@ import 'translation_service.dart';
 import 'chinese_segmenter_service.dart';
 import 'text_cleaner_service.dart';
 import 'pinyin_creation_service.dart';
+import 'user_preferences_service.dart';
 
 /// 개선된 OCR 서비스 : OCR 처리 후 모드에 따라 다른 처리를 수행합니다.
 /// 전문 서적 모드 : 핀인 제거 후 전체 텍스트 번역
@@ -49,6 +50,9 @@ class EnhancedOcrService {
 
   // 중국어 분할 서비스
   final ChineseSegmenterService _segmenterService = ChineseSegmenterService();
+
+  // 사용자 설정 서비스 추가
+  final UserPreferencesService _preferencesService = UserPreferencesService();
 
   // API 초기화
   Future<void> initialize() async {
@@ -157,52 +161,70 @@ class EnhancedOcrService {
       final cleanedText = _textCleanerService.removePinyinLines(fullText);
       debugPrint('OCR _processLanguageLearning: 정리된 텍스트 ${cleanedText.length}자');
 
-      // 전체 번역 시도 - 디버그 로그 추가
-      debugPrint('OCR _processLanguageLearning: 번역 요청 시작...');
-      
-      // 중국어에서 한국어로 명시적으로 언어 코드 설정
-      final fullTranslatedText = await _translationService.translateText(
-        cleanedText, 
-        sourceLanguage: 'zh-CN',  // 명시적으로 중국어 소스 언어 설정 
-        targetLanguage: 'ko'      // 명시적으로 한국어 타겟 언어 설정
-      );
-      
-      // 번역 결과 검증 로그
-      bool isTranslationSuccessful = fullTranslatedText != cleanedText;
-      
-      if (!isTranslationSuccessful) {
-        debugPrint('OCR _processLanguageLearning: 심각한 경고! 번역 결과가 원문과 동일함');
-        debugPrint('OCR _processLanguageLearning: 원본 샘플: "${cleanedText.length > 30 ? cleanedText.substring(0, 30) + '...' : cleanedText}"');
-        debugPrint('OCR _processLanguageLearning: 번역 샘플: "${fullTranslatedText.length > 30 ? fullTranslatedText.substring(0, 30) + '...' : fullTranslatedText}"');
+      // 사용자 세그먼트 모드 설정을 가져옴
+      final useSegmentMode = await _preferencesService.getUseSegmentMode();
+      debugPrint('OCR _processLanguageLearning: 사용자 세그먼트 모드: $useSegmentMode');
+
+      String? fullTranslatedText;
+      List<TextSegment>? segments;
+
+      // 세그먼트 모드가 아닌 경우에만 전체 번역 수행
+      if (!useSegmentMode) {
+        debugPrint('OCR _processLanguageLearning: 전체 번역 모드 - 전체 텍스트 번역 시작...');
+        // 중국어에서 한국어로 명시적으로 언어 코드 설정
+        fullTranslatedText = await _translationService.translateText(
+          cleanedText, 
+          sourceLanguage: 'zh-CN',  // 명시적으로 중국어 소스 언어 설정 
+          targetLanguage: 'ko'      // 명시적으로 한국어 타겟 언어 설정
+        );
+        
+        // 번역 결과 검증 로그
+        bool isTranslationSuccessful = fullTranslatedText != cleanedText;
+        
+        if (!isTranslationSuccessful) {
+          debugPrint('OCR _processLanguageLearning: 심각한 경고! 번역 결과가 원문과 동일함');
+          debugPrint('OCR _processLanguageLearning: 원본 샘플: "${cleanedText.length > 30 ? cleanedText.substring(0, 30) + '...' : cleanedText}"');
+          debugPrint('OCR _processLanguageLearning: 번역 샘플: "${fullTranslatedText.length > 30 ? fullTranslatedText.substring(0, 30) + '...' : fullTranslatedText}"');
+        } else {
+          debugPrint('OCR _processLanguageLearning: 번역 성공! 번역 결과 ${fullTranslatedText.length}자');
+          debugPrint('OCR _processLanguageLearning: 번역 결과 샘플: "${fullTranslatedText.length > 30 ? fullTranslatedText.substring(0, 30) + '...' : fullTranslatedText}"');
+        }
       } else {
-        debugPrint('OCR _processLanguageLearning: 번역 성공! 번역 결과 ${fullTranslatedText.length}자');
-        debugPrint('OCR _processLanguageLearning: 번역 결과 샘플: "${fullTranslatedText.length > 30 ? fullTranslatedText.substring(0, 30) + '...' : fullTranslatedText}"');
+        debugPrint('OCR _processLanguageLearning: 세그먼트 모드 - 전체 텍스트 번역 건너뜀');
       }
 
-      // 문장을 병렬로 처리
-      final segments = await _processTextSegmentsInParallel(cleanedText);
-      
-      // 최종 검증 로그
-      debugPrint('OCR _processLanguageLearning: 처리 완료. 원문: ${cleanedText.length}자, 번역: ${fullTranslatedText.length}자, 세그먼트: ${segments.length}개');
-
-      // 세그먼트가 있는 경우 세그먼트 번역 상태 확인
-      if (segments.isNotEmpty) {
-        int untranslatedCount = 0;
-        for (var segment in segments) {
-          if (segment.translatedText == segment.originalText) {
-            untranslatedCount++;
+      // 세그먼트 모드인 경우에만 개별 문장 번역 수행
+      if (useSegmentMode) {
+        debugPrint('OCR _processLanguageLearning: 세그먼트 모드 - 문장별 번역 시작...');
+        // 문장을 병렬로 처리
+        segments = await _processTextSegmentsInParallel(cleanedText);
+        
+        // 세그먼트가 있는 경우 세그먼트 번역 상태 확인
+        if (segments.isNotEmpty) {
+          int untranslatedCount = 0;
+          for (var segment in segments) {
+            if (segment.translatedText == segment.originalText) {
+              untranslatedCount++;
+            }
+          }
+          if (untranslatedCount > 0) {
+            debugPrint('OCR _processLanguageLearning: 경고! $untranslatedCount/${segments.length} 세그먼트의 번역이 원문과 동일함');
           }
         }
-        if (untranslatedCount > 0) {
-          debugPrint('OCR _processLanguageLearning: 경고! $untranslatedCount/${segments.length} 세그먼트의 번역이 원문과 동일함');
-        }
+      } else {
+        debugPrint('OCR _processLanguageLearning: 전체 번역 모드 - 문장별 번역 건너뜀');
       }
+      
+      // 최종 검증 로그
+      debugPrint('OCR _processLanguageLearning: 처리 완료. 원문: ${cleanedText.length}자, '
+          '번역: ${fullTranslatedText?.length ?? "없음"}자, '
+          '세그먼트: ${segments?.length ?? 0}개');
 
       return ProcessedText(
         fullOriginalText: cleanedText,
         fullTranslatedText: fullTranslatedText,
         segments: segments,
-        showFullText: false, // 세그먼트별 표시
+        showFullText: !useSegmentMode, // 사용자 선택에 따라 초기 표시 모드 설정
       );
     } catch (e) {
       debugPrint('언어 학습 모드 처리 오류: $e');
