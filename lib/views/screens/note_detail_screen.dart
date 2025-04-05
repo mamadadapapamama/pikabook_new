@@ -1302,12 +1302,29 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     if (mounted) {
       DebugUtils.log('홈 화면으로 이동 시작 (WillPopScope)');
       
-      // 직접 HomeScreen으로 이동 (pushReplacement 사용)
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => HomeScreen(
-          showTooltip: false,
-          onCloseTooltip: () {}, // 빈 콜백 함수 제공
-        ))
+      // 직접 HomeScreen으로 이동 (pushAndRemoveUntil에 슬라이드 애니메이션 적용)
+      Navigator.of(context).pushAndRemoveUntil(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => HomeScreen(
+            showTooltip: false,
+            onCloseTooltip: () {}, // 빈 콜백 함수 제공
+          ),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            const begin = Offset(-1.0, 0.0); // 왼쪽에서 오른쪽으로 슬라이드
+            const end = Offset.zero;
+            const curve = Curves.easeInOut;
+            
+            var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            var offsetAnimation = animation.drive(tween);
+            
+            return SlideTransition(
+              position: offsetAnimation,
+              child: child,
+            );
+          },
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
+        (route) => false // 모든 이전 경로 제거
       );
       return false; // WillPopScope 기본 동작 중지
     }
@@ -1340,13 +1357,30 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   // 홈 화면으로 직접 이동
                   DebugUtils.log('앱바 백버튼 터치됨 - 홈 화면으로 이동 시작');
                   
-                  // 홈 화면으로 직접 이동 (pushReplacement 사용)
+                  // 홈 화면으로 직접 이동 (왼쪽에서 오른쪽으로 슬라이드 애니메이션 적용)
                   if (mounted) {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (context) => HomeScreen(
-                        showTooltip: false,
-                        onCloseTooltip: () {}, // 빈 콜백 함수 제공
-                      ))
+                    Navigator.of(context).pushAndRemoveUntil(
+                      PageRouteBuilder(
+                        pageBuilder: (context, animation, secondaryAnimation) => HomeScreen(
+                          showTooltip: false,
+                          onCloseTooltip: () {}, // 빈 콜백 함수 제공
+                        ),
+                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                          const begin = Offset(-1.0, 0.0); // 왼쪽에서 오른쪽으로 슬라이드
+                          const end = Offset.zero;
+                          const curve = Curves.easeInOut;
+                          
+                          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                          var offsetAnimation = animation.drive(tween);
+                          
+                          return SlideTransition(
+                            position: offsetAnimation,
+                            child: child,
+                          );
+                        },
+                        transitionDuration: const Duration(milliseconds: 300),
+                      ),
+                      (route) => false // 모든 이전 경로 제거
                     );
                   }
                   
@@ -1661,6 +1695,54 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   }
                 },
               ),
+              
+            // 이미지 전체보기 버튼 추가
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Material(
+                color: Colors.black.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(20),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () {
+                    if (currentImageFile != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FullImageScreen(
+                            imageFile: currentImageFile,
+                            title: _note?.originalText ?? '이미지',
+                          ),
+                        ),
+                      );
+                    } else if (currentPage?.imageUrl != null) {
+                      _imageService.getImageFile(currentPage!.imageUrl).then((file) {
+                        if (file != null && mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FullImageScreen(
+                                imageFile: file,
+                                title: _note?.originalText ?? '이미지',
+                              ),
+                            ),
+                          );
+                        }
+                      });
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(6.0),
+                    child: Icon(
+                      Icons.fullscreen,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
