@@ -262,7 +262,7 @@ class _NoteListItemState extends State<NoteListItem> {
                                       return Container(
                                         color: Colors.grey[100],
                                         child: Image.asset(
-                                          'assets/images/image_empty.png',
+                                          'assets/images/thumbnail_empty.png',
                                           fit: BoxFit.cover,
                                         ),
                                       );
@@ -276,7 +276,7 @@ class _NoteListItemState extends State<NoteListItem> {
                                             Container(
                                               color: Colors.grey[100],
                                               child: Image.asset(
-                                                'assets/images/image_empty.png',
+                                                'assets/images/thumbnail_empty.png',
                                                 fit: BoxFit.cover,
                                               ),
                                             ),
@@ -289,7 +289,7 @@ class _NoteListItemState extends State<NoteListItem> {
                                 : Container(
                                     color: Colors.grey[100],
                                     child: Image.asset(
-                                      'assets/images/image_empty.png',
+                                      'assets/images/thumbnail_empty.png',
                                       fit: BoxFit.cover,
                                     ),
                                   ),

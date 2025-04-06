@@ -1481,7 +1481,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                       ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
                       : false,
                   onToggleFullTextMode: _toggleFullTextMode,
-                  onTogglePinyin: _togglePinyin,
                   pageContentService: _pageContentService,
                   textReaderService: _textReaderService,
                 )
@@ -2034,7 +2033,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           totalPages: _pageManager.pages.length,
           onPageChanged: (index) => _changePage(index),
           onToggleFullTextMode: _toggleFullTextMode,
-          onTogglePinyin: _togglePinyin, // 병음 토글 콜백 추가
           isFullTextMode: _pageManager.currentPage?.id != null
               ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
               : false,
@@ -2043,33 +2041,5 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         ),
       ],
     );
-  }
-
-  // 핀인(병음) 표시 토글 기능
-  void _togglePinyin() {
-    final currentPage = _pageManager.currentPage;
-    if (currentPage == null || currentPage.id == null) {
-      return;
-    }
-    
-    // 캐시된 processedText 가져오기
-    final processedText = _pageContentService.getProcessedText(currentPage.id!);
-    if (processedText == null) {
-      return;
-    }
-    
-    debugPrint('병음 토글 요청: 현재 showPinyin=${processedText.showPinyin}');
-    
-    setState(() {
-      // 병음 표시 상태 토글
-      final updatedText = processedText.copyWith(
-        showPinyin: !processedText.showPinyin,
-      );
-      
-      // 업데이트된 ProcessedText 저장
-      _pageContentService.setProcessedText(currentPage.id!, updatedText);
-      
-      debugPrint('병음 토글 완료: 변경 후 showPinyin=${updatedText.showPinyin}');
-    });
   }
 }
