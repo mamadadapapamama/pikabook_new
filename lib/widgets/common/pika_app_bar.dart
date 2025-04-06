@@ -74,31 +74,25 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       height: 100,
       actions: [
         Padding(
-          padding: EdgeInsets.only(right:SpacingTokens.md, bottom:SpacingTokens.md),
-          child: GestureDetector(
-            onTap: () {
-              debugPrint('설정 버튼 클릭됨 - GestureDetector');
+          padding: EdgeInsets.only(right: SpacingTokens.md, bottom: SpacingTokens.md),
+          child: IconButton(
+            onPressed: () {
+              debugPrint('설정 버튼 클릭됨 - IconButton');
               onSettingsPressed();
             },
-            child: Container(
-              width: 48,  // 더 넓은 터치 영역
-              height: 48, // 더 넓은 터치 영역
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: Center(
-                child: SvgPicture.asset(
-                  'assets/images/icon_profile.svg',
-                  width: SpacingTokens.profileIconSize,
-                  height: SpacingTokens.profileIconSize,
-                  placeholderBuilder: (context) => Icon(
-                    Icons.person,
-                    color: ColorTokens.secondary,
-                    size: SpacingTokens.profileIconSize,
-                  ),
-                ),
+            icon: SvgPicture.asset(
+              'assets/images/icon_profile.svg',
+              width: SpacingTokens.profileIconSize,
+              height: SpacingTokens.profileIconSize,
+              placeholderBuilder: (context) => Icon(
+                Icons.person,
+                color: ColorTokens.secondary,
+                size: SpacingTokens.profileIconSize,
               ),
             ),
+            iconSize: 48, // 더 큰 터치 영역
+            padding: const EdgeInsets.all(12), // 더 넓은 패딩
+            constraints: const BoxConstraints(), // 제약 조건 제거
           ),
         ),
       ],

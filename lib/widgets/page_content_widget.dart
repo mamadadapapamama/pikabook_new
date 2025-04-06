@@ -310,8 +310,37 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 텍스트 처리 중 표시
-          if (_isProcessingText || widget.page.originalText == '___PROCESSING___')
+          if (_isProcessingText)
             const DotLoadingIndicator(message: '텍스트 처리 중이에요!')
+          // 특수 처리 중 마커가 있는 경우
+          else if (widget.page.originalText == '___PROCESSING___')
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 40),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(
+                    '노트 처리 중입니다',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '잠시만 기다려 주세요...',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.black45,
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            )
           // 처리된 텍스트가 있는 경우
           else if (_processedText != null) ...[
             Builder(builder: (context) {

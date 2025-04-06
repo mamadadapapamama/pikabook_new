@@ -397,28 +397,25 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               await prefs.remove('updated_page_count_${widget.noteId}');
             }
             
-            // 현재 페이지 인덱스 저장
-            final currentIndex = _pageManager.currentPageIndex;
-
-            // 페이지 다시 로드
-            await _reloadPages(forceReload: true);
-
-            // 완료 메시지 표시
+            // 노트 문서에 처리 완료 플래그 저장
+            await prefs.setBool('processing_completed_${widget.noteId}', true);
+            
+            // 타이머 취소
+            timer.cancel();
+            _backgroundCheckTimer = null;
+            
+            // 즉시 페이지 다시 로드
+            _reloadPages(forceReload: true);
+            
+            // 메시지 표시
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('추가 페이지 처리가 완료되었습니다. 이제 다음 페이지로 이동할 수 있습니다.'),
-                  duration: Duration(seconds: 5),
+                  content: Text('$updatedPageCount개의 페이지 처리가 완료되었습니다.'),
+                  duration: const Duration(seconds: 3),
                 ),
               );
             }
-
-            // 로컬에 처리 완료 상태 저장
-            await _saveLocalProcessingCompletedStatus();
-
-            // 업데이트가 완료되었으므로 타이머 취소
-            debugPrint('백그라운드 처리 완료 - 타이머 취소');
-            timer.cancel();
           }
         } catch (e) {
           debugPrint('백그라운드 처리 상태 확인 중 오류 발생: $e');

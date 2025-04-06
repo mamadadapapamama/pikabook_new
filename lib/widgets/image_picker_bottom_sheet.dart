@@ -240,18 +240,19 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     try {
       debugPrint("노트 생성 시작: ${images.length}개 이미지");
       
-      // 로딩 다이얼로그 표시 - 첫 페이지 로딩까지만 표시
+      // 로딩 다이얼로그 표시 - 첫 페이지 처리가 완료될 때까지 표시
       if (context.mounted) {
         // 로딩 다이얼로그 표시
         LoadingDialog.show(context, message: '노트 생성 중...');
         isLoadingDialogShowing = true;
       }
 
-      // 여러 이미지로 노트 생성 (첫 번째 페이지만 처리하고 결과 반환)
+      // 여러 이미지로 노트 생성
       final result = await _noteService.createNoteWithMultipleImages(
         imageFiles: images,
         title: null, // 자동 타이틀 생성을 위해 null 전달
         silentProgress: true, // 진행 상황 업데이트 무시
+        waitForFirstPageProcessing: false, // 첫 페이지 처리 완료까지 대기하지 않음
       );
 
       // 결과를 먼저 저장 (네비게이션 전)
@@ -260,15 +261,12 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       final bool isProcessingBackground = result['isProcessingBackground'] ?? false;
       final String message = result['message'] ?? '노트 생성에 실패했습니다.';
 
-      // 로딩 다이얼로그 닫기 - 결과 처리 전에 먼저 닫기
+      // 로딩 다이얼로그 닫기 - 바로 닫기
       if (isLoadingDialogShowing && context.mounted) {
         // LoadingDialog 클래스의 메서드로 닫기
         LoadingDialog.hide(context);
         debugPrint("LoadingDialog.hide로 로딩 다이얼로그 닫기");
         isLoadingDialogShowing = false;
-        
-        // 다이얼로그가 확실히 닫히도록 짧은 지연 추가
-        await Future.delayed(const Duration(milliseconds: 100));
       }
 
       // 결과에 따라 다음 화면으로 이동 또는 오류 메시지 표시

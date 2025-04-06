@@ -14,14 +14,14 @@ class PikabookLoader extends StatelessWidget {
   const PikabookLoader({
     Key? key,
     this.title = '스마트한 학습 노트를 만들고 있어요.',
-    this.subtitle = '잠시만 기다려 주세요!',
+    this.subtitle = '잠시만 기다려 주세요!\n조금 시간이 걸릴수 있어요.',
   }) : super(key: key);
 
   /// 로더를 다이얼로그로 표시하는 정적 메서드
   static Future<void> show(
     BuildContext context, {
     String title = '스마트한 학습 노트를 만들고 있어요.',
-    String subtitle = '잠시만 기다려 주세요!',
+    String subtitle = '잠시만 기다려 주세요!\n조금 시간이 걸릴수 있어요.',
   }) async {
     if (!context.mounted) {
       debugPrint('PikabookLoader 표시 실패: context가 더 이상 유효하지 않습니다.');

@@ -534,6 +534,40 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // 특수 마커가 있는 경우 처리 중 표시
+    if (widget.processedText.fullOriginalText.contains('___PROCESSING___')) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(height: 40),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              '노트 처리 중입니다',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '잠시만 기다려 주세요...',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.black45,
+              ),
+            ),
+            const SizedBox(height: 40),
+          ],
+        ),
+      );
+    }
+
+    // 세그먼트 모드인지 전체 텍스트 모드인지에 따라 다른 렌더링
+    final bool isFullTextMode = widget.processedText.showFullText;
+
     // 로딩 확인용
     debugPrint('[${DateTime.now()}] ProcessedTextWidget build 호출');
     

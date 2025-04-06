@@ -769,6 +769,7 @@ class NoteService {
     String? noteSpace,
     Function(int progress)? progressCallback,
     bool silentProgress = false,
+    bool waitForFirstPageProcessing = false,  // 첫 페이지 처리 완료까지 대기 여부
   }) async {
     try {
       if (imageFiles.isEmpty) {
@@ -829,6 +830,7 @@ class NoteService {
         'noteSpace': noteSpace ?? 'default',
         'imageCount': imageFiles.length, // 전체 이미지 수 설정
         'pages': [], // 빈 페이지 배열 초기화
+        'firstPageProcessed': false, // 첫 페이지 처리 상태 추가
       };
       
       // 2. Firestore에 노트 추가
@@ -882,11 +884,64 @@ class NoteService {
       });
       
       // 백그라운드에서 모든 이미지 처리 (비동기)
-      _processAllImagesInBackground(
+      final backgroundProcessingFuture = _processAllImagesInBackground(
         noteId,
         imageFiles,
         targetLanguage,
       );
+      
+      // 첫 페이지 처리 완료까지 대기 옵션이 활성화된 경우
+      if (waitForFirstPageProcessing) {
+        debugPrint('첫 페이지 처리 완료 대기 모드 활성화');
+        
+        // 첫 페이지 처리 상태를 주기적으로 확인하는 함수
+        Future<void> waitForFirstPageCompletion() async {
+          bool isFirstPageProcessed = false;
+          int maxAttempts = 30; // 최대 30번 (30초) 대기
+          int attempt = 0;
+          
+          while (!isFirstPageProcessed && attempt < maxAttempts) {
+            attempt++;
+            
+            // 1초 대기
+            await Future.delayed(const Duration(seconds: 1));
+            
+            try {
+              // 노트 문서 검사
+              final noteDoc = await _notesCollection.doc(noteId).get();
+              if (noteDoc.exists) {
+                final noteData = noteDoc.data() as Map<String, dynamic>?;
+                isFirstPageProcessed = noteData?['firstPageProcessed'] == true;
+                
+                if (isFirstPageProcessed) {
+                  debugPrint('첫 페이지 처리 완료 감지: attempt=$attempt');
+                  break;
+                }
+              }
+            } catch (e) {
+              debugPrint('첫 페이지 처리 상태 확인 중 오류: $e');
+            }
+            
+            // 로그 찍기 (첫 번째와 매 5번째 시도마다)
+            if (attempt == 1 || attempt % 5 == 0) {
+              debugPrint('첫 페이지 처리 완료 대기 중... (시도: $attempt/$maxAttempts)');
+            }
+          }
+          
+          // 대기 결과 로그
+          if (isFirstPageProcessed) {
+            debugPrint('첫 페이지 처리 완료 확인: $attempt번째 시도에 성공');
+            
+            // 추가 대기 (UI 준비 시간)
+            await Future.delayed(const Duration(milliseconds: 500));
+          } else {
+            debugPrint('첫 페이지 처리 타임아웃: $maxAttempts번 시도 후 제한 시간 초과');
+          }
+        }
+        
+        // 첫 페이지 처리 완료 대기
+        await waitForFirstPageCompletion();
+      }
       
       // 5. 노트 정보 반환
       final docSnapshot = await _notesCollection.doc(noteId).get();
