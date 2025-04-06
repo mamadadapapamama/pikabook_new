@@ -36,13 +36,11 @@ import '../../utils/debug_utils.dart';
 /// profile setting, note detail, flashcard 화면으로 이동 가능
 
 class HomeScreen extends StatefulWidget {
-  final bool showTooltip;
-  final VoidCallback onCloseTooltip;
+  final VoidCallback? onSettingsPressed;
   
   const HomeScreen({
     Key? key,
-    this.showTooltip = false,
-    required this.onCloseTooltip,
+    this.onSettingsPressed,
   }) : super(key: key);
   
   @override
@@ -53,7 +51,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   final UserPreferencesService _userPreferences = UserPreferencesService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   String _noteSpaceName = '';
-  bool _showTooltip = false;
   late AnimationController _animationController;
   late Animation<double> _animation;
   
@@ -75,9 +72,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // 노트 스페이스 이름 다시 로드
       _loadNoteSpaceName();
-      
-      // 도움말 표시
-      _checkAndShowTooltip();
       
       // 사용량 확인
       _checkUsageLimits();
@@ -145,41 +139,46 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         appBar: PikaAppBar.home(
           noteSpaceName: _noteSpaceName,
           onSettingsPressed: () {
-            // 설정 화면으로 이동 (라우팅 사용)
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => SettingsScreen(
-                  onLogout: () async {
-                    // 로그아웃 처리
-                    await FirebaseAuth.instance.signOut();
-                    // 페이드 애니메이션을 사용한 로그인 화면 전환
-                    Navigator.of(context).pushAndRemoveUntil(
-                      PageRouteBuilder(
-                        pageBuilder: (context, animation, secondaryAnimation) => const App(),
-                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                          const begin = 0.0;
-                          const end = 1.0;
-                          const curve = Curves.easeInOut;
-                          
-                          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-                          var fadeAnimation = animation.drive(tween);
-                          
-                          return FadeTransition(
-                            opacity: fadeAnimation,
-                            child: child,
-                          );
-                        },
-                        transitionDuration: const Duration(milliseconds: 500),
-                      ),
-                      (route) => false,
-                    );
-                  },
+            // widget.onSettingsPressed가 있으면 사용, 없으면 기본 설정 화면으로 이동
+            if (widget.onSettingsPressed != null) {
+              widget.onSettingsPressed!();
+            } else {
+              // 설정 화면으로 이동 (라우팅 사용)
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => SettingsScreen(
+                    onLogout: () async {
+                      // 로그아웃 처리
+                      await FirebaseAuth.instance.signOut();
+                      // 페이드 애니메이션을 사용한 로그인 화면 전환
+                      Navigator.of(context).pushAndRemoveUntil(
+                        PageRouteBuilder(
+                          pageBuilder: (context, animation, secondaryAnimation) => const App(),
+                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                            const begin = 0.0;
+                            const end = 1.0;
+                            const curve = Curves.easeInOut;
+                            
+                            var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                            var fadeAnimation = animation.drive(tween);
+                            
+                            return FadeTransition(
+                              opacity: fadeAnimation,
+                              child: child,
+                            );
+                          },
+                          transitionDuration: const Duration(milliseconds: 500),
+                        ),
+                        (route) => false,
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ).then((_) {
-              // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
-              _loadNoteSpaceName();
-            });
+              ).then((_) {
+                // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
+                _loadNoteSpaceName();
+              });
+            }
           },
         ),
         body: SafeArea(
@@ -292,29 +291,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           );
                         }
                         return const SizedBox.shrink(); // 노트가 없으면 버튼 숨김
-                      },
-                    ),
-                    // 툴팁 위젯
-                    Consumer<HomeViewModel>(
-                      builder: (context, viewModel, _) {
-                        // 노트 유무와 상관없이 _showTooltip 상태만 확인
-                        final bool shouldShowTooltip = _showTooltip;
-                        
-                        return HelpTextTooltip(
-                          key: const Key('home_screen_tooltip'),
-                          text: "Pikabook에 오신걸 환영합니다!",
-                          image: Image.asset(
-                            'assets/images/home_help_beta.png',
-                            width: double.infinity,
-                            fit: BoxFit.contain,
-                          ),
-                          description: "📷 원서 이미지: 100장까지 텍스트 자동 인식\n🌐 번역: 최대 20,000자\n🔊 듣기 기능: 1000번 음성 변환 가능\n💾 저장 공간: 이미지 400장 (100mb)",
-                          showTooltip: shouldShowTooltip,
-                          onDismiss: () {
-                            DebugUtils.log('🏠 홈 화면 툴팁 닫기 콜백 호출됨!!');
-                            _handleCloseTooltip();
-                          }
-                        );
                       },
                     ),
                   ],
@@ -440,9 +416,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 color: ColorTokens.textSecondary,
               ),
             ),
-            
-            const SizedBox(height: 32),
-            
+            const SizedBox(height: 8),
             // CTA 버튼 - 이미지 업로드하기 (사용량 초과시 비활성화)
             _isButtonDisabled()
               ? Tooltip(
@@ -513,97 +487,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  // 툴팁 닫기 처리 메서드
-  void _handleCloseTooltip() {
-    DebugUtils.log('🏠 홈 화면 _handleCloseTooltip 메서드 실행 시작');
-    setState(() {
-      _showTooltip = false;
-    });
-    DebugUtils.log('🏠 홈 화면 _showTooltip 상태 변경됨: false');
-    
-    // SharedPreferences에 툴팁을 이미 봤다고 저장
-    _saveTooltipShownStatus();
-    
-    // 빈 콜백 호출 (컴파일 오류 방지)
-    DebugUtils.log('🏠 홈 화면 onCloseTooltip 콜백 호출 시작');
-    widget.onCloseTooltip();
-    DebugUtils.log('🏠 홈 화면 onCloseTooltip 콜백 호출 완료');
-  }
-  
-  // 툴팁 표시 상태를 저장하는 메서드
-  Future<void> _saveTooltipShownStatus() async {
-    try {
-      DebugUtils.log('🏠 홈 화면 툴팁 표시 상태 저장 시작');
-      final prefs = await SharedPreferences.getInstance();
-      
-      // 현재 사용자 ID 가져오기
-      final String? userId = await _userPreferences.getCurrentUserId();
-      
-      // 사용자별 키 생성 (사용자 ID가 있는 경우에만)
-      final String tooltipKey = userId != null && userId.isNotEmpty 
-          ? 'has_shown_home_tooltip_$userId' 
-          : 'has_shown_home_tooltip';
-      
-      // 툴팁 표시 기록 저장 (사용자별)
-      await prefs.setBool(tooltipKey, true);
-      DebugUtils.log('🏠 홈 화면 툴팁 표시 상태 저장 완료: $tooltipKey=true');
-    } catch (e) {
-      DebugUtils.error('🏠 홈 화면 툴팁 표시 상태 저장 중 오류: $e');
-    }
-  }
-
-  // HomeViewModel 변경 시 호출될 메서드
-  void _onViewModelChanged() {
-    // 필요시 상태 업데이트
-    if (!mounted || _viewModel == null) return;
-  }
-
-  // 최초 사용 경험 체크 (툴팁 표시 여부 결정)
-  Future<void> _checkAndShowTooltip() async {
-    // 이미 툴팁이 표시되고 있으면 중복 체크 방지
-    if (_showTooltip) return;
-    
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      // 현재 사용자 ID 가져오기
-      final String? userId = await _userPreferences.getCurrentUserId();
-      
-      // 사용자별 키 생성 (사용자 ID가 있는 경우에만)
-      final String tooltipKey = userId != null && userId.isNotEmpty 
-          ? 'has_shown_home_tooltip_$userId' 
-          : 'has_shown_home_tooltip';
-      
-      final bool hasShownHomeTooltip = prefs.getBool(tooltipKey) ?? false;
-      
-      debugPrint('툴팁 표시 확인: 키=$tooltipKey, 이미 표시됨=$hasShownHomeTooltip');
-      
-      // 뷰모델에 접근하여 노트 존재 여부 확인
-      final viewModel = Provider.of<HomeViewModel>(context, listen: false);
-      final bool hasNotes = viewModel.hasNotes;
-      
-      // 이전 코드: 노트가 없고, 툴팁이 아직 표시되지 않은 경우에만 표시
-      // 새 코드: 반드시 툴팁을 한 번도 표시하지 않은 사용자에게만 툴팁 표시
-      if (!hasShownHomeTooltip) {
-        // 최초 방문 시 툴팁 표시
-        setState(() {
-          _showTooltip = true;
-        });
-        
-        // 툴팁 표시 기록 저장 (사용자별)
-        // 여기서는 저장하지 않고, 사용자가 직접 닫을 때 저장하도록 변경
-        debugPrint('홈 화면 최초 방문 - 툴팁 표시 (사용자: $userId)');
-      }
-    } catch (e) {
-      debugPrint('최초 사용 경험 확인 중 오류: $e');
-    }
-  }
-
   // 버튼 비활성화 여부 확인
   bool _isButtonDisabled() {
     // OCR, 번역, 저장 공간 중 하나라도 한도 도달 시 버튼 비활성화
     return _limitStatus['ocrLimitReached'] == true || 
            _limitStatus['translationLimitReached'] == true || 
            _limitStatus['storageLimitReached'] == true;
+  }
+
+  // HomeViewModel 변경 시 호출될 메서드
+  void _onViewModelChanged() {
+    // 필요시 상태 업데이트
+    if (!mounted || _viewModel == null) return;
   }
 } 

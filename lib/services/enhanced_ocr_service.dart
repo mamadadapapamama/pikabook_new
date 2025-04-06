@@ -20,6 +20,7 @@ import 'chinese_segmenter_service.dart';
 import 'text_cleaner_service.dart';
 import 'pinyin_creation_service.dart';
 import 'user_preferences_service.dart';
+import 'package:crypto/crypto.dart';
 
 /// 개선된 OCR 서비스 : OCR 처리 후 모드에 따라 다른 처리를 수행합니다.
 /// 전문 서적 모드 : 핀인 제거 후 전체 텍스트 번역
@@ -196,7 +197,8 @@ class EnhancedOcrService {
       // 세그먼트 모드인 경우에만 개별 문장 번역 수행
       if (useSegmentMode) {
         debugPrint('OCR _processLanguageLearning: 세그먼트 모드 - 문장별 번역 시작...');
-        // 문장을 병렬로 처리
+        
+        // 문장을 병렬로 처리 - 이 부분을 바로 실행
         segments = await _processTextSegmentsInParallel(cleanedText);
         
         // 세그먼트가 있는 경우 세그먼트 번역 상태 확인
@@ -471,6 +473,13 @@ class EnhancedOcrService {
       debugPrint('텍스트 추출 중 오류 발생: $e');
       return '';
     }
+  }
+
+  // 텍스트에 대한 해시 생성 (세그먼트 캐싱용)
+  String _computeTextHash(String text) {
+    var bytes = utf8.encode(text);
+    var digest = sha256.convert(bytes);
+    return digest.toString().substring(0, 16); // 16자리로 제한
   }
 }
 

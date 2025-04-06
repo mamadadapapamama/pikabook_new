@@ -343,48 +343,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String value,
     required VoidCallback onTap,
   }) {
-    return Container(
-      width: double.infinity,
-      height: SpacingTokens.buttonHeight + SpacingTokens.sm,
-      padding: EdgeInsets.symmetric(
-        horizontal: SpacingTokens.md,
-        vertical: SpacingTokens.sm
-      ),
-      decoration: BoxDecoration(
-        color: ColorTokens.surface,
-        borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-      ),
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  title,
-                  style: TypographyTokens.captionEn.copyWith(
-                    color: ColorTokens.textSecondary,
+        borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+        child: Container(
+          width: double.infinity,
+          height: SpacingTokens.buttonHeight + SpacingTokens.sm,
+          padding: EdgeInsets.symmetric(
+            horizontal: SpacingTokens.md,
+            vertical: SpacingTokens.sm
+          ),
+          decoration: BoxDecoration(
+            color: ColorTokens.surface,
+            borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    title,
+                    style: TypographyTokens.captionEn.copyWith(
+                      color: ColorTokens.textSecondary,
+                    ),
                   ),
-                ),
-                Text(
-                  value,
-                  style: TypographyTokens.body2,
-                ),
-              ],
-            ),
-            SvgPicture.asset(
-              'assets/images/icon_arrow_right.svg',
-              width: SpacingTokens.iconSizeSmall + SpacingTokens.xs,
-              height: SpacingTokens.iconSizeSmall + SpacingTokens.xs,
-              colorFilter: const ColorFilter.mode(
-                ColorTokens.secondary,
-                BlendMode.srcIn,
+                  Text(
+                    value,
+                    style: TypographyTokens.body2,
+                  ),
+                ],
               ),
-            ),
-          ],
+              SvgPicture.asset(
+                'assets/images/icon_arrow_right.svg',
+                width: SpacingTokens.iconSizeSmall + SpacingTokens.xs,
+                height: SpacingTokens.iconSizeSmall + SpacingTokens.xs,
+                colorFilter: const ColorFilter.mode(
+                  ColorTokens.secondary,
+                  BlendMode.srcIn,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

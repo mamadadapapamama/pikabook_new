@@ -100,42 +100,44 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: SpacingTokens.sm,
-              vertical: SpacingTokens.sm, // 여백 늘림
+              vertical: SpacingTokens.xs, // 여백 줄임
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // 이전 페이지 버튼
-                _buildNavigationButton(
-                  icon: Icons.arrow_back_ios_rounded,
-                  onTap: widget.currentPageIndex > 0 
-                      ? () => widget.onPageChanged(widget.currentPageIndex - 1) 
-                      : null,
+                SizedBox(
+                  width: 32, // 고정 너비 설정
+                  child: _buildNavigationButton(
+                    icon: Icons.arrow_back_ios_rounded,
+                    onTap: widget.currentPageIndex > 0 
+                        ? () => widget.onPageChanged(widget.currentPageIndex - 1) 
+                        : null,
+                  ),
                 ),
                 
                 // 중앙 컨트롤 영역 (모드 전환 버튼)
-                GestureDetector(
-                  onTap: widget.onToggleFullTextMode,
-                  child: Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
-                      vertical: SpacingTokens.xs + SpacingTokens.xs/2
-                    ),
-                    decoration: BoxDecoration(
-                      color: ColorTokens.surface,
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(color: ColorTokens.secondary),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
+                Expanded(
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: widget.onToggleFullTextMode,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: SpacingTokens.sm, 
+                          vertical: SpacingTokens.xs
+                        ),
+                        decoration: BoxDecoration(
+                          color: ColorTokens.surface,
+                          borderRadius: BorderRadius.circular(100),
+                          border: Border.all(color: ColorTokens.secondary),
+                        ),
+                        child: Text(
                           widget.isFullTextMode ? '문장별 보기' : '원문 전체 보기',
                           style: TypographyTokens.caption.copyWith(
                             color: ColorTokens.secondary,
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -144,20 +146,27 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 페이지 번호 표시
-                    Text(
-                      '${widget.currentPageIndex + 1}/${widget.totalPages}',
-                      style: TypographyTokens.body2.copyWith(
-                        color: ColorTokens.textSecondary,
+                    // 페이지 번호 표시 - 최소 너비 설정
+                    SizedBox(
+                      width: 40, // 페이지 번호 부분 너비 조정
+                      child: Text(
+                        '${widget.currentPageIndex + 1}/${widget.totalPages}',
+                        style: TypographyTokens.body2.copyWith(
+                          color: ColorTokens.textSecondary,
+                          fontSize: 12, // 폰트 크기 줄임
+                        ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     // 다음 페이지 버튼
-                    _buildNavigationButton(
-                      icon: Icons.arrow_forward_ios_rounded,
-                      onTap: widget.currentPageIndex < widget.totalPages - 1 
-                          ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
-                          : null,
+                    SizedBox(
+                      width: 32, // 고정 너비 설정
+                      child: _buildNavigationButton(
+                        icon: Icons.arrow_forward_ios_rounded,
+                        onTap: widget.currentPageIndex < widget.totalPages - 1 
+                            ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
+                            : null,
+                      ),
                     ),
                   ],
                 ),

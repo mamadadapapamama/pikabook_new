@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
+// import 'package:google_fonts/google_fonts.dart';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import '../../services/note_service.dart';
@@ -21,7 +21,7 @@ import '../../widgets/edit_title_dialog.dart';
 import '../../widgets/note_detail_bottom_bar.dart';
 import '../../widgets/note_page_manager.dart';
 import '../../widgets/note_segment_manager.dart';
-import '../../utils/text_display_mode.dart';
+// import '../../utils/text_display_mode.dart';
 import 'flashcard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/unified_cache_service.dart';
@@ -35,16 +35,16 @@ import '../../widgets/common/pika_app_bar.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../widgets/common/help_text_tooltip.dart';
 import '../../theme/tokens/spacing_tokens.dart';
-import 'package:image_picker/image_picker.dart';
-import '../../widgets/common/usage_dialog.dart';
-import '../../services/usage_limit_service.dart';
+// import 'package:image_picker/image_picker.dart';
+// import '../../widgets/common/usage_dialog.dart';
+// import '../../services/usage_limit_service.dart';
 import '../../utils/debug_utils.dart';
 import 'home_screen.dart';
 import '../../services/translation_service.dart';
-import '../../models/flash_card.dart';
+// import '../../models/flash_card.dart';
 import '../../models/processed_text.dart';
-import 'dart:ui' as ui;
-import 'package:provider/provider.dart';
+// import 'dart:ui' as ui;
+// import 'package:provider/provider.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -1354,10 +1354,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       // 직접 HomeScreen으로 이동 (pushAndRemoveUntil에 슬라이드 애니메이션 적용)
       Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => HomeScreen(
-            showTooltip: false,
-            onCloseTooltip: () {}, // 빈 콜백 함수 제공
-          ),
+          pageBuilder: (context, animation, secondaryAnimation) => HomeScreen(),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             const begin = Offset(-1.0, 0.0); // 왼쪽에서 오른쪽으로 슬라이드
             const end = Offset.zero;
@@ -1410,10 +1407,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   if (mounted) {
                     Navigator.of(context).pushAndRemoveUntil(
                       PageRouteBuilder(
-                        pageBuilder: (context, animation, secondaryAnimation) => HomeScreen(
-                          showTooltip: false,
-                          onCloseTooltip: () {}, // 빈 콜백 함수 제공
-                        ),
+                        pageBuilder: (context, animation, secondaryAnimation) => HomeScreen(),
                         transitionsBuilder: (context, animation, secondaryAnimation, child) {
                           const begin = Offset(-1.0, 0.0); // 왼쪽에서 오른쪽으로 슬라이드
                           const end = Offset.zero;

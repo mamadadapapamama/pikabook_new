@@ -1,48 +1,57 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'views/screens/home_screen.dart';
+import 'views/screens/login_screen.dart';
+import 'views/screens/onboarding_screen.dart';
+import 'services/initialization_manager.dart';
+import 'services/user_preferences_service.dart';
+import 'firebase_options.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'widgets/loading_screen.dart';
 import 'package:provider/provider.dart';
 import 'dart:async'; // Timer 클래스를 위한 import
 import 'package:flutter/services.dart'; // SystemChrome 사용을 위한 import
 import 'theme/app_theme.dart';
-import 'views/screens/home_screen.dart';
-import 'services/initialization_manager.dart';
-import 'services/user_preferences_service.dart';
-import 'views/screens/onboarding_screen.dart';
-import 'views/screens/login_screen.dart';
-import 'widgets/loading_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'viewmodels/home_viewmodel.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-import 'package:flutter/rendering.dart';
+
+/// 앱의 시작 지점 및 초기 화면 결정 로직
+/// - 로그인 확인
+/// - 온보딩 확인
+/// - Firebase 초기화
 
 class App extends StatefulWidget {
-  const App({Key? key}) : super(key: key);
+  const App({
+    super.key,
+  });
 
   @override
   State<App> createState() => _AppState();
 }
 
 class _AppState extends State<App> {
+  // 상태 변수들
+  bool _isInitializing = false; // 초기화 중 여부
+  bool _isAuthenticated = false; // 로그인 여부 
+  bool _isOnboardingCompleted = false; // 온보딩 완료 여부
+  bool _isFirstEntry = false; // 첫 진입 여부 (툴팁 표시용)
+  bool _hasLoginHistory = false; // 로그인 이력 여부 
+  
+  // Firebase 관련 서비스 인스턴스
+  final InitializationManager _initManager = InitializationManager();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  User? _currentUser;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final UserPreferencesService _preferencesService = UserPreferencesService();
+
   // 앱 상태 변수
-  bool _isInitialized = false;
-  bool _isUserAuthenticated = false;
-  bool _isOnboardingCompleted = false;
-  bool _isFirstEntry = false;
-  bool _hasLoginHistory = false;
   double _progress = 0.0;
   String? _error;
   
   // 로딩 단계 추적을 위한 상태 메시지 (UI에는 표시되지 않음)
   String _message = '앱 준비 중...';
   
-  // 서비스들
-  final InitializationManager _initManager = InitializationManager();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final UserPreferencesService _preferencesService = UserPreferencesService();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
   // 인증 상태 변경 구독 취소용 변수
   StreamSubscription<User?>? _authStateSubscription;
   
@@ -81,10 +90,10 @@ class _AppState extends State<App> {
     
     // iOS 앱 스토어 리뷰를 위한 최적화: 타임아웃 시간을 8초로 단축
     Future.delayed(const Duration(seconds: 8), () {
-      if (!_isInitialized && mounted) {
+      if (!_isInitializing && mounted) {
         debugPrint('타임아웃: 초기화 강제 진행');
         setState(() {
-          _isInitialized = true;
+          _isInitializing = true;
           _message = '초기화 완료 (타임아웃)';
         });
       }
@@ -130,7 +139,7 @@ class _AppState extends State<App> {
       setState(() {
         _progress = 1.0;
         _message = '앱 준비 완료';
-        _isInitialized = true;
+        _isInitializing = true;
       });
     } catch (e) {
       debugPrint('❌ 앱 초기화 오류: $e');
@@ -216,7 +225,7 @@ class _AppState extends State<App> {
             
             // 로그아웃 상태 처리
             setState(() {
-              _isUserAuthenticated = false;
+              _isAuthenticated = false;
               _isOnboardingCompleted = false;
               _isFirstEntry = false; // 툴팁 표시 상태도 초기화
             });
@@ -323,16 +332,16 @@ class _AppState extends State<App> {
           _hasLoginHistory = hasLoginHistory;
           _isOnboardingCompleted = isOnboardingCompleted;
           _isFirstEntry = isOnboardingCompleted && !hasShownTooltip; // 온보딩 완료된 사용자만 툴팁 관련
-          _isUserAuthenticated = isUserAuthenticated;
+          _isAuthenticated = isUserAuthenticated;
           
           // 초기화 완료
-          _isInitialized = true;
+          _isInitializing = true;
           _progress = 1.0;
           _message = '앱 준비 완료';
         });
       }
       
-      debugPrint('앱 데이터 초기화 완료 - 로그인: $_isUserAuthenticated, 노트 있음: $hasNotes, 온보딩: $_isOnboardingCompleted, 툴팁 표시: $_isFirstEntry');
+      debugPrint('앱 데이터 초기화 완료 - 로그인: $_isAuthenticated, 노트 있음: $hasNotes, 온보딩: $_isOnboardingCompleted, 툴팁 표시: $_isFirstEntry');
       
       final elapsed = DateTime.now().difference(_appStartTime);
       debugPrint('앱 초기화 완료 (소요시간: ${elapsed.inMilliseconds}ms)');
@@ -342,7 +351,7 @@ class _AppState extends State<App> {
       // 오류가 있어도 앱은 계속 실행
       if (mounted) {
         setState(() {
-          _isInitialized = true;
+          _isInitializing = true;
           _progress = 1.0;
           _message = '앱 준비 완료 (일부 데이터 로드 실패)';
         });
@@ -354,7 +363,7 @@ class _AppState extends State<App> {
   Future<void> _handleUserLogin(User user) async {
     try {
       setState(() {
-        _isUserAuthenticated = true;
+        _isAuthenticated = true;
       });
       
       debugPrint('🔐 사용자 로그인 처리 시작: ${user.uid}');
@@ -521,7 +530,7 @@ class _AppState extends State<App> {
 
   Widget _buildHomeScreen() {
     // 초기화 상태에 따라 다른 화면 표시
-    if (!_isInitialized) {
+    if (!_isInitializing) {
       // iOS 앱 스토어 리뷰를 위한 최적화: 로딩 화면 성능 개선
       return LoadingScreen(
         progress: _progress,
@@ -562,7 +571,7 @@ class _AppState extends State<App> {
                 onPressed: () {
                   setState(() {
                     _error = null;
-                    _isInitialized = false;
+                    _isInitializing = false;
                     _progress = 0.0;
                   });
                   _initializeFirebase();
@@ -576,7 +585,7 @@ class _AppState extends State<App> {
     }
 
     // 로그인 되지 않은 경우
-    if (!_isUserAuthenticated) {
+    if (!_isAuthenticated) {
       return LoginScreen(
         onLoginSuccess: (user) {
           _handleUserLogin(user);
@@ -589,14 +598,8 @@ class _AppState extends State<App> {
     // 1. 온보딩이 이미 완료된 것으로 확인된 경우 홈 화면으로 이동
     if (_isOnboardingCompleted) {
       return HomeScreen(
-        showTooltip: _isFirstEntry,
-        onCloseTooltip: () async {
-          // 툴팁 표시 여부 업데이트
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('hasShownTooltip', true);
-          setState(() {
-            _isFirstEntry = false;
-          });
+        onSettingsPressed: () {
+          // 필요한 경우 설정 화면 이동 로직
         },
       );
     }

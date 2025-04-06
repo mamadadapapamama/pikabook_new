@@ -166,14 +166,14 @@ class PageContentService {
               // 이미 ProcessedText 객체인 경우
               _processedTextCache[pageId] = cachedProcessedText;
               debugPrint('캐시에서 처리된 텍스트 로드 성공: 페이지 ID=$pageId');
-              return cachedProcessedText;
+              return cachedProcessedText; // 캐시된 텍스트가 있으므로 여기서 바로 반환
             } else if (cachedProcessedText is Map<String, dynamic>) {
               // Map 형태로 저장된 경우 변환 시도
               try {
                 final convertedText = ProcessedText.fromJson(cachedProcessedText);
                 _processedTextCache[pageId] = convertedText;
                 debugPrint('캐시에서 Map으로 로드된 텍스트를 ProcessedText로 변환 성공: 페이지 ID=$pageId');
-                return convertedText;
+                return convertedText; // 캐시된 텍스트가 있으므로 여기서 바로 반환
               } catch (e) {
                 debugPrint('캐시된 Map 데이터를 ProcessedText로 변환 중 오류: $e');
                 removeProcessedText(pageId); // 오류 발생 시 잘못된 캐시 제거
