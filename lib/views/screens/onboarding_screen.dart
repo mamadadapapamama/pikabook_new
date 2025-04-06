@@ -181,14 +181,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       // Firestore에 사용자 데이터 저장
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
           'userName': userName,
           'learningPurpose': purpose,
           'translationMode': _isSegmentMode ? 'segment' : 'full',
           'hasOnboarded': true,
           'onboardingCompleted': true,
           'defaultNoteSpace': noteSpaceName,
-        });
+        }, SetOptions(merge: true));
       }
       
       // 온보딩 완료 표시

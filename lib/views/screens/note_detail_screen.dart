@@ -821,6 +821,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     
     debugPrint('페이지 변경: $previousPageIndex -> $index (이전에 방문한 페이지: $isSwitchingBack)');
     
+    // 변경하려는 페이지가 처리 중인 더미 페이지인지 확인
+    final targetPage = _pageManager.getPageAtIndex(index);
+    if (targetPage != null && targetPage.originalText == '___PROCESSING___') {
+      debugPrint('처리 중인 더미 페이지로는 이동하지 않음: $index');
+      return; // 처리 중인 더미 페이지로는 이동하지 않음
+    }
+    
     // PageController를 통한 페이지 이동 (화살표 버튼으로 이동할 때)
     // PageView의 onPageChanged에서 호출되는 경우에는 이미 페이지가 변경된 상태
     if (index != _pageManager.currentPageIndex) {
@@ -1399,10 +1406,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             ? null // 로딩 중이거나 오류 상태에서는 앱바 없음
             : PikaAppBar.noteDetail(
                 title: _note?.originalText ?? 'Note',
-                currentPage: _pageManager.currentPageIndex + 1,
+                currentPage: _calculateActualCurrentPageIndex() + 1,
                 totalPages: (_note?.isProcessingBackground ?? false) && _note?.imageCount != null
-                    ? max(_note!.imageCount!, _pageManager.pages.length)
-                    : _pageManager.pages.length,
+                    ? max(_note!.imageCount!, _calculateActualPageCount())
+                    : _calculateActualPageCount(),
                 flashcardCount: _note?.flashcardCount ?? 0,
                 onMorePressed: _showMoreOptions,
                 onFlashcardTap: _navigateToFlashcards,
@@ -1473,11 +1480,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           bottomNavigationBar: !_isLoading && _error == null && _note != null 
               ? NoteDetailBottomBar(
                   currentPage: _pageManager.currentPage,
-                  currentPageIndex: _pageManager.currentPageIndex,
+                  currentPageIndex: _calculateActualCurrentPageIndex(),
                   totalPages: (_note?.isProcessingBackground ?? false) && _note?.imageCount != null
-                      ? max(_note!.imageCount!, _pageManager.pages.length)
-                      : _pageManager.pages.length,
-                  onPageChanged: _changePage,
+                      ? max(_note!.imageCount!, _calculateActualPageCount())
+                      : _calculateActualPageCount(),
+                  onPageChanged: (index) {
+                    // 실제 페이지 인덱스를 _pageManager 인덱스로 변환
+                    int realIndex = _translateActualToRealIndex(index);
+                    if (realIndex >= 0) {
+                      _changePage(realIndex);
+                    }
+                  },
                   isFullTextMode: _pageManager.currentPage?.id != null 
                       ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
                       : false,
@@ -1495,91 +1508,116 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     final currentImageFile = _pageManager.currentImageFile;
     final String pageNumberText = '${_pageManager.currentPageIndex + 1}/${_pageManager.pages.length}';
     
+    // 처리 중인 더미 페이지를 필터링한 실제 페이지 수 계산
+    final int actualPageCount = _pageManager.pages.where((page) => page.originalText != '___PROCESSING___').length;
+    
     return Stack(
       children: [
         PageView.builder(
-        itemCount: _pageManager.pages.length,
+          itemCount: _pageManager.pages.length,
           controller: _pageController,
-        onPageChanged: (index) {
+          onPageChanged: (index) {
             debugPrint('PageView 스와이프: 페이지 변경 ($index) - 이전 방문: ${_previouslyVisitedPages.contains(index)}');
+            
+            final targetPage = _pageManager.getPageAtIndex(index);
+            if (targetPage != null && targetPage.originalText == '___PROCESSING___') {
+              debugPrint('처리 중인 더미 페이지 감지: $index');
+              // 처리 중인 더미 페이지인 경우 다음/이전 페이지로 이동
+              if (index > _pageManager.currentPageIndex) {
+                _pageController.animateToPage(
+                  _pageManager.currentPageIndex, // 현재 페이지로 되돌림
+                  duration: const Duration(milliseconds: 100),
+                  curve: Curves.easeInOut,
+                );
+                return;
+              } else if (index < _pageManager.currentPageIndex) {
+                _pageController.animateToPage(
+                  _pageManager.currentPageIndex, // 현재 페이지로 되돌림
+                  duration: const Duration(milliseconds: 100),
+                  curve: Curves.easeInOut,
+                );
+                return;
+              }
+              return;
+            }
             
             // 이전에 방문하지 않은 페이지라면 방문 기록에 추가
             _previouslyVisitedPages.add(index);
             
-          _changePage(index);
-        },
-        itemBuilder: (context, index) {
-          // 현재 표시할 페이지 인덱스의 페이지 빌드
-          if (index == _pageManager.currentPageIndex) {
-            return Column(
-              children: [
-                // 첫 번째 이미지 컨테이너
-                _buildFirstImageContainer(),
-                
-                // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
-                Expanded(
-                  child: Container(
-                    color: Colors.white, // 배경색 흰색
-                    padding: const EdgeInsets.all(0), // 패딩 0으로 설정 (ProcessedTextWidget에서 패딩 적용)
-                    child: _buildCurrentPageContent(),
-                  ),
-                ),
-              ],
-            );
-          } else {
-            // 다른 페이지는 페이지 매니저에서 해당 인덱스의 페이지를 가져와서 미리 로드
-            final page = _pageManager.getPageAtIndex(index);
-            final imageFile = _pageManager.getImageFileForPage(page);
-            
-            return Column(
-              children: [
-                // 페이지 썸네일 이미지 (있는 경우)
-                if (imageFile != null || page?.imageUrl != null)
-                  Container(
-                    margin: EdgeInsets.only(top: 16, left: 16, right: 16),
-                    height: 200, // 높이를 200으로 고정
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        )
-                      ],
+            _changePage(index);
+          },
+          itemBuilder: (context, index) {
+            // 현재 표시할 페이지 인덱스의 페이지 빌드
+            if (index == _pageManager.currentPageIndex) {
+              return Column(
+                children: [
+                  // 첫 번째 이미지 컨테이너
+                  _buildFirstImageContainer(),
+                  
+                  // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
+                  Expanded(
+                    child: Container(
+                      color: Colors.white, // 배경색 흰색
+                      padding: const EdgeInsets.all(0), // 패딩 0으로 설정 (ProcessedTextWidget에서 패딩 적용)
+                      child: _buildCurrentPageContent(),
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: imageFile != null 
-                        ? Image.file(
-                            imageFile,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
+                  ),
+                ],
+              );
+            } else {
+              // 다른 페이지는 페이지 매니저에서 해당 인덱스의 페이지를 가져와서 미리 로드
+              final page = _pageManager.getPageAtIndex(index);
+              final imageFile = _pageManager.getImageFileForPage(page);
+              
+              return Column(
+                children: [
+                  // 페이지 썸네일 이미지 (있는 경우)
+                  if (imageFile != null || page?.imageUrl != null)
+                    Container(
+                      margin: EdgeInsets.only(top: 16, left: 16, right: 16),
+                      height: 200, // 높이를 200으로 고정
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
                           )
-                        : (page?.imageUrl != null
-                            ? Image.network(
-                                page!.imageUrl!,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                              )
-                            : const Center(child: Text('이미지 없음'))),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: imageFile != null 
+                          ? Image.file(
+                              imageFile,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                            )
+                          : (page?.imageUrl != null
+                              ? Image.network(
+                                  page!.imageUrl!,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                )
+                              : const Center(child: Text('이미지 없음'))),
+                      ),
+                    ),
+                  
+                  // 페이지 내용 자리 표시자
+                  Expanded(
+                    child: Center(
+                      child: Text('페이지 ${index + 1} 로딩 중...'),
                     ),
                   ),
-                
-                // 페이지 내용 자리 표시자
-                Expanded(
-                  child: Center(
-                    child: Text('페이지 ${index + 1} 로딩 중...'),
-                  ),
-                ),
-              ],
-            );
-          }
-        },
-      ),
+                ],
+              );
+            }
+          },
+        ),
         
         // 툴팁 표시 (처음 텍스트 처리가 완료된 경우)
         if (_showTooltip)
@@ -1861,6 +1899,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 이전에 방문한 페이지인지 확인 (현재 페이지 인덱스가 이미 방문 기록에 있는지)
     final bool wasVisitedBefore = _previouslyVisitedPages.contains(_pageManager.currentPageIndex);
     
+    // 처리 중 마커 확인 - 무조건 로딩 화면 표시
+    if (currentPage.originalText == '___PROCESSING___') {
+      debugPrint('___PROCESSING___ 마커가 있는 페이지 감지 - 로딩 화면 표시');
+      return const Center(
+        child: DotLoadingIndicator(message: '텍스트 처리 중이에요!'),
+      );
+    }
+    
     // 캐시에서 ProcessedText 가져오기
     final processedText = currentPage.id != null
         ? _pageContentService.getProcessedText(currentPage.id!)
@@ -2094,5 +2140,52 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  // 실제 페이지 수 계산 (___PROCESSING___ 마커가 있는 더미 페이지 제외)
+  int _calculateActualPageCount() {
+    int count = 0;
+    for (var page in _pageManager.pages) {
+      if (page.originalText != '___PROCESSING___') {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  // 실제 현재 페이지 인덱스 계산 (___PROCESSING___ 마커가 있는 더미 페이지 제외)
+  int _calculateActualCurrentPageIndex() {
+    int actualIndex = 0;
+    int indexCounter = 0;
+    
+    for (int i = 0; i < _pageManager.pages.length; i++) {
+      if (_pageManager.pages[i].originalText != '___PROCESSING___') {
+        if (i == _pageManager.currentPageIndex) {
+          actualIndex = indexCounter;
+          break;
+        }
+        indexCounter++;
+      }
+    }
+    
+    return actualIndex;
+  }
+
+  // 실제 페이지 인덱스를 _pageManager 인덱스로 변환
+  int _translateActualToRealIndex(int actualIndex) {
+    int realPageCounter = -1;
+    int counter = -1;
+    
+    for (int i = 0; i < _pageManager.pages.length; i++) {
+      if (_pageManager.pages[i].originalText != '___PROCESSING___') {
+        counter++;
+        if (counter == actualIndex) {
+          realPageCounter = i;
+          break;
+        }
+      }
+    }
+    
+    return realPageCounter;
   }
 }

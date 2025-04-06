@@ -8,6 +8,7 @@ import '../../../widgets/dot_loading_indicator.dart';
 import '../../../firebase_options.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../services/auth_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatefulWidget {
   final Function(User) onLoginSuccess;

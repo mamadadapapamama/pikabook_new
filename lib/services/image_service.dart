@@ -183,62 +183,26 @@ class ImageService {
       final originalWidth = image.width;
       final originalHeight = image.height;
       
-      // 더 적극적인 이미지 리사이징 적용 (파일 크기 감소)
-      img.Image processedImage;
-      final int maxDimension = 1200; // 최대 너비/높이 제한
-      
-      if (originalWidth > maxDimension || originalHeight > maxDimension) {
-        // 비율 유지하며 리사이징
-        if (originalWidth > originalHeight) {
-          final ratio = maxDimension / originalWidth;
-          processedImage = img.copyResize(
-            image,
-            width: maxDimension,
-            height: (originalHeight * ratio).round(),
-            interpolation: img.Interpolation.average,
-          );
-        } else {
-          final ratio = maxDimension / originalHeight;
-          processedImage = img.copyResize(
-            image,
-            width: (originalWidth * ratio).round(), 
-            height: maxDimension,
-            interpolation: img.Interpolation.average,
-          );
-        }
-        debugPrint('이미지 리사이징: $originalWidth x $originalHeight → ${processedImage.width} x ${processedImage.height}');
-      } else {
-        processedImage = image;
-      }
+      // 이미지 리사이징 (필요한 경우)
+      img.Image processedImage = _resizeImageIfNeeded(image, originalWidth, originalHeight);
       
       // 단계별 압축 시도
-      File compressedFile = await _compressWithMultipleApproaches(
+      return await _compressWithMultipleApproaches(
         processedImage, 
         imageFile, 
         targetPath
       );
-      
-      return compressedFile;
     } catch (e) {
       debugPrint('이미지 압축 및 저장 중 오류 발생: $e');
       
+      // 대체 압축 방법 시도 - 직접 라이브러리 사용
       try {
-        // 압축 실패 시 flutter_image_compress로 직접 압축 시도
-        debugPrint('대체 압축 방법 시도 중...');
-        final result = await FlutterImageCompress.compressWithFile(
-          imageFile.path,
-          quality: 70,
-          format: CompressFormat.jpeg,
-        );
-        
-        if (result != null && result.isNotEmpty) {
-          final File compressedFile = File(targetPath);
-          await compressedFile.writeAsBytes(result);
-          debugPrint('대체 압축 성공: ${await compressedFile.length()} 바이트');
+        final compressedFile = await _applyFallbackCompression(imageFile, targetPath);
+        if (compressedFile != null) {
           return compressedFile;
         }
-      } catch (compressError) {
-        debugPrint('대체 압축 방법도 실패: $compressError');
+      } catch (fallbackError) {
+        debugPrint('대체 압축 방법도 실패: $fallbackError');
       }
       
       // 모든 압축 방법 실패 시 원본 복사
@@ -248,31 +212,62 @@ class ImageService {
     }
   }
   
+  /// 이미지 리사이징 로직
+  img.Image _resizeImageIfNeeded(img.Image image, int originalWidth, int originalHeight) {
+    final int maxDimension = 1200; // 최대 너비/높이 제한
+    
+    if (originalWidth > maxDimension || originalHeight > maxDimension) {
+      // 비율 유지하며 리사이징
+      if (originalWidth > originalHeight) {
+        final ratio = maxDimension / originalWidth;
+        final resized = img.copyResize(
+          image,
+          width: maxDimension,
+          height: (originalHeight * ratio).round(),
+          interpolation: img.Interpolation.average,
+        );
+        debugPrint('이미지 리사이징: $originalWidth x $originalHeight → ${resized.width} x ${resized.height}');
+        return resized;
+      } else {
+        final ratio = maxDimension / originalHeight;
+        final resized = img.copyResize(
+          image,
+          width: (originalWidth * ratio).round(), 
+          height: maxDimension,
+          interpolation: img.Interpolation.average,
+        );
+        debugPrint('이미지 리사이징: $originalWidth x $originalHeight → ${resized.width} x ${resized.height}');
+        return resized;
+      }
+    }
+    return image; // 리사이징 필요 없음
+  }
+  
   /// 여러 압축 방법을 시도하는 내부 메서드
   Future<File> _compressWithMultipleApproaches(
     img.Image processedImage, 
     File originalFile, 
     String targetPath
   ) async {
-    // Flutter Image Compress 라이브러리 활용 (더 효과적인 압축)
+    // Flutter Image Compress 라이브러리 활용
     final File tempFile = File('$targetPath.temp');
     
     try {
-      // 중간 품질의 JPG로 인코딩
+      // 1단계: 중간 품질의 JPG로 인코딩
       final jpegBytes = img.encodeJpg(
         processedImage,
-        quality: 85, // 더 높은 품질로 설정 (85로 조정)
+        quality: 85, // 높은 품질로 시작
       );
       
       // 임시 파일에 쓰기
       await tempFile.writeAsBytes(jpegBytes);
       
-      // 추가 압축 단계 (flutter_image_compress 사용)
+      // 2단계: 추가 압축 (flutter_image_compress 사용)
       final compressedBytes = await FlutterImageCompress.compressWithFile(
         tempFile.path,
         minWidth: processedImage.width,
         minHeight: processedImage.height,
-        quality: 80, // 추가 압축 품질
+        quality: 80, // 약간 더 압축
         format: CompressFormat.jpeg,
       );
       
@@ -288,24 +283,9 @@ class ImageService {
       final compressedSize = await compressedFile.length();
       debugPrint('압축 후 크기: $compressedSize 바이트');
       
-      // 최종 파일 크기 확인 및 비상 압축 (파일이 너무 크면 추가 압축)
+      // 3단계: 필요시 추가 압축 (파일이 여전히 큰 경우)
       if (compressedSize > 500 * 1024) { // 500KB 이상일 경우
-        debugPrint('파일이 여전히 큽니다. 추가 압축 시도...');
-        
-        // 2차 압축 시도
-        final secondCompressBytes = await FlutterImageCompress.compressWithFile(
-          compressedFile.path,
-          minWidth: processedImage.width ~/ 1.2, // 약간 더 크기 축소
-          minHeight: processedImage.height ~/ 1.2,
-          quality: 65, // 낮은 품질로 다시 압축
-          format: CompressFormat.jpeg,
-        );
-        
-        if (secondCompressBytes != null && secondCompressBytes.isNotEmpty) {
-          await compressedFile.writeAsBytes(secondCompressBytes);
-          final finalSize = await compressedFile.length();
-          debugPrint('추가 압축 후 크기: $finalSize 바이트');
-        }
+        return await _applyExtraCompression(compressedFile, processedImage);
       }
       
       return compressedFile;
@@ -321,6 +301,49 @@ class ImageService {
       // 메모리 해제 힌트
       processedImage.clear();
     }
+  }
+  
+  /// 추가 압축이 필요한 경우 적용 (3단계)
+  Future<File> _applyExtraCompression(File compressedFile, img.Image processedImage) async {
+    debugPrint('파일이 여전히 큽니다. 추가 압축 시도...');
+    
+    // 더 강한 압축 적용
+    final secondCompressBytes = await FlutterImageCompress.compressWithFile(
+      compressedFile.path,
+      minWidth: processedImage.width ~/ 1.2, // 약간 더 크기 축소
+      minHeight: processedImage.height ~/ 1.2,
+      quality: 65, // 낮은 품질로 다시 압축
+      format: CompressFormat.jpeg,
+    );
+    
+    if (secondCompressBytes != null && secondCompressBytes.isNotEmpty) {
+      await compressedFile.writeAsBytes(secondCompressBytes);
+      final finalSize = await compressedFile.length();
+      debugPrint('추가 압축 후 크기: $finalSize 바이트');
+    }
+    
+    return compressedFile;
+  }
+  
+  /// 모든 압축 방법이 실패한 경우 대체 압축 방법 적용
+  Future<File?> _applyFallbackCompression(File imageFile, String targetPath) async {
+    debugPrint('대체 압축 방법 시도 중...');
+    
+    // 직접 FlutterImageCompress로 압축 시도
+    final result = await FlutterImageCompress.compressWithFile(
+      imageFile.path,
+      quality: 70,
+      format: CompressFormat.jpeg,
+    );
+    
+    if (result != null && result.isNotEmpty) {
+      final File compressedFile = File(targetPath);
+      await compressedFile.writeAsBytes(result);
+      debugPrint('대체 압축 성공: ${await compressedFile.length()} 바이트');
+      return compressedFile;
+    }
+    
+    return null;
   }
 
   /// 저장된 이미지의 전체 경로 가져오기

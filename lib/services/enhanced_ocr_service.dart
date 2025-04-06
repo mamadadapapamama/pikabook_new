@@ -143,8 +143,8 @@ class EnhancedOcrService {
       }
       
       // 특수 처리 중 문자열인 경우 처리 없이 반환
-      if (text == '___PROCESSING___') {
-        debugPrint('OCR processText: 특수 처리 중 문자열 감지, 처리 생략');
+      if (text == '___PROCESSING___' || text == 'processing' || text.contains('텍스트 처리 중')) {
+        debugPrint('OCR processText: 특수 처리 중 문자열 감지("$text"), 처리 생략');
         return ProcessedText(
           fullOriginalText: text,
           fullTranslatedText: '',

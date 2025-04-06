@@ -591,11 +591,19 @@ class NoteService {
           await _cacheService.cachePages(noteId, processedPages);
           debugPrint('${processedPages.length}개 페이지 캐싱 완료 (노트 ID: $noteId)');
           
-          // 노트 상세 화면에 알림 전송 (페이지 업데이트 완료)
+          // 노트 문서에 처리 완료 플래그 추가
+          await _notesCollection.doc(noteId).update({
+            'processingCompleted': true,
+            'updatedAt': DateTime.now(),
+          });
+          
+          // 처리 완료를 SharedPreferences에 저장하여 UI에 알림
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('pages_updated_$noteId', true);
-          await prefs.setInt('updated_page_count_$noteId', processedPages.length);
-          debugPrint('페이지 업데이트 완료 알림 설정: $noteId');
+          await prefs.setInt('updated_page_count_$noteId', processedCount);
+          
+          // 처리 결과 로그
+          debugPrint('모든 이미지 처리 완료 ($processedCount/$totalCount), 오류: 0');
         }
       } catch (e) {
         debugPrint('노트 캐시 업데이트 실패: $e');
@@ -842,7 +850,7 @@ class NoteService {
           // 빈 페이지 생성 (OCR 처리 없이)
           final page = await _pageService.createPage(
             noteId: noteId,
-            originalText: '텍스트 처리 중...', // 처리 중임을 표시
+            originalText: '___PROCESSING___', // 특수 마커를 사용해 처리 중임을 표시
             translatedText: '',
             pageNumber: 1,
             imageFile: imageFiles[0]
@@ -916,43 +924,106 @@ class NoteService {
       
       debugPrint('백그라운드에서 ${imageFiles.length}개 이미지 처리 시작');
       
+      // 기존 페이지 ID 가져오기 (이미 만들어진 첫 페이지가 있을 것)
+      // 이 페이지를 업데이트하고 추가 페이지는 생성하지 않음
+      List<String> existingPageIds = [];
+      try {
+        final pagesSnapshot = await _firestore
+            .collection('pages')
+            .where('noteId', isEqualTo: noteId)
+            .get();
+            
+        if (pagesSnapshot.docs.isNotEmpty) {
+          existingPageIds = pagesSnapshot.docs.map((doc) => doc.id).toList();
+          debugPrint('이미 생성된 페이지 ID 목록: $existingPageIds');
+        }
+      } catch (e) {
+        debugPrint('기존 페이지 가져오기 오류: $e');
+      }
+      
       // 모든 이미지 처리 (OCR 및 페이지 업데이트)
       for (int i = 0; i < imageFiles.length; i++) {
         File imageFile = imageFiles[i];
         
         try {
-          // 이미지 처리 및 페이지 생성/업데이트
-          final pageData = await _processImageAndCreatePage(
-            noteId,
-            imageFile,
-            pageNumber: i + 1,
-            targetLanguage: targetLanguage,
-            shouldProcess: true, // OCR 처리 활성화
-          );
-          
-          if (pageData != null) {
-            processedCount++;
+          // 첫 번째 이미지이고 기존 페이지가 있는 경우 - 기존 페이지 업데이트
+          if (i == 0 && existingPageIds.isNotEmpty) {
+            debugPrint('첫 번째 이미지는 이미 페이지가 생성되어 있어 업데이트만 수행');
             
-            // 첫 번째 이미지인 경우 노트의 썸네일 이미지로 설정
-            if (i == 0) {
-              // 노트 이미지 URL 업데이트
-              await _notesCollection.doc(noteId).update({
-                'imageUrl': pageData['imageUrl'],
-                'updatedAt': DateTime.now(),
-                'extractedText': pageData['extractedText'] ?? '',
-                'translatedText': pageData['translatedText'] ?? '',
-              });
-              
-              // 캐시 정리 (썸네일 이미지가 업데이트되었으므로)
-              await _cacheService.removeCachedNote(noteId);
+            // 이미지 업로드
+            final imageUrl = await _imageService.uploadImage(imageFile);
+            if (imageUrl == null || imageUrl.isEmpty) {
+              throw Exception('이미지 업로드에 실패했습니다.');
             }
             
-            // 처리 상태 업데이트
+            // OCR로 텍스트 추출
+            final extractedText = await _ocrService.extractText(imageFile);
+            
+            // 텍스트 번역
+            String translatedText = '';
+            if (extractedText.isNotEmpty) {
+              translatedText = await _translationService.translateText(
+                extractedText,
+                targetLanguage: targetLanguage ?? 'ko',
+              );
+            }
+            
+            // 기존 페이지 업데이트
+            final firstPageId = existingPageIds[0];
+            await _pageService.updatePageContent(
+              firstPageId,
+              extractedText,
+              translatedText
+            );
+            
+            // 썸네일 업데이트
             await _notesCollection.doc(noteId).update({
-              'processedImagesCount': processedCount,
+              'imageUrl': imageUrl,
+              'extractedText': extractedText,
+              'translatedText': translatedText,
               'updatedAt': DateTime.now(),
+              'firstPageProcessed': true,
             });
+            
+            processedCount++;
+          } 
+          // 첫 번째가 아닌 이미지이거나, 기존 페이지가 없는 경우 새 페이지 생성
+          else {
+            // 이미지 처리 및 페이지 생성/업데이트
+            final pageData = await _processImageAndCreatePage(
+              noteId,
+              imageFile,
+              pageNumber: existingPageIds.isEmpty ? 1 : i + 1, // 기존 페이지가 없으면 1부터, 있으면 i+1
+              targetLanguage: targetLanguage,
+              shouldProcess: true, // OCR 처리 활성화
+            );
+            
+            if (pageData != null) {
+              processedCount++;
+              
+              // 첫 번째 이미지인 경우 노트의 썸네일 이미지로 설정
+              if (i == 0) {
+                // 노트 이미지 URL 업데이트
+                await _notesCollection.doc(noteId).update({
+                  'imageUrl': pageData['imageUrl'],
+                  'updatedAt': DateTime.now(),
+                  'extractedText': pageData['extractedText'] ?? '',
+                  'translatedText': pageData['translatedText'] ?? '',
+                  'firstPageProcessed': true,
+                });
+                
+                // 캐시 정리 (썸네일 이미지가 업데이트되었으므로)
+                await _cacheService.removeCachedNote(noteId);
+              }
+            }
           }
+          
+          // 처리 상태 업데이트
+          await _notesCollection.doc(noteId).update({
+            'processedImagesCount': processedCount,
+            'updatedAt': DateTime.now(),
+          });
+          
         } catch (e) {
           debugPrint('이미지 ${i + 1} 처리 중 오류: $e');
           // 이미지 처리 실패 시 페이지 카운트 감소
@@ -967,11 +1038,6 @@ class NoteService {
           // 첫 페이지 처리 완료 시 SharedPreferences에 표시
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('first_page_processed_$noteId', true);
-          
-          // 노트도 업데이트
-          await _notesCollection.doc(noteId).update({
-            'firstPageProcessed': true,
-          });
         }
       }
       
@@ -1024,19 +1090,29 @@ class NoteService {
         throw Exception('이미지 업로드에 실패했습니다.');
       }
 
-      // OCR로 텍스트 추출
-      final extractedText = await _ocrService.extractText(imageFile);
-      if (extractedText.isEmpty) {
-        debugPrint('OCR 텍스트 추출 실패 또는 텍스트 없음');
-      }
-
-      // 텍스트 번역
+      String extractedText = '';
       String translatedText = '';
-      if (extractedText.isNotEmpty) {
-        translatedText = await _translationService.translateText(
-          extractedText,
-          targetLanguage: targetLanguage ?? 'ko',
-        );
+      
+      // shouldProcess가 true일 때만 OCR 및 번역 처리
+      if (shouldProcess) {
+        // OCR로 텍스트 추출
+        extractedText = await _ocrService.extractText(imageFile);
+        if (extractedText.isEmpty) {
+          debugPrint('OCR 텍스트 추출 실패 또는 텍스트 없음');
+        }
+
+        // 텍스트 번역
+        if (extractedText.isNotEmpty) {
+          translatedText = await _translationService.translateText(
+            extractedText,
+            targetLanguage: targetLanguage ?? 'ko',
+          );
+        }
+      } else {
+        // 처리하지 않는 경우 특수 마커 사용
+        extractedText = '___PROCESSING___';
+        translatedText = '';
+        debugPrint('OCR 및 번역 처리 건너뛰기 - 특수 마커 사용');
       }
 
       // 페이지 생성
@@ -1061,7 +1137,7 @@ class NoteService {
           
           // extractedText 필드 업데이트
           await _notesCollection.doc(noteId).update({
-            'extractedText': extractedText,
+            'extractedText': extractedText == '___PROCESSING___' ? '' : extractedText,
             'translatedText': translatedText.isNotEmpty ? translatedText : note.translatedText,
           });
         }

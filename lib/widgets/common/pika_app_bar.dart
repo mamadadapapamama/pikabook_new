@@ -75,29 +75,26 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       actions: [
         Padding(
           padding: EdgeInsets.only(right:SpacingTokens.md, bottom:SpacingTokens.md),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(30),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onSettingsPressed,
-              splashColor: ColorTokens.primary.withOpacity(0.1),
-              highlightColor: ColorTokens.primary.withOpacity(0.05),
-              customBorder: const CircleBorder(),
-              child: Padding(
-                padding: const EdgeInsets.all(6.0),
-                child: SizedBox(
+          child: GestureDetector(
+            onTap: () {
+              debugPrint('설정 버튼 클릭됨 - GestureDetector');
+              onSettingsPressed();
+            },
+            child: Container(
+              width: 48,  // 더 넓은 터치 영역
+              height: 48, // 더 넓은 터치 영역
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Center(
+                child: SvgPicture.asset(
+                  'assets/images/icon_profile.svg',
                   width: SpacingTokens.profileIconSize,
                   height: SpacingTokens.profileIconSize,
-                  child: SvgPicture.asset(
-                    'assets/images/icon_profile.svg',
-                    width: SpacingTokens.profileIconSize,
-                    height: SpacingTokens.profileIconSize,
-                    placeholderBuilder: (context) => Icon(
-                      Icons.person,
-                      color: ColorTokens.secondary,
-                      size: SpacingTokens.profileIconSize,
-                    ),
+                  placeholderBuilder: (context) => Icon(
+                    Icons.person,
+                    color: ColorTokens.secondary,
+                    size: SpacingTokens.profileIconSize,
                   ),
                 ),
               ),

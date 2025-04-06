@@ -100,6 +100,12 @@ class TranslationService {
     if (text.isEmpty) {
       return '';
     }
+    
+    // 특수 마커 텍스트인 경우 번역하지 않고 빈 문자열 반환
+    if (text == '___PROCESSING___' || text == 'processing' || text.contains('텍스트 처리 중')) {
+      debugPrint('TranslationService: 특수 마커 텍스트("$text") 감지됨 - 번역 생략');
+      return '';
+    }
 
     // 언어 코드 검증 및 기본값 설정
     final effectiveTargetLanguage = targetLanguage ?? TargetLanguage.DEFAULT;
