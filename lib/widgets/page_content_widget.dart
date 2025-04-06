@@ -310,8 +310,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 텍스트 처리 중 표시
-          if (_isProcessingText)
-            const DotLoadingIndicator(message: '페이지 처리 중...')
+          if (_isProcessingText || widget.page.originalText == '___PROCESSING___')
+            const DotLoadingIndicator(message: '텍스트 처리 중이에요!')
           // 처리된 텍스트가 있는 경우
           else if (_processedText != null) ...[
             Builder(builder: (context) {
@@ -384,8 +384,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               );
             }),
           ]
-          // 처리된 텍스트가 없는 경우
-          else if (widget.page.originalText.isNotEmpty || widget.isLoadingImage)
+          // 처리된 텍스트가 없는 경우 (특수 처리 중 문자열이 아닌 경우)
+          else if ((widget.page.originalText.isNotEmpty && widget.page.originalText != '___PROCESSING___') || widget.isLoadingImage)
             const Center(
               child: DotLoadingIndicator(message: '텍스트 처리 중...'),
             )

@@ -134,19 +134,37 @@ class EnhancedOcrService {
   }
 
   /// 텍스트 처리 (모드에 따라 다르게 처리)
-  Future<ProcessedText> processText(
-    String text,
-    String mode,
-  ) async {
-    if (text.isEmpty) {
-      return ProcessedText(fullOriginalText: '');
-    }
-
+  Future<ProcessedText> processText(String text, String mode) async {
     try {
-      // 언어 학습 모드 처리 (항상 사용)
-      return await _processLanguageLearning(text);
+      // 입력 텍스트 확인
+      if (text.isEmpty) {
+        debugPrint('OCR processText: 빈 텍스트 입력');
+        return ProcessedText(fullOriginalText: '');
+      }
+      
+      // 특수 처리 중 문자열인 경우 처리 없이 반환
+      if (text == '___PROCESSING___') {
+        debugPrint('OCR processText: 특수 처리 중 문자열 감지, 처리 생략');
+        return ProcessedText(
+          fullOriginalText: text,
+          fullTranslatedText: '',
+          segments: [], // 빈 세그먼트 목록 제공
+          showFullText: false,
+          showPinyin: true,
+          showTranslation: true,
+        );
+      }
+      
+      // 모드 선택
+      switch (mode) {
+        case "languageLearning":
+          return await _processLanguageLearning(text);
+        default:
+          debugPrint('알 수 없는 모드: $mode, 기본값(languageLearning) 사용');
+          return await _processLanguageLearning(text);
+      }
     } catch (e) {
-      debugPrint('텍스트 처리 오류: $e');
+      debugPrint('OCR 처리 중 오류 발생: $e');
       return ProcessedText(fullOriginalText: text);
     }
   }

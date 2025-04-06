@@ -827,7 +827,7 @@ class NoteService {
       final docRef = await _notesCollection.add(noteData);
       final noteId = docRef.id;
       
-      // 3. 첫 번째 이미지 처리 (동기 처리)
+      // 3. 첫 번째 이미지 처리 (업로드만 동기적으로 처리)
       if (imageFiles.isNotEmpty) {
         try {
           // 첫 번째 이미지 업로드
@@ -836,38 +836,49 @@ class NoteService {
           // 노트에 이미지 URL 추가 (썸네일로 사용)
           await _notesCollection.doc(noteId).update({
             'imageUrl': imageUrl,
+            'processingStatus': 'uploading', // 처리 상태 표시
           });
           
-          await _processImageAndCreatePage(noteId, imageFiles[0]);
+          // 빈 페이지 생성 (OCR 처리 없이)
+          final page = await _pageService.createPage(
+            noteId: noteId,
+            originalText: '텍스트 처리 중...', // 처리 중임을 표시
+            translatedText: '',
+            pageNumber: 1,
+            imageFile: imageFiles[0]
+          );
           
-          // 진행률 콜백 호출 (첫 페이지 완료)
+          // 페이지 캐싱
+          if (page != null) {
+            await _cacheService.cachePage(noteId, page);
+          }
+          
+          // 진행률 콜백 호출 (첫 페이지 업로드 완료)
           if (progressCallback != null && !silentProgress) {
             progressCallback(1);
           }
         } catch (e) {
-          debugPrint('첫 번째 이미지 처리 중 오류: $e');
+          debugPrint('첫 번째 이미지 업로드 중 오류: $e');
           // 첫 페이지 처리 실패 시 페이지 카운트 감소
           await _usageLimitService.decrementPageCount();
           // 오류가 있더라도 계속 진행
         }
       }
       
-      // 4. 백그라운드에서 나머지 이미지 처리 (사용자가 이미 페이지를 볼 수 있게 함)
-      if (imageFiles.length > 1) {
-        // 백그라운드 처리 플래그 설정
-        await _notesCollection.doc(noteId).update({
-          'isProcessingBackground': true,
-          'totalImagesToProcess': imageFiles.length,
-          'processedImagesCount': 1, // 첫 이미지는 이미 처리됨
-        });
-        
-        // 백그라운드에서 나머지 이미지 처리 (비동기)
-        _processRemainingImagesInBackground(
-          noteId,
-          imageFiles.sublist(1),
-          targetLanguage,
-        );
-      }
+      // 4. 백그라운드에서 모든 이미지 처리 (처음부터 모든 이미지 OCR 처리)
+      // 백그라운드 처리 플래그 설정
+      await _notesCollection.doc(noteId).update({
+        'isProcessingBackground': true,
+        'totalImagesToProcess': imageFiles.length,
+        'processedImagesCount': 0, // 모든 이미지가 OCR 처리 대기 중
+      });
+      
+      // 백그라운드에서 모든 이미지 처리 (비동기)
+      _processAllImagesInBackground(
+        noteId,
+        imageFiles,
+        targetLanguage,
+      );
       
       // 5. 노트 정보 반환
       final docSnapshot = await _notesCollection.doc(noteId).get();
@@ -889,8 +900,8 @@ class NoteService {
     }
   }
   
-  /// 백그라운드에서 나머지 이미지 처리 (비동기)
-  Future<void> _processRemainingImagesInBackground(
+  /// 백그라운드에서 모든 이미지 처리 (비동기)
+  Future<void> _processAllImagesInBackground(
     String noteId,
     List<File> imageFiles,
     String? targetLanguage,
@@ -905,15 +916,16 @@ class NoteService {
       
       debugPrint('백그라운드에서 ${imageFiles.length}개 이미지 처리 시작');
       
-      // 첫 번째 이미지는 이미 처리했으므로 두번째 이미지부터 시작 (인덱스 1부터)
+      // 모든 이미지 처리 (OCR 및 페이지 업데이트)
       for (int i = 0; i < imageFiles.length; i++) {
         File imageFile = imageFiles[i];
         
         try {
-          // 이미지 처리 및 페이지 생성
+          // 이미지 처리 및 페이지 생성/업데이트
           final pageData = await _processImageAndCreatePage(
             noteId,
             imageFile,
+            pageNumber: i + 1,
             targetLanguage: targetLanguage,
             shouldProcess: true, // OCR 처리 활성화
           );
@@ -927,19 +939,39 @@ class NoteService {
               await _notesCollection.doc(noteId).update({
                 'imageUrl': pageData['imageUrl'],
                 'updatedAt': DateTime.now(),
+                'extractedText': pageData['extractedText'] ?? '',
+                'translatedText': pageData['translatedText'] ?? '',
               });
               
               // 캐시 정리 (썸네일 이미지가 업데이트되었으므로)
               await _cacheService.removeCachedNote(noteId);
             }
+            
+            // 처리 상태 업데이트
+            await _notesCollection.doc(noteId).update({
+              'processedImagesCount': processedCount,
+              'updatedAt': DateTime.now(),
+            });
           }
         } catch (e) {
-          debugPrint('이미지 ${i + 2} 처리 중 오류: $e');
+          debugPrint('이미지 ${i + 1} 처리 중 오류: $e');
           // 이미지 처리 실패 시 페이지 카운트 감소
           await _usageLimitService.decrementPageCount();
           // OCR 페이지 카운트도 롤백
           await _rollbackOcrPageCount();
           errorCount++;
+        }
+        
+        // 처리 중인 페이지 상태 업데이트를 실시간으로 저장
+        if (i == 0) {
+          // 첫 페이지 처리 완료 시 SharedPreferences에 표시
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('first_page_processed_$noteId', true);
+          
+          // 노트도 업데이트
+          await _notesCollection.doc(noteId).update({
+            'firstPageProcessed': true,
+          });
         }
       }
       

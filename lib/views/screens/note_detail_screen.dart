@@ -845,10 +845,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     setState(() {});
   }
   
-  // 페이지가 완전히 로드되었는지 확인
-  bool _isPageFullyLoaded(page_model.Page? page) {
-    if (page == null) return false;
-    if (page.originalText.isEmpty || page.originalText == 'processing') return false;
+  // 페이지가 완전히 로드되었는지 확인 (이미지, 텍스트 등)
+  bool _isPageFullyLoaded(page_model.Page page) {
+    if (page.originalText.isEmpty || 
+        page.originalText == 'processing' || 
+        page.originalText == '___PROCESSING___') return false;
     return true;
   }
 
@@ -1620,10 +1621,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                 spacing: 4.0,
                 image: Image.asset(
                   _tooltipStep == 1 
-                    ? 'assets/images/note_help.png'
+                    ? 'assets/images/note_help_1.png'
                     : _tooltipStep == 2
-                      ? 'assets/images/note_help.png' // 두 번째 단계 이미지
-                      : 'assets/images/note_help.png', // 세 번째 단계 이미지
+                      ? 'assets/images/note_help_2.png' // 두 번째 단계 이미지
+                      : 'assets/images/note_help_3.png', // 세 번째 단계 이미지
                   width: double.infinity,
                   fit: BoxFit.contain,
                 ),
@@ -1921,8 +1922,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             final serverPage = page_model.Page.fromFirestore(pageDoc);
             
             // 페이지가 이미 처리 완료되었으나 로컬 상태가 업데이트되지 않은 경우
-            if (serverPage.originalText.isNotEmpty && serverPage.originalText != 'processing') {
+            if (serverPage.originalText.isNotEmpty && 
+                serverPage.originalText != 'processing' && 
+                serverPage.originalText != '___PROCESSING___') {
               debugPrint('서버에서 처리 완료된 페이지 발견: ${currentPage.id}, 로컬 상태 업데이트');
+              
               
               // 페이지 매니저 내 페이지 목록 업데이트
               final updatedPages = _pageManager.pages.map((p) {
@@ -1976,7 +1980,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     if (_isProcessingText) {
       debugPrint('텍스트 처리 중 화면 표시');
       return const Center(
-        child: DotLoadingIndicator(message: '텍스트 처리 중...'),
+        child: DotLoadingIndicator(message: '텍스트 처리 중이에요!'),
+      );
+    }
+    
+    // 텍스트 처리 중이거나 특수 처리 중 문자열이 있는 경우
+    if (_isProcessingText || currentPage.originalText == '___PROCESSING___') {
+      debugPrint('텍스트 처리 중 화면 표시');
+      return const Center(
+        child: DotLoadingIndicator(message: '텍스트 처리 중이에요!'),
       );
     }
     

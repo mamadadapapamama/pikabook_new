@@ -344,6 +344,19 @@ class PageContentService {
       debugPrint(' - 번역 텍스트: ${translatedText.length}자');
       debugPrint(' - 모드: $textProcessingMode');
       
+      // 특수 처리 중 문자열인 경우 OCR 처리 없이 기본 객체 반환
+      if (originalText == '___PROCESSING___') {
+        debugPrint('PageContentService: 특수 처리 중 문자열 감지, OCR 처리 생략');
+        return ProcessedText(
+          fullOriginalText: originalText,
+          fullTranslatedText: '',
+          segments: [], // 빈 세그먼트 목록 제공
+          showFullText: false,
+          showPinyin: true,
+          showTranslation: true,
+        );
+      }
+      
       try {
       // 텍스트 처리
       ProcessedText processedText =

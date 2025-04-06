@@ -13,14 +13,14 @@ class PikabookLoader extends StatelessWidget {
 
   const PikabookLoader({
     Key? key,
-    this.title = '스마트 노트를 만들고 있어요.',
+    this.title = '스마트한 학습 노트를 만들고 있어요.',
     this.subtitle = '잠시만 기다려 주세요!',
   }) : super(key: key);
 
   /// 로더를 다이얼로그로 표시하는 정적 메서드
   static Future<void> show(
     BuildContext context, {
-    String title = '스마트 노트를 만들고 있어요.',
+    String title = '스마트한 학습 노트를 만들고 있어요.',
     String subtitle = '잠시만 기다려 주세요!',
   }) async {
     if (!context.mounted) {
@@ -38,15 +38,19 @@ class PikabookLoader extends StatelessWidget {
         showDialog(
           context: context,
           barrierDismissible: false,
+          barrierColor: Colors.black54, // 배경 색상 조정
           builder: (context) => WillPopScope(
             onWillPop: () async => false, // 뒤로 가기 방지
-            child: Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.all(24),
-              elevation: 0,
-              child: PikabookLoader(
-                title: title,
-                subtitle: subtitle,
+            child: Material(
+              type: MaterialType.transparency, // 배경을 투명하게 유지
+              child: Dialog(
+                backgroundColor: Colors.transparent,
+                insetPadding: const EdgeInsets.all(24),
+                elevation: 0,
+                child: PikabookLoader(
+                  title: title,
+                  subtitle: subtitle,
+                ),
               ),
             ),
           ),
