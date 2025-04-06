@@ -75,8 +75,8 @@ class ImageService {
         debugPrint('Firebase Storage 업로드 실패, 로컬만 저장됨: $e');
       }
       
-      // 스토리지 사용량 추적 (사용량 제한 확인 후 업데이트)
-      await _trackStorageUsage(compressedFileSize);
+      // 스토리지 사용량 추적 - 압축된 실제 파일 크기 사용
+      await _trackStorageUsage(compressedFile);
       
       debugPrint('이미지 압축 완료: ${(originalFileSize / 1024).toStringAsFixed(2)}KB -> ${(compressedFileSize / 1024).toStringAsFixed(2)}KB (${(100 - (compressedFileSize / originalFileSize * 100)).toStringAsFixed(0)}% 감소)');
 
@@ -124,12 +124,18 @@ class ImageService {
   }
   
   /// 저장 공간 사용량 추적
-  Future<bool> _trackStorageUsage(int sizeInBytes) async {
+  Future<bool> _trackStorageUsage(File compressedFile) async {
     try {
-      final canAddStorage = await _usageLimitService.addStorageUsage(sizeInBytes);
+      // 실제 파일 크기 측정
+      final actualSize = await compressedFile.length();
+      
+      // 사용량 추적
+      final canAddStorage = await _usageLimitService.addStorageUsage(actualSize);
       if (!canAddStorage) {
         debugPrint('⚠️ 저장 공간 제한에 도달했습니다. 이미지를 추가로 저장할 수 없습니다.');
       }
+      
+      debugPrint('저장 공간 사용량 추가: ${(actualSize / 1024).toStringAsFixed(2)}KB');
       return canAddStorage;
     } catch (e) {
       debugPrint('저장 공간 사용량 추적 중 오류: $e');

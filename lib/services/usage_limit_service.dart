@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 /// 사용량 제한 관리 서비스
 /// 베타 기간 동안 사용자의 사용량을 추적하고 제한을 적용합니다.
@@ -581,7 +583,7 @@ class UsageLimitService {
     debugPrint('flashcards 사용량 증가: ${currentUsage + 1}/무제한');
     return true;
   }
-
+  
   /// 플래시카드 사용량 감소
   Future<void> decrementFlashcardCount() async {
     final usageData = await _loadUsageData();
@@ -671,4 +673,62 @@ class UsageLimitService {
     _lastFetchTime = null;
     debugPrint('사용량 데이터 캐시 무효화됨');
   }
-}
+
+  /// 저장 공간 사용량 재계산
+  Future<int> recalculateStorageUsage() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final imageDir = Directory('${appDir.path}/images');
+      
+      if (!await imageDir.exists()) {
+        debugPrint('이미지 디렉토리가 존재하지 않음');
+        return 0;
+      }
+      
+      int totalSize = 0;
+      int fileCount = 0;
+      
+      debugPrint('저장 공간 사용량 재계산 시작...');
+      
+      await for (final entity in imageDir.list(recursive: true)) {
+        if (entity is File) {
+          final fileSize = await entity.length();
+          totalSize += fileSize;
+          fileCount++;
+          
+          if (fileCount % 20 == 0) { // 20개 파일마다 로그 출력
+            debugPrint('진행 중: $fileCount개 파일 처리, 현재 크기: ${(totalSize / 1024 / 1024).toStringAsFixed(2)}MB');
+          }
+        }
+      }
+      
+      // 이전 사용량 저장
+      final previousUsage = await _loadUsageData();
+      final oldStorageUsage = previousUsage['storageUsageBytes'] ?? 0;
+      
+      // 재계산된 값으로 저장 공간 사용량 업데이트
+      await resetStorageUsage();
+      await addStorageUsage(totalSize);
+      
+      final limitInMB = (MAX_FREE_STORAGE_BYTES / (1024 * 1024)).toStringAsFixed(0);
+      debugPrint('저장 공간 사용량 재계산 완료: ${fileCount}개 파일');
+      debugPrint('이전: ${(oldStorageUsage / 1024 / 1024).toStringAsFixed(2)}MB → 현재: ${(totalSize / 1024 / 1024).toStringAsFixed(2)}MB (제한: ${limitInMB}MB)');
+      
+      return totalSize;
+    } catch (e) {
+      debugPrint('저장 공간 사용량 재계산 중 오류: $e');
+      return 0;
+    }
+  }
+
+  /// 저장 공간 사용량 초기화
+  Future<void> resetStorageUsage() async {
+    final usageData = await _loadUsageData();
+    usageData['storageUsageBytes'] = 0;
+    await _saveUsageData(usageData);
+    debugPrint('저장 공간 사용량 초기화 완료');
+    
+    // 캐시 무효화
+    invalidateCache();
+  }
+} 

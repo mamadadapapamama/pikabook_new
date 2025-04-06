@@ -43,6 +43,8 @@ import 'home_screen.dart';
 import '../../services/translation_service.dart';
 import '../../models/flash_card.dart';
 import '../../models/processed_text.dart';
+import 'dart:ui' as ui;
+import 'package:provider/provider.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -95,6 +97,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   Set<int> _previouslyVisitedPages = <int>{};
   late PageController _pageController;
   bool _showTooltip = false; // 툴팁 표시 여부
+  int _tooltipStep = 1; // 툴팁 단계 추적
+  final int _totalTooltipSteps = 2; // 총 툴팁 단계 수
 
   // 의존성 관련 변수들
   ThemeData? _theme;
@@ -1584,15 +1588,25 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             right: 16,
             child: HelpTextTooltip(
               key: const Key('note_detail_tooltip'),
-              text: "첫 노트가 만들어졌어요!",
-              description: "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요.",
+              text: _tooltipStep == 1 
+                ? "첫 노트가 만들어졌어요! (1/2)" 
+                : "슬라이드 제스처로 더 많은 기능을 사용해보세요! (2/2)",
+              description: _tooltipStep == 1
+                ? "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요."
+                : "텍스트를 오른쪽으로 슬라이드하면 플래시카드를 만들 수 있고, 왼쪽으로 슬라이드하면 텍스트를 삭제할 수 있어요.",
               showTooltip: true,
               onDismiss: () {
                 DebugUtils.log('📝 노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
                 DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 시작: true -> false');
+                
+                // 상태 변경 먼저 수행
                 setState(() {
                   _showTooltip = false;
                 });
+                
+                // 사용자 기본 설정에 툴팁 표시 완료 저장 (비동기 작업이지만 UI 업데이트에는 영향 없음)
+                _saveTooltipShownPreference();
+                
                 DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 완료');
               },
               backgroundColor: ColorTokens.primaryverylight,
@@ -1601,11 +1615,31 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               tooltipPadding: const EdgeInsets.all(16),
               spacing: 4.0,
               image: Image.asset(
-                'assets/images/note_help.png',
+                _tooltipStep == 1 
+                  ? 'assets/images/note_help.png'
+                  : 'assets/images/note_help.png', // 임시로 동일한 이미지 사용
                 width: double.infinity,
                 fit: BoxFit.contain,
               ),
               child: Container(), // 빈 컨테이너 (툴팁만 표시)
+              currentStep: _tooltipStep,
+              totalSteps: _totalTooltipSteps,
+              onNextStep: () {
+                // 다음 단계로 이동
+                if (_tooltipStep < _totalTooltipSteps) {
+                  setState(() {
+                    _tooltipStep += 1;
+                  });
+                }
+              },
+              onPrevStep: () {
+                // 이전 단계로 이동
+                if (_tooltipStep > 1) {
+                  setState(() {
+                    _tooltipStep -= 1;
+                  });
+                }
+              },
             ),
           ),
       ],
@@ -1958,5 +1992,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         onDeleteSegment: _handleDeleteSegment,
       ),
     );
+  }
+
+  // 툴팁 표시 완료 상태를 저장하는 메소드
+  void _saveTooltipShownPreference() {
+    DebugUtils.log('📝 툴팁 표시 완료 상태 저장 시작');
+    // 백그라운드에서 SharedPreferences 작업 처리
+    Future.microtask(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('note_detail_tooltip_shown', true);
+        DebugUtils.log('📝 툴팁 표시 완료 상태 저장 성공');
+      } catch (e) {
+        DebugUtils.log('📝 툴팁 표시 완료 상태 저장 실패: $e');
+      }
+    });
   }
 }

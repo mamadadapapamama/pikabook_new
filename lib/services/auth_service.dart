@@ -427,6 +427,11 @@ class AuthService {
         'last_signin_provider',
         'has_multiple_accounts',
         'cache_current_user_id',
+        // 툴팁 관련 설정 추가
+        'note_detail_tooltip_shown',
+        'tooltip_shown_after_first_page',
+        'home_screen_tooltip_shown',
+        'first_note_created',
       ];
       
       for (final key in keys) {

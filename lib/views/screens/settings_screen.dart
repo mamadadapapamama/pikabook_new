@@ -12,6 +12,7 @@ import '../../widgets/common/pika_app_bar.dart';
 import '../../widgets/common/usage_dialog.dart';
 import '../../services/auth_service.dart';
 import '../../services/plan_service.dart';
+import '../../services/usage_limit_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -50,6 +51,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Map<String, int> _planLimits = {};
   Map<String, dynamic> _currentUsage = {};
   Map<String, double> _usagePercentages = {};
+  
+  // 저장 공간 사용량 재계산 상태
+  bool _isRecalculating = false;
   
   @override
   void initState() {
@@ -870,13 +874,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
   
   // 사용량 프로그레스 바 위젯
-  Widget _buildUsageProgressBars() {
-    // 표시할 주요 사용량 항목
-    final List<Map<String, dynamic>> usageItems = [
+  Widget _buildUsageSummary() {
+    final usageItems = [
       {
         'key': 'ocrPages',
-        'label': 'OCR 페이지',
-        'current': _currentUsage['ocrPages'] ?? 0,
+        'label': 'OCR',
+        'current': '${_currentUsage['ocrPages'] ?? 0}',
         'limit': _planLimits['ocrPages'] ?? 1,
         'percentage': _usagePercentages['ocr'] ?? 0.0,
       },
@@ -886,6 +889,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'current': _formatBytes(_currentUsage['storageUsageBytes'] ?? 0),
         'limit': _formatBytes(_planLimits['storageBytes'] ?? 1),
         'percentage': _usagePercentages['storage'] ?? 0.0,
+        'recalculateAction': () => _recalculateStorageUsage(), // 재계산 액션 추가
       },
     ];
     
@@ -908,6 +912,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: ColorTokens.textSecondary,
                     ),
                   ),
+                  if (item['recalculateAction'] != null && item['key'] == 'storageBytes')
+                    GestureDetector(
+                      onTap: _isRecalculating 
+                        ? null 
+                        : (item['recalculateAction'] as Function),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.refresh,
+                            size: 14,
+                            color: _isRecalculating
+                                ? ColorTokens.disabled
+                                : ColorTokens.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _isRecalculating ? '계산 중...' : '재계산',
+                            style: TypographyTokens.caption.copyWith(
+                              color: _isRecalculating
+                                  ? ColorTokens.disabled
+                                  : ColorTokens.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Text(
                     '${item['current']} / ${item['limit']}',
                     style: TypographyTokens.caption.copyWith(
@@ -1000,6 +1031,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     } else {
       return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+  }
+
+  // 저장 공간 사용량 재계산
+  Future<void> _recalculateStorageUsage() async {
+    setState(() {
+      _isRecalculating = true;
+    });
+    
+    try {
+      final usageLimitService = UsageLimitService();
+      await usageLimitService.recalculateStorageUsage();
+      
+      // 사용량 정보 새로고침
+      await _loadUsageLimits();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('저장 공간 사용량이 재계산되었습니다.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('저장 공간 사용량 재계산 중 오류가 발생했습니다: $e'),
+            backgroundColor: ColorTokens.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRecalculating = false;
+        });
+      }
     }
   }
 }

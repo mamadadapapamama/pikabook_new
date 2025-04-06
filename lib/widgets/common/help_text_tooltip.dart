@@ -29,6 +29,10 @@ class HelpTextTooltip extends StatefulWidget {
   final Color? textColor;
   final double spacing; // 버튼과 툴팁 사이의 간격
   final HelpTextTooltipStyle style; // 추가된 스타일 프리셋
+  final int currentStep; // 현재 단계
+  final int totalSteps; // 전체 단계
+  final VoidCallback? onNextStep; // 다음 단계로 이동
+  final VoidCallback? onPrevStep; // 이전 단계로 이동
 
   const HelpTextTooltip({
     Key? key,
@@ -46,6 +50,10 @@ class HelpTextTooltip extends StatefulWidget {
     this.textColor,
     this.spacing = 4.0, // 기본값 4px
     this.style = HelpTextTooltipStyle.primary, // 기본 스타일
+    this.currentStep = 1,
+    this.totalSteps = 1,
+    this.onNextStep,
+    this.onPrevStep,
   }) : super(key: key);
 
   @override
@@ -156,41 +164,62 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 제목과 닫기 버튼
+                      // 제목과 닫기 버튼, 단계 표시
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: Text(
-                              widget.text,
-                              style: TypographyTokens.body1En.copyWith(
-                                color: ColorTokens.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  widget.text,
+                                  style: TypographyTokens.body1En.copyWith(
+                                    color: ColorTokens.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                if (widget.totalSteps > 1) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: ColorTokens.primary.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '${widget.currentStep}/${widget.totalSteps}',
+                                      style: TypographyTokens.caption.copyWith(
+                                        color: ColorTokens.primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
                           // 닫기 버튼 (터치 영역 확장 및 시각적 피드백 개선)
-                          GestureDetector(
-                            onTap: () {
-                              DebugUtils.log('📣 헬프텍스트 닫기 버튼 클릭됨!! - 이벤트 발생');
-                              if (widget.onDismiss != null) {
-                                DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 시작');
-                                widget.onDismiss!();
-                                DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 완료');
-                              } else {
-                                DebugUtils.log('⚠️ 헬프텍스트 onDismiss 콜백이 null입니다');
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(16.0), // 더 큰 터치 영역
-                              decoration: const BoxDecoration(
-                                color: Colors.transparent,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                color: ColorTokens.textPrimary,
-                                size: 24, // 아이콘
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                DebugUtils.log('📣 헬프텍스트 닫기 버튼 클릭됨!! - 이벤트 발생');
+                                if (widget.onDismiss != null) {
+                                  DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 시작');
+                                  widget.onDismiss!();
+                                  DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 완료');
+                                } else {
+                                  DebugUtils.log('⚠️ 헬프텍스트 onDismiss 콜백이 null입니다');
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(24),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: const Icon(
+                                  Icons.close,
+                                  color: ColorTokens.textPrimary,
+                                  size: 24,
+                                ),
                               ),
                             ),
                           ),
@@ -216,6 +245,95 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                             fontSize: 14,
                             fontWeight: FontWeight.w400,
                           ),
+                        ),
+                      ],
+                      
+                      // 이전/다음 단계 버튼 (다중 단계인 경우에만)
+                      if (widget.totalSteps > 1) ...[
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            // 이전 버튼
+                            if (widget.currentStep > 1)
+                              Material(
+                                color: ColorTokens.greyLight,
+                                borderRadius: BorderRadius.circular(8),
+                                child: InkWell(
+                                  onTap: () {
+                                    DebugUtils.log('📣 헬프텍스트 이전 버튼 클릭됨!!');
+                                    if (widget.onPrevStep != null) {
+                                      widget.onPrevStep!();
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, 
+                                      vertical: 8
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.arrow_back_ios,
+                                          size: 14,
+                                          color: ColorTokens.textSecondary,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '이전',
+                                          style: TypographyTokens.button.copyWith(
+                                            color: ColorTokens.textSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else
+                              const SizedBox(width: 80), // 이전 버튼 없을 때 공간 유지
+                              
+                            // 다음 버튼
+                            if (widget.currentStep < widget.totalSteps)
+                              Material(
+                                color: ColorTokens.primary,
+                                borderRadius: BorderRadius.circular(8),
+                                child: InkWell(
+                                  onTap: () {
+                                    DebugUtils.log('📣 헬프텍스트 다음 버튼 클릭됨!!');
+                                    if (widget.onNextStep != null) {
+                                      widget.onNextStep!();
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, 
+                                      vertical: 8
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          '다음',
+                                          style: TypographyTokens.button.copyWith(
+                                            color: ColorTokens.textLight,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Icon(
+                                          Icons.arrow_forward_ios,
+                                          size: 14,
+                                          color: ColorTokens.textLight,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              )
+                          ],
                         ),
                       ],
                     ],
