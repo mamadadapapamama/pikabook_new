@@ -213,14 +213,21 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                                   GestureDetector(
                                     onTap: () {
                                       DebugUtils.log('📣 헬프텍스트 닫기 버튼 클릭됨!! - 이벤트 발생');
-                                      Navigator.of(dialogContext).pop(); // 다이얼로그 닫기
-                                      if (widget.onDismiss != null) {
-                                        DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 시작');
-                                        widget.onDismiss!();
-                                        DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 완료');
-                                      } else {
-                                        DebugUtils.log('⚠️ 헬프텍스트 onDismiss 콜백이 null입니다');
+                                      // 다이얼로그가 열려있는지 확인하고 닫기
+                                      if (Navigator.of(dialogContext).canPop()) {
+                                        Navigator.of(dialogContext).pop();
                                       }
+                                      
+                                      // onDismiss 콜백을 별도 스레드에서 실행하여 UI 업데이트 보장
+                                      Future.microtask(() {
+                                        if (widget.onDismiss != null) {
+                                          DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 시작 (지연 실행)');
+                                          widget.onDismiss!();
+                                          DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 완료');
+                                        } else {
+                                          DebugUtils.log('⚠️ 헬프텍스트 onDismiss 콜백이 null입니다');
+                                        }
+                                      });
                                     },
                                     child: Container(
                                       width: 40,
@@ -287,7 +294,7 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                                     
                                     if (widget.currentStep > 1)
                                       const SizedBox(width: 8),
-                                      
+                                    
                                     if (widget.currentStep < widget.totalSteps) // 마지막 단계가 아닌 경우에만 다음 버튼 표시
                                       TextButton(
                                         onPressed: () {

@@ -83,7 +83,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     
     return Container(
       width: double.infinity,
-      height: 70, // 높이를 70으로 증가
+      height: 64, // 필요한 최소 높이로 조정
       color: Colors.white,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -100,7 +100,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: SpacingTokens.sm,
-              vertical: SpacingTokens.md, // 여백 증가
+              vertical: SpacingTokens.sm, // 최적화된 여백
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -146,27 +146,21 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // 페이지 번호 표시 - 최소 너비 설정
-                    SizedBox(
-                      width: 40, // 페이지 번호 부분 너비 조정
-                      child: Text(
-                        '${widget.currentPageIndex + 1}/${widget.totalPages}',
-                        style: TypographyTokens.body2.copyWith(
-                          color: ColorTokens.textSecondary,
-                          fontSize: 12, // 폰트 크기 줄임
-                        ),
-                        textAlign: TextAlign.center,
+                    // 페이지 번호 표시
+                    Text(
+                      '${widget.currentPageIndex + 1}/${widget.totalPages}',
+                      style: TypographyTokens.caption.copyWith(
+                        color: ColorTokens.textSecondary,
                       ),
+                      textAlign: TextAlign.center,
                     ),
+                    const SizedBox(width: 4), // 작은 간격 추가
                     // 다음 페이지 버튼
-                    SizedBox(
-                      width: 32, // 고정 너비 설정
-                      child: _buildNavigationButton(
-                        icon: Icons.arrow_forward_ios_rounded,
-                        onTap: widget.currentPageIndex < widget.totalPages - 1 
-                            ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
-                            : null,
-                      ),
+                    _buildNavigationButton(
+                      icon: Icons.arrow_forward_ios_rounded,
+                      onTap: widget.currentPageIndex < widget.totalPages - 1 
+                          ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
+                          : null,
                     ),
                   ],
                 ),
@@ -208,10 +202,10 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
       child: Container(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(
+        decoration: onTap != null ? BoxDecoration(
           shape: BoxShape.circle,
-          color: onTap != null ? ColorTokens.surface : ColorTokens.greyLight,
-        ),
+          color: ColorTokens.surface,
+        ) : null,
         child: Center(
           child: Icon(
             icon, 

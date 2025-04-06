@@ -1597,13 +1597,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   DebugUtils.log('📝 노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
                   DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 시작: true -> false');
                   
-                  // 상태 변경 먼저 수행
+                  // 명시적으로 상태를 false로 설정
                   setState(() {
                     _showTooltip = false;
+                    _tooltipStep = 1; // 툴팁 단계 초기화
                   });
                   
-                  // 사용자 기본 설정에 툴팁 표시 완료 저장 (비동기 작업이지만 UI 업데이트에는 영향 없음)
-                  _saveTooltipShownPreference();
+                  // 백그라운드에서 처리되지 않도록 즉시 처리
+                  SharedPreferences.getInstance().then((prefs) {
+                    prefs.setBool('note_detail_tooltip_shown', true);
+                    DebugUtils.log('📝 툴팁 표시 완료 상태 저장 성공 (즉시 처리)');
+                  }).catchError((e) {
+                    DebugUtils.log('📝 툴팁 표시 완료 상태 저장 실패: $e');
+                  });
                   
                   DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 완료');
                 },
@@ -2040,6 +2046,35 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           textReaderService: _textReaderService,
         ),
       ],
+    );
+  }
+
+  // 페이지 처리 성공 시 알림 표시
+  void _showProcessingSuccessSnackbar() {
+    if (!mounted) return;
+    
+    // 스낵바 표시 전에 _showTooltip이 true로 남아있는지 확인하고 강제로 초기화
+    if (_showTooltip) {
+      DebugUtils.log('📝 스낵바 표시 전 남아있는 툴팁 강제 종료');
+      setState(() {
+        _showTooltip = false;
+        _tooltipStep = 1;
+      });
+      
+      // 툴팁 상태 저장 처리
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setBool('note_detail_tooltip_shown', true);
+      }).catchError((e) {
+        DebugUtils.log('📝 툴팁 표시 완료 상태 저장 실패: $e');
+      });
+    }
+    
+    // 스낵바 표시
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('모든 페이지 처리가 완료되었습니다.'),
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 }
