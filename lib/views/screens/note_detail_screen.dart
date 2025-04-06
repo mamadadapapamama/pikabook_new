@@ -98,7 +98,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   late PageController _pageController;
   bool _showTooltip = false; // 툴팁 표시 여부
   int _tooltipStep = 1; // 툴팁 단계 추적
-  final int _totalTooltipSteps = 2; // 총 툴팁 단계 수
+  final int _totalTooltipSteps = 3; // 총 툴팁 단계 수 (2에서 3으로 변경)
 
   // 의존성 관련 변수들
   ThemeData? _theme;
@@ -1577,63 +1577,69 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         // 툴팁 표시 (처음 텍스트 처리가 완료된 경우)
         if (_showTooltip)
           Positioned(
-            bottom: 20,
-            left: 16,
-            right: 16,
+            bottom: 24,
+            left: 24,
+            right: 24,
             child: HelpTextTooltip(
               key: const Key('note_detail_tooltip'),
               text: _tooltipStep == 1 
-                ? "첫 노트가 만들어졌어요! (1/2)" 
-                : "슬라이드 제스처로 더 많은 기능을 사용해보세요! (2/2)",
-              description: _tooltipStep == 1
-                ? "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요."
-                : "텍스트를 오른쪽으로 슬라이드하면 플래시카드를 만들 수 있고, 왼쪽으로 슬라이드하면 텍스트를 삭제할 수 있어요.",
-              showTooltip: true,
-              onDismiss: () {
-                DebugUtils.log('📝 노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
-                DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 시작: true -> false');
-                
-                // 상태 변경 먼저 수행
-                setState(() {
-                  _showTooltip = false;
-                });
-                
-                // 사용자 기본 설정에 툴팁 표시 완료 저장 (비동기 작업이지만 UI 업데이트에는 영향 없음)
-                _saveTooltipShownPreference();
-                
-                DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 완료');
-              },
-              backgroundColor: ColorTokens.primaryverylight,
-              borderColor: ColorTokens.primaryMedium,
-              textColor: ColorTokens.textPrimary,
-              tooltipPadding: const EdgeInsets.all(16),
-              spacing: 4.0,
-              image: Image.asset(
-                _tooltipStep == 1 
-                  ? 'assets/images/note_help.png'
-                  : 'assets/images/note_help.png', // 임시로 동일한 이미지 사용
-                width: double.infinity,
-                fit: BoxFit.contain,
-              ),
-              child: Container(), // 빈 컨테이너 (툴팁만 표시)
-              currentStep: _tooltipStep,
-              totalSteps: _totalTooltipSteps,
-              onNextStep: () {
-                // 다음 단계로 이동
-                if (_tooltipStep < _totalTooltipSteps) {
+                ? "첫 노트가 만들어졌어요! \n 사전 검색과 플래시카드 만들기도 할수 있어요." 
+                : _tooltipStep == 2
+                  ? "다음 페이지로 이동은 스와이프나 화살표로!"
+                  : "불필요한 텍스트는 지워요.",
+                description: _tooltipStep == 1
+                  ? "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요."
+                  : _tooltipStep == 2
+                    ? "노트의 빈 공간을 왼쪽으로 슬라이드하거나, \n바텀 바의 화살표를 눌러 다음 장으로 넘어갈 수 있어요."
+                    : "잘못 인식된 문장은 왼쪽으로 슬라이드해 삭제할수 있어요.",
+                showTooltip: true,
+                onDismiss: () {
+                  DebugUtils.log('📝 노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
+                  DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 시작: true -> false');
+                  
+                  // 상태 변경 먼저 수행
                   setState(() {
-                    _tooltipStep += 1;
+                    _showTooltip = false;
                   });
-                }
-              },
-              onPrevStep: () {
-                // 이전 단계로 이동
-                if (_tooltipStep > 1) {
-                  setState(() {
-                    _tooltipStep -= 1;
-                  });
-                }
-              },
+                  
+                  // 사용자 기본 설정에 툴팁 표시 완료 저장 (비동기 작업이지만 UI 업데이트에는 영향 없음)
+                  _saveTooltipShownPreference();
+                  
+                  DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 완료');
+                },
+                backgroundColor: ColorTokens.primaryverylight,
+                borderColor: ColorTokens.primaryMedium,
+                textColor: ColorTokens.textPrimary,
+                tooltipPadding: const EdgeInsets.all(16),
+                spacing: 4.0,
+                image: Image.asset(
+                  _tooltipStep == 1 
+                    ? 'assets/images/note_help.png'
+                    : _tooltipStep == 2
+                      ? 'assets/images/note_help.png' // 두 번째 단계 이미지
+                      : 'assets/images/note_help.png', // 세 번째 단계 이미지
+                  width: double.infinity,
+                  fit: BoxFit.contain,
+                ),
+                child: Container(), // 빈 컨테이너 (툴팁만 표시)
+                currentStep: _tooltipStep,
+                totalSteps: _totalTooltipSteps,
+                onNextStep: () {
+                  // 다음 단계로 이동
+                  if (_tooltipStep < _totalTooltipSteps) {
+                    setState(() {
+                      _tooltipStep += 1;
+                    });
+                  }
+                },
+                onPrevStep: () {
+                  // 이전 단계로 이동
+                  if (_tooltipStep > 1) {
+                    setState(() {
+                      _tooltipStep -= 1;
+                    });
+                  }
+                },
             ),
           ),
       ],

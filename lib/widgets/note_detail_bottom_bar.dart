@@ -83,7 +83,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     
     return Container(
       width: double.infinity,
-      height: 56, // 높이를 56으로 설정
+      height: 70, // 높이를 70으로 증가
       color: Colors.white,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -100,7 +100,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: SpacingTokens.sm,
-              vertical: SpacingTokens.xs, // 여백 줄임
+              vertical: SpacingTokens.md, // 여백 증가
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -203,24 +203,23 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   
   // 네비게이션 버튼 위젯
   Widget _buildNavigationButton({required IconData icon, VoidCallback? onTap}) {
-    return IconButton(
-      onPressed: onTap != null ? () {
-        // 탭이 가능한 상태일 때만 실행
-        debugPrint('네비게이션 버튼 클릭: ${icon == Icons.arrow_back_ios_rounded ? "이전" : "다음"}');
-        
-        // 페이지 전환 직후 텍스트 렌더링 지연 방지를 위한 short delay
-        // 페이지 변경 콜백 호출
-        onTap();
-      } : null,
-      icon: Icon(
-        icon, 
-        color: onTap != null ? ColorTokens.secondary : ColorTokens.greyMedium,
-        size: SpacingTokens.iconSizeMedium,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: onTap != null ? ColorTokens.surface : ColorTokens.greyLight,
+        ),
+        child: Center(
+          child: Icon(
+            icon, 
+            color: onTap != null ? ColorTokens.secondary : ColorTokens.greyMedium,
+            size: SpacingTokens.iconSizeMedium,
+          ),
+        ),
       ),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
-      visualDensity: VisualDensity.compact,
-      splashRadius: SpacingTokens.iconSizeMedium,
     );
   }
   

@@ -407,7 +407,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             
             Text(
               '이미지를 기반으로 학습 노트를 만들어드립니다. \n카메라 촬영도 가능합니다.',
@@ -416,7 +416,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 color: ColorTokens.textSecondary,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             // CTA 버튼 - 이미지 업로드하기 (사용량 초과시 비활성화)
             _isButtonDisabled()
               ? Tooltip(

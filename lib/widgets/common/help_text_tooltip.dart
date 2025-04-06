@@ -225,10 +225,6 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                                     child: Container(
                                       width: 40,
                                       height: 40,
-                                      decoration: BoxDecoration(
-                                        color: ColorTokens.surface,
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
                                       child: Center(
                                         child: Icon(
                                           Icons.close,
@@ -270,62 +266,65 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
                                     if (widget.currentStep > 1) // 첫 단계가 아닌 경우에만 이전 버튼 표시
-                                      ElevatedButton(
+                                      TextButton(
                                         onPressed: () {
                                           Navigator.of(dialogContext).pop(); // 현재 다이얼로그 닫기
                                           if (widget.onPrevStep != null) {
                                             widget.onPrevStep!();
                                           }
                                         },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: ColorTokens.greyLight,
+                                        style: TextButton.styleFrom(
                                           foregroundColor: ColorTokens.textSecondary,
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(4),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          minimumSize: Size(10, 10),
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          textStyle: TypographyTokens.caption.copyWith(
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        child: Text('이전', style: TypographyTokens.button),
+                                        child: Text('이전'),
                                       ),
                                     
                                     if (widget.currentStep > 1)
                                       const SizedBox(width: 8),
                                       
                                     if (widget.currentStep < widget.totalSteps) // 마지막 단계가 아닌 경우에만 다음 버튼 표시
-                                      ElevatedButton(
+                                      TextButton(
                                         onPressed: () {
                                           Navigator.of(dialogContext).pop(); // 현재 다이얼로그 닫기
                                           if (widget.onNextStep != null) {
                                             widget.onNextStep!();
                                           }
                                         },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: ColorTokens.primary,
-                                          foregroundColor: Colors.white,
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(4),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: ColorTokens.primary,
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          minimumSize: Size(10, 10),
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          textStyle: TypographyTokens.caption.copyWith(
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        child: Text('다음', style: TypographyTokens.button),
+                                        child: Text('다음'),
                                       )
                                     else
-                                      ElevatedButton(
+                                      TextButton(
                                         onPressed: () {
                                           Navigator.of(dialogContext).pop(); // 다이얼로그 닫기
                                           if (widget.onDismiss != null) {
                                             widget.onDismiss!();
                                           }
                                         },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: ColorTokens.primary,
-                                          foregroundColor: Colors.white,
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(4),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: ColorTokens.primary,
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          minimumSize: Size(10, 10),
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          textStyle: TypographyTokens.caption.copyWith(
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        child: Text('완료', style: TypographyTokens.button),
+                                        child: Text('완료'),
                                       ),
                                   ],
                                 ),

@@ -242,7 +242,7 @@ class UsageLimitService {
     
     final usageInMB = ((currentUsage + bytes) / (1024 * 1024)).toStringAsFixed(2);
     final limitInMB = (MAX_FREE_STORAGE_BYTES / (1024 * 1024)).toStringAsFixed(0);
-    debugPrint('저장 공간 사용량 증가: ${usageInMB}MB/${limitInMB}MB');
+    debugPrint('저장 공간 사용량 증가: ${usageInMB}MB/${limitInMB}MB (${bytes / 1024} KB 추가)');
     
     return (currentUsage + bytes) <= MAX_FREE_STORAGE_BYTES;
   }
@@ -291,6 +291,10 @@ class UsageLimitService {
     final ttsUsage = usageData['ttsRequests'] ?? 0;
     final translatedChars = usageData['translatedChars'] ?? 0;
     final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
+    
+    // 디버그 로그 추가: 저장 공간 사용량 확인
+    final storagePercent = ((storageUsageBytes * 100.0) / MAX_FREE_STORAGE_BYTES);
+    debugPrint('현재 저장 공간 사용량: ${(storageUsageBytes / 1024 / 1024).toStringAsFixed(2)}MB/${(MAX_FREE_STORAGE_BYTES / 1024 / 1024).toStringAsFixed(0)}MB (${storagePercent.toStringAsFixed(2)}%)');
     
     // 각 제한 초과 여부 확인
     final bool ocrLimitReached = ocrUsage >= MAX_FREE_OCR_PAGES;
@@ -572,7 +576,9 @@ class UsageLimitService {
 
   /// 플래시카드 사용량 증가
   Future<bool> incrementFlashcardCount() async {
-    // 현재는 플래시카드에 제한이 없으므로 항상 true 반환
+    // 플래시카드 사용량은 추적하지 않고 항상 true 반환
+    // 실제 사용량 증가 코드 주석 처리
+    /* 
     final usageData = await _loadUsageData();
     final currentUsage = usageData['flashcards'] ?? 0;
     
@@ -581,11 +587,15 @@ class UsageLimitService {
     await _saveUsageData(usageData);
     
     debugPrint('flashcards 사용량 증가: ${currentUsage + 1}/무제한');
+    */
     return true;
   }
   
   /// 플래시카드 사용량 감소
   Future<void> decrementFlashcardCount() async {
+    // 플래시카드 사용량은 추적하지 않음
+    // 실제 사용량 감소 코드 주석 처리
+    /*
     final usageData = await _loadUsageData();
     final currentUsage = usageData['flashcards'] ?? 0;
     
@@ -594,6 +604,7 @@ class UsageLimitService {
       await _saveUsageData(usageData);
       debugPrint('flashcards 사용량 감소: ${currentUsage - 1}/무제한');
     }
+    */
   }
 
   /// 페이지 추가 가능 여부 확인
@@ -711,8 +722,13 @@ class UsageLimitService {
       await addStorageUsage(totalSize);
       
       final limitInMB = (MAX_FREE_STORAGE_BYTES / (1024 * 1024)).toStringAsFixed(0);
-      debugPrint('저장 공간 사용량 재계산 완료: ${fileCount}개 파일');
-      debugPrint('이전: ${(oldStorageUsage / 1024 / 1024).toStringAsFixed(2)}MB → 현재: ${(totalSize / 1024 / 1024).toStringAsFixed(2)}MB (제한: ${limitInMB}MB)');
+      final totalMB = (totalSize / (1024 * 1024)).toStringAsFixed(2);
+      final oldMB = (oldStorageUsage / (1024 * 1024)).toStringAsFixed(2);
+      final percentUsed = ((totalSize * 100.0) / MAX_FREE_STORAGE_BYTES).toStringAsFixed(2);
+      
+      debugPrint('저장 공간 사용량 재계산 완료: $fileCount개 파일');
+      debugPrint('이전: ${oldMB}MB → 현재: ${totalMB}MB (제한: ${limitInMB}MB)');
+      debugPrint('총 사용률: $percentUsed% (${totalSize}바이트/${MAX_FREE_STORAGE_BYTES}바이트)');
       
       return totalSize;
     } catch (e) {

@@ -158,9 +158,9 @@ class ImageService {
       final originalWidth = image.width;
       final originalHeight = image.height;
       
-      // 앱 스토어 리뷰 최적화: 리사이징 적용 (대형 이미지 처리 개선)
+      // 더 적극적인 이미지 리사이징 적용 (파일 크기 감소)
       img.Image processedImage;
-      final int maxDimension = 1500; // 최대 너비/높이 제한
+      final int maxDimension = 1200; // 최대 너비/높이 제한 - 더 작게 설정
       
       if (originalWidth > maxDimension || originalHeight > maxDimension) {
         // 비율 유지하며 리사이징
@@ -195,16 +195,19 @@ class ImageService {
         quality: 80, // 이미지 품질 (앱 스토어 리뷰 최적화를 위해 80으로 설정)
       );
       
+      // 압축 및 저장 (파일 크기 최적화를 위해 더 높은 압축률 사용)
+      final compressedBytes = img.encodeJpg(
+        processedImage,
+        quality: 65, // 이미지 품질 (파일 크기 최적화를 위해 65로 낮춤)
+      );
+      
       // 앱 스토어 리뷰 최적화: 메모리 관리 개선
       final File compressedFile = File(targetPath);
       await compressedFile.writeAsBytes(compressedBytes);
       
-      // 압축 후 실제 파일 크기 확인 및 사용량 추적
+      // 압축 후 실제 파일 크기 확인
       final compressedSize = await compressedFile.length();
       debugPrint('압축 전 이미지 크기: ${imageBytes.length} 바이트, 압축 후: $compressedSize 바이트');
-      
-      // 저장 공간 사용량에 압축된 크기 추가
-      await _trackStorageUsage(compressedFile);
       
       // 메모리 해제를 위한 명시적 처리
       imageBytes.clear();
@@ -222,8 +225,7 @@ class ImageService {
       // 원본 이미지를 그대로 복사 (압축 실패 시 대체 방안)
       final origFile = await imageFile.copy(targetPath);
       
-      // 원본 이미지를 사용할 경우에도 저장 공간 사용량 추적
-      await _trackStorageUsage(origFile);
+      // 원본 이미지를 사용할 경우에도 저장 공간 사용량 추적 코드 제거 (중복 추적 방지)
       
       return origFile;
     }
