@@ -38,7 +38,7 @@ class LoadingDialog {
       // PikabookLoader를 사용하여 표시
       PikabookLoader.show(
         context,
-        title: '스마트한 번역 노트를 만들고 있어요.',
+        title: '스마트한 학습 노트를 만들고 있어요.',
         subtitle: '잠시만 기다려 주세요!',
       ).then((_) {
         // 다이얼로그가 닫힐 때 상태 초기화

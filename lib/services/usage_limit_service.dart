@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 /// 사용량 제한 관리 서비스
 /// 베타 기간 동안 사용자의 사용량을 추적하고 제한을 적용합니다.
@@ -746,5 +747,55 @@ class UsageLimitService {
     
     // 캐시 무효화
     invalidateCache();
+  }
+
+  /// 탈퇴 시 Firebase Storage 데이터 삭제
+  Future<bool> deleteFirebaseStorageData(String userId) async {
+    try {
+      if (userId.isEmpty) {
+        debugPrint('Firebase Storage 데이터 삭제 실패: 사용자 ID가 비어있음');
+        return false;
+      }
+      
+      // Firebase Storage 참조
+      final FirebaseStorage storage = FirebaseStorage.instance;
+      
+      // 사용자별 경로 지정: users/{userId}/
+      final userFolderRef = storage.ref().child('users/$userId');
+      
+      try {
+        // 1. 사용자 폴더 모든 파일 리스트 가져오기
+        final ListResult result = await userFolderRef.listAll();
+        debugPrint('탈퇴한 사용자의 Firebase Storage 파일 ${result.items.length}개, 폴더 ${result.prefixes.length}개 발견');
+        
+        // 2. 모든 파일 삭제
+        for (final Reference ref in result.items) {
+          await ref.delete();
+          debugPrint('파일 삭제됨: ${ref.fullPath}');
+        }
+        
+        // 3. 하위 폴더 재귀적으로 처리
+        for (final Reference prefix in result.prefixes) {
+          // 하위 폴더 처리 (일반적으로 images 폴더가 있음)
+          final ListResult subResult = await prefix.listAll();
+          
+          // 하위 폴더의 모든 파일 삭제
+          for (final Reference subRef in subResult.items) {
+            await subRef.delete();
+            debugPrint('하위 폴더 파일 삭제됨: ${subRef.fullPath}');
+          }
+        }
+        
+        debugPrint('Firebase Storage에서 사용자 $userId의 데이터 삭제 완료');
+        return true;
+      } catch (e) {
+        // 폴더가 없거나 권한이 없는 경우 등
+        debugPrint('Firebase Storage 데이터 삭제 중 오류: $e');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Firebase Storage 데이터 삭제 실패: $e');
+      return false;
+    }
   }
 } 

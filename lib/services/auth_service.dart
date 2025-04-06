@@ -19,6 +19,7 @@ import '../services/page_content_service.dart';
 import '../main.dart'; // firebaseApp 전역 변수 가져오기
 import 'package:get_it/get_it.dart';
 import '../services/image_service.dart';
+import '../services/usage_limit_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -382,13 +383,26 @@ class AuthService {
       // 2. Firestore 데이터 삭제
       await _deleteFirestoreData(userId);
       
-      // 3. 소셜 로그인 연결 해제
+      // 3. Firebase Storage 이미지 데이터 삭제
+      final usageLimitService = UsageLimitService();
+      try {
+        final storageDeleted = await usageLimitService.deleteFirebaseStorageData(userId);
+        if (storageDeleted) {
+          debugPrint('Firebase Storage 데이터 삭제 완료: $userId');
+        } else {
+          debugPrint('Firebase Storage 데이터 삭제 실패 또는 데이터 없음: $userId');
+        }
+      } catch (e) {
+        debugPrint('Firebase Storage 데이터 삭제 시도 중 오류: $e');
+      }
+      
+      // 4. 소셜 로그인 연결 해제
       await _clearSocialLoginSessions();
       
-      // 4. 디바이스 ID 초기화
+      // 5. 디바이스 ID 초기화
       await _resetDeviceId();
       
-      // 5. 탈퇴 기록 저장
+      // 6. 탈퇴 기록 저장
       await _saveDeletedUserRecord(userId, email, displayName);
       
       debugPrint('모든 사용자 데이터 삭제 완료');

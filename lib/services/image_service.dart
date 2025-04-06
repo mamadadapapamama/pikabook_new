@@ -189,13 +189,7 @@ class ImageService {
       // iOS 앱 스토어 리뷰를 위한 메모리 최적화
       // 메타데이터 관련 코드는 해당 라이브러리에서 직접 지원하지 않으므로 제거
       
-      // 압축 및 저장 (iOS 앱 스토어 리뷰를 위해 더 효율적인 압축 사용)
-      final compressedBytes = img.encodeJpg(
-        processedImage,
-        quality: 80, // 이미지 품질 (앱 스토어 리뷰 최적화를 위해 80으로 설정)
-      );
-      
-      // 압축 및 저장 (파일 크기 최적화를 위해 더 높은 압축률 사용)
+      // 압축 및 저장 (파일 크기 최적화를 위해 높은 압축률 사용)
       final compressedBytes = img.encodeJpg(
         processedImage,
         quality: 65, // 이미지 품질 (파일 크기 최적화를 위해 65로 낮춤)

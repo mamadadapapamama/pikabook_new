@@ -407,7 +407,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             
             Text(
               '이미지를 기반으로 학습 노트를 만들어드립니다. \n카메라 촬영도 가능합니다.',
@@ -416,7 +416,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 color: ColorTokens.textSecondary,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             // CTA 버튼 - 이미지 업로드하기 (사용량 초과시 비활성화)
             _isButtonDisabled()
               ? Tooltip(
@@ -489,6 +489,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   // 버튼 비활성화 여부 확인
   bool _isButtonDisabled() {
+    // _limitStatus가 비어있거나 null이면 false 반환 (버튼 활성화)
+    if (_limitStatus.isEmpty) {
+      return false;
+    }
+    
     // OCR, 번역, 저장 공간 중 하나라도 한도 도달 시 버튼 비활성화
     return _limitStatus['ocrLimitReached'] == true || 
            _limitStatus['translationLimitReached'] == true || 
