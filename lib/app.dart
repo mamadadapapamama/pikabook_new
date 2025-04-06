@@ -151,9 +151,22 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     try {
       if (_userId == null) return;
   
-      // 온보딩 완료 여부 확인
-      final prefs = await SharedPreferences.getInstance();
-      _isOnboardingCompleted = prefs.getBool('is_onboarding_completed') ?? false;
+      // 1. 먼저 사용자가 노트를 가지고 있는지 확인
+      bool hasNotes = await _checkUserHasNotes();
+      
+      // 2. 노트가 있는 경우 온보딩 완료 상태로 설정하고 홈화면으로 이동
+      if (hasNotes) {
+        debugPrint('사용자($_userId)의 노트가 존재합니다. 온보딩 완료 상태로 설정합니다.');
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('is_onboarding_completed', true);
+        _isOnboardingCompleted = true;
+      } 
+      // 3. 노트가 없는 경우 기존 온보딩 완료 여부 확인
+      else {
+        debugPrint('사용자($_userId)의 노트가 없습니다. 온보딩 완료 여부를 확인합니다.');
+        final prefs = await SharedPreferences.getInstance();
+        _isOnboardingCompleted = prefs.getBool('is_onboarding_completed') ?? false;
+      }
       
       if (mounted) {
         setState(() {});
@@ -165,6 +178,26 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           _error = '사용자 설정을 로드하는 중 오류가 발생했습니다: $e';
         });
       }
+    }
+  }
+  
+  /// 사용자가 노트를 가지고 있는지 확인
+  Future<bool> _checkUserHasNotes() async {
+    try {
+      if (_userId == null) return false;
+      
+      // Firestore에서 사용자의 노트 수 확인
+      final notesSnapshot = await FirebaseFirestore.instance
+          .collection('notes')
+          .where('userId', isEqualTo: _userId)
+          .limit(1) // 하나만 확인해도 충분
+          .get();
+      
+      // 노트가 하나라도 있으면 true
+      return notesSnapshot.docs.isNotEmpty;
+    } catch (e) {
+      debugPrint('노트 존재 여부 확인 중 오류: $e');
+      return false; // 오류 발생 시 기본값으로 false 반환
     }
   }
   

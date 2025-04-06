@@ -175,6 +175,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
       // SharedPreferences 인스턴스 가져오기
       final prefs = await SharedPreferences.getInstance();
+      // 온보딩 완료 표시 (명시적으로 is_onboarding_completed 키를 사용)
+      await prefs.setBool('is_onboarding_completed', true);
       // 툴팁을 아직 보지 않았다고 설정
       await prefs.setBool('hasShownTooltip', false);
       

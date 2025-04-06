@@ -91,7 +91,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             iconSize: 48, // 더 큰 터치 영역
-            padding: const EdgeInsets.all(12), // 더 넓은 패딩
+            padding: const EdgeInsets.all(4), // 더 넓은 패딩
             constraints: const BoxConstraints(), // 제약 조건 제거
           ),
         ),

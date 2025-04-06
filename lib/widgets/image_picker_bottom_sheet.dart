@@ -252,7 +252,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         imageFiles: images,
         title: null, // 자동 타이틀 생성을 위해 null 전달
         silentProgress: true, // 진행 상황 업데이트 무시
-        waitForFirstPageProcessing: false, // 첫 페이지 처리 완료까지 대기하지 않음
+        waitForFirstPageProcessing: true, // 첫 페이지 처리 완료까지 대기
       );
 
       // 결과를 먼저 저장 (네비게이션 전)
@@ -261,7 +261,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       final bool isProcessingBackground = result['isProcessingBackground'] ?? false;
       final String message = result['message'] ?? '노트 생성에 실패했습니다.';
 
-      // 로딩 다이얼로그 닫기 - 바로 닫기
+      // 로딩 다이얼로그 닫기 - 첫 페이지 처리 완료 후
       if (isLoadingDialogShowing && context.mounted) {
         // LoadingDialog 클래스의 메서드로 닫기
         LoadingDialog.hide(context);

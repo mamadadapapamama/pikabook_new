@@ -13,6 +13,7 @@ import '../theme/tokens/typography_tokens.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/segment_utils.dart';
 import '../widgets/common/tts_button.dart';
+import '../widgets/dot_loading_indicator.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 /// 
@@ -536,32 +537,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   Widget build(BuildContext context) {
     // 특수 마커가 있는 경우 처리 중 표시
     if (widget.processedText.fullOriginalText.contains('___PROCESSING___')) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(height: 40),
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(
-              '노트 처리 중입니다',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.black54,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '잠시만 기다려 주세요...',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.black45,
-              ),
-            ),
-            const SizedBox(height: 40),
-          ],
-        ),
+      return const Center(
+        child: DotLoadingIndicator(message: '텍스트 처리 중이에요!'),
       );
     }
 
