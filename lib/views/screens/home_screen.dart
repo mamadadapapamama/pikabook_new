@@ -263,27 +263,61 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                child: Consumer<HomeViewModel>(
-                  builder: (context, viewModel, _) {
-                    // 노트 유무와 상관없이 _showTooltip 상태만 확인
-                    final bool shouldShowTooltip = _showTooltip;
-                    
-                    return HelpTextTooltip(
-                      key: const Key('home_screen_tooltip'),
-                      text: "Pikabook에 오신걸 환영합니다!",
-                      image: Image.asset(
-                        'assets/images/home_help_beta.png',
-                        width: double.infinity,
-                        fit: BoxFit.contain,
-                      ),
-                      description: "📷 원서 이미지: 100장까지 텍스트 자동 인식\n🌐 번역: 최대 20,000자\n🔊 듣기 기능: 1000번 음성 변환 가능\n💾 저장 공간: 이미지 400장 (100mb)",
-                      showTooltip: shouldShowTooltip,
-                      onDismiss: () {
-                        DebugUtils.log('🏠 홈 화면 툴팁 닫기 콜백 호출됨!!');
-                        _handleCloseTooltip();
-                      }
-                    );
-                  },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 스마트 노트 만들기 버튼 - 노트가 있을 때만 표시
+                    Consumer<HomeViewModel>(
+                      builder: (context, viewModel, _) {
+                        // 노트가 있을 때만 버튼 표시
+                        if (viewModel.hasNotes) {
+                          return Column(
+                            children: [
+                              _isButtonDisabled()
+                                ? Tooltip(
+                                    message: '사용량 한도 초과로 비활성화되었습니다',
+                                    child: PikaButton(
+                                      text: '스마트 노트 만들기',
+                                      variant: PikaButtonVariant.primary,
+                                      onPressed: null, // 비활성화
+                                    ),
+                                  )
+                                : PikaButton(
+                                    text: '스마트 노트 만들기',
+                                    variant: PikaButtonVariant.primary,
+                                    onPressed: () => _showImagePickerBottomSheet(context),
+                                  ),
+                              const SizedBox(height: 16),
+                            ],
+                          );
+                        }
+                        return const SizedBox.shrink(); // 노트가 없으면 버튼 숨김
+                      },
+                    ),
+                    // 툴팁 위젯
+                    Consumer<HomeViewModel>(
+                      builder: (context, viewModel, _) {
+                        // 노트 유무와 상관없이 _showTooltip 상태만 확인
+                        final bool shouldShowTooltip = _showTooltip;
+                        
+                        return HelpTextTooltip(
+                          key: const Key('home_screen_tooltip'),
+                          text: "Pikabook에 오신걸 환영합니다!",
+                          image: Image.asset(
+                            'assets/images/home_help_beta.png',
+                            width: double.infinity,
+                            fit: BoxFit.contain,
+                          ),
+                          description: "📷 원서 이미지: 100장까지 텍스트 자동 인식\n🌐 번역: 최대 20,000자\n🔊 듣기 기능: 1000번 음성 변환 가능\n💾 저장 공간: 이미지 400장 (100mb)",
+                          showTooltip: shouldShowTooltip,
+                          onDismiss: () {
+                            DebugUtils.log('🏠 홈 화면 툴팁 닫기 콜백 호출됨!!');
+                            _handleCloseTooltip();
+                          }
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
             ],

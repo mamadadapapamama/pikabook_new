@@ -1481,6 +1481,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                       ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
                       : false,
                   onToggleFullTextMode: _toggleFullTextMode,
+                  onTogglePinyin: _togglePinyin,
                   pageContentService: _pageContentService,
                   textReaderService: _textReaderService,
                 )
@@ -2006,6 +2007,69 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       } catch (e) {
         DebugUtils.log('📝 툴팁 표시 완료 상태 저장 실패: $e');
       }
+    });
+  }
+
+  // 현재 페이지 컨텐츠와 하단 컨트롤바 표시 부분
+  Widget _buildPageContentArea() {
+    // 페이지가 없는 경우
+    if (_pageManager.pages.isEmpty) {
+      return const Center(
+        child: Text('페이지가 없습니다. 페이지를 추가해주세요.'),
+      );
+    }
+    
+    // 노트 하단 네비게이션 바 + 현재 페이지 내용
+    return Column(
+      children: [
+        // 페이지 내용 (Expanded로 남은 공간 채움)
+        Expanded(
+          child: _buildCurrentPageContent(),
+        ),
+        
+        // 하단 네비게이션 바
+        NoteDetailBottomBar(
+          currentPage: _pageManager.currentPage,
+          currentPageIndex: _pageManager.currentPageIndex,
+          totalPages: _pageManager.pages.length,
+          onPageChanged: (index) => _changePage(index),
+          onToggleFullTextMode: _toggleFullTextMode,
+          onTogglePinyin: _togglePinyin, // 병음 토글 콜백 추가
+          isFullTextMode: _pageManager.currentPage?.id != null
+              ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
+              : false,
+          pageContentService: _pageContentService,
+          textReaderService: _textReaderService,
+        ),
+      ],
+    );
+  }
+
+  // 핀인(병음) 표시 토글 기능
+  void _togglePinyin() {
+    final currentPage = _pageManager.currentPage;
+    if (currentPage == null || currentPage.id == null) {
+      return;
+    }
+    
+    // 캐시된 processedText 가져오기
+    final processedText = _pageContentService.getProcessedText(currentPage.id!);
+    if (processedText == null) {
+      return;
+    }
+    
+    debugPrint('병음 토글 요청: 현재 showPinyin=${processedText.showPinyin}');
+    
+    setState(() {
+      // 병음 표시 상태 토글
+      final updatedText = processedText.copyWith(
+        showPinyin: !processedText.showPinyin,
+      );
+      
+      // 업데이트된 ProcessedText 저장
+      _pageContentService.setProcessedText(currentPage.id!, updatedText);
+      
+      debugPrint('병음 토글 완료: 변경 후 showPinyin=${updatedText.showPinyin}');
     });
   }
 }

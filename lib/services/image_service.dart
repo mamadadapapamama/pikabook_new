@@ -199,6 +199,13 @@ class ImageService {
       final File compressedFile = File(targetPath);
       await compressedFile.writeAsBytes(compressedBytes);
       
+      // 압축 후 실제 파일 크기 확인 및 사용량 추적
+      final compressedSize = await compressedFile.length();
+      debugPrint('압축 전 이미지 크기: ${imageBytes.length} 바이트, 압축 후: $compressedSize 바이트');
+      
+      // 저장 공간 사용량에 압축된 크기 추가
+      await _trackStorageUsage(compressedFile);
+      
       // 메모리 해제를 위한 명시적 처리
       imageBytes.clear();
       processedImage.clear(); // 처리된 이미지도 명시적으로 메모리 해제
@@ -213,8 +220,12 @@ class ImageService {
     } catch (e) {
       debugPrint('이미지 압축 및 저장 중 오류 발생: $e');
       // 원본 이미지를 그대로 복사 (압축 실패 시 대체 방안)
-      await imageFile.copy(targetPath);
-      return File(targetPath);
+      final origFile = await imageFile.copy(targetPath);
+      
+      // 원본 이미지를 사용할 경우에도 저장 공간 사용량 추적
+      await _trackStorageUsage(origFile);
+      
+      return origFile;
     }
   }
 

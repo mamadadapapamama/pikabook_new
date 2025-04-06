@@ -916,7 +916,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     GestureDetector(
                       onTap: _isRecalculating 
                         ? null 
-                        : (item['recalculateAction'] as Function),
+                        : () => (item['recalculateAction'] as Function)(),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -1070,6 +1070,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _isRecalculating = false;
         });
       }
+    }
+  }
+
+  // 사용량 정보 로드
+  Future<void> _loadUsageLimits() async {
+    try {
+      // 현재 플랜 타입 가져오기
+      final planType = await _planService.getCurrentPlanType();
+      
+      // 플랜 서비스를 통해 현재 사용량 및 제한 가져오기
+      final planLimits = await _planService.getPlanLimits(planType);
+      final currentUsage = await _planService.getCurrentUsage();
+      final usagePercentages = await _planService.getUsagePercentages();
+      
+      if (mounted) {
+        setState(() {
+          _planLimits = planLimits;
+          _currentUsage = currentUsage;
+          _usagePercentages = usagePercentages;
+        });
+      }
+    } catch (e) {
+      debugPrint('사용량 정보 로드 중 오류: $e');
     }
   }
 }

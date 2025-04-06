@@ -19,8 +19,9 @@ class NoteDetailBottomBar extends StatefulWidget {
   final int currentPageIndex;
   final int totalPages;
   final Function(int) onPageChanged;
-  final bool isFullTextMode;
   final VoidCallback onToggleFullTextMode;
+  final VoidCallback onTogglePinyin;
+  final bool isFullTextMode;
   final PageContentService pageContentService;
   final TextReaderService textReaderService;
 
@@ -30,8 +31,9 @@ class NoteDetailBottomBar extends StatefulWidget {
     required this.currentPageIndex,
     required this.totalPages,
     required this.onPageChanged,
-    required this.isFullTextMode,
     required this.onToggleFullTextMode,
+    required this.onTogglePinyin,
+    required this.isFullTextMode,
     required this.pageContentService,
     required this.textReaderService,
   });
@@ -84,100 +86,115 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     // 현재 페이지 진행률 계산 (0.0 ~ 1.0 사이 값)
     final double progress = widget.totalPages > 0 ? (widget.currentPageIndex + 1) / widget.totalPages : 0.0;
     
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 프로그레스 바
-        _buildProgressBar(context, progress),
-        
-        // 컨트롤 부분
-        Container(
-          padding: EdgeInsets.symmetric(vertical: SpacingTokens.sm + SpacingTokens.xs, horizontal: SpacingTokens.md),
-          decoration: BoxDecoration(
-            color: ColorTokens.surface,
-            border: const Border(
-              top: BorderSide(color: ColorTokens.primaryverylight, width: 1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: ColorTokens.black.withOpacity(0.15),
-                blurRadius: 8,
-                offset: const Offset(0, -2),
-              ),
-            ],
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 프로그레스 바
+          LinearProgressIndicator(
+            value: progress,
+            backgroundColor: ColorTokens.primarylight,
+            valueColor: const AlwaysStoppedAnimation<Color>(ColorTokens.primary),
+            minHeight: 3,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // 이전 페이지 버튼
-              _buildNavigationButton(
-                icon: Icons.arrow_back_ios_rounded,
-                onTap: widget.currentPageIndex > 0 
-                    ? () => widget.onPageChanged(widget.currentPageIndex - 1) 
-                    : null,
-              ),
-              
-              // 중앙 컨트롤 영역 (병음 토글 + 모드 전환 버튼)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 모드 전환 버튼 (문장별 구분/원문 전체)
-                  GestureDetector(
-                    onTap: widget.onToggleFullTextMode,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
-                        vertical: SpacingTokens.xs + SpacingTokens.xs/2
+          
+          // 컨트롤 영역
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: SpacingTokens.sm,
+              vertical: SpacingTokens.xs,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // 이전 페이지 버튼
+                _buildNavigationButton(
+                  icon: Icons.arrow_back_ios_rounded,
+                  onTap: widget.currentPageIndex > 0 
+                      ? () => widget.onPageChanged(widget.currentPageIndex - 1) 
+                      : null,
+                ),
+                
+                // 중앙 컨트롤 영역 (병음 토글 + 모드 전환 버튼)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 모드 전환 버튼 (문장별 구분/원문 전체)
+                    GestureDetector(
+                      onTap: widget.onToggleFullTextMode,
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
+                          vertical: SpacingTokens.xs + SpacingTokens.xs/2
+                        ),
+                        decoration: BoxDecoration(
+                          color: ColorTokens.surface,
+                          borderRadius: BorderRadius.circular(100),
+                          border: Border.all(color: ColorTokens.secondary),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.isFullTextMode ? '문장별 보기' : '원문 전체 보기',
+                              style: TypographyTokens.caption.copyWith(
+                                color: ColorTokens.secondary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: ColorTokens.surface,
-                        borderRadius: BorderRadius.circular(100),
-                        border: Border.all(color: ColorTokens.secondary),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            widget.isFullTextMode ? '문장별 보기' : '원문 전체 보기',
-                            style: TypographyTokens.caption.copyWith(
-                              color: ColorTokens.secondary,
+                    ),
+                    
+                    // 중국어 학습용 병음 토글 버튼
+                    if (processedText != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8.0),
+                        child: GestureDetector(
+                          onTap: widget.onTogglePinyin,
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: SpacingTokens.sm + SpacingTokens.xs/2, 
+                              vertical: SpacingTokens.xs + SpacingTokens.xs/2
+                            ),
+                            decoration: BoxDecoration(
+                              color: ColorTokens.surface,
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(
+                                color: showPinyin ? ColorTokens.primary : ColorTokens.secondary,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '병음',
+                                  style: TypographyTokens.caption.copyWith(
+                                    color: showPinyin ? ColorTokens.primary : ColorTokens.secondary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-              
-              // 다음 페이지 버튼
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 페이지 번호 텍스트
-                  Container(
-                    margin: EdgeInsets.only(right: 4),
-                    child: Text(
-                      '${widget.currentPageIndex + 1}/${widget.totalPages}',
-                      style: TypographyTokens.body2.copyWith(
-                        color: ColorTokens.textSecondary,
-                      ),
-                    ),
-                  ),
-                  // 화살표 버튼
-                  _buildNavigationButton(
-                    icon: Icons.arrow_forward_ios_rounded,
-                    onTap: widget.currentPageIndex < widget.totalPages - 1 
-                        ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
-                        : null,
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+                
+                // 다음 페이지 버튼
+                _buildNavigationButton(
+                  icon: Icons.arrow_forward_ios_rounded,
+                  onTap: widget.currentPageIndex < widget.totalPages - 1 
+                      ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
+                      : null,
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
   
