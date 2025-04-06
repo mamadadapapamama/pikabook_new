@@ -19,6 +19,10 @@ import 'theme/app_theme.dart';
 import 'viewmodels/home_viewmodel.dart';
 import 'services/auth_service.dart';
 import 'services/usage_limit_service.dart';
+import 'services/initialization_service.dart';
+import 'services/ocr_service.dart';
+import 'services/enhanced_ocr_service.dart';
+import 'services/page_content_service.dart';
 
 /// 앱의 시작 지점 및 초기 화면 결정 로직
 /// - 로그인 확인

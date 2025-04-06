@@ -218,8 +218,8 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                                         Navigator.of(dialogContext).pop();
                                       }
                                       
-                                      // onDismiss 콜백을 별도 스레드에서 실행하여 UI 업데이트 보장
-                                      Future.microtask(() {
+                                      // 약간의 지연 후 onDismiss 콜백 실행
+                                      Future.delayed(Duration(milliseconds: 100), () {
                                         if (widget.onDismiss != null) {
                                           DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 시작 (지연 실행)');
                                           widget.onDismiss!();
@@ -318,9 +318,14 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                                       TextButton(
                                         onPressed: () {
                                           Navigator.of(dialogContext).pop(); // 다이얼로그 닫기
-                                          if (widget.onDismiss != null) {
-                                            widget.onDismiss!();
-                                          }
+                                          
+                                          // 약간의 지연 후 onDismiss 콜백 실행
+                                          Future.delayed(Duration(milliseconds: 100), () {
+                                            if (widget.onDismiss != null) {
+                                              DebugUtils.log('📣 헬프텍스트 완료 버튼 - onDismiss 콜백 호출');
+                                              widget.onDismiss!();
+                                            }
+                                          });
                                         },
                                         style: TextButton.styleFrom(
                                           foregroundColor: ColorTokens.primary,

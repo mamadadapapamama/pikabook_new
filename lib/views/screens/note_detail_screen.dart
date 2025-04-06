@@ -612,6 +612,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       
       final prefs = await SharedPreferences.getInstance();
       
+      // 툴팁이 이미 표시된 적이 있는지 명시적으로 확인
+      final bool noteDetailTooltipShown = prefs.getBool('note_detail_tooltip_shown') ?? false;
+      if (noteDetailTooltipShown) {
+        debugPrint('툴팁이 이미 표시된 적이 있어 표시하지 않음');
+        
+        // 이미 표시되었던 경우 상태 확인 및 강제 false 설정
+        if (_showTooltip) {
+          setState(() {
+            _showTooltip = false;
+            _tooltipStep = 1;
+          });
+        }
+        return;
+      }
+      
       // 첫 노트 생성 여부 확인 (홈 화면에서 설정됨)
       final bool isFirstNote = prefs.getBool('first_note_created') ?? true; // 기본값 true로 설정하여 기존 사용자도 체험할 수 있게 함
       
@@ -634,7 +649,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         debugPrint('첫 노트의 첫 페이지 텍스트 처리 완료 기록 저장');
         
         // 툴팁을 아직 표시하지 않았다면 표시
-        if (!tooltipShown) {
+        if (!tooltipShown && !noteDetailTooltipShown) {
           // 툴팁 표시 상태 설정
           setState(() {
             _showTooltip = true;
@@ -644,15 +659,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           await prefs.setBool('tooltip_shown_after_first_page', true);
           
           debugPrint('노트 상세 화면에서 첫 페이지 툴팁 표시');
-          
-          // 10초 후에 툴팁 자동으로 숨기기 - 제거
-          // Future.delayed(const Duration(seconds: 10), () {
-          //   if (mounted) {
-          //     setState(() {
-          //       _showTooltip = false;
-          //     });
-          //   }
-          // });
         }
       }
     } catch (e) {
@@ -1593,7 +1599,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   : _tooltipStep == 2
                     ? "노트의 빈 공간을 왼쪽으로 슬라이드하거나, \n바텀 바의 화살표를 눌러 다음 장으로 넘어갈 수 있어요."
                     : "잘못 인식된 문장은 왼쪽으로 슬라이드해 삭제할수 있어요.",
-                showTooltip: true,
+                showTooltip: _showTooltip,
                 onDismiss: () {
                   DebugUtils.log('📝 노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
                   DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 시작: true -> false');

@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:async';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:path_provider/path_provider.dart';
@@ -10,13 +12,12 @@ import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'unified_cache_service.dart';
 import 'usage_limit_service.dart';
 import 'package:image/image.dart' as img;
 
 /// 이미지 관리 서비스
 /// 이미지 저장, 로드, 압축 등의 기능을 제공합니다.
-/// 캐싱은 UnifiedCacheService에서 처리합니다.
+/// 메모리 관리와 최적화에 중점을 둠
 
 
 class ImageService {
@@ -24,10 +25,7 @@ class ImageService {
   static final ImageService _instance = ImageService._internal();
   factory ImageService() => _instance;
 
-  // 통합 캐시 서비스 참조
-  final UnifiedCacheService _cacheService = UnifiedCacheService();
-  
-  // 사용량 제한 서비스
+  // 통합 캐시 서비스 참조 - 현재 사용되지 않음 (제거)
   final UsageLimitService _usageLimitService = UsageLimitService();
   
   // Firebase Storage 참조
@@ -50,11 +48,21 @@ class ImageService {
         await imagesDir.create(recursive: true);
       }
 
-      // 고유한 파일명 생성
-      final uuid = const Uuid().v4();
-      final fileExtension = path.extension(imageFile.path);
-      final fileName = '$uuid$fileExtension';
+      // 이미지 파일의 해시값 계산 (파일 내용 기반 고유 식별자)
+      final fileHash = await _computeFileHash(imageFile);
+      
+      // 해시값을 파일명에 사용 (동일 내용의 파일은 동일한 이름을 가짐)
+      final fileExtension = path.extension(imageFile.path).toLowerCase();
+      final fileName = '$fileHash$fileExtension';
       final targetPath = '${imagesDir.path}/$fileName';
+      final relativePath = 'images/$fileName';
+      
+      // 동일한 해시값의 파일이 이미 존재하는지 확인
+      final existingFile = File(targetPath);
+      if (await existingFile.exists()) {
+        debugPrint('동일한 이미지가 이미 존재함 (해시: $fileHash), 기존 경로 반환');
+        return relativePath;
+      }
 
       // 원본 파일 크기 확인 (사용량 추적용)
       final originalFileSize = await imageFile.length();
@@ -65,14 +73,12 @@ class ImageService {
       // 압축 후 파일 크기 확인 (사용량 추적용)
       final compressedFileSize = await compressedFile.length();
       
-      // 저장된 이미지의 상대 경로 반환
-      final relativePath = 'images/$fileName';
-      
-      // Firebase Storage에 업로드 시도
+      // Firebase Storage에 업로드 시도 - 중복 업로드 방지를 위해 존재 여부 확인 추가
       try {
-        await _uploadToFirebaseStorage(compressedFile, relativePath);
+        // Firebase Storage 업로드는 별도 스레드에서 비동기로 처리 (앱 응답성 유지)
+        unawaited(_uploadToFirebaseStorageIfNotExists(compressedFile, relativePath));
       } catch (e) {
-        debugPrint('Firebase Storage 업로드 실패, 로컬만 저장됨: $e');
+        debugPrint('Firebase Storage 업로드 예약 실패: $e');
       }
       
       // 스토리지 사용량 추적 - 압축된 실제 파일 크기 사용
@@ -87,39 +93,58 @@ class ImageService {
     }
   }
   
-  /// Firebase Storage에 이미지 업로드
-  Future<String> _uploadToFirebaseStorage(File file, String relativePath) async {
+  /// 파일 내용의 SHA-256 해시값 계산
+  Future<String> _computeFileHash(File file) async {
+    try {
+      final bytes = await file.readAsBytes();
+      final digest = sha256.convert(bytes);
+      return digest.toString();
+    } catch (e) {
+      debugPrint('파일 해시 계산 중 오류: $e');
+      
+      // 오류 발생 시 UUID로 대체 (내용 기반 중복 감지는 불가능)
+      return const Uuid().v4();
+    }
+  }
+  
+  /// Firebase Storage에 이미지 업로드 (존재하지 않는 경우에만)
+  Future<String?> _uploadToFirebaseStorageIfNotExists(File file, String relativePath) async {
     try {
       final userId = _currentUserId;
       if (userId == null) {
-        throw Exception('로그인이 필요합니다');
+        debugPrint('Firebase Storage 업로드 건너뜀: 사용자 로그인 안됨');
+        return null;
       }
       
       // 사용자별 경로 지정: users/{userId}/images/{fileName}
       final storagePath = 'users/$userId/$relativePath';
       final storageRef = _storage.ref().child(storagePath);
       
-      // 이미지 업로드
-      debugPrint('Firebase Storage에 이미지 업로드 시작: $storagePath');
-      final uploadTask = storageRef.putFile(file);
-      
-      // 업로드 상태 모니터링 (선택적)
-      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        final progress = snapshot.bytesTransferred / snapshot.totalBytes;
-        debugPrint('이미지 업로드 진행률: ${(progress * 100).toStringAsFixed(1)}%');
-      });
-      
-      // 업로드 완료 대기
-      final snapshot = await uploadTask;
-      
-      // 이미지 URL 가져오기
-      final downloadUrl = await snapshot.ref.getDownloadURL();
-      debugPrint('Firebase Storage 업로드 완료: $downloadUrl');
-      
-      return downloadUrl;
+      // 이미지가 이미 존재하는지 확인
+      try {
+        await storageRef.getMetadata();
+        debugPrint('Firebase Storage에 이미지가 이미 존재함: $storagePath');
+        
+        // 이미 존재하는 경우 URL 반환
+        final downloadUrl = await storageRef.getDownloadURL();
+        return downloadUrl;
+      } catch (e) {
+        // 파일이 존재하지 않는 경우에만 업로드 진행
+        debugPrint('Firebase Storage에 새 이미지 업로드 시작: $storagePath');
+        final uploadTask = storageRef.putFile(file);
+        
+        // 업로드 완료 대기
+        final snapshot = await uploadTask;
+        
+        // 이미지 URL 가져오기
+        final downloadUrl = await snapshot.ref.getDownloadURL();
+        debugPrint('Firebase Storage 업로드 완료: $downloadUrl');
+        
+        return downloadUrl;
+      }
     } catch (e) {
       debugPrint('Firebase Storage 업로드 중 오류: $e');
-      throw e;
+      return null; // 실패해도 앱은 계속 작동하도록 예외를 다시 발생시키지 않음
     }
   }
   
@@ -160,7 +185,7 @@ class ImageService {
       
       // 더 적극적인 이미지 리사이징 적용 (파일 크기 감소)
       img.Image processedImage;
-      final int maxDimension = 1200; // 최대 너비/높이 제한 - 더 작게 설정
+      final int maxDimension = 1200; // 최대 너비/높이 제한
       
       if (originalWidth > maxDimension || originalHeight > maxDimension) {
         // 비율 유지하며 리사이징
@@ -186,42 +211,115 @@ class ImageService {
         processedImage = image;
       }
       
-      // iOS 앱 스토어 리뷰를 위한 메모리 최적화
-      // 메타데이터 관련 코드는 해당 라이브러리에서 직접 지원하지 않으므로 제거
-      
-      // 압축 및 저장 (파일 크기 최적화를 위해 높은 압축률 사용)
-      final compressedBytes = img.encodeJpg(
-        processedImage,
-        quality: 65, // 이미지 품질 (파일 크기 최적화를 위해 65로 낮춤)
+      // 단계별 압축 시도
+      File compressedFile = await _compressWithMultipleApproaches(
+        processedImage, 
+        imageFile, 
+        targetPath
       );
       
-      // 앱 스토어 리뷰 최적화: 메모리 관리 개선
+      return compressedFile;
+    } catch (e) {
+      debugPrint('이미지 압축 및 저장 중 오류 발생: $e');
+      
+      try {
+        // 압축 실패 시 flutter_image_compress로 직접 압축 시도
+        debugPrint('대체 압축 방법 시도 중...');
+        final result = await FlutterImageCompress.compressWithFile(
+          imageFile.path,
+          quality: 70,
+          format: CompressFormat.jpeg,
+        );
+        
+        if (result != null && result.isNotEmpty) {
+          final File compressedFile = File(targetPath);
+          await compressedFile.writeAsBytes(result);
+          debugPrint('대체 압축 성공: ${await compressedFile.length()} 바이트');
+          return compressedFile;
+        }
+      } catch (compressError) {
+        debugPrint('대체 압축 방법도 실패: $compressError');
+      }
+      
+      // 모든 압축 방법 실패 시 원본 복사
+      final origFile = await imageFile.copy(targetPath);
+      debugPrint('모든 압축 시도 실패, 원본 사용: ${await origFile.length()} 바이트');
+      return origFile;
+    }
+  }
+  
+  /// 여러 압축 방법을 시도하는 내부 메서드
+  Future<File> _compressWithMultipleApproaches(
+    img.Image processedImage, 
+    File originalFile, 
+    String targetPath
+  ) async {
+    // Flutter Image Compress 라이브러리 활용 (더 효과적인 압축)
+    final File tempFile = File('$targetPath.temp');
+    
+    try {
+      // 중간 품질의 JPG로 인코딩
+      final jpegBytes = img.encodeJpg(
+        processedImage,
+        quality: 85, // 더 높은 품질로 설정 (85로 조정)
+      );
+      
+      // 임시 파일에 쓰기
+      await tempFile.writeAsBytes(jpegBytes);
+      
+      // 추가 압축 단계 (flutter_image_compress 사용)
+      final compressedBytes = await FlutterImageCompress.compressWithFile(
+        tempFile.path,
+        minWidth: processedImage.width,
+        minHeight: processedImage.height,
+        quality: 80, // 추가 압축 품질
+        format: CompressFormat.jpeg,
+      );
+      
+      if (compressedBytes == null || compressedBytes.isEmpty) {
+        throw Exception('이미지 추가 압축에 실패했습니다');
+      }
+      
+      // 최종 파일에 압축된 이미지 쓰기
       final File compressedFile = File(targetPath);
       await compressedFile.writeAsBytes(compressedBytes);
       
       // 압축 후 실제 파일 크기 확인
       final compressedSize = await compressedFile.length();
-      debugPrint('압축 전 이미지 크기: ${imageBytes.length} 바이트, 압축 후: $compressedSize 바이트');
+      debugPrint('압축 후 크기: $compressedSize 바이트');
       
-      // 메모리 해제를 위한 명시적 처리
-      imageBytes.clear();
-      processedImage.clear(); // 처리된 이미지도 명시적으로 메모리 해제
-      
-      // 백그라운드에서 GC 힌트
-      scheduleMicrotask(() {
-        // 가비지 컬렉션 힌트
-        debugPrint('이미지 처리 후 메모리 최적화 수행');
-      });
+      // 최종 파일 크기 확인 및 비상 압축 (파일이 너무 크면 추가 압축)
+      if (compressedSize > 500 * 1024) { // 500KB 이상일 경우
+        debugPrint('파일이 여전히 큽니다. 추가 압축 시도...');
+        
+        // 2차 압축 시도
+        final secondCompressBytes = await FlutterImageCompress.compressWithFile(
+          compressedFile.path,
+          minWidth: processedImage.width ~/ 1.2, // 약간 더 크기 축소
+          minHeight: processedImage.height ~/ 1.2,
+          quality: 65, // 낮은 품질로 다시 압축
+          format: CompressFormat.jpeg,
+        );
+        
+        if (secondCompressBytes != null && secondCompressBytes.isNotEmpty) {
+          await compressedFile.writeAsBytes(secondCompressBytes);
+          final finalSize = await compressedFile.length();
+          debugPrint('추가 압축 후 크기: $finalSize 바이트');
+        }
+      }
       
       return compressedFile;
     } catch (e) {
-      debugPrint('이미지 압축 및 저장 중 오류 발생: $e');
-      // 원본 이미지를 그대로 복사 (압축 실패 시 대체 방안)
-      final origFile = await imageFile.copy(targetPath);
+      debugPrint('압축 과정 중 오류: $e');
+      throw e;
+    } finally {
+      // 임시 파일 정리
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
       
-      // 원본 이미지를 사용할 경우에도 저장 공간 사용량 추적 코드 제거 (중복 추적 방지)
-      
-      return origFile;
+      // 메모리 해제 힌트
+      processedImage.clear();
     }
   }
 
@@ -616,31 +714,6 @@ class ImageService {
     } catch (e) {
       debugPrint('저장 공간 사용량 계산 중 오류: $e');
       return 0.0;
-    }
-  }
-  
-  /// 이미지 저장소 초기화 (위험한 작업 - 신중히 사용)
-  Future<bool> initializeImageStorage() async {
-    try {
-      // 앱 문서 폴더의 이미지 디렉토리
-      final appDir = await getApplicationDocumentsDirectory();
-      final imagesDir = Directory('${appDir.path}/images');
-      
-      if (await imagesDir.exists()) {
-        // 디렉토리 전체 삭제
-        await imagesDir.delete(recursive: true);
-        
-        // 디렉토리 다시 생성
-        await imagesDir.create(recursive: true);
-        
-        debugPrint('이미지 저장소 초기화 완료');
-        return true;
-      }
-      
-      return false;
-    } catch (e) {
-      debugPrint('이미지 저장소 초기화 중 오류: $e');
-      return false;
     }
   }
 }
