@@ -536,6 +536,14 @@ class ImageService {
   /// 이미지 업로드 (로컬 저장소에 저장)
   Future<String> uploadImage(File imageFile) async {
     try {
+      // 타이머 출력 방지
+      timeDilation = 1.0;
+      
+      // 파일 유효성 확인
+      if (!await imageFile.exists()) {
+        throw Exception('이미지 파일이 존재하지 않습니다.');
+      }
+      
       // 사용량 제한 확인
       final usage = await _usageLimitService.getBetaUsageLimits();
       
@@ -546,8 +554,13 @@ class ImageService {
       
       // 이미지 저장 및 최적화
       final relativePath = await saveAndOptimizeImage(imageFile);
+      if (relativePath.isEmpty) {
+        throw Exception('이미지 저장에 실패했습니다.');
+      }
+      
       return relativePath;
     } catch (e) {
+      debugPrint('이미지 업로드 중 오류 발생: $e');
       throw Exception('이미지 업로드 중 오류가 발생했습니다: $e');
     }
   }

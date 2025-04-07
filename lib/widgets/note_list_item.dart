@@ -162,6 +162,16 @@ class _NoteListItemState extends State<NoteListItem> {
   
   // 노트 이미지 업데이트
   Future<void> _updateNoteImage(File imageFile) async {
+    // 노트 ID 검증 - null이면 조기 반환
+    if (widget.note.id == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('노트 ID가 유효하지 않습니다')),
+        );
+      }
+      return;
+    }
+    
     setState(() {
       _isLoadingImage = true;
     });
@@ -170,8 +180,13 @@ class _NoteListItemState extends State<NoteListItem> {
       // 이미지 업로드
       final imageUrl = await _imageService.uploadImage(imageFile);
       
-      // 노트 이미지 URL 업데이트
-      await _noteService.updateNoteImageUrl(widget.note.id!, imageUrl);
+      // 노트 이미지 URL 업데이트 - null 체크 후 안전하게 사용
+      final String noteId = widget.note.id!; // 이미 위에서 null 체크를 했으므로 안전
+      final bool success = await _noteService.updateNoteImageUrl(noteId, imageUrl);
+      
+      if (!success) {
+        throw Exception('노트 이미지 업데이트에 실패했습니다');
+      }
       
       // 이미지 로드
       await _loadImage();
@@ -186,7 +201,7 @@ class _NoteListItemState extends State<NoteListItem> {
       debugPrint('노트 이미지 업데이트 중 오류: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('이미지 업데이트 중 오류가 발생했습니다')),
+          SnackBar(content: Text('이미지 업데이트 중 오류가 발생했습니다: $e')),
         );
       }
     } finally {

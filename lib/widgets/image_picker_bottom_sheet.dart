@@ -249,14 +249,26 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         waitForFirstPageProcessing: false,
       );
 
-      // 결과 저장
+      // 결과 저장 - 안전한 방식으로 처리
       final bool success = result['success'] == true;
-      createdNoteId = result['noteId'] as String?;
+      
+      // noteId가 String인지 확인하고 안전하게 캐스팅
+      if (result.containsKey('noteId') && result['noteId'] != null) {
+        try {
+          createdNoteId = result['noteId'].toString();
+        } catch (e) {
+          debugPrint('노트 ID 변환 중 오류: $e');
+          createdNoteId = null;
+        }
+      } else {
+        createdNoteId = null;
+      }
+      
       final bool isProcessingBackground = result['isProcessingBackground'] ?? false;
       final String message = result['message'] ?? '노트 생성에 실패했습니다.';
       
-      // 성공 여부 저장
-      creationSucceeded = success && createdNoteId != null;
+      // 성공 여부 저장 - ID가 정상적으로 있는지 확인
+      creationSucceeded = success && createdNoteId != null && createdNoteId.isNotEmpty;
       
       // 4초 후 노트 페이지로 이동 (지정된 시간 후에 항상 로딩 종료)
       Future.delayed(Duration(seconds: 3), () {
@@ -265,8 +277,8 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           LoadingDialog.hide(context);
           isLoadingDialogShowing = false;
           
-          // 노트 페이지로 이동
-          if (creationSucceeded && createdNoteId != null && context.mounted) {
+          // 노트 페이지로 이동 - null 체크 강화
+          if (creationSucceeded && createdNoteId != null && createdNoteId.isNotEmpty && context.mounted) {
             _navigateToNoteDetail(context, createdNoteId, isProcessingBackground);
           }
         }
@@ -298,7 +310,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
       
       // 노트 생성에 성공했으면 오류가 있어도 노트 페이지로 이동
-      if (creationSucceeded && createdNoteId != null && context.mounted) {
+      if (creationSucceeded && createdNoteId != null && createdNoteId.isNotEmpty && context.mounted) {
         _navigateToNoteDetail(context, createdNoteId, true);
         return;
       }
