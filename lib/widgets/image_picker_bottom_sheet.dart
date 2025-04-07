@@ -225,7 +225,10 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
   Future<void> _createNoteWithImages(
       BuildContext context, List<File> images) async {
-    if (images.isEmpty) return;
+    if (images.isEmpty) {
+      debugPrint('이미지가 비어 있어 노트 생성을 중단합니다.');
+      return;
+    }
 
     // 로딩 다이얼로그 표시 여부를 추적하는 변수
     bool isLoadingDialogShowing = false;
@@ -249,74 +252,107 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         waitForFirstPageProcessing: false,
       );
 
+      // 결과 값이 null인지 확인
+      if (result == null) {
+        throw Exception('노트 생성 결과가 null입니다.');
+      }
+
       // 결과 저장 - 안전한 방식으로 처리
       final bool success = result['success'] == true;
       
-      // noteId가 String인지 확인하고 안전하게 캐스팅
+      // noteId 추출 및 안전 검사
       if (result.containsKey('noteId') && result['noteId'] != null) {
-        try {
-          createdNoteId = result['noteId'].toString();
-        } catch (e) {
-          debugPrint('노트 ID 변환 중 오류: $e');
+        // toString()으로 안전하게 문자열 변환
+        createdNoteId = result['noteId'].toString();
+        
+        // 변환된 ID가 비어있지 않은지 확인
+        if (createdNoteId.isEmpty) {
+          debugPrint('노트 ID가 빈 문자열입니다.');
           createdNoteId = null;
         }
       } else {
+        debugPrint('결과에 노트 ID가 없거나 null입니다.');
         createdNoteId = null;
       }
       
+      // 백그라운드 처리 상태
       final bool isProcessingBackground = result['isProcessingBackground'] ?? false;
-      final String message = result['message'] ?? '노트 생성에 실패했습니다.';
       
       // 성공 여부 저장 - ID가 정상적으로 있는지 확인
       creationSucceeded = success && createdNoteId != null && createdNoteId.isNotEmpty;
       
-      // 4초 후 노트 페이지로 이동 (지정된 시간 후에 항상 로딩 종료)
-      Future.delayed(Duration(seconds: 3), () {
+      debugPrint('노트 생성 결과: 성공=$success, ID=$createdNoteId, 백그라운드=$isProcessingBackground');
+      
+      // 에러가 발생한 경우 오류 메시지 표시
+      if (!creationSucceeded && context.mounted) {
+        final String errorMessage = result['message'] ?? '노트 생성에 실패했습니다.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: ColorTokens.error,
+            behavior: UITokens.snackBarTheme.behavior,
+            shape: UITokens.snackBarTheme.shape,
+          ),
+        );
+        
+        // 로딩 다이얼로그 닫기
         if (isLoadingDialogShowing && context.mounted) {
-          // 로딩 다이얼로그 닫기
           LoadingDialog.hide(context);
           isLoadingDialogShowing = false;
-          
-          // 노트 페이지로 이동 - null 체크 강화
-          if (creationSucceeded && createdNoteId != null && createdNoteId.isNotEmpty && context.mounted) {
-            _navigateToNoteDetail(context, createdNoteId, isProcessingBackground);
-          }
         }
-      });
+        return;
+      }
       
-      // 노트 생성 실패 시 처리
-      if (!creationSucceeded && context.mounted) {
-        // 즉시 로딩 다이얼로그 닫기
+      // 노트 생성 성공 시 3초 후에 화면 이동 (로딩 애니메이션 표시를 위한 지연)
+      if (creationSucceeded && context.mounted) {
+        // 일정 시간 후 노트 상세 화면으로 이동
+        Future.delayed(const Duration(seconds: 3), () {
+          // 컨텍스트가 여전히 유효한지 확인
+          if (context.mounted) {
+            // 로딩 다이얼로그가 표시 중인지 확인하고 닫기
+            if (isLoadingDialogShowing) {
+              LoadingDialog.hide(context);
+              isLoadingDialogShowing = false;
+            }
+            
+            // 생성된 노트 ID가 유효한지 다시 한번 확인
+            if (createdNoteId != null && createdNoteId.isNotEmpty) {
+              // 노트 상세 화면으로 이동
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NoteDetailScreen(
+                    noteId: createdNoteId!,
+                    isProcessingBackground: !isProcessingBackground,
+                  ),
+                ),
+              );
+            } else {
+              // 노트 ID가 유효하지 않은 경우 오류 메시지 표시
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('생성된 노트 ID가 유효하지 않습니다.'),
+                  backgroundColor: ColorTokens.error,
+                  behavior: UITokens.snackBarTheme.behavior,
+                  shape: UITokens.snackBarTheme.shape,
+                ),
+              );
+            }
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('노트 생성 중 예외 발생: $e');
+      
+      // 컨텍스트가 여전히 유효한지 확인
+      if (context.mounted) {
+        // 로딩 다이얼로그가 표시 중인지 확인하고 닫기
         if (isLoadingDialogShowing) {
           LoadingDialog.hide(context);
           isLoadingDialogShowing = false;
         }
         
         // 오류 메시지 표시
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: ColorTokens.error,
-            behavior: UITokens.snackBarTheme.behavior,
-            shape: UITokens.snackBarTheme.shape,
-          ),
-        );
-      }
-    } catch (e) {
-      // 로딩 다이얼로그 닫기
-      if (isLoadingDialogShowing && context.mounted) {
-        LoadingDialog.hide(context);
-        isLoadingDialogShowing = false;
-      }
-      
-      // 노트 생성에 성공했으면 오류가 있어도 노트 페이지로 이동
-      if (creationSucceeded && createdNoteId != null && createdNoteId.isNotEmpty && context.mounted) {
-        _navigateToNoteDetail(context, createdNoteId, true);
-        return;
-      }
-      
-      // 오류 메시지 표시
-      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('노트 생성 중 오류가 발생했습니다: $e'),
@@ -327,25 +363,5 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         );
       }
     }
-  }
-  
-  // 노트 상세 화면으로 이동하는 메서드
-  void _navigateToNoteDetail(BuildContext context, String noteId, bool isProcessingBackground) {
-    if (!context.mounted) return;
-    
-    // Microtask로 이동하여 화면 깜빡임 방지
-    Future.microtask(() {
-      if (context.mounted) {
-        // 화면 전환 (replace 사용하여 현재 화면 대체)
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => NoteDetailScreen(
-              noteId: noteId,
-              isProcessingBackground: isProcessingBackground,
-            ),
-          ),
-        );
-      }
-    });
   }
 } 
