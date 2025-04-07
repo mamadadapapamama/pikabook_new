@@ -546,7 +546,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     final bool isFullTextMode = widget.processedText.showFullText;
 
     // 로딩 확인용
-    debugPrint('[${DateTime.now()}] ProcessedTextWidget build 호출');
+    // debugPrint('[${DateTime.now()}] ProcessedTextWidget build 호출');
     
     // 번역 텍스트 체크 로그 추가
     if (widget.processedText.fullTranslatedText != null && widget.processedText.fullTranslatedText!.isNotEmpty) {

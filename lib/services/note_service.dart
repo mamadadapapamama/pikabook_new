@@ -486,7 +486,7 @@ class NoteService {
           }
 
           // OCR로 텍스트 추출
-          final extractedText = await _ocrService.extractText(imageFile);
+          final extractedText = await _ocrService.extractText(imageFile, skipUsageCount: true);
           debugPrint(
               'OCR 텍스트 추출 완료: 이미지 ${i + 1}, 텍스트 길이: ${extractedText.length}');
 
@@ -603,7 +603,7 @@ class NoteService {
           await prefs.setInt('updated_page_count_$noteId', processedCount);
           
           // 처리 결과 로그
-          debugPrint('모든 이미지 처리 완료 ($processedCount/$totalCount), 오류: 0');
+          // debugPrint('모든 이미지 처리 완료 ($processedCount/$totalCount), 오류: 0');
         }
       } catch (e) {
         debugPrint('노트 캐시 업데이트 실패: $e');
@@ -843,7 +843,7 @@ class NoteService {
           final imageUrl = await _imageService.uploadImage(imageFiles[0]);
           
           // OCR로 텍스트 추출
-          final extractedText = await _ocrService.extractText(imageFiles[0]);
+          final extractedText = await _ocrService.extractText(imageFiles[0], skipUsageCount: true);
           
           // 텍스트 번역
           String translatedText = '';
@@ -999,7 +999,7 @@ class NoteService {
         
         try {
           // OCR로 텍스트 추출
-          final extractedText = await _ocrService.extractText(imageFile);
+          final extractedText = await _ocrService.extractText(imageFile, skipUsageCount: true);
           
           // 텍스트 번역
           String translatedText = '';
@@ -1145,7 +1145,7 @@ class NoteService {
       // shouldProcess가 true일 때만 OCR 및 번역 처리
       if (shouldProcess) {
         // OCR로 텍스트 추출
-        extractedText = await _ocrService.extractText(imageFile);
+        extractedText = await _ocrService.extractText(imageFile, skipUsageCount: true);
         if (extractedText.isEmpty) {
           debugPrint('OCR 텍스트 추출 실패 또는 텍스트 없음');
         }

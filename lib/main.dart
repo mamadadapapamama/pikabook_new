@@ -61,6 +61,18 @@ void main() async {
   } else {
     // 디버그 모드 설정
     DebugUtils.enableLogInRelease = true;
+    
+    // 디버그 모드에서도 특정 로그 패턴(타이머 관련) 필터링
+    final originalDebugPrint = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      if (message == null) return;
+      // "pikabook", "ms", "소요 시간" 등 타이머 관련 출력 필터링
+      if (message.contains("pikabook") && (message.contains("ms") || message.contains("초"))) {
+        return; // 타이머 관련 로그 출력 안함
+      }
+      // 나머지 로그는 정상적으로 출력
+      originalDebugPrint(message, wrapWidth: wrapWidth);
+    };
   }
   
   // 5. Firebase 초기화

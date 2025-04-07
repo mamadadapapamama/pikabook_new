@@ -117,10 +117,11 @@ class EnhancedOcrService {
   Future<ProcessedText> processImage(
     File imageFile,
     String mode,
+    {bool skipUsageCount = false}
   ) async {
     try {
       // 이미지에서 텍스트 추출
-      final extractedText = await extractText(imageFile);
+      final extractedText = await extractText(imageFile, skipUsageCount: skipUsageCount);
       if (extractedText.isEmpty) {
         return ProcessedText(fullOriginalText: '');
       }
@@ -441,7 +442,7 @@ class EnhancedOcrService {
   }
 
   /// 이미지에서 텍스트 추출 (OCR)
-  Future<String> extractText(File imageFile) async {
+  Future<String> extractText(File imageFile, {bool skipUsageCount = false}) async {
     try {
       await initialize();
 

@@ -735,6 +735,72 @@ class DictionaryService {
       return '기타';
     }
   }
+
+  Future<Map<String, dynamic>> _processSearchResults(List<Map<String, dynamic>> results, String query) async {
+    try {
+      // 전체 결과 처리 시간 측정
+      // final startTime = DateTime.now();
+      
+      // 결과 데이터 형식 통일
+      final processedResults = <Map<String, dynamic>>[];
+      
+      for (final result in results) {
+        processedResults.add({
+          'word': result['word'] ?? result['title'] ?? query,
+          'pinyin': result['pinyin'] ?? result['pronunciation'] ?? '',
+          'meaning': result['meaning'] ?? result['definition'] ?? (result['translations'] != null 
+              ? List<String>.from(result['translations']).join(', ') 
+              : ''),
+          'examples': result['examples'] ?? [],
+          'source': result['source'] ?? 'local',
+        });
+      }
+      
+      // 결과 필터링 및 정렬
+      final filteredResults = processedResults
+          .where((r) => r['word'].toString().isNotEmpty && r['meaning'].toString().isNotEmpty)
+          .toList();
+      
+      // 정확한 일치가 있으면 상위 배치
+      filteredResults.sort((a, b) {
+        final aExactMatch = a['word'] == query;
+        final bExactMatch = b['word'] == query;
+        
+        if (aExactMatch && !bExactMatch) return -1;
+        if (!aExactMatch && bExactMatch) return 1;
+        
+        // 단어 길이로 정렬 (짧은 것이 우선)
+        return a['word'].toString().length - b['word'].toString().length;
+      });
+      
+      // 최대 10개 결과로 제한
+      final limitedResults = filteredResults.take(10).toList();
+      
+      // 최종 결과 포맷
+      final finalResponse = {
+        'query': query,
+        'results': limitedResults,
+        'status': 'success',
+        'count': limitedResults.length,
+      };
+      
+      // 처리 시간 측정
+      // final endTime = DateTime.now();
+      // final processingTime = endTime.difference(startTime).inMilliseconds;
+      // debugPrint('검색 결과 처리 시간: ${processingTime}ms (${limitedResults.length}개 결과)');
+      
+      return finalResponse;
+    } catch (e) {
+      debugPrint('검색 결과 처리 중 오류 발생: $e');
+      return {
+        'query': query,
+        'results': [],
+        'status': 'error',
+        'count': 0,
+        'error': e.toString(),
+      };
+    }
+  }
 }
 
 // 외부 사전 유형
