@@ -294,8 +294,16 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     // 4-1. 온보딩이 이미 완료된 경우 홈 화면
     if (_isOnboardingCompleted) {
       return HomeScreen(
-        onSettingsPressed: () {
+        onSettingsPressed: (BuildContext context) async {
           // 설정 화면으로 이동 로직 구현
+          // UI 스레드 처리를 위한 짧은 지연 추가
+          await Future.delayed(const Duration(milliseconds: 10));
+          
+          if (!context.mounted) return;
+          
+          // 로그 추가
+          debugPrint('App.dart에서 설정 화면으로 네비게이션 시작 (전달된 context 사용)');
+          
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => SettingsScreen(

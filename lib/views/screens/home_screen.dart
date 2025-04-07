@@ -36,7 +36,7 @@ import '../../utils/debug_utils.dart';
 /// profile setting, note detail, flashcard 화면으로 이동 가능
 
 class HomeScreen extends StatefulWidget {
-  final VoidCallback? onSettingsPressed;
+  final Function(BuildContext)? onSettingsPressed;
   
   const HomeScreen({
     Key? key,
@@ -142,43 +142,46 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             // 디버그 로그 추가
             debugPrint('홈 화면에서 설정 버튼 클릭됨 - 네비게이션 시작');
             
+            // 직접 네비게이션 처리
+            if (!mounted) return;
+            
             // widget.onSettingsPressed가 있으면 사용, 없으면 기본 설정 화면으로 이동
             if (widget.onSettingsPressed != null) {
               debugPrint('외부 제공된 onSettingsPressed 콜백 사용');
-              widget.onSettingsPressed!();
+              widget.onSettingsPressed!(context);
             } else {
               debugPrint('기본 설정 화면으로 이동');
-              // 설정 화면으로 이동 (라우팅 사용)
-              Navigator.push(
-                context,
+              
+              // 설정 화면으로 네비게이션 (딜레이 없이 직접 호출)
+              Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (context) => SettingsScreen(
                     onLogout: () async {
                       // 로그아웃 처리
                       await FirebaseAuth.instance.signOut();
-                      // 페이드 애니메이션을 사용한 로그인 화면 전환
-                      if (context.mounted) {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          PageRouteBuilder(
-                            pageBuilder: (context, animation, secondaryAnimation) => const App(),
-                            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                              const begin = 0.0;
-                              const end = 1.0;
-                              const curve = Curves.easeInOut;
-                              
-                              var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-                              var fadeAnimation = animation.drive(tween);
-                              
-                              return FadeTransition(
-                                opacity: fadeAnimation,
-                                child: child,
-                              );
-                            },
-                            transitionDuration: const Duration(milliseconds: 500),
-                          ),
-                          (route) => false,
-                        );
-                      }
+                      // 앱 재시작 효과를 위한 페이지 전환
+                      if (!context.mounted) return;
+                      
+                      Navigator.of(context).pushAndRemoveUntil(
+                        PageRouteBuilder(
+                          pageBuilder: (context, animation, secondaryAnimation) => const App(),
+                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                            const begin = 0.0;
+                            const end = 1.0;
+                            const curve = Curves.easeInOut;
+                            
+                            var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                            var fadeAnimation = animation.drive(tween);
+                            
+                            return FadeTransition(
+                              opacity: fadeAnimation,
+                              child: child,
+                            );
+                          },
+                          transitionDuration: const Duration(milliseconds: 500),
+                        ),
+                        (route) => false,
+                      );
                     },
                   ),
                 ),
