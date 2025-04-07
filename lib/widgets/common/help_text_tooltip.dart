@@ -178,10 +178,12 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                           Flexible(
                             child: Text(
                               widget.text,
-                              style: widget.titleStyle ?? TypographyTokens.body1.copyWith(
-                                color: ColorTokens.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: widget.titleStyle != null
+                                  ? widget.titleStyle
+                                  : TypographyTokens.body1.copyWith(
+                                      color: ColorTokens.primary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -245,11 +247,15 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                   const SizedBox(height: 12),
                   Text(
                     widget.description!,
-                    style: widget.descriptionStyle ?? TypographyTokens.body2.copyWith(
-                      color: ColorTokens.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                    ),
+                    style: widget.descriptionStyle != null 
+                        ? widget.descriptionStyle
+                        : TypographyTokens.body2.copyWith(
+                            color: ColorTokens.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                          ),
+                    textAlign: TextAlign.left,
+                    strutStyle: StrutStyle(forceStrutHeight: true),
                   ),
                 ],
                 
