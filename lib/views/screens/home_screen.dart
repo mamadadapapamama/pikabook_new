@@ -43,7 +43,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final UserPreferencesService _userPreferences = UserPreferencesService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   String _noteSpaceName = '';
@@ -63,6 +63,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    
+    // WidgetsBinding 옵저버 등록
+    WidgetsBinding.instance.addObserver(this);
     
     // 화면 구성하는 동안 필요한 데이터 즉시 로드
     _loadNoteSpaceName();
@@ -88,6 +91,44 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     
     // 애니메이션 반복 설정
     _animationController.repeat(reverse: true);
+    
+    // Route 변경 감지를 위한 리스너 추가
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 현재 라우트 감지를 위한 observer 등록
+      final navigator = Navigator.of(context);
+      // 페이지 리로드를 위한 포커스 리스너 추가
+      if (ModalRoute.of(context) != null) {
+        ModalRoute.of(context)!.addScopedWillPopCallback(() async {
+          // 화면으로 돌아올 때마다 노트스페이스 이름을 다시 로드
+          await _loadNoteSpaceName();
+          return false; // false를 반환하여 pop을 방해하지 않음
+        });
+      }
+    });
+  }
+  
+  @override
+  void dispose() {
+    // 리스너 제거
+    _viewModel?.removeListener(_onViewModelChanged);
+    _animationController.dispose();
+    
+    // WidgetsBinding 옵저버 제거
+    WidgetsBinding.instance.removeObserver(this);
+    
+    super.dispose();
+  }
+  
+  // 앱 라이프사이클 변경 감지
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // 앱이 다시 포그라운드로 돌아왔을 때
+    if (state == AppLifecycleState.resumed) {
+      // 노트스페이스 이름을 다시 로드
+      _loadNoteSpaceName();
+    }
   }
   
   // 홈 화면 도움말 표시 여부 확인
@@ -114,33 +155,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   @override
-  void dispose() {
-    // 리스너 제거
-    _viewModel?.removeListener(_onViewModelChanged);
-    _animationController.dispose();
-    super.dispose();
-  }
-  
-  Future<void> _loadNoteSpaceName() async {
-    try {
-      final noteSpaceName = await _userPreferences.getDefaultNoteSpace();
-      
-      // 디버깅을 위해 현재 사용자 ID 로깅
-      final currentUserId = await _userPreferences.getCurrentUserId();
-      
-      if (mounted) {
-        setState(() {
-          _noteSpaceName = noteSpaceName;
-        });
-      }
-    } catch (e) {
-      // 오류 발생 시 기본값 사용
-      if (mounted) {
-        setState(() {
-          _noteSpaceName = '학습 노트';
-        });
-      }
-    }
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // 화면이 활성화될 때마다 노트스페이스 이름 다시 로드
+    _loadNoteSpaceName();
   }
 
   @override
@@ -555,5 +574,36 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _onViewModelChanged() {
     // 필요시 상태 업데이트
     if (!mounted || _viewModel == null) return;
+  }
+
+  Future<void> _loadNoteSpaceName() async {
+    try {
+      // 노트스페이스 이름 변경 이벤트를 확인
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      final String? lastChangedName = prefs.getString('last_changed_notespace_name');
+      
+      // 일반적인 방법으로 노트스페이스 이름 로드
+      final noteSpaceName = await _userPreferences.getDefaultNoteSpace();
+      
+      // 디버깅을 위해 현재 사용자 ID 로깅
+      final currentUserId = await _userPreferences.getCurrentUserId();
+      
+      if (mounted) {
+        setState(() {
+          // 마지막으로 변경된 이름이 있으면 해당 이름 사용, 없으면 일반 로드 값 사용
+          _noteSpaceName = lastChangedName ?? noteSpaceName;
+          
+          // 디버그 정보 출력
+          DebugUtils.log('노트스페이스 이름 로드: $_noteSpaceName (변경된 이름: $lastChangedName)');
+        });
+      }
+    } catch (e) {
+      // 오류 발생 시 기본값 사용
+      if (mounted) {
+        setState(() {
+          _noteSpaceName = '학습 노트';
+        });
+      }
+    }
   }
 } 

@@ -1286,4 +1286,34 @@ class NoteService {
       debugPrint('OCR 페이지 카운트 롤백 중 오류: $e');
     }
   }
+
+  /// 노트의 첫 페이지 처리 상태 확인
+  Future<Map<String, dynamic>> checkFirstPageProcessingStatus(String noteId) async {
+    try {
+      // 1. 노트 문서에서 firstPageProcessed 필드 확인
+      final noteDoc = await _notesCollection.doc(noteId).get();
+      if (!noteDoc.exists) {
+        return {'processed': false, 'message': '노트를 찾을 수 없습니다.'};
+      }
+      
+      final data = noteDoc.data() as Map<String, dynamic>;
+      final bool firstPageProcessed = data['firstPageProcessed'] ?? false;
+      
+      // 2. 로컬 저장소에서도 확인
+      final prefs = await SharedPreferences.getInstance();
+      final localProcessed = prefs.getBool('first_page_processed_$noteId') ?? false;
+      
+      // 둘 중 하나라도 처리 완료로 표시되었으면 처리 완료로 간주
+      final bool isProcessed = firstPageProcessed || localProcessed;
+      
+      return {
+        'processed': isProcessed,
+        'message': isProcessed ? '첫 페이지 처리 완료' : '첫 페이지 처리 중',
+        'noteData': data
+      };
+    } catch (e) {
+      debugPrint('첫 페이지 처리 상태 확인 중 오류: $e');
+      return {'processed': false, 'message': '처리 상태 확인 중 오류: $e'};
+    }
+  }
 }

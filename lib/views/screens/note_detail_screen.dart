@@ -1534,11 +1534,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         itemCount: _pageManager.pages.length,
           controller: _pageController,
         onPageChanged: (index) {
-          // 이전에 방문하지 않은 페이지라면 방문 기록에 추가
+            // 이전에 방문하지 않은 페이지라면 방문 기록에 추가
           if (!_previouslyVisitedPages.contains(index)) {
             _previouslyVisitedPages.add(index);
           }
-          
+            
           // 페이지 변경 처리
           _changePage(index);
         },

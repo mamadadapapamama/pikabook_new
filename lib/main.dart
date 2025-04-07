@@ -66,10 +66,30 @@ void main() async {
     final originalDebugPrint = debugPrint;
     debugPrint = (String? message, {int? wrapWidth}) {
       if (message == null) return;
-      // "pikabook", "ms", "소요 시간" 등 타이머 관련 출력 필터링
-      if (message.contains("pikabook") && (message.contains("ms") || message.contains("초"))) {
-        return; // 타이머 관련 로그 출력 안함
+      
+      // 필터링할 키워드 목록
+      final keywords = [
+        'pikabook', 'Pikabook',
+        'ms', 'millisecond', 'millis',
+        '초', '시간', '소요',
+        'elapsed', 'duration',
+        'timeout', 'timer',
+      ];
+      
+      // 키워드가 포함된 메시지 필터링
+      bool shouldFilter = false;
+      for (final keyword in keywords) {
+        if (message.contains(keyword)) {
+          shouldFilter = true;
+          break;
+        }
       }
+      
+      // 필터링 조건에 해당하면 출력하지 않음
+      if (shouldFilter) {
+        return;
+      }
+      
       // 나머지 로그는 정상적으로 출력
       originalDebugPrint(message, wrapWidth: wrapWidth);
     };

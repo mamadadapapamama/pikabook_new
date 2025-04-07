@@ -238,46 +238,76 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     // 로딩 다이얼로그 표시 여부를 추적하는 변수
     bool isLoadingDialogShowing = false;
     
-    // 타임아웃 로직을 위한 타이머 추가
-    Timer? loadingTimeout;
-
+    // 생성된 노트 ID 저장용 변수
+    String? createdNoteId;
+    bool creationSucceeded = false;
+    
     try {
       // 노트 생성 시작: 이미지 개수 저장
       final int imageCount = images.length;
       
-      // 로딩 다이얼로그 표시 - 첫 페이지 처리가 완료될 때까지 표시
-      if (context.mounted) {
-        // 로딩 다이얼로그 표시
-        LoadingDialog.show(context, message: '노트 생성 중...');
-        isLoadingDialogShowing = true;
-        
-        // 5초 후 타임아웃 설정 - 로딩이 너무 오래 걸리면 자동으로 닫기
-        loadingTimeout = Timer(const Duration(seconds: 5), () {
-          if (context.mounted && isLoadingDialogShowing) {
-            LoadingDialog.hide(context);
-            isLoadingDialogShowing = false;
-          }
-        });
-      }
-
-      // 여러 이미지로 노트 생성
+      // 여러 이미지로 노트 생성 (먼저 노트부터 생성)
       final result = await _noteService.createNoteWithMultipleImages(
         imageFiles: images,
         title: null, // 자동 타이틀 생성을 위해 null 전달
         silentProgress: true, // 진행 상황 업데이트 무시
-        waitForFirstPageProcessing: true, // 첫 페이지 처리 완료까지 대기
+        waitForFirstPageProcessing: false, // 첫 페이지 처리 완료까지 대기하지 않고 바로 결과 반환
       );
 
-      // 타임아웃 타이머 취소
-      loadingTimeout?.cancel();
-
-      // 결과를 먼저 저장 (네비게이션 전)
+      // 결과 저장
       final bool success = result['success'] == true;
-      final String? noteId = result['noteId'] as String?;
+      createdNoteId = result['noteId'] as String?;
       final bool isProcessingBackground = result['isProcessingBackground'] ?? false;
       final String message = result['message'] ?? '노트 생성에 실패했습니다.';
+      
+      // 성공 여부 저장
+      creationSucceeded = success && createdNoteId != null;
+      
+      // 로딩 다이얼로그 표시 - 커스텀 타임아웃 콜백 추가
+      if (context.mounted) {
+        // 로딩 다이얼로그 표시 (기본 메시지 사용)
+        LoadingDialog.show(
+          context, 
+          timeoutSeconds: 20, // 타임아웃 시간을 20초로 설정
+        );
+        isLoadingDialogShowing = true;
+        
+        // 타임아웃 시 처리를 위한 별도 타이머 설정
+        Timer(Duration(seconds: 20), () {
+          if (isLoadingDialogShowing && context.mounted) {
+            // 타임아웃 발생 시 로딩 다이얼로그 닫기
+            LoadingDialog.hide(context);
+            isLoadingDialogShowing = false;
+            
+            // 노트 생성에 성공했으면 노트 페이지로 이동
+            if (creationSucceeded && context.mounted) {
+              _navigateToNoteDetail(context, createdNoteId!, isProcessingBackground);
+            }
+          }
+        });
+      }
+      
+      // 첫 페이지 처리 완료 대기 (최대 15초)
+      if (creationSucceeded) {
+        bool firstPageProcessed = false;
+        int waitCount = 0;
+        
+        while (!firstPageProcessed && waitCount < 15 && isLoadingDialogShowing) {
+          // 첫 페이지 처리 상태 확인
+          final pageStatus = await _noteService.checkFirstPageProcessingStatus(createdNoteId!);
+          firstPageProcessed = pageStatus['processed'] == true;
+          
+          if (firstPageProcessed) {
+            break;
+          }
+          
+          // 1초 대기 후 다시 확인
+          await Future.delayed(Duration(seconds: 1));
+          waitCount++;
+        }
+      }
 
-      // 로딩 다이얼로그 닫기 - 첫 페이지 처리 완료 후
+      // 로딩 다이얼로그 닫기 - 첫 페이지 처리 완료 또는 대기 시간 초과 후
       if (isLoadingDialogShowing && context.mounted) {
         // LoadingDialog 클래스의 메서드로 닫기
         LoadingDialog.hide(context);
@@ -285,21 +315,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
 
       // 결과에 따라 다음 화면으로 이동 또는 오류 메시지 표시
-      if (success && noteId != null && context.mounted) {
-        // 딜레이 없이 바로 노트 상세 화면으로 이동
-        if (context.mounted) {
-          // 화면 전환 (pushAndRemoveUntil 사용하여 홈 화면 위에 새 화면 push)
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(
-              builder: (context) => NoteDetailScreen(
-                noteId: noteId,
-                isProcessingBackground: isProcessingBackground,
-              ),
-            ),
-            // 홈 화면만 남기고 모든 화면 제거
-            (route) => route.isFirst
-          );
-        }
+      if (creationSucceeded && context.mounted) {
+        // 노트 상세 화면으로 이동
+        _navigateToNoteDetail(context, createdNoteId!, isProcessingBackground);
       } else if (context.mounted) {
         // 오류 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
@@ -312,13 +330,16 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         );
       }
     } catch (e) {
-      // 타임아웃 타이머 취소
-      loadingTimeout?.cancel();
-      
       // 오류 발생 시 로딩 다이얼로그 닫기
       if (isLoadingDialogShowing && context.mounted) {
         LoadingDialog.hide(context);
         isLoadingDialogShowing = false;
+      }
+      
+      // 노트 생성에 성공했으면 오류가 있어도 노트 페이지로 이동
+      if (creationSucceeded && context.mounted) {
+        _navigateToNoteDetail(context, createdNoteId!, true);
+        return;
       }
       
       // 오류 메시지 표시
@@ -333,5 +354,22 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         );
       }
     }
+  }
+  
+  // 노트 상세 화면으로 이동하는 메서드
+  void _navigateToNoteDetail(BuildContext context, String noteId, bool isProcessingBackground) {
+    if (!context.mounted) return;
+    
+    // 화면 전환 (pushAndRemoveUntil 사용하여 홈 화면 위에 새 화면 push)
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (context) => NoteDetailScreen(
+          noteId: noteId,
+          isProcessingBackground: isProcessingBackground,
+        ),
+      ),
+      // 홈 화면만 남기고 모든 화면 제거
+      (route) => route.isFirst
+    );
   }
 } 

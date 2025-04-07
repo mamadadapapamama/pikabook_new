@@ -10,11 +10,13 @@ import 'dart:async';
 class PikabookLoader extends StatelessWidget {
   final String title;
   final String subtitle;
+  final int timeoutSeconds;
 
   const PikabookLoader({
     Key? key,
     this.title = '스마트한 학습 노트를 만들고 있어요.',
     this.subtitle = '잠시만 기다려 주세요!\n조금 시간이 걸릴수 있어요.',
+    this.timeoutSeconds = 20,
   }) : super(key: key);
 
   /// 로더를 다이얼로그로 표시하는 정적 메서드
@@ -22,6 +24,7 @@ class PikabookLoader extends StatelessWidget {
     BuildContext context, {
     String title = '스마트한 학습 노트를 만들고 있어요.',
     String subtitle = '잠시만 기다려 주세요!\n조금 시간이 걸릴수 있어요.',
+    int timeoutSeconds = 20, // 타임아웃 시간 (초 단위)
   }) async {
     if (!context.mounted) {
       return;
@@ -29,6 +32,16 @@ class PikabookLoader extends StatelessWidget {
     
     // showDialog를 직접 호출하는 대신 addPostFrameCallback 사용
     Completer<void> completer = Completer<void>();
+    
+    // 타임아웃 설정 - 20초 후 자동으로 닫힘
+    Timer? timeoutTimer;
+    if (timeoutSeconds > 0) {
+      timeoutTimer = Timer(Duration(seconds: timeoutSeconds), () {
+        if (context.mounted) {
+          hide(context);
+        }
+      });
+    }
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (context.mounted) {
@@ -47,16 +60,21 @@ class PikabookLoader extends StatelessWidget {
                 child: PikabookLoader(
                   title: title,
                   subtitle: subtitle,
+                  timeoutSeconds: timeoutSeconds,
                 ),
               ),
             ),
           ),
         ).then((_) {
+          // 다이얼로그가 닫힐 때 타이머 취소
+          timeoutTimer?.cancel();
           completer.complete();
         }).catchError((e) {
+          timeoutTimer?.cancel();
           completer.completeError(e);
         });
       } else {
+        timeoutTimer?.cancel();
         completer.completeError('컨텍스트가 더 이상 유효하지 않습니다.');
       }
     });

@@ -13,6 +13,7 @@ import '../../widgets/common/usage_dialog.dart';
 import '../../services/auth_service.dart';
 import '../../services/plan_service.dart';
 import '../../services/usage_limit_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -515,6 +516,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // UI 다시 로드
         await _loadUserPreferences();
         
+        // 전역 상태를 통해 변경 사실을 알림
+        await _notifyNoteSpaceNameChanged(result);
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -545,6 +549,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
     }
+  }
+  
+  // 노트스페이스 이름 변경 알림 메서드
+  Future<void> _notifyNoteSpaceNameChanged(String newName) async {
+    // 1. SharedPreferences에 마지막 변경 시간 기록 (타임스탬프)
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('last_notespace_change', DateTime.now().millisecondsSinceEpoch);
+    
+    // 2. 앱 내 다른 화면을 강제로 갱신하기 위한 특수 플래그 설정
+    await prefs.setString('last_changed_notespace_name', newName);
   }
   
   // 원문 언어 설정 다이얼로그
