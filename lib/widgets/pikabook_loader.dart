@@ -141,7 +141,7 @@ class PikabookLoader extends StatelessWidget {
           Text(
             subtitle,
             style: TypographyTokens.body1.copyWith(
-              color: ColorTokens.primary,
+              color: Colors.grey[700], // 빨간색 대신 다크 그레이 색상 사용
             ),
             textAlign: TextAlign.center,
           ),

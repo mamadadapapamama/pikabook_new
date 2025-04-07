@@ -1377,26 +1377,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     if (mounted) {
       DebugUtils.log('홈 화면으로 이동 시작 (WillPopScope)');
       
-      // 직접 HomeScreen으로 이동 (pushAndRemoveUntil에 슬라이드 애니메이션 적용)
-      Navigator.of(context).pushAndRemoveUntil(
+      // 직접 HomeScreen으로 이동 (pushReplacement 사용하여 부드럽게 전환)
+      Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) => HomeScreen(),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            const begin = Offset(-1.0, 0.0); // 왼쪽에서 오른쪽으로 슬라이드
-            const end = Offset.zero;
-            const curve = Curves.easeInOut;
-            
-            var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-            var offsetAnimation = animation.drive(tween);
-            
-            return SlideTransition(
-              position: offsetAnimation,
+            return FadeTransition(
+              opacity: animation,
               child: child,
             );
           },
-          transitionDuration: const Duration(milliseconds: 300),
+          transitionDuration: const Duration(milliseconds: 200),
         ),
-        (route) => false // 모든 이전 경로 제거
       );
       return false; // WillPopScope 기본 동작 중지
     }

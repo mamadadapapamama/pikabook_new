@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:flutter/scheduler.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/note.dart';
 import '../utils/date_formatter.dart';
@@ -46,6 +47,10 @@ class _NoteListItemState extends State<NoteListItem> {
   @override
   void initState() {
     super.initState();
+    
+    // 타이머 출력 방지
+    timeDilation = 1.0;
+    
     _loadImage();
   }
 
@@ -75,7 +80,6 @@ class _NoteListItemState extends State<NoteListItem> {
         });
       }
     } catch (e) {
-      debugPrint('이미지 로드 중 오류 발생: $e');
       if (mounted) {
         setState(() {
           _isLoadingImage = false;
@@ -199,6 +203,9 @@ class _NoteListItemState extends State<NoteListItem> {
     final dismissibleKey = Key(widget.note.id ?? 'note-${DateTime.now().millisecondsSinceEpoch}');
     final borderRadius = BorderRadius.circular(SpacingTokens.radiusXs);
     
+    // 타이머 출력 방지
+    timeDilation = 1.0;
+    
     return Container(
       margin: EdgeInsets.symmetric(vertical: SpacingTokens.sm),
       child: SegmentUtils.buildDismissibleSegment(
@@ -246,57 +253,24 @@ class _NoteListItemState extends State<NoteListItem> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 이미지 썸네일
-                    Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(SpacingTokens.xs),
-                          child: SizedBox(
-                            width: 80,
-                            height: 80,
-                            child: _imageFile != null
-                                ? Image.file(
-                                    _imageFile!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        color: Colors.grey[100],
-                                        child: Image.asset(
-                                          'assets/images/thumbnail_empty.png',
-                                          fit: BoxFit.cover,
-                                        ),
-                                      );
-                                    },
-                                    frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                                      if (wasSynchronouslyLoaded || frame != null) {
-                                        return child;
-                                      } else {
-                                        return Stack(
-                                          children: [
-                                            Container(
-                                              color: Colors.grey[100],
-                                              child: Image.asset(
-                                                'assets/images/thumbnail_empty.png',
-                                                fit: BoxFit.cover,
-                                              ),
-                                            ),
-                                            child,
-                                          ],
-                                        );
-                                      }
-                                    },
-                                  )
-                                : Container(
-                                    color: Colors.grey[100],
-                                    child: Image.asset(
-                                      'assets/images/thumbnail_empty.png',
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ],
+                    // 이미지 썸네일 (최적화된 방식으로 구현)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(SpacingTokens.xs),
+                      child: SizedBox(
+                        width: 80,
+                        height: 80,
+                        child: _imageFile != null
+                          ? Image(
+                              image: FileImage(_imageFile!),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return _buildEmptyThumbnail();
+                              },
+                            )
+                          : _buildEmptyThumbnail(),
+                      ),
                     ),
+                    
                     SizedBox(width: SpacingTokens.md),
                     
                     // 노트 내용
@@ -412,6 +386,17 @@ class _NoteListItemState extends State<NoteListItem> {
             ),
           ),
         ),
+      ),
+    );
+  }
+  
+  // 빈 썸네일 표시 위젯
+  Widget _buildEmptyThumbnail() {
+    return Container(
+      color: Colors.grey[100],
+      child: Image.asset(
+        'assets/images/thumbnail_empty.png',
+        fit: BoxFit.cover,
       ),
     );
   }

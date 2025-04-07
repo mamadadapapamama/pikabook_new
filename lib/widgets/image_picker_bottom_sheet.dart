@@ -164,12 +164,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     try {
       final images = await _imageService.pickMultipleImages();
 
-      if (images.isNotEmpty) {
-        // 저장된 컨텍스트를 사용하여 로딩 다이얼로그 표시
-        if (navigatorContext.mounted) {
-          LoadingDialog.show(navigatorContext, message: '노트 생성 중...');
-          await _createNoteWithImages(navigatorContext, images);
-        }
+      if (images.isNotEmpty && navigatorContext.mounted) {
+        // 노트 생성 진행
+        await _createNoteWithImages(navigatorContext, images);
       }
     } catch (e) {
       if (navigatorContext.mounted) {
@@ -196,24 +193,19 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     try {
       final image = await _imageService.pickImage(source: ImageSource.camera);
 
-      if (image != null) {
-        // 저장된 컨텍스트를 사용하여 로딩 다이얼로그 표시
-        if (navigatorContext.mounted) {
-          LoadingDialog.show(navigatorContext, message: '노트 생성 중...');
-          await _createNoteWithImages(navigatorContext, [image]);
-        }
-      } else {
+      if (image != null && navigatorContext.mounted) {
+        // 노트 생성 진행
+        await _createNoteWithImages(navigatorContext, [image]);
+      } else if (navigatorContext.mounted) {
         // 사용자가 사진 촬영을 취소한 경우
-        if (navigatorContext.mounted) {
-          ScaffoldMessenger.of(navigatorContext).showSnackBar(
-            SnackBar(
-              content: const Text('사진 촬영이 취소되었습니다.'),
-              backgroundColor: ColorTokens.secondary,
-              behavior: UITokens.snackBarTheme.behavior,
-              shape: UITokens.snackBarTheme.shape,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(navigatorContext).showSnackBar(
+          SnackBar(
+            content: const Text('사진 촬영이 취소되었습니다.'),
+            backgroundColor: ColorTokens.secondary,
+            behavior: UITokens.snackBarTheme.behavior,
+            shape: UITokens.snackBarTheme.shape,
+          ),
+        );
       }
     } catch (e) {
       if (navigatorContext.mounted) {
@@ -242,19 +234,19 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     String? createdNoteId;
     bool creationSucceeded = false;
     
-    // 타이머 변수 생성 - 나중에 취소할 수 있도록 보관
-    Timer? loadingTimer;
-    
     try {
-      // 노트 생성 시작: 이미지 개수 저장
-      final int imageCount = images.length;
+      // 먼저 로딩 다이얼로그 표시 (OverlayEntry 방식 사용)
+      if (context.mounted) {
+        LoadingDialog.show(context, message: '노트 생성 중...');
+        isLoadingDialogShowing = true;
+      }
       
-      // 여러 이미지로 노트 생성 (먼저 노트부터 생성)
+      // 노트 생성 시작
       final result = await _noteService.createNoteWithMultipleImages(
         imageFiles: images,
-        title: null, // 자동 타이틀 생성을 위해 null 전달
-        silentProgress: true, // 진행 상황 업데이트 무시
-        waitForFirstPageProcessing: false, // 첫 페이지 처리 완료까지 대기하지 않고 바로 결과 반환
+        title: null,
+        silentProgress: true,
+        waitForFirstPageProcessing: false,
       );
 
       // 결과 저장
@@ -266,125 +258,56 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       // 성공 여부 저장
       creationSucceeded = success && createdNoteId != null;
       
-      // 로딩 다이얼로그 표시
-      if (context.mounted) {
-        // 로딩 다이얼로그 표시 (기본 메시지 사용)
-        LoadingDialog.show(context);
-        isLoadingDialogShowing = true;
-        
-        // 무조건 닫히게 하는 강제 타이머 설정 (10초 후 무조건 닫히고 페이지 이동)
-        loadingTimer = Timer(Duration(seconds: 10), () {
-          if (isLoadingDialogShowing && context.mounted) {
-            isLoadingDialogShowing = false;
-            
-            // 노트 생성에 성공했으면 노트 페이지로 이동
-            if (creationSucceeded && context.mounted) {
-              // 먼저 페이지 이동 수행 후 다이얼로그 닫기
-              _navigateToNoteDetail(context, createdNoteId!, isProcessingBackground);
-              
-              // 페이지 이동 후 적절한 지연을 두고 로딩 다이얼로그 닫기
-              Future.delayed(Duration(milliseconds: 100), () {
-                if (context.mounted) {
-                  LoadingDialog.hide(context);
-                }
-              });
-            } else {
-              // 실패한 경우 다이얼로그 닫기
-              if (context.mounted) {
-                LoadingDialog.hide(context);
-              }
-            }
-          }
-        });
-      }
-      
-      // 첫 페이지 처리 완료 대기 (최대 8초)
-      if (creationSucceeded) {
-        bool firstPageProcessed = false;
-        int waitCount = 0;
-        const int maxWaitSeconds = 8;
-        
-        while (!firstPageProcessed && waitCount < maxWaitSeconds && context.mounted && isLoadingDialogShowing) {
-          try {
-            // 첫 페이지 처리 상태 확인
-            final pageStatus = await _noteService.checkFirstPageProcessingStatus(createdNoteId!);
-            firstPageProcessed = pageStatus['processed'] == true;
-            
-            if (firstPageProcessed) {
-              break;
-            }
-          } catch (e) {
-            // 에러 무시
-          }
+      // 4초 후 노트 페이지로 이동 (지정된 시간 후에 항상 로딩 종료)
+      Future.delayed(Duration(seconds: 3), () {
+        if (isLoadingDialogShowing && context.mounted) {
+          // 로딩 다이얼로그 닫기
+          LoadingDialog.hide(context);
+          isLoadingDialogShowing = false;
           
-          // 1초 대기 후 다시 확인
-          await Future.delayed(Duration(seconds: 1));
-          waitCount++;
-        }
-      }
-
-      // 첫 페이지 처리 완료 또는 대기 시간 초과 후, 타이머가 작동 중이면 취소
-      loadingTimer?.cancel();
-      
-      // 결과에 따라 다음 화면으로 이동
-      if (creationSucceeded && context.mounted && isLoadingDialogShowing) {
-        isLoadingDialogShowing = false;
-        
-        // 페이지 이동 먼저 수행
-        _navigateToNoteDetail(context, createdNoteId!, isProcessingBackground);
-        
-        // 페이지 이동 후 적절한 지연을 두고 로딩 다이얼로그 닫기
-        Future.delayed(Duration(milliseconds: 100), () {
-          if (context.mounted) {
-            LoadingDialog.hide(context);
+          // 노트 페이지로 이동
+          if (creationSucceeded && createdNoteId != null && context.mounted) {
+            _navigateToNoteDetail(context, createdNoteId, isProcessingBackground);
           }
-        });
-      } else if (context.mounted && isLoadingDialogShowing) {
-        // 실패한 경우 다이얼로그 닫기 후 오류 메시지 표시
-        isLoadingDialogShowing = false;
-        LoadingDialog.hide(context);
-        
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(message.toString()),
-              backgroundColor: ColorTokens.error,
-              behavior: UITokens.snackBarTheme.behavior,
-              shape: UITokens.snackBarTheme.shape,
-            ),
-          );
         }
+      });
+      
+      // 노트 생성 실패 시 처리
+      if (!creationSucceeded && context.mounted) {
+        // 즉시 로딩 다이얼로그 닫기
+        if (isLoadingDialogShowing) {
+          LoadingDialog.hide(context);
+          isLoadingDialogShowing = false;
+        }
+        
+        // 오류 메시지 표시
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: ColorTokens.error,
+            behavior: UITokens.snackBarTheme.behavior,
+            shape: UITokens.snackBarTheme.shape,
+          ),
+        );
       }
     } catch (e) {
-      // 오류 발생 시 타이머 취소
-      loadingTimer?.cancel();
-      
-      // 노트 생성에 성공했으면 오류가 있어도 노트 페이지로 이동
-      if (creationSucceeded && context.mounted) {
-        // 페이지 이동 먼저 수행
-        _navigateToNoteDetail(context, createdNoteId!, true);
-        
-        // 페이지 이동 후 로딩 다이얼로그 닫기
-        Future.delayed(Duration(milliseconds: 100), () {
-          if (context.mounted && isLoadingDialogShowing) {
-            isLoadingDialogShowing = false;
-            LoadingDialog.hide(context);
-          }
-        });
-        return;
+      // 로딩 다이얼로그 닫기
+      if (isLoadingDialogShowing && context.mounted) {
+        LoadingDialog.hide(context);
+        isLoadingDialogShowing = false;
       }
       
-      // 실패한 경우 로딩 다이얼로그 닫기
-      if (context.mounted && isLoadingDialogShowing) {
-        isLoadingDialogShowing = false;
-        LoadingDialog.hide(context);
+      // 노트 생성에 성공했으면 오류가 있어도 노트 페이지로 이동
+      if (creationSucceeded && createdNoteId != null && context.mounted) {
+        _navigateToNoteDetail(context, createdNoteId, true);
+        return;
       }
       
       // 오류 메시지 표시
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('노트 생성 중 오류가 발생했습니다'),
+            content: Text('노트 생성 중 오류가 발생했습니다: $e'),
             backgroundColor: ColorTokens.error,
             behavior: UITokens.snackBarTheme.behavior,
             shape: UITokens.snackBarTheme.shape,

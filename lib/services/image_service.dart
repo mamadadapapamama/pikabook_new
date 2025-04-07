@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -31,7 +32,10 @@ class ImageService {
   // Firebase Storage 참조
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  ImageService._internal();
+  ImageService._internal() {
+    // 애니메이션 타이머 관련 설정
+    timeDilation = 1.0;
+  }
 
   // 현재 사용자 ID 가져오기
   String? get _currentUserId => FirebaseAuth.instance.currentUser?.uid;
@@ -360,6 +364,9 @@ class ImageService {
 
   /// 이미지 파일 가져오기
   Future<File?> getImageFile(String? relativePath) async {
+    // 타이머 출력 방지
+    timeDilation = 1.0;
+
     if (relativePath == null || relativePath.isEmpty) {
       return null;
     }

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'app.dart';
-import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'utils/debug_utils.dart';
@@ -12,6 +14,45 @@ import 'utils/debug_utils.dart';
 /// 앱 실행 준비 및 스플래시 화면 관리만 담당하고
 /// 모든 로직은 App 클래스에 위임합니다.
 void main() async {
+  // 성능 오버레이 비활성화 (MaterialApp에서 showPerformanceOverlay: false로 설정됨)
+  
+  // 타이머 및 애니메이션 디버깅 출력 비활성화
+  debugPrintScheduleFrameStacks = false;
+  debugPrintBeginFrameBanner = false;
+  debugPrintEndFrameBanner = false;
+  timeDilation = 1.0;
+  
+  // 렌더링 디버그 정보 비활성화
+  debugPaintSizeEnabled = false;
+  debugPaintBaselinesEnabled = false;
+  debugPaintLayerBordersEnabled = false;
+  debugPaintPointersEnabled = false;
+  debugRepaintRainbowEnabled = false;
+  
+  // iOS 시스템 로그 필터링
+  FlutterError.onError = (FlutterErrorDetails details) {
+    // iOS 시스템 로그 필터링 (대부분 무시)
+    if (details.toString().contains('RTIInputSystemClient') ||
+        details.toString().contains('UIKeyboard') ||
+        details.toString().contains('flutter_keyboard') ||
+        details.toString().contains('nw_path') ||
+        details.toString().contains('Firebase') ||
+        details.toString().contains('focusItemsInRect') ||
+        details.toString().contains('fopen failed') ||
+        details.toString().contains('bloom') ||
+        details.toString().contains('timer') ||
+        details.toString().contains('ms')) {
+      return; // 무시
+    }
+    
+    // 그 외의 오류는 정상적으로 처리
+    if (DebugUtils.isReleaseMode()) {
+      DebugUtils.error('앱 오류: ${details.exception}');
+    } else {
+      FlutterError.dumpErrorToConsole(details);
+    }
+  };
+  
   WidgetsFlutterBinding.ensureInitialized();
   
   // 1. 스플래시 화면 유지
@@ -135,9 +176,13 @@ void main() async {
   // 5. Firebase 초기화
   try {
     if (Firebase.apps.isEmpty) {
+      // Firebase 초기화
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      
+      // 로깅 관련 경고 메시지 감소를 위한 추가 설정
+      // (Firebase 내부 로깅은 플랫폼 별로 다르게 제어됨)
     }
   } catch (e) {
     // Firebase 초기화 실패 - 릴리즈 모드에서는 로그만 저장
