@@ -94,8 +94,20 @@ class PikabookLoader extends StatelessWidget {
         try {
           // 직접 네비게이터를 통해 닫기 시도
           Navigator.of(context, rootNavigator: true).pop();
+          debugPrint('PikabookLoader hide 메서드 성공');
         } catch (e) {
-          // 오류 무시
+          debugPrint('PikabookLoader hide 메서드 오류: $e');
+          
+          // 대비책: 약간의 지연 후 다시 시도
+          Future.delayed(const Duration(milliseconds: 100), () {
+            try {
+              if (context.mounted) {
+                Navigator.of(context, rootNavigator: true).pop();
+              }
+            } catch (retryError) {
+              // 재시도 오류 무시
+            }
+          });
         }
       }
     });
@@ -106,6 +118,7 @@ class PikabookLoader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
       width: 300, // Figma 디자인과 동일한 너비
+      height: 195, // 높이 고정
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),

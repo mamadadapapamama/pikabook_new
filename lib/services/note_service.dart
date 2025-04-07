@@ -1299,21 +1299,39 @@ class NoteService {
       final data = noteDoc.data() as Map<String, dynamic>;
       final bool firstPageProcessed = data['firstPageProcessed'] ?? false;
       
-      // 2. 로컬 저장소에서도 확인
-      final prefs = await SharedPreferences.getInstance();
-      final localProcessed = prefs.getBool('first_page_processed_$noteId') ?? false;
+      // 2. 로컬 저장소에서도 확인 (중요: 예외 처리 개선)
+      bool localProcessed = false;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        localProcessed = prefs.getBool('first_page_processed_$noteId') ?? false;
+      } catch (e) {
+        debugPrint('로컬 저장소에서 첫 페이지 처리 상태 확인 중 오류: $e');
+        // 오류가 발생해도 계속 진행
+      }
       
       // 둘 중 하나라도 처리 완료로 표시되었으면 처리 완료로 간주
       final bool isProcessed = firstPageProcessed || localProcessed;
       
+      // 첫 페이지 처리가 완료되었으면 로컬 저장소에도 표시
+      if (isProcessed) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('first_page_processed_$noteId', true);
+        } catch (e) {
+          debugPrint('로컬 저장소에 첫 페이지 처리 상태 저장 중 오류: $e');
+          // 오류가 발생해도 계속 진행
+        }
+      }
+      
       return {
         'processed': isProcessed,
         'message': isProcessed ? '첫 페이지 처리 완료' : '첫 페이지 처리 중',
-        'noteData': data
+        'firestore': firstPageProcessed,
+        'local': localProcessed
       };
     } catch (e) {
       debugPrint('첫 페이지 처리 상태 확인 중 오류: $e');
-      return {'processed': false, 'message': '처리 상태 확인 중 오류: $e'};
+      return {'processed': false, 'message': '오류: $e'};
     }
   }
 }

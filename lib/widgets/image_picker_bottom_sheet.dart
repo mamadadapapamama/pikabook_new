@@ -242,6 +242,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     String? createdNoteId;
     bool creationSucceeded = false;
     
+    // 타이머 변수 생성 - 나중에 취소할 수 있도록 보관
+    Timer? loadingTimer;
+    
     try {
       // 노트 생성 시작: 이미지 개수 저장
       final int imageCount = images.length;
@@ -268,14 +271,15 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         // 로딩 다이얼로그 표시 (기본 메시지 사용)
         LoadingDialog.show(
           context, 
-          timeoutSeconds: 20, // 타임아웃 시간을 20초로 설정
+          timeoutSeconds: 30, // 타임아웃 시간을 30초로 늘림
         );
         isLoadingDialogShowing = true;
         
         // 타임아웃 시 처리를 위한 별도 타이머 설정
-        Timer(Duration(seconds: 20), () {
+        loadingTimer = Timer(Duration(seconds: 30), () {
+          // 타이머 콜백 내에서 상태 변수 확인
           if (isLoadingDialogShowing && context.mounted) {
-            // 타임아웃 발생 시 로딩 다이얼로그 닫기
+            // 타임아웃 발생 시 로딩 다이얼로그 명시적으로 닫기
             LoadingDialog.hide(context);
             isLoadingDialogShowing = false;
             
@@ -291,14 +295,19 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       if (creationSucceeded) {
         bool firstPageProcessed = false;
         int waitCount = 0;
+        const int maxWaitSeconds = 15;
         
-        while (!firstPageProcessed && waitCount < 15 && isLoadingDialogShowing) {
-          // 첫 페이지 처리 상태 확인
-          final pageStatus = await _noteService.checkFirstPageProcessingStatus(createdNoteId!);
-          firstPageProcessed = pageStatus['processed'] == true;
-          
-          if (firstPageProcessed) {
-            break;
+        while (!firstPageProcessed && waitCount < maxWaitSeconds && context.mounted && isLoadingDialogShowing) {
+          try {
+            // 첫 페이지 처리 상태 확인
+            final pageStatus = await _noteService.checkFirstPageProcessingStatus(createdNoteId!);
+            firstPageProcessed = pageStatus['processed'] == true;
+            
+            if (firstPageProcessed) {
+              break;
+            }
+          } catch (e) {
+            debugPrint('첫 페이지 처리 상태 확인 중 오류: $e');
           }
           
           // 1초 대기 후 다시 확인
@@ -309,6 +318,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
       // 로딩 다이얼로그 닫기 - 첫 페이지 처리 완료 또는 대기 시간 초과 후
       if (isLoadingDialogShowing && context.mounted) {
+        // 백그라운드 타이머 취소
+        loadingTimer?.cancel();
+        
         // LoadingDialog 클래스의 메서드로 닫기
         LoadingDialog.hide(context);
         isLoadingDialogShowing = false;
@@ -330,6 +342,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         );
       }
     } catch (e) {
+      // 오류 발생 시 타이머 취소
+      loadingTimer?.cancel();
+      
       // 오류 발생 시 로딩 다이얼로그 닫기
       if (isLoadingDialogShowing && context.mounted) {
         LoadingDialog.hide(context);
@@ -346,7 +361,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('노트 생성 중 오류가 발생했습니다'),
+            content: Text('노트 생성 중 오류가 발생했습니다: $e'),
             backgroundColor: ColorTokens.error,
             behavior: UITokens.snackBarTheme.behavior,
             shape: UITokens.snackBarTheme.shape,

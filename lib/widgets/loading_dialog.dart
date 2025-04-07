@@ -30,39 +30,23 @@ class LoadingDialog {
     _dialogContext = context;
 
     try {
-      // 즉시 배경을 보여주기 위해 애니메이션 없이 즉시 표시
-      await showGeneralDialog(
+      // Dialog 위젯을 사용하여 중앙에 작은 창으로 표시
+      await showDialog(
         context: context,
         barrierDismissible: false,
         barrierColor: Colors.black54,
-        transitionDuration: const Duration(milliseconds: 300),
-        pageBuilder: (context, animation, secondaryAnimation) {
+        builder: (BuildContext context) {
           _dialogContext = context;
           return WillPopScope(
             onWillPop: () async => false,
-            child: SafeArea(
-              child: Material(
-                type: MaterialType.transparency,
-                child: PikabookLoader(
-                  title: '스마트한 학습 노트를 만들고 있어요.',
-                  subtitle: '잠시만 기다려 주세요!',
-                  timeoutSeconds: timeoutSeconds, // 타임아웃 값 전달
-                ),
+            child: Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              child: PikabookLoader(
+                title: '스마트한 학습 노트를 만들고 있어요.',
+                subtitle: '잠시만 기다려 주세요!',
+                timeoutSeconds: timeoutSeconds, // 타임아웃 값 전달
               ),
-            ),
-          );
-        },
-        transitionBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(
-            opacity: Tween<double>(begin: 0.0, end: 1.0).animate(animation),
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.8, end: 1.0).animate(
-                CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOutQuint,
-                ),
-              ),
-              child: child,
             ),
           );
         },
@@ -85,21 +69,37 @@ class LoadingDialog {
     _isShowing = false;
     
     try {
-      // PikabookLoader의 hide 메서드를 사용하여 닫기
-      PikabookLoader.hide(context);
-    } catch (e) {
-      // 오류 발생 시 직접 Navigator를 통해 닫기 시도
-      try {
-        // 저장된 다이얼로그 컨텍스트가 있으면 사용, 없으면 전달된 컨텍스트 사용
-        BuildContext effectiveContext = _dialogContext ?? context;
-        
-        // 컨텍스트 유효성 검사 및 닫기 시도
-        if (effectiveContext.mounted) {
-          Navigator.of(effectiveContext, rootNavigator: true).pop();
+      // PikabookLoader의 hide 메서드 호출 방식 변경
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          // 저장된 다이얼로그 컨텍스트가 있으면 사용, 없으면 전달된 컨텍스트 사용
+          BuildContext effectiveContext = _dialogContext ?? context;
+          
+          // 컨텍스트 유효성 검사 및 닫기 시도
+          if (effectiveContext.mounted) {
+            // 직접 Navigator를 통해 닫기
+            Navigator.of(effectiveContext, rootNavigator: true).pop();
+            debugPrint('로딩 다이얼로그 닫기 성공');
+          } else if (context.mounted) {
+            // 대체 컨텍스트로 시도
+            Navigator.of(context, rootNavigator: true).pop();
+            debugPrint('대체 컨텍스트로 로딩 다이얼로그 닫기 성공');
+          }
+        } catch (e) {
+          debugPrint('로딩 다이얼로그 닫기 중 오류: $e');
+          
+          // 마지막 시도: 현재 컨텍스트로 한 번 더 시도
+          try {
+            if (context.mounted) {
+              Navigator.of(context, rootNavigator: true).pop();
+            }
+          } catch (finalError) {
+            // 최종 오류는 무시
+          }
         }
-      } catch (navError) {
-        // 오류 무시
-      }
+      });
+    } catch (e) {
+      debugPrint('로딩 다이얼로그 닫기 프레임 스케줄링 중 오류: $e');
     } finally {
       // 어떤 경우든 상태 초기화
       _dialogContext = null;
