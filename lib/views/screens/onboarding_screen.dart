@@ -173,16 +173,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       // 사용 목적 저장
       await _userPreferences.setLearningPurpose(purpose ?? '');
 
-      // SharedPreferences 인스턴스 가져오기
-      final prefs = await SharedPreferences.getInstance();
-      // 온보딩 완료 표시 (명시적으로 is_onboarding_completed 키를 사용)
-      await prefs.setBool('is_onboarding_completed', true);
       // 툴팁을 아직 보지 않았다고 설정
+      final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('hasShownTooltip', false);
       
       // Firestore에 사용자 데이터 저장
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
+        // 현재 사용자 ID 설정 (데이터가 올바른 사용자에게 저장되도록)
+        await _userPreferences.setCurrentUserId(user.uid);
+        
+        // Firestore에 사용자 데이터 저장
         await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
           'userName': userName,
           'learningPurpose': purpose,
@@ -190,6 +191,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           'hasOnboarded': true,
           'onboardingCompleted': true,
           'defaultNoteSpace': noteSpaceName,
+          'noteSpaces': [noteSpaceName], // 노트 스페이스 목록도 저장
         }, SetOptions(merge: true));
       }
       

@@ -55,22 +55,29 @@ class UserPreferencesService {
   // 기본 노트 스페이스 가져오기
   Future<String> getDefaultNoteSpace() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_defaultNoteSpaceKey) ?? '기본 노트';
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_defaultNoteSpaceKey}_$userId' : _defaultNoteSpaceKey;
+    return prefs.getString(key) ?? '기본 노트';
   }
 
   // 기본 노트 스페이스 설정
   Future<void> setDefaultNoteSpace(String noteSpace) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_defaultNoteSpaceKey, noteSpace);
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_defaultNoteSpaceKey}_$userId' : _defaultNoteSpaceKey;
+    await prefs.setString(key, noteSpace);
     
     // Firestore에도 노트 스페이스 이름 업데이트
     try {
-      final userId = await getCurrentUserId();
       if (userId != null && userId.isNotEmpty) {
         await FirebaseFirestore.instance.collection('users').doc(userId).update({
           'defaultNoteSpace': noteSpace
         });
-        debugPrint('✅ Firestore에 노트 스페이스 이름 업데이트: $noteSpace');
+        debugPrint('✅ Firestore에 노트 스페이스 이름 업데이트: $noteSpace, 사용자: $userId');
       }
     } catch (e) {
       debugPrint('⚠️ Firestore 노트 스페이스 이름 업데이트 실패: $e');
@@ -120,37 +127,97 @@ class UserPreferencesService {
   // 사용자 이름 가져오기
   Future<String?> getUserName() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_userNameKey);
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_userNameKey}_$userId' : _userNameKey;
+    return prefs.getString(key);
   }
 
   // 사용자 이름 설정
   Future<void> setUserName(String name) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_userNameKey, name);
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_userNameKey}_$userId' : _userNameKey;
+    await prefs.setString(key, name);
+    
+    // Firestore에도 사용자 이름 업데이트
+    try {
+      if (userId != null && userId.isNotEmpty) {
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({
+          'userName': name
+        });
+        debugPrint('✅ Firestore에 사용자 이름 업데이트: $name, 사용자: $userId');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Firestore 사용자 이름 업데이트 실패: $e');
+    }
   }
 
   // 학습 목적 가져오기
   Future<String?> getLearningPurpose() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_learningPurposeKey);
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_learningPurposeKey}_$userId' : _learningPurposeKey;
+    return prefs.getString(key);
   }
 
   // 학습 목적 설정
   Future<void> setLearningPurpose(String purpose) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_learningPurposeKey, purpose);
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_learningPurposeKey}_$userId' : _learningPurposeKey;
+    await prefs.setString(key, purpose);
+    
+    // Firestore에도 학습 목적 업데이트
+    try {
+      if (userId != null && userId.isNotEmpty) {
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({
+          'learningPurpose': purpose
+        });
+        debugPrint('✅ Firestore에 학습 목적 업데이트: $purpose, 사용자: $userId');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Firestore 학습 목적 업데이트 실패: $e');
+    }
   }
 
   // 세그먼트 모드 사용 여부 가져오기
   Future<bool> getUseSegmentMode() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_useSegmentModeKey) ?? false;
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_useSegmentModeKey}_$userId' : _useSegmentModeKey;
+    return prefs.getBool(key) ?? false;
   }
 
   // 세그먼트 모드 사용 여부 설정
   Future<void> setUseSegmentMode(bool useSegmentMode) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_useSegmentModeKey, useSegmentMode);
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_useSegmentModeKey}_$userId' : _useSegmentModeKey;
+    await prefs.setBool(key, useSegmentMode);
+    
+    // Firestore에도 세그먼트 모드 업데이트
+    try {
+      if (userId != null && userId.isNotEmpty) {
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({
+          'translationMode': useSegmentMode ? 'segment' : 'full'
+        });
+        debugPrint('✅ Firestore에 세그먼트 모드 업데이트: $useSegmentMode, 사용자: $userId');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Firestore 세그먼트 모드 업데이트 실패: $e');
+    }
   }
 
   // getDefaultNoteViewMode 추가 (getUseSegmentMode 와 동일하게 동작)
@@ -162,16 +229,37 @@ class UserPreferencesService {
   // 노트 스페이스 목록 가져오기
   Future<List<String>> getNoteSpaces() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_noteSpacesKey) ?? ['기본 노트'];
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_noteSpacesKey}_$userId' : _noteSpacesKey;
+    return prefs.getStringList(key) ?? ['기본 노트'];
   }
 
   // 노트 스페이스 추가
   Future<void> addNoteSpace(String noteSpace) async {
     final prefs = await SharedPreferences.getInstance();
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_noteSpacesKey}_$userId' : _noteSpacesKey;
+    
     final noteSpaces = await getNoteSpaces();
     if (!noteSpaces.contains(noteSpace)) {
       noteSpaces.add(noteSpace);
-      await prefs.setStringList(_noteSpacesKey, noteSpaces);
+      await prefs.setStringList(key, noteSpaces);
+      
+      // Firestore에도 노트 스페이스 목록 업데이트
+      try {
+        if (userId != null && userId.isNotEmpty) {
+          await FirebaseFirestore.instance.collection('users').doc(userId).update({
+            'noteSpaces': noteSpaces
+          });
+          debugPrint('✅ Firestore에 노트 스페이스 목록 업데이트: $noteSpaces, 사용자: $userId');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Firestore 노트 스페이스 목록 업데이트 실패: $e');
+      }
     }
   }
 
@@ -267,9 +355,25 @@ class UserPreferencesService {
   Future<void> clearUserData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final userId = await getCurrentUserId();
       
-      // 사용자 데이터 관련 키 모두 삭제
-      await prefs.remove(_onboardingCompletedKey); // 온보딩 완료 상태도 초기화
+      if (userId == null) {
+        debugPrint('⚠️ 초기화할 사용자 ID가 없습니다');
+        return;
+      }
+      
+      // 사용자 데이터 관련 키 모두 삭제 (사용자 ID별)
+      await prefs.remove('${_onboardingCompletedKey}_$userId');
+      await prefs.remove('${_defaultNoteSpaceKey}_$userId');
+      await prefs.remove('${_userNameKey}_$userId');
+      await prefs.remove('${_learningPurposeKey}_$userId');
+      await prefs.remove('${_useSegmentModeKey}_$userId');
+      await prefs.remove('${_noteSpacesKey}_$userId');
+      await prefs.remove('${_sourceLanguageKey}_$userId');
+      await prefs.remove('${_targetLanguageKey}_$userId');
+      
+      // 일반 키도 삭제 (이전 버전 호환성을 위해)
+      await prefs.remove(_onboardingCompletedKey);
       await prefs.remove(_defaultNoteSpaceKey);
       await prefs.remove(_userNameKey);
       await prefs.remove(_learningPurposeKey);
@@ -280,8 +384,9 @@ class UserPreferencesService {
       
       // 'hasShownTooltip' 키도 초기화 (홈 화면 툴팁)
       await prefs.remove('hasShownTooltip');
+      await prefs.remove('hasShownTooltip_$userId');
       
-      debugPrint('⚠️ 사용자 전환 - 모든 사용자별 설정 데이터가 초기화되었습니다');
+      debugPrint('⚠️ 사용자 전환 - 모든 사용자별 설정 데이터가 초기화되었습니다: $userId');
     } catch (e) {
       debugPrint('⚠️ 사용자 데이터 초기화 중 오류 발생: $e');
     }
@@ -306,6 +411,66 @@ class UserPreferencesService {
     } catch (e) {
       debugPrint('사용자 설정 초기화 중 오류 발생: $e');
       rethrow;
+    }
+  }
+
+  // Firestore에서 사용자 설정 로드
+  Future<void> loadUserSettingsFromFirestore() async {
+    final userId = await getCurrentUserId();
+    if (userId == null || userId.isEmpty) {
+      debugPrint('⚠️ Firestore에서 설정을 로드할 사용자 ID가 없습니다');
+      return;
+    }
+    
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      
+      if (userDoc.exists) {
+        final userData = userDoc.data();
+        if (userData == null) return;
+        
+        // 설정 로드
+        if (userData['userName'] != null) {
+          await setUserName(userData['userName']);
+          debugPrint('✅ Firestore에서 사용자 이름 로드: ${userData['userName']}');
+        }
+        
+        if (userData['defaultNoteSpace'] != null) {
+          await setDefaultNoteSpace(userData['defaultNoteSpace']);
+          debugPrint('✅ Firestore에서 노트 스페이스 로드: ${userData['defaultNoteSpace']}');
+        }
+        
+        if (userData['learningPurpose'] != null) {
+          await setLearningPurpose(userData['learningPurpose']);
+          debugPrint('✅ Firestore에서 학습 목적 로드: ${userData['learningPurpose']}');
+        }
+        
+        if (userData['translationMode'] != null) {
+          final bool useSegment = userData['translationMode'] == 'segment';
+          await setUseSegmentMode(useSegment);
+          debugPrint('✅ Firestore에서 번역 모드 로드: ${userData['translationMode']}');
+        }
+        
+        if (userData['noteSpaces'] != null && userData['noteSpaces'] is List) {
+          final noteSpaces = List<String>.from(userData['noteSpaces']);
+          final prefs = await SharedPreferences.getInstance();
+          final key = '${_noteSpacesKey}_$userId';
+          await prefs.setStringList(key, noteSpaces);
+          debugPrint('✅ Firestore에서 노트 스페이스 목록 로드: $noteSpaces');
+        }
+        
+        if (userData['onboardingCompleted'] != null) {
+          final bool completed = userData['onboardingCompleted'] == true;
+          await setOnboardingCompleted(completed);
+          debugPrint('✅ Firestore에서 온보딩 완료 여부 로드: $completed');
+        }
+        
+        debugPrint('✅ Firestore에서 사용자 설정 로드 완료');
+      } else {
+        debugPrint('⚠️ Firestore에 사용자 문서가 없습니다: $userId');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Firestore에서 사용자 설정 로드 실패: $e');
     }
   }
 } 

@@ -150,6 +150,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   Future<void> _loadUserPreferences() async {
     try {
       if (_userId == null) return;
+      
+      // 현재 사용자 ID를 UserPreferencesService에 설정
+      await _preferencesService.setCurrentUserId(_userId!);
+
+      // Firestore에서 사용자 설정 로드
+      await _preferencesService.loadUserSettingsFromFirestore();
   
       // 1. 먼저 사용자가 노트를 가지고 있는지 확인
       bool hasNotes = await _checkUserHasNotes();
@@ -157,15 +163,13 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 2. 노트가 있는 경우 온보딩 완료 상태로 설정하고 홈화면으로 이동
       if (hasNotes) {
         debugPrint('사용자($_userId)의 노트가 존재합니다. 온보딩 완료 상태로 설정합니다.');
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('is_onboarding_completed', true);
+        await _preferencesService.setOnboardingCompleted(true);
         _isOnboardingCompleted = true;
       } 
       // 3. 노트가 없는 경우 기존 온보딩 완료 여부 확인
       else {
         debugPrint('사용자($_userId)의 노트가 없습니다. 온보딩 완료 여부를 확인합니다.');
-        final prefs = await SharedPreferences.getInstance();
-        _isOnboardingCompleted = prefs.getBool('is_onboarding_completed') ?? false;
+        _isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
       }
       
       if (mounted) {
@@ -313,7 +317,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     // 4-2. 온보딩이 필요한 경우 온보딩 화면
     else {
       return OnboardingScreen(
-        onComplete: () {
+        onComplete: () async {
+          // 온보딩 완료 상태를 UserPreferencesService를 통해 저장
+          await _preferencesService.setOnboardingCompleted(true);
           setState(() {
             _isOnboardingCompleted = true;
           });
