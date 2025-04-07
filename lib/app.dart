@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'package:provider/provider.dart';
 import 'dart:async';
 
 import 'views/screens/login_screen.dart';
@@ -16,9 +14,6 @@ import 'services/initialization_manager.dart';
 import 'services/user_preferences_service.dart';
 import 'widgets/loading_screen.dart';
 import 'theme/app_theme.dart';
-import 'viewmodels/home_viewmodel.dart';
-import 'services/auth_service.dart';
-import 'services/usage_limit_service.dart';
 
 /// 앱의 시작 지점 및 초기 화면 결정 로직
 /// - 로그인 확인

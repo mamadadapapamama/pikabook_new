@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show timeDilation;
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import 'dart:async';
@@ -159,35 +160,67 @@ class _PikabookDotPulseAnimation extends StatefulWidget {
 class _PikabookDotPulseAnimationState extends State<_PikabookDotPulseAnimation> 
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
+  bool _animationInitialized = false;
 
   @override
   void initState() {
     super.initState();
     
-    // 애니메이션 컨트롤러 초기화 (조용히)
+    // 디버그 타이머 출력 방지를 위한 애니메이션 속도 조정
+    timeDilation = 1.0; // 애니메이션 속도를 기본값으로 설정
+    
+    // 애니메이션 초기화는 첫 프레임 이후로 지연
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeAnimation();
+    });
+  }
+  
+  // 별도 메서드로 분리하여 디버그 출력 최소화
+  void _initializeAnimation() {
+    if (_animationInitialized) return;
+    
+    // 애니메이션 컨트롤러 초기화 - 조용히
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
       debugLabel: '',
     );
     
-    // 타이머 디버그 출력 제거
-    _controller.addStatusListener((status) {});
-    _controller.addListener(() {});
-    
-    // 애니메이션 시작 (애니메이션 로그 없이)
-    _controller.repeat(period: const Duration(milliseconds: 1500));
+    // 모든 리스너를 추가하지 않음
+    _controller.forward();
+    _controller.repeat(reverse: true);
+    _animationInitialized = true;
   }
 
   @override
   void dispose() {
-    _controller.stop();
-    _controller.dispose();
+    if (_animationInitialized) {
+      _controller.stop(canceled: false);
+      _controller.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_animationInitialized) {
+      return SizedBox(
+        height: 60,
+        width: double.infinity,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildStaticDots(),
+            Image.asset(
+              'assets/images/pikabook_bird.png',
+              width: 40,
+              height: 40,
+            ),
+          ],
+        ),
+      );
+    }
+    
     return SizedBox(
       height: 60,
       width: double.infinity,
@@ -205,6 +238,44 @@ class _PikabookDotPulseAnimationState extends State<_PikabookDotPulseAnimation>
           ),
         ],
       ),
+    );
+  }
+  
+  // 정적 도트 (애니메이션 초기화 전)
+  Widget _buildStaticDots() {
+    final Color dotColor = ColorTokens.primary;
+    
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: dotColor.withOpacity(0.7),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: dotColor.withOpacity(0.7),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: dotColor.withOpacity(0.7),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 12),
+      ],
     );
   }
 

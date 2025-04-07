@@ -10,6 +10,7 @@ class LoadingDialog {
   static bool _isShowing = false;
   static BuildContext? _dialogContext;
   static Timer? _autoHideTimer;
+  static OverlayEntry? _overlayEntry;
 
   /// 로딩 다이얼로그를 표시하는 정적 메서드
   static Future<void> show(BuildContext context, {
@@ -38,52 +39,49 @@ class LoadingDialog {
       // 자동 닫힘 타이머 설정 (최종 안전장치)
       _autoHideTimer = Timer(Duration(seconds: timeoutSeconds + 2), () {
         if (_isShowing) {
-          // 타이머 로그 출력 방지
-          _safeDebugPrint('로딩 다이얼로그 자동 닫힘 타이머 작동!');
           hide(context);
         }
       });
 
-      // Dialog 위젯을 사용하여 중앙에 작은 창으로 표시
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        barrierColor: Colors.black54,
-        builder: (BuildContext dialogContext) {
-          _dialogContext = dialogContext;
-          return WillPopScope(
-            onWillPop: () async => false,
-            child: Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              child: PikabookLoader(
-                title: '스마트한 학습 노트를 만들고 있어요.',
-                subtitle: '잠시만 기다려 주세요!',
-                timeoutSeconds: timeoutSeconds, // 타임아웃 값 전달
-              ),
-            ),
-          );
-        },
-      ).then((_) {
-        // 다이얼로그가 닫히면 상태 업데이트
-        _isShowing = false;
-        _dialogContext = null;
-        _autoHideTimer?.cancel();
-        _safeDebugPrint('로딩 다이얼로그 닫힘 완료 (then 콜백)');
-      }).catchError((e) {
-        _safeDebugPrint('로딩 다이얼로그 오류: $e');
-        _isShowing = false;
-        _dialogContext = null;
-        _autoHideTimer?.cancel();
-      });
+      // OverlayEntry를 사용하여 로딩 다이얼로그 표시 (타이머 출력 방지)
+      _showWithOverlay(context);
     } catch (e) {
-      _safeDebugPrint('로딩 다이얼로그 표시 중 오류: $e');
       _isShowing = false;
       _dialogContext = null;
       _autoHideTimer?.cancel();
     }
   }
 
+  // OverlayEntry를 사용한 로딩 다이얼로그 표시
+  static void _showWithOverlay(BuildContext context) {
+    if (!context.mounted) return;
+    
+    final overlay = Overlay.of(context);
+    if (overlay == null) return;
+    
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          // 전체 화면 반투명 배경
+          Positioned.fill(
+            child: Container(
+              color: Colors.black54,
+            ),
+          ),
+          // 중앙 로딩 다이얼로그
+          Center(
+            child: PikabookLoader(
+              title: '스마트한 학습 노트를 만들고 있어요.',
+              subtitle: '잠시만 기다려 주세요!',
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    overlay.insert(_overlayEntry!);
+  }
+  
   /// 로딩 다이얼로그를 닫는 정적 메서드
   static void hide(BuildContext context) {
     // 타이머 취소
@@ -97,8 +95,14 @@ class LoadingDialog {
     // 상태 업데이트 (먼저 업데이트하여 중복 호출 방지)
     _isShowing = false;
     
-    // 여러 방법으로 다이얼로그 닫기 시도
-    _tryCloseDialog(context);
+    // OverlayEntry가 있으면 제거
+    if (_overlayEntry != null) {
+      _overlayEntry!.remove();
+      _overlayEntry = null;
+    } else {
+      // OverlayEntry가 없는 경우 기존 방식으로 시도
+      _tryCloseDialog(context);
+    }
   }
   
   /// 다양한 방법으로 다이얼로그 닫기 시도

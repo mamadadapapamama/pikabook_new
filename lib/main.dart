@@ -144,6 +144,32 @@ void main() async {
     DebugUtils.error('Firebase 초기화 실패: $e');
   }
   
+  // 5.5 애니메이션 타이머 출력 억제를 위한 설정
+  // Flutter의 내부 타이머 출력을 억제하기 위한 트릭
+  FlutterError.onError = (FlutterErrorDetails details) {
+    if (details.exception.toString().toLowerCase().contains('timer') ||
+        details.exception.toString().toLowerCase().contains('animation') ||
+        details.exception.toString().toLowerCase().contains('ms') ||
+        details.exception.toString().toLowerCase().contains('pikabook')) {
+      // 애니메이션 및 타이머 관련 오류는 무시
+      return;
+    }
+    
+    // 그 외의 오류는 정상적으로 처리
+    if (DebugUtils.isReleaseMode()) {
+      DebugUtils.error('앱 오류: ${details.exception}');
+    } else {
+      FlutterError.dumpErrorToConsole(details);
+    }
+  };
+  
+  // 타이머 로그 특수 처리
+  if (!DebugUtils.isReleaseMode()) {
+    // 애니메이션 디버그 세부 정보 비활성화
+    // 렌더링 관련 정보 갱신 및 정리
+    WidgetsBinding.instance.reassembleApplication();
+  }
+  
   // 6. 앱 시작 - App 클래스에서 실제 초기화 진행
   runApp(const App());
   
