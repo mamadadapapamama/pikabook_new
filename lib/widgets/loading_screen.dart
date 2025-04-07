@@ -38,90 +38,144 @@ class LoadingScreen extends StatelessWidget {
     if (optimizeForAppReview) {
       // 가벼운 로딩 화면으로 처리
       return Scaffold(
-        backgroundColor: ColorTokens.primary,
-        body: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 로고 이미지
-                Image.asset(
-                  'assets/images/pikabook_textlogo.png',
-                  width: 80, // 크기 최적화
-                  color: Colors.white,
-                ),
-                const SizedBox(height: 16),
-                
-                // 간소화된 로딩 인디케이터
-                const DotLoadingIndicator(dotColor: Colors.white),
-                const SizedBox(height: 16),
-                
-                // 상태 메시지
-                Text(
-                  message ?? '앱을 준비하는 중이에요',
-                  style: TypographyTokens.button.copyWith(
-                    color: Colors.white,
+        body: Stack(
+          children: [
+            // 배경 이미지
+            Positioned.fill(
+              child: Image.asset(
+                'assets/images/splash_background.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+            // 그라데이션 오버레이
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      ColorTokens.black.withOpacity(0.0),
+                      ColorTokens.black.withOpacity(0.3),
+                      ColorTokens.black.withOpacity(0.0),
+                    ],
+                    stops: const [0.0, 0.5, 1.0],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+            SafeArea(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // 로고 이미지
+                    Image.asset(
+                      'assets/images/pikabook_textlogo.png',
+                      width: 80, // 크기 최적화
+                      color: Colors.white,
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // 간소화된 로딩 인디케이터
+                    const DotLoadingIndicator(dotColor: Colors.white),
+                    const SizedBox(height: 16),
+                    
+                    // 상태 메시지
+                    Text(
+                      message ?? '앱을 준비하는 중이에요',
+                      style: TypographyTokens.button.copyWith(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
 
     // 기본 로딩 화면 (기존 구현)
     return Scaffold(
-      backgroundColor: ColorTokens.primary,
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // 로고 이미지 (중앙에 배치)
-              Image.asset(
-                'assets/images/pikabook_textlogo.png',
-                width: 130,
-                color: Colors.white,
-              ),
-              const SizedBox(height: 48),
-              
-              // 로딩 인디케이터
-              const DotLoadingIndicator(dotColor: Colors.white),
-              const SizedBox(height: 24),
-              
-              // 상태 메시지
-              Text(
-                error ?? message ?? '${(progress * 100).toInt()}% 준비중이에요... ',
-                style: TypographyTokens.button.copyWith(
-                  color: Colors.white,
-                ),
-              ),
-              
-              // 건너뛰기 버튼 (제공된 경우)
-              if (onSkip != null) ...[
-                const SizedBox(height: 32),
-                TextButton(
-                  onPressed: onSkip,
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('skip'),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.arrow_forward,
-                        size: SpacingTokens.iconSizeSmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
+      body: Stack(
+        children: [
+          // 배경 이미지
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/splash_background.png',
+              fit: BoxFit.cover,
+            ),
           ),
-        ),
+          // 그라데이션 오버레이
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    ColorTokens.black.withOpacity(0.0),
+                    ColorTokens.black.withOpacity(0.3),
+                    ColorTokens.black.withOpacity(0.0),
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 로고 이미지 (중앙에 배치)
+                  Image.asset(
+                    'assets/images/pikabook_textlogo.png',
+                    width: 130,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(height: 48),
+                  
+                  // 로딩 인디케이터
+                  const DotLoadingIndicator(dotColor: Colors.white),
+                  const SizedBox(height: 24),
+                  
+                  // 상태 메시지
+                  Text(
+                    error ?? message ?? '${(progress * 100).toInt()}% 준비중이에요... ',
+                    style: TypographyTokens.button.copyWith(
+                      color: Colors.white,
+                    ),
+                  ),
+                  
+                  // 건너뛰기 버튼 (제공된 경우)
+                  if (onSkip != null) ...[
+                    const SizedBox(height: 32),
+                    TextButton(
+                      onPressed: onSkip,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('skip'),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.arrow_forward,
+                            size: SpacingTokens.iconSizeSmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

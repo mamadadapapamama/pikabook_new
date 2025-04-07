@@ -3,6 +3,7 @@ import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import 'pika_button.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// 사용량 확인 다이얼로그
 /// 사용량 정보 및 제한 상태를 확인할 수 있습니다.
@@ -83,13 +84,13 @@ class UsageDialog extends StatelessWidget {
             size: PikaButtonSize.small,
             onPressed: () {
               Navigator.of(context).pop();
-              onContactSupport!();
+              launchUrl(Uri.parse('https://forms.gle/YaeznYjGLiMdHmBD9'));
             },
           ),
           
         // 확인 버튼
         PikaButton(
-          text: '확인',
+          text: '닫기',
           variant: PikaButtonVariant.primary,
           size: PikaButtonSize.small,
           onPressed: () => Navigator.of(context).pop(),
