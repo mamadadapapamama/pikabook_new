@@ -611,10 +611,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       
       // 툴팁이 이미 표시된 적이 있는지 명시적으로 확인
       final bool noteDetailTooltipShown = prefs.getBool('note_detail_tooltip_shown') ?? false;
+      
+      // 이미 표시되었던 경우 상태를 확인하고 필요시 강제로 false 설정
       if (noteDetailTooltipShown) {
-        debugPrint('툴팁이 이미 표시된 적이 있어 표시하지 않음');
+        DebugUtils.log('툴팁이 이미 표시된 적이 있어 표시하지 않음');
         
-        // 이미 표시되었던 경우 상태 확인 및 강제 false 설정
+        // 만약 툴팁이 여전히 표시 중이라면 강제로 닫기
         if (_showTooltip) {
           setState(() {
             _showTooltip = false;
@@ -624,43 +626,40 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         return;
       }
       
-      // 첫 노트 생성 여부 확인 (홈 화면에서 설정됨)
-      final bool isFirstNote = prefs.getBool('first_note_created') ?? true; // 기본값 true로 설정하여 기존 사용자도 체험할 수 있게 함
-      
-      // 이미 텍스트 처리 완료 상태인지 확인
-      final bool textProcessingCompleted = prefs.getBool('first_note_text_processing_completed') ?? false;
-      final bool tooltipShown = prefs.getBool('tooltip_shown_after_first_page') ?? false;
-      
-      debugPrint('첫 노트 텍스트 처리 체크: 첫 노트=$isFirstNote, 첫 페이지=$isFirstPage, 텍스트 처리 완료=$textProcessingCompleted, 툴팁 표시됨=$tooltipShown');
-      
-      // 첫 노트의 첫 페이지이고 아직 텍스트 처리가 완료되지 않은 경우
-      if (isFirstNote && isFirstPage && !textProcessingCompleted) {
-        // 텍스트 처리 완료 기록
-        await prefs.setBool('first_note_text_processing_completed', true);
+      // 화면이 완전히 로드된 후 툴팁 표시를 위해 약간의 지연 추가
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
         
-        // 노트 생성 기록도 저장 (홈 화면에서 설정되지 않았을 경우를 대비)
-        if (!isFirstNote) {
-          await prefs.setBool('first_note_created', true);
-        }
+        // 툴팁 표시 상태 설정
+        setState(() {
+          _showTooltip = true;
+          _tooltipStep = 1;
+        });
         
-        debugPrint('첫 노트의 첫 페이지 텍스트 처리 완료 기록 저장');
-        
-        // 툴팁을 아직 표시하지 않았다면 표시
-        if (!tooltipShown && !noteDetailTooltipShown) {
-          // 툴팁 표시 상태 설정
-          setState(() {
-            _showTooltip = true;
-          });
-          
-          // 툴팁 표시 기록 저장
-          await prefs.setBool('tooltip_shown_after_first_page', true);
-          
-          debugPrint('노트 상세 화면에서 첫 페이지 툴팁 표시');
-        }
-      }
+        DebugUtils.log('노트 상세 화면에서 첫 페이지 툴팁 표시 (지연 후)');
+      });
     } catch (e) {
-      debugPrint('첫 노트 텍스트 처리 체크 중 오류 발생: $e');
+      DebugUtils.log('첫 노트 텍스트 처리 체크 중 오류 발생: $e');
     }
+  }
+  
+  // 툴팁 표시 완료 상태를 저장하는 메소드
+  void _saveTooltipShownPreference() {
+    DebugUtils.log('📝 툴팁 표시 완료 상태 저장 시작');
+    
+    // 상태 업데이트
+    setState(() {
+      _showTooltip = false;
+      _tooltipStep = 1;
+    });
+    
+    // SharedPreferences 업데이트
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool('note_detail_tooltip_shown', true);
+      DebugUtils.log('📝 툴팁 표시 완료 상태 저장 성공');
+    }).catchError((e) {
+      DebugUtils.log('📝 툴팁 표시 완료 상태 저장 실패: $e');
+    });
   }
 
   // ===== TTS 관련 메서드 =====
@@ -1619,75 +1618,59 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         // 툴팁 표시 (처음 텍스트 처리가 완료된 경우)
         if (_showTooltip)
           Positioned(
-            bottom: 24,
-            left: 24,
-            right: 24,
-            child: HelpTextTooltip(
-              key: const Key('note_detail_tooltip'),
-              text: _tooltipStep == 1 
-                ? "첫 노트가 만들어졌어요! \n 사전 검색과 플래시카드 만들기도 할수 있어요." 
-                : _tooltipStep == 2
-                  ? "다음 페이지로 이동은 스와이프나 화살표로!"
-                  : "불필요한 텍스트는 지워요.",
+            bottom: 80, // 하단 네비게이션 바 위에 위치하도록 조정
+            left: 16,
+            right: 16,
+            child: Material(
+              elevation: 0,
+              color: Colors.transparent,
+              child: HelpTextTooltip(
+                key: const Key('note_detail_tooltip'),
+                text: _tooltipStep == 1 
+                  ? "첫 노트가 만들어졌어요!" 
+                  : _tooltipStep == 2
+                    ? "다음 페이지로 이동은 스와이프나 화살표로!"
+                    : "불필요한 텍스트는 지워요.",
                 description: _tooltipStep == 1
                   ? "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요."
                   : _tooltipStep == 2
-                    ? "노트의 빈 공간을 왼쪽으로 슬라이드하거나, \n바텀 바의 화살표를 눌러 다음 장으로 넘어갈 수 있어요."
+                    ? "노트의 빈 공간을 왼쪽으로 슬라이드하거나, 바텀 바의 화살표를 눌러 다음 장으로 넘어갈 수 있어요."
                     : "잘못 인식된 문장은 왼쪽으로 슬라이드해 삭제할수 있어요.",
                 showTooltip: _showTooltip,
-                onDismiss: () {
-                  DebugUtils.log('📝 노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
-                  DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 시작: true -> false');
-                  
-                  // 명시적으로 상태를 false로 설정
-                  setState(() {
-                    _showTooltip = false;
-                    _tooltipStep = 1; // 툴팁 단계 초기화
-                  });
-                  
-                  // 백그라운드에서 처리되지 않도록 즉시 처리
-                  SharedPreferences.getInstance().then((prefs) {
-                    prefs.setBool('note_detail_tooltip_shown', true);
-                    DebugUtils.log('📝 툴팁 표시 완료 상태 저장 성공 (즉시 처리)');
-                  }).catchError((e) {
-                    DebugUtils.log('📝 툴팁 표시 완료 상태 저장 실패: $e');
-                  });
-                  
-                  DebugUtils.log('📝 노트 상세 화면 _showTooltip 상태 변경 완료');
-                },
+                onDismiss: _handleTooltipDismiss,
                 backgroundColor: ColorTokens.primaryverylight,
-                borderColor: ColorTokens.primaryMedium,
+                borderColor: ColorTokens.primary,
                 textColor: ColorTokens.textPrimary,
                 tooltipPadding: const EdgeInsets.all(16),
-                spacing: 4.0,
+                tooltipWidth: MediaQuery.of(context).size.width - 32, // 화면 폭에 맞춤
+                spacing: 8.0,
+                style: HelpTextTooltipStyle.primary,
                 image: Image.asset(
                   _tooltipStep == 1 
                     ? 'assets/images/note_help_1.png'
                     : _tooltipStep == 2
-                      ? 'assets/images/note_help_2.png' // 두 번째 단계 이미지
-                      : 'assets/images/note_help_3.png', // 세 번째 단계 이미지
+                      ? 'assets/images/note_help_2.png'
+                      : 'assets/images/note_help_3.png',
                   width: double.infinity,
                   fit: BoxFit.contain,
                 ),
-                child: Container(), // 빈 컨테이너 (툴팁만 표시)
                 currentStep: _tooltipStep,
                 totalSteps: _totalTooltipSteps,
                 onNextStep: () {
                   // 다음 단계로 이동
-                  if (_tooltipStep < _totalTooltipSteps) {
-                    setState(() {
-                      _tooltipStep += 1;
-                    });
-                  }
+                  setState(() {
+                    _tooltipStep += 1;
+                    DebugUtils.log('📝 툴팁 다음 단계로 이동: $_tooltipStep');
+                  });
                 },
                 onPrevStep: () {
                   // 이전 단계로 이동
-                  if (_tooltipStep > 1) {
-                    setState(() {
-                      _tooltipStep -= 1;
-                    });
-                  }
+                  setState(() {
+                    _tooltipStep -= 1;
+                    DebugUtils.log('📝 툴팁 이전 단계로 이동: $_tooltipStep');
+                  });
                 },
+              ),
             ),
           ),
       ],
@@ -2061,18 +2044,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     );
   }
 
-  // 툴팁 표시 완료 상태를 저장하는 메소드
-  void _saveTooltipShownPreference() {
-    DebugUtils.log('📝 툴팁 표시 완료 상태 저장 시작');
-    // 백그라운드에서 SharedPreferences 작업 처리
-    Future.microtask(() async {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool('note_detail_tooltip_shown', true);
-        DebugUtils.log('📝 툴팁 표시 완료 상태 저장 성공');
-      } catch (e) {
-        DebugUtils.log('📝 툴팁 표시 완료 상태 저장 실패: $e');
-      }
+  void _handleTooltipDismiss() {
+    DebugUtils.log('📝 노트 상세 화면에서 툴팁 닫기 버튼 클릭됨!!');
+    
+    // 즉시 상태 업데이트 및 SharedPreferences 저장
+    setState(() {
+      _showTooltip = false;
+      _tooltipStep = 1; // 툴팁 단계 초기화
+    });
+    
+    // 즉시 SharedPreferences에 저장 
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool('note_detail_tooltip_shown', true);
+      DebugUtils.log('📝 툴팁 표시 완료 상태 저장 성공');
     });
   }
 

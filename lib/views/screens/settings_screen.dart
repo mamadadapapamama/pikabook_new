@@ -526,7 +526,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: ColorTokens.textLight,
                 ),
               ),
-              backgroundColor: ColorTokens.primary,
             ),
           );
         }
@@ -775,7 +774,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('계정 삭제 중 오류가 발생했습니다: $e'),
-            backgroundColor: Colors.red,
           ),
         );
       }

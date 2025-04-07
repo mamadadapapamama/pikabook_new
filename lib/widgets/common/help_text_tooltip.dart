@@ -137,225 +137,181 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    // 모달 형태로 변경: Stack 대신 위젯을 반환하고, 쇼툴팁이 true면 모달 다이얼로그를 표시
-    if (widget.showTooltip) {
-      // 포스트 프레임 콜백으로 모달 표시 (빌드 사이클 중에 showDialog 호출 방지)
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          barrierColor: Colors.transparent, // 투명 배경으로 설정
-          builder: (dialogContext) {
-            return Dialog(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              insetPadding: EdgeInsets.zero,
-              child: Stack(
-                children: [
-                  // 모달 컨테이너
-                  Positioned(
-                    bottom: MediaQuery.of(context).size.height * 0.1, // 화면 하단에서 10% 위치에 배치
-                    left: 16,
-                    right: 16,
-                    child: AnimatedBuilder(
-                      animation: _bounceAnimation,
-                      builder: (context, child) {
-                        return Container(
-                          width: widget.tooltipWidth ?? 349,
-                          padding: widget.tooltipPadding ?? const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: _getBackgroundColor,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: _getBorderColor,
-                              width: 1,
-                            ),
-                            boxShadow: UITokens.mediumShadow,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // 제목과 닫기 버튼, 단계 표시
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                          widget.text,
-                                          style: TypographyTokens.body1En.copyWith(
-                                            color: ColorTokens.primary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        if (widget.totalSteps > 1) ...[
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: ColorTokens.primary.withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              '${widget.currentStep}/${widget.totalSteps}',
-                                              style: TypographyTokens.caption.copyWith(
-                                                color: ColorTokens.primary,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  // 닫기 버튼 (확장된 터치 영역)
-                                  GestureDetector(
-                                    onTap: () {
-                                      DebugUtils.log('📣 헬프텍스트 닫기 버튼 클릭됨!! - 이벤트 발생');
-                                      // 다이얼로그가 열려있는지 확인하고 닫기
-                                      if (Navigator.of(dialogContext).canPop()) {
-                                        Navigator.of(dialogContext).pop();
-                                      }
-                                      
-                                      // 약간의 지연 후 onDismiss 콜백 실행
-                                      Future.delayed(Duration(milliseconds: 100), () {
-                                        if (widget.onDismiss != null) {
-                                          DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 시작 (지연 실행)');
-                                          widget.onDismiss!();
-                                          DebugUtils.log('📣 헬프텍스트 onDismiss 콜백 호출 완료');
-                                        } else {
-                                          DebugUtils.log('⚠️ 헬프텍스트 onDismiss 콜백이 null입니다');
-                                        }
-                                      });
-                                    },
-                                    child: Container(
-                                      width: 40,
-                                      height: 40,
-                                      child: Center(
-                                        child: Icon(
-                                          Icons.close,
-                                          color: ColorTokens.textPrimary,
-                                          size: 24,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+    // 툴팁을 표시하지 않는 경우 자식 위젯만 반환
+    if (!widget.showTooltip) {
+      return widget.child ?? Container();
+    }
+    
+    // 카드형 툴팁 위젯 반환
+    return AnimatedBuilder(
+      animation: _bounceAnimation,
+      builder: (context, child) {
+        return Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: _getBorderColor,
+              width: 1,
+            ),
+          ),
+          color: _getBackgroundColor,
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: widget.tooltipPadding ?? const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 헤더: 제목, 단계 표시, 닫기 버튼
+                Row(
+                  children: [
+                    // 제목과 단계 표시를 포함한 영역
+                    Expanded(
+                      child: Row(
+                        children: [
+                          // 제목 (최대 폭 제한)
+                          Flexible(
+                            child: Text(
+                              widget.text,
+                              style: TypographyTokens.body1.copyWith(
+                                color: ColorTokens.primary,
+                                fontWeight: FontWeight.w700,
                               ),
-                              
-                              // 이미지
-                              if (widget.image != null) ...[
-                                const SizedBox(height: 12),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: widget.image!,
-                                ),
-                              ],
-                              
-                              // 설명
-                              if (widget.description != null) ...[
-                                const SizedBox(height: 12),
-                                Text(
-                                  widget.description!,
-                                  style: TypographyTokens.body2.copyWith(
-                                    color: ColorTokens.textPrimary,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
-                              ],
-                              
-                              // 다음 버튼 및 이전 버튼 (여러 단계가 있는 경우)
-                              if (widget.totalSteps > 1) ...[
-                                const SizedBox(height: 16),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    if (widget.currentStep > 1) // 첫 단계가 아닌 경우에만 이전 버튼 표시
-                                      TextButton(
-                                        onPressed: () {
-                                          Navigator.of(dialogContext).pop(); // 현재 다이얼로그 닫기
-                                          if (widget.onPrevStep != null) {
-                                            widget.onPrevStep!();
-                                          }
-                                        },
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: ColorTokens.textSecondary,
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          minimumSize: Size(10, 10),
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          textStyle: TypographyTokens.caption.copyWith(
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        child: Text('이전'),
-                                      ),
-                                    
-                                    if (widget.currentStep > 1)
-                                      const SizedBox(width: 8),
-                                    
-                                    if (widget.currentStep < widget.totalSteps) // 마지막 단계가 아닌 경우에만 다음 버튼 표시
-                                      TextButton(
-                                        onPressed: () {
-                                          Navigator.of(dialogContext).pop(); // 현재 다이얼로그 닫기
-                                          if (widget.onNextStep != null) {
-                                            widget.onNextStep!();
-                                          }
-                                        },
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: ColorTokens.primary,
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          minimumSize: Size(10, 10),
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          textStyle: TypographyTokens.caption.copyWith(
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        child: Text('다음'),
-                                      )
-                                    else
-                                      TextButton(
-                                        onPressed: () {
-                                          Navigator.of(dialogContext).pop(); // 다이얼로그 닫기
-                                          
-                                          // 약간의 지연 후 onDismiss 콜백 실행
-                                          Future.delayed(Duration(milliseconds: 100), () {
-                                            if (widget.onDismiss != null) {
-                                              DebugUtils.log('📣 헬프텍스트 완료 버튼 - onDismiss 콜백 호출');
-                                              widget.onDismiss!();
-                                            }
-                                          });
-                                        },
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: ColorTokens.primary,
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          minimumSize: Size(10, 10),
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          textStyle: TypographyTokens.caption.copyWith(
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        child: Text('완료'),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ],
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        );
+                          
+                          // 단계 표시 (총 단계가 1보다 큰 경우에만 표시)
+                          if (widget.totalSteps > 1) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: ColorTokens.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${widget.currentStep}/${widget.totalSteps}',
+                                style: TypographyTokens.caption.copyWith(
+                                  color: ColorTokens.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    
+                    // 닫기 버튼
+                    InkWell(
+                      onTap: () {
+                        DebugUtils.log('📣 헬프텍스트 닫기 버튼 클릭됨!!');
+                        if (widget.onDismiss != null) {
+                          widget.onDismiss!();
+                        }
                       },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Icon(
+                          Icons.close,
+                          color: ColorTokens.textPrimary,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                
+                // 이미지 (있는 경우만 표시)
+                if (widget.image != null) ...[
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: widget.image!,
+                  ),
+                ],
+                
+                // 설명 텍스트 (있는 경우만 표시)
+                if (widget.description != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    widget.description!,
+                    style: TypographyTokens.body2.copyWith(
+                      color: ColorTokens.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                 ],
-              ),
-            );
-          },
+                
+                // 네비게이션 버튼 (여러 단계가 있는 경우에만 표시)
+                if (widget.totalSteps > 1) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      // 이전 버튼 (첫 단계가 아닌 경우에만 표시)
+                      if (widget.currentStep > 1)
+                        TextButton(
+                          onPressed: widget.onPrevStep,
+                          style: TextButton.styleFrom(
+                            foregroundColor: ColorTokens.textSecondary,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: Size(48, 36),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            textStyle: TypographyTokens.caption.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          child: Text('이전'),
+                        ),
+                      
+                      if (widget.currentStep > 1)
+                        const SizedBox(width: 8),
+                      
+                      // 다음 또는 완료 버튼
+                      if (widget.currentStep < widget.totalSteps)
+                        // 다음 버튼
+                        TextButton(
+                          onPressed: widget.onNextStep,
+                          style: TextButton.styleFrom(
+                            foregroundColor: ColorTokens.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: Size(48, 36),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            textStyle: TypographyTokens.caption.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          child: Text('다음'),
+                        )
+                      else
+                        // 완료 버튼
+                        TextButton(
+                          onPressed: widget.onDismiss,
+                          style: TextButton.styleFrom(
+                            foregroundColor: ColorTokens.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: Size(48, 36),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            textStyle: TypographyTokens.caption.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          child: Text('완료'),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
         );
-      });
-    }
-    
-    // 자식 위젯만 반환하거나 빈 컨테이너 반환
-    return widget.child ?? Container();
+      },
+    );
   }
 } 

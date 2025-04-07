@@ -52,7 +52,7 @@ class UITokens {
   
   // 스낵바 스타일
   static SnackBarThemeData snackBarTheme = const SnackBarThemeData(
-    backgroundColor: ColorTokens.secondary,
+    backgroundColor: Colors.black,
     contentTextStyle: TextStyle(
       color: Colors.white,
       fontSize: 14,
