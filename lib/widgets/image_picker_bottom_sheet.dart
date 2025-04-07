@@ -10,6 +10,7 @@ import '../theme/tokens/ui_tokens.dart';
 import '../widgets/common/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/usage_limit_service.dart';
+import 'dart:async';
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);
@@ -236,6 +237,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
     // 로딩 다이얼로그 표시 여부를 추적하는 변수
     bool isLoadingDialogShowing = false;
+    
+    // 타임아웃 로직을 위한 타이머 추가
+    Timer? loadingTimeout;
 
     try {
       debugPrint("노트 생성 시작: ${images.length}개 이미지");
@@ -245,6 +249,15 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         // 로딩 다이얼로그 표시
         LoadingDialog.show(context, message: '노트 생성 중...');
         isLoadingDialogShowing = true;
+        
+        // 10초 후 타임아웃 설정 - 로딩이 너무 오래 걸리면 자동으로 닫기
+        loadingTimeout = Timer(const Duration(seconds: 10), () {
+          if (context.mounted && isLoadingDialogShowing) {
+            LoadingDialog.hide(context);
+            debugPrint("노트 생성 타임아웃으로 로딩 다이얼로그 닫기");
+            isLoadingDialogShowing = false;
+          }
+        });
       }
 
       // 여러 이미지로 노트 생성
@@ -254,6 +267,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         silentProgress: true, // 진행 상황 업데이트 무시
         waitForFirstPageProcessing: true, // 첫 페이지 처리 완료까지 대기
       );
+
+      // 타임아웃 타이머 취소
+      loadingTimeout?.cancel();
 
       // 결과를 먼저 저장 (네비게이션 전)
       final bool success = result['success'] == true;
@@ -273,18 +289,30 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       if (success && noteId != null && context.mounted) {
         debugPrint("노트 상세 화면으로 이동 시도");
         
-        // 화면 전환 (pushReplacement 사용)
-        if (context.mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => NoteDetailScreen(
-                noteId: noteId,
-                isProcessingBackground: isProcessingBackground,
+        // 짧은 딜레이 후 화면 전환 (UI 스레드가 완전히 처리될 수 있도록)
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (context.mounted) {
+            debugPrint("딜레이 후 노트 상세 화면으로 이동 시작");
+            
+            // 화면 전환 (pushReplacement 사용)
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(
+                builder: (context) => NoteDetailScreen(
+                  noteId: noteId,
+                  isProcessingBackground: isProcessingBackground,
+                ),
               ),
-            ),
-          );
-          debugPrint("노트 상세 화면으로 이동 완료");
-        }
+              // 현재 루트와 홈 스크린은 유지하고, 그 사이의 화면들만 제거
+              (route) {
+                // 스택에서 2개만 남기고 나머지는 제거 (홈 화면 + 현재 화면)
+                return route.isFirst || route.settings.name == '/';
+              }
+            );
+            debugPrint("노트 상세 화면으로 이동 완료");
+          } else {
+            debugPrint("context가 mounted 상태가 아니어서 화면 전환 취소");
+          }
+        });
       } else if (context.mounted) {
         // 오류 메시지 표시
         debugPrint("노트 생성 실패: $message");
@@ -299,6 +327,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
     } catch (e) {
       debugPrint("노트 생성 중 오류 발생: $e");
+      
+      // 타임아웃 타이머 취소
+      loadingTimeout?.cancel();
       
       // 오류 발생 시 로딩 다이얼로그 닫기
       if (isLoadingDialogShowing && context.mounted) {

@@ -175,6 +175,7 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                             child: Text(
                               widget.text,
                               style: TypographyTokens.body1.copyWith(
+                                fontsize:18,
                                 color: ColorTokens.primary,
                                 fontWeight: FontWeight.w700,
                               ),

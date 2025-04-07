@@ -336,7 +336,7 @@ class NoteService {
   }
 
   // 노트와 페이지를 함께 가져오기 (캐싱 활용)
-  Future<Map<String, dynamic>> getNoteWithPages(String noteId) async {
+  Future<Map<String, dynamic>> getNoteWithPages(String noteId, {bool forceReload = false}) async {
     try {
       Note? note;
       List<page_model.Page> pages = [];
@@ -897,14 +897,14 @@ class NoteService {
         // 첫 페이지 처리 상태를 주기적으로 확인하는 함수
         Future<void> waitForFirstPageCompletion() async {
           bool isFirstPageProcessed = false;
-          int maxAttempts = 30; // 최대 30번 (30초) 대기
+          int maxAttempts = 40; // 최대 20초 대기 (0.5초 간격으로 40번)
           int attempt = 0;
           
           while (!isFirstPageProcessed && attempt < maxAttempts) {
             attempt++;
             
-            // 1초 대기
-            await Future.delayed(const Duration(seconds: 1));
+            // 0.5초 간격으로 대기하여 더 빠르게 반응
+            await Future.delayed(const Duration(milliseconds: 500));
             
             try {
               // 노트 문서 검사
@@ -913,17 +913,23 @@ class NoteService {
                 final noteData = noteDoc.data() as Map<String, dynamic>?;
                 isFirstPageProcessed = noteData?['firstPageProcessed'] == true;
                 
+                // 처리된 페이지 수 확인
+                final int processedCount = noteData?['processedImagesCount'] ?? 0;
+                
                 if (isFirstPageProcessed) {
-                  debugPrint('첫 페이지 처리 완료 감지: attempt=$attempt');
+                  debugPrint('첫 페이지 처리 완료 감지: attempt=$attempt, processedCount=$processedCount');
                   break;
+                } else if (processedCount > 0) {
+                  // 적어도 하나의 이미지가 처리되었다면 진행 중인 것으로 간주
+                  debugPrint('이미지 처리 진행 중: processedCount=$processedCount');
                 }
               }
             } catch (e) {
               debugPrint('첫 페이지 처리 상태 확인 중 오류: $e');
             }
             
-            // 로그 찍기 (첫 번째와 매 5번째 시도마다)
-            if (attempt == 1 || attempt % 5 == 0) {
+            // 로그 찍기 (첫 번째와 매 4번째 시도마다)
+            if (attempt == 1 || attempt % 4 == 0) {
               debugPrint('첫 페이지 처리 완료 대기 중... (시도: $attempt/$maxAttempts)');
             }
           }
@@ -933,10 +939,27 @@ class NoteService {
             debugPrint('첫 페이지 처리 완료 확인: $attempt번째 시도에 성공');
             
             // 추가 대기 (UI 준비 시간)
-            await Future.delayed(const Duration(milliseconds: 500));
+            await Future.delayed(const Duration(milliseconds: 800)); // 0.8초로 감소
+            
+            // 노트 캐시 갱신하여 최신 데이터로 만듦
+            try {
+              await getNoteWithPages(noteId, forceReload: true);
+              debugPrint('노트 캐시 강제 갱신 완료: $noteId');
+            } catch (e) {
+              debugPrint('노트 캐시 갱신 중 오류: $e');
+            }
           } else {
-            debugPrint('첫 페이지 처리 타임아웃: $maxAttempts번 시도 후 제한 시간 초과');
+            debugPrint('첫 페이지 처리 타임아웃: $maxAttempts번 시도 후 계속 진행');
+            
+            // 타임아웃이 발생해도 로딩 화면을 계속 표시하지 않고 진행
+            await _notesCollection.doc(noteId).update({
+              'firstPageProcessed': true, // 강제로 처리 완료 표시
+              'updatedAt': DateTime.now(),
+            });
           }
+          
+          // 다음 화면 전환을 위한 추가 대기
+          await Future.delayed(const Duration(milliseconds: 200)); // 0.2초로 감소
         }
         
         // 첫 페이지 처리 완료 대기
