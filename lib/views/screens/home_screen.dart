@@ -348,10 +348,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   left: 16,
                   right: 16,
                   child: HelpTextTooltip(
-                    text: '피카북에 오신 걸 환영해요! 🎉',
+                    text: '환영합니다!',
                     description: '4월 30일까지, 교재 이미지 100장까지 무료로 스마트 학습 노트를 만들어보실 수 있어요.\n사용량은 [설정]에서 언제든 확인하실 수 있어요!',
                     image: Image.asset(
-                      'assets/images/home_help.png',
+                      'assets/images/help/help_home.png',
                       fit: BoxFit.contain,
                       width: MediaQuery.of(context).size.width - 64, // 화면 너비에 맞게 조정 (패딩 고려)
                     ),
@@ -364,6 +364,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: ColorTokens.primary,
+                    ),
+                    descriptionStyle: const TextStyle(
+                      fontSize: 16,
+                      color: ColorTokens.textPrimary,
                     ),
                   ),
                 ),

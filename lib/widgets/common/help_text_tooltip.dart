@@ -34,6 +34,7 @@ class HelpTextTooltip extends StatefulWidget {
   final VoidCallback? onNextStep; // 다음 단계로 이동
   final VoidCallback? onPrevStep; // 이전 단계로 이동
   final TextStyle? titleStyle; // 제목 텍스트 스타일 커스터마이징
+  final TextStyle? descriptionStyle; // 설명 텍스트 스타일 커스터마이징
 
   const HelpTextTooltip({
     Key? key,
@@ -56,6 +57,7 @@ class HelpTextTooltip extends StatefulWidget {
     this.onNextStep,
     this.onPrevStep,
     this.titleStyle,
+    this.descriptionStyle,
   }) : super(key: key);
 
   @override
@@ -239,14 +241,13 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                   ),
                 ],
                 
-                // 설명 텍스트 (있는 경우만 표시)
+                // 설명 텍스트 (있는 경우에만)
                 if (widget.description != null) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Text(
                     widget.description!,
-                    style: TypographyTokens.body2.copyWith(
-                      color: ColorTokens.textPrimary,
-                      fontSize: 14,
+                    style: widget.descriptionStyle ?? TypographyTokens.body2.copyWith(
+                      color: _getTextColor,
                       fontWeight: FontWeight.w400,
                     ),
                   ),

@@ -80,6 +80,13 @@ class _TtsButtonState extends State<TtsButton> {
             _isPlaying = isThisSegmentPlaying;
           });
           
+          // 재생 시작/종료 콜백 처리
+          if (isThisSegmentPlaying && widget.onPlayStart != null) {
+            widget.onPlayStart!();
+          } else if (!isThisSegmentPlaying && _isPlaying && widget.onPlayEnd != null) {
+            widget.onPlayEnd!();
+          }
+          
           debugPrint('TTS 버튼 상태 변경: _isPlaying=$_isPlaying, segmentIndex=$segmentIndex, widget.segmentIndex=${widget.segmentIndex}');
         }
       }
@@ -87,16 +94,20 @@ class _TtsButtonState extends State<TtsButton> {
     
     // 재생 완료 리스너
     _ttsService.setOnPlayingCompleted(() {
-      if (mounted && _isPlaying) {
-        setState(() {
-          _isPlaying = false;
-        });
-        
-        debugPrint('TTS 재생 완료: 버튼 상태 리셋');
-        
-        // 재생 완료 콜백 호출
-        if (widget.onPlayEnd != null) {
-          widget.onPlayEnd!();
+      if (mounted) {
+        // 현재 재생 중이거나 이 버튼의 세그먼트가 재생 중이었던 경우 상태 리셋
+        if (_isPlaying || _ttsService.currentSegmentIndex == widget.segmentIndex) {
+          final bool wasPlaying = _isPlaying;
+          setState(() {
+            _isPlaying = false;
+          });
+          
+          debugPrint('TTS 재생 완료: 버튼 상태 리셋 (segmentIndex=${widget.segmentIndex})');
+          
+          // 재생 종료 콜백 호출 (이전에 재생 중이었던 경우에만)
+          if (wasPlaying && widget.onPlayEnd != null) {
+            widget.onPlayEnd!();
+          }
         }
       }
     });
@@ -175,10 +186,13 @@ class _TtsButtonState extends State<TtsButton> {
     
     if (_isPlaying) {
       // 이미 재생 중이면 중지
-      _ttsService.stop();
-      setState(() {
-        _isPlaying = false;
-      });
+      await _ttsService.stop();
+      
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+        });
+      }
       
       // 재생 종료 콜백 호출
       if (widget.onPlayEnd != null) {
@@ -187,10 +201,14 @@ class _TtsButtonState extends State<TtsButton> {
       
       debugPrint('TTS 재생 중지 (사용자에 의해)');
     } else {
-      // 재생 시작
-      setState(() {
-        _isPlaying = true;
-      });
+      // 재생 시작 전에 모든 TTS를 중지하고 상태 초기화
+      await _ttsService.stop();
+      
+      if (mounted) {
+        setState(() {
+          _isPlaying = true;
+        });
+      }
       
       // 재생 시작 콜백 호출
       if (widget.onPlayStart != null) {
@@ -208,8 +226,8 @@ class _TtsButtonState extends State<TtsButton> {
         }
         
         // speakSegment이 비동기적으로 완료된 후에도 상태 확인
-        // 3초 후에 TTS 서비스 상태를 확인하여 현재 재생 중인지 확인
-        Future.delayed(const Duration(seconds: 3), () {
+        // 2초 후에 TTS 서비스 상태를 확인하여 현재 재생 중인지 확인 (타임아웃 시간 단축)
+        Future.delayed(const Duration(seconds: 2), () {
           if (mounted) {
             final currentSegment = _ttsService.currentSegmentIndex;
             final bool shouldStillBePlaying = widget.segmentIndex != null && 
@@ -221,7 +239,7 @@ class _TtsButtonState extends State<TtsButton> {
                 _isPlaying = false;
               });
               
-              debugPrint('3초 타임아웃으로 TTS 버튼 상태 리셋');
+              debugPrint('2초 타임아웃으로 TTS 버튼 상태 리셋');
               
               // 재생 종료 콜백 호출
               if (widget.onPlayEnd != null) {

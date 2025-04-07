@@ -468,7 +468,7 @@ class TtsService {
       // 재생 완료 시 현재 재생 중인 세그먼트 초기화
       _updateCurrentSegment(null);
 
-      // 재생 완료 콜백 호출
+      // 재생 완료 콜백 호출 - 항상 호출하도록 수정
       if (_onPlayingCompleted != null) {
         _onPlayingCompleted!();
       }
@@ -480,6 +480,11 @@ class TtsService {
       
       // 재생 취소 시 현재 재생 중인 세그먼트 초기화
       _updateCurrentSegment(null);
+      
+      // 재생 취소 시에도 완료 콜백 호출 (추가)
+      if (_onPlayingCompleted != null) {
+        _onPlayingCompleted!();
+      }
     });
 
     _flutterTts?.setPauseHandler(() {
@@ -498,6 +503,11 @@ class TtsService {
       
       // 오류 발생 시 현재 재생 중인 세그먼트 초기화
       _updateCurrentSegment(null);
+      
+      // 오류 발생 시에도 완료 콜백 호출 (추가)
+      if (_onPlayingCompleted != null) {
+        _onPlayingCompleted!();
+      }
     });
   }
 }
