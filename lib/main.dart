@@ -62,41 +62,72 @@ void main() async {
     // 디버그 모드 설정
     DebugUtils.enableLogInRelease = true;
     
-    // 디버그 모드에서도 특정 로그 패턴(타이머 관련) 필터링
+    // 타이머 관련 키워드 체크 함수
+    bool containsTimerKeyword(String message) {
+      final keywords = [
+        'pikabook', 'timer', '타이머', '로딩', '로더', 
+        'ms', '초', '시간', '소요', '처리', 
+        'loading', 'duration', 'elapsed', 'timeout',
+        '성공', '실패', '완료', '진행', '대기', '취소',
+        '다이얼로그', 'dialog', '메시지',
+        '✅', '⚠️', '🔴', 'error', '오류',
+      ];
+      
+      for (var keyword in keywords) {
+        if (message.contains(keyword)) {
+          return true;
+        }
+      }
+      
+      return false;
+    }
+    
+    // 타이머 패턴 체크 함수
+    bool containsTimerPattern(String message) {
+      // 숫자 + ms, 숫자 + 초, 시간 :, 등의 패턴 체크
+      final patterns = [
+        RegExp(r'\d+\s*ms'),
+        RegExp(r'\d+\s*(초|분|시간)'),
+        RegExp(r'(시간|처리|소요)\s*[:\-=]'),
+        RegExp(r'\d{4,}'),  // 4자리 이상 연속된 숫자
+      ];
+      
+      for (var pattern in patterns) {
+        if (pattern.hasMatch(message)) {
+          return true;
+        }
+      }
+      
+      return false;
+    }
+    
+    // 디버그 모드에서도 모든 로그 출력 비활성화 (타이머 문제 해결)
     final originalDebugPrint = debugPrint;
     debugPrint = (String? message, {int? wrapWidth}) {
       if (message == null) return;
       
-      // 필터링할 키워드 목록
-      final keywords = [
-        'pikabook', 'Pikabook', 'PIKABOOK',
-        'ms', 'MS', 'millisecond', 'millis',
-        '초', '시간', '소요', '처리',
-        'elapsed', 'duration', 'time', 
-        'timeout', 'timer', 'Timer',
-      ];
-      
-      // 키워드가 포함된 메시지 필터링 (대소문자 구분 없이)
+      // 모든 로그 메시지 로우 레벨 필터링
       final lowerMessage = message.toLowerCase();
-      bool shouldFilter = false;
-      for (final keyword in keywords) {
-        if (lowerMessage.contains(keyword.toLowerCase())) {
-          shouldFilter = true;
-          break;
-        }
-      }
       
-      // 숫자와 ms가 함께 있는 패턴 필터링 (예: "200ms", "1500 ms")
-      if (!shouldFilter && RegExp(r'\d+\s*ms').hasMatch(lowerMessage)) {
-        shouldFilter = true;
-      }
-      
-      // 필터링 조건에 해당하면 출력하지 않음
-      if (shouldFilter) {
+      // 1. 타이머 관련 단어 있으면 필터링
+      if (containsTimerKeyword(lowerMessage)) {
         return;
       }
       
-      // 나머지 로그는 정상적으로 출력
+      // 2. 숫자와 ms, 초 등의 패턴이 있으면 필터링
+      if (containsTimerPattern(lowerMessage)) {
+        return;
+      }
+      
+      // 3. Pikabook, 피카북 등의 단어 필터링
+      if (lowerMessage.contains('pikabook') || 
+          lowerMessage.contains('피카북') ||
+          lowerMessage.contains('loading') ||
+          lowerMessage.contains('로딩')) {
+        return;
+      }
+      
+      // 필터링을 통과한 로그만 출력
       originalDebugPrint(message, wrapWidth: wrapWidth);
     };
   }

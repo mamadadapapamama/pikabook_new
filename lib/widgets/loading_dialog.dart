@@ -107,11 +107,10 @@ class LoadingDialog {
     if (_dialogContext != null && _dialogContext!.mounted) {
       try {
         Navigator.of(_dialogContext!, rootNavigator: true).pop();
-        debugPrint('✅ 저장된 컨텍스트로 다이얼로그 닫기 성공');
         _dialogContext = null;
         return;
       } catch (e) {
-        debugPrint('⚠️ 저장된 컨텍스트로 닫기 실패: $e');
+        // 오류 무시
       }
     }
 
@@ -119,11 +118,10 @@ class LoadingDialog {
     if (context.mounted) {
       try {
         Navigator.of(context, rootNavigator: true).pop();
-        debugPrint('✅ 전달된 컨텍스트로 다이얼로그 닫기 성공');
         _dialogContext = null;
         return;
       } catch (e) {
-        debugPrint('⚠️ 전달된 컨텍스트로 닫기 실패: $e');
+        // 오류 무시
       }
     }
 
@@ -137,10 +135,9 @@ class LoadingDialog {
           
           if (effectiveContext.mounted) {
             Navigator.of(effectiveContext, rootNavigator: true).pop();
-            debugPrint('✅ 지연 후 다이얼로그 닫기 성공');
           }
         } catch (e) {
-          debugPrint('⚠️ 지연 후 닫기 실패: $e');
+          // 오류 무시
         } finally {
           _dialogContext = null;
         }

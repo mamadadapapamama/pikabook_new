@@ -94,10 +94,7 @@ class PikabookLoader extends StatelessWidget {
         try {
           // 직접 네비게이터를 통해 닫기 시도
           Navigator.of(context, rootNavigator: true).pop();
-          debugPrint('PikabookLoader hide 메서드 성공');
         } catch (e) {
-          debugPrint('PikabookLoader hide 메서드 오류: $e');
-          
           // 대비책: 약간의 지연 후 다시 시도
           Future.delayed(const Duration(milliseconds: 100), () {
             try {
@@ -167,18 +164,24 @@ class _PikabookDotPulseAnimationState extends State<_PikabookDotPulseAnimation>
   void initState() {
     super.initState();
     
-    // 애니메이션 컨트롤러 초기화
+    // 애니메이션 컨트롤러 초기화 (조용히)
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
-    )..repeat();
+      debugLabel: '',
+    );
     
-    // 타이머 디버그 출력 제거 (UI에 표시될 수 있는 문제 방지)
+    // 타이머 디버그 출력 제거
     _controller.addStatusListener((status) {});
+    _controller.addListener(() {});
+    
+    // 애니메이션 시작 (애니메이션 로그 없이)
+    _controller.repeat(period: const Duration(milliseconds: 1500));
   }
 
   @override
   void dispose() {
+    _controller.stop();
     _controller.dispose();
     super.dispose();
   }

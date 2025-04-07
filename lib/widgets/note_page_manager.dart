@@ -4,7 +4,6 @@ import '../models/page.dart' as page_model;
 import '../services/page_service.dart';
 import '../services/image_service.dart';
 import '../services/unified_cache_service.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// 노트 페이지 관리 클래스 (note_detail_screen.dart 에서 사용)
 /// 페이지 로드, 병합, 이미지 로드 등의 기능 제공
@@ -196,13 +195,10 @@ class NotePageManager {
           if (page.id != null) {
             _imageFileMap[page.id!] = imageFile;
           }
-          debugPrint('페이지 $index 이미지 로드 완료: ${page.imageUrl}');
         } else {
-          debugPrint('페이지 $index 이미지 로드 실패: 파일을 찾을 수 없음 - ${page.imageUrl}');
         }
       }
     } catch (e) {
-      debugPrint('이미지 로드 중 오류 발생: $e');
     }
   }
   
@@ -263,6 +259,5 @@ class NotePageManager {
       _imageFileMap[updatedPage.id!] = imageFile;
     }
     
-    debugPrint('페이지 이미지 업데이트 완료: ${updatedPage.id}');
   }
 } 

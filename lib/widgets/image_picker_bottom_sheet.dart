@@ -272,27 +272,37 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         LoadingDialog.show(context);
         isLoadingDialogShowing = true;
         
-        // 무조건 닫히게 하는 강제 타이머 설정
-        loadingTimer = Timer(Duration(seconds: 20), () {
-          // 타이머 콜백 내에서 상태 변수 확인
+        // 무조건 닫히게 하는 강제 타이머 설정 (10초 후 무조건 닫히고 페이지 이동)
+        loadingTimer = Timer(Duration(seconds: 10), () {
           if (isLoadingDialogShowing && context.mounted) {
-            // 타이머 로그 출력 방지 (UI에 표시될 수 있는 문제 방지)
-            LoadingDialog.hide(context);
             isLoadingDialogShowing = false;
             
             // 노트 생성에 성공했으면 노트 페이지로 이동
             if (creationSucceeded && context.mounted) {
+              // 먼저 페이지 이동 수행 후 다이얼로그 닫기
               _navigateToNoteDetail(context, createdNoteId!, isProcessingBackground);
+              
+              // 페이지 이동 후 적절한 지연을 두고 로딩 다이얼로그 닫기
+              Future.delayed(Duration(milliseconds: 100), () {
+                if (context.mounted) {
+                  LoadingDialog.hide(context);
+                }
+              });
+            } else {
+              // 실패한 경우 다이얼로그 닫기
+              if (context.mounted) {
+                LoadingDialog.hide(context);
+              }
             }
           }
         });
       }
       
-      // 첫 페이지 처리 완료 대기 (최대 15초)
+      // 첫 페이지 처리 완료 대기 (최대 8초)
       if (creationSucceeded) {
         bool firstPageProcessed = false;
         int waitCount = 0;
-        const int maxWaitSeconds = 15;
+        const int maxWaitSeconds = 8;
         
         while (!firstPageProcessed && waitCount < maxWaitSeconds && context.mounted && isLoadingDialogShowing) {
           try {
@@ -301,11 +311,10 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             firstPageProcessed = pageStatus['processed'] == true;
             
             if (firstPageProcessed) {
-              // 첫 페이지 처리 로그 출력 방지
               break;
             }
           } catch (e) {
-            // 에러 로그 출력 방지
+            // 에러 무시
           }
           
           // 1초 대기 후 다시 확인
@@ -314,67 +323,68 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         }
       }
 
-      // 로딩 다이얼로그 닫기 - 첫 페이지 처리 완료 또는 대기 시간 초과 후
-      try {
-        // 백그라운드 타이머 취소
-        loadingTimer?.cancel();
-        
-        if (isLoadingDialogShowing && context.mounted) {
-          // LoadingDialog 클래스의 메서드로 닫기
-          LoadingDialog.hide(context);
-          isLoadingDialogShowing = false;
-        }
-      } catch (e) {
-        // 에러 로그 출력 방지
-      }
-
-      // 추가적인 안전장치: 지연 후 한 번 더 닫기 시도
-      await Future.delayed(Duration(milliseconds: 500));
-      if (isLoadingDialogShowing && context.mounted) {
-        LoadingDialog.hide(context);
+      // 첫 페이지 처리 완료 또는 대기 시간 초과 후, 타이머가 작동 중이면 취소
+      loadingTimer?.cancel();
+      
+      // 결과에 따라 다음 화면으로 이동
+      if (creationSucceeded && context.mounted && isLoadingDialogShowing) {
         isLoadingDialogShowing = false;
-      }
-
-      // 결과에 따라 다음 화면으로 이동 또는 오류 메시지 표시
-      if (creationSucceeded && context.mounted) {
-        // 노트 상세 화면으로 이동
+        
+        // 페이지 이동 먼저 수행
         _navigateToNoteDetail(context, createdNoteId!, isProcessingBackground);
-      } else if (context.mounted) {
-        // 오류 메시지 표시
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message.toString()),
-            backgroundColor: ColorTokens.error,
-            behavior: UITokens.snackBarTheme.behavior,
-            shape: UITokens.snackBarTheme.shape,
-          ),
-        );
+        
+        // 페이지 이동 후 적절한 지연을 두고 로딩 다이얼로그 닫기
+        Future.delayed(Duration(milliseconds: 100), () {
+          if (context.mounted) {
+            LoadingDialog.hide(context);
+          }
+        });
+      } else if (context.mounted && isLoadingDialogShowing) {
+        // 실패한 경우 다이얼로그 닫기 후 오류 메시지 표시
+        isLoadingDialogShowing = false;
+        LoadingDialog.hide(context);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message.toString()),
+              backgroundColor: ColorTokens.error,
+              behavior: UITokens.snackBarTheme.behavior,
+              shape: UITokens.snackBarTheme.shape,
+            ),
+          );
+        }
       }
     } catch (e) {
       // 오류 발생 시 타이머 취소
       loadingTimer?.cancel();
       
-      // 오류 발생 시 로딩 다이얼로그 닫기
-      try {
-        if (isLoadingDialogShowing && context.mounted) {
-          LoadingDialog.hide(context);
-          isLoadingDialogShowing = false;
-        }
-      } catch (dialogError) {
-        // 에러 로그 출력 방지
-      }
-      
       // 노트 생성에 성공했으면 오류가 있어도 노트 페이지로 이동
       if (creationSucceeded && context.mounted) {
+        // 페이지 이동 먼저 수행
         _navigateToNoteDetail(context, createdNoteId!, true);
+        
+        // 페이지 이동 후 로딩 다이얼로그 닫기
+        Future.delayed(Duration(milliseconds: 100), () {
+          if (context.mounted && isLoadingDialogShowing) {
+            isLoadingDialogShowing = false;
+            LoadingDialog.hide(context);
+          }
+        });
         return;
+      }
+      
+      // 실패한 경우 로딩 다이얼로그 닫기
+      if (context.mounted && isLoadingDialogShowing) {
+        isLoadingDialogShowing = false;
+        LoadingDialog.hide(context);
       }
       
       // 오류 메시지 표시
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('노트 생성 중 오류가 발생했습니다: $e'),
+            content: Text('노트 생성 중 오류가 발생했습니다'),
             backgroundColor: ColorTokens.error,
             behavior: UITokens.snackBarTheme.behavior,
             shape: UITokens.snackBarTheme.shape,
@@ -388,16 +398,19 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   void _navigateToNoteDetail(BuildContext context, String noteId, bool isProcessingBackground) {
     if (!context.mounted) return;
     
-    // 화면 전환 (pushAndRemoveUntil 사용하여 홈 화면 위에 새 화면 push)
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(
-          noteId: noteId,
-          isProcessingBackground: isProcessingBackground,
-        ),
-      ),
-      // 홈 화면만 남기고 모든 화면 제거
-      (route) => route.isFirst
-    );
+    // Microtask로 이동하여 화면 깜빡임 방지
+    Future.microtask(() {
+      if (context.mounted) {
+        // 화면 전환 (replace 사용하여 현재 화면 대체)
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => NoteDetailScreen(
+              noteId: noteId,
+              isProcessingBackground: isProcessingBackground,
+            ),
+          ),
+        );
+      }
+    });
   }
 } 
