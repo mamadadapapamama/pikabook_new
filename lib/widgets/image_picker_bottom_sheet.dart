@@ -266,20 +266,17 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       // 성공 여부 저장
       creationSucceeded = success && createdNoteId != null;
       
-      // 로딩 다이얼로그 표시 - 커스텀 타임아웃 콜백 추가
+      // 로딩 다이얼로그 표시
       if (context.mounted) {
         // 로딩 다이얼로그 표시 (기본 메시지 사용)
-        LoadingDialog.show(
-          context, 
-          timeoutSeconds: 30, // 타임아웃 시간을 30초로 늘림
-        );
+        LoadingDialog.show(context);
         isLoadingDialogShowing = true;
         
-        // 타임아웃 시 처리를 위한 별도 타이머 설정
-        loadingTimer = Timer(Duration(seconds: 30), () {
+        // 무조건 닫히게 하는 강제 타이머 설정
+        loadingTimer = Timer(Duration(seconds: 20), () {
           // 타이머 콜백 내에서 상태 변수 확인
           if (isLoadingDialogShowing && context.mounted) {
-            // 타임아웃 발생 시 로딩 다이얼로그 명시적으로 닫기
+            // 타이머 로그 출력 방지 (UI에 표시될 수 있는 문제 방지)
             LoadingDialog.hide(context);
             isLoadingDialogShowing = false;
             
@@ -304,10 +301,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             firstPageProcessed = pageStatus['processed'] == true;
             
             if (firstPageProcessed) {
+              // 첫 페이지 처리 로그 출력 방지
               break;
             }
           } catch (e) {
-            debugPrint('첫 페이지 처리 상태 확인 중 오류: $e');
+            // 에러 로그 출력 방지
           }
           
           // 1초 대기 후 다시 확인
@@ -317,11 +315,22 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
 
       // 로딩 다이얼로그 닫기 - 첫 페이지 처리 완료 또는 대기 시간 초과 후
-      if (isLoadingDialogShowing && context.mounted) {
+      try {
         // 백그라운드 타이머 취소
         loadingTimer?.cancel();
         
-        // LoadingDialog 클래스의 메서드로 닫기
+        if (isLoadingDialogShowing && context.mounted) {
+          // LoadingDialog 클래스의 메서드로 닫기
+          LoadingDialog.hide(context);
+          isLoadingDialogShowing = false;
+        }
+      } catch (e) {
+        // 에러 로그 출력 방지
+      }
+
+      // 추가적인 안전장치: 지연 후 한 번 더 닫기 시도
+      await Future.delayed(Duration(milliseconds: 500));
+      if (isLoadingDialogShowing && context.mounted) {
         LoadingDialog.hide(context);
         isLoadingDialogShowing = false;
       }
@@ -346,9 +355,13 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       loadingTimer?.cancel();
       
       // 오류 발생 시 로딩 다이얼로그 닫기
-      if (isLoadingDialogShowing && context.mounted) {
-        LoadingDialog.hide(context);
-        isLoadingDialogShowing = false;
+      try {
+        if (isLoadingDialogShowing && context.mounted) {
+          LoadingDialog.hide(context);
+          isLoadingDialogShowing = false;
+        }
+      } catch (dialogError) {
+        // 에러 로그 출력 방지
       }
       
       // 노트 생성에 성공했으면 오류가 있어도 노트 페이지로 이동

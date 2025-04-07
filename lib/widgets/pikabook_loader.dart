@@ -172,6 +172,9 @@ class _PikabookDotPulseAnimationState extends State<_PikabookDotPulseAnimation>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat();
+    
+    // 타이머 디버그 출력 제거 (UI에 표시될 수 있는 문제 방지)
+    _controller.addStatusListener((status) {});
   }
 
   @override

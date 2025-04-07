@@ -69,20 +69,26 @@ void main() async {
       
       // 필터링할 키워드 목록
       final keywords = [
-        'pikabook', 'Pikabook',
-        'ms', 'millisecond', 'millis',
-        '초', '시간', '소요',
-        'elapsed', 'duration',
-        'timeout', 'timer',
+        'pikabook', 'Pikabook', 'PIKABOOK',
+        'ms', 'MS', 'millisecond', 'millis',
+        '초', '시간', '소요', '처리',
+        'elapsed', 'duration', 'time', 
+        'timeout', 'timer', 'Timer',
       ];
       
-      // 키워드가 포함된 메시지 필터링
+      // 키워드가 포함된 메시지 필터링 (대소문자 구분 없이)
+      final lowerMessage = message.toLowerCase();
       bool shouldFilter = false;
       for (final keyword in keywords) {
-        if (message.contains(keyword)) {
+        if (lowerMessage.contains(keyword.toLowerCase())) {
           shouldFilter = true;
           break;
         }
+      }
+      
+      // 숫자와 ms가 함께 있는 패턴 필터링 (예: "200ms", "1500 ms")
+      if (!shouldFilter && RegExp(r'\d+\s*ms').hasMatch(lowerMessage)) {
+        shouldFilter = true;
       }
       
       // 필터링 조건에 해당하면 출력하지 않음
