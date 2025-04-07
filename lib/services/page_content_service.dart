@@ -391,4 +391,19 @@ class PageContentService {
       );
     }
   }
+
+  // 프로세스된 텍스트 업데이트
+  void updateProcessedText(String pageId, ProcessedText processedText) {
+    // 기존 setProcessedText 메서드를 사용하여 업데이트
+    setProcessedText(pageId, processedText);
+    
+    // 영구 캐시에도 저장 (비동기로 처리)
+    _pageService.cacheProcessedText(
+      pageId,
+      processedText,
+      "languageLearning", // 항상 languageLearning 모드 사용
+    ).catchError((error) {
+      debugPrint('페이지 $pageId의 ProcessedText 영구 캐시 업데이트 중 오류: $error');
+    });
+  }
 }

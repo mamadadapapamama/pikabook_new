@@ -23,6 +23,14 @@ class NoteDetailBottomBar extends StatefulWidget {
   final bool isFullTextMode;
   final PageContentService pageContentService;
   final TextReaderService textReaderService;
+  final bool showPinyin;
+  final bool showTranslation;
+  final bool isProcessing; // 현재 페이지가 처리 중인지 여부
+  final double progressValue;
+  final VoidCallback onTogglePinyin;
+  final VoidCallback onToggleTranslation;
+  final VoidCallback? onTtsPlay;
+  final bool isMinimalUI;
 
   const NoteDetailBottomBar({
     super.key,
@@ -34,6 +42,14 @@ class NoteDetailBottomBar extends StatefulWidget {
     required this.isFullTextMode,
     required this.pageContentService,
     required this.textReaderService,
+    required this.showPinyin,
+    required this.showTranslation,
+    this.isProcessing = false, // 기본값은 false (처리 중이 아님)
+    this.progressValue = 0.0,
+    required this.onTogglePinyin,
+    required this.onToggleTranslation,
+    this.onTtsPlay,
+    this.isMinimalUI = false,
   });
 
   @override
@@ -158,7 +174,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                     // 다음 페이지 버튼
                     _buildNavigationButton(
                       icon: Icons.arrow_forward_ios_rounded,
-                      onTap: widget.currentPageIndex < widget.totalPages - 1 
+                      onTap: (widget.currentPageIndex < widget.totalPages - 1 && !_isNextPageProcessing())
                           ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
                           : null,
                     ),
@@ -215,6 +231,28 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
         ),
       ),
     );
+  }
+  
+  // 다음 페이지가 처리 중인지 확인
+  bool _isNextPageProcessing() {
+    // 현재 페이지가 처리 중인 경우
+    if (widget.isProcessing) {
+      return true;
+    }
+    
+    // 모든 페이지가 로드된 경우가 아닌 경우
+    if (widget.currentPage == null || widget.totalPages <= 0) {
+      return false;
+    }
+    
+    // 다음 페이지가 없는 경우
+    if (widget.currentPageIndex >= widget.totalPages - 1) {
+      return false;
+    }
+    
+    // 부모 위젯에서 isProcessing 플래그가 true로 설정된 경우
+    // 이는 노트 전체가 아직 처리 중임을 의미할 수 있음
+    return widget.isProcessing;
   }
   
   /*

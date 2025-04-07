@@ -33,6 +33,7 @@ class HelpTextTooltip extends StatefulWidget {
   final int totalSteps; // 전체 단계
   final VoidCallback? onNextStep; // 다음 단계로 이동
   final VoidCallback? onPrevStep; // 이전 단계로 이동
+  final TextStyle? titleStyle; // 제목 텍스트 스타일 커스터마이징
 
   const HelpTextTooltip({
     Key? key,
@@ -54,6 +55,7 @@ class HelpTextTooltip extends StatefulWidget {
     this.totalSteps = 1,
     this.onNextStep,
     this.onPrevStep,
+    this.titleStyle,
   }) : super(key: key);
 
   @override
@@ -174,8 +176,7 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                           Flexible(
                             child: Text(
                               widget.text,
-                              style: TypographyTokens.body1.copyWith(
-                                fontsize:18,
+                              style: widget.titleStyle ?? TypographyTokens.body1.copyWith(
                                 color: ColorTokens.primary,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -230,9 +231,11 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                 // 이미지 (있는 경우만 표시)
                 if (widget.image != null) ...[
                   const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: widget.image!,
+                  Center(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: widget.image!,
+                    ),
                   ),
                 ],
                 

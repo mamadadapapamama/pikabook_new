@@ -99,6 +99,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   bool _showTooltip = false; // 툴팁 표시 여부
   int _tooltipStep = 1; // 툴팁 단계 추적
   final int _totalTooltipSteps = 3; // 총 툴팁 단계 수 (2에서 3으로 변경)
+  bool _isEditingTitle = false; // 제목 편집 모드 여부
+  TextEditingController _titleEditingController = TextEditingController(); // 제목 편집용 컨트롤러
 
   // 의존성 관련 변수들
   ThemeData? _theme;
@@ -747,70 +749,72 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     );
   }
 
-  void _showEditTitleDialog() {
-    if (_note == null) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => EditTitleDialog(
-        currentTitle: _note!.originalText,
-        onTitleUpdated: _updateNoteTitle,
-      ),
-    );
-  }
-
+  // 노트 제목 업데이트
   Future<void> _updateNoteTitle(String newTitle) async {
-    if (_note == null || _note?.id == null) return;
-
-    // 즉시 UI 업데이트 (낙관적 업데이트)
-    final previousTitle = _note!.originalText;
-    final currentFlashCards = _note!.flashCards;
+    if (newTitle.trim().isEmpty || _note == null || _note!.id == null) return;
     
     setState(() {
-      _note = _note!.copyWith(
-        originalText: newTitle,
-        updatedAt: DateTime.now(),
-        flashCards: currentFlashCards, // 현재 플래시카드 유지
-      );
-      _isLoading = true;
+      _isEditingTitle = false;
     });
-
+    
     try {
+      // 노트 복사본 생성 및 제목 업데이트
+      final updatedNote = _note!.copyWith(
+        originalText: newTitle.trim(),
+        updatedAt: DateTime.now(),
+      );
+      
       // Firestore 업데이트
-      await _noteService.updateNote(_note!.id!, _note!);
-
-      // 업데이트 완료
+      await _noteService.updateNote(_note!.id!, updatedNote);
+      
+      // 노트 상태 업데이트
+      setState(() {
+        _note = updatedNote;
+      });
+      
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('노트 제목이 변경되었습니다.')),
+          SnackBar(
+            content: Text('노트 제목이 업데이트되었습니다.'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } catch (e) {
-      // 오류 발생 시 이전 제목으로 복원
+      debugPrint('노트 제목 업데이트 오류: $e');
+      
       if (mounted) {
-        setState(() {
-          _note = _note!.copyWith(
-            originalText: previousTitle,
-            flashCards: currentFlashCards, // 현재 플래시카드 유지
-          );
-          _isLoading = false;
-        });
-
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('노트 제목 변경 중 오류가 발생했습니다: $e')),
+          SnackBar(
+            content: Text('제목 업데이트에 실패했습니다.'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
+  }
+  
+  // 제목 편집 다이얼로그 표시
+  void _showEditTitleDialog() {
+    if (_note == null) return;
+    
+    setState(() {
+      _titleEditingController.text = _note!.originalText;
+      _isEditingTitle = true;
+    });
   }
 
   // ===== 페이지 탐색 관련 메서드 =====
 
   void _changePage(int index) {
-    if (index < 0 || index >= _pageManager.pages.length) return;
+    // 범위 검사
+    if (index < 0 || index >= _pageManager.pages.length) {
+      debugPrint('페이지 범위 오류: 요청 인덱스 $index, 페이지 수: ${_pageManager.pages.length}');
+      return;
+    }
     
     final previousPageIndex = _pageManager.currentPageIndex;
     final isSwitchingBack = _previouslyVisitedPages.contains(index);
@@ -821,6 +825,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     final targetPage = _pageManager.getPageAtIndex(index);
     if (targetPage != null && targetPage.originalText == '___PROCESSING___') {
       debugPrint('처리 중인 더미 페이지로는 이동하지 않음: $index');
+      
+      // 처리 중인 페이지로 이동하려는 경우 스낵바로 피드백 제공
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '아직 페이지를 준비중이에요. 잠시만 기다려 주세요.',
+              style: TextStyle(color: Colors.white),
+            ),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: ColorTokens.primary, // 앱 테마 컬러 사용
+          ),
+        );
+      }
+      
       return; // 처리 중인 더미 페이지로는 이동하지 않음
     }
     
@@ -1397,105 +1417,109 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: _isLoading || _error != null
-            ? null // 로딩 중이거나 오류 상태에서는 앱바 없음
-            : PikaAppBar.noteDetail(
-                title: _note?.originalText ?? 'Note',
-                currentPage: _calculateActualCurrentPageIndex() + 1,
-                totalPages: (_note?.isProcessingBackground ?? false) && _note?.imageCount != null
-                    ? max(_note!.imageCount!, _calculateActualPageCount())
-                    : _calculateActualPageCount(),
-                flashcardCount: _note?.flashcardCount ?? 0,
-                onMorePressed: _showMoreOptions,
-                onFlashcardTap: _navigateToFlashcards,
-                onBackPressed: () {
-                  // 홈 화면으로 직접 이동
-                  DebugUtils.log('앱바 백버튼 터치됨 - 홈 화면으로 이동 시작');
-                  
-                  // 홈 화면으로 직접 이동 (왼쪽에서 오른쪽으로 슬라이드 애니메이션 적용)
-                  if (mounted) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      PageRouteBuilder(
-                        pageBuilder: (context, animation, secondaryAnimation) => HomeScreen(),
-                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                          const begin = Offset(-1.0, 0.0); // 왼쪽에서 오른쪽으로 슬라이드
-                          const end = Offset.zero;
-                          const curve = Curves.easeInOut;
-                          
-                          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-                          var offsetAnimation = animation.drive(tween);
-                          
-                          return SlideTransition(
-                            position: offsetAnimation,
-                            child: child,
-                          );
-                        },
-                        transitionDuration: const Duration(milliseconds: 300),
-                      ),
-                      (route) => false // 모든 이전 경로 제거
-                    );
-                  }
-                  
-                  // 화면 이동 후 리소스 정리 (백그라운드에서 처리)
-                  Future.microtask(() async {
-                    try {
-                      DebugUtils.log('백그라운드에서 TTS 리소스 정리 시작');
-                      
-                      // TTS 관련 서비스 중지
-                      if (_textReaderService.isPlaying) {
-                        DebugUtils.log('TextReaderService 중지 중...');
-                        await _textReaderService.stop();
-                      }
-                      
-                      DebugUtils.log('TtsService 중지 중...');
-                      await _ttsService.stop();
-                      
-                      // 필요한 리소스 정리
-                      if (_pageManager.currentPage?.id != null) {
-                        DebugUtils.log('ProcessedText 리소스 정리 중...');
-                        _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
-                      }
-                      
-                      DebugUtils.log('백그라운드 리소스 정리 완료');
-                    } catch (e) {
-                      DebugUtils.error('백그라운드 리소스 정리 중 오류: $e');
-                    }
-                  });
-                },
-              ),
-          body: _isLoading
-              ? const Center(
-                  child: DotLoadingIndicator(
-                    message: '노트 로딩 중...',
+        appBar: AppBar(
+          title: _isEditingTitle
+              ? TextField(
+                  controller: _titleEditingController,
+                  autofocus: true,
+                  style: TypographyTokens.body1,
+                  onSubmitted: (value) => _updateNoteTitle(value),
+                  decoration: InputDecoration(
+                    hintText: '노트 제목',
+                    border: InputBorder.none,
                   ),
                 )
-              : _error != null
-                  ? Center(child: Text(_error ?? '노트를 불러올 수 없습니다.'))
-                  : _buildBody(),
-          bottomNavigationBar: !_isLoading && _error == null && _note != null 
-              ? NoteDetailBottomBar(
-                  currentPage: _pageManager.currentPage,
-                  currentPageIndex: _calculateActualCurrentPageIndex(),
-                  totalPages: (_note?.isProcessingBackground ?? false) && _note?.imageCount != null
-                      ? max(_note!.imageCount!, _calculateActualPageCount())
-                      : _calculateActualPageCount(),
-                  onPageChanged: (index) {
-                    // 실제 페이지 인덱스를 _pageManager 인덱스로 변환
-                    int realIndex = _translateActualToRealIndex(index);
-                    if (realIndex >= 0) {
-                      _changePage(realIndex);
-                    }
-                  },
-                  isFullTextMode: _pageManager.currentPage?.id != null 
-                      ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
-                      : false,
-                  onToggleFullTextMode: _toggleFullTextMode,
-                  pageContentService: _pageContentService,
-                  textReaderService: _textReaderService,
-                )
-              : null,
+              : Text(
+                  _note?.originalText ?? '로딩 중',
+                  style: TypographyTokens.body1,
+                ),
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.more_vert),
+              onPressed: _showMoreOptions,
+            ),
+          ],
         ),
+        body: Stack(
+          children: [
+            Column(
+              children: [
+                // 메인 콘텐츠 영역
+                Expanded(
+                  child: _buildCurrentPageContent(),
+                ),
+                
+                // 하단 네비게이션 바 (_buildBottomBar 메소드 직접 호출)
+                _buildBottomBar(),
+              ],
+            ),
+            
+            // 툴팁 표시 (처음 텍스트 처리가 완료된 경우)
+            if (_showTooltip)
+              Positioned(
+                bottom: 80, // 하단 네비게이션 바 위에 위치하도록 조정
+                left: 16,
+                right: 16,
+                child: Material(
+                  elevation: 0,
+                  color: Colors.transparent,
+                  child: HelpTextTooltip(
+                    key: const Key('note_detail_tooltip'),
+                    text: _tooltipStep == 1 
+                      ? "첫 노트가 만들어졌어요!" 
+                      : _tooltipStep == 2
+                        ? "다음 페이지로 이동은 스와이프나 화살표로!"
+                        : "불필요한 텍스트는 지워요.",
+                    description: _tooltipStep == 1
+                      ? "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요."
+                      : _tooltipStep == 2
+                        ? "노트의 빈 공간을 왼쪽으로 슬라이드하거나, 바텀 바의 화살표를 눌러 다음 장으로 넘어갈 수 있어요."
+                        : "잘못 인식된 문장은 왼쪽으로 슬라이드해 삭제할수 있어요.",
+                    showTooltip: _showTooltip,
+                    onDismiss: _handleTooltipDismiss,
+                    backgroundColor: ColorTokens.primaryverylight,
+                    borderColor: ColorTokens.primary,
+                    textColor: ColorTokens.textPrimary,
+                    tooltipPadding: const EdgeInsets.all(16),
+                    tooltipWidth: MediaQuery.of(context).size.width - 32, // 화면 폭에 맞춤
+                    spacing: 8.0,
+                    style: HelpTextTooltipStyle.primary,
+                    image: Image.asset(
+                      _tooltipStep == 1 
+                        ? 'assets/images/note_help_1.png'
+                        : _tooltipStep == 2
+                          ? 'assets/images/note_help_2.png'
+                          : 'assets/images/note_help_3.png',
+                      width: double.infinity,
+                      fit: BoxFit.contain,
+                    ),
+                    currentStep: _tooltipStep,
+                    totalSteps: _totalTooltipSteps,
+                    onNextStep: () {
+                      // 다음 단계로 이동
+                      setState(() {
+                        _tooltipStep += 1;
+                        DebugUtils.log('📝 툴팁 다음 단계로 이동: $_tooltipStep');
+                      });
+                    },
+                    onPrevStep: () {
+                      // 이전 단계로 이동
+                      setState(() {
+                        _tooltipStep -= 1;
+                        DebugUtils.log('📝 툴팁 이전 단계로 이동: $_tooltipStep');
+                      });
+                    },
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1615,64 +1639,38 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           },
         ),
         
-        // 툴팁 표시 (처음 텍스트 처리가 완료된 경우)
-        if (_showTooltip)
-          Positioned(
-            bottom: 80, // 하단 네비게이션 바 위에 위치하도록 조정
-            left: 16,
-            right: 16,
-            child: Material(
-              elevation: 0,
-              color: Colors.transparent,
-              child: HelpTextTooltip(
-                key: const Key('note_detail_tooltip'),
-                text: _tooltipStep == 1 
-                  ? "첫 노트가 만들어졌어요!" 
-                  : _tooltipStep == 2
-                    ? "다음 페이지로 이동은 스와이프나 화살표로!"
-                    : "불필요한 텍스트는 지워요.",
-                description: _tooltipStep == 1
-                  ? "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요."
-                  : _tooltipStep == 2
-                    ? "노트의 빈 공간을 왼쪽으로 슬라이드하거나, 바텀 바의 화살표를 눌러 다음 장으로 넘어갈 수 있어요."
-                    : "잘못 인식된 문장은 왼쪽으로 슬라이드해 삭제할수 있어요.",
-                showTooltip: _showTooltip,
-                onDismiss: _handleTooltipDismiss,
-                backgroundColor: ColorTokens.primaryverylight,
-                borderColor: ColorTokens.primary,
-                textColor: ColorTokens.textPrimary,
-                tooltipPadding: const EdgeInsets.all(16),
-                tooltipWidth: MediaQuery.of(context).size.width - 32, // 화면 폭에 맞춤
-                spacing: 8.0,
-                style: HelpTextTooltipStyle.primary,
-                image: Image.asset(
-                  _tooltipStep == 1 
-                    ? 'assets/images/note_help_1.png'
-                    : _tooltipStep == 2
-                      ? 'assets/images/note_help_2.png'
-                      : 'assets/images/note_help_3.png',
-                  width: double.infinity,
-                  fit: BoxFit.contain,
-                ),
-                currentStep: _tooltipStep,
-                totalSteps: _totalTooltipSteps,
-                onNextStep: () {
-                  // 다음 단계로 이동
-                  setState(() {
-                    _tooltipStep += 1;
-                    DebugUtils.log('📝 툴팁 다음 단계로 이동: $_tooltipStep');
-                  });
-                },
-                onPrevStep: () {
-                  // 이전 단계로 이동
-                  setState(() {
-                    _tooltipStep -= 1;
-                    DebugUtils.log('📝 툴팁 이전 단계로 이동: $_tooltipStep');
-                  });
-                },
-              ),
+        Column(
+          children: [
+            // 페이지 내용 (Expanded로 남은 공간 채움)
+            Expanded(
+              child: _buildCurrentPageContent(),
             ),
-          ),
+            
+            // 하단 네비게이션 바
+            NoteDetailBottomBar(
+              currentPage: _pageManager.currentPage,
+              currentPageIndex: _pageManager.currentPageIndex,
+              totalPages: _pageManager.pages.length,
+              onPageChanged: (index) => _changePage(index),
+              onToggleFullTextMode: _toggleFullTextMode,
+              isFullTextMode: _pageManager.currentPage?.id != null
+                  ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showFullText ?? false
+                  : false,
+              pageContentService: _pageContentService,
+              textReaderService: _textReaderService,
+              showPinyin: _pageManager.currentPage?.id != null
+                  ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showPinyin ?? true
+                  : true,
+              showTranslation: _pageManager.currentPage?.id != null
+                  ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showTranslation ?? true
+                  : true,
+              onTogglePinyin: _togglePinyin,
+              onToggleTranslation: _toggleTranslation,
+              onTtsPlay: _onTtsPlay,
+              isProcessing: _isCurrentPageProcessing(),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -2089,6 +2087,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               : false,
           pageContentService: _pageContentService,
           textReaderService: _textReaderService,
+          showPinyin: _pageManager.currentPage?.id != null
+              ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showPinyin ?? true
+              : true,
+          showTranslation: _pageManager.currentPage?.id != null
+              ? _pageContentService.getProcessedText(_pageManager.currentPage!.id!)?.showTranslation ?? true
+              : true,
+          onTogglePinyin: _togglePinyin,
+          onToggleTranslation: _toggleTranslation,
+          onTtsPlay: _onTtsPlay,
+          isProcessing: _isCurrentPageProcessing(),
         ),
       ],
     );
@@ -2168,5 +2176,98 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     }
     
     return realPageCounter;
+  }
+
+  /// 현재 페이지가 처리 중인지 확인
+  bool _isCurrentPageProcessing() {
+    final currentPage = _pageManager.currentPage;
+    if (currentPage == null) return false;
+    
+    // 원본 텍스트가 비어 있거나 처리 중을 나타내는 마커가 있는 경우
+    return currentPage.originalText.isEmpty || 
+           currentPage.originalText == 'processing' || 
+           currentPage.originalText == '___PROCESSING___';
+  }
+
+  // 하단 내비게이션 바 생성
+  Widget _buildBottomBar() {
+    if (_note == null || _pageManager.currentPage == null) {
+      return const SizedBox.shrink();
+    }
+    
+    // 페이지 콘텐츠 뷰 모드 결정
+    final pageId = _pageManager.currentPage!.id;
+    final processedText = pageId != null 
+      ? _pageContentService.getProcessedText(pageId) 
+      : null;
+    
+    final bool showFullText = processedText?.showFullText ?? false;
+    final bool showPinyin = processedText?.showPinyin ?? true;
+    final bool showTranslation = processedText?.showTranslation ?? true;
+    
+    // 현재 페이지가 처리 중인지 확인
+    final bool isProcessing = _isCurrentPageProcessing();
+    
+    return NoteDetailBottomBar(
+      currentPage: _pageManager.currentPage,
+      currentPageIndex: _pageManager.currentPageIndex,
+      totalPages: _pageManager.pages.length,
+      onPageChanged: _changePage,
+      onToggleFullTextMode: _toggleFullTextMode,
+      isFullTextMode: showFullText,
+      pageContentService: _pageContentService,
+      textReaderService: _textReaderService,
+      showPinyin: showPinyin,
+      showTranslation: showTranslation,
+      isProcessing: isProcessing,  // 처리 중인지 여부 전달
+      onTogglePinyin: _togglePinyin,
+      onToggleTranslation: _toggleTranslation,
+      onTtsPlay: _onTtsPlay,
+    );
+  }
+
+  // 병음 표시 토글
+  void _togglePinyin() {
+    if (_pageManager.currentPage?.id == null) return;
+    
+    final pageId = _pageManager.currentPage!.id!;
+    final processedText = _pageContentService.getProcessedText(pageId);
+    
+    if (processedText != null) {
+      final updatedProcessedText = processedText.copyWith(
+        showPinyin: !processedText.showPinyin,
+      );
+      
+      _pageContentService.updateProcessedText(pageId, updatedProcessedText);
+      setState(() {});
+    }
+  }
+  
+  // 번역 표시 토글
+  void _toggleTranslation() {
+    if (_pageManager.currentPage?.id == null) return;
+    
+    final pageId = _pageManager.currentPage!.id!;
+    final processedText = _pageContentService.getProcessedText(pageId);
+    
+    if (processedText != null) {
+      final updatedProcessedText = processedText.copyWith(
+        showTranslation: !processedText.showTranslation,
+      );
+      
+      _pageContentService.updateProcessedText(pageId, updatedProcessedText);
+      setState(() {});
+    }
+  }
+  
+  // TTS 재생
+  void _onTtsPlay() {
+    if (_pageManager.currentPage == null) return;
+    
+    // 현재 페이지의 원본 텍스트 재생
+    final originalText = _pageManager.currentPage!.originalText;
+    if (originalText.isNotEmpty && originalText != '___PROCESSING___') {
+      _ttsService.speak(originalText);
+    }
   }
 }

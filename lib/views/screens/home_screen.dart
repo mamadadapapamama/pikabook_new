@@ -344,7 +344,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               // 홈 화면 도움말 툴팁 (첫 방문 시에만 표시)
               if (_showHomeHelp)
                 Positioned(
-                  bottom: 120,
+                  bottom: 150,
                   left: 16,
                   right: 16,
                   child: HelpTextTooltip(
@@ -353,13 +353,18 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     image: Image.asset(
                       'assets/images/home_help.png',
                       fit: BoxFit.contain,
-                      height: 180,
+                      width: MediaQuery.of(context).size.width - 64, // 화면 너비에 맞게 조정 (패딩 고려)
                     ),
                     showTooltip: true,
                     onDismiss: _handleHelpDismiss,
                     tooltipWidth: MediaQuery.of(context).size.width - 32,
                     spacing: 8.0,
                     style: HelpTextTooltipStyle.primary,
+                    titleStyle: TypographyTokens.subtitle1.copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: ColorTokens.primary,
+                    ),
                   ),
                 ),
             ],
