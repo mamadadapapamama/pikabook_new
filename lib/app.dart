@@ -36,6 +36,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   bool _isInitialized = false;
   bool _isLoading = true;
   bool _isOnboardingCompleted = false;
+  bool _isLoadingUserData = false; // 사용자 데이터 로딩 상태 추가
   String? _userId;
   User? _user;
   StreamSubscription<User?>? _authStateSubscription;
@@ -135,7 +136,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         
         if (user != null) {
           // 사용자가 로그인됨
-          await _loadUserPreferences();
+          _isLoadingUserData = true;
+          _loadUserPreferences();
         } else {
           // 사용자가 로그아웃됨
           setState(() {
@@ -149,7 +151,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   /// 사용자 로그인 후 처리 로직
   Future<void> _loadUserPreferences() async {
     try {
-      if (_userId == null) return;
+      if (_userId == null) {
+        setState(() {
+          _isLoadingUserData = false;
+        });
+        return;
+      }
       
       // 현재 사용자 ID를 UserPreferencesService에 설정
       await _preferencesService.setCurrentUserId(_userId!);
@@ -173,13 +180,16 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       }
       
       if (mounted) {
-        setState(() {});
+        setState(() {
+          _isLoadingUserData = false; // 데이터 로딩 완료
+        });
       }
     } catch (e) {
       // 사용자 설정 로드 실패 처리
       if (mounted) {
         setState(() {
           _error = '사용자 설정을 로드하는 중 오류가 발생했습니다: $e';
+          _isLoadingUserData = false; // 오류 발생 시에도 로딩 상태 해제
         });
       }
     }
@@ -226,6 +236,14 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return LoadingScreen(
         progress: 0.5,
         message: '앱을 초기화하는 중입니다...'
+      );
+    }
+    
+    // 1-2. 사용자 데이터 로딩 중인 경우 로딩 화면 표시
+    if (_isLoadingUserData) {
+      return LoadingScreen(
+        progress: 0.8,
+        message: '사용자 데이터를 불러오는 중입니다...'
       );
     }
     
