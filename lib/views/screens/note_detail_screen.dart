@@ -814,20 +814,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   void _changePage(int index) {
     // 범위 검사
     if (index < 0 || index >= _pageManager.pages.length) {
-      debugPrint('페이지 범위 오류: 요청 인덱스 $index, 페이지 수: ${_pageManager.pages.length}');
       return;
     }
     
     final previousPageIndex = _pageManager.currentPageIndex;
     final isSwitchingBack = _previouslyVisitedPages.contains(index);
     
-    debugPrint('페이지 변경: $previousPageIndex -> $index (이전에 방문한 페이지: $isSwitchingBack)');
-    
     // 변경하려는 페이지가 처리 중인 더미 페이지인지 확인
     final targetPage = _pageManager.getPageAtIndex(index);
     if (targetPage != null && targetPage.originalText == '___PROCESSING___') {
-      debugPrint('처리 중인 더미 페이지로는 이동하지 않음: $index');
-      
       // 처리 중인 페이지로 이동하려는 경우 스낵바로 피드백 제공
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -843,7 +838,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         );
       }
       
-      return; // 처리 중인 더미 페이지로는 이동하지 않음
+      // 페이지 이동은 계속 진행 (사용자가 처리 중인 페이지도 볼 수 있도록)
     }
     
     // PageController를 통한 페이지 이동 (화살표 버튼으로 이동할 때)
@@ -856,7 +851,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           curve: Curves.easeInOut,
         );
       } catch (e) {
-        debugPrint('페이지 애니메이션 오류: $e');
+        // 페이지 애니메이션 오류는 무시
       }
     }
     
@@ -866,7 +861,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 이전에 방문한 페이지가 아닌 경우에만 방문 기록 추가
     if (!_previouslyVisitedPages.contains(index)) {
       _previouslyVisitedPages.add(index);
-      debugPrint('방문 기록 추가: $index, 총 방문 페이지: ${_previouslyVisitedPages.length}개');
     }
     
     // 페이지가 변경되면 새 페이지의 ProcessedText 초기화
@@ -1540,33 +1534,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         itemCount: _pageManager.pages.length,
           controller: _pageController,
         onPageChanged: (index) {
-            debugPrint('PageView 스와이프: 페이지 변경 ($index) - 이전 방문: ${_previouslyVisitedPages.contains(index)}');
-            
-            final targetPage = _pageManager.getPageAtIndex(index);
-            if (targetPage != null && targetPage.originalText == '___PROCESSING___') {
-              debugPrint('처리 중인 더미 페이지 감지: $index');
-              // 처리 중인 더미 페이지인 경우 다음/이전 페이지로 이동
-              if (index > _pageManager.currentPageIndex) {
-                _pageController.animateToPage(
-                  _pageManager.currentPageIndex, // 현재 페이지로 되돌림
-                  duration: const Duration(milliseconds: 100),
-                  curve: Curves.easeInOut,
-                );
-                return;
-              } else if (index < _pageManager.currentPageIndex) {
-                _pageController.animateToPage(
-                  _pageManager.currentPageIndex, // 현재 페이지로 되돌림
-                  duration: const Duration(milliseconds: 100),
-                  curve: Curves.easeInOut,
-                );
-                return;
-              }
-              return;
-            }
-            
-            // 이전에 방문하지 않은 페이지라면 방문 기록에 추가
+          // 이전에 방문하지 않은 페이지라면 방문 기록에 추가
+          if (!_previouslyVisitedPages.contains(index)) {
             _previouslyVisitedPages.add(index);
-            
+          }
+          
+          // 페이지 변경 처리
           _changePage(index);
         },
         itemBuilder: (context, index) {

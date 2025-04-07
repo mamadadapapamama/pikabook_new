@@ -18,7 +18,7 @@ void main() async {
   FlutterNativeSplash.preserve(widgetsBinding: WidgetsFlutterBinding.ensureInitialized());
   
   // 앱 스토어 심사를 위한 최적화: 메모리 사용량 최적화
-  final profileMode = true;
+  final profileMode = false;
   if (profileMode) {
     // 메모리 관련 제약 조정
     WidgetsBinding.instance.deferFirstFrame();
@@ -50,6 +50,9 @@ void main() async {
   if (DebugUtils.isReleaseMode()) {
     // 릴리즈 모드에서는 불필요한 로그 비활성화
     DebugUtils.enableLogInRelease = false;
+    
+    // 릴리즈 모드에서는 디버그 프린트 완전 비활성화
+    debugPrint = (String? message, {int? wrapWidth}) { };
     
     // 에러 로깅 설정 - 심각한 오류만 기록
     FlutterError.onError = (FlutterErrorDetails details) {

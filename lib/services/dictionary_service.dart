@@ -377,33 +377,17 @@ class DictionaryService {
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime);
 
-      debugPrint('API 응답 시간: ${duration.inMilliseconds}ms');
       debugPrint('API 응답 상태 코드: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        // 응답 내용 로깅 (처음 200자만)
-        final responsePreview = response.body.length > 200
-            ? '${response.body.substring(0, 200)}...'
-            : response.body;
-        debugPrint('API 응답 내용 미리보기: $responsePreview');
-
         // JSON 응답 파싱
         final Map<String, dynamic> data = json.decode(response.body);
 
         if (data.containsKey('message')) {
-          debugPrint('응답 데이터 구조: ${data.keys}');
-          debugPrint('message 구조: ${data['message'].keys}');
-
           if (data['message'].containsKey('result')) {
-            debugPrint('result 구조: ${data['message']['result'].keys}');
-
             final translatedText = data['message']['result']['translatedText'];
             final srcLangType = data['message']['result']['srcLangType'];
             final tarLangType = data['message']['result']['tarLangType'];
-
-            debugPrint('원본 언어: $srcLangType');
-            debugPrint('번역 언어: $tarLangType');
-            debugPrint('번역 결과: $translatedText');
 
             // 번역 결과를 DictionaryEntry로 변환
             final entry = DictionaryEntry(
@@ -416,25 +400,16 @@ class DictionaryService {
 
             // 사전에 추가 (메모리 사전에 영구 저장)
             _dictionary[word] = entry;
-            debugPrint('사전에 단어 추가됨: $word -> $translatedText');
 
             // 사전 업데이트 알림
             _notifyDictionaryUpdated();
 
             return entry;
-          } else {
-            debugPrint('API 응답에 result 필드가 없습니다.');
-            return null;
           }
-        } else {
-          debugPrint('API 응답에 message 필드가 없습니다.');
-          return null;
         }
-      } else {
-        debugPrint('API 요청 실패: ${response.statusCode}');
-        debugPrint('응답 내용: ${response.body}');
-        return null;
       }
+
+      return null;
     } catch (e, stackTrace) {
       debugPrint('Papago API 번역 중 오류 발생: $e');
       debugPrint('스택 트레이스: $stackTrace');
@@ -490,7 +465,6 @@ class DictionaryService {
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime);
 
-      debugPrint('API 응답 시간: ${duration.inMilliseconds}ms');
       debugPrint('API 응답 상태 코드: ${response.statusCode}');
 
       if (response.statusCode == 200) {

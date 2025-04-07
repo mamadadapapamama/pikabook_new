@@ -251,8 +251,8 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         LoadingDialog.show(context, message: '노트 생성 중...');
         isLoadingDialogShowing = true;
         
-        // 10초 후 타임아웃 설정 - 로딩이 너무 오래 걸리면 자동으로 닫기
-        loadingTimeout = Timer(const Duration(seconds: 10), () {
+        // 5초 후 타임아웃 설정 - 로딩이 너무 오래 걸리면 자동으로 닫기
+        loadingTimeout = Timer(const Duration(seconds: 5), () {
           if (context.mounted && isLoadingDialogShowing) {
             LoadingDialog.hide(context);
             isLoadingDialogShowing = false;
@@ -286,25 +286,20 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
       // 결과에 따라 다음 화면으로 이동 또는 오류 메시지 표시
       if (success && noteId != null && context.mounted) {
-        // 짧은 딜레이 후 화면 전환 (UI 스레드가 완전히 처리될 수 있도록)
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (context.mounted) {
-            // 화면 전환 (pushReplacement 사용)
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(
-                builder: (context) => NoteDetailScreen(
-                  noteId: noteId,
-                  isProcessingBackground: isProcessingBackground,
-                ),
+        // 딜레이 없이 바로 노트 상세 화면으로 이동
+        if (context.mounted) {
+          // 화면 전환 (pushAndRemoveUntil 사용하여 홈 화면 위에 새 화면 push)
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => NoteDetailScreen(
+                noteId: noteId,
+                isProcessingBackground: isProcessingBackground,
               ),
-              // 현재 루트와 홈 스크린은 유지하고, 그 사이의 화면들만 제거
-              (route) {
-                // 스택에서 2개만 남기고 나머지는 제거 (홈 화면 + 현재 화면)
-                return route.isFirst || route.settings.name == '/';
-              }
-            );
-          }
-        });
+            ),
+            // 홈 화면만 남기고 모든 화면 제거
+            (route) => route.isFirst
+          );
+        }
       } else if (context.mounted) {
         // 오류 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(

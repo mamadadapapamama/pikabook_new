@@ -64,20 +64,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     
-    // 첫 로드
+    // 화면 구성하는 동안 필요한 데이터 즉시 로드
     _loadNoteSpaceName();
-    
-    // 화면 구성 완료 후 데이터 확인 및 새로고침
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 노트 스페이스 이름 다시 로드
-      _loadNoteSpaceName();
-      
-      // 사용량 확인
-      _checkUsageLimits();
-      
-      // 홈 화면 도움말 표시 확인
-      _checkShowHomeHelp();
-    });
+    _checkUsageLimits();
+    _checkShowHomeHelp();
     
     // 애니메이션 컨트롤러 초기화
     _animationController = AnimationController(
@@ -105,14 +95,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     SharedPreferences prefs = await SharedPreferences.getInstance();
     bool homeHelpShown = prefs.getBool('home_help_shown') ?? false;
     
-    if (!homeHelpShown) {
-      // 500ms 딜레이 후 도움말 표시 (화면이 완전히 구성된 후)
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
-          setState(() {
-            _showHomeHelp = true;
-          });
-        }
+    if (!homeHelpShown && mounted) {
+      // 딜레이 없이 바로 도움말 표시
+      setState(() {
+        _showHomeHelp = true;
       });
     }
   }
@@ -357,7 +343,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       color: ColorTokens.primary,
                     ),
                     descriptionStyle: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       color: ColorTokens.textPrimary,
                     ),
                   ),

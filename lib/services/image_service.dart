@@ -60,7 +60,6 @@ class ImageService {
       // 동일한 해시값의 파일이 이미 존재하는지 확인
       final existingFile = File(targetPath);
       if (await existingFile.exists()) {
-        debugPrint('동일한 이미지가 이미 존재함 (해시: $fileHash), 기존 경로 반환');
         return relativePath;
       }
 
@@ -78,17 +77,14 @@ class ImageService {
         // Firebase Storage 업로드는 별도 스레드에서 비동기로 처리 (앱 응답성 유지)
         unawaited(_uploadToFirebaseStorageIfNotExists(compressedFile, relativePath));
       } catch (e) {
-        debugPrint('Firebase Storage 업로드 예약 실패: $e');
+        // 오류 처리
       }
       
       // 스토리지 사용량 추적 - 압축된 실제 파일 크기 사용
       await _trackStorageUsage(compressedFile);
-      
-      debugPrint('이미지 압축 완료: ${(originalFileSize / 1024).toStringAsFixed(2)}KB -> ${(compressedFileSize / 1024).toStringAsFixed(2)}KB (${(100 - (compressedFileSize / originalFileSize * 100)).toStringAsFixed(0)}% 감소)');
 
       return relativePath;
     } catch (e) {
-      debugPrint('이미지 저장 및 최적화 중 오류 발생: $e');
       throw Exception('이미지 저장 및 최적화 중 오류가 발생했습니다: $e');
     }
   }
@@ -112,7 +108,6 @@ class ImageService {
     try {
       final userId = _currentUserId;
       if (userId == null) {
-        debugPrint('Firebase Storage 업로드 건너뜀: 사용자 로그인 안됨');
         return null;
       }
       
@@ -123,14 +118,12 @@ class ImageService {
       // 이미지가 이미 존재하는지 확인
       try {
         await storageRef.getMetadata();
-        debugPrint('Firebase Storage에 이미지가 이미 존재함: $storagePath');
         
         // 이미 존재하는 경우 URL 반환
         final downloadUrl = await storageRef.getDownloadURL();
         return downloadUrl;
       } catch (e) {
         // 파일이 존재하지 않는 경우에만 업로드 진행
-        debugPrint('Firebase Storage에 새 이미지 업로드 시작: $storagePath');
         final uploadTask = storageRef.putFile(file);
         
         // 업로드 완료 대기
@@ -138,12 +131,10 @@ class ImageService {
         
         // 이미지 URL 가져오기
         final downloadUrl = await snapshot.ref.getDownloadURL();
-        debugPrint('Firebase Storage 업로드 완료: $downloadUrl');
         
         return downloadUrl;
       }
     } catch (e) {
-      debugPrint('Firebase Storage 업로드 중 오류: $e');
       return null; // 실패해도 앱은 계속 작동하도록 예외를 다시 발생시키지 않음
     }
   }
@@ -160,7 +151,6 @@ class ImageService {
         debugPrint('⚠️ 저장 공간 제한에 도달했습니다. 이미지를 추가로 저장할 수 없습니다.');
       }
       
-      debugPrint('저장 공간 사용량 추가: ${(actualSize / 1024).toStringAsFixed(2)}KB');
       return canAddStorage;
     } catch (e) {
       debugPrint('저장 공간 사용량 추적 중 오류: $e');
@@ -193,8 +183,6 @@ class ImageService {
         targetPath
       );
     } catch (e) {
-      debugPrint('이미지 압축 및 저장 중 오류 발생: $e');
-      
       // 대체 압축 방법 시도 - 직접 라이브러리 사용
       try {
         final compressedFile = await _applyFallbackCompression(imageFile, targetPath);
@@ -202,12 +190,11 @@ class ImageService {
           return compressedFile;
         }
       } catch (fallbackError) {
-        debugPrint('대체 압축 방법도 실패: $fallbackError');
+        // 오류 처리
       }
       
       // 모든 압축 방법 실패 시 원본 복사
       final origFile = await imageFile.copy(targetPath);
-      debugPrint('모든 압축 시도 실패, 원본 사용: ${await origFile.length()} 바이트');
       return origFile;
     }
   }
@@ -226,7 +213,6 @@ class ImageService {
           height: (originalHeight * ratio).round(),
           interpolation: img.Interpolation.average,
         );
-        debugPrint('이미지 리사이징: $originalWidth x $originalHeight → ${resized.width} x ${resized.height}');
         return resized;
       } else {
         final ratio = maxDimension / originalHeight;
@@ -236,7 +222,6 @@ class ImageService {
           height: maxDimension,
           interpolation: img.Interpolation.average,
         );
-        debugPrint('이미지 리사이징: $originalWidth x $originalHeight → ${resized.width} x ${resized.height}');
         return resized;
       }
     }
@@ -281,7 +266,6 @@ class ImageService {
       
       // 압축 후 실제 파일 크기 확인
       final compressedSize = await compressedFile.length();
-      debugPrint('압축 후 크기: $compressedSize 바이트');
       
       // 3단계: 필요시 추가 압축 (파일이 여전히 큰 경우)
       if (compressedSize > 500 * 1024) { // 500KB 이상일 경우
@@ -290,7 +274,6 @@ class ImageService {
       
       return compressedFile;
     } catch (e) {
-      debugPrint('압축 과정 중 오류: $e');
       throw e;
     } finally {
       // 임시 파일 정리
@@ -305,8 +288,6 @@ class ImageService {
   
   /// 추가 압축이 필요한 경우 적용 (3단계)
   Future<File> _applyExtraCompression(File compressedFile, img.Image processedImage) async {
-    debugPrint('파일이 여전히 큽니다. 추가 압축 시도...');
-    
     // 더 강한 압축 적용
     final secondCompressBytes = await FlutterImageCompress.compressWithFile(
       compressedFile.path,
@@ -318,8 +299,6 @@ class ImageService {
     
     if (secondCompressBytes != null && secondCompressBytes.isNotEmpty) {
       await compressedFile.writeAsBytes(secondCompressBytes);
-      final finalSize = await compressedFile.length();
-      debugPrint('추가 압축 후 크기: $finalSize 바이트');
     }
     
     return compressedFile;
@@ -327,8 +306,6 @@ class ImageService {
   
   /// 모든 압축 방법이 실패한 경우 대체 압축 방법 적용
   Future<File?> _applyFallbackCompression(File imageFile, String targetPath) async {
-    debugPrint('대체 압축 방법 시도 중...');
-    
     // 직접 FlutterImageCompress로 압축 시도
     final result = await FlutterImageCompress.compressWithFile(
       imageFile.path,
@@ -339,7 +316,6 @@ class ImageService {
     if (result != null && result.isNotEmpty) {
       final File compressedFile = File(targetPath);
       await compressedFile.writeAsBytes(result);
-      debugPrint('대체 압축 성공: ${await compressedFile.length()} 바이트');
       return compressedFile;
     }
     
@@ -351,7 +327,6 @@ class ImageService {
     try {
       final appDir = await getApplicationDocumentsDirectory();
       final fullPath = '${appDir.path}/$relativePath';
-      debugPrint('이미지 전체 경로 변환: $relativePath → $fullPath');
       return fullPath;
     } catch (e) {
       debugPrint('이미지 경로 변환 중 오류: $e');
@@ -363,7 +338,6 @@ class ImageService {
   /// 이미지가 정말 존재하는지 확인
   Future<bool> imageExists(String? relativePath) async {
     if (relativePath == null || relativePath.isEmpty) {
-      debugPrint('이미지 존재 확인: 경로가 비어있음');
       return false;
     }
     
@@ -374,11 +348,9 @@ class ImageService {
       if (await file.exists()) {
         final fileSize = await file.length();
         final exists = fileSize > 0;
-        debugPrint('이미지 존재 확인: $relativePath (${exists ? '존재함' : '크기가 0'}, 크기: $fileSize 바이트)');
         return exists;
       }
       
-      debugPrint('이미지 존재 확인: $relativePath (파일 없음)');
       return false;
     } catch (e) {
       debugPrint('이미지 존재 여부 확인 중 오류: $e');
@@ -389,7 +361,6 @@ class ImageService {
   /// 이미지 파일 가져오기
   Future<File?> getImageFile(String? relativePath) async {
     if (relativePath == null || relativePath.isEmpty) {
-      debugPrint('이미지 서비스: 상대 경로가 비어있습니다');
       return null;
     }
     
@@ -402,23 +373,15 @@ class ImageService {
       if (await file.exists()) {
         final fileSize = await file.length();
         if (fileSize > 0) {
-          debugPrint('이미지 서비스: 디스크에서 이미지 로드 성공: $relativePath (크기: $fileSize 바이트)');
           return file;
-        } else {
-          debugPrint('이미지 서비스: 파일은 존재하지만 크기가 0입니다: $relativePath');
         }
       }
-      
-      debugPrint('이미지 서비스: 로컬 이미지 파일을 찾을 수 없음: $relativePath (경로: $fullPath), Firebase에서 시도합니다...');
       
       // 로컬에 없으면 Firebase Storage에서 다운로드 시도
       final downloadedFile = await _downloadFromFirebaseStorage(relativePath, fullPath);
       if (downloadedFile != null) {
-        debugPrint('이미지 서비스: Firebase에서 이미지 다운로드 성공: $relativePath');
         return downloadedFile;
       }
-      
-      debugPrint('이미지 서비스: 이미지 파일을 Firebase에서도 찾을 수 없음: $relativePath');
       
       // 파일이 존재하지 않을 경우 null 반환
       return null;
@@ -444,7 +407,6 @@ class ImageService {
       try {
         await storageRef.getMetadata();
       } catch (e) {
-        debugPrint('Firebase Storage에 이미지가 없음: $storagePath');
         return null;
       }
       
@@ -459,19 +421,15 @@ class ImageService {
       final file = File(localPath);
       
       // 파일 다운로드
-      debugPrint('Firebase Storage에서 이미지 다운로드 시작: $storagePath');
       await storageRef.writeToFile(file);
       
       // 다운로드된 파일 확인
       if (await file.exists() && await file.length() > 0) {
-        debugPrint('Firebase Storage에서 다운로드 완료: $localPath (${await file.length()} 바이트)');
         return file;
       } else {
-        debugPrint('Firebase Storage에서 다운로드 실패: 파일이 비어있거나 없음');
         return null;
       }
     } catch (e) {
-      debugPrint('Firebase Storage에서 다운로드 중 오류: $e');
       return null;
     }
   }
@@ -503,12 +461,10 @@ class ImageService {
         
         // 파일에 PNG 데이터 쓰기
         await file.writeAsBytes(placeholderBytes);
-        debugPrint('더미 이미지 파일 생성 완료: $fullPath (1x1 투명 PNG)');
       }
       
       return file;
     } catch (e) {
-      debugPrint('더미 이미지 파일 생성 중 오류: $e');
       return null;
     }
   }
@@ -585,7 +541,6 @@ class ImageService {
       final relativePath = await saveAndOptimizeImage(imageFile);
       return relativePath;
     } catch (e) {
-      debugPrint('이미지 업로드 중 오류 발생: $e');
       throw Exception('이미지 업로드 중 오류가 발생했습니다: $e');
     }
   }
@@ -611,7 +566,6 @@ class ImageService {
       // XFile을 File로 변환
       return pickedFiles.map((xFile) => File(xFile.path)).toList();
     } catch (e) {
-      debugPrint('이미지 선택 중 오류 발생: $e');
       throw Exception('이미지 선택 중 오류가 발생했습니다: $e');
     }
   }
@@ -636,7 +590,6 @@ class ImageService {
 
       return File(pickedFile.path);
     } catch (e) {
-      debugPrint('이미지 선택 중 오류 발생: $e');
       return null;
     }
   }
@@ -677,7 +630,7 @@ class ImageService {
                 await entity.delete();
                 removedCount++;
               } catch (e) {
-                debugPrint('임시 파일 삭제 중 오류: $e');
+                // 오류 무시
               }
             }
           }
@@ -685,10 +638,10 @@ class ImageService {
       }
       
       if (removedCount > 0) {
-        debugPrint('임시 이미지 파일 $removedCount개 정리 완료');
+        // 삭제된 파일 개수 기록
       }
     } catch (e) {
-      debugPrint('임시 파일 정리 중 오류 발생: $e');
+      // 오류 무시
     }
   }
   
@@ -698,10 +651,8 @@ class ImageService {
       // 대기 중인 이미지 프로바이더 캐시 정리
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
-      
-      debugPrint('이미지 메모리 캐시 정리 완료');
     } catch (e) {
-      debugPrint('이미지 캐시 정리 중 오류 발생: $e');
+      // 오류 무시
     }
   }
   
@@ -724,18 +675,16 @@ class ImageService {
             final stats = await entity.stat();
             totalBytes += stats.size;
           } catch (e) {
-            debugPrint('파일 크기 확인 중 오류: $e');
+            // 오류 무시
           }
         }
       }
       
       // MB 단위로 변환 (소수점 2자리까지)
       final totalMB = totalBytes / (1024 * 1024);
-      debugPrint('총 이미지 저장 공간 사용량: ${totalMB.toStringAsFixed(2)}MB');
       
       return totalMB;
     } catch (e) {
-      debugPrint('저장 공간 사용량 계산 중 오류: $e');
       return 0.0;
     }
   }

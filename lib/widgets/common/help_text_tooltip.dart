@@ -240,6 +240,7 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                       child: widget.image!,
                     ),
                   ),
+                  const SizedBox(height: 4), // 이미지 아래에 4px 간격 추가
                 ],
                 
                 // 설명 텍스트 (있는 경우만 표시)

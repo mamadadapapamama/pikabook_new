@@ -28,16 +28,8 @@ class HomeViewModel extends ChangeNotifier {
 
   // ViewModel 초기화
   Future<void> _initializeViewModel() async {
-    // 캐시된 데이터가 있고 유효한 경우 먼저 표시
-    await _loadCachedNotes();
-
-    // 서버에서 최신 데이터 로드
-    _loadNotes();
-  }
-
-  // 캐시된 노트 로드
-  Future<void> _loadCachedNotes() async {
     try {
+      // 캐시된 데이터가 있고 유효한 경우 먼저 표시
       final cachedNotes = await _noteService.getCachedNotes();
       if (cachedNotes.isNotEmpty) {
         _notes = cachedNotes;
@@ -46,15 +38,13 @@ class HomeViewModel extends ChangeNotifier {
 
         // 캐시 시간 확인
         _lastRefreshTime = await _noteService.getLastCacheTime();
-
-        // 캐시가 유효하면 서버 로드를 지연시킴
-        if (_isCacheValid()) {
-          debugPrint('유효한 캐시 데이터 사용 중: ${cachedNotes.length}개 노트');
-        }
       }
+      
+      // 서버에서 최신 데이터 로드 - 캐시 유효성과 상관없이 항상 백그라운드로 실행
+      _loadNotes();
     } catch (e) {
-      debugPrint('캐시된 노트 로드 실패: $e');
       // 캐시 로드 실패는 무시하고 서버에서 로드 진행
+      _loadNotes();
     }
   }
 
@@ -71,22 +61,19 @@ class HomeViewModel extends ChangeNotifier {
   void _loadNotes() {
     _error = null;
 
-    // 이미 로드된 캐시가 유효하면 로딩 상태 변경 없이 진행
-    if (!_isCacheValid()) {
+    // 이미 로드된 캐시가 있는 경우 로딩 상태 표시하지 않음
+    if (_notes.isEmpty) {
       _isLoading = true;
       notifyListeners();
     }
 
     try {
-      debugPrint('노트 목록 로드 시작');
-
       // 기존 구독이 있으면 취소
       _cancelSubscription();
 
       // 모든 노트 목록 구독
       _notesSubscription = _noteService.getNotes().listen(
         (notesList) {
-          debugPrint('노트 목록 수신: ${notesList.length}개');
           _notes = notesList;
           _isLoading = false;
           _error = null;
@@ -96,8 +83,6 @@ class HomeViewModel extends ChangeNotifier {
           _updateCache();
         },
         onError: (e) {
-          debugPrint('노트 목록 스트림 오류: $e');
-
           // 캐시된 데이터가 있으면 오류 표시하지 않음
           if (_notes.isEmpty) {
             _isLoading = false;
@@ -107,8 +92,6 @@ class HomeViewModel extends ChangeNotifier {
         },
       );
     } catch (e) {
-      debugPrint('노트 목록 불러오기 오류: $e');
-
       // 캐시된 데이터가 있으면 오류 표시하지 않음
       if (_notes.isEmpty) {
         _isLoading = false;
@@ -131,12 +114,9 @@ class HomeViewModel extends ChangeNotifier {
         _noteService.cacheNotes(_notes);
         _lastRefreshTime = DateTime.now();
         _noteService.saveLastCacheTime(_lastRefreshTime!);
-        debugPrint('노트 캐시 업데이트 완료: ${_notes.length}개');
-      } else {
-        debugPrint('최근에 캐싱되어 캐시 업데이트 건너뜀');
       }
     } catch (e) {
-      debugPrint('캐시 업데이트 중 오류 발생: $e');
+      // 캐시 업데이트 오류는 무시
     }
   }
 

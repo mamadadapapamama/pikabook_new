@@ -10,10 +10,8 @@ class DebugUtils {
   /// 릴리즈 모드에서는 특별히 설정된 경우만 출력
   static void log(String message) {
     if (kReleaseMode) {
-      // 릴리즈 모드에서는 설정에 따라 로그 출력
-      if (enableLogInRelease) {
-        print(message);
-      }
+      // 릴리즈 모드에서는 아예 출력하지 않음
+      return;
     } else {
       // 디버그 모드에서는 항상 출력
       debugPrint(message);
@@ -24,8 +22,10 @@ class DebugUtils {
   /// 심각한 오류는 릴리즈 모드에서도 출력
   static void error(String message) {
     if (kReleaseMode) {
-      // 중요 오류는 릴리즈 모드에서도 출력
-      print('ERROR: $message');
+      // 릴리즈 모드에서도 심각한 오류는 기록할 수 있게 설정 가능
+      if (enableLogInRelease) {
+        print('ERROR: $message');
+      }
     } else {
       debugPrint('ERROR: $message');
     }

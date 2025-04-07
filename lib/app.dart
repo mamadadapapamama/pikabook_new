@@ -226,6 +226,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // themeMode: ThemeMode.system,
       home: _buildHomeScreen(),
       debugShowCheckedModeBanner: false,
+      // 성능 오버레이 비활성화
+      showPerformanceOverlay: false,
     );
   }
   

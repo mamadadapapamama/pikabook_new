@@ -24,11 +24,8 @@ class PikabookLoader extends StatelessWidget {
     String subtitle = '잠시만 기다려 주세요!\n조금 시간이 걸릴수 있어요.',
   }) async {
     if (!context.mounted) {
-      debugPrint('PikabookLoader 표시 실패: context가 더 이상 유효하지 않습니다.');
       return;
     }
-    
-    // 이전에 열려 있는 다이얼로그 확인/닫기 시도 제거 - 중첩 네비게이션 방지
     
     // showDialog를 직접 호출하는 대신 addPostFrameCallback 사용
     Completer<void> completer = Completer<void>();
@@ -57,7 +54,6 @@ class PikabookLoader extends StatelessWidget {
         ).then((_) {
           completer.complete();
         }).catchError((e) {
-          debugPrint('PikabookLoader 표시 중 오류: $e');
           completer.completeError(e);
         });
       } else {
@@ -71,7 +67,6 @@ class PikabookLoader extends StatelessWidget {
   /// 로더를 숨기는 정적 메서드
   static void hide(BuildContext context) {
     if (!context.mounted) {
-      debugPrint('PikabookLoader 닫기 실패: context가 더 이상 유효하지 않습니다.');
       return;
     }
     
@@ -81,10 +76,8 @@ class PikabookLoader extends StatelessWidget {
         try {
           // 직접 네비게이터를 통해 닫기 시도
           Navigator.of(context, rootNavigator: true).pop();
-          debugPrint('PikabookLoader 닫기 성공');
         } catch (e) {
-          // 오류 발생 시 후속 조치 - 오류만 기록
-          debugPrint('PikabookLoader 닫기 중 오류: $e');
+          // 오류 무시
         }
       }
     });

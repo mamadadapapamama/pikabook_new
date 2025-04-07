@@ -12,7 +12,6 @@ class LoadingDialog {
   /// 로딩 다이얼로그를 표시하는 정적 메서드
   static Future<void> show(BuildContext context, {String message = '로딩 중...'}) async {
     if (!context.mounted) {
-      debugPrint('로딩 다이얼로그 표시 실패: context가 더 이상 유효하지 않습니다.');
       return;
     }
 
@@ -20,7 +19,7 @@ class LoadingDialog {
     if (_isShowing) {
       hide(context);
       // 닫기 작업이 완료될 때까지 짧게 대기
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 50));
     }
 
     // 상태 업데이트
@@ -35,7 +34,6 @@ class LoadingDialog {
         subtitle: '잠시만 기다려 주세요!',
       );
     } catch (e) {
-      debugPrint('로딩 다이얼로그 표시 중 오류: $e');
       // 오류 발생 시에도 상태는 업데이트
       _isShowing = true;
       _dialogContext = context;
@@ -46,11 +44,8 @@ class LoadingDialog {
   static void hide(BuildContext context) {
     // 다이얼로그가 표시되어 있지 않으면 아무 작업도 하지 않음
     if (!_isShowing) {
-      debugPrint('로딩 다이얼로그 hide 호출됨: 현재 표시 중이 아님');
       return;
     }
-
-    debugPrint('로딩 다이얼로그 닫기 시도');
     
     // 상태 업데이트 (먼저 업데이트하여 중복 호출 방지)
     _isShowing = false;
@@ -58,10 +53,7 @@ class LoadingDialog {
     try {
       // PikabookLoader의 hide 메서드를 사용하여 닫기
       PikabookLoader.hide(context);
-      debugPrint('PikabookLoader.hide 호출 완료');
     } catch (e) {
-      debugPrint('PikabookLoader.hide 호출 중 오류: $e');
-      
       // 오류 발생 시 직접 Navigator를 통해 닫기 시도
       try {
         // 저장된 다이얼로그 컨텍스트가 있으면 사용, 없으면 전달된 컨텍스트 사용
@@ -70,10 +62,9 @@ class LoadingDialog {
         // 컨텍스트 유효성 검사 및 닫기 시도
         if (effectiveContext.mounted) {
           Navigator.of(effectiveContext, rootNavigator: true).pop();
-          debugPrint('Navigator.pop으로 다이얼로그 닫기 성공');
         }
       } catch (navError) {
-        debugPrint('Navigator.pop으로 다이얼로그 닫기 실패: $navError');
+        // 오류 무시
       }
     } finally {
       // 어떤 경우든 상태 초기화
