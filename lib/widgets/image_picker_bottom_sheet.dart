@@ -242,7 +242,8 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     Timer? loadingTimeout;
 
     try {
-      debugPrint("노트 생성 시작: ${images.length}개 이미지");
+      // 노트 생성 시작: 이미지 개수 저장
+      final int imageCount = images.length;
       
       // 로딩 다이얼로그 표시 - 첫 페이지 처리가 완료될 때까지 표시
       if (context.mounted) {
@@ -254,7 +255,6 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         loadingTimeout = Timer(const Duration(seconds: 10), () {
           if (context.mounted && isLoadingDialogShowing) {
             LoadingDialog.hide(context);
-            debugPrint("노트 생성 타임아웃으로 로딩 다이얼로그 닫기");
             isLoadingDialogShowing = false;
           }
         });
@@ -281,19 +281,14 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       if (isLoadingDialogShowing && context.mounted) {
         // LoadingDialog 클래스의 메서드로 닫기
         LoadingDialog.hide(context);
-        debugPrint("LoadingDialog.hide로 로딩 다이얼로그 닫기");
         isLoadingDialogShowing = false;
       }
 
       // 결과에 따라 다음 화면으로 이동 또는 오류 메시지 표시
       if (success && noteId != null && context.mounted) {
-        debugPrint("노트 상세 화면으로 이동 시도");
-        
         // 짧은 딜레이 후 화면 전환 (UI 스레드가 완전히 처리될 수 있도록)
         Future.delayed(const Duration(milliseconds: 300), () {
           if (context.mounted) {
-            debugPrint("딜레이 후 노트 상세 화면으로 이동 시작");
-            
             // 화면 전환 (pushReplacement 사용)
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(
@@ -308,14 +303,10 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                 return route.isFirst || route.settings.name == '/';
               }
             );
-            debugPrint("노트 상세 화면으로 이동 완료");
-          } else {
-            debugPrint("context가 mounted 상태가 아니어서 화면 전환 취소");
           }
         });
       } else if (context.mounted) {
         // 오류 메시지 표시
-        debugPrint("노트 생성 실패: $message");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message.toString()),
@@ -326,15 +317,12 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         );
       }
     } catch (e) {
-      debugPrint("노트 생성 중 오류 발생: $e");
-      
       // 타임아웃 타이머 취소
       loadingTimeout?.cancel();
       
       // 오류 발생 시 로딩 다이얼로그 닫기
       if (isLoadingDialogShowing && context.mounted) {
         LoadingDialog.hide(context);
-        debugPrint("오류 발생 후 LoadingDialog.hide로 로딩 다이얼로그 닫기");
         isLoadingDialogShowing = false;
       }
       
@@ -342,7 +330,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('노트 생성 중 오류가 발생했습니다: $e'),
+            content: Text('노트 생성 중 오류가 발생했습니다'),
             backgroundColor: ColorTokens.error,
             behavior: UITokens.snackBarTheme.behavior,
             shape: UITokens.snackBarTheme.shape,

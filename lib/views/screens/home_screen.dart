@@ -141,7 +141,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       
       // 디버깅을 위해 현재 사용자 ID 로깅
       final currentUserId = await _userPreferences.getCurrentUserId();
-      debugPrint('노트 스페이스 이름 로드: "$noteSpaceName" (사용자 ID: $currentUserId)');
       
       if (mounted) {
         setState(() {
@@ -149,7 +148,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         });
       }
     } catch (e) {
-      debugPrint('노트 스페이스 이름 로드 오류: $e');
       // 오류 발생 시 기본값 사용
       if (mounted) {
         setState(() {
@@ -168,19 +166,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         appBar: PikaAppBar.home(
           noteSpaceName: _noteSpaceName,
           onSettingsPressed: () {
-            // 디버그 로그 추가
-            debugPrint('홈 화면에서 설정 버튼 클릭됨 - 네비게이션 시작');
-            
             // 직접 네비게이션 처리
             if (!mounted) return;
             
             // widget.onSettingsPressed가 있으면 사용, 없으면 기본 설정 화면으로 이동
             if (widget.onSettingsPressed != null) {
-              debugPrint('외부 제공된 onSettingsPressed 콜백 사용');
               widget.onSettingsPressed!(context);
             } else {
-              debugPrint('기본 설정 화면으로 이동');
-              
               // 설정 화면으로 네비게이션 (딜레이 없이 직접 호출)
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -216,7 +208,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ).then((_) {
                 // 설정 화면에서 돌아올 때 노트 스페이스 이름 다시 로드
-                debugPrint('설정 화면에서 돌아옴 - 노트 스페이스 이름 다시 로드');
                 _loadNoteSpaceName();
               });
             }
@@ -348,10 +339,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   left: 16,
                   right: 16,
                   child: HelpTextTooltip(
-                    text: '환영합니다!',
+                    text: '피카북에 오신 걸 환영해요! 🎉',
                     description: '4월 30일까지, 교재 이미지 100장까지 무료로 스마트 학습 노트를 만들어보실 수 있어요.\n사용량은 [설정]에서 언제든 확인하실 수 있어요!',
                     image: Image.asset(
-                      'assets/images/help/help_home.png',
+                      'assets/images/home_help.png',
                       fit: BoxFit.contain,
                       width: MediaQuery.of(context).size.width - 64, // 화면 너비에 맞게 조정 (패딩 고려)
                     ),
@@ -406,7 +397,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         });
       }
     } catch (e) {
-      debugPrint('사용량 확인 중 오류 발생: $e');
+      DebugUtils.error('사용량 확인 중 오류 발생: $e');
     }
   }
   
@@ -429,7 +420,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         }
       }
     } catch (e) {
-      debugPrint('URL 열기 오류: $e');
       // 오류 발생 시 스낵바로 알림
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

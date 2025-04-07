@@ -829,6 +829,8 @@ class NoteService {
         'tags': tags ?? [],
         'noteSpace': noteSpace ?? 'default',
         'imageCount': imageFiles.length, // 전체 이미지 수 설정
+        'pageCount': imageFiles.length, // 페이지 수를 이미지 수와 동일하게 설정
+        'totalPages': imageFiles.length, // 총 페이지 수도 명시적으로 설정
         'pages': [], // 빈 페이지 배열 초기화
         'firstPageProcessed': false, // 첫 페이지 처리 상태 추가
       };
@@ -849,7 +851,7 @@ class NoteService {
             'processingStatus': 'uploading', // 처리 상태 표시
           });
           
-          // 빈 페이지 생성 (OCR 처리 없이)
+          // 첫번째 페이지 생성 (OCR 처리 없이)
           final page = await _pageService.createPage(
             noteId: noteId,
             originalText: '___PROCESSING___', // 특수 마커를 사용해 처리 중임을 표시
@@ -863,12 +865,27 @@ class NoteService {
             await _cacheService.cachePage(noteId, page);
           }
           
+          // 나머지 이미지들에 대해 빈 페이지 생성 (비동기 처리만 위한 자리표시자)
+          for (int i = 1; i < imageFiles.length; i++) {
+            final placeholderPage = await _pageService.createPage(
+              noteId: noteId,
+              originalText: '___PROCESSING___',
+              translatedText: '',
+              pageNumber: i + 1,
+              imageFile: imageFiles[i]
+            );
+            
+            // 페이지 캐싱
+            if (placeholderPage != null) {
+              await _cacheService.cachePage(noteId, placeholderPage);
+            }
+          }
+          
           // 진행률 콜백 호출 (첫 페이지 업로드 완료)
           if (progressCallback != null && !silentProgress) {
             progressCallback(1);
           }
         } catch (e) {
-          debugPrint('첫 번째 이미지 업로드 중 오류: $e');
           // 첫 페이지 처리 실패 시 페이지 카운트 감소
           await _usageLimitService.decrementPageCount();
           // 오류가 있더라도 계속 진행

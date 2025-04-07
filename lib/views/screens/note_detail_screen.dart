@@ -1419,14 +1419,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        backgroundColor: Colors.white,
+      backgroundColor: Colors.white,
         appBar: PikaAppBar.noteDetail(
           title: _isEditingTitle ? '' : (_note?.originalText ?? '로딩 중'),
-          currentPage: _pageManager.currentPageIndex + 1,
+              currentPage: _pageManager.currentPageIndex + 1,
           totalPages: _pageManager.pages.length,
-          flashcardCount: _note?.flashcardCount ?? 0,
-          onMorePressed: _showMoreOptions,
-          onFlashcardTap: _navigateToFlashcards,
+              flashcardCount: _note?.flashcardCount ?? 0,
+              onMorePressed: _showMoreOptions,
+              onFlashcardTap: _navigateToFlashcards,
           onBackPressed: () => Navigator.pop(context),
         ),
         body: _isEditingTitle ? 
@@ -1537,9 +1537,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     return Stack(
       children: [
         PageView.builder(
-          itemCount: _pageManager.pages.length,
+        itemCount: _pageManager.pages.length,
           controller: _pageController,
-          onPageChanged: (index) {
+        onPageChanged: (index) {
             debugPrint('PageView 스와이프: 페이지 변경 ($index) - 이전 방문: ${_previouslyVisitedPages.contains(index)}');
             
             final targetPage = _pageManager.getPageAtIndex(index);
@@ -1567,51 +1567,51 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             // 이전에 방문하지 않은 페이지라면 방문 기록에 추가
             _previouslyVisitedPages.add(index);
             
-            _changePage(index);
-          },
-          itemBuilder: (context, index) {
-            // 현재 표시할 페이지 인덱스의 페이지 빌드
-            if (index == _pageManager.currentPageIndex) {
-              return Column(
-                children: [
-                  // 첫 번째 이미지 컨테이너
-                  _buildFirstImageContainer(),
-                  
-                  // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
-                  Expanded(
-                    child: Container(
-                      color: Colors.white, // 배경색 흰색
-                      padding: const EdgeInsets.all(0), // 패딩 0으로 설정 (ProcessedTextWidget에서 패딩 적용)
-                      child: _buildCurrentPageContent(),
-                    ),
+          _changePage(index);
+        },
+        itemBuilder: (context, index) {
+          // 현재 표시할 페이지 인덱스의 페이지 빌드
+          if (index == _pageManager.currentPageIndex) {
+            return Column(
+              children: [
+                // 첫 번째 이미지 컨테이너
+                _buildFirstImageContainer(),
+                
+                // 페이지 내용 (Expanded로 감싸 남은 공간 채우기)
+                Expanded(
+                  child: Container(
+                    color: Colors.white, // 배경색 흰색
+                    padding: const EdgeInsets.all(0), // 패딩 0으로 설정 (ProcessedTextWidget에서 패딩 적용)
+                    child: _buildCurrentPageContent(),
                   ),
-                ],
-              );
-            } else {
-              // 다른 페이지는 페이지 매니저에서 해당 인덱스의 페이지를 가져와서 미리 로드
-              final page = _pageManager.getPageAtIndex(index);
-              final imageFile = _pageManager.getImageFileForPage(page);
-              
-              return Column(
-                children: [
-                  // 페이지 썸네일 이미지 (있는 경우)
-                  if (imageFile != null || page?.imageUrl != null)
-                    Container(
-                      margin: EdgeInsets.only(top: 16, left: 16, right: 16),
-                      height: 200, // 높이를 200으로 고정
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          )
-                        ],
-                      ),
+                ),
+              ],
+            );
+          } else {
+            // 다른 페이지는 페이지 매니저에서 해당 인덱스의 페이지를 가져와서 미리 로드
+            final page = _pageManager.getPageAtIndex(index);
+            final imageFile = _pageManager.getImageFileForPage(page);
+            
+            return Column(
+              children: [
+                // 페이지 썸네일 이미지 (있는 경우)
+                if (imageFile != null || page?.imageUrl != null)
+                  Container(
+                    margin: EdgeInsets.only(top: 16, left: 16, right: 16),
+                    height: 200, // 높이를 200으로 고정
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        )
+                      ],
+                    ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(8),
                         child: imageFile != null 
                           ? Image.file(
                               imageFile,
@@ -1622,9 +1622,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                           : (page?.imageUrl != null
                               ? Image.network(
                                   page!.imageUrl!,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  height: double.infinity,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
                                 )
                               : const Center(child: Text('이미지 없음'))),
                       ),
@@ -1637,10 +1637,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                     ),
                   ),
                 ],
-              );
-            }
-          },
-        ),
+                                );
+                              }
+                            },
+                          ),
       ],
     );
   }
@@ -1659,15 +1659,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     return GestureDetector(
       onTap: () {
         if (currentImageFile != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => FullImageScreen(
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FullImageScreen(
                 imageFile: currentImageFile,
                 title: _note?.originalText ?? '이미지',
-              ),
-            ),
-          );
+                                  ),
+                                ),
+                              );
         } else if (currentPage?.imageUrl != null) {
           _imageService.getImageFile(currentPage!.imageUrl).then((file) {
             if (file != null && mounted) {
@@ -1684,31 +1684,31 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           });
         }
       },
-      child: Container(
+        child: Container(
         margin: const EdgeInsets.only(
           top: 16,
           left: 16,
           right: 16,
           bottom: 0,
         ),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            )
-          ],
-        ),
-        height: 200, // 내부 컨테이너 높이도 200으로 고정
-        width: MediaQuery.of(context).size.width,
-        child: Stack(
-          children: [
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              )
+            ],
+          ),
+          height: 200, // 내부 컨테이너 높이도 200으로 고정
+          width: MediaQuery.of(context).size.width,
+          child: Stack(
+            children: [
             // 이미지 표시 부분
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
               child: currentImageFile != null
                 ? Image.file(
                     currentImageFile,
@@ -1729,27 +1729,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   )
                 : (currentPage?.imageUrl != null
                     ? FutureBuilder<File?>(
-                        future: _imageService.getImageFile(currentPage!.imageUrl),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return Center(child: CircularProgressIndicator());
-                          } else if (snapshot.hasData && snapshot.data != null) {
-                            // 이미지 파일을 찾은 경우, 페이지 매니저에도 업데이트
-                            if (currentPage.id != null) {
-                              // 이미지 파일과 URL 업데이트 (기존 NotePageManager 메서드 활용)
-                              _pageManager.updateCurrentPageImage(
-                                snapshot.data!, 
-                                currentPage.imageUrl!
-                              );
-                            }
-                            
+                  future: _imageService.getImageFile(currentPage!.imageUrl),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: CircularProgressIndicator());
+                    } else if (snapshot.hasData && snapshot.data != null) {
+                      // 이미지 파일을 찾은 경우, 페이지 매니저에도 업데이트
+                      if (currentPage.id != null) {
+                        // 이미지 파일과 URL 업데이트 (기존 NotePageManager 메서드 활용)
+                        _pageManager.updateCurrentPageImage(
+                          snapshot.data!, 
+                          currentPage.imageUrl!
+                        );
+                      }
+                      
                             return Image.file(
-                              snapshot.data!,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              height: double.infinity,
-                              errorBuilder: (context, error, stackTrace) {
-                                debugPrint('이미지 로드 오류: $error');
+                          snapshot.data!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                          errorBuilder: (context, error, stackTrace) {
+                            debugPrint('이미지 로드 오류: $error');
                                 return Center(
                                   child: Image.asset(
                                     'assets/images/image_empty.png',
@@ -1759,18 +1759,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                                   ),
                                 );
                               },
-                            );
-                          } else {
-                            return Center(
+                      );
+                    } else {
+                      return Center(
                               child: Image.asset(
-                                'assets/images/image_empty.png',
+                              'assets/images/image_empty.png',
                                 width: double.infinity,
                                 height: double.infinity,
                                 fit: BoxFit.cover,
-                              ),
-                            );
-                          }
-                        },
+                        ),
+                      );
+                    }
+                  },
                       )
                     : Center(
                         child: Image.asset(
@@ -1784,7 +1784,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             ),
             
             // 이미지 전체보기 버튼 추가
-            Positioned(
+              Positioned(
               top: 8,
               right: 8,
               child: Material(
@@ -1794,15 +1794,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   borderRadius: BorderRadius.circular(20),
                   onTap: () {
                     if (currentImageFile != null) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => FullImageScreen(
-                            imageFile: currentImageFile,
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => FullImageScreen(
+                          imageFile: currentImageFile,
                             title: _note?.originalText ?? '이미지',
-                          ),
                         ),
-                      );
+                      ),
+                    );
                     } else if (currentPage?.imageUrl != null) {
                       _imageService.getImageFile(currentPage!.imageUrl).then((file) {
                         if (file != null && mounted) {
@@ -1826,11 +1826,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                       color: Colors.white,
                       size: 28,
                     ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
         ),
       ),
     );

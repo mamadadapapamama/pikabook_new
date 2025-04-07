@@ -212,7 +212,6 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                     // 닫기 버튼
                     InkWell(
                       onTap: () {
-                        DebugUtils.log('📣 헬프텍스트 닫기 버튼 클릭됨!!');
                         if (widget.onDismiss != null) {
                           widget.onDismiss!();
                         }
@@ -241,13 +240,14 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
                   ),
                 ],
                 
-                // 설명 텍스트 (있는 경우에만)
+                // 설명 텍스트 (있는 경우만 표시)
                 if (widget.description != null) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Text(
                     widget.description!,
                     style: widget.descriptionStyle ?? TypographyTokens.body2.copyWith(
-                      color: _getTextColor,
+                      color: ColorTokens.textPrimary,
+                      fontSize: 14,
                       fontWeight: FontWeight.w400,
                     ),
                   ),

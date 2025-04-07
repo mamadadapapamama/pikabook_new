@@ -436,16 +436,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   size: TtsButton.sizeMedium, // 중간 크기로 통일
                   tooltip: '무료 TTS 사용량을 모두 사용했습니다.',
                   activeBackgroundColor: ColorTokens.primary.withOpacity(0.2), // 더 뚜렷한 활성화 색상
-                  // 재생 시작/종료 콜백 추가
-                  onPlayStart: () {
-                    if (widget.onPlayTts != null) {
-                      widget.onPlayTts!(segment.originalText, segmentIndex: i);
-                    }
-                  },
-                  onPlayEnd: () {
-                    // 디버그 로그 추가
-                    debugPrint('TTS 재생 종료됨: segmentIndex=$i');
-                  },
                 ),
               ),
             ],
