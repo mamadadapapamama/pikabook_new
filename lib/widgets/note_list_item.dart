@@ -47,10 +47,6 @@ class _NoteListItemState extends State<NoteListItem> {
   @override
   void initState() {
     super.initState();
-    
-    // 타이머 출력 방지
-    timeDilation = 1.0;
-    
     _loadImage();
   }
 
@@ -65,14 +61,24 @@ class _NoteListItemState extends State<NoteListItem> {
   }
 
   Future<void> _loadImage() async {
+    // 이미지 URL이 없으면 처리하지 않음
     if (widget.note.imageUrl == null || widget.note.imageUrl!.isEmpty) return;
 
-    setState(() {
-      _isLoadingImage = true;
-    });
+    // 이미 로딩 중이면 중복 로딩 방지
+    if (_isLoadingImage) return;
+
+    // 로딩 시작
+    if (mounted) {
+      setState(() {
+        _isLoadingImage = true;
+      });
+    }
 
     try {
+      // 이미지 서비스를 통해 이미지 파일 가져오기
       final imageFile = await _imageService.getImageFile(widget.note.imageUrl);
+      
+      // 위젯이 여전히 마운트 상태인지 확인
       if (mounted) {
         setState(() {
           _imageFile = imageFile;
@@ -80,6 +86,9 @@ class _NoteListItemState extends State<NoteListItem> {
         });
       }
     } catch (e) {
+      debugPrint('썸네일 이미지 로드 오류: $e');
+      
+      // 오류 발생해도 로딩 상태 종료
       if (mounted) {
         setState(() {
           _isLoadingImage = false;
@@ -230,9 +239,6 @@ class _NoteListItemState extends State<NoteListItem> {
   Widget build(BuildContext context) {
     final dismissibleKey = Key(widget.note.id ?? 'note-${DateTime.now().millisecondsSinceEpoch}');
     final borderRadius = BorderRadius.circular(SpacingTokens.radiusXs);
-    
-    // 타이머 출력 방지
-    timeDilation = 1.0;
     
     return Container(
       margin: EdgeInsets.symmetric(vertical: SpacingTokens.sm),

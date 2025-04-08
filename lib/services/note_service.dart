@@ -167,12 +167,52 @@ class NoteService {
       // 페이지 캐시 히스토리 기록 정리
       await _cleanPageCacheHistory();
       
+      // 이미지 캐시도 정리 시도
+      await _imageService.clearImageCache();
+      
+      // 노트 생성 중 멈춘 백그라운드 프로세싱 상태 초기화
+      await _cleanupStaleBackgroundProcessingState();
+      
       debugPrint('노트 서비스 캐시 정리 완료');
     } catch (e) {
       debugPrint('노트 캐시 정리 중 오류 발생: $e');
     }
   }
   
+  /// 멈춘 백그라운드 프로세싱 상태 정리
+  Future<void> _cleanupStaleBackgroundProcessingState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // SharedPreferences의 모든 키 가져오기
+      final allKeys = prefs.getKeys();
+      
+      // 백그라운드 처리 관련 키 찾기
+      final staleProcessingKeys = <String>[];
+      
+      for (var key in allKeys) {
+        // 백그라운드 처리 상태 키 찾기
+        if (key.startsWith('processing_note_') || 
+            key.startsWith('pages_updated_') || 
+            key.startsWith('updated_page_count_') ||
+            key.startsWith('first_page_processed_')) {
+          staleProcessingKeys.add(key);
+        }
+      }
+      
+      // 오래된 키 삭제
+      for (var key in staleProcessingKeys) {
+        await prefs.remove(key);
+      }
+      
+      if (staleProcessingKeys.isNotEmpty) {
+        debugPrint('${staleProcessingKeys.length}개의 멈춘 백그라운드 처리 상태를 정리했습니다.');
+      }
+    } catch (e) {
+      debugPrint('백그라운드 처리 상태 정리 중 오류: $e');
+    }
+  }
+
   /// 페이지 캐시 히스토리 정리
   Future<void> _cleanPageCacheHistory() async {
     try {

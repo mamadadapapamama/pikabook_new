@@ -157,15 +157,33 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   @override
   void dispose() {
+    // 백그라운드 처리 확인 타이머 취소
     _backgroundCheckTimer?.cancel();
+    _backgroundCheckTimer = null;
+    
+    // 스크린샷 경고 타이머 취소
     _screenshotWarningTimer?.cancel();
+    _screenshotWarningTimer = null;
+    
+    // 스크린샷 감지 중지
     _screenshotService.stopDetection();
+    
+    // 위젯 바인딩 옵저버 제거
     WidgetsBinding.instance.removeObserver(this);
+    
+    // 오디오 관련 리소스 정리
     if (_textReaderService.isPlaying) {
       _textReaderService.stop();
     }
     _ttsService.stop();
+    
+    // 컨트롤러 정리
     _pageController.dispose();
+    _titleEditingController.dispose();
+    
+    // 이미지 캐시 정리 시도
+    _imageService.clearImageCache();
+    
     super.dispose();
   }
 
@@ -1348,52 +1366,53 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // 뒤로가기 버튼 처리
   Future<bool> _onWillPop() async {
-    DebugUtils.log('WillPopScope 호출됨 - 백버튼 이벤트');
-    
-    // 리소스 정리는 백그라운드에서 처리
-    Future.microtask(() async {
-      try {
-        // TTS 정리
-        if (_textReaderService.isPlaying) {
-          DebugUtils.log('백그라운드에서 TextReaderService 중지 중...');
-          await _textReaderService.stop();
-        }
-        
-        DebugUtils.log('백그라운드에서 TtsService 중지 중...');
-        await _ttsService.stop();
-        
-        // 리소스 정리
-        if (_pageManager.currentPage?.id != null) {
-          _pageContentService.removeProcessedText(_pageManager.currentPage!.id!);
-        }
-        
-        DebugUtils.log('백그라운드 리소스 정리 완료');
-    } catch (e) {
-        DebugUtils.error('백그라운드 리소스 정리 중 오류: $e');
-      }
-    });
-    
-    // 버그 해결: 기본 동작 방지하고 직접 네비게이션 처리
-    if (mounted) {
-      DebugUtils.log('홈 화면으로 이동 시작 (WillPopScope)');
-      
-      // 직접 HomeScreen으로 이동 (pushReplacement 사용하여 부드럽게 전환)
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => HomeScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(
-              opacity: animation,
-              child: child,
-            );
-          },
-          transitionDuration: const Duration(milliseconds: 200),
-        ),
-      );
-      return false; // WillPopScope 기본 동작 중지
+    // 텍스트 읽기 중이면 먼저 정지
+    if (_textReaderService.isPlaying) {
+      _textReaderService.stop();
     }
     
+    // TTS 정지
+    _ttsService.stop();
+    
+    // 홈 화면으로 이동
+    _navigateToHomeScreen();
+    
+    // 기본 뒤로가기 동작 방지
     return false;
+  }
+  
+  // 홈 화면으로 안전하게 이동
+  void _navigateToHomeScreen() {
+    if (!mounted) return;
+    
+    // 가능한 모든 리소스 정리 시도
+    _cleanupResources();
+    
+    // 컨텍스트가 유효한지 재확인 후 네비게이션
+    if (context.mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+  }
+  
+  // 추가 리소스 정리 메서드
+  void _cleanupResources() {
+    try {
+      // 오디오 정지
+      _ttsService.stop();
+      _textReaderService.stop();
+      
+      // 이미지 캐시 정리
+      PaintingBinding.instance.imageCache.clear();
+      
+      // 메모리 관련 정리
+      if (Platform.isIOS || Platform.isAndroid) {
+        // GC 힌트 (실제로는 큰 영향 없지만 시도)
+        imageCache.clear();
+        imageCache.clearLiveImages();
+      }
+    } catch (e) {
+      debugPrint('리소스 정리 중 오류: $e');
+    }
   }
 
   // ===== UI 빌드 메서드 =====

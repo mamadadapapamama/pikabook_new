@@ -134,9 +134,6 @@ class ImageService {
 
   /// 이미지 파일 가져오기
   Future<File?> getImageFile(String? relativePath) async {
-    // 타이머 출력 방지
-    timeDilation = 1.0;
-
     if (relativePath == null || relativePath.isEmpty) {
       return null;
     }
@@ -214,9 +211,6 @@ class ImageService {
   /// 이미지 업로드 (로컬 저장소에 저장)
   Future<String> uploadImage(File imageFile) async {
     try {
-      // 타이머 출력 방지
-      timeDilation = 1.0;
-      
       // 파일 유효성 확인
       if (!await imageFile.exists()) {
         debugPrint('이미지 파일이 존재하지 않습니다 - 대체 파일 경로 반환');
@@ -320,12 +314,9 @@ class ImageService {
     }
   }
   
-  /// 이미지 압축 및 저장 (단일 통합 메서드)
+  /// 이미지 압축 및 저장 (다양한 방법 시도)
   Future<_CompressionResult> _compressAndSaveImage(File imageFile, String targetPath) async {
     try {
-      // 타이머 출력 방지
-      timeDilation = 1.0;
-      
       // 이미지 정보 가져오기
       final Uint8List imageBytes = await imageFile.readAsBytes();
       final img.Image? image = img.decodeImage(imageBytes);

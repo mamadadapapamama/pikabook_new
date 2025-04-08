@@ -293,7 +293,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         isLoadingDialogShowing = true;
         
         // 화면이 완전히 업데이트되도록 잠시 대기
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 300));
       }
       
       // 노트 생성
@@ -304,13 +304,13 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         waitForFirstPageProcessing: true, // 첫 페이지 처리 완료까지 대기
       );
       
-      // 로딩 다이얼로그 닫기
-      if (isLoadingDialogShowing && context.mounted) {
+      // 로딩 다이얼로그 닫기 (노트 생성 후 무조건 닫기)
+      if (context.mounted) {
         LoadingDialog.hide(context);
         isLoadingDialogShowing = false;
         
         // 화면이 완전히 업데이트되도록 잠시 대기
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 300));
       }
       
       // 결과 처리
@@ -339,21 +339,28 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       // 화면 전환
       if (context.mounted) {
         try {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => NoteDetailScreen(
-                noteId: noteId,
-                isProcessingBackground: isProcessingBackground,
-              ),
-            ),
-          );
+          // pushReplacement 대신 pop 후 push 사용
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          
+          // 약간의 지연 후 노트 상세 화면으로 이동
+          Future.delayed(const Duration(milliseconds: 150), () {
+            if (context.mounted) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => NoteDetailScreen(
+                    noteId: noteId,
+                    isProcessingBackground: isProcessingBackground,
+                  ),
+                ),
+              );
+            }
+          });
         } catch (navError) {
           debugPrint('화면 전환 중 오류 발생: $navError');
           
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: const Text('화면 전환 중 오류가 발생했습니다. 노트는 저장되었습니다.'),
+              content: const Text('화면 전환 중 오류가 발생했습니다. 노트는 정상적으로 저장되었습니다.'),
               backgroundColor: ColorTokens.warning,
               behavior: UITokens.snackBarTheme.behavior,
               shape: UITokens.snackBarTheme.shape,

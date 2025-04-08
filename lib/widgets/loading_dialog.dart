@@ -1,84 +1,96 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
-import 'pikabook_loader.dart';
-import 'dart:async';
+import 'dart:ui';
 
 /// 로딩 다이얼로그를 표시하는 유틸리티 클래스
 ///
 /// 장시간의 작업이 진행될 때 전체 화면을 덮는 로딩 다이얼로그를 표시합니다.
 /// 내부적으로 PikabookLoader를 사용하여 디자인에 맞게 구현되었습니다.
 class LoadingDialog {
-  static bool _isShowing = false;
   static OverlayEntry? _overlayEntry;
-
+  
   /// 로딩 다이얼로그를 표시하는 정적 메서드
-  static void show(BuildContext context, {String? message}) {
-    if (!context.mounted) {
-      return;
-    }
-
-    // 애니메이션 타이머 출력 방지
-    timeDilation = 1.0;
-
-    // 이미 표시 중이면 제거 후 다시 표시
-    if (_isShowing) {
-      hide(context);
-    }
-
-    // 상태 업데이트
-    _isShowing = true;
-
-    // OverlayEntry로 로딩 화면 표시 (UI 출력 문제 없음)
-    _showWithOverlay(context, message: message);
-  }
-
-  // OverlayEntry를 사용한 로딩 다이얼로그 표시
-  static void _showWithOverlay(BuildContext context, {String? message}) {
-    if (!context.mounted) return;
-    
-    final overlay = Overlay.of(context);
-    if (overlay == null) return;
+  static void show(BuildContext context, {String message = '로딩 중...'}) {
+    // 이미 표시 중이면 닫고 다시 열기
+    hide(context);
     
     _overlayEntry = OverlayEntry(
-      builder: (context) => Material(
-        type: MaterialType.transparency,
-        child: Stack(
-          children: [
-            // 전체 화면 반투명 배경
-            Positioned.fill(
-              child: Container(
-                color: Colors.black54,
-              ),
-            ),
-            // 중앙 로딩 다이얼로그
-            Center(
-              child: PikabookLoader(
-                title: '스마트한 학습 노트를 만들고 있어요.',
-                subtitle: message ?? '잠시만 기다려 주세요!',
-              ),
-            ),
-          ],
-        ),
-      ),
+      builder: (context) => _LoadingOverlay(message: message),
     );
     
-    overlay.insert(_overlayEntry!);
+    if (_overlayEntry != null && context.mounted) {
+      try {
+        Overlay.of(context).insert(_overlayEntry!);
+      } catch (e) {
+        debugPrint('로딩 다이얼로그 표시 중 오류: $e');
+      }
+    }
   }
   
   /// 로딩 다이얼로그를 닫는 정적 메서드
   static void hide(BuildContext context) {
-    // 다이얼로그가 표시되어 있지 않으면 아무 작업도 하지 않음
-    if (!_isShowing) {
-      return;
-    }
-    
-    // 상태 업데이트
-    _isShowing = false;
-    
-    // OverlayEntry가 있으면 제거
     if (_overlayEntry != null) {
-      _overlayEntry!.remove();
-      _overlayEntry = null;
+      try {
+        _overlayEntry!.remove();
+        _overlayEntry = null;
+      } catch (e) {
+        debugPrint('로딩 다이얼로그 닫기 중 오류: $e');
+      }
     }
+  }
+}
+
+/// 로딩 오버레이 위젯
+class _LoadingOverlay extends StatelessWidget {
+  final String message;
+  
+  const _LoadingOverlay({required this.message});
+  
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withOpacity(0.7),
+      child: Center(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 15,
+                  spreadRadius: 2,
+                )
+              ]
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                    strokeWidth: 4.0,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 } 

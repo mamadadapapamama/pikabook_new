@@ -8,6 +8,7 @@ import 'app.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'utils/debug_utils.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 앱의 진입점
 /// 
@@ -183,6 +184,9 @@ void main() async {
       
       // 로깅 관련 경고 메시지 감소를 위한 추가 설정
       // (Firebase 내부 로깅은 플랫폼 별로 다르게 제어됨)
+      
+      // 앱 시작 시 캐시 정리
+      await _cleanupOnStart();
     }
   } catch (e) {
     // Firebase 초기화 실패 - 릴리즈 모드에서는 로그만 저장
@@ -220,4 +224,35 @@ void main() async {
   
   // 7. 스플래시 화면 제거
   FlutterNativeSplash.remove();
+}
+
+// 시작 시 메모리 정리 및 임시 파일 정리
+Future<void> _cleanupOnStart() async {
+  try {
+    // 이미지 캐시 정리
+    PaintingBinding.instance.imageCache.clear();
+    imageCache.clear();
+    imageCache.clearLiveImages();
+    
+    // SharedPreferences에서 오래된 처리 상태 키 제거
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys();
+    int removedCount = 0;
+    
+    for (var key in keys) {
+      if (key.startsWith('processing_note_') || 
+          key.startsWith('pages_updated_') || 
+          key.startsWith('first_page_processed_') ||
+          key.startsWith('updated_page_count_')) {
+        await prefs.remove(key);
+        removedCount++;
+      }
+    }
+    
+    if (removedCount > 0) {
+      DebugUtils.log('앱 시작 시 $removedCount개의 오래된 상태 키를 정리했습니다.');
+    }
+  } catch (e) {
+    DebugUtils.error('캐시 정리 중 오류: $e');
+  }
 }
