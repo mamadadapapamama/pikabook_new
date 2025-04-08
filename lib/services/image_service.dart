@@ -48,8 +48,7 @@ class ImageService {
   static const int _defaultJpegQuality = 85; // 기본 JPEG 품질
   
   ImageService._internal() {
-    // 애니메이션 타이머 관련 설정
-    timeDilation = 1.0;
+    // 초기화 로직
   }
 
   // 현재 사용자 ID 가져오기
@@ -58,20 +57,32 @@ class ImageService {
   /// 이미지 선택 (갤러리)
   Future<File?> pickImage({ImageSource source = ImageSource.gallery}) async {
     try {
-      // 타이머 출력 방지
-      timeDilation = 1.0;
+      // 이미지 피커 설정
+      final ImagePicker picker = ImagePicker();
       
-      final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(
+      // 이미지 크기 설정
+      final XFile? pickedFile = await picker.pickImage(
         source: source,
-        imageQuality: 85, // 약간 압축
+        maxWidth: 2048,    // 이미지 최대 크기 제한
+        maxHeight: 2048,
+        requestFullMetadata: false, // 불필요한 메타데이터 요청 안함
       );
       
+      // 선택되지 않았으면 null 반환 (사용자가 취소함)
       if (pickedFile == null) {
         return null;
       }
       
-      return File(pickedFile.path);
+      // XFile을 File로 변환
+      final File file = File(pickedFile.path);
+      
+      // 파일 존재 확인
+      if (!file.existsSync() || file.lengthSync() == 0) {
+        debugPrint('선택된 이미지 파일이 유효하지 않습니다');
+        return null;
+      }
+      
+      return file;
     } catch (e) {
       debugPrint('이미지 선택 중 오류: $e');
       return null;
@@ -81,19 +92,40 @@ class ImageService {
   /// 여러 이미지 선택 (갤러리)
   Future<List<File>> pickMultipleImages() async {
     try {
-      // 타이머 출력 방지
-      timeDilation = 1.0;
+      // 이미지 피커 설정
+      final ImagePicker picker = ImagePicker();
+      List<XFile>? pickedFiles;
       
-      final picker = ImagePicker();
-      final pickedFiles = await picker.pickMultiImage(
-        imageQuality: 85, // 약간 압축
-      );
-      
-      if (pickedFiles.isEmpty) {
+      // iOS 관련 오류 방지를 위해 try-catch로 감싸기
+      try {
+        pickedFiles = await picker.pickMultiImage(
+          requestFullMetadata: false, // iOS에서 오류 발생 가능성 줄이기
+        );
+      } catch (pickError) {
+        debugPrint('이미지 선택 API 오류: $pickError');
         return [];
       }
       
-      return pickedFiles.map((xFile) => File(xFile.path)).toList();
+      // 선택된 이미지 없음
+      if (pickedFiles == null || pickedFiles.isEmpty) {
+        return [];
+      }
+      
+      // 파일 변환 및 유효성 검사
+      List<File> validFiles = [];
+      for (var pickedFile in pickedFiles) {
+        try {
+          final file = File(pickedFile.path);
+          if (file.existsSync() && file.lengthSync() > 0) {
+            validFiles.add(file);
+          }
+        } catch (fileError) {
+          debugPrint('파일 변환 오류: $fileError');
+          // 개별 파일 오류는 무시하고 계속 진행
+        }
+      }
+      
+      return validFiles;
     } catch (e) {
       debugPrint('여러 이미지 선택 중 오류: $e');
       return [];
@@ -483,5 +515,122 @@ class ImageService {
       return true; // 오류 발생 시 기본적으로 허용
     }
   }
-}
+  
+  /// 이미지 존재 여부 확인 (추가된 메서드)
+  Future<bool> imageExists(String? relativePath) async {
+    if (relativePath == null || relativePath.isEmpty) {
+      return false;
+    }
+    
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final filePath = '${appDir.path}/$relativePath';
+      final file = File(filePath);
+      
+      if (await file.exists()) {
+        final fileSize = await file.length();
+        return fileSize > 0;
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('이미지 존재 여부 확인 중 오류: $e');
+      return false;
+    }
+  }
+  
+  /// 이미지 삭제 (추가된 메서드)
+  Future<bool> deleteImage(String? relativePath) async {
+    if (relativePath == null || relativePath.isEmpty) {
+      return false;
+    }
+
+    try {
+      // 디스크에서 제거
+      final appDir = await getApplicationDocumentsDirectory();
+      final filePath = '${appDir.path}/$relativePath';
+      final file = File(filePath);
+      
+      if (await file.exists()) {
+        // 파일 크기 확인 (사용량 추적 감소용)
+        final fileSize = await file.length();
+        
+        // 파일 삭제
+        await file.delete();
+        
+        // Firebase에서도 삭제 시도
+        try {
+          if (_currentUserId != null) {
+            final storagePath = 'users/${_currentUserId}/$relativePath';
+            final storageRef = _storage.ref().child(storagePath);
+            await storageRef.delete();
+          }
+        } catch (e) {
+          // Firebase 삭제 실패는 무시 (로컬만 삭제해도 됨)
+          debugPrint('Firebase에서 이미지 삭제 중 오류: $e');
+        }
+        
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('이미지 삭제 중 오류 발생: $e');
+      return false;
+    }
+  }
+  
+  /// 임시 파일 정리 (추가된 메서드)
+  Future<void> cleanupTempFiles() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final dir = Directory(tempDir.path);
+      final entities = await dir.list().toList();
+      
+      int removedCount = 0;
+      
+      // 이미지 관련 임시 파일 찾기
+      for (var entity in entities) {
+        if (entity is File) {
+          final fileName = path.basename(entity.path);
+          
+          // 앱이 생성한 임시 이미지 파일 확인 (_img_, image_ 등의 패턴 포함)
+          if ((fileName.contains('image_') || fileName.contains('_img_')) && 
+              (fileName.endsWith('.jpg') || fileName.endsWith('.png'))) {
+            
+            // 파일 정보 확인
+            FileStat stat = await entity.stat();
+            
+            // 24시간 이상 지난 파일 삭제
+            final now = DateTime.now();
+            if (now.difference(stat.modified).inHours > 24) {
+              try {
+                await entity.delete();
+                removedCount++;
+              } catch (e) {
+                // 오류 무시
+              }
+            }
+          }
+        }
+      }
+      
+      if (removedCount > 0) {
+        debugPrint('$removedCount개의 임시 파일을 정리했습니다.');
+      }
+    } catch (e) {
+      debugPrint('임시 파일 정리 중 오류: $e');
+    }
+  }
+  
+  /// 이미지 캐시 정리 (추가된 메서드)
+  Future<void> clearImageCache() async {
+    try {
+      // 대기 중인 이미지 프로바이더 캐시 정리
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      debugPrint('이미지 캐시를 정리했습니다.');
+    } catch (e) {
+      debugPrint('이미지 캐시 정리 중 오류: $e');
+    }
+  }
 }

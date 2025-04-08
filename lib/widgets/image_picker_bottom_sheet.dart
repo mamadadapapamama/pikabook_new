@@ -11,6 +11,7 @@ import '../widgets/common/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/usage_limit_service.dart';
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);
@@ -156,23 +157,30 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   }
 
   Future<void> _pickImagesAndCreateNote(BuildContext context) async {
-    // 바텀 시트를 닫기 전에 전역 키를 사용하여 컨텍스트 저장
-    final navigatorContext = Navigator.of(context).context;
-
-    Navigator.pop(context); // 바텀 시트 닫기
-
+    // 바텀 시트를 닫기 전에 컨텍스트 저장
+    final rootContext = Navigator.of(context).context;
+    
+    // 바텀 시트 닫기
+    Navigator.pop(context);
+    
+    // 적절한 지연 추가 (iOS에서 필요)
+    await Future.delayed(const Duration(milliseconds: 500));
+    
     try {
+      // 이미지 선택
       final images = await _imageService.pickMultipleImages();
-
-      if (images.isNotEmpty && navigatorContext.mounted) {
+      
+      // 이미지가 선택되었고 컨텍스트가 유효한지 확인
+      if (images.isNotEmpty && rootContext.mounted) {
         // 노트 생성 진행
-        await _createNoteWithImages(navigatorContext, images);
+        await _createNoteWithImagesDirectly(rootContext, images);
       }
     } catch (e) {
-      if (navigatorContext.mounted) {
-        // 오류 발생 시 로딩 다이얼로그 닫기
-        LoadingDialog.hide(navigatorContext);
-        ScaffoldMessenger.of(navigatorContext).showSnackBar(
+      debugPrint('이미지 선택 중 오류 발생: $e');
+      
+      // 컨텍스트가 유효한지 확인
+      if (rootContext.mounted) {
+        ScaffoldMessenger.of(rootContext).showSnackBar(
           SnackBar(
             content: Text('이미지 선택 중 오류가 발생했습니다: $e'),
             backgroundColor: ColorTokens.error,
@@ -186,34 +194,31 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
   Future<void> _takePhotoAndCreateNote(BuildContext context) async {
     // 바텀 시트를 닫기 전에 전역 키를 사용하여 컨텍스트 저장
-    final navigatorContext = Navigator.of(context).context;
-
-    Navigator.pop(context); // 바텀 시트 닫기
-
+    final rootContext = Navigator.of(context).context;
+    
+    // 바텀 시트 닫기
+    Navigator.pop(context);
+    
+    // 적절한 지연 추가 (iOS에서 필요)
+    await Future.delayed(const Duration(milliseconds: 500));
+    
     try {
+      // 카메라로 사진 촬영
       final image = await _imageService.pickImage(source: ImageSource.camera);
-
-      if (image != null && navigatorContext.mounted) {
+      
+      // 이미지가 선택되었고 컨텍스트가 유효한지 확인
+      if (image != null && rootContext.mounted) {
         // 노트 생성 진행
-        await _createNoteWithImages(navigatorContext, [image]);
-      } else if (navigatorContext.mounted) {
-        // 사용자가 사진 촬영을 취소한 경우
-        ScaffoldMessenger.of(navigatorContext).showSnackBar(
-          SnackBar(
-            content: const Text('사진 촬영이 취소되었습니다.'),
-            backgroundColor: ColorTokens.secondary,
-            behavior: UITokens.snackBarTheme.behavior,
-            shape: UITokens.snackBarTheme.shape,
-          ),
-        );
+        await _createNoteWithImagesDirectly(rootContext, [image]);
       }
     } catch (e) {
-      if (navigatorContext.mounted) {
-        // 오류 발생 시 로딩 다이얼로그 닫기
-        LoadingDialog.hide(navigatorContext);
-        ScaffoldMessenger.of(navigatorContext).showSnackBar(
+      debugPrint('카메라 촬영 중 오류 발생: $e');
+      
+      // 컨텍스트가 유효한지 확인
+      if (rootContext.mounted) {
+        ScaffoldMessenger.of(rootContext).showSnackBar(
           SnackBar(
-            content: Text('사진 촬영 중 오류가 발생했습니다: $e'),
+            content: Text('카메라 촬영 중 오류가 발생했습니다: $e'),
             backgroundColor: ColorTokens.error,
             behavior: UITokens.snackBarTheme.behavior,
             shape: UITokens.snackBarTheme.shape,
@@ -222,145 +227,156 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
     }
   }
-
-  Future<void> _createNoteWithImages(
-      BuildContext context, List<File> images) async {
+  
+  // 이미지로 직접 노트 생성 (기존 함수 대체)
+  Future<void> _createNoteWithImagesDirectly(
+    BuildContext context,
+    List<File> images,
+  ) async {
+    // 이미지 유효성 검사
     if (images.isEmpty) {
-      debugPrint('이미지가 비어 있어 노트 생성을 중단합니다.');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('이미지가 선택되지 않았습니다.'),
+          backgroundColor: ColorTokens.error,
+          behavior: UITokens.snackBarTheme.behavior,
+          shape: UITokens.snackBarTheme.shape,
+        ));
+      }
       return;
     }
 
-    // 로딩 다이얼로그 표시 여부를 추적하는 변수
+    // 유효한 이미지만 필터링
+    List<File> validImages = [];
+    for (var image in images) {
+      try {
+        if (image.existsSync() && image.lengthSync() > 0) {
+          validImages.add(image);
+        }
+      } catch (e) {
+        debugPrint('이미지 파일 확인 중 오류: $e');
+      }
+    }
+
+    if (validImages.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('유효한 이미지가 없습니다.'),
+          backgroundColor: ColorTokens.error,
+          behavior: UITokens.snackBarTheme.behavior,
+          shape: UITokens.snackBarTheme.shape,
+        ));
+      }
+      return;
+    }
+
+    // 로딩 다이얼로그 표시 여부
     bool isLoadingDialogShowing = false;
     
-    // 생성된 노트 ID 저장용 변수
-    String? createdNoteId;
-    bool creationSucceeded = false;
-    
     try {
-      // 먼저 로딩 다이얼로그 표시 (OverlayEntry 방식 사용)
-      if (context.mounted) {
-        LoadingDialog.show(context, message: '노트 생성 중...');
-        isLoadingDialogShowing = true;
-      }
-      
-      // 노트 생성 시작
-      final result = await _noteService.createNoteWithMultipleImages(
-        imageFiles: images,
-        title: null,
-        silentProgress: true,
-        waitForFirstPageProcessing: false,
-      );
-
-      // 결과 값이 null인지 확인
-      if (result == null) {
-        throw Exception('노트 생성 결과가 null입니다.');
-      }
-
-      // 결과 저장 - 안전한 방식으로 처리
-      final bool success = result['success'] == true;
-      
-      // noteId 추출 및 안전 검사
-      if (result.containsKey('noteId') && result['noteId'] != null) {
-        // toString()으로 안전하게 문자열 변환
-        createdNoteId = result['noteId'].toString();
-        
-        // 변환된 ID가 비어있지 않은지 확인
-        if (createdNoteId.isEmpty) {
-          debugPrint('노트 ID가 빈 문자열입니다.');
-          createdNoteId = null;
-        }
-      } else {
-        debugPrint('결과에 노트 ID가 없거나 null입니다.');
-        createdNoteId = null;
-      }
-      
-      // 백그라운드 처리 상태
-      final bool isProcessingBackground = result['isProcessingBackground'] ?? false;
-      
-      // 성공 여부 저장 - ID가 정상적으로 있는지 확인
-      creationSucceeded = success && createdNoteId != null && createdNoteId.isNotEmpty;
-      
-      debugPrint('노트 생성 결과: 성공=$success, ID=$createdNoteId, 백그라운드=$isProcessingBackground');
-      
-      // 에러가 발생한 경우 오류 메시지 표시
-      if (!creationSucceeded && context.mounted) {
-        final String errorMessage = result['message'] ?? '노트 생성에 실패했습니다.';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
+      // Firebase 초기화 확인
+      if (Firebase.apps.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('Firebase가 초기화되지 않았습니다. 앱을 다시 시작해주세요.'),
             backgroundColor: ColorTokens.error,
             behavior: UITokens.snackBarTheme.behavior,
             shape: UITokens.snackBarTheme.shape,
-          ),
-        );
-        
-        // 로딩 다이얼로그 닫기
-        if (isLoadingDialogShowing && context.mounted) {
-          LoadingDialog.hide(context);
-          isLoadingDialogShowing = false;
+          ));
         }
         return;
       }
       
-      // 노트 생성 성공 시 3초 후에 화면 이동 (로딩 애니메이션 표시를 위한 지연)
-      if (creationSucceeded && context.mounted) {
-        // 일정 시간 후 노트 상세 화면으로 이동
-        Future.delayed(const Duration(seconds: 3), () {
-          // 컨텍스트가 여전히 유효한지 확인
+      // 로딩 다이얼로그 표시
+      if (context.mounted) {
+        LoadingDialog.show(context, message: '노트 생성 중...');
+        isLoadingDialogShowing = true;
+        
+        // 화면이 완전히 업데이트되도록 잠시 대기
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      
+      // 노트 생성
+      final result = await _noteService.createNoteWithMultipleImages(
+        imageFiles: validImages,
+        title: null,
+        silentProgress: true,
+        waitForFirstPageProcessing: true, // 첫 페이지 처리 완료까지 대기
+      );
+      
+      // 로딩 다이얼로그 닫기
+      if (isLoadingDialogShowing && context.mounted) {
+        LoadingDialog.hide(context);
+        isLoadingDialogShowing = false;
+        
+        // 화면이 완전히 업데이트되도록 잠시 대기
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      
+      // 결과 처리
+      if (result == null) {
+        throw Exception('노트 생성 결과가 null입니다.');
+      }
+      
+      final bool success = result['success'] == true;
+      final String? noteId = result['noteId']?.toString();
+      final bool isProcessingBackground = result['isProcessingBackground'] == true;
+      
+      // 성공 여부 확인
+      if (!success || noteId == null || noteId.isEmpty) {
+        final String errorMessage = result['message'] ?? '노트 생성에 실패했습니다.';
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: ColorTokens.error,
+            behavior: UITokens.snackBarTheme.behavior,
+            shape: UITokens.snackBarTheme.shape,
+          ));
+        }
+        return;
+      }
+      
+      // 화면 전환
+      if (context.mounted) {
+        try {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => NoteDetailScreen(
+                noteId: noteId,
+                isProcessingBackground: isProcessingBackground,
+              ),
+            ),
+          );
+        } catch (navError) {
+          debugPrint('화면 전환 중 오류 발생: $navError');
+          
           if (context.mounted) {
-            // 로딩 다이얼로그가 표시 중인지 확인하고 닫기
-            if (isLoadingDialogShowing) {
-              LoadingDialog.hide(context);
-              isLoadingDialogShowing = false;
-            }
-            
-            // 생성된 노트 ID가 유효한지 다시 한번 확인
-            if (createdNoteId != null && createdNoteId.isNotEmpty) {
-              // 노트 상세 화면으로 이동
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => NoteDetailScreen(
-                    noteId: createdNoteId!,
-                    isProcessingBackground: !isProcessingBackground,
-                  ),
-                ),
-              );
-            } else {
-              // 노트 ID가 유효하지 않은 경우 오류 메시지 표시
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('생성된 노트 ID가 유효하지 않습니다.'),
-                  backgroundColor: ColorTokens.error,
-                  behavior: UITokens.snackBarTheme.behavior,
-                  shape: UITokens.snackBarTheme.shape,
-                ),
-              );
-            }
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: const Text('화면 전환 중 오류가 발생했습니다. 노트는 저장되었습니다.'),
+              backgroundColor: ColorTokens.warning,
+              behavior: UITokens.snackBarTheme.behavior,
+              shape: UITokens.snackBarTheme.shape,
+            ));
           }
-        });
+        }
       }
     } catch (e) {
       debugPrint('노트 생성 중 예외 발생: $e');
       
-      // 컨텍스트가 여전히 유효한지 확인
+      // 로딩 다이얼로그 닫기
+      if (isLoadingDialogShowing && context.mounted) {
+        LoadingDialog.hide(context);
+      }
+      
+      // 오류 메시지 표시
       if (context.mounted) {
-        // 로딩 다이얼로그가 표시 중인지 확인하고 닫기
-        if (isLoadingDialogShowing) {
-          LoadingDialog.hide(context);
-          isLoadingDialogShowing = false;
-        }
-        
-        // 오류 메시지 표시
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('노트 생성 중 오류가 발생했습니다: $e'),
-            backgroundColor: ColorTokens.error,
-            behavior: UITokens.snackBarTheme.behavior,
-            shape: UITokens.snackBarTheme.shape,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('노트 생성 중 오류가 발생했습니다: $e'),
+          backgroundColor: ColorTokens.error,
+          behavior: UITokens.snackBarTheme.behavior,
+          shape: UITokens.snackBarTheme.shape,
+        ));
       }
     }
   }

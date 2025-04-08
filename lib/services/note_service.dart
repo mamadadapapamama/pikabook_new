@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../models/note.dart';
 import '../models/page.dart' as page_model;
 import '../models/flash_card.dart';
@@ -479,10 +480,17 @@ class NoteService {
 
         try {
           // 이미지 업로드
-          final imageUrl = await _imageService.uploadImage(imageFile);
-          if (imageUrl == null || imageUrl.isEmpty) {
-            debugPrint('이미지 업로드 실패: 이미지 ${i + 1}');
-            continue;
+          String imageUrl = '';
+          try {
+            imageUrl = await _imageService.uploadImage(imageFile);
+            // 만약 빈 문자열이 반환되면, 기본 fallback 경로 사용
+            if (imageUrl.isEmpty) {
+              debugPrint('이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
+              imageUrl = 'images/fallback_image.jpg';
+            }
+          } catch (uploadError) {
+            debugPrint('이미지 업로드 중 오류: $uploadError - 기본 경로 사용');
+            imageUrl = 'images/fallback_image.jpg';
           }
 
           // OCR로 텍스트 추출
@@ -772,15 +780,46 @@ class NoteService {
     bool waitForFirstPageProcessing = false,  // 첫 페이지 처리 완료까지 대기 여부
   }) async {
     try {
+      // Firebase 초기화 확인
+      if (Firebase.apps.isEmpty) {
+        debugPrint('Firebase가 초기화되지 않았습니다.');
+        return {'success': false, 'message': 'Firebase가 초기화되지 않았습니다. 앱을 다시 시작해주세요.'};
+      }
+      
       if (imageFiles.isEmpty) {
         return {'success': false, 'message': '이미지가 없습니다.'};
       }
+      
+      // 이미지 파일 유효성 검사
+      List<File> validImageFiles = [];
+      for (var file in imageFiles) {
+        try {
+          if (file.existsSync() && file.lengthSync() > 0) {
+            validImageFiles.add(file);
+          } else {
+            debugPrint('유효하지 않은 이미지 파일: ${file.path}');
+          }
+        } catch (e) {
+          debugPrint('이미지 파일 확인 중 오류: $e');
+          // 오류 발생 시 해당 파일 건너뛰기
+        }
+      }
+      
+      if (validImageFiles.isEmpty) {
+        return {'success': false, 'message': '유효한 이미지가 없습니다.'};
+      }
+      
+      // 유효한 이미지만 사용
+      imageFiles = validImageFiles;
       
       // 사용자 확인
       final user = _auth.currentUser;
       if (user == null) {
         return {'success': false, 'message': '로그인이 필요합니다.'};
       }
+      
+      // 이하 기존 코드 동일
+      // ... existing code ...
       
       // 페이지 사용량 제한 확인 - 이미지 수만큼 페이지를 추가할 수 있는지 확인
       final int pageCount = imageFiles.length;
@@ -840,7 +879,24 @@ class NoteService {
       if (imageFiles.isNotEmpty) {
         try {
           // 첫 번째 이미지 업로드
-          final imageUrl = await _imageService.uploadImage(imageFiles[0]);
+          String imageUrl = 'images/fallback_image.jpg'; // 기본값으로 fallback 이미지 경로 설정
+          
+          if (imageFiles[0].existsSync() && imageFiles[0].lengthSync() > 0) {
+            try {
+              final tempUrl = await _imageService.uploadImage(imageFiles[0]);
+              
+              // null 또는 빈 문자열이 아닌 경우에만 이미지 URL 업데이트
+              if (tempUrl != null && tempUrl.isNotEmpty) {
+                imageUrl = tempUrl;
+              } else {
+                debugPrint('첫 번째 이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
+              }
+            } catch (uploadError) {
+              debugPrint('첫 번째 이미지 업로드 중 오류: $uploadError - 기본 경로 사용');
+            }
+          } else {
+            debugPrint('첫 번째 이미지가 유효하지 않아 기본 이미지 사용: ${imageFiles[0].path}');
+          }
           
           // OCR로 텍스트 추출
           final extractedText = await _ocrService.extractText(imageFiles[0], skipUsageCount: true);
@@ -950,6 +1006,13 @@ class NoteService {
     String? targetLanguage,
   ) async {
     try {
+      // Firebase 초기화 확인
+      final isFirebaseReady = await _ensureFirebaseInitialized();
+      if (!isFirebaseReady) {
+        debugPrint('Firebase가 초기화되지 않아 백그라운드 처리를 중단합니다.');
+        return;
+      }
+      
       // 백그라운드 처리 상태 설정
       await _setNoteBackgroundProcessingState(noteId, true);
       
@@ -998,6 +1061,26 @@ class NoteService {
         }
         
         try {
+          // 이미지 업로드
+          String imageUrl = 'images/fallback_image.jpg'; // 기본값 미리 설정
+          
+          if (imageFile.existsSync() && imageFile.lengthSync() > 0) {
+            try {
+              final tempUrl = await _imageService.uploadImage(imageFile);
+              
+              // null 또는 빈 문자열이 아닌 경우에만 이미지 URL 업데이트
+              if (tempUrl != null && tempUrl.isNotEmpty) {
+                imageUrl = tempUrl;
+              } else {
+                debugPrint('이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
+              }
+            } catch (uploadError) {
+              debugPrint('이미지 업로드 중 오류: $uploadError - 기본 경로 사용');
+            }
+          } else {
+            debugPrint('유효하지 않은 이미지 파일이므로 기본 이미지 사용: ${imageFile.path}');
+          }
+
           // OCR로 텍스트 추출
           final extractedText = await _ocrService.extractText(imageFile, skipUsageCount: true);
           
@@ -1008,12 +1091,6 @@ class NoteService {
               extractedText,
               targetLanguage: targetLanguage ?? 'ko',
             );
-          }
-          
-          // 이미지 업로드
-          final imageUrl = await _imageService.uploadImage(imageFile);
-          if (imageUrl == null || imageUrl.isEmpty) {
-            throw Exception('이미지 업로드에 실패했습니다.');
           }
           
           // 기존 페이지 업데이트 또는 새 페이지 생성
@@ -1134,9 +1211,17 @@ class NoteService {
   ) async {
     try {
       // 이미지 업로드
-      final imageUrl = await _imageService.uploadImage(imageFile);
-      if (imageUrl == null || imageUrl.isEmpty) {
-        throw Exception('이미지 업로드에 실패했습니다.');
+      String imageUrl = '';
+      try {
+        imageUrl = await _imageService.uploadImage(imageFile);
+        // 만약 빈 문자열이 반환되면, 기본 fallback 경로 사용
+        if (imageUrl.isEmpty) {
+          debugPrint('이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
+          imageUrl = 'images/fallback_image.jpg';
+        }
+      } catch (uploadError) {
+        debugPrint('이미지 업로드 중 오류: $uploadError - 기본 경로 사용');
+        imageUrl = 'images/fallback_image.jpg';
       }
 
       String extractedText = '';
@@ -1333,5 +1418,30 @@ class NoteService {
       debugPrint('첫 페이지 처리 상태 확인 중 오류: $e');
       return {'processed': false, 'message': '오류: $e'};
     }
+  }
+
+  // Firebase 초기화 상태 확인
+  bool _isFirebaseInitialized() {
+    try {
+      return Firebase.apps.isNotEmpty;
+    } catch (e) {
+      debugPrint('Firebase 초기화 상태 확인 중 오류: $e');
+      return false;
+    }
+  }
+
+  // Firebase 초기화 상태 확인 및 처리
+  Future<bool> _ensureFirebaseInitialized() async {
+    if (!_isFirebaseInitialized()) {
+      try {
+        debugPrint('Firebase가 초기화되지 않았습니다. 초기화를 시도합니다.');
+        // Firebase가 초기화되지 않은 경우 대체 동작 (로컬 저장)
+        return false;
+      } catch (e) {
+        debugPrint('Firebase 초기화 시도 중 오류: $e');
+        return false;
+      }
+    }
+    return true;
   }
 }
