@@ -1046,10 +1046,11 @@ class NoteService {
     String? targetLanguage,
   ) async {
     try {
-      // Firebase 초기화 확인
-      final isFirebaseReady = await _ensureFirebaseInitialized();
-      if (!isFirebaseReady) {
-        debugPrint('Firebase가 초기화되지 않아 백그라운드 처리를 중단합니다.');
+      // Firebase 초기화 확인 - Firebase.app() 사용
+      try {
+        Firebase.app();
+      } catch (e) {
+        debugPrint('Firebase가 초기화되지 않았습니다: $e');
         return;
       }
       
@@ -1111,6 +1112,7 @@ class NoteService {
               // null 또는 빈 문자열이 아닌 경우에만 이미지 URL 업데이트
               if (tempUrl != null && tempUrl.isNotEmpty) {
                 imageUrl = tempUrl;
+                debugPrint('이미지 업로드 성공: $imageUrl');
               } else {
                 debugPrint('이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
               }

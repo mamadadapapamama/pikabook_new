@@ -57,34 +57,56 @@ class ImageService {
   /// 이미지 선택 (갤러리)
   Future<File?> pickImage({ImageSource source = ImageSource.gallery}) async {
     try {
+      debugPrint('이미지 선택 시작: $source');
+      
       // 이미지 피커 설정
       final ImagePicker picker = ImagePicker();
       
-      // 이미지 크기 설정
-      final XFile? pickedFile = await picker.pickImage(
-        source: source,
-        maxWidth: 2048,    // 이미지 최대 크기 제한
-        maxHeight: 2048,
-        requestFullMetadata: false, // 불필요한 메타데이터 요청 안함
-      );
+      // 이미지 선택 API 호출 (iOS에서 오류가 발생할 수 있음)
+      XFile? pickedFile;
       
-      // 선택되지 않았으면 null 반환 (사용자가 취소함)
-      if (pickedFile == null) {
+      try {
+        pickedFile = await picker.pickImage(
+          source: source,
+          maxWidth: 2048,    // 이미지 최대 크기 제한
+          maxHeight: 2048,
+          requestFullMetadata: false, // 불필요한 메타데이터 요청 안함
+        );
+        
+        // 사용자가 취소한 경우
+        if (pickedFile == null) {
+          debugPrint('이미지 선택이 취소되었습니다');
+          return null;
+        }
+      } catch (pickError) {
+        debugPrint('이미지 선택 API 오류: $pickError');
         return null;
       }
       
       // XFile을 File로 변환
       final File file = File(pickedFile.path);
       
-      // 파일 존재 확인
-      if (!file.existsSync() || file.lengthSync() == 0) {
-        debugPrint('선택된 이미지 파일이 유효하지 않습니다');
+      // 파일 존재 확인 (엄격한 체크)
+      bool fileExists = false;
+      int fileSize = 0;
+      
+      try {
+        fileExists = file.existsSync();
+        fileSize = fileExists ? file.lengthSync() : 0;
+        debugPrint('파일 상태: 존재=$fileExists, 크기=$fileSize, 경로=${file.path}');
+      } catch (fileCheckError) {
+        debugPrint('파일 확인 중 오류: $fileCheckError');
+      }
+      
+      if (!fileExists || fileSize == 0) {
+        debugPrint('선택된 이미지 파일이 유효하지 않습니다: 존재=$fileExists, 크기=$fileSize');
         return null;
       }
       
+      debugPrint('이미지 선택 성공: 경로=${file.path}, 크기=$fileSize 바이트');
       return file;
     } catch (e) {
-      debugPrint('이미지 선택 중 오류: $e');
+      debugPrint('이미지 선택 중 예외 발생: $e');
       return null;
     }
   }
