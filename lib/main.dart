@@ -47,45 +47,35 @@ void main() async {
   final imageService = ImageService();
   await imageService.cleanupTempFiles();
   
-  // 보류 중인 노트 ID 확인
+  // 보류 중인 노트 ID가 있는지 확인
   String? pendingNoteId;
-  bool isProcessing = false;
+  bool isProcessingBackground = false;
   
   try {
     final prefs = await SharedPreferences.getInstance();
     pendingNoteId = prefs.getString('pending_note_id');
-    isProcessing = prefs.getBool('pending_note_is_processing') ?? false;
+    isProcessingBackground = prefs.getBool('pending_note_is_processing') ?? false;
     
-    if (pendingNoteId != null && pendingNoteId.isNotEmpty) {
-      debugPrint('앱 시작 시 보류 중인 노트 발견: $pendingNoteId (메인 함수에서)');
-      
-      // SharedPreferences에서 값 제거
+    // 값이 있으면 즉시 제거 (한 번만 사용)
+    if (pendingNoteId != null) {
       await prefs.remove('pending_note_id');
       await prefs.remove('pending_note_is_processing');
+      debugPrint('보류 중인 노트 ID 발견: $pendingNoteId (처리 중: $isProcessingBackground)');
     }
   } catch (e) {
-    debugPrint('SharedPreferences 접근 중 오류: $e');
+    debugPrint('설정 확인 중 오류: $e');
   }
   
-  // 바로 노트 상세 페이지로 이동하도록 설정
+  // 노트 ID가 있으면 바로 노트 상세 화면으로 이동하는 App으로 시작
   if (pendingNoteId != null && pendingNoteId.isNotEmpty) {
-    // 노트 상세 페이지로 이동하기 위해 App 대신 직접 MaterialApp 실행
     runApp(
-      MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-          fontFamily: 'Pretendard',
-        ),
-        home: NoteDetailScreen(
-          noteId: pendingNoteId,
-          isProcessingBackground: isProcessing,
-        ),
+      DirectNoteApp(
+        noteId: pendingNoteId,
+        isProcessingBackground: isProcessingBackground,
       ),
     );
   } else {
-    // 일반적인 앱 시작
+    // 일반적인 앱 실행
     runApp(const App());
   }
 }
@@ -113,30 +103,30 @@ Future<void> _cleanupOnStart() async {
   }
 }
 
-Future<Widget> _determineStartScreen() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final pendingNoteId = prefs.getString('pending_note_id');
-    
-    if (pendingNoteId != null && pendingNoteId.isNotEmpty) {
-      final isProcessing = prefs.getBool('pending_note_is_processing') ?? false;
-      debugPrint('앱 시작 시 보류 중인 노트 발견: $pendingNoteId');
-      
-      // SharedPreferences에서 값 제거
-      await prefs.remove('pending_note_id');
-      await prefs.remove('pending_note_is_processing');
-      
-      // 노트 상세 화면으로 이동
-      return NoteDetailScreen(
-        noteId: pendingNoteId,
-        isProcessingBackground: isProcessing,
-      );
-    }
-    
-    // 기본 시작 화면 (홈 화면)
-    return const HomeScreen();
-  } catch (e) {
-    debugPrint('시작 화면 결정 중 오류: $e');
-    return const HomeScreen();
+/// 직접 노트 상세 화면으로 이동하는 앱
+class DirectNoteApp extends StatelessWidget {
+  final String noteId;
+  final bool isProcessingBackground;
+  
+  const DirectNoteApp({
+    super.key, 
+    required this.noteId,
+    this.isProcessingBackground = false,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFE975B)),
+        fontFamily: 'Pretendard',
+        useMaterial3: true,
+      ),
+      home: NoteDetailScreen(
+        noteId: noteId,
+        isProcessingBackground: isProcessingBackground,
+      ),
+    );
   }
 }

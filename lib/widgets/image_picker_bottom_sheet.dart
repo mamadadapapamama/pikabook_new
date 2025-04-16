@@ -273,12 +273,35 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     }
     
     debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
+    
+    // 바텀 시트 즉시 닫기
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+    
+    // 새로운 BuildContext를 위해 약간의 지연
+    await Future.delayed(const Duration(milliseconds: 100));
+    
+    // 로딩 다이얼로그를 표시할 최상위 컨텍스트 찾기
+    BuildContext? topContext;
+    try {
+      topContext = Navigator.of(context, rootNavigator: true).context;
+    } catch (e) {
+      debugPrint('루트 컨텍스트 가져오기 실패: $e');
+      topContext = context;
+    }
+    
+    if (!mounted || topContext == null) {
+      debugPrint('컨텍스트가 유효하지 않아 진행 불가');
+      return;
+    }
+    
+    // 로딩 다이얼로그 표시
+    LoadingDialog.show(topContext, message: '노트 생성 준비 중...');
+    
     String? createdNoteId;
     
     try {
-      // 로딩 다이얼로그 표시 - 초기 메시지
-      LoadingDialog.show(context, message: '노트 생성 준비 중...');
-      
       // 노트 생성 호출
       final result = await _noteService.createNoteWithMultipleImages(
         imageFiles: imageFiles,
@@ -293,7 +316,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         createdNoteId = result['noteId'] as String;
         debugPrint('노트 ID 생성 성공: $createdNoteId');
         
-        // 로딩 메시지 업데이트 (다이얼로그를 숨기지 않고 메시지만 변경)
+        // 로딩 메시지 업데이트
         LoadingDialog.updateMessage('첫 페이지 처리 중... (0/10초)');
         
         // 변수에 보관할 노트 ID 복사 (중간에 null이 되지 않도록)
@@ -316,9 +339,10 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
               break;
             }
             
-            // 진행 메시지 업데이트 (모든 시도마다)
-            LoadingDialog.updateMessage('첫 페이지 처리 중... (${attempts/2}/10초)');
-            debugPrint('로딩 메시지 업데이트: 첫 페이지 처리 중... (${attempts/2}/10초)');
+            // 진행 메시지 업데이트
+            final progressSeconds = (attempts / 2).toStringAsFixed(1);
+            LoadingDialog.updateMessage('첫 페이지 처리 중... ($progressSeconds/10초)');
+            debugPrint('로딩 메시지 업데이트: 첫 페이지 처리 중... ($progressSeconds/10초)');
             
             // 0.5초 대기
             await Future.delayed(const Duration(milliseconds: 500));
@@ -334,18 +358,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         // 로딩 다이얼로그 숨기기
         LoadingDialog.hide();
         
-        // 노트 상세 화면으로 이동 전 약간의 지연 (UI가 업데이트될 시간 확보)
+        // 즉시 노트 상세 화면으로 이동
         await Future.delayed(const Duration(milliseconds: 100));
-        
-        // 앱이 계속 활성 상태인지 확인
-        if (mounted && context.mounted) {
-          // 노트 상세 화면으로 이동
-          _navigateToNoteDetail(context, noteId, !firstPageProcessed);
-        } else {
-          // 현재 컨텍스트가 유효하지 않은 경우 SharedPreferences에 노트 ID 저장
-          debugPrint('컨텍스트가 유효하지 않아 SharedPreferences에 노트 ID 저장');
-          await _savePendingNoteToPrefs(noteId, !firstPageProcessed);
-        }
+        _moveToNoteDetail(topContext, noteId, !firstPageProcessed);
       } else {
         // 노트 생성 실패
         debugPrint('노트 생성 결과 실패: ${result['message']}');
@@ -356,8 +371,8 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         // 실패 메시지 표시
         final String errorMessage = result['message'] as String? ?? '노트 생성에 실패했습니다.';
         
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted && topContext != null) {
+          ScaffoldMessenger.of(topContext).showSnackBar(
             SnackBar(content: Text('노트 생성 실패: $errorMessage')),
           );
         }
@@ -367,50 +382,32 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       LoadingDialog.hide();
       
       debugPrint('노트 생성 중 예외 발생: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted && topContext != null) {
+        ScaffoldMessenger.of(topContext).showSnackBar(
           SnackBar(content: Text('노트 생성 중 오류가 발생했습니다')),
         );
       }
     }
   }
 
-  // 노트 상세 화면으로 안전하게 이동
-  void _navigateToNoteDetail(BuildContext context, String noteId, bool isProcessingBackground) {
+  // 노트 상세 화면으로 직접 이동 (MaterialApp.router가 아닌 경우에만 사용)
+  void _moveToNoteDetail(BuildContext context, String noteId, bool isProcessingBackground) {
     try {
-      debugPrint('노트 상세 화면으로 이동 시작: $noteId');
+      debugPrint('노트 상세 화면으로 직접 이동 시작: $noteId');
       
-      // bottom sheet 닫기
-      Navigator.of(context).pop();
+      // 현재 Navigator의 루트를 사용하여 이동
+      Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute(
+          builder: (context) => NoteDetailScreen(
+            noteId: noteId,
+            isProcessingBackground: isProcessingBackground,
+          ),
+        ),
+      );
       
-      // 현재 가장 높은 레벨의 context 가져오기 전 약간의 지연
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (!mounted) {
-          // 컨텍스트가 유효하지 않은 경우 SharedPreferences에 저장
-          _savePendingNoteToPrefs(noteId, isProcessingBackground);
-          return;
-        }
-        
-        try {
-          // 현재 화면을 노트 상세 화면으로 대체 (기존 방식에서 변경)
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => NoteDetailScreen(
-                noteId: noteId,
-                isProcessingBackground: isProcessingBackground,
-              ),
-            ),
-          );
-          debugPrint('노트 상세 화면으로 이동 완료: $noteId');
-        } catch (e) {
-          debugPrint('화면 이동 중 오류: $e');
-          _savePendingNoteToPrefs(noteId, isProcessingBackground);
-        }
-      });
+      debugPrint('노트 상세 화면으로 이동 성공: $noteId');
     } catch (e) {
       debugPrint('노트 상세 화면 이동 중 오류: $e');
-      
-      // 오류 발생 시 SharedPreferences에 노트 ID 저장
       _savePendingNoteToPrefs(noteId, isProcessingBackground);
     }
   }
