@@ -212,142 +212,90 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   @override
   Widget build(BuildContext context) {
-    // 앱 테마 정의
-    return MaterialApp(
-      title: 'Pikabook',
-      theme: AppTheme.lightTheme,
-      // 다크 테마 지원시 추가
-      // darkTheme: AppTheme.darkTheme,
-      // themeMode: ThemeMode.system,
-      home: _buildHomeScreen(),
-      debugShowCheckedModeBanner: false,
-      // 성능 오버레이 비활성화
-      showPerformanceOverlay: false,
+    // 앱 테마 적용
+    final themeData = ThemeData(
+      primarySwatch: Colors.blue,
+      visualDensity: VisualDensity.adaptivePlatformDensity,
+      fontFamily: 'Pretendard',
     );
-  }
-  
-  /// 로딩, 오류, 로그인 또는 홈 화면 중 적절한 화면을 반환
-  Widget _buildHomeScreen() {
-    // 1. 초기화 중이거나 로딩 중인 경우 로딩 화면 표시
-    if (_isLoading) {
-      return LoadingScreen(
-        progress: 0.5,
-        message: '앱을 초기화하는 중입니다...'
-      );
-    }
     
-    // 1-2. 사용자 데이터 로딩 중인 경우 로딩 화면 표시
-    if (_isLoadingUserData) {
-      return LoadingScreen(
-        progress: 0.8,
-        message: '사용자 데이터를 불러오는 중입니다...'
-      );
-    }
-    
-    // 2. 초기화 실패시 오류 화면 표시
-    if (_error != null || !_isInitialized) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  _error ?? '앱을 초기화할 수 없습니다.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => _initializeApp(),
-                child: const Text('다시 시도'),
-              ),
-            ],
+    // 에러 발생한 경우
+    if (_error != null) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: themeData,
+        home: Scaffold(
+          body: Center(
+            child: Text(
+              '오류가 발생했습니다:\n$_error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
+            ),
           ),
         ),
       );
     }
     
-    // 3. 사용자가 로그인되지 않은 경우 로그인 화면
-    if (_user == null) {
-      return LoginScreen(
-        onLoginSuccess: (user) {
-          // 사용자 로그인 성공 처리
-          setState(() {
-            _user = user;
-            _userId = user.uid;
-          });
-          _loadUserPreferences();
-        },
-        isInitializing: false,
+    // 초기화 중인 경우
+    if (_isLoading || !_isInitialized || _isLoadingUserData) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: themeData,
+        home: const LoadingScreen(progress: 0.5, message: '앱을 초기화하는 중입니다...'),
       );
     }
     
-    // 사용자가 로그인된 경우
-    // 4-1. 온보딩이 이미 완료된 경우 홈 화면
-    if (_isOnboardingCompleted) {
-      return HomeScreen(
-        onSettingsPressed: (BuildContext context) async {
-          // 설정 화면으로 이동 로직 구현
-          // UI 스레드 처리를 위한 짧은 지연 추가
-          await Future.delayed(const Duration(milliseconds: 10));
-          
-          if (!context.mounted) return;
-          
-          // 로그 추가
-          debugPrint('App.dart에서 설정 화면으로 네비게이션 시작 (전달된 context 사용)');
-          
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => SettingsScreen(
-                onLogout: () async {
-                  // 로그아웃 처리
-                  await FirebaseAuth.instance.signOut();
-                  // 앱 재시작 효과를 위한 페이지 전환
-                  if (!context.mounted) return;
-                  
-                  Navigator.of(context).pushAndRemoveUntil(
-                    PageRouteBuilder(
-                      pageBuilder: (context, animation, secondaryAnimation) => const App(),
-                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                        const begin = 0.0;
-                        const end = 1.0;
-                        const curve = Curves.easeInOut;
-                        
-                        var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-                        var fadeAnimation = animation.drive(tween);
-                        
-                        return FadeTransition(
-                          opacity: fadeAnimation,
-                          child: child,
-                        );
-                      },
-                      transitionDuration: const Duration(milliseconds: 500),
-                    ),
-                    (route) => false,
-                  );
-                },
-              ),
-            ),
-          );
-        },
+    // 사용자가 로그인하지 않은 경우 (인증 화면 표시)
+    if (_user == null) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: themeData,
+        home: LoginScreen(
+          onLoginSuccess: (user) {
+            // 사용자 로그인 성공 처리
+            setState(() {
+              _user = user;
+              _userId = user.uid;
+            });
+            _loadUserPreferences();
+          },
+          isInitializing: false,
+        ),
       );
     }
-    // 4-2. 온보딩이 필요한 경우 온보딩 화면
-    else {
-      return OnboardingScreen(
-        onComplete: () async {
-          // 온보딩 완료 상태를 UserPreferencesService를 통해 저장
-          await _preferencesService.setOnboardingCompleted(true);
-          setState(() {
-            _isOnboardingCompleted = true;
-          });
-        },
+    
+    // 사용자가 로그인했지만 온보딩을 완료하지 않은 경우
+    if (!_isOnboardingCompleted) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: themeData,
+        home: OnboardingScreen(
+          onComplete: () async {
+            await _preferencesService.setOnboardingCompleted(true);
+            if (mounted) {
+              setState(() {
+                _isOnboardingCompleted = true;
+              });
+            }
+          },
+        ),
       );
     }
+    
+    // 모든 조건을 만족한 경우 앱의 메인 화면 표시
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: themeData,
+      // 홈 화면 표시
+      home: const HomeScreen(),
+      routes: {
+        '/settings': (context) => SettingsScreen(
+          onLogout: () async {
+            // 로그아웃 처리
+            await FirebaseAuth.instance.signOut();
+          },
+        ),
+      },
+    );
   }
 }

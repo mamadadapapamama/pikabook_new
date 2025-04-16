@@ -16,7 +16,7 @@ import 'package:pinyin/pinyin.dart';
 import '../models/processed_text.dart';
 import '../models/text_segment.dart';
 import 'translation_service.dart';
-import 'chinese_segmenter_service.dart';
+import 'internal_cn_segmenter_service.dart';
 import 'text_cleaner_service.dart';
 import 'pinyin_creation_service.dart';
 import 'user_preferences_service.dart';
@@ -50,7 +50,7 @@ class EnhancedOcrService {
   final TranslationService _translationService = TranslationService();
 
   // 중국어 분할 서비스
-  final ChineseSegmenterService _segmenterService = ChineseSegmenterService();
+  final InternalCnSegmenterService _segmenterService = InternalCnSegmenterService();
 
   // 사용자 설정 서비스 추가
   final UserPreferencesService _preferencesService = UserPreferencesService();

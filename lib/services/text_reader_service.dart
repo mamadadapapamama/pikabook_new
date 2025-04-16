@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/processed_text.dart';
 import 'tts_service.dart';
-import 'chinese_segmenter_service.dart';
+import 'internal_cn_segmenter_service.dart';
 
 /// 텍스트 읽기 서비스
 /// TTS 기능과 문장 분할 기능을 통합하여 제공합니다.
@@ -11,7 +11,7 @@ class TextReaderService {
   TextReaderService._internal();
 
   final TtsService _ttsService = TtsService();
-  final ChineseSegmenterService _segmenterService = ChineseSegmenterService();
+  final InternalCnSegmenterService _segmenterService = InternalCnSegmenterService();
 
   // 현재 재생 중인 세그먼트 인덱스
   int? get currentSegmentIndex => _ttsService.currentSegmentIndex;

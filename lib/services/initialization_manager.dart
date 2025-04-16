@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'unified_cache_service.dart';
 import 'user_preferences_service.dart';
 import 'auth_service.dart';
-import 'chinese_segmenter_service.dart';
+import 'internal_cn_segmenter_service.dart';
 import 'image_service.dart';
 
 /// 앱 초기화 단계를 정의합니다.
@@ -264,7 +264,7 @@ class InitializationManager {
       final prefs = await SharedPreferences.getInstance();
       
       // 중국어 분할 설정 로드
-      ChineseSegmenterService.isSegmentationEnabled =
+      InternalCnSegmenterService.isSegmentationEnabled =
           prefs.getBool('segmentation_enabled') ?? false;
       
       // 언어 설정 로드 - 기본값 설정
@@ -275,7 +275,7 @@ class InitializationManager {
     } catch (e) {
       debugPrint('앱 설정 로드 중 오류: $e');
       // 기본값 설정
-      ChineseSegmenterService.isSegmentationEnabled = false;
+      InternalCnSegmenterService.isSegmentationEnabled = false;
     }
   }
   

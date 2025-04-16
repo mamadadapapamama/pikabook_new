@@ -1,120 +1,228 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../theme/tokens/color_tokens.dart';
+import 'dart:async';
 
-/// 로딩 다이얼로그 클래스
-/// 앱 전체에서 로딩 표시에 사용됨
+/// 전역 로딩 다이얼로그 상태 관리 클래스
 class LoadingDialog {
-  static OverlayEntry? _overlayEntry;
-  static bool _isVisible = false;
+  static bool _isShowing = false;
+  static String _message = '로딩 중...';
+  static BuildContext? _dialogContext;
+  static Timer? _dismissTimer;
+  static final _messageStreamController = StreamController<String>.broadcast();
   
   /// 로딩 다이얼로그 표시
-  static void show(BuildContext context, {String message = '로딩 중...'}) {
-    debugPrint('로딩 다이얼로그 표시 요청: $message');
-    
-    // 이미 표시 중이면 무시
-    if (_isVisible) {
-      debugPrint('로딩 다이얼로그가 이미 표시 중입니다');
+  static Future<void> show(BuildContext context, {String message = '로딩 중...'}) async {
+    // 이미 표시 중이면 메시지만 업데이트
+    if (_isShowing) {
+      updateMessage(message);
+      debugPrint('로딩 다이얼로그가 이미 표시 중입니다. 메시지 업데이트: $message');
       return;
     }
     
-    // 오버레이 항목 생성
-    _overlayEntry = OverlayEntry(
-      builder: (context) => _LoadingOverlay(message: message),
-    );
+    _isShowing = true;
+    _message = message;
+    _messageStreamController.add(message);
     
-    // 오버레이에 추가
-    if (_overlayEntry != null) {
-      Overlay.of(context).insert(_overlayEntry!);
-      _isVisible = true;
-      debugPrint('로딩 다이얼로그가 표시되었습니다');
+    // 안전 장치: 최대 15초 후 자동으로 닫힘
+    _dismissTimer?.cancel();
+    _dismissTimer = Timer(const Duration(seconds: 15), () {
+      hide();
+      debugPrint('로딩 다이얼로그 자동 타임아웃 (15초)');
+    });
+    
+    try {
+      // BuildContext 유효성 확인
+      if (!context.mounted) {
+        debugPrint('컨텍스트가 유효하지 않아 로딩 다이얼로그 표시 불가');
+        _isShowing = false;
+        return;
+      }
+      
+      // 모달 다이얼로그 표시
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          _dialogContext = dialogContext;
+          return _LoadingOverlay(
+            messageStream: _messageStreamController.stream,
+            initialMessage: _message,
+          );
+        },
+      ).then((_) {
+        // 다이얼로그가 닫히면 상태 초기화
+        _isShowing = false;
+        _dialogContext = null;
+        debugPrint('로딩 다이얼로그가 닫혔습니다');
+      });
+    } catch (e) {
+      debugPrint('로딩 다이얼로그 표시 중 오류: $e');
+      _isShowing = false;
     }
+    
+    debugPrint('로딩 다이얼로그 표시 요청: $message');
+  }
+  
+  /// 로딩 다이얼로그 메시지 업데이트
+  static void updateMessage(String message) {
+    _message = message;
+    _messageStreamController.add(message);
+    debugPrint('로딩 다이얼로그 메시지 업데이트: $message');
   }
   
   /// 로딩 다이얼로그 숨기기
   static void hide() {
     debugPrint('로딩 다이얼로그 숨김 요청');
     
-    if (_overlayEntry != null) {
-      _overlayEntry!.remove();
-      _overlayEntry = null;
-      _isVisible = false;
-      debugPrint('로딩 다이얼로그가 숨겨졌습니다');
+    // 타이머 취소
+    _dismissTimer?.cancel();
+    _dismissTimer = null;
+    
+    // 이미 닫혀있으면 무시
+    if (!_isShowing) {
+      debugPrint('로딩 다이얼로그가 이미 닫혀있습니다');
+      return;
     }
+    
+    // 다이얼로그 컨텍스트가 있을 때만 닫기 시도
+    if (_dialogContext != null && _dialogContext!.mounted) {
+      try {
+        Navigator.of(_dialogContext!).pop();
+        debugPrint('로딩 다이얼로그가 숨겨졌습니다');
+      } catch (e) {
+        debugPrint('다이얼로그 닫기 중 오류: $e');
+      }
+    } else {
+      debugPrint('다이얼로그 컨텍스트가 유효하지 않아 숨기기 실패');
+    }
+    
+    // 상태 초기화
+    _isShowing = false;
+    _dialogContext = null;
   }
   
-  /// 로딩 다이얼로그 표시 여부 확인
-  static bool isShowing() {
-    return _isVisible;
+  /// 로딩 다이얼로그가 현재 표시 중인지 확인
+  static bool get isShowing => _isShowing;
+  
+  /// 현재 표시 중인 메시지 가져오기
+  static String get message => _message;
+  
+  /// 리소스 정리 (앱 종료 시 호출)
+  static void dispose() {
+    _dismissTimer?.cancel();
+    _messageStreamController.close();
   }
 }
 
 /// 로딩 오버레이 위젯
-class _LoadingOverlay extends StatelessWidget {
-  final String message;
+class _LoadingOverlay extends StatefulWidget {
+  final Stream<String> messageStream;
+  final String initialMessage;
   
-  const _LoadingOverlay({required this.message});
+  const _LoadingOverlay({
+    required this.messageStream,
+    required this.initialMessage,
+  });
+  
+  @override
+  _LoadingOverlayState createState() => _LoadingOverlayState();
+}
+
+class _LoadingOverlayState extends State<_LoadingOverlay> with SingleTickerProviderStateMixin {
+  late String _message;
+  late AnimationController _controller;
+  StreamSubscription? _messageSubscription;
+  
+  @override
+  void initState() {
+    super.initState();
+    _message = widget.initialMessage;
+    
+    // 메시지 스트림 구독
+    _messageSubscription = widget.messageStream.listen((newMessage) {
+      if (mounted) {
+        setState(() {
+          _message = newMessage;
+        });
+      }
+    });
+    
+    // 애니메이션 컨트롤러 초기화
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+  
+  @override
+  void dispose() {
+    _messageSubscription?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
   
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0x59000000), // rgba(0, 0, 0, 0.35)
+    return WillPopScope(
+      // 뒤로가기 버튼으로 닫히지 않도록 설정
+      onWillPop: () async => false,
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-        child: Center(
-          child: Container(
-            width: 300,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 피카북 로더 애니메이션
-                SizedBox(
-                  height: 40,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildLoader(),
-                      const SizedBox(width: 12),
-                      _buildPikabirdLogo(),
-                    ],
+        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+        child: Container(
+          color: Colors.black.withOpacity(0.5),
+          width: double.infinity,
+          height: double.infinity,
+          child: Center(
+            child: Container(
+              width: 200,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    spreadRadius: 1,
                   ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  '스마트 노트를 만들고 있어요.',
-                  style: const TextStyle(
-                    fontFamily: 'Noto Sans KR',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black,
-                    height: 1.2,
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 10),
+                  Image.asset(
+                    'assets/images/logo.png',
+                    width: 60,
+                    height: 60,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          color: ColorTokens.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.auto_stories,
+                          color: Colors.white,
+                          size: 30,
+                        ),
+                      );
+                    },
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF226357),
-                    height: 1.5,
+                  const SizedBox(height: 20),
+                  _buildBouncingDots(),
+                  const SizedBox(height: 20),
+                  Text(
+                    _message,
+                    style: const TextStyle(fontSize: 14),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+                  const SizedBox(height: 10),
+                ],
+              ),
             ),
           ),
         ),
@@ -123,7 +231,7 @@ class _LoadingOverlay extends StatelessWidget {
   }
   
   /// 로딩 애니메이션 위젯 생성
-  Widget _buildLoader() {
+  Widget _buildBouncingDots() {
     return SizedBox(
       width: 70,
       child: Row(
@@ -142,101 +250,31 @@ class _LoadingOverlay extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 4),
       child: _BouncingDot(
         delay: delay,
-        color: const Color(0xFFFE975B),
+        controller: _controller,
+        color: ColorTokens.primary,
         size: 8,
-      ),
-    );
-  }
-  
-  /// 피카버드 로고 생성
-  Widget _buildPikabirdLogo() {
-    return Container(
-      width: 40,
-      height: 40,
-      alignment: Alignment.center,
-      child: Stack(
-        children: [
-          // 새 모양 윤곽
-          Container(
-            width: 30,
-            height: 30,
-            decoration: const BoxDecoration(
-              color: Color(0xFFFE6A15),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(15),
-                topRight: Radius.circular(15),
-                bottomLeft: Radius.circular(15),
-                bottomRight: Radius.circular(5),
-              ),
-            ),
-          ),
-          // 주황 노랑 그라데이션 배경
-          Positioned(
-            top: 3,
-            left: 3,
-            child: Container(
-              width: 24,
-              height: 24,
-              decoration: const BoxDecoration(
-                color: Color(0xFFFFD53C),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
-                  bottomLeft: Radius.circular(12),
-                  bottomRight: Radius.circular(4),
-                ),
-              ),
-            ),
-          ),
-          // 눈
-          Positioned(
-            top: 10,
-            left: 15,
-            child: Container(
-              width: 6,
-              height: 6,
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
 }
 
 /// 바운싱 애니메이션 도트 위젯
-class _BouncingDot extends StatefulWidget {
+class _BouncingDot extends StatelessWidget {
   final double delay;
   final Color color;
   final double size;
+  final AnimationController controller;
 
   const _BouncingDot({
     required this.delay,
     required this.color,
     required this.size,
+    required this.controller,
   });
 
   @override
-  _BouncingDotState createState() => _BouncingDotState();
-}
-
-class _BouncingDotState extends State<_BouncingDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
-
-    _animation = TweenSequence<double>([
+  Widget build(BuildContext context) {
+    final Animation<double> animation = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween<double>(begin: 0, end: -10)
             .chain(CurveTween(curve: Curves.easeOut)),
@@ -247,33 +285,27 @@ class _BouncingDotState extends State<_BouncingDot>
             .chain(CurveTween(curve: Curves.easeIn)),
         weight: 50,
       ),
-    ]).animate(_controller);
+    ]).animate(
+      CurvedAnimation(
+        parent: controller,
+        curve: Interval(
+          delay,  // 시작 지연
+          delay + 0.7,  // 종료 (0.7 범위 내에서 애니메이션)
+          curve: Curves.linear,
+        ),
+      ),
+    );
 
-    Future.delayed(Duration(milliseconds: (widget.delay * 1000).toInt()), () {
-      if (mounted) {
-        _controller.repeat();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _controller,
+      animation: controller,
       builder: (context, child) {
         return Transform.translate(
-          offset: Offset(0, _animation.value),
+          offset: Offset(0, animation.value),
           child: Container(
-            width: widget.size,
-            height: widget.size,
+            width: size,
+            height: size,
             decoration: BoxDecoration(
-              color: widget.color,
+              color: color,
               shape: BoxShape.circle,
             ),
           ),

@@ -126,21 +126,55 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           statusBarBrightness: Brightness.dark,
         ),
       );
+      
+      // 즉시 노트 로드 시작 - 포스트 프레임에서 실행하여 UI가 준비된 후 실행
+      _loadNote();
+      _initTts();
+      _loadUserPreferences();
+      _setupBackgroundProcessingCheck();
+      _initScreenshotDetection();
+      
+      // 이전에 페이지 이동이 실패한 노트가 있는지 확인
+      _checkPendingNote();
     });
-    
-    // 의존성 관련 문제를 해결하기 위해 포스트 프레임 콜백 사용
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-    _loadNote();
-    _initTts();
-    _loadUserPreferences();
-    _setupBackgroundProcessingCheck();
-    _initScreenshotDetection();
-      if (mounted) {
-        setState(() {
-          // 상태 초기화
-        });
+  }
+  
+  // 이전에 실패한 노트 이동 확인
+  Future<void> _checkPendingNote() async {
+    try {
+      // 현재 노트 ID가 비어있지 않으면 이미 노트를 표시 중이므로 건너뜀
+      if (widget.noteId.isNotEmpty) {
+        return;
       }
-    });
+      
+      final prefs = await SharedPreferences.getInstance();
+      final pendingNoteId = prefs.getString('pending_note_id');
+      
+      if (pendingNoteId != null && pendingNoteId.isNotEmpty) {
+        final isProcessing = prefs.getBool('pending_note_is_processing') ?? false;
+        debugPrint('이전에 실패한 노트 이동 발견: $pendingNoteId');
+        
+        // SharedPreferences에서 값 제거
+        await prefs.remove('pending_note_id');
+        await prefs.remove('pending_note_is_processing');
+        
+        // 컨텍스트가 유효한지 확인
+        if (mounted && context.mounted) {
+          // 노트 상세 화면으로 이동
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => NoteDetailScreen(
+                noteId: pendingNoteId,
+                isProcessingBackground: isProcessing,
+              ),
+            ),
+          );
+          debugPrint('보류 중이던 노트로 이동 완료: $pendingNoteId');
+        }
+      }
+    } catch (e) {
+      debugPrint('보류 중인 노트 확인 중 오류: $e');
+    }
   }
 
   @override
@@ -264,11 +298,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   /// 노트 데이터 로드
   Future<void> _loadNote() async {
     try {
-    setState(() {
-      _isLoading = true;
+      setState(() {
+        _isLoading = true;
       });
 
-      // 노트 로드
+      // 노트 ID 유효성 검사
+      if (widget.noteId.isEmpty) {
+        setState(() {
+          _error = '유효하지 않은 노트 ID입니다.';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // 노트 로드 - 캐시 먼저 확인
       final note = await _noteService.getNoteById(widget.noteId);
       
       if (note == null) {
@@ -280,55 +323,68 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       }
       
       // 로드된 노트 정보 반영
-        setState(() {
-          _note = note;
-          _isFavorite = note.isFavorite;
-      });
-      
-      // 페이지 로드
-      await _pageManager.loadPagesFromServer();
-      
-      // 노트에 백그라운드 처리 상태 확인
-      final bool isProcessingBackground = await _checkBackgroundProcessingStatus(note.id!);
-      
-      // 백그라운드 처리 중이 아니라면 처리 완료된 페이지가 있는지 확인
-      if (!isProcessingBackground) {
-        final prefs = await SharedPreferences.getInstance();
-        final pagesUpdated = prefs.getBool('pages_updated_${widget.noteId}') ?? false;
-        
-        if (pagesUpdated) {
-          final updatedPageCount = prefs.getInt('updated_page_count_${widget.noteId}') ?? 0;
-          debugPrint('노트 로드 시 완료된 페이지 발견: $updatedPageCount개');
-          
-          // 플래그 초기화
-          await prefs.remove('pages_updated_${widget.noteId}');
-          await prefs.remove('updated_page_count_${widget.noteId}');
-          
-          // 메시지 표시
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('$updatedPageCount개의 추가 페이지가 처리되었습니다.'),
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        }
-      }
-      
-      // 텍스트 처리
-      await _processTextForCurrentPage();
-      
       setState(() {
-        _isLoading = false;
+        _note = note;
+        _isFavorite = note.isFavorite;
       });
-    } catch (e) {
-      debugPrint('노트 로드 중 오류 발생: $e');
+      
+      // 페이지 로드 - 비동기로 시작하지만 대기하지 않음
+      _pageManager.loadPagesFromServer().then((_) {
+        // 페이지 로드 완료 후 첫 페이지 텍스트 처리
+        if (mounted) {
+          _processTextForCurrentPage().then((_) {
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
+          });
+        }
+      });
+      
+      // 노트에 백그라운드 처리 상태 확인 - 비동기로 실행
+      _checkBackgroundProcessingStatus(note.id!).then((isProcessingBackground) {
+        // 백그라운드 처리 중이 아니라면 처리 완료된 페이지가 있는지 확인
+        if (!isProcessingBackground && mounted) {
+          SharedPreferences.getInstance().then((prefs) {
+            final pagesUpdated = prefs.getBool('pages_updated_${widget.noteId}') ?? false;
+            
+            if (pagesUpdated) {
+              final updatedPageCount = prefs.getInt('updated_page_count_${widget.noteId}') ?? 0;
+              debugPrint('노트 로드 시 완료된 페이지 발견: $updatedPageCount개');
+              
+              // 플래그 초기화
+              prefs.remove('pages_updated_${widget.noteId}');
+              prefs.remove('updated_page_count_${widget.noteId}');
+              
+              // 메시지 표시
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('$updatedPageCount개의 추가 페이지가 처리되었습니다.'),
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              }
+            }
+          });
+        }
+      });
+      
+      // 노트 정보가 있으면 로딩 상태 업데이트
+      // 나머지 데이터는 비동기로 로드되므로 사용자가 먼저 UI를 볼 수 있음
+      if (_note != null) {
         setState(() {
-        _error = '노트 로드 중 오류가 발생했습니다: $e';
           _isLoading = false;
         });
       }
+    } catch (e) {
+      debugPrint('노트 로드 중 오류 발생: $e');
+      setState(() {
+        _error = '노트 로드 중 오류가 발생했습니다: $e';
+        _isLoading = false;
+      });
+    }
   }
   
   /// 백그라운드 처리 상태 확인
@@ -1373,16 +1429,41 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     try {
       debugPrint('노트 상세 화면에서 뒤로가기 버튼 클릭됨');
       
-      // 리소스 정리
+      // TTS 및 다른 리소스 정리
       _cleanupResources();
       
-      // 이전 화면으로 이동 (간소화된 방식)
-      if (!mounted) return true;
+      // 컨텍스트가 유효한지 확인
+      if (!mounted || !context.mounted) {
+        debugPrint('컨텍스트가 유효하지 않아 기본 동작 허용');
+        return true; // 기본 뒤로가기 동작 허용
+      }
       
-      // 모든 이전 화면을 스택에서 제거하고 홈 화면으로 이동
-      Navigator.of(context).popUntil((route) => route.isFirst);
+      // 노트에서 작업 중인 내용이 있는지 확인 (필요 시 저장)
+      if (_isEditingTitle) {
+        // 제목 편집 중인 경우 저장
+        if (_titleEditingController.text.isNotEmpty) {
+          await _updateNoteTitle(_titleEditingController.text);
+        }
+        setState(() {
+          _isEditingTitle = false;
+        });
+        return false; // 뒤로가기 이벤트 소비
+      }
       
-      return false; // 기본 뒤로가기 동작 방지
+      // 노트 처리 결과 저장
+      if (_note != null && _note!.id != null) {
+        // 캐시 저장 또는 필요한 정리 작업
+        _cacheService.cacheNote(_note!);
+      }
+      
+      // 간단하게 화면 종료 (검은 화면 문제 해결)
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        return false; // 뒤로가기 이벤트 소비 (이미 처리했으므로)
+      }
+      
+      // 화면 스택을 확인하여 팝 가능하지 않은 경우 홈 화면으로 이동
+      return true; // 기본 뒤로가기 동작 허용
     } catch (e) {
       debugPrint('뒤로가기 처리 중 오류 발생: $e');
       return true; // 오류 발생 시 기본 뒤로가기 허용
@@ -1399,12 +1480,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         backgroundColor: Colors.white,
         appBar: PikaAppBar.noteDetail(
           title: _isEditingTitle ? '' : (_note?.originalText ?? '로딩 중'),
-              currentPage: _pageManager.currentPageIndex + 1,
+          currentPage: _pageManager.currentPageIndex + 1,
           totalPages: _pageManager.pages.length,
-              flashcardCount: _note?.flashcardCount ?? 0,
-              onMorePressed: _showMoreOptions,
-              onFlashcardTap: _navigateToFlashcards,
-          onBackPressed: () => Navigator.pop(context),
+          flashcardCount: _note?.flashcardCount ?? 0,
+          onMorePressed: _showMoreOptions,
+          onFlashcardTap: _navigateToFlashcards,
+          onBackPressed: () {
+            // 시스템 백버튼과 동일한 로직 사용
+            _onWillPop().then((shouldHandleDefault) {
+              // shouldHandleDefault가 true인 경우에만 추가로 pop 처리
+              if (shouldHandleDefault && Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+            });
+          },
         ),
         body: _isEditingTitle ? 
           Center(

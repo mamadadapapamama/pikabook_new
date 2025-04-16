@@ -7,15 +7,15 @@ import 'dictionary/internal_cn_dictionary_service.dart';
 
 /// 중국어 텍스트를 문장 단위로 분절하는 서비스
 /// 문장 분할, 문단 처리 등의 기능만 담당합니다
-class ChineseSegmenterService {
-  static final ChineseSegmenterService _instance =
-      ChineseSegmenterService._internal();
+class InternalCnSegmenterService {
+  static final InternalCnSegmenterService _instance =
+      InternalCnSegmenterService._internal();
 
-  factory ChineseSegmenterService() {
+  factory InternalCnSegmenterService() {
     return _instance;
   }
 
-  ChineseSegmenterService._internal();
+  InternalCnSegmenterService._internal();
 
   // 단어 목록을 가져오기 위한 중국어 사전 서비스 참조
   final InternalCnDictionaryService _dictionaryService = InternalCnDictionaryService();
@@ -59,21 +59,21 @@ class ChineseSegmenterService {
     _initializationCompleter = Completer<void>();
 
     try {
-      debugPrint('ChineseSegmenterService 초기화 시작...');
+      debugPrint('InternalCnSegmenterService 초기화 시작...');
 
       // 사전 로드 (단어 분절을 위해 필요한 경우에만)
       if (isSegmentationEnabled) {
         await _dictionaryService.loadDictionary();
-        debugPrint('ChineseSegmenterService 초기화 완료: 사전 로드됨');
+        debugPrint('InternalCnSegmenterService 초기화 완료: 사전 로드됨');
       } else {
-        debugPrint('ChineseSegmenterService 초기화 완료: 세그멘테이션 비활성화로 사전 로드 생략');
+        debugPrint('InternalCnSegmenterService 초기화 완료: 세그멘테이션 비활성화로 사전 로드 생략');
       }
 
       _isInitialized = true;
       _isInitializing = false;
       _initializationCompleter!.complete();
     } catch (e) {
-      debugPrint('ChineseSegmenterService 초기화 실패: $e');
+      debugPrint('InternalCnSegmenterService 초기화 실패: $e');
       _isInitializing = false;
       _initializationCompleter!.completeError(e);
       throw e;
@@ -306,7 +306,7 @@ class ChineseSegmenterService {
   // 캐시 정리
   void clearCache() {
     _sentenceSplitCache.clear();
-    debugPrint('ChineseSegmenterService: 문장 분리 캐시 정리됨');
+    debugPrint('InternalCnSegmenterService: 문장 분리 캐시 정리됨');
   }
 }
 

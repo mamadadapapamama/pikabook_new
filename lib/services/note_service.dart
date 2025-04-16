@@ -671,373 +671,6 @@ class NoteService {
       await _setBackgroundProcessingState(noteId, false);
     }
   }
-
-  // 자동 노트 제목 생성
-  Future<String> _generateNoteTitle() async {
-    try {
-      // 현재 사용자의 노트 수 가져오기
-      final user = _auth.currentUser;
-      if (user == null) {
-        return '노트 1';
-      }
-
-      // Firestore에서 직접 노트 수 조회
-      final snapshot =
-          await _notesCollection.where('userId', isEqualTo: user.uid).get();
-
-      final noteNumber = snapshot.docs.length + 1;
-      final title = '노트 $noteNumber';
-      debugPrint('자동 노트 제목 생성: $title (현재 노트 수: ${snapshot.docs.length})');
-      return title;
-    } catch (e) {
-      debugPrint('자동 노트 제목 생성 중 오류 발생: $e');
-      // 오류 발생 시 기본값 사용
-      return '노트 1';
-    }
-  }
-
-  // 특정 노트 가져오기
-  Future<Note?> getNoteById(String noteId) async {
-    try {
-      final docSnapshot = await _notesCollection.doc(noteId).get();
-      if (docSnapshot.exists) {
-        return Note.fromFirestore(docSnapshot);
-      }
-      return null;
-    } catch (e) {
-      debugPrint('노트를 가져오는 중 오류가 발생했습니다: $e');
-      throw Exception('노트를 가져오는 중 오류가 발생했습니다: $e');
-    }
-  }
-
-  // 이미지로 노트 생성 (OCR 및 번역 포함)
-  Future<Note?> createNoteWithImage(
-    File imageFile, {
-    String? title,
-    List<String>? tags,
-    String? targetLanguage,
-  }) async {
-    try {
-      // 이미지 업로드
-      final imageUrl = await _imageService.uploadImage(imageFile);
-
-      // 이미지에서 텍스트 추출 (OCR)
-      final extractedText = await _ocrService.extractText(imageFile);
-
-      // 추출된 텍스트 번역
-      final translatedText = await _translationService.translateText(
-        extractedText,
-        targetLanguage: targetLanguage,
-      );
-
-      // 노트 제목 설정 (제공되지 않은 경우 자동 생성)
-      final noteTitle = title ?? await _generateNoteTitle();
-      debugPrint('노트 제목 설정: $noteTitle');
-
-      // 노트 생성 (제목을 유지하고 추출된 텍스트는 페이지에만 사용)
-      final note = await createNote(
-        noteTitle,
-        null, // 이미지 파일은 전달하지 않고 페이지 생성 시 사용
-      );
-
-      if (note?.id != null) {
-        // 첫 번째 페이지 생성 (OCR로 추출된 텍스트를 페이지 내용으로 사용)
-        await _pageService.createPage(
-          noteId: note!.id!,
-          originalText: extractedText,
-          translatedText: translatedText,
-          pageNumber: 0,
-          imageFile: imageFile,
-        );
-      }
-
-      return note;
-    } catch (e) {
-      debugPrint('이미지로 노트 생성 중 오류 발생: $e');
-      throw Exception('이미지로 노트를 생성할 수 없습니다: $e');
-    }
-  }
-
-  /// 플래시카드 추가
-  Future<Map<String, dynamic>> addFlashCard(String noteId, FlashCard flashCard) async {
-    try {
-      // 사용량 제한 확인
-      final canAddFlashcard = await _usageLimitService.incrementFlashcardCount();
-      if (!canAddFlashcard) {
-        return {
-          'success': false,
-          'message': '무료 플래시카드 사용량 한도를 초과했습니다.',
-          'limitExceeded': true,
-        };
-      }
-      
-      // 노트 가져오기
-      final note = await getNoteById(noteId);
-      if (note == null) {
-        return {'success': false, 'message': '노트를 찾을 수 없습니다.'};
-      }
-      
-      // 플래시카드 목록에 추가
-      List<FlashCard> updatedFlashCards = List.from(note.flashCards);
-      
-      // 고유 ID 생성
-      final newFlashCard = flashCard.copyWith(
-        id: flashCard.id ?? const Uuid().v4(),
-      );
-      
-      updatedFlashCards.add(newFlashCard);
-      
-      // Firestore 업데이트
-      await _notesCollection.doc(noteId).update({
-        'flashCards': updatedFlashCards.map((card) => card.toJson()).toList(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      
-      // 캐시된 노트 업데이트
-      final updatedNote = note.copyWith(flashCards: updatedFlashCards);
-      await _cacheService.cacheNote(updatedNote);
-      
-      return {
-        'success': true, 
-        'flashCard': newFlashCard,
-        'message': '플래시카드가 추가되었습니다.'
-      };
-    } catch (e) {
-      debugPrint('플래시카드 추가 중 오류 발생: $e');
-      return {'success': false, 'message': '플래시카드 추가 중 오류: $e'};
-    }
-  }
-
-  // 여러 이미지로 노트 생성 (배치 처리)
-  Future<Map<String, dynamic>> createNoteWithMultipleImages({
-    required List<File> imageFiles,
-    String? title,
-    List<String>? tags,
-    String? targetLanguage,
-    String? noteSpace,
-    Function(int progress)? progressCallback,
-    bool silentProgress = false,
-    bool waitForFirstPageProcessing = false,  // 첫 페이지 처리 완료까지 대기 여부
-  }) async {
-    try {
-      // Firebase 초기화 확인
-      if (Firebase.apps.isEmpty) {
-        debugPrint('Firebase가 초기화되지 않았습니다.');
-        return {'success': false, 'message': 'Firebase가 초기화되지 않았습니다. 앱을 다시 시작해주세요.'};
-      }
-      
-      if (imageFiles.isEmpty) {
-        return {'success': false, 'message': '이미지가 없습니다.'};
-      }
-      
-      // 이미지 파일 유효성 검사
-      List<File> validImageFiles = [];
-      for (var file in imageFiles) {
-        try {
-          if (file.existsSync() && file.lengthSync() > 0) {
-            validImageFiles.add(file);
-          } else {
-            debugPrint('유효하지 않은 이미지 파일: ${file.path}');
-          }
-        } catch (e) {
-          debugPrint('이미지 파일 확인 중 오류: $e');
-          // 오류 발생 시 해당 파일 건너뛰기
-        }
-      }
-      
-      if (validImageFiles.isEmpty) {
-        return {'success': false, 'message': '유효한 이미지가 없습니다.'};
-      }
-      
-      // 유효한 이미지만 사용
-      imageFiles = validImageFiles;
-      
-      // 사용자 확인
-      final user = _auth.currentUser;
-      if (user == null) {
-        return {'success': false, 'message': '로그인이 필요합니다.'};
-      }
-      
-      // 이하 기존 코드 동일
-      // ... existing code ...
-      
-      // 페이지 사용량 제한 확인 - 이미지 수만큼 페이지를 추가할 수 있는지 확인
-      final int pageCount = imageFiles.length;
-      final canAddPages = await _usageLimitService.canAddPage(pageCount);
-      if (!canAddPages) {
-        return {
-          'success': false,
-          'message': '무료 페이지 사용량 한도를 초과했습니다. 관리자에게 문의해주세요.',
-          'limitExceeded': true,
-        };
-      }
-      
-      // OCR 페이지 추가 가능 여부 확인 (단, 페이지가 있으면 일부라도 처리)
-      final canAddOcrPages = await _usageLimitService.canAddOcrPages(pageCount);
-      if (!canAddOcrPages) {
-        return {
-          'success': false,
-          'message': 'OCR 서비스 사용량 한도를 초과했습니다. 관리자에게 문의해주세요.',
-          'limitExceeded': true,
-        };
-      }
-      
-      // OCR 페이지 카운트 증가 (허용된 만큼만 증가)
-      final ocrIncremented = await _usageLimitService.incrementOcrPages(pageCount);
-      
-      // 페이지 카운트 증가 - 이미지 수만큼 증가
-      await _usageLimitService.incrementPageCount(pageCount);
-      
-      // 노트 기본 정보 생성
-      final now = DateTime.now();
-      String defaultTitle = title ?? await _generateNoteTitle();
-      
-      // 1. 노트 생성
-      final Map<String, dynamic> noteData = {
-        'userId': user.uid,
-        'originalText': defaultTitle,
-        'translatedText': '',
-        'isFavorite': false,
-        'flashcardCount': 0,
-        'flashCards': [],
-        'createdAt': now,
-        'updatedAt': now,
-        'tags': tags ?? [],
-        'noteSpace': noteSpace ?? 'default',
-        'imageCount': imageFiles.length, // 전체 이미지 수 설정
-        'pageCount': imageFiles.length, // 페이지 수를 이미지 수와 동일하게 설정
-        'totalPages': imageFiles.length, // 총 페이지 수도 명시적으로 설정
-        'pages': [], // 빈 페이지 배열 초기화
-        'firstPageProcessed': false, // 첫 페이지 처리 상태 추가
-      };
-      
-      // 2. Firestore에 노트 추가
-      final docRef = await _notesCollection.add(noteData);
-      final noteId = docRef.id;
-      
-      // 3. 첫 번째 이미지만 처리하고 나머지는 백그라운드로 전달
-      if (imageFiles.isNotEmpty) {
-        try {
-          // 첫 번째 이미지 업로드
-          String imageUrl = 'images/fallback_image.jpg'; // 기본값으로 fallback 이미지 경로 설정
-          
-          if (imageFiles[0].existsSync() && imageFiles[0].lengthSync() > 0) {
-            try {
-              final tempUrl = await _imageService.uploadImage(imageFiles[0]);
-              
-              // null 또는 빈 문자열이 아닌 경우에만 이미지 URL 업데이트
-              if (tempUrl != null && tempUrl.isNotEmpty) {
-                imageUrl = tempUrl;
-              } else {
-                debugPrint('첫 번째 이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
-              }
-            } catch (uploadError) {
-              debugPrint('첫 번째 이미지 업로드 중 오류: $uploadError - 기본 경로 사용');
-            }
-          } else {
-            debugPrint('첫 번째 이미지가 유효하지 않아 기본 이미지 사용: ${imageFiles[0].path}');
-          }
-          
-          // OCR로 텍스트 추출
-          final extractedText = await _ocrService.extractText(imageFiles[0], skipUsageCount: true);
-          
-          // 텍스트 번역
-          String translatedText = '';
-          if (extractedText.isNotEmpty) {
-            translatedText = await _translationService.translateText(
-              extractedText,
-              targetLanguage: targetLanguage ?? 'ko',
-            );
-          }
-          
-          // 노트에 이미지 URL 추가 (썸네일로 사용)
-          await _notesCollection.doc(noteId).update({
-            'imageUrl': imageUrl,
-            'extractedText': extractedText,
-            'translatedText': translatedText,
-            'firstPageProcessed': true,
-            'updatedAt': DateTime.now(),
-          });
-          
-          // 첫번째 페이지 생성 (이미 처리된 내용으로)
-          final page = await _pageService.createPage(
-            noteId: noteId,
-            originalText: extractedText,
-            translatedText: translatedText,
-            pageNumber: 1,
-            imageFile: imageFiles[0]
-          );
-          
-          // 페이지 ID 목록 초기화
-          List<String> pageIds = [];
-          if (page != null && page.id != null) {
-            pageIds.add(page.id!);
-            
-            // 페이지 캐싱
-            await _cacheService.cachePage(noteId, page);
-          }
-          
-          // 나머지 이미지들도 바로 페이지 생성 (페이지 수만큼만 생성)
-          for (int i = 1; i < imageFiles.length; i++) {
-            // 실제 이미지 처리를 백그라운드에서 하기 위해 빈 페이지만 생성
-            final tempPage = await _pageService.createPage(
-              noteId: noteId,
-              originalText: '',  // 백그라운드에서 업데이트될 예정
-              translatedText: '',
-              pageNumber: i + 1,
-              imageFile: imageFiles[i]
-            );
-            
-            // 페이지 ID 목록에 추가
-            if (tempPage != null && tempPage.id != null) {
-              pageIds.add(tempPage.id!);
-              
-              // 페이지 캐싱
-              await _cacheService.cachePage(noteId, tempPage);
-            }
-          }
-          
-          // 노트 문서에 페이지 ID 목록 업데이트
-          await _notesCollection.doc(noteId).update({
-            'pages': pageIds,
-            'totalPageCount': pageIds.length,
-          });
-          
-          // 진행률 콜백 호출 (첫 페이지 업로드 완료)
-          if (progressCallback != null && !silentProgress) {
-            progressCallback(20); // 20% 진행
-          }
-        } catch (e) {
-          // 첫 페이지 처리 실패 시 페이지 카운트 감소
-          await _usageLimitService.decrementPageCount();
-        }
-      }
-      
-      // 4. 백그라운드에서 나머지 이미지 처리 (비동기)
-      _processAllImagesInBackground(
-        noteId,
-        imageFiles,
-        targetLanguage,
-      );
-      
-      // 5. 노트 정보 반환
-      final docSnapshot = await _notesCollection.doc(noteId).get();
-      final note = Note.fromFirestore(docSnapshot);
-      
-      // 노트를 캐시에 저장
-      await _cacheService.cacheNote(note);
-      
-      return {
-        'success': true,
-        'noteId': noteId,
-        'note': note,
-        'message': '노트가 생성되었습니다.',
-        'isProcessingBackground': imageFiles.length > 1,
-      };
-    } catch (e) {
-      return {'success': false, 'message': '노트 생성 중 오류 발생: $e'};
-    }
-  }
   
   /// 백그라운드에서 모든 이미지 처리 (비동기)
   Future<void> _processAllImagesInBackground(
@@ -1091,175 +724,228 @@ class NoteService {
         existingPageIds = existingPageIds.sublist(0, totalCount);
       }
       
-      // 모든 이미지 처리
-      for (int i = 0; i < imageFiles.length; i++) {
-        File imageFile = imageFiles[i];
-        String? pageId = null;
-        
-        // 기존 페이지 ID가 있으면 사용, 없으면 null
-        if (i < existingPageIds.length) {
-          pageId = existingPageIds[i];
-        }
-        
+      // 첫 번째 이미지 먼저 처리 (우선 순위)
+      if (imageFiles.isNotEmpty) {
         try {
-          // 이미지 업로드
-          String imageUrl = 'images/fallback_image.jpg'; // 기본값 미리 설정
+          final File firstImage = imageFiles[0];
+          String? pageId = existingPageIds.isNotEmpty ? existingPageIds[0] : null;
           
-          if (imageFile.existsSync() && imageFile.lengthSync() > 0) {
-            try {
-              final tempUrl = await _imageService.uploadImage(imageFile);
-              
-              // null 또는 빈 문자열이 아닌 경우에만 이미지 URL 업데이트
-              if (tempUrl != null && tempUrl.isNotEmpty) {
-                imageUrl = tempUrl;
-                debugPrint('이미지 업로드 성공: $imageUrl');
-              } else {
-                debugPrint('이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
-              }
-            } catch (uploadError) {
-              debugPrint('이미지 업로드 중 오류: $uploadError - 기본 경로 사용');
-            }
-          } else {
-            debugPrint('유효하지 않은 이미지 파일이므로 기본 이미지 사용: ${imageFile.path}');
-          }
-
-          // OCR로 텍스트 추출
-          final extractedText = await _ocrService.extractText(imageFile, skipUsageCount: true);
+          // 첫 번째 이미지 처리 및 페이지 생성
+          final result = await _processImageAndCreatePage(
+            noteId,
+            firstImage,
+            pageNumber: 1,
+            pageId: pageId,
+            skipOcrUsageCount: true,
+          );
           
-          // 텍스트 번역
-          String translatedText = '';
-          if (extractedText.isNotEmpty) {
-            translatedText = await _translationService.translateText(
-              extractedText,
-              targetLanguage: targetLanguage ?? 'ko',
-            );
-          }
-          
-          // 기존 페이지 업데이트 또는 새 페이지 생성
-          if (pageId != null) {
-            // 기존 페이지 업데이트
-            await _pageService.updatePageContent(
-              pageId,
-              extractedText,
-              translatedText
-            );
+          if (result['success'] == true) {
+            processedCount++;
             
-            // 이미지 URL 업데이트
-            await _pageService.updatePageImageUrl(pageId, imageUrl);
+            // 첫 페이지 처리 완료 플래그 설정
+            await _notesCollection.doc(noteId).update({
+              'firstPageProcessed': true,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
             
-            // 첫 번째 페이지인 경우 노트 썸네일 업데이트
-            if (i == 0) {
-              await _notesCollection.doc(noteId).update({
-                'imageUrl': imageUrl,
-                'extractedText': extractedText,
-                'translatedText': translatedText,
-                'updatedAt': DateTime.now(),
-                'firstPageProcessed': true,
-              });
-            }
-          } else {
-            // 새 페이지 생성
-            final page = await _pageService.createPage(
-              noteId: noteId,
-              originalText: extractedText,
-              translatedText: translatedText,
-              pageNumber: i + 1,
-              imageFile: imageFile,
-            );
+            // 로컬 저장소에도 첫 페이지 처리 완료 상태 저장
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('first_page_processed_$noteId', true);
             
-            if (page.id != null) {
-              existingPageIds.add(page.id!);
-              
-              // 첫 번째 페이지인 경우 노트 썸네일 업데이트
-              if (i == 0) {
-                await _notesCollection.doc(noteId).update({
-                  'imageUrl': imageUrl,
-                  'extractedText': extractedText,
-                  'translatedText': translatedText,
-                  'updatedAt': DateTime.now(),
-                  'firstPageProcessed': true,
-                });
-              }
-            }
+            debugPrint('첫 번째 페이지 처리 완료 및 플래그 설정');
           }
-          
-          processedCount++;
-          
-          // 처리 상태 업데이트
-          await _notesCollection.doc(noteId).update({
-            'processedImagesCount': processedCount,
-            'updatedAt': DateTime.now(),
-          });
-          
         } catch (e) {
-          debugPrint('이미지 ${i + 1} 처리 중 오류: $e');
+          debugPrint('첫 번째 이미지 처리 중 오류 발생: $e');
           errorCount++;
         }
         
-        // 첫 페이지 처리 완료 시 플래그 설정
-        if (i == 0) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('first_page_processed_$noteId', true);
+        // 나머지 이미지 처리 (두 번째 이미지부터)
+        for (int i = 1; i < imageFiles.length; i++) {
+          try {
+            final File imageFile = imageFiles[i];
+            String? pageId = (i < existingPageIds.length) ? existingPageIds[i] : null;
+            
+            // 이미지 처리 및 페이지 생성
+            final result = await _processImageAndCreatePage(
+              noteId,
+              imageFile,
+              pageNumber: i + 1,
+              pageId: pageId,
+              skipOcrUsageCount: true,
+            );
+            
+            if (result['success'] == true) {
+              processedCount++;
+            } else {
+              errorCount++;
+            }
+          } catch (e) {
+            debugPrint('이미지 ${i+1} 처리 중 오류 발생: $e');
+            errorCount++;
+          }
         }
       }
       
-      // 페이지 ID 목록을 노트 문서에 저장
-      if (existingPageIds.isNotEmpty) {
-        await _notesCollection.doc(noteId).update({
-          'pages': existingPageIds,
-          'totalPageCount': existingPageIds.length,
-          'processedPageCount': processedCount,
-        });
-      }
-      
-      // 모든 이미지 처리 완료 후 플래그 업데이트
+      // 마무리 (백그라운드 처리 상태 업데이트)
       await _setBackgroundProcessingState(noteId, false);
       
-      // 노트 문서에 처리 완료 플래그 추가
+      // 처리 완료 플래그 업데이트
       await _notesCollection.doc(noteId).update({
         'processingCompleted': true,
-        'updatedAt': DateTime.now(),
+        'processedImagesCount': processedCount,
+        'totalImages': totalCount,
+        'updatedAt': FieldValue.serverTimestamp(),
       });
       
       // 처리 완료를 SharedPreferences에 저장하여 UI에 알림
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('pages_updated_$noteId', true);
       await prefs.setInt('updated_page_count_$noteId', processedCount);
+      
+      debugPrint('백그라운드 이미지 처리 완료: 총 $totalCount개, 성공 $processedCount개, 실패 $errorCount개');
     } catch (e) {
-      debugPrint('백그라운드 이미지 처리 중 오류 발생: $e');
-      // 오류가 발생해도 처리 상태 업데이트
-      await _setBackgroundProcessingState(noteId, false);
+      debugPrint('백그라운드 이미지 처리 중 오류: $e');
+      
+      // 백그라운드 처리 상태 업데이트
+      try {
+        await _setBackgroundProcessingState(noteId, false);
+      } catch (stateError) {
+        debugPrint('백그라운드 처리 상태 업데이트 중 오류: $stateError');
+      }
     }
   }
-  
-  /// 백그라운드 처리 취소
-  Future<void> cancelBackgroundProcessing(String noteId) async {
+
+  // 여러 이미지로 노트 생성 (배치 처리) - 간소화 버전
+  Future<Map<String, dynamic>> createNoteWithMultipleImages({
+    required List<File> imageFiles,
+    String? title,
+    List<String>? tags,
+    String? targetLanguage,
+    String? noteSpace,
+    Function(int progress)? progressCallback,
+    bool silentProgress = false,
+    bool waitForFirstPageProcessing = false,
+  }) async {
     try {
-      // 노트 문서 업데이트
-      await _notesCollection.doc(noteId).update({
-        'isProcessingBackground': false,
-        'processingCompleted': true,
-        'updatedAt': DateTime.now(),
-      });
+      // Firebase 초기화 확인
+      if (Firebase.apps.isEmpty) {
+        debugPrint('Firebase가 초기화되지 않았습니다.');
+        return {'success': false, 'message': 'Firebase가 초기화되지 않았습니다. 앱을 다시 시작해주세요.'};
+      }
       
-      // SharedPreferences에서 관련 플래그 정리
-      final prefs = await SharedPreferences.getInstance();
-      final keys = [
-        'processing_note_$noteId',
-        'pages_updated_$noteId',
-        'updated_page_count_$noteId',
-        'first_page_processed_$noteId'
-      ];
+      if (imageFiles.isEmpty) {
+        return {'success': false, 'message': '이미지가 없습니다.'};
+      }
       
-      for (final key in keys) {
-        if (prefs.containsKey(key)) {
-          await prefs.remove(key);
+      // 이미지 파일 유효성 검사
+      List<File> validImageFiles = [];
+      for (var file in imageFiles) {
+        try {
+          if (file.existsSync() && file.lengthSync() > 0) {
+            validImageFiles.add(file);
+          } else {
+            debugPrint('유효하지 않은 이미지 파일: ${file.path}');
+          }
+        } catch (e) {
+          debugPrint('이미지 파일 확인 중 오류: $e');
+          // 오류 발생 시 해당 파일 건너뛰기
         }
       }
       
-      debugPrint('노트 $noteId의 백그라운드 처리를 취소했습니다.');
+      if (validImageFiles.isEmpty) {
+        return {'success': false, 'message': '유효한 이미지가 없습니다.'};
+      }
+      
+      // 유효한 이미지만 사용
+      imageFiles = validImageFiles;
+      
+      // 사용자 확인
+      final user = _auth.currentUser;
+      if (user == null) {
+        return {'success': false, 'message': '로그인이 필요합니다.'};
+      }
+      
+      // 페이지 사용량 제한 확인 - 이미지 수만큼 페이지를 추가할 수 있는지 확인
+      final int pageCount = imageFiles.length;
+      final canAddPages = await _usageLimitService.canAddPage(pageCount);
+      if (!canAddPages) {
+        return {
+          'success': false,
+          'message': '무료 페이지 사용량 한도를 초과했습니다. 관리자에게 문의해주세요.',
+          'limitExceeded': true,
+        };
+      }
+      
+      // OCR 페이지 추가 가능 여부 확인 (단, 페이지가 있으면 일부라도 처리)
+      final canAddOcrPages = await _usageLimitService.canAddOcrPages(pageCount);
+      if (!canAddOcrPages) {
+        return {
+          'success': false,
+          'message': 'OCR 서비스 사용량 한도를 초과했습니다. 관리자에게 문의해주세요.',
+          'limitExceeded': true,
+        };
+      }
+      
+      // OCR 페이지 카운트 증가 (허용된 만큼만 증가)
+      await _usageLimitService.incrementOcrPages(pageCount);
+      
+      // 페이지 카운트 증가 - 이미지 수만큼 증가
+      await _usageLimitService.incrementPageCount(pageCount);
+      
+      // 노트 기본 정보 생성
+      final now = DateTime.now();
+      String defaultTitle = title ?? await _generateNoteTitle();
+      
+      // 1. 노트 생성
+      final Map<String, dynamic> noteData = {
+        'userId': user.uid,
+        'originalText': defaultTitle,
+        'translatedText': '',
+        'isFavorite': false,
+        'flashcardCount': 0,
+        'flashCards': [],
+        'createdAt': now,
+        'updatedAt': now,
+        'tags': tags ?? [],
+        'noteSpace': noteSpace ?? 'default',
+        'imageCount': imageFiles.length, // 전체 이미지 수 설정
+        'pageCount': imageFiles.length, // 페이지 수를 이미지 수와 동일하게 설정
+        'totalPages': imageFiles.length, // 총 페이지 수도 명시적으로 설정
+        'pages': [], // 빈 페이지 배열 초기화
+        'firstPageProcessed': false, // 첫 페이지 처리 상태 추가
+      };
+      
+      // 2. Firestore에 노트 추가 (중요: 노트 ID 즉시 반환)
+      final docRef = await _notesCollection.add(noteData);
+      final noteId = docRef.id;
+      
+      debugPrint('노트 ID 생성 성공: $noteId');
+      
+      // 진행률 콜백 호출 (노트 생성 완료)
+      if (progressCallback != null && !silentProgress) {
+        progressCallback(20); // 20% 진행
+      }
+      
+      // 3. 백그라운드에서 이미지 처리 시작 (비동기적으로 실행)
+      _processAllImagesInBackground(noteId, imageFiles, targetLanguage);
+      
+      // 4. 노트 정보 반환
+      final docSnapshot = await _notesCollection.doc(noteId).get();
+      final note = Note.fromFirestore(docSnapshot);
+      
+      // 노트를 캐시에 저장
+      await _cacheService.cacheNote(note);
+      
+      // 반환값에 noteId를 명확하게 포함시킴
+      return {
+        'success': true,
+        'noteId': noteId,
+        'note': note,
+        'message': '노트가 생성되었습니다.',
+        'isProcessingBackground': true,
+      };
     } catch (e) {
-      debugPrint('백그라운드 처리 취소 중 오류: $e');
+      return {'success': false, 'message': '노트 생성 중 오류 발생: $e'};
     }
   }
 
@@ -1267,7 +953,7 @@ class NoteService {
   Future<Map<String, dynamic>> _processImageAndCreatePage(
     String noteId, 
     File imageFile, 
-    {int pageNumber = 1, String? targetLanguage, bool shouldProcess = true}
+    {int pageNumber = 1, String? pageId, String? targetLanguage, bool shouldProcess = true, bool skipOcrUsageCount = false}
   ) async {
     try {
       // 이미지 업로드
@@ -1290,7 +976,7 @@ class NoteService {
       // shouldProcess가 true일 때만 OCR 및 번역 처리
       if (shouldProcess) {
         // OCR로 텍스트 추출
-        extractedText = await _ocrService.extractText(imageFile, skipUsageCount: true);
+        extractedText = await _ocrService.extractText(imageFile, skipUsageCount: skipOcrUsageCount);
         if (extractedText.isEmpty) {
           debugPrint('OCR 텍스트 추출 실패 또는 텍스트 없음');
         }
@@ -1435,7 +1121,27 @@ class NoteService {
   /// 노트의 첫 페이지 처리 상태 확인
   Future<Map<String, dynamic>> checkFirstPageProcessingStatus(String noteId) async {
     try {
-      // 1. 노트 문서에서 firstPageProcessed 필드 확인
+      // 우선 로컬 저장소 확인 (더 빠름)
+      bool localProcessed = false;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        localProcessed = prefs.getBool('first_page_processed_$noteId') ?? false;
+        
+        // 로컬에서 처리됨으로 나오면 Firestore 확인 건너뛸 수 있음
+        if (localProcessed) {
+          return {
+            'processed': true,
+            'message': '첫 페이지 처리 완료 (로컬)',
+            'firestore': true,  // 최적화를 위해 Firestore 조회 생략
+            'local': true
+          };
+        }
+      } catch (e) {
+        debugPrint('로컬 저장소에서 첫 페이지 처리 상태 확인 중 오류: $e');
+        // 오류가 발생해도 계속 진행
+      }
+      
+      // 필요한 경우에만 Firestore 확인
       final noteDoc = await _notesCollection.doc(noteId).get();
       if (!noteDoc.exists) {
         return {'processed': false, 'message': '노트를 찾을 수 없습니다.'};
@@ -1444,33 +1150,20 @@ class NoteService {
       final data = noteDoc.data() as Map<String, dynamic>;
       final bool firstPageProcessed = data['firstPageProcessed'] ?? false;
       
-      // 2. 로컬 저장소에서도 확인 (중요: 예외 처리 개선)
-      bool localProcessed = false;
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        localProcessed = prefs.getBool('first_page_processed_$noteId') ?? false;
-      } catch (e) {
-        debugPrint('로컬 저장소에서 첫 페이지 처리 상태 확인 중 오류: $e');
-        // 오류가 발생해도 계속 진행
-      }
-      
-      // 둘 중 하나라도 처리 완료로 표시되었으면 처리 완료로 간주
-      final bool isProcessed = firstPageProcessed || localProcessed;
-      
-      // 첫 페이지 처리가 완료되었으면 로컬 저장소에도 표시
-      if (isProcessed) {
+      // 처리 완료 시 로컬 저장소에도 표시 (다음 확인 최적화)
+      if (firstPageProcessed && !localProcessed) {
         try {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('first_page_processed_$noteId', true);
+          debugPrint('첫 페이지 처리 상태를 로컬에 캐싱 완료');
         } catch (e) {
           debugPrint('로컬 저장소에 첫 페이지 처리 상태 저장 중 오류: $e');
-          // 오류가 발생해도 계속 진행
         }
       }
       
       return {
-        'processed': isProcessed,
-        'message': isProcessed ? '첫 페이지 처리 완료' : '첫 페이지 처리 중',
+        'processed': firstPageProcessed,
+        'message': firstPageProcessed ? '첫 페이지 처리 완료' : '첫 페이지 처리 중',
         'firestore': firstPageProcessed,
         'local': localProcessed
       };
@@ -1503,5 +1196,43 @@ class NoteService {
       }
     }
     return true;
+  }
+
+  // 특정 노트 가져오기
+  Future<Note?> getNoteById(String noteId) async {
+    try {
+      final docSnapshot = await _notesCollection.doc(noteId).get();
+      if (docSnapshot.exists) {
+        return Note.fromFirestore(docSnapshot);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('노트를 가져오는 중 오류가 발생했습니다: $e');
+      throw Exception('노트를 가져오는 중 오류가 발생했습니다: $e');
+    }
+  }
+  
+  // 자동 노트 제목 생성
+  Future<String> _generateNoteTitle() async {
+    try {
+      // 현재 사용자의 노트 수 가져오기
+      final user = _auth.currentUser;
+      if (user == null) {
+        return '노트 1';
+      }
+
+      // Firestore에서 직접 노트 수 조회
+      final snapshot =
+          await _notesCollection.where('userId', isEqualTo: user.uid).get();
+
+      final noteNumber = snapshot.docs.length + 1;
+      final title = '노트 $noteNumber';
+      debugPrint('자동 노트 제목 생성: $title (현재 노트 수: ${snapshot.docs.length})');
+      return title;
+    } catch (e) {
+      debugPrint('자동 노트 제목 생성 중 오류 발생: $e');
+      // 오류 발생 시 기본값 사용
+      return '노트 1';
+    }
   }
 }
