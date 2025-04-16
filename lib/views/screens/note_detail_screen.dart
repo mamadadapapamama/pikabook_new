@@ -1,27 +1,23 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/services.dart';
-// import 'package:google_fonts/google_fonts.dart';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import '../../services/note_service.dart';
 import '../../services/page_service.dart';
 import '../../services/image_service.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
-import '../../services/dictionary_service.dart';
+import '../../services/dictionary/dictionary_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/enhanced_ocr_service.dart';
 import '../../services/user_preferences_service.dart';
 import '../../services/page_content_service.dart';
 import '../../widgets/note_action_bottom_sheet.dart';
 import '../../widgets/page_content_widget.dart';
-import '../../widgets/edit_title_dialog.dart';
 import '../../widgets/note_detail_bottom_bar.dart';
 import '../../widgets/note_page_manager.dart';
 import '../../widgets/note_segment_manager.dart';
-// import '../../utils/text_display_mode.dart';
 import 'flashcard_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/unified_cache_service.dart';
@@ -35,18 +31,10 @@ import '../../widgets/common/pika_app_bar.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../widgets/common/help_text_tooltip.dart';
 import '../../theme/tokens/spacing_tokens.dart';
-import '../../theme/tokens/ui_tokens.dart';
-import '../../widgets/flashcard_counter_badge.dart';
-// import 'package:image_picker/image_picker.dart';
-// import '../../widgets/common/usage_dialog.dart';
-// import '../../services/usage_limit_service.dart';
 import '../../utils/debug_utils.dart';
-import 'home_screen.dart';
 import '../../services/translation_service.dart';
-// import '../../models/flash_card.dart';
 import '../../models/processed_text.dart';
-// import 'dart:ui' as ui;
-// import 'package:provider/provider.dart';
+import '../../models/dictionary_entry.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -157,34 +145,49 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   @override
   void dispose() {
-    // 백그라운드 처리 확인 타이머 취소
-    _backgroundCheckTimer?.cancel();
-    _backgroundCheckTimer = null;
+    debugPrint('노트 상세 화면 dispose 호출됨');
     
-    // 스크린샷 경고 타이머 취소
-    _screenshotWarningTimer?.cancel();
-    _screenshotWarningTimer = null;
-    
-    // 스크린샷 감지 중지
-    _screenshotService.stopDetection();
-    
-    // 위젯 바인딩 옵저버 제거
-    WidgetsBinding.instance.removeObserver(this);
-    
-    // 오디오 관련 리소스 정리
-    if (_textReaderService.isPlaying) {
-      _textReaderService.stop();
-    }
-    _ttsService.stop();
-    
-    // 컨트롤러 정리
-    _pageController.dispose();
-    _titleEditingController.dispose();
-    
-    // 이미지 캐시 정리 시도
-    _imageService.clearImageCache();
+    // 리소스 정리
+    _cleanupResources();
     
     super.dispose();
+  }
+
+  // 리소스 정리를 위한 별도 메서드
+  Future<void> _cleanupResources() async {
+    try {
+      // 이미지 캐시 정리
+      await _imageService.clearImageCache();
+      
+      // 메모리 최적화 힌트
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      
+      // 만약 처리 중인 작업이 있다면 취소
+      await _cancelAllPendingTasks();
+    } catch (e) {
+      debugPrint('리소스 정리 중 오류: $e');
+    }
+  }
+  
+  // 진행 중인 모든 작업을 취소
+  Future<void> _cancelAllPendingTasks() async {
+    try {
+      // 진행 중인 백그라운드 작업 취소 시도
+      if (widget.noteId.isNotEmpty) {
+        // TTS 중지
+        _ttsService.stop();
+        // 텍스트 읽기 중지
+        _textReaderService.stop();
+        
+        // 백그라운드 처리 상태를 로컬에서 먼저 업데이트 (UI 용)
+        final prefs = await SharedPreferences.getInstance();
+        final key = 'processing_note_${widget.noteId}';
+        await prefs.setBool(key, false);
+      }
+    } catch (e) {
+      debugPrint('백그라운드 작업 취소 중 오류: $e');
+    }
   }
 
   @override
@@ -955,13 +958,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       } else {
         // 사전에서 단어 정보 찾기
         final dictionaryService = DictionaryService();
-        final dictionaryEntry = dictionaryService.lookupWord(front);
+        final dictionaryResult = await dictionaryService.lookupWord(front);
 
         // 사전에 단어가 있으면 병음과 의미 사용
         final String finalBack;
         final String? finalPinyin;
 
-        if (dictionaryEntry != null) {
+        if (dictionaryResult['success'] == true && dictionaryResult['entry'] != null) {
+          final dictionaryEntry = dictionaryResult['entry'] as DictionaryEntry;
           finalBack = dictionaryEntry.meaning;
           finalPinyin = dictionaryEntry.pinyin;
         } else {
@@ -1364,54 +1368,24 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     return await _imageService.imageExists(imageUrl);
   }
 
-  // 뒤로가기 버튼 처리
+  // 뒤로가기 버튼 처리를 위한 메서드
   Future<bool> _onWillPop() async {
-    // 텍스트 읽기 중이면 먼저 정지
-    if (_textReaderService.isPlaying) {
-      _textReaderService.stop();
-    }
-    
-    // TTS 정지
-    _ttsService.stop();
-    
-    // 홈 화면으로 이동
-    _navigateToHomeScreen();
-    
-    // 기본 뒤로가기 동작 방지
-    return false;
-  }
-  
-  // 홈 화면으로 안전하게 이동
-  void _navigateToHomeScreen() {
-    if (!mounted) return;
-    
-    // 가능한 모든 리소스 정리 시도
-    _cleanupResources();
-    
-    // 컨텍스트가 유효한지 재확인 후 네비게이션
-    if (context.mounted) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
-    }
-  }
-  
-  // 추가 리소스 정리 메서드
-  void _cleanupResources() {
     try {
-      // 오디오 정지
-      _ttsService.stop();
-      _textReaderService.stop();
+      debugPrint('노트 상세 화면에서 뒤로가기 버튼 클릭됨');
       
-      // 이미지 캐시 정리
-      PaintingBinding.instance.imageCache.clear();
+      // 리소스 정리
+      _cleanupResources();
       
-      // 메모리 관련 정리
-      if (Platform.isIOS || Platform.isAndroid) {
-        // GC 힌트 (실제로는 큰 영향 없지만 시도)
-        imageCache.clear();
-        imageCache.clearLiveImages();
-      }
+      // 이전 화면으로 이동 (간소화된 방식)
+      if (!mounted) return true;
+      
+      // 모든 이전 화면을 스택에서 제거하고 홈 화면으로 이동
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      
+      return false; // 기본 뒤로가기 동작 방지
     } catch (e) {
-      debugPrint('리소스 정리 중 오류: $e');
+      debugPrint('뒤로가기 처리 중 오류 발생: $e');
+      return true; // 오류 발생 시 기본 뒤로가기 허용
     }
   }
 
@@ -1419,12 +1393,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
-    // 상태바 아이콘 색상 설정은 initState로 이동하였으므로 여기서 제거
-    
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-      backgroundColor: Colors.white,
+        backgroundColor: Colors.white,
         appBar: PikaAppBar.noteDetail(
           title: _isEditingTitle ? '' : (_note?.originalText ?? '로딩 중'),
               currentPage: _pageManager.currentPageIndex + 1,
@@ -1528,10 +1500,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             ],
           ),
       ),
-      );
-    }
+    );
+  }
 
-    // 메인 UI 구성 (로딩 및 오류 처리 이후)
+  // 메인 UI 구성 (로딩 및 오류 처리 이후)
   Widget _buildBody() {
     final currentImageFile = _pageManager.currentImageFile;
     final String pageNumberText = '${_pageManager.currentPageIndex + 1}/${_pageManager.pages.length}';
@@ -2229,6 +2201,57 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     final originalText = _pageManager.currentPage!.originalText;
     if (originalText.isNotEmpty && originalText != '___PROCESSING___') {
       _ttsService.speak(originalText);
+    }
+  }
+
+  /// 페이지 이미지 로드
+  Future<void> _loadPageImage(int pageIndex) async {
+    try {
+      final pages = _pageManager.pages;
+      if (pages.isEmpty || pageIndex >= pages.length) {
+        return;
+      }
+      
+      final page = pages[pageIndex];
+      if (page.imageUrl == null || page.imageUrl!.isEmpty) {
+        debugPrint('페이지 ${pageIndex + 1}에 이미지 URL이 없습니다.');
+        return;
+      }
+      
+      // 이미지 서비스를 통해 이미지 가져오기
+      debugPrint('페이지 ${pageIndex + 1} 이미지 로드 시작: ${page.imageUrl}');
+      final imageFile = await _imageService.getImageFile(page.imageUrl);
+      
+      // 이미지 파일이 없거나 빈 파일인 경우 다시 다운로드 시도
+      if (imageFile == null || !await imageFile.exists() || await imageFile.length() == 0) {
+        debugPrint('이미지 파일이 존재하지 않거나 비어있습니다. 다시 다운로드 시도');
+        
+        // Firebase Storage에서 직접 다운로드 시도
+        final redownloadedFile = await _imageService.downloadImage(page.imageUrl!);
+        
+        if (mounted) {
+          setState(() {
+            _imageFile = redownloadedFile;
+          });
+        }
+        return;
+      }
+      
+      // 위젯이 마운트된 상태인지 확인
+      if (mounted) {
+        setState(() {
+          _imageFile = imageFile;
+        });
+      }
+    } catch (e) {
+      debugPrint('페이지 이미지 로드 중 오류: $e');
+      
+      // 오류가 발생해도 상태 업데이트
+      if (mounted) {
+        setState(() {
+          _imageFile = null;
+        });
+      }
     }
   }
 }

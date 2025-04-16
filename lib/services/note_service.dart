@@ -452,7 +452,7 @@ class NoteService {
   }
 
   // 백그라운드 처리 상태 설정
-  Future<void> _setBackgroundProcessingStatus(
+  Future<void> _setBackgroundProcessingState(
       String noteId, bool isProcessing) async {
     try {
       // SharedPreferences에 상태 저장 (임시)
@@ -497,12 +497,12 @@ class NoteService {
       debugPrint('백그라운드 처리 시작: ${imageFiles.length}개 이미지의 내용 채우기');
 
       // 백그라운드 처리 상태 설정
-      await _setBackgroundProcessingStatus(noteId, true);
+      await _setBackgroundProcessingState(noteId, true);
 
       if (imageFiles.length != pageIds.length) {
         debugPrint(
             '이미지 수와 페이지 ID 수가 일치하지 않습니다: 이미지 ${imageFiles.length}개, 페이지 ID ${pageIds.length}개');
-        await _setBackgroundProcessingStatus(noteId, false);
+        await _setBackgroundProcessingState(noteId, false);
         return;
       }
 
@@ -658,7 +658,7 @@ class NoteService {
       }
 
       // 백그라운드 처리 상태 업데이트
-      await _setBackgroundProcessingStatus(noteId, false);
+      await _setBackgroundProcessingState(noteId, false);
 
       // 모든 이미지 처리 완료 후 플래그 업데이트
       await _notesCollection.doc(noteId).update({
@@ -668,7 +668,7 @@ class NoteService {
       });
     } catch (e) {
       debugPrint('백그라운드 페이지 내용 채우기 중 오류 발생: $e');
-      await _setBackgroundProcessingStatus(noteId, false);
+      await _setBackgroundProcessingState(noteId, false);
     }
   }
 
@@ -1055,7 +1055,7 @@ class NoteService {
       }
       
       // 백그라운드 처리 상태 설정
-      await _setNoteBackgroundProcessingState(noteId, true);
+      await _setBackgroundProcessingState(noteId, true);
       
       final totalCount = imageFiles.length;
       int processedCount = 0;
@@ -1213,7 +1213,7 @@ class NoteService {
       }
       
       // 모든 이미지 처리 완료 후 플래그 업데이트
-      await _setNoteBackgroundProcessingState(noteId, false);
+      await _setBackgroundProcessingState(noteId, false);
       
       // 노트 문서에 처리 완료 플래그 추가
       await _notesCollection.doc(noteId).update({
@@ -1228,20 +1228,38 @@ class NoteService {
     } catch (e) {
       debugPrint('백그라운드 이미지 처리 중 오류 발생: $e');
       // 오류가 발생해도 처리 상태 업데이트
-      await _setNoteBackgroundProcessingState(noteId, false);
+      await _setBackgroundProcessingState(noteId, false);
     }
   }
   
-  /// 노트의 백그라운드 처리 상태 설정
-  Future<void> _setNoteBackgroundProcessingState(String noteId, bool isProcessing) async {
+  /// 백그라운드 처리 취소
+  Future<void> cancelBackgroundProcessing(String noteId) async {
     try {
+      // 노트 문서 업데이트
       await _notesCollection.doc(noteId).update({
-        'isProcessingBackground': isProcessing,
+        'isProcessingBackground': false,
+        'processingCompleted': true,
+        'updatedAt': DateTime.now(),
       });
       
-      debugPrint('백그라운드 처리 상태 설정: $noteId, 처리 중: $isProcessing');
+      // SharedPreferences에서 관련 플래그 정리
+      final prefs = await SharedPreferences.getInstance();
+      final keys = [
+        'processing_note_$noteId',
+        'pages_updated_$noteId',
+        'updated_page_count_$noteId',
+        'first_page_processed_$noteId'
+      ];
+      
+      for (final key in keys) {
+        if (prefs.containsKey(key)) {
+          await prefs.remove(key);
+        }
+      }
+      
+      debugPrint('노트 $noteId의 백그라운드 처리를 취소했습니다.');
     } catch (e) {
-      debugPrint('백그라운드 처리 상태 설정 중 오류 발생: $e');
+      debugPrint('백그라운드 처리 취소 중 오류: $e');
     }
   }
 

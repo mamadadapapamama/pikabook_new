@@ -280,13 +280,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 final note = viewModel.notes[index];
                                 return NoteListItem(
                                   note: note,
-                                  onTap: () => _navigateToNoteDetail(context, note.id!),
-                                  onFavoriteToggle: (isFavorite) {
-                                    if (note.id != null) {
-                                      viewModel.toggleFavorite(note.id!, isFavorite);
-                                    }
+                                  onNoteTapped: (noteId) => _navigateToNoteDetail(context, noteId),
+                                  onFavoriteToggled: (noteId, isFavorite) {
+                                    viewModel.toggleFavorite(noteId, isFavorite);
                                   },
-                                  onDelete: () {
+                                  onDismissed: () {
                                     if (note.id != null) {
                                       viewModel.deleteNote(note.id!);
                                     }

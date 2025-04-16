@@ -5,7 +5,7 @@ import '../models/processed_text.dart';
 import '../services/page_service.dart';
 import '../services/enhanced_ocr_service.dart';
 import '../services/tts_service.dart';
-import '../services/dictionary_service.dart';
+import '../services/dictionary/dictionary_service.dart';
 import '../models/dictionary_entry.dart';
 import '../models/text_segment.dart';
 import '../models/flash_card.dart';
@@ -317,22 +317,19 @@ class PageContentService {
 
   // 사전 검색
   Future<DictionaryEntry?> lookupWord(String word) async {
-    // 사전 서비스에서 단어 검색
-    final entry = _dictionaryService.lookupWord(word);
+    try {
+      // 사전 서비스에서 단어 검색
+      final result = await _dictionaryService.lookupWord(word);
 
-    if (entry == null) {
-      // 사전에 없는 단어일 경우 Papago API로 검색 시도
-      debugPrint('사전에 없는 단어, Papago API로 검색 시도: $word');
-      final fallbackResult = await _dictionaryService.lookupWordWithFallback(word);
-      
       // 결과에서 entry 추출하여 반환
-      if (fallbackResult['success'] == true && fallbackResult['entry'] != null) {
-        return fallbackResult['entry'];
+      if (result['success'] == true && result['entry'] != null) {
+        return result['entry'] as DictionaryEntry;
       }
       return null;
+    } catch (e) {
+      debugPrint('단어 검색 중 오류 발생: $e');
+      return null;
     }
-
-    return entry;
   }
 
   Future<ProcessedText> processText(String originalText, String translatedText,

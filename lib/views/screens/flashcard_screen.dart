@@ -8,7 +8,7 @@ import '../../models/note.dart';
 import '../../services/flashcard_service.dart' hide debugPrint;
 import '../../services/tts_service.dart';
 import '../../widgets/dot_loading_indicator.dart';
-import '../../services/chinese_dictionary_service.dart';
+import '../../services/dictionary/internal_cn_dictionary_service.dart';
 import '../../widgets/flashcard_ui.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
@@ -34,8 +34,8 @@ class FlashCardScreen extends StatefulWidget {
 class _FlashCardScreenState extends State<FlashCardScreen> {
   final FlashCardService _flashCardService = FlashCardService();
   final TtsService _ttsService = TtsService();
-  final ChineseDictionaryService _dictionaryService =
-      ChineseDictionaryService();
+  final InternalCnDictionaryService _dictionaryService =
+      InternalCnDictionaryService();
   final CardSwiperController _cardController = CardSwiperController();
   final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
 

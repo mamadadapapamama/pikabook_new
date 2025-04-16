@@ -1,41 +1,50 @@
-import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:flutter/material.dart';
 
-/// 로딩 다이얼로그를 표시하는 유틸리티 클래스
-///
-/// 장시간의 작업이 진행될 때 전체 화면을 덮는 로딩 다이얼로그를 표시합니다.
-/// 내부적으로 PikabookLoader를 사용하여 디자인에 맞게 구현되었습니다.
+/// 로딩 다이얼로그 클래스
+/// 앱 전체에서 로딩 표시에 사용됨
 class LoadingDialog {
   static OverlayEntry? _overlayEntry;
+  static bool _isVisible = false;
   
-  /// 로딩 다이얼로그를 표시하는 정적 메서드
+  /// 로딩 다이얼로그 표시
   static void show(BuildContext context, {String message = '로딩 중...'}) {
-    // 이미 표시 중이면 닫고 다시 열기
-    hide(context);
+    debugPrint('로딩 다이얼로그 표시 요청: $message');
     
+    // 이미 표시 중이면 무시
+    if (_isVisible) {
+      debugPrint('로딩 다이얼로그가 이미 표시 중입니다');
+      return;
+    }
+    
+    // 오버레이 항목 생성
     _overlayEntry = OverlayEntry(
       builder: (context) => _LoadingOverlay(message: message),
     );
     
-    if (_overlayEntry != null && context.mounted) {
-      try {
-        Overlay.of(context).insert(_overlayEntry!);
-      } catch (e) {
-        debugPrint('로딩 다이얼로그 표시 중 오류: $e');
-      }
+    // 오버레이에 추가
+    if (_overlayEntry != null) {
+      Overlay.of(context).insert(_overlayEntry!);
+      _isVisible = true;
+      debugPrint('로딩 다이얼로그가 표시되었습니다');
     }
   }
   
-  /// 로딩 다이얼로그를 닫는 정적 메서드
-  static void hide(BuildContext context) {
+  /// 로딩 다이얼로그 숨기기
+  static void hide() {
+    debugPrint('로딩 다이얼로그 숨김 요청');
+    
     if (_overlayEntry != null) {
-      try {
-        _overlayEntry!.remove();
-        _overlayEntry = null;
-      } catch (e) {
-        debugPrint('로딩 다이얼로그 닫기 중 오류: $e');
-      }
+      _overlayEntry!.remove();
+      _overlayEntry = null;
+      _isVisible = false;
+      debugPrint('로딩 다이얼로그가 숨겨졌습니다');
     }
+  }
+  
+  /// 로딩 다이얼로그 표시 여부 확인
+  static bool isShowing() {
+    return _isVisible;
   }
 }
 
@@ -48,43 +57,38 @@ class _LoadingOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black.withOpacity(0.7),
-      child: Center(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+      color: Colors.black.withOpacity(0.5),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
+        child: Center(
           child: Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(8),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 15,
-                  spreadRadius: 2,
-                )
-              ]
+                  color: Colors.black26,
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-                    strokeWidth: 4.0,
-                  ),
+                  width: 40, 
+                  height: 40,
+                  child: CircularProgressIndicator(),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   message,
                   style: const TextStyle(
-                    color: Colors.black87,
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w500,
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ],
             ),

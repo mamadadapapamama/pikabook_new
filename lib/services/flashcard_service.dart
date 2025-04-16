@@ -5,8 +5,8 @@ import 'package:uuid/uuid.dart';
 import '../models/flash_card.dart';
 import '../models/dictionary_entry.dart';
 import 'package:pinyin/pinyin.dart';
-import 'dictionary_service.dart';
-import 'chinese_dictionary_service.dart';
+import 'dictionary/dictionary_service.dart';
+import 'dictionary/internal_cn_dictionary_service.dart';
 import 'pinyin_creation_service.dart';
 import 'usage_limit_service.dart';
 
@@ -17,8 +17,8 @@ class FlashCardService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
   final DictionaryService _dictionaryService = DictionaryService();
-  final ChineseDictionaryService _chineseDictionaryService =
-      ChineseDictionaryService();
+  final InternalCnDictionaryService _chineseDictionaryService =
+      InternalCnDictionaryService();
   final PinyinCreationService _pinyinService = PinyinCreationService();
   final UsageLimitService _usageLimitService = UsageLimitService();
 
@@ -56,7 +56,7 @@ class FlashCardService {
       String pinyinValue = pinyin ?? '';
 
       // 1. 먼저 사전에서 단어 검색
-      final dictResult = await _dictionaryService.lookupWordWithFallback(front);
+      final dictResult = await _dictionaryService.lookupWord(front);
       
       // 2. 사전에서 찾은 경우
       if (dictResult['success'] == true && dictResult['entry'] != null) {

@@ -1,14 +1,12 @@
-// MARK: 다국어 지원을 위한 확장 포인트
-// 이 서비스는 향후 다국어 지원을 위해 리팩토링될 예정입니다.
-// 현재는 중국어 분절만 지원합니다.
-// 향후 각 언어별 분절 서비스로 분리될 예정입니다.
+// 현재는 중국어 문장 분절만 지원합니다.
+// 향후 각 언어별 분절 서비스로 분리될 예정입니다. 
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'chinese_dictionary_service.dart';
-import 'dictionary_service.dart';
-import 'package:pinyin/pinyin.dart';
+import 'dictionary/internal_cn_dictionary_service.dart';
 
+/// 중국어 텍스트를 문장 단위로 분절하는 서비스
+/// 문장 분할, 문단 처리 등의 기능만 담당합니다
 class ChineseSegmenterService {
   static final ChineseSegmenterService _instance =
       ChineseSegmenterService._internal();
@@ -17,16 +15,10 @@ class ChineseSegmenterService {
     return _instance;
   }
 
-  ChineseSegmenterService._internal() {
-    // 사전 업데이트 리스너 등록
-    _fallbackDictionaryService
-        .addDictionaryUpdateListener(_onDictionaryUpdated);
-  }
+  ChineseSegmenterService._internal();
 
-  final ChineseDictionaryService _dictionaryService =
-      ChineseDictionaryService();
-
-  final DictionaryService _fallbackDictionaryService = DictionaryService();
+  // 단어 목록을 가져오기 위한 중국어 사전 서비스 참조
+  final InternalCnDictionaryService _dictionaryService = InternalCnDictionaryService();
 
   // 세그멘테이션 활성화 여부 플래그 추가
   static bool isSegmentationEnabled = false; // MVP에서는 비활성화
@@ -52,12 +44,6 @@ class ChineseSegmenterService {
   final Map<String, List<String>> _sentenceSplitCache = {};
   final int _maxCacheSize = 100; // 최대 캐시 항목 수
 
-  // 사전 업데이트 감지 시 호출되는 콜백
-  void _onDictionaryUpdated() {
-    debugPrint('ChineseSegmenterService: 사전 업데이트 감지됨');
-    // 필요한 경우 캐시 초기화 등의 작업 수행
-  }
-
   // 지연 로딩 방식으로 초기화 개선
   Future<void> initialize() async {
     // 이미 초기화되었으면 바로 반환
@@ -75,7 +61,7 @@ class ChineseSegmenterService {
     try {
       debugPrint('ChineseSegmenterService 초기화 시작...');
 
-      // 사전 로드 (필요한 경우에만)
+      // 사전 로드 (단어 분절을 위해 필요한 경우에만)
       if (isSegmentationEnabled) {
         await _dictionaryService.loadDictionary();
         debugPrint('ChineseSegmenterService 초기화 완료: 사전 로드됨');
@@ -94,72 +80,28 @@ class ChineseSegmenterService {
     }
   }
 
-  // 중국어 텍스트 분절 및 사전 정보 추가
-  Future<List<SegmentedWord>> processText(String text) async {
-    // 세그멘테이션이 비활성화된 경우 초기화 없이 바로 처리
+  /// 중국어 문장 분절
+  List<String> segmentText(String text) {
+    // 세그멘테이션이 비활성화된 경우
     if (!isSegmentationEnabled) {
-      return [SegmentedWord(text: text, pinyin: '', meaning: '')];
+      return [text];
     }
-
-    // 필요한 경우에만 초기화
-    await initialize();
-
-    // 각 단어에 사전 정보 추가
-    List<SegmentedWord> result = [];
-
-    // 비동기 처리를 위한 Future 목록
-    List<Future<SegmentedWord>> futures = [];
-
-    for (String segment in _segmentText(text)) {
-      futures.add(_processSegment(segment));
+    
+    List<String> words = [];
+    
+    try {
+      // 메서드가 존재하면 사용
+      words = _dictionaryService.getWords();
+    } catch (e) {
+      debugPrint('단어 목록 가져오기 실패: $e');
+      // 안전하게 빈 목록 사용
+      words = [];
     }
-
-    // 모든 비동기 작업이 완료될 때까지 대기
-    result = await Future.wait(futures);
-
-    return result;
-  }
-
-  // 개별 단어 처리 (비동기)
-  Future<SegmentedWord> _processSegment(String segment) async {
-    // 1. 앱 내 JSON 사전에서 검색
-    final entry = _dictionaryService.lookup(segment);
-
-    if (entry != null) {
-      // JSON 사전에서 찾은 경우
-      return SegmentedWord(
-        text: segment,
-        meaning: entry.meaning,
-        pinyin: entry.pinyin,
-      );
-    } else {
-      // 2. 폴백 사전 서비스 사용 (DictionaryService)
-      final fallbackResult =
-          await _fallbackDictionaryService.lookupWordWithFallback(segment);
-
-      if (fallbackResult['success'] == true && fallbackResult['entry'] != null) {
-        // 폴백 사전에서 찾은 경우
-        final entry = fallbackResult['entry'];
-        return SegmentedWord(
-          text: segment,
-          meaning: entry.meaning,
-          pinyin: entry.pinyin,
-          source: 'external',
-        );
-      } else {
-        // 3. 사전에 없는 경우 - 외부 사전 서비스 필요
-        return SegmentedWord(
-          text: segment,
-          meaning: '사전에 없는 단어',
-          pinyin: '',
-        );
-      }
+    
+    // 단어 목록이 비어있으면 문자별로 분리
+    if (words.isEmpty) {
+      return text.split('');
     }
-  }
-
-  // 중국어 문장 분절
-  List<String> _segmentText(String text) {
-    final words = _dictionaryService.getWords();
 
     // 최장 일치 알고리즘 (Forward Maximum Matching)
     List<String> result = [];
@@ -194,6 +136,7 @@ class ChineseSegmenterService {
     return result;
   }
 
+  // 단어가 사전에 있는지 확인 (하위 호환성 유지)
   bool isWordInDictionary(String word) {
     // 사전이 초기화되지 않았으면 초기화
     if (!_isInitialized) {
@@ -206,71 +149,6 @@ class ChineseSegmenterService {
     final result = _dictionaryService.lookup(word) != null;
     debugPrint('단어 "$word" 사전 확인 결과: ${result ? "있음" : "없음"}');
     return result;
-  }
-
-  // 유저가 선택한 단어 처리 메서드 추가
-  Future<SegmentedWord> processSelectedWord(String word) async {
-    await initialize();
-
-    // 1. 앱 내 JSON 사전에서 검색
-    final entry = _dictionaryService.lookup(word);
-
-    if (entry != null) {
-      // JSON 사전에서 찾은 경우
-      return SegmentedWord(
-        text: word,
-        meaning: entry.meaning,
-        pinyin: entry.pinyin,
-      );
-    } else {
-      // 2. 폴백 사전 서비스 사용 (DictionaryService)
-      final fallbackResult =
-          await _fallbackDictionaryService.lookupWordWithFallback(word);
-
-      if (fallbackResult['success'] == true && fallbackResult['entry'] != null) {
-        // 폴백 사전에서 찾은 경우
-        final entry = fallbackResult['entry'];
-        String pinyin = entry.pinyin;
-        
-        // 핀인이 비어있으면 생성
-        if (pinyin.isEmpty) {
-          pinyin = await _generatePinyin(word);
-        }
-        
-        return SegmentedWord(
-          text: word,
-          meaning: entry.meaning,
-          pinyin: pinyin,
-          source: entry.source ?? 'external',
-        );
-      } else {
-        // 3. 사전에 없는 경우 - 외부 사전 서비스 필요
-        // 핀인 생성 시도
-        String pinyin = '';
-        try {
-          pinyin = await _generatePinyin(word);
-        } catch (e) {
-          debugPrint('핀인 생성 중 오류 발생: $e');
-        }
-
-        return SegmentedWord(
-          text: word,
-          meaning: '사전에 없는 단어',
-          pinyin: pinyin,
-        );
-      }
-    }
-  }
-
-  // 핀인 생성 메서드
-  Future<String> _generatePinyin(String text) async {
-    try {
-      // pinyin 패키지 사용
-      return PinyinHelper.getPinyin(text, separator: ' ');
-    } catch (e) {
-      debugPrint('핀인 생성 중 오류 발생: $e');
-      return '';
-    }
   }
 
   /// 텍스트를 문장 단위로 분리 (최적화 버전)
@@ -432,17 +310,13 @@ class ChineseSegmenterService {
   }
 }
 
-// 분절된 단어 클래스
-class SegmentedWord {
+// 세그먼트된 문장 정보
+class SegmentedSentence {
   final String text;
-  final String meaning;
-  final String pinyin;
-  final String? source;
-
-  SegmentedWord({
+  final bool isChapter;
+  
+  SegmentedSentence({
     required this.text,
-    required this.meaning,
-    required this.pinyin,
-    this.source,
+    this.isChapter = false,
   });
 }
