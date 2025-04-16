@@ -270,58 +270,99 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     }
     
     debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
+    String? createdNoteId;
     
     try {
-      // 로딩 다이얼로그 표시
+      // 로딩 다이얼로그 표시 - 초기 메시지
       if (mounted) {
-        LoadingDialog.show(context, message: '노트 생성 중...');
+        LoadingDialog.show(context, message: '노트 생성 준비 중...');
       }
       
       // 노트 생성 호출
       final result = await _noteService.createNoteWithMultipleImages(
         imageFiles: imageFiles,
-        waitForFirstPageProcessing: true,
+        waitForFirstPageProcessing: false, // 기다리지 않고 직접 폴링으로 확인
+        progressCallback: (int progress) {
+          debugPrint('노트 생성 진행률: $progress%');
+          // 진행 상황에 따라 로딩 메시지 업데이트
+          if (mounted && progress > 0) {
+            // 기존 다이얼로그 닫고 새로운 메시지로 다시 표시
+            LoadingDialog.hide();
+            Future.microtask(() {
+              if (mounted) {
+                LoadingDialog.show(context, message: '노트 생성 중... $progress%');
+              }
+            });
+          }
+        },
       );
       
-      // 로딩 다이얼로그 숨기기
-      LoadingDialog.hide();
-      
-      // 결과 처리
-      if (result['success'] == true) {
-        final String? createdNoteId = result['noteId'] as String?;
+      // 노트 생성 성공 확인
+      if (result['success'] == true && result['noteId'] != null) {
+        createdNoteId = result['noteId'] as String;
+        debugPrint('노트 ID 생성 성공: $createdNoteId');
         
-        if (createdNoteId != null && createdNoteId.isNotEmpty) {
-          if (mounted) {
-            // 약간의 지연 후 노트 상세 화면으로 이동
-            await Future.delayed(const Duration(milliseconds: 300));
-            
+        if (mounted) {
+          // 로딩 메시지 업데이트
+          LoadingDialog.hide();
+          Future.microtask(() {
             if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => NoteDetailScreen(noteId: createdNoteId),
-                ),
-              );
+              LoadingDialog.show(context, message: '첫 페이지 처리 중...');
             }
-          }
-        } else {
-          debugPrint('생성된 노트 ID가 유효하지 않음');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('노트 생성에 실패했습니다. 다시 시도해 주세요.')),
-            );
+          });
+        }
+        
+        // 첫 번째 페이지 처리 완료 확인 (최대 10초)
+        bool firstPageProcessed = false;
+        int attempts = 0;
+        const maxAttempts = 20; // 10초 (0.5초 간격으로 20번)
+        
+        while (!firstPageProcessed && attempts < maxAttempts && mounted) {
+          attempts++;
+          
+          try {
+            final statusResult = await _noteService.checkFirstPageProcessingStatus(createdNoteId);
+            firstPageProcessed = statusResult['processed'] == true;
+            
+            if (firstPageProcessed) {
+              debugPrint('첫 번째 페이지 처리 완료: $createdNoteId (시도: $attempts)');
+              break;
+            }
+            
+            // 진행 메시지 업데이트 (5번마다)
+            if (attempts % 5 == 0 && mounted) {
+              LoadingDialog.hide();
+              // microtask를 사용하여 현재 실행 스택이 완료된 후 UI 업데이트
+              Future.microtask(() {
+                if (mounted) {
+                  LoadingDialog.show(context, message: '첫 페이지 처리 중... (${attempts / 2}초)');
+                }
+              });
+            }
+            
+            // 0.5초 대기
+            await Future.delayed(const Duration(milliseconds: 500));
+          } catch (e) {
+            debugPrint('첫 번째 페이지 처리 상태 확인 중 오류: $e');
+            break; // 오류 발생 시 루프 종료
           }
         }
       } else {
+        // 노트 생성 실패
+        debugPrint('노트 생성 결과 실패: ${result['message']}');
+        
+        // 로딩 다이얼로그 숨기기
+        LoadingDialog.hide();
+        
         // 실패 메시지 표시
         final String errorMessage = result['message'] as String? ?? '노트 생성에 실패했습니다.';
-        debugPrint('노트 생성 실패: $errorMessage');
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(errorMessage)),
+            SnackBar(content: Text('노트 생성 실패: $errorMessage')),
           );
         }
+        return; // 노트 생성 실패 시 여기서 종료
       }
     } catch (e) {
       // 로딩 다이얼로그 숨기기
@@ -330,9 +371,30 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       debugPrint('노트 생성 중 예외 발생: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('노트 생성 중 오류: $e')),
+          SnackBar(content: Text('노트 생성 중 오류가 발생했습니다')),
         );
       }
+      return; // 오류 발생 시 여기서 종료
+    }
+    
+    // 로딩 다이얼로그 숨기기 - 반드시 마지막에 한번 더 확인
+    LoadingDialog.hide();
+    
+    // 정상적으로 노트가 생성되었으면 노트 상세 화면으로 이동
+    if (createdNoteId != null && createdNoteId.isNotEmpty && mounted) {
+      debugPrint('노트 생성 후 상세 화면으로 이동: $createdNoteId');
+      
+      // nullability 오류를 해결하기 위해 로컬 변수에 할당
+      final String noteId = createdNoteId;
+      
+      // 이전 화면들을 모두 대체하여 사용자가 뒤로가기 시 홈 화면으로 돌아가도록 함
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (context) => NoteDetailScreen(noteId: noteId),
+        ),
+        (route) => route.isFirst, // 첫 번째 루트(홈 화면)만 남김
+      );
     }
   }
 } 
