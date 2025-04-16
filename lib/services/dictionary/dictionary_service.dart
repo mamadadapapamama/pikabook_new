@@ -10,6 +10,13 @@ import './external_cn_dictionary_service.dart';
 /// 범용 사전 서비스
 /// 여러 언어의 사전 기능을 통합 관리합니다.
 
+/// 외부 사전 유형 (구글, 네이버, 바이두)
+enum ExternalDictType {
+  google,
+  naver,
+  baidu,
+}
+
 class DictionaryService {
   // 싱글톤 패턴 구현
   static final DictionaryService _instance = DictionaryService._internal();
@@ -177,6 +184,18 @@ class DictionaryService {
       debugPrint('사전 캐시 정리 완료');
     } catch (e) {
       debugPrint('사전 캐시 정리 중 오류 발생: $e');
+    }
+  }
+
+  /// 외부 사전 열기
+  /// [word] 검색할 단어
+  /// [type] 사전 타입 (구글, 네이버, 바이두)
+  String getExternalDictionaryUrl(String word, ExternalDictType type) {
+    if (_currentLanguage == 'zh-CN') {
+      final cnDictType = ExternalCnDictType.values[type.index];
+      return _externalCnDictionaryService.getExternalDictionaryUrl(word, cnDictType);
+    } else {
+      throw UnsupportedError('지원되지 않는 언어입니다: $_currentLanguage');
     }
   }
 }

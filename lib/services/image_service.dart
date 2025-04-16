@@ -645,4 +645,82 @@ class ImageService {
       debugPrint('이미지 캐시 정리 중 오류: $e');
     }
   }
+
+  /// 이미지 선택 (갤러리) - 대체 메서드
+  /// 일반 ImagePicker가 작동하지 않을 때 사용
+  Future<File?> pickImageAlternative({ImageSource source = ImageSource.gallery}) async {
+    try {
+      debugPrint('이미지 선택 시작 (단순화된 메서드): $source');
+      
+      // 단순화된 이미지 피커 구현
+      final ImagePicker picker = ImagePicker();
+      
+      // 기본 옵션만 사용하여 이미지 선택 (최소 옵션)
+      final XFile? pickedFile = await picker.pickImage(source: source);
+      
+      // 선택 취소 처리
+      if (pickedFile == null) {
+        debugPrint('이미지 선택 취소됨');
+        return null;
+      }
+      
+      // 파일 변환 및 확인
+      final File file = File(pickedFile.path);
+      if (!file.existsSync()) {
+        debugPrint('선택된 파일이 존재하지 않음: ${file.path}');
+        return null;
+      }
+      
+      final int fileSize = file.lengthSync();
+      if (fileSize <= 0) {
+        debugPrint('선택된 파일의 크기가 0 또는 음수: $fileSize');
+        return null;
+      }
+      
+      debugPrint('이미지 선택 성공: ${file.path} (${fileSize}바이트)');
+      return file;
+    } catch (e) {
+      debugPrint('이미지 선택 중 예외 발생: $e');
+      return null;
+    }
+  }
+  
+  /// 여러 이미지 선택 (갤러리) - 대체 메서드
+  Future<List<File>> pickMultipleImagesAlternative() async {
+    try {
+      debugPrint('다중 이미지 선택 시작 (단순화된 메서드)');
+      
+      // 단순화된 이미지 피커 구현
+      final ImagePicker picker = ImagePicker();
+      
+      // 기본 옵션으로 이미지 선택
+      final List<XFile>? pickedFiles = await picker.pickMultiImage();
+      
+      // 선택 취소 또는 실패 처리
+      if (pickedFiles == null || pickedFiles.isEmpty) {
+        debugPrint('이미지가 선택되지 않음');
+        return [];
+      }
+      
+      // 파일 변환 및 검증
+      final List<File> validFiles = [];
+      
+      for (final XFile pickedFile in pickedFiles) {
+        final File file = File(pickedFile.path);
+        
+        if (file.existsSync() && file.lengthSync() > 0) {
+          validFiles.add(file);
+          debugPrint('유효한 이미지 추가: ${file.path}');
+        } else {
+          debugPrint('유효하지 않은 이미지 무시: ${file.path}');
+        }
+      }
+      
+      debugPrint('총 ${validFiles.length}개의 이미지가 선택됨');
+      return validFiles;
+    } catch (e) {
+      debugPrint('다중 이미지 선택 중 오류: $e');
+      return [];
+    }
+  }
 }

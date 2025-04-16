@@ -37,9 +37,9 @@ dependencies:
   cupertino_icons: ^1.0.8
 
   # Firebase 패키지 (최신 버전 사용)
-  firebase_core: 3.11.0  # 최신 버전으로 업데이트
+  firebase_core: ^3.11.0  # 최신 버전으로 업데이트
   firebase_auth: ^5.4.2   # 최신 버전으로 업데이트
-  cloud_firestore: 5.6.3 # 최신 버전으로 업데이트
+  cloud_firestore: ^5.6.3 # 최신 버전으로 업데이트
   firebase_storage: ^12.4.2 # Firebase Storage 지원 추가 (호환 버전)
   # 기타 필요한 Firebase 패키지...
   

@@ -11,7 +11,6 @@ import '../widgets/common/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/usage_limit_service.dart';
 import 'dart:async';
-import 'package:firebase_core/firebase_core.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);
@@ -24,6 +23,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   final ImageService _imageService = ImageService();
   final NoteService _noteService = NoteService();
   final UsageLimitService _usageLimitService = UsageLimitService();
+  final ImagePicker _picker = ImagePicker(); // 직접 ImagePicker 인스턴스 사용
   bool _isButtonDisabled = false;
   String _limitTooltip = '';
   
@@ -156,101 +156,50 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     );
   }
 
-  /// 이미지 선택 및 노트 생성 처리
-  Future<void> _selectAndCreateNote(BuildContext context) async {
-    try {
-      // Firebase 초기화 확인 - 직접 Firebase 객체 사용
-      try {
-        Firebase.app();
-      } catch (e) {
-        // Firebase 초기화 실패 시 에러 메시지 표시
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('서비스 연결에 실패했습니다. 잠시 후 다시 시도해주세요.')),
-          );
-        }
-        return;
-      }
-      
-      // 바텀 시트 닫기 - 이미지 선택 전에 닫아서 화면 전환 문제 방지
-      if (context.mounted) {
-        Navigator.pop(context);
-        
-        // 약간의 지연 후 이미지 선택 다이얼로그 열기
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
-      
-      if (!context.mounted) return;
-      
-      // 갤러리에서 이미지 선택 (기본값)
-      await _selectGalleryImages(context);
-    } catch (e) {
-      debugPrint('이미지 선택 및 노트 생성 중 오류: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('오류가 발생했습니다: $e')),
-        );
-      }
-    }
-  }
-  
   /// 갤러리에서 이미지 선택
   Future<void> _selectGalleryImages(BuildContext context) async {
     try {
-      // Firebase 초기화 확인
+      debugPrint('갤러리에서 이미지 선택 시작');
+      
+      // 예외 상황 방지를 위해 try-catch로 감싸기
       try {
-        Firebase.app();
-      } catch (e) {
-        // Firebase 초기화 실패 시 에러 메시지 표시
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('서비스 연결에 실패했습니다. 잠시 후 다시 시도해주세요.')),
-          );
+        // 먼저 이미지 선택을 시도
+        final List<XFile> selectedImages = await _picker.pickMultiImage();
+        debugPrint('이미지 선택 작업 완료: ${selectedImages.length}개');
+        
+        // 선택 완료 후에 바텀 시트 닫기
+        if (mounted) Navigator.pop(context);
+        
+        if (selectedImages.isEmpty) {
+          debugPrint('이미지 선택 취소됨');
+          return;
         }
-        return;
-      }
-      
-      // 바텀 시트 닫기
-      if (context.mounted) {
-        Navigator.pop(context);
-        // 약간의 지연 추가
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
-      
-      if (!context.mounted) return;
-      
-      // 갤러리에서 이미지 선택
-      final ImagePicker picker = ImagePicker();
-      final List<XFile> pickedFiles = await picker.pickMultiImage(
-        requestFullMetadata: false, // iOS에서 오류 방지
-      );
-      
-      // 이미지 선택 취소 처리
-      if (pickedFiles.isEmpty) {
-        debugPrint('이미지 선택이 취소되었습니다.');
-        return;
-      }
-      
-      // File 객체로 변환
-      final List<File> imageFiles = pickedFiles
-          .map((xFile) => File(xFile.path))
-          .where((file) => file.existsSync() && file.lengthSync() > 0)
-          .toList();
-      
-      if (imageFiles.isEmpty) {
-        debugPrint('선택된 이미지가 없거나 유효하지 않습니다.');
-        return;
-      }
-      
-      // 이미지로 노트 생성
-      if (context.mounted) {
-        await _createNoteWithImages(context, imageFiles);
+        
+        // XFile을 File로 변환
+        final List<File> imageFiles = selectedImages
+            .map((xFile) => File(xFile.path))
+            .where((file) => file.existsSync() && file.lengthSync() > 0)
+            .toList();
+        
+        if (imageFiles.isEmpty) {
+          debugPrint('변환 후 유효한 이미지 없음');
+          return;
+        }
+        
+        // 이미지로 노트 생성
+        if (mounted) {
+          await _createNoteWithImages(context, imageFiles);
+        }
+      } catch (innerError) {
+        debugPrint('이미지 선택 중 내부 오류: $innerError');
+        if (mounted) Navigator.pop(context);
+        rethrow; // 외부 catch 블록에서 처리하도록 다시 throw
       }
     } catch (e) {
-      debugPrint('갤러리 이미지 선택 중 오류: $e');
-      if (context.mounted) {
+      debugPrint('갤러리 이미지 선택 중 오류 발생: $e');
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('이미지 선택 중 오류가 발생했습니다: $e')),
+          SnackBar(content: Text('이미지 선택 중 오류: $e')),
         );
       }
     }
@@ -259,56 +208,55 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   /// 카메라로 사진 촬영
   Future<void> _takeCameraPhoto(BuildContext context) async {
     try {
-      // Firebase 초기화 확인
+      debugPrint('카메라 촬영 시작');
+      
+      // 예외 상황 방지를 위해 try-catch로 감싸기
       try {
-        Firebase.app();
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('서비스 연결에 실패했습니다. 잠시 후 다시 시도해주세요.')),
-          );
+        // 먼저 카메라 촬영 시도
+        final XFile? photo = await _picker.pickImage(
+          source: ImageSource.camera,
+          preferredCameraDevice: CameraDevice.rear,
+          maxWidth: 1200,
+          maxHeight: 1200,
+          imageQuality: 85,
+        );
+        debugPrint('카메라 촬영 작업 완료: ${photo != null ? '성공' : '취소'}');
+        
+        // 촬영 완료 후에 바텀 시트 닫기
+        if (mounted) Navigator.pop(context);
+        
+        if (photo == null) {
+          debugPrint('카메라 사진 촬영 취소됨');
+          return;
         }
-        return;
-      }
-      
-      // 바텀 시트 닫기
-      if (context.mounted) {
-        Navigator.pop(context);
-        // 약간의 지연 추가
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
-      
-      if (!context.mounted) return;
-      
-      // 카메라로 사진 촬영
-      final ImagePicker picker = ImagePicker();
-      final XFile? photo = await picker.pickImage(
-        source: ImageSource.camera,
-        requestFullMetadata: false, // iOS에서 오류 방지
-      );
-      
-      // 사진 촬영 취소 처리
-      if (photo == null) {
-        debugPrint('카메라 촬영이 취소되었습니다.');
-        return;
-      }
-      
-      // File 객체로 변환
-      final File imageFile = File(photo.path);
-      if (!imageFile.existsSync() || imageFile.lengthSync() == 0) {
-        debugPrint('촬영된 이미지가 유효하지 않습니다.');
-        return;
-      }
-      
-      // 이미지로 노트 생성
-      if (context.mounted) {
-        await _createNoteWithImages(context, [imageFile]);
+        
+        // XFile을 File로 변환
+        final File imageFile = File(photo.path);
+        
+        if (!imageFile.existsSync() || imageFile.lengthSync() == 0) {
+          debugPrint('카메라로 찍은 이미지가 유효하지 않음');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('이미지를 가져올 수 없습니다. 다시 시도하세요.')),
+            );
+          }
+          return;
+        }
+        
+        // 이미지로 노트 생성
+        if (mounted) {
+          await _createNoteWithImages(context, [imageFile]);
+        }
+      } catch (innerError) {
+        debugPrint('카메라 촬영 중 내부 오류: $innerError');
+        if (mounted) Navigator.pop(context);
+        rethrow; // 외부 catch 블록에서 처리하도록 다시 throw
       }
     } catch (e) {
-      debugPrint('카메라 촬영 중 오류: $e');
-      if (context.mounted) {
+      debugPrint('카메라 촬영 중 오류 발생: $e');
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('카메라 촬영 중 오류가 발생했습니다: $e')),
+          SnackBar(content: Text('카메라 촬영 중 오류: $e')),
         );
       }
     }
@@ -316,31 +264,17 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   
   /// 선택한 이미지로 노트 생성
   Future<void> _createNoteWithImages(BuildContext context, List<File> imageFiles) async {
-    debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
-    
     if (imageFiles.isEmpty) {
-      debugPrint('이미지가 없어 노트 생성을 취소합니다.');
+      debugPrint('이미지가 없어 노트 생성 취소');
       return;
     }
     
+    debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
+    
     try {
       // 로딩 다이얼로그 표시
-      if (context.mounted) {
+      if (mounted) {
         LoadingDialog.show(context, message: '노트 생성 중...');
-      }
-      
-      // Firebase 초기화 확인 (다시 한번 확인)
-      try {
-        Firebase.app();
-      } catch (e) {
-        // Firebase 초기화 실패 시 로딩 숨기고 에러 메시지 표시
-        LoadingDialog.hide();
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('서비스 연결에 실패했습니다. 잠시 후 다시 시도해주세요.')),
-          );
-        }
-        return;
       }
       
       // 노트 생성 호출
@@ -356,13 +290,12 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       if (result['success'] == true) {
         final String? createdNoteId = result['noteId'] as String?;
         
-        // null 체크 추가
         if (createdNoteId != null && createdNoteId.isNotEmpty) {
-          if (context.mounted) {
-            // 노트 상세 화면으로 이동 (지연 추가)
+          if (mounted) {
+            // 약간의 지연 후 노트 상세 화면으로 이동
             await Future.delayed(const Duration(milliseconds: 300));
             
-            if (context.mounted) {
+            if (mounted) {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
@@ -372,8 +305,8 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             }
           }
         } else {
-          debugPrint('생성된 노트 ID가 null이거나 비어 있습니다.');
-          if (context.mounted) {
+          debugPrint('생성된 노트 ID가 유효하지 않음');
+          if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('노트 생성에 실패했습니다. 다시 시도해 주세요.')),
             );
@@ -381,9 +314,12 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         }
       } else {
         // 실패 메시지 표시
-        if (context.mounted) {
+        final String errorMessage = result['message'] as String? ?? '노트 생성에 실패했습니다.';
+        debugPrint('노트 생성 실패: $errorMessage');
+        
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(result['message'] as String? ?? '노트 생성에 실패했습니다.')),
+            SnackBar(content: Text(errorMessage)),
           );
         }
       }
@@ -391,10 +327,10 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       // 로딩 다이얼로그 숨기기
       LoadingDialog.hide();
       
-      debugPrint('노트 생성 중 오류: $e');
-      if (context.mounted) {
+      debugPrint('노트 생성 중 예외 발생: $e');
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
+          SnackBar(content: Text('노트 생성 중 오류: $e')),
         );
       }
     }

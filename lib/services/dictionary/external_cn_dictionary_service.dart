@@ -8,11 +8,11 @@ import '../../models/dictionary_entry.dart';
 import '../usage_limit_service.dart';
 import '../pinyin_creation_service.dart';
 
-/// 외부 사전 유형
+/// 외부 중국어 사전 서비스 타입 (구글, 네이버, 바이두)
 enum ExternalCnDictType {
-  google, // Google Translate
-  naver, // Naver 사전
-  baidu, // Baidu 사전
+  google,
+  naver,
+  baidu,
 }
 
 /// 외부 API를 통해 중국어 사전 기능을 제공하는 서비스
@@ -296,12 +296,12 @@ class ExternalCnDictionaryService {
       case ExternalCnDictType.naver:
         // Naver 사전 (중국어)
         return Uri.parse(
-            'https://dict.naver.com/dict.search?query=${Uri.encodeComponent(word)}');
+            'https://dict.naver.com/search.dict?dicQuery=${Uri.encodeComponent(word)}&query=${Uri.encodeComponent(word)}&target=dic&ie=utf8&query_utf=&isOnlyViewEE=');
 
       case ExternalCnDictType.baidu:
         // Baidu 사전
         return Uri.parse(
-            'https://dict.baidu.com/s?wd=${Uri.encodeComponent(word)}');
+            'https://fanyi.baidu.com/#zh/ko/${Uri.encodeComponent(word)}');
     }
   }
   
@@ -309,5 +309,12 @@ class ExternalCnDictionaryService {
   void clearCache() {
     _searchResultCache.clear();
     debugPrint('외부 사전 검색 캐시 정리됨');
+  }
+  
+  /// 외부 사전 URL 문자열 가져오기
+  /// [word] 검색할 단어
+  /// [type] 외부 사전 유형
+  String getExternalDictionaryUrl(String word, ExternalCnDictType type) {
+    return _getExternalDictionaryUri(word, type).toString();
   }
 } 
