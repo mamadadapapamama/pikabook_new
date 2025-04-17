@@ -279,19 +279,20 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     
     debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
     
-    // 로딩 다이얼로그 표시 - Future.microtask 사용으로 UI 업데이트 안정성 개선
-    Future.microtask(() {
-      if (mounted) {
-        LoadingDialog.show(context, message: '노트 생성 준비 중...');
-      }
-    });
-    
     // 화면 전환을 위해 부모 컨텍스트 미리 저장
     final BuildContext parentContext = Navigator.of(context).context;
     
-    // 바텀 시트 닫기 (이 부분은 제대로 작동함)
+    // 바텀 시트를 즉시 닫기
     if (mounted && Navigator.canPop(context)) {
       Navigator.pop(context);
+    }
+    
+    // 바텀 시트가 완전히 닫히길 기다린 후 로딩 다이얼로그 표시
+    await Future.delayed(const Duration(milliseconds: 100));
+    
+    // 로딩 다이얼로그 표시
+    if (parentContext.mounted) {
+      LoadingDialog.show(parentContext, message: '노트 생성 준비 중...');
     }
     
     String? createdNoteId;

@@ -28,6 +28,20 @@ import '../../app.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../utils/debug_utils.dart';
 
+/// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
+class OrangeOverscrollBehavior extends ScrollBehavior {
+  const OrangeOverscrollBehavior();
+  
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+    return GlowingOverscrollIndicator(
+      axisDirection: details.direction,
+      color: ColorTokens.primarylight, // 오버스크롤 색상을 주황색으로 변경
+      child: child,
+    );
+  }
+}
+
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
 
@@ -264,34 +278,37 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         }
 
                         // RefreshIndicator로 감싸서 pull to refresh 기능 추가
-                        return RefreshIndicator(
-                          onRefresh: () => viewModel.refreshNotes(),
-                          color: ColorTokens.primary,
-                          backgroundColor: Colors.white, // 배경색을 흰색으로 설정
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: SpacingTokens.md,
-                              vertical: SpacingTokens.sm,
-                            ),
-                            child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: viewModel.notes.length,
-                              itemBuilder: (context, index) {
-                                // 일반 노트 아이템
-                                final note = viewModel.notes[index];
-                                return NoteListItem(
-                                  note: note,
-                                  onNoteTapped: (noteId) => _navigateToNoteDetail(context, noteId),
-                                  onFavoriteToggled: (noteId, isFavorite) {
-                                    viewModel.toggleFavorite(noteId, isFavorite);
-                                  },
-                                  onDismissed: () {
-                                    if (note.id != null) {
-                                      viewModel.deleteNote(note.id!);
-                                    }
-                                  },
-                                );
-                              },
+                        return ScrollConfiguration(
+                          behavior: OrangeOverscrollBehavior(),
+                          child: RefreshIndicator(
+                            onRefresh: () => viewModel.refreshNotes(),
+                            color: ColorTokens.primary,
+                            backgroundColor: Colors.white, // 배경색을 흰색으로 설정
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: SpacingTokens.md,
+                                vertical: SpacingTokens.sm,
+                              ),
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                itemCount: viewModel.notes.length,
+                                itemBuilder: (context, index) {
+                                  // 일반 노트 아이템
+                                  final note = viewModel.notes[index];
+                                  return NoteListItem(
+                                    note: note,
+                                    onNoteTapped: (noteId) => _navigateToNoteDetail(context, noteId),
+                                    onFavoriteToggled: (noteId, isFavorite) {
+                                      viewModel.toggleFavorite(noteId, isFavorite);
+                                    },
+                                    onDismissed: () {
+                                      if (note.id != null) {
+                                        viewModel.deleteNote(note.id!);
+                                      }
+                                    },
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         );
