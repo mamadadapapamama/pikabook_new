@@ -24,7 +24,7 @@ class SpacingTokens {
   static const double iconSizeXLarge = 48.0;
   
   // 컴포넌트 크기
-  static const double buttonHeight = 48.0;
+  static const double buttonHeight = 52.0;
   static const double fabSize = 64.0;
   static const double fabSizeSmall = 40.0;
   static const double profileIconSize = 24.0;

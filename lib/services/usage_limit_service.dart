@@ -293,9 +293,7 @@ class UsageLimitService {
     final translatedChars = usageData['translatedChars'] ?? 0;
     final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
     
-    // 디버그 로그 추가: 저장 공간 사용량 확인
     final storagePercent = ((storageUsageBytes * 100.0) / MAX_FREE_STORAGE_BYTES);
-    debugPrint('현재 저장 공간 사용량: ${(storageUsageBytes / 1024 / 1024).toStringAsFixed(2)}MB/${(MAX_FREE_STORAGE_BYTES / 1024 / 1024).toStringAsFixed(0)}MB (${storagePercent.toStringAsFixed(2)}%)');
     
     // 각 제한 초과 여부 확인
     final bool ocrLimitReached = ocrUsage >= MAX_FREE_OCR_PAGES;

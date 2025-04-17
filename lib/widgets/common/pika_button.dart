@@ -153,19 +153,19 @@ class PikaButton extends StatelessWidget {
           backgroundColor: ColorTokens.primary,
           foregroundColor: Colors.white,
           elevation: 0,
+          minimumSize: Size(0, SpacingTokens.buttonHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),
           disabledBackgroundColor: ColorTokens.primary.withOpacity(0.5),
         );
       
-      
-      
       case PikaButtonVariant.outline:
         return ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           foregroundColor: ColorTokens.primary,
           elevation: 0,
+          minimumSize: Size(0, SpacingTokens.buttonHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
             side: BorderSide(color: ColorTokens.primary),
@@ -177,6 +177,7 @@ class PikaButton extends StatelessWidget {
           backgroundColor: Colors.transparent,
           foregroundColor: ColorTokens.primary,
           elevation: 0,
+          minimumSize: Size(0, SpacingTokens.buttonHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),
@@ -187,6 +188,7 @@ class PikaButton extends StatelessWidget {
           backgroundColor: Colors.red[100],
           foregroundColor: Colors.red[800],
           elevation: 0,
+          minimumSize: Size(0, SpacingTokens.buttonHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),

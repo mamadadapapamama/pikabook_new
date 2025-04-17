@@ -87,7 +87,6 @@ class LoadingDialog {
       Future.microtask(() {
         _MessageNotifier().value = message;
       });
-      debugPrint('로딩 다이얼로그 메시지 업데이트: $message');
     } catch (e) {
       debugPrint('로딩 다이얼로그 메시지 업데이트 중 오류: $e');
     }

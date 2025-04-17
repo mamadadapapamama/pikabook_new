@@ -537,7 +537,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           if (noteDoc.exists) {
             final data = noteDoc.data();
             processingCompleted = data?['processingCompleted'] as bool? ?? false;
-          }
+            }
           }
         } catch (e) {
           debugPrint('노트 상태 확인 중 오류: $e');

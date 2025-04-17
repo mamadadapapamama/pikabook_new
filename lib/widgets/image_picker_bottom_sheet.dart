@@ -348,7 +348,6 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             final message = '스마트 노트가 만들어 지고 있어요... ($progressSeconds/10초)';
             try {
               LoadingDialog.updateMessage(message);
-              debugPrint('로딩 메시지 업데이트: $message');
             } catch (e) {
               debugPrint('로딩 메시지 업데이트 실패: $e');
             }

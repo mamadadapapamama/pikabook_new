@@ -585,7 +585,6 @@ class ImageService {
           return;
         } catch (e) {
           // 파일이 존재하지 않음 - 정상 진행
-          debugPrint('신규 이미지 업로드 시작: $relativePath');
         }
         
         // 파일 크기 확인
