@@ -456,7 +456,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             _backgroundCheckTimer = null;
             
             // 즉시 페이지 다시 로드
-          _reloadPages(forceReload: true);
+          _reloadPages(forceReload: true).then((_) {
+            // 페이지 로드 완료 후 UI 갱신
+            if (mounted) {
+              setState(() {});
+            }
+          });
 
             // 메시지 표시
           if (mounted) {
@@ -576,6 +581,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         setState(() {
           _isLoading = false;
         });
+      }
+    } finally {
+      // finally 블록에서도 UI 갱신 시도 (오류 발생 여부와 관계없이)
+      if (mounted) {
+        setState(() {});
       }
     }
   }
