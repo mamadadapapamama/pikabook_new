@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'tokens/color_tokens.dart';
 import 'tokens/typography_tokens.dart';
 
@@ -7,6 +8,11 @@ class AppTheme {
     return ThemeData(
       primaryColor: ColorTokens.primary,
       scaffoldBackgroundColor: ColorTokens.background,
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: ColorTokens.primary,
+        selectionColor: ColorTokens.primarylight.withOpacity(0.5),
+        selectionHandleColor: ColorTokens.primary,
+      ),
       colorScheme: const ColorScheme.light(
         primary: ColorTokens.primary,
         secondary: ColorTokens.secondary,
@@ -27,10 +33,15 @@ class AppTheme {
         bodySmall: TypographyTokens.caption,
         labelSmall: TypographyTokens.overline,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: ColorTokens.primary,
         foregroundColor: Colors.white,
         elevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: ColorTokens.primary,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(

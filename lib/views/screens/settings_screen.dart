@@ -403,6 +403,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('학습자 이름 설정', style: TypographyTokens.subtitle2),
+        backgroundColor: Colors.white,
         content: TextField(
           controller: controller,
           decoration: InputDecoration(
