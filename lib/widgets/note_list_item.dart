@@ -8,6 +8,7 @@ import 'flashcard_counter_badge.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../theme/tokens/color_tokens.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 /// 홈페이지 노트리스트 화면에서 사용되는 카드 위젯
 
@@ -64,9 +65,32 @@ class _NoteListItemState extends State<NoteListItem> {
         });
 
         debugPrint('노트 이미지 로드 시작: ${widget.note.imageUrl}');
-
-        // 이미지 다운로드
-        final downloadedImage = await _imageService.downloadImage(widget.note.imageUrl!);
+        
+        File? downloadedImage;
+        
+        // 1. 직접 Firebase URL인지 확인
+        if (widget.note.imageUrl!.startsWith('http') && 
+            widget.note.imageUrl!.contains('firebasestorage.googleapis.com')) {
+          // Firebase Storage URL에서 다운로드
+          downloadedImage = await _imageService.downloadImage(widget.note.imageUrl!);
+        } 
+        // 2. 상대 경로인 경우 
+        else {
+          // 이미지 다운로드
+          downloadedImage = await _imageService.downloadImage(widget.note.imageUrl!);
+          
+          // 실패한 경우 전체 URL로 다시 시도
+          if (downloadedImage == null) {
+            // Firebase Storage에서 URL 가져오기 시도
+            try {
+              final storageRef = FirebaseStorage.instance.ref().child(widget.note.imageUrl!);
+              final url = await storageRef.getDownloadURL();
+              downloadedImage = await _imageService.downloadImage(url);
+            } catch (e) {
+              debugPrint('Firebase URL로 재시도 중 오류: $e');
+            }
+          }
+        }
 
         if (mounted) { // 위젯이 여전히 마운트되어 있는지 확인
           if (downloadedImage != null) {
@@ -376,62 +400,102 @@ class _NoteListItemState extends State<NoteListItem> {
   Widget _buildImageWidget() {
     if (_isLoadingImage) {
       return const Center(
-        child: CircularProgressIndicator(),
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary),
+          strokeWidth: 2.0,
+        ),
       );
     } else if (_imageLoadError || _imageFile == null) {
-      return Container(
-        color: Colors.grey[200],
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.image_not_supported,
-                color: Colors.grey[400],
-                size: 32.0,
-              ),
-              const SizedBox(height: 8.0),
-              Text(
-                '이미지를 불러올 수 없습니다',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 12.0,
+      // 이미지 URL이 있지만 로드에 실패한 경우
+      final hasUrl = widget.note.imageUrl != null && widget.note.imageUrl!.isNotEmpty;
+      
+      return GestureDetector(
+        onTap: hasUrl ? _loadImage : _showImageSourceOptions, // 이미지가 있으면 다시 로드 시도, 없으면 선택 다이얼로그
+        child: Container(
+          color: Colors.grey[200],
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  hasUrl ? Icons.refresh : Icons.add_photo_alternate,
+                  color: hasUrl ? Colors.grey[400] : ColorTokens.primary,
+                  size: 32.0,
                 ),
-              ),
-            ],
+                if (hasUrl) ...[
+                  const SizedBox(height: 4.0),
+                  Text(
+                    '이미지 불러오기 실패\n다시 시도',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 10.0,
+                    ),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 4.0),
+                  Text(
+                    '이미지 추가',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 10.0,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       );
     } else {
-      return Image.file(
-        _imageFile!,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          debugPrint('이미지 렌더링 오류: $error');
-          return Container(
-            color: Colors.grey[200],
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.broken_image,
-                    color: Colors.grey[400],
-                    size: 32.0,
-                  ),
-                  const SizedBox(height: 8.0),
-                  Text(
-                    '이미지 오류',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12.0,
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.file(
+            _imageFile!,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              debugPrint('이미지 렌더링 오류: $error');
+              // 오류 발생 시 다시 로드 시도할 수 있는 UI 제공
+              return GestureDetector(
+                onTap: _loadImage,
+                child: Container(
+                  color: Colors.grey[200],
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.refresh,
+                          color: Colors.grey[400],
+                          size: 32.0,
+                        ),
+                        const SizedBox(height: 4.0),
+                        Text(
+                          '이미지 다시 로드',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 10.0,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
+              );
+            },
+          ),
+          // 업로드 중이면 오버레이 표시
+          if (_isUploadingImage)
+            Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
               ),
             ),
-          );
-        },
+        ],
       );
     }
   }
