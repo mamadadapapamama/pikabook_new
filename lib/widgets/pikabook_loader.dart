@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart' show timeDilation;
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 /// Pikabook 로딩 화면
 /// 
@@ -25,8 +26,11 @@ class PikabookLoader extends StatelessWidget {
     BuildContext context, {
     String title = '스마트한 학습 노트를 만들고 있어요.',
     String subtitle = '잠시만 기다려 주세요!\n조금 시간이 걸릴수 있어요.',
-    int timeoutSeconds = 20, // 타임아웃 시간 (초 단위)
+    int timeoutSeconds = 10, // 타임아웃 시간 (초 단위) - 기본값 20에서 10으로 변경
   }) async {
+    // 애니메이션 속도를 정상으로 설정 (디버그 타이머 비활성화)
+    timeDilation = 1.0;
+    
     if (!context.mounted) {
       return;
     }
@@ -34,26 +38,20 @@ class PikabookLoader extends StatelessWidget {
     // showDialog를 직접 호출하는 대신 addPostFrameCallback 사용
     Completer<void> completer = Completer<void>();
     
-    // 타임아웃 설정 - 20초 후 자동으로 닫힘
+    // 타이머 변수 (나중에 초기화)
     Timer? timeoutTimer;
-    if (timeoutSeconds > 0) {
-      timeoutTimer = Timer(Duration(seconds: timeoutSeconds), () {
-        if (context.mounted) {
-          hide(context);
-        }
-      });
-    }
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (context.mounted) {
+        // 다이얼로그 표시
         showDialog(
           context: context,
           barrierDismissible: false,
-          barrierColor: Colors.black54, // 배경 색상 조정
+          barrierColor: Colors.black54,
           builder: (context) => WillPopScope(
-            onWillPop: () async => false, // 뒤로 가기 방지
+            onWillPop: () async => false,
             child: Material(
-              type: MaterialType.transparency, // 배경을 투명하게 유지
+              type: MaterialType.transparency,
               child: Dialog(
                 backgroundColor: Colors.transparent,
                 insetPadding: const EdgeInsets.all(24),
@@ -68,14 +66,40 @@ class PikabookLoader extends StatelessWidget {
           ),
         ).then((_) {
           // 다이얼로그가 닫힐 때 타이머 취소
-          timeoutTimer?.cancel();
+          if (timeoutTimer != null) {
+            try {
+              timeoutTimer!.cancel();
+            } catch (e) {
+              // 오류 무시
+            }
+          }
           completer.complete();
         }).catchError((e) {
-          timeoutTimer?.cancel();
+          if (timeoutTimer != null) {
+            try {
+              timeoutTimer!.cancel();
+            } catch (e) {
+              // 오류 무시
+            }
+          }
           completer.completeError(e);
         });
+        
+        // 타이머 초기화 - 다이얼로그 표시 이후에
+        if (timeoutSeconds > 0 && context.mounted) {
+          try {
+            Future.microtask(() {
+              timeoutTimer = Timer(Duration(seconds: timeoutSeconds), () {
+                if (context.mounted) {
+                  hide(context);
+                }
+              });
+            });
+          } catch (e) {
+            // 타이머 초기화 오류 무시
+          }
+        }
       } else {
-        timeoutTimer?.cancel();
         completer.completeError('컨텍스트가 더 이상 유효하지 않습니다.');
       }
     });
@@ -166,9 +190,6 @@ class _PikabookDotPulseAnimationState extends State<_PikabookDotPulseAnimation>
   void initState() {
     super.initState();
     
-    // 디버그 타이머 출력 방지를 위한 애니메이션 속도 조정
-    timeDilation = 1.0; // 애니메이션 속도를 기본값으로 설정
-    
     // 애니메이션 초기화는 첫 프레임 이후로 지연
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeAnimation();
@@ -179,24 +200,45 @@ class _PikabookDotPulseAnimationState extends State<_PikabookDotPulseAnimation>
   void _initializeAnimation() {
     if (_animationInitialized) return;
     
-    // 애니메이션 컨트롤러 초기화 - 조용히
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-      debugLabel: '',
-    );
+    try {
+      // 릴리즈 모드에서는 더 단순한 방식으로 애니메이션 초기화
+      if (kReleaseMode) {
+        // 클린한 방식으로 컨트롤러 생성
+        _controller = AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 1500),
+        );
+        
+        // 리스너 없이 조용히 시작
+        _controller.value = 0;
+        _controller.forward();
+        _controller.repeat(reverse: true);
+      } else {
+        // 개발 모드에서는 일반적인 초기화
+        _controller = AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 1500),
+        );
+        _controller.forward();
+        _controller.repeat(reverse: true);
+      }
+    } catch (e) {
+      // 오류 무시 (로그 출력 없음)
+    }
     
-    // 모든 리스너를 추가하지 않음
-    _controller.forward();
-    _controller.repeat(reverse: true);
     _animationInitialized = true;
   }
 
   @override
   void dispose() {
     if (_animationInitialized) {
-      _controller.stop(canceled: false);
-      _controller.dispose();
+      try {
+        // 조용히 정리
+        _controller.stop(canceled: false);
+        _controller.dispose();
+      } catch (e) {
+        // 오류 무시
+      }
     }
     super.dispose();
   }
@@ -241,41 +283,23 @@ class _PikabookDotPulseAnimationState extends State<_PikabookDotPulseAnimation>
     );
   }
   
-  // 정적 도트 (애니메이션 초기화 전)
+  // 릴리즈 모드를 위한 정적 도트 메서드
   Widget _buildStaticDots() {
-    final Color dotColor = ColorTokens.primary;
-    
     return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Container(
-          width: 6,
-          height: 6,
+      children: List.generate(
+        3,
+        (index) => Container(
+          width: 10,
+          height: 10,
+          margin: const EdgeInsets.only(right: 8),
           decoration: BoxDecoration(
-            color: dotColor.withOpacity(0.7),
+            color: index == 1 
+              ? ColorTokens.primary 
+              : ColorTokens.primary.withOpacity(0.3),
             shape: BoxShape.circle,
           ),
         ),
-        const SizedBox(width: 6),
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: dotColor.withOpacity(0.7),
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: dotColor.withOpacity(0.7),
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 12),
-      ],
+      ),
     );
   }
 

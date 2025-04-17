@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import 'views/screens/login_screen.dart';
 import 'views/screens/home_screen.dart'; 
@@ -46,6 +47,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     
     // 시스템 UI 조정
     SystemChannels.textInput.invokeMethod('TextInput.hide');
+    
+    // 타이머 로그 출력 제한 (릴리즈 모드 기반)
+    if (kReleaseMode) {
+      // 릴리즈 모드에서 디버그 출력 최소화
+      debugPrint = (String? message, {int? wrapWidth}) {};
+    }
     
     // 상태표시줄 설정
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -224,6 +231,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
+        // 디버그 성능 측정 비활성화
+        showPerformanceOverlay: false,
+        checkerboardRasterCacheImages: false,
+        checkerboardOffscreenLayers: false,
+        showSemanticsDebugger: false,
+        debugShowMaterialGrid: false,
         home: Scaffold(
           body: Center(
             child: Text(
@@ -241,6 +254,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
+        // 디버그 성능 측정 비활성화
+        showPerformanceOverlay: false,
+        checkerboardRasterCacheImages: false,
+        checkerboardOffscreenLayers: false,
+        showSemanticsDebugger: false,
+        debugShowMaterialGrid: false,
         home: const LoadingScreen(progress: 0.5, message: '앱을 초기화하는 중입니다...'),
       );
     }
@@ -250,6 +269,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
+        // 디버그 성능 측정 비활성화
+        showPerformanceOverlay: false,
+        checkerboardRasterCacheImages: false,
+        checkerboardOffscreenLayers: false,
+        showSemanticsDebugger: false,
+        debugShowMaterialGrid: false,
         home: LoginScreen(
           onLoginSuccess: (user) {
             // 사용자 로그인 성공 처리
@@ -269,6 +294,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
+        // 디버그 성능 측정 비활성화
+        showPerformanceOverlay: false,
+        checkerboardRasterCacheImages: false,
+        checkerboardOffscreenLayers: false,
+        showSemanticsDebugger: false,
+        debugShowMaterialGrid: false,
         home: OnboardingScreen(
           onComplete: () async {
             await _preferencesService.setOnboardingCompleted(true);
@@ -286,6 +317,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: themeData,
+      // 디버그 성능 측정 비활성화
+      showPerformanceOverlay: false,
+      checkerboardRasterCacheImages: false,
+      checkerboardOffscreenLayers: false,
+      showSemanticsDebugger: false,
+      debugShowMaterialGrid: false,
       // 홈 화면 표시
       home: const HomeScreen(),
       routes: {

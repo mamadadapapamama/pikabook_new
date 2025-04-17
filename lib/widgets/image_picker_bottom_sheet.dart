@@ -320,7 +320,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         
         // 로딩 메시지 업데이트 - Future.microtask 사용
         Future.microtask(() {
-          LoadingDialog.updateMessage('스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요... (0/10초)');
+          LoadingDialog.updateMessage('스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요...');
         });
         
         // 변수에 보관할 노트 ID 복사 (중간에 null이 되지 않도록)
@@ -345,7 +345,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             
             // 진행 메시지 업데이트 - 안전하게 try-catch로 감싸기
             final progressSeconds = (attempts * 0.5).toStringAsFixed(1);
-            final message = '스마트 노트가 만들어 지고 있어요... ($progressSeconds/10초)';
+            final message = '스마트 노트가 만들어 지고 있어요...';
             try {
               LoadingDialog.updateMessage(message);
             } catch (e) {
