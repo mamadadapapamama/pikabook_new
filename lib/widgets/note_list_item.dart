@@ -6,6 +6,8 @@ import '../services/image_service.dart';
 import '../services/note_service.dart';
 import 'flashcard_counter_badge.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import '../theme/tokens/color_tokens.dart';
 
 /// 홈페이지 노트리스트 화면에서 사용되는 카드 위젯
 
@@ -247,6 +249,7 @@ class _NoteListItemState extends State<NoteListItem> {
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(true),
                   child: const Text('삭제'),
+                  style: TextButton.styleFrom(foregroundColor: ColorTokens.primary),
                 ),
               ],
             );

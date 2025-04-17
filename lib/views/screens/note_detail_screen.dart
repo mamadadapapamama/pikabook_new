@@ -35,6 +35,7 @@ import '../../utils/debug_utils.dart';
 import '../../services/translation_service.dart';
 import '../../models/processed_text.dart';
 import '../../models/dictionary_entry.dart';
+import 'dart:math' as math;
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -42,11 +43,13 @@ import '../../models/dictionary_entry.dart';
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;
   final bool isProcessingBackground;
+  final int? totalImageCount; // 추가: 총 이미지 수 저장
 
   const NoteDetailScreen({
     super.key,
     required this.noteId,
     this.isProcessingBackground = false,
+    this.totalImageCount, // 추가: 생성자에 총 이미지 수 매개변수 추가
   });
 
   @override
@@ -91,7 +94,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   final int _totalTooltipSteps = 3; // 총 툴팁 단계 수 (2에서 3으로 변경)
   bool _isEditingTitle = false; // 제목 편집 모드 여부
   TextEditingController _titleEditingController = TextEditingController(); // 제목 편집용 컨트롤러
-
+  int _expectedTotalPages = 0; // 추가: 예상되는 총 페이지 수
+  
   // 의존성 관련 변수들
   ThemeData? _theme;
   
@@ -116,6 +120,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     _segmentManager = NoteSegmentManager();
     _previouslyVisitedPages = <int>{};
     _pageController = PageController();
+    
+    // 전달받은 총 이미지 수가 있으면 설정
+    if (widget.totalImageCount != null && widget.totalImageCount! > 0) {
+      _expectedTotalPages = widget.totalImageCount!;
+      debugPrint('전달받은 총 이미지 수: $_expectedTotalPages');
+    }
     
     // 상태표시줄 설정
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -786,6 +796,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               _deleteNote();
             },
             child: const Text('삭제'),
+            style: TextButton.styleFrom(foregroundColor: ColorTokens.primary),
           ),
         ],
       ),
@@ -2180,37 +2191,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // 하단 내비게이션 바 생성
   Widget _buildBottomBar() {
-    if (_note == null || _pageManager.currentPage == null) {
-      return const SizedBox.shrink();
-    }
-    
-    // 페이지 콘텐츠 뷰 모드 결정
-    final pageId = _pageManager.currentPage!.id;
-    final processedText = pageId != null 
-      ? _pageContentService.getProcessedText(pageId) 
-      : null;
-    
-    final bool showFullText = processedText?.showFullText ?? false;
-    final bool showPinyin = processedText?.showPinyin ?? true;
-    final bool showTranslation = processedText?.showTranslation ?? true;
-    
-    // 현재 페이지가 처리 중인지 확인
-    final bool isProcessing = _isCurrentPageProcessing();
+    // 현재 페이지와 총 페이지 수 계산
+    final currentPageIndex = _pageManager.currentPageIndex;
+    // 총 페이지 수는 실제 페이지 수와 예상 페이지 수 중 큰 값 사용
+    final totalPages = _expectedTotalPages > 0 
+        ? math.max(_pageManager.pages.length, _expectedTotalPages)
+        : _pageManager.pages.length;
     
     return NoteDetailBottomBar(
       currentPage: _pageManager.currentPage,
-      currentPageIndex: _pageManager.currentPageIndex,
-      totalPages: _pageManager.pages.length,
+      currentPageIndex: currentPageIndex,
+      totalPages: totalPages,
       onPageChanged: _changePage,
       onToggleFullTextMode: _toggleFullTextMode,
-      isFullTextMode: showFullText,
+      isFullTextMode: !_useSegmentMode,
       pageContentService: _pageContentService,
       textReaderService: _textReaderService,
-      showPinyin: showPinyin,
-      showTranslation: showTranslation,
-      isProcessing: isProcessing,  // 처리 중인지 여부 전달
-      onTogglePinyin: _togglePinyin,
-      onToggleTranslation: _toggleTranslation,
+      showPinyin: true,
+      showTranslation: true,
+      isProcessing: _isProcessingText,
+      onTogglePinyin: () {},
+      onToggleTranslation: () {},
       onTtsPlay: _onTtsPlay,
     );
   }

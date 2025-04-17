@@ -60,7 +60,7 @@ class SegmentUtils {
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(true),
                     child: const Text('삭제'),
-                    style: TextButton.styleFrom(foregroundColor: ColorTokens.error),
+                    style: TextButton.styleFrom(foregroundColor: ColorTokens.primary),
                   ),
                 ],
               ),

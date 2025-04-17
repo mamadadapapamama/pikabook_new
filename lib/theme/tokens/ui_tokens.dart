@@ -23,6 +23,7 @@ class UITokens {
   
   // 배경색
   static const Color homeBackground = Color(0xFFFFF9F1);
+  static const Color homeOverlayScrollEffect = ColorTokens.primaryverylight; // 스크롤 오버레이 효과 색상 (보라색에서 주황색으로 변경)
   static const Color cardBackground = Colors.white;
   
   // 플래시카드 관련 색상

@@ -267,6 +267,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         return RefreshIndicator(
                           onRefresh: () => viewModel.refreshNotes(),
                           color: ColorTokens.primary,
+                          backgroundColor: Colors.white, // 배경색을 흰색으로 설정
                           child: Padding(
                             padding: EdgeInsets.symmetric(
                               horizontal: SpacingTokens.md,

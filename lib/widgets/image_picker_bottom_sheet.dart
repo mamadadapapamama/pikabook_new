@@ -313,7 +313,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         
         // 로딩 메시지 업데이트 - Future.microtask 사용
         Future.microtask(() {
-          LoadingDialog.updateMessage('첫 페이지 처리 중... (0/10초)');
+          LoadingDialog.updateMessage('스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요... (0/10초)');
         });
         
         // 변수에 보관할 노트 ID 복사 (중간에 null이 되지 않도록)
@@ -375,6 +375,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
               builder: (context) => NoteDetailScreen(
                 noteId: noteId,
                 isProcessingBackground: !firstPageProcessed,
+                totalImageCount: imageFiles.length,
               ),
             ),
           ).then((_) {
@@ -397,6 +398,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                             builder: (context) => NoteDetailScreen(
                               noteId: noteId,
                               isProcessingBackground: !firstPageProcessed,
+                              totalImageCount: imageFiles.length,
                             ),
                           ),
                         );
