@@ -8,6 +8,7 @@ class LoadingDialog {
   static bool _isVisible = false;
   static String _message = '로딩 중...';
   static OverlayEntry? _overlayEntry;
+  static BuildContext? _dialogContext;
   
   /// 로딩 다이얼로그 표시
   static void show(BuildContext context, {String message = '로딩 중...'}) {
@@ -20,50 +21,56 @@ class LoadingDialog {
       _isVisible = true;
       _message = message;
       
-      // 직접 오버레이 엔트리 생성
-      _overlayEntry = OverlayEntry(
-        builder: (context) => Material(
-          color: Colors.black54,
-          child: Center(
-            child: Container(
-              width: 200,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 로딩 이미지
-                  Image.asset(
-                    'assets/images/pikabook_loader.gif',
-                    width: 60,
-                    height: 60,
-                    errorBuilder: (context, error, stackTrace) {
-                      // 이미지 로드 실패 시 CircularProgressIndicator 표시
-                      return const CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  // 메시지 텍스트
-                  _MessageText(initialMessage: message),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-      
-      // 오버레이에 추가
       try {
-        Overlay.of(context).insert(_overlayEntry!);
+        // Navigator를 통한 다이얼로그 표시 방식으로 변경
+        Future.microtask(() {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (BuildContext dialogContext) {
+              _dialogContext = dialogContext;
+              return WillPopScope(
+                onWillPop: () async => false,
+                child: Dialog(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  child: Container(
+                    width: 200,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 로딩 이미지
+                        Image.asset(
+                          'assets/images/pikabook_loader.gif',
+                          width: 60,
+                          height: 60,
+                          errorBuilder: (context, error, stackTrace) {
+                            // 이미지 로드 실패 시 CircularProgressIndicator 표시
+                            return const CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        // 메시지 텍스트
+                        _MessageText(initialMessage: message),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        });
+        
         debugPrint('로딩 다이얼로그 표시 완료: $message');
       } catch (e) {
         _isVisible = false;
-        _overlayEntry = null;
         debugPrint('로딩 다이얼로그 표시 중 오류: $e');
       }
     } catch (e) {
@@ -93,7 +100,17 @@ class LoadingDialog {
         return;
       }
       
-      if (_overlayEntry != null) {
+      // 다이얼로그 컨텍스트가 있으면 Navigator.pop으로 닫기
+      if (_dialogContext != null) {
+        try {
+          Navigator.of(_dialogContext!, rootNavigator: true).pop();
+          _dialogContext = null;
+        } catch (e) {
+          debugPrint('Navigator.pop으로 다이얼로그 닫기 실패: $e');
+        }
+      }
+      // 기존 OverlayEntry 방식의 cleanup도 유지
+      else if (_overlayEntry != null) {
         try {
           _overlayEntry!.remove();
         } catch (e) {
@@ -109,6 +126,7 @@ class LoadingDialog {
       // 오류가 발생해도 상태 초기화
       _isVisible = false;
       _overlayEntry = null;
+      _dialogContext = null;
       debugPrint('로딩 다이얼로그 숨김 중 오류: $e');
     }
   }

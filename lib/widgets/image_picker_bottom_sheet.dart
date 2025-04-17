@@ -282,17 +282,23 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     // 화면 전환을 위해 부모 컨텍스트 미리 저장
     final BuildContext parentContext = Navigator.of(context).context;
     
+    // 애플리케이션 루트 컨텍스트 가져오기 (다이얼로그 및 스낵바 표시에 사용)
+    final BuildContext appContext = Navigator.of(parentContext, rootNavigator: true).context;
+    
     // 바텀 시트를 즉시 닫기
     if (mounted && Navigator.canPop(context)) {
       Navigator.pop(context);
     }
     
-    // 바텀 시트가 완전히 닫히길 기다린 후 로딩 다이얼로그 표시
+    // 약간의 딜레이 후에 로딩 다이얼로그 표시 (바텀시트가 완전히 닫힌 후)
     await Future.delayed(const Duration(milliseconds: 100));
     
     // 로딩 다이얼로그 표시
-    if (parentContext.mounted) {
-      LoadingDialog.show(parentContext, message: '노트 생성 준비 중...');
+    try {
+      LoadingDialog.show(appContext, message: '노트 생성 준비 중...');
+    } catch (e) {
+      debugPrint('로딩 다이얼로그 표시 실패: $e');
+      // 로딩 다이얼로그 없이도 계속 진행
     }
     
     String? createdNoteId;
@@ -337,13 +343,15 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
               break;
             }
             
-            // 진행 메시지 업데이트 - Future.microtask 사용
-            final progressSeconds = (attempts / 2).toStringAsFixed(1);
+            // 진행 메시지 업데이트 - 안전하게 try-catch로 감싸기
+            final progressSeconds = (attempts * 0.5).toStringAsFixed(1);
             final message = '첫 페이지 처리 중... ($progressSeconds/10초)';
-            Future.microtask(() {
+            try {
               LoadingDialog.updateMessage(message);
-            });
-            debugPrint('로딩 메시지 업데이트: $message');
+              debugPrint('로딩 메시지 업데이트: $message');
+            } catch (e) {
+              debugPrint('로딩 메시지 업데이트 실패: $e');
+            }
             
             // 0.5초 대기
             await Future.delayed(const Duration(milliseconds: 500));
@@ -367,11 +375,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         // 약간의 딜레이 후 화면 전환 시도
         await Future.delayed(const Duration(milliseconds: 300));
         
-        // 부모 컨텍스트를 사용하여 노트 상세 화면으로 이동
-        if (parentContext.mounted) {
-          debugPrint('부모 컨텍스트를 사용하여 노트 상세 화면으로 이동 시도');
+        // 앱 컨텍스트를 사용하여 노트 상세 화면으로 이동
+        if (appContext.mounted) {
+          debugPrint('앱 컨텍스트를 사용하여 노트 상세 화면으로 이동 시도');
           
-          Navigator.of(parentContext).push(
+          Navigator.of(appContext).push(
             MaterialPageRoute(
               builder: (context) => NoteDetailScreen(
                 noteId: noteId,
@@ -384,17 +392,17 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           }).catchError((error) {
             debugPrint('노트 상세 화면 이동 중 오류: $error');
             
-            // 오류 발생 시 스낵바로 알림
-            if (parentContext.mounted) {
-              ScaffoldMessenger.of(parentContext).showSnackBar(
+            // 오류 발생 시 스낵바로 피드백 제공
+            if (appContext.mounted) {
+              ScaffoldMessenger.of(appContext).showSnackBar(
                 SnackBar(
                   content: Text('노트가 생성되었지만 화면 이동에 실패했습니다.'),
                   action: SnackBarAction(
                     label: '확인',
                     onPressed: () {
                       // 다시 시도 (한 번 더)
-                      if (parentContext.mounted) {
-                        Navigator.of(parentContext).push(
+                      if (appContext.mounted) {
+                        Navigator.of(appContext).push(
                           MaterialPageRoute(
                             builder: (context) => NoteDetailScreen(
                               noteId: noteId,
@@ -412,7 +420,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             }
           });
         } else {
-          debugPrint('부모 컨텍스트도 유효하지 않아 노트 상세 화면으로 이동할 수 없습니다');
+          debugPrint('앱 컨텍스트도 유효하지 않아 노트 상세 화면으로 이동할 수 없습니다');
         }
       } else {
         // 노트 생성 실패
@@ -428,8 +436,8 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         // 실패 메시지 표시
         final String errorMessage = result['message'] as String? ?? '노트 생성에 실패했습니다.';
         
-        if (parentContext.mounted) {
-          ScaffoldMessenger.of(parentContext).showSnackBar(
+        if (appContext.mounted) {
+          ScaffoldMessenger.of(appContext).showSnackBar(
             SnackBar(content: Text('노트 생성 실패: $errorMessage')),
           );
         }
@@ -443,8 +451,8 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
       
       debugPrint('노트 생성 중 예외 발생: $e');
-      if (parentContext.mounted) {
-        ScaffoldMessenger.of(parentContext).showSnackBar(
+      if (appContext.mounted) {
+        ScaffoldMessenger.of(appContext).showSnackBar(
           SnackBar(content: Text('노트 생성 중 오류가 발생했습니다')),
         );
       }
