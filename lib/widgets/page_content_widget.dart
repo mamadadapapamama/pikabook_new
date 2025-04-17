@@ -18,6 +18,8 @@ import '../services/usage_limit_service.dart';
 import '../widgets/common/usage_dialog.dart';
 import '../services/translation_service.dart';
 import '../services/enhanced_ocr_service.dart';
+import '../services/dictionary/dictionary_service.dart';
+import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
 /// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
 ///
@@ -555,7 +557,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         return;
       }
 
-      // 사전 서비스에서 단어 검색
+      // 사전 서비스에서 단어 검색 
       final entry = await _pageContentService.lookupWord(word);
 
       if (entry != null) {
@@ -568,11 +570,28 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           );
         }
       } else {
-        if (mounted) {
-          // 사전에서 찾지 못한 경우 오류 메시지
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('단어 "$word"를 사전에서 찾을 수 없습니다.')),
-          );
+        // 내부 사전에서 찾지 못한 경우, DictionaryService를 직접 사용하여 Papago API로 검색
+        final dictionaryService = DictionaryService();
+        final result = await dictionaryService.lookupWord(word);
+        
+        if (result['success'] == true && result['entry'] != null) {
+          final apiEntry = result['entry'] as DictionaryEntry;
+          
+          if (mounted) {
+            DictionaryResultWidget.showDictionaryBottomSheet(
+              context: context,
+              entry: apiEntry,
+              onCreateFlashCard: widget.onCreateFlashCard,
+              isExistingFlashcard: false,
+            );
+          }
+        } else {
+          // 그래도 찾지 못한 경우에만 스낵바 표시
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('단어 "$word"를 사전에서 찾을 수 없습니다.')),
+            );
+          }
         }
       }
     } catch (e) {

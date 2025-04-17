@@ -95,7 +95,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   bool _isEditingTitle = false; // 제목 편집 모드 여부
   TextEditingController _titleEditingController = TextEditingController(); // 제목 편집용 컨트롤러
   int _expectedTotalPages = 0; // 추가: 예상되는 총 페이지 수
-  
+
   // 의존성 관련 변수들
   ThemeData? _theme;
   
@@ -145,7 +145,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     _initScreenshotDetection();
     });
   }
-  
+
   @override
   void dispose() {
     debugPrint('노트 상세 화면 dispose 호출됨');
@@ -1419,7 +1419,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         if (_titleEditingController.text.isNotEmpty) {
           await _updateNoteTitle(_titleEditingController.text);
         }
-        setState(() {
+    setState(() {
           _isEditingTitle = false;
         });
         return false; // 뒤로가기 이벤트 소비
