@@ -2079,7 +2079,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         NoteDetailBottomBar(
           currentPage: _pageManager.currentPage,
           currentPageIndex: _pageManager.currentPageIndex,
-          totalPages: _pageManager.pages.length,
+          totalPages: _note?.imageCount != null && _note!.imageCount! > 0
+              ? _note!.imageCount!  // 노트의 imageCount 우선 사용
+              : (_expectedTotalPages > 0 
+                  ? math.max(_pageManager.pages.length, _expectedTotalPages)
+                  : _pageManager.pages.length),
           onPageChanged: (index) => _changePage(index),
           onToggleFullTextMode: _toggleFullTextMode,
           isFullTextMode: _pageManager.currentPage?.id != null
@@ -2193,10 +2197,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   Widget _buildBottomBar() {
     // 현재 페이지와 총 페이지 수 계산
     final currentPageIndex = _pageManager.currentPageIndex;
-    // 총 페이지 수는 실제 페이지 수와 예상 페이지 수 중 큰 값 사용
-    final totalPages = _expectedTotalPages > 0 
-        ? math.max(_pageManager.pages.length, _expectedTotalPages)
-        : _pageManager.pages.length;
+    // 총 페이지 수는 노트의 imageCount, 예상 페이지 수, 실제 페이지 리스트 중 가장 큰 값을 사용
+    final totalPages = _note?.imageCount != null && _note!.imageCount! > 0
+        ? _note!.imageCount!  // 노트의 imageCount 우선 사용
+        : (_expectedTotalPages > 0 
+            ? math.max(_pageManager.pages.length, _expectedTotalPages)
+            : _pageManager.pages.length);
     
     return NoteDetailBottomBar(
       currentPage: _pageManager.currentPage,

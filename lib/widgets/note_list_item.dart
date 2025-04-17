@@ -325,7 +325,7 @@ class _NoteListItemState extends State<NoteListItem> {
                           ),
                           const SizedBox(width: 4.0),
                           Text(
-                            '${widget.note.pages.length} pages',
+                            '${widget.note.imageCount ?? widget.note.pages.length} pages',
                             style: const TextStyle(
                               fontFamily: 'Poppins',
                               fontSize: 12.0,
@@ -337,64 +337,11 @@ class _NoteListItemState extends State<NoteListItem> {
                       ),
                       const SizedBox(height: 8.0),
                       if (widget.note.flashcardCount > 0 || widget.note.flashCards.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFD53C),
-                            borderRadius: BorderRadius.circular(100),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 20,
-                                height: 20,
-                                alignment: Alignment.center,
-                                child: Stack(
-                                  children: [
-                                    Container(
-                                      width: 12,
-                                      height: 12,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color: const Color(0xFF665518),
-                                          width: 2,
-                                        ),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      top: 4,
-                                      left: 4,
-                                      child: Container(
-                                        width: 12,
-                                        height: 12,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFFD53C),
-                                          borderRadius: BorderRadius.circular(4),
-                                          border: Border.all(
-                                            color: const Color(0xFF665518),
-                                            width: 2,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${widget.note.flashcardCount > 0 ? widget.note.flashcardCount : widget.note.flashCards.length}',
-                                style: const TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF226357),
-                                ),
-                              ),
-                            ],
-                          ),
+                        FlashcardCounterBadge(
+                          count: widget.note.flashcardCount > 0 
+                              ? widget.note.flashcardCount 
+                              : widget.note.flashCards.length,
+                          noteId: widget.note.id,
                         ),
                     ],
                   ),

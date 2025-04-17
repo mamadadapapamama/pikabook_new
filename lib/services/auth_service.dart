@@ -97,35 +97,45 @@ class AuthService {
   Future<User?> signInWithApple() async {
     try {
       debugPrint('Apple login: 1. Starting authentication...');
-      // 구글 로그인 프로세스 시작
-      final GoogleSignIn googleSignIn = GoogleSignIn();
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       
-      // 사용자가 로그인 취소한 경우
-      if (googleUser == null) {
-        debugPrint('구글 로그인 취소됨');
-        return null;
-      }
+      // 앱 재설치 여부 확인
+      await _checkAppInstallation();
       
-      // 구글 인증 정보 얻기
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      
-      // Firebase 인증 정보 생성
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+      // Apple 로그인 시작
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
       );
       
-      // Firebase로 로그인
-      final UserCredential userCredential = 
-          await FirebaseAuth.instance.signInWithCredential(credential);
-          
-      final User? user = userCredential.user;
+      debugPrint('Apple login: 2. Got Apple credentials');
       
-      // 사용자 정보가 있다면 Firestore에 사용자 정보 업데이트
+      // OAuthCredential 생성
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: appleCredential.identityToken,
+        accessToken: appleCredential.authorizationCode,
+      );
+      
+      debugPrint('Apple login: 3. Created OAuth credential');
+      
+      // Firebase 인증
+      final userCredential = await _auth.signInWithCredential(oauthCredential);
+      final user = userCredential.user;
+      
+      debugPrint('Apple login: 4. Signed in with Firebase');
+      
+      // 사용자 정보가 있으면 Firestore에 저장
       if (user != null) {
+        // 이름 정보가 있다면 업데이트 (애플은 첫 로그인에만 이름 제공)
+        if (appleCredential.givenName != null && userCredential.additionalUserInfo?.isNewUser == true) {
+          // 사용자 프로필 업데이트
+          await user.updateDisplayName('${appleCredential.givenName} ${appleCredential.familyName}'.trim());
+          debugPrint('Apple login: 5. Updated user display name');
+        }
+        
         await _saveUserToFirestore(user, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
-        debugPrint('Apple login: 7. Firebase login successful');
+        debugPrint('Apple login: 6. Saved user to Firestore');
       }
       
       return user;
@@ -144,35 +154,23 @@ class AuthService {
   Future<User?> signInWithAppleAlternative() async {
     try {
       debugPrint('Alternative Apple login: 1. Starting authentication...');
-      // 구글 로그인 프로세스 시작
-      final GoogleSignIn googleSignIn = GoogleSignIn();
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       
-      // 사용자가 로그인 취소한 경우
-      if (googleUser == null) {
-        debugPrint('구글 로그인 취소됨');
-        return null;
-      }
+      // 앱 재설치 여부 확인
+      await _checkAppInstallation();
       
-      // 구글 인증 정보 얻기
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      // Apple 로그인을 사용한 Firebase 인증
+      final provider = OAuthProvider('apple.com')
+        ..addScope('email')
+        ..addScope('name');
+        
+      // 인증 시도
+      final result = await _auth.signInWithProvider(provider);
+      final user = result.user;
       
-      // Firebase 인증 정보 생성
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
-      
-      // Firebase로 로그인
-      final UserCredential userCredential = 
-          await FirebaseAuth.instance.signInWithCredential(credential);
-          
-      final User? user = userCredential.user;
-      
-      // 사용자 정보가 있다면 Firestore에 사용자 정보 업데이트
+      // 사용자 정보가 있으면 Firestore에 저장
       if (user != null) {
-        await _saveUserToFirestore(user, isNewUser: userCredential.additionalUserInfo?.isNewUser ?? false);
-        debugPrint('Alternative Apple login: 7. Signing in with Firebase...');
+        await _saveUserToFirestore(user, isNewUser: result.additionalUserInfo?.isNewUser ?? false);
+        debugPrint('Alternative Apple login: 2. Signed in successfully');
       }
       
       return user;
