@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:flutter/scheduler.dart' show timeDilation;
 import '../services/image_service.dart';
 import '../services/note_service.dart';
 import '../views/screens/note_detail_screen.dart';
@@ -271,6 +272,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   
   /// 선택한 이미지로 노트 생성
   Future<void> _createNoteWithImages(BuildContext context, List<File> imageFiles) async {
+    // 메서드 시작 시점에 디버그 타이머 강제 비활성화
+    timeDilation = 1.0;
+    
     if (imageFiles.isEmpty) {
       debugPrint('이미지가 없어 노트 생성 취소');
       return;
@@ -334,6 +338,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         // 앱 컨텍스트를 사용하여 노트 상세 화면으로 이동
         if (appContext.mounted) {
           debugPrint('앱 컨텍스트를 사용하여 노트 상세 화면으로 이동 시도');
+          
+          // 화면 전환 직전에 다시 한번 timeDilation 설정
+          timeDilation = 1.0;
           
           Navigator.of(appContext).push(
             MaterialPageRoute(
