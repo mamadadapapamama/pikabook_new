@@ -140,8 +140,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   void dispose() {
     debugPrint('노트 상세 화면 dispose 호출됨');
     
-    // 리소스 정리
-    _cleanupResources();
+    // 리소스 정리 - 동기적으로 호출만 하고 실제 완료는 기다리지 않음
+    // 비동기 작업은 백그라운드에서 계속됨
+    _cleanupResources().then((_) {
+      debugPrint('리소스 정리 완료');
+    }).catchError((e) {
+      debugPrint('리소스 정리 중 오류: $e');
+    });
     
     super.dispose();
   }
@@ -1389,7 +1394,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       debugPrint('노트 상세 화면에서 뒤로가기 버튼 클릭됨');
       
       // TTS 및 다른 리소스 정리
-      _cleanupResources();
+      await _cleanupResources();
       
       // 컨텍스트가 유효한지 확인
       if (!mounted || !context.mounted) {
@@ -1403,7 +1408,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         if (_titleEditingController.text.isNotEmpty) {
           await _updateNoteTitle(_titleEditingController.text);
         }
-      setState(() {
+        setState(() {
           _isEditingTitle = false;
         });
         return false; // 뒤로가기 이벤트 소비
@@ -1415,14 +1420,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         _cacheService.cacheNote(_note!);
       }
       
-      // 간단하게 화면 종료 (검은 화면 문제 해결)
-      if (Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-        return false; // 뒤로가기 이벤트 소비 (이미 처리했으므로)
-      }
+      // 간단하게 화면 종료
+      debugPrint('Navigator.of(context).canPop(): ${Navigator.of(context).canPop()}');
       
-      // 화면 스택을 확인하여 팝 가능하지 않은 경우 홈 화면으로 이동
-      return true; // 기본 뒤로가기 동작 허용
+      // 명시적으로 Navigator.pop 호출
+      Future.microtask(() {
+        if (mounted && context.mounted) {
+          Navigator.of(context).pop();
+          debugPrint('Navigator.pop() 호출 완료');
+        }
+      });
+      
+      return false; // 뒤로가기 이벤트 소비 (명시적으로 처리)
     } catch (e) {
       debugPrint('뒤로가기 처리 중 오류 발생: $e');
       return true; // 오류 발생 시 기본 뒤로가기 허용
@@ -1445,12 +1454,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               onMorePressed: _showMoreOptions,
               onFlashcardTap: _navigateToFlashcards,
           onBackPressed: () {
-            // 시스템 백버튼과 동일한 로직 사용
-            _onWillPop().then((shouldHandleDefault) {
-              // shouldHandleDefault가 true인 경우에만 추가로 pop 처리
-              if (shouldHandleDefault && Navigator.of(context).canPop()) {
-                Navigator.of(context).pop();
-              }
+            // 명시적으로 뒤로가기 처리
+            debugPrint('앱바의 뒤로가기 버튼 클릭됨');
+            _onWillPop().then((_) {
+              // onWillPop에서 이미 처리되므로 여기서는 추가 작업 없음
+              debugPrint('앱바 뒤로가기 처리 완료');
             });
           },
         ),
