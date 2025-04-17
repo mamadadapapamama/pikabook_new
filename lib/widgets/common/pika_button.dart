@@ -136,7 +136,7 @@ class PikaButton extends StatelessWidget {
       case PikaButtonSize.large:
         return EdgeInsets.symmetric(
           horizontal: SpacingTokens.lg,
-          vertical: SpacingTokens.xs,
+          vertical: SpacingTokens.sm,
         );
       default:
         return EdgeInsets.symmetric(

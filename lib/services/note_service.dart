@@ -691,8 +691,8 @@ class NoteService {
       await _setBackgroundProcessingState(noteId, true);
       
       final totalCount = imageFiles.length;
-      int processedCount = 0;
-      int errorCount = 0;
+      int successCount = 0;
+      int failCount = 0;
       
       // 기존 페이지 ID 가져오기
       List<String> existingPageIds = [];
@@ -740,7 +740,7 @@ class NoteService {
           );
           
           if (result['success'] == true) {
-            processedCount++;
+            successCount++;
             
             // 첫 페이지 처리 완료 플래그 설정
             await _notesCollection.doc(noteId).update({
@@ -756,7 +756,7 @@ class NoteService {
           }
         } catch (e) {
           debugPrint('첫 번째 이미지 처리 중 오류 발생: $e');
-          errorCount++;
+          failCount++;
         }
         
         // 나머지 이미지 처리 (두 번째 이미지부터)
@@ -775,13 +775,13 @@ class NoteService {
             );
             
             if (result['success'] == true) {
-              processedCount++;
+              successCount++;
             } else {
-              errorCount++;
+              failCount++;
             }
           } catch (e) {
             debugPrint('이미지 ${i+1} 처리 중 오류 발생: $e');
-            errorCount++;
+            failCount++;
           }
         }
       }
@@ -792,7 +792,7 @@ class NoteService {
       // 처리 완료 플래그 업데이트
       await _notesCollection.doc(noteId).update({
         'processingCompleted': true,
-        'processedImagesCount': processedCount,
+        'processedImagesCount': successCount + failCount,
         'totalImages': totalCount,
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -800,9 +800,9 @@ class NoteService {
       // 처리 완료를 SharedPreferences에 저장하여 UI에 알림
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('pages_updated_$noteId', true);
-      await prefs.setInt('updated_page_count_$noteId', processedCount);
+      await prefs.setInt('updated_page_count_$noteId', successCount + failCount);
       
-      debugPrint('백그라운드 이미지 처리 완료: 총 $totalCount개, 성공 $processedCount개, 실패 $errorCount개');
+      debugPrint('백그라운드 이미지 처리 완료: 총 $totalCount개, 성공 $successCount개, 실패 $failCount개');
     } catch (e) {
       debugPrint('백그라운드 이미지 처리 중 오류: $e');
       
@@ -936,16 +936,22 @@ class NoteService {
       // 노트를 캐시에 저장
       await _cacheService.cacheNote(note);
       
-      // 반환값에 noteId를 명확하게 포함시킴
+      // 결과 반환 (성공)
       return {
         'success': true,
         'noteId': noteId,
-        'note': note,
         'message': '노트가 생성되었습니다.',
-        'isProcessingBackground': true,
+        'totalPages': imageFiles.length,
+        'title': defaultTitle,
       };
     } catch (e) {
-      return {'success': false, 'message': '노트 생성 중 오류 발생: $e'};
+      debugPrint('노트 생성 중 오류 발생: $e');
+      
+      // 결과 반환 (실패)
+      return {
+        'success': false,
+        'message': '노트 생성 중 오류가 발생했습니다: $e',
+      };
     }
   }
 

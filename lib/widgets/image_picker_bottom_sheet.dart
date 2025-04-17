@@ -286,7 +286,10 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
     });
     
-    // 바텀 시트 닫기
+    // 화면 전환을 위해 부모 컨텍스트 미리 저장
+    final BuildContext parentContext = Navigator.of(context).context;
+    
+    // 바텀 시트 닫기 (이 부분은 제대로 작동함)
     if (mounted && Navigator.canPop(context)) {
       Navigator.pop(context);
     }
@@ -355,18 +358,59 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         // 로딩 다이얼로그 숨기기 - 안정적인 실행을 위해 try-catch로 감싸기
         try {
           LoadingDialog.hide();
+          debugPrint('로딩 다이얼로그 숨김 완료');
         } catch (e) {
           debugPrint('로딩 다이얼로그 숨기기 오류: $e');
         }
         
-        // 노트 상세 화면으로 이동 전 짧은 딜레이
-        await Future.delayed(const Duration(milliseconds: 200));
+        // 약간의 딜레이 후 화면 전환 시도
+        await Future.delayed(const Duration(milliseconds: 300));
         
-        if (!mounted) {
-          return;
+        // 부모 컨텍스트를 사용하여 노트 상세 화면으로 이동
+        if (parentContext.mounted) {
+          debugPrint('부모 컨텍스트를 사용하여 노트 상세 화면으로 이동 시도');
+          
+          Navigator.of(parentContext).push(
+            MaterialPageRoute(
+              builder: (context) => NoteDetailScreen(
+                noteId: noteId,
+                isProcessingBackground: !firstPageProcessed,
+              ),
+            ),
+          ).then((_) {
+            debugPrint('노트 상세 화면에서 돌아옴');
+          }).catchError((error) {
+            debugPrint('노트 상세 화면 이동 중 오류: $error');
+            
+            // 오류 발생 시 스낵바로 알림
+            if (parentContext.mounted) {
+              ScaffoldMessenger.of(parentContext).showSnackBar(
+                SnackBar(
+                  content: Text('노트가 생성되었지만 화면 이동에 실패했습니다.'),
+                  action: SnackBarAction(
+                    label: '확인',
+                    onPressed: () {
+                      // 다시 시도 (한 번 더)
+                      if (parentContext.mounted) {
+                        Navigator.of(parentContext).push(
+                          MaterialPageRoute(
+                            builder: (context) => NoteDetailScreen(
+                              noteId: noteId,
+                              isProcessingBackground: !firstPageProcessed,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            }
+          });
+        } else {
+          debugPrint('부모 컨텍스트도 유효하지 않아 노트 상세 화면으로 이동할 수 없습니다');
         }
-        
-        await _navigateToNoteDetail(context, noteId, !firstPageProcessed);
       } else {
         // 노트 생성 실패
         debugPrint('노트 생성 결과 실패: ${result['message']}');
@@ -381,8 +425,8 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         // 실패 메시지 표시
         final String errorMessage = result['message'] as String? ?? '노트 생성에 실패했습니다.';
         
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+        if (parentContext.mounted) {
+          ScaffoldMessenger.of(parentContext).showSnackBar(
             SnackBar(content: Text('노트 생성 실패: $errorMessage')),
           );
         }
@@ -396,47 +440,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
       
       debugPrint('노트 생성 중 예외 발생: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (parentContext.mounted) {
+        ScaffoldMessenger.of(parentContext).showSnackBar(
           SnackBar(content: Text('노트 생성 중 오류가 발생했습니다')),
         );
       }
-    }
-  }
-
-  // 노트 상세 화면으로 이동
-  Future<void> _navigateToNoteDetail(BuildContext context, String noteId, bool isProcessingBackground) async {
-    try {
-      debugPrint('노트 상세 화면으로 이동 시작: $noteId');
-      
-      // 상태 확인
-      if (!mounted) {
-        debugPrint('위젯이 마운트되지 않아 노트 상세 화면으로 이동 취소');
-        return;
-      }
-      
-      // 이동 전 추가 딜레이로 안정성 향상
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      // BuildContext가 유효한지 확인
-      if (!mounted || !Navigator.of(context).canPop()) {
-        debugPrint('BuildContext가 더 이상 유효하지 않음');
-        return;
-      }
-      
-      // 일반적인 네비게이션 사용
-      final MaterialPageRoute route = MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(
-          noteId: noteId,
-          isProcessingBackground: isProcessingBackground,
-        ),
-      );
-      
-      await Navigator.of(context).push(route);
-      
-      debugPrint('노트 상세 화면으로 이동 성공: $noteId');
-    } catch (e) {
-      debugPrint('노트 상세 화면 이동 중 오류: $e');
     }
   }
 } 
