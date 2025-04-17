@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/scheduler.dart' show timeDilation;
 import 'firebase_options.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -46,14 +47,11 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     
+    // 디버그 타이머 비활성화 (항상 1.0으로 설정)
+    timeDilation = 1.0;
+    
     // 시스템 UI 조정
     SystemChannels.textInput.invokeMethod('TextInput.hide');
-    
-    // 타이머 로그 출력 제한 (릴리즈 모드 기반)
-    if (kReleaseMode) {
-      // 릴리즈 모드에서 디버그 출력 최소화
-      debugPrint = (String? message, {int? wrapWidth}) {};
-    }
     
     // 상태표시줄 설정
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -223,6 +221,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   @override
   Widget build(BuildContext context) {
+    // 디버그 타이머 비활성화 (매 빌드마다 1.0으로 설정)
+    timeDilation = 1.0;
+    
     // 앱 테마 적용
     final themeData = ThemeData(
       primarySwatch: Colors.blue,
@@ -254,40 +255,24 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       ),
     );
     
-    // 에러 발생한 경우
+    // 오류 발생 시 에러 화면 표시
     if (_error != null) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
-        // 디버그 성능 측정 비활성화
-        showPerformanceOverlay: false,
-        checkerboardRasterCacheImages: false,
-        checkerboardOffscreenLayers: false,
-        showSemanticsDebugger: false,
-        debugShowMaterialGrid: false,
         home: Scaffold(
           body: Center(
-            child: Text(
-              '오류가 발생했습니다:\n$_error',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red),
-            ),
+            child: Text(_error!),
           ),
         ),
       );
     }
     
-    // 초기화 중인 경우
+    // 로딩 중일 때 로딩 화면 표시
     if (_isLoading || !_isInitialized || _isLoadingUserData) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
-        // 디버그 성능 측정 비활성화
-        showPerformanceOverlay: false,
-        checkerboardRasterCacheImages: false,
-        checkerboardOffscreenLayers: false,
-        showSemanticsDebugger: false,
-        debugShowMaterialGrid: false,
         home: const LoadingScreen(progress: 0.5, message: '앱을 초기화하는 중입니다...'),
       );
     }
@@ -297,12 +282,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
-        // 디버그 성능 측정 비활성화
-        showPerformanceOverlay: false,
-        checkerboardRasterCacheImages: false,
-        checkerboardOffscreenLayers: false,
-        showSemanticsDebugger: false,
-        debugShowMaterialGrid: false,
         home: LoginScreen(
           onLoginSuccess: (user) {
             // 사용자 로그인 성공 처리
@@ -322,12 +301,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
-        // 디버그 성능 측정 비활성화
-        showPerformanceOverlay: false,
-        checkerboardRasterCacheImages: false,
-        checkerboardOffscreenLayers: false,
-        showSemanticsDebugger: false,
-        debugShowMaterialGrid: false,
         home: OnboardingScreen(
           onComplete: () async {
             await _preferencesService.setOnboardingCompleted(true);
@@ -345,13 +318,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: themeData,
-      // 디버그 성능 측정 비활성화
-      showPerformanceOverlay: false,
-      checkerboardRasterCacheImages: false,
-      checkerboardOffscreenLayers: false,
-      showSemanticsDebugger: false,
-      debugShowMaterialGrid: false,
-      // 홈 화면 표시
       home: const HomeScreen(),
       routes: {
         '/settings': (context) => SettingsScreen(

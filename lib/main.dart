@@ -125,3 +125,15 @@ Future<void> _cleanupOnStart() async {
     debugPrint('앱 시작 시 캐시 정리 중 오류: $e');
   }
 }
+
+@override
+Widget build(BuildContext context) {
+  return MaterialApp(
+    title: 'Pikabook',
+    debugShowCheckedModeBanner: false, // 디버그 배너 비활성화
+    theme: ThemeData(
+      // ... existing code ...
+    ),
+    // ... existing code ...
+  );
+}

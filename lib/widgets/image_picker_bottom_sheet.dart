@@ -294,7 +294,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     
     // 로딩 다이얼로그 표시
     try {
-      PikabookLoader.show(appContext, message: '스마트 노트를 만들고 있어요...');
+      PikabookLoader.show(appContext, message: '스마트 노트를 만들고 있어요...\n잠시만 기다려 주세요.');
     } catch (e) {
       debugPrint('로딩 다이얼로그 표시 실패: $e');
       // 로딩 다이얼로그 없이도 계속 진행
@@ -320,35 +320,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         // 변수에 보관할 노트 ID 복사 (중간에 null이 되지 않도록)
         final String noteId = createdNoteId;
         
-        // 첫 번째 페이지 처리 완료 또는 타임아웃 대기 (최대 10초)
-        bool firstPageProcessed = false;
-        int attempts = 0;
-        const maxAttempts = 20; // 10초 (0.5초 간격으로 20번)
-        
-        while (!firstPageProcessed && attempts < maxAttempts) {
-          attempts++;
-          
-          try {
-            final statusResult = await _noteService.checkFirstPageProcessingStatus(noteId);
-            firstPageProcessed = statusResult['processed'] == true;
-            
-            if (firstPageProcessed) {
-              debugPrint('첫 번째 페이지 처리 완료: $noteId (시도: $attempts)');
-              break;
-            }
-            
-            // 0.5초 대기
-            await Future.delayed(const Duration(milliseconds: 500));
-          } catch (e) {
-            debugPrint('첫 번째 페이지 처리 상태 확인 중 오류: $e');
-            // 오류가 발생해도 계속 진행 (break 제거)
-          }
-        }
-        
-        // 타임아웃이 발생해도 노트 상세 화면으로 이동
-        debugPrint('노트 페이지 처리 완료 여부: ${firstPageProcessed ? '완료' : '처리 중'}, 시도 횟수: $attempts');
-        
-        // 로딩 다이얼로그 숨기기 - 안정적인 실행을 위해 try-catch로 감싸기
+        // 노트 생성 성공 후, 즉시 로딩 다이얼로그 숨기기
         try {
           PikabookLoader.hide(appContext);
           debugPrint('로딩 다이얼로그 숨김 완료');
@@ -367,7 +339,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             MaterialPageRoute(
               builder: (context) => NoteDetailScreen(
                 noteId: noteId,
-                isProcessingBackground: !firstPageProcessed,
+                isProcessingBackground: true,
                 totalImageCount: imageFiles.length,
               ),
             ),
@@ -390,7 +362,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                           MaterialPageRoute(
                             builder: (context) => NoteDetailScreen(
                               noteId: noteId,
-                              isProcessingBackground: !firstPageProcessed,
+                              isProcessingBackground: true,
                               totalImageCount: imageFiles.length,
                             ),
                           ),
