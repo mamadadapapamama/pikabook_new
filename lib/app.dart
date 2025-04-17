@@ -15,6 +15,7 @@ import 'services/initialization_manager.dart';
 import 'services/user_preferences_service.dart';
 import 'widgets/loading_screen.dart';
 import 'theme/app_theme.dart';
+import 'theme/tokens/color_tokens.dart';
 
 /// 앱의 시작 지점 및 초기 화면 결정 로직
 /// - 로그인 확인
@@ -60,7 +61,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         const SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: Brightness.dark,
-          statusBarBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+          systemNavigationBarColor: Colors.white,
+          systemNavigationBarDividerColor: Colors.transparent,
+          systemNavigationBarIconBrightness: Brightness.dark,
         ),
       );
     });
@@ -224,6 +228,30 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       primarySwatch: Colors.blue,
       visualDensity: VisualDensity.adaptivePlatformDensity,
       fontFamily: 'Pretendard',
+      
+      // 텍스트 선택 색상 및 커서 색상을 주황색으로 변경
+      textSelectionTheme: TextSelectionThemeData(
+        selectionColor: ColorTokens.primarylight, // 선택된 텍스트 배경색
+        cursorColor: ColorTokens.primary,         // 커서 색상
+        selectionHandleColor: ColorTokens.primary, // 선택 핸들 색상
+      ),
+      
+      // 앱바 테마 설정
+      appBarTheme: AppBarTheme(
+        color: ColorTokens.primary,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+        ),
+        iconTheme: IconThemeData(color: Colors.white),
+      ),
+      
+      // 앱의 메인 컬러도 주황색으로 통일
+      colorScheme: ColorScheme.light(
+        primary: ColorTokens.primary,
+        secondary: ColorTokens.primary,
+      ),
     );
     
     // 에러 발생한 경우

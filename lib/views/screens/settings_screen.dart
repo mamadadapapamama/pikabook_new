@@ -694,6 +694,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
         title: Text(
           '회원 탈퇴',
           style: TypographyTokens.subtitle2.copyWith(
