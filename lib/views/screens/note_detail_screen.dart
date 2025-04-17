@@ -36,6 +36,7 @@ import '../../services/translation_service.dart';
 import '../../models/processed_text.dart';
 import '../../models/dictionary_entry.dart';
 import 'dart:math' as math;
+import '../../widgets/edit_title_dialog.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -374,8 +375,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         final isProcessingBackground = data?['isProcessingBackground'] as bool? ?? false;
         final processingCompleted = data?['processingCompleted'] as bool? ?? false;
         
-        debugPrint('백그라운드 처리 상태 확인: 처리 중=$isProcessingBackground, 완료=$processingCompleted');
-        
         return isProcessingBackground && !processingCompleted;
       }
       
@@ -391,20 +390,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 기존 타이머가 있으면 취소
     _backgroundCheckTimer?.cancel();
 
-    // 타이머 생성 전 로그 출력
-    debugPrint('백그라운드 처리 확인 타이머 설정: ${widget.noteId}');
-
     // 로컬에 저장된 처리 완료 상태 확인
     _checkLocalProcessingCompletedStatus().then((bool alreadyProcessed) {
       if (alreadyProcessed) {
-        debugPrint('이미 완료 처리된 노트 - 타이머 설정 생략');
         return;
       }
 
     // 5초마다 백그라운드 처리 상태 확인하는 주기적 타이머 설정
     _backgroundCheckTimer = Timer.periodic(Duration(seconds: 5), (timer) async {
       if (!mounted) {
-        debugPrint('화면이 더 이상 마운트되지 않음 - 타이머 취소');
         timer.cancel();
         return;
       }
@@ -432,7 +426,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                 // 처리 완료 + 백그라운드 처리 플래그 False 인 경우 업데이트
                 if (processingCompleted && !isProcessingBackground) {
                   firestoreUpdated = true;
-                  debugPrint('Firestore에서 백그라운드 처리 완료 확인됨');
                 }
               }
             } catch (e) {
@@ -444,7 +437,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           // 페이지 업데이트가 완료된 경우
           final updatedPageCount =
                 prefs.getInt('updated_page_count_${widget.noteId}') ?? _note?.imageCount ?? 0;
-          debugPrint('백그라운드 처리 완료 감지: $updatedPageCount 페이지 업데이트됨');
 
           // 플래그 초기화
             if (pagesUpdated) {
@@ -497,7 +489,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       final prefs = await SharedPreferences.getInstance();
       final key = 'note_processing_completed_${widget.noteId}';
       await prefs.setBool(key, true);
-      debugPrint('노트 처리 완료 상태 로컬에 저장됨: ${widget.noteId}');
     } catch (e) {
       debugPrint('로컬 처리 완료 상태 저장 중 오류: $e');
     }
@@ -537,7 +528,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           // 로컬에서 처리 완료 상태 확인
           final localCompleted = await _checkLocalProcessingCompletedStatus();
           if (localCompleted && !forceReload) {
-            debugPrint('로컬에 저장된 처리 완료 상태 확인: 이미 처리 완료됨');
             // 로컬 상태가 이미 완료인 경우 Firestore 검사 생략
           } else {
           final noteDoc = await FirebaseFirestore.instance
@@ -546,19 +536,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               .get();
           if (noteDoc.exists) {
             final data = noteDoc.data();
-            processingCompleted =
-                data?['processingCompleted'] as bool? ?? false;
-            if (processingCompleted) {
-              debugPrint('노트 문서에서 백그라운드 처리 완료 상태 확인: $processingCompleted');
-              forceReload = true; // 처리가 완료된 경우 강제 로드
-                
-                // 로컬에 처리 완료 상태 저장 (중복 알림 방지)
-                await _saveLocalProcessingCompletedStatus();
-              }
-            }
+            processingCompleted = data?['processingCompleted'] as bool? ?? false;
+          }
           }
         } catch (e) {
-          debugPrint('노트 문서 확인 중 오류 발생: $e');
+          debugPrint('노트 상태 확인 중 오류: $e');
         }
       }
 
@@ -859,6 +841,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       _titleEditingController.text = _note!.originalText;
       _isEditingTitle = true;
     });
+    
+    EditTitleDialog.show(
+      context,
+      currentTitle: _note!.originalText,
+      onTitleUpdated: (newTitle) {
+        _updateNoteTitle(newTitle);
+      },
+    );
   }
 
   // ===== 페이지 탐색 관련 메서드 =====

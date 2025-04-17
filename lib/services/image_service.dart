@@ -105,7 +105,7 @@ class ImageService {
         return null;
       }
       
-      debugPrint('이미지 선택 성공: 경로=${file.path}, 크기=$fileSize 바이트');
+      debugPrint('이미지 선택 성공: $file.path ($fileSize바이트)');
       return file;
     } catch (e) {
       debugPrint('이미지 선택 중 예외 발생: $e');
@@ -155,7 +155,9 @@ class ImageService {
         }
       }
       
-      debugPrint('선택된 유효한 이미지 수: ${validFiles.length}');
+      // 문자열 연결 방식으로 수정
+      final int count = validFiles.length;
+      debugPrint('총 $count개의 이미지가 선택됨');
       return validFiles;
     } catch (e) {
       debugPrint('다중 이미지 선택 중 예외 발생: $e');
@@ -844,7 +846,7 @@ class ImageService {
         return null;
       }
       
-      debugPrint('이미지 선택 성공: $file.path (${fileSize}바이트)');
+      debugPrint('이미지 선택 성공: $file.path ($fileSize바이트)');
       return file;
     } catch (e) {
       debugPrint('이미지 선택 중 예외 발생: $e');
@@ -883,7 +885,9 @@ class ImageService {
         }
       }
       
-      debugPrint('총 $validFiles.length개의 이미지가 선택됨');
+      // 문자열 연결 방식으로 수정
+      final int count = validFiles.length;
+      debugPrint('총 $count개의 이미지가 선택됨');
       return validFiles;
     } catch (e) {
       debugPrint('다중 이미지 선택 중 오류: $e');

@@ -3,12 +3,11 @@ import 'package:flutter/material.dart';
 import '../models/note.dart';
 import '../utils/date_formatter.dart';
 import '../services/image_service.dart';
-import '../services/note_service.dart';
 import 'flashcard_counter_badge.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
 import '../theme/tokens/color_tokens.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// 홈페이지 노트리스트 화면에서 사용되는 카드 위젯
 
@@ -34,7 +33,6 @@ class NoteListItem extends StatefulWidget {
 
 class _NoteListItemState extends State<NoteListItem> {
   final ImageService _imageService = ImageService();
-  final NoteService _noteService = NoteService();
   File? _imageFile;
   bool _isLoadingImage = false;
   bool _isUploadingImage = false;
@@ -57,6 +55,7 @@ class _NoteListItemState extends State<NoteListItem> {
   }
 
   Future<void> _loadImage() async {
+    // 메인 imageUrl이 있으면 먼저 시도
     if (widget.note.imageUrl != null && widget.note.imageUrl!.isNotEmpty) {
       try {
         setState(() {
@@ -99,29 +98,85 @@ class _NoteListItemState extends State<NoteListItem> {
               _isLoadingImage = false;
             });
             debugPrint('노트 이미지 로드 성공: ${widget.note.id}');
+            return; // 성공적으로 로드되었으므로 종료
           } else {
-            setState(() {
-              _isLoadingImage = false;
-              _imageLoadError = true;
-            });
-            debugPrint('노트 이미지 로드 실패 (파일 없음): ${widget.note.id}');
+            // imageUrl로 로드 실패 시 pages 리스트의 첫 번째 이미지 시도
+            await _tryLoadFirstPageImage();
           }
         }
       } catch (e) {
         debugPrint('이미지 로드 중 오류: $e');
         if (mounted) { // 위젯이 여전히 마운트되어 있는지 확인
-          setState(() {
-            _isLoadingImage = false;
-            _imageLoadError = true;
-          });
+          // 오류 발생 시 pages 리스트의 첫 번째 이미지 시도
+          await _tryLoadFirstPageImage();
         }
       }
+    } else if (widget.note.pages.isNotEmpty) {
+      // imageUrl이 없으면 pages 리스트의 첫 번째 이미지 시도
+      await _tryLoadFirstPageImage();
     } else {
       setState(() {
         _isLoadingImage = false;
         _imageFile = null; // 이미지 URL이 없는 경우 이미지 파일 정보 초기화
       });
-      debugPrint('노트에 이미지 URL이 없음: ${widget.note.id}');
+      debugPrint('노트에 이미지가 없음: ${widget.note.id}');
+    }
+  }
+
+  // pages 리스트의 첫 번째 이미지를 로드하는 헬퍼 메서드
+  Future<void> _tryLoadFirstPageImage() async {
+    // 페이지가 있는지 확인
+    if (widget.note.pages.isNotEmpty) {
+      try {
+        final firstPage = widget.note.pages.first;
+        // 페이지에 이미지 URL이 있는지 확인
+        if (firstPage.imageUrl != null && firstPage.imageUrl!.isNotEmpty) {
+          debugPrint('첫 번째 페이지 이미지 로드 시도: ${firstPage.imageUrl}');
+          
+          File? pageImage;
+          
+          // URL 또는 경로에 따라 다운로드 시도
+          if (firstPage.imageUrl!.startsWith('http')) {
+            pageImage = await _imageService.downloadImage(firstPage.imageUrl!);
+          } else {
+            pageImage = await _imageService.downloadImage(firstPage.imageUrl!);
+            
+            // 실패한 경우 Firebase URL 가져오기 시도
+            if (pageImage == null) {
+              try {
+                final storageRef = FirebaseStorage.instance.ref().child(firstPage.imageUrl!);
+                final url = await storageRef.getDownloadURL();
+                pageImage = await _imageService.downloadImage(url);
+              } catch (e) {
+                debugPrint('첫 번째 페이지 Firebase URL 재시도 중 오류: $e');
+              }
+            }
+          }
+          
+          if (mounted) {
+            if (pageImage != null) {
+              setState(() {
+                _imageFile = pageImage;
+                _isLoadingImage = false;
+                _imageLoadError = false;
+              });
+              debugPrint('첫 번째 페이지 이미지 로드 성공');
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('첫 번째 페이지 이미지 로드 중 오류: $e');
+      }
+    }
+    
+    // 모든 시도 실패
+    if (mounted) {
+      setState(() {
+        _isLoadingImage = false;
+        _imageLoadError = true;
+      });
+      debugPrint('모든 이미지 로드 시도 실패: ${widget.note.id}');
     }
   }
 
@@ -136,15 +191,32 @@ class _NoteListItemState extends State<NoteListItem> {
       final String? uploadedUrl = await _imageService.uploadImage(imageFile);
 
       if (uploadedUrl != null) {
-        // 노트 이미지 URL 업데이트
-        await _noteService.updateNoteImageUrl(widget.note.id!, uploadedUrl);
-        
-        setState(() {
-          _isUploadingImage = false;
-        });
-        
-        if (mounted) {
-          _showSnackBar('이미지가 업데이트 되었습니다');
+        // 노트 이미지 URL 직접 업데이트 (Firestore)
+        try {
+          // Firestore 직접 참조
+          await FirebaseFirestore.instance
+              .collection('notes')
+              .doc(widget.note.id!)
+              .update({
+                'imageUrl': uploadedUrl,
+                'updatedAt': DateTime.now(),
+              });
+          
+          setState(() {
+            _isUploadingImage = false;
+          });
+          
+          if (mounted) {
+            _showSnackBar('이미지가 업데이트 되었습니다');
+          }
+        } catch (firestoreError) {
+          debugPrint('Firestore 업데이트 오류: $firestoreError');
+          if (mounted) {
+            _showSnackBar('이미지 URL 업데이트 실패');
+          }
+          setState(() {
+            _isUploadingImage = false;
+          });
         }
       } else {
         setState(() {
@@ -285,10 +357,10 @@ class _NoteListItemState extends State<NoteListItem> {
       },
       child: Card(
         margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 16.0),
-        elevation: 1.0,
+        elevation: 0.0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8.0),
-          side: const BorderSide(color: Color(0xFFFFF0E8), width: 1.0),
+          side: const BorderSide(color: ColorTokens.primarylight, width: 1.0),
         ),
         color: Colors.white,
         child: InkWell(
@@ -419,7 +491,7 @@ class _NoteListItemState extends State<NoteListItem> {
               children: [
                 Icon(
                   hasUrl ? Icons.refresh : Icons.add_photo_alternate,
-                  color: hasUrl ? Colors.grey[400] : ColorTokens.primary,
+                  color: hasUrl ? Colors.grey[400] : ColorTokens.textGrey,
                   size: 32.0,
                 ),
                 if (hasUrl) ...[

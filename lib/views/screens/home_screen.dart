@@ -12,7 +12,6 @@ import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import '../../theme/tokens/ui_tokens.dart';
 import 'note_detail_screen.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/image_picker_bottom_sheet.dart';
 import '../../widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,7 +20,6 @@ import '../../widgets/common/help_text_tooltip.dart';
 import '../../widgets/common/pika_app_bar.dart';
 import '../../widgets/common/usage_dialog.dart';
 import 'flashcard_screen.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'settings_screen.dart';
 import '../../app.dart';
@@ -286,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             backgroundColor: Colors.white, // 배경색을 흰색으로 설정
                             child: Padding(
                               padding: EdgeInsets.symmetric(
-                                horizontal: SpacingTokens.md,
+                                horizontal: SpacingTokens.sm,
                                 vertical: SpacingTokens.sm,
                               ),
                               child: ListView.builder(

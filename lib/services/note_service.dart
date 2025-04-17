@@ -465,8 +465,6 @@ class NoteService {
         'isProcessingBackground': isProcessing,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-
-      debugPrint('백그라운드 처리 상태 설정: $noteId, 처리 중: $isProcessing');
     } catch (e) {
       debugPrint('백그라운드 처리 상태 설정 중 오류 발생: $e');
     }
@@ -480,7 +478,6 @@ class NoteService {
           await _imageService.getImageBytes(page.imageUrl);
         }
       }
-      debugPrint('${pages.length}개 페이지의 이미지 미리 로드 완료');
     });
   }
 
@@ -494,14 +491,10 @@ class NoteService {
     bool silentProgress = false,
   }) async {
     try {
-      debugPrint('백그라운드 처리 시작: ${imageFiles.length}개 이미지의 내용 채우기');
-
       // 백그라운드 처리 상태 설정
       await _setBackgroundProcessingState(noteId, true);
 
       if (imageFiles.length != pageIds.length) {
-        debugPrint(
-            '이미지 수와 페이지 ID 수가 일치하지 않습니다: 이미지 ${imageFiles.length}개, 페이지 ID ${pageIds.length}개');
         await _setBackgroundProcessingState(noteId, false);
         return;
       }
@@ -516,7 +509,6 @@ class NoteService {
       for (int i = 0; i < imageFiles.length; i++) {
         final imageFile = imageFiles[i];
         final pageId = pageIds[i];
-        debugPrint('이미지 ${i + 1}/${imageFiles.length} 처리 중...');
 
         try {
           // 이미지 업로드
@@ -525,7 +517,6 @@ class NoteService {
             imageUrl = await _imageService.uploadImage(imageFile);
             // 만약 빈 문자열이 반환되면, 기본 fallback 경로 사용
             if (imageUrl.isEmpty) {
-              debugPrint('이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
               imageUrl = 'images/fallback_image.jpg';
             }
           } catch (uploadError) {
@@ -535,8 +526,6 @@ class NoteService {
 
           // OCR로 텍스트 추출
           final extractedText = await _ocrService.extractText(imageFile, skipUsageCount: true);
-          debugPrint(
-              'OCR 텍스트 추출 완료: 이미지 ${i + 1}, 텍스트 길이: ${extractedText.length}');
 
           // 텍스트 번역
           String translatedText = '';
@@ -545,8 +534,6 @@ class NoteService {
               extractedText,
               targetLanguage: targetLanguage ?? 'ko',
             );
-            debugPrint(
-                '번역 완료: 이미지 ${i + 1}, 번역 텍스트 길이: ${translatedText.length}');
           }
 
           // 페이지 내용 업데이트
@@ -559,7 +546,6 @@ class NoteService {
           // 페이지 캐싱 - 페이지 업데이트 완료 시점에 캐싱
           if (updatedPage != null) {
             processedPages.add(updatedPage);
-            debugPrint('페이지 내용 업데이트 완료: 이미지 ${i + 1}, 페이지 ID: ${pageId}');
 
             // 진행 상황 업데이트
             processedCount++;
@@ -567,8 +553,6 @@ class NoteService {
               final progress = (processedCount * 100) ~/ totalCount;
               progressCallback(progress);
             }
-          } else {
-            debugPrint('페이지 내용 업데이트 실패: 이미지 ${i + 1}, 페이지 ID: ${pageId}');
           }
         } catch (e) {
           debugPrint('이미지 ${i + 1} 처리 중 오류 발생: $e');
@@ -578,9 +562,6 @@ class NoteService {
         // 서버 부하 감소를 위한 약간의 지연
         await Future.delayed(Duration(milliseconds: 500));
       }
-
-      debugPrint(
-          '백그라운드 처리 완료: ${processedCount} 페이지의 내용 채우기 완료, 노트 ID: $noteId');
 
       // 노트 객체 업데이트 (캐시 갱신) - 모든 페이지 처리 완료 시점에 캐싱
       try {
@@ -593,12 +574,10 @@ class NoteService {
           // 노트 문서에서 이미 저장된 전체 페이지 ID 목록 가져오기
           if (data != null && data['pages'] is List) {
             allPageIds = List<String>.from(data['pages'] as List);
-            debugPrint('노트 문서에서 가져온 전체 페이지 ID 목록: ${allPageIds.length}개');
           }
           
           // 페이지 ID 목록이 비어있거나 완전하지 않다면 모든 페이지 쿼리하여 확인
           if (allPageIds.isEmpty || allPageIds.length < pageIds.length + 1) {
-            debugPrint('노트의 전체 페이지 쿼리 시작');
             // 노트에 속한 모든 페이지 쿼리 (페이지 번호순)
             final pagesSnapshot = await _firestore
                 .collection('pages')
@@ -608,9 +587,7 @@ class NoteService {
             
             if (pagesSnapshot.docs.isNotEmpty) {
               allPageIds = pagesSnapshot.docs.map((doc) => doc.id).toList();
-              debugPrint('쿼리로 찾은 전체 페이지 ID 목록: ${allPageIds.length}개, 페이지 번호 순');
             } else {
-              debugPrint('노트에 속한 페이지가 없거나 쿼리 실패');
               // 백업 방법: 처리된 페이지 ID와 이번에 처리한 페이지 ID 합치기
               allPageIds = pageIds;
             }
@@ -627,17 +604,13 @@ class NoteService {
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-          debugPrint('노트 문서의 페이지 ID 목록 업데이트 완료: ${allPageIds.length}개');
-
           // 업데이트된 노트 객체 캐싱
           final updatedNoteDoc = await _notesCollection.doc(noteId).get();
           final updatedNote = Note.fromFirestore(updatedNoteDoc);
           await _cacheService.cacheNote(updatedNote);
-          debugPrint('노트 캐시 업데이트 완료: $noteId');
           
           // 페이지 목록도 캐시 업데이트
           await _cacheService.cachePages(noteId, processedPages);
-          debugPrint('${processedPages.length}개 페이지 캐싱 완료 (노트 ID: $noteId)');
           
           // 노트 문서에 처리 완료 플래그 추가
           await _notesCollection.doc(noteId).update({
@@ -649,9 +622,6 @@ class NoteService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('pages_updated_$noteId', true);
           await prefs.setInt('updated_page_count_$noteId', processedCount);
-          
-          // 처리 결과 로그
-          // debugPrint('모든 이미지 처리 완료 ($processedCount/$totalCount), 오류: 0');
         }
       } catch (e) {
         debugPrint('노트 캐시 업데이트 실패: $e');
@@ -1021,11 +991,19 @@ class NoteService {
         if (noteDoc.exists) {
           final note = Note.fromFirestore(noteDoc);
           
-          // extractedText 필드 업데이트
+          // extractedText 필드와 imageUrl 필드 업데이트
           await _notesCollection.doc(noteId).update({
             'extractedText': extractedText == '___PROCESSING___' ? '' : extractedText,
             'translatedText': translatedText.isNotEmpty ? translatedText : note.translatedText,
+            'imageUrl': imageUrl, // 썸네일로 첫 번째 이미지 URL 사용
+            'updatedAt': DateTime.now(),
           });
+          
+          // 썸네일 설정 로그
+          debugPrint('노트 썸네일 자동 설정됨: $noteId -> $imageUrl');
+          
+          // 캐시에서 노트 제거 (다음에 불러올 때 최신 정보로 로드)
+          await _cacheService.removeCachedNote(noteId);
         }
       }
 
@@ -1091,25 +1069,6 @@ class NoteService {
       return true;
     } catch (e) {
       debugPrint('플래시카드 추가 중 오류 발생: $e');
-      return false;
-    }
-  }
-
-  /// 노트 이미지 URL 업데이트
-  Future<bool> updateNoteImageUrl(String noteId, String imageUrl) async {
-    try {
-      // 노트의 이미지 URL 업데이트
-      await _notesCollection.doc(noteId).update({
-        'imageUrl': imageUrl,
-        'updatedAt': DateTime.now(),
-      });
-      
-      // 캐시에서 노트 제거 (다음에 불러올 때 최신 정보로 로드)
-      await _cacheService.removeCachedNote(noteId);
-      
-      return true;
-    } catch (e) {
-      debugPrint('노트 이미지 URL 업데이트 중 오류 발생: $e');
       return false;
     }
   }

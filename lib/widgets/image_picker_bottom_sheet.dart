@@ -345,7 +345,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             
             // 진행 메시지 업데이트 - 안전하게 try-catch로 감싸기
             final progressSeconds = (attempts * 0.5).toStringAsFixed(1);
-            final message = '첫 페이지 처리 중... ($progressSeconds/10초)';
+            final message = '스마트 노트가 만들어 지고 있어요... ($progressSeconds/10초)';
             try {
               LoadingDialog.updateMessage(message);
               debugPrint('로딩 메시지 업데이트: $message');
