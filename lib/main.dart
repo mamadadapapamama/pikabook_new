@@ -6,9 +6,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'firebase_options.dart';
 import 'services/image_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'views/screens/home_screen.dart';
-import 'views/screens/note_detail_screen.dart';
+// import 'package:shared_preferences/shared_preferences.dart';
+// import 'views/screens/home_screen.dart';
+// import 'views/screens/note_detail_screen.dart';
 
 /// 앱의 진입점
 /// 
@@ -47,37 +47,8 @@ void main() async {
   final imageService = ImageService();
   await imageService.cleanupTempFiles();
   
-  // 보류 중인 노트 ID가 있는지 확인
-  String? pendingNoteId;
-  bool isProcessingBackground = false;
-  
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    pendingNoteId = prefs.getString('pending_note_id');
-    isProcessingBackground = prefs.getBool('pending_note_is_processing') ?? false;
-    
-    // 값이 있으면 즉시 제거 (한 번만 사용)
-    if (pendingNoteId != null) {
-      await prefs.remove('pending_note_id');
-      await prefs.remove('pending_note_is_processing');
-      debugPrint('보류 중인 노트 ID 발견: $pendingNoteId (처리 중: $isProcessingBackground)');
-    }
-  } catch (e) {
-    debugPrint('설정 확인 중 오류: $e');
-  }
-  
-  // 노트 ID가 있으면 바로 노트 상세 화면으로 이동하는 App으로 시작
-  if (pendingNoteId != null && pendingNoteId.isNotEmpty) {
-    runApp(
-      DirectNoteApp(
-        noteId: pendingNoteId,
-        isProcessingBackground: isProcessingBackground,
-      ),
-    );
-  } else {
-    // 일반적인 앱 실행
-    runApp(const App());
-  }
+  // 일반적인 앱 실행
+  runApp(const App());
 }
 
 /// 앱 시작 시 캐시 및 임시 데이터 정리
@@ -100,33 +71,5 @@ Future<void> _cleanupOnStart() async {
     debugPrint('앱 시작 시 캐시 정리 완료');
   } catch (e) {
     debugPrint('앱 시작 시 캐시 정리 중 오류: $e');
-  }
-}
-
-/// 직접 노트 상세 화면으로 이동하는 앱
-class DirectNoteApp extends StatelessWidget {
-  final String noteId;
-  final bool isProcessingBackground;
-  
-  const DirectNoteApp({
-    super.key, 
-    required this.noteId,
-    this.isProcessingBackground = false,
-  });
-  
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFE975B)),
-        fontFamily: 'Pretendard',
-        useMaterial3: true,
-      ),
-      home: NoteDetailScreen(
-        noteId: noteId,
-        isProcessingBackground: isProcessingBackground,
-      ),
-    );
   }
 }

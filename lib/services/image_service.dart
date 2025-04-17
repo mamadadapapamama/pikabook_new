@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 import 'dart:async';
 import 'dart:convert';
@@ -14,6 +15,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'usage_limit_service.dart';
 import 'package:image/image.dart' as img;
+import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
 
 /// 압축된 결과를 나타내는 클래스 (내부 사용)
 class _CompressionResult {
@@ -316,11 +319,7 @@ class ImageService {
       // Firebase Storage에 업로드 시도 - 중복 업로드 방지를 위해 존재 여부 확인 추가
       try {
         // Firebase Storage 업로드는 별도 스레드에서 비동기로 처리 (앱 응답성 유지)
-        _uploadToFirebaseStorageIfNotExists(File(targetPath), relativePath).then((_) {
-          // 업로드 완료 후 추가 작업은 없음
-        }).catchError((error) {
-          debugPrint('Firebase Storage 배경 업로드 중 오류: $error');
-        });
+        await _uploadToFirebaseStorageIfNotExists(File(targetPath), relativePath);
       } catch (e) {
         debugPrint('Firebase Storage 업로드 중 오류: $e');
       }
@@ -466,46 +465,98 @@ class ImageService {
     }
   }
   
-  /// Firebase Storage에 이미지 업로드 (존재하지 않는 경우에만)
-  Future<String?> _uploadToFirebaseStorageIfNotExists(File file, String relativePath) async {
+  /// Firebase Storage에 이미지 업로드 (중복 확인)
+  Future<void> _uploadToFirebaseStorageIfNotExists(File file, String relativePath) async {
     try {
-      // Firebase 초기화 체크
-      if (FirebaseAuth.instance.app == null) {
-        debugPrint('Firebase가 초기화되지 않았습니다');
-        return null;
-      }
-      
-      final userId = _currentUserId;
-      if (userId == null) {
-        return null;
-      }
-      
-      // 사용자별 경로 지정: users/{userId}/images/{fileName}
-      final storagePath = 'users/$userId/$relativePath';
-      final storageRef = _storage.ref().child(storagePath);
-      
-      // 이미지가 이미 존재하는지 확인
-      try {
-        await storageRef.getMetadata();
+      if (!await _imageExists(relativePath)) {
+        // 파일이 존재하지 않는 경우에만 업로드
+        final ref = _storage.ref().child(relativePath);
         
-        // 이미 존재하는 경우 URL 반환
-        final downloadUrl = await storageRef.getDownloadURL();
-        return downloadUrl;
-      } catch (e) {
-        // 파일이 존재하지 않는 경우에만 업로드 진행
-        final uploadTask = storageRef.putFile(file);
+        // 존재 여부 이중 체크
+        try {
+          await ref.getDownloadURL();
+          debugPrint('이미지가 이미 존재함: $relativePath');
+          return;
+        } catch (e) {
+          // 파일이 존재하지 않음 - 정상 진행
+          debugPrint('신규 이미지 업로드 시작: $relativePath');
+        }
+        
+        // 파일 크기 확인
+        final fileSize = await file.length();
+        if (fileSize <= 0) {
+          throw Exception('파일 크기가 0바이트 이하: $relativePath');
+        }
+        
+        // 파일 확장자 확인
+        final extension = path.extension(file.path).toLowerCase();
+        final contentType = _getContentType(extension);
+        
+        // 업로드 메타데이터 설정
+        final metadata = SettableMetadata(
+          contentType: contentType,
+          customMetadata: {
+            'uploaded': DateTime.now().toIso8601String(),
+            'size': fileSize.toString(),
+          },
+        );
+        
+        // 업로드 작업
+        final uploadTask = ref.putFile(file, metadata);
         
         // 업로드 완료 대기
+        await uploadTask.whenComplete(() => debugPrint('이미지 업로드 완료: $relativePath'));
+        
+        // 업로드 상태 확인
         final snapshot = await uploadTask;
-        
-        // 이미지 URL 가져오기
-        final downloadUrl = await snapshot.ref.getDownloadURL();
-        
-        return downloadUrl;
+        if (snapshot.state == TaskState.success) {
+          debugPrint('이미지 성공적으로 업로드됨: $relativePath');
+        } else {
+          debugPrint('이미지 업로드 실패 상태: ${snapshot.state}');
+        }
+      } else {
+        debugPrint('이미지가 이미 존재함: $relativePath');
       }
     } catch (e) {
-      debugPrint('Firebase Storage 업로드 중 오류: $e');
-      return null; // 실패해도 앱은 계속 작동하도록 예외를 다시 발생시키지 않음
+      debugPrint('_uploadToFirebaseStorageIfNotExists 오류: $e');
+      // 업로드 실패해도 치명적 오류 처리하지 않음 (로컬 파일 사용)
+    }
+  }
+  
+  /// 확장자에 따른 컨텐츠 타입 결정
+  String _getContentType(String extension) {
+    switch(extension) {
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.png':
+        return 'image/png';
+      case '.gif':
+        return 'image/gif';
+      case '.bmp':
+        return 'image/bmp';
+      case '.webp':
+        return 'image/webp';
+      case '.heic':
+        return 'image/heic';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+  
+  /// 이미지 URL이 Firebase Storage에 존재하는지 확인
+  Future<bool> _imageExists(String relativePath) async {
+    try {
+      final ref = _storage.ref().child(relativePath);
+      await ref.getDownloadURL();
+      return true;
+    } catch (e) {
+      if (e is FirebaseException && e.code == 'object-not-found') {
+        return false;
+      }
+      // 다른 오류는 존재하지 않는 것으로 간주 (안전)
+      debugPrint('이미지 존재 확인 중 오류: $e');
+      return false;
     }
   }
   
@@ -529,24 +580,39 @@ class ImageService {
   }
   
   /// 이미지 존재 여부 확인 (추가된 메서드)
-  Future<bool> imageExists(String? relativePath) async {
-    if (relativePath == null || relativePath.isEmpty) {
+  Future<bool> imageExists(String? imageUrl) async {
+    if (imageUrl == null || imageUrl.isEmpty) {
       return false;
     }
     
     try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final filePath = '${appDir.path}/$relativePath';
-      final file = File(filePath);
-      
-      if (await file.exists()) {
-        final fileSize = await file.length();
-        return fileSize > 0;
+      // Firebase 저장소 URL인 경우
+      if (imageUrl.contains('firebasestorage.googleapis.com')) {
+        // URL에서 상대 경로 추출 시도
+        final uri = Uri.parse(imageUrl);
+        final pathSegments = uri.pathSegments;
+        
+        if (pathSegments.length > 2 && pathSegments.contains('o')) {
+          final encodedPath = pathSegments[pathSegments.indexOf('o') + 1];
+          String relativePath = Uri.decodeComponent(encodedPath);
+          
+          if (relativePath.startsWith('/')) {
+            relativePath = relativePath.substring(1);
+          }
+          
+          return _imageExists(relativePath);
+        }
+        
+        // 직접 HTTP 요청으로 체크
+        final response = await http.head(Uri.parse(imageUrl));
+        return response.statusCode == 200;
+      } else {
+        // 일반 HTTP URL
+        final response = await http.head(Uri.parse(imageUrl));
+        return response.statusCode == 200;
       }
-      
-      return false;
     } catch (e) {
-      debugPrint('이미지 존재 여부 확인 중 오류: $e');
+      debugPrint('이미지 존재 확인 중 오류 (URL): $e');
       return false;
     }
   }

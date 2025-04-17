@@ -11,7 +11,6 @@ import '../widgets/common/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/usage_limit_service.dart';
 import 'dart:async';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);
@@ -162,6 +161,8 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     try {
       debugPrint('갤러리에서 이미지 선택 시작');
       
+      // 바텀 시트를 먼저 닫지 않도록 변경
+      
       // 예외 상황 방지를 위해 try-catch로 감싸기
       try {
         // 먼저 이미지 선택을 시도
@@ -184,17 +185,18 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           return;
         }
         
-        // 선택 완료 후에 바텀 시트 닫기 (순서 변경)
-        if (mounted) Navigator.pop(context);
+        // 이미지 선택 및 변환 완료 후에 바텀 시트 닫지 않음 (노트 생성 메소드에서 처리)
         
-        // 이미지로 노트 생성 (약간 지연 추가)
-        await Future.delayed(const Duration(milliseconds: 100));
+        // 이미지로 노트 생성 (_createNoteWithImages에서 바텀 시트 닫기)
         if (mounted) {
           await _createNoteWithImages(context, imageFiles);
         }
       } catch (innerError) {
         debugPrint('이미지 선택 중 내부 오류: $innerError');
-        if (mounted) Navigator.pop(context);
+        if (mounted) {
+          // 오류 발생 시에만 바텀 시트 닫기
+          Navigator.pop(context);
+        }
         rethrow; // 외부 catch 블록에서 처리하도록 다시 throw
       }
     } catch (e) {
@@ -211,6 +213,8 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   Future<void> _takeCameraPhoto(BuildContext context) async {
     try {
       debugPrint('카메라 촬영 시작');
+      
+      // 바텀 시트를 먼저 닫지 않도록 변경
       
       // 예외 상황 방지를 위해 try-catch로 감싸기
       try {
@@ -242,17 +246,18 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           return;
         }
         
-        // 촬영 완료 후에 바텀 시트 닫기 (순서 변경)
-        if (mounted) Navigator.pop(context);
+        // 이미지 촬영 완료 후에 바텀 시트 닫지 않음 (노트 생성 메소드에서 처리)
         
-        // 이미지로 노트 생성 (약간 지연 추가)
-        await Future.delayed(const Duration(milliseconds: 100));
+        // 이미지로 노트 생성
         if (mounted) {
           await _createNoteWithImages(context, [imageFile]);
         }
       } catch (innerError) {
         debugPrint('카메라 촬영 중 내부 오류: $innerError');
-        if (mounted) Navigator.pop(context);
+        if (mounted) {
+          // 오류 발생 시에만 바텀 시트 닫기
+          Navigator.pop(context);
+        }
         rethrow; // 외부 catch 블록에서 처리하도록 다시 throw
       }
     } catch (e) {
@@ -274,30 +279,17 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     
     debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
     
-    // 바텀 시트 즉시 닫기
-    if (Navigator.canPop(context)) {
+    // 로딩 다이얼로그 표시 - Future.microtask 사용으로 UI 업데이트 안정성 개선
+    Future.microtask(() {
+      if (mounted) {
+        LoadingDialog.show(context, message: '노트 생성 준비 중...');
+      }
+    });
+    
+    // 바텀 시트 닫기
+    if (mounted && Navigator.canPop(context)) {
       Navigator.pop(context);
     }
-    
-    // 새로운 BuildContext를 위해 약간의 지연
-    await Future.delayed(const Duration(milliseconds: 100));
-    
-    // 로딩 다이얼로그를 표시할 최상위 컨텍스트 찾기
-    BuildContext? topContext;
-    try {
-      topContext = Navigator.of(context, rootNavigator: true).context;
-    } catch (e) {
-      debugPrint('루트 컨텍스트 가져오기 실패: $e');
-      topContext = context;
-    }
-    
-    if (!mounted || topContext == null) {
-      debugPrint('컨텍스트가 유효하지 않아 진행 불가');
-      return;
-    }
-    
-    // 로딩 다이얼로그 표시
-    LoadingDialog.show(topContext, message: '노트 생성 준비 중...');
     
     String? createdNoteId;
     
@@ -316,8 +308,10 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         createdNoteId = result['noteId'] as String;
         debugPrint('노트 ID 생성 성공: $createdNoteId');
         
-        // 로딩 메시지 업데이트
-        LoadingDialog.updateMessage('첫 페이지 처리 중... (0/10초)');
+        // 로딩 메시지 업데이트 - Future.microtask 사용
+        Future.microtask(() {
+          LoadingDialog.updateMessage('첫 페이지 처리 중... (0/10초)');
+        });
         
         // 변수에 보관할 노트 ID 복사 (중간에 null이 되지 않도록)
         final String noteId = createdNoteId;
@@ -327,7 +321,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         int attempts = 0;
         const maxAttempts = 20; // 10초 (0.5초 간격으로 20번)
         
-        while (!firstPageProcessed && attempts < maxAttempts && mounted) {
+        while (!firstPageProcessed && attempts < maxAttempts) {
           attempts++;
           
           try {
@@ -339,88 +333,110 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
               break;
             }
             
-            // 진행 메시지 업데이트
+            // 진행 메시지 업데이트 - Future.microtask 사용
             final progressSeconds = (attempts / 2).toStringAsFixed(1);
-            LoadingDialog.updateMessage('첫 페이지 처리 중... ($progressSeconds/10초)');
-            debugPrint('로딩 메시지 업데이트: 첫 페이지 처리 중... ($progressSeconds/10초)');
+            final message = '첫 페이지 처리 중... ($progressSeconds/10초)';
+            Future.microtask(() {
+              LoadingDialog.updateMessage(message);
+            });
+            debugPrint('로딩 메시지 업데이트: $message');
             
             // 0.5초 대기
             await Future.delayed(const Duration(milliseconds: 500));
           } catch (e) {
             debugPrint('첫 번째 페이지 처리 상태 확인 중 오류: $e');
-            break; // 오류 발생 시 루프 종료
+            // 오류가 발생해도 계속 진행 (break 제거)
           }
         }
         
         // 타임아웃이 발생해도 노트 상세 화면으로 이동
         debugPrint('노트 페이지 처리 완료 여부: ${firstPageProcessed ? '완료' : '처리 중'}, 시도 횟수: $attempts');
         
-        // 로딩 다이얼로그 숨기기
-        LoadingDialog.hide();
+        // 로딩 다이얼로그 숨기기 - 안정적인 실행을 위해 try-catch로 감싸기
+        try {
+          LoadingDialog.hide();
+        } catch (e) {
+          debugPrint('로딩 다이얼로그 숨기기 오류: $e');
+        }
         
-        // 즉시 노트 상세 화면으로 이동
-        await Future.delayed(const Duration(milliseconds: 100));
-        _moveToNoteDetail(topContext, noteId, !firstPageProcessed);
+        // 노트 상세 화면으로 이동 전 짧은 딜레이
+        await Future.delayed(const Duration(milliseconds: 200));
+        
+        if (!mounted) {
+          return;
+        }
+        
+        await _navigateToNoteDetail(context, noteId, !firstPageProcessed);
       } else {
         // 노트 생성 실패
         debugPrint('노트 생성 결과 실패: ${result['message']}');
         
-        // 로딩 다이얼로그 숨기기
-        LoadingDialog.hide();
+        // 로딩 다이얼로그 숨기기 - 안정적인 실행을 위해 try-catch로 감싸기
+        try {
+          LoadingDialog.hide();
+        } catch (e) {
+          debugPrint('로딩 다이얼로그 숨기기 오류: $e');
+        }
         
         // 실패 메시지 표시
         final String errorMessage = result['message'] as String? ?? '노트 생성에 실패했습니다.';
         
-        if (mounted && topContext != null) {
-          ScaffoldMessenger.of(topContext).showSnackBar(
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('노트 생성 실패: $errorMessage')),
           );
         }
       }
     } catch (e) {
-      // 에러 발생 시 로딩 다이얼로그 숨기기
-      LoadingDialog.hide();
+      // 에러 발생 시 로딩 다이얼로그 숨기기 - 안정적인 실행을 위해 try-catch로 감싸기
+      try {
+        LoadingDialog.hide();
+      } catch (innerError) {
+        debugPrint('로딩 다이얼로그 숨기기 오류: $innerError');
+      }
       
       debugPrint('노트 생성 중 예외 발생: $e');
-      if (mounted && topContext != null) {
-        ScaffoldMessenger.of(topContext).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('노트 생성 중 오류가 발생했습니다')),
         );
       }
     }
   }
 
-  // 노트 상세 화면으로 직접 이동 (MaterialApp.router가 아닌 경우에만 사용)
-  void _moveToNoteDetail(BuildContext context, String noteId, bool isProcessingBackground) {
+  // 노트 상세 화면으로 이동
+  Future<void> _navigateToNoteDetail(BuildContext context, String noteId, bool isProcessingBackground) async {
     try {
-      debugPrint('노트 상세 화면으로 직접 이동 시작: $noteId');
+      debugPrint('노트 상세 화면으로 이동 시작: $noteId');
       
-      // 현재 Navigator의 루트를 사용하여 이동
-      Navigator.of(context, rootNavigator: true).push(
-        MaterialPageRoute(
-          builder: (context) => NoteDetailScreen(
-            noteId: noteId,
-            isProcessingBackground: isProcessingBackground,
-          ),
+      // 상태 확인
+      if (!mounted) {
+        debugPrint('위젯이 마운트되지 않아 노트 상세 화면으로 이동 취소');
+        return;
+      }
+      
+      // 이동 전 추가 딜레이로 안정성 향상
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // BuildContext가 유효한지 확인
+      if (!mounted || !Navigator.of(context).canPop()) {
+        debugPrint('BuildContext가 더 이상 유효하지 않음');
+        return;
+      }
+      
+      // 일반적인 네비게이션 사용
+      final MaterialPageRoute route = MaterialPageRoute(
+        builder: (context) => NoteDetailScreen(
+          noteId: noteId,
+          isProcessingBackground: isProcessingBackground,
         ),
       );
+      
+      await Navigator.of(context).push(route);
       
       debugPrint('노트 상세 화면으로 이동 성공: $noteId');
     } catch (e) {
       debugPrint('노트 상세 화면 이동 중 오류: $e');
-      _savePendingNoteToPrefs(noteId, isProcessingBackground);
-    }
-  }
-
-  // SharedPreferences에 보류 중인 노트 ID 저장 (이동 실패시 사용)
-  Future<void> _savePendingNoteToPrefs(String noteId, bool isProcessing) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('pending_note_id', noteId);
-      await prefs.setBool('pending_note_is_processing', isProcessing);
-      debugPrint('노트 ID를 SharedPreferences에 저장: $noteId');
-    } catch (e) {
-      debugPrint('SharedPreferences 저장 중 오류: $e');
     }
   }
 } 

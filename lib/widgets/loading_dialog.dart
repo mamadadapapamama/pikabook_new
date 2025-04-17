@@ -3,126 +3,114 @@ import 'package:flutter/material.dart';
 import '../theme/tokens/color_tokens.dart';
 import 'dart:async';
 
-/// 간단한 로딩 다이얼로그 관리 클래스
-/// static 메서드를 통해 앱 전체에서 로딩 표시 관리
+/// 매우 단순화된 로딩 다이얼로그 관리자
 class LoadingDialog {
   static bool _isVisible = false;
   static String _message = '로딩 중...';
-  static BuildContext? _dialogContext;
+  static OverlayEntry? _overlayEntry;
   
   /// 로딩 다이얼로그 표시
   static void show(BuildContext context, {String message = '로딩 중...'}) {
-    // 이미 표시 중이면 메시지만 업데이트
-    if (_isVisible) {
-      updateMessage(message);
-      return;
-    }
-    
-    _isVisible = true;
-    _message = message;
-    
-    // Dialog 표시
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        _dialogContext = context;
-        return WillPopScope(
-          onWillPop: () async => false,
-          child: AlertDialog(
-            backgroundColor: Colors.white,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 로고 이미지
-                Image.asset(
-                  'assets/images/logo.png',
-                  width: 60,
-                  height: 60,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: ColorTokens.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.auto_stories,
-                        color: Colors.white,
-                        size: 30,
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 20),
-                // 로딩 인디케이터
-                const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary),
-                ),
-                const SizedBox(height: 16),
-                // 로딩 메시지 텍스트
-                StatefulBuilder(
-                  builder: (context, setState) {
-                    // 전역 메시지 변수 감시
-                    return ValueListenableBuilder<String>(
-                      valueListenable: _MessageNotifier()..value = _message,
-                      builder: (context, message, child) {
-                        return Text(
-                          message,
-                          style: const TextStyle(fontSize: 14),
-                          textAlign: TextAlign.center,
-                        );
-                      },
-                    );
-                  },
-                ),
-              ],
+    try {
+      if (_isVisible) {
+        updateMessage(message);
+        return;
+      }
+      
+      _isVisible = true;
+      _message = message;
+      
+      // 직접 오버레이 엔트리 생성
+      _overlayEntry = OverlayEntry(
+        builder: (context) => Material(
+          color: Colors.black54,
+          child: Center(
+            child: Container(
+              width: 200,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 로딩 이미지
+                  Image.asset(
+                    'assets/images/pikabook_loader.gif',
+                    width: 60,
+                    height: 60,
+                    errorBuilder: (context, error, stackTrace) {
+                      // 이미지 로드 실패 시 CircularProgressIndicator 표시
+                      return const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // 메시지 텍스트
+                  _MessageText(initialMessage: message),
+                ],
+              ),
             ),
           ),
-        );
-      },
-    ).then((_) {
+        ),
+      );
+      
+      // 오버레이에 추가
+      try {
+        Overlay.of(context).insert(_overlayEntry!);
+        debugPrint('로딩 다이얼로그 표시 완료: $message');
+      } catch (e) {
+        _isVisible = false;
+        _overlayEntry = null;
+        debugPrint('로딩 다이얼로그 표시 중 오류: $e');
+      }
+    } catch (e) {
       _isVisible = false;
-      _dialogContext = null;
-    });
-    
-    debugPrint('로딩 다이얼로그 표시 완료');
+      debugPrint('로딩 다이얼로그 초기화 중 오류: $e');
+    }
   }
   
   /// 로딩 다이얼로그 메시지 업데이트
   static void updateMessage(String message) {
-    _message = message;
-    // 메시지 노티파이어 업데이트
-    _MessageNotifier().value = message;
-    debugPrint('로딩 다이얼로그 메시지 업데이트: $message');
+    try {
+      _message = message;
+      // 별도의 microtask로 실행하여 UI 업데이트 안정성 개선
+      Future.microtask(() {
+        _MessageNotifier().value = message;
+      });
+      debugPrint('로딩 다이얼로그 메시지 업데이트: $message');
+    } catch (e) {
+      debugPrint('로딩 다이얼로그 메시지 업데이트 중 오류: $e');
+    }
   }
   
   /// 로딩 다이얼로그 숨기기
   static void hide() {
-    if (!_isVisible) {
-      debugPrint('로딩 다이얼로그가 이미 숨겨져 있음');
-      return;
-    }
-    
-    if (_dialogContext != null) {
-      // 단순히 Navigator.pop 호출
-      try {
-        Navigator.of(_dialogContext!).pop();
-        debugPrint('로딩 다이얼로그가 숨겨졌습니다');
-      } catch (e) {
-        debugPrint('로딩 다이얼로그 숨기기 중 오류: $e');
+    try {
+      if (!_isVisible) {
+        return;
       }
-    } else {
-      debugPrint('로딩 다이얼로그 컨텍스트가 없어 숨기기 실패');
+      
+      if (_overlayEntry != null) {
+        try {
+          _overlayEntry!.remove();
+        } catch (e) {
+          debugPrint('로딩 다이얼로그 제거 중 오류: $e');
+        } finally {
+          _overlayEntry = null;
+        }
+      }
+      
+      _isVisible = false;
+      debugPrint('로딩 다이얼로그 숨김 완료');
+    } catch (e) {
+      // 오류가 발생해도 상태 초기화
+      _isVisible = false;
+      _overlayEntry = null;
+      debugPrint('로딩 다이얼로그 숨김 중 오류: $e');
     }
-    
-    _isVisible = false;
-    _dialogContext = null;
   }
   
   /// 로딩 다이얼로그 표시 여부 확인
@@ -140,4 +128,50 @@ class _MessageNotifier extends ValueNotifier<String> {
   }
   
   _MessageNotifier._internal(String value) : super(value);
+}
+
+/// 메시지 텍스트 위젯 (상태 변경에 반응)
+class _MessageText extends StatefulWidget {
+  final String initialMessage;
+  
+  const _MessageText({required this.initialMessage});
+  
+  @override
+  State<_MessageText> createState() => _MessageTextState();
+}
+
+class _MessageTextState extends State<_MessageText> {
+  late String _message;
+  
+  @override
+  void initState() {
+    super.initState();
+    _message = widget.initialMessage;
+    
+    // 메시지 변경을 감지하기 위한 리스너 추가
+    _MessageNotifier().addListener(_updateMessage);
+  }
+  
+  @override
+  void dispose() {
+    _MessageNotifier().removeListener(_updateMessage);
+    super.dispose();
+  }
+  
+  void _updateMessage() {
+    if (mounted) {
+      setState(() {
+        _message = _MessageNotifier().value;
+      });
+    }
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _message,
+      style: const TextStyle(fontSize: 14),
+      textAlign: TextAlign.center,
+    );
+  }
 } 
