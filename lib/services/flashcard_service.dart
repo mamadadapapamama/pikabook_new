@@ -6,7 +6,6 @@ import '../models/flash_card.dart';
 import '../models/dictionary_entry.dart';
 import 'package:pinyin/pinyin.dart';
 import 'dictionary/dictionary_service.dart';
-import 'dictionary/internal_cn_dictionary_service.dart';
 import 'pinyin_creation_service.dart';
 import 'usage_limit_service.dart';
 
@@ -17,8 +16,6 @@ class FlashCardService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
   final DictionaryService _dictionaryService = DictionaryService();
-  final InternalCnDictionaryService _chineseDictionaryService =
-      InternalCnDictionaryService();
   final PinyinCreationService _pinyinService = PinyinCreationService();
   final UsageLimitService _usageLimitService = UsageLimitService();
 
@@ -139,9 +136,8 @@ class FlashCardService {
   Future<void> _addToDictionaryIfNeeded(
       String word, String meaning, String pinyin) async {
     try {
-      // 내부 중국어 사전에 단어가 있는지 확인
-      await _chineseDictionaryService.loadDictionary();
-      final existingEntry = _chineseDictionaryService.lookup(word);
+      // 사전 서비스를 통해 단어 검색
+      final existingEntry = await _dictionaryService.lookup(word);
 
       // 사전에 없는 단어라면 추가
       if (existingEntry == null) {
@@ -152,8 +148,8 @@ class FlashCardService {
           source: 'flashcard',
         );
 
-        // 내부 중국어 사전에 추가
-        _chineseDictionaryService.addEntry(newEntry);
+        // 사전 서비스를 통해 단어 추가
+        await _dictionaryService.addEntry(newEntry);
         debugPrint('플래시카드에서 사전에 단어 추가됨: $word');
       }
     } catch (e) {

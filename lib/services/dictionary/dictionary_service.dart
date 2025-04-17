@@ -21,6 +21,17 @@ class DictionaryService {
   static final DictionaryService _instance = DictionaryService._internal();
   factory DictionaryService() => _instance;
   
+  // 언어별 사전 서비스 인스턴스 (즉시 초기화)
+  final InternalCnDictionaryService _chineseDictionaryService = InternalCnDictionaryService();
+  final ExternalCnDictionaryService _externalCnDictionaryService = ExternalCnDictionaryService();
+  
+  // 사전 업데이트 리스너 목록
+  late final List<Function()> _dictionaryUpdateListeners;
+  
+  // 초기화 완료 여부
+  bool _isInitialized = false;
+  bool get isInitialized => _isInitialized;
+  
   DictionaryService._internal() {
     // 사전 업데이트 리스너 목록 초기화
     _dictionaryUpdateListeners = [];
@@ -31,13 +42,6 @@ class DictionaryService {
   
   // 현재 활성화된 언어
   String _currentLanguage = 'zh-CN';
-  
-  // 언어별 사전 서비스 인스턴스 (지연 초기화)
-  late final InternalCnDictionaryService _chineseDictionaryService;
-  late final ExternalCnDictionaryService _externalCnDictionaryService;
-  
-  // 사전 업데이트 리스너 목록
-  late final List<Function()> _dictionaryUpdateListeners;
 
   // 현재 언어 설정
   String get currentLanguage => _currentLanguage;
@@ -52,18 +56,25 @@ class DictionaryService {
 
   // 초기화 메서드 - 필요한 서비스 인스턴스 생성
   Future<void> initialize() async {
+    // 이미 초기화된 경우 빠르게 반환
+    if (_isInitialized) return;
+    
     try {
       // 중국어 사전 서비스 초기화
-      _chineseDictionaryService = InternalCnDictionaryService();
       await _chineseDictionaryService.loadDictionary();
       
-      // 외부 중국어 사전 서비스 초기화
-      _externalCnDictionaryService = ExternalCnDictionaryService();
-      
+      _isInitialized = true;
       debugPrint('DictionaryService 초기화 완료');
     } catch (e) {
       debugPrint('DictionaryService 초기화 중 오류 발생: $e');
       rethrow;
+    }
+  }
+
+  // 사전 초기화 검증 및 필요시 초기화
+  Future<void> _ensureInitialized() async {
+    if (!_isInitialized) {
+      await initialize();
     }
   }
 
@@ -89,6 +100,9 @@ class DictionaryService {
   // 단어 검색 - 내부 사전, 외부 사전 순차적으로 검색
   Future<Map<String, dynamic>> lookupWord(String word) async {
     try {
+      // 초기화 확인
+      await _ensureInitialized();
+      
       // 현재 설정된 언어에 따라 다른 사전 서비스 사용
       switch (_currentLanguage) {
         case 'zh-CN':
@@ -139,8 +153,11 @@ class DictionaryService {
   }
 
   // 단어 검색 (단순 인터페이스, 내부 사전만 검색)
-  DictionaryEntry? lookup(String word) {
+  Future<DictionaryEntry?> lookup(String word) async {
     try {
+      // 초기화 확인
+      await _ensureInitialized();
+      
       // 현재 설정된 언어에 따라 다른 사전 서비스 사용
       switch (_currentLanguage) {
         case 'zh-CN':
@@ -155,8 +172,11 @@ class DictionaryService {
   }
   
   // 사전에 단어 추가
-  void addEntry(DictionaryEntry entry) {
+  Future<void> addEntry(DictionaryEntry entry) async {
     try {
+      // 초기화 확인
+      await _ensureInitialized();
+      
       // 현재 설정된 언어에 따라 다른 사전 서비스 사용
       switch (_currentLanguage) {
         case 'zh-CN':
