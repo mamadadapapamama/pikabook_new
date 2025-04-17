@@ -3,10 +3,9 @@ import 'dart:io';
 import '../services/image_service.dart';
 import '../services/note_service.dart';
 import '../views/screens/note_detail_screen.dart';
-import '../widgets/loading_dialog.dart';
+import '../widgets/pikabook_loader.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
-import '../theme/tokens/ui_tokens.dart';
 import '../widgets/common/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/usage_limit_service.dart';
@@ -295,7 +294,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     
     // 로딩 다이얼로그 표시
     try {
-      LoadingDialog.show(appContext, message: '노트 생성 준비 중...');
+      PikabookLoader.show(appContext, message: '스마트 노트를 만들고 있어요...');
     } catch (e) {
       debugPrint('로딩 다이얼로그 표시 실패: $e');
       // 로딩 다이얼로그 없이도 계속 진행
@@ -318,11 +317,6 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         createdNoteId = result['noteId'] as String;
         debugPrint('노트 ID 생성 성공: $createdNoteId');
         
-        // 로딩 메시지 업데이트 - Future.microtask 사용
-        Future.microtask(() {
-          LoadingDialog.updateMessage('스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요...');
-        });
-        
         // 변수에 보관할 노트 ID 복사 (중간에 null이 되지 않도록)
         final String noteId = createdNoteId;
         
@@ -343,15 +337,6 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
               break;
             }
             
-            // 진행 메시지 업데이트 - 안전하게 try-catch로 감싸기
-            final progressSeconds = (attempts * 0.5).toStringAsFixed(1);
-            final message = '스마트 노트가 만들어 지고 있어요...';
-            try {
-              LoadingDialog.updateMessage(message);
-            } catch (e) {
-              debugPrint('로딩 메시지 업데이트 실패: $e');
-            }
-            
             // 0.5초 대기
             await Future.delayed(const Duration(milliseconds: 500));
           } catch (e) {
@@ -365,7 +350,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         
         // 로딩 다이얼로그 숨기기 - 안정적인 실행을 위해 try-catch로 감싸기
         try {
-          LoadingDialog.hide();
+          PikabookLoader.hide(appContext);
           debugPrint('로딩 다이얼로그 숨김 완료');
         } catch (e) {
           debugPrint('로딩 다이얼로그 숨기기 오류: $e');
@@ -427,7 +412,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         
         // 로딩 다이얼로그 숨기기 - 안정적인 실행을 위해 try-catch로 감싸기
         try {
-          LoadingDialog.hide();
+          PikabookLoader.hide(appContext);
         } catch (e) {
           debugPrint('로딩 다이얼로그 숨기기 오류: $e');
         }
@@ -444,7 +429,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     } catch (e) {
       // 에러 발생 시 로딩 다이얼로그 숨기기 - 안정적인 실행을 위해 try-catch로 감싸기
       try {
-        LoadingDialog.hide();
+        PikabookLoader.hide(appContext);
       } catch (innerError) {
         debugPrint('로딩 다이얼로그 숨기기 오류: $innerError');
       }

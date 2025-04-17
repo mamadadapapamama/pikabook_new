@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show timeDilation;
 import 'dart:io';
 import 'package:flutter/services.dart';
 import '../../theme/tokens/color_tokens.dart';
@@ -26,65 +27,46 @@ class FullImageScreen extends StatefulWidget {
 class _FullImageScreenState extends State<FullImageScreen> {
   final TransformationController _transformationController =
       TransformationController();
-  late TapDownDetails _doubleTapDetails;
 
   @override
   void initState() {
     super.initState();
     // 화면 진입 시 상태표시줄을 흰색으로 설정 (강제 적용)
     _setLightStatusBar();
-  }
-
-  // 상태표시줄을 밝은색(흰색)으로 설정
-  void _setLightStatusBar() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 상태표시줄 설정을 강제로 적용
-      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light, // 안드로이드용 (흰색 아이콘)
-        statusBarBrightness: Brightness.dark, // iOS용 (어두운 배경 = 흰색 아이콘)
-      ));
-    });
+    
+    // 디버그 타이머 비활성화
+    timeDilation = 1.0;
   }
 
   @override
   void dispose() {
+    // 화면 종료 시 시스템 UI 설정 복원
+    _restoreStatusBar();
+    // 컨트롤러 해제
     _transformationController.dispose();
-    // 화면을 떠날 때 상태표시줄을 다시 검은색으로 복원
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark.copyWith(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark, // 안드로이드용 (검정 아이콘)
-      statusBarBrightness: Brightness.light, // iOS용 (밝은 배경 = 검정 아이콘)
-    ));
     super.dispose();
   }
 
-  void _handleDoubleTapDown(TapDownDetails details) {
-    _doubleTapDetails = details;
+  // 상태표시줄을 흰색으로 설정 (어두운 배경에 맞게)
+  void _setLightStatusBar() {
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarBrightness: Brightness.dark, // iOS: 어둡게 설정하면 흰색 아이콘
+      statusBarIconBrightness: Brightness.light, // Android: 밝게 설정하면 흰색 아이콘
+    ));
   }
 
-  void _handleDoubleTap() {
-    if (_transformationController.value != Matrix4.identity()) {
-      // 현재 확대된 상태면 원래 크기로 복원
-      _transformationController.value = Matrix4.identity();
-    } else {
-      // 원래 크기면 두 배로 확대하고 탭한 위치를 중심으로 설정
-      final position = _doubleTapDetails.localPosition;
-      final double scale = 2.5;
-
-      final x = -position.dx * (scale - 1);
-      final y = -position.dy * (scale - 1);
-
-      final zoomed = Matrix4.identity()
-        ..translate(x, y)
-        ..scale(scale);
-
-      _transformationController.value = zoomed;
-    }
+  // 상태표시줄 설정 복원
+  void _restoreStatusBar() {
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark.copyWith(
+      statusBarColor: Colors.transparent,
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
+    // 디버그 타이머 비활성화 - 빌드 단계에서도 적용
+    timeDilation = 1.0;
+    
     // 검은 배경에 흰색 상태표시줄을 설정
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
@@ -103,26 +85,32 @@ class _FullImageScreenState extends State<FullImageScreen> {
           icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light, // Android (흰색 아이콘)
-          statusBarBrightness: Brightness.dark, // iOS (어두운 배경 = 흰색 아이콘)
-        ),
       ),
-      body: SafeArea(
-        child: Center(
-          child: GestureDetector(
-            onDoubleTapDown: _handleDoubleTapDown,
-            onDoubleTap: _handleDoubleTap,
+      body: Center(
+        child: _buildImageContent(),
+      ),
+    );
+  }
+
+  // 이미지 콘텐츠 구성
+  Widget _buildImageContent() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Container(
+          color: Colors.black,
+          width: constraints.maxWidth,
+          height: constraints.maxHeight,
+          child: Center(
             child: InteractiveViewer(
               transformationController: _transformationController,
               minScale: 0.5,
               maxScale: 4.0,
+              boundaryMargin: const EdgeInsets.all(20.0),
               child: _buildImage(),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

@@ -20,7 +20,7 @@ import 'services/image_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 애니메이션 속도를 정상으로 설정 (디버그 타이머 비활성화)
+  // 디버그 타이머 강제로 비활성화
   timeDilation = 1.0;
   
   // 릴리즈 모드에 관계없이 항상 디버그 UI와 성능 측정기 비활성화

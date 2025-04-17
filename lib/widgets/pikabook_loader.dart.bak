@@ -1,0 +1,289 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show timeDilation;
+import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'dot_loading_indicator.dart';
+
+/// Pikabook 로딩 화면
+/// 
+/// 노트 생성 중 또는 긴 작업 시간 동안 사용자에게 로딩 상태를 시각적으로 표시하는 위젯입니다.
+/// Figma 디자인에 따라 구현되었습니다.
+class PikabookLoader extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final int timeoutSeconds;
+
+  const PikabookLoader({
+    Key? key,
+    this.title = '스마트한 학습 노트를 만들고 있어요.',
+    this.subtitle = '잠시만 기다려 주세요!\n조금 시간이 걸릴수 있어요.',
+    this.timeoutSeconds = 20,
+  }) : super(key: key);
+
+  // 로더 상태 관리를 위한 정적 변수들
+  static bool _isVisible = false;
+  static String _message = '스마트 노트를 만들고 있어요...';
+  static BuildContext? _dialogContext;
+  static Timer? _timeoutTimer; // 타이머 변수를 정적으로 선언
+
+  /// 로더를 다이얼로그로 표시하는 정적 메서드
+  static Future<void> show(
+    BuildContext context, {
+    String message = '스마트 노트를 만들고 있어요...',
+    int timeoutSeconds = 10, // 타임아웃 시간 (초 단위) - 기본값 10
+  }) async {
+    // 이미 실행 중인 타이머가 있다면 취소
+    _cancelExistingTimer();
+    
+    // 이미 표시 중이면 메시지만 업데이트
+    if (_isVisible) {
+      updateMessage(message);
+      return;
+    }
+    
+    _isVisible = true;
+    _message = message;
+    
+    // 애니메이션 속도를 정상으로 설정 (디버그 타이머 비활성화)
+    timeDilation = 1.0;
+    
+    if (!context.mounted) {
+      return;
+    }
+    
+    // showDialog를 직접 호출하는 대신 addPostFrameCallback 사용
+    Completer<void> completer = Completer<void>();
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        // 다이얼로그 표시
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          barrierColor: Colors.black54,
+          builder: (context) {
+            _dialogContext = context;
+            return PopScope(
+              canPop: false,
+              child: Material(
+                type: MaterialType.transparency,
+                child: Dialog(
+                  backgroundColor: Colors.transparent,
+                  insetPadding: const EdgeInsets.all(24),
+                  elevation: 0,
+                  child: _MessageStateWidget(
+                    initialMessage: message,
+                    timeoutSeconds: timeoutSeconds,
+                  ),
+                ),
+              ),
+            );
+          },
+        ).then((_) {
+          // 다이얼로그가 닫힐 때 타이머 취소
+          _cancelExistingTimer();
+          timeDilation = 1.0; // 디버그 타이머 초기화
+          completer.complete();
+        }).catchError((e) {
+          _cancelExistingTimer();
+          timeDilation = 1.0; // 디버그 타이머 초기화
+          completer.completeError(e);
+        });
+        
+        // 타이머 초기화 - 다이얼로그 표시 이후에
+        if (timeoutSeconds > 0 && context.mounted) {
+          try {
+            _startTimer(timeoutSeconds, context);
+          } catch (e) {
+            // 타이머 초기화 오류 무시
+          }
+        }
+      } else {
+        completer.completeError('컨텍스트가 더 이상 유효하지 않습니다.');
+      }
+    });
+    
+    return completer.future;
+  }
+  
+  /// 기존 타이머 취소
+  static void _cancelExistingTimer() {
+    if (_timeoutTimer != null) {
+      try {
+        _timeoutTimer!.cancel();
+        _timeoutTimer = null;
+      } catch (e) {
+        // 오류 무시
+      }
+    }
+  }
+  
+  /// 타이머 시작
+  static void _startTimer(int seconds, BuildContext context) {
+    // 기존 타이머 취소
+    _cancelExistingTimer();
+    
+    // 새로운 타이머 시작
+    Future.microtask(() {
+      _timeoutTimer = Timer(Duration(seconds: seconds), () {
+        if (context.mounted) {
+          hide(context);
+        }
+      });
+    });
+  }
+  
+  /// 메시지 업데이트 메서드
+  static void updateMessage(String message) {
+    _message = message;
+    // 별도의 microtask로 실행하여 UI 업데이트 안정성 개선
+    Future.microtask(() {
+      _MessageNotifier().value = message;
+    });
+  }
+
+  /// 로더를 숨기는 정적 메서드
+  static void hide(BuildContext context) {
+    if (!_isVisible) {
+      return;
+    }
+    
+    _isVisible = false;
+    _cancelExistingTimer();
+    
+    // 명시적으로 디버그 타이머 초기화
+    timeDilation = 1.0;
+    
+    // addPostFrameCallback 사용하여 안전하게 닫기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_dialogContext != null && _dialogContext!.mounted) {
+        try {
+          // 직접 네비게이터를 통해 닫기 시도
+          Navigator.of(_dialogContext!, rootNavigator: true).pop();
+          _dialogContext = null;
+        } catch (e) {
+          // 대비책: 약간의 지연 후 다시 시도
+          Future.delayed(const Duration(milliseconds: 100), () {
+            try {
+              if (_dialogContext != null && _dialogContext!.mounted) {
+                Navigator.of(_dialogContext!, rootNavigator: true).pop();
+                _dialogContext = null;
+              }
+            } catch (retryError) {
+              // 재시도 오류 무시
+            }
+          });
+        }
+      }
+    });
+  }
+  
+  /// 로딩 다이얼로그 표시 여부 확인
+  static bool isShowing() {
+    return _isVisible;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+      width: 300, // Figma 디자인과 동일한 너비
+      height: 195, // 높이 고정
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // DotLoadingIndicator 사용 (애니메이션된 로더)
+          const DotLoadingIndicator(
+            dotColor: ColorTokens.primary,
+            dotSize: 10.0,
+            spacing: 8.0,
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // 텍스트 섹션
+          Text(
+            title,
+            style: TypographyTokens.body1Bold,
+            textAlign: TextAlign.center,
+          ),
+          
+          const SizedBox(height: 8),
+          
+          Text(
+            subtitle,
+            style: TypographyTokens.body1.copyWith(
+              color: Colors.grey[700], // 빨간색 대신 다크 그레이 색상 사용
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 메시지 상태를 관리하는 위젯
+class _MessageStateWidget extends StatefulWidget {
+  final String initialMessage;
+  final int timeoutSeconds;
+
+  const _MessageStateWidget({
+    required this.initialMessage,
+    required this.timeoutSeconds,
+  });
+
+  @override
+  State<_MessageStateWidget> createState() => _MessageStateWidgetState();
+}
+
+class _MessageStateWidgetState extends State<_MessageStateWidget> {
+  late String _message;
+
+  @override
+  void initState() {
+    super.initState();
+    _message = widget.initialMessage;
+    _MessageNotifier().addListener(_onMessageChanged);
+  }
+
+  @override
+  void dispose() {
+    _MessageNotifier().removeListener(_onMessageChanged);
+    super.dispose();
+  }
+
+  void _onMessageChanged() {
+    if (mounted) {
+      setState(() {
+        _message = _MessageNotifier().value;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PikabookLoader(
+      title: _message,
+      subtitle: '',
+      timeoutSeconds: widget.timeoutSeconds,
+    );
+  }
+}
+
+/// 메시지 업데이트를 위한 내부 ValueNotifier
+class _MessageNotifier extends ValueNotifier<String> {
+  static final _MessageNotifier _instance = _MessageNotifier._internal('');
+  
+  factory _MessageNotifier() {
+    return _instance;
+  }
+  
+  _MessageNotifier._internal(String value) : super(value);
+} 

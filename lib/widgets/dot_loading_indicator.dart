@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
+import 'package:flutter/scheduler.dart' show timeDilation;
 
 /// 도트 애니메이션 로딩 인디케이터 위젯
 /// 세 개의 도트가 애니메이션되는 심플한 로딩 인디케이터입니다.
@@ -37,6 +38,9 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerPr
   @override
   void initState() {
     super.initState();
+    
+    // 디버그 타이머 비활성화
+    timeDilation = 1.0;
     
     _controller1 = AnimationController(
       vsync: this,
@@ -105,6 +109,9 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerPr
 
   @override
   Widget build(BuildContext context) {
+    // 디버그 타이머 비활성화 (빌드 단계에서도 적용)
+    timeDilation = 1.0;
+    
     // 현재 테마의 밝기 확인
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:flutter/scheduler.dart' show timeDilation;
 import '../views/screens/full_image_screen.dart';
 import '../widgets/dot_loading_indicator.dart';
 import 'package:path_provider/path_provider.dart';
@@ -21,6 +22,9 @@ class PageImageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 디버그 타이머 비활성화
+    timeDilation = 1.0;
+    
     if (imageUrl == null && imageFile == null) {
       return const SizedBox.shrink();
     }
