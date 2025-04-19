@@ -39,46 +39,70 @@ class _NoteListItemState extends State<NoteListItem> {
   bool _isLoadingImage = false;
   bool _isUploadingImage = false;
   bool _imageLoadError = false;
+  String? _cachedImageUrl; // 현재 캐시된 이미지 URL
 
   @override
   void initState() {
     super.initState();
-    _loadImage();
+    _loadImageIfNeeded();
   }
 
   @override
   void didUpdateWidget(NoteListItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // 이미지 URL이 변경되면 새로 로드
-    if (oldWidget.note.imageUrl != widget.note.imageUrl) {
-      _loadImage();
+    // 노트 ID 또는 이미지 URL이 변경된 경우에만 로드
+    if (oldWidget.note.id != widget.note.id || 
+        oldWidget.note.imageUrl != widget.note.imageUrl) {
+      _loadImageIfNeeded();
     }
   }
 
+  // 이미지 로드가 필요한지 확인 후 로드
+  void _loadImageIfNeeded() {
+    final imageUrl = widget.note.imageUrl;
+    
+    // 이미 동일한 URL을 로드 중이거나, 이미 로드했거나, URL이 없는 경우는 제외
+    if (_isLoadingImage || 
+        (imageUrl == _cachedImageUrl && _imageFile != null) || 
+        imageUrl == null || 
+        imageUrl.isEmpty) {
+      return;
+    }
+    
+    _loadImage();
+  }
+
   Future<void> _loadImage() async {
-    if (widget.note.imageUrl == null || widget.note.imageUrl!.isEmpty) {
-      setState(() {
-        _isLoadingImage = false;
-        _imageFile = null;
-        _imageLoadError = false;
-      });
-      debugPrint('노트에 이미지 URL이 없음: ${widget.note.id}');
+    final String imageUrl = widget.note.imageUrl ?? '';
+    final String noteId = widget.note.id ?? '';
+    
+    // 이미지 URL이 없거나 비어있으면 바로 반환
+    if (imageUrl.isEmpty) {
+      if (_isLoadingImage || _imageFile != null) {
+        setState(() {
+          _isLoadingImage = false;
+          _imageFile = null;
+          _imageLoadError = false;
+        });
+      }
       return;
     }
 
-    try {
+    // 이미 로딩 중이면 중복 요청 방지
+    if (_isLoadingImage) return;
+
+    // 로딩 상태만 변경
+    if (!_isLoadingImage) {
       setState(() {
         _isLoadingImage = true;
         _imageLoadError = false;
       });
+    }
 
-      debugPrint('노트 이미지 로드 시작: ${widget.note.imageUrl}');
-      
-      File? downloadedImage;
-      
+    try {
       // 이미지 URL 처리 개선
-      final String imageUrl = widget.note.imageUrl!;
+      File? downloadedImage;
       
       // Firebase Storage URL 패턴 체크
       bool isFirebaseUrl = imageUrl.startsWith('http') && 
@@ -89,11 +113,9 @@ class _NoteListItemState extends State<NoteListItem> {
       if (isFirebaseUrl) {
         // Firebase Storage URL에서 직접 다운로드
         downloadedImage = await _imageService.downloadImage(imageUrl);
-        debugPrint('Firebase URL에서 다운로드 시도: $imageUrl');
       } else {
         // 상대 경로로 시도
         downloadedImage = await _imageService.downloadImage(imageUrl);
-        debugPrint('상대 경로로 다운로드 시도: $imageUrl');
         
         // 실패한 경우 전체 URL로 다시 시도
         if (downloadedImage == null) {
@@ -102,41 +124,36 @@ class _NoteListItemState extends State<NoteListItem> {
             final storageRef = FirebaseStorage.instance.ref().child(imageUrl);
             final fullUrl = await storageRef.getDownloadURL();
             downloadedImage = await _imageService.downloadImage(fullUrl);
-            debugPrint('전체 URL로 재시도 성공: $fullUrl');
           } catch (e) {
-            debugPrint('전체 URL로 재시도 중 오류: $e');
-            
             // 마지막 시도: 기본 경로를 붙여서 시도
             try {
               final fallbackUrl = 'images/$imageUrl';
               final storageRef = FirebaseStorage.instance.ref().child(fallbackUrl);
               final fullUrl = await storageRef.getDownloadURL();
               downloadedImage = await _imageService.downloadImage(fullUrl);
-              debugPrint('기본 경로 추가 시도 성공: $fallbackUrl');
             } catch (e) {
-              debugPrint('기본 경로 추가 시도 실패: $e');
+              // 모든 시도 실패
             }
           }
         }
       }
 
+      // 마운트 상태와 결과에 따라 단 한 번의 setState 호출
       if (mounted) {
         if (downloadedImage != null) {
           setState(() {
             _imageFile = downloadedImage;
             _isLoadingImage = false;
           });
-          debugPrint('노트 이미지 로드 성공: ${widget.note.id}');
         } else {
           setState(() {
             _isLoadingImage = false;
             _imageLoadError = true;
           });
-          debugPrint('노트 이미지 로드 실패 (파일 없음): ${widget.note.id}');
         }
       }
     } catch (e) {
-      debugPrint('이미지 로드 중 오류: $e');
+      // 오류 발생 시에만 상태 변경
       if (mounted) {
         setState(() {
           _isLoadingImage = false;
@@ -147,12 +164,14 @@ class _NoteListItemState extends State<NoteListItem> {
   }
 
   Future<void> _updateNoteImage(File imageFile) async {
-    try {
-      setState(() {
-        _isUploadingImage = true;
-        _imageFile = imageFile;
-      });
+    if (_isUploadingImage) return; // 이미 업로드 중이면 중복 요청 방지
+    
+    setState(() {
+      _isUploadingImage = true;
+      _imageFile = imageFile;
+    });
 
+    try {
       // 이미지 업로드
       final String? uploadedUrl = await _imageService.uploadImage(imageFile);
 
@@ -160,26 +179,26 @@ class _NoteListItemState extends State<NoteListItem> {
         // 노트 이미지 URL 업데이트
         await _noteService.updateNoteImageUrl(widget.note.id!, uploadedUrl);
         
-        setState(() {
-          _isUploadingImage = false;
-        });
-        
         if (mounted) {
+          setState(() {
+            _isUploadingImage = false;
+            _cachedImageUrl = uploadedUrl; // 캐시된 URL 업데이트
+          });
           _showSnackBar('이미지가 업데이트 되었습니다');
         }
       } else {
-        setState(() {
-          _isUploadingImage = false;
-        });
         if (mounted) {
+          setState(() {
+            _isUploadingImage = false;
+          });
           _showSnackBar('이미지 업로드 실패');
         }
       }
     } catch (e) {
-      setState(() {
-        _isUploadingImage = false;
-      });
       if (mounted) {
+        setState(() {
+          _isUploadingImage = false;
+        });
         _showSnackBar('이미지 업로드 중 오류 발생: $e');
       }
     }
@@ -419,6 +438,9 @@ class _NoteListItemState extends State<NoteListItem> {
   }
   
   Widget _buildImageWidget() {
+    // 이미지 URL을 키로 사용하여 불필요한 재로드 방지
+    final String cacheKey = widget.note.id ?? '' + (widget.note.imageUrl ?? '');
+    
     if (_isLoadingImage) {
       return const Center(
         child: CircularProgressIndicator(
@@ -475,9 +497,11 @@ class _NoteListItemState extends State<NoteListItem> {
           Image.file(
             _imageFile!,
             fit: BoxFit.cover,
+            key: ValueKey(cacheKey), // 고유 키 설정으로 불필요한 리빌드 방지
+            cacheHeight: 160, // 썸네일 2배 크기로 메모리 최적화
+            cacheWidth: 160,
             errorBuilder: (context, error, stackTrace) {
               debugPrint('이미지 렌더링 오류: $error');
-              // 오류 발생 시 다시 로드 시도할 수 있는 UI 제공
               return GestureDetector(
                 onTap: _loadImage,
                 child: Container(

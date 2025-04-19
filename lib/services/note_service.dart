@@ -956,165 +956,33 @@ class NoteService {
     }
   }
 
-  // 이미지 처리 및 페이지 생성
-  Future<Map<String, dynamic>> _processImageAndCreatePage(
-    String noteId, 
-    File imageFile, 
-    {int pageNumber = 1, String? pageId, String? targetLanguage, bool shouldProcess = true, bool skipOcrUsageCount = false}
-  ) async {
-    try {
-      // 이미지 업로드
-      String imageUrl = '';
-      try {
-        imageUrl = await _imageService.uploadImage(imageFile);
-        // 만약 빈 문자열이 반환되면, 기본 fallback 경로 사용
-        if (imageUrl.isEmpty) {
-          debugPrint('이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
-          imageUrl = 'images/fallback_image.jpg';
-        }
-      } catch (uploadError) {
-        debugPrint('이미지 업로드 중 오류: $uploadError - 기본 경로 사용');
-        imageUrl = 'images/fallback_image.jpg';
-      }
-
-      String extractedText = '';
-      String translatedText = '';
-      
-      // shouldProcess가 true일 때만 OCR 및 번역 처리
-      if (shouldProcess) {
-        // OCR로 텍스트 추출
-        extractedText = await _ocrService.extractText(imageFile, skipUsageCount: skipOcrUsageCount);
-        if (extractedText.isEmpty) {
-          debugPrint('OCR 텍스트 추출 실패 또는 텍스트 없음');
-        }
-
-        // 텍스트 번역
-        if (extractedText.isNotEmpty) {
-          translatedText = await _translationService.translateText(
-            extractedText,
-            targetLanguage: targetLanguage ?? 'ko',
-          );
-        }
-      } else {
-        // 처리하지 않는 경우 특수 마커 사용
-        extractedText = '___PROCESSING___';
-        translatedText = '';
-        debugPrint('OCR 및 번역 처리 건너뛰기 - 특수 마커 사용');
-      }
-
-      // 페이지 생성
-      final page = await _pageService.createPage(
-        noteId: noteId,
-        originalText: extractedText,
-        translatedText: translatedText,
-        pageNumber: pageNumber,
-        imageFile: imageFile,
-      );
-
-      // 페이지 캐싱
-      if (page != null) {
-        await _cacheService.cachePage(noteId, page);
-      }
-
-      // 노트 업데이트 (첫 페이지 내용으로 노트 내용 업데이트)
-      if (pageNumber == 1) {
-        final noteDoc = await _notesCollection.doc(noteId).get();
-        if (noteDoc.exists) {
-          final note = Note.fromFirestore(noteDoc);
-          
-          // extractedText 필드와 imageUrl 필드 업데이트
-          await _notesCollection.doc(noteId).update({
-            'extractedText': extractedText == '___PROCESSING___' ? '' : extractedText,
-            'translatedText': translatedText.isNotEmpty ? translatedText : note.translatedText,
-            'imageUrl': imageUrl, // 썸네일로 첫 번째 이미지 URL 사용
-            'updatedAt': DateTime.now(),
-          });
-          
-          // 썸네일 설정 로그
-          debugPrint('노트 썸네일 자동 설정됨: $noteId -> $imageUrl');
-          
-          // 캐시에서 노트 제거 (다음에 불러올 때 최신 정보로 로드)
-          await _cacheService.removeCachedNote(noteId);
-        }
-      }
-
-      // 처리 결과 반환
-      return {
-        'success': true,
-        'imageUrl': imageUrl,
-        'extractedText': extractedText,
-        'translatedText': translatedText,
-        'pageId': page?.id,
-      };
-    } catch (e) {
-      debugPrint('이미지 처리 및 페이지 생성 중 오류 발생: $e');
-      rethrow;
-    }
-  }
-
-  // 노트 내용을 플래시카드로 추가
-  Future<bool> addNoteToFlashcards(String noteId) async {
-    try {
-      // 노트 정보 가져오기
-      final note = await getNoteById(noteId);
-      if (note == null) {
-        throw Exception('노트를 찾을 수 없습니다.');
-      }
-
-      // 이미 플래시카드가 있는지 확인
-      bool hasExistingCard = false;
-      for (var card in note.flashCards) {
-        if (card.front == note.originalText) {
-          hasExistingCard = true;
-          break;
-        }
-      }
-
-      // 이미 동일한 플래시카드가 있으면 추가하지 않음
-      if (hasExistingCard) {
-        return false;
-      }
-
-      // 새 플래시카드 생성
-      final newCard = FlashCard(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        front: note.originalText,
-        back: note.translatedText,
-        pinyin: '', // 핀인은 빈 값으로 설정
-        createdAt: DateTime.now(),
-        noteId: noteId,
-      );
-
-      // 플래시카드 목록에 추가
-      final updatedFlashCards = [...note.flashCards, newCard];
-
-      // 노트 업데이트
-      final updatedNote = note.copyWith(
-        flashCards: updatedFlashCards,
-        flashcardCount: updatedFlashCards.length,
-      );
-
-      // Firestore에 업데이트
-      await updateNote(noteId, updatedNote);
-
-      return true;
-    } catch (e) {
-      debugPrint('플래시카드 추가 중 오류 발생: $e');
-      return false;
-    }
-  }
-
   /// 노트 이미지 URL 업데이트
   Future<bool> updateNoteImageUrl(String noteId, String imageUrl) async {
     try {
+      // 현재 노트 정보 확인 (캐시된 정보 우선 확인)
+      final cachedNote = await _cacheService.getCachedNote(noteId);
+      
+      // 이미 동일한 URL이면 불필요한 업데이트 방지
+      if (cachedNote != null && cachedNote.imageUrl == imageUrl) {
+        debugPrint('이미지 URL이 이미 동일하여 업데이트 생략: $noteId');
+        return true;
+      }
+      
       // 노트의 이미지 URL 업데이트
       await _notesCollection.doc(noteId).update({
         'imageUrl': imageUrl,
         'updatedAt': DateTime.now(),
       });
       
-      // 캐시에서 노트 제거 (다음에 불러올 때 최신 정보로 로드)
-      await _cacheService.removeCachedNote(noteId);
+      // 노트 캐시 갱신 (캐싱된 노트가 있는 경우)
+      if (cachedNote != null) {
+        final updatedNote = cachedNote.copyWith(imageUrl: imageUrl);
+        await _cacheService.cacheNote(updatedNote);
+        debugPrint('노트 이미지 URL 캐시 업데이트 완료: $noteId');
+      } else {
+        // 캐시에서 노트 제거 (다음에 불러올 때 최신 정보로 로드)
+        await _cacheService.removeCachedNote(noteId);
+      }
       
       return true;
     } catch (e) {
@@ -1248,6 +1116,172 @@ class NoteService {
       debugPrint('자동 노트 제목 생성 중 오류 발생: $e');
       // 오류 발생 시 기본값 사용
       return '노트 1';
+    }
+  }
+
+  // 노트 내용을 플래시카드로 추가
+  Future<bool> addNoteToFlashcards(String noteId) async {
+    try {
+      // 노트 정보 가져오기
+      final note = await getNoteById(noteId);
+      if (note == null) {
+        throw Exception('노트를 찾을 수 없습니다.');
+      }
+
+      // 이미 플래시카드가 있는지 확인
+      bool hasExistingCard = false;
+      for (var card in note.flashCards) {
+        if (card.front == note.originalText) {
+          hasExistingCard = true;
+          break;
+        }
+      }
+
+      // 이미 동일한 플래시카드가 있으면 추가하지 않음
+      if (hasExistingCard) {
+        return false;
+      }
+
+      // 새 플래시카드 생성
+      final newCard = FlashCard(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        front: note.originalText,
+        back: note.translatedText,
+        pinyin: '', // 핀인은 빈 값으로 설정
+        createdAt: DateTime.now(),
+        noteId: noteId,
+      );
+
+      // 플래시카드 목록에 추가
+      final updatedFlashCards = [...note.flashCards, newCard];
+
+      // 노트 업데이트
+      final updatedNote = note.copyWith(
+        flashCards: updatedFlashCards,
+        flashcardCount: updatedFlashCards.length,
+      );
+
+      // Firestore에 업데이트
+      await updateNote(noteId, updatedNote);
+
+      return true;
+    } catch (e) {
+      debugPrint('플래시카드 추가 중 오류 발생: $e');
+      return false;
+    }
+  }
+
+  // 이미지 처리 및 페이지 생성
+  Future<Map<String, dynamic>> _processImageAndCreatePage(
+    String noteId, 
+    File imageFile, 
+    {int pageNumber = 1, String? pageId, String? targetLanguage, bool shouldProcess = true, bool skipOcrUsageCount = false}
+  ) async {
+    try {
+      // 이미지 업로드
+      String imageUrl = '';
+      try {
+        // 이미지 업로드 전에 이미지 해시값 계산 (중복 업로드 방지)
+        imageUrl = await _imageService.uploadImage(imageFile);
+        // 만약 빈 문자열이 반환되면, 기본 fallback 경로 사용
+        if (imageUrl.isEmpty) {
+          debugPrint('이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
+          imageUrl = 'images/fallback_image.jpg';
+        }
+      } catch (uploadError) {
+        debugPrint('이미지 업로드 중 오류: $uploadError - 기본 경로 사용');
+        imageUrl = 'images/fallback_image.jpg';
+      }
+
+      String extractedText = '';
+      String translatedText = '';
+      
+      // shouldProcess가 true일 때만 OCR 및 번역 처리
+      if (shouldProcess) {
+        // OCR로 텍스트 추출
+        extractedText = await _ocrService.extractText(imageFile, skipUsageCount: skipOcrUsageCount);
+        if (extractedText.isEmpty) {
+          debugPrint('OCR 텍스트 추출 실패 또는 텍스트 없음');
+        }
+
+        // 텍스트 번역
+        if (extractedText.isNotEmpty) {
+          translatedText = await _translationService.translateText(
+            extractedText,
+            targetLanguage: targetLanguage ?? 'ko',
+          );
+        }
+      } else {
+        // 처리하지 않는 경우 특수 마커 사용
+        extractedText = '___PROCESSING___';
+        translatedText = '';
+        debugPrint('OCR 및 번역 처리 건너뛰기 - 특수 마커 사용');
+      }
+
+      // 페이지 생성
+      final page = await _pageService.createPage(
+        noteId: noteId,
+        originalText: extractedText,
+        translatedText: translatedText,
+        pageNumber: pageNumber,
+        imageFile: imageFile,
+      );
+
+      // 페이지 캐싱
+      if (page != null) {
+        await _cacheService.cachePage(noteId, page);
+      }
+
+      // 노트 업데이트 (첫 페이지 내용으로 노트 내용 업데이트)
+      if (pageNumber == 1) {
+        // 첫 페이지만 실행하기 위한 추가 확인
+        final noteDoc = await _notesCollection.doc(noteId).get();
+        if (noteDoc.exists) {
+          final note = Note.fromFirestore(noteDoc);
+          final bool imageUrlNeedsUpdate = note.imageUrl == null || note.imageUrl!.isEmpty || note.imageUrl == 'images/fallback_image.jpg';
+          
+          // 필요한 필드만 선택적으로 업데이트하여 불필요한 문서 쓰기 감소
+          final Map<String, dynamic> updateData = {
+            'updatedAt': DateTime.now(),
+          };
+          
+          if (extractedText != '___PROCESSING___') {
+            updateData['extractedText'] = extractedText;
+          }
+          
+          if (translatedText.isNotEmpty) {
+            updateData['translatedText'] = translatedText;
+          } else if (note.translatedText.isNotEmpty) {
+            updateData['translatedText'] = note.translatedText;
+          }
+          
+          // 이미지 URL은 필요한 경우에만 업데이트 (불필요한 변경 방지)
+          if (imageUrlNeedsUpdate) {
+            updateData['imageUrl'] = imageUrl;
+            debugPrint('노트 썸네일 설정: $noteId -> $imageUrl');
+          }
+          
+          // 변경할 내용이 있을 때만 Firestore 업데이트
+          if (updateData.length > 1) { // 'updatedAt'만 있는 경우가 아닐 때
+            await _notesCollection.doc(noteId).update(updateData);
+            
+            // 이전 캐시 제거 (다음 로드에서 최신 정보 사용)
+            await _cacheService.removeCachedNote(noteId);
+          }
+        }
+      }
+
+      // 처리 결과 반환
+      return {
+        'success': true,
+        'imageUrl': imageUrl,
+        'extractedText': extractedText,
+        'translatedText': translatedText,
+        'pageId': page?.id,
+      };
+    } catch (e) {
+      debugPrint('이미지 처리 및 페이지 생성 중 오류 발생: $e');
+      rethrow;
     }
   }
 }
