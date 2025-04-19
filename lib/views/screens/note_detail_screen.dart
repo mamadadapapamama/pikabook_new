@@ -36,6 +36,8 @@ import '../../services/translation_service.dart';
 import '../../models/processed_text.dart';
 import '../../models/dictionary_entry.dart';
 import 'dart:math' as math;
+import 'package:flutter/scheduler.dart';
+import '../../widgets/common/pika_app_bar.dart'; // NoteAppBar 위젯 import
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -167,14 +169,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   @override
   void dispose() {
+    // 디버그 타이머 방지
+    timeDilation = 1.0;
+    
     debugPrint('노트 상세 화면 dispose 호출됨');
     
-    // 리소스 정리 - 동기적으로 호출만 하고 실제 완료는 기다리지 않음
-    // 비동기 작업은 백그라운드에서 계속됨
+    // 필수 리소스 정리는 동기적으로 수행
+    // TTS 및 텍스트 리더 정리
+    _ttsService.stop();
+    _textReaderService.stop();
+    
+    // 스크린샷 감지 중지
+    _screenshotService.stopDetection();
+    
+    // 타이머 정리
+    _screenshotWarningTimer?.cancel();
+    
+    // 비동기 리소스 정리는 백그라운드에서 계속 실행
     _cleanupResources().then((_) {
-      debugPrint('리소스 정리 완료');
+      debugPrint('백그라운드 리소스 정리 완료');
     }).catchError((e) {
-      debugPrint('리소스 정리 중 오류: $e');
+      debugPrint('백그라운드 리소스 정리 중 오류: $e');
     });
     
     super.dispose();
@@ -1420,6 +1435,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // 뒤로가기 버튼 처리를 위한 메서드
   Future<bool> _onWillPop() async {
+    // 디버그 타이머 방지
+    timeDilation = 1.0;
+    
     try {
       debugPrint('노트 상세 화면에서 뒤로가기 버튼 클릭됨');
       
@@ -1438,7 +1456,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         if (_titleEditingController.text.isNotEmpty) {
           await _updateNoteTitle(_titleEditingController.text);
         }
-    setState(() {
+        setState(() {
           _isEditingTitle = false;
         });
         return false; // 뒤로가기 이벤트 소비
@@ -1450,16 +1468,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         _cacheService.cacheNote(_note!);
       }
       
-      // 간단하게 화면 종료
       debugPrint('Navigator.of(context).canPop(): ${Navigator.of(context).canPop()}');
       
-      // 명시적으로 Navigator.pop 호출
-      Future.microtask(() {
-        if (mounted && context.mounted) {
-          Navigator.of(context).pop();
-          debugPrint('Navigator.pop() 호출 완료');
-        }
-      });
+      // 동기적으로 Navigator.pop 호출 (Future.microtask 제거)
+      if (mounted && context.mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+        debugPrint('Navigator.pop() 호출 완료');
+      }
       
       return false; // 뒤로가기 이벤트 소비 (명시적으로 처리)
     } catch (e) {
@@ -1472,24 +1487,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
+    // 디버그 타이머 방지
+    timeDilation = 1.0;
+    
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-      backgroundColor: Colors.white,
+        // 앱바 내에서 직접 뒤로가기 버튼 처리
         appBar: PikaAppBar.noteDetail(
-          title: _isEditingTitle ? '' : (_note?.originalText ?? '로딩 중'),
-              currentPage: _pageManager.currentPageIndex + 1,
+          title: _note?.originalText ?? '로딩 중',
+          currentPage: _pageManager.currentPageIndex + 1,
           totalPages: _pageManager.pages.length,
-              flashcardCount: _note?.flashcardCount ?? 0,
-              onMorePressed: _showMoreOptions,
-              onFlashcardTap: _navigateToFlashcards,
-          onBackPressed: () {
-            // 명시적으로 뒤로가기 처리
-            debugPrint('앱바의 뒤로가기 버튼 클릭됨');
-            _onWillPop().then((_) {
-              // onWillPop에서 이미 처리되므로 여기서는 추가 작업 없음
-              debugPrint('앱바 뒤로가기 처리 완료');
-            });
+          flashcardCount: _note?.flashcardCount ?? 0,
+          onMorePressed: _showMoreOptions,
+          onFlashcardTap: _navigateToFlashcards,
+          onBackPressed: () async {
+            await _onWillPop();
           },
         ),
         body: _isEditingTitle ? 
@@ -1586,10 +1599,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             ],
           ),
       ),
-      );
-    }
+    );
+  }
 
-    // 메인 UI 구성 (로딩 및 오류 처리 이후)
+  // 메인 UI 구성 (로딩 및 오류 처리 이후)
   Widget _buildBody() {
     final currentImageFile = _pageManager.currentImageFile;
     final String pageNumberText = '${_pageManager.currentPageIndex + 1}/${_pageManager.pages.length}';

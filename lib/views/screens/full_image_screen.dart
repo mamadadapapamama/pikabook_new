@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
@@ -31,6 +32,8 @@ class _FullImageScreenState extends State<FullImageScreen> {
   @override
   void initState() {
     super.initState();
+    // 디버그 타이머 방지
+    timeDilation = 1.0;
     // 화면 진입 시 상태표시줄을 흰색으로 설정 (강제 적용)
     _setLightStatusBar();
   }
@@ -49,6 +52,9 @@ class _FullImageScreenState extends State<FullImageScreen> {
 
   @override
   void dispose() {
+    // 디버그 타이머 방지
+    timeDilation = 1.0;
+    
     _transformationController.dispose();
     // 화면을 떠날 때 상태표시줄을 다시 검은색으로 복원
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark.copyWith(
@@ -57,6 +63,26 @@ class _FullImageScreenState extends State<FullImageScreen> {
       statusBarBrightness: Brightness.light, // iOS용 (밝은 배경 = 검정 아이콘)
     ));
     super.dispose();
+  }
+  
+  // 뒤로가기 버튼 처리
+  Future<bool> _onWillPop() async {
+    // 디버그 타이머 방지
+    timeDilation = 1.0;
+    
+    // 화면을 떠날 때 상태표시줄을 다시 검은색으로 복원
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark.copyWith(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark, // 안드로이드용 (검정 아이콘)
+      statusBarBrightness: Brightness.light, // iOS용 (밝은 배경 = 검정 아이콘)
+    ));
+    
+    // 리소스 정리 후 화면 종료
+    if (mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+    
+    return false; // 뒤로가기 이벤트 소비
   }
 
   void _handleDoubleTapDown(TapDownDetails details) {
@@ -85,40 +111,46 @@ class _FullImageScreenState extends State<FullImageScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 디버그 타이머 방지
+    timeDilation = 1.0;
+    
     // 검은 배경에 흰색 상태표시줄을 설정
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     
-    return Scaffold(
-      backgroundColor: Colors.black,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: Text(
-          widget.title,
-          style: TypographyTokens.subtitle2.copyWith(color: ColorTokens.textLight),
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          title: Text(
+            widget.title,
+            style: TypographyTokens.subtitle2.copyWith(color: ColorTokens.textLight),
+          ),
+          backgroundColor: Colors.black.withOpacity(0.5),
+          elevation: 0,
+          iconTheme: const IconThemeData(color: Colors.white), // 뒤로 가기 버튼 색상을 흰색으로 설정
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white),
+            onPressed: () => _onWillPop(),
+          ),
+          systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.light, // Android (흰색 아이콘)
+            statusBarBrightness: Brightness.dark, // iOS (어두운 배경 = 흰색 아이콘)
+          ),
         ),
-        backgroundColor: Colors.black.withOpacity(0.5),
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white), // 뒤로 가기 버튼 색상을 흰색으로 설정
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light, // Android (흰색 아이콘)
-          statusBarBrightness: Brightness.dark, // iOS (어두운 배경 = 흰색 아이콘)
-        ),
-      ),
-      body: SafeArea(
-        child: Center(
-          child: GestureDetector(
-            onDoubleTapDown: _handleDoubleTapDown,
-            onDoubleTap: _handleDoubleTap,
-            child: InteractiveViewer(
-              transformationController: _transformationController,
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: _buildImage(),
+        body: SafeArea(
+          child: Center(
+            child: GestureDetector(
+              onDoubleTapDown: _handleDoubleTapDown,
+              onDoubleTap: _handleDoubleTap,
+              child: InteractiveViewer(
+                transformationController: _transformationController,
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: _buildImage(),
+              ),
             ),
           ),
         ),

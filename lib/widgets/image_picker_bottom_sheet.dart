@@ -3,10 +3,8 @@ import 'dart:io';
 import '../services/image_service.dart';
 import '../services/note_service.dart';
 import '../views/screens/note_detail_screen.dart';
-import '../widgets/loading_dialog.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
-import '../theme/tokens/ui_tokens.dart';
 import '../widgets/common/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/usage_limit_service.dart';
@@ -289,8 +287,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       debugPrint('로딩 다이얼로그 표시 시작');
       await PikabookLoader.show(
         appContext, 
-        title: '스마트 노트를 만들고 있어요', 
-        subtitle: '잠시만 기다려 주세요!'
+        message: '스마트 노트를 만들고 있어요\n잠시만 기다려 주세요!'
       );
       debugPrint('로딩 다이얼로그 표시 완료');
     } else {
