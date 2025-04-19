@@ -13,7 +13,6 @@ import 'views/screens/settings_screen.dart';
 import 'services/initialization_manager.dart';
 import 'services/user_preferences_service.dart';
 import 'widgets/loading_screen.dart';
-import 'theme/app_theme.dart';
 
 /// 앱의 시작 지점 및 초기 화면 결정 로직
 /// - 로그인 확인

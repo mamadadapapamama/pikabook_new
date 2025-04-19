@@ -57,71 +57,92 @@ class _NoteListItemState extends State<NoteListItem> {
   }
 
   Future<void> _loadImage() async {
-    if (widget.note.imageUrl != null && widget.note.imageUrl!.isNotEmpty) {
-      try {
-        setState(() {
-          _isLoadingImage = true;
-          _imageLoadError = false;
-        });
+    if (widget.note.imageUrl == null || widget.note.imageUrl!.isEmpty) {
+      setState(() {
+        _isLoadingImage = false;
+        _imageFile = null;
+        _imageLoadError = false;
+      });
+      debugPrint('노트에 이미지 URL이 없음: ${widget.note.id}');
+      return;
+    }
 
-        debugPrint('노트 이미지 로드 시작: ${widget.note.imageUrl}');
+    try {
+      setState(() {
+        _isLoadingImage = true;
+        _imageLoadError = false;
+      });
+
+      debugPrint('노트 이미지 로드 시작: ${widget.note.imageUrl}');
+      
+      File? downloadedImage;
+      
+      // 이미지 URL 처리 개선
+      final String imageUrl = widget.note.imageUrl!;
+      
+      // Firebase Storage URL 패턴 체크
+      bool isFirebaseUrl = imageUrl.startsWith('http') && 
+          (imageUrl.contains('firebasestorage.googleapis.com') || 
+           imageUrl.contains('firebase') || 
+           imageUrl.contains('storage'));
+      
+      if (isFirebaseUrl) {
+        // Firebase Storage URL에서 직접 다운로드
+        downloadedImage = await _imageService.downloadImage(imageUrl);
+        debugPrint('Firebase URL에서 다운로드 시도: $imageUrl');
+      } else {
+        // 상대 경로로 시도
+        downloadedImage = await _imageService.downloadImage(imageUrl);
+        debugPrint('상대 경로로 다운로드 시도: $imageUrl');
         
-        File? downloadedImage;
-        
-        // 1. 직접 Firebase URL인지 확인
-        if (widget.note.imageUrl!.startsWith('http') && 
-            widget.note.imageUrl!.contains('firebasestorage.googleapis.com')) {
-          // Firebase Storage URL에서 다운로드
-          downloadedImage = await _imageService.downloadImage(widget.note.imageUrl!);
-        } 
-        // 2. 상대 경로인 경우 
-        else {
-          // 이미지 다운로드
-          downloadedImage = await _imageService.downloadImage(widget.note.imageUrl!);
-          
-          // 실패한 경우 전체 URL로 다시 시도
-          if (downloadedImage == null) {
-            // Firebase Storage에서 URL 가져오기 시도
+        // 실패한 경우 전체 URL로 다시 시도
+        if (downloadedImage == null) {
+          try {
+            // Firebase Storage 참조 생성 시도
+            final storageRef = FirebaseStorage.instance.ref().child(imageUrl);
+            final fullUrl = await storageRef.getDownloadURL();
+            downloadedImage = await _imageService.downloadImage(fullUrl);
+            debugPrint('전체 URL로 재시도 성공: $fullUrl');
+          } catch (e) {
+            debugPrint('전체 URL로 재시도 중 오류: $e');
+            
+            // 마지막 시도: 기본 경로를 붙여서 시도
             try {
-              final storageRef = FirebaseStorage.instance.ref().child(widget.note.imageUrl!);
-              final url = await storageRef.getDownloadURL();
-              downloadedImage = await _imageService.downloadImage(url);
+              final fallbackUrl = 'images/$imageUrl';
+              final storageRef = FirebaseStorage.instance.ref().child(fallbackUrl);
+              final fullUrl = await storageRef.getDownloadURL();
+              downloadedImage = await _imageService.downloadImage(fullUrl);
+              debugPrint('기본 경로 추가 시도 성공: $fallbackUrl');
             } catch (e) {
-              debugPrint('Firebase URL로 재시도 중 오류: $e');
+              debugPrint('기본 경로 추가 시도 실패: $e');
             }
           }
         }
+      }
 
-        if (mounted) { // 위젯이 여전히 마운트되어 있는지 확인
-          if (downloadedImage != null) {
-            setState(() {
-              _imageFile = downloadedImage;
-              _isLoadingImage = false;
-            });
-            debugPrint('노트 이미지 로드 성공: ${widget.note.id}');
-          } else {
-            setState(() {
-              _isLoadingImage = false;
-              _imageLoadError = true;
-            });
-            debugPrint('노트 이미지 로드 실패 (파일 없음): ${widget.note.id}');
-          }
-        }
-      } catch (e) {
-        debugPrint('이미지 로드 중 오류: $e');
-        if (mounted) { // 위젯이 여전히 마운트되어 있는지 확인
+      if (mounted) {
+        if (downloadedImage != null) {
+          setState(() {
+            _imageFile = downloadedImage;
+            _isLoadingImage = false;
+          });
+          debugPrint('노트 이미지 로드 성공: ${widget.note.id}');
+        } else {
           setState(() {
             _isLoadingImage = false;
             _imageLoadError = true;
           });
+          debugPrint('노트 이미지 로드 실패 (파일 없음): ${widget.note.id}');
         }
       }
-    } else {
-      setState(() {
-        _isLoadingImage = false;
-        _imageFile = null; // 이미지 URL이 없는 경우 이미지 파일 정보 초기화
-      });
-      debugPrint('노트에 이미지 URL이 없음: ${widget.note.id}');
+    } catch (e) {
+      debugPrint('이미지 로드 중 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingImage = false;
+          _imageLoadError = true;
+        });
+      }
     }
   }
 

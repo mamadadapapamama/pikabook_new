@@ -913,6 +913,7 @@ class NoteService {
         'totalPages': imageFiles.length, // 총 페이지 수도 명시적으로 설정
         'pages': [], // 빈 페이지 배열 초기화
         'firstPageProcessed': false, // 첫 페이지 처리 상태 추가
+        'imageUrl': '', // 썸네일 이미지 URL 필드 초기화
       };
       
       // 2. Firestore에 노트 추가 (중요: 노트 ID 즉시 반환)
@@ -1021,11 +1022,19 @@ class NoteService {
         if (noteDoc.exists) {
           final note = Note.fromFirestore(noteDoc);
           
-          // extractedText 필드 업데이트
+          // extractedText 필드와 imageUrl 필드 업데이트
           await _notesCollection.doc(noteId).update({
             'extractedText': extractedText == '___PROCESSING___' ? '' : extractedText,
             'translatedText': translatedText.isNotEmpty ? translatedText : note.translatedText,
+            'imageUrl': imageUrl, // 썸네일로 첫 번째 이미지 URL 사용
+            'updatedAt': DateTime.now(),
           });
+          
+          // 썸네일 설정 로그
+          debugPrint('노트 썸네일 자동 설정됨: $noteId -> $imageUrl');
+          
+          // 캐시에서 노트 제거 (다음에 불러올 때 최신 정보로 로드)
+          await _cacheService.removeCachedNote(noteId);
         }
       }
 
