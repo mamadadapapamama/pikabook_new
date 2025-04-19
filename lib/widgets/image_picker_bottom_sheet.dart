@@ -270,51 +270,111 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   
   /// 선택한 이미지로 노트 생성
   Future<void> _createNoteWithImages(BuildContext context, List<File> imageFiles) async {
-    if (imageFiles.isEmpty) return;
+    if (imageFiles.isEmpty) {
+      debugPrint('이미지가 없어 노트 생성 취소');
+      return;
+    }
     
     final BuildContext parentContext = Navigator.of(context).context;
     final BuildContext appContext = Navigator.of(parentContext, rootNavigator: true).context;
     
     // 바텀 시트 닫기
-    if (mounted && Navigator.canPop(context)) Navigator.pop(context);
+    if (mounted && Navigator.canPop(context)) {
+      Navigator.pop(context);
+      debugPrint('바텀 시트 닫힘');
+    }
     
     // PikabookLoader 사용 - 기존 LoadingDialog보다 안정적
     if (appContext.mounted) {
-      PikabookLoader.show(
+      debugPrint('로딩 다이얼로그 표시 시작');
+      await PikabookLoader.show(
         appContext, 
         title: '스마트 노트를 만들고 있어요', 
         subtitle: '잠시만 기다려 주세요!'
       );
+      debugPrint('로딩 다이얼로그 표시 완료');
+    } else {
+      debugPrint('앱 컨텍스트가 유효하지 않아 로딩 다이얼로그를 표시할 수 없음');
     }
     
+    String? createdNoteId;
+    
     try {
+      debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
       // 노트 생성 (백그라운드 처리 위임)
       final result = await _noteService.createNoteWithMultipleImages(
         imageFiles: imageFiles,
         waitForFirstPageProcessing: false,
       );
+      debugPrint('노트 생성 완료: $result');
+      
+      // 성공 여부 체크
+      final bool isSuccess = result['success'] == true;
+      createdNoteId = result['noteId'] as String?;
       
       // 로더 숨기기
-      if (appContext.mounted) PikabookLoader.hide(appContext);
+      try {
+        if (appContext.mounted) {
+          debugPrint('로딩 다이얼로그 숨김 시작');
+          PikabookLoader.hide(appContext);
+          debugPrint('로딩 다이얼로그 숨김 완료');
+        }
+      } catch (e) {
+        debugPrint('로딩 다이얼로그 숨김 중 오류: $e');
+      }
+      
+      // 약간의 딜레이 추가 (화면 전환 안정성 개선)
+      await Future.delayed(const Duration(milliseconds: 300));
       
       // 노트 생성 성공 시 상세 화면으로 이동
-      if (result['success'] == true && result['noteId'] != null) {
-        final noteId = result['noteId'] as String;
+      if (isSuccess && createdNoteId != null) {
+        debugPrint('노트 ID: $createdNoteId - 상세 화면으로 이동 시도');
         
         if (appContext.mounted) {
-          Navigator.of(appContext).push(
-            MaterialPageRoute(
-              builder: (context) => NoteDetailScreen(
-                noteId: noteId,
-                isProcessingBackground: true, // 항상 백그라운드 처리 중으로 설정
+          try {
+            debugPrint('노트 상세 화면으로 이동 시작');
+            await Navigator.of(appContext).push(
+              NoteDetailScreen.route(
+                noteId: createdNoteId!,
+                isProcessingBackground: true,
                 totalImageCount: imageFiles.length,
               ),
-            ),
-          );
+            );
+            debugPrint('노트 상세 화면으로 이동 완료');
+          } catch (navError) {
+            debugPrint('노트 상세 화면 이동 중 오류: $navError');
+            // 이동 실패 시 스낵바 표시
+            if (appContext.mounted) {
+              ScaffoldMessenger.of(appContext).showSnackBar(
+                SnackBar(
+                  content: Text('노트가 생성되었지만 화면 이동에 실패했습니다.'),
+                  action: SnackBarAction(
+                    label: '확인',
+                    onPressed: () {
+                      // 다시 시도
+                      if (appContext.mounted && createdNoteId != null) {
+                        Navigator.of(appContext).push(
+                          NoteDetailScreen.route(
+                            noteId: createdNoteId!,
+                            isProcessingBackground: true,
+                            totalImageCount: imageFiles.length,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  duration: const Duration(seconds: 5),
+                ),
+              );
+            }
+          }
+        } else {
+          debugPrint('앱 컨텍스트가 유효하지 않아 노트 상세 화면으로 이동할 수 없음');
         }
       } else {
         // 실패 시 메시지 표시
         final errorMessage = result['message'] as String? ?? '노트 생성에 실패했습니다';
+        debugPrint('노트 생성 실패: $errorMessage');
         if (appContext.mounted) {
           ScaffoldMessenger.of(appContext).showSnackBar(
             SnackBar(content: Text(errorMessage)),
@@ -322,12 +382,56 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         }
       }
     } catch (e) {
+      debugPrint('노트 생성 중 예외 발생: $e');
       // 에러 처리
+      try {
+        if (appContext.mounted) {
+          PikabookLoader.hide(appContext);
+        }
+      } catch (loaderError) {
+        debugPrint('로더 숨김 중 오류: $loaderError');
+      }
+      
       if (appContext.mounted) {
-        PikabookLoader.hide(appContext);
         ScaffoldMessenger.of(appContext).showSnackBar(
           SnackBar(content: Text('노트 생성 중 오류가 발생했습니다')),
         );
+      }
+    } finally {
+      // 성공적으로 노트가 생성되었지만 화면 이동에 실패한 경우 스낵바 표시
+      if (createdNoteId != null && appContext.mounted) {
+        // Navigator에 NoteDetailScreen이 이미 있는지 확인
+        bool alreadyNavigated = false;
+        Navigator.of(appContext).popUntil((route) {
+          if (route.settings.name == '/note_detail') {
+            alreadyNavigated = true;
+          }
+          return true;
+        });
+        
+        if (!alreadyNavigated) {
+          debugPrint('노트는 생성되었지만 화면 이동이 확인되지 않음: $createdNoteId');
+          ScaffoldMessenger.of(appContext).showSnackBar(
+            SnackBar(
+              content: Text('노트가 생성되었습니다. 노트 목록에서 확인하세요.'),
+              action: SnackBarAction(
+                label: '상세보기',
+                onPressed: () {
+                  if (appContext.mounted) {
+                    Navigator.of(appContext).push(
+                      NoteDetailScreen.route(
+                        noteId: createdNoteId!,
+                        isProcessingBackground: true,
+                        totalImageCount: imageFiles.length,
+                      ),
+                    );
+                  }
+                },
+              ),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
       }
     }
   }

@@ -43,14 +43,33 @@ import 'dart:math' as math;
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;
   final bool isProcessingBackground;
-  final int? totalImageCount; // 추가: 총 이미지 수 저장
+  final int totalImageCount;
+  
+  // 라우트 이름 상수 추가
+  static const String routeName = '/note_detail';
 
   const NoteDetailScreen({
-    super.key,
+    Key? key,
     required this.noteId,
     this.isProcessingBackground = false,
-    this.totalImageCount, // 추가: 생성자에 총 이미지 수 매개변수 추가
-  });
+    this.totalImageCount = 1,
+  }) : super(key: key);
+
+  // 라우트를 생성하는 편의 메소드 추가
+  static Route<dynamic> route({
+    required String noteId,
+    bool isProcessingBackground = false,
+    int totalImageCount = 1,
+  }) {
+    return MaterialPageRoute(
+      settings: const RouteSettings(name: routeName),
+      builder: (context) => NoteDetailScreen(
+        noteId: noteId,
+        isProcessingBackground: isProcessingBackground,
+        totalImageCount: totalImageCount,
+      ),
+    );
+  }
 
   @override
   State<NoteDetailScreen> createState() => _NoteDetailScreenState();

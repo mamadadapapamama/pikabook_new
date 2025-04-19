@@ -498,8 +498,8 @@ class _NoteListItemState extends State<NoteListItem> {
             _imageFile!,
             fit: BoxFit.cover,
             key: ValueKey(cacheKey), // 고유 키 설정으로 불필요한 리빌드 방지
-            cacheHeight: 160, // 썸네일 2배 크기로 메모리 최적화
-            cacheWidth: 160,
+            cacheHeight: 240, // 썸네일 2배 크기로 메모리 최적화
+            cacheWidth: 240,
             errorBuilder: (context, error, stackTrace) {
               debugPrint('이미지 렌더링 오류: $error');
               return GestureDetector(

@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../theme/tokens/color_tokens.dart';
 import 'dart:async';
 
@@ -80,19 +81,20 @@ class LoadingDialog {
   }
   
   /// 로딩 다이얼로그 메시지 업데이트
-  static void updateMessage(String message) {
-    try {
-      _message = message;
-      // 별도의 microtask로 실행하여 UI 업데이트 안정성 개선
-      Future.microtask(() {
-        _MessageNotifier().value = message;
-      });
-      debugPrint('로딩 다이얼로그 메시지 업데이트: $message');
-    } catch (e) {
-      debugPrint('로딩 다이얼로그 메시지 업데이트 중 오류: $e');
-    }
+static void updateMessage(String message) {
+  if (!kDebugMode) return; // 릴리즈 모드에서는 아무 동작도 하지 않음
+
+  try {
+    _message = message;
+    // 별도의 microtask로 실행하여 UI 업데이트 안정성 개선
+    Future.microtask(() {
+      _MessageNotifier().value = message;
+    });
+    debugPrint('로딩 다이얼로그 메시지 업데이트: $message');
+  } catch (e) {
+    debugPrint('로딩 다이얼로그 메시지 업데이트 중 오류: $e');
   }
-  
+}  
   /// 로딩 다이얼로그 숨기기
   static void hide() {
     try {

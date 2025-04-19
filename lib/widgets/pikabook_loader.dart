@@ -17,7 +17,7 @@ class PikabookLoader extends StatelessWidget {
     Key? key,
     this.title = '스마트한 학습 노트를 만들고 있어요.',
     this.subtitle = '잠시만 기다려 주세요!\n조금 시간이 걸릴수 있어요.',
-    this.timeoutSeconds = 20,
+    this.timeoutSeconds = 10,
   }) : super(key: key);
 
   /// 로더를 다이얼로그로 표시하는 정적 메서드
