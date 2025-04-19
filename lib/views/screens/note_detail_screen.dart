@@ -1456,7 +1456,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         if (_titleEditingController.text.isNotEmpty) {
           await _updateNoteTitle(_titleEditingController.text);
         }
-        setState(() {
+      setState(() {
           _isEditingTitle = false;
         });
         return false; // 뒤로가기 이벤트 소비
@@ -1496,11 +1496,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         // 앱바 내에서 직접 뒤로가기 버튼 처리
         appBar: PikaAppBar.noteDetail(
           title: _note?.originalText ?? '로딩 중',
-          currentPage: _pageManager.currentPageIndex + 1,
+              currentPage: _pageManager.currentPageIndex + 1,
           totalPages: _pageManager.pages.length,
-          flashcardCount: _note?.flashcardCount ?? 0,
-          onMorePressed: _showMoreOptions,
-          onFlashcardTap: _navigateToFlashcards,
+              flashcardCount: _note?.flashcardCount ?? 0,
+              onMorePressed: _showMoreOptions,
+              onFlashcardTap: _navigateToFlashcards,
           onBackPressed: () async {
             await _onWillPop();
           },
@@ -1599,10 +1599,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             ],
           ),
       ),
-    );
-  }
+      );
+    }
 
-  // 메인 UI 구성 (로딩 및 오류 처리 이후)
+    // 메인 UI 구성 (로딩 및 오류 처리 이후)
   Widget _buildBody() {
     final currentImageFile = _pageManager.currentImageFile;
     final String pageNumberText = '${_pageManager.currentPageIndex + 1}/${_pageManager.pages.length}';
