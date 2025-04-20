@@ -11,6 +11,7 @@ import 'unified_cache_service.dart';
 import 'dart:convert';
 
 /// 페이지 서비스: 페이지 관리 (CRUD) 기능을 제공합니다.
+/// 
 class PageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -422,6 +423,10 @@ class PageService {
   }
 
   /// 페이지 텍스트 번역
+  /* 
+  // 현재 미사용: MVP에서는 사용되지 않는 단순 번역 메서드
+  // 이 메서드는 세그먼트 분할, pinyin 생성 등을 제공하지 않고 단순 번역만 수행함
+  // 실제 텍스트 처리는 EnhancedOcrService와 PageContentService를 통해 이루어짐
   Future<String> translatePageText(String pageId, {String? targetLanguage}) async {
     try {
       // 페이지 정보 가져오기
@@ -448,40 +453,11 @@ class PageService {
       throw Exception('페이지 텍스트를 번역할 수 없습니다: $e');
     }
   }
+  */
 
-  /// 페이지 삭제
+  /// 개별 페이지 삭제 - MVP 이후 UI 제공 예정
   Future<void> deletePage(String pageId) async {
-    try {
-      // 페이지 정보 가져오기
-      final pageDoc = await _pagesCollection.doc(pageId).get();
-      if (!pageDoc.exists) {
-        throw Exception('페이지를 찾을 수 없습니다.');
-      }
-      
-      final data = pageDoc.data() as Map<String, dynamic>?;
-      final imageUrl = data?['imageUrl'] as String?;
-      final noteId = data?['noteId'] as String?;
-
-      // 이미지 삭제 (있는 경우)
-      if (imageUrl != null && imageUrl.isNotEmpty) {
-        await _imageService.deleteImage(imageUrl);
-      }
-
-      // 페이지 문서 삭제
-      await _pagesCollection.doc(pageId).delete();
-
-      // 캐시에서 페이지 제거
-      await _cacheService.removePage(pageId);
-      
-      // 텍스트 캐시 제거 관련 로그만 출력 (기능은 아직 구현 안됨)
-      debugPrint('페이지 $pageId의 텍스트 캐시 제거 필요 (아직 미구현)');
-      
-      // 처리된 텍스트 캐시 제거 관련 로그만 출력 (기능은 아직 구현 안됨)
-      debugPrint('페이지 $pageId의 처리된 텍스트 캐시 제거 필요 (아직 미구현)');
-    } catch (e) {
-      debugPrint('페이지 삭제 중 오류 발생: $e');
-      throw Exception('페이지를 삭제할 수 없습니다: $e');
-    }
+    // Implementation needed
   }
 
   /// 노트의 모든 페이지 삭제

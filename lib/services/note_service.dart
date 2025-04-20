@@ -17,8 +17,10 @@ import 'unified_cache_service.dart';
 import 'enhanced_ocr_service.dart';
 import 'usage_limit_service.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/material.dart';
 
 /// 노트 서비스: 노트 관리, 생성, 처리, 캐싱 로직을 담당합니다.
+/// 
 class NoteService {
   // 서비스 인스턴스
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -107,7 +109,7 @@ class NoteService {
   Future<void> clearCache() async {
     try {
       // UnifiedCacheService를 통해 캐시 초기화
-      await _cacheService.clearCache();
+      _cacheService.clearCache();
       
       // 백그라운드 처리 상태 초기화
       await _cleanupStaleBackgroundProcessingState();
@@ -566,6 +568,201 @@ class NoteService {
       }
     } catch (e) {
       debugPrint('노트 첫 페이지 정보 업데이트 중 오류: $e');
+    }
+  }
+
+  // 여러 이미지로 노트 생성 (ImagePickerBottomSheet에서 사용)
+  Future<Map<String, dynamic>> createNoteWithMultipleImages({
+    required List<File> imageFiles,
+    bool waitForFirstPageProcessing = false,
+  }) async {
+    try {
+      if (imageFiles.isEmpty) {
+        return {
+          'success': false,
+          'message': '이미지 파일이 없습니다',
+        };
+      }
+
+      // 현재 사용자 확인
+      final user = _auth.currentUser;
+      if (user == null) {
+        return {
+          'success': false,
+          'message': '로그인이 필요합니다',
+        };
+      }
+
+      // 기본 노트 데이터 생성 (첫 번째 이미지 기준)
+      final now = DateTime.now();
+      final noteData = {
+        'userId': user.uid,
+        'originalText': '새 노트', // 기본 제목 설정
+        'translatedText': '',
+        'isFavorite': false,
+        'flashcardCount': 0,
+        'imageCount': imageFiles.length, // 이미지 개수 설정
+        'flashCards': [],
+        'createdAt': now,
+        'updatedAt': now,
+        'isProcessingBackground': true, // 백그라운드 처리 상태 설정
+      };
+
+      // Firestore에 노트 추가
+      final docRef = await _notesCollection.add(noteData);
+      final noteId = docRef.id;
+      
+      // 첫 번째 이미지 즉시 처리 (나머지는 백그라운드에서)
+      if (imageFiles.isNotEmpty) {
+        // 첫 번째 이미지는 동기적으로 처리
+        await _processImageAndCreatePage(
+          noteId, 
+          imageFiles[0],
+          shouldProcess: waitForFirstPageProcessing,
+        );
+        
+        // 2번째 이미지부터는 백그라운드에서 처리
+        if (imageFiles.length > 1) {
+          _processRemainingImagesInBackground(noteId, imageFiles.sublist(1));
+        }
+      }
+
+      return {
+        'success': true,
+        'noteId': noteId,
+        'imageCount': imageFiles.length,
+      };
+    } catch (e) {
+      debugPrint('여러 이미지로 노트 생성 중 오류 발생: $e');
+      return {
+        'success': false,
+        'message': '노트 생성 중 오류가 발생했습니다: $e',
+      };
+    }
+  }
+  
+  // 나머지 이미지 백그라운드 처리
+  Future<void> _processRemainingImagesInBackground(String noteId, List<File> imageFiles) async {
+    // 백그라운드 처리 상태 설정
+    await _setBackgroundProcessingState(noteId, true);
+    
+    try {
+      // 각 이미지에 대해 순차적으로 페이지 생성
+      for (int i = 0; i < imageFiles.length; i++) {
+        final pageNumber = i + 2; // 첫 번째 이미지는 이미 처리됨
+        
+        await _processImageAndCreatePage(
+          noteId, 
+          imageFiles[i],
+          pageNumber: pageNumber,
+        );
+        
+        // 처리 진행 상황 업데이트
+        await _updateProcessingProgress(noteId, pageNumber, imageFiles.length + 1);
+      }
+      
+      // 모든 처리 완료 후 상태 업데이트
+      await _completeProcessing(noteId);
+    } catch (e) {
+      debugPrint('이미지 백그라운드 처리 중 오류 발생: $e');
+      // 오류가 발생해도 처리 완료 표시
+      await _completeProcessing(noteId);
+    }
+  }
+  
+  // 처리 진행 상황 업데이트
+  Future<void> _updateProcessingProgress(String noteId, int processedCount, int totalCount) async {
+    try {
+      // 로컬 상태 저장 (SharedPreferences)
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('updated_page_count_$noteId', processedCount);
+      
+      // Firestore 업데이트 (매 페이지마다 하면 비효율적이므로 50% 간격으로만 업데이트)
+      if (processedCount == totalCount || processedCount % max(1, (totalCount ~/ 2)) == 0) {
+        await _notesCollection.doc(noteId).update({
+          'processedPageCount': processedCount,
+          'totalPageCount': totalCount,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      debugPrint('처리 진행 상황 업데이트 중 오류: $e');
+    }
+  }
+  
+  // 처리 완료 표시
+  Future<void> _completeProcessing(String noteId) async {
+    try {
+      // 로컬 상태 업데이트
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('processing_note_$noteId');
+      
+      // Firestore 업데이트
+      await _notesCollection.doc(noteId).update({
+        'isProcessingBackground': false,
+        'processingCompleted': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      debugPrint('노트 $noteId의 백그라운드 처리 완료');
+    } catch (e) {
+      debugPrint('처리 완료 표시 중 오류: $e');
+    }
+  }
+  
+  /// 마지막 캐시 시간 저장 (HomeViewModel에서 사용)
+  Future<void> saveLastCacheTime(DateTime time) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = _auth.currentUser?.uid;
+      if (userId != null) {
+        final key = 'last_cache_time_$userId';
+        await prefs.setString(key, time.toIso8601String());
+      }
+    } catch (e) {
+      debugPrint('마지막 캐시 시간 저장 중 오류: $e');
+    }
+  }
+  
+  /// 마지막 캐시 시간 가져오기 (HomeViewModel에서 사용)
+  Future<DateTime?> getLastCacheTime() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = _auth.currentUser?.uid;
+      if (userId != null) {
+        final key = 'last_cache_time_$userId';
+        final timeStr = prefs.getString(key);
+        if (timeStr != null) {
+          return DateTime.parse(timeStr);
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('마지막 캐시 시간 가져오기 중 오류: $e');
+      return null;
+    }
+  }
+  
+  /// 노트 이미지 URL 업데이트 (NoteListItem에서 사용)
+  Future<void> updateNoteImageUrl(String noteId, String imageUrl) async {
+    try {
+      // Firestore에 업데이트
+      await _notesCollection.doc(noteId).update({
+        'imageUrl': imageUrl,
+        'updatedAt': DateTime.now(),
+      });
+      
+      // 캐시된 노트 업데이트
+      final cachedNote = await _cacheService.getCachedNote(noteId);
+      if (cachedNote != null) {
+        final updatedNote = cachedNote.copyWith(imageUrl: imageUrl);
+        await _cacheService.cacheNote(updatedNote);
+      }
+      
+      debugPrint('노트 $noteId의 이미지 URL 업데이트 완료: $imageUrl');
+    } catch (e) {
+      debugPrint('노트 이미지 URL 업데이트 중 오류: $e');
+      rethrow;
     }
   }
 }

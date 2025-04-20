@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/scheduler.dart';
 import 'firebase_options.dart';
 import 'dart:async';
 
@@ -42,6 +43,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    
+    // 디버그 타이머 비활성화
+    timeDilation = 1.0;
     
     // 시스템 UI 조정
     SystemChannels.textInput.invokeMethod('TextInput.hide');
@@ -211,6 +215,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   @override
   Widget build(BuildContext context) {
+    // 디버그 타이머 비활성화
+    timeDilation = 1.0;
+    
     // 앱 테마 적용
     final themeData = ThemeData(
       primarySwatch: Colors.blue,
