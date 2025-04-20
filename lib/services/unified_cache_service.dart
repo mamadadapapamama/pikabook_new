@@ -969,6 +969,56 @@ class UnifiedCacheService {
     _memoryCache[targetLanguageKey] = language;
   }
 
+  // ProcessedText 캐싱 메서드 - 추가된 부분
+  final Map<String, ProcessedText> _processedTextCache = {};
+  
+  // ProcessedText 캐싱 (메모리)
+  Future<void> setProcessedText(String pageId, ProcessedText processedText) async {
+    await _ensureInitialized();
+    final key = 'processed_text_$pageId';
+    _processedTextCache[pageId] = processedText;
+    _cacheTimestamps[pageId] = DateTime.now();
+    
+    // 통계 업데이트
+    _updateCacheStats(key, CacheOperationType.write);
+    
+    debugPrint('ProcessedText 메모리 캐싱 완료: 페이지 ID=$pageId');
+  }
+  
+  // ProcessedText 조회 (메모리)
+  Future<ProcessedText?> getProcessedText(String pageId) async {
+    await _ensureInitialized();
+    final key = 'processed_text_$pageId';
+    
+    if (_processedTextCache.containsKey(pageId)) {
+      // 타임스탬프 업데이트
+      _cacheTimestamps[pageId] = DateTime.now();
+      
+      // 통계 업데이트
+      _updateCacheStats(key, CacheOperationType.read);
+      
+      return _processedTextCache[pageId];
+    }
+    
+    // 캐시 미스
+    _updateCacheStats(key, CacheOperationType.read);
+    return null;
+  }
+  
+  // ProcessedText 삭제 (메모리)
+  Future<void> removeProcessedText(String pageId) async {
+    await _ensureInitialized();
+    final key = 'processed_text_$pageId';
+    
+    _processedTextCache.remove(pageId);
+    _cacheTimestamps.remove(pageId);
+    
+    // 통계 업데이트
+    _updateCacheStats(key, CacheOperationType.delete);
+    
+    debugPrint('ProcessedText 메모리 캐시 삭제 완료: 페이지 ID=$pageId');
+  }
+
   // 초기화 확인 및 수행
   Future<void> _ensureInitialized() async {
     if (!_isInitialized) {

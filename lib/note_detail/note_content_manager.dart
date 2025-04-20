@@ -7,6 +7,7 @@ import '../models/text_segment.dart';
 import '../services/flashcard_service.dart' hide debugPrint;
 import '../services/page_content_service.dart';
 import '../services/tts_service.dart';
+import '../services/unified_cache_service.dart';
 import 'note_detail_image_handler.dart';
 import 'note_detail_page_manager.dart';
 import 'note_detail_text_processor.dart';
@@ -19,6 +20,7 @@ class NoteContentManager {
   final TtsService _ttsService = TtsService();
   final FlashCardService _flashCardService = FlashCardService();
   final PageContentService _pageContentService = PageContentService();
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
   final NoteDetailState _state;
   
   NoteContentManager(this._pageManager, this._textProcessor, this._imageHandler, this._state);
@@ -74,12 +76,12 @@ class NoteContentManager {
   }
   
   // 전체 텍스트/세그먼트 모드 전환
-  void toggleFullTextMode(bool useSegmentMode) {
+  Future<void> toggleFullTextMode(bool useSegmentMode) async {
     final currentPage = _pageManager.currentPage;
     if (currentPage?.id == null) return;
     
     final pageId = currentPage!.id!;
-    final processedText = _pageContentService.getProcessedText(pageId);
+    final processedText = await _cacheService.getProcessedText(pageId);
     
     if (processedText != null) {
       final updatedProcessedText = processedText.copyWith(
@@ -87,7 +89,7 @@ class NoteContentManager {
         showFullTextModified: true,
       );
       
-      _pageContentService.setProcessedText(pageId, updatedProcessedText);
+      await _cacheService.setProcessedText(pageId, updatedProcessedText);
     }
   }
   
@@ -134,10 +136,11 @@ class NoteContentManager {
       if (currentPage?.id == null) return;
       
       final pageId = currentPage!.id!;
-      final processedText = _pageContentService.getProcessedText(pageId);
+      final processedText = await _cacheService.getProcessedText(pageId);
       
-      if (processedText?.segments == null || 
-          segmentIndex >= processedText!.segments!.length) {
+      if (processedText == null || 
+          processedText.segments == null || 
+          segmentIndex >= processedText.segments!.length) {
         return;
       }
       
@@ -151,7 +154,7 @@ class NoteContentManager {
       );
       
       // 변경사항 저장
-      _pageContentService.setProcessedText(pageId, updatedText);
+      await _cacheService.setProcessedText(pageId, updatedText);
       
       debugPrint('세그먼트 삭제됨: 페이지 $pageId, 인덱스 $segmentIndex');
     } catch (e) {

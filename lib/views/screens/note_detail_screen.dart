@@ -899,27 +899,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   }
 
   // 전체텍스트/세그먼트 모드 전환
-  void _toggleFullTextMode() {
+  Future<void> _toggleFullTextMode() async {
     final currentPage = _pageManager.currentPage;
     if (currentPage == null || currentPage.id == null) {
       return;
     }
     
     // 캐시된 processedText 가져오기
-    final processedText = _textProcessor.getProcessedText(currentPage.id!);
+    final processedText = await _textProcessor.getProcessedText(currentPage.id!);
     if (processedText == null) {
       return;
     }
     
     // 모드 전환
-        setState(() {
-      final updatedText = _textProcessor.toggleDisplayMode(currentPage.id!, processedText);
+    final updatedText = await _textProcessor.toggleDisplayMode(currentPage.id!, processedText);
+    setState(() {
       _useSegmentMode = !updatedText.showFullText;
     });
     
     // 필요한 번역 데이터 확인 및 로드
-      if (mounted) {
-      _textProcessor.checkAndLoadTranslationData(context, processedText, currentPage.id!).then((updatedText) {
+    if (mounted) {
+      _textProcessor.checkAndLoadTranslationData(processedText, currentPage.id!).then((updatedText) {
         if (updatedText != null) {
           setState(() {
             _useSegmentMode = !updatedText.showFullText;
@@ -930,40 +930,42 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   }
   
   // 병음 표시 전환
-  void _togglePinyin() {
+  Future<void> _togglePinyin() async {
     final currentPage = _pageManager.currentPage;
     if (currentPage == null || currentPage.id == null) {
         return;
       }
       
     // 캐시된 processedText 가져오기
-    final processedText = _textProcessor.getProcessedText(currentPage.id!);
+    final processedText = await _textProcessor.getProcessedText(currentPage.id!);
     if (processedText == null) {
       return;
     }
     
     // 병음 표시 전환
-          setState(() {
-      _textProcessor.togglePinyin(currentPage.id!, processedText);
+    final updatedText = await _textProcessor.togglePinyin(currentPage.id!, processedText);
+    setState(() {
+      // 상태 업데이트: 필요한 경우 여기에 추가 로직 구현
     });
   }
   
   // 번역 표시 전환
-  void _toggleTranslation() {
+  Future<void> _toggleTranslation() async {
     final currentPage = _pageManager.currentPage;
     if (currentPage == null || currentPage.id == null) {
       return;
     }
     
     // 캐시된 processedText 가져오기
-    final processedText = _textProcessor.getProcessedText(currentPage.id!);
+    final processedText = await _textProcessor.getProcessedText(currentPage.id!);
     if (processedText == null) {
       return;
     }
     
     // 번역 표시 전환
+    final updatedText = await _textProcessor.toggleTranslation(currentPage.id!, processedText);
     setState(() {
-      _textProcessor.toggleTranslation(currentPage.id!, processedText);
+      // 상태 업데이트: 필요한 경우 여기에 추가 로직 구현
     });
   }
 

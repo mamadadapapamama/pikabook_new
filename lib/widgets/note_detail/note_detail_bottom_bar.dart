@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import '../../models/page.dart' as page_model;
-import '../../models/processed_text.dart';
-import '../../services/page_content_service.dart';
-import '../../services/text_reader_service.dart';
-import '../../services/tts_service.dart';
-import '../../utils/text_display_mode.dart';
-import '../../theme/tokens/color_tokens.dart';
-import '../../theme/tokens/typography_tokens.dart';
-import '../../theme/tokens/spacing_tokens.dart';
-import '../common/tts_button.dart';
+import '../../../models/page.dart' as page_model;
+import '../../../models/processed_text.dart';
+import '../../../services/page_content_service.dart';
+import '../../../services/text_reader_service.dart';
+import '../../../services/tts_service.dart';
+import '../../../utils/text_display_mode.dart';
+import '../../../theme/tokens/color_tokens.dart';
+import '../../../theme/tokens/typography_tokens.dart';
+import '../../../theme/tokens/spacing_tokens.dart';
+import '../../../widgets/common/tts_button.dart';
 
 /// 노트 상세 화면 하단 내비게이션 바
 /// 페이지 탐색, 텍스트 표시 모드 토글, 모드 전환, 진행률 바 제공
@@ -63,20 +63,27 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   @override
   void initState() {
     super.initState();
-    _updateProcessedText();
+    _initProcessedText();
   }
   
   @override
-  void didUpdateWidget(NoteDetailBottomBar oldWidget) {
+  Future<void> didUpdateWidget(NoteDetailBottomBar oldWidget) async {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.currentPage?.id != widget.currentPage?.id) {
-      _updateProcessedText();
+      await _updateProcessedText();
     }
   }
   
-  void _updateProcessedText() {
+  Future<void> _initProcessedText() async {
+    await _updateProcessedText();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+  
+  Future<void> _updateProcessedText() async {
     if (widget.currentPage?.id != null) {
-      processedText = widget.pageContentService.getProcessedText(widget.currentPage!.id!);
+      processedText = await widget.pageContentService.getProcessedText(widget.currentPage!.id!);
     } else {
       processedText = null;
     }

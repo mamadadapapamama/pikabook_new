@@ -10,6 +10,7 @@ import '../models/dictionary_entry.dart';
 import '../models/text_segment.dart';
 import '../models/flash_card.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용
+import '../services/unified_cache_service.dart';
 
 /// PageContentService는 페이지 콘텐츠 처리와 관련된 비즈니스 로직을 담당합니다.
 /// PageContentWidget에서 분리된 로직을 포함합니다.
@@ -25,11 +26,8 @@ class PageContentService {
   final TtsService _ttsService = TtsService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final PageService _pageService = PageService();
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
   
-  // 페이지 ID를 키로 사용하여 ProcessedText 객체 캐싱 (메모리 캐시)
-  final Map<String, ProcessedText> _processedTextCache = {};
-  // 캐시 타임스탬프 관리
-  final Map<String, DateTime> _cacheTimestamps = {};
   // 캐시 크기 제한
   static const int _maxCacheSize = 50;
   // 캐시 유효 기간
@@ -39,94 +37,52 @@ class PageContentService {
     _initTts();
   }
 
-  // ProcessedText 캐시 메서드들 (메모리 캐시만 관리)
-  bool hasProcessedText(String pageId) {
-    return _processedTextCache.containsKey(pageId);
+  // ProcessedText 캐시 메서드들 (UnifiedCacheService에 위임)
+  Future<bool> hasProcessedText(String pageId) async {
+    final processedText = await _cacheService.getProcessedText(pageId);
+    return processedText != null;
   }
 
-  ProcessedText? getProcessedText(String pageId) {
-    if (_processedTextCache.containsKey(pageId)) {
-      // 캐시 타임스탬프 업데이트
-      _cacheTimestamps[pageId] = DateTime.now();
-      return _processedTextCache[pageId];
+  Future<ProcessedText?> getProcessedText(String pageId) async {
+    try {
+      // 캐시 서비스에서 조회
+      return await _cacheService.getProcessedText(pageId);
+    } catch (e) {
+      debugPrint('처리된 텍스트 조회 중 오류: $e');
+      return null;
     }
-    return null;
   }
 
-  void setProcessedText(String pageId, ProcessedText processedText) {
-    debugPrint('페이지 ID $pageId의 ProcessedText 메모리 캐시 업데이트: '
-        'showFullText=${processedText.showFullText}, '
-        'showPinyin=${processedText.showPinyin}, '
-        'showTranslation=${processedText.showTranslation}');
-    
-    _processedTextCache[pageId] = processedText;
-    _cacheTimestamps[pageId] = DateTime.now();
-    
-    // 캐시 크기 확인 및 정리
-    _cleanupCacheIfNeeded();
-  }
-  
-  // 캐시 크기가 제한을 초과하면 오래된 항목 제거
-  void _cleanupCacheIfNeeded() {
-    if (_processedTextCache.length > _maxCacheSize) {
-      // 캐시 정리 로그
-      debugPrint('ProcessedText 캐시 정리 시작: ${_processedTextCache.length}개 > $_maxCacheSize개');
+  Future<void> setProcessedText(String pageId, ProcessedText processedText) async {
+    try {
+      debugPrint('페이지 ID $pageId의 ProcessedText 캐시 업데이트: '
+          'showFullText=${processedText.showFullText}, '
+          'showPinyin=${processedText.showPinyin}, '
+          'showTranslation=${processedText.showTranslation}');
       
-      // 타임스탬프 기준으로 정렬된 키 목록 가져오기
-      final sortedKeys = _cacheTimestamps.keys.toList()
-        ..sort((a, b) {
-          final timeA = _cacheTimestamps[a] ?? DateTime.now();
-          final timeB = _cacheTimestamps[b] ?? DateTime.now();
-          return timeA.compareTo(timeB);
-        });
-      
-      // 제거할 항목 수 계산
-      final itemsToRemove = _processedTextCache.length - _maxCacheSize;
-      
-      // 가장 오래된 항목부터 제거
-      for (int i = 0; i < itemsToRemove && i < sortedKeys.length; i++) {
-        final key = sortedKeys[i];
-        _processedTextCache.remove(key);
-        _cacheTimestamps.remove(key);
-      }
-      
-      debugPrint('ProcessedText 캐시 정리 완료: $itemsToRemove개 항목 제거됨');
-    }
-  }
-  
-  // 오래된 캐시 항목 정리 (주기적으로 호출)
-  void cleanupExpiredCache() {
-    final now = DateTime.now();
-    final expiredKeys = <String>[];
-    
-    // 만료된 캐시 항목 찾기
-    for (final entry in _cacheTimestamps.entries) {
-      if (now.difference(entry.value) > _cacheValidity) {
-        expiredKeys.add(entry.key);
-      }
-    }
-    
-    // 만료된 항목 제거
-    if (expiredKeys.isNotEmpty) {
-      debugPrint('만료된 ProcessedText 캐시 정리: ${expiredKeys.length}개 항목');
-      
-      for (final key in expiredKeys) {
-        _processedTextCache.remove(key);
-        _cacheTimestamps.remove(key);
-      }
+      // 캐시 서비스에 저장
+      await _cacheService.setProcessedText(pageId, processedText);
+    } catch (e) {
+      debugPrint('ProcessedText 캐싱 중 오류: $e');
     }
   }
 
   // 특정 페이지의 캐시 제거
-  void removeProcessedText(String pageId) {
-    _processedTextCache.remove(pageId);
-    _cacheTimestamps.remove(pageId);
+  Future<void> removeProcessedText(String pageId) async {
+    try {
+      await _cacheService.removeProcessedText(pageId);
+    } catch (e) {
+      debugPrint('ProcessedText 캐시 제거 중 오류: $e');
+    }
   }
 
   // 모든 캐시 초기화
-  void clearProcessedTextCache() {
-    _processedTextCache.clear();
-    _cacheTimestamps.clear();
+  Future<void> clearProcessedTextCache() async {
+    try {
+      _cacheService.clearCache();
+    } catch (e) {
+      debugPrint('전체 캐시 초기화 중 오류: $e');
+    }
   }
 
   // TTS 초기화
@@ -147,9 +103,9 @@ class PageContentService {
         debugPrint('페이지 ID가 없어 캐시를 확인할 수 없습니다.');
       } else {
         // 메모리 캐시 확인
-        if (_processedTextCache.containsKey(pageId)) {
+        if (await hasProcessedText(pageId)) {
           debugPrint('메모리 캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId');
-          return _processedTextCache[pageId];
+          return await getProcessedText(pageId);
         }
         
         // UnifiedCacheService를 통한 캐시 확인
@@ -164,25 +120,25 @@ class PageContentService {
             
             if (cachedProcessedText is ProcessedText) {
               // 이미 ProcessedText 객체인 경우
-              _processedTextCache[pageId] = cachedProcessedText;
+              await setProcessedText(pageId, cachedProcessedText);
               debugPrint('캐시에서 처리된 텍스트 로드 성공: 페이지 ID=$pageId');
               return cachedProcessedText; // 캐시된 텍스트가 있으므로 여기서 바로 반환
             } else if (cachedProcessedText is Map<String, dynamic>) {
               // Map 형태로 저장된 경우 변환 시도
               try {
                 final convertedText = ProcessedText.fromJson(cachedProcessedText);
-                _processedTextCache[pageId] = convertedText;
+                await setProcessedText(pageId, convertedText);
                 debugPrint('캐시에서 Map으로 로드된 텍스트를 ProcessedText로 변환 성공: 페이지 ID=$pageId');
                 return convertedText; // 캐시된 텍스트가 있으므로 여기서 바로 반환
               } catch (e) {
                 debugPrint('캐시된 Map 데이터를 ProcessedText로 변환 중 오류: $e');
-                removeProcessedText(pageId); // 오류 발생 시 잘못된 캐시 제거
+                await removeProcessedText(pageId); // 오류 발생 시 잘못된 캐시 제거
               }
             }
           }
         } catch (e) {
           debugPrint('캐시된 처리 텍스트 로드 중 오류: $e');
-          removeProcessedText(pageId); // 오류 발생 시 캐시 제거
+          await removeProcessedText(pageId); // 오류 발생 시 캐시 제거
         }
 
         debugPrint('캐시된 처리 텍스트 없음 또는 오류 발생: 페이지 ID=$pageId');
@@ -207,7 +163,7 @@ class PageContentService {
         // 처리된 텍스트를 페이지에 캐싱
         if (processedText.fullOriginalText.isNotEmpty && pageId != null) {
           // 메모리 캐시에 저장
-          _processedTextCache[pageId] = processedText;
+          await setProcessedText(pageId, processedText);
           
           // UnifiedCacheService를 통한 영구 캐싱
           await _pageService.cacheProcessedText(
@@ -236,7 +192,7 @@ class PageContentService {
         // 페이지 ID가 있는 경우 캐시에 저장
         if (pageId != null) {
           // 메모리 캐시에 저장
-          _processedTextCache[pageId] = processedText;
+          await setProcessedText(pageId, processedText);
           
           // UnifiedCacheService를 통한 영구 캐싱
           await _pageService.cacheProcessedText(
@@ -265,7 +221,7 @@ class PageContentService {
   ) async {
     try {
       // 메모리 캐시 업데이트
-      setProcessedText(pageId, processedText);
+      await setProcessedText(pageId, processedText);
       
       // UnifiedCacheService를 통한 영구 캐싱
       await _pageService.cacheProcessedText(

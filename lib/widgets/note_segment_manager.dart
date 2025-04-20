@@ -23,12 +23,12 @@ class NoteSegmentManager {
     debugPrint('세그먼트 매니저: 페이지 ${page.id}의 세그먼트 $segmentIndex 삭제 시작');
     
     // 현재 페이지의 processedText 객체 가져오기
-    if (!_pageContentService.hasProcessedText(page.id!)) {
+    if (!(await _pageContentService.hasProcessedText(page.id!))) {
       debugPrint('세그먼트 매니저: ProcessedText가 없어 세그먼트를 삭제할 수 없습니다');
       return null;
     }
     
-    final processedText = _pageContentService.getProcessedText(page.id!);
+    final processedText = await _pageContentService.getProcessedText(page.id!);
     if (processedText == null || 
         processedText.segments == null || 
         segmentIndex >= processedText.segments!.length) {
@@ -74,7 +74,7 @@ class NoteSegmentManager {
     );
     
     // 메모리 캐시에 ProcessedText 업데이트
-    _pageContentService.setProcessedText(page.id!, updatedProcessedText);
+    await _pageContentService.setProcessedText(page.id!, updatedProcessedText);
     
     // ProcessedText 캐시 업데이트
     await _pageContentService.updatePageCache(
@@ -111,21 +111,21 @@ class NoteSegmentManager {
   }
   
   // 텍스트 표시 모드 업데이트
-  void updateTextDisplayMode({
+  Future<void> updateTextDisplayMode({
     required String pageId,
     required bool showFullText,
     required bool showPinyin,
     required bool showTranslation,
-  }) {
-    if (!_pageContentService.hasProcessedText(pageId)) return;
+  }) async {
+    if (!(await _pageContentService.hasProcessedText(pageId))) return;
     
-    final processedText = _pageContentService.getProcessedText(pageId);
+    final processedText = await _pageContentService.getProcessedText(pageId);
     if (processedText == null) return;
     
     final updatedProcessedText = processedText.copyWith(
       showFullText: showFullText,
     );
     
-    _pageContentService.setProcessedText(pageId, updatedProcessedText);
+    await _pageContentService.setProcessedText(pageId, updatedProcessedText);
   }
 } 
