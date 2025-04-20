@@ -10,8 +10,7 @@ import 'translation_service.dart';
 import 'unified_cache_service.dart';
 import 'dart:convert';
 
-// 페이지 서비스: 페이지 관리 (CRUD) 기능을 제공합니다.
-
+/// 페이지 서비스: 페이지 관리 (CRUD) 기능을 제공합니다.
 class PageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -19,11 +18,6 @@ class PageService {
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final TranslationService _translationService = TranslationService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
-
-  // 캐싱 제어 변수
-  bool _isCachingInProgress = false;
-  final Map<String, DateTime> _lastCacheTime = {};
-  final Duration _cacheThreshold = Duration(minutes: 5); // 캐싱 최소 간격
 
   // 페이지 컬렉션 참조
   CollectionReference get _pagesCollection => _firestore.collection('pages');
@@ -35,7 +29,7 @@ class PageService {
         .orderBy('pageNumber');
   }
 
-  // 페이지 생성
+  /// 페이지 생성
   Future<page_model.Page> createPage({
     required String noteId,
     required String originalText,
@@ -85,7 +79,7 @@ class PageService {
         updatedAt: now,
       );
 
-      // 캐시에 새 페이지 저장 (노트 ID 사용)
+      // 캐시에 새 페이지 저장
       await _cacheService.cachePage(noteId, newPage);
 
       return newPage;
@@ -95,7 +89,7 @@ class PageService {
     }
   }
 
-  // 이미지로 페이지 생성 (OCR 및 번역 포함)
+  /// 이미지로 페이지 생성 (OCR 및 번역 포함)
   Future<page_model.Page> createPageWithImage({
     required String noteId,
     required int pageNumber,
@@ -126,13 +120,13 @@ class PageService {
     }
   }
 
-  // 페이지 가져오기 (캐시 활용)
+  /// 페이지 가져오기 (캐시 활용)
   Future<page_model.Page?> getPageById(String pageId) async {
     try {
       // 1. 캐시에서 페이지 찾기 시도
       final cachedPage = await _cacheService.getCachedPage(pageId);
       if (cachedPage != null) {
-        debugPrint('캐시에서 페이지 $pageId 로드됨 (텍스트 포함)');
+        debugPrint('캐시에서 페이지 $pageId 로드됨');
         return cachedPage;
       }
 
@@ -150,18 +144,18 @@ class PageService {
 
         if (noteId != null) {
           await _cacheService.cachePage(noteId, page);
-          debugPrint('Firestore에서 페이지 $pageId 로드 완료 및 캐시에 저장됨 (텍스트 포함)');
+          debugPrint('Firestore에서 페이지 $pageId 로드 완료 및 캐시에 저장됨');
         }
       }
 
       return page;
     } catch (e) {
       debugPrint('페이지 조회 중 오류 발생: $e');
-      throw Exception('페이지를 조회할 수 없습니다: $e');
+      return null; // 오류 발생 시 null 반환하여 호출부에서 처리하도록 함
     }
   }
 
-  // 노트의 모든 페이지 가져오기 (캐시 활용)
+  /// 노트의 모든 페이지 가져오기 (캐시 활용)
   Future<List<page_model.Page>> getPagesForNote(String noteId, {bool forceReload = false}) async {
     try {
       // 1. forceReload가 true가 아니면 캐시에서 먼저 페이지 확인
@@ -192,47 +186,8 @@ class PageService {
         return serverPages;
       }
       
-      // 3. 로컬 및 서버 페이지 병합
-      // ID 기준으로 페이지 맵 생성 
-      final Map<String, page_model.Page> mergedPagesMap = {};
-      
-      // 캐시된 페이지 먼저 추가 
-      for (final page in cachedPages) {
-        if (page.id != null) {
-          mergedPagesMap[page.id!] = page;
-        }
-      }
-      
-      // 서버 페이지 추가 (동일 ID는 서버 버전으로 업데이트)
-      for (final page in serverPages) {
-        if (page.id != null) {
-          mergedPagesMap[page.id!] = page;
-        }
-      }
-      
-      // 맵을 리스트로 변환하고 페이지 번호로 정렬
-      final mergedPages = mergedPagesMap.values.toList()
-        ..sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-      
-      // 페이지 번호가 연속되지 않은 경우 재정렬
-      for (int i = 0; i < mergedPages.length; i++) {
-        if (mergedPages[i].pageNumber != i) {
-          final updatedPage = mergedPages[i].copyWith(pageNumber: i);
-          mergedPages[i] = updatedPage;
-          
-          // 페이지 번호 업데이트가 필요한 경우 Firestore도 업데이트
-          if (updatedPage.id != null) {
-            _pagesCollection.doc(updatedPage.id).update({'pageNumber': i});
-          }
-        }
-      }
-      
-      debugPrint('페이지 병합 결과: 로컬=${cachedPages.length}개, 서버=${serverPages.length}개, 병합 후=${mergedPages.length}개');
-      
-      // 결과가 비어있으면 서버 페이지만 반환
-      if (mergedPages.isEmpty && serverPages.isNotEmpty) {
-        return serverPages;
-      }
+      // 3. 서버와 캐시 페이지 병합
+      final mergedPages = _mergePages(cachedPages, serverPages);
       
       // 캐시 업데이트 - 병합된 결과를 캐시에 저장
       await _cacheService.cachePages(noteId, mergedPages);
@@ -244,8 +199,54 @@ class PageService {
     }
   }
 
-  // 페이지 업데이트
-  Future<void> updatePage(
+  /// 캐시와 서버에서 가져온 페이지 병합
+  List<page_model.Page> _mergePages(List<page_model.Page> cachedPages, List<page_model.Page> serverPages) {
+    // ID 기준으로 페이지 맵 생성 
+    final Map<String, page_model.Page> mergedPagesMap = {};
+    
+    // 캐시된 페이지 먼저 추가 
+    for (final page in cachedPages) {
+      if (page.id != null) {
+        mergedPagesMap[page.id!] = page;
+      }
+    }
+    
+    // 서버 페이지 추가 (동일 ID는 서버 버전으로 업데이트)
+    for (final page in serverPages) {
+      if (page.id != null) {
+        mergedPagesMap[page.id!] = page;
+      }
+    }
+    
+    // 맵을 리스트로 변환하고 페이지 번호로 정렬
+    final mergedPages = mergedPagesMap.values.toList()
+      ..sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+    
+    // 페이지 번호가 연속되지 않은 경우 재정렬
+    for (int i = 0; i < mergedPages.length; i++) {
+      if (mergedPages[i].pageNumber != i) {
+        final updatedPage = mergedPages[i].copyWith(pageNumber: i);
+        mergedPages[i] = updatedPage;
+        
+        // 페이지 번호 업데이트가 필요한 경우 Firestore도 업데이트
+        if (updatedPage.id != null) {
+          _pagesCollection.doc(updatedPage.id).update({'pageNumber': i});
+        }
+      }
+    }
+    
+    debugPrint('페이지 병합 결과: 로컬=${cachedPages.length}개, 서버=${serverPages.length}개, 병합 후=${mergedPages.length}개');
+    
+    // 결과가 비어있으면 서버 페이지만 반환
+    if (mergedPages.isEmpty && serverPages.isNotEmpty) {
+      return serverPages;
+    }
+    
+    return mergedPages;
+  }
+
+  /// 페이지 업데이트
+  Future<page_model.Page?> updatePage(
     String pageId, {
     String? originalText,
     String? translatedText,
@@ -297,8 +298,7 @@ class PageService {
 
           // 번역 텍스트가 제공되지 않은 경우, 번역 수행
           if (translatedText == null) {
-            final translatedText =
-                await _translationService.translateText(extractedText);
+            final translatedText = await _translationService.translateText(extractedText);
             updates['translatedText'] = translatedText;
           }
         }
@@ -307,26 +307,27 @@ class PageService {
       // Firestore 업데이트
       await _pagesCollection.doc(pageId).update(updates);
 
-      // 캐시 업데이트
-      if (noteId != null) {
-        // 업데이트된 페이지 객체 생성
-        final updatedDoc = await _pagesCollection.doc(pageId).get();
-        if (updatedDoc.exists) {
-          final updatedPage = page_model.Page.fromFirestore(updatedDoc);
+      // 업데이트된 페이지 객체 생성 및 캐시 업데이트
+      final updatedDoc = await _pagesCollection.doc(pageId).get();
+      if (updatedDoc.exists) {
+        final updatedPage = page_model.Page.fromFirestore(updatedDoc);
+        
+        if (noteId != null) {
           await _cacheService.cachePage(noteId, updatedPage);
           debugPrint('페이지 $pageId 업데이트 및 캐시 갱신 완료');
         }
-      } else {
-        // 노트 ID를 찾을 수 없는 경우 캐시에서 페이지 제거
-        _cacheService.removePage(pageId);
+        
+        return updatedPage;
       }
+      
+      return null;
     } catch (e) {
       debugPrint('페이지 업데이트 중 오류 발생: $e');
       throw Exception('페이지를 업데이트할 수 없습니다: $e');
     }
   }
 
-  // 빈 페이지 구조만 생성 (내용 없음)
+  /// 빈 페이지 구조만 생성 (내용 없음)
   Future<page_model.Page?> createEmptyPage({
     required String noteId,
     required int pageNumber,
@@ -368,11 +369,10 @@ class PageService {
         updatedAt: now,
       );
 
-      // 캐시에 새 페이지 저장 (노트 ID 사용)
+      // 캐시에 새 페이지 저장
       await _cacheService.cachePage(noteId, newPage);
 
-      debugPrint(
-          '빈 페이지 구조 생성 완료: ID=${pageRef.id}, 페이지 번호=$pageNumber, 이미지 URL=${imageUrl != null}');
+      debugPrint('빈 페이지 구조 생성 완료: ID=${pageRef.id}, 페이지 번호=$pageNumber, 이미지 URL=${imageUrl != null}');
       return newPage;
     } catch (e) {
       debugPrint('빈 페이지 구조 생성 중 오류 발생: $e');
@@ -391,10 +391,6 @@ class PageService {
         'updatedAt': DateTime.now(),
       });
 
-      // 캐시 업데이트 - 페이지 내용 업데이트 완료 시점에 캐싱
-      await _cacheService.cacheText('page_original', pageId, originalText);
-      await _cacheService.cacheText('page_translated', pageId, translatedText);
-
       // 업데이트된 페이지 객체 반환
       final pageDoc = await _pagesCollection.doc(pageId).get();
       if (pageDoc.exists) {
@@ -407,13 +403,17 @@ class PageService {
         // 노트 ID가 있으면 페이지 객체 캐싱
         if (noteId != null && updatedPage.id != null) {
           await _cacheService.cachePage(noteId, updatedPage);
-          debugPrint('페이지 객체 캐시 업데이트 완료: ${updatedPage.id}');
+          
+          // 캐시 텍스트 저장
+          await _cacheService.cacheText('page_original', pageId, originalText);
+          await _cacheService.cacheText('page_translated', pageId, translatedText);
+          
+          debugPrint('페이지 객체 및 텍스트 캐시 업데이트 완료: ${updatedPage.id}');
         }
 
         return updatedPage;
       }
 
-      debugPrint('페이지 내용 업데이트 완료: ID=$pageId');
       return null;
     } catch (e) {
       debugPrint('페이지 내용 업데이트 중 오류 발생: $e');
@@ -421,9 +421,8 @@ class PageService {
     }
   }
 
-  // 페이지 텍스트 번역
-  Future<String> translatePageText(String pageId,
-      {String? targetLanguage}) async {
+  /// 페이지 텍스트 번역
+  Future<String> translatePageText(String pageId, {String? targetLanguage}) async {
     try {
       // 페이지 정보 가져오기
       final page = await getPageById(pageId);
@@ -450,11 +449,15 @@ class PageService {
     }
   }
 
-  // 페이지 삭제
+  /// 페이지 삭제
   Future<void> deletePage(String pageId) async {
     try {
       // 페이지 정보 가져오기
       final pageDoc = await _pagesCollection.doc(pageId).get();
+      if (!pageDoc.exists) {
+        throw Exception('페이지를 찾을 수 없습니다.');
+      }
+      
       final data = pageDoc.data() as Map<String, dynamic>?;
       final imageUrl = data?['imageUrl'] as String?;
       final noteId = data?['noteId'] as String?;
@@ -468,19 +471,20 @@ class PageService {
       await _pagesCollection.doc(pageId).delete();
 
       // 캐시에서 페이지 제거
-      _cacheService.removePage(pageId);
-
-      // 노트 ID가 있으면 해당 노트의 캐시 타임스탬프 초기화
-      if (noteId != null) {
-        _lastCacheTime.remove(noteId);
-      }
+      await _cacheService.removePage(pageId);
+      
+      // 텍스트 캐시 제거 관련 로그만 출력 (기능은 아직 구현 안됨)
+      debugPrint('페이지 $pageId의 텍스트 캐시 제거 필요 (아직 미구현)');
+      
+      // 처리된 텍스트 캐시 제거 관련 로그만 출력 (기능은 아직 구현 안됨)
+      debugPrint('페이지 $pageId의 처리된 텍스트 캐시 제거 필요 (아직 미구현)');
     } catch (e) {
       debugPrint('페이지 삭제 중 오류 발생: $e');
       throw Exception('페이지를 삭제할 수 없습니다: $e');
     }
   }
 
-  // 노트의 모든 페이지 삭제
+  /// 노트의 모든 페이지 삭제
   Future<void> deleteAllPagesForNote(String noteId) async {
     try {
       final snapshot = await getPagesForNoteQuery(noteId).get();
@@ -491,31 +495,19 @@ class PageService {
       }
 
       // 노트의 모든 페이지를 캐시에서 제거
-      _cacheService.removePagesForNote(noteId);
-
-      // 노트의 캐시 타임스탬프 초기화
-      _lastCacheTime.remove(noteId);
+      await _cacheService.removePagesForNote(noteId);
     } catch (e) {
       debugPrint('노트의 모든 페이지 삭제 중 오류 발생: $e');
       throw Exception('페이지를 삭제할 수 없습니다: $e');
     }
   }
 
-  // 캐시 정리 (오래된 항목 제거)
-  void clearOldCache() {
-    // UnifiedCacheService에는 clearOldMemoryCache 메서드가 없으므로 제거
-    // 대신 캐시 타임스탬프만 초기화
-    _lastCacheTime.clear();
-  }
-
-  // 전체 캐시 초기화
+  /// 전체 캐시 초기화
   void clearCache() {
     _cacheService.clearCache();
-    _lastCacheTime.clear();
-    _isCachingInProgress = false;
   }
 
-  // 처리된 텍스트 캐싱
+  /// 처리된 텍스트 캐싱
   Future<void> cacheProcessedText(
     String pageId,
     dynamic processedText,
@@ -533,7 +525,7 @@ class PageService {
     }
   }
 
-  // 캐시된 처리 텍스트 가져오기
+  /// 캐시된 처리 텍스트 가져오기
   Future<dynamic> getCachedProcessedText(
     String pageId,
     String textProcessingMode,
@@ -585,8 +577,19 @@ class PageService {
         'updatedAt': DateTime.now(),
       });
       
-      // 캐시에서 페이지 제거 (다음에 불러올 때 최신 정보로 로드)
-      await _cacheService.removePage(pageId);
+      // 업데이트된 페이지 가져오기
+      final pageDoc = await _pagesCollection.doc(pageId).get();
+      if (pageDoc.exists) {
+        final data = pageDoc.data() as Map<String, dynamic>?;
+        final noteId = data?['noteId'] as String?;
+        
+        if (noteId != null) {
+          // 업데이트된 페이지 객체 캐시에 저장
+          final updatedPage = page_model.Page.fromFirestore(pageDoc);
+          await _cacheService.cachePage(noteId, updatedPage);
+          debugPrint('페이지 이미지 URL 업데이트 및 캐시 갱신 완료: $pageId');
+        }
+      }
       
       return true;
     } catch (e) {
