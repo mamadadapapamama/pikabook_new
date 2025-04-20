@@ -327,19 +327,31 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       if (isSuccess && createdNoteId != null) {
         debugPrint('노트 ID: $createdNoteId - 상세 화면으로 이동 시도');
         
+        // 약간의 딜레이 추가 (화면 전환 안정성 개선)
+        await Future.delayed(const Duration(milliseconds: 500));
+        
         if (appContext.mounted) {
           try {
             debugPrint('노트 상세 화면으로 이동 시작');
-            await Navigator.of(appContext).push(
+            
+            // 안전하게 첫 화면으로 이동 후, 그 다음 노트 상세 화면으로 이동
+            await Navigator.pushAndRemoveUntil(
+              appContext,
               NoteDetailScreen.route(
                 noteId: createdNoteId!,
                 isProcessingBackground: true,
                 totalImageCount: imageFiles.length,
               ),
+              (route) => route.isFirst, // 첫 화면만 남기고 모두 제거
             );
+            
             debugPrint('노트 상세 화면으로 이동 완료');
           } catch (navError) {
             debugPrint('노트 상세 화면 이동 중 오류: $navError');
+            
+            // 약간의 딜레이 후 다시 시도
+            await Future.delayed(const Duration(milliseconds: 500));
+            
             // 이동 실패 시 스낵바 표시
             if (appContext.mounted) {
               ScaffoldMessenger.of(appContext).showSnackBar(
@@ -348,15 +360,23 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                   action: SnackBarAction(
                     label: '확인',
                     onPressed: () {
-                      // 다시 시도
+                      // 다시 시도 - 홈으로 돌아간 후 이동
                       if (appContext.mounted && createdNoteId != null) {
-                        Navigator.of(appContext).push(
-                          NoteDetailScreen.route(
-                            noteId: createdNoteId!,
-                            isProcessingBackground: true,
-                            totalImageCount: imageFiles.length,
-                          ),
-                        );
+                        // 홈으로 돌아가기
+                        Navigator.of(appContext).popUntil((route) => route.isFirst);
+                        
+                        // 약간의 딜레이 후 노트 상세 화면으로 이동
+                        Future.delayed(const Duration(milliseconds: 300), () {
+                          if (appContext.mounted) {
+                            Navigator.of(appContext).push(
+                              NoteDetailScreen.route(
+                                noteId: createdNoteId!,
+                                isProcessingBackground: true,
+                                totalImageCount: imageFiles.length,
+                              ),
+                            );
+                          }
+                        });
                       }
                     },
                   ),
