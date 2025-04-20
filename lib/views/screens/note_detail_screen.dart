@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart' show timeDilation;
 
 // 모델
 import '../../models/note.dart';
@@ -38,24 +39,29 @@ import '../../widgets/dot_loading_indicator.dart';
 import '../../widgets/common/pika_app_bar.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/color_tokens.dart';
-import '../../widgets/note_detail_bottom_bar.dart';
+import '../../widgets/note_detail/note_detail_bottom_bar.dart';
 import '../../widgets/common/help_text_tooltip.dart';
 import '../../widgets/note_segment_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/scheduler.dart';
 import '../../widgets/note_action_bottom_sheet.dart';
 import '../../utils/debug_utils.dart';
 import '../../views/screens/flashcard_screen.dart';
 import '../../views/screens/full_image_screen.dart';
 import 'dart:math' as math;
+import '../../widgets/edit_title_dialog.dart';
+import '../../note_detail/screenshot_service_helper.dart';
+import '../../note_detail/tooltip_manager.dart';
+import '../../note_detail/note_options_manager.dart';
+import '../../note_detail/note_content_manager.dart';
+import '../../widgets/page_content_widget.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
 class NoteDetailScreen extends StatefulWidget {
   final String noteId;
   final bool isProcessingBackground;
-  final int totalImageCount;
+  final int? totalImageCount;
   
   // 라우트 이름 상수 추가
   static const String routeName = '/note_detail';
@@ -64,7 +70,7 @@ class NoteDetailScreen extends StatefulWidget {
     Key? key,
     required this.noteId,
     this.isProcessingBackground = false,
-    this.totalImageCount = 1,
+    this.totalImageCount,
   }) : super(key: key);
 
   // 라우트를 생성하는 편의 메소드 추가
@@ -116,6 +122,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   Timer? _screenshotWarningTimer;
   bool _isShowingScreenshotWarning = false;
 
+  // 새로운 매니저 인스턴스
+  late ScreenshotServiceHelper _screenshotHelper;
+  late TooltipManager _tooltipManager;
+  late NoteOptionsManager _optionsManager;
+  late NoteContentManager _contentManager;
+
   @override
   void initState() {
     super.initState();
@@ -126,7 +138,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 상태 초기화
     _state = NoteDetailState();
     _state.setLoading(true);
-    _state.expectedTotalPages = widget.totalImageCount;
+    _state.expectedTotalPages = widget.totalImageCount ?? 0;
     _state.setBackgroundProcessingFlag(widget.isProcessingBackground);
     
     // 매니저 및 핸들러 초기화
@@ -136,6 +148,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     
     // 컨트롤러 초기화
     _pageController = PageController();
+    
+    // 새로운 매니저 인스턴스 초기화
+    _initializeManagers();
     
     // 상태표시줄 설정 및 데이터 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -223,52 +238,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // 스크린샷 감지 초기화
   Future<void> _initScreenshotDetection() async {
-    await _screenshotService.initialize(() {
+    await _screenshotHelper.initialize((timestamp) {
       if (mounted) {
-        _showScreenshotWarning();
+        _screenshotHelper.showSnackBarWarning(context);
       }
     });
     
-    await _screenshotService.startDetection();
-  }
-
-  // 스크린샷 경고 메시지 표시
-  void _showScreenshotWarning() {
-    if (_isShowingScreenshotWarning) return;
-    
-    setState(() {
-      _isShowingScreenshotWarning = true;
-    });
-    
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '원서 내용을 무단으로 공유, 배포할 경우 법적 제재를 받을 수 있습니다.',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: ColorTokens.black,
-        duration: const Duration(seconds: 5),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        onVisible: () {
-    _screenshotWarningTimer?.cancel();
-          _screenshotWarningTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) {
-        setState(() {
-          _isShowingScreenshotWarning = false;
-        });
-      }
-    });
-        },
-      ),
-    );
+    await _screenshotHelper.startDetection();
   }
 
   // 데이터 순차적 로드 (안정성 개선)
@@ -317,7 +293,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         });
         return;
       }
-      
+
       // 노트 가져오기 요청
       final note = await _noteService.getNoteById(widget.noteId);
       
@@ -371,24 +347,24 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     } catch (e) {
       debugPrint('노트 로드 중 오류: $e');
       if (mounted) {
-        setState(() {
+      setState(() {
           _state.setError('노트 로드 중 오류가 발생했습니다: $e');
           _state.setLoading(false);
-        });
+      });
       }
     }
   }
-  
+
   // 백그라운드 처리 상태 확인
   Future<void> _checkBackgroundProcessing(String noteId) async {
-    try {
-      final noteDoc = await FirebaseFirestore.instance
-          .collection('notes')
+        try {
+          final noteDoc = await FirebaseFirestore.instance
+              .collection('notes')
           .doc(noteId)
-          .get();
+              .get();
           
       if (noteDoc.exists && mounted) {
-        final data = noteDoc.data();
+            final data = noteDoc.data();
         final isProcessingBackground = data?['isProcessingBackground'] as bool? ?? false;
         final processingCompleted = data?['processingCompleted'] as bool? ?? false;
         
@@ -407,7 +383,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     if (currentPage == null) return;
     
     if (!mounted) return;
-    
+
     setState(() {
       _state.setProcessingText(true);
     });
@@ -430,22 +406,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       
       if (processedText != null && currentPage.id != null) {
         try {
-          // 기본 표시 설정 지정
-          final updatedProcessedText = processedText.copyWith(
-            showFullText: false, // 기본값: 세그먼트 모드
+        // 기본 표시 설정 지정
+        final updatedProcessedText = processedText.copyWith(
+          showFullText: false, // 기본값: 세그먼트 모드
             showPinyin: true, // 병음 표시는 기본적으로 활성화
-            showTranslation: true, // 번역은 항상 표시
-          );
-          
+          showTranslation: true, // 번역은 항상 표시
+        );
+        
           // 업데이트된 텍스트 캐싱
           _textProcessor.setProcessedText(currentPage.id!, updatedProcessedText);
-          
+        
           debugPrint('텍스트 처리 완료: ${currentPage.id}');
           
           // 페이지가 처음 방문된 것으로 표시
           _state.markPageVisited(_pageManager.currentPageIndex);
           
-      } catch (e) {
+        } catch (e) {
           debugPrint('페이지 텍스트 처리 중 오류 발생: ProcessedText 객체 변환 실패: $e');
           // 캐시 삭제 및 다시 로드 시도
           _textProcessor.removeProcessedText(currentPage.id!);
@@ -475,7 +451,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       final useSegmentMode = await _preferencesService.getUseSegmentMode();
       
       if (mounted) {
-        setState(() {
+          setState(() {
           // 세그먼트 모드 여부는 별도 변수로 저장
           _useSegmentMode = useSegmentMode;
         });
@@ -484,8 +460,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     } catch (e) {
       debugPrint('사용자 기본 설정 로드 중 오류 발생: $e');
       // 오류 발생 시 기본 모드 사용
-      if (mounted) {
-    setState(() {
+            if (mounted) {
+              setState(() {
           _useSegmentMode = true; // 기본값은 세그먼트 모드
         });
       }
@@ -501,83 +477,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     );
   }
   
-  // TTS 재생
-  void _onTtsPlay() {
-    if (_pageManager.currentPage == null) return;
-    
-    // 현재 페이지의 원본 텍스트 재생
-    final originalText = _pageManager.currentPage!.originalText;
-    if (originalText.isNotEmpty && originalText != '___PROCESSING___') {
-      _ttsService.speak(originalText);
-    }
-  }
-  
   // 플래시카드 화면으로 이동
-  Future<void> _navigateToFlashcards() async {
-    if (_state.note == null || _state.note?.id == null) return;
-
-    try {
-      // 플래시카드 화면으로 이동
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => FlashCardScreen(
+  void _navigateToFlashcards() {
+    if (_state.note?.id != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => FlashCardScreen(
             noteId: _state.note!.id!,
+          ),
         ),
-      ),
-    );
-
-      // 결과 처리
-      if (result != null && mounted && _state.note != null) {
-        if (result is Map) {
-          final flashcardCount = result['flashcardCount'] as int? ?? 0;
-          final success = result['success'] as bool? ?? false;
-          final noteId = result['noteId'] as String?;
-          
-          if (success && noteId == _state.note!.id) {
-            // 노트 객체 업데이트
-            final updatedNote = _state.note!.copyWith(flashcardCount: flashcardCount);
-            
-            // Firebase에 업데이트 반영
-            await FirebaseFirestore.instance
-                .collection('notes')
-                .doc(_state.note!.id)
-                .update({'flashcardCount': flashcardCount});
-                
-            // 캐시 관련 초기화 작업
-            if (_pageManager.currentPage?.id != null) {
-              _textProcessor.removeProcessedText(_pageManager.currentPage!.id!);
-            }
-            
-            // 노트 서비스에 캐시 업데이트
-            _noteService.cacheNotes([updatedNote]);
-            
-            // 노트를 다시 로드하여 최신 데이터 가져오기
-            await _loadNote();
-            
-            // 현재 페이지의 플래시카드 단어 목록을 새로 로드
-            if (_pageManager.currentPageIndex >= 0 && _pageManager.currentPageIndex < _pageManager.pages.length) {
-              // 플래시카드 목록 새로 로드
-              final flashcards = await _flashCardService.getFlashCardsForNote(_state.note!.id!);
-              
-              // 노트 객체 업데이트
-        setState(() {
-                _state.updateNote(_state.note!.copyWith(flashCards: flashcards));
-              });
-              
-              // 현재 페이지 텍스트 다시 처리
-              await _processCurrentPageText();
-            }
-          }
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        debugPrint('플래시카드 화면 이동 중 오류: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('오류가 발생했습니다: $e')),
-        );
-      }
+      );
     }
   }
 
@@ -587,7 +497,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     if (index < 0 || index >= _pageManager.pages.length) {
         return;
       }
-      
+    
     // 페이지 매니저를 통한 페이지 변경
     _pageManager.changePage(index);
     
@@ -599,7 +509,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeInOut,
         );
-    } catch (e) {
+      } catch (e) {
         // 페이지 애니메이션 오류는 무시
       }
     }
@@ -626,10 +536,28 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           currentPage: _pageManager.currentPageIndex + 1,
           totalPages: _pageManager.pages.length,
           flashcardCount: _state.note?.flashcardCount ?? 0,
-          onMorePressed: _showMoreOptions,
+          onMorePressed: () => _optionsManager.showMoreOptions(
+            context,
+            _state.note,
+            onTitleEditing: () {
+              // 제목 편집 후 처리
+              setState(() {});
+            },
+            onFavoriteToggle: (isFavorite) {
+              setState(() {
+                _state.toggleFavorite();
+              });
+            },
+            onNoteDeleted: () {
+              Navigator.of(context).pop(); // 화면 닫기
+            },
+          ),
           onFlashcardTap: _navigateToFlashcards,
           onBackPressed: () async {
-            await _onWillPop();
+            final shouldPop = await _onWillPop();
+            if (shouldPop && context.mounted) {
+              Navigator.of(context).pop();
+            }
           },
         ),
         // 본문
@@ -658,7 +586,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       ),
     );
   }
-  
+
   // 메인 콘텐츠 위젯
   Widget _buildMainContent() {
     return Stack(
@@ -680,299 +608,189 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         
         // 툴팁 표시
         if (_state.showTooltip)
-          _buildTooltip(),
+          _tooltipManager.buildTooltip(
+            context,
+            onDismiss: () {
+              setState(() {
+                _tooltipManager.handleTooltipDismiss();
+                _state.showTooltip = false;
+              });
+            },
+            onNextStep: () {
+              setState(() {
+                _tooltipManager.setTooltipStep(_tooltipManager.tooltipStep + 1);
+              });
+            },
+            onPrevStep: () {
+              setState(() {
+                _tooltipManager.setTooltipStep(_tooltipManager.tooltipStep - 1);
+              });
+            },
+          ),
       ],
     );
   }
   
   // 하단 바 구성
   Widget _buildBottomBar() {
-    final currentPageIndex = _pageManager.currentPageIndex;
-    final totalPages = _state.note?.imageCount != null && _state.note!.imageCount! > 0
-        ? _state.note!.imageCount!
-        : (_state.expectedTotalPages > 0 
-            ? math.max(_pageManager.pages.length, _state.expectedTotalPages)
-            : _pageManager.pages.length);
+    // null 체크와 기본값 설정으로 안전하게 처리
+    final totalPages = (_state.note?.imageCount != null) 
+        ? _state.note!.imageCount! 
+        : _pageManager.pages.length;
     
     return NoteDetailBottomBar(
       currentPage: _pageManager.currentPage,
-      currentPageIndex: currentPageIndex,
+      currentPageIndex: _pageManager.currentPageIndex,
       totalPages: totalPages,
-      onPageChanged: _changePage,
-      onToggleFullTextMode: _toggleFullTextMode,
+      onPageChanged: (index) {
+        _pageManager.changePage(index);
+        setState(() {});
+      },
+      onToggleFullTextMode: () {
+        setState(() {
+          _useSegmentMode = !_useSegmentMode;
+          _contentManager.toggleFullTextMode(_useSegmentMode);
+        });
+      },
       isFullTextMode: !_useSegmentMode,
       pageContentService: PageContentService(),
-      textReaderService: _textReaderService,
+      textReaderService: TextReaderService(),
       showPinyin: true,
       showTranslation: true,
+      onTogglePinyin: () {
+        // 병음 토글은 PageContentWidget에서 처리
+      },
+      onToggleTranslation: () {
+        // 번역 토글은 PageContentWidget에서 처리
+      },
+      onTtsPlay: () {
+        // TTS 재생은 PageContentWidget에서 처리
+      },
       isProcessing: _state.isProcessingText,
-      onTogglePinyin: _togglePinyin,
-      onToggleTranslation: _toggleTranslation,
-      onTtsPlay: _onTtsPlay,
     );
   }
   
   // 메인 UI 구성
   Widget _buildBody() {
-    // 로딩 중인 경우
-    if (_state.isLoading) {
+    final currentPage = _pageManager.currentPage;
+    final isFirstPageProcessing = currentPage == null || 
+                                  currentPage.originalText == '___PROCESSING___' || 
+                                  ((currentPage.originalText.isEmpty || currentPage.originalText == 'processing') && 
+                                   !_state.isPageVisited(_pageManager.currentPageIndex));
+
+    // 초기 로딩 또는 첫 페이지 처리 중일 때 로딩 UI 표시 (조건 통합)
+    if (_state.isLoading || _state.note == null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const DotLoadingIndicator(
-              dotColor: ColorTokens.primary,
+            // 피카북 캐릭터 이미지
+            Image.asset(
+              'assets/images/pikabook_bird.png',
+              width: 40,
+              height: 40,
             ),
-            const SizedBox(height: 16),
-            Text(
-              '노트를 불러오고 있어요...',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[700],
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-      ),
-    );
-  }
-  
-    // 오류가 있는 경우
-    if (_state.error != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
-            const SizedBox(height: 16),
-            Text(
-              _state.error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('돌아가기'),
-            ),
-          ],
-        ),
-      );
-    }
-    
-    // 노트가 없거나 페이지가 없는 경우
-    if (_state.note == null || _pageManager.pages.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const DotLoadingIndicator(
-              dotColor: ColorTokens.primary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '페이지를 준비하고 있어요...',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[700],
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      );
-    }
-    
-    // 페이지 뷰 구성
-    return PageView.builder(
-        itemCount: _pageManager.pages.length,
-          controller: _pageController,
-        onPageChanged: (index) {
-            // 이전에 방문하지 않은 페이지라면 방문 기록에 추가
-        _state.markPageVisited(index);
+            const SizedBox(height: 16), // 이미지와 인디케이터 사이 간격
             
-        // 페이지 변경 처리
-          _changePage(index);
-        },
-        itemBuilder: (context, index) {
-          if (index == _pageManager.currentPageIndex) {
-          return _buildCurrentPageView();
+            // 메시지 없이 로딩 아이콘만 표시
+            const DotLoadingIndicator(),
+            
+            const SizedBox(height: 16),
+            
+            // Figma 디자인의 텍스트와 동일하게 수정
+            Text(
+              '스마트 노트를 만들고 있어요.',
+              style: TypographyTokens.subtitle2.copyWith(
+                fontWeight: FontWeight.w700,
+                color: ColorTokens.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '글자 인식과 번역을 하고 있어요.\n잠시만 기다려 주세요!',
+              style: TypographyTokens.body1.copyWith(
+                color: ColorTokens.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            // 새로고침 버튼 표시 (선택적)
+            if (!_state.isLoading)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: TextButton(
+                  onPressed: () => _forceRefreshPage(),
+                  child: Text('새로고침', style: TypographyTokens.button),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+    
+    // 텍스트 처리 중인 경우 (별도 로딩 표시)
+    if (_state.isProcessingText) {
+      return Center(
+        child: DotLoadingIndicator(message: '텍스트 처리 중이에요!'),
+      );
+    }
+    
+    // 페이지가 있는 경우, PageView로 페이지 표시
+    return PageView.builder(
+      itemCount: _pageManager.pages.length,
+      controller: _pageController,
+      onPageChanged: (index) {
+        if (!_state.isPageVisited(index)) {
+          _state.markPageVisited(index);
+        }
+        _changePage(index);
+      },
+      itemBuilder: (context, index) {
+        final page = _pageManager.getPageAtIndex(index);
+        final imageFile = _pageManager.getImageFileForPage(page);
+        
+        // 공통 이미지 썸네일 컨테이너 사용
+        Widget imageThumbnail = _buildImageThumbnailContainer(page, imageFile);
+        
+        if (index == _pageManager.currentPageIndex) {
+          // 현재 페이지: 이미지 + 텍스트 콘텐츠
+          return Column(
+            children: [
+              imageThumbnail, // 공통 썸네일 위젯
+              
+              // 텍스트 콘텐츠 (스크롤 가능)
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.vertical,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: PageContentWidget(
+                    key: ValueKey('page_${page?.id}_${_useSegmentMode}'),
+                    page: page!,
+                    imageFile: imageFile,
+                    flashCards: _state.note?.flashCards,
+                    useSegmentMode: _useSegmentMode,
+                    isLoadingImage: false,
+                    noteId: widget.noteId,
+                    onCreateFlashCard: (front, back, {pinyin}) async {
+                      await _createFlashCard(front, back, pinyin: pinyin);
+                    },
+                    onDeleteSegment: _handleDeleteSegment,
+                  ),
+                ),
+              ),
+            ],
+          );
         } else {
-          return _buildOtherPageView(index);
+          // 다른 페이지는 단순히 이미지만 표시
+          return Container(
+            color: Colors.white,
+            child: imageThumbnail,
+          );
         }
       },
     );
   }
   
-  // 현재 페이지 뷰
-  Widget _buildCurrentPageView() {
-            return Column(
-              children: [
-        // 이미지 컨테이너
-        _buildImageContainer(),
-                
-        // 페이지 내용
-                Expanded(
-                  child: Container(
-            color: Colors.white,
-                    child: _buildCurrentPageContent(),
-                  ),
-                ),
-              ],
-            );
-  }
-  
-  // 다른 페이지 뷰 (미리보기)
-  Widget _buildOtherPageView(int index) {
-            final page = _pageManager.getPageAtIndex(index);
-            final imageFile = _pageManager.getImageFileForPage(page);
-            
-            return Column(
-              children: [
-        // 미리보기 이미지
-                if (imageFile != null || page?.imageUrl != null)
-                  Container(
-                    margin: EdgeInsets.only(top: 16, left: 16, right: 16),
-            height: 200,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 4,
-                          offset: Offset(0, 2),
-                        )
-                      ],
-                    ),
-            child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-              child: imageFile != null 
-                ? Image.file(
-                              imageFile,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              height: double.infinity,
-                  )
-                : (page?.imageUrl != null
-                    ? Image.network(
-                        page!.imageUrl!,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    height: double.infinity,
-                      )
-                    : const Center(child: Text('이미지 없음'))),
-            ),
-          ),
-        
-        // 미리보기 내용
-        Expanded(
-          child: Center(
-            child: Text('페이지 ${index + 1} 로딩 중...'),
-          ),
-        ),
-      ],
-    );
-  }
-  
-  // 툴팁 구성
-  Widget _buildTooltip() {
-    return Positioned(
-      bottom: 80,
-      left: 16,
-      right: 16,
-      child: Material(
-        elevation: 0,
-        color: Colors.transparent,
-        child: HelpTextTooltip(
-          key: const Key('note_detail_tooltip'),
-          text: _state.tooltipStep == 1 
-            ? "첫 노트가 만들어졌어요!" 
-            : _state.tooltipStep == 2
-              ? "다음 페이지로 이동은 스와이프나 화살표로!"
-              : "불필요한 텍스트는 지워요.",
-          description: _state.tooltipStep == 1
-            ? "모르는 단어는 선택하여 사전 검색 하거나, 플래시카드를 만들어 복습해 볼수 있어요."
-            : _state.tooltipStep == 2
-              ? "노트의 빈 공간을 왼쪽으로 슬라이드하거나, 바텀 바의 화살표를 눌러 다음 장으로 넘어갈 수 있어요."
-              : "잘못 인식된 문장은 왼쪽으로 슬라이드해 삭제할수 있어요.",
-          showTooltip: _state.showTooltip,
-          onDismiss: _handleTooltipDismiss,
-          backgroundColor: ColorTokens.primaryverylight,
-          borderColor: ColorTokens.primary,
-          textColor: ColorTokens.textPrimary,
-          tooltipPadding: const EdgeInsets.all(16),
-          tooltipWidth: MediaQuery.of(context).size.width - 32,
-          spacing: 8.0,
-          style: HelpTextTooltipStyle.primary,
-          image: Image.asset(
-            _state.tooltipStep == 1 
-              ? 'assets/images/note_help_1.png'
-              : _state.tooltipStep == 2
-                ? 'assets/images/note_help_2.png'
-                : 'assets/images/note_help_3.png',
-            width: double.infinity,
-            fit: BoxFit.contain,
-          ),
-          currentStep: _state.tooltipStep,
-          totalSteps: _state.totalTooltipSteps,
-          onNextStep: () {
-            setState(() {
-              _state.setTooltipStep(_state.tooltipStep + 1);
-            });
-          },
-          onPrevStep: () {
-            setState(() {
-              _state.setTooltipStep(_state.tooltipStep - 1);
-            });
-          },
-        ),
-      ),
-    );
-  }
-  
-  // 툴팁 닫기 처리
-  void _handleTooltipDismiss() {
-    setState(() {
-      _state.showTooltip = false;
-      _state.setTooltipStep(1);
-    });
-    
-    // 툴팁 표시 상태 저장
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setBool('note_detail_tooltip_shown', true);
-    });
-  }
-  
-  // 뒤로가기 처리
-  Future<bool> _onWillPop() async {
-    try {
-      // TTS 및 리소스 정리
-      await _cleanupResources();
-      
-      // 제목 편집 중인 경우 저장
-      if (_state.isEditingTitle) {
-        if (_titleEditingController.text.isNotEmpty) {
-          await _updateNoteTitle(_titleEditingController.text);
-        }
-        setState(() {
-          _state.isEditingTitle = false;
-        });
-        return false;
-      }
-      
-      // 동기적으로 Navigator.pop 호출
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
-      
-      return false;
-    } catch (e) {
-      debugPrint('뒤로가기 처리 중 오류: $e');
-      return true;
-    }
-  }
-
   // 이미지 컨테이너 구성
   Widget _buildImageContainer() {
     final currentPage = _pageManager.currentPage;
@@ -989,24 +807,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       noteTitle: _state.note?.originalText ?? '노트',
       onFullScreenTap: (imageFile) {
                               Navigator.push(
-                                context,
-                                MaterialPageRoute(
+      context,
+      MaterialPageRoute(
                                   builder: (context) => FullImageScreen(
                                     imageFile: imageFile,
               title: _state.note?.originalText ?? '이미지',
-                                  ),
-                                ),
-                              );
+        ),
+      ),
+    );
                             },
     );
   }
 
-  // 현재 페이지 내용 구성
+  // 현재 페이지 콘텐츠 구성
   Widget _buildCurrentPageContent() {
     final currentPage = _pageManager.currentPage;
-    final currentImageFile = _pageManager.currentImageFile;
     
-    // 페이지가 없는 경우
+    // 현재 페이지가 null인 경우 로딩 표시
     if (currentPage == null) {
       return Center(
         child: Column(
@@ -1016,51 +833,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             const SizedBox(height: 16),
             Text(
               '페이지를 준비하고 있어요...',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[700],
-                          ),
-                        ),
-                      ],
-                    ),
-      );
-    }
-    
-    // 처리 중인 경우
-    if (currentPage.originalText == '___PROCESSING___') {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const DotLoadingIndicator(),
-            const SizedBox(height: 16),
-            Text(
-              '텍스트 처리 중이에요!',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[700],
-                  ),
-                ),
-              ],
-        ),
-      );
-    }
-    
-    // 페이지가 준비 중인 경우
-    if ((currentPage.originalText.isEmpty || currentPage.originalText == 'processing') 
-        && !_state.isPageVisited(_pageManager.currentPageIndex)) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-            const DotLoadingIndicator(),
-            const SizedBox(height: 16),
-            Text(
-              '페이지 준비 중...\n이미지 인식 및 번역을 진행하고 있습니다.',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[700],
-              ),
+              style: TypographyTokens.body1Bold,
               textAlign: TextAlign.center,
             ),
           ],
@@ -1068,56 +841,60 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       );
     }
     
-    // 텍스트 처리 중인 경우
-    if (_state.isProcessingText) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
+    // 처리 중인 페이지인 경우 로딩 표시
+    if (currentPage.originalText == '___PROCESSING___' || 
+        ((currentPage.originalText.isEmpty || currentPage.originalText == 'processing') && 
+         !_state.isPageVisited(_pageManager.currentPageIndex))) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
             const DotLoadingIndicator(),
             const SizedBox(height: 16),
             Text(
-              '텍스트 처리 중이에요!',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[700],
-              ),
+              '페이지를 처리하고 있어요...',
+              style: TypographyTokens.body1Bold,
+              textAlign: TextAlign.center,
             ),
-                          ],
-                        ),
-                      );
-                    }
+            const SizedBox(height: 8),
+            Text(
+              '잠시만 기다려주세요.',
+              style: TypographyTokens.body2,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
     
-    // 현재 페이지의 처리된 텍스트 가져오기
-    final processedText = currentPage.id != null
-        ? _textProcessor.getProcessedText(currentPage.id!)
-        : null;
+    // 이전에 방문했고 텍스트가 비어있는 경우 빈 페이지 메시지
+    if (currentPage.originalText.isEmpty && _state.isPageVisited(_pageManager.currentPageIndex)) {
+      return Center(
+        child: Text(
+          '이 페이지에는 텍스트가 없습니다.',
+          style: TypographyTokens.body1Bold,
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
     
-    // CurrentPageContent 위젯 사용
-    return CurrentPageContent(
-      currentPage: currentPage,
-      currentImageFile: currentImageFile,
-      flashCards: _state.note?.flashCards,
-      useSegmentMode: _useSegmentMode,
-      noteId: widget.noteId,
-      onCreateFlashCard: _createFlashCard,
-      onDeleteSegment: _handleDeleteSegment,
-      isProcessingText: _state.isProcessingText,
-      wasVisitedBefore: _state.isPageVisited(_pageManager.currentPageIndex),
-      processedText: processedText,
-      isLoading: _state.isLoading,
-      isProcessing: currentPage.originalText == 'processing',
-      currentIndex: _pageManager.currentPageIndex,
-      onToggleDisplayMode: _toggleFullTextMode,
-      onTogglePinyin: _togglePinyin,
-      onToggleTranslation: _toggleTranslation,
-      onAddFlashcard: () {
-        // 플래시카드 추가 구현
-      },
-      onDelete: () {
-        // 페이지 삭제 구현
-      },
-      onReadText: _onTtsPlay,
+    // 일반적인 경우 콘텐츠 표시 - PageContentWidget을 사용하여 단어 선택 및 사전 검색, 플래시카드 기능 제공
+    return SingleChildScrollView(
+      scrollDirection: Axis.vertical,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: PageContentWidget(
+        key: ValueKey('processed_${currentPage.id}_${_useSegmentMode}'),
+        page: currentPage,
+        imageFile: _pageManager.getImageFileForPage(currentPage),
+        flashCards: _state.note?.flashCards,
+        useSegmentMode: _useSegmentMode,
+        isLoadingImage: false,
+        noteId: widget.noteId,
+        onCreateFlashCard: (front, back, {pinyin}) async {
+          await _createFlashCard(front, back, pinyin: pinyin);
+        },
+        onDeleteSegment: _handleDeleteSegment,
+      ),
     );
   }
 
@@ -1135,13 +912,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     }
     
     // 모드 전환
-    setState(() {
+        setState(() {
       final updatedText = _textProcessor.toggleDisplayMode(currentPage.id!, processedText);
       _useSegmentMode = !updatedText.showFullText;
     });
     
     // 필요한 번역 데이터 확인 및 로드
-    if (mounted) {
+      if (mounted) {
       _textProcessor.checkAndLoadTranslationData(context, processedText, currentPage.id!).then((updatedText) {
         if (updatedText != null) {
           setState(() {
@@ -1156,9 +933,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   void _togglePinyin() {
     final currentPage = _pageManager.currentPage;
     if (currentPage == null || currentPage.id == null) {
-      return;
-    }
-    
+        return;
+      }
+      
     // 캐시된 processedText 가져오기
     final processedText = _textProcessor.getProcessedText(currentPage.id!);
     if (processedText == null) {
@@ -1166,7 +943,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     }
     
     // 병음 표시 전환
-    setState(() {
+          setState(() {
       _textProcessor.togglePinyin(currentPage.id!, processedText);
     });
   }
@@ -1216,7 +993,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       
       if (noteDoc.exists && mounted) {
         final updatedNote = Note.fromFirestore(noteDoc);
-        setState(() {
+    setState(() {
           _state.updateNote(updatedNote);
         });
       }
@@ -1302,8 +1079,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     if (_state.note == null || _state.note?.id == null) return;
 
     final newValue = !_state.isFavorite;
-
-                setState(() {
+    
+    setState(() {
       _state.isFavorite = newValue;
     });
 
@@ -1385,7 +1162,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     setState(() {
       _state.isEditingTitle = false;
     });
-
+    
     try {
       // 노트 업데이트
       final updatedNote = _state.note!.copyWith(
@@ -1402,7 +1179,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('노트 제목이 업데이트되었습니다.'),
             duration: Duration(seconds: 2),
@@ -1414,7 +1191,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       debugPrint('노트 제목 업데이트 오류: $e');
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('제목 업데이트에 실패했습니다.'),
             duration: Duration(seconds: 2),
@@ -1423,6 +1200,190 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           ),
         );
       }
+    }
+  }
+
+  // 페이지 강제 새로고침 메서드
+  void _forceRefreshPage() {
+    debugPrint('페이지 강제 새로고침');
+    
+    // 캐시 무효화
+    if (_pageManager.currentPage?.id != null) {
+      _cacheService.removeCachedNote(widget.noteId);
+    }
+    
+    // 노트 다시 로드
+    _loadNote();
+  }
+
+  // 이미지 썸네일 컨테이너 생성
+  Widget _buildImageThumbnailContainer(page_model.Page? page, File? imageFile) {
+    if (page == null) {
+      return Container(
+        height: 200,
+        color: Colors.grey[200],
+        child: const Center(child: Text('이미지 없음')),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      height: 200,
+                    decoration: BoxDecoration(
+        color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+                      ],
+                    ),
+                    child: Stack(
+                      children: [
+          // 이미지 표시
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+                              width: double.infinity,
+                              height: double.infinity,
+              child: imageFile != null
+                ? Image.file(
+                    imageFile,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _buildImagePlaceholder(),
+                  )
+                : (page.imageUrl != null && page.imageUrl!.isNotEmpty
+                    ? Image.network(
+                        page.imageUrl!,
+                                    fit: BoxFit.cover,
+                        loadingBuilder: (_, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return _buildImageLoadingIndicator();
+                        },
+                        errorBuilder: (_, __, ___) => _buildImagePlaceholder(),
+                      )
+                    : _buildImagePlaceholder()),
+            ),
+          ),
+          
+          // 전체 화면 버튼
+                        Positioned(
+            top: 8,
+            right: 8,
+            child: Material(
+              color: Colors.black.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(20),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () => _showFullImage(page, imageFile),
+                child: const Padding(
+                  padding: EdgeInsets.all(6.0),
+                  child: Icon(
+                    Icons.fullscreen,
+                                color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                    ),
+                  ),
+                ),
+              ],
+      ),
+    );
+  }
+  
+  // 이미지 로딩 인디케이터
+  Widget _buildImageLoadingIndicator() {
+    return Container(
+      color: Colors.grey[200],
+      child: const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+  
+  // 이미지 플레이스홀더
+  Widget _buildImagePlaceholder() {
+    return Container(
+      color: Colors.grey[200],
+      child: Center(
+        child: Icon(
+          Icons.image,
+          size: 48,
+          color: Colors.grey[400],
+        ),
+                        ),
+                      );
+                    }
+  
+  // 전체 화면 이미지 표시
+  void _showFullImage(page_model.Page page, File? imageFile) {
+    if (imageFile != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => FullImageScreen(
+            imageFile: imageFile,
+            title: _state.note?.originalText ?? '이미지',
+                        ),
+                      ),
+                    );
+    } else if (page.imageUrl != null && page.imageUrl!.isNotEmpty) {
+      _imageHandler.loadPageImage(page).then((file) {
+        if (file != null && mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => FullImageScreen(
+                imageFile: file,
+                title: _state.note?.originalText ?? '이미지',
+        ),
+      ),
+    );
+  }
+      });
+    }
+  }
+
+  void _initializeManagers() {
+    _screenshotHelper = ScreenshotServiceHelper();
+    _tooltipManager = TooltipManager();
+    _optionsManager = NoteOptionsManager();
+    _contentManager = NoteContentManager(
+      _pageManager,
+      _textProcessor,
+      _imageHandler,
+      _state,
+    );
+  }
+
+  Future<bool> _onWillPop() async {
+    try {
+      // TTS 및 리소스 정리
+      await _cleanupResources();
+      
+      // 제목 편집 중인 경우 저장
+      if (_state.isEditingTitle) {
+        if (_titleEditingController.text.isNotEmpty) {
+          await _updateNoteTitle(_titleEditingController.text);
+        }
+        setState(() {
+          _state.isEditingTitle = false;
+        });
+        return false;
+      }
+      
+      // 동기적으로 Navigator.pop 호출
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('뒤로가기 처리 중 오류: $e');
+      return true;
     }
   }
 }
