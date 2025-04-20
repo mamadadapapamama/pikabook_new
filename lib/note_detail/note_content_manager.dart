@@ -56,7 +56,7 @@ class NoteContentManager {
           );
           
           // 업데이트된 텍스트 캐싱
-          _textProcessor.setProcessedText(currentPage.id!, updatedProcessedText);
+          await _pageContentService.setProcessedText(currentPage.id!, updatedProcessedText);
           
           debugPrint('텍스트 처리 완료: ${currentPage.id}');
           
@@ -65,7 +65,7 @@ class NoteContentManager {
         } catch (e) {
           debugPrint('페이지 텍스트 처리 중 오류 발생: ProcessedText 객체 변환 실패: $e');
           // 캐시 삭제 및 다시 로드 시도
-          _textProcessor.removeProcessedText(currentPage.id!);
+          await _pageContentService.removeProcessedText(currentPage.id!);
         }
       }
     } catch (e) {
@@ -81,15 +81,33 @@ class NoteContentManager {
     if (currentPage?.id == null) return;
     
     final pageId = currentPage!.id!;
-    final processedText = await _cacheService.getProcessedText(pageId);
+    final processedText = await _pageContentService.getProcessedText(pageId);
     
     if (processedText != null) {
-      final updatedProcessedText = processedText.copyWith(
-        showFullText: !useSegmentMode,
-        showFullTextModified: true,
-      );
+      // 현재 표시 모드와 요청된 모드가 다른 경우에만 전환
+      final bool currentIsFullMode = processedText.showFullText;
+      final bool requestingFullMode = !useSegmentMode;
       
-      await _cacheService.setProcessedText(pageId, updatedProcessedText);
+      // 같은 모드로 전환하려는 경우 무시
+      if (currentIsFullMode == requestingFullMode) return;
+      
+      // 1. 모드 전환 전에 번역 데이터 확인 및 필요시 로드
+      if (_state.note != null) {
+        final updatedText = await _textProcessor.checkAndLoadTranslationData(
+          note: _state.note!,
+          page: currentPage,
+          imageFile: _imageHandler.getCurrentImageFile(),
+          currentProcessedText: processedText
+        );
+        
+        // 2. 모드 전환
+        if (updatedText != null) {
+          await _textProcessor.toggleDisplayMode(
+            pageId: pageId,
+            processedText: updatedText
+          );
+        }
+      }
     }
   }
   
@@ -136,7 +154,7 @@ class NoteContentManager {
       if (currentPage?.id == null) return;
       
       final pageId = currentPage!.id!;
-      final processedText = await _cacheService.getProcessedText(pageId);
+      final processedText = await _pageContentService.getProcessedText(pageId);
       
       if (processedText == null || 
           processedText.segments == null || 
@@ -154,7 +172,7 @@ class NoteContentManager {
       );
       
       // 변경사항 저장
-      await _cacheService.setProcessedText(pageId, updatedText);
+      await _pageContentService.setProcessedText(pageId, updatedText);
       
       debugPrint('세그먼트 삭제됨: 페이지 $pageId, 인덱스 $segmentIndex');
     } catch (e) {
