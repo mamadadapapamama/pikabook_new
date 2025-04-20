@@ -38,6 +38,7 @@ import '../../models/dictionary_entry.dart';
 import 'dart:math' as math;
 import 'package:flutter/scheduler.dart';
 import '../../widgets/common/pika_app_bar.dart'; // NoteAppBar 위젯 import
+import '../../widgets/dot_loading_indicator.dart';
 
 /// 노트 상세 화면
 /// 페이지 탐색, 노트 액션, 백그라운드 처리, 이미지 로딩 등의 기능
@@ -120,6 +121,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   // 의존성 관련 변수들
   ThemeData? _theme;
   
+  // 백그라운드 처리 중 여부
+  bool _isProcessingBackground = false;
+  
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -142,10 +146,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     _previouslyVisitedPages = <int>{};
     _pageController = PageController();
     
+    // 새 노트 생성 시 처리 중임을 명시적으로 표시
+    _isLoading = true;
+    
     // 전달받은 총 이미지 수가 있으면 설정
-    if (widget.totalImageCount != null && widget.totalImageCount! > 0) {
-      _expectedTotalPages = widget.totalImageCount!;
+    if (widget.totalImageCount > 0) {
+      _expectedTotalPages = widget.totalImageCount;
       debugPrint('전달받은 총 이미지 수: $_expectedTotalPages');
+    }
+    
+    // 처리 중인 백그라운드 플래그 설정
+    if (widget.isProcessingBackground) {
+      _isProcessingBackground = true;
+      debugPrint('백그라운드 처리 플래그 설정됨');
     }
     
     // 상태표시줄 설정
@@ -1604,6 +1617,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
     // 메인 UI 구성 (로딩 및 오류 처리 이후)
   Widget _buildBody() {
+    // 노트가 로딩 중인 상태 확인
+    if (_isLoading || _note == null) {
+      return const Center(
+        child: DotLoadingIndicator(
+          message: '노트를 불러오고 있어요...',
+        ),
+      );
+    }
+    
+    // 오류 발생 시 메시지 표시
+    if (_error != null) {
+      return Center(
+        child: Text(_error!),
+      );
+    }
+    
     final currentImageFile = _pageManager.currentImageFile;
     final String pageNumberText = '${_pageManager.currentPageIndex + 1}/${_pageManager.pages.length}';
     
@@ -1899,7 +1928,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 페이지 없음 (비어있는 노트)
     if (currentPage == null) {
       return const Center(
-        child: Text('페이지가 없습니다. 페이지를 추가해주세요.'),
+        // 페이지가 없을 때 로딩 인디케이터로 변경
+        child: DotLoadingIndicator(message: '페이지를 준비하고 있어요...'),
       );
     }
     
@@ -1922,118 +1952,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         ? _pageContentService.getProcessedText(currentPage.id!)
         : null;
     
-    // 세그먼트/전체 모드 확인
-    final bool isFullTextMode = processedText?.showFullText ?? false;
-    
-    // 패딩 설정 - 전체 모드는 좌우 패딩 줄이기, 세그먼트 모드는 기본 패딩 유지
-    final EdgeInsets contentPadding = const EdgeInsets.symmetric(horizontal: SpacingTokens.md + SpacingTokens.sm); // 24.0 (통일된 패딩 값)
-    
-    // 페이지가 준비 중인 경우 - 백그라운드 처리를 체크하기 위한 로직 추가
+    // 페이지가 준비 중인 경우 (빈 텍스트이거나 'processing' 상태)
     if ((currentPage.originalText.isEmpty || currentPage.originalText == 'processing') && !wasVisitedBefore) {
-      // 이전 페이지와 같은 페이지인지 확인 (무한 로딩 방지)
-      if (_processingPage != null && _processingPage!.id == _note!.id) {
-        final now = DateTime.now();
-        final diff = now.difference(_processingPage!.updatedAt);
-        
-        // 5분 이상 처리 중이면 에러로 간주
-        if (diff.inMinutes > 5) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, color: ColorTokens.error, size: 48),
-                SizedBox(height: SpacingTokens.md),
-                Text(
-                  '페이지 처리 중 오류가 발생했습니다.',
-                  style: TypographyTokens.body1,
-                ),
-                SizedBox(height: SpacingTokens.sm),
-                ElevatedButton(
-                  onPressed: () {
-                    _loadNote(); // 다시 로드 시도
-                  },
-                  child: const Text('다시 시도'),
-                ),
-              ],
-            ),
-          );
-        }
-      }
-      
-      // 처리 중인 페이지 정보 저장
-      _processingPage = _note;
-      
-      // 페이지가 준비 중인 경우 - 백그라운드 처리를 체크하기 위한 로직 추가
-    if (currentPage.id != null) {
-        // 페이지 정보를 서버에서 다시 확인
-        (() async {
-          try {
-            // 서버에서 페이지 정보 가져오기
-            final pageDoc = await FirebaseFirestore.instance
-              .collection('pages')
-              .doc(currentPage.id!)
-              .get();
-            
-            if (!pageDoc.exists) {
-              debugPrint('페이지를 찾을 수 없음: ${currentPage.id!}');
-              return;
-            }
-            
-            if (!mounted) return;
-            
-            final serverPage = page_model.Page.fromFirestore(pageDoc);
-            
-            // 페이지가 이미 처리 완료되었으나 로컬 상태가 업데이트되지 않은 경우
-            if (serverPage.originalText.isNotEmpty && 
-                serverPage.originalText != 'processing' && 
-                serverPage.originalText != '___PROCESSING___') {
-              debugPrint('서버에서 처리 완료된 페이지 발견: ${currentPage.id}, 로컬 상태 업데이트');
-              
-              
-              // 페이지 매니저 내 페이지 목록 업데이트
-              final updatedPages = _pageManager.pages.map((p) {
-                return p.id == currentPage.id ? serverPage : p;
-              }).toList();
-              _pageManager.setPages(updatedPages);
-              
-              // 텍스트 다시 처리
-              _processTextForCurrentPage();
-              setState(() {}); // UI 갱신
-            }
-          } catch (e) {
-            debugPrint('페이지 정보 갱신 중 오류 발생: $e');
-          }
-        })();
-      }
-      
-      debugPrint('페이지 준비 중 화면 표시 (이전 방문: $wasVisitedBefore)');
-      
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(color: ColorTokens.primary),
-            SizedBox(height: SpacingTokens.lg),
-            Text(
-              '페이지 준비 중...',
-              style: TypographyTokens.body1.copyWith(
-                fontWeight: FontWeight.bold,
-                color: ColorTokens.textSecondary,
-              ),
-            ),
-            SizedBox(height: SpacingTokens.sm),
-            Text(
-              '이미지 인식 및 번역을 진행하고 있습니다.',
-              style: TypographyTokens.body2.copyWith(
-                color: ColorTokens.textGrey,
-              ),
-            ),
-            SizedBox(height: SpacingTokens.sm),
-            TextButton(
-              onPressed: () => _forceRefreshPage(),
-              child: Text('새로고침', style: TypographyTokens.button),
-            ),
-          ],
+      // 로딩 인디케이터로 변경
+      return const Center(
+        child: DotLoadingIndicator(
+          message: '페이지 준비 중...\n이미지 인식 및 번역을 진행하고 있습니다.',
         ),
       );
     }
@@ -2046,18 +1970,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       );
     }
     
-    // 텍스트 처리 중이거나 특수 처리 중 문자열이 있는 경우
-    if (_isProcessingText || currentPage.originalText == '___PROCESSING___') {
-      debugPrint('텍스트 처리 중 화면 표시');
-      return const Center(
-        child: DotLoadingIndicator(message: '텍스트 처리 중이에요!'),
-      );
-    }
-    
     // 텍스트/이미지 세그먼트가 있는 경우
+    final EdgeInsets contentPadding = const EdgeInsets.symmetric(horizontal: SpacingTokens.md + SpacingTokens.sm); // 24.0
+    
     return SingleChildScrollView(
           scrollDirection: Axis.vertical,
-          padding: contentPadding, // 여기에 패딩 적용
+      padding: contentPadding,
           child: PageContentWidget(
             key: ValueKey('processed_${currentPage.id}'),
       page: currentPage,

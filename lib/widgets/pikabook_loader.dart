@@ -44,8 +44,8 @@ class PikabookLoader extends StatelessWidget {
       await showDialog(
         context: context,
         barrierDismissible: false,
-        barrierColor: Colors.black38, // 투명도 조정
-        useSafeArea: true, // 안전 영역 고려
+        barrierColor: Colors.transparent, // Colors.black38에서 변경
+        useSafeArea: true,
         builder: (context) => WillPopScope(
           onWillPop: () async => false, // 뒤로 가기 방지
           child: Material(
