@@ -53,7 +53,7 @@ class PikabookLoader extends StatelessWidget {
       showDialog(
         context: context,
         barrierDismissible: false,
-        barrierColor: Colors.black54,
+        barrierColor: Colors.transparent,
         builder: (context) {
           _dialogContext = context;
           return PopScope(
