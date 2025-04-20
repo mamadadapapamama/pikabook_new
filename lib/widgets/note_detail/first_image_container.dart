@@ -45,23 +45,13 @@ class FirstImageContainer extends StatelessWidget {
           )
         ],
       ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary),
-              strokeWidth: 2,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '이미지 준비중...',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 14,
-              ),
-            ),
-          ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.asset(
+          'assets/images/image_empty.png',
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
         ),
       ),
     );
