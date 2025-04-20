@@ -883,6 +883,7 @@ class NoteService {
         'totalPages': imageFiles.length, // 총 페이지 수도 명시적으로 설정
         'pages': [], // 빈 페이지 배열 초기화
         'firstPageProcessed': false, // 첫 페이지 처리 상태 추가
+        'imageUrl': '', // 썸네일 이미지 URL 필드 초기화
       };
       
       // 2. Firestore에 노트 추가 (중요: 노트 ID 즉시 반환)
