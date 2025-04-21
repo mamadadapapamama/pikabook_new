@@ -179,9 +179,23 @@ class PageManager {
         return _pages;
       }
       
-      // 3. 일반 모드: 초기 노트가 전달되었으면 바로 서버에서 로드
+      // 3. 일반 모드: 초기 노트가 전달되었으면 초기 노트의 페이지 정보 확인
       if (initialNote != null) {
-        debugPrint('🔄 초기 노트가 전달됨: 서버에서 직접 페이지를 로드합니다.');
+        debugPrint('🔄 초기 노트가 전달됨, 페이지 수: ${initialNote!.pages.length}');
+        
+        // 초기 노트에 페이지가 있으면 그대로 사용
+        if (initialNote!.pages.isNotEmpty) {
+          debugPrint('✅ 초기 노트의 페이지를 사용합니다: ${initialNote!.pages.length}개');
+          setPages(initialNote!.pages);
+          
+          // 백그라운드에서 서버와 동기화
+          _syncWithServerInBackground();
+          
+          return _pages;
+        }
+        
+        // 초기 노트에 페이지가 없으면 서버에서 로드
+        debugPrint('⚠️ 초기 노트에 페이지가 없어 서버에서 로드합니다.');
         loadedPages = await _directlyLoadFromServer();
         
         // 로드된 페이지로 현재 페이지 목록 업데이트

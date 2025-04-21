@@ -327,7 +327,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     }
   }
 
-  // 노트 데이터 로드
+  // 노트 로드 함수 - 선택적으로 초기 데이터 사용
   Future<void> _loadNote() async {
     debugPrint('📄 _loadNote 메서드 시작: noteId=${widget.noteId}');
     
@@ -342,17 +342,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         _state.setError(null); // 이전 에러 초기화
       });
       
-      // 전달된 노트 객체를 직접 사용
-      debugPrint('✅ 위젯에서 전달된 노트 객체 사용: id=${widget.note?.id}, 제목=${widget.note?.originalText}');
+      // 이미 완전한 노트 객체가 있는 경우 바로 사용
+      if (widget.note != null && 
+          widget.note!.id != null && 
+          widget.note!.id!.isNotEmpty) {
+        debugPrint('🔍 전달받은 노트 데이터를 사용합니다: ${widget.note!.id}, 페이지 수: ${widget.note!.pages?.length ?? 0}');
+        
+        // 노트 객체로 상태 업데이트  
+        setState(() {
+          _state.updateNote(widget.note!);
+          _titleEditingController.text = widget.note!.originalText ?? '';
+          _state.setLoading(false);
+        });
+        
+        // 페이지 로딩은 생략 - 이미 노트 객체가 있기 때문
+        return;
+      }
       
-      // 노트 객체로 상태 업데이트
-      setState(() {
-        _state.updateNote(widget.note!);
-        _titleEditingController.text = widget.note!.originalText;
-      });
+      // 노트 ID로 데이터 로드
+      debugPrint('📝 서버에서 노트 데이터 로드: ${widget.noteId}');
+      await _loadPages(); // 기존 페이지 로드 로직 사용
       
-      // 페이지 로드 로직 호출
-      await _loadPages();
     } catch (e, stackTrace) {
       debugPrint('❌ 노트 로드 중 오류: $e');
       debugPrint('스택 트레이스: $stackTrace');
