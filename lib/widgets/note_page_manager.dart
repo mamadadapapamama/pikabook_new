@@ -4,6 +4,8 @@ import '../models/page.dart' as page_model;
 import '../services/page_service.dart';
 import '../services/image_service.dart';
 import '../services/unified_cache_service.dart';
+import '../services/text_processing_service.dart';
+import '../note_detail/note_detail_image_handler.dart';
 
 /// 노트 페이지 관리 클래스 (note_detail_screen.dart 에서 사용)
 /// 페이지 로드, 병합, 이미지 로드 등의 기능 제공
@@ -259,5 +261,58 @@ class NotePageManager {
       _imageFileMap[updatedPage.id!] = imageFile;
     }
     
+  }
+  
+  /// 페이지 내용을 로드하는 통합 메서드
+  /// 이미지와 텍스트 처리를 모두 처리합니다.
+  Future<Map<String, dynamic>> loadPageContent(
+    page_model.Page page, 
+    {required TextProcessingService textProcessingService,
+    required NoteDetailImageHandler imageHandler,
+    required dynamic note}) async {
+    
+    // 결과를 담을 맵
+    final Map<String, dynamic> result = {
+      'imageFile': null,
+      'processedText': null,
+      'isSuccess': false,
+    };
+    
+    try {
+      // 1. 이미지 로드 (있는 경우)
+      File? imageFile;
+      if (page.imageUrl != null && page.imageUrl!.isNotEmpty) {
+        imageFile = await imageHandler.loadPageImage(page);
+        result['imageFile'] = imageFile;
+      }
+      
+      // 2. 텍스트 처리
+      if (page.id != null) {
+        final processedText = await textProcessingService.processAndPreparePageContent(
+          page: page,
+          imageFile: imageFile ?? imageHandler.getCurrentImageFile(),
+          note: note,
+        );
+        
+        result['processedText'] = processedText;
+        result['isSuccess'] = processedText != null;
+      }
+      
+      // 현재 페이지의 이미지 파일 업데이트
+      if (page.id == currentPage?.id && imageFile != null) {
+        for (int i = 0; i < _pages.length; i++) {
+          if (_pages[i].id == page.id && i < _imageFiles.length) {
+            _imageFiles[i] = imageFile;
+            break;
+          }
+        }
+      }
+      
+      return result;
+    } catch (e) {
+      debugPrint('페이지 내용 로드 중 오류: $e');
+      result['error'] = e.toString();
+      return result;
+    }
   }
 } 

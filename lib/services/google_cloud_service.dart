@@ -2,14 +2,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'enhanced_ocr_service.dart';
 import 'translation_service.dart';
-import '.language_service_interface.dart';
 import '../utils/language_constants.dart';
 
 /// Google Cloud 서비스를 통합적으로 관리하는 클래스
 /// OCR 및 번역 기능을 제공합니다.
 /// MARK: 다국어 지원을 위한 확장 포인트
 
-class GoogleCloudService implements LanguageServiceInterface, ChineseLanguageServiceInterface {
+class GoogleCloudService {
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final TranslationService _translationService = TranslationService();
 
@@ -20,7 +19,6 @@ class GoogleCloudService implements LanguageServiceInterface, ChineseLanguageSer
 
   /// 이미지에서 텍스트 추출 (OCR)
   /// 언어별 텍스트를 추출합니다.
-  @override
   Future<String> extractText(File imageFile, {String? sourceLanguage}) async {
     try {
       debugPrint('GoogleCloudService: 이미지에서 텍스트 추출 시작');
@@ -40,7 +38,6 @@ class GoogleCloudService implements LanguageServiceInterface, ChineseLanguageSer
 
   /// 텍스트 번역
   /// 다양한 언어 지원 가능
-  @override
   Future<String> translateText(String text, {
     String? sourceLanguage,
     String? targetLanguage,
@@ -148,7 +145,6 @@ class GoogleCloudService implements LanguageServiceInterface, ChineseLanguageSer
   }
 
   /// 지원되는 언어 목록 가져오기
-  @override
   Future<List<Map<String, String>>> getSupportedLanguages() async {
     try {
       debugPrint('GoogleCloudService: 지원 언어 목록 조회 시작');
@@ -167,7 +163,6 @@ class GoogleCloudService implements LanguageServiceInterface, ChineseLanguageSer
   }
   
   /// 텍스트를 문장으로 분리
-  @override
   List<String> splitTextIntoSentences(String text, {String? languageCode}) {
     if (text.isEmpty) return [];
     
@@ -182,71 +177,9 @@ class GoogleCloudService implements LanguageServiceInterface, ChineseLanguageSer
         .toList();
   }
   
-  /// 발음 생성 (중국어의 경우 핀인)
-  @override
-  Future<String> generatePronunciation(String text, {String? languageCode}) async {
-    // 언어별 발음 생성 처리 (MVP에서는 중국어 핀인만 구현)
-    final language = languageCode ?? SourceLanguage.DEFAULT;
-    final processor = getLanguageProcessor(language);
-    
-    if (processor == LanguageProcessor.chinese) {
-      return await generatePinyin(text);
-    }
-    
-    // 다른 언어는 미구현
-    return '';
-  }
-  
-  /// 중국어 핀인 생성 (ChineseLanguageServiceInterface 구현)
-  @override
-  Future<String> generatePinyin(String text) async {
-    // TODO: 실제 구현체 호출
-    // 현재는 가상 구현
-    try {
-      return ''; // 실제로는 PinyinCreationService 호출해야 함
-    } catch (e) {
-      debugPrint('핀인 생성 중 오류 발생: $e');
-      return '';
-    }
-  }
-  
-  /// 중국어 텍스트 분절 (ChineseLanguageServiceInterface 구현)
-  @override
-  Future<List<String>> segmentChineseText(String text) async {
-    // TODO: 실제 구현체 호출
-    // 현재는 가상 구현
-    try {
-      return [text]; // 실제로는 ChineseSegmenterService 호출해야 함
-    } catch (e) {
-      debugPrint('중국어 분절 중 오류 발생: $e');
-      return [text];
-    }
-  }
-  
-  /// 중국어 단어 사전 검색 (ChineseLanguageServiceInterface 구현)
-  @override
-  Future<Map<String, dynamic>?> lookupChineseWord(String word) async {
-    // TODO: 실제 구현체 호출
-    // 현재는 가상 구현
-    try {
-      return null; // 실제로는 DictionaryService 호출해야 함
-    } catch (e) {
-      debugPrint('중국어 단어 검색 중 오류 발생: $e');
-      return null;
-    }
-  }
-  
   /// 언어 감지
-  @override
   Future<String> detectLanguage(String text) async {
-    // TODO: 실제 언어 감지 API 호출
-    // MVP에서는 중국어로 가정
+    // 현재는 기본 언어만 지원
     return SourceLanguage.DEFAULT;
-  }
-  
-  /// 언어 프로세서 타입 가져오기
-  @override
-  LanguageProcessor getLanguageProcessor(String languageCode) {
-    return getProcessorForLanguage(languageCode);
   }
 }

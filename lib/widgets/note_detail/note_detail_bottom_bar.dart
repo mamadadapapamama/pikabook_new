@@ -5,6 +5,7 @@ import '../../../models/processed_text.dart';
 import '../../../services/page_content_service.dart';
 import '../../../services/text_reader_service.dart';
 import '../../../services/tts_service.dart';
+import '../../../services/text_processing_service.dart';
 import '../../../utils/text_display_mode.dart';
 import '../../../theme/tokens/color_tokens.dart';
 import '../../../theme/tokens/typography_tokens.dart';
@@ -23,12 +24,8 @@ class NoteDetailBottomBar extends StatefulWidget {
   final bool isFullTextMode;
   final PageContentService pageContentService;
   final TextReaderService textReaderService;
-  final bool showPinyin;
-  final bool showTranslation;
   final bool isProcessing; // 현재 페이지가 처리 중인지 여부
   final double progressValue;
-  final VoidCallback onTogglePinyin;
-  final VoidCallback onToggleTranslation;
   final VoidCallback? onTtsPlay;
   final bool isMinimalUI;
 
@@ -42,12 +39,8 @@ class NoteDetailBottomBar extends StatefulWidget {
     required this.isFullTextMode,
     required this.pageContentService,
     required this.textReaderService,
-    required this.showPinyin,
-    required this.showTranslation,
     this.isProcessing = false, // 기본값은 false (처리 중이 아님)
     this.progressValue = 0.0,
-    required this.onTogglePinyin,
-    required this.onToggleTranslation,
     this.onTtsPlay,
     this.isMinimalUI = false,
   });
@@ -58,6 +51,7 @@ class NoteDetailBottomBar extends StatefulWidget {
 
 class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   final TtsService _ttsService = TtsService();
+  final TextProcessingService _textProcessingService = TextProcessingService();
   ProcessedText? processedText;
   
   @override
@@ -143,7 +137,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                 Expanded(
                   child: Center(
                     child: GestureDetector(
-                      onTap: widget.onToggleFullTextMode,
+                      onTap: _toggleDisplayMode,
                       child: Container(
                         padding: EdgeInsets.symmetric(
                           horizontal: SpacingTokens.sm, 
@@ -247,125 +241,25 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     return false;
   }
   
-  /*
-  // 현재 사용되지 않는 코드입니다 - 향후 참조를 위해 보존
-  // minimal UI 버전의 하단바가 필요할 때 활용할 수 있습니다
-  
-  // 최소한의 UI를 가진 바텀 바 (ProcessedText가 없는 경우)
-  Widget _buildMinimalBottomBar(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 페이지 진행률 바 (비활성화 상태)
-        Container(
-          height: 4,
-          width: double.infinity,
-          color: const Color(0xFFFFF0E8),
-          child: Row(
-            children: [
-              // 진행된 부분 (현재 페이지까지)
-              Container(
-                width: widget.totalPages > 0 
-                    ? (widget.currentPageIndex + 1) / widget.totalPages * MediaQuery.of(context).size.width 
-                    : 0,
-                color: ColorTokens.primary,
-              ),
-            ],
-          ),
-        ),
-        
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            border: Border(
-              top: BorderSide(color: Color(0xFFFFF0E8), width: 1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x26000000),
-                blurRadius: 8,
-                offset: Offset(0, -2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // 이전 페이지 버튼 (비활성화)
-              Icon(
-                Icons.arrow_back_ios_rounded, 
-                color: Colors.grey.shade300,
-                size: 24,
-              ),
-              
-              // 중앙 컨트롤 영역 (비활성화 상태)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 병음 토글 버튼 (비활성화)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Text(
-                      '한어병음',
-                      style: GoogleFonts.notoSansKr(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: Colors.grey.shade400,
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(width: 16),
-                  
-                  // 재생 버튼 (비활성화)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(100),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.volume_up,
-                          color: Colors.grey.shade400,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '전체 재생',
-                          style: GoogleFonts.notoSansKr(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            color: Colors.grey.shade400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              
-              // 다음 페이지 버튼 (비활성화)
-              Icon(
-                Icons.arrow_forward_ios_rounded, 
-                color: Colors.grey.shade300,
-                size: 24,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+  // 텍스트 표시 모드 토글
+  void _toggleDisplayMode() async {
+    if (widget.currentPage?.id == null) return;
+    
+    try {
+      // 부모의 콜백 호출
+      widget.onToggleFullTextMode();
+      
+      // 직접 서비스 호출을 통한 토글 (옵션)
+      if (processedText != null) {
+        final updatedText = await _textProcessingService.toggleDisplayModeForPage(widget.currentPage!.id!);
+        if (updatedText != null && mounted) {
+          setState(() {
+            processedText = updatedText;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('디스플레이 모드 토글 중 오류: $e');
+    }
   }
-  */
 } 
