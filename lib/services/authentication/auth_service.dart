@@ -10,7 +10,7 @@ import '../../services/storage/unified_cache_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../services/media/image_service.dart';
-import '../../services/usage_limit_service.dart';
+import '../common/usage_limit_service.dart';
 import '../../managers/content_manager.dart';
 
 class AuthService {

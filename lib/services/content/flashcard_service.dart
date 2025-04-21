@@ -7,7 +7,7 @@ import '../../models/dictionary.dart';
 import 'package:pinyin/pinyin.dart';
 import '../../services/dictionary/dictionary_service.dart';
 import '../../services/text_processing/pinyin_creation_service.dart';
-import '../../services/usage_limit_service.dart';
+import '../common/usage_limit_service.dart';
 
 /// 플래시카드 생성 및 관리 기능(CRUD)을 제공합니다
 

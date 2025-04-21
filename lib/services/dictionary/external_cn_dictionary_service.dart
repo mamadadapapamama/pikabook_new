@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import 'dart:io' show Platform;
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/dictionary.dart';
-import '../../services/usage_limit_service.dart';
+import '../common/usage_limit_service.dart';
 import '../../services/text_processing/pinyin_creation_service.dart';
 
 /// 외부 중국어 사전 서비스 타입 (구글, 네이버, 바이두)
