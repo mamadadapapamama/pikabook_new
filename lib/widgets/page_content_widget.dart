@@ -20,6 +20,8 @@ import '../services/text_processing/translation_service.dart';
 import '../services/text_processing/enhanced_ocr_service.dart';
 import '../services/dictionary/dictionary_service.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
+import '../services/content/page_service.dart';
+import 'dart:async';
 
 /// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
 ///
@@ -71,20 +73,33 @@ class PageContentWidget extends StatefulWidget {
 }
 
 class _PageContentWidgetState extends State<PageContentWidget> {
-  bool _isProcessingText = false;
+  final ContentManager _contentManager = ContentManager();
+  final DictionaryService _dictionaryService = DictionaryService();
+  final TextReaderService _textReaderService = TextReaderService();
+  final PageService _pageService = PageService();
+  
+  // 상태 변수들
   ProcessedText? _processedText;
+  bool _isProcessingText = false;
+  bool _showFullText = false;
+  bool _showPinyin = true;
+  bool _showTranslation = true;
   
-  // 서비스 객체 선언 변경
-  late ContentManager _contentManager;
-  late TextReaderService _textReaderService;
+  // 추가 상태 변수
+  bool _hasProcessedText = false;
+  bool _isProcessing = false;
+  bool _isLoading = false;
+  bool _isError = false;
+  String _errorMessage = '';
+  Timer? _backgroundCheckTimer;
   
+  // 스타일 및 레이아웃 관련 변수
+  late TextStyle _originalTextStyle;
+  late TextStyle _translatedTextStyle;
+  late TextStyle _pinyinTextStyle;
+
   Set<String> _flashcardWords = {};
   int? _playingSegmentIndex; // 현재 재생 중인 세그먼트 인덱스 추가
-
-  // 클래스 레벨 변수로 스타일 정의
-  late final TextStyle _originalTextStyle;
-  late final TextStyle _pinyinTextStyle;
-  late final TextStyle _translatedTextStyle;
 
   // TTS 사용량 제한 확인 변수
   bool _isCheckingTtsLimit = false;
@@ -101,8 +116,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     super.initState();
     
     // 서비스 초기화
-    _contentManager = ContentManager();
-    _textReaderService = TextReaderService();
+    _textReaderService.init();
     
     // 플래시카드 단어 목록 업데이트
     _updateFlashcardWords();

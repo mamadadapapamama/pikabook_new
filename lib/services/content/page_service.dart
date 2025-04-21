@@ -159,16 +159,97 @@ class PageService {
   /// 노트의 모든 페이지 가져오기 (캐시 활용)
   Future<List<page_model.Page>> getPagesForNote(String noteId, {bool forceReload = false}) async {
     try {
-      // 1. forceReload가 true가 아니면 캐시에서 먼저 페이지 확인
-      List<page_model.Page> cachedPages = [];
-      if (!forceReload) {
-        cachedPages = await _cacheService.getPagesForNote(noteId);
-        debugPrint('캐시에서 노트 $noteId의 페이지 ${cachedPages.length}개 로드됨');
-      } else {
-        debugPrint('강제 로드 모드: 캐시를 건너뛰고 서버에서 직접 로드합니다.');
+      debugPrint('📄 getPagesForNote 호출: noteId=$noteId, forceReload=$forceReload');
+      
+      // 1. forceReload가 true인 경우 서버에서만 로드
+      if (forceReload) {
+        debugPrint('🔄 강제 로드 모드: 캐시를 완전히 건너뛰고 서버에서 직접 로드합니다.');
+        
+        // Firestore에서 페이지 가져오기
+        final snapshot = await _pagesCollection
+          .where('noteId', isEqualTo: noteId)
+          .orderBy('pageNumber')
+          .get()
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+            debugPrint('⚠️ 서버에서 페이지 가져오기 타임아웃');
+            throw Exception('서버에서 페이지 가져오기 타임아웃');
+          });
+        
+        final serverPages = snapshot.docs
+          .map((doc) => page_model.Page.fromFirestore(doc))
+          .toList();
+        
+        debugPrint('✅ Firestore에서 노트 $noteId의 페이지 ${serverPages.length}개 로드됨');
+        
+        // 서버에서 가져온 페이지로 캐시 업데이트 (백그라운드로 처리)
+        Future.microtask(() async {
+          try {
+            await _cacheService.cachePages(noteId, serverPages);
+            debugPrint('✅ 백그라운드에서 서버 데이터로 캐시 업데이트 완료');
+          } catch (e) {
+            debugPrint('⚠️ 백그라운드 캐시 업데이트 중 오류 (무시됨): $e');
+          }
+        });
+        
+        return serverPages;
       }
       
-      // 2. Firestore에서 페이지 가져오기
+      // 2. 일반 모드: 캐시에서 먼저 페이지 확인
+      List<page_model.Page> cachedPages = [];
+      cachedPages = await _cacheService.getPagesForNote(noteId);
+      
+      if (cachedPages.isNotEmpty) {
+        debugPrint('✅ 캐시에서 노트 $noteId의 페이지 ${cachedPages.length}개 로드됨');
+        
+        // 서버와 동기화는 백그라운드에서 진행 (UI를 막지 않기 위해)
+        Future.microtask(() async {
+          try {
+            await _syncPagesWithServer(noteId, cachedPages);
+          } catch (e) {
+            debugPrint('⚠️ 백그라운드 페이지 동기화 중 오류 (무시됨): $e');
+          }
+        });
+        
+        return cachedPages;
+      }
+      
+      // 3. 캐시에 없는 경우 서버에서 페이지 로드
+      debugPrint('⚠️ 캐시에서 페이지를 찾지 못함, 서버에서 직접 로드');
+      final snapshot = await _pagesCollection
+        .where('noteId', isEqualTo: noteId)
+        .orderBy('pageNumber')
+        .get()
+        .timeout(const Duration(seconds: 5), onTimeout: () {
+          debugPrint('⚠️ 서버에서 페이지 가져오기 타임아웃');
+          throw Exception('서버에서 페이지 가져오기 타임아웃');
+        });
+      
+      final serverPages = snapshot.docs
+        .map((doc) => page_model.Page.fromFirestore(doc))
+        .toList();
+        
+      debugPrint('✅ Firestore에서 노트 $noteId의 페이지 ${serverPages.length}개 로드됨');
+      
+      // 서버 데이터로 캐시 업데이트
+      await _cacheService.cachePages(noteId, serverPages);
+      debugPrint('✅ 서버 데이터로 캐시 업데이트 완료');
+      
+      return serverPages;
+    } catch (e, stackTrace) {
+      debugPrint('❌ 노트 $noteId의 페이지를 가져오는 중 오류 발생: $e');
+      debugPrint('스택 트레이스: $stackTrace');
+      
+      // 오류 발생 시 빈 배열 반환
+      return [];
+    }
+  }
+  
+  /// 서버와 페이지 동기화 (백그라운드 작업용)
+  Future<void> _syncPagesWithServer(String noteId, List<page_model.Page> cachedPages) async {
+    try {
+      debugPrint('🔄 서버와 페이지 동기화 시작: noteId=$noteId');
+      
+      // 서버에서 페이지 가져오기
       final snapshot = await _pagesCollection
         .where('noteId', isEqualTo: noteId)
         .orderBy('pageNumber')
@@ -177,26 +258,18 @@ class PageService {
       final serverPages = snapshot.docs
         .map((doc) => page_model.Page.fromFirestore(doc))
         .toList();
-      debugPrint('Firestore에서 노트 $noteId의 페이지 ${serverPages.length}개 로드됨');
       
-      // 강제 로드 모드인 경우 서버 페이지만 사용
-      if (forceReload) {
-        // 서버 데이터로 캐시 갱신
-        await _cacheService.cachePages(noteId, serverPages);
-        debugPrint('강제 로드 모드: 서버 데이터로 캐시를 갱신했습니다.');
-        return serverPages;
-      }
-      
-      // 3. 서버와 캐시 페이지 병합
+      // 서버와 캐시 페이지 병합
       final mergedPages = _mergePages(cachedPages, serverPages);
       
-      // 캐시 업데이트 - 병합된 결과를 캐시에 저장
-      await _cacheService.cachePages(noteId, mergedPages);
-      
-      return mergedPages;
+      // 변경사항이 있는 경우에만 캐시 업데이트
+      if (mergedPages.length != cachedPages.length) {
+        await _cacheService.cachePages(noteId, mergedPages);
+        debugPrint('✅ 서버와 동기화 후 캐시 업데이트 완료 (페이지 수 변경: ${cachedPages.length} → ${mergedPages.length})');
+      }
     } catch (e) {
-      debugPrint('노트 $noteId의 페이지를 가져오는 중 오류 발생: $e');
-      return [];
+      debugPrint('⚠️ 서버와 페이지 동기화 중 오류: $e');
+      // 오류는 무시하고 캐시된 데이터 사용 유지
     }
   }
 

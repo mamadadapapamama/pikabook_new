@@ -172,32 +172,64 @@ class NoteService {
     }
   }
 
-  /// 특정 노트 가져오기
+  /// 노트 ID로 노트 가져오기 (캐싱 활용)
   Future<Note?> getNoteById(String noteId) async {
+    debugPrint('📝 getNoteById 호출됨: $noteId');
+    
     try {
-      // 1. 캐시에서 노트 찾기 시도
-      final cachedNote = await _cacheService.getCachedNote(noteId);
+      // 1. 캐시에서 노트 확인 (짧은 타임아웃 적용)
+      Note? cachedNote;
+      try {
+        cachedNote = await Future.any([
+          _cacheService.getCachedNote(noteId),
+          Future.delayed(const Duration(milliseconds: 500), () => null)
+        ]);
+      } catch (e) {
+        debugPrint('⚠️ 캐시 확인 중 오류 또는 타임아웃: $e');
+        // 캐시 오류는 무시하고 계속 진행
+      }
+      
       if (cachedNote != null) {
-        debugPrint('캐시에서 노트 $noteId 로드됨');
+        debugPrint('✅ 캐시에서 노트 찾음: ${cachedNote.id}, 제목: ${cachedNote.originalText}');
         return cachedNote;
       }
       
-      // 2. Firestore에서 노트 가져오기
-      final docSnapshot = await _notesCollection.doc(noteId).get();
+      debugPrint('🔄 캐시에서 노트를 찾지 못해 Firestore에서 조회 시작: $noteId');
+      
+      // 2. Firestore에서 노트 가져오기 (엄격한 타임아웃 적용)
+      final docSnapshot = await _notesCollection.doc(noteId)
+          .get()
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+            debugPrint('⚠️ 노트 가져오기 타임아웃: $noteId');
+            throw Exception('노트 가져오기 타임아웃');
+          });
+          
       if (!docSnapshot.exists) {
+        debugPrint('❌ Firestore에 노트가 존재하지 않음: $noteId');
         return null;
       }
       
-      // 3. 노트 객체 생성 및 캐시에 저장
+      // 3. 노트 객체 생성
       final note = Note.fromFirestore(docSnapshot);
+      
+      // 4. 캐시에 노트 저장 (백그라운드로 처리)
       if (note.id != null) {
-        await _cacheService.cacheNote(note);
-        debugPrint('Firestore에서 노트 $noteId 로드 완료 및 캐시에 저장됨');
+        Future.microtask(() async {
+          try {
+            await _cacheService.cacheNote(note);
+            debugPrint('✅ 백그라운드에서 Firestore 노트를 캐시에 저장 완료: ${note.id}');
+          } catch (e) {
+            debugPrint('⚠️ 백그라운드에서 노트 캐싱 중 오류 (무시됨): $e');
+          }
+        });
+        
+        debugPrint('✅ Firestore에서 노트 로드 성공: ${note.id}, 제목: ${note.originalText}');
       }
       
       return note;
-    } catch (e) {
-      debugPrint('노트를 가져오는 중 오류가 발생했습니다: $e');
+    } catch (e, stackTrace) {
+      debugPrint('❌ 노트를 가져오는 중 오류가 발생했습니다: $e');
+      debugPrint('스택 트레이스: $stackTrace');
       return null;
     }
   }

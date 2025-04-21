@@ -15,7 +15,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 class NoteListItem extends StatefulWidget {
   final Note note;
   final Function() onDismissed;
-  final Function(String noteId) onNoteTapped;
+  final Function(Note note) onNoteTapped;
   final Function(String noteId, bool isFavorite) onFavoriteToggled;
   final bool isFilteredList;
 
@@ -332,7 +332,29 @@ class _NoteListItemState extends State<NoteListItem> {
         ),
         color: Colors.white,
         child: InkWell(
-          onTap: () => widget.onNoteTapped(widget.note.id ?? ''),
+          onTap: () {
+            try {
+              debugPrint('노트 아이템 탭됨: id=${widget.note.id ?? "없음"}, 제목=${widget.note.originalText}');
+              
+              // 노트 ID가 null이거나 비어있는 경우 처리
+              if (widget.note.id == null || widget.note.id!.isEmpty) {
+                debugPrint('⚠️ 경고: 유효하지 않은 노트 ID');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('유효하지 않은 노트 ID입니다.')),
+                );
+                return;
+              }
+              
+              // 정상적인 경우 노트 객체 전체를 전달
+              widget.onNoteTapped(widget.note);
+            } catch (e, stackTrace) {
+              debugPrint('❌ 노트 탭 처리 중 오류 발생: $e');
+              debugPrint('스택 트레이스: $stackTrace');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('노트를 열 수 없습니다: $e')),
+              );
+            }
+          },
           borderRadius: BorderRadius.circular(8.0),
           child: Padding(
             padding: const EdgeInsets.all(12.0),

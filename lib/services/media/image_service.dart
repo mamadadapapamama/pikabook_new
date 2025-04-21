@@ -58,6 +58,9 @@ class ImageService {
   // 현재 사용자 ID 가져오기
   String? get _currentUserId => FirebaseAuth.instance.currentUser?.uid;
 
+  // 클래스 내부에서 모든 메서드에서 공유할 실패한 다운로드 경로 목록
+  static final Set<String> _failedDownloadPaths = <String>{};
+
   /// 이미지 선택 (갤러리)
   Future<File?> pickImage({ImageSource source = ImageSource.gallery}) async {
     try {
@@ -259,6 +262,12 @@ class ImageService {
         storagePath = 'users/$_currentUserId/$relativePath';
       }
       
+      // Firebase 다운로드 재시도 방지 (메모리에 경로 캐싱)
+      if (_failedDownloadPaths.contains(storagePath)) {
+        debugPrint('이전에 실패한 다운로드 경로, 재시도 방지: $storagePath');
+        return null;
+      }
+      
       final storageRef = _storage.ref().child(storagePath);
       
       // 먼저 URL을 가져와서 존재 여부 확인
@@ -267,6 +276,7 @@ class ImageService {
       } catch (e) {
         if (e is FirebaseException && e.code == 'object-not-found') {
           debugPrint('Firebase Storage에서 파일을 찾을 수 없음: $storagePath');
+          _failedDownloadPaths.add(storagePath); // 실패한 경로 캐싱
           
           // 사용자 ID 없이 직접 경로도 시도
           if (storagePath != relativePath) {
@@ -285,6 +295,7 @@ class ImageService {
         return file;
       } else {
         debugPrint('Firebase에서 다운로드했으나 파일이 비어 있음: $storagePath');
+        _failedDownloadPaths.add(storagePath); // 실패한 경로 캐싱
         
         // 사용자 ID 없이 직접 경로도 시도
         if (storagePath != relativePath) {
@@ -294,6 +305,11 @@ class ImageService {
       }
     } catch (storageError) {
       debugPrint('Firebase Storage에서 다운로드 중 오류: $storageError');
+      
+      // 실패한 경로 캐싱 (사용 중인 storagePath 변수 사용)
+      final String pathToCache = relativePath.startsWith('users/') ? 
+          relativePath : (_currentUserId != null ? 'users/$_currentUserId/$relativePath' : relativePath);
+      _failedDownloadPaths.add(pathToCache);
       
       // 사용자 ID 없이 직접 경로도 시도
       if (relativePath.startsWith('users/') || _currentUserId == null) {
@@ -306,14 +322,24 @@ class ImageService {
   /// 직접 경로로 다운로드 시도
   Future<File?> _tryDownloadDirectPath(String relativePath, File file) async {
     try {
+      // 실패한 다운로드 캐싱
+      if (_failedDownloadPaths.contains(relativePath)) {
+        debugPrint('이전에 실패한 직접 경로, 재시도 방지: $relativePath');
+        return null;
+      }
+      
       final directRef = _storage.ref().child(relativePath);
       await directRef.writeToFile(file);
       
       if (await file.exists() && await file.length() > 0) {
         return file;
       }
+      
+      // 실패한 경로 캐싱
+      _failedDownloadPaths.add(relativePath);
     } catch (retryError) {
       debugPrint('직접 경로로 재시도 중 오류: $retryError');
+      _failedDownloadPaths.add(relativePath);
     }
     return null;
   }
@@ -896,34 +922,83 @@ class ImageService {
   // 현재 보고 있는 이미지 파일 관리 (NoteDetailImageHandler에서 가져옴)
   File? _currentImageFile;
   
-  // 현재 이미지 파일 가져오기
+  // 현재 이미지 파일 가져오기 - 안전 장치 추가
   File? getCurrentImageFile() {
-    return _currentImageFile;
-  }
-  
-  // 현재 이미지 설정
-  void setCurrentImageFile(File? file) {
-    _currentImageFile = file;
-  }
-  
-  // 페이지 이미지 로드 (NoteDetailImageHandler에서 가져옴)
-  Future<File?> loadPageImage(dynamic pageOrUrl) async {
-    String? imageUrl;
-    
-    // page_model.Page 객체인지 문자열인지 확인
-    if (pageOrUrl is String) {
-      imageUrl = pageOrUrl;
-    } else if (pageOrUrl != null && pageOrUrl.imageUrl != null) {
-      imageUrl = pageOrUrl.imageUrl;
-    }
-    
-    if (imageUrl == null || imageUrl.isEmpty) {
+    try {
+      // 이미지 파일이 null이 아니고 존재하는지 확인
+      if (_currentImageFile != null) {
+        if (!_currentImageFile!.existsSync()) {
+          debugPrint('⚠️ 현재 이미지 파일이 더 이상 존재하지 않습니다. null 반환');
+          _currentImageFile = null;
+        }
+      }
+      return _currentImageFile;
+    } catch (e) {
+      debugPrint('❌ getCurrentImageFile 오류: $e - null 반환');
+      _currentImageFile = null;
       return null;
     }
-    
-    final imageFile = await getImageFile(imageUrl);
-    _currentImageFile = imageFile;
-    return imageFile;
+  }
+  
+  // 현재 이미지 설정 - 안전 장치 추가
+  void setCurrentImageFile(File? file) {
+    try {
+      // 파일이 null이 아니고 실제로 존재하는지 확인
+      if (file != null && !file.existsSync()) {
+        debugPrint('⚠️ 존재하지 않는 이미지 파일을 현재 이미지로 설정하려고 시도. 무시됨.');
+        return;
+      }
+      _currentImageFile = file;
+    } catch (e) {
+      debugPrint('❌ setCurrentImageFile 오류: $e');
+      _currentImageFile = null;
+    }
+  }
+  
+  // 페이지 이미지 로드 (NoteDetailImageHandler에서 가져옴) - 안전 장치 추가
+  Future<File?> loadPageImage(dynamic pageOrUrl) async {
+    try {
+      String? imageUrl;
+      
+      // page_model.Page 객체인지 문자열인지 확인
+      if (pageOrUrl is String) {
+        imageUrl = pageOrUrl;
+      } else if (pageOrUrl != null && pageOrUrl.imageUrl != null) {
+        imageUrl = pageOrUrl.imageUrl;
+      }
+      
+      if (imageUrl == null || imageUrl.isEmpty) {
+        // 현재 이미지 초기화
+        _currentImageFile = null;
+        return null;
+      }
+      
+      // 이미 실패한 다운로드인 경우 빠르게 반환
+      if (_failedDownloadPaths.contains(imageUrl)) {
+        debugPrint('⚠️ 이전에 실패한 이미지 URL, 재시도 방지: $imageUrl');
+        // 현재 이미지 초기화
+        _currentImageFile = null;
+        return null;
+      }
+      
+      final imageFile = await getImageFile(imageUrl);
+      
+      // 파일이 실제로 존재하고 크기가 있는지 확인
+      if (imageFile != null && imageFile.existsSync() && imageFile.lengthSync() > 0) {
+        _currentImageFile = imageFile;
+        return imageFile;
+      } else {
+        debugPrint('⚠️ 이미지 로드 실패 또는 빈 파일: $imageUrl');
+        _currentImageFile = null;
+        // 실패한 경로 캐싱
+        _failedDownloadPaths.add(imageUrl);
+        return null;
+      }
+    } catch (e) {
+      debugPrint('❌ loadPageImage 오류: $e');
+      _currentImageFile = null;
+      return null;
+    }
   }
   
   // 이미지 확대 화면 표시 (NoteDetailImageHandler에서 가져옴)

@@ -27,6 +27,7 @@ import 'settings_screen.dart';
 import '../../app.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../utils/debug_utils.dart';
+import '../../models/note.dart';
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -297,7 +298,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   final note = viewModel.notes[index];
                                   return NoteListItem(
                                     note: note,
-                                    onNoteTapped: (noteId) => _navigateToNoteDetail(context, noteId),
+                                    onNoteTapped: (note) => _navigateToNoteDetail(context, note),
                                     onFavoriteToggled: (noteId, isFavorite) {
                                       viewModel.toggleFavorite(noteId, isFavorite);
                                     },
@@ -462,12 +463,37 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  void _navigateToNoteDetail(BuildContext context, String noteId) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => NoteDetailScreen(noteId: noteId),
-      ),
-    );
+  void _navigateToNoteDetail(BuildContext context, Note note) {
+    try {
+      if (note.id == null || note.id!.isEmpty) {
+        print("[HOME] 노트 ID가 없어 노트 상세화면으로 이동할 수 없습니다.");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('노트 정보가 유효하지 않습니다.')),
+        );
+        return;
+      }
+
+      print("[HOME] 노트 상세화면으로 이동합니다. ID: ${note.id!}");
+      print("[HOME] 노트 이미지 URL: ${note.imageUrl}");
+      print("[HOME] 노트 페이지 수: ${note.pages?.length ?? 0}, 플래시카드 수: ${note.flashcardCount ?? 0}");
+
+      Navigator.of(context).push(
+        NoteDetailScreen.route(
+          note: note,
+          isProcessingBackground: false,
+          totalImageCount: note.imageCount ?? note.pages?.length ?? 0,
+        ),
+      ).then((_) {
+        print("[HOME] 노트 상세화면에서 돌아왔습니다.");
+        Provider.of<HomeViewModel>(context, listen: false).refreshNotes();
+      });
+    } catch (e, stackTrace) {
+      print("[HOME] 노트 상세화면 이동 중 오류 발생: $e");
+      print("[HOME] 스택 트레이스: $stackTrace");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('노트 상세화면으로 이동할 수 없습니다: $e')),
+      );
+    }
   }
 
   Widget _buildZeroState(BuildContext context) {

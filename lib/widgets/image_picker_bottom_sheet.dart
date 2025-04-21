@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/common/usage_limit_service.dart';
 import 'dart:async';
 import '../widgets/pikabook_loader.dart';
+import '../models/note.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);
@@ -334,15 +335,20 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           try {
             debugPrint('노트 상세 화면으로 이동 시작');
             
-            // 안전하게 첫 화면으로 이동 후, 그 다음 노트 상세 화면으로 이동
-            await Navigator.pushAndRemoveUntil(
-              appContext,
+            // 임시 Note 객체 생성
+            final tempNote = Note(
+              id: createdNoteId,
+              originalText: '새 노트',
+              translatedText: '',
+              extractedText: '',
+            );
+            
+            Navigator.of(appContext).push(
               NoteDetailScreen.route(
-                noteId: createdNoteId!,
+                note: tempNote,
                 isProcessingBackground: true,
                 totalImageCount: imageFiles.length,
               ),
-              (route) => route.isFirst, // 첫 화면만 남기고 모두 제거
             );
             
             debugPrint('노트 상세 화면으로 이동 완료');
@@ -362,6 +368,14 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                     onPressed: () {
                       // 다시 시도 - 홈으로 돌아간 후 이동
                       if (appContext.mounted && createdNoteId != null) {
+                        // 임시 Note 객체 생성
+                        final tempNote = Note(
+                          id: createdNoteId,
+                          originalText: '새 노트',
+                          translatedText: '',
+                          extractedText: '',
+                        );
+                        
                         // 홈으로 돌아가기
                         Navigator.of(appContext).popUntil((route) => route.isFirst);
                         
@@ -370,7 +384,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                           if (appContext.mounted) {
                             Navigator.of(appContext).push(
                               NoteDetailScreen.route(
-                                noteId: createdNoteId!,
+                                note: tempNote,
                                 isProcessingBackground: true,
                                 totalImageCount: imageFiles.length,
                               ),
@@ -435,12 +449,20 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                 label: '상세보기',
                 onPressed: () {
                   if (appContext.mounted) {
-                    Navigator.of(appContext).push(
-                      NoteDetailScreen.route(
-                        noteId: createdNoteId!,
-                        isProcessingBackground: true,
-                        totalImageCount: imageFiles.length,
-                      ),
+                    // 임시 Note 객체 생성
+  final tempNote = Note(
+    id: createdNoteId,
+    originalText: '새 노트',
+    translatedText: '',
+    extractedText: '',
+  );
+  
+  Navigator.of(appContext).push(
+    NoteDetailScreen.route(
+      note: tempNote,
+      isProcessingBackground: true,
+      totalImageCount: imageFiles.length,
+    ),
                     );
                   }
                 },
