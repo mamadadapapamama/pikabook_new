@@ -2,12 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
-import '../models/flash_card.dart';
-import '../models/dictionary_entry.dart';
+import '../../models/flash_card.dart';
+import '../../models/dictionary.dart';
 import 'package:pinyin/pinyin.dart';
-import 'dictionary/dictionary_service.dart';
-import 'pinyin_creation_service.dart';
-import 'usage_limit_service.dart';
+import '../../services/dictionary/dictionary_service.dart';
+import '../../services/text_processing/pinyin_creation_service.dart';
+import '../../services/usage_limit_service.dart';
 
 /// 플래시카드 생성 및 관리 기능(CRUD)을 제공합니다
 

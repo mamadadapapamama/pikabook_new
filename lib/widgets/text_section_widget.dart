@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../utils/text_selection_helper.dart';
+import '../utils/text_highlight_manager.dart';
 
 // 아직 페이지의 텍스트 처리가 완료되지 않았을때, 원문 번역문 섹션을 처리하는 위젯.
 
@@ -43,20 +43,31 @@ class TextSectionWidget extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: isOriginal
-                  ? TextSelectionHelper.buildSelectableText(
-                      text: text,
-                      style: TextStyle(
-                        fontSize: 18, // 원문은 큰 글자 크기
-                        height: 1.8, // 줄 간격 증가
-                        letterSpacing: isOriginal ? 0.5 : 0.2, // 글자 간격 조정
+                  ? SelectableText.rich(
+                      TextSpan(
+                        children: TextHighlightManager.buildHighlightedText(
+                          text: text,
+                          flashcardWords: flashcardWords ?? {},
+                          onTap: onDictionaryLookup,
+                          normalStyle: TextStyle(
+                            fontSize: 18, // 원문은 큰 글자 크기
+                            height: 1.8, // 줄 간격 증가
+                            letterSpacing: 0.5, // 글자 간격 조정
+                          ),
+                        ),
                       ),
-                      onDictionaryLookup: onDictionaryLookup,
-                      onCreateFlashCard: onCreateFlashCard,
-                      translatedText: translatedText,
-                      flashcardWords: flashcardWords,
-                      onWordTap: (word) {
-                        // 하이라이트된 단어를 탭했을 때 사전 검색 실행
-                        onDictionaryLookup(word);
+                      onSelectionChanged: (selection, cause) {
+                        if (!selection.isCollapsed) {
+                          try {
+                            final selectedText = text.substring(
+                                selection.start, selection.end);
+                            if (selectedText.isNotEmpty) {
+                              // 나중에 컨텍스트 메뉴를 표시해야 할 경우에 대비
+                            }
+                          } catch (e) {
+                            debugPrint('텍스트 선택 오류: $e');
+                          }
+                        }
                       },
                     )
                   : Text(

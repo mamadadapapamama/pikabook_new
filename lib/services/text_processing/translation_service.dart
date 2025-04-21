@@ -5,9 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:googleapis/translate/v3.dart' as translate;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
-import '../models/text_segment.dart';
-import '../utils/language_constants.dart';
-import 'usage_limit_service.dart';
+import '../../models/text_segment.dart';
+import '../../utils/language_constants.dart';
+import '../../services/usage_limit_service.dart';
 // 순환 참조 제거
 // import 'google_cloud_service.dart';
 

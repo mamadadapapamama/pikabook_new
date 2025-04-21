@@ -2,7 +2,7 @@
 // 현재는 중국어만 지원합니다.
 
 import 'package:flutter/foundation.dart';
-import '../../models/dictionary_entry.dart';
+import '../../models/dictionary.dart';
 import './internal_cn_dictionary_service.dart';
 import './external_cn_dictionary_service.dart';
 

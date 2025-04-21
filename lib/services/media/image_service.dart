@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -13,10 +14,11 @@ import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'usage_limit_service.dart';
+import '../../services/usage_limit_service.dart';
 import 'package:image/image.dart' as img;
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
+import '../../views/screens/full_image_screen.dart';
 
 /// 압축된 결과를 나타내는 클래스 (내부 사용)
 class _CompressionResult {
@@ -889,5 +891,51 @@ class ImageService {
       debugPrint('다중 이미지 선택 중 오류: $e');
       return [];
     }
+  }
+
+  // 현재 보고 있는 이미지 파일 관리 (NoteDetailImageHandler에서 가져옴)
+  File? _currentImageFile;
+  
+  // 현재 이미지 파일 가져오기
+  File? getCurrentImageFile() {
+    return _currentImageFile;
+  }
+  
+  // 현재 이미지 설정
+  void setCurrentImageFile(File? file) {
+    _currentImageFile = file;
+  }
+  
+  // 페이지 이미지 로드 (NoteDetailImageHandler에서 가져옴)
+  Future<File?> loadPageImage(dynamic pageOrUrl) async {
+    String? imageUrl;
+    
+    // page_model.Page 객체인지 문자열인지 확인
+    if (pageOrUrl is String) {
+      imageUrl = pageOrUrl;
+    } else if (pageOrUrl != null && pageOrUrl.imageUrl != null) {
+      imageUrl = pageOrUrl.imageUrl;
+    }
+    
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return null;
+    }
+    
+    final imageFile = await getImageFile(imageUrl);
+    _currentImageFile = imageFile;
+    return imageFile;
+  }
+  
+  // 이미지 확대 화면 표시 (NoteDetailImageHandler에서 가져옴)
+  void showFullImage(BuildContext context, File imageFile, String title) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FullImageScreen(
+          imageFile: imageFile,
+          title: title,
+        ),
+      ),
+    );
   }
 }

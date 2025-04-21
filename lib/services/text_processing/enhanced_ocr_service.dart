@@ -13,13 +13,13 @@ import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:pinyin/pinyin.dart';
-import '../models/processed_text.dart';
-import '../models/text_segment.dart';
-import 'translation_service.dart';
-import 'internal_cn_segmenter_service.dart';
-import 'text_cleaner_service.dart';
-import 'pinyin_creation_service.dart';
-import 'user_preferences_service.dart';
+import '../../models/processed_text.dart';
+import '../../models/text_segment.dart';
+import '../../services/text_processing/translation_service.dart';
+import '../../services/text_processing/internal_cn_segmenter_service.dart';
+import '../../services/text_processing/text_cleaner_service.dart';
+import '../../services/text_processing/pinyin_creation_service.dart';
+import '../../services/authentication/user_preferences_service.dart';
 import 'package:crypto/crypto.dart';
 
 /// 개선된 OCR 서비스 : OCR 처리 후 모드에 따라 다른 처리를 수행합니다.

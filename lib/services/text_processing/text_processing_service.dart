@@ -4,19 +4,19 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 // 서비스 임포트
-import 'unified_cache_service.dart';
-import 'translation_service.dart';
-import 'enhanced_ocr_service.dart';
-import 'page_content_service.dart';
-import 'internal_cn_segmenter_service.dart';
-import 'pinyin_creation_service.dart';
-import 'user_preferences_service.dart';
+import '../../services/storage/unified_cache_service.dart';
+import '../../services/text_processing/translation_service.dart';
+import '../../services/text_processing/enhanced_ocr_service.dart';
+import '../../managers/content_manager.dart';
+import '../../services/text_processing/internal_cn_segmenter_service.dart';
+import '../../services/text_processing/pinyin_creation_service.dart';
+import '../../services/authentication/user_preferences_service.dart';
 
 // 모델 임포트
-import '../models/page.dart' as page_model;
-import '../models/note.dart';
-import '../models/processed_text.dart';
-import '../models/text_segment.dart';
+import '../../models/page.dart' as page_model;
+import '../../models/note.dart';
+import '../../models/processed_text.dart';
+import '../../models/text_segment.dart';
 
 /// 다국어 텍스트 처리를 위한 중앙 통합 워크플로우 서비스
 /// 
@@ -38,7 +38,7 @@ class TextProcessingService {
   final TranslationService _translationService = TranslationService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
-  final PageContentService _pageContentService = PageContentService();
+  final ContentManager _contentManager = ContentManager();
   final InternalCnSegmenterService _segmenterService = InternalCnSegmenterService();
   final UserPreferencesService _preferencesService = UserPreferencesService();
 
@@ -56,8 +56,8 @@ class TextProcessingService {
   }) async {
     if (page == null) return null;
     
-    // 기존 서비스 위임 (유지)
-    return await _pageContentService.processPageText(
+    // ContentManager로 위임
+    return await _contentManager.processPageText(
       page: page,
       imageFile: imageFile,
     );
@@ -271,7 +271,7 @@ class TextProcessingService {
     await _cacheService.setProcessedText(pageId, processedText);
     
     // 페이지 캐시도 함께 업데이트
-    await _pageContentService.updatePageCache(
+    await _contentManager.updatePageCache(
       pageId, 
       processedText,
       "languageLearning"

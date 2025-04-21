@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/note.dart';
-import '../services/note_service.dart';
+import '../services/content/note_service.dart';
 import '../widgets/edit_title_dialog.dart';
 
 class NoteOptionsManager {

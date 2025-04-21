@@ -2,12 +2,12 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import '../models/page.dart' as page_model;
-import '../models/processed_text.dart';
-import 'image_service.dart';
-import 'enhanced_ocr_service.dart';
-import 'translation_service.dart';
-import 'unified_cache_service.dart';
+import '../../models/page.dart' as page_model;
+import '../../models/processed_text.dart';
+import '../../services/media/image_service.dart';
+import '../../services/text_processing/enhanced_ocr_service.dart';
+import '../../services/text_processing/translation_service.dart';
+import '../../services/storage/unified_cache_service.dart';
 import 'dart:convert';
 
 /// 페이지 서비스: 페이지 관리 (CRUD) 기능을 제공합니다.
@@ -426,7 +426,7 @@ class PageService {
   /* 
   // 현재 미사용: MVP에서는 사용되지 않는 단순 번역 메서드
   // 이 메서드는 세그먼트 분할, pinyin 생성 등을 제공하지 않고 단순 번역만 수행함
-  // 실제 텍스트 처리는 EnhancedOcrService와 PageContentService를 통해 이루어짐
+  // 실제 텍스트 처리는 EnhancedOcrService와 ContentManager를 통해 이루어짐
   Future<String> translatePageText(String pageId, {String? targetLanguage}) async {
     try {
       // 페이지 정보 가져오기

@@ -3,81 +3,182 @@ import 'dart:io';
 import '../views/screens/full_image_screen.dart';
 import '../widgets/dot_loading_indicator.dart';
 import 'package:path_provider/path_provider.dart';
+import '../models/page.dart' as page_model;
+
+/// 이미지 컨테이너 스타일 정의
+enum ImageContainerStyle {
+  standard,   // 기본 스타일
+  noteDetail, // 노트 상세 스타일
+  minimal,    // 최소화된 스타일
+}
 
 /// 페이지 이미지를 표시하는 위젯
+/// FirstImageContainer와 통합되었습니다.
 class PageImageWidget extends StatelessWidget {
   final File? imageFile;
   final String? imageUrl;
+  final page_model.Page? page;
   final String? pageId;
   final bool isLoading;
+  final bool showTitle;
+  final String title;
+  final ImageContainerStyle style;
+  final double? height;
+  final double? width;
+  final Function(File)? onFullScreenTap;
+  final VoidCallback? onTap;
+  final bool enableFullScreen;
 
   const PageImageWidget({
     super.key,
-    required this.imageFile,
+    this.imageFile,
     this.imageUrl,
+    this.page,
     this.pageId,
     this.isLoading = false,
+    this.showTitle = false,
+    this.title = '',
+    this.style = ImageContainerStyle.standard,
+    this.height = 200,
+    this.width,
+    this.onFullScreenTap,
+    this.onTap,
+    this.enableFullScreen = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (imageUrl == null && imageFile == null) {
-      return const SizedBox.shrink();
+    // 이미지가 없거나 페이지가 처리 중인 경우
+    if ((imageFile == null && (imageUrl == null || imageUrl!.isEmpty)) || 
+        (page != null && page!.originalText == '___PROCESSING___') ||
+        isLoading) {
+      return _buildLoadingIndicator();
     }
 
-    return Center(
-      child: isLoading
-          ? _buildLoadingIndicator()
-          : GestureDetector(
-              onTap: () => _openFullScreenImage(context),
-              child: Hero(
-                tag: 'image_${pageId ?? "unknown"}',
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      _buildImage(),
-                      // 확대 아이콘 오버레이
-                      Positioned(
-                        right: 8,
-                        bottom: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withAlpha(128),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Icon(
-                            Icons.zoom_in,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                    ],
+    return GestureDetector(
+      onTap: () {
+        if (onTap != null) {
+          onTap!();
+        } else if (enableFullScreen) {
+          _openFullScreenImage(context);
+        }
+      },
+      child: Container(
+        height: height,
+        width: width ?? double.infinity,
+        margin: _getContainerMargin(),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            )
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // 이미지
+              _buildImage(),
+              
+              // 확대 아이콘 (enableFullScreen이 true인 경우)
+              if (enableFullScreen)
+                Positioned(
+                  right: 8,
+                  bottom: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withAlpha(128),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Icon(
+                      Icons.zoom_in,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                   ),
                 ),
-              ),
-            ),
+                
+              // 제목 오버레이 (showTitle이 true인 경우)
+              if (showTitle && title.isNotEmpty)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.6),
+                        ],
+                      ),
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(8),
+                        bottomRight: Radius.circular(8),
+                      ),
+                    ),
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   // 로딩 인디케이터 위젯
   Widget _buildLoadingIndicator() {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        // 기본 이미지 (배경)
-        _buildEmptyImageWidget(),
-        // 로딩 인디케이터 (전경)
-        const Center(
-          child: DotLoadingIndicator(
-            message: '이미지 로딩 중...',
-            dotColor: Color(0xFFFFD53C),
-          ),
-        ),
-      ],
+    return Container(
+      height: height,
+      width: width ?? double.infinity,
+      margin: _getContainerMargin(),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          )
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // 기본 이미지 (배경)
+          _buildEmptyImageWidget(),
+          
+          // 로딩 인디케이터 (전경)
+          if (isLoading)
+            const Center(
+              child: DotLoadingIndicator(
+                message: '이미지 로딩 중...',
+                dotColor: Color(0xFFFFD53C),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -86,9 +187,9 @@ class PageImageWidget extends StatelessWidget {
     if (imageFile != null) {
       return Image.file(
         imageFile!,
-        height: 200,
+        height: height,
         width: double.infinity,
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
           return _buildEmptyImageWidget();
         },
@@ -107,39 +208,55 @@ class PageImageWidget extends StatelessWidget {
         },
       );
     } else if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return FutureBuilder<File?>(
-        future: _getImageFile(imageUrl!),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+      if (imageUrl!.startsWith('http')) {
+        // 네트워크 이미지 처리
+        return Image.network(
+          imageUrl!,
+          height: height,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
             return _buildEmptyImageWidget();
-          } else if (snapshot.hasData && snapshot.data != null) {
-            return Image.file(
-              snapshot.data!,
-              height: 200,
-              width: double.infinity,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                return _buildEmptyImageWidget();
-              },
-              // 이미지 로딩 중에도 기본 이미지 표시
-              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                if (wasSynchronouslyLoaded || frame != null) {
-                  return child;
-                } else {
-                  return Stack(
-                    children: [
-                      _buildEmptyImageWidget(),
-                      child,
-                    ],
-                  );
-                }
-              },
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Stack(
+              children: [
+                _buildEmptyImageWidget(),
+                Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                        : null,
+                  ),
+                ),
+              ],
             );
-          } else {
-            return _buildEmptyImageWidget();
-          }
-        },
-      );
+          },
+        );
+      } else {
+        // 로컬 이미지 경로 처리
+        return FutureBuilder<File?>(
+          future: _getImageFile(imageUrl!),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return _buildEmptyImageWidget();
+            } else if (snapshot.hasData && snapshot.data != null) {
+              return Image.file(
+                snapshot.data!,
+                height: height,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildEmptyImageWidget();
+                },
+              );
+            } else {
+              return _buildEmptyImageWidget();
+            }
+          },
+        );
+      }
     } else {
       return _buildEmptyImageWidget();
     }
@@ -160,7 +277,7 @@ class PageImageWidget extends StatelessWidget {
       }
       return null;
     } catch (e) {
-      print('이미지 파일 로드 오류: $e');
+      debugPrint('이미지 파일 로드 오류: $e');
       return null;
     }
   }
@@ -169,10 +286,9 @@ class PageImageWidget extends StatelessWidget {
   Widget _buildEmptyImageWidget() {
     return Container(
       width: double.infinity,
-      height: 200,
+      height: double.infinity,
       decoration: BoxDecoration(
         color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
       ),
       child: Image.asset(
         'assets/images/image_empty.png',
@@ -185,7 +301,7 @@ class PageImageWidget extends StatelessWidget {
   Widget _buildErrorWidget() {
     return Container(
       width: double.infinity,
-      height: 150,
+      height: height,
       color: Colors.grey[200],
       child: const Center(
         child: Column(
@@ -200,16 +316,34 @@ class PageImageWidget extends StatelessWidget {
     );
   }
 
+  // 스타일에 따른 마진 설정
+  EdgeInsets _getContainerMargin() {
+    switch (style) {
+      case ImageContainerStyle.minimal:
+        return EdgeInsets.zero;
+      case ImageContainerStyle.noteDetail:
+        return const EdgeInsets.only(top: 16, left: 16, right: 16);
+      case ImageContainerStyle.standard:
+      default:
+        return const EdgeInsets.symmetric(horizontal: 16, vertical: 8);
+    }
+  }
+
   // 전체 화면 이미지 뷰어 열기
   void _openFullScreenImage(BuildContext context) {
     if (imageFile == null && imageUrl == null) return;
+
+    if (imageFile != null && onFullScreenTap != null) {
+      onFullScreenTap!(imageFile!);
+      return;
+    }
 
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FullImageScreen(
           imageFile: imageFile,
           imageUrl: imageUrl,
-          title: '이미지 보기',
+          title: title.isNotEmpty ? title : '이미지 보기',
         ),
       ),
     );

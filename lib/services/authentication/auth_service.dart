@@ -6,12 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../services/unified_cache_service.dart';
+import '../../services/storage/unified_cache_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
-import '../services/page_content_service.dart';
-import '../services/image_service.dart';
-import '../services/usage_limit_service.dart';
+import '../../services/media/image_service.dart';
+import '../../services/usage_limit_service.dart';
+import '../../managers/content_manager.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -203,7 +203,7 @@ class AuthService {
       await ImageService().clearImageCache();
       
       // 5. 처리된 텍스트 캐시 정리
-      PageContentService().clearProcessedTextCache();
+      ContentManager().clearProcessedTextCache();
       
       // 6. Firebase 로그아웃
       await _auth.signOut();

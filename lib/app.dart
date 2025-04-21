@@ -11,8 +11,8 @@ import 'views/screens/login_screen.dart';
 import 'views/screens/home_screen.dart'; 
 import 'views/screens/onboarding_screen.dart';
 import 'views/screens/settings_screen.dart';
-import 'services/initialization_manager.dart';
-import 'services/user_preferences_service.dart';
+import 'services/common/initialization_manager.dart';
+import 'services/authentication/user_preferences_service.dart';
 import 'widgets/loading_screen.dart';
 
 /// 앱의 시작 지점 및 초기 화면 결정 로직

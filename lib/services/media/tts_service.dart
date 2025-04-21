@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import '../models/processed_text.dart';
-import '../utils/language_constants.dart';
-import 'usage_limit_service.dart';
+import '../../models/processed_text.dart';
+import '../../utils/language_constants.dart';
+import '../common/usage_limit_service.dart';
 
 // 텍스트 음성 변환 서비스를 제공합니다
 
@@ -96,9 +96,9 @@ class TtsService {
       if (_ttsCache[text] == true) {
         // 동일 단어 반복 재생 시, 재생 상태 업데이트만 하고 사용량은 증가시키지 않음
         await _flutterTts?.speak(text);
-        debugPrint('캐시된 TTS 재생 (사용량 변화 없음): $text');
+        (kDebugMode) ? debugPrint('캐시된 TTS 재생 (사용량 변화 없음): $text') : debugPrint('캐시된 TTS 재생 (사용량 변화 없음): $text');
       } else {
-        debugPrint('TTS 사용량 제한으로 재생 불가: $text');
+        (kDebugMode) ? debugPrint('TTS 사용량 제한으로 재생 불가: $text') : debugPrint('TTS 사용량 제한으로 재생 불가: $text');
         // 여기서 알림을 표시하거나 다른 처리를 할 수 있음
       }
       return;

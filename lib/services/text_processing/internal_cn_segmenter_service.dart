@@ -3,7 +3,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'dictionary/internal_cn_dictionary_service.dart';
+import '../../services/dictionary/internal_cn_dictionary_service.dart';
 
 /// 중국어 텍스트를 문장 단위로 분절하는 서비스
 /// 문장 분할, 문단 처리 등의 기능만 담당합니다

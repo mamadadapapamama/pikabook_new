@@ -4,7 +4,7 @@ import '../models/flash_card.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
-import '../services/tts_service.dart';
+import '../services/media/tts_service.dart';
 import 'common/tts_button.dart';
 
 /// 플래시카드 한 장 내의 UI와 기능

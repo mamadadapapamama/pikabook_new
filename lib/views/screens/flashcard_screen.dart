@@ -5,17 +5,18 @@ import 'package:flip_card/flip_card.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/flash_card.dart';
 import '../../models/note.dart';
-import '../../services/flashcard_service.dart' hide debugPrint;
-import '../../services/tts_service.dart';
+import '../../models/dictionary.dart';
+import '../../services/content/flashcard_service.dart' hide debugPrint;
+import '../../services/media/tts_service.dart';
 import '../../widgets/dot_loading_indicator.dart';
-import '../../services/dictionary/internal_cn_dictionary_service.dart';
+import '../../services/dictionary/external_cn_dictionary_service.dart';
 import '../../widgets/flashcard_ui.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import '../../widgets/common/pika_app_bar.dart';
-import '../../services/unified_cache_service.dart';
-import '../../services/usage_limit_service.dart';
+import '../../services/storage/unified_cache_service.dart';
+import '../../services/common/usage_limit_service.dart';
 import '../../widgets/common/usage_dialog.dart';
 
 /// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
@@ -34,8 +35,8 @@ class FlashCardScreen extends StatefulWidget {
 class _FlashCardScreenState extends State<FlashCardScreen> {
   final FlashCardService _flashCardService = FlashCardService();
   final TtsService _ttsService = TtsService();
-  final InternalCnDictionaryService _dictionaryService =
-      InternalCnDictionaryService();
+  final ExternalCnDictionaryService _dictionaryService =
+      ExternalCnDictionaryService();
   final CardSwiperController _cardController = CardSwiperController();
   final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
 
@@ -360,97 +361,97 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   void _searchWordInDictionary(String word) {
     if (word.isEmpty) return;
 
-    if (!_dictionaryService.isLoaded) {
-      setState(() => _isLoading = true);
-
-      _dictionaryService.loadDictionary().then((_) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          _performDictionarySearch(word);
-        }
-      }).catchError((e) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('사전 로드 중 오류가 발생했습니다: $e')),
-          );
-        }
-      });
-    } else {
-      _performDictionarySearch(word);
-    }
-  }
-
-  /// 사전 검색 수행
-  void _performDictionarySearch(String word) {
-    if (!_dictionaryService.isLoaded) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('사전이 로드되지 않았습니다.')),
-      );
-      return;
-    }
-
-    final entry = _dictionaryService.lookup(word);
-    if (entry != null) {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        builder: (context) {
-          return DraggableScrollableSheet(
-            initialChildSize: 0.4,
-            minChildSize: 0.3,
-            maxChildSize: 0.7,
-            expand: false,
-            builder: (context, scrollController) {
-              return Container(
-                padding: const EdgeInsets.all(16.0),
-                child: ListView(
-                  controller: scrollController,
-                  children: [
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 8.0),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              entry.word,
-                              style: const TextStyle(
-                                fontSize: 24.0,
-                                fontWeight: FontWeight.bold,
-                              ),
+    setState(() => _isLoading = true);
+    
+    // ExternalCnDictionaryService는 lookupWord 메서드로 검색을 수행함
+    _dictionaryService.lookupWord(word).then((result) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        
+        if (result['success'] == true && result['entry'] != null) {
+          final entry = result['entry'] as DictionaryEntry;
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            builder: (context) {
+              return DraggableScrollableSheet(
+                initialChildSize: 0.4,
+                minChildSize: 0.3,
+                maxChildSize: 0.7,
+                expand: false,
+                builder: (context, scrollController) {
+                  return Container(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ListView(
+                      controller: scrollController,
+                      children: [
+                        Card(
+                          margin: const EdgeInsets.only(bottom: 8.0),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  entry.word,
+                                  style: const TextStyle(
+                                    fontSize: 24.0,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4.0),
+                                Text(
+                                  entry.pinyin,
+                                  style: const TextStyle(
+                                    fontSize: 18.0,
+                                    fontStyle: FontStyle.italic,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                                const SizedBox(height: 8.0),
+                                Text(
+                                  entry.meaning,
+                                  style: const TextStyle(fontSize: 16.0),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 4.0),
-                            Text(
-                              entry.pinyin,
-                              style: const TextStyle(
-                                fontSize: 18.0,
-                                fontStyle: FontStyle.italic,
-                                color: Colors.blue,
-                              ),
-                            ),
-                            const SizedBox(height: 8.0),
-                            Text(
-                              entry.meaning,
-                              style: const TextStyle(fontSize: 16.0),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               );
             },
           );
-        },
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('\'$word\'에 대한 검색 결과가 없습니다.')),
-      );
-    }
+        } else {
+          // 검색 실패 또는 결과 없음
+          final message = result['message'] ?? '\'$word\'에 대한 검색 결과가 없습니다.';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message)),
+          );
+          
+          // 사용량 제한 초과 경우
+          if (result['limitExceeded'] == true) {
+            UsageDialog.show(
+              context,
+              limitStatus: {'dictionaryLimitReached': true},
+              usagePercentages: {'dictionary': 100},
+              onContactSupport: () {
+                // 지원팀 문의 기능
+              },
+            );
+          }
+        }
+      }
+    }).catchError((e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('단어 검색 중 오류가 발생했습니다: $e')),
+        );
+      }
+    });
   }
 
   @override

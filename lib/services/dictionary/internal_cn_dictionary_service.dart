@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../models/dictionary_entry.dart';
+import '../../models/dictionary.dart';
 
 /// 내부 중국어 사전 데이터를 로드 관리하는 서비스
 

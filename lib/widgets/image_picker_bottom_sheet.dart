@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import '../services/image_service.dart';
-import '../services/note_service.dart';
+import '../services/media/image_service.dart';
+import '../services/content/note_service.dart';
 import '../views/screens/note_detail_screen.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../widgets/common/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
-import '../services/usage_limit_service.dart';
+import '../services/common/usage_limit_service.dart';
 import 'dart:async';
 import '../widgets/pikabook_loader.dart';
 

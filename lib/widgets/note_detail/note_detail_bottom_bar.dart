@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../../../models/page.dart' as page_model;
 import '../../../models/processed_text.dart';
-import '../../../services/page_content_service.dart';
-import '../../../services/text_reader_service.dart';
-import '../../../services/tts_service.dart';
-import '../../../services/text_processing_service.dart';
+import '../../../services/text_processing/text_reader_service.dart';
+import '../../../services/media/tts_service.dart';
+import '../../../services/text_processing/text_processing_service.dart';
 import '../../../utils/text_display_mode.dart';
 import '../../../theme/tokens/color_tokens.dart';
 import '../../../theme/tokens/typography_tokens.dart';
 import '../../../theme/tokens/spacing_tokens.dart';
 import '../../../widgets/common/tts_button.dart';
+import '../../../managers/content_manager.dart';
 
 /// 노트 상세 화면 하단 내비게이션 바
 /// 페이지 탐색, 텍스트 표시 모드 토글, 모드 전환, 진행률 바 제공
@@ -22,7 +22,7 @@ class NoteDetailBottomBar extends StatefulWidget {
   final Function(int) onPageChanged;
   final VoidCallback onToggleFullTextMode;
   final bool isFullTextMode;
-  final PageContentService pageContentService;
+  final ContentManager contentManager;
   final TextReaderService textReaderService;
   final bool isProcessing; // 현재 페이지가 처리 중인지 여부
   final double progressValue;
@@ -37,7 +37,7 @@ class NoteDetailBottomBar extends StatefulWidget {
     required this.onPageChanged,
     required this.onToggleFullTextMode,
     required this.isFullTextMode,
-    required this.pageContentService,
+    required this.contentManager,
     required this.textReaderService,
     this.isProcessing = false, // 기본값은 false (처리 중이 아님)
     this.progressValue = 0.0,
@@ -77,7 +77,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   
   Future<void> _updateProcessedText() async {
     if (widget.currentPage?.id != null) {
-      processedText = await widget.pageContentService.getProcessedText(widget.currentPage!.id!);
+      processedText = await widget.contentManager.getProcessedText(widget.currentPage!.id!);
     } else {
       processedText = null;
     }
@@ -249,9 +249,9 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
       // 부모의 콜백 호출
       widget.onToggleFullTextMode();
       
-      // 직접 서비스 호출을 통한 토글 (옵션)
+      // ContentManager의 toggleDisplayModeForPage 사용
       if (processedText != null) {
-        final updatedText = await _textProcessingService.toggleDisplayModeForPage(widget.currentPage!.id!);
+        final updatedText = await widget.contentManager.toggleDisplayModeForPage(widget.currentPage!.id!);
         if (updatedText != null && mounted) {
           setState(() {
             processedText = updatedText;

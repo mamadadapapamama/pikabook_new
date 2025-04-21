@@ -1,15 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/page.dart' as page_model;
-import '../services/page_service.dart';
-import '../services/image_service.dart';
-import '../services/unified_cache_service.dart';
-import '../services/text_processing_service.dart';
-import '../note_detail/note_detail_image_handler.dart';
+import '../models/note.dart';
+import '../services/content/page_service.dart';
+import '../services/media/image_service.dart';
+import '../services/storage/unified_cache_service.dart';
+import '../services/text_processing/text_processing_service.dart';
 
-/// 노트 페이지 관리 클래스 (note_detail_screen.dart 에서 사용)
+/// 페이지 관리 클래스
 /// 페이지 로드, 병합, 이미지 로드 등의 기능 제공
-class NotePageManager {
+class PageManager {
   final String noteId;
   final PageService _pageService = PageService();
   final ImageService _imageService = ImageService();
@@ -21,7 +21,7 @@ class NotePageManager {
   Map<String, File> _imageFileMap = {};
   int _currentPageIndex = 0;
   
-  NotePageManager({required this.noteId});
+  PageManager({required this.noteId});
   
   // 상태 접근자
   List<page_model.Page> get pages => _pages;
@@ -197,10 +197,10 @@ class NotePageManager {
           if (page.id != null) {
             _imageFileMap[page.id!] = imageFile;
           }
-        } else {
         }
       }
     } catch (e) {
+      debugPrint('이미지 로드 중 오류: $e');
     }
   }
   
@@ -260,7 +260,6 @@ class NotePageManager {
     if (updatedPage.id != null) {
       _imageFileMap[updatedPage.id!] = imageFile;
     }
-    
   }
   
   /// 페이지 내용을 로드하는 통합 메서드
@@ -268,7 +267,7 @@ class NotePageManager {
   Future<Map<String, dynamic>> loadPageContent(
     page_model.Page page, 
     {required TextProcessingService textProcessingService,
-    required NoteDetailImageHandler imageHandler,
+    required ImageService imageService,
     required dynamic note}) async {
     
     // 결과를 담을 맵
@@ -282,7 +281,7 @@ class NotePageManager {
       // 1. 이미지 로드 (있는 경우)
       File? imageFile;
       if (page.imageUrl != null && page.imageUrl!.isNotEmpty) {
-        imageFile = await imageHandler.loadPageImage(page);
+        imageFile = await imageService.loadPageImage(page.imageUrl);
         result['imageFile'] = imageFile;
       }
       
@@ -290,7 +289,7 @@ class NotePageManager {
       if (page.id != null) {
         final processedText = await textProcessingService.processAndPreparePageContent(
           page: page,
-          imageFile: imageFile ?? imageHandler.getCurrentImageFile(),
+          imageFile: imageFile ?? imageService.getCurrentImageFile(),
           note: note,
         );
         
@@ -315,4 +314,4 @@ class NotePageManager {
       return result;
     }
   }
-} 
+}

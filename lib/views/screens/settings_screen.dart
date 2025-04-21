@@ -4,15 +4,15 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
-import '../../services/user_preferences_service.dart';
+import '../../services/authentication/user_preferences_service.dart';
 import '../../utils/language_constants.dart';
 import '../../widgets/dot_loading_indicator.dart';
 import '../../widgets/common/pika_button.dart';
 import '../../widgets/common/pika_app_bar.dart';
 import '../../widgets/common/usage_dialog.dart';
-import '../../services/auth_service.dart';
-import '../../services/plan_service.dart';
-import '../../services/usage_limit_service.dart';
+import '../../services/authentication/auth_service.dart';
+import '../../services/common/plan_service.dart';
+import '../../services/common/usage_limit_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {

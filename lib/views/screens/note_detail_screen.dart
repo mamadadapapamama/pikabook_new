@@ -11,28 +11,27 @@ import '../../models/page.dart' as page_model;
 import '../../models/processed_text.dart';
 import '../../models/flash_card.dart';
 
-// 새 클래스들
-import '../../widgets/note_page_manager.dart';
-import '../../note_detail/note_detail_image_handler.dart';
+// 매니저
+import '../../managers/page_manager.dart';
+import '../../managers/content_manager.dart';
 import '../../widgets/note_detail/note_detail_state.dart';
-import '../../widgets/note_detail/first_image_container.dart';
+import '../../widgets/page_image_widget.dart';
 
 // 서비스들
-import '../../services/note_service.dart';
-import '../../services/flashcard_service.dart' hide debugPrint;
-import '../../services/tts_service.dart';
-import '../../services/user_preferences_service.dart';
-import '../../services/unified_cache_service.dart';
-import '../../services/text_reader_service.dart';
-import '../../services/screenshot_service.dart';
-import '../../services/page_content_service.dart';
-import '../../services/translation_service.dart';
-import '../../services/enhanced_ocr_service.dart';
-import '../../services/dictionary/dictionary_service.dart';
-import '../../services/page_service.dart';
-import '../../services/image_service.dart';
-import '../../services/text_processing_service.dart';
-import '../../services/favorites_service.dart';
+import '../../services/content/note_service.dart';
+import '../../services/content/flashcard_service.dart' hide debugPrint;
+import '../../services/media/tts_service.dart';
+import '../../services/authentication/user_preferences_service.dart';
+import '../../services/storage/unified_cache_service.dart';
+import '../../services/text_processing/text_reader_service.dart';
+import '../../services/media/screenshot_service.dart';
+import '../../services/text_processing/translation_service.dart';
+import '../../services/text_processing/enhanced_ocr_service.dart';
+import '../../services/dictionary/external_cn_dictionary_service.dart';
+import '../../services/content/page_service.dart';
+import '../../services/media/image_service.dart';
+import '../../services/text_processing/text_processing_service.dart';
+import '../../services/content/favorites_service.dart';
 
 // 기타 위젯 및 유틸리티
 import '../../widgets/dot_loading_indicator.dart';
@@ -41,7 +40,6 @@ import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/color_tokens.dart';
 import '../../widgets/note_detail/note_detail_bottom_bar.dart';
 import '../../widgets/common/help_text_tooltip.dart';
-import '../../widgets/note_segment_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/note_action_bottom_sheet.dart';
@@ -50,9 +48,9 @@ import '../../views/screens/flashcard_screen.dart';
 import '../../views/screens/full_image_screen.dart';
 import 'dart:math' as math;
 import '../../widgets/edit_title_dialog.dart';
-import '../../note_detail/screenshot_service_helper.dart';
-import '../../note_detail/tooltip_manager.dart';
-import '../../note_detail/note_options_manager.dart';
+import '../../utils/screenshot_service_helper.dart';
+import '../../utils/tooltip_manager.dart';
+import '../../managers/note_options_manager.dart';
 import '../../widgets/page_content_widget.dart';
 
 /// 노트 상세 화면
@@ -95,14 +93,15 @@ class NoteDetailScreen extends StatefulWidget {
 class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBindingObserver {
   // 페이지 상태 및 관리 객체
   final _state = NoteDetailState();
-  late NotePageManager _pageManager;
+  late PageManager _pageManager;
+  final ContentManager _contentManager = ContentManager();
 
   // 서비스들
   final TextProcessingService _textProcessingService = TextProcessingService();
   final TtsService _ttsService = TtsService();
   final FavoritesService _favoritesService = FavoritesService();
   final UserPreferencesService _preferencesService = UserPreferencesService();
-  final NoteDetailImageHandler _imageHandler = NoteDetailImageHandler();
+  final ImageService _imageService = ImageService();
   late PageContentWidget _pageContentWidget;
   
   // 화면 설정 및 상태
@@ -145,7 +144,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     _state.setBackgroundProcessingFlag(widget.isProcessingBackground);
     
     // 매니저 및 핸들러 초기화
-    _pageManager = NotePageManager(noteId: widget.noteId);
+    _pageManager = PageManager(noteId: widget.noteId);
     
     // 컨트롤러 초기화
     _pageController = PageController();
@@ -216,7 +215,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   // 리소스 정리 메서드
   Future<void> _cleanupResources() async {
     try {
-      await _imageHandler.clearImageCache();
+      await _imageService.clearImageCache();
       await _cancelAllPendingTasks();
     } catch (e) {
       debugPrint('리소스 정리 중 오류: $e');
@@ -295,7 +294,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     if (!mounted) return;
     
     try {
-        setState(() {
+      setState(() {
         _state.setLoading(true);
         _state.setError(null); // 이전 에러 초기화
       });
@@ -305,8 +304,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           _state.setError('유효하지 않은 노트 ID입니다.');
           _state.setLoading(false);
         });
-        return;
-      }
+      return;
+    }
 
       debugPrint('노트 로딩 시작: ${widget.noteId}');
       
@@ -327,13 +326,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         setState(() {
             _state.setError('노트를 불러오는 중 오류가 발생했습니다: $e');
             _state.setLoading(false);
-          });
-        }
-        return;
+        });
       }
-
-      if (!mounted) return;
-      
+        return;
+  }
+  
+    if (!mounted) return;
+    
       setState(() {
         _state.updateNote(note!);
       });
@@ -357,7 +356,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         if (!mounted) return;
         
         if (_pageManager.pages.isEmpty) {
-      setState(() {
+          setState(() {
             _state.setError('노트에 페이지가 없습니다.');
             _state.setLoading(false);
           });
@@ -371,14 +370,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         await _processCurrentPageText();
         
         if (!mounted) return;
-        
-        setState(() {
+
+    setState(() {
           _state.setLoading(false);
-          _state.setCurrentImageFile(_imageHandler.getCurrentImageFile());
-        });
+          _state.setCurrentImageFile(_imageService.getCurrentImageFile());
+    });
     } catch (e) {
         debugPrint('페이지 로드 중 오류: $e');
-          if (mounted) {
+      if (mounted) {
         setState(() {
             _state.setError('페이지 로드 중 오류가 발생했습니다: $e');
             _state.setLoading(false);
@@ -388,8 +387,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       
       if (note.id != null) {
         await _checkBackgroundProcessing(note.id!);
-        }
-      } catch (e) {
+      }
+    } catch (e) {
       debugPrint('노트 로드 중 오류: $e');
       if (mounted) {
         setState(() {
@@ -412,8 +411,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             final data = noteDoc.data();
         final isProcessingBackground = data?['isProcessingBackground'] as bool? ?? false;
         final processingCompleted = data?['processingCompleted'] as bool? ?? false;
-        
-        setState(() {
+    
+    setState(() {
           _state.setBackgroundProcessingFlag(isProcessingBackground && !processingCompleted);
         });
       }
@@ -432,27 +431,27 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       
       // PageController 애니메이션
       if (_pageController.hasClients && _pageController.page?.round() != index) {
-        try {
-          _pageController.animateToPage(
-            index,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        } catch (e) {
-          debugPrint('페이지 애니메이션 오류: $e');
-        }
+      try {
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      } catch (e) {
+        debugPrint('페이지 애니메이션 오류: $e');
       }
-      
-      // 이전에 방문한 페이지가 아닌 경우에만 방문 기록 추가
+    }
+    
+    // 이전에 방문한 페이지가 아닌 경우에만 방문 기록 추가
       if (!_state.isPageVisited(index)) {
         _state.markPageVisited(index);
-      }
-      
-      // UI 업데이트
+    }
+    
+    // UI 업데이트
       if (mounted) {
-        setState(() {});
-      }
-      
+    setState(() {});
+  }
+  
       // 페이지 내용 로드 (이미지 및 텍스트 처리) - 서비스 레이어로 위임
       final currentPage = _pageManager.currentPage;
       if (currentPage != null && _state.note != null) {
@@ -463,12 +462,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           });
         }
         
-        // 페이지 내용 로드 (이미지 및 텍스트 처리 통합)
-        final result = await _pageManager.loadPageContent(
-          currentPage,
-          textProcessingService: _textProcessingService,
-          imageHandler: _imageHandler,
-          note: _state.note!,
+        // _contentManager.processPageText 사용
+        final result = await _contentManager.processPageText(
+          page: currentPage,
+          imageFile: _imageService.getCurrentImageFile(),
         );
         
         if (!mounted) return;
@@ -476,13 +473,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         // 결과 처리
         setState(() {
           // 이미지 파일 업데이트
-          if (result['imageFile'] != null) {
-            _state.setCurrentImageFile(result['imageFile']);
+          if (_imageService.getCurrentImageFile() != null) {
+            _state.setCurrentImageFile(_imageService.getCurrentImageFile());
           }
           
           // 텍스트 처리 결과 업데이트
-          if (result['processedText'] != null) {
-            _useSegmentMode = !result['processedText'].showFullText;
+          if (result != null) {
+            _useSegmentMode = !result.showFullText;
             _state.markPageVisited(_pageManager.currentPageIndex);
           }
           
@@ -501,7 +498,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       }
     }
   }
-  
+
   // 현재 페이지 텍스트 처리
   Future<void> _processCurrentPageText() async {
     final currentPage = _pageManager.currentPage;
@@ -516,14 +513,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     setState(() {
       _state.setProcessingText(true);
     });
-    
+
     try {
-      // 페이지 내용 로드 (서비스 레이어로 위임)
-      final result = await _pageManager.loadPageContent(
-        currentPage,
-        textProcessingService: _textProcessingService,
-        imageHandler: _imageHandler,
-        note: _state.note!,
+      // _contentManager.processPageText 사용
+      final result = await _contentManager.processPageText(
+        page: currentPage,
+        imageFile: _imageService.getCurrentImageFile(),
       );
       
       if (!mounted) return;
@@ -531,13 +526,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       // 결과 처리
       setState(() {
         // 이미지 파일 업데이트
-        if (result['imageFile'] != null) {
-          _state.setCurrentImageFile(result['imageFile']);
+        if (_imageService.getCurrentImageFile() != null) {
+          _state.setCurrentImageFile(_imageService.getCurrentImageFile());
         }
         
         // 텍스트 처리 결과 업데이트
-        if (result['processedText'] != null) {
-          _useSegmentMode = !result['processedText'].showFullText;
+        if (result != null) {
+          _useSegmentMode = !result.showFullText;
           _state.markPageVisited(_pageManager.currentPageIndex);
         }
       });
@@ -552,35 +547,35 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       }
     }
   }
-  
+
   // TTS 초기화
   void _initTts() {
     _ttsService.init();
   }
-  
+
   // 사용자 기본 설정 로드
   Future<void> _loadUserPreferences() async {
     try {
       if (!mounted) return;
-      
+
       final currentPage = _pageManager.currentPage;
       if (currentPage == null || currentPage.id == null) return;
-      
+
       // TextProcessingService를 통해 사용자 설정 로드 및 적용 (id가 null이 아님이 확인됨)
       final useSegmentMode = await _textProcessingService.loadAndApplyUserPreferences(currentPage.id);
-      
+
       if (mounted) {
-          setState(() {
+        setState(() {
           _useSegmentMode = useSegmentMode;
-        });
-      }
-      
+              });
+            }
+
       debugPrint('노트 뷰 모드 로드됨: 세그먼트 모드 사용: $_useSegmentMode');
     } catch (e) {
       debugPrint('사용자 기본 설정 로드 중 오류 발생: $e');
       // 오류 발생 시 기본 모드 사용
-            if (mounted) {
-              setState(() {
+      if (mounted) {
+          setState(() {
           _useSegmentMode = true; // 기본값은 세그먼트 모드
         });
       }
@@ -600,7 +595,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   void _navigateToFlashcards() {
     if (_state.note?.id != null) {
       Navigator.push(
-      context,
+          context,
       MaterialPageRoute(
         builder: (context) => FlashCardScreen(
             noteId: _state.note!.id!,
@@ -617,7 +612,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       child: Scaffold(
         // 앱바
         appBar: PikaAppBar.noteDetail(
-          title: _state.note?.originalText ?? '로딩 중',
+          title: _state.note?.originalText ?? '',
           currentPage: _pageManager.currentPageIndex + 1,
           totalPages: _pageManager.pages.length,
           flashcardCount: _state.note?.flashcardCount ?? 0,
@@ -629,7 +624,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               setState(() {});
             },
             onFavoriteToggle: (isFavorite) {
-              setState(() {
+    setState(() {
                 _state.toggleFavorite();
               });
             },
@@ -646,32 +641,11 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             },
           ),
         // 본문
-        body: _state.isEditingTitle ? 
-          _buildTitleEditor() :
-          _buildMainContent(),
+        body: _buildMainContent(),
       ),
     );
   }
-
-  // 제목 편집 위젯
-  Widget _buildTitleEditor() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: TextField(
-          controller: _titleEditingController,
-          autofocus: true,
-          style: TypographyTokens.body1,
-          onSubmitted: (value) => _updateNoteTitle(value),
-          decoration: InputDecoration(
-            hintText: '노트 제목',
-            border: OutlineInputBorder(),
-          ),
-        ),
-      ),
-    );
-  }
-
+  
   // 메인 콘텐츠 위젯
   Widget _buildMainContent() {
     return Stack(
@@ -702,12 +676,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               });
             },
             onNextStep: () {
-    setState(() {
+      setState(() {
                 _tooltipManager.setTooltipStep(_tooltipManager.tooltipStep + 1);
               });
             },
             onPrevStep: () {
-    setState(() {
+        setState(() {
                 _tooltipManager.setTooltipStep(_tooltipManager.tooltipStep - 1);
               });
             },
@@ -723,34 +697,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         ? _state.note!.imageCount! 
         : _pageManager.pages.length;
     
+    // PageContentService 대신 ContentManager 사용
     return NoteDetailBottomBar(
       currentPage: _pageManager.currentPage,
       currentPageIndex: _pageManager.currentPageIndex,
       totalPages: totalPages,
-      onPageChanged: (index) {
-        _pageManager.changePage(index);
-        setState(() {});
-      },
-      onToggleFullTextMode: () {
-        setState(() {
-          _useSegmentMode = !_useSegmentMode;
-          // 직접 TextProcessingService 호출
-          final pageId = _pageManager.currentPage?.id;
-          if (pageId != null) {
-            _textProcessingService.toggleDisplayModeForPage(pageId);
-          }
-        });
-      },
+      onPageChanged: (index) => _changePage(index),
+      onToggleFullTextMode: _toggleDisplayMode,
       isFullTextMode: !_useSegmentMode,
-      pageContentService: PageContentService(),
-      textReaderService: TextReaderService(),
-      onTtsPlay: () {
-        // TTS 재생은 PageContentWidget에서 처리
-      },
+      contentManager: _contentManager, // PageContentService에서 ContentManager로 변경
+      textReaderService: _textReaderService,
       isProcessing: _state.isProcessingText,
     );
   }
-  
+
   // 메인 UI 구성
   Widget _buildBody() {
     // 로딩 중 또는 노트가 없는 경우
@@ -758,7 +718,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+      children: [
             // 로딩 표시
             const DotLoadingIndicator(message: '노트를 불러오는 중입니다'),
             
@@ -780,7 +740,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+              children: [
             Text(
               _state.error ?? '오류가 발생했습니다',
               style: TypographyTokens.body1.copyWith(color: Colors.red),
@@ -798,19 +758,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   
     // 페이지가 없는 경우
     if (_pageManager.pages.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+                                return Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
             Text(
               '페이지가 없습니다',
               style: TypographyTokens.body1,
               textAlign: TextAlign.center,
             ),
-          ],
-        ),
-      );
-    }
+                                    ],
+                                  ),
+                                );
+                              }
     
     // 정상적인 경우 PageView로 페이지 표시
     return PageView.builder(
@@ -834,195 +794,114 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             return Column(
               children: [
             // 이미지 영역
-            _buildImageThumbnailContainer(page, imageFile),
+            PageImageWidget(
+              page: page,
+              imageFile: imageFile,
+              title: _state.note?.originalText ?? '노트',
+              showTitle: true,
+              style: ImageContainerStyle.noteDetail,
+              onFullScreenTap: (file) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => FullImageScreen(
+                      imageFile: file,
+                      title: _state.note?.originalText ?? '이미지',
+                                  ),
+                                ),
+                              );
+                            },
+            ),
             
             // 내용 영역 (현재 페이지일 경우만 콘텐츠 표시)
             Expanded(
               child: index == _pageManager.currentPageIndex
                 ? SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: PageContentWidget(
-                      key: ValueKey('page_${page.id}_${_useSegmentMode}_${DateTime.now().millisecondsSinceEpoch}'),
-                      page: page,
-                      imageFile: imageFile,
-                      isLoadingImage: false,
-                      noteId: widget.noteId,
-                      onCreateFlashCard: (front, back, {String? pinyin}) => 
-                        _createFlashCard(front, back, pinyin: pinyin),
-                      flashCards: _state.note?.flashCards,
-                      onDeleteSegment: _handleDeleteSegment,
-                      useSegmentMode: _useSegmentMode,
-                    ),
+                    child: _buildPageContentWidget(),
                   )
                 : Center(
-                    child: Text(
+                            child: Text(
                       '페이지 ${index + 1}',
                       style: TypographyTokens.body1,
                     ),
                   ),
-            ),
-          ],
-        );
+                ),
+              ],
+            );
       },
     );
   }
   
-  // 이미지 썸네일 컨테이너 생성
-  Widget _buildImageThumbnailContainer(page_model.Page? page, File? imageFile) {
-    debugPrint('이미지 썸네일 빌드: pageId=${page?.id}, 이미지 파일=${imageFile != null}');
+  // _buildPageContentWidget 메서드 수정
+  Widget _buildPageContentWidget() {
+    final currentPage = _pageManager.currentPage;
+    if (currentPage == null) return const SizedBox.shrink();
     
-    // 페이지가 없는 경우 빈 컨테이너
-    if (page == null) {
-      return Container(
-        height: 200,
-        color: Colors.grey[100],
-        child: const Center(child: Text('이미지 없음')),
+    return PageContentWidget(
+      key: ValueKey('page_content_${currentPage.id}'),
+      page: currentPage,
+      imageFile: _state.imageFile,
+      isLoadingImage: _state.isProcessingText,
+      noteId: widget.noteId,
+      onCreateFlashCard: _createFlashCard,
+      flashCards: [], // 필요한 경우 플래시카드 목록 전달
+      onDeleteSegment: _deleteSegment,
+      useSegmentMode: _useSegmentMode,
+    );
+  }
+  
+  // _deleteSegment 메서드 수정
+  Future<void> _deleteSegment(int segmentIndex) async {
+    final currentPage = _pageManager.currentPage;
+    if (currentPage == null) return;
+    
+    setState(() {
+      _state.setProcessingText(true);
+    });
+    
+    try {
+      final updatedPage = await _contentManager.deleteSegment(
+        noteId: widget.noteId,
+        page: currentPage,
+        segmentIndex: segmentIndex,
       );
-    }
-
-    // 탭 시 전체 화면 이미지 표시 처리
-    void onTapImage() {
-      if (imageFile != null) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => FullImageScreen(
-                                    imageFile: imageFile,
-              title: _state.note?.originalText ?? '이미지',
-                                  ),
-                                ),
-                              );
-      } else if (page.imageUrl != null && page.imageUrl!.isNotEmpty) {
-        _imageHandler.loadPageImage(page).then((file) {
-          if (file != null && mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => FullImageScreen(
-                  imageFile: file,
-                  title: _state.note?.originalText ?? '이미지',
-                ),
-              ),
-            );
+      
+      if (updatedPage != null) {
+        setState(() {
+          _pageManager.updateCurrentPage(updatedPage);
+          if (_state.note != null) {
+            _state.updateNote(_state.note!);
           }
         });
+        
+        // 페이지 처리 후 다시 텍스트 로드
+        _processCurrentPageText();
       }
+    } catch (e) {
+      debugPrint('세그먼트 삭제 중 오류: $e');
+    } finally {
+      setState(() {
+        _state.setProcessingText(false);
+      });
     }
-
-    // GestureDetector로 이미지 컨테이너 감싸기 (전체 화면 보기 위해)
-    return GestureDetector(
-      onTap: onTapImage,
-        child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        height: 200,
-          decoration: BoxDecoration(
-          color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-            ],
-          ),
-          child: Stack(
-            children: [
-            // 이미지 표시
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                    width: double.infinity,
-                    height: double.infinity,
-                child: imageFile != null
-                  ? Image.file(
-                      imageFile,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _buildImagePlaceholder(),
-                    )
-                  : (page.imageUrl != null && page.imageUrl!.isNotEmpty
-                      ? Image.network(
-                          page.imageUrl!,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (_, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return _buildImageLoadingIndicator();
-                          },
-                          errorBuilder: (_, __, ___) => _buildImagePlaceholder(),
-                        )
-                      : _buildImagePlaceholder()),
-              ),
-            ),
-            
-            // 전체 화면 버튼
-              Positioned(
-              top: 8,
-              right: 8,
-              child: Material(
-                color: Colors.black.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(20),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: onTapImage,
-                  child: const Padding(
-                    padding: EdgeInsets.all(6.0),
-                    child: Icon(
-                      Icons.fullscreen,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  // 이미지 로딩 인디케이터
-  Widget _buildImageLoadingIndicator() {
-    return Container(
-      color: Colors.grey[200],
-      child: const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-  }
-  
-  // 이미지 플레이스홀더
-  Widget _buildImagePlaceholder() {
-    return Container(
-      color: Colors.grey[200],
-      child: Center(
-        child: Icon(
-          Icons.image,
-          size: 48,
-          color: Colors.grey[400],
-        ),
-      ),
-    );
   }
 
-  // 텍스트 표시 모드 토글
+  // _toggleDisplayMode 메서드 수정
   Future<void> _toggleDisplayMode() async {
     final currentPage = _pageManager.currentPage;
-    if (currentPage == null || currentPage.id == null) return;
-
-    if (_state.isProcessingText) return;
-
+    if (currentPage?.id == null) return;
+    
     try {
-      // TextProcessingService의 통합 메서드 사용 (id가 null이 아님이 확인됨)
-      final updatedText = await _textProcessingService.toggleDisplayModeForPage(currentPage.id);
+      final updatedText = await _contentManager.toggleDisplayModeForPage(currentPage!.id);
       
-      if (updatedText != null && mounted) {
+      if (mounted && updatedText != null) {
         setState(() {
           _useSegmentMode = !updatedText.showFullText;
         });
       }
     } catch (e) {
-      debugPrint('디스플레이 모드 토글 중 오류 발생: $e');
+      debugPrint('디스플레이 모드 토글 실패: $e');
     }
   }
 
@@ -1064,9 +943,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           SnackBar(
             content: Text('플래시카드 생성 중 오류가 발생했습니다: $e'),
             duration: Duration(seconds: 3),
-          ),
-        );
-      }
+            ),
+          );
+        }
     } finally {
       if (mounted) {
         setState(() {
@@ -1076,44 +955,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     }
   }
 
-  // 세그먼트 삭제
-  Future<void> _handleDeleteSegment(int segmentIndex) async {
-    final currentPage = _pageManager.currentPage;
-    if (currentPage == null || currentPage.id == null || _state.note == null || _state.note!.id == null) {
-      return;
-    }
-    
-    // 세그먼트 매니저를 사용하여 삭제
-    final segmentManager = NoteSegmentManager();
-    final updatedPage = await segmentManager.deleteSegment(
-      noteId: _state.note!.id!,
-      page: currentPage,
-      segmentIndex: segmentIndex,
-    );
-    
-    if (updatedPage == null) {
-      return;
-    }
-    
-    // 페이지 업데이트
-    setState(() {
-      _pageManager.updateCurrentPage(updatedPage);
-    });
-    
-    // 노트 캐시 업데이트
-    try {
-      await _noteService.getNoteWithPages(_state.note!.id!);
-    } catch (e) {
-      debugPrint('세그먼트 삭제 후 노트 캐시 업데이트 중 오류: $e');
-    }
-  }
-  
   // 옵션 더보기 메뉴
   void _showMoreOptions() {
     showModalBottomSheet(
       context: context,
       builder: (context) => NoteActionBottomSheet(
-        onEditTitle: _showEditTitleDialog,
+        onEditTitle: () => _optionsManager.showMoreOptions(
+          context,
+          _state.note,
+          onTitleEditing: () => setState(() {}),
+          onFavoriteToggle: (isFavorite) => setState(() => _state.toggleFavorite()),
+          onNoteDeleted: () => Navigator.of(context).pop(),
+        ),
         onDeleteNote: _confirmDelete,
         onToggleFullTextMode: _toggleDisplayMode,
         onToggleFavorite: _toggleFavorite,
@@ -1123,32 +976,22 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       );
     }
     
-  // 제목 편집 다이얼로그 표시
-  void _showEditTitleDialog() {
-    if (_state.note == null) return;
-    
-    setState(() {
-      _titleEditingController.text = _state.note!.originalText;
-      _state.isEditingTitle = true;
-    });
-  }
-  
   // 즐겨찾기 토글
   Future<void> _toggleFavorite() async {
     if (_state.note == null || _state.note?.id == null) return;
 
     final newValue = !_state.isFavorite;
     
-    setState(() {
+                setState(() {
       _state.isFavorite = newValue;
     });
-
+    
     try {
       // id가 null이 아님을 확인했으므로 안전하게 사용
       await _favoritesService.toggleFavorite(_state.note!.id!, newValue);
     } catch (e) {
       if (mounted) {
-        setState(() {
+      setState(() {
           _state.isFavorite = !newValue; // 실패 시 원래 값으로 되돌림
         });
 
@@ -1172,7 +1015,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             child: const Text('취소'),
           ),
           TextButton(
-                            onPressed: () {
+                  onPressed: () {
               Navigator.of(context).pop();
               _deleteNote();
             },
@@ -1180,15 +1023,15 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             style: TextButton.styleFrom(foregroundColor: ColorTokens.primary),
                         ),
                       ],
-                    ),
+      ),
     );
   }
-  
+
   // 노트 삭제
   Future<void> _deleteNote() async {
     if (_state.note == null || _state.note?.id == null) return;
 
-    setState(() {
+                setState(() {
       _state.setLoading(true);
     });
 
@@ -1210,54 +1053,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('노트 삭제 중 오류가 발생했습니다: $e'))
-        );
-      }
-    }
-  }
-  
-  // 노트 제목 업데이트
-  Future<void> _updateNoteTitle(String newTitle) async {
-    if (newTitle.trim().isEmpty || _state.note == null || _state.note!.id == null) return;
-    
-    setState(() {
-      _state.isEditingTitle = false;
-    });
-    
-    try {
-      // 노트 업데이트
-      final updatedNote = _state.note!.copyWith(
-        originalText: newTitle.trim(),
-        updatedAt: DateTime.now(),
-      );
-      
-      // Firestore 업데이트
-      await _noteService.updateNote(_state.note!.id!, updatedNote);
-
-      // 상태 업데이트
-                setState(() {
-        _state.updateNote(updatedNote);
-      });
-
-      if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('노트 제목이 업데이트되었습니다.'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('노트 제목 업데이트 오류: $e');
-        
-        if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('제목 업데이트에 실패했습니다.'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.red,
-          ),
         );
       }
     }
@@ -1287,17 +1082,6 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       // 먼저 리소스 정리
       _ttsService.stop();
       _textReaderService.stop();
-      
-      // 제목 편집 중인 경우 처리
-      if (_state.isEditingTitle) {
-        if (_titleEditingController.text.isNotEmpty) {
-          await _updateNoteTitle(_titleEditingController.text);
-        }
-        setState(() {
-          _state.isEditingTitle = false;
-        });
-        return false;
-      }
       
       // true를 반환하여 시스템이 pop을 처리하도록 함
       // 직접 Navigator.pop()을 호출하지 않아 assertion 에러를 방지

@@ -3,9 +3,9 @@ import 'dart:io';
 import '../models/page.dart' as page_model;
 import '../models/processed_text.dart';
 import '../models/flash_card.dart';
-import '../models/dictionary_entry.dart';
+import '../models/dictionary.dart';
 import 'processed_text_widget.dart';
-import '../services/page_content_service.dart';
+import '../managers/content_manager.dart';
 import 'dictionary_result_widget.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
 import 'dot_loading_indicator.dart';
@@ -13,11 +13,11 @@ import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
 import '../utils/segment_utils.dart';
-import '../services/text_reader_service.dart'; // TTS 서비스 추가
-import '../services/usage_limit_service.dart';
+import '../services/text_processing/text_reader_service.dart'; // TTS 서비스 추가
+import '../services/common/usage_limit_service.dart';
 import '../widgets/common/usage_dialog.dart';
-import '../services/translation_service.dart';
-import '../services/enhanced_ocr_service.dart';
+import '../services/text_processing/translation_service.dart';
+import '../services/text_processing/enhanced_ocr_service.dart';
 import '../services/dictionary/dictionary_service.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
 
@@ -75,7 +75,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   ProcessedText? _processedText;
   
   // 서비스 객체 선언 변경
-  late PageContentService _pageContentService;
+  late ContentManager _contentManager;
   late TextReaderService _textReaderService;
   
   Set<String> _flashcardWords = {};
@@ -101,7 +101,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     super.initState();
     
     // 서비스 초기화
-    _pageContentService = PageContentService();
+    _contentManager = ContentManager();
     _textReaderService = TextReaderService();
     
     // 플래시카드 단어 목록 업데이트
@@ -122,7 +122,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     if (widget.page.id == null) return;
     
     try {
-      final cachedText = await _pageContentService.getProcessedText(widget.page.id!);
+      final cachedText = await _contentManager.getProcessedText(widget.page.id!);
       
       if (mounted) {
         setState(() {
@@ -152,7 +152,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     super.didUpdateWidget(oldWidget);
     // 페이지가 변경되면 TTS 중지
     if (oldWidget.page.id != widget.page.id) {
-      _pageContentService.stopSpeaking();
+      _contentManager.stopSpeaking();
       _processPageText();
     }
 
@@ -176,7 +176,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     debugPrint('페이지 텍스트 처리 시작: ${widget.page.id}');
 
     try {
-      final processedText = await _pageContentService.processPageText(
+      final processedText = await _contentManager.processPageText(
         page: widget.page,
         imageFile: widget.imageFile,
       );
@@ -187,8 +187,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       if (kDebugMode) {
         debugPrint('페이지 텍스트 처리 소요시간: ${duration.inMilliseconds}ms');
       }
-      // debugPrint(
-      //     '페이지 텍스트 처리 완료: ${widget.page.id}, 소요 시간: ${duration.inMilliseconds}ms');
 
       if (mounted) {
         setState(() {
@@ -209,7 +207,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   @override
   void dispose() {
     // 화면을 나갈 때 TTS 중지
-    _pageContentService.stopSpeaking();
+    _contentManager.stopSpeaking();
     _textReaderService.dispose(); // TTS 서비스 정리
     super.dispose();
   }
@@ -347,7 +345,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               // ProcessedText 처리 로직을 FutureBuilder로 감싸기
               return FutureBuilder<ProcessedText?>(
                 future: widget.page.id != null 
-                    ? _pageContentService.getProcessedText(widget.page.id!)
+                    ? _contentManager.getProcessedText(widget.page.id!)
                     : Future.value(_processedText),
                 builder: (context, snapshot) {
                   // 위젯이 dispose 되었는지 확인
@@ -497,7 +495,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       }
 
       // 사전 서비스에서 단어 검색
-      final entry = await _pageContentService.lookupWord(word);
+      final entry = await _contentManager.lookupWord(word);
 
       if (entry != null) {
         if (mounted) {
@@ -534,7 +532,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   void _updateFlashcardWords() {
     setState(() {
       _flashcardWords =
-          _pageContentService.extractFlashcardWords(widget.flashCards);
+          _contentManager.extractFlashcardWords(widget.flashCards);
       debugPrint('플래시카드 단어 목록 업데이트: ${_flashcardWords.length}개');
     });
   }
@@ -600,7 +598,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       }
 
       // 사전 서비스에서 단어 검색 
-      final entry = await _pageContentService.lookupWord(word);
+      final entry = await _contentManager.lookupWord(word);
 
       if (entry != null) {
         if (mounted) {
@@ -941,8 +939,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       
       // 업데이트된 ProcessedText 저장 (캐시 업데이트)
       if (widget.page.id != null) {
-        _pageContentService.setProcessedText(widget.page.id!, updatedText);
-        await _pageContentService.updatePageCache(
+        _contentManager.setProcessedText(widget.page.id!, updatedText);
+        await _contentManager.updatePageCache(
           widget.page.id!, 
           updatedText, 
           "languageLearning"
@@ -958,7 +956,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     try {
       if (!mounted) return; // 위젯이 이미 dispose된 경우 중단
       
-      await _pageContentService.setProcessedText(pageId, processedText);
+      await _contentManager.setProcessedText(pageId, processedText);
       
       // 로깅
       debugPrint('processedText 저장 완료: pageId=$pageId');
