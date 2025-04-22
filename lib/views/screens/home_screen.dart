@@ -12,6 +12,7 @@ import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import '../../theme/tokens/ui_tokens.dart';
 import 'note_detail_screen.dart';
+import 'note_detail_screen_new.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/image_picker_bottom_sheet.dart';
 import '../../widgets/dot_loading_indicator.dart';
@@ -28,6 +29,7 @@ import '../../app.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../utils/debug_utils.dart';
 import '../../models/note.dart';
+import '../../views/screens/note_detail_screen.dart'; // 정확한 경로 확인 및 수정
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -486,11 +488,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       print("🚀 [HOME] Navigator.push 호출 직전. Note ID: ${cleanNote.id}");
 
       Navigator.of(context).push(
-        NoteDetailScreen.route(
-          note: cleanNote,
-          isProcessingBackground: false,
-          totalImageCount: note.imageCount ?? 0,
-        ),
+        NoteDetailScreenNew.route(note: cleanNote), // 새로운 화면으로 변경
       ).then((_) {
         print("[HOME] 노트 상세화면에서 돌아왔습니다.");
         Provider.of<HomeViewModel>(context, listen: false).refreshNotes();

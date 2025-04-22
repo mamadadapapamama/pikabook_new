@@ -417,6 +417,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           debugPrint('✅ 백그라운드에서 ${pages.length}개 페이지 로드 성공');
           debugPrint('⚠️ 노트 업데이트 전: _state.note?.pages: ${_state.note?.pages?.length ?? 0}, _state.note?.imageCount: ${_state.note?.imageCount ?? 0}');
           
+          // PageManager에도 페이지 목록 설정
+          _pageManager.setPages(pages);
+          debugPrint('✅ PageManager 페이지 설정 완료: ${_pageManager.pages.length}개 페이지');
+          
           setState(() {
             // 현재 노트 상태 업데이트
             if (_state.note != null) {
@@ -661,7 +665,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
         // 상태가 실제로 변경될 때만 setState 호출
         if (_state.isProcessingBackground != newProcessingState) {
-          setState(() {
+        setState(() {
             debugPrint('🔄 _checkBackgroundProcessing: 상태 변경 감지 -> setState 호출');
             _state.setBackgroundProcessingFlag(newProcessingState);
           });
@@ -853,7 +857,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       // isProcessingText 상태가 실제로 true에서 false로 변경될 때만 setState 호출
       if (_state.isProcessingText) {
         // 오류 발생 시 지연 없이 즉시 상태 업데이트
-        setState(() {
+    setState(() {
           _state.setProcessingText(false);
           debugPrint("  ✨ _processCurrentPageText: setState 호출됨 (오류 발생 시)");
         });
@@ -871,7 +875,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       // 오류 발생 시에도 isProcessingText 상태가 true일 때만 setState 호출
       if (_state.isProcessingText) {
         // 오류 발생 시 지연 없이 즉시 상태 업데이트
-        setState(() {
+    setState(() {
           _state.setProcessingText(false);
           debugPrint("  ✨ _processCurrentPageText: setState 호출됨 (오류 발생 시)");
         });
@@ -1086,10 +1090,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     // 로딩 중 또는 노트가 없는 경우
     if (_state.isLoading || _state.note == null) {
       debugPrint('  -> _buildBody: 로딩 또는 노트 없음 표시');
-      return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+                                return Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
               // 로딩 표시
               const DotLoadingIndicator(message: '노트를 불러오는 중입니다'),
               
@@ -1101,10 +1105,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
                   onPressed: _forceRefreshPage,
                   child: const Text('새로고침'),
                 ),
-            ],
-          ),
-        );
-    }
+                                    ],
+                                  ),
+                                );
+                              }
     
     // 에러가 있는 경우
     if (_state.error?.isNotEmpty == true) {
@@ -1122,9 +1126,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
               TextButton(
                 onPressed: _forceRefreshPage,
                 child: const Text('다시 시도'),
-              ),
-            ],
-          ),
+                        ),
+                      ],
+                    ),
       );
     }
     
@@ -1189,7 +1193,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             debugPrint("  -> itemBuilder[$index]: 이미지 파일 ${imageFile != null ? '있음' : '없음'}");
             debugPrint("  -> itemBuilder[$index]: Column 반환 시도");
             return Column(
-              children: [
+                          children: [
                 PageImageWidget(...),
                 Expanded(...),
               ],
@@ -1202,7 +1206,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       debugPrint('스택 트레이스: $stackTrace');
       // 오류 발생 시 대체 위젯 반환 (예: 에러 메시지)
       return Center(
-        child: Text(
+                  child: Text(
           '페이지 뷰를 표시하는 중 오류가 발생했습니다.\n$e',
           style: TextStyle(color: Colors.red),
           textAlign: TextAlign.center,

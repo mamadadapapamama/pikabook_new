@@ -37,11 +37,49 @@ class TtsService {
   Future<void> init() async {
     _flutterTts = FlutterTts();
 
+    try {
+      // 오디오 세션 설정 (iOS/macOS에서 중요)
+      await _flutterTts?.setSharedInstance(true);
+      await _flutterTts?.setIosAudioCategory(
+        IosTextToSpeechAudioCategory.playback,
+        [
+          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+          IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+          IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker
+        ],
+        IosTextToSpeechAudioMode.defaultMode
+      );
+      
+      // 오디오 포커스 설정 (Android용)
+      await _flutterTts?.setQueueMode(1); // 1: QUEUE_ADD
+      
+      debugPrint('TTS 엔진 초기화 성공');
+    } catch (e) {
+      debugPrint('오디오 세션 설정 중 오류(무시 가능): $e');
+    }
+    
     // 이벤트 리스너 설정
     await _setupEventHandlers();
 
     // 언어 설정
     await setLanguage(_currentLanguage);
+    
+    // 가용성 확인
+    try {
+      bool isAvailable = await _flutterTts?.isLanguageAvailable(_currentLanguage) ?? false;
+      debugPrint('TTS 언어 가용성: $_currentLanguage = $isAvailable');
+      
+      // 음성 목록 확인
+      final voices = await _flutterTts?.getVoices;
+      debugPrint('사용 가능한 음성 수: ${voices?.length ?? 0}');
+      
+      // 시스템 볼륨 확인 (iOS에서만 가능)
+      final volume = await _flutterTts?.getMaxSpeechInputLength;
+      debugPrint('현재 설정된 볼륨 정보: $volume');
+    } catch (e) {
+      debugPrint('TTS 가용성 확인 중 오류(무시 가능): $e');
+    }
   }
 
   // 언어 설정
@@ -53,10 +91,12 @@ class TtsService {
     // TTS에 맞는 언어 코드로 변환
     final ttsLanguageCode = TtsLanguage.getTtsLanguageCode(language);
     await _flutterTts?.setLanguage(ttsLanguageCode);
+    debugPrint('TTS 언어 설정: $ttsLanguageCode');
 
     // 언어에 따른 음성 설정
     final voiceName = TtsLanguage.getVoiceName(ttsLanguageCode);
     await _flutterTts?.setVoice({"name": voiceName, "locale": ttsLanguageCode});
+    debugPrint('TTS 음성 설정: $voiceName, 로케일: $ttsLanguageCode');
     
     // 언어별 발화 속도 조정
     double speechRate = 0.5;  // 기본값
@@ -84,6 +124,7 @@ class TtsService {
     await _flutterTts?.setSpeechRate(speechRate);
     await _flutterTts?.setVolume(1.0);
     await _flutterTts?.setPitch(1.0);
+    debugPrint('TTS 설정 완료: 속도=$speechRate, 볼륨=1.0, 피치=1.0');
   }
 
   /// 텍스트 읽기

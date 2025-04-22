@@ -59,7 +59,7 @@ class PageContentWidget extends StatefulWidget {
   const PageContentWidget({
     super.key,
     required this.page,
-    required this.imageFile,
+    this.imageFile,
     required this.isLoadingImage,
     required this.noteId,
     required this.onCreateFlashCard,
