@@ -10,6 +10,7 @@ import '../../theme/tokens/typography_tokens.dart';
 import '../../widgets/common/pika_app_bar.dart';
 import '../../models/flash_card.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 /// 노트 상세 화면 (개선된 버전)
 class NoteDetailScreenNew extends StatefulWidget {
@@ -37,7 +38,7 @@ class NoteDetailScreenNew extends StatefulWidget {
   _NoteDetailScreenNewState createState() => _NoteDetailScreenNewState();
 }
 
-class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> {
+class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with AutomaticKeepAliveClientMixin {
   late PageManager _pageManager;
   late PageController _pageController;
   final ContentManager _contentManager = ContentManager();
@@ -49,18 +50,26 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> {
   bool _isProcessingSegments = false;
   Timer? _processingTimer;
   List<FlashCard> _flashCards = [];
+  // 페이지 컨텐츠 위젯 관련 상태
+  Map<String, bool> _processedPageStatus = {};
+  bool _shouldUpdateUI = true; // 화면 업데이트 제어 플래그
+
+  @override
+  bool get wantKeepAlive => true; // AutomaticKeepAliveClientMixin 구현
 
   @override
   void initState() {
     super.initState();
-    debugPrint("🏁 NoteDetailScreenNew initState: noteId=${widget.noteId}");
+    if (kDebugMode) {
+      debugPrint("🏁 NoteDetailScreenNew initState: noteId=${widget.noteId}");
+    }
     _currentNote = widget.initialNote;
     _pageController = PageController(initialPage: _currentPageIndex);
 
     _pageManager = PageManager(
       noteId: widget.noteId,
       initialNote: widget.initialNote,
-       useCacheFirst: false,
+      useCacheFirst: false,
     );
 
     // 첫 프레임 빌드 후에 페이지 로드 시작
@@ -77,12 +86,26 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> {
     if (_processingTimer != null) {
       _processingTimer!.cancel();
       _processingTimer = null;
+      if (kDebugMode) {
+        debugPrint("⏱️ 처리 타이머 취소됨");
+      }
     }
     super.dispose();
   }
 
+  // 사용량 데이터 처리 중 불필요한 UI 업데이트를 방지
+  void _pauseUIUpdates() {
+    _shouldUpdateUI = false;
+  }
+
+  void _resumeUIUpdates() {
+    _shouldUpdateUI = true;
+  }
+
   Future<void> _loadInitialPages() async {
-    debugPrint("🔄 NoteDetailScreenNew: _loadInitialPages 시작");
+    if (kDebugMode) {
+      debugPrint("🔄 NoteDetailScreenNew: _loadInitialPages 시작");
+    }
     if (!mounted) return;
 
     setState(() {
@@ -93,18 +116,74 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> {
     try {
       // forceRefresh: true로 항상 서버/캐시에서 로드 시도
       final pages = await _pageManager.loadPagesFromServer(forceRefresh: true);
-      if (mounted) {
+      
+      // 마운트 확인 및 상태 업데이트
+      if (!mounted) return;
+      
+      // 로드된 페이지가 없으면 빈 리스트로 설정하여 로딩 상태 해제
+      if (pages.isEmpty) {
+        if (kDebugMode) {
+          debugPrint("⚠️ NoteDetailScreenNew: 로드된 페이지가 없습니다.");
+        }
         setState(() {
           _pages = pages;
           _isLoading = false;
-          debugPrint("✅ NoteDetailScreenNew: 페이지 로드 완료 (${pages.length}개)");
         });
-        // 페이지 로드 후 세그먼트 처리 시작
+        return;
+      }
+      
+      // 페이지 처리 상태를 미리 확인하여 처리 필요 여부 결정
+      bool needsProcessing = false;
+      if (pages.isNotEmpty) {
+        try {
+          final firstPage = pages.first;
+          final processedText = await _contentManager.getProcessedText(firstPage.id!);
+          needsProcessing = processedText == null || 
+                           (processedText.segments == null || processedText.segments!.isEmpty);
+          if (kDebugMode) {
+            debugPrint("🔍 첫 페이지 처리 필요 여부: $needsProcessing");
+          }
+          
+          // 페이지 처리 상태 기록
+          if (firstPage.id != null) {
+            _processedPageStatus[firstPage.id!] = !needsProcessing;
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
+          }
+          needsProcessing = true;
+        }
+      }
+      
+      _pauseUIUpdates(); // 불필요한 UI 업데이트 방지 시작
+      
+      setState(() {
+        _pages = pages;
+        _isLoading = false;
+        if (kDebugMode) {
+          debugPrint("✅ NoteDetailScreenNew: 페이지 로드 완료 (${pages.length}개)");
+        }
+      });
+      
+      // UI 업데이트 재개를 지연시켜 불필요한 업데이트 방지
+      Future.delayed(Duration(milliseconds: 500), () {
+        _resumeUIUpdates();
+      });
+      
+      // 페이지 로드 후 세그먼트 처리가 필요한 경우에만 시작
+      if (needsProcessing) {
         _startSegmentProcessing();
+      } else {
+        if (kDebugMode) {
+          debugPrint("✅ 모든 페이지가 이미 처리되어 있어 세그먼트 처리 건너뜀");
+        }
       }
     } catch (e, stackTrace) {
-      debugPrint("❌ NoteDetailScreenNew: 페이지 로드 중 오류: $e");
-      debugPrint("Stack Trace: $stackTrace");
+      if (kDebugMode) {
+        debugPrint("❌ NoteDetailScreenNew: 페이지 로드 중 오류: $e");
+        debugPrint("Stack Trace: $stackTrace");
+      }
       if (mounted) {
         setState(() {
           _error = "페이지 로드 실패: $e";
@@ -117,9 +196,7 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> {
   void _startSegmentProcessing() {
     if (_pages == null || _pages!.isEmpty) return;
     
-    setState(() {
-      _isProcessingSegments = true;
-    });
+    _isProcessingSegments = true; // setState 없이 상태만 설정
     
     // 첫 번째 페이지부터 순차적으로 세그먼트 처리
     _processPageSegments(_currentPageIndex);
@@ -129,68 +206,102 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> {
       if (!_isProcessingSegments) {
         timer.cancel();
         _processingTimer = null;
+        if (kDebugMode) {
+          debugPrint("⏱️ 처리 타이머 종료됨: 모든 세그먼트 처리 완료");
+        }
       }
     });
+    
+    if (kDebugMode) {
+      debugPrint("⏱️ 세그먼트 처리 타이머 시작됨 (3초 간격)");
+    }
   }
   
   Future<void> _processPageSegments(int pageIndex) async {
     if (_pages == null || pageIndex >= _pages!.length) {
-      setState(() {
-        _isProcessingSegments = false;
-      });
+      _isProcessingSegments = false; // setState 없이 플래그만 업데이트
       return;
     }
     
     try {
       final page = _pages![pageIndex];
-      debugPrint("🔄 페이지 ${pageIndex + 1} 세그먼트 처리 시작: ${page.id}");
+      if (kDebugMode) {
+        debugPrint("🔄 페이지 ${pageIndex + 1} 세그먼트 처리 시작: ${page.id}");
+      }
+      
+      // 이미 처리된 페이지인지 확인
+      if (page.id != null && _processedPageStatus[page.id!] == true) {
+        if (kDebugMode) {
+          debugPrint("✅ 페이지 ${pageIndex + 1}는 이미 처리되어 있어 건너뜁니다.");
+        }
+        // 다음 페이지로 진행
+        if (pageIndex < _pages!.length - 1) {
+          _processPageSegments(pageIndex + 1);
+        } else {
+          _isProcessingSegments = false;
+        }
+        return;
+      }
       
       // ContentManager를 통해 페이지 텍스트 처리
       final processedText = await _contentManager.processPageText(
         page: page,
-        imageFile: null, // 명시적으로 null을 전달하여 이미지 파일이 없음을 표시
+        imageFile: null,
       );
       
       // 세그먼트 처리 결과 확인
       if (processedText != null) {
-        debugPrint("✅ 페이지 ${pageIndex + 1} 세그먼트 처리 완료 - 결과: ${processedText.segments?.length ?? 0}개 세그먼트");
+        if (kDebugMode) {
+          debugPrint("✅ 페이지 ${pageIndex + 1} 세그먼트 처리 완료 - 결과: ${processedText.segments?.length ?? 0}개 세그먼트");
+        }
+        // 페이지 처리 상태 업데이트
+        if (page.id != null) {
+          _processedPageStatus[page.id!] = true;
+        }
       } else {
-        debugPrint("⚠️ 페이지 ${pageIndex + 1} 세그먼트 처리 결과가 null입니다");
+        if (kDebugMode) {
+          debugPrint("⚠️ 페이지 ${pageIndex + 1} 세그먼트 처리 결과가 null입니다");
+        }
       }
       
       if (mounted) {
-        debugPrint("✅ 페이지 ${pageIndex + 1} 세그먼트 처리 완료");
+        if (kDebugMode) {
+          debugPrint("✅ 페이지 ${pageIndex + 1} 세그먼트 처리 완료");
+        }
         
         // 다음 페이지 처리 (필요한 경우)
         if (pageIndex < _pages!.length - 1) {
           _processPageSegments(pageIndex + 1);
         } else {
-          setState(() {
-            _isProcessingSegments = false;
-            // 모든 페이지 처리 완료 후 화면 새로고침
-            if (mounted) {
-              Future.delayed(Duration(milliseconds: 500), () {
-                if (mounted) setState(() {});
-              });
-            }
-          });
+          _isProcessingSegments = false; // setState 없이 상태만 업데이트
+          
+          // 모든 페이지 처리 완료 후 화면 새로고침은 필요한 경우에만 실행
+          if (mounted && _currentPageIndex == 0 && _shouldUpdateUI) { // 첫 페이지이고 UI 업데이트가 허용된 경우에만
+            Future.delayed(Duration(milliseconds: 500), () {
+              if (mounted) setState(() {});
+            });
+          }
         }
       }
     } catch (e) {
-      debugPrint("❌ 페이지 세그먼트 처리 중 오류: $e");
+      if (kDebugMode) {
+        debugPrint("❌ 페이지 세그먼트 처리 중 오류: $e");
+      }
       if (mounted) {
-        setState(() {
-          _isProcessingSegments = false;
-        });
+        _isProcessingSegments = false; // setState 없이 상태만 업데이트
       }
     }
   }
 
   void _onPageChanged(int index) {
+    if (!mounted || _pages == null || index >= _pages!.length || _currentPageIndex == index) return;
+    
     setState(() {
       _currentPageIndex = index;
     });
-    print("페이지 변경됨: $_currentPageIndex");
+    if (kDebugMode) {
+      debugPrint("📄 페이지 변경됨: $_currentPageIndex");
+    }
     
     // 페이지가 변경될 때 해당 페이지의 세그먼트가 처리되지 않았다면 처리 시작
     if (_pages != null && index < _pages!.length) {
@@ -200,47 +311,109 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> {
   }
   
   void _checkAndProcessPageIfNeeded(pika_page.Page page) async {
+    if (page.id == null) return;
+    
+    // 이미 처리 상태를 알고 있는 경우 체크 스킵
+    if (_processedPageStatus.containsKey(page.id!) && _processedPageStatus[page.id!] == true) {
+      if (kDebugMode) {
+        debugPrint("✅ 페이지 ${page.id}는 이미 처리되어 있어 다시 처리하지 않습니다.");
+      }
+      return;
+    }
+    
     try {
       // 이미 처리된 세그먼트가 있는지 확인
       final processedText = await _contentManager.getProcessedText(page.id!);
+      if (processedText != null && processedText.segments != null && processedText.segments!.isNotEmpty) {
+        // 처리된 세그먼트가 있으면 상태 업데이트
+        _processedPageStatus[page.id!] = true;
+        if (kDebugMode) {
+          debugPrint("✅ 페이지 ${page.id}는 이미 처리되어 있습니다: ${processedText.segments!.length}개 세그먼트");
+        }
+        return;
+      }
+      
       if (processedText == null) {
         // 처리된 세그먼트가 없으면 처리 시작
-        debugPrint("🔄 현재 페이지 세그먼트 처리 시작: ${page.id}");
+        if (kDebugMode) {
+          debugPrint("🔄 현재 페이지 세그먼트 처리 시작: ${page.id}");
+        }
+        _pauseUIUpdates(); // UI 업데이트 일시 중지
+        
         _contentManager.processPageText(
           page: page,
-          imageFile: null, // 명시적으로 null을 전달하여 이미지 파일이 없음을 표시
-        );
+          imageFile: null,
+        ).then((result) {
+          if (result != null) {
+            if (kDebugMode) {
+              debugPrint("✅ 처리 완료: ${result.segments?.length ?? 0}개 세그먼트");
+            }
+            // 페이지 처리 상태 업데이트
+            _processedPageStatus[page.id!] = true;
+            
+            // 딜레이 후 UI 업데이트 재개 및 화면 갱신
+            Future.delayed(Duration(milliseconds: 300), () {
+              _resumeUIUpdates();
+              // 현재 페이지인 경우에만 화면 갱신
+              if (mounted && _pages != null && _currentPageIndex < _pages!.length && 
+                  _pages![_currentPageIndex].id == page.id && _shouldUpdateUI) {
+                setState(() {});
+              }
+            });
+          }
+        }).catchError((e) {
+          if (kDebugMode) {
+            debugPrint("❌ 처리 중 오류 발생: $e");
+          }
+          _resumeUIUpdates();
+        });
       }
     } catch (e) {
-      debugPrint("❌ 세그먼트 처리 확인 중 오류: $e");
+      if (kDebugMode) {
+        debugPrint("❌ 세그먼트 처리 확인 중 오류: $e");
+      }
+      _resumeUIUpdates();
     }
   }
   
   // 플래시카드 생성 핸들러
   void _handleCreateFlashCard(String originalText, String translatedText, {String? pinyin}) {
     // 플래시카드 추가 로직 구현 (실제 구현은 추후 필요)
-    debugPrint("플래시카드 생성: $originalText - $translatedText");
+    if (kDebugMode) {
+      debugPrint("📝 플래시카드 생성: $originalText - $translatedText");
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-     debugPrint("🧱 NoteDetailScreenNew build: isLoading=$_isLoading, pages=${_pages?.length ?? 0}, error=$_error");
+    super.build(context); // AutomaticKeepAliveClientMixin 요구사항
+    if (kDebugMode) {
+      debugPrint("🧱 NoteDetailScreenNew build: isLoading=$_isLoading, pages=${_pages?.length ?? 0}, error=$_error");
+    }
+    
     return Scaffold(
-      appBar: PikaAppBar(
+      appBar: PikaAppBar.noteDetail(
         title: widget.initialNote?.originalText ?? _currentNote?.originalText ?? '노트 로딩 중...',
-        actions: [
-          // 수동 새로고침 버튼 추가 (디버깅용)
-          IconButton(
-            icon: const Icon(Icons.refresh, color: ColorTokens.textSecondary),
-            onPressed: () {
-              debugPrint("수동 새로고침 버튼 클릭");
-              if (_pages != null && _currentPageIndex < _pages!.length) {
-                _checkAndProcessPageIfNeeded(_pages![_currentPageIndex]);
-                setState(() {}); // 화면 강제 새로고침
-              }
-            },
-          ),
-        ],
+        currentPage: _pages != null && _pages!.isNotEmpty ? _currentPageIndex + 1 : 0,
+        totalPages: _pages?.length ?? 0,
+        flashcardCount: _flashCards.length,
+        onMorePressed: () {
+          // 더보기 메뉴 처리
+          if (kDebugMode) {
+            debugPrint("더보기 메뉴 클릭");
+          }
+          // 추후 구현 필요
+        },
+        onFlashcardTap: () {
+          // 플래시카드 탭 처리
+          if (kDebugMode) {
+            debugPrint("플래시카드 카운터 클릭");
+          }
+          // 추후 구현 필요
+        },
+        onBackPressed: () {
+          Navigator.of(context).pop();
+        },
       ),
       body: _buildBody(),
     );
@@ -273,92 +446,151 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> {
       );
     }
 
-    return PageView.builder(
-      controller: _pageController,
-      itemCount: _pages!.length,
-      onPageChanged: _onPageChanged,
-      itemBuilder: (context, index) {
-        final page = _pages![index];
-       
-        // 특수 처리 마커("___PROCESSING___")가 있는지 확인
-        if (page.originalText == "___PROCESSING___") {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const DotLoadingIndicator(message: '텍스트 처리를 기다리는 중...'),
-                Text(
-                  '이 페이지는 아직 처리 중입니다.\n잠시 후 자동으로 업데이트됩니다.',
-                  textAlign: TextAlign.center,
-                  style: TypographyTokens.body2,
-                ),
-              ],
-            ),
-          );
-        }
-        
-        // 처리된 텍스트가 있는지 확인하기 위한 로그 추가
-        _checkProcessedTextStatus(page);
+    // 위젯 캐싱을 위한 변수
+    final List<Widget> pageWidgets = List.generate(_pages!.length, (index) {
+      final page = _pages![index];
+      
+      // 특수 처리 마커가 있는지 확인
+      if (page.originalText == "___PROCESSING___") {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const DotLoadingIndicator(message: '텍스트 처리를 기다리는 중...'),
+              Text(
+                '이 페이지는 아직 처리 중입니다.\n잠시 후 자동으로 업데이트됩니다.',
+                textAlign: TextAlign.center,
+                style: TypographyTokens.body2,
+              ),
+            ],
+          ),
+        );
+      }
+      
+      // 비동기적으로 처리된 텍스트 확인 (백그라운드에서)
+      if (page.id != null && !_processedPageStatus.containsKey(page.id!)) {
+        Future.microtask(() => _checkProcessedTextStatus(page));
+      }
 
-        // PageContentWidget 사용하여 페이지 콘텐츠 표시
-        return PageContentWidget(
-          key: ValueKey('page_content_${page.id}_${DateTime.now().millisecondsSinceEpoch}'), // 키 추가하여 재생성 강제
+      // 메모이제이션을 위해 ValueKey 사용 및 RepaintBoundary로 감싸기
+      return RepaintBoundary(
+        child: PageContentWidget(
+          key: ValueKey('page_content_${page.id}'),
           page: page,
-          imageFile: null, // 이미지는 이미 처리 완료된 상태
+          imageFile: null,
           isLoadingImage: false,
           noteId: widget.noteId,
           onCreateFlashCard: _handleCreateFlashCard,
           flashCards: _flashCards,
-          useSegmentMode: true, // 세그먼트 모드 활성화
-        );
-      },
+          useSegmentMode: true,
+        ),
+      );
+    });
+
+    return PageView(
+      controller: _pageController,
+      onPageChanged: _onPageChanged,
+      children: pageWidgets,
     );
   }
 
   // 처리된 텍스트 상태 확인 함수
   void _checkProcessedTextStatus(pika_page.Page page) async {
     if (page.id == null) {
-      debugPrint("⚠️ 페이지 ID가 null입니다");
+      if (kDebugMode) {
+        debugPrint("⚠️ 페이지 ID가 null입니다");
+      }
+      return;
+    }
+    
+    // 이미 확인된 페이지는 건너뛰기
+    if (_processedPageStatus.containsKey(page.id!) && _processedPageStatus[page.id!] == true) {
       return;
     }
     
     // 특수 처리 마커("___PROCESSING___")가 있는지 확인하고 건너뛰기
     if (page.originalText == "___PROCESSING___") {
-      debugPrint("⚠️ 페이지 ${page.id}에 특수 처리 마커가 있습니다");
+      if (kDebugMode) {
+        debugPrint("⚠️ 페이지 ${page.id}에 특수 처리 마커가 있습니다");
+      }
       return;
     }
     
     try {
       final processedText = await _contentManager.getProcessedText(page.id!);
       if (processedText != null) {
-        debugPrint("✅ 페이지 ${page.id}의 처리된 텍스트가 있습니다: ${processedText.segments?.length ?? 0}개 세그먼트");
+        if (kDebugMode) {
+          debugPrint("✅ 페이지 ${page.id}의 처리된 텍스트가 있습니다: ${processedText.segments?.length ?? 0}개 세그먼트");
+        }
         
         // 세그먼트가 비어있는지 확인
         if (processedText.segments == null || processedText.segments!.isEmpty) {
-          debugPrint("⚠️ 페이지 ${page.id}의 세그먼트가 비어 있습니다. 처리 다시 시도");
-          // 페이지 처리 다시 시도 (자동 처리 대기)
-          debugPrint("⌛ 페이지 자동 처리 대기 중");
+          if (kDebugMode) {
+            debugPrint("⚠️ 페이지 ${page.id}의 세그먼트가 비어 있습니다. 처리 다시 시도");
+          }
+          // 처리 상태 기록 안함 (빈 세그먼트는 제대로 처리되지 않은 것으로 간주)
+        } else {
+          // 정상적으로 처리된 페이지 기록
+          _processedPageStatus[page.id!] = true;
         }
       } else {
-        debugPrint("❌ 페이지 ${page.id}의 처리된 텍스트가 없습니다 - 세그먼트 처리 필요");
+        if (kDebugMode) {
+          debugPrint("❌ 페이지 ${page.id}의 처리된 텍스트가 없습니다 - 세그먼트 처리 필요");
+        }
+        
+        // 현재 UI 업데이트가 일시 중지된 상태인지 확인
+        bool wasUpdatesPaused = !_shouldUpdateUI;
+        
+        if (!wasUpdatesPaused) {
+          _pauseUIUpdates(); // UI 업데이트 일시 중지
+        }
+        
         // 처리된 텍스트가 없으면 처리 시작
         _contentManager.processPageText(
           page: page,
           imageFile: null,
         ).then((result) {
           if (result != null) {
-            debugPrint("✅ 처리 완료: ${result.segments?.length ?? 0}개 세그먼트");
-            // 화면 갱신
-            if (mounted) setState(() {});
+            if (kDebugMode) {
+              debugPrint("✅ 처리 완료: ${result.segments?.length ?? 0}개 세그먼트");
+            }
+            // 처리 상태 기록
+            _processedPageStatus[page.id!] = true;
+            
+            // 업데이트를 일시 중지한 경우만 재개
+            if (!wasUpdatesPaused) {
+              Future.delayed(Duration(milliseconds: 300), () {
+                _resumeUIUpdates();
+                // 현재 페이지인 경우에만 화면 갱신
+                if (mounted && _pages != null && _currentPageIndex < _pages!.length && 
+                    _pages![_currentPageIndex].id == page.id && _shouldUpdateUI) {
+                  setState(() {});
+                }
+              });
+            }
           } else {
-            debugPrint("❌ 처리 결과가 null입니다");
+            if (kDebugMode) {
+              debugPrint("❌ 처리 결과가 null입니다");
+            }
+            // 업데이트를 일시 중지한 경우만 재개
+            if (!wasUpdatesPaused) {
+              _resumeUIUpdates();
+            }
           }
         }).catchError((e) {
-          debugPrint("❌ 처리 중 오류 발생: $e");
+          if (kDebugMode) {
+            debugPrint("❌ 처리 중 오류 발생: $e");
+          }
+          // 업데이트를 일시 중지한 경우만 재개
+          if (!wasUpdatesPaused) {
+            _resumeUIUpdates();
+          }
         });
       }
     } catch (e) {
-      debugPrint("❌ 처리된 텍스트 확인 중 오류 발생: $e");
+      if (kDebugMode) {
+        debugPrint("❌ 처리된 텍스트 확인 중 오류 발생: $e");
+      }
     }
   }
 } 
