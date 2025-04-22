@@ -28,8 +28,9 @@ class TranslationService {
   // 사용량 추적 서비스
   final UsageLimitService _usageLimitService = UsageLimitService();
 
+  // 생성자 로그 추가
   TranslationService._internal() {
-    debugPrint('TranslationService 생성됨');
+    debugPrint('🌐 TranslationService: 생성자 호출됨');
     _initializeApi();
   }
 

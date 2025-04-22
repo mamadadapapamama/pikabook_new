@@ -93,11 +93,11 @@ class DictionaryResultWidget extends StatelessWidget {
                   SizedBox(width: SpacingTokens.xs),
                   // 발음 듣기 버튼 - TtsButton 위젯으로 변경
                   FutureBuilder<bool>(
-                    future: contentManager.getTtsService().isTtsAvailable(),
+                    future: contentManager.ttsService.isTtsAvailable(),
                     builder: (context, snapshot) {
                       final bool isTtsEnabled = snapshot.data ?? true;
                       final String? ttsTooltip = !isTtsEnabled ? 
-                          contentManager.getTtsService().getTtsLimitMessage() : null;
+                          contentManager.ttsService.getTtsLimitMessage() : null;
                       
                       // 표준 TtsButton 위젯 사용
                       return TtsButton(

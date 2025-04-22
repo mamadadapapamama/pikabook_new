@@ -22,26 +22,42 @@ import '../services/text_processing/text_processing_service.dart';
 
 class ContentManager {
   // 싱글톤 패턴 구현
-  static final ContentManager _instance = ContentManager._internal();
-  factory ContentManager() => _instance;
-
-  // 사용할 서비스들
-  final PageService _pageService = PageService();
-  final EnhancedOcrService _ocrService = EnhancedOcrService();
-  final TtsService _ttsService = TtsService();
-  final DictionaryService _dictionaryService = DictionaryService();
-  final UnifiedCacheService _cacheService = UnifiedCacheService();
-  final TranslationService _translationService = TranslationService();
-  final TextProcessingService _textProcessingService = TextProcessingService();
-  final PinyinCreationService _pinyinService = PinyinCreationService();
-
-  ContentManager._internal() {
-    _initTts();
+  static final ContentManager _instance = () {
+    debugPrint('🏭 ContentManager: 싱글톤 인스턴스 생성 시작');
+    final instance = ContentManager._internal();
+    debugPrint('🏭 ContentManager: 싱글톤 인스턴스 생성 완료');
+    return instance;
+  }();
+  
+  factory ContentManager() {
+    debugPrint('🏭 ContentManager: 팩토리 생성자 호출됨 (싱글톤 반환)');
+    return _instance;
   }
 
-  // TTS 초기화
-  Future<void> _initTts() async {
-    await _ttsService.init();
+  // 사용할 서비스들 (late final로 변경)
+  late final PageService _pageService = PageService();
+  late final EnhancedOcrService _ocrService = EnhancedOcrService();
+  late final TtsService _ttsService = TtsService();
+  late final DictionaryService _dictionaryService = DictionaryService();
+  late final UnifiedCacheService _cacheService = UnifiedCacheService();
+  late final TranslationService _translationService = TranslationService();
+  late final TextProcessingService _textProcessingService = TextProcessingService();
+  late final PinyinCreationService _pinyinService = PinyinCreationService();
+
+  ContentManager._internal() {
+    debugPrint('🤫 ContentManager: 내부 생성자(_internal) 호출됨 - 서비스 초기화 지연됨');
+    // _initTts(); // TTS 초기화는 필요 시 별도 호출 또는 _ttsService 접근 시 자동 초기화
+  }
+
+  // TTS 초기화 (필요 시 외부에서 호출하거나, _ttsService 첫 접근 시 자동 초기화되도록 함)
+  // Future<void> initServices() async {
+  //   await _ttsService.init(); 
+  // }
+
+  // TTS 초기화 - TtsService 접근 시 자동으로 초기화되도록 getter 사용 가능성
+  TtsService get ttsService {
+    // _ttsService.init(); // 필요하다면 여기서 init 호출
+    return _ttsService;
   }
 
   //
@@ -55,11 +71,13 @@ class ContentManager {
     int recursionDepth = 0, // 재귀 호출 깊이 추적을 위한 매개변수 추가
   }) async {
     // 재귀 호출 깊이 제한 (스택 오버플로우 방지)
+    print("ContentManager.processPageText 시작: pageId=${page.id}, recursionDepth=$recursionDepth");
+    
     if (recursionDepth > 2) {
-      debugPrint('⚠️ 경고: processPageText 재귀 호출 깊이 초과 (방지)');
+      debugPrint('❌ 무한 루프 방지: 최대 재귀 깊이(2) 초과');
       return null;
     }
-
+    
     if (page.originalText.isEmpty && imageFile == null) return null;
 
     try {
@@ -71,6 +89,7 @@ class ContentManager {
         ProcessedText? cachedText = await getProcessedText(pageId);
         if (cachedText != null) {
           debugPrint('✅ 메모리 캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId');
+          print("ContentManager.processPageText 완료(캐시): pageId=$pageId");
           return cachedText;
         }
         
@@ -100,6 +119,7 @@ class ContentManager {
             if (convertedText != null) {
               debugPrint('✅ 영구 캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId');
               await setProcessedText(pageId, convertedText);
+              print("ContentManager.processPageText 완료(영구캐시): pageId=$pageId");
               return convertedText;
             }
           }
@@ -108,7 +128,7 @@ class ContentManager {
           // 캐시 오류는 무시하고 계속 진행
         }
       }
-
+      
       // 텍스트 처리 로직
       final originalText = page.originalText;
       final translatedText = page.translatedText ?? '';
@@ -117,6 +137,7 @@ class ContentManager {
       if (imageFile != null &&
           (originalText.isEmpty || translatedText.isEmpty)) {
         try {
+          print("이미지 OCR 처리 시작: pageId=$pageId");
           final processedText = await _ocrService.processImage(
             imageFile,
             "languageLearning", // 항상 languageLearning 모드 사용
@@ -129,7 +150,8 @@ class ContentManager {
             // 백그라운드로 영구 캐싱
             _cacheInBackground(pageId, processedText);
           }
-
+          
+          print("ContentManager.processPageText 완료(OCR): pageId=$pageId");
           return processedText;
         } catch (ocrError) {
           debugPrint('OCR 처리 중 오류: $ocrError');
@@ -146,9 +168,10 @@ class ContentManager {
       // 텍스트 처리
       if (originalText.isNotEmpty) {
         try {
+          print("텍스트 처리 시작: pageId=$pageId, 텍스트 길이=${originalText.length}");
           ProcessedText processedText =
               await _ocrService.processText(originalText, "languageLearning");
-
+        
           // 번역 텍스트가 있는 경우 설정
           if (translatedText.isNotEmpty &&
               processedText.fullTranslatedText == null) {
@@ -163,7 +186,8 @@ class ContentManager {
             // 백그라운드로 영구 캐싱
             _cacheInBackground(pageId, processedText);
           }
-
+          
+          print("ContentManager.processPageText 완료(텍스트): pageId=$pageId");
           return processedText;
         } catch (textProcessingError) {
           debugPrint('텍스트 처리 중 오류: $textProcessingError');
@@ -176,8 +200,9 @@ class ContentManager {
           );
         }
       }
-    } catch (e) {
+    } catch (e, stack) {
       debugPrint('페이지 텍스트 처리 중 오류 발생: $e');
+      debugPrint('스택 트레이스: $stack');
       // 오류 발생 시 기본 텍스트 반환
       return ProcessedText(
         fullOriginalText: page.originalText,
@@ -189,7 +214,7 @@ class ContentManager {
 
     return null;
   }
-
+  
   // ProcessedText 캐시 메서드들
   Future<bool> hasProcessedText(String pageId) async {
     final processedText = await _cacheService.getProcessedText(pageId);
@@ -243,10 +268,6 @@ class ContentManager {
 
   Future<void> stopSpeaking() async {
     await _ttsService.stop();
-  }
-
-  TtsService getTtsService() {
-    return _ttsService;
   }
 
   // 사전 검색

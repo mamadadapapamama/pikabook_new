@@ -6,6 +6,7 @@ import '../../models/page.dart' as page_model;
 import '../../models/processed_text.dart';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../managers/content_manager.dart'; // ContentManager 임포트
 
 // 캐시 작업 유형 (통계용)
 enum CacheOperationType {
@@ -39,22 +40,29 @@ class UnifiedCacheService {
   // SharedPreferences 인스턴스
   SharedPreferences? _prefs;
 
+  final Set<String> _initializationLocks = {};
+  
+  // 생성자 로그 추가
   UnifiedCacheService._internal() {
-    debugPrint('UnifiedCacheService 생성됨 - 메모리 캐싱만 활성화');
-    // 사용자 ID 초기화 시도
-    _initCurrentUserId();
+    debugPrint('💾 UnifiedCacheService: 내부 생성자(_internal) 호출됨');
+    _initCurrentUserId(); // 기존 초기화 메서드 호출 유지
   }
   
   // 현재 사용자 ID 초기화
   Future<void> _initCurrentUserId() async {
+    debugPrint('    [CacheService] _initCurrentUserId 시작');
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null && user.uid.isNotEmpty) {
+        debugPrint('    [CacheService] Firebase에서 사용자 ID 가져옴: ${user.uid}');
         await setCurrentUserId(user.uid);
+      } else {
+        debugPrint('    [CacheService] Firebase에 현재 사용자 없음');
       }
     } catch (e) {
-      debugPrint('초기 사용자 ID 로드 중 오류 발생: $e');
+      debugPrint('    [CacheService] 초기 사용자 ID 로드 중 오류 발생: $e');
     }
+    debugPrint('    [CacheService] _initCurrentUserId 완료');
   }
   
   // 사용자 ID 설정 - 사용자 로그인 시 호출됨

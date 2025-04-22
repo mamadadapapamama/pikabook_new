@@ -52,7 +52,7 @@ class ImageService {
   static const int _defaultJpegQuality = 85; // 기본 JPEG 품질
   
   ImageService._internal() {
-    // 초기화 로직
+    debugPrint('🖼️ ImageService: 생성자 호출됨');
   }
 
   // 현재 사용자 ID 가져오기

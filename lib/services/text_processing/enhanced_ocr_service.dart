@@ -21,6 +21,7 @@ import '../../services/text_processing/text_cleaner_service.dart';
 import '../../services/text_processing/pinyin_creation_service.dart';
 import '../../services/authentication/user_preferences_service.dart';
 import 'package:crypto/crypto.dart';
+import '../../managers/content_manager.dart'; // ContentManager 임포트
 
 /// 개선된 OCR 서비스 : OCR 처리 후 모드에 따라 다른 처리를 수행합니다.
 /// 전문 서적 모드 : 핀인 제거 후 전체 텍스트 번역
@@ -30,7 +31,9 @@ class EnhancedOcrService {
   // 싱글톤 패턴 구현
   static final EnhancedOcrService _instance = EnhancedOcrService._internal();
   factory EnhancedOcrService() => _instance;
-  EnhancedOcrService._internal();
+  EnhancedOcrService._internal() {
+    debugPrint('🤖 EnhancedOcrService: 생성자 호출됨');
+  }
 
   // Google Cloud Vision API 클라이언트
   vision.VisionApi? _visionApi;

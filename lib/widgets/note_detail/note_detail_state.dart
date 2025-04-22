@@ -2,6 +2,7 @@ import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import 'dart:io';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 class NoteDetailState {
   Note? note;
@@ -22,11 +23,17 @@ class NoteDetailState {
   
   // 상태 업데이트 메서드
   void updateNote(Note note) {
+    debugPrint('📝 NoteDetailState.updateNote 호출:');
+    debugPrint('  - 기존 노트: ${this.note?.id}, 페이지 수: ${this.note?.pages?.length ?? 0}');
+    debugPrint('  - 새 노트: ${note.id}, 페이지 수: ${note.pages?.length ?? 0}, imageCount: ${note.imageCount ?? 0}');
+    
     this.note = note;
     this.isFavorite = note.isFavorite;
   }
   
   void setLoading(bool loading) {
+    // 로딩 상태 변경 로깅
+    debugPrint('🔄 setLoading 호출: 현재 isLoading=$isLoading -> 새 값=$loading');
     isLoading = loading;
   }
   

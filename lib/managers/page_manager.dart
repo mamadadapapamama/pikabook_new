@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/page.dart' as page_model;
-import '../models/note.dart';
+import '../models/note.dart' as note_model;
 import '../services/content/page_service.dart';
 import '../services/media/image_service.dart';
 import '../services/storage/unified_cache_service.dart';
@@ -12,9 +12,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// 페이지 관리 클래스
 /// 페이지 로드, 병합, 이미지 로드 등의 기능 제공
+/// 
 class PageManager {
   final String noteId;
-  final Note? initialNote;
+  final note_model.Note? initialNote;
   final PageService _pageService = PageService();
   final NoteService _noteService = NoteService();
   final FlashCardService _flashCardService = FlashCardService();
@@ -22,16 +23,42 @@ class PageManager {
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
+  note_model.Note? _note;
+  
   List<page_model.Page> _pages = [];
   List<File?> _imageFiles = [];
   // 페이지 ID별 이미지 파일 맵
   Map<String, File> _imageFileMap = {};
   int _currentPageIndex = 0;
+  bool _loadingPages = false;
+  
+  ValueNotifier<int> currentPageNotifier = ValueNotifier<int>(0);
+  bool _useCacheFirst = true;
+  int _pageLoadCounter = 0;
+  int _loadErrorCount = 0;
+  bool _isSyncing = false;
   
   PageManager({
     required this.noteId,
     this.initialNote,
-  });
+    bool useCacheFirst = true,
+  }) : _useCacheFirst = useCacheFirst,
+       _note = initialNote,
+       _loadingPages = false,
+       _pageLoadCounter = 0 {
+    debugPrint('🔄 PageManager 초기화: noteId=$noteId, initialNote=${initialNote != null ? "있음" : "없음"}, useCacheFirst=$useCacheFirst');
+    
+    // 초기 노트가 있는 경우, 페이지가 있으면 사용하고 없으면 나중에 로드
+    if (initialNote != null) {
+      if (initialNote!.pages != null && initialNote!.pages!.isNotEmpty) {
+        debugPrint('✅ 초기 노트에서 ${initialNote!.pages!.length}개 페이지를 즉시 설정합니다.');
+        setPages(initialNote!.pages!);
+      } else {
+        debugPrint('⚠️ 초기 노트에 페이지가 없습니다. 필요 시 로드해야 합니다.');
+        _pages = [];
+      }
+    }
+  }
   
   // 상태 접근자
   List<page_model.Page> get pages => _pages;
@@ -145,181 +172,147 @@ class PageManager {
     return newImageFiles;
   }
   
-  // 서버에서 페이지 로드 - 캐시 확인과 서버 요청을 명확히 분리
-  Future<List<page_model.Page>> loadPagesFromServer({bool forceReload = false}) async {
-    if (noteId.isEmpty) {
-      debugPrint('❌ PageManager.loadPagesFromServer: 노트 ID가 비어있음');
-      return _pages;
-    }
+  /// 서버에서 페이지를 로드합니다.
+  Future<List<page_model.Page>> loadPagesFromServer({String? noteId, bool forceRefresh = false}) async {
+    final String targetNoteId = noteId ?? this.noteId;
     
-    try {
-      // 로딩 시작 로그
-      debugPrint('🔄 PageManager.loadPagesFromServer 시작: noteId=$noteId, forceReload=$forceReload');
-      final startTime = DateTime.now();
-      
-      List<page_model.Page> loadedPages = [];
-      
-      // 1. 강제 리로드가 아니고 이미 페이지가 로드된 경우 현재 페이지 반환
-      if (!forceReload && _pages.isNotEmpty) {
-        debugPrint('✅ 이미 메모리에 ${_pages.length}개 페이지가 로드되어 있어 재사용합니다.');
-        return _pages;
-      }
-      
-      // 2. 강제 리로드인 경우 서버에서만 로드
-      if (forceReload) {
-        debugPrint('🔄 강제 로드 모드: 서버에서 직접 페이지를 로드합니다.');
-        loadedPages = await _directlyLoadFromServer();
-        
-        // 로드된 페이지로 현재 페이지 목록 업데이트
-        setPages(loadedPages);
-        
-        // 백그라운드에서 캐시 업데이트
-        _updateCacheInBackground(loadedPages);
-        
-        return _pages;
-      }
-      
-      // 3. 일반 모드: 초기 노트가 전달되었으면 초기 노트의 페이지 정보 확인
-      if (initialNote != null) {
-        debugPrint('🔄 초기 노트가 전달됨, 페이지 수: ${initialNote!.pages.length}');
-        
-        // 초기 노트에 페이지가 있으면 그대로 사용
-        if (initialNote!.pages.isNotEmpty) {
-          debugPrint('✅ 초기 노트의 페이지를 사용합니다: ${initialNote!.pages.length}개');
-          setPages(initialNote!.pages);
-          
-          // 백그라운드에서 서버와 동기화
-          _syncWithServerInBackground();
-          
-          return _pages;
-        }
-        
-        // 초기 노트에 페이지가 없으면 서버에서 로드
-        debugPrint('⚠️ 초기 노트에 페이지가 없어 서버에서 로드합니다.');
-        loadedPages = await _directlyLoadFromServer();
-        
-        // 로드된 페이지로 현재 페이지 목록 업데이트
-        setPages(loadedPages);
-        
-        // 백그라운드에서 캐시 업데이트
-        _updateCacheInBackground(loadedPages);
-        
-        return _pages;
-      }
-      
-      // 4. 캐시 확인
-      try {
-        // 캐시에서 페이지 확인 (타임아웃 적용)
-        loadedPages = await Future.any([
-          _cacheService.getPagesForNote(noteId),
-          Future.delayed(const Duration(seconds: 1), () => <page_model.Page>[])
-        ]);
-      } catch (e) {
-        debugPrint('⚠️ 캐시 확인 중 오류: $e');
-        loadedPages = [];
-      }
-      
-      // 캐시에서 페이지를 찾은 경우
-      if (loadedPages.isNotEmpty) {
-        debugPrint('✅ 캐시에서 ${loadedPages.length}개 페이지를 로드했습니다.');
-        
-        // 페이지 설정
-        setPages(loadedPages);
-        
-        // 백그라운드에서 서버와 동기화
-        _syncWithServerInBackground();
-        
-        return _pages;
-      }
-      
-      // 5. 캐시에 없는 경우 서버에서 로드
-      debugPrint('⚠️ 캐시에 페이지가 없어 서버에서 직접 로드합니다.');
-      loadedPages = await _directlyLoadFromServer();
-      
-      // 로드된 페이지로 현재 페이지 목록 업데이트
-      setPages(loadedPages);
-      
-      // 백그라운드에서 캐시 업데이트
-      _updateCacheInBackground(loadedPages);
-      
-      // 실행 시간 로깅
-      final endTime = DateTime.now();
-      final duration = endTime.difference(startTime);
-      debugPrint('⏱️ 페이지 로드 총 소요 시간: ${duration.inMilliseconds}ms');
-      
-      return _pages;
-    } catch (e, stackTrace) {
-      debugPrint('❌ PageManager.loadPagesFromServer 오류: $e');
-      debugPrint('스택 트레이스: $stackTrace');
-      return _pages; // 오류 발생 시 현재 페이지 목록 반환
-    }
-  }
-  
-  // 서버에서 직접 페이지 로드 (별도 메서드로 분리하여 재사용)
-  Future<List<page_model.Page>> _directlyLoadFromServer() async {
-    try {
-      final snapshot = await _firestore.collection('pages')
-        .where('noteId', isEqualTo: noteId)
-        .orderBy('pageNumber')
-        .get()
-        .timeout(const Duration(seconds: 5), onTimeout: () {
-          debugPrint('⚠️ 서버에서 페이지 가져오기 타임아웃');
-          throw Exception('서버에서 페이지 가져오기 타임아웃');
-        });
-      
-      final loadedPages = snapshot.docs
-        .map((doc) => page_model.Page.fromFirestore(doc))
-        .toList();
-      
-      debugPrint('✅ 서버에서 ${loadedPages.length}개 페이지를 직접 로드했습니다.');
-      return loadedPages;
-    } catch (e) {
-      debugPrint('❌ 서버에서 페이지 로드 중 오류: $e');
+    debugPrint('🚀 loadPagesFromServer 호출됨: noteId=$targetNoteId, forceRefresh=$forceRefresh, _loadingPages=$_loadingPages');
+    
+    if (targetNoteId.isEmpty) {
+      debugPrint('⚠️ loadPagesFromServer: noteId가 비어 있습니다');
       return [];
     }
-  }
-  
-  // 백그라운드에서 캐시 업데이트 (UI 차단 방지)
-  void _updateCacheInBackground(List<page_model.Page> pages) {
-    if (pages.isEmpty) return;
     
-    Future.microtask(() async {
-      try {
-        await _cacheService.cachePages(noteId, pages);
-        debugPrint('✅ 백그라운드에서 ${pages.length}개 페이지를 캐시에 저장했습니다.');
-      } catch (e) {
-        debugPrint('⚠️ 백그라운드 캐시 업데이트 중 오류 (무시됨): $e');
+    // 중요: 중복 요청 확인 로직
+    // forceRefresh가 true면 무조건 로드, 아니면 이미 로딩 중인지 확인
+    if (_loadingPages && !forceRefresh) {
+      debugPrint('⚠️ 이미 페이지 로드 중입니다. 중복 요청 무시. (_loadingPages=true)');
+      return _pages;
+    }
+    
+    bool wasLoading = _loadingPages;
+    _loadingPages = true;
+    _pageLoadCounter++;
+    final int currentLoadAttempt = _pageLoadCounter;
+    
+    debugPrint('📢 페이지 로드 시작: noteId=$targetNoteId, 시도 번호=$currentLoadAttempt, 이전 로딩 상태=$wasLoading');
+    
+    try {
+      List<page_model.Page> pages = [];
+      
+      // 0. 이미 메모리에 페이지가 있고 강제 새로고침이 아니면 그대로 사용
+      if (!forceRefresh && _pages.isNotEmpty) {
+        debugPrint('✅ 메모리에 이미 ${_pages.length}개 페이지가 있어 그대로 사용합니다.');
+        _loadingPages = false;
+        return _pages;
       }
-    });
-  }
-  
-  // 백그라운드에서 서버와 동기화 (UI 차단 방지)
-  void _syncWithServerInBackground() {
-    Future.microtask(() async {
+      
+      // 1. Firestore에서 직접 페이지 로드 (가장 신뢰할 수 있는 소스)
       try {
-        debugPrint('🔄 백그라운드에서 서버와 페이지 동기화 시작');
-        final serverPages = await _directlyLoadFromServer();
+        debugPrint('📄 Firestore에서 페이지 직접 로드 시작: noteId=$targetNoteId');
+        final snapshot = await _firestore
+          .collection('pages')
+          .where('noteId', isEqualTo: targetNoteId)
+          .orderBy('pageNumber')
+          .get()
+          .timeout(const Duration(seconds: 5));
         
-        if (serverPages.isEmpty) {
-          debugPrint('⚠️ 서버에서 페이지를 가져오지 못해 동기화를 건너뜁니다.');
-          return;
-        }
+        debugPrint('📊 Firestore 쿼리 결과: ${snapshot.docs.length}개 문서');
         
-        // 서버 페이지와 현재 페이지 병합
-        final oldPageCount = _pages.length;
-        mergePages(serverPages);
-        
-        // 페이지 수가 변경된 경우 캐시 업데이트
-        if (_pages.length != oldPageCount) {
-          await _cacheService.cachePages(noteId, _pages);
-          debugPrint('✅ 서버 동기화 후 캐시 업데이트 (페이지 수: $oldPageCount → ${_pages.length})');
+        if (snapshot.docs.isNotEmpty) {
+          pages = snapshot.docs
+            .map((doc) => page_model.Page.fromFirestore(doc))
+            .toList();
+          
+          // 페이지를 번호순으로 정렬
+          pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+          
+          debugPrint('✅ Firestore에서 직접 ${pages.length}개 페이지 로드 완료');
+          
+          // 백그라운드에서 캐시 업데이트
+          Future.microtask(() async {
+            try {
+              await _cacheService.cachePages(targetNoteId, pages);
+              debugPrint('✅ 백그라운드에서 페이지 캐시 업데이트 완료');
+            } catch (e) {
+              debugPrint('⚠️ 페이지 캐시 업데이트 중 오류: $e');
+            }
+          });
+          
+          // 현재 로드 시도가 최신 시도와 동일한 경우에만 상태 업데이트
+          if (currentLoadAttempt == _pageLoadCounter) {
+            if (pages.isNotEmpty) {
+              debugPrint('📝 페이지 목록 설정: ${pages.length}개 페이지');
+              setPages(pages);
+            }
+            _loadingPages = false;
+          } else {
+            debugPrint('⚠️ 현재 로드 시도($currentLoadAttempt)가 최신 시도($_pageLoadCounter)와 다릅니다');
+            _loadingPages = false;
+          }
+          
+          return pages;
         } else {
-          debugPrint('✅ 서버 동기화 완료 (변경사항 없음)');
+          debugPrint('⚠️ Firestore에 페이지가 없습니다: noteId=$targetNoteId');
         }
       } catch (e) {
-        debugPrint('⚠️ 백그라운드 서버 동기화 중 오류 (무시됨): $e');
+        debugPrint('❌ Firestore에서 페이지 로드 중 오류: $e');
+        // Firestore 로드 실패 시 캐시 시도
       }
-    });
+      
+      // 2. Firestore 로드 실패 시 캐시에서 페이지 로드 시도
+      if (_useCacheFirst || forceRefresh == false) {
+        try {
+          debugPrint('🔍 캐시에서 페이지 로드 시도: noteId=$targetNoteId');
+          final cachedPages = await _pageService.getPagesForNote(targetNoteId);
+          
+          if (cachedPages.isNotEmpty) {
+            debugPrint('✅ 캐시에서 ${cachedPages.length}개 페이지 로드 성공');
+            pages = cachedPages;
+            
+            // 현재 로드 시도가 최신 시도와 동일한 경우에만 상태 업데이트
+            if (currentLoadAttempt == _pageLoadCounter) {
+              setPages(pages);
+              _loadingPages = false;
+            } else {
+              _loadingPages = false;
+            }
+            
+            return pages;
+          } else {
+            debugPrint('⚠️ 캐시에 페이지가 없습니다.');
+          }
+        } catch (e) {
+          debugPrint('❌ 캐시에서 페이지 로드 중 오류: $e');
+        }
+      }
+      
+      // 로드 실패 시 빈 목록 반환
+      debugPrint('⚠️ 페이지 로드 실패: Firestore와 캐시 모두에서 페이지를 찾지 못했습니다.');
+      
+      // 현재 로드 시도가 최신 시도와 동일한 경우에만 상태 업데이트
+      if (currentLoadAttempt == _pageLoadCounter) {
+        _loadingPages = false;
+      } else {
+        _loadingPages = false;
+      }
+      
+      return pages;
+    } catch (e, stack) {
+      debugPrint('❌ 페이지 로드 중 예외 발생: $e');
+      debugPrint('스택 트레이스: $stack');
+      
+      // 오류 발생 시 로딩 상태 해제
+      _loadingPages = false;
+      
+      return [];
+    } finally {
+      // 여기서 확실하게 로딩 상태 해제
+      if (_loadingPages && currentLoadAttempt == _pageLoadCounter) {
+        debugPrint('🔄 finally 블록에서 로딩 상태 해제');
+        _loadingPages = false;
+      }
+    }
   }
   
   // 모든 페이지 이미지 로드

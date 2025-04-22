@@ -78,6 +78,9 @@ class NoteDetailScreen extends StatefulWidget {
     bool isProcessingBackground = false,
     int totalImageCount = 0,
   }) {
+    // 라우트 빌더 시작 로그 추가
+    print("🛠️ NoteDetailScreen.route 빌더 시작. Note ID: ${note.id}");
+
     return MaterialPageRoute(
       settings: const RouteSettings(name: routeName),
       builder: (context) => NoteDetailScreen(
@@ -133,41 +136,61 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   late ScreenshotServiceHelper _screenshotHelper;
   late TooltipManager _tooltipManager;
   late NoteOptionsManager _optionsManager;
+  
+  // 페이지 변경 중복 실행 방지 플래그
+  bool _isChangingPage = false;
 
   @override
   void initState() {
+    // initState 시작 로그 추가
+    debugPrint('🏁 _NoteDetailScreenState.initState 시작');
     super.initState();
-    debugPrint('🔍 NoteDetailScreen.initState: noteId=${widget.noteId}, 노트=${widget.note?.originalText}');
-    
+    debugPrint('🔍 NoteDetailScreen.initState: noteId=${widget.noteId}, 노트=${widget.note?.originalText}, 페이지 수=${widget.note?.pages?.length ?? 0}');
+
     try {
       // 옵저버 등록
-      WidgetsBinding.instance.addObserver(this);
-      
+      debugPrint('  [initState] WidgetsBinding.instance.addObserver(this)');
+    WidgetsBinding.instance.addObserver(this);
+
       // 상태 초기화
+      debugPrint('  [initState] _state 초기화 시작');
       _state.setLoading(true);
       _state.expectedTotalPages = widget.totalImageCount;
       _state.setBackgroundProcessingFlag(widget.isProcessingBackground);
       _state.note = widget.note; // 전달받은 노트 객체를 바로 상태에 설정
-      
+      debugPrint('  [initState] _state 초기화 완료');
+
       // 매니저 및 핸들러 초기화
+      debugPrint('  [initState] PageManager 초기화 시작');
       _pageManager = PageManager(
         noteId: widget.noteId,
         initialNote: widget.note,
+        useCacheFirst: false, // 항상 Firestore에서 최신 데이터를 직접 로드
       );
-      
+      debugPrint('  [initState] PageManager 초기화 완료');
+
       // 컨트롤러 초기화
-      _pageController = PageController();
-      
+      debugPrint('  [initState] PageController 초기화 시작');
+    _pageController = PageController();
+      debugPrint('  [initState] PageController 초기화 완료');
+
       // 새로운 매니저 인스턴스 초기화
+      debugPrint('  [initState] _initializeManagers() 호출 시작');
       _initializeManagers();
-      
+      debugPrint('  [initState] _initializeManagers() 호출 완료');
+
       // 상태표시줄 설정 및 데이터 로드
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('  [initState] addPostFrameCallback 등록 시작');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+        debugPrint('    [addPostFrameCallback] 콜백 시작');
         _setupStatusBar();
+        debugPrint('    [addPostFrameCallback] _setupStatusBar() 완료');
         // 이미 mounted 체크가 되어있는 내부에서 비동기 작업 시작
         _loadDataSequentially();
+        debugPrint('    [addPostFrameCallback] _loadDataSequentially() 호출 완료');
       });
-      
+      debugPrint('  [initState] addPostFrameCallback 등록 완료');
+
       debugPrint('✅ NoteDetailScreen initState 완료');
     } catch (e, stackTrace) {
       debugPrint('❌ NoteDetailScreen initState 중 오류 발생: $e');
@@ -335,9 +358,9 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       debugPrint('❌ _loadNote: 위젯이 더 이상 마운트되지 않음');
       return;
     }
-    
+
     try {
-      setState(() {
+        setState(() {
         _state.setLoading(true);
         _state.setError(null); // 이전 에러 초기화
       });
@@ -354,15 +377,21 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           _titleEditingController.text = widget.note!.originalText ?? '';
           _state.setLoading(false);
         });
-        
-        // 페이지 로딩은 생략 - 이미 노트 객체가 있기 때문
+
+        // 페이지가 비어 있으면 페이지 로드 시도 (이미지가 있지만 페이지가 없는 경우)
+        if (widget.note!.pages == null || widget.note!.pages!.isEmpty) {
+          debugPrint('⚠️ 전달받은 노트에 페이지가 없습니다. 페이지 로드를 시도합니다.');
+          // 비동기적으로 페이지 로드 (UI 블록 없이)
+          _loadPagesInBackground();
+        } else {
+          debugPrint('✅ 전달받은 노트에 ${widget.note!.pages!.length}개의 페이지가 있습니다.');
+        }
         return;
       }
-      
+
       // 노트 ID로 데이터 로드
       debugPrint('📝 서버에서 노트 데이터 로드: ${widget.noteId}');
       await _loadPages(); // 기존 페이지 로드 로직 사용
-      
     } catch (e, stackTrace) {
       debugPrint('❌ 노트 로드 중 오류: $e');
       debugPrint('스택 트레이스: $stackTrace');
@@ -374,21 +403,162 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       }
     }
   }
+
+  // 백그라운드에서 페이지 로드 (UI 차단 없이)
+  void _loadPagesInBackground() {
+    Future.microtask(() async {
+      try {
+        debugPrint('🔄 백그라운드에서 페이지 로드 시작: noteId=${widget.noteId}');
+        final pages = await _pageManager.loadPagesFromServer(forceRefresh: true);
+        
+        if (!mounted) return;
+        
+        if (pages.isNotEmpty) {
+          debugPrint('✅ 백그라운드에서 ${pages.length}개 페이지 로드 성공');
+          debugPrint('⚠️ 노트 업데이트 전: _state.note?.pages: ${_state.note?.pages?.length ?? 0}, _state.note?.imageCount: ${_state.note?.imageCount ?? 0}');
+          
+          setState(() {
+            // 현재 노트 상태 업데이트
+            if (_state.note != null) {
+              final updatedNote = _state.note!.copyWith(
+                pages: pages,
+                imageCount: pages.length // imageCount도 업데이트
+              );
+              _state.updateNote(updatedNote);
+              debugPrint('✅ 노트 상태 업데이트 완료: pages=${pages.length}, imageCount=${updatedNote.imageCount}');
+            }
+          });
+          
+          // 페이지 텍스트 처리
+          _processPageTextAfterLoading();
+        } else {
+          debugPrint('⚠️ 백그라운드에서 페이지 로드 실패 또는 페이지 없음');
+          
+          // Firestore에서 직접 노트 정보 가져오기 시도
+          await _loadNoteDirectlyFromFirestore();
+          }
+        } catch (e) {
+        debugPrint('❌ 백그라운드 페이지 로드 중 오류: $e');
+        
+        // 오류 발생 시에도 Firestore에서 직접 노트 정보 가져오기 시도
+        await _loadNoteDirectlyFromFirestore();
+      }
+    });
+  }
   
+  // Firestore에서 직접 노트 정보 가져오기
+  Future<void> _loadNoteDirectlyFromFirestore() async {
+    if (!mounted) return;
+    
+    try {
+      debugPrint('🔄 Firestore에서 직접 노트 정보 로드 시작: ${widget.noteId}');
+      final docRef = FirebaseFirestore.instance.collection('notes').doc(widget.noteId);
+      
+      // 노트 문서 가져오기
+      debugPrint('📄 노트 문서 조회 시작');
+      final noteDoc = await docRef.get().timeout(Duration(seconds: 5));
+      
+      if (!noteDoc.exists) {
+        debugPrint('❌ Firestore에서 노트를 찾을 수 없음: ${widget.noteId}');
+      if (mounted) {
+        setState(() {
+            _state.setLoading(false);
+            _state.setError('노트 문서를 찾을 수 없습니다 (ID: ${widget.noteId})');
+          });
+        }
+        return;
+      }
+      
+      debugPrint('✓ 노트 문서 조회 성공: ${noteDoc.id}');
+      
+      // 노트 문서가 존재하면 노트 객체 생성
+      final note = Note.fromFirestore(noteDoc);
+      debugPrint('📝 노트 객체 생성 완료: 제목=${note.originalText}, 이미지URL=${note.imageUrl != null}');
+      
+      // 페이지 직접 로드
+      debugPrint('📄 페이지 문서 조회 시작');
+      final pagesRef = FirebaseFirestore.instance
+          .collection('pages')
+          .where('noteId', isEqualTo: widget.noteId)
+          .orderBy('pageNumber');
+          
+      final pagesSnapshot = await pagesRef.get().timeout(Duration(seconds: 5));
+      debugPrint('✓ 페이지 문서 조회 결과: ${pagesSnapshot.docs.length}개 문서');
+      
+      final pages = pagesSnapshot.docs
+          .map((doc) => page_model.Page.fromFirestore(doc))
+          .toList();
+      
+      debugPrint('📊 페이지 객체 생성 완료: ${pages.length}개 페이지');
+          
+      if (pages.isNotEmpty) {
+        // 페이지를 번호순으로 정렬
+        pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+        
+        // 로그에 각 페이지의 정보 출력
+        for (int i = 0; i < pages.length; i++) {
+          final page = pages[i];
+          debugPrint('📄 페이지[$i]: ID=${page.id}, pageNumber=${page.pageNumber}, 텍스트 길이=${page.originalText.length}, 이미지=${page.imageUrl != null}');
+        }
+        
+        // 노트에 페이지 설정
+        final updatedNote = note.copyWith(pages: pages);
+        
+        if (mounted) {
+          setState(() {
+            _state.updateNote(updatedNote);
+            _state.setLoading(false);
+            debugPrint('✅ Firestore에서 노트와 ${pages.length}개 페이지 직접 로드 완료');
+          });
+          
+          // PageManager 업데이트
+          _pageManager.setPages(pages);
+          
+          // 로드 성공 시 초기 페이지로 이동
+          if (pages.isNotEmpty) {
+            _pageManager.changePage(0);
+            debugPrint('🔄 첫 페이지로 이동 완료');
+          }
+          
+          // 텍스트 처리
+          _processPageTextAfterLoading();
+        }
+      } else {
+        debugPrint('⚠️ Firestore에서 페이지를 찾을 수 없음: ${widget.noteId}');
+            if (mounted) {
+              setState(() {
+            _state.updateNote(note);
+            _state.setLoading(false);
+            _state.setError('노트의 페이지를 찾을 수 없습니다.');
+          });
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Firestore에서 직접 노트 로드 중 오류: $e');
+      debugPrint('❌ 스택 트레이스: $stackTrace');
+      if (mounted) {
+        setState(() {
+          _state.setLoading(false);
+          _state.setError('노트 로드 중 오류가 발생했습니다: $e');
+        });
+      }
+    }
+  }
+
   // 페이지 로드 로직을 별도 메서드로 분리
   Future<void> _loadPages() async {
     try {
       debugPrint('⏱️ 페이지 로드 타임아웃 설정 (5초)');
       
-      // UI 차단 없이 페이지 로드 시작
-      final pageLoadFuture = _pageManager.loadPagesFromServer(forceReload: true);
+      // UI 차단 없이 페이지 로드 시작 - 강제 새로고침으로 항상 설정
+      final pageLoadFuture = _pageManager.loadPagesFromServer(forceRefresh: true);
       
       // 타임아웃 설정
-      final pageLoadResult = await Future.any([
+      final List<page_model.Page> pages = await Future.any([
         pageLoadFuture,
         Future.delayed(const Duration(seconds: 5), () {
           debugPrint('⚠️ 페이지 로드 타임아웃');
-          throw Exception('페이지 로드 시간이 초과되었습니다.');
+          return <page_model.Page>[];
         })
       ]);
       
@@ -397,37 +567,59 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         return;
       }
       
-      if (_pageManager.pages.isEmpty) {
-        debugPrint('⚠️ 페이지가 없음');
-        setState(() {
-          _state.setError('노트에 페이지가 없습니다.');
+      if (pages.isEmpty) {
+        debugPrint('⚠️ 페이지가 없거나 타임아웃 발생');
+    setState(() {
+          _state.setError('노트에 페이지가 없거나 로드하지 못했습니다.');
           _state.setLoading(false);
+    });
+
+        // 비동기적으로 다시 시도 - 직접 Firestore에서 로드
+        Future.delayed(Duration(seconds: 1), () {
+      if (mounted) {
+            debugPrint('🔄 직접 Firestore에서 노트 로드 시도 중...');
+            _loadNoteDirectlyFromFirestore();
+          }
         });
         return;
       }
       
-      debugPrint('✅ 페이지 로드 성공: ${_pageManager.pages.length}개 페이지');
+      debugPrint('✅ 페이지 로드 성공: ${pages.length}개 페이지');
       
       // 첫 페이지로 이동 - UI 업데이트만 즉시 처리
       debugPrint('🔄 첫 페이지로 이동');
       _pageManager.changePage(0);
       
       // 로딩 상태 해제 - 텍스트 처리 전에 UI 표시
-      setState(() {
+    setState(() {
         _state.setLoading(false);
         _state.setCurrentImageFile(_imageService.getCurrentImageFile());
+        
+        // 노트 상태도 업데이트
+        if (_state.note != null) {
+          _state.updateNote(_state.note!.copyWith(pages: pages));
+        }
       });
       
       // 페이지 텍스트 처리는 별도 작업으로 비동기 실행
       _processPageTextAfterLoading();
       
       debugPrint('🎉 페이지 로드 메인 로직 완료, UI 표시 중');
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('❌ 페이지 로드 중 오류: $e');
+      debugPrint('스택 트레이스: $stackTrace');
       if (mounted) {
         setState(() {
           _state.setError('페이지 로드 중 오류가 발생했습니다: $e');
           _state.setLoading(false);
+        });
+        
+        // 오류 발생 시에도 직접 Firestore에서 로드 시도
+        Future.delayed(Duration(seconds: 1), () {
+          if (mounted) {
+            debugPrint('🔄 오류 발생 후 직접 Firestore에서 노트 로드 시도 중...');
+            _loadNoteDirectlyFromFirestore();
+          }
         });
       }
     }
@@ -447,7 +639,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         }
         
         debugPrint('✅ 백그라운드 페이지 텍스트 처리 완료');
-      } catch (e) {
+    } catch (e) {
         debugPrint('⚠️ 백그라운드 텍스트 처리 중 오류 (무시됨): $e');
       }
     });
@@ -455,29 +647,55 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // 백그라운드 처리 상태 확인
   Future<void> _checkBackgroundProcessing(String noteId) async {
-        try {
-          final noteDoc = await FirebaseFirestore.instance
-              .collection('notes')
+    try {
+      final noteDoc = await FirebaseFirestore.instance
+          .collection('notes')
           .doc(noteId)
-              .get();
+          .get();
           
       if (noteDoc.exists && mounted) {
-            final data = noteDoc.data();
+        final data = noteDoc.data();
         final isProcessingBackground = data?['isProcessingBackground'] as bool? ?? false;
         final processingCompleted = data?['processingCompleted'] as bool? ?? false;
-    
-    setState(() {
-          _state.setBackgroundProcessingFlag(isProcessingBackground && !processingCompleted);
-        });
+        final newProcessingState = isProcessingBackground && !processingCompleted;
+
+        // 상태가 실제로 변경될 때만 setState 호출
+        if (_state.isProcessingBackground != newProcessingState) {
+          setState(() {
+            debugPrint('🔄 _checkBackgroundProcessing: 상태 변경 감지 -> setState 호출');
+            _state.setBackgroundProcessingFlag(newProcessingState);
+          });
+        } else {
+          // debugPrint('🔄 _checkBackgroundProcessing: 상태 변경 없음, setState 건너뜀');
+        }
       }
     } catch (e) {
       debugPrint('백그라운드 처리 상태 확인 중 오류: $e');
     }
   }
-  
+
   // 페이지 변경 처리
   Future<void> _changePage(int index) async {
-    if (index < 0 || index >= _pageManager.pages.length) return;
+    // 중복 실행 방지
+    if (_isChangingPage) {
+      debugPrint('🔄 _changePage 건너뛰기: 이미 변경 중 (요청 인덱스=$index)');
+      return;
+    }
+    _isChangingPage = true; // 변경 시작 플래그 설정
+    
+    debugPrint('🔄 _changePage 시작: 요청 인덱스=$index, 현재 인덱스=${_pageManager.currentPageIndex}, PageController 페이지=${_pageController.page?.round()}');
+    
+    if (index < 0 || index >= _pageManager.pages.length) {
+      _isChangingPage = false; // 범위 벗어나면 플래그 해제
+      return;
+    }
+    
+    // 현재 페이지와 동일한 페이지로 변경 시도하는 경우 무시 (무한 루프 방지)
+    if (index == _pageManager.currentPageIndex) {
+      debugPrint('⚠️ 이미 현재 페이지(${_pageManager.currentPageIndex})입니다. 변경 무시');
+      _isChangingPage = false; // 동일 페이지면 플래그 해제
+      return;
+    }
     
     try {
       // 페이지 매니저에 인덱스 변경 알림
@@ -485,26 +703,26 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       
       // PageController 애니메이션
       if (_pageController.hasClients && _pageController.page?.round() != index) {
-        try {
-          _pageController.animateToPage(
-            index,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        } catch (e) {
-          debugPrint('페이지 애니메이션 오류: $e');
-        }
+      try {
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      } catch (e) {
+        debugPrint('페이지 애니메이션 오류: $e');
       }
+    }
     
-      // 이전에 방문한 페이지가 아닌 경우에만 방문 기록 추가
+    // 이전에 방문한 페이지가 아닌 경우에만 방문 기록 추가
       if (!_state.isPageVisited(index)) {
         _state.markPageVisited(index);
-      }
+    }
     
-      // UI 업데이트
+    // UI 업데이트
       if (mounted) {
-        setState(() {});
-      }
+    setState(() {});
+  }
   
       // 페이지 내용 로드 (이미지 및 텍스트 처리) - 서비스 레이어로 위임
       final currentPage = _pageManager.currentPage;
@@ -512,12 +730,14 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         // 이미 처리 중인 경우 중복 처리 방지
         if (_state.isProcessingText) {
           debugPrint('⚠️ 이미 텍스트 처리 중입니다. 중복 처리 방지');
+          // 텍스트 처리 중이더라도 페이지 변경 플래그는 해제해야 함
+          _isChangingPage = false; 
           return;
         }
         
         // 로딩 상태 업데이트
-        if (mounted) {
-          setState(() {
+      if (mounted) {
+        setState(() {
             _state.setProcessingText(true);
           });
         }
@@ -536,10 +756,13 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             }),
           ]);
           
-          if (!mounted) return;
+          if (!mounted) {
+            _isChangingPage = false; // 마운트 안됐으면 플래그 해제
+            return;
+          }
           
           // 결과 처리
-          setState(() {
+              setState(() {
             // 이미지 파일 업데이트 (null 체크 추가)
             final currentImageFile = _imageService.getCurrentImageFile();
             if (currentImageFile != null && currentImageFile.existsSync()) {
@@ -555,12 +778,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
             // 처리 상태 업데이트
             _state.setProcessingText(false);
           });
-        } catch (e) {
+    } catch (e) {
           debugPrint('❌ 페이지 변경 중 텍스트 처리 오류: $e');
           
           // 오류 발생 시에도 로딩 상태 해제
-          if (mounted) {
-            setState(() {
+      if (mounted) {
+        setState(() {
               _state.setProcessingText(false);
             });
           }
@@ -571,15 +794,20 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       
       // 오류 발생 시에도 로딩 상태 해제
       if (mounted) {
-        setState(() {
+          setState(() {
           _state.setProcessingText(false);
         });
       }
+    } finally {
+      _isChangingPage = false; // 변경 완료 플래그 해제
+      debugPrint('🏁 _changePage 종료: 요청 인덱스=$index, 최종 인덱스=${_pageManager.currentPageIndex}');
     }
   }
 
   // 현재 페이지 텍스트 처리
   Future<void> _processCurrentPageText({bool isRetry = false}) async {
+    print("PROCESSING TEXT STARTED - isRetry: $isRetry");
+    
     final currentPage = _pageManager.currentPage;
     if (currentPage == null || _state.note == null) {
       debugPrint('텍스트 처리: 현재 페이지 또는 노트 정보가 없습니다');
@@ -588,6 +816,12 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     
     if (!mounted) return;
 
+    // 이미 처리 중이면 중복 처리 방지
+    if (_state.isProcessingText) {
+      debugPrint('⚠️ 이미 텍스트 처리 중입니다. 중복 호출 방지');
+      return;
+    }
+    
     // 처리 상태 업데이트
     setState(() {
       _state.setProcessingText(true);
@@ -597,7 +831,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       // 타임아웃 추가 및 에러 처리 강화
       final result = await Future.any([
         _contentManager.processPageText(
-          page: currentPage,
+      page: currentPage,
           imageFile: _imageService.getCurrentImageFile(),
           recursionDepth: isRetry ? 1 : 0, // 재시도 시 recursionDepth 증가
         ),
@@ -609,31 +843,44 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     
       if (!mounted) return;
     
-      // 결과가 null이 아닌 경우에만 상태 업데이트
+      // -- Start Modification --
+      // 먼저, UI와 직접 관련 없는 내부 상태 업데이트
       if (result != null) {
-        setState(() {
-          // 이미지 파일 업데이트 (null 체크 추가)
-          final currentImageFile = _imageService.getCurrentImageFile();
-          if (currentImageFile != null && currentImageFile.existsSync()) {
-            _state.setCurrentImageFile(currentImageFile);
-          }
-          
-          _useSegmentMode = !result.showFullText;
-          _state.markPageVisited(_pageManager.currentPageIndex);
-          
-          // 텍스트 처리 완료 표시
-          _state.setProcessingText(false);
-        });
-      } else {
-        setState(() {
-          _state.setProcessingText(false);
-          // 실패한 경우에도 페이지 방문 표시는 유지
-          _state.markPageVisited(_pageManager.currentPageIndex);
-        });
+        _useSegmentMode = !result.showFullText;
       }
+      _state.markPageVisited(_pageManager.currentPageIndex); // 방문 기록은 항상 남김
+
+      // isProcessingText 상태가 실제로 true에서 false로 변경될 때만 setState 호출
+      if (_state.isProcessingText) {
+        // 오류 발생 시 지연 없이 즉시 상태 업데이트
+        setState(() {
+          _state.setProcessingText(false);
+          debugPrint("  ✨ _processCurrentPageText: setState 호출됨 (오류 발생 시)");
+        });
+       } else {
+         // 플래그가 이미 false였다면 내부 상태만 업데이트 (setState 불필요)
+         _state.setProcessingText(false);
+         debugPrint("  ✨ _processCurrentPageText: isProcessingText 이미 false였음 (setState 건너뜀)");
+      }
+      // -- End Modification --
+      
     } catch (e) {
       debugPrint('❌ 텍스트 처리 중 오류: $e');
       
+      // --- Start Error Handling Modification ---
+      // 오류 발생 시에도 isProcessingText 상태가 true일 때만 setState 호출
+      if (_state.isProcessingText) {
+        // 오류 발생 시 지연 없이 즉시 상태 업데이트
+        setState(() {
+          _state.setProcessingText(false);
+          debugPrint("  ✨ _processCurrentPageText: setState 호출됨 (오류 발생 시)");
+        });
+       } else {
+           _state.setProcessingText(false);
+            debugPrint("  ✨ _processCurrentPageText: isProcessingText 이미 false였음 (오류 발생 시, setState 건너뜀)");
+       }
+      // --- End Error Handling Modification ---
+       
       // 첫 번째 시도에서 실패한 경우에만 한 번 더 시도
       if (!isRetry) {
         debugPrint('🔄 텍스트 처리 재시도 중...');
@@ -642,13 +889,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
         if (mounted) {
           _processCurrentPageText(isRetry: true);
         }
-      } else {
-        if (mounted) {
-          setState(() {
-            _state.setProcessingText(false);
-          });
-        }
-      }
+      } 
     }
   }
 
@@ -679,7 +920,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
       debugPrint('사용자 기본 설정 로드 중 오류 발생: $e');
       // 오류 발생 시 기본 모드 사용
       if (mounted) {
-          setState(() {
+      setState(() {
           _useSegmentMode = true; // 기본값은 세그먼트 모드
         });
       }
@@ -688,14 +929,17 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // 백그라운드 처리 확인 설정
   Future<void> _setupBackgroundProcessingCheck() async {
+    debugPrint('  ⏳ _setupBackgroundProcessingCheck: 백그라운드 타이머 설정 건너뛰기 (디버깅 목적)');
+    /* // 타이머 생성 주석 처리
     // 처리 상태 주기적으로 확인
     _state.backgroundCheckTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _checkBackgroundProcessing(widget.noteId)
     );
+    */
   }
   
-      // 플래시카드 화면으로 이동
+  // 플래시카드 화면으로 이동
   void _navigateToFlashcards() {
     if (_state.note?.id != null) {
       Navigator.push(
@@ -711,6 +955,16 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
+    // build 메서드 시작 로그 추가
+    debugPrint('🧱 NoteDetailScreen.build 시작');
+
+    // 디버그 로깅 추가
+    debugPrint('📊 NoteDetailScreen.build - 상태 정보:');
+    debugPrint('  - _state.note: ${_state.note != null ? "있음" : "없음"}');
+    debugPrint('  - _state.note?.pages: ${_state.note?.pages?.length ?? 0}개');
+    debugPrint('  - _state.note?.imageCount: ${_state.note?.imageCount ?? 0}');
+    debugPrint('  - _pageManager.pages: ${_pageManager.pages.length}개');
+    
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
@@ -720,30 +974,37 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
           currentPage: _pageManager.currentPageIndex + 1,
           totalPages: _pageManager.pages.length,
           flashcardCount: _state.note?.flashcardCount ?? 0,
-          onMorePressed: () => _optionsManager.showMoreOptions(
-            context,
-            _state.note,
-            onTitleEditing: () {
-              // 제목 편집 후 처리
-              setState(() {});
-            },
-            onFavoriteToggle: (isFavorite) {
-    setState(() {
-                _state.toggleFavorite();
-              });
-            },
-            onNoteDeleted: () {
-              Navigator.of(context).pop(); // 화면 닫기
-            },
-          ),
-          onFlashcardTap: _navigateToFlashcards,
+          onMorePressed: () {
+            debugPrint('📊 앱바 표시 시 페이지 수 정보:');
+            debugPrint('  - _pageManager.pages.length: ${_pageManager.pages.length}');
+            debugPrint('  - _state.note?.pages?.length: ${_state.note?.pages?.length ?? 0}');
+            debugPrint('  - _state.note?.imageCount: ${_state.note?.imageCount ?? 0}');
+            
+            _optionsManager.showMoreOptions(
+              context,
+              _state.note,
+              onTitleEditing: () {
+                // 제목 편집 후 처리
+                setState(() {});
+              },
+              onFavoriteToggle: (isFavorite) {
+      setState(() {
+                  _state.toggleFavorite();
+                });
+              },
+              onNoteDeleted: () {
+                Navigator.of(context).pop(); // 화면 닫기
+              },
+            );
+          },
+              onFlashcardTap: _navigateToFlashcards,
           onBackPressed: () async {
             final shouldPop = await _onWillPop();
             if (shouldPop && context.mounted) {
               Navigator.of(context).pop();
             }
-            },
-          ),
+          },
+        ),
         // 본문
         body: _buildMainContent(),
       ),
@@ -755,10 +1016,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
     return Stack(
       children: [
         Column(
-          children: [
+              children: [
             // 메인 콘텐츠 영역
-            Expanded(
-              child: Container(
+                Expanded(
+                  child: Container(
                 color: Colors.white,
                 child: _buildBody(),
               ),
@@ -796,6 +1057,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   
   // 하단 바 구성
   Widget _buildBottomBar() {
+    debugPrint('🧱 -> _buildBottomBar 시작'); // 시작 로그 추가
+    
     // null 체크와 기본값 설정으로 안전하게 처리
     final totalPages = (_state.note?.imageCount != null) 
         ? _state.note!.imageCount! 
@@ -817,126 +1080,137 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
 
   // 메인 UI 구성
   Widget _buildBody() {
+    // _buildBody 시작 및 상태 로깅
+    debugPrint('🧱 -> _buildBody 시작: isLoading=${_state.isLoading}, note=${_state.note != null}, error=${_state.error}, pageManager.pages.isEmpty=${_pageManager.pages.isEmpty}');
+    
     // 로딩 중 또는 노트가 없는 경우
     if (_state.isLoading || _state.note == null) {
+      debugPrint('  -> _buildBody: 로딩 또는 노트 없음 표시');
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-            // 로딩 표시
-            const DotLoadingIndicator(message: '노트를 불러오는 중입니다'),
-            
-            const SizedBox(height: 24),
-            
-            // 새로고침 버튼 (2초 이상 로딩이 지속되면 표시)
-            if (!_state.isLoading)
-              TextButton(
-                onPressed: _forceRefreshPage,
-                child: const Text('새로고침'),
-              ),
-          ],
-        ),
-      );
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // 로딩 표시
+              const DotLoadingIndicator(message: '노트를 불러오는 중입니다'),
+              
+              const SizedBox(height: 24),
+              
+              // 새로고침 버튼 (2초 이상 로딩이 지속되면 표시)
+              if (!_state.isLoading)
+                TextButton(
+                  onPressed: _forceRefreshPage,
+                  child: const Text('새로고침'),
+                ),
+            ],
+          ),
+        );
     }
     
     // 에러가 있는 경우
     if (_state.error?.isNotEmpty == true) {
+      debugPrint('  -> _buildBody: 에러 표시 - ${_state.error}');
       return Center(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-            Text(
-              _state.error ?? '오류가 발생했습니다',
-              style: TypographyTokens.body1.copyWith(color: Colors.red),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: _forceRefreshPage,
-              child: const Text('다시 시도'),
-            ),
-          ],
-      ),
-    );
-  }
-  
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _state.error ?? '오류가 발생했습니다',
+                style: TypographyTokens.body1.copyWith(color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: _forceRefreshPage,
+                child: const Text('다시 시도'),
+              ),
+            ],
+          ),
+      );
+    }
+    
     // 페이지가 없는 경우
     if (_pageManager.pages.isEmpty) {
-                                return Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
+      debugPrint('  -> _buildBody: 페이지 없음 표시');
+      return Center(
+          child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
             Text(
               '페이지가 없습니다',
               style: TypographyTokens.body1,
               textAlign: TextAlign.center,
             ),
-                                    ],
-                                  ),
-                                );
-                              }
+          ],
+        ),
+      );
+    }
     
     // 정상적인 경우 PageView로 페이지 표시
-    return PageView.builder(
-        itemCount: _pageManager.pages.length,
+    debugPrint('  -> _buildBody: PageView.builder 반환 시도');
+    try {
+      return PageView.builder(
+          itemCount: _pageManager.pages.length,
           controller: _pageController,
-        onPageChanged: (index) {
-          _changePage(index);
-        },
-        itemBuilder: (context, index) {
-        // 페이지 정보 가져오기
-            final page = _pageManager.getPageAtIndex(index);
-        
-        // 페이지가 없으면 기본 UI 표시
-        if (page == null) {
-          return Center(child: Text('페이지 정보가 없습니다'));
-        }
-        
-        // 이미지 파일 로드
-            final imageFile = _pageManager.getImageFileForPage(page);
+          onPageChanged: (index) {
+            debugPrint("📄 PageView.onPageChanged: 발생 인덱스=$index (현재 인덱스: ${_pageManager.currentPageIndex})");
+            // 현재 인덱스와 다를 때만 페이지 변경 로직 호출
+            if (index != _pageManager.currentPageIndex) {
+              _changePage(index);
+            }
+          },
+          itemBuilder: (context, index) {
+            debugPrint("🛠️ PageView.itemBuilder: 빌드 인덱스=$index 시작");
+            // 페이지 정보 가져오기 (오류 방지를 위해 null 체크 강화)
+            page_model.Page? page;
+            if (index >= 0 && index < _pageManager.pages.length) {
+              page = _pageManager.pages[index];
+            }
+            debugPrint("  -> itemBuilder[$index]: 페이지 객체 ${page != null ? '있음 (ID: ${page.id})' : '없음'}");
+
+            // --- itemBuilder 단순화 --- 
+            // 페이지 유무와 관계없이 간단한 Text 위젯 반환
+            return Center(
+              child: Text(
+                'Page $index\n(Page ID: ${page?.id ?? 'N/A'})',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            );
+            // --- itemBuilder 단순화 끝 --- 
             
+            /* // 기존 itemBuilder 내용 주석 처리
+            // 페이지가 없으면 기본 UI 표시
+            if (page == null) {
+              debugPrint("  -> itemBuilder[$index]: 페이지 객체가 null이므로 기본 UI 표시");
+              return Center(child: Text('페이지 정보가 없습니다'));
+            }
+            // 이미지 파일 로드
+            final imageFile = _pageManager.getImageFileForPage(page);
+            debugPrint("  -> itemBuilder[$index]: 이미지 파일 ${imageFile != null ? '있음' : '없음'}");
+            debugPrint("  -> itemBuilder[$index]: Column 반환 시도");
             return Column(
               children: [
-            // 이미지 영역
-            PageImageWidget(
-              page: page,
-              imageFile: imageFile,
-              title: _state.note?.originalText ?? '노트',
-              showTitle: true,
-              style: ImageContainerStyle.noteDetail,
-              onFullScreenTap: (file) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => FullImageScreen(
-                      imageFile: file,
-                      title: _state.note?.originalText ?? '이미지',
-                                  ),
-                                ),
-                              );
-                            },
-            ),
-            
-            // 내용 영역 (현재 페이지일 경우만 콘텐츠 표시)
-            Expanded(
-              child: index == _pageManager.currentPageIndex
-                ? SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _buildPageContentWidget(),
-                  )
-                : Center(
-                            child: Text(
-                      '페이지 ${index + 1}',
-                      style: TypographyTokens.body1,
-                    ),
-                  ),
-                ),
+                PageImageWidget(...),
+                Expanded(...),
               ],
             );
-      },
-    );
+            */
+          },
+      );
+    } catch (e, stackTrace) {
+      debugPrint('❌ _buildBody에서 PageView 생성 중 오류 발생: $e');
+      debugPrint('스택 트레이스: $stackTrace');
+      // 오류 발생 시 대체 위젯 반환 (예: 에러 메시지)
+      return Center(
+        child: Text(
+          '페이지 뷰를 표시하는 중 오류가 발생했습니다.\n$e',
+          style: TextStyle(color: Colors.red),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
   }
-  
+
   // _buildPageContentWidget 메서드 수정
   Widget _buildPageContentWidget() {
     final currentPage = _pageManager.currentPage;
@@ -1178,9 +1452,19 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> with WidgetsBinding
   // 매니저 인스턴스 초기화
   void _initializeManagers() {
     try {
+      debugPrint('    [initState] _initializeManagers 내부 시작');
+      
+      debugPrint('      -> ScreenshotServiceHelper 초기화 시작');
       _screenshotHelper = ScreenshotServiceHelper();
+      debugPrint('      <- ScreenshotServiceHelper 초기화 완료');
+      
+      debugPrint('      -> TooltipManager 초기화 시작');
       _tooltipManager = TooltipManager();
+      debugPrint('      <- TooltipManager 초기화 완료');
+      
+      debugPrint('      -> NoteOptionsManager 초기화 시작');
       _optionsManager = NoteOptionsManager();
+      debugPrint('      <- NoteOptionsManager 초기화 완료');
       
       debugPrint('✅ 모든 매니저 초기화 완료');
     } catch (e, stackTrace) {

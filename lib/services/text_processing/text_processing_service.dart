@@ -32,7 +32,9 @@ class TextProcessingService {
   // 싱글톤 패턴
   static final TextProcessingService _instance = TextProcessingService._internal();
   factory TextProcessingService() => _instance;
-  TextProcessingService._internal();
+  TextProcessingService._internal() {
+    debugPrint('✨ TextProcessingService: 생성자 호출됨');
+  }
 
   // 필요한 서비스들의 인스턴스
   final TranslationService _translationService = TranslationService();

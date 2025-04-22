@@ -16,9 +16,18 @@ class PageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final ImageService _imageService = ImageService();
-  final EnhancedOcrService _ocrService = EnhancedOcrService();
-  final TranslationService _translationService = TranslationService();
-  final UnifiedCacheService _cacheService = UnifiedCacheService();
+  // 아래 서비스 의존성 제거
+  // final EnhancedOcrService _ocrService = EnhancedOcrService();
+  // final TranslationService _translationService = TranslationService();
+  // final UnifiedCacheService _cacheService = UnifiedCacheService();
+
+  // UnifiedCacheService 직접 사용 대신 getter 또는 메서드로 접근 고려
+  UnifiedCacheService get _cacheService => UnifiedCacheService();
+
+  // 생성자 로그 추가
+  PageService() {
+    debugPrint('📄 PageService: 생성자 호출됨');
+  }
 
   // 페이지 컬렉션 참조
   CollectionReference get _pagesCollection => _firestore.collection('pages');
@@ -30,59 +39,51 @@ class PageService {
         .orderBy('pageNumber');
   }
 
-  /// 페이지 생성
+  /// 페이지 생성 (단순 버전)
   Future<page_model.Page> createPage({
     required String noteId,
     required String originalText,
     required String translatedText,
     required int pageNumber,
     File? imageFile,
+    String? imageUrl, // 이미지 URL도 받을 수 있도록 추가
   }) async {
     try {
-      // 사용자 확인
       final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('로그인이 필요합니다.');
+      if (user == null) throw Exception('로그인이 필요합니다.');
+
+      String? finalImageUrl = imageUrl;
+      if (imageFile != null && finalImageUrl == null) {
+        finalImageUrl = await _imageService.uploadImage(imageFile);
       }
 
-      // 이미지 업로드 (있는 경우)
-      String? imageUrl;
-      if (imageFile != null) {
-        imageUrl = await _imageService.uploadImage(imageFile);
-      }
-
-      // 페이지 데이터 생성
       final now = DateTime.now();
       final pageData = page_model.Page(
         originalText: originalText,
         translatedText: translatedText,
         pageNumber: pageNumber,
-        imageUrl: imageUrl,
+        imageUrl: finalImageUrl,
         createdAt: now,
         updatedAt: now,
       );
 
-      // Firestore에 페이지 추가
       final pageRef = await _pagesCollection.add({
         ...pageData.toFirestore(),
         'userId': user.uid,
         'noteId': noteId,
       });
 
-      // ID가 포함된 페이지 객체 반환
       final newPage = page_model.Page(
         id: pageRef.id,
         originalText: originalText,
         translatedText: translatedText,
         pageNumber: pageNumber,
-        imageUrl: imageUrl,
+        imageUrl: finalImageUrl,
         createdAt: now,
         updatedAt: now,
       );
 
-      // 캐시에 새 페이지 저장
       await _cacheService.cachePage(noteId, newPage);
-
       return newPage;
     } catch (e) {
       debugPrint('페이지 생성 중 오류 발생: $e');
@@ -90,7 +91,8 @@ class PageService {
     }
   }
 
-  /// 이미지로 페이지 생성 (OCR 및 번역 포함)
+  /* // createPageWithImage 메서드 주석 처리 (ContentManager로 이동 고려)
+  /// 이미지로 페이지 생성 (OCR 및 번역 포함) - ContentManager 역할
   Future<page_model.Page> createPageWithImage({
     required String noteId,
     required int pageNumber,
@@ -99,13 +101,17 @@ class PageService {
   }) async {
     try {
       // 이미지에서 텍스트 추출 (OCR)
-      final extractedText = await _ocrService.extractText(imageFile);
+      // final extractedText = await _ocrService.extractText(imageFile);
+      throw UnimplementedError('OCR 기능은 ContentManager로 이동해야 합니다.');
+      String extractedText = ''; // 임시
 
       // 추출된 텍스트 번역
-      final translatedText = await _translationService.translateText(
-        extractedText,
-        targetLanguage: targetLanguage,
-      );
+      // final translatedText = await _translationService.translateText(
+      //   extractedText,
+      //   targetLanguage: targetLanguage,
+      // );
+      throw UnimplementedError('번역 기능은 ContentManager로 이동해야 합니다.');
+      String translatedText = ''; // 임시
 
       // 페이지 생성
       return await createPage(
@@ -120,6 +126,7 @@ class PageService {
       throw Exception('이미지로 페이지를 생성할 수 없습니다: $e');
     }
   }
+  */
 
   /// 페이지 가져오기 (캐시 활용)
   Future<page_model.Page?> getPageById(String pageId) async {
@@ -319,20 +326,18 @@ class PageService {
     return mergedPages;
   }
 
-  /// 페이지 업데이트
+  /// 페이지 업데이트 (단순 버전)
   Future<page_model.Page?> updatePage(
     String pageId, {
     String? originalText,
     String? translatedText,
     int? pageNumber,
     File? imageFile,
+    String? imageUrl, // 이미지 URL 직접 업데이트 지원
   }) async {
     try {
-      // 페이지 정보 가져오기 (노트 ID 확인용)
       final pageDoc = await _pagesCollection.doc(pageId).get();
-      if (!pageDoc.exists) {
-        throw Exception('페이지를 찾을 수 없습니다.');
-      }
+      if (!pageDoc.exists) throw Exception('페이지를 찾을 수 없습니다.');
 
       final data = pageDoc.data() as Map<String, dynamic>?;
       final noteId = data?['noteId'] as String?;
@@ -342,58 +347,32 @@ class PageService {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      if (originalText != null) {
-        updates['originalText'] = originalText;
-      }
+      if (originalText != null) updates['originalText'] = originalText;
+      if (translatedText != null) updates['translatedText'] = translatedText;
+      if (pageNumber != null) updates['pageNumber'] = pageNumber;
+      if (imageUrl != null) updates['imageUrl'] = imageUrl; // 직접 URL 업데이트
 
-      if (translatedText != null) {
-        updates['translatedText'] = translatedText;
-      }
-
-      if (pageNumber != null) {
-        updates['pageNumber'] = pageNumber;
-      }
-
-      // 이미지 업로드 (있는 경우)
+      // 이미지 파일이 제공된 경우 업로드 및 URL 업데이트
       if (imageFile != null) {
-        // 기존 이미지 삭제
         if (existingImageUrl != null && existingImageUrl.isNotEmpty) {
-          await _imageService.deleteImage(existingImageUrl);
+          await _imageService.deleteImage(existingImageUrl).catchError((e) => print("기존 이미지 삭제 오류(무시): $e"));
         }
-
-        // 새 이미지 업로드
         final newImageUrl = await _imageService.uploadImage(imageFile);
         updates['imageUrl'] = newImageUrl;
-
-        // 이미지가 변경되었고 원본 텍스트가 제공되지 않은 경우, OCR 수행
-        if (originalText == null) {
-          final extractedText = await _ocrService.extractText(imageFile);
-          updates['originalText'] = extractedText;
-
-          // 번역 텍스트가 제공되지 않은 경우, 번역 수행
-          if (translatedText == null) {
-            final translatedText = await _translationService.translateText(extractedText);
-            updates['translatedText'] = translatedText;
-          }
-        }
+        // OCR/번역 로직 제거
       }
 
-      // Firestore 업데이트
       await _pagesCollection.doc(pageId).update(updates);
 
-      // 업데이트된 페이지 객체 생성 및 캐시 업데이트
       final updatedDoc = await _pagesCollection.doc(pageId).get();
       if (updatedDoc.exists) {
         final updatedPage = page_model.Page.fromFirestore(updatedDoc);
-        
         if (noteId != null) {
           await _cacheService.cachePage(noteId, updatedPage);
           debugPrint('페이지 $pageId 업데이트 및 캐시 갱신 완료');
         }
-        
         return updatedPage;
       }
-      
       return null;
     } catch (e) {
       debugPrint('페이지 업데이트 중 오류 발생: $e');
