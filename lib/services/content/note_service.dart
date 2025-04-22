@@ -797,4 +797,75 @@ class NoteService {
       rethrow;
     }
   }
+
+  /// 노트에 속한 플래시카드 목록 가져오기
+  Future<List<FlashCard>> getFlashcardsByNoteId(String noteId) async {
+    try {
+      // 캐시에서 플래시카드 가져오기 시도
+      final cachedFlashcards = await _cacheService.getFlashcardsByNoteId(noteId);
+      if (cachedFlashcards.isNotEmpty) {
+        debugPrint('✅ 캐시에서 ${cachedFlashcards.length}개의 플래시카드를 찾았습니다.');
+        return cachedFlashcards;
+      }
+      
+      // Firestore에서 플래시카드 가져오기
+      debugPrint('🔄 캐시에서 플래시카드를 찾지 못해 Firestore에서 조회 시작');
+      final querySnapshot = await _firestore
+          .collection('flashcards')
+          .where('noteId', isEqualTo: noteId)
+          .orderBy('createdAt', descending: true)
+          .get();
+      
+      // 플래시카드 변환 및 반환
+      final flashcards = querySnapshot.docs
+          .map((doc) => FlashCard.fromJson({...doc.data() as Map<String, dynamic>, 'id': doc.id}))
+          .toList();
+      
+      // 캐시에 저장
+      if (flashcards.isNotEmpty) {
+        await _cacheService.cacheFlashcards(flashcards);
+        debugPrint('✅ ${flashcards.length}개의 플래시카드를 캐시에 저장했습니다.');
+      }
+      
+      return flashcards;
+    } catch (e) {
+      debugPrint('❌ 플래시카드 목록을 가져오는 중 오류 발생: $e');
+      return [];
+    }
+  }
+  
+  /// 플래시카드 저장
+  Future<bool> saveFlashcard(FlashCard flashcard) async {
+    try {
+      // Firestore에 저장
+      final flashcardRef = _firestore.collection('flashcards').doc(flashcard.id);
+      await flashcardRef.set(flashcard.toJson());
+      
+      // 캐시에 저장
+      await _cacheService.cacheFlashcard(flashcard);
+      
+      // 노트의 플래시카드 카운트 증가
+      if (flashcard.noteId != null && flashcard.noteId!.isNotEmpty) {
+        // 노트 가져오기
+        final noteRef = _notesCollection.doc(flashcard.noteId);
+        final noteSnapshot = await noteRef.get();
+        
+        if (noteSnapshot.exists) {
+          // 노트에서 현재 플래시카드 카운트 가져오기
+          final noteData = noteSnapshot.data() as Map<String, dynamic>;
+          final currentCount = noteData['flashcardCount'] ?? 0;
+          
+          // 카운트 1 증가
+          await noteRef.update({'flashcardCount': currentCount + 1});
+          debugPrint('✅ 노트 ${flashcard.noteId}의 플래시카드 카운트 업데이트: ${currentCount + 1}');
+        }
+      }
+      
+      debugPrint('✅ 플래시카드 ${flashcard.id} 저장 완료');
+      return true;
+    } catch (e) {
+      debugPrint('❌ 플래시카드 저장 중 오류 발생: $e');
+      return false;
+    }
+  }
 }

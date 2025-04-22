@@ -11,6 +11,11 @@ import '../../widgets/common/pika_app_bar.dart';
 import '../../models/flash_card.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../../managers/note_options_manager.dart';
+import '../../widgets/note_action_bottom_sheet.dart';
+import '../../widgets/edit_title_dialog.dart';
+import '../../services/content/note_service.dart';
+import '../../views/screens/flashcard_screen.dart';
 
 /// 노트 상세 화면 (개선된 버전)
 class NoteDetailScreenNew extends StatefulWidget {
@@ -42,6 +47,8 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with Automati
   late PageManager _pageManager;
   late PageController _pageController;
   final ContentManager _contentManager = ContentManager();
+  final NoteOptionsManager _noteOptionsManager = NoteOptionsManager();
+  final NoteService _noteService = NoteService();
   Note? _currentNote;
   List<pika_page.Page>? _pages;
   bool _isLoading = true;
@@ -53,6 +60,7 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with Automati
   // 페이지 컨텐츠 위젯 관련 상태
   Map<String, bool> _processedPageStatus = {};
   bool _shouldUpdateUI = true; // 화면 업데이트 제어 플래그
+  bool _isFullTextMode = false; // 전체 텍스트 모드 상태
 
   @override
   bool get wantKeepAlive => true; // AutomaticKeepAliveClientMixin 구현
@@ -71,6 +79,9 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with Automati
       initialNote: widget.initialNote,
       useCacheFirst: false,
     );
+
+    // 플래시카드 데이터 로드
+    _loadFlashcards();
 
     // 첫 프레임 빌드 후에 페이지 로드 시작
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -376,11 +387,270 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with Automati
     }
   }
   
+  // 플래시카드 데이터 로드
+  Future<void> _loadFlashcards() async {
+    try {
+      // 노트에 속한 플래시카드 로드
+      if (kDebugMode) {
+        debugPrint("📚 노트 ${widget.noteId}의 플래시카드 로드 시작");
+      }
+      
+      // noteService를 통해 플래시카드 목록 가져오기
+      final flashcards = await _noteService.getFlashcardsByNoteId(widget.noteId);
+      
+      if (mounted) {
+        setState(() {
+          _flashCards = flashcards;
+        });
+        
+        if (kDebugMode) {
+          debugPrint("📚 노트 ${widget.noteId}의 플래시카드 ${_flashCards.length}개 로드 완료");
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("❌ 플래시카드 로드 중 오류: $e");
+      }
+    }
+  }
+
   // 플래시카드 생성 핸들러
   void _handleCreateFlashCard(String originalText, String translatedText, {String? pinyin}) {
-    // 플래시카드 추가 로직 구현 (실제 구현은 추후 필요)
+    // 플래시카드 생성 로직
+    final newFlashCard = FlashCard(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      front: originalText,
+      back: translatedText,
+      pinyin: pinyin ?? '',
+      noteId: widget.noteId,
+      createdAt: DateTime.now(),
+    );
+    
+    // 플래시카드 저장
+    _saveFlashcard(newFlashCard);
+    
+    // 상태 업데이트
+    setState(() {
+      _flashCards.add(newFlashCard);
+    });
+    
     if (kDebugMode) {
       debugPrint("📝 플래시카드 생성: $originalText - $translatedText");
+      debugPrint("📊 현재 플래시카드 수: ${_flashCards.length}");
+    }
+    
+    // 노트의 플래시카드 카운터 업데이트
+    _updateNoteFlashcardCount();
+  }
+  
+  // 플래시카드 저장
+  Future<void> _saveFlashcard(FlashCard flashcard) async {
+    try {
+      // 플래시카드 서비스를 통해 저장
+      await _noteService.saveFlashcard(flashcard);
+      
+      if (kDebugMode) {
+        debugPrint("✅ 플래시카드 저장 완료: ${flashcard.id}");
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("❌ 플래시카드 저장 중 오류: $e");
+      }
+    }
+  }
+  
+  // 노트의 플래시카드 카운터 업데이트
+  Future<void> _updateNoteFlashcardCount() async {
+    if (_currentNote == null || _currentNote!.id == null) return;
+    
+    try {
+      // 현재 노트 정보 가져오기
+      final note = await _noteService.getNoteById(_currentNote!.id!);
+      if (note == null) return;
+      
+      // 플래시카드 카운트 업데이트
+      final updatedNote = note.copyWith(flashcardCount: _flashCards.length);
+      await _noteService.updateNote(updatedNote.id!, updatedNote);
+      
+      // 현재 노트 정보 업데이트
+      setState(() {
+        _currentNote = updatedNote;
+      });
+      
+      if (kDebugMode) {
+        debugPrint("✅ 노트 플래시카드 카운트 업데이트: ${_flashCards.length}");
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("❌ 노트 플래시카드 카운트 업데이트 실패: $e");
+      }
+    }
+  }
+  
+  // 더보기 메뉴 처리
+  void _handleMoreButtonPressed() {
+    if (_currentNote == null) return;
+    
+    // 바텀시트 표시
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => NoteActionBottomSheet(
+        isFullTextMode: _isFullTextMode,
+        isFavorite: _currentNote?.isFavorite ?? false,
+        onToggleFullTextMode: _toggleFullTextMode,
+        onToggleFavorite: _toggleFavorite,
+        onEditTitle: _showEditTitleDialog,
+        onDeleteNote: _confirmDeleteNote,
+      ),
+    );
+  }
+  
+  // 전체 텍스트 모드 토글
+  void _toggleFullTextMode() {
+    setState(() {
+      _isFullTextMode = !_isFullTextMode;
+    });
+    
+    if (kDebugMode) {
+      debugPrint("🔤 전체 텍스트 모드 변경: $_isFullTextMode");
+    }
+  }
+  
+  // 즐겨찾기 토글
+  void _toggleFavorite() async {
+    if (_currentNote == null || _currentNote!.id == null) return;
+    
+    final newValue = !(_currentNote?.isFavorite ?? false);
+    final success = await _noteOptionsManager.toggleFavorite(_currentNote!.id!, newValue);
+    
+    if (success) {
+      setState(() {
+        _currentNote = _currentNote!.copyWith(isFavorite: newValue);
+      });
+      
+      if (kDebugMode) {
+        debugPrint("⭐ 즐겨찾기 상태 변경: $newValue");
+      }
+    }
+  }
+  
+  // 제목 편집 다이얼로그 표시
+  void _showEditTitleDialog() {
+    if (_currentNote == null) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => EditTitleDialog(
+        currentTitle: _currentNote!.originalText,
+        onTitleUpdated: (newTitle) async {
+          final success = await _noteOptionsManager.updateNoteTitle(_currentNote!.id!, newTitle);
+          if (success && mounted) {
+            // 노트 정보 다시 로드
+            final updatedNote = await _noteService.getNoteById(_currentNote!.id!);
+            setState(() {
+              _currentNote = updatedNote;
+            });
+            
+            if (kDebugMode) {
+              debugPrint("✏️ 노트 제목 변경: $newTitle");
+            }
+          }
+        },
+      ),
+    );
+  }
+  
+  // 노트 삭제 확인
+  void _confirmDeleteNote() {
+    if (_currentNote == null || _currentNote!.id == null) return;
+    
+    _noteOptionsManager.confirmDelete(
+      context, 
+      _currentNote!.id!, 
+      onDeleted: () {
+        // 화면 닫기
+        Navigator.of(context).pop();
+        
+        if (kDebugMode) {
+          debugPrint("🗑️ 노트 삭제 완료");
+        }
+      },
+    );
+  }
+  
+  // 플래시카드 화면으로 이동
+  void _navigateToFlashcards() {
+    if (_flashCards.isEmpty) {
+      // 플래시카드가 없는 경우 안내 메시지 표시
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('저장된 플래시카드가 없습니다. 먼저 플래시카드를 추가해주세요.')),
+      );
+      return;
+    }
+    
+    if (kDebugMode) {
+      debugPrint("📚 플래시카드 화면으로 이동");
+    }
+    
+    // 플래시카드 화면으로 이동
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => FlashCardScreen(
+          noteId: widget.noteId,
+          initialFlashcards: _flashCards, // 미리 로드된 플래시카드 목록 전달
+        ),
+      ),
+    ).then((result) {
+      // 플래시카드 화면에서 돌아왔을 때 데이터 갱신
+      if (result != null && result is Map && result.containsKey('flashcardCount')) {
+        final int count = result['flashcardCount'] as int;
+        
+        setState(() {
+          if (result.containsKey('flashcards')) {
+            _flashCards = List<FlashCard>.from(result['flashcards'] ?? []);
+          }
+        });
+        
+        // 노트 플래시카드 카운트 업데이트
+        _updateNoteFlashcardCountWithValue(count);
+        
+        if (kDebugMode) {
+          debugPrint("🔄 플래시카드 화면에서 돌아옴: 카운트=$count");
+        }
+      } else {
+        // 결과가 없어도 최신 데이터로 갱신
+        _loadFlashcards();
+      }
+    });
+  }
+  
+  // 노트의 플래시카드 카운터 직접 값 지정 업데이트
+  Future<void> _updateNoteFlashcardCountWithValue(int count) async {
+    if (_currentNote == null || _currentNote!.id == null) return;
+    
+    try {
+      // 현재 노트 정보 가져오기
+      final note = await _noteService.getNoteById(_currentNote!.id!);
+      if (note == null) return;
+      
+      // 플래시카드 카운트 업데이트
+      final updatedNote = note.copyWith(flashcardCount: count);
+      await _noteService.updateNote(updatedNote.id!, updatedNote);
+      
+      // 현재 노트 정보 업데이트
+      setState(() {
+        _currentNote = updatedNote;
+      });
+      
+      if (kDebugMode) {
+        debugPrint("✅ 노트 플래시카드 카운트 명시적 업데이트: $count");
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("❌ 노트 플래시카드 카운트 업데이트 실패: $e");
+      }
     }
   }
 
@@ -393,24 +663,12 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with Automati
     
     return Scaffold(
       appBar: PikaAppBar.noteDetail(
-        title: widget.initialNote?.originalText ?? _currentNote?.originalText ?? '노트 로딩 중...',
+        title: _currentNote?.originalText ?? widget.initialNote?.originalText ?? '노트 로딩 중...',
         currentPage: _pages != null && _pages!.isNotEmpty ? _currentPageIndex + 1 : 0,
         totalPages: _pages?.length ?? 0,
         flashcardCount: _flashCards.length,
-        onMorePressed: () {
-          // 더보기 메뉴 처리
-          if (kDebugMode) {
-            debugPrint("더보기 메뉴 클릭");
-          }
-          // 추후 구현 필요
-        },
-        onFlashcardTap: () {
-          // 플래시카드 탭 처리
-          if (kDebugMode) {
-            debugPrint("플래시카드 카운터 클릭");
-          }
-          // 추후 구현 필요
-        },
+        onMorePressed: _handleMoreButtonPressed,
+        onFlashcardTap: _navigateToFlashcards,
         onBackPressed: () {
           Navigator.of(context).pop();
         },
@@ -482,7 +740,7 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with Automati
           noteId: widget.noteId,
           onCreateFlashCard: _handleCreateFlashCard,
           flashCards: _flashCards,
-          useSegmentMode: true,
+          useSegmentMode: !_isFullTextMode, // 전체 텍스트 모드 여부에 따라 설정
         ),
       );
     });

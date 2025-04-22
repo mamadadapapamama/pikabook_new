@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/processed_text.dart';
+import '../../models/flash_card.dart'; // FlashCard 모델 임포트 추가
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../managers/content_manager.dart'; // ContentManager 임포트
@@ -1032,6 +1033,139 @@ class UnifiedCacheService {
     if (!_isInitialized) {
       _prefs = await SharedPreferences.getInstance();
       _isInitialized = true;
+    }
+  }
+
+  /// 특정 노트의 페이지 목록 캐시에서 가져오기
+  Future<List<page_model.Page>> getCachedPagesByNoteId(String noteId) async {
+    try {
+      if (!_isInitialized) await initialize();
+
+      // 캐시에서 페이지 ID 목록 가져오기
+      final pageIds = _notePageIds[noteId] ?? [];
+      if (pageIds.isEmpty) {
+        return [];
+      }
+
+      // 페이지 ID로 페이지 객체 가져오기
+      final pages = <page_model.Page>[];
+      for (final pageId in pageIds) {
+        final page = _pageCache[pageId];
+        if (page != null) {
+          pages.add(page);
+        }
+      }
+
+      // 페이지 번호로 정렬
+      pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+      return pages;
+    } catch (e) {
+      debugPrint('캐시에서 페이지 목록을 가져오는 중 오류 발생: $e');
+      return [];
+    }
+  }
+  
+  /// 특정 노트의 플래시카드 목록 캐시에서 가져오기
+  Future<List<FlashCard>> getFlashcardsByNoteId(String noteId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'flashcards_$noteId';
+      
+      // 캐시된 값이 없으면 빈 배열 반환
+      if (!prefs.containsKey(key)) {
+        return [];
+      }
+      
+      final jsonString = prefs.getString(key) ?? '[]';
+      
+      final List<dynamic> jsonList = jsonDecode(jsonString);
+      return jsonList.map((json) => FlashCard.fromJson(json)).toList();
+    } catch (e) {
+      debugPrint('캐시에서 플래시카드 목록을 가져오는 중 오류 발생: $e');
+      return [];
+    }
+  }
+  
+  /// 플래시카드 목록 캐싱
+  Future<void> cacheFlashcards(List<FlashCard> flashcards) async {
+    if (flashcards.isEmpty) return;
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 노트 ID별로 그룹화
+      final groupedByNote = <String, List<FlashCard>>{};
+      for (final card in flashcards) {
+        if (card.noteId != null && card.noteId!.isNotEmpty) {
+          if (!groupedByNote.containsKey(card.noteId)) {
+            groupedByNote[card.noteId!] = [];
+          }
+          groupedByNote[card.noteId]!.add(card);
+        }
+      }
+      
+      // 노트 ID별로 캐싱
+      for (final entry in groupedByNote.entries) {
+        final noteId = entry.key;
+        final cards = entry.value;
+        
+        final jsonList = cards.map((card) => card.toJson()).toList();
+        final jsonString = jsonEncode(jsonList);
+        
+        await prefs.setString('flashcards_$noteId', jsonString);
+        debugPrint('노트 $noteId의 플래시카드 ${cards.length}개 캐싱 완료');
+      }
+    } catch (e) {
+      debugPrint('플래시카드 캐싱 중 오류 발생: $e');
+    }
+  }
+  
+  /// 단일 플래시카드 캐싱
+  Future<void> cacheFlashcard(FlashCard flashcard) async {
+    if (flashcard.noteId == null || flashcard.noteId!.isEmpty) return;
+    
+    try {
+      // 해당 노트의 기존 캐시된 플래시카드 가져오기
+      final cachedCards = await getFlashcardsByNoteId(flashcard.noteId!);
+      
+      // 이미 같은 ID의 카드가 있는지 확인
+      final existingIndex = cachedCards.indexWhere((card) => card.id == flashcard.id);
+      
+      if (existingIndex >= 0) {
+        // 기존 카드 업데이트
+        cachedCards[existingIndex] = flashcard;
+      } else {
+        // 새 카드 추가
+        cachedCards.add(flashcard);
+      }
+      
+      // 업데이트된 목록 다시 캐싱
+      await cacheFlashcards(cachedCards);
+      
+      debugPrint('플래시카드 ${flashcard.id} 캐싱 완료');
+    } catch (e) {
+      debugPrint('단일 플래시카드 캐싱 중 오류 발생: $e');
+    }
+  }
+
+  /// 캐시에서 플래시카드 삭제
+  Future<void> removeFlashcard(String flashcardId, String? noteId) async {
+    if (noteId == null || noteId.isEmpty) return;
+    
+    try {
+      // 해당 노트의 기존 캐시된 플래시카드 가져오기
+      final cachedCards = await getFlashcardsByNoteId(noteId);
+      
+      // 지정된 ID의 카드 제거
+      cachedCards.removeWhere((card) => card.id == flashcardId);
+      
+      // 업데이트된 목록 다시 캐싱
+      await cacheFlashcards(cachedCards);
+      
+      debugPrint('플래시카드 $flashcardId 캐시에서 삭제 완료');
+    } catch (e) {
+      debugPrint('플래시카드 삭제 중 오류 발생: $e');
     }
   }
 }

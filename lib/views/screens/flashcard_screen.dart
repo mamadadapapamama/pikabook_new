@@ -25,8 +25,13 @@ import '../../widgets/common/usage_dialog.dart';
 ///
 class FlashCardScreen extends StatefulWidget {
   final String? noteId; // 특정 노트의 플래시카드만 표시할 때 사용
+  final List<FlashCard>? initialFlashcards; // 초기 플래시카드 목록
 
-  const FlashCardScreen({super.key, this.noteId});
+  const FlashCardScreen({
+    super.key, 
+    this.noteId,
+    this.initialFlashcards,
+  });
 
   @override
   State<FlashCardScreen> createState() => _FlashCardScreenState();
@@ -51,7 +56,20 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFlashCards(); // 플래시카드 로드
+    // 초기 플래시카드가 있는 경우 바로 사용
+    if (widget.initialFlashcards != null && widget.initialFlashcards!.isNotEmpty) {
+      setState(() {
+        _flashCards = widget.initialFlashcards!;
+        _isLoading = false;
+      });
+      // 사용량 업데이트는 여전히 수행
+      if (_flashCards.isNotEmpty) {
+        _updateFlashCardReviewCount();
+      }
+    } else {
+      // 기존 방식대로 로드
+      _loadFlashCards();
+    }
     _initTts(); // TTS 초기화
     // 중국어 사전은 필요할 때만 로드하도록 변경
   }
@@ -463,7 +481,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
           Navigator.of(context).pop({
             'flashcardCount': _flashCards.length,
             'success': _error == null,
-            'noteId': widget.noteId
+            'noteId': widget.noteId,
+            'flashcards': _flashCards, // 플래시카드 목록 전체 반환
           });
         }
         return false; // 이미 명시적으로 pop을 호출했으므로 false 반환
@@ -483,7 +502,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
             Navigator.of(context).pop({
               'flashcardCount': _flashCards.length,
               'success': _error == null,
-              'noteId': widget.noteId
+              'noteId': widget.noteId,
+              'flashcards': _flashCards, // 플래시카드 목록 전체 반환
             });
           },
           currentCardIndex: _currentIndex,

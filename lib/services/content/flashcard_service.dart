@@ -81,11 +81,6 @@ class FlashCardService {
         debugPrint('핀인 생성됨: $front -> $pinyinValue');
       }
 
-      // 4. 핀인이 여전히 비어있으면 폴백으로 'xíng zǒu' 설정
-      if (pinyinValue.isEmpty) {
-        pinyinValue = 'xíng zǒu';
-        debugPrint('핀인 폴백 사용됨: $front');
-      }
 
       // 플래시카드 ID 생성
       final id = _uuid.v4();
