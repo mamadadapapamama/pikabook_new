@@ -16,6 +16,9 @@ import '../../widgets/note_action_bottom_sheet.dart';
 import '../../widgets/edit_title_dialog.dart';
 import '../../services/content/note_service.dart';
 import '../../views/screens/flashcard_screen.dart';
+import '../../services/content/flashcard_service.dart' hide debugPrint;
+import '../../services/storage/unified_cache_service.dart';
+import '../../services/media/tts_service.dart';
 
 /// 노트 상세 화면 (개선된 버전)
 class NoteDetailScreenNew extends StatefulWidget {
@@ -46,9 +49,10 @@ class NoteDetailScreenNew extends StatefulWidget {
 class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with AutomaticKeepAliveClientMixin {
   late PageManager _pageManager;
   late PageController _pageController;
-  final ContentManager _contentManager = ContentManager();
+  late ContentManager _contentManager;
   final NoteOptionsManager _noteOptionsManager = NoteOptionsManager();
-  final NoteService _noteService = NoteService();
+  late NoteService _noteService;
+  final TtsService _ttsService = TtsService();
   Note? _currentNote;
   List<pika_page.Page>? _pages;
   bool _isLoading = true;
@@ -61,6 +65,10 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with Automati
   Map<String, bool> _processedPageStatus = {};
   bool _shouldUpdateUI = true; // 화면 업데이트 제어 플래그
   bool _isFullTextMode = false; // 전체 텍스트 모드 상태
+  String? _noteId;
+  Note? _note;
+  bool _loading = true;
+  bool _loadingFlashcards = true;
 
   @override
   bool get wantKeepAlive => true; // AutomaticKeepAliveClientMixin 구현
@@ -68,31 +76,48 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with Automati
   @override
   void initState() {
     super.initState();
-    if (kDebugMode) {
-      debugPrint("🏁 NoteDetailScreenNew initState: noteId=${widget.noteId}");
+    _note = widget.initialNote;
+    _noteId = widget.noteId;
+    _pageController = PageController(initialPage: 0);
+    
+    debugPrint("[NoteDetailScreenNew] initState - noteId: $_noteId");
+    debugPrint("[NoteDetailScreenNew] initState - initial note: ${_note?.id}");
+    
+    _initializeTts();
+    
+    // 서비스와 매니저 초기화
+    _contentManager = ContentManager();
+    _noteService = NoteService();
+    
+    // Note 정보가 없으면 Firebase에서 로드
+    if (_note == null && _noteId != null && _noteId!.isNotEmpty) {
+      _loadNoteFromFirestore(_noteId!);
     }
-    _currentNote = widget.initialNote;
-    _pageController = PageController(initialPage: _currentPageIndex);
-
+    
     _pageManager = PageManager(
-      noteId: widget.noteId,
-      initialNote: widget.initialNote,
+      noteId: _noteId ?? "", // null 체크 추가
+      initialNote: _note,
       useCacheFirst: false,
     );
-
-    // 플래시카드 데이터 로드
-    _loadFlashcards();
-
-    // 첫 프레임 빌드 후에 페이지 로드 시작
+    
+    // 상태가 초기화된 후에 플래시카드 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
-       if (mounted) {
-         _loadInitialPages();
-       }
+      _loadFlashcards();
+      _loadInitialPages();
     });
   }
 
   @override
   void dispose() {
+    _ttsService.stop();
+    _ttsService.dispose();
+    
+    // 앱 종료 전 플래시카드 저장
+    if (_noteId != null && _noteId!.isNotEmpty && _flashCards.isNotEmpty) {
+      debugPrint("[NoteDetailScreenNew] dispose - ${_flashCards.length}개의 플래시카드 캐시에 저장");
+      UnifiedCacheService().cacheFlashcards(_flashCards);
+    }
+    
     _pageController.dispose();
     if (_processingTimer != null) {
       _processingTimer!.cancel();
@@ -389,72 +414,124 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with Automati
   
   // 플래시카드 데이터 로드
   Future<void> _loadFlashcards() async {
+    if (_noteId == null || _noteId!.isEmpty) {
+      debugPrint("[NoteDetailScreenNew] 플래시카드 로드 실패: noteId가 없음");
+      return;
+    }
+
+    debugPrint("[NoteDetailScreenNew] 플래시카드 로드 시작: noteId = $_noteId");
+  
+    final flashCardService = FlashCardService();
+  
     try {
-      // 노트에 속한 플래시카드 로드
-      if (kDebugMode) {
-        debugPrint("📚 노트 ${widget.noteId}의 플래시카드 로드 시작");
-      }
-      
-      // noteService를 통해 플래시카드 목록 가져오기
-      final flashcards = await _noteService.getFlashcardsByNoteId(widget.noteId);
-      
-      if (mounted) {
+      // 먼저 Firestore에서 플래시카드 로드 시도
+      var firestoreFlashcards = await flashCardService.getFlashCardsForNote(_noteId!);
+      if (firestoreFlashcards != null && firestoreFlashcards.isNotEmpty) {
+        debugPrint("[NoteDetailScreenNew] Firestore에서 ${firestoreFlashcards.length}개의 플래시카드 로드 성공");
         setState(() {
-          _flashCards = flashcards;
+          _flashCards = firestoreFlashcards;
+          _loadingFlashcards = false;
         });
         
-        if (kDebugMode) {
-          debugPrint("📚 노트 ${widget.noteId}의 플래시카드 ${_flashCards.length}개 로드 완료");
+        // Firestore에서 로드된 플래시카드를 캐시에 저장
+        await UnifiedCacheService().cacheFlashcards(firestoreFlashcards);
+        
+        // 노트 객체의 flashcardCount 업데이트
+        if (_note != null) {
+          setState(() {
+            _note = _note!.copyWith(flashcardCount: _flashCards.length);
+          });
+          debugPrint("[NoteDetailScreenNew] 노트 객체의 flashcardCount 업데이트: ${_flashCards.length}");
         }
+        return;
       }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint("❌ 플래시카드 로드 중 오류: $e");
+
+      // Firestore에서 로드 실패한 경우 캐시에서 로드 시도
+      debugPrint("[NoteDetailScreenNew] Firestore에서 플래시카드를 찾지 못함, 캐시 확인 중");
+      var cachedFlashcards = await UnifiedCacheService().getFlashcardsByNoteId(_noteId!);
+      if (cachedFlashcards.isNotEmpty) {
+        debugPrint("[NoteDetailScreenNew] 캐시에서 ${cachedFlashcards.length}개의 플래시카드 로드 성공");
+        setState(() {
+          _flashCards = cachedFlashcards;
+          _loadingFlashcards = false;
+        });
+        
+        // 캐시에서 로드된 플래시카드를 Firestore에 동기화
+        for (var card in cachedFlashcards) {
+          await flashCardService.updateFlashCard(card);
+        }
+        
+        // 노트 객체의 flashcardCount 업데이트
+        if (_note != null) {
+          setState(() {
+            _note = _note!.copyWith(flashcardCount: _flashCards.length);
+          });
+          debugPrint("[NoteDetailScreenNew] 노트 객체의 flashcardCount 업데이트: ${_flashCards.length}");
+        }
+        return;
       }
+
+      // 모든 시도 실패시 빈 리스트로 초기화
+      debugPrint("[NoteDetailScreenNew] 플래시카드를 찾지 못함 (Firestore 및 캐시 모두)");
+      setState(() {
+        _flashCards = [];
+        _loadingFlashcards = false;
+      });
+    } catch (e, stackTrace) {
+      debugPrint("[NoteDetailScreenNew] 플래시카드 로드 중 오류 발생: $e");
+      debugPrint(stackTrace.toString());
+      setState(() {
+        _flashCards = [];
+        _loadingFlashcards = false;
+      });
     }
   }
 
   // 플래시카드 생성 핸들러
-  void _handleCreateFlashCard(String originalText, String translatedText, {String? pinyin}) {
-    // 플래시카드 생성 로직
-    final newFlashCard = FlashCard(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      front: originalText,
-      back: translatedText,
-      pinyin: pinyin ?? '',
-      noteId: widget.noteId,
-      createdAt: DateTime.now(),
-    );
-    
-    // 플래시카드 저장
-    _saveFlashcard(newFlashCard);
-    
-    // 상태 업데이트
-    setState(() {
-      _flashCards.add(newFlashCard);
-    });
-    
+  void _handleCreateFlashCard(String originalText, String translatedText, {String? pinyin}) async {
     if (kDebugMode) {
-      debugPrint("📝 플래시카드 생성: $originalText - $translatedText");
-      debugPrint("📊 현재 플래시카드 수: ${_flashCards.length}");
+      debugPrint("📝 플래시카드 생성 시작: $originalText - $translatedText (병음: $pinyin)");
     }
     
-    // 노트의 플래시카드 카운터 업데이트
-    _updateNoteFlashcardCount();
-  }
-  
-  // 플래시카드 저장
-  Future<void> _saveFlashcard(FlashCard flashcard) async {
     try {
-      // 플래시카드 서비스를 통해 저장
-      await _noteService.saveFlashcard(flashcard);
+      // FlashCardService를 사용하여 플래시카드 생성
+      final flashCardService = FlashCardService();
+      final newFlashCard = await flashCardService.createFlashCard(
+        front: originalText,
+        back: translatedText,
+        noteId: widget.noteId,
+        pinyin: pinyin,
+      );
+      
+      // 상태 업데이트
+      setState(() {
+        _flashCards.add(newFlashCard);
+      });
       
       if (kDebugMode) {
-        debugPrint("✅ 플래시카드 저장 완료: ${flashcard.id}");
+        debugPrint("✅ 플래시카드 생성 완료: ${newFlashCard.front} - ${newFlashCard.back} (병음: ${newFlashCard.pinyin})");
+        debugPrint("📊 현재 플래시카드 수: ${_flashCards.length}");
+      }
+      
+      // 노트의 플래시카드 카운터 업데이트
+      _updateNoteFlashcardCount();
+      
+      // 성공 메시지 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('플래시카드가 추가되었습니다'))
+        );
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint("❌ 플래시카드 저장 중 오류: $e");
+        debugPrint("❌ 플래시카드 생성 중 오류: $e");
+      }
+      
+      // 오류 메시지 표시
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('플래시카드 생성 중 오류가 발생했습니다: $e'))
+        );
       }
     }
   }
@@ -651,6 +728,98 @@ class _NoteDetailScreenNewState extends State<NoteDetailScreenNew> with Automati
       if (kDebugMode) {
         debugPrint("❌ 노트 플래시카드 카운트 업데이트 실패: $e");
       }
+    }
+  }
+
+  // TTS 초기화 메서드 추가
+  void _initializeTts() {
+    _ttsService.init();
+    debugPrint("[NoteDetailScreenNew] TTS 서비스 초기화됨");
+  }
+
+  // Firestore에서 노트 로드 메서드 추가
+  Future<void> _loadNoteFromFirestore(String noteId) async {
+    debugPrint("[NoteDetailScreenNew] Firestore에서 노트 로드 시작: $noteId");
+    
+    try {
+      Note? loadedNote = await _noteService.getNoteById(noteId);
+      if (loadedNote != null) {
+        debugPrint("[NoteDetailScreenNew] 노트 로드 성공: ${loadedNote.id}, 플래시카드 수: ${loadedNote.flashcardCount}");
+        
+        setState(() {
+          _note = loadedNote;
+          _loading = false;
+          _error = null;
+        });
+        
+        // 플래시카드 카운트가 있으면 플래시카드 로드
+        if (loadedNote.flashcardCount != null && loadedNote.flashcardCount! > 0) {
+          _loadFlashcards();
+        }
+      } else {
+        debugPrint("[NoteDetailScreenNew] 노트를 찾을 수 없음: $noteId");
+        setState(() {
+          _loading = false;
+          _error = "노트를 찾을 수 없습니다.";
+        });
+      }
+    } catch (e, stackTrace) {
+      debugPrint("[NoteDetailScreenNew] 노트 로드 중 오류 발생: $e");
+      debugPrint(stackTrace.toString());
+      setState(() {
+        _loading = false;
+        _error = "노트 로드 중 오류가 발생했습니다: $e";
+      });
+    }
+  }
+
+  // 페이지 로드 후 처리 콜백 추가
+  void _handlePagesLoaded(List<pika_page.Page> pages) {
+    debugPrint("[NoteDetailScreenNew] _handlePagesLoaded: ${pages.length}개 페이지 로드됨");
+    
+    if (!mounted) return;
+    
+    setState(() {
+      _pages = pages;
+      _isLoading = false;
+      
+      // 노트 상태 업데이트
+      if (_note != null && pages.isNotEmpty) {
+        _note = _note!.copyWith(pages: pages);
+      }
+    });
+  }
+
+  // 세그먼트 처리 콜백 추가
+  void _handleSegmentsProcessed(bool isSuccess, String? pageId) {
+    debugPrint("[NoteDetailScreenNew] _handleSegmentsProcessed: 성공=$isSuccess, 페이지=$pageId");
+    
+    if (!mounted) return;
+    
+    // 페이지 처리 상태 기록
+    if (pageId != null) {
+      _processedPageStatus[pageId] = isSuccess;
+    }
+    
+    // 모든 페이지 처리 완료 여부 확인
+    bool allProcessed = true;
+    if (_pages != null) {
+      for (var page in _pages!) {
+        if (page.id != null && !_processedPageStatus.containsKey(page.id)) {
+          allProcessed = false;
+          break;
+        }
+      }
+    }
+    
+    // 모든 페이지가 처리됐으면 처리 상태 업데이트
+    if (allProcessed) {
+      _isProcessingSegments = false;
+    }
+    
+    // UI 반영 필요한 경우만 업데이트
+    if (_shouldUpdateUI) {
+      setState(() {});
     }
   }
 
