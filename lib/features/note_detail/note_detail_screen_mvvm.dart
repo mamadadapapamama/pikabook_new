@@ -384,10 +384,13 @@ class NoteDetailScreenMVVM extends StatelessWidget {
       return const SizedBox.shrink();
     }
     
+    // 페이지 처리 완료 콜백 설정 (한 번만 설정)
+    _setupPageProcessedCallback(context, viewModel);
+    
     return NoteDetailBottomBar(
       currentPage: viewModel.currentPage,
       currentPageIndex: viewModel.currentPageIndex,
-      totalPages: viewModel.pages?.length ?? 0,
+      totalPages: viewModel.totalImageCount > 0 ? viewModel.totalImageCount : (viewModel.pages?.length ?? 0),
       onPageChanged: (index) {
         // 네비게이션 버튼 클릭 시 PageController를 사용하여 페이지 이동
         viewModel.navigateToPage(index);
@@ -397,7 +400,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
       contentManager: viewModel.getContentManager(),
       textReaderService: TextReaderService(),
       isProcessing: false,
-      progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),
+      progressValue: (viewModel.currentPageIndex + 1) / (viewModel.totalImageCount > 0 ? viewModel.totalImageCount : (viewModel.pages?.length ?? 1)),
       onTtsPlay: () {
         if (kDebugMode) {
           print("TTS 재생 시작");
@@ -405,6 +408,29 @@ class NoteDetailScreenMVVM extends StatelessWidget {
         viewModel.speakCurrentPageText();
       },
       isMinimalUI: false,
+      processedPages: viewModel.getProcessedPagesStatus(),
     );
+  }
+  
+  // 페이지 처리 완료 콜백 설정 (스낵바 표시)
+  void _setupPageProcessedCallback(BuildContext context, NoteDetailViewModel viewModel) {
+    // 이미 콜백이 설정되어 있는지 검사하는 로직이 필요할 수 있음
+    // 일단 매번 새로 설정하도록 구현
+    
+    viewModel.setPageProcessedCallback((pageIndex) {
+      // 현재 화면이 살아있는지 확인
+      if (context.mounted) {
+        // 페이지 번호는 1부터 시작하도록 표시
+        final pageNum = pageIndex + 1;
+        
+        // 스낵바로 페이지 처리 완료 메시지 표시
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$pageNum번째 페이지가 처리 완료되었습니다.'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    });
   }
 } 

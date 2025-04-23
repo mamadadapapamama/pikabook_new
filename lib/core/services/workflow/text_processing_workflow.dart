@@ -5,11 +5,11 @@ import 'package:flutter/foundation.dart';
 
 // 서비스 임포트
 import '../storage/unified_cache_service.dart';
-import 'translation_service.dart';
-import 'enhanced_ocr_service.dart';
+import '../text_processing/translation_service.dart';
+import '../text_processing/enhanced_ocr_service.dart';
 import '../../../features/note_detail/managers/content_manager.dart';
-import 'internal_cn_segmenter_service.dart';
-import 'pinyin_creation_service.dart';
+import '../text_processing/internal_cn_segmenter_service.dart';
+import '../text_processing/pinyin_creation_service.dart';
 import '../authentication/user_preferences_service.dart';
 
 // 모델 임포트
@@ -18,11 +18,11 @@ import '../../models/note.dart';
 import '../../models/processed_text.dart';
 import '../../models/text_segment.dart';
 
-/// 다국어 텍스트 처리를 위한 중앙 통합 워크플로우 서비스
+/// 텍스트 처리를 위한 중앙 통합 워크플로우 서비스
 /// 
-/// 이 서비스는 다음 기능들을 통합적으로 제공:
+/// 다음 기능들을 통합적으로 제공:
 /// 1. 텍스트 번역 (TranslationService 활용)
-/// 2. 언어별 세그멘테이션
+/// 2. 언어별 세그멘테이션 (현재는 internal_cn_segmenter_service.dart 사용)
 /// 3. 텍스트 발음 생성 (병음 등)
 /// 4. 처리된 텍스트 캐싱 (UnifiedCacheService 활용)
 ///

@@ -245,9 +245,16 @@ class NoteService {
 
       // 기본 노트 데이터 생성
       final now = DateTime.now();
+      
+      // 빈 제목이거나 '새 노트'인 경우 순차적 이름 부여
+      String noteTitle = title;
+      if (title.isEmpty || title == '새 노트') {
+        noteTitle = await _generateSequentialNoteTitle();
+      }
+      
       final noteData = {
         'userId': user.uid,
-        'originalText': title,
+        'originalText': noteTitle,
         'translatedText': '',
         'isFavorite': false,
         'flashcardCount': 0,
@@ -624,12 +631,15 @@ class NoteService {
           'message': '로그인이 필요합니다',
         };
       }
+      
+      // 순차적인 노트 제목 생성
+      final noteTitle = await _generateSequentialNoteTitle();
 
       // 기본 노트 데이터 생성 (첫 번째 이미지 기준)
       final now = DateTime.now();
       final noteData = {
         'userId': user.uid,
-        'originalText': '새 노트', // 기본 제목 설정
+        'originalText': noteTitle, // 순차적 제목 설정
         'translatedText': '',
         'isFavorite': false,
         'flashcardCount': 0,
@@ -866,6 +876,32 @@ class NoteService {
     } catch (e) {
       debugPrint('❌ 플래시카드 저장 중 오류 발생: $e');
       return false;
+    }
+  }
+
+  /// 순차적인 노트 제목 생성 ('노트 1', '노트 2', ...)
+  Future<String> _generateSequentialNoteTitle() async {
+    try {
+      // 현재 사용자의 노트 수 가져오기
+      final user = _auth.currentUser;
+      if (user == null) {
+        return '노트 1'; // 기본값
+      }
+      
+      // 사용자의 노트 수 확인
+      final snapshot = await _notesCollection
+          .where('userId', isEqualTo: user.uid)
+          .count()
+          .get();
+      
+      final noteCount = snapshot.count ?? 0; // null 체크 추가
+      
+      // 다음 번호로 노트 제목 생성
+      return '노트 ${noteCount + 1}';
+    } catch (e) {
+      debugPrint('순차적 노트 제목 생성 중 오류: $e');
+      // 오류 발생 시 기본값 반환
+      return '노트 1';
     }
   }
 }

@@ -193,23 +193,28 @@ class NoteDetailViewModel extends ChangeNotifier {
         return;
       }
       
-      // 페이지 처리 상태를 미리 확인하여 처리 필요 여부 결정
-      bool needsProcessing = false;
-      if (pages.isNotEmpty) {
-        try {
-          final firstPage = pages.first;
-          final processedText = await _contentManager.getProcessedText(firstPage.id!);
-          needsProcessing = processedText == null || 
-                          (processedText.segments == null || processedText.segments!.isEmpty);
-          debugPrint("🔍 첫 페이지 처리 필요 여부: $needsProcessing");
+      // 페이지를 로드하면서 각 페이지의 처리 상태 파악
+      for (var page in pages) {
+        if (page.id != null) {
+          bool isProcessed = false;
+          
+          // 텍스트가 이미 있으면 처리된 것으로 간주
+          if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
+            isProcessed = true;
+          } else {
+            try {
+              // ContentManager를 통해 처리된 텍스트가 있는지 확인
+              final processedText = await _contentManager.getProcessedText(page.id!);
+              isProcessed = processedText != null && 
+                           processedText.fullOriginalText != '___PROCESSING___' &&
+                           processedText.fullOriginalText.isNotEmpty;
+            } catch (e) {
+              debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
+            }
+          }
           
           // 페이지 처리 상태 기록
-          if (firstPage.id != null) {
-            _processedPageStatus[firstPage.id!] = !needsProcessing;
-          }
-        } catch (e) {
-          debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
-          needsProcessing = true;
+          _processedPageStatus[page.id!] = isProcessed;
         }
       }
       
@@ -225,20 +230,21 @@ class NoteDetailViewModel extends ChangeNotifier {
         _resumeUIUpdates();
       });
       
+      // 백그라운드 처리 상태 확인 시작
+      _startPageProcessingCheck();
+      
       // 페이지 로드 후 세그먼트 처리가 필요한 경우에만 시작
-      if (needsProcessing) {
-        _startSegmentProcessing();
-      } else {
-        debugPrint("✅ 모든 페이지가 이미 처리되어 있어 세그먼트 처리 건너뜀");
+      if (_isProcessingBackground && pages.isNotEmpty) {
+        _startBackgroundProcessing();
       }
       
-      // 페이지 이미지 백그라운드 로드 시작
-      loadPageImagesInBackground();
+      // 페이지 이미지 미리 로드
+      loadAllPageImages();
     } catch (e, stackTrace) {
-      debugPrint("❌ NoteDetailViewModel: 페이지 로드 중 오류: $e");
-      debugPrint("Stack Trace: $stackTrace");
-      _error = "페이지 로드 실패: $e";
+      debugPrint("❌ NoteDetailViewModel: 페이지 로드 중 오류 발생: $e");
+      debugPrint(stackTrace.toString());
       _isLoading = false;
+      _error = "페이지를 로드하는 중 오류가 발생했습니다: $e";
       notifyListeners();
     }
   }
@@ -817,5 +823,247 @@ class NoteDetailViewModel extends ChangeNotifier {
       debugPrint(stackTrace.toString());
       return false;
     }
+  }
+  
+  // 페이지 처리 상태 확인 및 반환 메서드 추가
+  List<bool> getProcessedPagesStatus() {
+    // pages가 없으면 빈 리스트 반환
+    if (_pages == null || _pages!.isEmpty) {
+      return [];
+    }
+    
+    List<bool> processedStatus = List.filled(_totalImageCount > 0 ? _totalImageCount : _pages!.length, false);
+    
+    // 현재 pages 목록에 있는 페이지들의 상태 설정
+    for (int i = 0; i < _pages!.length; i++) {
+      final page = _pages![i];
+      if (page.id != null && _processedPageStatus.containsKey(page.id!)) {
+        processedStatus[i] = _processedPageStatus[page.id!] ?? false;
+      } else {
+        // 상태 정보가 없는 경우, 처리 중인지 여부로 판단
+        processedStatus[i] = page.originalText != '___PROCESSING___' && 
+                             page.originalText.isNotEmpty;
+      }
+    }
+    
+    return processedStatus;
+  }
+  
+  // 페이지 처리 상태 업데이트 메서드 추가
+  Future<void> updatePageProcessingStatus(int pageIndex, bool isProcessed) async {
+    if (_pages == null || pageIndex < 0 || pageIndex >= _pages!.length) {
+      return;
+    }
+    
+    final page = _pages![pageIndex];
+    if (page.id == null) return;
+    
+    // 상태가 변경된 경우에만 업데이트
+    if (_processedPageStatus[page.id] != isProcessed) {
+      _processedPageStatus[page.id!] = isProcessed;
+      notifyListeners();
+      
+      // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
+      if (isProcessed && _pageProcessedCallback != null) {
+        _pageProcessedCallback!(pageIndex);
+      }
+    }
+  }
+  
+  // 페이지 처리 완료 시 호출될 콜백 함수
+  Function(int)? _pageProcessedCallback;
+  
+  // 페이지 처리 완료 콜백 설정 메서드
+  void setPageProcessedCallback(Function(int) callback) {
+    _pageProcessedCallback = callback;
+  }
+  
+  // 백그라운드에서 페이지 처리 상태 체크
+  void _startPageProcessingCheck() {
+    // 이미 타이머가 실행 중이면 취소
+    if (_processingTimer != null) {
+      _processingTimer!.cancel();
+    }
+    
+    // 페이지가 없으면 실행하지 않음
+    if (_pages == null || _pages!.isEmpty) return;
+    
+    // 3초마다 각 페이지의 처리 상태 확인
+    _processingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      bool allProcessed = true;
+      bool anyStatusChanged = false;
+      
+      for (int i = 0; i < _pages!.length; i++) {
+        final page = _pages![i];
+        if (page.id == null) continue;
+        
+        // 이미 처리된 페이지는 스킵
+        if (_processedPageStatus[page.id!] == true) continue;
+        
+        try {
+          // 페이지 상태 확인
+          bool isProcessed = false;
+          
+          // 텍스트가 이미 처리되어 있는지 확인
+          if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
+            isProcessed = true;
+          } else {
+            // ContentManager를 통해 처리된 텍스트가 있는지 확인
+            final processedText = await _contentManager.getProcessedText(page.id!);
+            isProcessed = processedText != null && 
+                          processedText.fullOriginalText != '___PROCESSING___' &&
+                          processedText.fullOriginalText.isNotEmpty;
+          }
+          
+          // 상태가 변경된 경우에만 업데이트
+          if (_processedPageStatus[page.id!] != isProcessed) {
+            _processedPageStatus[page.id!] = isProcessed;
+            anyStatusChanged = true;
+            
+            // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
+            if (isProcessed && _pageProcessedCallback != null) {
+              _pageProcessedCallback!(i);
+            }
+          }
+          
+          // 아직 처리되지 않은 페이지가 있으면 체크
+          if (!isProcessed) {
+            allProcessed = false;
+          }
+        } catch (e) {
+          debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
+        }
+      }
+      
+      // 상태 변경이 있으면 UI 갱신
+      if (anyStatusChanged) {
+        notifyListeners();
+      }
+      
+      // 모든 페이지가 처리되었으면 타이머 중지
+      if (allProcessed) {
+        debugPrint("✅ 모든 페이지 처리 완료, 타이머 중지");
+        timer.cancel();
+        _processingTimer = null;
+      }
+    });
+  }
+  
+  // 백그라운드에서 페이지 처리 상태 체크
+  void _startBackgroundProcessing() {
+    // 이미 타이머가 실행 중이면 취소
+    if (_processingTimer != null) {
+      _processingTimer!.cancel();
+    }
+    
+    // 페이지가 없으면 실행하지 않음
+    if (_pages == null || _pages!.isEmpty) return;
+    
+    // 3초마다 각 페이지의 처리 상태 확인
+    _processingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      bool allProcessed = true;
+      bool anyStatusChanged = false;
+      
+      for (int i = 0; i < _pages!.length; i++) {
+        final page = _pages![i];
+        if (page.id == null) continue;
+        
+        // 이미 처리된 페이지는 스킵
+        if (_processedPageStatus[page.id!] == true) continue;
+        
+        try {
+          // 페이지 상태 확인
+          bool isProcessed = false;
+          
+          // 텍스트가 이미 처리되어 있는지 확인
+          if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
+            isProcessed = true;
+          } else {
+            // ContentManager를 통해 처리된 텍스트가 있는지 확인
+            final processedText = await _contentManager.getProcessedText(page.id!);
+            isProcessed = processedText != null && 
+                          processedText.fullOriginalText != '___PROCESSING___' &&
+                          processedText.fullOriginalText.isNotEmpty;
+          }
+          
+          // 상태가 변경된 경우에만 업데이트
+          if (_processedPageStatus[page.id!] != isProcessed) {
+            _processedPageStatus[page.id!] = isProcessed;
+            anyStatusChanged = true;
+            
+            // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
+            if (isProcessed && _pageProcessedCallback != null) {
+              _pageProcessedCallback!(i);
+            }
+          }
+          
+          // 아직 처리되지 않은 페이지가 있으면 체크
+          if (!isProcessed) {
+            allProcessed = false;
+          }
+        } catch (e) {
+          debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
+        }
+      }
+      
+      // 상태 변경이 있으면 UI 갱신
+      if (anyStatusChanged) {
+        notifyListeners();
+      }
+      
+      // 모든 페이지가 처리되었으면 타이머 중지
+      if (allProcessed) {
+        debugPrint("✅ 모든 페이지 처리 완료, 타이머 중지");
+        timer.cancel();
+        _processingTimer = null;
+      }
+    });
+  }
+  
+  // 백그라운드에서 모든 페이지 이미지 로드
+  Future<void> loadAllPageImages() async {
+    if (_pages == null || _pages!.isEmpty) return;
+    
+    debugPrint("�� 페이지 이미지 백그라운드 로드 시작: ${_pages!.length}개 페이지");
+    
+    // 현재 페이지의 이미지 우선 로드 (사용자에게 가장 먼저 보여야 함)
+    if (_currentPageIndex >= 0 && _currentPageIndex < _pages!.length) {
+      await _loadPageImage(_currentPageIndex);
+      
+      // UI 업데이트 (현재 페이지 이미지 로드 완료 후)
+      if (_shouldUpdateUI) {
+        notifyListeners();
+      }
+    }
+    
+    // 다음 페이지와 이전 페이지를 두 번째로 로드 (빠른 페이지 전환 위해)
+    List<Future<void>> priorityLoads = [];
+    
+    if (_currentPageIndex + 1 < _pages!.length) {
+      priorityLoads.add(_loadPageImage(_currentPageIndex + 1));
+    }
+    
+    if (_currentPageIndex - 1 >= 0) {
+      priorityLoads.add(_loadPageImage(_currentPageIndex - 1));
+    }
+    
+    // 우선순위 로드 동시 실행
+    if (priorityLoads.isNotEmpty) {
+      await Future.wait(priorityLoads);
+    }
+    
+    // 나머지 모든 페이지 이미지 순차적으로 로드
+    for (int i = 0; i < _pages!.length; i++) {
+      if (i != _currentPageIndex && 
+          i != _currentPageIndex + 1 && 
+          i != _currentPageIndex - 1) {
+        await _loadPageImage(i);
+        
+        // 로드 간 짧은 딜레이 추가 (시스템 부하 방지)
+        await Future.delayed(Duration(milliseconds: 50));
+      }
+    }
+    
+    debugPrint("✅ 모든 페이지 이미지 로드 완료");
   }
 } 

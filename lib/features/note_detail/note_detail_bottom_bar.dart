@@ -29,6 +29,7 @@ class NoteDetailBottomBar extends StatefulWidget {
   final double progressValue;
   final VoidCallback? onTtsPlay;
   final bool isMinimalUI;
+  final List<bool> processedPages; // 각 페이지의 처리 상태 추적 배열 추가
 
   const NoteDetailBottomBar({
     super.key,
@@ -44,6 +45,7 @@ class NoteDetailBottomBar extends StatefulWidget {
     this.progressValue = 0.0,
     this.onTtsPlay,
     this.isMinimalUI = false,
+    this.processedPages = const [], // 기본값은 빈 배열
   });
 
   @override
@@ -136,6 +138,45 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     }
   }
 
+  // 이전 페이지가 처리되었는지 확인
+  bool _isPrevPageProcessed() {
+    final prevPageIndex = widget.currentPageIndex - 1;
+    if (prevPageIndex < 0) return true; // 첫 페이지면 항상 true
+    
+    // processedPages 배열이 있고, 해당 인덱스가 유효하면 해당 값 반환
+    if (widget.processedPages.isNotEmpty && prevPageIndex < widget.processedPages.length) {
+      return widget.processedPages[prevPageIndex];
+    }
+    
+    // 페이지 처리 상태 정보가 없으면 처리된 것으로 간주
+    return true;
+  }
+  
+  // 다음 페이지가 처리되었는지 확인
+  bool _isNextPageProcessed() {
+    final nextPageIndex = widget.currentPageIndex + 1;
+    if (nextPageIndex >= widget.totalPages) return true; // 마지막 페이지면 항상 true
+    
+    // processedPages 배열이 있고, 해당 인덱스가 유효하면 해당 값 반환
+    if (widget.processedPages.isNotEmpty && nextPageIndex < widget.processedPages.length) {
+      return widget.processedPages[nextPageIndex];
+    }
+    
+    // 페이지 처리 상태 정보가 없으면 기본적으로 처리된 것으로 간주
+    return true;
+  }
+  
+  // 처리되지 않은 페이지로 이동하려 할 때 메시지 표시
+  void _showPageProcessingMessage(BuildContext context, int pageIndex) {
+    final pageNum = pageIndex + 1;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$pageNum번째 페이지가 아직 준비 중이에요. 잠시만 기다려주세요.'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.currentPage == null) return const SizedBox.shrink();
@@ -157,6 +198,10 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     
     // 하단 safe area 영역 고려
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+    
+    // 이전/다음 페이지 처리 상태
+    final bool prevPageProcessed = _isPrevPageProcessed();
+    final bool nextPageProcessed = _isNextPageProcessed();
     
     return Material(
       color: Colors.white,
@@ -195,9 +240,12 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                         width: 32,
                         child: _buildNavigationButton(
                           icon: Icons.arrow_back_ios_rounded,
-                          onTap: widget.currentPageIndex > 0 
+                          onTap: (widget.currentPageIndex > 0 && prevPageProcessed) 
                               ? () => widget.onPageChanged(widget.currentPageIndex - 1) 
-                              : null,
+                              : widget.currentPageIndex > 0 
+                                  ? () => _showPageProcessingMessage(context, widget.currentPageIndex - 1)
+                                  : null,
+                          isDisabled: widget.currentPageIndex > 0 && !prevPageProcessed,
                         ),
                       ),
                       
@@ -262,9 +310,12 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                           // 다음 페이지 버튼
                           _buildNavigationButton(
                             icon: Icons.arrow_forward_ios_rounded,
-                            onTap: (widget.currentPageIndex < widget.totalPages - 1)
+                            onTap: (widget.currentPageIndex < widget.totalPages - 1 && nextPageProcessed)
                                 ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
-                                : null,
+                                : widget.currentPageIndex < widget.totalPages - 1
+                                    ? () => _showPageProcessingMessage(context, widget.currentPageIndex + 1)
+                                    : null,
+                            isDisabled: widget.currentPageIndex < widget.totalPages - 1 && !nextPageProcessed,
                           ),
                         ],
                       ),
@@ -303,7 +354,11 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   }
   
   // 네비게이션 버튼 위젯
-  Widget _buildNavigationButton({required IconData icon, VoidCallback? onTap}) {
+  Widget _buildNavigationButton({
+    required IconData icon, 
+    VoidCallback? onTap,
+    bool isDisabled = false,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -311,12 +366,14 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
         height: 40,
         decoration: onTap != null ? BoxDecoration(
           shape: BoxShape.circle,
-          color: ColorTokens.surface,
+          color: isDisabled ? ColorTokens.greyLight : ColorTokens.surface,
         ) : null,
         child: Center(
           child: Icon(
             icon, 
-            color: onTap != null ? ColorTokens.secondary : ColorTokens.greyMedium,
+            color: onTap != null 
+                ? (isDisabled ? ColorTokens.greyMedium : ColorTokens.secondary) 
+                : ColorTokens.greyMedium,
             size: SpacingTokens.iconSizeMedium,
           ),
         ),
@@ -350,7 +407,4 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
         }
       });
   }
-
-  // _isNextPageProcessing 메서드 단순화
-  bool _isNextPageProcessing() => widget.isProcessing;
 } 
