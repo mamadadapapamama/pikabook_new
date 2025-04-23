@@ -53,7 +53,7 @@ class NoteCreationWorkflow {
     debugPrint('로딩 다이얼로그 표시 시작');
     await NoteCreationLoader.show(
       rootContext, 
-      message: '스마트 노트를 만들고 있어요\n잠시만 기다려 주세요!'
+      message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
     );
     
     String? createdNoteId;

@@ -46,7 +46,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.backgroundColor = Colors.transparent,
     this.centerTitle = false,
     this.subtitle,
-    this.height = 96,
+    this.height = 102,
     this.showBackButton = false,
     this.showLogo = false,
     this.noteSpaceName,
@@ -70,7 +70,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       showLogo: true,
       noteSpaceName: noteSpaceName,
       backgroundColor: UITokens.screenBackground,
-      height: 112,
+      height: 108,
       actions: [
         Padding(
           padding: EdgeInsets.only(right: SpacingTokens.md),
@@ -120,7 +120,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       showBackButton: true,
       onBackPressed: onBackPressed,
       automaticallyImplyLeading: true,
-      height: 96,
+      height: 108,
       backgroundColor: backgroundColor,
       actions: [
         // 플래시카드 카운터
@@ -159,7 +159,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: '설정',
       showBackButton: true,
       onBackPressed: onBackPressed,
-      height: 96,
+      height: 108,
     );
   }
 
@@ -173,7 +173,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: '플래시카드',
       showBackButton: true,
       onBackPressed: onBackPressed,
-      height: 96,
+      height: 108,
       actions: totalCards > 0 ? [
         Padding(
           padding: const EdgeInsets.only(right: 16.0),

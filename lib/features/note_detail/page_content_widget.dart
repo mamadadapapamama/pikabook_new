@@ -351,7 +351,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           // 페이지 이미지 표시 (이미지가 있는 경우)
           if (widget.imageFile != null || (widget.page.imageUrl != null && widget.page.imageUrl!.isNotEmpty))
             Padding(
-              padding: const EdgeInsets.only(bottom: 16.0),
+              padding: const EdgeInsets.fromLTRB(24,0,24,16),
               child: PageImageWidget(
                 imageFile: widget.imageFile,
                 imageUrl: widget.page.imageUrl,

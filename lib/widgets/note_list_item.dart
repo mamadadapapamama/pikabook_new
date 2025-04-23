@@ -284,7 +284,10 @@ class _NoteListItemState extends State<NoteListItem> {
     return Dismissible(
       key: Key(widget.note.id ?? ''),
       background: Container(
-        color: ColorTokens.errorBackground,
+        decoration: BoxDecoration(
+          color: ColorTokens.errorBackground,
+          borderRadius: BorderRadius.circular(8.0),
+        ),
         child: const Align(
           alignment: Alignment.centerRight,
           child: Padding(
@@ -328,6 +331,7 @@ class _NoteListItemState extends State<NoteListItem> {
           side: const BorderSide(color: ColorTokens.primaryverylight,width:1.0),
         ),
         color: Colors.white,
+        elevation: 0,
         child: InkWell(
           onTap: () {
             try {

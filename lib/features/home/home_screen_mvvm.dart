@@ -39,7 +39,7 @@ class OrangeOverscrollBehavior extends ScrollBehavior {
   Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
     return GlowingOverscrollIndicator(
       axisDirection: details.direction,
-      color: ColorTokens.primarylight, // 오버스크롤 색상을 주황색으로 변경
+      color: UITokens.homeOverlayScrollEffect, // 오버스크롤 색상을 primaryverylight로 변경
       child: child,
     );
   }
@@ -173,40 +173,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         children: [
                           // 노트 목록
                           Expanded(
-                            child: ScrollConfiguration(
-                              behavior: const OrangeOverscrollBehavior(),
-                              child: RefreshIndicator(
-                                color: ColorTokens.primary,
-                                backgroundColor: Colors.white,
-                                onRefresh: () async {
-                                  await viewModel.refreshNotes();
-                                },
-                                child: ListView.builder(
-                                  padding: const EdgeInsets.only(top: 16, bottom: 16),
-                                  itemCount: viewModel.notes.length,
-                                  itemBuilder: (context, index) {
-                                    final note = viewModel.notes[index];
-                                    
-                                    return Padding(
-                                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                                      child: GestureDetector(
-                                        onTap: () => _navigateToNoteDetail(context, note),
-                                        child: NoteListItem(
-                                          note: note,
-                                          onNoteTapped: (note) => _navigateToNoteDetail(context, note),
-                                          onFavoriteToggled: (noteId, isFavorite) {
-                                            viewModel.toggleFavorite(noteId, isFavorite);
-                                          },
-                                          onDismissed: () {
-                                            if (note.id != null) {
-                                              viewModel.deleteNote(note.id!);
-                                            }
-                                          },
-                                        ),
+                            child: RefreshIndicator(
+                              color: ColorTokens.primary,
+                              backgroundColor: Colors.white,
+                              onRefresh: () async {
+                                await viewModel.refreshNotes();
+                              },
+                              child: ListView.builder(
+                                padding: const EdgeInsets.only(top: 4, bottom: 16),
+                                itemCount: viewModel.notes.length,
+                                itemBuilder: (context, index) {
+                                  final note = viewModel.notes[index];
+                                  
+                                  return Padding(
+                                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
+                                    child: GestureDetector(
+                                      onTap: () => _navigateToNoteDetail(context, note),
+                                      child: NoteListItem(
+                                        note: note,
+                                        onNoteTapped: (note) => _navigateToNoteDetail(context, note),
+                                        onFavoriteToggled: (noteId, isFavorite) {
+                                          viewModel.toggleFavorite(noteId, isFavorite);
+                                        },
+                                        onDismissed: () {
+                                          if (note.id != null) {
+                                            viewModel.deleteNote(note.id!);
+                                          }
+                                        },
                                       ),
-                                    );
-                                  },
-                                ),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ),

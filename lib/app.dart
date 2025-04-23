@@ -20,6 +20,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/services/marketing/marketing_campaign_service.dart';
 import 'core/theme/app_theme.dart';
 import 'dart:io';
+import 'core/theme/tokens/ui_tokens.dart';
+import 'core/theme/tokens/color_tokens.dart';
+
+/// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
+class CustomScrollBehavior extends ScrollBehavior {
+  const CustomScrollBehavior();
+  
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+    return GlowingOverscrollIndicator(
+      axisDirection: details.direction,
+      color: ColorTokens.primaryverylight, // 오버스크롤 색상을 primaryverylight로 변경
+      child: child,
+    );
+  }
+}
 
 /// 앱의 시작 지점 및 초기 화면 결정 로직
 /// - 로그인 확인
@@ -244,6 +260,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
+        scrollBehavior: const CustomScrollBehavior(),
         home: Scaffold(
           body: Center(
             child: Text(
@@ -261,6 +278,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
+        scrollBehavior: const CustomScrollBehavior(),
         home: const LoadingScreen(progress: 0.5, message: '앱을 초기화하는 중입니다...'),
       );
     }
@@ -270,6 +288,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
+        scrollBehavior: const CustomScrollBehavior(),
         home: LoginScreen(
           onLoginSuccess: (user) {
             // 사용자 로그인 성공 처리
@@ -289,6 +308,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: themeData,
+        scrollBehavior: const CustomScrollBehavior(),
         home: OnboardingScreen(
           onComplete: () async {
             await _preferencesService.setOnboardingCompleted(true);
@@ -306,6 +326,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: themeData,
+      scrollBehavior: const CustomScrollBehavior(),
       // 홈 화면 표시
       home: const HomeScreen(),
       routes: {
