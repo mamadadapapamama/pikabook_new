@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
-import '../../theme/tokens/color_tokens.dart';
-import '../../theme/tokens/typography_tokens.dart';
-import '../../theme/tokens/spacing_tokens.dart';
+import 'package:flutter/foundation.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import '../../core/theme/tokens/spacing_tokens.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// 이미지를 전체 화면으로 표시하는 화면
@@ -32,8 +33,10 @@ class _FullImageScreenState extends State<FullImageScreen> {
   @override
   void initState() {
     super.initState();
-    // 디버그 타이머 방지
-    timeDilation = 1.0;
+    // 디버그 타이머 방지 (디버그 모드에서만)
+    if (kDebugMode) {
+      timeDilation = 1.0;
+    }
     // 화면 진입 시 상태표시줄을 흰색으로 설정 (강제 적용)
     _setLightStatusBar();
   }
@@ -52,8 +55,10 @@ class _FullImageScreenState extends State<FullImageScreen> {
 
   @override
   void dispose() {
-    // 디버그 타이머 방지
-    timeDilation = 1.0;
+    // 디버그 타이머 방지 (디버그 모드에서만)
+    if (kDebugMode) {
+      timeDilation = 1.0;
+    }
     
     _transformationController.dispose();
     // 화면을 떠날 때 상태표시줄을 다시 검은색으로 복원
@@ -67,8 +72,10 @@ class _FullImageScreenState extends State<FullImageScreen> {
   
   // 뒤로가기 버튼 처리
   Future<bool> _onWillPop() async {
-    // 디버그 타이머 방지
-    timeDilation = 1.0;
+    // 디버그 타이머 방지 (디버그 모드에서만)
+    if (kDebugMode) {
+      timeDilation = 1.0;
+    }
     
     // 화면을 떠날 때 상태표시줄을 다시 검은색으로 복원
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark.copyWith(
@@ -111,8 +118,10 @@ class _FullImageScreenState extends State<FullImageScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 디버그 타이머 방지
-    timeDilation = 1.0;
+    // 디버그 타이머 방지 (디버그 모드에서만)
+    if (kDebugMode) {
+      timeDilation = 1.0;
+    }
     
     // 검은 배경에 흰색 상태표시줄을 설정
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;

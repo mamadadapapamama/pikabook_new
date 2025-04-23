@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import '../../../theme/tokens/color_tokens.dart';
-import '../../../theme/tokens/typography_tokens.dart';
-import '../../../theme/tokens/spacing_tokens.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import '../../core/theme/tokens/spacing_tokens.dart';
 import '../../../widgets/dot_loading_indicator.dart';
 import '../../../firebase_options.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import '../../../services/authentication/auth_service.dart';
+import '../../core/services/authentication/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatefulWidget {

@@ -4,16 +4,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/foundation.dart';
 import 'firebase_options.dart';
 import 'dart:async';
-
 import 'views/screens/login_screen.dart';
-import 'views/screens/home_screen.dart'; 
+import 'features/home/home_screen_mvvm.dart'; 
 import 'views/screens/onboarding_screen.dart';
 import 'views/screens/settings_screen.dart';
 import 'views/screens/page_test_screen.dart';
-import 'services/common/initialization_manager.dart';
-import 'services/authentication/user_preferences_service.dart';
+import 'core/services/common/initialization_manager.dart';
+import 'core/services/authentication/user_preferences_service.dart';
 import 'widgets/loading_screen.dart';
 
 /// 앱의 시작 지점 및 초기 화면 결정 로직
@@ -45,8 +45,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     
-    // 디버그 타이머 비활성화
-    timeDilation = 1.0;
+    // 디버그 타이머 비활성화 (디버그 모드에서만)
+    if (kDebugMode) {
+      timeDilation = 1.0;
+    }
     
     // 시스템 UI 조정
     SystemChannels.textInput.invokeMethod('TextInput.hide');
@@ -216,8 +218,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   @override
   Widget build(BuildContext context) {
-    // 디버그 타이머 비활성화
-    timeDilation = 1.0;
+    // 디버그 타이머 비활성화 (디버그 모드에서만)
+    if (kDebugMode) {
+      timeDilation = 1.0;
+    }
     
     // 앱 테마 적용
     final themeData = ThemeData(

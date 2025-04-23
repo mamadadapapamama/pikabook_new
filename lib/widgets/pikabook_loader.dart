@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show timeDilation;
-import '../theme/tokens/color_tokens.dart';
-import '../theme/tokens/typography_tokens.dart';
+import 'package:flutter/foundation.dart';
+import '../core/theme/tokens/color_tokens.dart';
+import '../core/theme/tokens/typography_tokens.dart';
 import 'dart:async';
 
 /// Pikabook 로딩 화면
@@ -24,8 +25,10 @@ class PikabookLoader extends StatelessWidget {
     String message = '스마트한 학습 노트를 만들고 있어요.\n잠시만 기다려 주세요! 조금 시간이 걸릴수 있어요.',
     int timeoutSeconds = 20, // 타임아웃 시간 (초 단위)
   }) async {
-    // 디버그 타이머 방지
-    timeDilation = 1.0;
+    // 디버그 타이머 방지 (디버그 모드에서만)
+    if (kDebugMode) {
+      timeDilation = 1.0;
+    }
     
     if (!context.mounted) return;
     
@@ -169,8 +172,10 @@ class _AnimatedDotLoaderState extends State<_AnimatedDotLoader> with SingleTicke
   void initState() {
     super.initState();
     
-    // 디버그 타이머 방지
-    timeDilation = 1.0;
+    // 디버그 타이머 방지 (디버그 모드에서만)
+    if (kDebugMode) {
+      timeDilation = 1.0;
+    }
     
     // 애니메이션 컨트롤러 초기화
     _controller = AnimationController(
