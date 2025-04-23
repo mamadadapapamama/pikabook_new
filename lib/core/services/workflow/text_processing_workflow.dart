@@ -195,13 +195,46 @@ class TextProcessingWorkflow {
         );
       }
       
-      // 6. TextSegment 리스트 생성
+      // 6. 세그먼트별 번역 수행 (중요: 각 세그먼트별 번역 추가)
+      List<String> segmentTranslations = [];
+      
+      // 세그먼트가 있고 전체 번역도 있는 경우 세그먼트별 번역 수행
+      if (segments.isNotEmpty && translatedText.isNotEmpty) {
+        try {
+          // 각 세그먼트를 개별적으로 번역
+          for (var segment in segments) {
+            final originalText = segment['text'] as String;
+            if (originalText.trim().isEmpty) {
+              segmentTranslations.add('');
+              continue;
+            }
+            
+            // 개별 세그먼트 번역
+            final segmentTranslation = await _translationService.translateText(
+              originalText,
+              sourceLanguage: note.sourceLanguage,
+              targetLanguage: note.targetLanguage,
+            );
+            
+            segmentTranslations.add(segmentTranslation);
+          }
+        } catch (e) {
+          debugPrint('세그먼트별 번역 중 오류: $e');
+          // 오류 발생 시 빈 번역으로 채우기
+          segmentTranslations = List.filled(segments.length, '');
+        }
+      } else {
+        // 세그먼트나 전체 번역이 없는 경우 빈 번역으로 채우기
+        segmentTranslations = List.filled(segments.length, '');
+      }
+      
+      // 7. TextSegment 리스트 생성
       final List<TextSegment> textSegments = [];
-      for (var segment in segments) {
-        final originalText = segment['text'] as String;
+      for (int i = 0; i < segments.length; i++) {
+        final originalText = segments[i]['text'] as String;
         String segmentPinyin = '';
         
-        // 6-1. 개별 세그먼트에 대한 발음 추가
+        // 7-1. 개별 세그먼트에 대한 발음 추가
         if (note.sourceLanguage.startsWith('zh')) {
           // 중국어인 경우 해당 세그먼트의 병음 찾기
           segmentPinyin = pronunciation[originalText] ?? '';
@@ -214,16 +247,21 @@ class TextProcessingWorkflow {
           }
         }
         
+        // 세그먼트별 번역 적용 (인덱스 범위 확인)
+        final segmentTranslation = i < segmentTranslations.length 
+            ? segmentTranslations[i] 
+            : '';
+        
         textSegments.add(TextSegment(
           originalText: originalText,
           pinyin: segmentPinyin,
-          translatedText: '', // 개별 번역은 향후 구현
+          translatedText: segmentTranslation, // 개별 세그먼트 번역 설정
           sourceLanguage: note.sourceLanguage,
           targetLanguage: note.targetLanguage,
         ));
       }
       
-      // 7. ProcessedText 객체 생성
+      // 8. ProcessedText 객체 생성
       final processedText = ProcessedText(
         fullOriginalText: text,
         fullTranslatedText: translatedText,
@@ -233,7 +271,7 @@ class TextProcessingWorkflow {
         showTranslation: true,
       );
       
-      // 8. 결과 캐싱
+      // 9. 결과 캐싱
       await _cacheService.setProcessedText(pageId, processedText);
       
       return processedText;

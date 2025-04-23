@@ -14,6 +14,7 @@ import '../../../core/services/dictionary/external_cn_dictionary_service.dart';
 import '../../../core/services/text_processing/pinyin_creation_service.dart';
 import '../../../core/services/storage/unified_cache_service.dart';
 import '../../../core/services/workflow/text_processing_workflow.dart';
+import '../../../core/models/note.dart';
 
 /// 콘텐츠 관리자 클래스
 /// 페이지 텍스트 및 세그먼트 처리와 관련된 모든 로직을 중앙화합니다.
@@ -65,6 +66,8 @@ class ContentManager {
   //
 
   /// 페이지 텍스트 처리 - TextProcessingWorkflow에 위임
+  /// 리팩토링: processPageContent 메서드로 중복 로직 통합
+  @Deprecated('Use processPageContent instead')
   Future<ProcessedText?> processPageText({
     required page_model.Page page,
     required File? imageFile,
@@ -428,5 +431,71 @@ class ContentManager {
         debugPrint('⚠️ 백그라운드 캐싱 중 오류 (무시됨): $e');
       }
     });
+  }
+
+  // ===== 리팩토링: PageManager와 중복 로직 통합 =====
+  
+  /// 페이지 콘텐츠를 처리하는 통합 메서드
+  /// PageManager.loadPageContent와 중복 로직을 이 메서드로 통합
+  Future<Map<String, dynamic>> processPageContent({
+    required page_model.Page page,
+    required File? imageFile,
+    required dynamic note,
+  }) async {
+    // 결과를 담을 맵
+    final Map<String, dynamic> result = {
+      'imageFile': null,
+      'processedText': null,
+      'isSuccess': false,
+    };
+    
+    try {
+      // 1. 이미지 정보 설정
+      if (imageFile != null) {
+        result['imageFile'] = imageFile;
+      }
+      
+      // 2. 텍스트 처리
+      if (page.id != null) {
+        // 캐시에서 ProcessedText 확인
+        ProcessedText? processedText;
+        
+        try {
+          processedText = await getProcessedText(page.id!);
+          
+          // 캐시에 없으면 새로 처리
+          if (processedText == null) {
+            processedText = await _textProcessingWorkflow.processPageText(
+              page: page,
+              imageFile: imageFile,
+            );
+            
+            // 처리 결과 캐싱
+            if (processedText != null) {
+              setProcessedText(page.id!, processedText);
+              _cacheInBackground(page.id!, processedText);
+            }
+          }
+        } catch (e) {
+          debugPrint('ProcessedText 처리 중 오류: $e');
+          // 오류 시 기본 객체 생성
+          processedText = ProcessedText(
+            fullOriginalText: page.originalText,
+            fullTranslatedText: page.translatedText,
+            segments: [],
+            showFullText: true,
+          );
+        }
+        
+        result['processedText'] = processedText;
+        result['isSuccess'] = processedText != null;
+      }
+      
+      return result;
+    } catch (e) {
+      debugPrint('페이지 내용 처리 중 오류: $e');
+      result['error'] = e.toString();
+      return result;
+    }
   }
 }

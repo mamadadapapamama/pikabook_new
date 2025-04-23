@@ -9,6 +9,7 @@ import '../../../core/services/workflow/text_processing_workflow.dart';
 import '../../../core/services/content/note_service.dart';
 import '../../../core/services/content/flashcard_service.dart' hide debugPrint;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'content_manager.dart';
 
 /// 페이지 관리 클래스
 /// 페이지 로드, 병합, 이미지 로드 등의 기능 제공
@@ -22,6 +23,7 @@ class PageManager {
   final ImageService _imageService = ImageService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ContentManager _contentManager = ContentManager();
   
   note_model.Note? _note;
   
@@ -488,42 +490,35 @@ class PageManager {
   }
   
   /// 페이지 내용을 로드하는 통합 메서드
-  /// 이미지와 텍스트 처리를 모두 처리합니다.
+  /// ContentManager로 로직을 위임하여 중복 코드 제거
   Future<Map<String, dynamic>> loadPageContent(
     page_model.Page page, 
-    {required TextProcessingWorkflow textProcessingWorkflow,
-    required ImageService imageService,
-    required dynamic note}) async {
+    {
+      TextProcessingWorkflow? textProcessingWorkflow, // 선택적 매개변수로 변경
+      ImageService? imageService, // 선택적 매개변수로 변경
+      dynamic note,
+    }) async {
     
-    // 결과를 담을 맵
-    final Map<String, dynamic> result = {
-      'imageFile': null,
-      'processedText': null,
-      'isSuccess': false,
-    };
-    
+    // ContentManager에 작업 위임
     try {
-      // 1. 이미지 로드 (있는 경우)
+      // 1. 이미지 로드
       File? imageFile;
       if (page.imageUrl != null && page.imageUrl!.isNotEmpty) {
-        imageFile = await imageService.loadPageImage(page.imageUrl);
-        result['imageFile'] = imageFile;
+        imageFile = await (imageService ?? _imageService).loadPageImage(page.imageUrl);
+      } else {
+        // 이미지 URL이 없는 경우 현재 페이지의 이미지를 사용
+        imageFile = getImageFileForPage(page);
       }
       
-      // 2. 텍스트 처리
-      if (page.id != null) {
-        final processedText = await textProcessingWorkflow.processAndPreparePageContent(
-          page: page,
-          imageFile: imageFile ?? imageService.getCurrentImageFile(),
-          note: note,
-        );
-        
-        result['processedText'] = processedText;
-        result['isSuccess'] = processedText != null;
-      }
+      // 2. ContentManager에 텍스트 처리 위임
+      final result = await _contentManager.processPageContent(
+        page: page,
+        imageFile: imageFile,
+        note: note ?? _note,
+      );
       
-      // 현재 페이지의 이미지 파일 업데이트
-      if (page.id == currentPage?.id && imageFile != null) {
+      // 3. 현재 페이지의 이미지 파일 업데이트 (이미지가 있는 경우)
+      if (imageFile != null && page.id == currentPage?.id) {
         for (int i = 0; i < _pages.length; i++) {
           if (_pages[i].id == page.id && i < _imageFiles.length) {
             _imageFiles[i] = imageFile;
@@ -535,8 +530,12 @@ class PageManager {
       return result;
     } catch (e) {
       debugPrint('페이지 내용 로드 중 오류: $e');
-      result['error'] = e.toString();
-      return result;
+      return {
+        'imageFile': null,
+        'processedText': null,
+        'isSuccess': false,
+        'error': e.toString(),
+      };
     }
   }
 }

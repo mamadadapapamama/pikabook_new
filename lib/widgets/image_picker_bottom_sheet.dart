@@ -149,20 +149,20 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   /// 갤러리에서 이미지 선택
   Future<void> _selectGalleryImages() async {
     try {
-      final List<XFile> selectedImages = await _picker.pickMultiImage();
-      
+        final List<XFile> selectedImages = await _picker.pickMultiImage();
+        
       if (selectedImages.isEmpty) return;
-      
-      // XFile을 File로 변환
-      final List<File> imageFiles = selectedImages
-          .map((xFile) => File(xFile.path))
-          .where((file) => file.existsSync() && file.lengthSync() > 0)
-          .toList();
-      
+        
+        // XFile을 File로 변환
+        final List<File> imageFiles = selectedImages
+            .map((xFile) => File(xFile.path))
+            .where((file) => file.existsSync() && file.lengthSync() > 0)
+            .toList();
+        
       if (imageFiles.isEmpty) return;
-              
+                
       // 워크플로우 시작
-      if (mounted) {
+        if (mounted) {
         await _noteCreationWorkflow.createNoteWithImages(context, imageFiles);
       }
     } catch (e) {
@@ -177,30 +177,30 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   /// 카메라로 사진 촬영
   Future<void> _takeCameraPhoto() async {
     try {
-      final XFile? photo = await _picker.pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.rear,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 85,
-      );
-      
+        final XFile? photo = await _picker.pickImage(
+          source: ImageSource.camera,
+          preferredCameraDevice: CameraDevice.rear,
+          maxWidth: 1200,
+          maxHeight: 1200,
+          imageQuality: 85,
+        );
+        
       if (photo == null) return;
-      
-      // XFile을 File로 변환
-      final File imageFile = File(photo.path);
-      
-      if (!imageFile.existsSync() || imageFile.lengthSync() == 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('이미지를 가져올 수 없습니다. 다시 시도하세요.')),
-          );
+        
+        // XFile을 File로 변환
+        final File imageFile = File(photo.path);
+        
+        if (!imageFile.existsSync() || imageFile.lengthSync() == 0) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('이미지를 가져올 수 없습니다. 다시 시도하세요.')),
+            );
+          }
+          return;
         }
-        return;
-      }
-      
+        
       // 워크플로우 시작
-      if (mounted) {
+        if (mounted) {
         await _noteCreationWorkflow.createNoteWithImages(context, [imageFile]);
       }
     } catch (e) {

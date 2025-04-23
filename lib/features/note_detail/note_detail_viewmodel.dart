@@ -202,14 +202,14 @@ class NoteDetailViewModel extends ChangeNotifier {
           if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
             isProcessed = true;
           } else {
-            try {
+        try {
               // ContentManager를 통해 처리된 텍스트가 있는지 확인
               final processedText = await _contentManager.getProcessedText(page.id!);
               isProcessed = processedText != null && 
                            processedText.fullOriginalText != '___PROCESSING___' &&
                            processedText.fullOriginalText.isNotEmpty;
-            } catch (e) {
-              debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
+        } catch (e) {
+          debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
             }
           }
           
