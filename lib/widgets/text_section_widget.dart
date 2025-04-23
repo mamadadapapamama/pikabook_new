@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../utils/text_highlight_manager.dart';
+import '../core/utils/text_highlight_manager.dart';
 
 // 아직 페이지의 텍스트 처리가 완료되지 않았을때, 원문 번역문 섹션을 처리하는 위젯.
 

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import '../models/note.dart';
-import '../services/content/note_service.dart';
-import '../widgets/edit_title_dialog.dart';
+import '../../../core/models/note.dart';
+import '../../../core/services/content/note_service.dart';
+import '../../../widgets/edit_title_dialog.dart';
 
+// 노트 상세 화면의 옵션 메뉴 관리. 즐겨찾기, 삭제, 제목 편집
 class NoteOptionsManager {
   final NoteService _noteService = NoteService();
   

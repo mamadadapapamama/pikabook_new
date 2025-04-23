@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import '../services/media/image_service.dart';
-import '../services/content/note_service.dart';
-import '../views/screens/note_detail_screen_mvvm.dart';
-import '../theme/tokens/color_tokens.dart';
-import '../theme/tokens/typography_tokens.dart';
+import '../core/services/media/image_service.dart';
+import '../core/services/content/note_service.dart';
+import '../features/note_detail/note_detail_screen_mvvm.dart';
+import '../core/theme/tokens/color_tokens.dart';
+import '../core/theme/tokens/typography_tokens.dart';
 import '../widgets/common/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
-import '../services/common/usage_limit_service.dart';
+import '../core/services/common/usage_limit_service.dart';
 import 'dart:async';
 import '../widgets/pikabook_loader.dart';
-import '../models/note.dart';
+import '../core/models/note.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);

@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
-import '../models/processed_text.dart';
-import '../models/flash_card.dart';
-import '../utils/context_menu_helper.dart';
-import '../../services/text_processing/text_reader_service.dart';
-import '../utils/text_highlight_manager.dart';
-import '../utils/context_menu_manager.dart';
-import '../theme/tokens/color_tokens.dart';
-import '../theme/tokens/typography_tokens.dart';
+import '../../core/models/processed_text.dart';
+import '../../core/models/flash_card.dart';
+import '../../core/utils/context_menu_helper.dart';
+import '../../core/services/text_processing/text_reader_service.dart';
+import '../../core/utils/text_highlight_manager.dart';
+import '../../core/utils/context_menu_manager.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../utils/segment_utils.dart';
-import '../widgets/common/tts_button.dart';
-import '../widgets/dot_loading_indicator.dart';
+import '../../core/utils/segment_utils.dart';
+import '../../widgets/common/tts_button.dart';
+import '../../widgets/dot_loading_indicator.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 /// 

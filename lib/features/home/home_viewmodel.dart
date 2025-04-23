@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../models/note.dart';
-import '../services/content/note_service.dart';
+import '../../core/models/note.dart';
+import '../../core/services/content/note_service.dart';
 
 class HomeViewModel extends ChangeNotifier {
   final NoteService _noteService = NoteService();

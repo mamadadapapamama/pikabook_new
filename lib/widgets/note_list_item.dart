@@ -1,13 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../models/note.dart';
-import '../utils/date_formatter.dart';
-import '../services/media/image_service.dart';
-import '../services/content/note_service.dart';
+import '../core/models/note.dart';
+import '../core/utils/date_formatter.dart';
+import '../core/services/media/image_service.dart';
+import '../core/services/content/note_service.dart';
 import 'flashcard_counter_badge.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import '../theme/tokens/color_tokens.dart';
+import '../core/theme/tokens/color_tokens.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 /// 홈페이지 노트리스트 화면에서 사용되는 카드 위젯

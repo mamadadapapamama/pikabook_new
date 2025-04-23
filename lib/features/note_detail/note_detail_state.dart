@@ -1,5 +1,5 @@
-import '../../models/note.dart';
-import '../../models/page.dart' as page_model;
+import '../../core/models/note.dart';
+import '../../core/models/page.dart' as page_model;
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';

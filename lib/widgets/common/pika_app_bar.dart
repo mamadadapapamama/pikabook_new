@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import '../../theme/tokens/color_tokens.dart';
-import '../../theme/tokens/typography_tokens.dart';
-import '../../theme/tokens/spacing_tokens.dart';
-import '../../theme/tokens/ui_tokens.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import '../../core/theme/tokens/spacing_tokens.dart';
+import '../../core/theme/tokens/ui_tokens.dart';
 import '../flashcard_counter_badge.dart';
 
 /// 공통 앱바 위젯

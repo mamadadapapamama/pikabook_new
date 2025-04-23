@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import '../theme/tokens/color_tokens.dart';
+import '../core/theme/tokens/color_tokens.dart';
 import 'dart:async';
 
 /// 매우 단순화된 로딩 다이얼로그 관리자

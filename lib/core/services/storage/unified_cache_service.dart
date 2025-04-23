@@ -7,7 +7,7 @@ import '../../models/processed_text.dart';
 import '../../models/flash_card.dart'; // FlashCard 모델 임포트 추가
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../managers/content_manager.dart'; // ContentManager 임포트
+import '../../../features/note_detail/managers/content_manager.dart'; // ContentManager 임포트
 
 // 캐시 작업 유형 (통계용)
 enum CacheOperationType {

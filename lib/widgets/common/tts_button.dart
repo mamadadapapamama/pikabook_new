@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../services/media/tts_service.dart';
-import '../../theme/tokens/color_tokens.dart';
-import '../../theme/tokens/spacing_tokens.dart';
+import '../../core/services/media/tts_service.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/spacing_tokens.dart';
 
 /// TTS 버튼을 위한 공용 위젯
 /// 상태에 따라 적절한 스타일과 피드백을 제공합니다.

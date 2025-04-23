@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../theme/tokens/color_tokens.dart';
-import '../theme/tokens/typography_tokens.dart';
-import '../theme/tokens/spacing_tokens.dart';
-import '../theme/tokens/ui_tokens.dart';
+import '../core/theme/tokens/color_tokens.dart';
+import '../core/theme/tokens/typography_tokens.dart';
+import '../core/theme/tokens/spacing_tokens.dart';
+import '../core/theme/tokens/ui_tokens.dart';
 
 /// 노트의 페이지 개수를 보여주는 배지 위젯
 /// 

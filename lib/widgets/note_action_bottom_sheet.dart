@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import '../theme/tokens/color_tokens.dart';
-import '../theme/tokens/typography_tokens.dart';
+import '../core/theme/tokens/color_tokens.dart';
+import '../core/theme/tokens/typography_tokens.dart';
 
+// 즐겨찾기, 노트제목 변경, 노트삭제 기능
 class NoteActionBottomSheet extends StatelessWidget {
   final VoidCallback onEditTitle;
   final VoidCallback onDeleteNote;

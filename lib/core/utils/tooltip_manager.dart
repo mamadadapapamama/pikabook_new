@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/tokens/color_tokens.dart';
-import '../utils/debug_utils.dart';
-import '../widgets/common/help_text_tooltip.dart';
+import 'debug_utils.dart';
+import '../../widgets/common/help_text_tooltip.dart';
 
 class TooltipManager {
   bool showTooltip = false;

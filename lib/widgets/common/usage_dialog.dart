@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../theme/tokens/color_tokens.dart';
-import '../../theme/tokens/typography_tokens.dart';
-import '../../theme/tokens/spacing_tokens.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import '../../core/theme/tokens/spacing_tokens.dart';
 import 'pika_button.dart';
 import 'package:url_launcher/url_launcher.dart';
 

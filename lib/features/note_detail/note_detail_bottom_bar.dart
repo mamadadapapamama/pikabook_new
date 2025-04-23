@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import '../../../models/page.dart' as page_model;
-import '../../../models/processed_text.dart';
-import '../../../services/text_processing/text_reader_service.dart';
-import '../../../services/media/tts_service.dart';
-import '../../../services/text_processing/text_processing_service.dart';
-import '../../../utils/text_display_mode.dart';
-import '../../../theme/tokens/color_tokens.dart';
-import '../../../theme/tokens/typography_tokens.dart';
-import '../../../theme/tokens/spacing_tokens.dart';
+import '../../core/models/page.dart' as page_model;
+import '../../core/models/processed_text.dart';
+import '../../core/services/text_processing/text_reader_service.dart';
+import '../../core/services/media/tts_service.dart';
+import '../../core/services/text_processing/text_processing_service.dart';
+import '../../core/utils/text_display_mode.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import '../../core/theme/tokens/spacing_tokens.dart';
 import '../../../widgets/common/tts_button.dart';
-import '../../../managers/content_manager.dart';
+import 'managers/content_manager.dart';
 
 /// 노트 상세 화면 하단 내비게이션 바
 /// 페이지 탐색, 텍스트 표시 모드 토글, 모드 전환, 진행률 바 제공

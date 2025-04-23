@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../../services/content/note_service.dart';
-import '../../services/storage/unified_cache_service.dart';
+import 'note_service.dart';
+import '../storage/unified_cache_service.dart';
 
 /// 즐겨찾기 관리 서비스
 class FavoritesService {

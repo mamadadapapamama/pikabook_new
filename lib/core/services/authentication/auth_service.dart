@@ -6,12 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../../services/storage/unified_cache_service.dart';
+import '../storage/unified_cache_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
-import '../../services/media/image_service.dart';
+import '../media/image_service.dart';
 import '../common/usage_limit_service.dart';
-import '../../managers/content_manager.dart';
+import '../../../features/note_detail/managers/content_manager.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;

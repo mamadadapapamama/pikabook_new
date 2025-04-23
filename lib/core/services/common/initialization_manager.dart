@@ -3,11 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../services/storage/unified_cache_service.dart';
-import '../../services/authentication/user_preferences_service.dart';
-import '../../services/authentication/auth_service.dart';
-import '../../services/text_processing/internal_cn_segmenter_service.dart';
-import '../../services/media/image_service.dart';
+import '../storage/unified_cache_service.dart';
+import '../authentication/user_preferences_service.dart';
+import '../authentication/auth_service.dart';
+import '../text_processing/internal_cn_segmenter_service.dart';
+import '../media/image_service.dart';
 
 /// 앱 초기화 단계를 정의합니다.
 enum InitializationStep {

@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart' hide debugPrint;
 import 'package:flutter/material.dart' hide debugPrint;
 import 'dart:async';
-import '../../models/flash_card.dart';
-import './flashcard_service.dart';
-import '../../services/media/tts_service.dart';
-import '../../services/storage/unified_cache_service.dart';
+import '../../core/models/flash_card.dart';
+import 'flashcard_service.dart';
+import '../../core/services/media/tts_service.dart';
+import '../../core/services/storage/unified_cache_service.dart';
 import 'dart:developer' as dev;
 
 /// 플래시카드 관련 로직을 담당하는 ViewModel

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../models/note.dart';
-import '../../models/page.dart' as page_model;
-import '../../managers/page_manager.dart';
+import '../../core/models/note.dart';
+import '../../core/models/page.dart' as page_model;
+import '../../features/note_detail/managers/page_manager.dart';
 
 /// 페이지 로드 로직 테스트를 위한 화면
 class PageTestScreen extends StatefulWidget {

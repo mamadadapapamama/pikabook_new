@@ -1,8 +1,8 @@
 // 사전 서비스 관련 모듈을 한 번에 내보내는 인덱스 파일
 
-export './internal_cn_dictionary_service.dart';
-export './dictionary_service.dart';
-export './external_cn_dictionary_service.dart';
+export 'internal_cn_dictionary_service.dart';
+export 'dictionary_service.dart';
+export 'external_cn_dictionary_service.dart';
 
 /// 사전 서비스 모듈
 /// 

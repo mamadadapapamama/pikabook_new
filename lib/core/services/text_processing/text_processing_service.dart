@@ -4,13 +4,13 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 // 서비스 임포트
-import '../../services/storage/unified_cache_service.dart';
-import '../../services/text_processing/translation_service.dart';
-import '../../services/text_processing/enhanced_ocr_service.dart';
-import '../../managers/content_manager.dart';
-import '../../services/text_processing/internal_cn_segmenter_service.dart';
-import '../../services/text_processing/pinyin_creation_service.dart';
-import '../../services/authentication/user_preferences_service.dart';
+import '../storage/unified_cache_service.dart';
+import 'translation_service.dart';
+import 'enhanced_ocr_service.dart';
+import '../../../features/note_detail/managers/content_manager.dart';
+import 'internal_cn_segmenter_service.dart';
+import 'pinyin_creation_service.dart';
+import '../authentication/user_preferences_service.dart';
 
 // 모델 임포트
 import '../../models/page.dart' as page_model;

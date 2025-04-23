@@ -3,8 +3,8 @@
 
 import 'package:flutter/foundation.dart';
 import '../../models/dictionary.dart';
-import './internal_cn_dictionary_service.dart';
-import './external_cn_dictionary_service.dart';
+import 'internal_cn_dictionary_service.dart';
+import 'external_cn_dictionary_service.dart';
 
 /// 범용 사전 서비스
 /// 여러 언어의 사전 기능을 통합 관리합니다.

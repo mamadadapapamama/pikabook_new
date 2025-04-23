@@ -4,10 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/processed_text.dart';
-import '../../services/media/image_service.dart';
-import '../../services/text_processing/enhanced_ocr_service.dart';
-import '../../services/text_processing/translation_service.dart';
-import '../../services/storage/unified_cache_service.dart';
+import '../media/image_service.dart';
+import '../text_processing/enhanced_ocr_service.dart';
+import '../text_processing/translation_service.dart';
+import '../storage/unified_cache_service.dart';
 import 'dart:convert';
 
 /// 페이지 서비스: 페이지 관리 (CRUD) 기능을 제공합니다.

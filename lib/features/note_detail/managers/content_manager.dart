@@ -1,19 +1,19 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../models/page.dart' as page_model;
-import '../models/processed_text.dart';
-import '../models/text_segment.dart';
-import '../models/flash_card.dart';
-import '../models/dictionary.dart';
-import '../services/content/page_service.dart';
-import '../services/text_processing/enhanced_ocr_service.dart';
-import '../services/media/tts_service.dart';
-import '../services/text_processing/translation_service.dart';
-import '../services/dictionary/dictionary_service.dart';
-import '../services/dictionary/external_cn_dictionary_service.dart';
-import '../services/text_processing/pinyin_creation_service.dart';
-import '../services/storage/unified_cache_service.dart';
-import '../services/text_processing/text_processing_service.dart';
+import '../../../core/models/page.dart' as page_model;
+import '../../../core/models/processed_text.dart';
+import '../../../core/models/text_segment.dart';
+import '../../../core/models/flash_card.dart';
+import '../../../core/models/dictionary.dart';
+import '../../../core/services/content/page_service.dart';
+import '../../../core/services/text_processing/enhanced_ocr_service.dart';
+import '../../../core/services/media/tts_service.dart';
+import '../../../core/services/text_processing/translation_service.dart';
+import '../../../core/services/dictionary/dictionary_service.dart';
+import '../../../core/services/dictionary/external_cn_dictionary_service.dart';
+import '../../../core/services/text_processing/pinyin_creation_service.dart';
+import '../../../core/services/storage/unified_cache_service.dart';
+import '../../../core/services/text_processing/text_processing_service.dart';
 
 /// 콘텐츠 관리자 클래스
 /// 페이지 텍스트 및 세그먼트 처리와 관련된 모든 로직을 중앙화합니다.

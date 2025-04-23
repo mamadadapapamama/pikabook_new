@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../models/processed_text.dart';
-import '../../services/media/tts_service.dart';
-import '../../services/text_processing/internal_cn_segmenter_service.dart';
+import '../media/tts_service.dart';
+import 'internal_cn_segmenter_service.dart';
 
 /// 텍스트 읽기 서비스
 /// TTS 기능과 문장 분할 기능을 통합하여 제공합니다.
