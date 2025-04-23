@@ -174,38 +174,46 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           return Scaffold(
             backgroundColor: const Color(0xFFFFF9F1), // Figma 디자인의 #FFF9F1 배경색 적용
             appBar: AppBar(
-              backgroundColor: Colors.white,
+              backgroundColor: UITokens.screenBackground,
               elevation: 0.5,
               title: GestureDetector(
                 onTap: _showNoteSpaceOptions,
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // 로고 추가 (Figma 디자인에 맞게)
-                    SvgPicture.asset(
-                      'assets/images/pikabook_textlogo_primary.svg',
-                      height: 24,
-                      width: 120,
-                    ),
-                    const SizedBox(width: 8),
-                    // 노트스페이스 이름
+                    // 로고와 노트스페이스 이름을 상하 정렬
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          _noteSpaceName.isNotEmpty ? _noteSpaceName : '로딩 중...',
-                          style: GoogleFonts.poppins(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF0E2823), // #0E2823 (Figma 디자인 기준)
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        // 로고
+                        SvgPicture.asset(
+                          'assets/images/pikabook_textlogo_primary.svg',
+                          height: 24,
+                          width: 120,
+                        ),
+                        const SizedBox(height: 4),
+                        // 노트스페이스 이름
+                        Row(
+                          children: [
+                            Text(
+                              _noteSpaceName.isNotEmpty ? _noteSpaceName : '로딩 중...',
+                              style: GoogleFonts.poppins(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0E2823), // #0E2823 (Figma 디자인 기준)
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const Icon(
+                              Icons.arrow_drop_down_rounded,
+                              color: Color(0xFF0E2823),
+                            ),
+                          ],
                         ),
                       ],
-                    ),
-                    const Icon(
-                      Icons.arrow_drop_down_rounded,
-                      color: Color(0xFF0E2823),
                     ),
                   ],
                 ),

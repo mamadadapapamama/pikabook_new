@@ -6,7 +6,6 @@ import '../core/services/media/image_service.dart';
 import '../core/services/content/note_service.dart';
 import 'flashcard_counter_badge.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
 import '../core/theme/tokens/color_tokens.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
@@ -285,11 +284,11 @@ class _NoteListItemState extends State<NoteListItem> {
     return Dismissible(
       key: Key(widget.note.id ?? ''),
       background: Container(
-        color: Colors.red,
+        color: ColorTokens.errorBackground,
         child: const Align(
           alignment: Alignment.centerRight,
           child: Padding(
-            padding: EdgeInsets.only(right: 16.0),
+            padding: EdgeInsets.all(24),
             child: Icon(
               Icons.delete,
               color: Colors.white,
@@ -324,11 +323,9 @@ class _NoteListItemState extends State<NoteListItem> {
         widget.onDismissed();
       },
       child: Card(
-        margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 16.0),
-        elevation: 1.0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8.0),
-          side: const BorderSide(color: Color(0xFFFFF0E8), width: 1.0),
+          side: const BorderSide(color: ColorTokens.primaryverylight,width:1.0),
         ),
         color: Colors.white,
         child: InkWell(
