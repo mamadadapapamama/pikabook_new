@@ -30,6 +30,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/debug_utils.dart';
 import '../../core/models/note.dart';
 import '../note_detail/note_detail_screen_mvvm.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -180,9 +181,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 child: Row(
                   children: [
                     // 로고 추가 (Figma 디자인에 맞게)
-                    Image.asset(
-                      'assets/images/logo_small.png', 
+                    SvgPicture.asset(
+                      'assets/images/pikabook_textlogo_primary.svg',
                       height: 24,
+                      width: 120,
                     ),
                     const SizedBox(width: 8),
                     // 노트스페이스 이름
@@ -191,12 +193,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       children: [
                         Text(
                           _noteSpaceName.isNotEmpty ? _noteSpaceName : '로딩 중...',
-                          style: TypographyTokens.subtitle1.copyWith(
-                            color: const Color(0xFF0E2823), // #0E2823 (Figma 디자인 기준)
+                          style: GoogleFonts.poppins(
+                            fontSize: 24,
                             fontWeight: FontWeight.w700,
-                            fontSize: 20,
-                            fontFamily: 'Poppins',
+                            color: const Color(0xFF0E2823), // #0E2823 (Figma 디자인 기준)
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -208,15 +211,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
               ),
               actions: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.person_outline,
-                    color: Color(0xFF226357), // #226357 (Figma 디자인 기준)
-                    size: 24,
+                Padding(
+                  padding: const EdgeInsets.only(right: 16.0),
+                  child: GestureDetector(
+                    onTap: () => _navigateToSettings(context),
+                    child: SvgPicture.asset(
+                      'assets/images/icon_profile.svg',
+                      width: 24,
+                      height: 24,
+                      color: const Color(0xFF226357), // #226357 (Figma 디자인 기준)
+                    ),
                   ),
-                  onPressed: () => _navigateToSettings(context),
                 ),
               ],
+              toolbarHeight: 80,
+              leadingWidth: 0,
+              titleSpacing: 24,
+              centerTitle: false,
             ),
             body: Consumer<HomeViewModel>(
               builder: (context, viewModel, _) {
@@ -253,144 +264,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     final note = viewModel.notes[index];
                                     
                                     return Padding(
-                                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
                                       child: GestureDetector(
                                         onTap: () => _navigateToNoteDetail(context, note),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(8), // 8px 라운드 코너
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              color: Colors.white,
-                                              border: Border.all(
-                                                color: const Color(0xFFFFF0E8), // #FFF0E8 (Figma 디자인 기준)
-                                                width: 1,
-                                              ),
-                                              borderRadius: BorderRadius.circular(8),
-                                            ),
-                                            padding: const EdgeInsets.all(12), // 패딩 업데이트
-                                            child: Row(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                // 썸네일
-                                                ClipRRect(
-                                                  borderRadius: BorderRadius.circular(4),
-                                                  child: note.imageUrl != null && note.imageUrl!.isNotEmpty
-                                                    ? Image.network(
-                                                        note.imageUrl!,
-                                                        width: 80,
-                                                        height: 80,
-                                                        fit: BoxFit.cover,
-                                                      )
-                                                    : Container(
-                                                        width: 80,
-                                                        height: 80,
-                                                        color: const Color(0xFFE5E5E5),
-                                                      ),
-                                                ),
-                                                const SizedBox(width: 16),
-                                                // 노트 정보
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      // 노트 제목
-                                                      Text(
-                                                        note.originalText.isNotEmpty ? note.originalText : '제목 없음',
-                                                        style: GoogleFonts.poppins(
-                                                          fontSize: 20,
-                                                          fontWeight: FontWeight.w600,
-                                                          color: const Color(0xFF0E2823), // #0E2823
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                      const SizedBox(height: 2),
-                                                      // 날짜 및 페이지 정보
-                                                      Row(
-                                                        children: [
-                                                          // 날짜
-                                                          Text(
-                                                            _formatDate(note.createdAt ?? DateTime.now()),
-                                                            style: GoogleFonts.poppins(
-                                                              fontSize: 12,
-                                                              color: const Color(0xFF969696), // #969696
-                                                            ),
-                                                          ),
-                                                          const SizedBox(width: 4),
-                                                          // 구분자
-                                                          Text(
-                                                            '|',
-                                                            style: GoogleFonts.poppins(
-                                                              fontSize: 12,
-                                                              color: const Color(0xFF969696), // #969696
-                                                            ),
-                                                          ),
-                                                          const SizedBox(width: 4),
-                                                          // 페이지 수
-                                                          Text(
-                                                            '${note.pages?.length ?? 0} pages',
-                                                            style: GoogleFonts.poppins(
-                                                              fontSize: 12,
-                                                              color: const Color(0xFF969696), // #969696
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      const SizedBox(height: 8),
-                                                      // 플래시카드 배지 (있는 경우)
-                                                      if (note.flashcardCount != null && note.flashcardCount! > 0)
-                                                        Container(
-                                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                          decoration: BoxDecoration(
-                                                            color: const Color(0xFFFFD53C), // #FFD53C
-                                                            borderRadius: BorderRadius.circular(100),
-                                                          ),
-                                                          child: Row(
-                                                            mainAxisSize: MainAxisSize.min,
-                                                            children: [
-                                                              const Icon(
-                                                                Icons.collections_bookmark_outlined,
-                                                                size: 16,
-                                                                color: Color(0xFF226357),
-                                                              ),
-                                                              const SizedBox(width: 4),
-                                                              Text(
-                                                                '${note.flashcardCount}',
-                                                                style: GoogleFonts.inter(
-                                                                  fontSize: 12,
-                                                                  fontWeight: FontWeight.w700,
-                                                                  color: const Color(0xFF226357), // #226357
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                // 좋아요 아이콘
-                                                GestureDetector(
-                                                  onTap: () {
-                                                    if (note.id != null) {
-                                                      viewModel.toggleFavorite(
-                                                        note.id!,
-                                                        !(note.isFavorite ?? false),
-                                                      );
-                                                    }
-                                                  },
-                                                  child: Icon(
-                                                    note.isFavorite ?? false
-                                                        ? Icons.favorite
-                                                        : Icons.favorite_border,
-                                                    color: note.isFavorite ?? false
-                                                        ? const Color(0xFFFE6A15) // #FE6A15
-                                                        : const Color(0xFFD3E0DD), // #D3E0DD
-                                                    size: 24,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
+                                        child: NoteListItem(
+                                          note: note,
+                                          onNoteTapped: (note) => _navigateToNoteDetail(context, note),
+                                          onFavoriteToggled: (noteId, isFavorite) {
+                                            viewModel.toggleFavorite(noteId, isFavorite);
+                                          },
+                                          onDismissed: () {
+                                            if (note.id != null) {
+                                              viewModel.deleteNote(note.id!);
+                                            }
+                                          },
                                         ),
                                       ),
                                     );
@@ -414,43 +301,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                           _isButtonDisabled()
                                             ? Tooltip(
                                                 message: '사용량 한도 초과로 비활성화되었습니다',
-                                                child: Container(
-                                                  width: double.infinity,
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFFFE6A15).withOpacity(0.5),
-                                                    borderRadius: BorderRadius.circular(8),
-                                                  ),
-                                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                                  alignment: Alignment.center,
-                                                  child: Text(
-                                                    '스마트 노트 만들기',
-                                                    style: GoogleFonts.poppins(
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.w500,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
+                                                child: PikaButton(
+                                                  text: '스마트 노트 만들기',
+                                                  variant: PikaButtonVariant.primary,
+                                                  isFullWidth: false,
+                                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                                  onPressed: null,
                                                 ),
                                               )
-                                            : GestureDetector(
-                                                onTap: () => _showImagePickerBottomSheet(context),
-                                                child: Container(
-                                                  width: double.infinity,
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFFFE6A15), // #FE6A15
-                                                    borderRadius: BorderRadius.circular(8),
-                                                  ),
-                                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                                  alignment: Alignment.center,
-                                                  child: Text(
-                                                    '스마트 노트 만들기',
-                                                    style: GoogleFonts.poppins(
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.w500,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                ),
+                                            : PikaButton(
+                                                text: '스마트 노트 만들기',
+                                                variant: PikaButtonVariant.primary,
+                                                isFullWidth: false,
+                                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                                onPressed: () => _showImagePickerBottomSheet(context),
                                               ),
                                           const SizedBox(height: 16),
                                         ],
@@ -638,43 +502,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             _isButtonDisabled()
               ? Tooltip(
                   message: '사용량 한도 초과로 비활성화되었습니다',
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFE6A15).withOpacity(0.5), // 비활성화 상태 #FE6A15 반투명
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '이미지 올리기',
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    ),
+                  child: PikaButton(
+                    text: '이미지 올리기',
+                    variant: PikaButtonVariant.primary,
+                    isFullWidth: true,
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    onPressed: null,
                   ),
                 )
-              : GestureDetector(
-                  onTap: () => _showImagePickerBottomSheet(context),
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFE6A15), // #FE6A15
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '이미지 올리기',
-                      style: GoogleFonts.poppins(
-                        fontSize: 16, 
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
+              : PikaButton(
+                  text: '이미지 올리기',
+                  variant: PikaButtonVariant.primary,
+                  isFullWidth: true,
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  onPressed: () => _showImagePickerBottomSheet(context),
                 ),
           ],
         ),
