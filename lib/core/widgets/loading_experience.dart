@@ -230,7 +230,7 @@ class _LoadingExperienceState extends State<LoadingExperience> {
     );
   }
 }
-
+/// 2. 전체 페이지 위젯
 /// 로딩 경험을 페이지 단위로 제공하는 위젯
 /// 전체 화면을 로딩/오류/콘텐츠 상태로 관리합니다.
 class LoadingPage extends StatelessWidget {

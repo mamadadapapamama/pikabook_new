@@ -4,6 +4,9 @@ import '../../views/screens/full_image_screen.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/models/page.dart' as page_model;
+import 'package:flutter/foundation.dart';
+import 'note_detail_state.dart'; // LoadingState import 추가
+import 'package:flutter/rendering.dart';
 
 /// 이미지 컨테이너 스타일 정의
 enum ImageContainerStyle {
@@ -28,6 +31,9 @@ class PageImageWidget extends StatelessWidget {
   final Function(File)? onFullScreenTap;
   final VoidCallback? onTap;
   final bool enableFullScreen;
+  final Function(LoadingState)? onLoadingStateChanged;
+  final Function(ComponentState)? onStateChanged;
+  final bool showLoadingUI;
 
   const PageImageWidget({
     super.key,
@@ -44,16 +50,32 @@ class PageImageWidget extends StatelessWidget {
     this.onFullScreenTap,
     this.onTap,
     this.enableFullScreen = true,
+    this.onLoadingStateChanged,
+    this.onStateChanged,
+    this.showLoadingUI = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    // 이미지가 없거나 페이지가 처리 중인 경우
+    // 이미지가 없는 경우
     if ((imageFile == null && (imageUrl == null || imageUrl!.isEmpty)) || 
-        (page != null && page!.originalText == '___PROCESSING___') ||
-        isLoading) {
-      return _buildLoadingIndicator();
+        (page != null && page!.originalText == '___PROCESSING___')) {
+      
+      // 상태 콜백 호출 (로딩 중)
+      if (onStateChanged != null) {
+        onStateChanged!(ComponentState.loading);
+      }
+      
+      // 로딩 UI 제거하고 빈 공간만 표시
+      return const SizedBox(height: 150);
     }
+
+    // 이미지 로드 성공 시 상태 업데이트
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (onStateChanged != null) {
+        onStateChanged!(ComponentState.ready);
+      }
+    });
 
     return GestureDetector(
       onTap: () {
@@ -66,7 +88,6 @@ class PageImageWidget extends StatelessWidget {
       child: Container(
         height: 200, // 이미지 높이 고정
         width: width ?? double.infinity,
-        margin: _getContainerMargin(),
         decoration: BoxDecoration(
           color: Colors.grey.shade200,
           borderRadius: BorderRadius.circular(8),
@@ -111,42 +132,6 @@ class PageImageWidget extends StatelessWidget {
     );
   }
 
-  // 로딩 인디케이터 위젯
-  Widget _buildLoadingIndicator() {
-    return Container(
-      height: 200, // 이미지 높이 고정
-      width: width ?? double.infinity,
-      margin: _getContainerMargin(),
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          )
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // 기본 이미지 (배경)
-          _buildEmptyImageWidget(),
-          
-          // 로딩 인디케이터 (전경)
-          if (isLoading)
-            const Center(
-              child: DotLoadingIndicator(
-                message: '이미지 로딩 중...',
-                dotColor: Color(0xFFFFD53C),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
   // 이미지 위젯
   Widget _buildImage() {
     if (imageFile != null) {
@@ -163,12 +148,8 @@ class PageImageWidget extends StatelessWidget {
           if (wasSynchronouslyLoaded || frame != null) {
             return child;
           } else {
-            return Stack(
-              children: [
-                _buildEmptyImageWidget(),
-                child,
-              ],
-            );
+            // 로딩 인디케이터 대신 빈 이미지만 표시
+            return _buildEmptyImageWidget();
           }
         },
       );
@@ -185,18 +166,8 @@ class PageImageWidget extends StatelessWidget {
           },
           loadingBuilder: (context, child, loadingProgress) {
             if (loadingProgress == null) return child;
-            return Stack(
-              children: [
-                _buildEmptyImageWidget(),
-                Center(
-                  child: CircularProgressIndicator(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                        : null,
-                  ),
-                ),
-              ],
-            );
+            // 로딩 인디케이터 제거하고 빈 이미지만 표시
+            return _buildEmptyImageWidget();
           },
         );
       } else {
@@ -205,6 +176,7 @@ class PageImageWidget extends StatelessWidget {
           future: _getImageFile(imageUrl!),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
+              // 로딩 인디케이터 제거하고 빈 이미지만 표시
               return _buildEmptyImageWidget();
             } else if (snapshot.hasData && snapshot.data != null) {
               return Image.file(

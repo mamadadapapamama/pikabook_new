@@ -9,16 +9,14 @@ import '../../core/utils/text_highlight_manager.dart';
 import '../../core/utils/context_menu_manager.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../core/utils/segment_utils.dart';
 import '../../core/widgets/tts_button.dart';
-import '../../core/widgets/dot_loading_indicator.dart';
+import 'note_detail_state.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 /// 
 /// ## 주요 기능
 /// - 세그먼트별 또는 전체 텍스트 모드로 표시
-/// - 병음 및 번역 표시 토글
 /// - 단어 선택 및 사전 검색
 /// - 텍스트 선택 및 컨텍스트 메뉴
 /// - 플래시카드 단어 하이라이트
@@ -44,6 +42,8 @@ class ProcessedTextWidget extends StatefulWidget {
   final TextStyle? originalTextStyle;
   final TextStyle? pinyinTextStyle;
   final TextStyle? translatedTextStyle;
+  final Function(ComponentState)? onStateChanged;
+  final bool showLoadingUI;
 
   const ProcessedTextWidget({
     Key? key,
@@ -57,6 +57,8 @@ class ProcessedTextWidget extends StatefulWidget {
     this.originalTextStyle,
     this.pinyinTextStyle,
     this.translatedTextStyle,
+    this.onStateChanged,
+    this.showLoadingUI = false,
   }) : super(key: key);
 
   @override
@@ -79,6 +81,15 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     super.initState();
     _flashcardWords = {};
     _extractFlashcardWords();
+    
+    // 위젯 초기화 시 상태 알림
+    if (widget.processedText.fullOriginalText != "___PROCESSING___") {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (widget.onStateChanged != null) {
+          widget.onStateChanged!(ComponentState.ready);
+        }
+      });
+    }
   }
 
   @override
@@ -534,40 +545,21 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // 특수 마커가 있는 경우 처리 중 표시
-    if (widget.processedText.fullOriginalText.contains('___PROCESSING___')) {
-      return const Center(
-        child: DotLoadingIndicator(message: '텍스트 처리 중이에요!'),
-      );
+    final processedText = widget.processedText;
+    
+    // 처리 중인 경우
+    if (processedText.fullOriginalText == "___PROCESSING___") {
+      // 상태 콜백 호출 (로딩 중)
+      if (widget.onStateChanged != null) {
+        widget.onStateChanged!(ComponentState.loading);
+      }
+      
+      // 로딩 UI 제거하고 항상 빈 컨테이너만 반환
+      return const SizedBox();
     }
 
     // 세그먼트 모드인지 전체 텍스트 모드인지에 따라 다른 렌더링
     final bool isFullTextMode = widget.processedText.showFullText;
-
-    // 로딩 확인용
-    // debugPrint('[${DateTime.now()}] ProcessedTextWidget build 호출');
-    
-    // 번역 텍스트 체크 로그 추가
-    if (widget.processedText.fullTranslatedText != null && widget.processedText.fullTranslatedText!.isNotEmpty) {
-      final sample = widget.processedText.fullTranslatedText!.length > 50 
-          ? widget.processedText.fullTranslatedText!.substring(0, 50) + '...' 
-          : widget.processedText.fullTranslatedText!;
-      debugPrint('ProcessedTextWidget: 번역 텍스트 있음 (${widget.processedText.fullTranslatedText!.length}자)');
-      debugPrint('ProcessedTextWidget: 번역 텍스트 샘플 - "$sample"');
-    } else {
-      debugPrint('ProcessedTextWidget: 번역 텍스트 없음 (null 또는 빈 문자열)');
-    }
-    
-    // 세그먼트별 번역 체크
-    if (widget.processedText.segments != null && widget.processedText.segments!.isNotEmpty) {
-      int untranslatedSegments = 0;
-      for (final segment in widget.processedText.segments!) {
-        if (segment.translatedText == null || segment.translatedText!.isEmpty || segment.translatedText == segment.originalText) {
-          untranslatedSegments++;
-        }
-      }
-      debugPrint('ProcessedTextWidget: 세그먼트 ${widget.processedText.segments!.length}개 중 $untranslatedSegments개 번역 누락');
-    }
 
     // 문장 바깥 탭 시 선택 취소를 위한 GestureDetector 추가
     return GestureDetector(

@@ -15,6 +15,8 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'note_detail_state.dart';
+import 'dart:math' as math;
 
 // debugPrint 함수 - 커스텀 구현
 void debugPrint(String message) {
@@ -29,6 +31,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   final NoteOptionsManager _noteOptionsManager = NoteOptionsManager();
   late NoteService _noteService;
   final TtsService _ttsService = TtsService();
+  
+  // 새로운 상태 관리 객체
+  final NoteDetailState _state = NoteDetailState();
   
   // PageController 추가
   final PageController pageController = PageController();
@@ -49,6 +54,8 @@ class NoteDetailViewModel extends ChangeNotifier {
   bool _shouldUpdateUI = true;        // UI 업데이트 제어 플래그
   bool _isProcessingBackground = false; // 백그라운드 처리 상태
   int _totalImageCount = 0;           // 총 이미지 수
+  bool _isContentLoading = true;       // 콘텐츠 로딩 상태
+  Map<String, ComponentState> _pageContentStates = {}; // 페이지 콘텐츠 상태
   
   // 게터
   Note? get note => _note;
@@ -63,6 +70,13 @@ class NoteDetailViewModel extends ChangeNotifier {
   bool get isFullTextMode => _isFullTextMode;
   bool get isProcessingBackground => _isProcessingBackground;
   int get totalImageCount => _totalImageCount;
+  bool get isContentLoading => _isContentLoading;
+  
+  // 상태 객체 게터
+  NoteDetailState get state => _state;
+  
+  // 로딩 상태 게터
+  LoadingState get loadingState => _state.loadingState;
   
   // 현재 페이지 (nullable)
   pika_page.Page? get currentPage {
@@ -83,6 +97,11 @@ class NoteDetailViewModel extends ChangeNotifier {
     _note = initialNote;
     _isProcessingBackground = isProcessingBackground;
     _totalImageCount = totalImageCount;
+    
+    // 상태 초기화
+    _state.setLoading(true);
+    _state.isProcessingBackground = isProcessingBackground;
+    _state.expectedTotalPages = totalImageCount;
     
     _initializeDependencies();
     
@@ -119,6 +138,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   }
   
   // 리소스 정리
+  @override
   void dispose() {
     _ttsService.stop();
     _ttsService.dispose();
@@ -139,6 +159,9 @@ class NoteDetailViewModel extends ChangeNotifier {
       debugPrint("⏱️ 처리 타이머 취소됨");
     }
     
+    // 상태 타이머 정리
+    _state.cancelBackgroundTimer();
+    
     super.dispose();
   }
   
@@ -158,6 +181,11 @@ class NoteDetailViewModel extends ChangeNotifier {
         _note = loadedNote;
         _isLoading = false;
         _error = null;
+        
+        // 상태 업데이트
+        _state.updateNote(loadedNote);
+        _state.setLoading(false);
+        
         notifyListeners();
         
         // 플래시카드 카운트가 있으면 플래시카드 로드
@@ -170,6 +198,11 @@ class NoteDetailViewModel extends ChangeNotifier {
         }
         _isLoading = false;
         _error = "노트를 찾을 수 없습니다.";
+        
+        // 상태 업데이트
+        _state.setLoading(false);
+        _state.setError(_error);
+        
         notifyListeners();
       }
     } catch (e, stackTrace) {
@@ -179,6 +212,11 @@ class NoteDetailViewModel extends ChangeNotifier {
       }
       _isLoading = false;
       _error = "노트 로드 중 오류가 발생했습니다: $e";
+      
+      // 상태 업데이트
+      _state.setLoading(false);
+      _state.setError(_error);
+      
       notifyListeners();
     }
   }
@@ -191,6 +229,10 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     _isLoading = true;
     _error = null;
+    
+    // 상태 업데이트
+    _state.setLoading(true);
+    
     notifyListeners();
 
     try {
@@ -204,11 +246,16 @@ class NoteDetailViewModel extends ChangeNotifier {
         }
         _pages = pages;
         _isLoading = false;
+        
+        // 상태 업데이트
+        _state.setLoading(false);
+        
         notifyListeners();
         return;
       }
       
       // 페이지를 로드하면서 각 페이지의 처리 상태 파악
+      int processingPagesCount = 0;
       for (var page in pages) {
         if (page.id != null) {
           bool isProcessed = false;
@@ -216,17 +263,34 @@ class NoteDetailViewModel extends ChangeNotifier {
           // 텍스트가 이미 있으면 처리된 것으로 간주
           if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
             isProcessed = true;
+            _state.setPageLoadingState(page.id!, LoadingState.contentReady);
           } else {
             try {
+              processingPagesCount++;
               // ContentManager를 통해 처리된 텍스트가 있는지 확인
               final processedText = await _contentManager.getProcessedText(page.id!);
               isProcessed = processedText != null && 
                            processedText.fullOriginalText != '___PROCESSING___' &&
                            processedText.fullOriginalText.isNotEmpty;
+              
+              // 상태 업데이트
+              _state.setPageLoadingState(
+                page.id!, 
+                isProcessed ? LoadingState.contentReady : LoadingState.pageProcessing
+              );
+              
+              // 로그 추가 
+              if (kDebugMode) {
+                debugPrint("📝 페이지 ${page.id} 처리 상태: " + 
+                  (isProcessed ? "완료" : "처리 중") + 
+                  (processedText == null ? " (ProcessedText 없음)" : 
+                   " (ProcessedText 있음: '${processedText.fullOriginalText.substring(0, math.min(20, processedText.fullOriginalText.length))}...')"));
+              }
             } catch (e) {
               if (kDebugMode) {
                 debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
               }
+              _state.setPageLoadingState(page.id!, LoadingState.error);
             }
           }
           
@@ -239,36 +303,38 @@ class NoteDetailViewModel extends ChangeNotifier {
       
       _pages = pages;
       _isLoading = false;
+      
+      // 상태 업데이트
+      _state.setLoading(false);
+      _state.updateGlobalLoadingState();
+      
       notifyListeners();
       
       if (kDebugMode) {
-        debugPrint("✅ NoteDetailViewModel: 페이지 로드 완료 (${pages.length}개)");
+        debugPrint("📝 로드된 페이지 수: ${pages.length}, 처리 중인 페이지 수: $processingPagesCount");
       }
       
-      // UI 업데이트 재개를 지연시켜 불필요한 업데이트 방지
-      Future.delayed(Duration(milliseconds: 500), () {
-        _resumeUIUpdates();
-      });
-      
-      // 백그라운드 처리 상태 확인 시작
-      _startPageProcessingCheck();
-      
-      // 페이지 로드 후 세그먼트 처리가 필요한 경우에만 시작
-      if (_isProcessingBackground && pages.isNotEmpty) {
-        _startBackgroundProcessing();
+      // 처리 중인 페이지가 있는 경우 백그라운드 처리 상태 확인 시작
+      if (processingPagesCount > 0) {
+        _startPageProcessingCheck();
       }
       
       // 페이지 이미지 미리 로드 - 로딩이 완료된 후에만 수행
       Future.delayed(Duration(milliseconds: 300), () {
         loadAllPageImages();
       });
-    } catch (e, stackTrace) {
+    } catch (e) {
       if (kDebugMode) {
         debugPrint("❌ NoteDetailViewModel: 페이지 로드 중 오류 발생: $e");
-        debugPrint(stackTrace.toString());
       }
+      
       _isLoading = false;
-      _error = "페이지를 로드하는 중 오류가 발생했습니다: $e";
+      _error = "페이지 로드 중 오류 발생: $e";
+      
+      // 상태 업데이트
+      _state.setLoading(false);
+      _state.setError(_error);
+      
       notifyListeners();
     }
   }
@@ -434,6 +500,10 @@ class NoteDetailViewModel extends ChangeNotifier {
     if (_pages == null || index >= _pages!.length || _currentPageIndex == index) return;
     
     _currentPageIndex = index;
+    
+    // 상태 업데이트
+    _state.processingPageIndex = index;
+    
     notifyListeners();
     if (kDebugMode) {
       debugPrint("📄 페이지 변경됨: $_currentPageIndex");
@@ -636,6 +706,11 @@ class NoteDetailViewModel extends ChangeNotifier {
       return;
     }
     
+    // 상태 업데이트
+    _state.setPageLoadingState(page.id!, LoadingState.pageProcessing);
+    _state.updateGlobalLoadingState();
+    notifyListeners();
+    
     // 특수 처리 마커가 있는지 확인하고 건너뛰기
     if (page.originalText == "___PROCESSING___") {
       if (kDebugMode) {
@@ -660,6 +735,11 @@ class NoteDetailViewModel extends ChangeNotifier {
         } else {
           // 정상적으로 처리된 페이지 기록
           _processedPageStatus[page.id!] = true;
+          
+          // 상태 업데이트
+          _state.setPageLoadingState(page.id!, LoadingState.contentReady);
+          _state.updateGlobalLoadingState();
+          notifyListeners();
         }
       } else {
         if (kDebugMode) {
@@ -685,6 +765,10 @@ class NoteDetailViewModel extends ChangeNotifier {
             // 처리 상태 기록
             _processedPageStatus[page.id!] = true;
             
+            // 상태 업데이트
+            _state.setPageLoadingState(page.id!, LoadingState.contentReady);
+            _state.updateGlobalLoadingState();
+            
             // 업데이트를 일시 중지한 경우만 재개
             if (!wasUpdatesPaused) {
               Future.delayed(Duration(milliseconds: 300), () {
@@ -696,18 +780,30 @@ class NoteDetailViewModel extends ChangeNotifier {
             if (kDebugMode) {
               debugPrint("❌ 처리 결과가 null입니다");
             }
+            
+            // 상태 업데이트
+            _state.setPageLoadingState(page.id!, LoadingState.error);
+            _state.updateGlobalLoadingState();
+            
             // 업데이트를 일시 중지한 경우만 재개
             if (!wasUpdatesPaused) {
               _resumeUIUpdates();
+              notifyListeners();
             }
           }
         }).catchError((e) {
           if (kDebugMode) {
             debugPrint("❌ 처리 중 오류 발생: $e");
           }
+          
+          // 상태 업데이트
+          _state.setPageLoadingState(page.id!, LoadingState.error);
+          _state.updateGlobalLoadingState();
+          
           // 업데이트를 일시 중지한 경우만 재개
           if (!wasUpdatesPaused) {
             _resumeUIUpdates();
+            notifyListeners();
           }
         });
       }
@@ -715,6 +811,11 @@ class NoteDetailViewModel extends ChangeNotifier {
       if (kDebugMode) {
         debugPrint("❌ 처리된 텍스트 확인 중 오류 발생: $e");
       }
+      
+      // 상태 업데이트
+      _state.setPageLoadingState(page.id!, LoadingState.error);
+      _state.updateGlobalLoadingState();
+      notifyListeners();
     }
   }
   
@@ -1038,8 +1139,8 @@ class NoteDetailViewModel extends ChangeNotifier {
     // 페이지가 없으면 실행하지 않음
     if (_pages == null || _pages!.isEmpty) return;
     
-    // 리스너 최소화를 위해 타이머 간격을 늘림
-    _processingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+    // 리스너 최소화를 위해 타이머 간격을 줄임
+    _processingTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       bool allProcessed = true;
       bool anyStatusChanged = false;
       bool currentPageChanged = false;
@@ -1076,6 +1177,10 @@ class NoteDetailViewModel extends ChangeNotifier {
               currentPageChanged = true;
             }
             
+            // 상태가 변경된 경우 UI 상태 업데이트
+            _state.setPageLoadingState(page.id!, isProcessed ? LoadingState.contentReady : LoadingState.pageProcessing);
+            _state.updateGlobalLoadingState();
+            
             // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
             if (isProcessed && _pageProcessedCallback != null) {
               _pageProcessedCallback!(i);
@@ -1093,8 +1198,8 @@ class NoteDetailViewModel extends ChangeNotifier {
         }
       }
       
-      // 상태 변경이 있고 현재 페이지에 변경이 있을 때만 UI 갱신
-      if (anyStatusChanged && currentPageChanged && _shouldUpdateUI) {
+      // 상태 변경이 있으면 UI 갱신 (현재 페이지 변경 여부와 상관없이)
+      if (anyStatusChanged && _shouldUpdateUI) {
         notifyListeners();
       }
       
@@ -1169,5 +1274,60 @@ class NoteDetailViewModel extends ChangeNotifier {
     if (kDebugMode) {
       debugPrint("✅ 모든 페이지 이미지 로드 완료");
     }
+  }
+  
+  // 페이지 로딩 상태 업데이트 메서드 추가
+  void updatePageLoadingState(String pageId, LoadingState state) {
+    _state.setPageLoadingState(pageId, state);
+    _state.updateGlobalLoadingState();
+    notifyListeners();
+  }
+  
+  // 페이지 로딩 상태 확인 메서드 추가
+  LoadingState getPageLoadingState(String pageId) {
+    return _state.getPageLoadingState(pageId);
+  }
+  
+  // 현재 페이지 로딩 상태 확인 메서드 추가
+  LoadingState getCurrentPageLoadingState() {
+    if (currentPage?.id == null) {
+      return LoadingState.initial;
+    }
+    return getPageLoadingState(currentPage!.id!);
+  }
+
+  // 페이지 콘텐츠 상태 업데이트
+  void updatePageContentState(String pageId, ComponentState state) {
+    _pageContentStates[pageId] = state;
+    
+    // 모든 페이지가 준비되었는지 확인
+    bool allPagesReady = true;
+    
+    // 현재 로드된 페이지 중에서 확인
+    if (_pages != null) {
+      for (final page in _pages!) {
+        if (page.id != null) {
+          final pageState = _pageContentStates[page.id];
+          if (pageState != ComponentState.ready) {
+            allPagesReady = false;
+            break;
+          }
+        }
+      }
+    }
+    
+    // 전체 로딩 상태 업데이트
+    if (allPagesReady && _isContentLoading) {
+      _isContentLoading = false;
+      notifyListeners();
+    } else if (!allPagesReady && !_isContentLoading) {
+      _isContentLoading = true;
+      notifyListeners();
+    }
+  }
+
+  /// 위젯 트리를 강제로 리빌드하는 간단한 메서드
+  void rebuildWidgetTree() {
+    notifyListeners();
   }
 } 

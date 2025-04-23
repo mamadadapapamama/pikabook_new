@@ -13,6 +13,8 @@ import '../../core/services/text_processing/text_reader_service.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
+import '../../core/widgets/loading_experience.dart';
+import 'note_detail_state.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatelessWidget {
@@ -81,73 +83,83 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     );
   }
   
-  // 바디 구성
+  // 바디 구성 - 중앙집중식 로딩 상태 관리 적용
   Widget _buildBody(BuildContext context, NoteDetailViewModel viewModel) {
-    if (viewModel.isLoading) {
-      return const Center(child: DotLoadingIndicator(message: '페이지 로딩 중...'));
-    }
-
-    if (viewModel.error != null) {
-      return Center(
+    return LoadingExperience(
+      loadingMessage: '페이지 로딩 중...',
+      loadData: () async {
+        if (viewModel.pages == null) {
+          await viewModel.loadInitialPages();
+        }
+      },
+      errorWidgetBuilder: (error, retry) => Center(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Text(
-            '오류 발생: ${viewModel.error}',
-            style: const TextStyle(color: Colors.red),
-            textAlign: TextAlign.center,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '오류 발생: ${viewModel.error}',
+                style: const TextStyle(color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () async {
+                  // 재시도 시 초기 페이지 로드
+                  await viewModel.loadInitialPages();
+                  retry();
+                },
+                child: const Text('다시 시도'),
+              ),
+            ],
           ),
         ),
-      );
-    }
-
-    if (viewModel.pages == null || viewModel.pages!.isEmpty) {
-      return Center(
+      ),
+      isEmptyState: () => viewModel.pages == null || viewModel.pages!.isEmpty,
+      emptyStateWidget: Center(
         child: Text(
           '표시할 페이지가 없습니다.',
           style: TypographyTokens.body1,
         ),
-      );
-    }
+      ),
+      contentBuilder: (context) {
+        // 콘텐츠 준비 확인
+        if (viewModel.isContentLoading) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const DotLoadingIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  '페이지 처리 중입니다.\n잠시만 기다려주세요.',
+                  textAlign: TextAlign.center,
+                  style: TypographyTokens.body2,
+                ),
+              ],
+            ),
+          );
+        }
 
-    // 페이지 뷰 구성 - PageController 연결
-    return SafeArea(
-      child: Container(
-        color: Colors.white,
-        padding: EdgeInsets.zero,
-        child: PageView.builder(
-          controller: viewModel.pageController, // 뷰모델의 컨트롤러 사용
-          itemCount: viewModel.pages!.length,
-          onPageChanged: viewModel.onPageChanged,
-          itemBuilder: (context, index) {
-            final page = viewModel.pages![index];
-            
-            // 특수 처리 마커가 있는지 확인
-            if (page.originalText == "___PROCESSING___") {
-              return _buildProcessingPage();
-            }
-            
-            // 페이지 콘텐츠 위젯 반환
-            return _buildPageContent(context, viewModel, page);
-          },
-        ),
-      ),
-    );
-  }
-  
-  // 처리 중인 페이지 UI
-  Widget _buildProcessingPage() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const DotLoadingIndicator(message: '텍스트 처리를 기다리는 중...'),
-          Text(
-            '이 페이지는 아직 처리 중입니다.\n잠시 후 자동으로 업데이트됩니다.',
-            textAlign: TextAlign.center,
-            style: TypographyTokens.body2,
+        // 콘텐츠 준비 완료 - 페이지 뷰 표시
+        return SafeArea(
+          child: Container(
+            color: Colors.white,
+            padding: EdgeInsets.zero,
+            child: PageView.builder(
+              controller: viewModel.pageController,
+              itemCount: viewModel.pages!.length,
+              onPageChanged: viewModel.onPageChanged,
+              itemBuilder: (context, index) {
+                final page = viewModel.pages![index];
+                
+                return _buildPageContent(context, viewModel, page);
+              },
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
   
@@ -165,6 +177,12 @@ class NoteDetailScreenMVVM extends StatelessWidget {
         flashCards: viewModel.flashCards,
         useSegmentMode: !viewModel.isFullTextMode,
         onDeleteSegment: (segmentIndex) => _handleDeleteSegment(context, viewModel, segmentIndex),
+        onContentReady: (state) {
+          // 페이지 콘텐츠 준비 상태 업데이트
+          if (page.id != null) {
+            viewModel.updatePageContentState(page.id!, state);
+          }
+        },
       ),
     );
   }
@@ -371,15 +389,9 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     ).then((result) {
       // 플래시카드 화면에서 돌아왔을 때 데이터 갱신
       if (result != null && result is Map && result.containsKey('flashcardCount')) {
-        final int count = result['flashcardCount'] as int;
-        
         if (result.containsKey('flashcards') && result['flashcards'] is List) {
           // 새로운 플래시카드 목록으로 교체
           viewModel.loadFlashcards();
-          
-          if (kDebugMode) {
-            print("🔄 플래시카드 화면에서 돌아옴: 카운트=$count, 데이터 갱신 요청됨");
-          }
         }
       } else {
         // 결과가 없어도 최신 데이터로 갱신
@@ -388,7 +400,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     });
   }
 
-  // 바텀 네비게이션 바 구성 (다중 선택 모드)
+  // 바텀 네비게이션 바 구성
   Widget _buildBottomBar(BuildContext context, NoteDetailViewModel viewModel) {
     if (viewModel.pages == null || viewModel.pages!.isEmpty) {
       return const SizedBox.shrink();
@@ -409,12 +421,9 @@ class NoteDetailScreenMVVM extends StatelessWidget {
       isFullTextMode: viewModel.isFullTextMode,
       contentManager: viewModel.getContentManager(),
       textReaderService: TextReaderService(),
-      isProcessing: false,
+      isProcessing: viewModel.loadingState == LoadingState.pageProcessing,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.totalImageCount > 0 ? viewModel.totalImageCount : (viewModel.pages?.length ?? 1)),
       onTtsPlay: () {
-        if (kDebugMode) {
-          print("TTS 재생 시작");
-        }
         viewModel.speakCurrentPageText();
       },
       isMinimalUI: false,
@@ -424,11 +433,8 @@ class NoteDetailScreenMVVM extends StatelessWidget {
   
   // 페이지 처리 완료 콜백 설정 (스낵바 표시)
   void _setupPageProcessedCallback(BuildContext context, NoteDetailViewModel viewModel) {
-    // 이미 콜백이 설정되어 있는지 검사하는 로직이 필요할 수 있음
-    // 일단 매번 새로 설정하도록 구현
-    
+    // 콜백 설정 - 간단히 페이지 처리 완료 시 메시지 표시
     viewModel.setPageProcessedCallback((pageIndex) {
-      // 현재 화면이 살아있는지 확인
       if (context.mounted) {
         // 페이지 번호는 1부터 시작하도록 표시
         final pageNum = pageIndex + 1;

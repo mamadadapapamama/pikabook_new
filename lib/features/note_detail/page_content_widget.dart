@@ -19,10 +19,10 @@ import '../../core/widgets/usage_dialog.dart';
 import '../../core/services/text_processing/translation_service.dart';
 import '../../core/services/text_processing/enhanced_ocr_service.dart';
 import '../../core/services/dictionary/dictionary_service.dart';
-import 'package:url_launcher/url_launcher.dart' as url_launcher;
 import '../../core/services/content/page_service.dart';
 import 'dart:async';
 import 'page_image_widget.dart'; // PageImageWidget 추가
+import 'note_detail_state.dart'; // LoadingState Enum import 추가
 
 /// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
 ///
@@ -56,6 +56,9 @@ class PageContentWidget extends StatefulWidget {
   final List<FlashCard>? flashCards;
   final Function(int)? onDeleteSegment;
   final bool useSegmentMode;
+  final LoadingState loadingState;
+  final Function(LoadingState)? onLoadingStateChanged;
+  final Function(ComponentState)? onContentReady;
 
   const PageContentWidget({
     super.key,
@@ -67,6 +70,9 @@ class PageContentWidget extends StatefulWidget {
     this.flashCards,
     this.onDeleteSegment,
     this.useSegmentMode = true,
+    this.loadingState = LoadingState.contentReady,
+    this.onLoadingStateChanged,
+    this.onContentReady,
   });
 
   @override
@@ -112,6 +118,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   // OCR 서비스 추가
   final EnhancedOcrService _ocrService = EnhancedOcrService();
 
+  bool _isImageReady = false;
+  bool _isTextReady = false;
+
   @override
   void initState() {
     super.initState();
@@ -130,6 +139,17 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       // 이미 처리된 텍스트가 있는지 확인
       _getProcessedTextFromCache();
     }
+    
+    // 로딩 상태 변경 확인 및 콜백 호출
+    if (widget.onLoadingStateChanged != null && _isProcessingText) {
+      widget.onLoadingStateChanged!(LoadingState.pageProcessing);
+    }
+
+    // 이미지가 없는 경우 이미지는 이미 준비됨으로 처리
+    if (widget.imageFile == null && (widget.page.imageUrl == null || widget.page.imageUrl!.isEmpty)) {
+      _isImageReady = true;
+      _checkAndUpdateReadyState();
+    }
   }
 
   // 캐시에서 처리된 텍스트 가져오기
@@ -146,8 +166,17 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           if (_processedText == null) {
             // 텍스트 처리 상태로 변경
             _isProcessingText = true;
+            
+            // 로딩 상태 변경 콜백 호출
+            if (widget.onLoadingStateChanged != null) {
+              widget.onLoadingStateChanged!(LoadingState.pageProcessing);
+            }
+            
             // 비동기로 페이지 처리
             _processPageText();
+          } else if (widget.onLoadingStateChanged != null) {
+            // 콘텐츠가 준비된 상태로 콜백 호출
+            widget.onLoadingStateChanged!(LoadingState.contentReady);
           }
         });
       }
@@ -157,6 +186,12 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         setState(() {
           _isProcessingText = true;
         });
+        
+        // 로딩 상태 변경 콜백 호출
+        if (widget.onLoadingStateChanged != null) {
+          widget.onLoadingStateChanged!(LoadingState.pageProcessing);
+        }
+        
         _processPageText();
       }
     }
@@ -186,6 +221,11 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     setState(() {
       _isProcessingText = true;
     });
+    
+    // 로딩 상태 변경 콜백 호출
+    if (widget.onLoadingStateChanged != null) {
+      widget.onLoadingStateChanged!(LoadingState.pageProcessing);
+    }
 
     final startTime = DateTime.now();
     debugPrint('페이지 텍스트 처리 시작: ${widget.page.id}');
@@ -199,22 +239,36 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime);
       
-      if (kDebugMode) {
-        debugPrint('페이지 텍스트 처리 소요시간: ${duration.inMilliseconds}ms');
-      }
-
       if (mounted) {
         setState(() {
           _processedText = processedText;
           _isProcessingText = false;
+          _isLoading = false;
+          _isError = false;
         });
+        
+        // 로딩 상태 변경 콜백 호출
+        if (widget.onLoadingStateChanged != null) {
+          widget.onLoadingStateChanged!(LoadingState.contentReady);
+        }
+        
+        debugPrint('페이지 텍스트 처리 완료: 소요 시간 = ${duration.inMilliseconds}ms');
       }
     } catch (e) {
-      debugPrint('텍스트 처리 중 오류 발생: $e');
       if (mounted) {
         setState(() {
           _isProcessingText = false;
+          _isLoading = false;
+          _isError = true;
+          _errorMessage = '텍스트 처리 중 오류가 발생했습니다: $e';
         });
+        
+        // 오류 상태 콜백 호출
+        if (widget.onLoadingStateChanged != null) {
+          widget.onLoadingStateChanged!(LoadingState.error);
+        }
+        
+        debugPrint('페이지 텍스트 처리 중 오류 발생: $e');
       }
     }
   }
@@ -362,6 +416,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 style: ImageContainerStyle.noteDetail,
                 height: 200,
                 enableFullScreen: true,
+                onStateChanged: _handleImageStateChanged,
+                showLoadingUI: false, // 로딩 UI 비활성화
               ),
             ),
           
@@ -389,17 +445,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                         // 위젯이 dispose 되었는지 확인
                         if (!mounted) {
                           return const SizedBox.shrink();
-                        }
-                        
-                        // 로딩 중이거나 데이터가 없는 경우
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const DotLoadingIndicator(message: '텍스트 로딩 중...');
-                        }
-                        
-                        if (!snapshot.hasData || snapshot.data == null) {
-                          return const Center(
-                            child: Text('텍스트 데이터를 불러올 수 없습니다.'),
-                          );
                         }
                         
                         // 데이터가 있는 경우
@@ -462,6 +507,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                           originalTextStyle: _originalTextStyle,
                           pinyinTextStyle: _pinyinTextStyle,
                           translatedTextStyle: _translatedTextStyle,
+                          onStateChanged: _handleTextStateChanged,
+                          showLoadingUI: false, // 로딩 UI 비활성화
                         );
                       },
                     );
@@ -1003,6 +1050,35 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       debugPrint('processedText 저장 완료: pageId=$pageId');
     } catch (e) {
       debugPrint('processedText 저장 중 오류 발생: $e');
+    }
+  }
+
+  // 이미지 상태 업데이트 받는 메서드
+  void _handleImageStateChanged(ComponentState state) {
+    setState(() {
+      _isImageReady = state == ComponentState.ready;
+    });
+    _checkAndUpdateReadyState();
+  }
+
+  // 텍스트 상태 업데이트 받는 메서드
+  void _handleTextStateChanged(ComponentState state) {
+    setState(() {
+      _isTextReady = state == ComponentState.ready;
+    });
+    _checkAndUpdateReadyState();
+  }
+
+  // 통합 상태 체크 및 부모에게 알림
+  void _checkAndUpdateReadyState() {
+    if (_isImageReady && _isTextReady) {
+      if (widget.onContentReady != null) {
+        widget.onContentReady!(ComponentState.ready);
+      }
+    } else {
+      if (widget.onContentReady != null) {
+        widget.onContentReady!(ComponentState.loading);
+      }
     }
   }
 }

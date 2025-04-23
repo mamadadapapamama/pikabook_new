@@ -31,19 +31,7 @@ import '../../core/models/note.dart';
 import '../note_detail/note_detail_screen_mvvm.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-/// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
-class OrangeOverscrollBehavior extends ScrollBehavior {
-  const OrangeOverscrollBehavior();
-  
-  @override
-  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
-    return GlowingOverscrollIndicator(
-      axisDirection: details.direction,
-      color: UITokens.homeOverlayScrollEffect, // 오버스크롤 색상을 primaryverylight로 변경
-      child: child,
-    );
-  }
-}
+
 
 /// 노트 카드 리스트를 보여주는 홈 화면
 /// profile setting, note detail, flashcard 화면으로 이동 가능
@@ -556,3 +544,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     Navigator.of(context).pushNamed('/settings');
   }
 } 
+/// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
+class OrangeOverscrollBehavior extends ScrollBehavior {
+  const OrangeOverscrollBehavior();
+  
+  @override
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
+    return GlowingOverscrollIndicator(
+      axisDirection: details.direction,
+      color: UITokens.homeOverlayScrollEffect, // 오버스크롤 색상을 primaryverylight로 변경
+      child: child,
+    );
+  }
+}
