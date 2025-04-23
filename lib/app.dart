@@ -15,6 +15,11 @@ import 'views/screens/page_test_screen.dart';
 import 'core/services/common/initialization_manager.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'widgets/loading_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'core/services/marketing/marketing_campaign_service.dart';
+import 'core/theme/app_theme.dart';
+import 'dart:io';
 
 /// 앱의 시작 지점 및 초기 화면 결정 로직
 /// - 로그인 확인
@@ -32,13 +37,14 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   bool _isInitialized = false;
   bool _isLoading = true;
   bool _isOnboardingCompleted = false;
-  bool _isLoadingUserData = false; // 사용자 데이터 로딩 상태 추가
+  bool _isLoadingUserData = false;
   String? _userId;
   User? _user;
   StreamSubscription<User?>? _authStateSubscription;
   late InitializationManager _initializationManager;
   late UserPreferencesService _preferencesService;
   String? _error;
+  final MarketingCampaignService _marketingService = MarketingCampaignService();
   
   @override
   void initState() {
@@ -104,6 +110,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      
+      // 마케팅 캠페인 서비스 초기화
+      await _marketingService.initialize();
       
       // 공통 서비스 초기화
       await _initializationManager.initialize();

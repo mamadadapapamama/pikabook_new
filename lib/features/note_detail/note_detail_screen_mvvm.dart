@@ -11,6 +11,7 @@ import '../flashcard/flashcard_screen.dart';
 import 'note_detail_bottom_bar.dart';
 import '../../core/services/text_processing/text_reader_service.dart';
 import 'package:provider/provider.dart';
+import '../../core/theme/tokens/color_tokens.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatelessWidget {
@@ -55,6 +56,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     final viewModel = Provider.of<NoteDetailViewModel>(context);
     
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: _buildAppBar(context, viewModel),
       body: _buildBody(context, viewModel),
       bottomNavigationBar: _buildBottomBar(context, viewModel),
@@ -74,6 +76,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
       onMorePressed: () => _showMoreOptions(context, viewModel),
       onFlashcardTap: () => _navigateToFlashcards(context, viewModel),
       onBackPressed: () => Navigator.of(context).pop(),
+      backgroundColor: ColorTokens.primaryverylight,
     );
   }
   
@@ -106,21 +109,27 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     }
 
     // 페이지 뷰 구성 - PageController 연결
-    return PageView.builder(
-      controller: viewModel.pageController, // 뷰모델의 컨트롤러 사용
-      itemCount: viewModel.pages!.length,
-      onPageChanged: viewModel.onPageChanged,
-      itemBuilder: (context, index) {
-        final page = viewModel.pages![index];
-        
-        // 특수 처리 마커가 있는지 확인
-        if (page.originalText == "___PROCESSING___") {
-          return _buildProcessingPage();
-        }
-        
-        // 페이지 콘텐츠 위젯 반환
-        return _buildPageContent(context, viewModel, page);
-      },
+    return SafeArea(
+      child: Container(
+        color: Colors.white,
+        padding: EdgeInsets.zero,
+        child: PageView.builder(
+          controller: viewModel.pageController, // 뷰모델의 컨트롤러 사용
+          itemCount: viewModel.pages!.length,
+          onPageChanged: viewModel.onPageChanged,
+          itemBuilder: (context, index) {
+            final page = viewModel.pages![index];
+            
+            // 특수 처리 마커가 있는지 확인
+            if (page.originalText == "___PROCESSING___") {
+              return _buildProcessingPage();
+            }
+            
+            // 페이지 콘텐츠 위젯 반환
+            return _buildPageContent(context, viewModel, page);
+          },
+        ),
+      ),
     );
   }
   
@@ -378,7 +387,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     });
   }
 
-  // 하단 내비게이션 바 구성
+  // 바텀 네비게이션 바 구성 (다중 선택 모드)
   Widget _buildBottomBar(BuildContext context, NoteDetailViewModel viewModel) {
     if (viewModel.pages == null || viewModel.pages!.isEmpty) {
       return const SizedBox.shrink();

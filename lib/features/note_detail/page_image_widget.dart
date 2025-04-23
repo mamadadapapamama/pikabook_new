@@ -64,7 +64,7 @@ class PageImageWidget extends StatelessWidget {
         }
       },
       child: Container(
-        height: height,
+        height: 200, // 이미지 높이 고정
         width: width ?? double.infinity,
         margin: _getContainerMargin(),
         decoration: BoxDecoration(
@@ -104,41 +104,6 @@ class PageImageWidget extends StatelessWidget {
                     ),
                   ),
                 ),
-                
-              // 제목 오버레이 (showTitle이 true인 경우)
-              if (showTitle && title.isNotEmpty)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withOpacity(0.6),
-                        ],
-                      ),
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(8),
-                        bottomRight: Radius.circular(8),
-                      ),
-                    ),
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
             ],
           ),
         ),
@@ -149,7 +114,7 @@ class PageImageWidget extends StatelessWidget {
   // 로딩 인디케이터 위젯
   Widget _buildLoadingIndicator() {
     return Container(
-      height: height,
+      height: 200, // 이미지 높이 고정
       width: width ?? double.infinity,
       margin: _getContainerMargin(),
       decoration: BoxDecoration(
@@ -322,10 +287,10 @@ class PageImageWidget extends StatelessWidget {
       case ImageContainerStyle.minimal:
         return EdgeInsets.zero;
       case ImageContainerStyle.noteDetail:
-        return const EdgeInsets.only(top: 16, left: 16, right: 16);
+        return const EdgeInsets.only(top: 16);
       case ImageContainerStyle.standard:
       default:
-        return const EdgeInsets.symmetric(horizontal: 16, vertical: 8);
+        return const EdgeInsets.symmetric(vertical: 8);
     }
   }
 

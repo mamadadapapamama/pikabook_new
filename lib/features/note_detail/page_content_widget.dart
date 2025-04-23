@@ -344,7 +344,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       key: ValueKey('page_${widget.page.id}'),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -357,131 +357,140 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 imageUrl: widget.page.imageUrl,
                 page: widget.page,
                 isLoading: widget.isLoadingImage,
-                title: widget.page.pageNumber != null ? '${widget.page.pageNumber}페이지' : '',
-                showTitle: widget.page.pageNumber != null,
+                title: '',
+                showTitle: false,
                 style: ImageContainerStyle.noteDetail,
-                height: 300,
+                height: 200,
                 enableFullScreen: true,
               ),
             ),
           
-          // 텍스트 처리 중 표시
-          if (_isProcessingText)
-            const DotLoadingIndicator(message: '텍스트 처리 중이에요!')
-          // 특수 처리 중 마커가 있는 경우
-          else if (widget.page.originalText == '___PROCESSING___')
-            const DotLoadingIndicator(message: '텍스트 처리 중이에요!')
-          // 처리된 텍스트가 있는 경우
-          else if (_processedText != null) ...[
-            Builder(builder: (context) {
-              // ProcessedText 처리 로직을 FutureBuilder로 감싸기
-              return FutureBuilder<ProcessedText?>(
-                future: widget.page.id != null 
-                    ? _contentManager.getProcessedText(widget.page.id!)
-                    : Future.value(_processedText),
-                builder: (context, snapshot) {
-                  // 위젯이 dispose 되었는지 확인
-                  if (!mounted) {
-                    return const SizedBox.shrink();
-                  }
-                  
-                  // 로딩 중이거나 데이터가 없는 경우
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const DotLoadingIndicator(message: '텍스트 로딩 중...');
-                  }
-                  
-                  if (!snapshot.hasData || snapshot.data == null) {
-                    return const Center(
-                      child: Text('텍스트 데이터를 불러올 수 없습니다.'),
+          // 텍스트 처리 중 표시 및 나머지 콘텐츠는 좌우 패딩 적용
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 텍스트 처리 중 표시
+                if (_isProcessingText)
+                  const DotLoadingIndicator(message: '텍스트 처리 중이에요!')
+                // 특수 처리 중 마커가 있는 경우
+                else if (widget.page.originalText == '___PROCESSING___')
+                  const DotLoadingIndicator(message: '텍스트 처리 중이에요!')
+                // 처리된 텍스트가 있는 경우
+                else if (_processedText != null) ...[
+                  Builder(builder: (context) {
+                    // ProcessedText 처리 로직을 FutureBuilder로 감싸기
+                    return FutureBuilder<ProcessedText?>(
+                      future: widget.page.id != null 
+                          ? _contentManager.getProcessedText(widget.page.id!)
+                          : Future.value(_processedText),
+                      builder: (context, snapshot) {
+                        // 위젯이 dispose 되었는지 확인
+                        if (!mounted) {
+                          return const SizedBox.shrink();
+                        }
+                        
+                        // 로딩 중이거나 데이터가 없는 경우
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const DotLoadingIndicator(message: '텍스트 로딩 중...');
+                        }
+                        
+                        if (!snapshot.hasData || snapshot.data == null) {
+                          return const Center(
+                            child: Text('텍스트 데이터를 불러올 수 없습니다.'),
+                          );
+                        }
+                        
+                        // 데이터가 있는 경우
+                        final displayedText = snapshot.data!;
+                        
+                        // 상태 디버깅
+                        debugPrint('표시할 ProcessedText: hashCode=${displayedText.hashCode}, '
+                            'showFullText=${displayedText.showFullText}, '
+                            'showPinyin=${displayedText.showPinyin}, '
+                            'showTranslation=${displayedText.showTranslation}');
+                      
+                        debugPrint(
+                            'ProcessedText 표시: 원본 텍스트 ${displayedText.fullOriginalText.length}자, '
+                            '번역 텍스트 ${displayedText.fullTranslatedText?.length ?? 0}자, '
+                            'segments ${displayedText.segments?.length ?? 0}개');
+                            
+                        // 개별 노트에 이미 설정된 값이 있으면 그것을 우선 사용
+                        // 설정된 값이 없는 경우에만 전역 세그먼트 모드 설정 적용
+                        final bool useExistingMode = displayedText.showFullTextModified;
+                        final bool showFullText = useExistingMode 
+                            ? displayedText.showFullText 
+                            : !widget.useSegmentMode;
+                            
+                        debugPrint('뷰 모드 적용: useExistingMode=$useExistingMode, '
+                            'existingMode=${displayedText.showFullText}, '
+                            'globalMode=${!widget.useSegmentMode}, '
+                            'finalMode=$showFullText');
+                            
+                        final updatedText = displayedText.copyWith(
+                          showFullText: showFullText,
+                          showFullTextModified: true, // 수정됨 표시
+                          showPinyin: displayedText.showPinyin,
+                          showTranslation: displayedText.showTranslation,
+                        );
+                        
+                        // 모드 변경 적용 로깅
+                        debugPrint('세그먼트 모드 적용: useSegmentMode=${widget.useSegmentMode}, '
+                          'showFullText=$showFullText');
+                        
+                        // 업데이트된 설정으로 ProcessedText 저장
+                        if (widget.page.id != null) {
+                          // 비동기 호출은 별도 함수로 분리하여 FutureBuilder 내에서 관리하지 않음
+                          _saveProcessedText(widget.page.id!, updatedText);
+                        }
+                            
+                        return ProcessedTextWidget(
+                          // 캐시 무효화를 위한 키 추가 (ProcessedText 상태가 변경될 때마다 새 위젯 생성)
+                          key: ValueKey('pt_${widget.page.id}_${updatedText.hashCode}_'
+                              '${updatedText.showFullText}_'
+                              '${updatedText.showPinyin}_'
+                              '${updatedText.showTranslation}'),
+                          processedText: updatedText,
+                          onDictionaryLookup: _lookupWord,
+                          onCreateFlashCard: widget.onCreateFlashCard,
+                          flashCards: widget.flashCards,
+                          onDeleteSegment: widget.onDeleteSegment,
+                          onPlayTts: _playTts,
+                          playingSegmentIndex: _playingSegmentIndex,
+                          // UI 스타일 전달 - 클래스 레벨 스타일 변수 사용
+                          originalTextStyle: _originalTextStyle,
+                          pinyinTextStyle: _pinyinTextStyle,
+                          translatedTextStyle: _translatedTextStyle,
+                        );
+                      },
                     );
-                  }
-                  
-                  // 데이터가 있는 경우
-                  final displayedText = snapshot.data!;
-                  
-                  // 상태 디버깅
-                  debugPrint('표시할 ProcessedText: hashCode=${displayedText.hashCode}, '
-                      'showFullText=${displayedText.showFullText}, '
-                      'showPinyin=${displayedText.showPinyin}, '
-                      'showTranslation=${displayedText.showTranslation}');
-                
-                  debugPrint(
-                      'ProcessedText 표시: 원본 텍스트 ${displayedText.fullOriginalText.length}자, '
-                      '번역 텍스트 ${displayedText.fullTranslatedText?.length ?? 0}자, '
-                      'segments ${displayedText.segments?.length ?? 0}개');
-                      
-                  // 개별 노트에 이미 설정된 값이 있으면 그것을 우선 사용
-                  // 설정된 값이 없는 경우에만 전역 세그먼트 모드 설정 적용
-                  final bool useExistingMode = displayedText.showFullTextModified;
-                  final bool showFullText = useExistingMode 
-                      ? displayedText.showFullText 
-                      : !widget.useSegmentMode;
-                      
-                  debugPrint('뷰 모드 적용: useExistingMode=$useExistingMode, '
-                      'existingMode=${displayedText.showFullText}, '
-                      'globalMode=${!widget.useSegmentMode}, '
-                      'finalMode=$showFullText');
-                      
-                  final updatedText = displayedText.copyWith(
-                    showFullText: showFullText,
-                    showFullTextModified: true, // 수정됨 표시
-                    showPinyin: displayedText.showPinyin,
-                    showTranslation: displayedText.showTranslation,
-                  );
-                  
-                  // 모드 변경 적용 로깅
-                  debugPrint('세그먼트 모드 적용: useSegmentMode=${widget.useSegmentMode}, '
-                    'showFullText=$showFullText');
-                  
-                  // 업데이트된 설정으로 ProcessedText 저장
-                  if (widget.page.id != null) {
-                    // 비동기 호출은 별도 함수로 분리하여 FutureBuilder 내에서 관리하지 않음
-                    _saveProcessedText(widget.page.id!, updatedText);
-                  }
-                      
-                  return ProcessedTextWidget(
-                    // 캐시 무효화를 위한 키 추가 (ProcessedText 상태가 변경될 때마다 새 위젯 생성)
-                    key: ValueKey('pt_${widget.page.id}_${updatedText.hashCode}_'
-                        '${updatedText.showFullText}_'
-                        '${updatedText.showPinyin}_'
-                        '${updatedText.showTranslation}'),
-                    processedText: updatedText,
-                    onDictionaryLookup: _lookupWord,
-                    onCreateFlashCard: widget.onCreateFlashCard,
-                    flashCards: widget.flashCards,
-                    onDeleteSegment: widget.onDeleteSegment,
-                    onPlayTts: _playTts,
-                    playingSegmentIndex: _playingSegmentIndex,
-                    // UI 스타일 전달 - 클래스 레벨 스타일 변수 사용
-                    originalTextStyle: _originalTextStyle,
-                    pinyinTextStyle: _pinyinTextStyle,
-                    translatedTextStyle: _translatedTextStyle,
-                  );
-                },
-              );
-            }),
-          ]
-          // 처리된 텍스트가 없는 경우 (특수 처리 중 문자열이 아닌 경우)
-          else if ((widget.page.originalText.isNotEmpty && widget.page.originalText != '___PROCESSING___') || widget.isLoadingImage)
-            const Center(
-              child: DotLoadingIndicator(message: '텍스트 처리 중...'),
-            )
-          // 빈 페이지인 경우
-          else
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.text_snippet_outlined, size: 48, color: Colors.grey),
-                  const SizedBox(height: 16),
-                  const Text('처리된 텍스트가 없습니다.'),
-                  if (widget.page.id != null) ...[
-                    const SizedBox(height: 16),
-                    _buildAddTextButton(),
-                  ],
-                ],
-              ),
+                  }),
+                ]
+                // 처리된 텍스트가 없는 경우 (특수 처리 중 문자열이 아닌 경우)
+                else if ((widget.page.originalText.isNotEmpty && widget.page.originalText != '___PROCESSING___') || widget.isLoadingImage)
+                  const Center(
+                    child: DotLoadingIndicator(message: '텍스트 처리 중...'),
+                  )
+                // 빈 페이지인 경우
+                else
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.text_snippet_outlined, size: 48, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        const Text('처리된 텍스트가 없습니다.'),
+                        if (widget.page.id != null) ...[
+                          const SizedBox(height: 16),
+                          _buildAddTextButton(),
+                        ],
+                      ],
+                    ),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
     );

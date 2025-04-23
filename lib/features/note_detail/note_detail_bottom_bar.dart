@@ -203,9 +203,17 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     final bool prevPageProcessed = _isPrevPageProcessed();
     final bool nextPageProcessed = _isNextPageProcessed();
     
-    return Material(
-      color: Colors.white,
-      elevation: 4.0,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            offset: const Offset(0, -2),
+            blurRadius: 8,
+            color: Colors.black.withOpacity(0.15),
+          ),
+        ],
+      ),
       child: SafeArea(
         top: false,
         child: Container(
@@ -249,15 +257,17 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                         ),
                       ),
                       
-                      // 중앙 컨트롤 영역 (모드 전환 버튼)
-                      Expanded(
-                        child: Center(
-                          child: GestureDetector(
-                            onTap: () => _toggleDisplayMode(), // 메서드 직접 호출로 변경
+                      // 중앙 - 원문 전체보기 버튼과 TTS 버튼을 한 프레임에 넣기
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 모드 전환 버튼
+                          GestureDetector(
+                            onTap: () => _toggleDisplayMode(),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8, 
-                                vertical: 2 // 패딩 크기 감소
+                                vertical: 2
                               ),
                               decoration: BoxDecoration(
                                 color: ColorTokens.surface,
@@ -268,19 +278,16 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                                 widget.isFullTextMode ? '문장별 보기' : '원문 전체 보기',
                                 style: TypographyTokens.caption.copyWith(
                                   color: ColorTokens.secondary,
-                                  fontSize: 12, 
+                                  fontSize: 12,
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                      
-                      // 오른쪽 영역 (TTS 버튼 + 페이지 번호 + 다음 페이지 버튼)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // TTS 재생 버튼 추가 - TtsButton 위젯으로 변경
+                          
+                          // 간격 추가
+                          const SizedBox(width: 4),
+                          
+                          // TTS 버튼
                           if (widget.currentPage != null && !widget.isMinimalUI)
                             SizedBox(
                               width: 24,
@@ -294,14 +301,19 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                                 onPlayStart: widget.onTtsPlay,
                               ),
                             ),
-                          const SizedBox(width: 4), // 간격 줄임
-                          
+                        ],
+                      ),
+                      
+                      // 오른쪽 영역 (페이지 번호 + 다음 페이지 버튼)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           // 페이지 번호 표시
                           Text(
                             '${widget.currentPageIndex + 1}/${widget.totalPages}',
                             style: TypographyTokens.caption.copyWith(
                               color: ColorTokens.textSecondary,
-                              fontSize: 12, // 폰트 크기 줄임
+                              fontSize: 12,
                             ),
                             textAlign: TextAlign.center,
                           ),

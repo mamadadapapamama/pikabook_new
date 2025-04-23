@@ -114,6 +114,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     required VoidCallback onMorePressed,
     required VoidCallback onFlashcardTap,
     VoidCallback? onBackPressed,
+    Color backgroundColor = UITokens.homeBackground,
   }) {
     return PikaAppBar(
       title: title,
@@ -121,6 +122,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       onBackPressed: onBackPressed,
       automaticallyImplyLeading: true,
       height: 96,
+      backgroundColor: backgroundColor,
       actions: [
         // 플래시카드 카운터
         GestureDetector(

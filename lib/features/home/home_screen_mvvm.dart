@@ -7,6 +7,7 @@ import '../../widgets/note_list_item.dart';
 import '../../core/services/content/note_service.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
+import '../../core/services/marketing/marketing_campaign_service.dart';  // 마케팅 캠페인 서비스 추가
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
@@ -17,6 +18,7 @@ import '../../core/widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/widgets/pika_button.dart';
 import '../../core/widgets/help_text_tooltip.dart';
+import '../../core/widgets/marketing_campaign_widget.dart';  // 마케팅 캠페인 위젯 추가
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
 import '../flashcard/flashcard_screen.dart';
@@ -61,6 +63,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final UserPreferencesService _userPreferences = UserPreferencesService();
   final UsageLimitService _usageLimitService = UsageLimitService();
+  final MarketingCampaignService _marketingService = MarketingCampaignService();  // 마케팅 캠페인 서비스 추가
   String _noteSpaceName = '';
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -69,9 +72,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _hasCheckedUsage = false;
   Map<String, dynamic> _limitStatus = {};
   Map<String, double> _usagePercentages = {};
-  
-  // 홈 화면 도움말 표시 관련 변수
-  bool _showHomeHelp = false;
   
   HomeViewModel? _viewModel;
 
@@ -85,7 +85,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     // 화면 구성하는 동안 필요한 데이터 즉시 로드
     _loadNoteSpaceName();
     _checkUsageLimits();
-    _checkShowHomeHelp();
+    
+    // 마케팅 캠페인 서비스 초기화
+    _initializeMarketingService();
     
     // 애니메이션 컨트롤러 초기화
     _animationController = AnimationController(
@@ -122,6 +124,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
   
+  // 마케팅 캠페인 서비스 초기화
+  Future<void> _initializeMarketingService() async {
+    await _marketingService.initialize();
+  }
+  
   @override
   void dispose() {
     // 리스너 제거
@@ -144,29 +151,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       // 노트스페이스 이름을 다시 로드
       _loadNoteSpaceName();
     }
-  }
-  
-  // 홈 화면 도움말 표시 여부 확인
-  Future<void> _checkShowHomeHelp() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool homeHelpShown = prefs.getBool('home_help_shown') ?? false;
-    
-    if (!homeHelpShown && mounted) {
-      // 딜레이 없이 바로 도움말 표시
-      setState(() {
-        _showHomeHelp = true;
-      });
-    }
-  }
-  
-  // 도움말 닫기 처리
-  void _handleHelpDismiss() async {
-    setState(() {
-      _showHomeHelp = false;
-    });
-    
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('home_help_shown', true);
   }
 
   @override
@@ -198,192 +182,139 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   children: [
                     Text(
                       _noteSpaceName.isNotEmpty ? _noteSpaceName : '로딩 중...',
-                      style: const TextStyle(
+                      style: TypographyTokens.subtitle1.copyWith(
                         color: ColorTokens.textPrimary,
-                        fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     const Icon(
-                      Icons.keyboard_arrow_down,
+                      Icons.arrow_drop_down_rounded,
                       color: ColorTokens.textPrimary,
-                      size: 20,
                     ),
                   ],
                 ),
               ),
-              centerTitle: false,
               actions: [
-                // 페이지 로드 테스트 버튼 추가
                 IconButton(
-                  icon: const Icon(Icons.bug_report, color: ColorTokens.primary),
-                  onPressed: () => Navigator.of(context).pushNamed('/page-test'),
-                  tooltip: '페이지 로드 테스트',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.settings, color: ColorTokens.textSecondary),
-                  onPressed: () {
-                    Navigator.of(context).pushNamed('/settings');
-                  },
+                  icon: const Icon(
+                    Icons.settings_outlined,
+                    color: ColorTokens.textSecondary,
+                  ),
+                  onPressed: () => _navigateToSettings(context),
                 ),
               ],
             ),
-            body: SafeArea(
-              bottom: false,
-              child: Stack(
-                children: [
-                  Column(
+            body: Consumer<HomeViewModel>(
+              builder: (context, viewModel, _) {
+                _viewModel = viewModel;
+                
+                if (viewModel.isLoading) {
+                  return const Center(
+                    child: DotLoadingIndicator(),
+                  );
+                } else if (viewModel.notes.isEmpty) {
+                  return _buildZeroState(context);
+                }
+                
+                return SafeArea(
+                  child: Stack(
                     children: [
-                      Expanded(
-                        child: Consumer<HomeViewModel>(
-                          builder: (context, viewModel, child) {
-                            // ViewModel 참조 보관
-                            _viewModel = viewModel;
-                            
-                            if (viewModel.isLoading) {
-                              return const DotLoadingIndicator(message: '노트 불러오는 중...');
-                            }
-
-                            if (viewModel.error != null) {
-                              return Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.error_outline,
-                                      size: SpacingTokens.iconSizeXLarge,
-                                      color: ColorTokens.error,
-                                    ),
-                                    SizedBox(height: SpacingTokens.md),
-                                    Text(
-                                      viewModel.error!,
-                                      textAlign: TextAlign.center,
-                                      style: TypographyTokens.body1,
-                                    ),
-                                    SizedBox(height: SpacingTokens.md),
-                                    ElevatedButton(
-                                      onPressed: () => viewModel.refreshNotes(),
-                                      child: const Text('다시 시도'),
-                                      style: UITokens.primaryButtonStyle,
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-
-                            if (!viewModel.hasNotes) {
-                              // Zero State 디자인
-                              return _buildZeroState(context);
-                            }
-
-                            // RefreshIndicator로 감싸서 pull to refresh 기능 추가
-                            return ScrollConfiguration(
-                              behavior: OrangeOverscrollBehavior(),
+                      // 리스트 뷰
+                      Column(
+                        children: [
+                          // 노트 목록
+                          Expanded(
+                            child: ScrollConfiguration(
+                              behavior: const OrangeOverscrollBehavior(),
                               child: RefreshIndicator(
-                                onRefresh: () => viewModel.refreshNotes(),
                                 color: ColorTokens.primary,
-                                backgroundColor: Colors.white, // 배경색을 흰색으로 설정
-                                child: Padding(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: SpacingTokens.md,
-                                    vertical: SpacingTokens.sm,
-                                  ),
-                                  child: ListView.builder(
-                                    padding: EdgeInsets.zero,
-                                    itemCount: viewModel.notes.length,
-                                    itemBuilder: (context, index) {
-                                      // 일반 노트 아이템
-                                      final note = viewModel.notes[index];
-                                      return NoteListItem(
-                                        note: note,
-                                        onNoteTapped: (note) => _navigateToNoteDetail(context, note),
-                                        onFavoriteToggled: (noteId, isFavorite) {
-                                          viewModel.toggleFavorite(noteId, isFavorite);
-                                        },
-                                        onDismissed: () {
-                                          if (note.id != null) {
-                                            viewModel.deleteNote(note.id!);
-                                          }
-                                        },
-                                      );
-                                    },
-                                  ),
+                                backgroundColor: Colors.white,
+                                onRefresh: () async {
+                                  await viewModel.refreshNotes();
+                                },
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.only(top: 16, bottom: 80),
+                                  itemCount: viewModel.notes.length,
+                                  itemBuilder: (context, index) {
+                                    final note = viewModel.notes[index];
+                                    
+                                    return Padding(
+                                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                      child: GestureDetector(
+                                        onTap: () => _navigateToNoteDetail(context, note),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(16),
+                                          child: NoteListItem(
+                                            note: note,
+                                            onNoteTapped: (note) => _navigateToNoteDetail(context, note),
+                                            onFavoriteToggled: (noteId, isFavorite) {
+                                              viewModel.toggleFavorite(noteId, isFavorite);
+                                            },
+                                            onDismissed: () {
+                                              if (note.id != null) {
+                                                viewModel.deleteNote(note.id!);
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
-                            );
-                          },
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // 스마트 노트 만들기 버튼 - 노트가 있을 때만 표시
-                            Consumer<HomeViewModel>(
-                              builder: (context, viewModel, _) {
-                                // 노트가 있을 때만 버튼 표시
-                                if (viewModel.hasNotes) {
-                                  return Column(
-                                    children: [
-                                      _isButtonDisabled()
-                                        ? Tooltip(
-                                            message: '사용량 한도 초과로 비활성화되었습니다',
-                                            child: PikaButton(
-                                              text: '스마트 노트 만들기',
-                                              variant: PikaButtonVariant.primary,
-                                              onPressed: null, // 비활성화
-                                            ),
-                                          )
-                                        : PikaButton(
-                                            text: '스마트 노트 만들기',
-                                            variant: PikaButtonVariant.primary,
-                                            onPressed: () => _showImagePickerBottomSheet(context),
-                                          ),
-                                      const SizedBox(height: 16),
-                                    ],
-                                  );
-                                }
-                                return const SizedBox.shrink(); // 노트가 없으면 버튼 숨김
-                              },
                             ),
-                          ],
-                        ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // 스마트 노트 만들기 버튼 - 노트가 있을 때만 표시
+                                Consumer<HomeViewModel>(
+                                  builder: (context, viewModel, _) {
+                                    // 노트가 있을 때만 버튼 표시
+                                    if (viewModel.hasNotes) {
+                                      return Column(
+                                        children: [
+                                          _isButtonDisabled()
+                                            ? Tooltip(
+                                                message: '사용량 한도 초과로 비활성화되었습니다',
+                                                child: PikaButton(
+                                                  text: '스마트 노트 만들기',
+                                                  variant: PikaButtonVariant.primary,
+                                                  onPressed: null, // 비활성화
+                                                ),
+                                              )
+                                            : PikaButton(
+                                                text: '스마트 노트 만들기',
+                                                variant: PikaButtonVariant.primary,
+                                                onPressed: () => _showImagePickerBottomSheet(context),
+                                              ),
+                                          const SizedBox(height: 16),
+                                        ],
+                                      );
+                                    }
+                                    return const SizedBox.shrink(); // 노트가 없으면 버튼 숨김
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      // FTUE 위젯 (첫 방문 시에만 표시) - HelpTextTooltip 대신 FTUEWidget 사용
+                      FTUEWidget(
+                        screenName: 'home',
+                        position: const EdgeInsets.only(bottom: 150, left: 16, right: 16),
+                        onDismiss: () {
+                          setState(() {}); // UI 갱신
+                        },
                       ),
                     ],
                   ),
-                  // 홈 화면 도움말 툴팁 (첫 방문 시에만 표시)
-                  if (_showHomeHelp)
-                    Positioned(
-                      bottom: 150,
-                      left: 16,
-                      right: 16,
-                      child: HelpTextTooltip(
-                        text: '피카북에 오신 걸 환영해요! 🎉',
-                        description: '4월 30일까지, 교재 이미지 100장까지 무료로 스마트 학습 노트를 만들어보실 수 있어요.\n사용량은 [설정]에서 언제든 확인하실 수 있어요!',
-                        image: Image.asset(
-                          'assets/images/home_help.png',
-                          fit: BoxFit.contain,
-                          width: MediaQuery.of(context).size.width - 64, // 화면 너비에 맞게 조정 (패딩 고려)
-                        ),
-                        showTooltip: true,
-                        onDismiss: _handleHelpDismiss,
-                        tooltipWidth: MediaQuery.of(context).size.width - 32,
-                        spacing: 8.0,
-                        style: HelpTextTooltipStyle.primary,
-                        titleStyle: TypographyTokens.subtitle1.copyWith(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: ColorTokens.primary,
-                        ),
-                        descriptionStyle: const TextStyle(
-                          fontSize: 14,
-                          color: ColorTokens.textPrimary,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+                );
+              },
             ),
           );
         }
@@ -658,5 +589,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         });
       }
     }
+  }
+
+  // 설정 화면으로 이동
+  void _navigateToSettings(BuildContext context) {
+    Navigator.of(context).pushNamed('/settings');
   }
 } 
