@@ -8,16 +8,16 @@ import '../../core/models/note.dart';
 import '../../core/models/dictionary.dart';
 import '../../core/services/content/flashcard_service.dart' hide debugPrint;
 import '../../core/services/media/tts_service.dart';
-import '../../widgets/dot_loading_indicator.dart';
+import '../../core/widgets/loading_experience.dart';
 import '../../core/services/dictionary/external_cn_dictionary_service.dart';
 import 'flashcard_ui.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
-import '../../widgets/common/pika_app_bar.dart';
+import '../../core/widgets/pika_app_bar.dart';
 import '../../core/services/storage/unified_cache_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
-import '../../widgets/common/usage_dialog.dart';
+import '../../core/widgets/usage_dialog.dart';
 
 /// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
 /// 플래시카드 UI interaction 담당 (swipe, flip, tts, delete )
@@ -92,34 +92,24 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
   /// 플래시카드 목록 로드
   Future<void> _loadFlashCards() async {
-    setState(() => _isLoading = true);
-
     try {
       // noteId가 있으면 해당 노트의 플래시카드만, 없으면 모든 플래시카드 로드
       _flashCards = widget.noteId != null
           ? await _flashCardService.getFlashCardsForNote(widget.noteId!)
           : await _flashCardService.getAllFlashCards();
 
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _currentIndex = 0;
-          _isFlipped = false;
-        });
+      // 초기화 인덱스 설정
+      _currentIndex = 0;
+      _isFlipped = false;
 
-        // 플래시카드가 있으면 첫 번째 카드의 복습 횟수 업데이트
-        if (_flashCards.isNotEmpty) _updateFlashCardReviewCount();
+      // 플래시카드가 있으면 첫 번째 카드의 복습 횟수 업데이트
+      if (_flashCards.isNotEmpty) {
+        await _updateFlashCardReviewCount();
       }
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _error = '플래시카드를 불러오는 중 오류가 발생했습니다: $e';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('플래시카드를 불러오는 중 오류가 발생했습니다: $e')),
-        );
-      }
+      debugPrint('플래시카드를 불러오는 중 오류가 발생했습니다: $e');
+      // 에러를 LoadingExperience에서 처리하기 위해 에러를 throw
+      throw '플래시카드를 불러오는 중 오류가 발생했습니다: $e';
     }
   }
 
@@ -512,248 +502,251 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
         body: Stack(
           children: [
             // 메인 카드 화면
-            _isLoading
-              ? const Center(child: DotLoadingIndicator(message: '플래시카드 로딩 중...'))
-              : _error != null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline,
-                            size: SpacingTokens.iconSizeXLarge, 
-                            color: ColorTokens.error),
-                        SizedBox(height: SpacingTokens.md),
-                        Text(
-                          _error!, 
-                          textAlign: TextAlign.center,
-                          style: TypographyTokens.body1.copyWith(
-                            color: ColorTokens.textPrimary,
-                          ),
+            LoadingExperience(
+              loadingMessage: '플래시카드 로딩 중...',
+              loadData: _loadFlashCards,
+              errorWidgetBuilder: (error, retry) => Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error_outline,
+                        size: SpacingTokens.iconSizeXLarge, 
+                        color: ColorTokens.error),
+                    SizedBox(height: SpacingTokens.md),
+                    Text(
+                      error.toString(), 
+                      textAlign: TextAlign.center,
+                      style: TypographyTokens.body1.copyWith(
+                        color: ColorTokens.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: SpacingTokens.md),
+                    ElevatedButton(
+                      onPressed: retry,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: ColorTokens.primary,
+                        foregroundColor: ColorTokens.textLight,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: SpacingTokens.md,
+                          vertical: SpacingTokens.sm,
                         ),
-                        SizedBox(height: SpacingTokens.md),
-                        ElevatedButton(
-                          onPressed: _loadFlashCards,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: ColorTokens.primary,
-                            foregroundColor: ColorTokens.textLight,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: SpacingTokens.md,
-                              vertical: SpacingTokens.sm,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-                            ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+                        ),
+                      ),
+                      child: Text(
+                        '다시 시도',
+                        style: TypographyTokens.button.copyWith(
+                          color: ColorTokens.textLight,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              emptyStateWidget: Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // 이미지
+                      Image.asset(
+                        'assets/images/flashcard_zero.png',
+                        width: 160,
+                        height: 232,
+                        fit: BoxFit.contain,
+                      ),
+                      SizedBox(height: SpacingTokens.lg),
+                      
+                      // 제목 텍스트
+                      Text(
+                        '잘 안외워지는 단어는,\n플래시카드로 만들어봐요!',
+                        textAlign: TextAlign.center,
+                        style: TypographyTokens.subtitle1.copyWith(
+                          color: ColorTokens.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: SpacingTokens.sm),
+                      
+                      // 설명 텍스트
+                      Text(
+                        '스마트 노트에서 단어를 선택해\n플래시카드로 추가하세요.',
+                        textAlign: TextAlign.center,
+                        style: TypographyTokens.body2.copyWith(
+                          color: ColorTokens.textSecondary,
+                        ),
+                      ),
+                      SizedBox(height: SpacingTokens.xl),
+                      
+                      // 노트로 돌아가기 버튼
+                      GestureDetector(
+                        onTap: () async {
+                          // TTS 실행 중인 경우 먼저 중지
+                          if (_isSpeaking) {
+                            await _ttsService.stop();
+                            _isSpeaking = false;
+                          }
+                          
+                          if (widget.noteId != null && mounted) {
+                            // 노트 화면으로 돌아가면서 카드 개수 0 전달
+                            Navigator.of(context).pop({
+                              'flashcardCount': 0,
+                              'success': true,
+                              'noteId': widget.noteId
+                            });
+                          } else {
+                            Navigator.of(context).pushReplacementNamed('/notes');
+                          }
+                        },
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: SpacingTokens.lg,
+                            vertical: SpacingTokens.sm + SpacingTokens.xs
+                          ),
+                          decoration: BoxDecoration(
+                            color: ColorTokens.primary,
+                            borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
                           ),
                           child: Text(
-                            '다시 시도',
+                            '노트로 돌아가기',
                             style: TypographyTokens.button.copyWith(
                               color: ColorTokens.textLight,
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                  )
-                : _flashCards.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 24),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // 이미지
-                              Image.asset(
-                                'assets/images/flashcard_zero.png',
-                                width: 160,
-                                height: 232,
-                                fit: BoxFit.contain,
-                              ),
-                              SizedBox(height: SpacingTokens.lg),
-                              
-                              // 제목 텍스트
-                              Text(
-                                '잘 안외워지는 단어는,\n플래시카드로 만들어봐요!',
-                                textAlign: TextAlign.center,
-                                style: TypographyTokens.subtitle1.copyWith(
-                                  color: ColorTokens.textPrimary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: SpacingTokens.sm),
-                              
-                              // 설명 텍스트
-                              Text(
-                                '스마트 노트에서 단어를 선택해\n플래시카드로 추가하세요.',
-                                textAlign: TextAlign.center,
-                                style: TypographyTokens.body2.copyWith(
-                                  color: ColorTokens.textSecondary,
-                                ),
-                              ),
-                              SizedBox(height: SpacingTokens.xl),
-                              
-                              // 노트로 돌아가기 버튼
-                              GestureDetector(
-                                onTap: () async {
-                                  // TTS 실행 중인 경우 먼저 중지
-                                  if (_isSpeaking) {
-                                    await _ttsService.stop();
-                                    _isSpeaking = false;
-                                  }
-                                  
-                                  if (widget.noteId != null && mounted) {
-                                    // 노트 화면으로 돌아가면서 카드 개수 0 전달
-                                    Navigator.of(context).pop({
-                                      'flashcardCount': 0,
-                                      'success': true,
-                                      'noteId': widget.noteId
-                                    });
-                                  } else {
-                                    Navigator.of(context).pushReplacementNamed('/notes');
-                                  }
-                                },
-                                child: Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: SpacingTokens.lg,
-                                    vertical: SpacingTokens.sm + SpacingTokens.xs
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: ColorTokens.primary,
-                                    borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-                                  ),
-                                  child: Text(
-                                    '노트로 돌아가기',
-                                    style: TypographyTokens.button.copyWith(
-                                      color: ColorTokens.textLight,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : FutureBuilder<bool>(
-                        future: _ttsService.isTtsAvailable(),
-                        builder: (context, snapshot) {
-                          final bool isTtsEnabled = snapshot.data ?? true;
-                          final String ttsTooltip = _ttsService.getTtsLimitMessage();
-                          
-                          return Padding(
-                            padding: EdgeInsets.all(SpacingTokens.md),
-                            child: CardSwiper(
-                              controller: _cardController,
-                              cardsCount: _flashCards.length,
-                              onSwipe: _onSwipe,
-                              allowedSwipeDirection: _flashCards.length == 1
-                                  ? const AllowedSwipeDirection.only(up: true)
-                                  : AllowedSwipeDirection.symmetric(
-                                      horizontal: true,
-                                      vertical: true,
-                                    ),
-                              onSwipeDirectionChange: (_, __) {},
-                              numberOfCardsDisplayed:
-                                  _flashCards.length == 1 ? 1 : 2,
-                              padding: EdgeInsets.all(SpacingTokens.lg),
-                              isLoop: _flashCards.length > 1,
-                              cardBuilder: (context, index, horizontalThreshold,
-                                  verticalThreshold) {
-                                debugPrint('CardSwiper가 카드 빌드: index=$index, 총 카드=${_flashCards.length}, 현재 인덱스=$_currentIndex');
-                                
-                                final double scale;
-                                final double yOffset;
-
-                                if (_flashCards.length == 1) {
-                                  scale = 1.0;
-                                  yOffset = 0.0;
-                                  debugPrint('카드 1장만 표시: 스케일=$scale, 오프셋=$yOffset');
-                                } else {
-                                  final int indexDiff = (index - _currentIndex).abs();
-                                  scale = index == _currentIndex
-                                      ? 1.0
-                                      : 1.0 - (0.05 * indexDiff);
-                                  yOffset = index == _currentIndex
-                                      ? 0
-                                      : 20.0 * indexDiff;
-                                  debugPrint('여러 카드 표시: 인덱스=$index, 현재 인덱스=$_currentIndex, 스케일=$scale, 오프셋=$yOffset');
-                                }
-
-                                return FlashCardUI.buildFlashCard(
-                                  card: _flashCards[index],
-                                  index: index,
-                                  currentIndex: _currentIndex,
-                                  flipCardKey: index == _currentIndex
-                                      ? _flipCardKey
-                                      : null,
-                                  isSpeaking: _isSpeaking,
-                                  onFlip: () {
-                                    setState(() => _isFlipped = !_isFlipped);
-                                  },
-                                  onSpeak: _speakText,
-                                  onStopSpeaking: _stopSpeaking,
-                                  getNextCardInfo: _getNextCardInfo,
-                                  getPreviousCardInfo: _getPreviousCardInfo,
-                                  onWordTap: _searchWordInDictionary,
-                                  onDelete: _deleteCurrentCard,
-                                  scale: scale,
-                                  offset: Offset(0, yOffset),
-                                  isTtsEnabled: isTtsEnabled,
-                                  ttsTooltip: !isTtsEnabled ? ttsTooltip : null,
-                                );
-                              },
-                            ),
-                          );
-                        },
-                      ),
-            // 삭제 안내 텍스트 (가장 하단 레이어에 배치)
-            if (!_isLoading && _error == null && _flashCards.isNotEmpty)
-              Positioned(
-                top: SpacingTokens.xs,
-                left: 0,
-                right: 0,
-                // z-index 조정을 위해 Material 위젯 추가
-                child: Material(
-                  color: ColorTokens.surface.withOpacity(0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // 삭제 버튼
-                      Icon(
-                        Icons.delete_outline,
-                        color: ColorTokens.disabled,
-                        size: SpacingTokens.iconSizeMedium,
-                      ),
-                      SizedBox(height: SpacingTokens.xs/2),
-                      // 스와이프 안내 텍스트
-                      Text(
-                        '위로 스와이프 하면 삭제 됩니다.',
-                        style: TypographyTokens.caption.copyWith(
-                          color: ColorTokens.disabled,
-                        ),
-                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
                 ),
               ),
-              
-            // 이동 안내 텍스트 (가장 하단 레이어에 배치)
-            if (!_isLoading && _error == null && _flashCards.isNotEmpty && _flashCards.length > 1)
-              Positioned(
-                bottom: SpacingTokens.xl,
-                left: 0,
-                right: 0,
-                // z-index 조정을 위해 Material 위젯 추가
-                child: Material(
-                  color: ColorTokens.surface.withOpacity(0),
-                  child: Text(
-                    '좌우로 스와이프 해서 다음 카드로 이동',
-                    style: TypographyTokens.caption.copyWith(
-                      color: ColorTokens.disabled,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+              isEmptyState: () => _flashCards.isEmpty,
+              contentBuilder: (context) => FutureBuilder<bool>(
+                future: _ttsService.isTtsAvailable(),
+                builder: (context, snapshot) {
+                  final bool isTtsEnabled = snapshot.data ?? true;
+                  final String ttsTooltip = _ttsService.getTtsLimitMessage();
+                  
+                  return Stack(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.all(SpacingTokens.md),
+                        child: CardSwiper(
+                          controller: _cardController,
+                          cardsCount: _flashCards.length,
+                          onSwipe: _onSwipe,
+                          allowedSwipeDirection: _flashCards.length == 1
+                              ? const AllowedSwipeDirection.only(up: true)
+                              : AllowedSwipeDirection.symmetric(
+                                  horizontal: true,
+                                  vertical: true,
+                                ),
+                          onSwipeDirectionChange: (_, __) {},
+                          numberOfCardsDisplayed:
+                              _flashCards.length == 1 ? 1 : 2,
+                          padding: EdgeInsets.all(SpacingTokens.lg),
+                          isLoop: _flashCards.length > 1,
+                          cardBuilder: (context, index, horizontalThreshold,
+                              verticalThreshold) {
+                            debugPrint('CardSwiper가 카드 빌드: index=$index, 총 카드=${_flashCards.length}, 현재 인덱스=$_currentIndex');
+                            
+                            final double scale;
+                            final double yOffset;
+
+                            if (_flashCards.length == 1) {
+                              scale = 1.0;
+                              yOffset = 0.0;
+                              debugPrint('카드 1장만 표시: 스케일=$scale, 오프셋=$yOffset');
+                            } else {
+                              final int indexDiff = (index - _currentIndex).abs();
+                              scale = index == _currentIndex
+                                  ? 1.0
+                                  : 1.0 - (0.05 * indexDiff);
+                              yOffset = index == _currentIndex
+                                  ? 0
+                                  : 20.0 * indexDiff;
+                              debugPrint('여러 카드 표시: 인덱스=$index, 현재 인덱스=$_currentIndex, 스케일=$scale, 오프셋=$yOffset');
+                            }
+
+                            return FlashCardUI.buildFlashCard(
+                              card: _flashCards[index],
+                              index: index,
+                              currentIndex: _currentIndex,
+                              flipCardKey: index == _currentIndex
+                                  ? _flipCardKey
+                                  : null,
+                              isSpeaking: _isSpeaking,
+                              onFlip: () {
+                                setState(() => _isFlipped = !_isFlipped);
+                              },
+                              onSpeak: _speakText,
+                              onStopSpeaking: _stopSpeaking,
+                              getNextCardInfo: _getNextCardInfo,
+                              getPreviousCardInfo: _getPreviousCardInfo,
+                              onWordTap: _searchWordInDictionary,
+                              onDelete: _deleteCurrentCard,
+                              scale: scale,
+                              offset: Offset(0, yOffset),
+                              isTtsEnabled: isTtsEnabled,
+                              ttsTooltip: !isTtsEnabled ? ttsTooltip : null,
+                            );
+                          },
+                        ),
+                      ),
+                
+                      // 삭제 안내 텍스트 (상단)
+                      Positioned(
+                        top: SpacingTokens.xs,
+                        left: 0,
+                        right: 0,
+                        child: Material(
+                          color: ColorTokens.surface.withOpacity(0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // 삭제 버튼
+                              Icon(
+                                Icons.delete_outline,
+                                color: ColorTokens.disabled,
+                                size: SpacingTokens.iconSizeMedium,
+                              ),
+                              SizedBox(height: SpacingTokens.xs/2),
+                              // 스와이프 안내 텍스트
+                              Text(
+                                '위로 스와이프 하면 삭제 됩니다.',
+                                style: TypographyTokens.caption.copyWith(
+                                  color: ColorTokens.disabled,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      // 이동 안내 텍스트 (하단)
+                      if (_flashCards.length > 1)
+                        Positioned(
+                          bottom: SpacingTokens.xl,
+                          left: 0,
+                          right: 0,
+                          child: Material(
+                            color: ColorTokens.surface.withOpacity(0),
+                            child: Text(
+                              '좌우로 스와이프 해서 다음 카드로 이동',
+                              style: TypographyTokens.caption.copyWith(
+                                color: ColorTokens.disabled,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
+            ),
           ],
         ),
       ),

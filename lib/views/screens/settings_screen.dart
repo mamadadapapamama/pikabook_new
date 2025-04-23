@@ -6,10 +6,10 @@ import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/utils/language_constants.dart';
-import '../../widgets/dot_loading_indicator.dart';
-import '../../widgets/common/pika_button.dart';
-import '../../widgets/common/pika_app_bar.dart';
-import '../../widgets/common/usage_dialog.dart';
+import '../../core/widgets/loading_experience.dart';
+import '../../core/widgets/pika_button.dart';
+import '../../core/widgets/pika_app_bar.dart';
+import '../../core/widgets/usage_dialog.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/common/plan_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
@@ -167,12 +167,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: PikaAppBar.settings(
         onBackPressed: () => Navigator.of(context).pop(),
       ),
-      body: _isLoading
-          ? const Center(child: DotLoadingIndicator(
-              message: '설정 로딩 중...',
-              dotColor: ColorTokens.primary,
-            ))
-          : _buildProfileContent(),
+      body: LoadingExperience(
+        loadingMessage: '설정 로딩 중...',
+        loadData: () async {
+          if (!_isLoading) {
+            await _loadUserData();
+            await _loadUserPreferences();
+            await _loadPlanInfo();
+          }
+        },
+        contentBuilder: (context) => _buildProfileContent(),
+      ),
     );
   }
 
