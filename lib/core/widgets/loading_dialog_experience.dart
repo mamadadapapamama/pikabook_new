@@ -26,10 +26,16 @@ class NoteCreationLoader {
       timeDilation = 1.0;
     }
     
-    if (!context.mounted) return;
+    if (!context.mounted) {
+      debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
+      return;
+    }
     
-    // 기존 로더가 있으면 먼저 제거 (중복 방지)
-    hide(context);
+    // 이미 로더가 표시되고 있는지 확인
+    if (_isVisible) {
+      debugPrint('로더가 이미 표시되고 있습니다');
+      return;
+    }
     
     _isVisible = true;
     
@@ -37,84 +43,100 @@ class NoteCreationLoader {
     _timeoutTimer?.cancel();
     if (timeoutSeconds > 0) {
       _timeoutTimer = Timer(Duration(seconds: timeoutSeconds), () {
-        if (context.mounted) hide(context);
+        // 타임아웃 시 안전하게 제거
+        if (_isVisible) {
+          debugPrint('로더가 타임아웃으로 자동 종료됨');
+          if (context.mounted) hide(context);
+        }
       });
     }
     
     try {
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        barrierColor: Colors.black.withOpacity(0.5),
-        useSafeArea: true,
-        builder: (context) => WillPopScope(
-          onWillPop: () async => false, // 뒤로 가기 방지
-          child: Material(
-            type: MaterialType.transparency,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-                width: 300,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 도트 로딩 인디케이터
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+      // WidgetsBinding을 사용하여 다음 프레임에서 다이얼로그 표시
+      // (애니메이션 중첩 방지)
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!context.mounted || !_isVisible) return;
+        
+        try {
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            barrierColor: Colors.black.withOpacity(0.5),
+            useSafeArea: true,
+            builder: (dialogContext) => WillPopScope(
+              onWillPop: () async => false, // 뒤로 가기 방지
+              child: Material(
+                type: MaterialType.transparency,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+                    width: 300,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        // 도트 애니메이션
-                        const DotLoadingIndicator(),
-                        
-                        const SizedBox(width: 12),
-                        
-                        // 피카북 새 캐릭터 (고정된 상태)
-                        Image.asset(
-                          'assets/images/pikabook_bird.png',
-                          width: 40,
-                          height: 40,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
+                        // 도트 로딩 인디케이터
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // 도트 애니메이션
+                            const DotLoadingIndicator(),
+                            
+                            const SizedBox(width: 12),
+                            
+                            // 피카북 새 캐릭터 (고정된 상태)
+                            Image.asset(
+                              'assets/images/pikabook_bird.png',
                               width: 40,
                               height: 40,
-                              decoration: BoxDecoration(
-                                color: ColorTokens.primary.withOpacity(0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.auto_awesome,
-                                color: ColorTokens.primary,
-                                size: 24,
-                              ),
-                            );
-                          },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: ColorTokens.primary.withOpacity(0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.auto_awesome,
+                                    color: ColorTokens.primary,
+                                    size: 24,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 24),
+                        
+                        // 텍스트 섹션
+                        Text(
+                          message,
+                          style: TypographyTokens.body1.copyWith(
+                            height: 1.4,
+                            color: ColorTokens.textPrimary,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
-                    
-                    const SizedBox(height: 24),
-                    
-                    // 텍스트 섹션
-                    Text(
-                      message,
-                      style: TypographyTokens.body1.copyWith(
-                        height: 1.4,
-                        color: ColorTokens.textPrimary,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-      ).then((_) {
-        _timeoutTimer?.cancel();
-        _isVisible = false;
+          ).then((_) {
+            _timeoutTimer?.cancel();
+            _isVisible = false;
+          });
+        } catch (dialogError) {
+          debugPrint('다이얼로그 표시 중 내부 오류: $dialogError');
+          _timeoutTimer?.cancel();
+          _isVisible = false;
+        }
       });
     } catch (e) {
       debugPrint('노트 생성 로더 표시 중 오류: $e');
@@ -129,7 +151,11 @@ class NoteCreationLoader {
     
     try {
       // 안전하게 다이얼로그 닫기
-      Navigator.of(context, rootNavigator: true).pop();
+      if (Navigator.of(context, rootNavigator: true).canPop()) {
+        Navigator.of(context, rootNavigator: true).pop();
+      } else {
+        debugPrint('숨길 다이얼로그가 없습니다');
+      }
     } catch (e) {
       debugPrint('노트 생성 로더 숨기기 중 오류: $e');
     } finally {

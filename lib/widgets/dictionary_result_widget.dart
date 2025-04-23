@@ -5,8 +5,8 @@ import '../core/theme/tokens/color_tokens.dart';
 import '../core/theme/tokens/typography_tokens.dart';
 import '../core/theme/tokens/spacing_tokens.dart';
 import '../core/theme/tokens/ui_tokens.dart';
-import '../widgets/common/pika_button.dart';
-import '../widgets/common/tts_button.dart';
+import '../core/widgets/pika_button.dart';
+import '../core/widgets/tts_button.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
 
