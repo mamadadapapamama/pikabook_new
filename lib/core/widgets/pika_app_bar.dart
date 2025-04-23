@@ -9,6 +9,7 @@ import '../../widgets/flashcard_counter_badge.dart';
 
 /// 공통 앱바 위젯
 /// 모든 스크린에서 재사용할 수 있도록 설계된 커스터마이저블 앱바
+
 class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   // 공통 속성
   final String? title;
@@ -26,7 +27,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Widget? bottom;
   final bool automaticallyImplyLeading;
   final double bottomHeight;
-  final double progress;
   
   // 플래시카드 카운터 관련 속성
   final int? flashcardCount;
@@ -58,8 +58,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.currentPageIndex,
     this.totalPages,
     this.automaticallyImplyLeading = true,
-    this.bottomHeight = 2,
-    this.progress = 0,
+    this.bottomHeight = 16,
   }) : super(key: key);
 
   /// 홈 스크린용 앱바 팩토리 생성자
@@ -71,7 +70,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       showLogo: true,
       noteSpaceName: noteSpaceName,
       backgroundColor: UITokens.screenBackground,
-      height: 100,
+      height: 112,
       actions: [
         Padding(
           padding: EdgeInsets.only(right: SpacingTokens.md),
@@ -227,25 +226,20 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               ? _buildLogoTitle(noteSpaceName)
               : null,
       actions: actions,
-      bottom: progress > 0 
+      bottom: bottom != null
           ? PreferredSize(
               preferredSize: Size.fromHeight(bottomHeight),
-              child: _buildProgressBar(context, progress),
+              child: bottom!,
             )
-          : bottom != null
+          : showBorder
               ? PreferredSize(
-                  preferredSize: Size.fromHeight(bottomHeight),
-                  child: bottom!,
+                  preferredSize: Size.fromHeight(1.0),
+                  child: Container(
+                    height: 1.0,
+                    color: Colors.grey.withOpacity(0.1),
+                  ),
                 )
-              : showBorder
-                  ? PreferredSize(
-                      preferredSize: Size.fromHeight(1.0),
-                      child: Container(
-                        height: 1.0,
-                        color: Colors.grey.withOpacity(0.1),
-                      ),
-                    )
-                  : null,
+              : null,
     );
 
     return Container(
@@ -293,29 +287,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-      ],
-    );
-  }
-
-  /// 프로그레스 바 위젯 빌드
-  Widget _buildProgressBar(BuildContext context, double progress) {
-    // progress는 0.0 ~ 1.0 사이 값
-    final double clampedProgress = progress.clamp(0.0, 1.0);
-    
-    return Stack(
-      children: [
-        // 배경 (회색 배경)
-        Container(
-          width: double.infinity,
-          height: bottomHeight,
-          color: ColorTokens.divider,
-        ),
-        // 진행 상태 (오렌지색)
-        Container(
-          width: MediaQuery.of(context).size.width * clampedProgress,
-          height: bottomHeight,
-          color: ColorTokens.primary,
-        ),
       ],
     );
   }

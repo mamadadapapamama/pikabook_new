@@ -17,7 +17,6 @@ import '../../widgets/image_picker_bottom_sheet.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/widgets/pika_button.dart';
-import '../../core/widgets/help_text_tooltip.dart';
 import '../../core/widgets/marketing_campaign_widget.dart';  // 마케팅 캠페인 위젯 추가
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
@@ -61,13 +60,11 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final UserPreferencesService _userPreferences = UserPreferencesService();
   final UsageLimitService _usageLimitService = UsageLimitService();
-  final MarketingCampaignService _marketingService = MarketingCampaignService();  // 마케팅 캠페인 서비스 추가
+  final MarketingCampaignService _marketingService = MarketingCampaignService();
   String _noteSpaceName = '';
-  late AnimationController _animationController;
-  late Animation<double> _animation;
   
   // 사용량 관련 상태 변수
   bool _hasCheckedUsage = false;
@@ -89,26 +86,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     
     // 마케팅 캠페인 서비스 초기화
     _initializeMarketingService();
-    
-    // 애니메이션 컨트롤러 초기화
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
-    
-    // 위아래로 움직이는 애니메이션 설정
-    _animation = Tween<double>(
-      begin: -4.0,
-      end: 4.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ))..addListener(() {
-      setState(() {});
-    });
-    
-    // 애니메이션 반복 설정
-    _animationController.repeat(reverse: true);
     
     // Route 변경 감지를 위한 리스너 추가
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -134,7 +111,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void dispose() {
     // 리스너 제거
     _viewModel?.removeListener(_onViewModelChanged);
-    _animationController.dispose();
     
     // WidgetsBinding 옵저버 제거
     WidgetsBinding.instance.removeObserver(this);
@@ -173,69 +149,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
           return Scaffold(
             backgroundColor: const Color(0xFFFFF9F1), // Figma 디자인의 #FFF9F1 배경색 적용
-            appBar: AppBar(
-              backgroundColor: UITokens.screenBackground,
-              elevation: 0.5,
-              title: GestureDetector(
-                onTap: _showNoteSpaceOptions,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // 로고와 노트스페이스 이름을 상하 정렬
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // 로고
-                        SvgPicture.asset(
-                          'assets/images/pikabook_textlogo_primary.svg',
-                          height: 24,
-                          width: 120,
-                        ),
-                        const SizedBox(height: 4),
-                        // 노트스페이스 이름
-                        Row(
-                          children: [
-                            Text(
-                              _noteSpaceName.isNotEmpty ? _noteSpaceName : '로딩 중...',
-                              style: GoogleFonts.poppins(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF0E2823), // #0E2823 (Figma 디자인 기준)
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const Icon(
-                              Icons.arrow_drop_down_rounded,
-                              color: Color(0xFF0E2823),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 16.0),
-                  child: GestureDetector(
-                    onTap: () => _navigateToSettings(context),
-                    child: SvgPicture.asset(
-                      'assets/images/icon_profile.svg',
-                      width: 24,
-                      height: 24,
-                      color: const Color(0xFF226357), // #226357 (Figma 디자인 기준)
-                    ),
-                  ),
-                ),
-              ],
-              toolbarHeight: 80,
-              leadingWidth: 0,
-              titleSpacing: 24,
-              centerTitle: false,
+            appBar: PikaAppBar.home(
+              noteSpaceName: _noteSpaceName.isNotEmpty ? _noteSpaceName : '로딩 중...',
+              onSettingsPressed: () => _navigateToSettings(context),
             ),
             body: Consumer<HomeViewModel>(
               builder: (context, viewModel, _) {
@@ -266,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   await viewModel.refreshNotes();
                                 },
                                 child: ListView.builder(
-                                  padding: const EdgeInsets.only(top: 16, bottom: 80),
+                                  padding: const EdgeInsets.only(top: 16, bottom: 16),
                                   itemCount: viewModel.notes.length,
                                   itemBuilder: (context, index) {
                                     final note = viewModel.notes[index];
@@ -295,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             ),
                           ),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -470,6 +386,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       );
     }
   }
+// zero state 디자인 위젯
 
   Widget _buildZeroState(BuildContext context) {
     return Center(

@@ -14,6 +14,7 @@ import '../../core/services/media/tts_service.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 // debugPrint 함수 - 커스텀 구현
 void debugPrint(String message) {
@@ -112,7 +113,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   // TTS 초기화
   void _initializeTts() {
     _ttsService.init();
-    debugPrint("[NoteDetailViewModel] TTS 서비스 초기화됨");
+    if (kDebugMode) {
+      debugPrint("[NoteDetailViewModel] TTS 서비스 초기화됨");
+    }
   }
   
   // 리소스 정리
@@ -141,12 +144,16 @@ class NoteDetailViewModel extends ChangeNotifier {
   
   // 노트 로드 메서드
   Future<void> loadNoteFromFirestore() async {
-    debugPrint("[NoteDetailViewModel] Firestore에서 노트 로드 시작: $_noteId");
+    if (kDebugMode) {
+      debugPrint("[NoteDetailViewModel] Firestore에서 노트 로드 시작: $_noteId");
+    }
     
     try {
       Note? loadedNote = await _noteService.getNoteById(_noteId);
       if (loadedNote != null) {
-        debugPrint("[NoteDetailViewModel] 노트 로드 성공: ${loadedNote.id}, 플래시카드 수: ${loadedNote.flashcardCount}");
+        if (kDebugMode) {
+          debugPrint("[NoteDetailViewModel] 노트 로드 성공: ${loadedNote.id}, 플래시카드 수: ${loadedNote.flashcardCount}");
+        }
         
         _note = loadedNote;
         _isLoading = false;
@@ -158,14 +165,18 @@ class NoteDetailViewModel extends ChangeNotifier {
           loadFlashcards();
         }
       } else {
-        debugPrint("[NoteDetailViewModel] 노트를 찾을 수 없음: $_noteId");
+        if (kDebugMode) {
+          debugPrint("[NoteDetailViewModel] 노트를 찾을 수 없음: $_noteId");
+        }
         _isLoading = false;
         _error = "노트를 찾을 수 없습니다.";
         notifyListeners();
       }
     } catch (e, stackTrace) {
-      debugPrint("[NoteDetailViewModel] 노트 로드 중 오류 발생: $e");
-      debugPrint(stackTrace.toString());
+      if (kDebugMode) {
+        debugPrint("[NoteDetailViewModel] 노트 로드 중 오류 발생: $e");
+        debugPrint(stackTrace.toString());
+      }
       _isLoading = false;
       _error = "노트 로드 중 오류가 발생했습니다: $e";
       notifyListeners();
@@ -174,7 +185,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   
   // 초기 페이지 로드
   Future<void> loadInitialPages() async {
-    debugPrint("🔄 NoteDetailViewModel: loadInitialPages 시작");
+    if (kDebugMode) {
+      debugPrint("🔄 NoteDetailViewModel: loadInitialPages 시작");
+    }
     
     _isLoading = true;
     _error = null;
@@ -186,7 +199,9 @@ class NoteDetailViewModel extends ChangeNotifier {
       
       // 로드된 페이지가 없으면 빈 리스트로 설정하여 로딩 상태 해제
       if (pages.isEmpty) {
-        debugPrint("⚠️ NoteDetailViewModel: 로드된 페이지가 없습니다.");
+        if (kDebugMode) {
+          debugPrint("⚠️ NoteDetailViewModel: 로드된 페이지가 없습니다.");
+        }
         _pages = pages;
         _isLoading = false;
         notifyListeners();
@@ -202,14 +217,16 @@ class NoteDetailViewModel extends ChangeNotifier {
           if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
             isProcessed = true;
           } else {
-        try {
+            try {
               // ContentManager를 통해 처리된 텍스트가 있는지 확인
               final processedText = await _contentManager.getProcessedText(page.id!);
               isProcessed = processedText != null && 
                            processedText.fullOriginalText != '___PROCESSING___' &&
                            processedText.fullOriginalText.isNotEmpty;
-        } catch (e) {
-          debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
+            } catch (e) {
+              if (kDebugMode) {
+                debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
+              }
             }
           }
           
@@ -223,7 +240,10 @@ class NoteDetailViewModel extends ChangeNotifier {
       _pages = pages;
       _isLoading = false;
       notifyListeners();
-      debugPrint("✅ NoteDetailViewModel: 페이지 로드 완료 (${pages.length}개)");
+      
+      if (kDebugMode) {
+        debugPrint("✅ NoteDetailViewModel: 페이지 로드 완료 (${pages.length}개)");
+      }
       
       // UI 업데이트 재개를 지연시켜 불필요한 업데이트 방지
       Future.delayed(Duration(milliseconds: 500), () {
@@ -238,11 +258,15 @@ class NoteDetailViewModel extends ChangeNotifier {
         _startBackgroundProcessing();
       }
       
-      // 페이지 이미지 미리 로드
-      loadAllPageImages();
+      // 페이지 이미지 미리 로드 - 로딩이 완료된 후에만 수행
+      Future.delayed(Duration(milliseconds: 300), () {
+        loadAllPageImages();
+      });
     } catch (e, stackTrace) {
-      debugPrint("❌ NoteDetailViewModel: 페이지 로드 중 오류 발생: $e");
-      debugPrint(stackTrace.toString());
+      if (kDebugMode) {
+        debugPrint("❌ NoteDetailViewModel: 페이지 로드 중 오류 발생: $e");
+        debugPrint(stackTrace.toString());
+      }
       _isLoading = false;
       _error = "페이지를 로드하는 중 오류가 발생했습니다: $e";
       notifyListeners();
@@ -250,16 +274,18 @@ class NoteDetailViewModel extends ChangeNotifier {
   }
   
   // 백그라운드에서 모든 페이지 이미지 로드
-  Future<void> loadPageImagesInBackground() async {
+  Future<void> loadAllPageImages() async {
     if (_pages == null || _pages!.isEmpty) return;
     
-    debugPrint("🔄 페이지 이미지 백그라운드 로드 시작: ${_pages!.length}개 페이지");
+    if (kDebugMode) {
+      debugPrint("🔄 페이지 이미지 백그라운드 로드 시작: ${_pages!.length}개 페이지");
+    }
     
-    // 현재 페이지의 이미지 우선 로드 (사용자에게 가장 먼저 보여야 함)
+    // 현재 페이지의 이미지 우선 로드
     if (_currentPageIndex >= 0 && _currentPageIndex < _pages!.length) {
       await _loadPageImage(_currentPageIndex);
       
-      // UI 업데이트 (현재 페이지 이미지 로드 완료 후)
+      // UI 업데이트를 최소화하기 위해 현재 페이지 로드 후 한 번만 업데이트
       if (_shouldUpdateUI) {
         notifyListeners();
       }
@@ -281,29 +307,53 @@ class NoteDetailViewModel extends ChangeNotifier {
       await Future.wait(priorityLoads);
     }
     
-    // 나머지 모든 페이지 이미지 순차적으로 로드
+    // 나머지 모든 페이지 이미지 순차적으로 로드 - 딜레이를 늘리고 UI 업데이트를 줄임
     for (int i = 0; i < _pages!.length; i++) {
       if (i != _currentPageIndex && 
           i != _currentPageIndex + 1 && 
           i != _currentPageIndex - 1) {
         await _loadPageImage(i);
         
-        // 로드 간 짧은 딜레이 추가 (시스템 부하 방지)
-        await Future.delayed(Duration(milliseconds: 50));
+        // 로드 간 딜레이 추가 (시스템 부하 방지)
+        await Future.delayed(Duration(milliseconds: 100));
       }
     }
     
-    debugPrint("✅ 모든 페이지 이미지 로드 완료");
+    if (kDebugMode) {
+      debugPrint("✅ 모든 페이지 이미지 로드 완료");
+    }
+  }
+  
+  // 백그라운드 처리 시작
+  void _startBackgroundProcessing() {
+    if (_pages == null || _pages!.isEmpty) return;
+    
+    if (kDebugMode) {
+      debugPrint("🔄 백그라운드 처리 시작: ${_pages!.length}개 페이지");
+    }
+    
+    // 첫 번째 페이지부터 순차적으로 세그먼트 처리
+    _isProcessingSegments = true;
+    _processPageSegments(0);
+    
+    // 이미지 로드는 약간 지연시켜 실행 (로딩 화면에서의 처리 부하 분산)
+    Future.delayed(Duration(milliseconds: 500), () {
+      loadAllPageImages();
+    });
   }
   
   // 플래시카드 로드
   Future<void> loadFlashcards() async {
     if (_noteId.isEmpty) {
-      debugPrint("[NoteDetailViewModel] 플래시카드 로드 실패: noteId가 없음");
+      if (kDebugMode) {
+        debugPrint("[NoteDetailViewModel] 플래시카드 로드 실패: noteId가 없음");
+      }
       return;
     }
 
-    debugPrint("[NoteDetailViewModel] 플래시카드 로드 시작: noteId = $_noteId");
+    if (kDebugMode) {
+      debugPrint("[NoteDetailViewModel] 플래시카드 로드 시작: noteId = $_noteId");
+    }
   
     final flashCardService = FlashCardService();
   
@@ -311,7 +361,9 @@ class NoteDetailViewModel extends ChangeNotifier {
       // 먼저 Firestore에서 플래시카드 로드 시도
       var firestoreFlashcards = await flashCardService.getFlashCardsForNote(_noteId);
       if (firestoreFlashcards != null && firestoreFlashcards.isNotEmpty) {
-        debugPrint("[NoteDetailViewModel] Firestore에서 ${firestoreFlashcards.length}개의 플래시카드 로드 성공");
+        if (kDebugMode) {
+          debugPrint("[NoteDetailViewModel] Firestore에서 ${firestoreFlashcards.length}개의 플래시카드 로드 성공");
+        }
         _flashCards = firestoreFlashcards;
         _loadingFlashcards = false;
         
@@ -322,41 +374,55 @@ class NoteDetailViewModel extends ChangeNotifier {
         if (_note != null) {
           _note = _note!.copyWith(flashcardCount: _flashCards.length);
         }
-        debugPrint("[NoteDetailViewModel] 노트 객체의 flashcardCount 업데이트: ${_flashCards.length}");
+        if (kDebugMode) {
+          debugPrint("[NoteDetailViewModel] 노트 객체의 flashcardCount 업데이트: ${_flashCards.length}");
+        }
         notifyListeners();
         return;
       }
 
       // Firestore에서 로드 실패한 경우 캐시에서 로드 시도
-      debugPrint("[NoteDetailViewModel] Firestore에서 플래시카드를 찾지 못함, 캐시 확인 중");
+      if (kDebugMode) {
+        debugPrint("[NoteDetailViewModel] Firestore에서 플래시카드를 찾지 못함, 캐시 확인 중");
+      }
       var cachedFlashcards = await UnifiedCacheService().getFlashcardsByNoteId(_noteId);
       if (cachedFlashcards.isNotEmpty) {
-        debugPrint("[NoteDetailViewModel] 캐시에서 ${cachedFlashcards.length}개의 플래시카드 로드 성공");
+        if (kDebugMode) {
+          debugPrint("[NoteDetailViewModel] 캐시에서 ${cachedFlashcards.length}개의 플래시카드 로드 성공");
+        }
         _flashCards = cachedFlashcards;
         _loadingFlashcards = false;
         
-        // 캐시에서 로드된 플래시카드를 Firestore에 동기화
-        for (var card in cachedFlashcards) {
-          await flashCardService.updateFlashCard(card);
-        }
+        // 캐시에서 로드된 플래시카드를 Firestore에 동기화 - 백그라운드로 처리하여 UI 차단 방지
+        Future.microtask(() async {
+          for (var card in cachedFlashcards) {
+            await flashCardService.updateFlashCard(card);
+          }
+        });
         
         // 노트 객체의 flashcardCount 업데이트
         if (_note != null) {
           _note = _note!.copyWith(flashcardCount: _flashCards.length);
         }
-        debugPrint("[NoteDetailViewModel] 노트 객체의 flashcardCount 업데이트: ${_flashCards.length}");
+        if (kDebugMode) {
+          debugPrint("[NoteDetailViewModel] 노트 객체의 flashcardCount 업데이트: ${_flashCards.length}");
+        }
         notifyListeners();
         return;
       }
 
       // 모든 시도 실패시 빈 리스트로 초기화
-      debugPrint("[NoteDetailViewModel] 플래시카드를 찾지 못함 (Firestore 및 캐시 모두)");
+      if (kDebugMode) {
+        debugPrint("[NoteDetailViewModel] 플래시카드를 찾지 못함 (Firestore 및 캐시 모두)");
+      }
       _flashCards = [];
       _loadingFlashcards = false;
       notifyListeners();
     } catch (e, stackTrace) {
-      debugPrint("[NoteDetailViewModel] 플래시카드 로드 중 오류 발생: $e");
-      debugPrint(stackTrace.toString());
+      if (kDebugMode) {
+        debugPrint("[NoteDetailViewModel] 플래시카드 로드 중 오류 발생: $e");
+        debugPrint(stackTrace.toString());
+      }
       _flashCards = [];
       _loadingFlashcards = false;
       notifyListeners();
@@ -369,7 +435,9 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     _currentPageIndex = index;
     notifyListeners();
-    debugPrint("📄 페이지 변경됨: $_currentPageIndex");
+    if (kDebugMode) {
+      debugPrint("📄 페이지 변경됨: $_currentPageIndex");
+    }
     
     // 페이지가 변경될 때 해당 페이지의 세그먼트가 처리되지 않았다면 처리 시작
     if (_pages != null && index < _pages!.length) {
@@ -419,7 +487,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   void toggleFullTextMode() {
     _isFullTextMode = !_isFullTextMode;
     notifyListeners();
-    debugPrint("🔤 전체 텍스트 모드 변경: $_isFullTextMode");
+    if (kDebugMode) {
+      debugPrint("🔤 전체 텍스트 모드 변경: $_isFullTextMode");
+    }
   }
   
   // 즐겨찾기 토글
@@ -432,7 +502,9 @@ class NoteDetailViewModel extends ChangeNotifier {
     if (success) {
       _note = _note!.copyWith(isFavorite: newValue);
       notifyListeners();
-      debugPrint("⭐ 즐겨찾기 상태 변경: $newValue");
+      if (kDebugMode) {
+        debugPrint("⭐ 즐겨찾기 상태 변경: $newValue");
+      }
     }
     
     return success;
@@ -440,7 +512,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   
   // 플래시카드 생성
   Future<bool> createFlashCard(String front, String back, {String? pinyin}) async {
-    debugPrint("📝 플래시카드 생성 시작: $front - $back (병음: $pinyin)");
+    if (kDebugMode) {
+      debugPrint("📝 플래시카드 생성 시작: $front - $back (병음: $pinyin)");
+    }
     
     try {
       // FlashCardService를 사용하여 플래시카드 생성
@@ -456,15 +530,19 @@ class NoteDetailViewModel extends ChangeNotifier {
       _flashCards.add(newFlashCard);
       notifyListeners();
       
-      debugPrint("✅ 플래시카드 생성 완료: ${newFlashCard.front} - ${newFlashCard.back} (병음: ${newFlashCard.pinyin})");
-      debugPrint("📊 현재 플래시카드 수: ${_flashCards.length}");
+      if (kDebugMode) {
+        debugPrint("✅ 플래시카드 생성 완료: ${newFlashCard.front} - ${newFlashCard.back} (병음: ${newFlashCard.pinyin})");
+        debugPrint("📊 현재 플래시카드 수: ${_flashCards.length}");
+      }
       
       // 노트의 플래시카드 카운터 업데이트
       _updateNoteFlashcardCount();
       
       return true;
     } catch (e) {
-      debugPrint("❌ 플래시카드 생성 중 오류: $e");
+      if (kDebugMode) {
+        debugPrint("❌ 플래시카드 생성 중 오류: $e");
+      }
       return false;
     }
   }
@@ -474,7 +552,9 @@ class NoteDetailViewModel extends ChangeNotifier {
     _flashCards = updatedFlashcards;
     _updateNoteFlashcardCount();
     notifyListeners();
-    debugPrint("🔄 플래시카드 목록 업데이트됨: ${_flashCards.length}개");
+    if (kDebugMode) {
+      debugPrint("🔄 플래시카드 목록 업데이트됨: ${_flashCards.length}개");
+    }
   }
   
   // 노트 제목 업데이트
@@ -487,7 +567,9 @@ class NoteDetailViewModel extends ChangeNotifier {
       final updatedNote = await _noteService.getNoteById(_note!.id!);
       _note = updatedNote;
       notifyListeners();
-      debugPrint("✏️ 노트 제목 변경: $newTitle");
+      if (kDebugMode) {
+        debugPrint("✏️ 노트 제목 변경: $newTitle");
+      }
     }
     
     return success;
@@ -499,10 +581,14 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     try {
       await _noteService.deleteNote(_note!.id!);
-      debugPrint("🗑️ 노트 삭제 완료");
+      if (kDebugMode) {
+        debugPrint("🗑️ 노트 삭제 완료");
+      }
       return true;
     } catch (e) {
-      debugPrint("❌ 노트 삭제 중 오류: $e");
+      if (kDebugMode) {
+        debugPrint("❌ 노트 삭제 중 오류: $e");
+      }
       return false;
     }
   }
@@ -518,15 +604,23 @@ class NoteDetailViewModel extends ChangeNotifier {
       
       // 플래시카드 카운트 업데이트
       final updatedNote = note.copyWith(flashcardCount: _flashCards.length);
-      await _noteService.updateNote(updatedNote.id!, updatedNote);
+      
+      // UI 차단 방지를 위해 백그라운드에서 처리
+      Future.microtask(() async {
+        await _noteService.updateNote(updatedNote.id!, updatedNote);
+      });
       
       // 현재 노트 정보 업데이트
       _note = updatedNote;
       notifyListeners();
       
-      debugPrint("✅ 노트 플래시카드 카운트 업데이트: ${_flashCards.length}");
+      if (kDebugMode) {
+        debugPrint("✅ 노트 플래시카드 카운트 업데이트: ${_flashCards.length}");
+      }
     } catch (e) {
-      debugPrint("❌ 노트 플래시카드 카운트 업데이트 실패: $e");
+      if (kDebugMode) {
+        debugPrint("❌ 노트 플래시카드 카운트 업데이트 실패: $e");
+      }
     }
   }
   
@@ -536,31 +630,41 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     // 이미 처리 상태를 알고 있는 경우 체크 스킵
     if (_processedPageStatus.containsKey(page.id!) && _processedPageStatus[page.id!] == true) {
-      debugPrint("✅ 페이지 ${page.id}는 이미 처리되어 있어 다시 처리하지 않습니다.");
+      if (kDebugMode) {
+        debugPrint("✅ 페이지 ${page.id}는 이미 처리되어 있어 다시 처리하지 않습니다.");
+      }
       return;
     }
     
     // 특수 처리 마커가 있는지 확인하고 건너뛰기
     if (page.originalText == "___PROCESSING___") {
-      debugPrint("⚠️ 페이지 ${page.id}에 특수 처리 마커가 있습니다");
+      if (kDebugMode) {
+        debugPrint("⚠️ 페이지 ${page.id}에 특수 처리 마커가 있습니다");
+      }
       return;
     }
     
     try {
       final processedText = await _contentManager.getProcessedText(page.id!);
       if (processedText != null) {
-        debugPrint("✅ 페이지 ${page.id}의 처리된 텍스트가 있습니다: ${processedText.segments?.length ?? 0}개 세그먼트");
+        if (kDebugMode) {
+          debugPrint("✅ 페이지 ${page.id}의 처리된 텍스트가 있습니다: ${processedText.segments?.length ?? 0}개 세그먼트");
+        }
         
         // 세그먼트가 비어있는지 확인
         if (processedText.segments == null || processedText.segments!.isEmpty) {
-          debugPrint("⚠️ 페이지 ${page.id}의 세그먼트가 비어 있습니다. 처리 다시 시도");
+          if (kDebugMode) {
+            debugPrint("⚠️ 페이지 ${page.id}의 세그먼트가 비어 있습니다. 처리 다시 시도");
+          }
           // 처리 상태 기록 안함 (빈 세그먼트는 제대로 처리되지 않은 것으로 간주)
         } else {
           // 정상적으로 처리된 페이지 기록
           _processedPageStatus[page.id!] = true;
         }
       } else {
-        debugPrint("❌ 페이지 ${page.id}의 처리된 텍스트가 없습니다 - 세그먼트 처리 필요");
+        if (kDebugMode) {
+          debugPrint("❌ 페이지 ${page.id}의 처리된 텍스트가 없습니다 - 세그먼트 처리 필요");
+        }
         
         // 현재 UI 업데이트가 일시 중지된 상태인지 확인
         bool wasUpdatesPaused = !_shouldUpdateUI;
@@ -575,7 +679,9 @@ class NoteDetailViewModel extends ChangeNotifier {
           imageFile: null,
         ).then((result) {
           if (result != null) {
-            debugPrint("✅ 처리 완료: ${result.segments?.length ?? 0}개 세그먼트");
+            if (kDebugMode) {
+              debugPrint("✅ 처리 완료: ${result.segments?.length ?? 0}개 세그먼트");
+            }
             // 처리 상태 기록
             _processedPageStatus[page.id!] = true;
             
@@ -587,14 +693,18 @@ class NoteDetailViewModel extends ChangeNotifier {
               });
             }
           } else {
-            debugPrint("❌ 처리 결과가 null입니다");
+            if (kDebugMode) {
+              debugPrint("❌ 처리 결과가 null입니다");
+            }
             // 업데이트를 일시 중지한 경우만 재개
             if (!wasUpdatesPaused) {
               _resumeUIUpdates();
             }
           }
         }).catchError((e) {
-          debugPrint("❌ 처리 중 오류 발생: $e");
+          if (kDebugMode) {
+            debugPrint("❌ 처리 중 오류 발생: $e");
+          }
           // 업데이트를 일시 중지한 경우만 재개
           if (!wasUpdatesPaused) {
             _resumeUIUpdates();
@@ -602,7 +712,9 @@ class NoteDetailViewModel extends ChangeNotifier {
         });
       }
     } catch (e) {
-      debugPrint("❌ 처리된 텍스트 확인 중 오류 발생: $e");
+      if (kDebugMode) {
+        debugPrint("❌ 처리된 텍스트 확인 중 오류 발생: $e");
+      }
     }
   }
   
@@ -620,11 +732,15 @@ class NoteDetailViewModel extends ChangeNotifier {
       if (!_isProcessingSegments) {
         timer.cancel();
         _processingTimer = null;
-        debugPrint("⏱️ 처리 타이머 종료됨: 모든 세그먼트 처리 완료");
+        if (kDebugMode) {
+          debugPrint("⏱️ 처리 타이머 종료됨: 모든 세그먼트 처리 완료");
+        }
       }
     });
     
-    debugPrint("⏱️ 세그먼트 처리 타이머 시작됨 (3초 간격)");
+    if (kDebugMode) {
+      debugPrint("⏱️ 세그먼트 처리 타이머 시작됨 (3초 간격)");
+    }
   }
   
   // 페이지 세그먼트 처리
@@ -636,11 +752,15 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     try {
       final page = _pages![pageIndex];
-      debugPrint("🔄 페이지 ${pageIndex + 1} 세그먼트 처리 시작: ${page.id}");
+      if (kDebugMode) {
+        debugPrint("🔄 페이지 ${pageIndex + 1} 세그먼트 처리 시작: ${page.id}");
+      }
       
       // 이미 처리된 페이지인지 확인
       if (page.id != null && _processedPageStatus[page.id!] == true) {
-        debugPrint("✅ 페이지 ${pageIndex + 1}는 이미 처리되어 있어 건너뜁니다.");
+        if (kDebugMode) {
+          debugPrint("✅ 페이지 ${pageIndex + 1}는 이미 처리되어 있어 건너뜁니다.");
+        }
         // 다음 페이지로 진행
         if (pageIndex < _pages!.length - 1) {
           _processPageSegments(pageIndex + 1);
@@ -658,16 +778,22 @@ class NoteDetailViewModel extends ChangeNotifier {
       
       // 세그먼트 처리 결과 확인
       if (processedText != null) {
-        debugPrint("✅ 페이지 ${pageIndex + 1} 세그먼트 처리 완료 - 결과: ${processedText.segments?.length ?? 0}개 세그먼트");
+        if (kDebugMode) {
+          debugPrint("✅ 페이지 ${pageIndex + 1} 세그먼트 처리 완료 - 결과: ${processedText.segments?.length ?? 0}개 세그먼트");
+        }
         // 페이지 처리 상태 업데이트
         if (page.id != null) {
           _processedPageStatus[page.id!] = true;
         }
       } else {
-        debugPrint("⚠️ 페이지 ${pageIndex + 1} 세그먼트 처리 결과가 null입니다");
+        if (kDebugMode) {
+          debugPrint("⚠️ 페이지 ${pageIndex + 1} 세그먼트 처리 결과가 null입니다");
+        }
       }
       
-      debugPrint("✅ 페이지 ${pageIndex + 1} 세그먼트 처리 완료");
+      if (kDebugMode) {
+        debugPrint("✅ 페이지 ${pageIndex + 1} 세그먼트 처리 완료");
+      }
       
       // 다음 페이지 처리 (필요한 경우)
       if (pageIndex < _pages!.length - 1) {
@@ -683,7 +809,9 @@ class NoteDetailViewModel extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint("❌ 페이지 세그먼트 처리 중 오류: $e");
+      if (kDebugMode) {
+        debugPrint("❌ 페이지 세그먼트 처리 중 오류: $e");
+      }
       _isProcessingSegments = false;
     }
   }
@@ -702,7 +830,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   Future<void> speakCurrentPageText() async {
     final currentPage = this.currentPage;
     if (currentPage == null) {
-      debugPrint("⚠️ speakCurrentPageText: 현재 페이지가 없습니다");
+      if (kDebugMode) {
+        debugPrint("⚠️ speakCurrentPageText: 현재 페이지가 없습니다");
+      }
       return;
     }
     
@@ -728,20 +858,28 @@ class NoteDetailViewModel extends ChangeNotifier {
       }
       
       if (textToSpeak.isNotEmpty) {
-        debugPrint("🔊 TTS 시작: ${textToSpeak.substring(0, textToSpeak.length > 50 ? 50 : textToSpeak.length)}...");
+        if (kDebugMode) {
+          debugPrint("🔊 TTS 시작: ${textToSpeak.substring(0, textToSpeak.length > 50 ? 50 : textToSpeak.length)}...");
+        }
         await _ttsService.speak(textToSpeak);
       } else {
-        debugPrint("⚠️ TTS: 읽을 텍스트가 없습니다");
+        if (kDebugMode) {
+          debugPrint("⚠️ TTS: 읽을 텍스트가 없습니다");
+        }
       }
     } catch (e) {
-      debugPrint("❌ TTS 중 오류 발생: $e");
+      if (kDebugMode) {
+        debugPrint("❌ TTS 중 오류 발생: $e");
+      }
     }
   }
   
   // TTS 중지
   void stopTts() {
     _ttsService.stop();
-    debugPrint("🔴 TTS 중지됨");
+    if (kDebugMode) {
+      debugPrint("🔴 TTS 중지됨");
+    }
   }
   
   // 특정 페이지의 이미지 파일 로드
@@ -753,12 +891,14 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     try {
       await _pageManager.loadPageImage(pageIndex);
-      // 이미지 로드 완료 후 UI 갱신
-      if (_currentPageIndex == pageIndex) {
+      // 이미지 로드 완료 후 UI 갱신 - 현재 페이지일 때만 UI 갱신하도록 수정
+      if (_currentPageIndex == pageIndex && _shouldUpdateUI) {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint("❌ 페이지 이미지 로드 중 오류: $e");
+      if (kDebugMode) {
+        debugPrint("❌ 페이지 이미지 로드 중 오류: $e");
+      }
     }
   }
   
@@ -788,10 +928,14 @@ class NoteDetailViewModel extends ChangeNotifier {
   
   // 세그먼트 삭제 메서드
   Future<bool> deleteSegment(int segmentIndex) async {
-    debugPrint("🗑️ 세그먼트 삭제 시작: 인덱스=$segmentIndex");
+    if (kDebugMode) {
+      debugPrint("🗑️ 세그먼트 삭제 시작: 인덱스=$segmentIndex");
+    }
     
     if (currentPage == null || currentPage!.id == null) {
-      debugPrint("⚠️ 세그먼트 삭제 실패: 현재 페이지가 없거나 ID가 없습니다");
+      if (kDebugMode) {
+        debugPrint("⚠️ 세그먼트 삭제 실패: 현재 페이지가 없거나 ID가 없습니다");
+      }
       return false;
     }
     
@@ -804,7 +948,9 @@ class NoteDetailViewModel extends ChangeNotifier {
       );
       
       if (updatedPage == null) {
-        debugPrint("⚠️ 세그먼트 삭제 실패: 페이지 업데이트 결과가 null입니다");
+        if (kDebugMode) {
+          debugPrint("⚠️ 세그먼트 삭제 실패: 페이지 업데이트 결과가 null입니다");
+        }
         return false;
       }
       
@@ -816,11 +962,15 @@ class NoteDetailViewModel extends ChangeNotifier {
       // 화면 갱신
       notifyListeners();
       
-      debugPrint("✅ 세그먼트 삭제 완료");
+      if (kDebugMode) {
+        debugPrint("✅ 세그먼트 삭제 완료");
+      }
       return true;
     } catch (e, stackTrace) {
-      debugPrint("❌ 세그먼트 삭제 중 오류 발생: $e");
-      debugPrint(stackTrace.toString());
+      if (kDebugMode) {
+        debugPrint("❌ 세그먼트 삭제 중 오류 발생: $e");
+        debugPrint(stackTrace.toString());
+      }
       return false;
     }
   }
@@ -878,7 +1028,7 @@ class NoteDetailViewModel extends ChangeNotifier {
     _pageProcessedCallback = callback;
   }
   
-  // 백그라운드에서 페이지 처리 상태 체크
+  // 백그라운드에서 페이지 처리 상태 주기적 체크
   void _startPageProcessingCheck() {
     // 이미 타이머가 실행 중이면 취소
     if (_processingTimer != null) {
@@ -888,10 +1038,11 @@ class NoteDetailViewModel extends ChangeNotifier {
     // 페이지가 없으면 실행하지 않음
     if (_pages == null || _pages!.isEmpty) return;
     
-    // 3초마다 각 페이지의 처리 상태 확인
-    _processingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+    // 리스너 최소화를 위해 타이머 간격을 늘림
+    _processingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       bool allProcessed = true;
       bool anyStatusChanged = false;
+      bool currentPageChanged = false;
       
       for (int i = 0; i < _pages!.length; i++) {
         final page = _pages![i];
@@ -920,6 +1071,11 @@ class NoteDetailViewModel extends ChangeNotifier {
             _processedPageStatus[page.id!] = isProcessed;
             anyStatusChanged = true;
             
+            // 현재 페이지의 상태가 변경되었는지 확인
+            if (i == _currentPageIndex) {
+              currentPageChanged = true;
+            }
+            
             // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
             if (isProcessed && _pageProcessedCallback != null) {
               _pageProcessedCallback!(i);
@@ -931,106 +1087,52 @@ class NoteDetailViewModel extends ChangeNotifier {
             allProcessed = false;
           }
         } catch (e) {
-          debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
+          if (kDebugMode) {
+            debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
+          }
         }
       }
       
-      // 상태 변경이 있으면 UI 갱신
-      if (anyStatusChanged) {
+      // 상태 변경이 있고 현재 페이지에 변경이 있을 때만 UI 갱신
+      if (anyStatusChanged && currentPageChanged && _shouldUpdateUI) {
         notifyListeners();
       }
       
       // 모든 페이지가 처리되었으면 타이머 중지
       if (allProcessed) {
-        debugPrint("✅ 모든 페이지 처리 완료, 타이머 중지");
+        if (kDebugMode) {
+          debugPrint("✅ 모든 페이지 처리 완료, 타이머 중지");
+        }
         timer.cancel();
         _processingTimer = null;
       }
     });
   }
   
-  // 백그라운드에서 페이지 처리 상태 체크
-  void _startBackgroundProcessing() {
-    // 이미 타이머가 실행 중이면 취소
+  // 백그라운드에서 페이지 처리 상태 주기적 체크 취소
+  void cancelBackgroundProcessingCheck() {
     if (_processingTimer != null) {
+      if (kDebugMode) {
+        debugPrint("⏱️ 백그라운드 처리 타이머 취소");
+      }
       _processingTimer!.cancel();
+      _processingTimer = null;
     }
-    
-    // 페이지가 없으면 실행하지 않음
-    if (_pages == null || _pages!.isEmpty) return;
-    
-    // 3초마다 각 페이지의 처리 상태 확인
-    _processingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
-      bool allProcessed = true;
-      bool anyStatusChanged = false;
-      
-      for (int i = 0; i < _pages!.length; i++) {
-        final page = _pages![i];
-        if (page.id == null) continue;
-        
-        // 이미 처리된 페이지는 스킵
-        if (_processedPageStatus[page.id!] == true) continue;
-        
-        try {
-          // 페이지 상태 확인
-          bool isProcessed = false;
-          
-          // 텍스트가 이미 처리되어 있는지 확인
-          if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
-            isProcessed = true;
-          } else {
-            // ContentManager를 통해 처리된 텍스트가 있는지 확인
-            final processedText = await _contentManager.getProcessedText(page.id!);
-            isProcessed = processedText != null && 
-                          processedText.fullOriginalText != '___PROCESSING___' &&
-                          processedText.fullOriginalText.isNotEmpty;
-          }
-          
-          // 상태가 변경된 경우에만 업데이트
-          if (_processedPageStatus[page.id!] != isProcessed) {
-            _processedPageStatus[page.id!] = isProcessed;
-            anyStatusChanged = true;
-            
-            // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
-            if (isProcessed && _pageProcessedCallback != null) {
-              _pageProcessedCallback!(i);
-            }
-          }
-          
-          // 아직 처리되지 않은 페이지가 있으면 체크
-          if (!isProcessed) {
-            allProcessed = false;
-          }
-        } catch (e) {
-          debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
-        }
-      }
-      
-      // 상태 변경이 있으면 UI 갱신
-      if (anyStatusChanged) {
-        notifyListeners();
-      }
-      
-      // 모든 페이지가 처리되었으면 타이머 중지
-      if (allProcessed) {
-        debugPrint("✅ 모든 페이지 처리 완료, 타이머 중지");
-        timer.cancel();
-        _processingTimer = null;
-      }
-    });
   }
   
-  // 백그라운드에서 모든 페이지 이미지 로드
-  Future<void> loadAllPageImages() async {
+  // 백그라운드에서 페이지 이미지 로드
+  Future<void> loadPageImagesInBackground() async {
     if (_pages == null || _pages!.isEmpty) return;
     
-    debugPrint("�� 페이지 이미지 백그라운드 로드 시작: ${_pages!.length}개 페이지");
+    if (kDebugMode) {
+      debugPrint("🔄 페이지 이미지 백그라운드 로드 시작: ${_pages!.length}개 페이지");
+    }
     
     // 현재 페이지의 이미지 우선 로드 (사용자에게 가장 먼저 보여야 함)
     if (_currentPageIndex >= 0 && _currentPageIndex < _pages!.length) {
       await _loadPageImage(_currentPageIndex);
       
-      // UI 업데이트 (현재 페이지 이미지 로드 완료 후)
+      // UI 업데이트 - 현재 페이지 이미지 로드 완료 후 한 번만
       if (_shouldUpdateUI) {
         notifyListeners();
       }
@@ -1059,11 +1161,13 @@ class NoteDetailViewModel extends ChangeNotifier {
           i != _currentPageIndex - 1) {
         await _loadPageImage(i);
         
-        // 로드 간 짧은 딜레이 추가 (시스템 부하 방지)
-        await Future.delayed(Duration(milliseconds: 50));
+        // 로드 간 딜레이 추가 (시스템 부하 방지) - 딜레이 늘림
+        await Future.delayed(Duration(milliseconds: 100));
       }
     }
     
-    debugPrint("✅ 모든 페이지 이미지 로드 완료");
+    if (kDebugMode) {
+      debugPrint("✅ 모든 페이지 이미지 로드 완료");
+    }
   }
 } 
