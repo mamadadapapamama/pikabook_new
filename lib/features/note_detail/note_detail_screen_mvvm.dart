@@ -8,6 +8,8 @@ import 'page_content_widget.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../widgets/common/pika_app_bar.dart';
 import '../flashcard/flashcard_screen.dart';
+import 'note_detail_bottom_bar.dart';
+import '../../core/services/text_processing/text_reader_service.dart';
 import 'package:provider/provider.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
@@ -55,6 +57,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     return Scaffold(
       appBar: _buildAppBar(context, viewModel),
       body: _buildBody(context, viewModel),
+      bottomNavigationBar: _buildBottomBar(context, viewModel),
     );
   }
   
@@ -102,8 +105,9 @@ class NoteDetailScreenMVVM extends StatelessWidget {
       );
     }
 
-    // 페이지 뷰 구성
+    // 페이지 뷰 구성 - PageController 연결
     return PageView.builder(
+      controller: viewModel.pageController, // 뷰모델의 컨트롤러 사용
       itemCount: viewModel.pages!.length,
       onPageChanged: viewModel.onPageChanged,
       itemBuilder: (context, index) {
@@ -161,11 +165,11 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     
     if (success && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('세그먼트가 삭제되었습니다')),
+        const SnackBar(content: Text('문장이 삭제되었습니다')),
       );
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('세그먼트 삭제 중 오류가 발생했습니다')),
+        const SnackBar(content: Text('문장 삭제 중 오류가 발생했습니다')),
       );
     }
   }
@@ -372,5 +376,35 @@ class NoteDetailScreenMVVM extends StatelessWidget {
         viewModel.loadFlashcards();
       }
     });
+  }
+
+  // 하단 내비게이션 바 구성
+  Widget _buildBottomBar(BuildContext context, NoteDetailViewModel viewModel) {
+    if (viewModel.pages == null || viewModel.pages!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    return NoteDetailBottomBar(
+      currentPage: viewModel.currentPage,
+      currentPageIndex: viewModel.currentPageIndex,
+      totalPages: viewModel.pages?.length ?? 0,
+      onPageChanged: (index) {
+        // 네비게이션 버튼 클릭 시 PageController를 사용하여 페이지 이동
+        viewModel.navigateToPage(index);
+      },
+      onToggleFullTextMode: viewModel.toggleFullTextMode,
+      isFullTextMode: viewModel.isFullTextMode,
+      contentManager: viewModel.getContentManager(),
+      textReaderService: TextReaderService(),
+      isProcessing: false,
+      progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),
+      onTtsPlay: () {
+        if (kDebugMode) {
+          print("TTS 재생 시작");
+        }
+        viewModel.speakCurrentPageText();
+      },
+      isMinimalUI: false,
+    );
   }
 } 

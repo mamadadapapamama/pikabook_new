@@ -13,6 +13,7 @@ import '../../core/services/storage/unified_cache_service.dart';
 import '../../core/services/media/tts_service.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
+import 'package:flutter/material.dart';
 
 // debugPrint 함수 - 커스텀 구현
 void debugPrint(String message) {
@@ -27,6 +28,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   final NoteOptionsManager _noteOptionsManager = NoteOptionsManager();
   late NoteService _noteService;
   final TtsService _ttsService = TtsService();
+  
+  // PageController 추가
+  final PageController pageController = PageController();
   
   // 상태 변수
   Note? _note;                        // 현재 노트
@@ -115,6 +119,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   void dispose() {
     _ttsService.stop();
     _ttsService.dispose();
+    
+    // PageController 정리
+    pageController.dispose();
     
     // 앱 종료 전 플래시카드 저장
     if (_noteId.isNotEmpty && _flashCards.isNotEmpty) {
@@ -376,6 +383,30 @@ class NoteDetailViewModel extends ChangeNotifier {
         _loadPageImage(index - 1);
       }
     }
+  }
+  
+  // 프로그램적으로 페이지 이동
+  void navigateToPage(int index) {
+    if (_pages == null || _pages!.isEmpty) return;
+    
+    // 유효한 인덱스인지 확인
+    if (index < 0 || index >= _pages!.length) return;
+    
+    // 이미 해당 페이지에 있는지 확인
+    if (_currentPageIndex == index) return;
+    
+    // PageController를 사용하여 애니메이션과 함께 페이지 이동
+    pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+    
+    // UI 변경을 기다리지 않고 바로 상태 업데이트 (UX 향상)
+    _currentPageIndex = index;
+    notifyListeners();
+    
+    debugPrint("📄 프로그램적으로 페이지 이동: $index");
   }
   
   // 전체 텍스트 모드 토글
@@ -742,6 +773,11 @@ class NoteDetailViewModel extends ChangeNotifier {
   File? getCurrentPageImageFile() {
     if (currentPage == null) return null;
     return getImageFileForPage(currentPage);
+  }
+  
+  // ContentManager 객체 가져오기
+  ContentManager getContentManager() {
+    return _contentManager;
   }
   
   // 세그먼트 삭제 메서드

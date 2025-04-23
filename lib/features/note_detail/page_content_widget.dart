@@ -22,6 +22,7 @@ import '../../core/services/dictionary/dictionary_service.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
 import '../../core/services/content/page_service.dart';
 import 'dart:async';
+import 'page_image_widget.dart'; // PageImageWidget 추가
 
 /// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
 ///
@@ -349,7 +350,20 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         children: [
           // 페이지 이미지 표시 (이미지가 있는 경우)
           if (widget.imageFile != null || (widget.page.imageUrl != null && widget.page.imageUrl!.isNotEmpty))
-            _buildPageImage(),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16.0),
+              child: PageImageWidget(
+                imageFile: widget.imageFile,
+                imageUrl: widget.page.imageUrl,
+                page: widget.page,
+                isLoading: widget.isLoadingImage,
+                title: widget.page.pageNumber != null ? '${widget.page.pageNumber}페이지' : '',
+                showTitle: widget.page.pageNumber != null,
+                style: ImageContainerStyle.noteDetail,
+                height: 300,
+                enableFullScreen: true,
+              ),
+            ),
           
           // 텍스트 처리 중 표시
           if (_isProcessingText)
@@ -981,115 +995,5 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     } catch (e) {
       debugPrint('processedText 저장 중 오류 발생: $e');
     }
-  }
-
-  // 페이지 이미지를 표시하는 위젯
-  Widget _buildPageImage() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Container(
-        width: double.infinity,
-        constraints: const BoxConstraints(maxHeight: 300),
-        child: widget.imageFile != null || widget.page.imageUrl != null
-          ? Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Material(
-                  child: InkWell(
-                    onTap: () => _openFullScreenImage(context),
-                    child: widget.imageFile != null
-                      ? Image.file(
-                          widget.imageFile!,
-                          fit: BoxFit.contain,
-                          width: double.infinity,
-                        )
-                      : widget.page.imageUrl != null && widget.page.imageUrl!.isNotEmpty
-                        ? Image.network(
-                            widget.page.imageUrl!,
-                            fit: BoxFit.contain,
-                            width: double.infinity,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Center(
-                                child: CircularProgressIndicator(
-                                  value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                                    : null,
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              debugPrint('이미지 로드 오류: $error');
-                              return const Center(
-                                child: Icon(
-                                  Icons.image_not_supported,
-                                  size: 48,
-                                  color: Colors.grey,
-                                ),
-                              );
-                            },
-                          )
-                        : const SizedBox(),
-                  ),
-                ),
-              ),
-            )
-          : const SizedBox(),
-      ),
-    );
-  }
-  
-  // 전체 화면 이미지 뷰어 열기
-  void _openFullScreenImage(BuildContext context) {
-    if (widget.imageFile == null && (widget.page.imageUrl == null || widget.page.imageUrl!.isEmpty)) {
-      return;
-    }
-    
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          appBar: AppBar(
-            title: Text(widget.page.pageNumber.toString() + '페이지'),
-            backgroundColor: Colors.black,
-            iconTheme: const IconThemeData(color: Colors.white),
-          ),
-          body: Container(
-            color: Colors.black,
-            child: Center(
-              child: widget.imageFile != null
-                ? Image.file(
-                    widget.imageFile!,
-                    fit: BoxFit.contain,
-                  )
-                : Image.network(
-                    widget.page.imageUrl!,
-                    fit: BoxFit.contain,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Center(
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                            : null,
-                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      );
-                    },
-                  ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }

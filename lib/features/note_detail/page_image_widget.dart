@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import '../views/screens/full_image_screen.dart';
-import '../widgets/dot_loading_indicator.dart';
+import '../../views/screens/full_image_screen.dart';
+import '../../widgets/dot_loading_indicator.dart';
 import 'package:path_provider/path_provider.dart';
-import '../core/models/page.dart' as page_model;
+import '../../core/models/page.dart' as page_model;
 
 /// 이미지 컨테이너 스타일 정의
 enum ImageContainerStyle {
