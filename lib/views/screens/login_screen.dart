@@ -4,7 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
-import '../../../widgets/dot_loading_indicator.dart';
+import '../../core/widgets/dot_loading_indicator.dart';
 import '../../../firebase_options.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../core/services/authentication/auth_service.dart';

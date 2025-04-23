@@ -10,7 +10,7 @@ import '../../core/utils/text_display_mode.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
-import '../../widgets/common/tts_button.dart';
+import '../../core/widgets/tts_button.dart';
 import 'managers/content_manager.dart';
 
 /// 노트 상세 화면 하단 내비게이션 바
@@ -232,17 +232,19 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // TTS 재생 버튼 추가 - 컴팩트하게 아이콘 크기 조정
-                          if (widget.onTtsPlay != null && !widget.isMinimalUI)
-                            IconButton(
-                              icon: const Icon(Icons.volume_up, size: 16), // 18에서 16으로 크기 줄임
-                              onPressed: widget.onTtsPlay,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 24,
-                                minHeight: 24,
+                          // TTS 재생 버튼 추가 - TtsButton 위젯으로 변경
+                          if (widget.currentPage != null && !widget.isMinimalUI)
+                            SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: TtsButton(
+                                text: widget.currentPage?.translatedText ?? widget.currentPage?.originalText ?? '',
+                                size: TtsButton.sizeSmall,
+                                useCircularShape: false,
+                                iconColor: ColorTokens.secondary,
+                                activeBackgroundColor: ColorTokens.secondaryLight,
+                                onPlayStart: widget.onTtsPlay,
                               ),
-                              color: ColorTokens.secondary,
                             ),
                           const SizedBox(width: 4), // 간격 줄임
                           

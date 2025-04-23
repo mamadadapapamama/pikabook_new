@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/theme/tokens/typography_tokens.dart';
-import '../../core/theme/tokens/spacing_tokens.dart';
+import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
+import '../theme/tokens/spacing_tokens.dart';
 
 enum PikaButtonVariant {
   primary,

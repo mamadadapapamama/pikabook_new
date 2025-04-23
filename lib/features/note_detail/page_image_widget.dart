@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import '../../views/screens/full_image_screen.dart';
-import '../../widgets/dot_loading_indicator.dart';
+import '../../core/widgets/dot_loading_indicator.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/models/page.dart' as page_model;
 

@@ -5,7 +5,7 @@ import '../core/services/content/note_service.dart';
 import '../features/note_detail/note_detail_screen_mvvm.dart';
 import '../core/theme/tokens/color_tokens.dart';
 import '../core/theme/tokens/typography_tokens.dart';
-import '../widgets/common/pika_button.dart';
+import '../core/widgets/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
 import '../core/services/common/usage_limit_service.dart';
 import 'dart:async';

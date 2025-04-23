@@ -11,8 +11,8 @@ import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/utils/segment_utils.dart';
-import '../../widgets/common/tts_button.dart';
-import '../../widgets/dot_loading_indicator.dart';
+import '../../core/widgets/tts_button.dart';
+import '../../core/widgets/dot_loading_indicator.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 /// 

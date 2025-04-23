@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/theme/tokens/typography_tokens.dart';
-import '../../core/theme/tokens/spacing_tokens.dart';
-import '../../core/theme/tokens/ui_tokens.dart';
-import '../../core/utils/debug_utils.dart';
+import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
+import '../theme/tokens/spacing_tokens.dart';
+import '../theme/tokens/ui_tokens.dart';
+import '../utils/debug_utils.dart';
 
 /// 툴팁 스타일 프리셋
 enum HelpTextTooltipStyle {

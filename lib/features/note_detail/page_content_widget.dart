@@ -8,14 +8,14 @@ import 'processed_text_widget.dart';
 import 'managers/content_manager.dart';
 import '../../widgets/dictionary_result_widget.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
-import '../../widgets/dot_loading_indicator.dart';
+import '../../core/widgets/dot_loading_indicator.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/utils/segment_utils.dart';
 import '../../core/services/text_processing/text_reader_service.dart'; // TTS 서비스 추가
 import '../../core/services/common/usage_limit_service.dart';
-import '../../widgets/common/usage_dialog.dart';
+import '../../core/widgets/usage_dialog.dart';
 import '../../core/services/text_processing/translation_service.dart';
 import '../../core/services/text_processing/enhanced_ocr_service.dart';
 import '../../core/services/dictionary/dictionary_service.dart';

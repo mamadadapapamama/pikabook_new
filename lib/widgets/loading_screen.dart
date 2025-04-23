@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme/tokens/color_tokens.dart';
 import '../core/theme/tokens/typography_tokens.dart';
 import '../core/theme/tokens/spacing_tokens.dart';
-import 'dot_loading_indicator.dart';
+import '../core/widgets/dot_loading_indicator.dart';
 
 /// 앱 초기화 중 표시되는 로딩 화면
 ///
