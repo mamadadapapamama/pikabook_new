@@ -743,4 +743,43 @@ class NoteDetailViewModel extends ChangeNotifier {
     if (currentPage == null) return null;
     return getImageFileForPage(currentPage);
   }
+  
+  // 세그먼트 삭제 메서드
+  Future<bool> deleteSegment(int segmentIndex) async {
+    debugPrint("🗑️ 세그먼트 삭제 시작: 인덱스=$segmentIndex");
+    
+    if (currentPage == null || currentPage!.id == null) {
+      debugPrint("⚠️ 세그먼트 삭제 실패: 현재 페이지가 없거나 ID가 없습니다");
+      return false;
+    }
+    
+    try {
+      // ContentManager의 deleteSegment 메서드 호출
+      final updatedPage = await _contentManager.deleteSegment(
+        noteId: _noteId,
+        page: currentPage!,
+        segmentIndex: segmentIndex,
+      );
+      
+      if (updatedPage == null) {
+        debugPrint("⚠️ 세그먼트 삭제 실패: 페이지 업데이트 결과가 null입니다");
+        return false;
+      }
+      
+      // 현재 페이지 업데이트
+      if (_pages != null && _currentPageIndex < _pages!.length) {
+        _pages![_currentPageIndex] = updatedPage;
+      }
+      
+      // 화면 갱신
+      notifyListeners();
+      
+      debugPrint("✅ 세그먼트 삭제 완료");
+      return true;
+    } catch (e, stackTrace) {
+      debugPrint("❌ 세그먼트 삭제 중 오류 발생: $e");
+      debugPrint(stackTrace.toString());
+      return false;
+    }
+  }
 } 

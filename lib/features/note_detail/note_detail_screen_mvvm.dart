@@ -150,11 +150,26 @@ class NoteDetailScreenMVVM extends StatelessWidget {
             _handleCreateFlashCard(context, viewModel, front, back, pinyin: pinyin),
         flashCards: viewModel.flashCards,
         useSegmentMode: !viewModel.isFullTextMode,
+        onDeleteSegment: (segmentIndex) => _handleDeleteSegment(context, viewModel, segmentIndex),
       ),
     );
   }
   
- 
+  // 세그먼트 삭제 처리
+  void _handleDeleteSegment(BuildContext context, NoteDetailViewModel viewModel, int segmentIndex) async {
+    final success = await viewModel.deleteSegment(segmentIndex);
+    
+    if (success && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('세그먼트가 삭제되었습니다')),
+      );
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('세그먼트 삭제 중 오류가 발생했습니다')),
+      );
+    }
+  }
+  
   // 더보기 옵션 표시
   void _showMoreOptions(BuildContext context, NoteDetailViewModel viewModel) {
     showModalBottomSheet(
