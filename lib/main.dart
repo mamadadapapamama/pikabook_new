@@ -7,7 +7,7 @@ import 'dart:async';
 import 'firebase_options.dart';
 import 'services/media/image_service.dart';
 // import 'package:shared_preferences/shared_preferences.dart';
-// import 'views/screens/home_screen.dart';
+// import 'views/screens/home_screen_mvvm.dart';
 // import 'views/screens/note_detail_screen.dart';
 
 /// 앱의 진입점

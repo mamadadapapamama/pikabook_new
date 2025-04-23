@@ -18,7 +18,7 @@ import '../common/usage_limit_service.dart';
 import 'package:image/image.dart' as img;
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
-import '../../views/screens/full_image_screen.dart';
+import '../../../views/screens/full_image_screen.dart';
 
 /// 압축된 결과를 나타내는 클래스 (내부 사용)
 class _CompressionResult {

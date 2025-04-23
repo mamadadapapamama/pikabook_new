@@ -11,8 +11,6 @@ import '../../theme/tokens/color_tokens.dart';
 import '../../theme/tokens/typography_tokens.dart';
 import '../../theme/tokens/spacing_tokens.dart';
 import '../../theme/tokens/ui_tokens.dart';
-import 'note_detail_screen.dart';
-import 'note_detail_screen_new.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../widgets/image_picker_bottom_sheet.dart';
 import '../../widgets/dot_loading_indicator.dart';
@@ -29,7 +27,7 @@ import '../../app.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../utils/debug_utils.dart';
 import '../../models/note.dart';
-import '../../views/screens/note_detail_screen.dart'; // 정확한 경로 확인 및 수정
+import 'note_detail_screen_mvvm.dart';
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -480,7 +478,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       print("[HOME] 노트 페이지 수: ${note.pages?.length ?? 0}, 플래시카드 수: ${note.flashcardCount ?? 0}");
       
       // 페이지 로드 문제 해결을 위해 pages 필드를 null로 설정하여
-      // NoteDetailScreen에서 직접 Firestore에서 페이지를 로드하도록 함
+      // 상세 화면에서 직접 Firestore에서 페이지를 로드하도록 함
       final cleanNote = note.copyWith(pages: null);
       print("[HOME] 페이지 필드를 null로 설정하여 노트 전달");
 
@@ -488,7 +486,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       print("🚀 [HOME] Navigator.push 호출 직전. Note ID: ${cleanNote.id}");
 
       Navigator.of(context).push(
-        NoteDetailScreenNew.route(note: cleanNote), // 새로운 화면으로 변경
+        NoteDetailScreenMVVM.route(note: cleanNote), // MVVM 패턴 적용한 화면으로 변경
       ).then((_) {
         print("[HOME] 노트 상세화면에서 돌아왔습니다.");
         Provider.of<HomeViewModel>(context, listen: false).refreshNotes();

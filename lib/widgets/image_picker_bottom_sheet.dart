@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import '../services/media/image_service.dart';
 import '../services/content/note_service.dart';
-import '../views/screens/note_detail_screen.dart';
+import '../views/screens/note_detail_screen_mvvm.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../widgets/common/pika_button.dart';
@@ -344,7 +344,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             );
             
             Navigator.of(appContext).push(
-              NoteDetailScreen.route(
+              NoteDetailScreenMVVM.route(
                 note: tempNote,
                 isProcessingBackground: true,
                 totalImageCount: imageFiles.length,
@@ -383,7 +383,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                         Future.delayed(const Duration(milliseconds: 300), () {
                           if (appContext.mounted) {
                             Navigator.of(appContext).push(
-                              NoteDetailScreen.route(
+                              NoteDetailScreenMVVM.route(
                                 note: tempNote,
                                 isProcessingBackground: true,
                                 totalImageCount: imageFiles.length,
@@ -450,19 +450,19 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                 onPressed: () {
                   if (appContext.mounted) {
                     // 임시 Note 객체 생성
-  final tempNote = Note(
-    id: createdNoteId,
-    originalText: '새 노트',
-    translatedText: '',
-    extractedText: '',
-  );
-  
-  Navigator.of(appContext).push(
-    NoteDetailScreen.route(
-      note: tempNote,
-      isProcessingBackground: true,
-      totalImageCount: imageFiles.length,
-    ),
+                    final tempNote = Note(
+                      id: createdNoteId,
+                      originalText: '새 노트',
+                      translatedText: '',
+                      extractedText: '',
+                    );
+                    
+                    Navigator.of(appContext).push(
+                      NoteDetailScreenMVVM.route(
+                        note: tempNote,
+                        isProcessingBackground: true,
+                        totalImageCount: imageFiles.length,
+                      ),
                     );
                   }
                 },
