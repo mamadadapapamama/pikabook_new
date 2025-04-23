@@ -70,7 +70,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     return PikaAppBar(
       showLogo: true,
       noteSpaceName: noteSpaceName,
-      backgroundColor: UITokens.homeBackground,
+      backgroundColor: UITokens.screenBackground,
       height: 100,
       actions: [
         Padding(
@@ -114,7 +114,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     required VoidCallback onMorePressed,
     required VoidCallback onFlashcardTap,
     VoidCallback? onBackPressed,
-    Color backgroundColor = UITokens.homeBackground,
+    Color backgroundColor = UITokens.screenBackground,
   }) {
     return PikaAppBar(
       title: title,

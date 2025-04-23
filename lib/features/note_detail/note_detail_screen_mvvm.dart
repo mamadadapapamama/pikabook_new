@@ -12,6 +12,7 @@ import 'note_detail_bottom_bar.dart';
 import '../../core/services/text_processing/text_reader_service.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/ui_tokens.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatelessWidget {
@@ -76,7 +77,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
       onMorePressed: () => _showMoreOptions(context, viewModel),
       onFlashcardTap: () => _navigateToFlashcards(context, viewModel),
       onBackPressed: () => Navigator.of(context).pop(),
-      backgroundColor: ColorTokens.primaryverylight,
+      backgroundColor: UITokens.screenBackground, 
     );
   }
   
