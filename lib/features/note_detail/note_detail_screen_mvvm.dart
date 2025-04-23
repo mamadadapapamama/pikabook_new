@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import '../../models/note.dart';
-import '../../models/page.dart' as pika_page;
-import '../../viewmodels/note_detail_viewmodel.dart';
+import '../../core/models/note.dart';
+import '../../core/models/page.dart' as pika_page;
+import 'note_detail_viewmodel.dart';
 import '../../widgets/dot_loading_indicator.dart';
-import '../../widgets/page_content_widget.dart';
-import '../../theme/tokens/typography_tokens.dart';
+import 'page_content_widget.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
 import '../../widgets/common/pika_app_bar.dart';
-import '../../views/screens/flashcard_screen.dart';
+import '../flashcard/flashcard_screen.dart';
 import 'package:provider/provider.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
@@ -143,7 +143,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
       child: PageContentWidget(
         key: ValueKey('page_content_${page.id}'),
         page: page,
-        imageFile: null,
+        imageFile: viewModel.getImageFileForPage(page),
         isLoadingImage: false,
         noteId: viewModel.noteId,
         onCreateFlashCard: (front, back, {pinyin}) => 

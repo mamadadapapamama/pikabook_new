@@ -1,13 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../models/page.dart' as page_model;
-import '../models/note.dart' as note_model;
-import '../services/content/page_service.dart';
-import '../services/media/image_service.dart';
-import '../services/storage/unified_cache_service.dart';
-import '../services/text_processing/text_processing_service.dart';
-import '../services/content/note_service.dart';
-import '../services/content/flashcard_service.dart' hide debugPrint;
+import '../../../core/models/page.dart' as page_model;
+import '../../../core/models/note.dart' as note_model;
+import '../../../core/services/content/page_service.dart';
+import '../../../core/services/media/image_service.dart';
+import '../../../core/services/storage/unified_cache_service.dart';
+import '../../../core/services/text_processing/text_processing_service.dart';
+import '../../../core/services/content/note_service.dart';
+import '../../../core/services/content/flashcard_service.dart' hide debugPrint;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// 페이지 관리 클래스
@@ -432,6 +432,58 @@ class PageManager {
     // 이미지 파일 캐싱 (맵에 저장)
     if (updatedPage.id != null) {
       _imageFileMap[updatedPage.id!] = imageFile;
+    }
+  }
+  
+  /// 특정 인덱스의 페이지 이미지를 로드합니다.
+  Future<File?> loadPageImage(int index) async {
+    if (index < 0 || index >= _pages.length) return null;
+    
+    final page = _pages[index];
+    if (page.imageUrl == null || page.imageUrl!.isEmpty) return null;
+    
+    // 이미지 파일이 이미 로드되어 있으면 반환
+    if (index < _imageFiles.length && _imageFiles[index] != null) {
+      debugPrint('이미지 파일이 이미 로드되어 있음: ${page.id}');
+      return _imageFiles[index];
+    }
+    
+    // 페이지 ID로 이미지 맵에서 찾기
+    if (page.id != null && _imageFileMap.containsKey(page.id!)) {
+      final cachedFile = _imageFileMap[page.id!];
+      // 이미지 파일 배열 업데이트
+      if (index < _imageFiles.length) {
+        _imageFiles[index] = cachedFile;
+      }
+      debugPrint('이미지 맵에서 파일 찾음: ${page.id}');
+      return cachedFile;
+    }
+    
+    try {
+      // 이미지 서비스로 로드
+      debugPrint('이미지 로드 시작: ${page.imageUrl}');
+      final imageFile = await _imageService.getImageFile(page.imageUrl!);
+      
+      if (imageFile != null) {
+        // 이미지 파일 배열 업데이트
+        if (index < _imageFiles.length) {
+          _imageFiles[index] = imageFile;
+        }
+        
+        // 이미지 맵에 추가
+        if (page.id != null) {
+          _imageFileMap[page.id!] = imageFile;
+        }
+        
+        debugPrint('이미지 로드 성공: ${page.id}');
+        return imageFile;
+      } else {
+        debugPrint('이미지 로드 실패: 파일이 null임');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('이미지 로드 중 오류: $e');
+      return null;
     }
   }
   

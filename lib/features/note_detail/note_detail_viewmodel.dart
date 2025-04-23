@@ -1,17 +1,18 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' hide debugPrint;
-import '../models/note.dart';
-import '../models/page.dart' as pika_page;
-import '../models/flash_card.dart';
-import '../models/processed_text.dart';
-import '../managers/page_manager.dart';
-import '../managers/content_manager.dart';
-import '../managers/note_options_manager.dart';
-import '../services/content/note_service.dart';
-import '../services/content/flashcard_service.dart';
-import '../services/storage/unified_cache_service.dart';
-import '../services/media/tts_service.dart';
+import '../../core/models/note.dart';
+import '../../core/models/page.dart' as pika_page;
+import '../../core/models/flash_card.dart';
+import '../../core/models/processed_text.dart';
+import 'managers/page_manager.dart';
+import 'managers/content_manager.dart';
+import 'managers/note_options_manager.dart';
+import '../../core/services/content/note_service.dart';
+import '../../core/services/content/flashcard_service.dart';
+import '../../core/services/storage/unified_cache_service.dart';
+import '../../core/services/media/tts_service.dart';
 import 'dart:developer' as developer;
+import 'dart:io';
 
 // debugPrint 함수 - 커스텀 구현
 void debugPrint(String message) {
@@ -223,6 +224,9 @@ class NoteDetailViewModel extends ChangeNotifier {
       } else {
         debugPrint("✅ 모든 페이지가 이미 처리되어 있어 세그먼트 처리 건너뜀");
       }
+      
+      // 페이지 이미지 백그라운드 로드 시작
+      loadPageImagesInBackground();
     } catch (e, stackTrace) {
       debugPrint("❌ NoteDetailViewModel: 페이지 로드 중 오류: $e");
       debugPrint("Stack Trace: $stackTrace");
@@ -230,6 +234,53 @@ class NoteDetailViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+  
+  // 백그라운드에서 모든 페이지 이미지 로드
+  Future<void> loadPageImagesInBackground() async {
+    if (_pages == null || _pages!.isEmpty) return;
+    
+    debugPrint("🔄 페이지 이미지 백그라운드 로드 시작: ${_pages!.length}개 페이지");
+    
+    // 현재 페이지의 이미지 우선 로드 (사용자에게 가장 먼저 보여야 함)
+    if (_currentPageIndex >= 0 && _currentPageIndex < _pages!.length) {
+      await _loadPageImage(_currentPageIndex);
+      
+      // UI 업데이트 (현재 페이지 이미지 로드 완료 후)
+      if (_shouldUpdateUI) {
+        notifyListeners();
+      }
+    }
+    
+    // 다음 페이지와 이전 페이지를 두 번째로 로드 (빠른 페이지 전환 위해)
+    List<Future<void>> priorityLoads = [];
+    
+    if (_currentPageIndex + 1 < _pages!.length) {
+      priorityLoads.add(_loadPageImage(_currentPageIndex + 1));
+    }
+    
+    if (_currentPageIndex - 1 >= 0) {
+      priorityLoads.add(_loadPageImage(_currentPageIndex - 1));
+    }
+    
+    // 우선순위 로드 동시 실행
+    if (priorityLoads.isNotEmpty) {
+      await Future.wait(priorityLoads);
+    }
+    
+    // 나머지 모든 페이지 이미지 순차적으로 로드
+    for (int i = 0; i < _pages!.length; i++) {
+      if (i != _currentPageIndex && 
+          i != _currentPageIndex + 1 && 
+          i != _currentPageIndex - 1) {
+        await _loadPageImage(i);
+        
+        // 로드 간 짧은 딜레이 추가 (시스템 부하 방지)
+        await Future.delayed(Duration(milliseconds: 50));
+      }
+    }
+    
+    debugPrint("✅ 모든 페이지 이미지 로드 완료");
   }
   
   // 플래시카드 로드
@@ -311,6 +362,19 @@ class NoteDetailViewModel extends ChangeNotifier {
     if (_pages != null && index < _pages!.length) {
       final page = _pages![index];
       _checkAndProcessPageIfNeeded(page);
+      
+      // 현재 페이지의 이미지 로드
+      _loadPageImage(index);
+      
+      // 다음 페이지의 이미지도 미리 로드 (있는 경우)
+      if (index + 1 < _pages!.length) {
+        _loadPageImage(index + 1);
+      }
+      
+      // 이전 페이지의 이미지도 유지 (있는 경우)
+      if (index - 1 >= 0) {
+        _loadPageImage(index - 1);
+      }
     }
   }
   
@@ -640,6 +704,43 @@ class NoteDetailViewModel extends ChangeNotifier {
   // TTS 중지
   void stopTts() {
     _ttsService.stop();
-    debugPrint("�� TTS 중지됨");
+    debugPrint("🔴 TTS 중지됨");
+  }
+  
+  // 특정 페이지의 이미지 파일 로드
+  Future<void> _loadPageImage(int pageIndex) async {
+    if (_pages == null || pageIndex < 0 || pageIndex >= _pages!.length) return;
+    
+    final page = _pages![pageIndex];
+    if (page.id == null || page.imageUrl == null || page.imageUrl!.isEmpty) return;
+    
+    try {
+      await _pageManager.loadPageImage(pageIndex);
+      // 이미지 로드 완료 후 UI 갱신
+      if (_currentPageIndex == pageIndex) {
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("❌ 페이지 이미지 로드 중 오류: $e");
+    }
+  }
+  
+  // 특정 페이지의 이미지 파일 가져오기
+  File? getImageFileForPage(pika_page.Page? page) {
+    if (page == null || page.id == null) return null;
+    
+    try {
+      // PageManager에서 이미지 파일 가져오기
+      return _pageManager.getImageFileForPage(page);
+    } catch (e) {
+      debugPrint("❌ 이미지 파일 가져오기 중 오류: $e");
+      return null;
+    }
+  }
+  
+  // 현재 페이지의 이미지 파일 가져오기
+  File? getCurrentPageImageFile() {
+    if (currentPage == null) return null;
+    return getImageFileForPage(currentPage);
   }
 } 

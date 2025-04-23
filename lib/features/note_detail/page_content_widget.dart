@@ -1,26 +1,26 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import '../models/page.dart' as page_model;
-import '../models/processed_text.dart';
-import '../models/flash_card.dart';
-import '../models/dictionary.dart';
+import '../../core/models/page.dart' as page_model;
+import '../../core/models/processed_text.dart';
+import '../../core/models/flash_card.dart';
+import '../../core/models/dictionary.dart';
 import 'processed_text_widget.dart';
-import '../managers/content_manager.dart';
-import 'dictionary_result_widget.dart';
+import 'managers/content_manager.dart';
+import '../../widgets/dictionary_result_widget.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
-import 'dot_loading_indicator.dart';
-import '../theme/tokens/typography_tokens.dart';
-import '../theme/tokens/color_tokens.dart';
-import '../theme/tokens/spacing_tokens.dart';
-import '../utils/segment_utils.dart';
-import '../services/text_processing/text_reader_service.dart'; // TTS 서비스 추가
-import '../services/common/usage_limit_service.dart';
-import '../widgets/common/usage_dialog.dart';
-import '../services/text_processing/translation_service.dart';
-import '../services/text_processing/enhanced_ocr_service.dart';
-import '../services/dictionary/dictionary_service.dart';
+import '../../widgets/dot_loading_indicator.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/spacing_tokens.dart';
+import '../../core/utils/segment_utils.dart';
+import '../../core/services/text_processing/text_reader_service.dart'; // TTS 서비스 추가
+import '../../core/services/common/usage_limit_service.dart';
+import '../../widgets/common/usage_dialog.dart';
+import '../../core/services/text_processing/translation_service.dart';
+import '../../core/services/text_processing/enhanced_ocr_service.dart';
+import '../../core/services/dictionary/dictionary_service.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
-import '../services/content/page_service.dart';
+import '../../core/services/content/page_service.dart';
 import 'dart:async';
 
 /// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
@@ -347,6 +347,10 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 페이지 이미지 표시 (이미지가 있는 경우)
+          if (widget.imageFile != null || (widget.page.imageUrl != null && widget.page.imageUrl!.isNotEmpty))
+            _buildPageImage(),
+          
           // 텍스트 처리 중 표시
           if (_isProcessingText)
             const DotLoadingIndicator(message: '텍스트 처리 중이에요!')
@@ -977,5 +981,115 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     } catch (e) {
       debugPrint('processedText 저장 중 오류 발생: $e');
     }
+  }
+
+  // 페이지 이미지를 표시하는 위젯
+  Widget _buildPageImage() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(maxHeight: 300),
+        child: widget.imageFile != null || widget.page.imageUrl != null
+          ? Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Material(
+                  child: InkWell(
+                    onTap: () => _openFullScreenImage(context),
+                    child: widget.imageFile != null
+                      ? Image.file(
+                          widget.imageFile!,
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                        )
+                      : widget.page.imageUrl != null && widget.page.imageUrl!.isNotEmpty
+                        ? Image.network(
+                            widget.page.imageUrl!,
+                            fit: BoxFit.contain,
+                            width: double.infinity,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Center(
+                                child: CircularProgressIndicator(
+                                  value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                    : null,
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              debugPrint('이미지 로드 오류: $error');
+                              return const Center(
+                                child: Icon(
+                                  Icons.image_not_supported,
+                                  size: 48,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            },
+                          )
+                        : const SizedBox(),
+                  ),
+                ),
+              ),
+            )
+          : const SizedBox(),
+      ),
+    );
+  }
+  
+  // 전체 화면 이미지 뷰어 열기
+  void _openFullScreenImage(BuildContext context) {
+    if (widget.imageFile == null && (widget.page.imageUrl == null || widget.page.imageUrl!.isEmpty)) {
+      return;
+    }
+    
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: Text(widget.page.pageNumber.toString() + '페이지'),
+            backgroundColor: Colors.black,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Container(
+            color: Colors.black,
+            child: Center(
+              child: widget.imageFile != null
+                ? Image.file(
+                    widget.imageFile!,
+                    fit: BoxFit.contain,
+                  )
+                : Image.network(
+                    widget.page.imageUrl!,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                            : null,
+                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      );
+                    },
+                  ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

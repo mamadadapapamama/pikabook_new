@@ -5,7 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'firebase_options.dart';
-import 'services/media/image_service.dart';
+import 'core/services/media/image_service.dart';
 // import 'package:shared_preferences/shared_preferences.dart';
 // import 'views/screens/home_screen_mvvm.dart';
 // import 'views/screens/note_detail_screen.dart';
