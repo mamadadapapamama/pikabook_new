@@ -7,7 +7,8 @@ import 'package:flutter/foundation.dart';
 import '../storage/unified_cache_service.dart';
 import '../text_processing/translation_service.dart';
 import '../text_processing/enhanced_ocr_service.dart';
-import '../../../features/note_detail/managers/content_manager.dart';
+// ContentManager 의존성 제거
+// import '../../../features/note_detail/managers/content_manager.dart';
 import '../text_processing/internal_cn_segmenter_service.dart';
 import '../text_processing/pinyin_creation_service.dart';
 import '../authentication/user_preferences_service.dart';
@@ -18,7 +19,7 @@ import '../../models/note.dart';
 import '../../models/processed_text.dart';
 import '../../models/text_segment.dart';
 
-/// 텍스트 처리를 위한 중앙 통합 워크플로우 서비스
+/// 텍스트 처리를 위한 중앙 통합 워크플로우
 /// 
 /// 다음 기능들을 통합적으로 제공:
 /// 1. 텍스트 번역 (TranslationService 활용)
@@ -26,21 +27,21 @@ import '../../models/text_segment.dart';
 /// 3. 텍스트 발음 생성 (병음 등)
 /// 4. 처리된 텍스트 캐싱 (UnifiedCacheService 활용)
 ///
-/// 기존의 NoteDetailTextProcessor와 NoteContentManager의 기능을 통합한 
-/// 단일 진입점 서비스입니다.
-class TextProcessingService {
+/// 독립적인 텍스트 처리 책임만 담당하여 UI와 분리된 순수 워크플로우 역할을 합니다.
+class TextProcessingWorkflow {
   // 싱글톤 패턴
-  static final TextProcessingService _instance = TextProcessingService._internal();
-  factory TextProcessingService() => _instance;
-  TextProcessingService._internal() {
-    debugPrint('✨ TextProcessingService: 생성자 호출됨');
+  static final TextProcessingWorkflow _instance = TextProcessingWorkflow._internal();
+  factory TextProcessingWorkflow() => _instance;
+  TextProcessingWorkflow._internal() {
+    debugPrint('✨ TextProcessingWorkflow: 생성자 호출됨');
   }
 
   // 필요한 서비스들의 인스턴스
   final TranslationService _translationService = TranslationService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
-  final ContentManager _contentManager = ContentManager();
+  // ContentManager 의존성 제거
+  // final ContentManager _contentManager = ContentManager();
   final InternalCnSegmenterService _segmenterService = InternalCnSegmenterService();
   final UserPreferencesService _preferencesService = UserPreferencesService();
 
@@ -51,18 +52,104 @@ class TextProcessingService {
     // 추후 더 많은 언어 추가 가능: 'ja': JapaneseProcessor() 등
   };
 
-  /// 페이지 텍스트 처리 (note_detail_text_processor.dart에서 이전)
+  /// 페이지 텍스트 처리 - ContentManager 의존성 제거하고 직접 구현
   Future<ProcessedText?> processPageText({
     required page_model.Page? page,
     required File? imageFile,
   }) async {
     if (page == null) return null;
+    if (page.id == null) return null;
     
-    // ContentManager로 위임
-    return await _contentManager.processPageText(
-      page: page,
-      imageFile: imageFile,
-    );
+    // 1. 캐시에서 처리된 텍스트 확인
+    final pageId = page.id!;
+    try {
+      final cachedText = await _cacheService.getProcessedText(pageId);
+      if (cachedText != null) {
+        debugPrint('캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId');
+        return cachedText;
+      }
+    } catch (e) {
+      debugPrint('캐시 확인 중 오류 (무시됨): $e');
+    }
+    
+    // 2. 텍스트 처리 로직
+    final originalText = page.originalText;
+    final translatedText = page.translatedText ?? '';
+    
+    // 3. 이미지 파일이 있고 텍스트가 없는 경우 OCR 처리
+    if (imageFile != null && (originalText.isEmpty || translatedText.isEmpty)) {
+      try {
+        final extractedText = await _ocrService.extractText(
+          imageFile,
+          skipUsageCount: false,
+        );
+        
+        final note = Note(
+          id: null,
+          userId: '',
+          originalText: '',
+          translatedText: '',
+          extractedText: extractedText,
+          sourceLanguage: 'zh-CN', // 기본값, 향후 개선 필요
+          targetLanguage: 'ko',
+        );
+        
+        final processedText = await processText(
+          text: extractedText,
+          note: note,
+          pageId: pageId,
+        );
+        
+        return processedText;
+      } catch (e) {
+        debugPrint('이미지 처리 중 오류: $e');
+        return ProcessedText(
+          fullOriginalText: originalText.isNotEmpty ? originalText : "이미지 처리 중 오류가 발생했습니다.",
+          fullTranslatedText: translatedText,
+          segments: [],
+          showFullText: true,
+        );
+      }
+    }
+    
+    // 4. 텍스트 처리
+    if (originalText.isNotEmpty) {
+      try {
+        final note = Note(
+          id: null,
+          userId: '',
+          originalText: '',
+          translatedText: '',
+          extractedText: originalText,
+          sourceLanguage: 'zh-CN', // 기본값, 향후 개선 필요
+          targetLanguage: 'ko',
+        );
+        
+        ProcessedText processedText = await processText(
+          text: originalText,
+          note: note,
+          pageId: pageId,
+        );
+        
+        // 번역 텍스트가 있는 경우 설정
+        if (translatedText.isNotEmpty && 
+            (processedText.fullTranslatedText == null || processedText.fullTranslatedText!.isEmpty)) {
+          processedText = processedText.copyWith(fullTranslatedText: translatedText);
+        }
+        
+        return processedText;
+      } catch (e) {
+        debugPrint('텍스트 처리 중 오류: $e');
+        return ProcessedText(
+          fullOriginalText: originalText,
+          fullTranslatedText: translatedText,
+          segments: [],
+          showFullText: true,
+        );
+      }
+    }
+    
+    return null;
   }
 
   /// 텍스트 처리 메인 메서드
@@ -198,7 +285,7 @@ class TextProcessingService {
     }
   }
 
-  /// 번역 데이터 확인 및 로드 (note_detail_text_processor.dart에서 이전)
+  /// 번역 데이터 확인 및 로드
   Future<ProcessedText?> checkAndLoadTranslationData({
     required Note note,
     required page_model.Page? page,
@@ -211,17 +298,17 @@ class TextProcessingService {
     if (currentProcessedText != null && 
         currentProcessedText.fullTranslatedText != null && 
         currentProcessedText.fullTranslatedText!.isNotEmpty) {
-      debugPrint('TextProcessingService: 이미 번역 데이터가 있습니다.');
+      debugPrint('TextProcessingWorkflow: 이미 번역 데이터가 있습니다.');
       return currentProcessedText;
     }
     
     // 원본 텍스트가 없으면 처리할 수 없음
     if (page.originalText.isEmpty && imageFile == null) {
-      debugPrint('TextProcessingService: 원본 텍스트와 이미지가 모두 없습니다.');
+      debugPrint('TextProcessingWorkflow: 원본 텍스트와 이미지가 모두 없습니다.');
       return currentProcessedText;
     }
     
-    debugPrint('TextProcessingService: 번역 데이터 로드 시작');
+    debugPrint('TextProcessingWorkflow: 번역 데이터 로드 시작');
     
     try {
       // 기존 ProcessedText가 없는 경우 새로 생성
@@ -235,12 +322,12 @@ class TextProcessingService {
       // ProcessedText는 있지만 번역 데이터가 없는 경우 번역만 추가
       final String originalText = currentProcessedText.fullOriginalText;
       if (originalText.isEmpty) {
-        debugPrint('TextProcessingService: 원본 텍스트가 비어 있습니다.');
+        debugPrint('TextProcessingWorkflow: 원본 텍스트가 비어 있습니다.');
         return currentProcessedText;
       }
       
       // 번역 실행
-      debugPrint('TextProcessingService: 번역 실행');
+      debugPrint('TextProcessingWorkflow: 번역 실행');
       final translatedText = await _translationService.translateText(
         originalText,
         sourceLanguage: note.sourceLanguage,
@@ -252,7 +339,7 @@ class TextProcessingService {
         fullTranslatedText: translatedText,
       );
     } catch (e) {
-      debugPrint('TextProcessingService: 번역 데이터 로드 중 오류 발생 - $e');
+      debugPrint('TextProcessingWorkflow: 번역 데이터 로드 중 오류 발생 - $e');
       return currentProcessedText;
     }
   }
@@ -272,12 +359,12 @@ class TextProcessingService {
     if (pageId == null) return;
     await _cacheService.setProcessedText(pageId, processedText);
     
-    // 페이지 캐시도 함께 업데이트
-    await _contentManager.updatePageCache(
-      pageId, 
-      processedText,
-      "languageLearning"
-    );
+    // 페이지 캐시도 함께 업데이트 (ContentManager 의존성 제거)
+    // await _contentManager.updatePageCache(
+    //   pageId, 
+    //   processedText,
+    //   "languageLearning"
+    // );
   }
   
   Future<void> clearProcessedTextCache(String? pageId) async {

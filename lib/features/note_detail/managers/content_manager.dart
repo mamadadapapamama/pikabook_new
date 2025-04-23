@@ -13,7 +13,7 @@ import '../../../core/services/dictionary/dictionary_service.dart';
 import '../../../core/services/dictionary/external_cn_dictionary_service.dart';
 import '../../../core/services/text_processing/pinyin_creation_service.dart';
 import '../../../core/services/storage/unified_cache_service.dart';
-import '../../../core/services/text_processing/text_processing_service.dart';
+import '../../../core/services/workflow/text_processing_workflow.dart';
 
 /// 콘텐츠 관리자 클래스
 /// 페이지 텍스트 및 세그먼트 처리와 관련된 모든 로직을 중앙화합니다.
@@ -41,7 +41,7 @@ class ContentManager {
   late final DictionaryService _dictionaryService = DictionaryService();
   late final UnifiedCacheService _cacheService = UnifiedCacheService();
   late final TranslationService _translationService = TranslationService();
-  late final TextProcessingService _textProcessingService = TextProcessingService();
+  late final TextProcessingWorkflow _textProcessingWorkflow = TextProcessingWorkflow();
   late final PinyinCreationService _pinyinService = PinyinCreationService();
 
   ContentManager._internal() {
@@ -64,7 +64,7 @@ class ContentManager {
   // ===== PageContentService 기능 =====
   //
 
-  /// 페이지 텍스트 처리
+  /// 페이지 텍스트 처리 - TextProcessingWorkflow에 위임
   Future<ProcessedText?> processPageText({
     required page_model.Page page,
     required File? imageFile,
@@ -81,125 +81,11 @@ class ContentManager {
     if (page.originalText.isEmpty && imageFile == null) return null;
 
     try {
-      final pageId = page.id;
-      if (pageId == null) {
-        debugPrint('페이지 ID가 없어 캐시를 확인할 수 없습니다.');
-      } else {
-        // 메모리 캐시만 확인 (빠른 접근)
-        ProcessedText? cachedText = await getProcessedText(pageId);
-        if (cachedText != null) {
-          debugPrint('✅ 메모리 캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId');
-          print("ContentManager.processPageText 완료(캐시): pageId=$pageId");
-          return cachedText;
-        }
-        
-        // 메모리 캐시에 없는 경우만 영구 캐시 확인
-        try {
-          final cachedProcessedText = await _pageService.getCachedProcessedText(
-            pageId,
-            "languageLearning", // 항상 languageLearning 모드 사용
-          );
-
-          if (cachedProcessedText != null) {
-            ProcessedText? convertedText;
-            
-            if (cachedProcessedText is ProcessedText) {
-              // 이미 ProcessedText 객체인 경우
-              convertedText = cachedProcessedText;
-            } else if (cachedProcessedText is Map<String, dynamic>) {
-              // Map 형태로 저장된 경우 변환 시도
-              try {
-                convertedText = ProcessedText.fromJson(cachedProcessedText);
-              } catch (e) {
-                debugPrint('캐시된 Map 데이터를 ProcessedText로 변환 중 오류: $e');
-              }
-            }
-            
-            // 변환된 텍스트가 있으면 메모리 캐시에 저장하고 반환
-            if (convertedText != null) {
-              debugPrint('✅ 영구 캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId');
-              await setProcessedText(pageId, convertedText);
-              print("ContentManager.processPageText 완료(영구캐시): pageId=$pageId");
-              return convertedText;
-            }
-          }
-        } catch (e) {
-          debugPrint('⚠️ 영구 캐시 확인 중 오류 (무시됨): $e');
-          // 캐시 오류는 무시하고 계속 진행
-        }
-      }
-      
-      // 텍스트 처리 로직
-      final originalText = page.originalText;
-      final translatedText = page.translatedText ?? '';
-
-      // 이미지 파일이 있고 텍스트가 없는 경우 OCR 처리
-      if (imageFile != null &&
-          (originalText.isEmpty || translatedText.isEmpty)) {
-        try {
-          print("이미지 OCR 처리 시작: pageId=$pageId");
-          final processedText = await _ocrService.processImage(
-            imageFile,
-            "languageLearning", // 항상 languageLearning 모드 사용
-          );
-
-          // 처리된 텍스트를 메모리에 캐싱
-          if (processedText.fullOriginalText.isNotEmpty && pageId != null) {
-            await setProcessedText(pageId, processedText);
-            
-            // 백그라운드로 영구 캐싱
-            _cacheInBackground(pageId, processedText);
-          }
-          
-          print("ContentManager.processPageText 완료(OCR): pageId=$pageId");
-          return processedText;
-        } catch (ocrError) {
-          debugPrint('OCR 처리 중 오류: $ocrError');
-          // OCR 오류 발생 시 빈 ProcessedText 객체 반환
-          return ProcessedText(
-            fullOriginalText: originalText.isNotEmpty ? originalText : "이미지 처리 중 오류가 발생했습니다.",
-            fullTranslatedText: translatedText,
-            segments: [],
-            showFullText: true,
-          );
-        }
-      }
-
-      // 텍스트 처리
-      if (originalText.isNotEmpty) {
-        try {
-          print("텍스트 처리 시작: pageId=$pageId, 텍스트 길이=${originalText.length}");
-          ProcessedText processedText =
-              await _ocrService.processText(originalText, "languageLearning");
-        
-          // 번역 텍스트가 있는 경우 설정
-          if (translatedText.isNotEmpty &&
-              processedText.fullTranslatedText == null) {
-            processedText =
-                processedText.copyWith(fullTranslatedText: translatedText);
-          }
-
-          // 메모리 캐시에 저장
-          if (pageId != null) {
-            await setProcessedText(pageId, processedText);
-            
-            // 백그라운드로 영구 캐싱
-            _cacheInBackground(pageId, processedText);
-          }
-          
-          print("ContentManager.processPageText 완료(텍스트): pageId=$pageId");
-          return processedText;
-        } catch (textProcessingError) {
-          debugPrint('텍스트 처리 중 오류: $textProcessingError');
-          // 텍스트 처리 오류 시 기본 텍스트 반환
-          return ProcessedText(
-            fullOriginalText: originalText,
-            fullTranslatedText: translatedText,
-            segments: [],
-            showFullText: true,
-          );
-        }
-      }
+      // TextProcessingWorkflow에 위임
+      return await _textProcessingWorkflow.processPageText(
+        page: page,
+        imageFile: imageFile,
+      );
     } catch (e, stack) {
       debugPrint('페이지 텍스트 처리 중 오류 발생: $e');
       debugPrint('스택 트레이스: $stack');
@@ -211,8 +97,6 @@ class ContentManager {
         showFullText: true,
       );
     }
-
-    return null;
   }
   
   // ProcessedText 캐시 메서드들
@@ -474,9 +358,9 @@ class ContentManager {
     }
   }
 
-  // TextProcessingService 기능 위임
+  // TextProcessingWorkflow 기능 위임
   Future<ProcessedText?> toggleDisplayModeForPage(String? pageId) async {
-    return await _textProcessingService.toggleDisplayModeForPage(pageId);
+    return await _textProcessingWorkflow.toggleDisplayModeForPage(pageId);
   }
 
   // 병음 토글

@@ -5,7 +5,7 @@ import '../../../core/models/note.dart' as note_model;
 import '../../../core/services/content/page_service.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/services/storage/unified_cache_service.dart';
-import '../../../core/services/text_processing/text_processing_service.dart';
+import '../../../core/services/workflow/text_processing_workflow.dart';
 import '../../../core/services/content/note_service.dart';
 import '../../../core/services/content/flashcard_service.dart' hide debugPrint;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -491,7 +491,7 @@ class PageManager {
   /// 이미지와 텍스트 처리를 모두 처리합니다.
   Future<Map<String, dynamic>> loadPageContent(
     page_model.Page page, 
-    {required TextProcessingService textProcessingService,
+    {required TextProcessingWorkflow textProcessingWorkflow,
     required ImageService imageService,
     required dynamic note}) async {
     
@@ -512,7 +512,7 @@ class PageManager {
       
       // 2. 텍스트 처리
       if (page.id != null) {
-        final processedText = await textProcessingService.processAndPreparePageContent(
+        final processedText = await textProcessingWorkflow.processAndPreparePageContent(
           page: page,
           imageFile: imageFile ?? imageService.getCurrentImageFile(),
           note: note,
