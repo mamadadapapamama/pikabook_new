@@ -9,7 +9,7 @@ import '../widgets/common/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
 import '../core/services/common/usage_limit_service.dart';
 import 'dart:async';
-import '../widgets/pikabook_loader.dart';
+import '../core/widgets/loading_dialog_experience.dart';
 import '../core/models/note.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
@@ -286,7 +286,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     // PikabookLoader 사용 - 기존 LoadingDialog보다 안정적
     if (appContext.mounted) {
       debugPrint('로딩 다이얼로그 표시 시작');
-      await PikabookLoader.show(
+      await NoteCreationLoader.show(
         appContext, 
         message: '스마트 노트를 만들고 있어요\n잠시만 기다려 주세요!'
       );
@@ -314,7 +314,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       try {
         if (appContext.mounted) {
           debugPrint('로딩 다이얼로그 숨김 시작');
-          PikabookLoader.hide(appContext);
+          NoteCreationLoader.hide(appContext);
           debugPrint('로딩 다이얼로그 숨김 완료');
         }
       } catch (e) {
@@ -417,7 +417,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       // 에러 처리
       try {
         if (appContext.mounted) {
-          PikabookLoader.hide(appContext);
+          NoteCreationLoader.hide(appContext);
         }
       } catch (loaderError) {
         debugPrint('로더 숨김 중 오류: $loaderError');

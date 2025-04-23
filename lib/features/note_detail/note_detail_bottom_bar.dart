@@ -156,113 +156,123 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
         : (widget.totalPages > 0 ? (widget.currentPageIndex + 1) / widget.totalPages : 0.0);
     
     // 하단 safe area 영역 고려
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
     
-    return Container(
-      width: double.infinity,
-      // 바텀 패딩을 고려하여 높이 조정 - Material 기본 bottomBar 높이에 맞춤
-      height: 56 + bottomPadding,
+    return Material(
       color: Colors.white,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 프로그레스 바
-          LinearProgressIndicator(
-            value: progress,
-            backgroundColor: ColorTokens.primarylight,
-            valueColor: const AlwaysStoppedAnimation<Color>(ColorTokens.primary),
-            minHeight: 3,
-          ),
-          
-          // 컨트롤 영역
-          Padding(
-            padding: EdgeInsets.only(
-              left: SpacingTokens.sm,
-              right: SpacingTokens.sm,
-              top: SpacingTokens.xs, // 상단 패딩 줄임
-              bottom: SpacingTokens.xs + bottomPadding, // 하단 패딩에 safe area 포함
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // 이전 페이지 버튼
-                SizedBox(
-                  width: 32,
-                  child: _buildNavigationButton(
-                    icon: Icons.arrow_back_ios_rounded,
-                    onTap: widget.currentPageIndex > 0 
-                        ? () => widget.onPageChanged(widget.currentPageIndex - 1) 
-                        : null,
+      elevation: 4.0,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          width: double.infinity,
+          // 바텀 패딩을 고려하여 높이 조정 - 전체 높이를 더 줄임
+          height: 48 + (bottomPadding > 0 ? 4 : 0), // notch 기기에서만 약간의 추가 높이
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 프로그레스 바 - 더 얇게 수정
+              LinearProgressIndicator(
+                value: progress,
+                backgroundColor: ColorTokens.primarylight,
+                valueColor: const AlwaysStoppedAnimation<Color>(ColorTokens.primary),
+                minHeight: 2, // 3에서 2로 줄임
+              ),
+              
+              // 컨트롤 영역
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: SpacingTokens.xs,
+                    right: SpacingTokens.xs,
+                    top: 2, // 패딩 줄임
+                    bottom: 2, // 패딩 줄임
                   ),
-                ),
-                
-                // 중앙 컨트롤 영역 (모드 전환 버튼)
-                Expanded(
-                  child: Center(
-                    child: GestureDetector(
-                      onTap: () => _toggleDisplayMode(), // 메서드 직접 호출로 변경
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: SpacingTokens.sm, 
-                          vertical: SpacingTokens.xs // 패딩 크기 감소
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // 이전 페이지 버튼
+                      SizedBox(
+                        width: 32,
+                        child: _buildNavigationButton(
+                          icon: Icons.arrow_back_ios_rounded,
+                          onTap: widget.currentPageIndex > 0 
+                              ? () => widget.onPageChanged(widget.currentPageIndex - 1) 
+                              : null,
                         ),
-                        decoration: BoxDecoration(
-                          color: ColorTokens.surface,
-                          borderRadius: BorderRadius.circular(100),
-                          border: Border.all(color: ColorTokens.secondary),
-                        ),
-                        child: Text(
-                          widget.isFullTextMode ? '문장별 보기' : '원문 전체 보기',
-                          style: TypographyTokens.caption.copyWith(
-                            color: ColorTokens.secondary,
+                      ),
+                      
+                      // 중앙 컨트롤 영역 (모드 전환 버튼)
+                      Expanded(
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: () => _toggleDisplayMode(), // 메서드 직접 호출로 변경
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8, 
+                                vertical: 2 // 패딩 크기 감소
+                              ),
+                              decoration: BoxDecoration(
+                                color: ColorTokens.surface,
+                                borderRadius: BorderRadius.circular(100),
+                                border: Border.all(color: ColorTokens.secondary),
+                              ),
+                              child: Text(
+                                widget.isFullTextMode ? '문장별 보기' : '원문 전체 보기',
+                                style: TypographyTokens.caption.copyWith(
+                                  color: ColorTokens.secondary,
+                                  fontSize: 12, 
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                      
+                      // 오른쪽 영역 (TTS 버튼 + 페이지 번호 + 다음 페이지 버튼)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // TTS 재생 버튼 추가 - 컴팩트하게 아이콘 크기 조정
+                          if (widget.onTtsPlay != null && !widget.isMinimalUI)
+                            IconButton(
+                              icon: const Icon(Icons.volume_up, size: 16), // 18에서 16으로 크기 줄임
+                              onPressed: widget.onTtsPlay,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 24,
+                                minHeight: 24,
+                              ),
+                              color: ColorTokens.secondary,
+                            ),
+                          const SizedBox(width: 4), // 간격 줄임
+                          
+                          // 페이지 번호 표시
+                          Text(
+                            '${widget.currentPageIndex + 1}/${widget.totalPages}',
+                            style: TypographyTokens.caption.copyWith(
+                              color: ColorTokens.textSecondary,
+                              fontSize: 12, // 폰트 크기 줄임
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(width: 4),
+                          
+                          // 다음 페이지 버튼
+                          _buildNavigationButton(
+                            icon: Icons.arrow_forward_ios_rounded,
+                            onTap: (widget.currentPageIndex < widget.totalPages - 1)
+                                ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
+                                : null,
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                
-                // 오른쪽 영역 (TTS 버튼 + 페이지 번호 + 다음 페이지 버튼)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // TTS 재생 버튼 추가 - 컴팩트하게 아이콘 크기 조정
-                    if (widget.onTtsPlay != null && !widget.isMinimalUI)
-                      IconButton(
-                        icon: const Icon(Icons.volume_up, size: 18),
-                        onPressed: widget.onTtsPlay,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 24,
-                          minHeight: 24,
-                        ),
-                        color: ColorTokens.secondary,
-                      ),
-                    const SizedBox(width: 4), // 간격 줄임
-                    
-                    // 페이지 번호 표시
-                    Text(
-                      '${widget.currentPageIndex + 1}/${widget.totalPages}',
-                      style: TypographyTokens.caption.copyWith(
-                        color: ColorTokens.textSecondary,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(width: 4),
-                    
-                    // 다음 페이지 버튼
-                    _buildNavigationButton(
-                      icon: Icons.arrow_forward_ios_rounded,
-                      onTap: (widget.currentPageIndex < widget.totalPages - 1)
-                          ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
-                          : null,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

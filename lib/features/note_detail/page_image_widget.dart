@@ -89,8 +89,8 @@ class PageImageWidget extends StatelessWidget {
               // 확대 아이콘 (enableFullScreen이 true인 경우)
               if (enableFullScreen)
                 Positioned(
-                  right: 8,
-                  bottom: 8,
+                  right: 12,
+                  bottom: 12,
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
@@ -100,7 +100,7 @@ class PageImageWidget extends StatelessWidget {
                     child: const Icon(
                       Icons.zoom_in,
                       color: Colors.white,
-                      size: 16,
+                      size: 24,
                     ),
                   ),
                 ),
