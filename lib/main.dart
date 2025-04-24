@@ -45,7 +45,7 @@ void main() async {
   
   // 이미지 캐시 초기화
   final imageService = ImageService();
-  await imageService.cleanupTempFiles();
+  await imageService.clearImageCache();
   
   // 일반적인 앱 실행
   runApp(const App());
@@ -65,8 +65,8 @@ Future<void> _cleanupOnStart() async {
       }
     };
     
-    // 이미지 서비스 임시 파일 정리
-    await ImageService().cleanupTempFiles();
+    // 이미지 서비스 캐시 정리
+    await ImageService().clearImageCache();
     
     debugPrint('앱 시작 시 캐시 정리 완료');
   } catch (e) {

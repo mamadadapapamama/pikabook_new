@@ -8,6 +8,7 @@ import '../../../core/widgets/loading_dialog_experience.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../features/note_detail/note_detail_screen_mvvm.dart';
+import '../../../features/note_detail/managers/content_manager.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
@@ -19,6 +20,7 @@ class NoteCreationWorkflow {
   final PageService _pageService = PageService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ContentManager _contentManager = ContentManager();
   
   // 싱글톤 패턴
   static final NoteCreationWorkflow _instance = NoteCreationWorkflow._internal();
@@ -64,9 +66,9 @@ class NoteCreationWorkflow {
       debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
       
       // 노트 생성 (백그라운드 처리 위임)
-      final result = await _noteService.createNoteWithMultipleImages(
+      final result = await _contentManager.createNoteWithMultipleImages(
         imageFiles: imageFiles,
-        waitForFirstPageProcessing: true, // 첫 페이지 처리 기다리기 (변경됨)
+        waitForFirstPageProcessing: true, // 첫 페이지 처리 기다리기
       );
       
       debugPrint('노트 생성 완료: $result');

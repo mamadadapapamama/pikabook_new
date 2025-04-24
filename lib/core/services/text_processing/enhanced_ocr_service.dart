@@ -1,445 +1,153 @@
-// MARK: 다국어 지원을 위한 확장 포인트
-// 이 서비스는 향후 다국어 지원을 위해 확장될 예정입니다.
-// 현재는 중국어 텍스트 추출에 초점이 맞춰져 있습니다.
-// 향후 각 언어별 최적화된 OCR 처리가 추가될 예정입니다.
-
+// 향후 다국어 지원 확대 예정
+// 현재는 중국어 텍스트 추출에 초점
 import 'dart:io';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:googleapis/vision/v1.dart' as vision;
-import 'package:googleapis_auth/auth_io.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
-import 'package:pinyin/pinyin.dart';
-import '../../models/processed_text.dart';
-import '../../models/text_segment.dart';
-import 'translation_service.dart';
-import 'internal_cn_segmenter_service.dart';
-import 'text_cleaner_service.dart';
-import 'pinyin_creation_service.dart';
-import '../authentication/user_preferences_service.dart';
 import 'package:crypto/crypto.dart';
-import '../../../features/note_detail/managers/content_manager.dart'; // ContentManager 임포트
+import 'package:path_provider/path_provider.dart';
+import 'package:googleapis/vision/v1.dart';
+import 'package:googleapis_auth/auth_io.dart';
+import '../storage/unified_cache_service.dart';
 
-/// 고급 OCR 서비스
-/// 
-/// 이미지에서 텍스트를 추출하고 다양한 처리를 수행합니다.
-/// 
-/// ## 주요 기능
-/// - Google Cloud Vision API 기반 OCR 처리
-/// - 추출된 텍스트의 세그먼트화 및 번역
-/// - 중국어 텍스트 인식 및 처리 최적화
-/// - 다양한 모드별 텍스트 처리 (언어 학습, 전문 서적 등)
-/// - 처리된 결과를 ProcessedText 형태로 반환
+/// Enhanced OCR Service: 이미지에서 텍스트를 추출하는 서비스
 ///
-/// ## 사용 예시
-/// ```dart
-/// final ocrService = EnhancedOcrService();
-/// await ocrService.initialize();
-/// 
-/// // 이미지에서 텍스트 추출
-/// final extractedText = await ocrService.extractText(imageFile);
-/// 
-/// // 추출된 텍스트 처리
-/// final processedText = await ocrService.processText(extractedText, "languageLearning");
-/// ```
+/// Google Cloud Vision API를 사용하여 이미지에서 텍스트를 추출합니다.
+/// OCR 기능에만 집중하도록 단순화되었습니다.
+/// 텍스트 처리 관련 로직은 TextProcessingWorkflow로 이동했습니다.
 class EnhancedOcrService {
-  // 싱글톤 패턴 구현
+  // 싱글톤 패턴
   static final EnhancedOcrService _instance = EnhancedOcrService._internal();
   factory EnhancedOcrService() => _instance;
   EnhancedOcrService._internal() {
-    debugPrint('🤖 EnhancedOcrService: 생성자 호출됨');
+    debugPrint('✨ EnhancedOcrService: 생성자 호출됨');
+    _initializeApi();
   }
 
-  // Google Cloud Vision API 클라이언트
-  vision.VisionApi? _visionApi;
-
-  // 감지할 언어 설정 (MVP에서는 중국어만 지원)
-  final String _targetLanguage = 'zh-CN'; // 중국어
-
-  // 텍스트 정리 서비스 - 텍스트 클리닝 전담
-  final TextCleanerService _textCleanerService = TextCleanerService();
-
-  // 핀인 생성 서비스
-  final PinyinCreationService _pinyinService = PinyinCreationService();
-
-  // 번역 서비스
-  final TranslationService _translationService = TranslationService();
-
-  // 중국어 분할 서비스
-  final InternalCnSegmenterService _segmenterService = InternalCnSegmenterService();
-
-  // 사용자 설정 서비스 추가
-  final UserPreferencesService _preferencesService = UserPreferencesService();
-
-  // API 초기화
-  Future<void> initialize() async {
-    if (_visionApi != null) return;
-
-    try {
-      // 서비스 계정 키 파일 로드
-      final credentialsFile = await _loadCredentialsFile();
-
-      // 인증 클라이언트 생성
-      final client = await clientViaServiceAccount(
-        ServiceAccountCredentials.fromJson(credentialsFile),
-        [vision.VisionApi.cloudVisionScope],
-      );
-
-      // Vision API 클라이언트 생성
-      _visionApi = vision.VisionApi(client);
-
-      debugPrint('Google Cloud Vision API 초기화 완료');
-    } catch (e) {
-      debugPrint('Google Cloud Vision API 초기화 중 오류 발생: $e');
-      throw Exception('OCR 서비스를 초기화할 수 없습니다: $e');
-    }
-  }
-
-  // 서비스 계정 키 파일 로드
-  Future<Map<String, dynamic>> _loadCredentialsFile() async {
-    try {
-      // 먼저 앱 문서 디렉토리에서 키 파일 확인
-      final directory = await getApplicationDocumentsDirectory();
-      final credentialsPath = '${directory.path}/google_cloud_credentials.json';
-      final file = File(credentialsPath);
-
-      if (await file.exists()) {
-        final contents = await file.readAsString();
-        return json.decode(contents) as Map<String, dynamic>;
-      } else {
-        // 앱 문서 디렉토리에 파일이 없으면 assets에서 로드하여 복사
-        try {
-          // assets에서 키 파일 로드 (service-account.json으로 변경)
-          final String jsonString = await rootBundle
-              .loadString('assets/credentials/service-account.json');
-
-          // 앱 문서 디렉토리에 파일 저장
-          await file.create(recursive: true);
-          await file.writeAsString(jsonString);
-
-          return json.decode(jsonString) as Map<String, dynamic>;
-        } catch (assetError) {
-          debugPrint('assets에서 서비스 계정 키 파일 로드 중 오류 발생: $assetError');
-          throw Exception('서비스 계정 키 파일을 찾을 수 없습니다.');
-        }
-      }
-    } catch (e) {
-      debugPrint('서비스 계정 키 파일 로드 중 오류 발생: $e');
-      throw Exception('서비스 계정 키 파일을 로드할 수 없습니다: $e');
-    }
-  }
-
-  /// 이미지에서 텍스트 추출 및 처리
-  Future<ProcessedText> processImage(
-    File imageFile,
-    String mode,
-    {bool skipUsageCount = false}
-  ) async {
-    try {
-      // 이미지에서 텍스트 추출
-      final extractedText = await extractText(imageFile, skipUsageCount: skipUsageCount);
-      if (extractedText.isEmpty) {
-        return ProcessedText(fullOriginalText: '');
-      }
-
-      // 추출된 텍스트 처리
-      return await processText(extractedText, mode);
-    } catch (e) {
-      debugPrint('OCR 이미지 처리 오류: $e');
-      return ProcessedText(fullOriginalText: '');
-    }
-  }
-
-  /// 텍스트 처리 (모드에 따라 다르게 처리)
-  Future<ProcessedText> processText(String text, String mode) async {
-    try {
-      // 입력 텍스트 확인
-      if (text.isEmpty) {
-        debugPrint('OCR processText: 빈 텍스트 입력');
-        return ProcessedText(fullOriginalText: '');
-      }
-      
-      // 특수 처리 중 문자열인 경우 처리 없이 반환
-      if (text == '___PROCESSING___' || text == 'processing' || text.contains('텍스트 처리 중')) {
-        debugPrint('OCR processText: 특수 처리 중 문자열 감지("$text"), 처리 생략');
-        return ProcessedText(
-          fullOriginalText: text,
-          fullTranslatedText: '',
-          segments: [], // 빈 세그먼트 목록 제공
-          showFullText: false,
-          showPinyin: true,
-          showTranslation: true,
-        );
-      }
-      
-      // 모드 선택
-      switch (mode) {
-        case "languageLearning":
-          return await _processLanguageLearning(text);
-        default:
-          debugPrint('알 수 없는 모드: $mode, 기본값(languageLearning) 사용');
-          return await _processLanguageLearning(text);
-      }
-    } catch (e) {
-      debugPrint('OCR 처리 중 오류 발생: $e');
-      return ProcessedText(fullOriginalText: text);
-    }
-  }
-
-  /// **언어 학습 모드 텍스트 처리**
-  Future<ProcessedText> _processLanguageLearning(String fullText) async {
-    try {
-      if (fullText.isEmpty) {
-        return ProcessedText(fullOriginalText: '');
-      }
-
-      // 텍스트 클리너 서비스를 통해 핀인 줄 제거 및 정리
-      final cleanedText = _textCleanerService.removePinyinLines(fullText);
-      debugPrint('OCR _processLanguageLearning: 정리된 텍스트 ${cleanedText.length}자');
-
-      // 사용자 세그먼트 모드 설정을 가져옴
-      final useSegmentMode = await _preferencesService.getUseSegmentMode();
-      debugPrint('OCR _processLanguageLearning: 사용자 세그먼트 모드: $useSegmentMode');
-
-      String? fullTranslatedText;
-      List<TextSegment>? segments;
-
-      // 세그먼트 모드가 아닌 경우에만 전체 번역 수행
-      if (!useSegmentMode) {
-        debugPrint('OCR _processLanguageLearning: 전체 번역 모드 - 전체 텍스트 번역 시작...');
-        // 중국어에서 한국어로 명시적으로 언어 코드 설정
-        fullTranslatedText = await _translationService.translateText(
-          cleanedText, 
-          sourceLanguage: 'zh-CN',  // 명시적으로 중국어 소스 언어 설정 
-          targetLanguage: 'ko'      // 명시적으로 한국어 타겟 언어 설정
-        );
-        
-        // 번역 결과 검증 로그
-        bool isTranslationSuccessful = fullTranslatedText != cleanedText;
-        
-        if (!isTranslationSuccessful) {
-          debugPrint('OCR _processLanguageLearning: 심각한 경고! 번역 결과가 원문과 동일함');
-          debugPrint('OCR _processLanguageLearning: 원본 샘플: "${cleanedText.length > 30 ? cleanedText.substring(0, 30) + '...' : cleanedText}"');
-          debugPrint('OCR _processLanguageLearning: 번역 샘플: "${fullTranslatedText.length > 30 ? fullTranslatedText.substring(0, 30) + '...' : fullTranslatedText}"');
-        } else {
-          debugPrint('OCR _processLanguageLearning: 번역 성공! 번역 결과 ${fullTranslatedText.length}자');
-          debugPrint('OCR _processLanguageLearning: 번역 결과 샘플: "${fullTranslatedText.length > 30 ? fullTranslatedText.substring(0, 30) + '...' : fullTranslatedText}"');
-        }
-      } else {
-        debugPrint('OCR _processLanguageLearning: 세그먼트 모드 - 전체 텍스트 번역 건너뜀');
-      }
-
-      // 세그먼트 모드인 경우에만 개별 문장 번역 수행
-      if (useSegmentMode) {
-        debugPrint('OCR _processLanguageLearning: 세그먼트 모드 - 문장별 번역 시작...');
-        
-        // 문장을 병렬로 처리 - 이 부분을 바로 실행
-        segments = await _processTextSegmentsInParallel(cleanedText);
-        
-        // 세그먼트가 있는 경우 세그먼트 번역 상태 확인
-        if (segments.isNotEmpty) {
-          int untranslatedCount = 0;
-          for (var segment in segments) {
-            if (segment.translatedText == segment.originalText) {
-              untranslatedCount++;
-            }
-          }
-          if (untranslatedCount > 0) {
-            debugPrint('OCR _processLanguageLearning: 경고! $untranslatedCount/${segments.length} 세그먼트의 번역이 원문과 동일함');
-          }
-        }
-      } else {
-        debugPrint('OCR _processLanguageLearning: 전체 번역 모드 - 문장별 번역 건너뜀');
-      }
-      
-      // 최종 검증 로그
-      debugPrint('OCR _processLanguageLearning: 처리 완료. 원문: ${cleanedText.length}자, '
-          '번역: ${fullTranslatedText?.length ?? "없음"}자, '
-          '세그먼트: ${segments?.length ?? 0}개');
-
-      return ProcessedText(
-        fullOriginalText: cleanedText,
-        fullTranslatedText: fullTranslatedText,
-        segments: segments,
-        showFullText: !useSegmentMode, // 사용자 선택에 따라 초기 표시 모드 설정
-      );
-    } catch (e) {
-      debugPrint('언어 학습 모드 처리 오류: $e');
-      return ProcessedText(fullOriginalText: fullText);
-    }
-  }
-
-  /// 전문 서적 모드 텍스트 처리 - 사용하지 않지만 호환성을 위해 유지
-  Future<ProcessedText> _processProfessionalReading(String fullText) async {
-    try {
-      // 단순히 원본 텍스트만 반환
-      return ProcessedText(
-        fullOriginalText: fullText,
-      );
-    } catch (e) {
-      debugPrint('전문 서적 모드 처리 오류: $e');
-      return ProcessedText(fullOriginalText: fullText);
-    }
-  }
-
-  /// 문장을 병렬로 처리
-  Future<List<TextSegment>> _processTextSegmentsInParallel(String text) async {
-    try {
-      if (text.isEmpty) {
-        return [];
-      }
-
-      // 중국어 문장 분리
-      final sentences = _segmenterService.splitIntoSentences(text);
-      debugPrint('추출된 문장 수: ${sentences.length}');
-
-      // 빈 문장 필터링
-      final filteredSentences = sentences
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
-      
-      debugPrint('필터링 후 문장 수: ${filteredSentences.length}');
-
-      // 항상 순차 처리 방식 사용 - Isolate 병렬 처리 문제 방지
-      return _processTextSegmentsSequentially(filteredSentences);
-    } catch (e) {
-      debugPrint('문장 병렬 처리 중 오류 발생: $e');
-      return [];
-    }
-  }
+  // API 클라이언트
+  AutoRefreshingAuthClient? _client;
+  VisionApi? _visionApi;
   
-  // 문장을 순차적으로 처리
-  Future<List<TextSegment>> _processTextSegmentsSequentially(List<String> sentences) async {
-    debugPrint('순차적 문장 처리 시작: ${sentences.length}개');
-    
-    // 병렬 처리를 위한 배치 크기 설정
-    const int batchSize = 5;
-    final List<TextSegment> allSegments = [];
+  // 캐시 서비스
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
 
-    // 배치 단위로 처리하여 메모리 사용량 최적화
-    for (int i = 0; i < sentences.length; i += batchSize) {
-      final end =
-          (i + batchSize < sentences.length) ? i + batchSize : sentences.length;
-      final batch = sentences.sublist(i, end);
-
-      // 배치 내 문장들을 병렬로 처리
-      final batchResults = await Future.wait(
-        batch.map((sentence) => _processTextSegment(sentence)),
-      );
-
-      allSegments.addAll(batchResults);
-
-      // UI 스레드 차단 방지 (필요한 경우만)
-      if (end < sentences.length && allSegments.length > 10) {
-        await Future.delayed(Duration(milliseconds: 1));
-      }
-    }
-
-    return allSegments;
-  }
-
-  /// 개별 문장 처리
-  Future<TextSegment> _processTextSegment(String sentence) async {
+  /// API 클라이언트 초기화
+  Future<void> _initializeApi() async {
     try {
-      // 핀인 생성 (TextCleanerService에 위임)
-      final pinyin = await _textCleanerService.generatePinyinForSentence(sentence);
-
-      // 번역 시 언어 코드 명시적 설정
-      debugPrint('_processTextSegment: 문장 번역 시작 (${sentence.length}자)');
-      final translated = await _translationService.translateText(
-        sentence,
-        sourceLanguage: 'zh-CN',  // 중국어 소스 언어 명시
-        targetLanguage: 'ko',     // 한국어 타겟 언어 명시
-      );
-      
-      // 번역 결과 검증
-      if (translated == sentence) {
-        debugPrint('_processTextSegment: 경고 - 문장 번역 결과가 원문과 동일함');
+      final serviceAccountCredentials = await _loadServiceAccountCredentials();
+      if (serviceAccountCredentials != null) {
+        final scopes = [VisionApi.cloudPlatformScope];
+        _client = await clientViaServiceAccount(serviceAccountCredentials, scopes);
+        _visionApi = VisionApi(_client!);
+        debugPrint('Google Cloud Vision API 초기화 완료');
       } else {
-        debugPrint('_processTextSegment: 문장 번역 성공 (${translated.length}자)');
+        debugPrint('서비스 계정 자격 증명을 로드할 수 없습니다.');
       }
-
-      return TextSegment(
-        originalText: sentence,
-        pinyin: pinyin,
-        translatedText: translated,
-        sourceLanguage: 'zh-CN',  // 중국어 소스 언어 명시
-        targetLanguage: 'ko',     // 한국어 타겟 언어 명시
-      );
     } catch (e) {
-      debugPrint('문장 처리 중 오류 발생: $e');
-      // 오류가 발생해도 기본 세그먼트 반환
-      return TextSegment(
-        originalText: sentence,
-        pinyin: '',
-        translatedText: '번역 오류',
-        sourceLanguage: 'zh-CN',
-        targetLanguage: 'ko',
-      );
+      debugPrint('Vision API 초기화 중 오류 발생: $e');
     }
   }
 
-  /// 이미지에서 텍스트 추출 (OCR)
+  /// 서비스 계정 자격 증명 로드
+  Future<ServiceAccountCredentials?> _loadServiceAccountCredentials() async {
+    try {
+      // 자격 증명 파일 경로 (앱 내부 디렉토리에 저장된 경우)
+      final appDir = await getApplicationDocumentsDirectory();
+      final credentialFilePath = '${appDir.path}/service-account.json';
+      final credentialFile = File(credentialFilePath);
+      
+      if (await credentialFile.exists()) {
+        final credentialJson = await credentialFile.readAsString();
+        return ServiceAccountCredentials.fromJson(jsonDecode(credentialJson));
+      } else {
+        debugPrint('자격 증명 파일을 찾을 수 없습니다: $credentialFilePath');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('자격 증명 로드 중 오류 발생: $e');
+      return null;
+    }
+  }
+
+  /// 이미지에서 텍스트 추출
+  /// 
+  /// [imageFile]: 텍스트를 추출할 이미지 파일
+  /// [skipUsageCount]: 사용량 카운트 스킵 여부 (테스트용)
   Future<String> extractText(File imageFile, {bool skipUsageCount = false}) async {
     try {
-      await initialize();
-
-      if (_visionApi == null) {
-        throw Exception('Vision API가 초기화되지 않았습니다.');
+      // 이미지 파일 해시 생성 (캐싱 키로 사용)
+      final imageHash = await _generateImageHash(imageFile);
+      
+      // 캐시에서 OCR 결과 확인
+      final cachedOcrResult = await _cacheService.getImageOcrResult(imageHash);
+      if (cachedOcrResult != null && cachedOcrResult.isNotEmpty) {
+        debugPrint('캐시에서 OCR 결과 반환: ${cachedOcrResult.length} 자');
+        return cachedOcrResult;
       }
-
-      // 이미지 파일을 base64로 인코딩
-      final bytes = await imageFile.readAsBytes();
-      final base64Image = base64Encode(bytes);
-
+      
+      // API가 초기화되지 않은 경우 초기화
+      if (_visionApi == null || _client == null) {
+        await _initializeApi();
+        
+        // 여전히 초기화되지 않은 경우 에러
+        if (_visionApi == null || _client == null) {
+          throw Exception('Vision API가 초기화되지 않았습니다.');
+        }
+      }
+      
+      // 이미지 파일을 바이트로 읽기
+      final imageBytes = await imageFile.readAsBytes();
+      
       // Vision API 요청 생성
-      final request = vision.AnnotateImageRequest();
-      request.image = vision.Image()..content = base64Image;
-      request.features = [
-        vision.Feature()
-          ..type = 'TEXT_DETECTION'
-          ..maxResults = 1
-      ];
-
-      // 언어 힌트 추가 (중국어 우선)
-      request.imageContext = vision.ImageContext()
-        ..languageHints = ['zh-CN', 'zh-TW', 'ja', 'ko', 'en'];
-
-      // API 요청 전송
-      final batchRequest = vision.BatchAnnotateImagesRequest()
+      final request = AnnotateImageRequest()
+        ..features = [Feature()..type = 'TEXT_DETECTION']
+        ..image = (Image()..content = base64Encode(imageBytes));
+      
+      final batchRequest = BatchAnnotateImagesRequest()
         ..requests = [request];
+      
+      // OCR 요청 실행
       final response = await _visionApi!.images.annotate(batchRequest);
-
+      
       // 응답 처리
-      if (response.responses == null || response.responses!.isEmpty) {
-        return '';
+      if (response.responses != null && response.responses!.isNotEmpty) {
+        final firstResponse = response.responses!.first;
+        final extractedText = firstResponse.fullTextAnnotation?.text ?? '';
+        
+        // OCR 결과 캐싱
+        if (extractedText.isNotEmpty) {
+          await _cacheService.setImageOcrResult(imageHash, extractedText);
+        }
+        
+        debugPrint('이미지에서 텍스트 추출 완료: ${extractedText.length} 자');
+        return extractedText;
       }
-
-      final textAnnotation = response.responses![0].fullTextAnnotation;
-      if (textAnnotation == null) {
-        return '';
-      }
-
-      String extractedText = textAnnotation.text ?? '';
-
-      // TextCleanerService를 사용하여 불필요한 텍스트 제거
-      extractedText = _textCleanerService.cleanText(extractedText);
-
-      return extractedText;
+      
+      return '';
     } catch (e) {
       debugPrint('텍스트 추출 중 오류 발생: $e');
       return '';
     }
   }
 
-  // 텍스트에 대한 해시 생성 (세그먼트 캐싱용)
-  String _computeTextHash(String text) {
-    var bytes = utf8.encode(text);
-    var digest = sha256.convert(bytes);
-    return digest.toString().substring(0, 16); // 16자리로 제한
+  /// 이미지 파일의 해시 생성 (캐싱 키로 사용)
+  Future<String> _generateImageHash(File imageFile) async {
+    try {
+      final bytes = await imageFile.readAsBytes();
+      
+      // 대용량 이미지의 경우 첫 10KB만 사용 (성능 최적화)
+      final sampleSize = min(10 * 1024, bytes.length);
+      final sample = bytes.sublist(0, sampleSize);
+      
+      // SHA-256 해시 생성
+      final digest = sha256.convert(sample);
+      return digest.toString();
+    } catch (e) {
+      debugPrint('이미지 해시 생성 중 오류 발생: $e');
+      
+      // 오류 시 파일 경로와 타임스탬프로 대체
+      final fallbackKey = '${imageFile.path}_${DateTime.now().millisecondsSinceEpoch}';
+      return sha256.convert(utf8.encode(fallbackKey)).toString();
+    }
   }
 }

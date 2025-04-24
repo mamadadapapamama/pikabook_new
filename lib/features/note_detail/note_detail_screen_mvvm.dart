@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:quill_html_editor/quill_html_editor.dart';
 import '../../core/models/note.dart';
 import '../../core/models/page.dart' as page_model;
 import '../../core/models/processed_text.dart';
@@ -14,7 +12,6 @@ import '../../core/services/dictionary/dictionary_service.dart';
 import '../../core/services/content/flashcard_service.dart';
 import '../../core/services/media/tts_service.dart';
 import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/utils/loading_state.dart';
 import '../../core/widgets/loading_experience.dart';
 import 'note_detail_state.dart';
 import 'note_detail_viewmodel.dart';

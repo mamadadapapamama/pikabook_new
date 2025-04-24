@@ -6,17 +6,17 @@ import 'dart:io';
 import '../../core/models/processed_text.dart';
 import '../../core/models/flash_card.dart';
 import '../../core/models/page.dart' as pika_page;
+import '../../core/models/dictionary.dart';
+import '../../core/models/note.dart';
 import '../../core/services/dictionary/dictionary_service.dart';
 import '../../core/services/content/page_service.dart';
 import '../../core/services/media/tts_service.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/services/common/usage_limit_service.dart';
-import '../../core/utils/usage_dialog.dart';
-import '../../core/utils/component_state.dart';
-import '../../core/utils/loading_state.dart';
 import '../../core/services/text_processing/enhanced_ocr_service.dart';
 import '../../core/services/text_processing/translation_service.dart';
+import '../../core/services/workflow/text_processing_workflow.dart';
 import 'processed_text_widget.dart';
 import 'managers/content_manager.dart';
 import 'page_image_widget.dart'; // PageImageWidget 추가
@@ -25,7 +25,6 @@ import '../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/utils/segment_utils.dart';
 import '../../core/services/text_processing/.text_reader_service.dart'; // TTS 서비스 추가
 import '../../core/widgets/usage_dialog.dart';
-import '../../core/services/text_processing/tts_service.dart';
 
 /// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
 ///
@@ -1045,11 +1044,24 @@ if (kDebugMode) {
         );
         
         try {
-          // 세그먼트 처리 (문장 분리 및 번역)
-          // _processTextSegmentsInParallel은 private 메서드이므로 processText 사용
-          final processedResult = await _ocrService.processText(
-            updatedText.fullOriginalText, 
-            "languageLearning"
+          // 세그먼트 처리 (문장 분리 및 번역) - TextProcessingWorkflow 사용
+          final textProcessingWorkflow = TextProcessingWorkflow();
+          // Note 객체에 extractedText 필드를 설정합니다
+          final note = Note(
+            id: null, 
+            userId: '', 
+            originalText: updatedText.fullOriginalText,
+            translatedText: updatedText.fullTranslatedText ?? '',
+            sourceLanguage: 'zh-CN',
+            targetLanguage: 'ko',
+            extractedText: updatedText.fullOriginalText, // extractedText 필드에 원본 텍스트 설정
+          );
+          
+          final processedResult = await textProcessingWorkflow.processText(
+            text: updatedText.fullOriginalText,
+            note: note,
+            pageId: widget.page.id ?? 'temp',
+            // 외부 extractedText 매개변수는 제거 (Note 객체 내부에 이미 설정됨)
           );
           
           // 세그먼트 결과 업데이트
@@ -1133,5 +1145,40 @@ if (kDebugMode) {
         widget.onContentReady!(ComponentState.loading);
       }
     }
+  }
+}
+
+// 임시 사전 결과 위젯 클래스 추가
+class DictionaryResultWidget {
+  static Future<void> showDictionaryBottomSheet({
+    required BuildContext context,
+    required DictionaryEntry entry,
+    required Function(String, String, {String? pinyin}) onCreateFlashCard,
+    required bool isExistingFlashcard,
+  }) async {
+    // 간소화된 형태로 구현
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('단어: ${entry.word}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            if (entry.pinyin.isNotEmpty)
+              Text('병음: ${entry.pinyin}'),
+            Text('의미: ${entry.meaning}'),
+            if (!isExistingFlashcard)
+              ElevatedButton(
+                onPressed: () {
+                  onCreateFlashCard(entry.word, entry.meaning, pinyin: entry.pinyin);
+                  Navigator.pop(context);
+                },
+                child: const Text('플래시카드 추가'),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }

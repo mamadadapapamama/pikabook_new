@@ -242,7 +242,7 @@ class InitializationManager {
       
       // 임시 파일 정리
       final imageService = ImageService();
-      await imageService.cleanupTempFiles();
+      await imageService.clearImageCache();
       
       // 7. 완료
       _updateProgress(

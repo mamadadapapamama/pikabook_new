@@ -5,8 +5,6 @@ import 'package:flutter/foundation.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/processed_text.dart';
 import '../media/image_service.dart';
-import '../text_processing/enhanced_ocr_service.dart';
-import '../text_processing/translation_service.dart';
 import '../storage/unified_cache_service.dart';
 import 'dart:convert';
 
@@ -91,42 +89,6 @@ class PageService {
     }
   }
 
-  /* // createPageWithImage 메서드 주석 처리 (ContentManager로 이동 고려)
-  /// 이미지로 페이지 생성 (OCR 및 번역 포함) - ContentManager 역할
-  Future<page_model.Page> createPageWithImage({
-    required String noteId,
-    required int pageNumber,
-    required File imageFile,
-    String? targetLanguage,
-  }) async {
-    try {
-      // 이미지에서 텍스트 추출 (OCR)
-      // final extractedText = await _ocrService.extractText(imageFile);
-      throw UnimplementedError('OCR 기능은 ContentManager로 이동해야 합니다.');
-      String extractedText = ''; // 임시
-
-      // 추출된 텍스트 번역
-      // final translatedText = await _translationService.translateText(
-      //   extractedText,
-      //   targetLanguage: targetLanguage,
-      // );
-      throw UnimplementedError('번역 기능은 ContentManager로 이동해야 합니다.');
-      String translatedText = ''; // 임시
-
-      // 페이지 생성
-      return await createPage(
-        noteId: noteId,
-        originalText: extractedText,
-        translatedText: translatedText,
-        pageNumber: pageNumber,
-        imageFile: imageFile,
-      );
-    } catch (e) {
-      debugPrint('이미지로 페이지 생성 중 오류 발생: $e');
-      throw Exception('이미지로 페이지를 생성할 수 없습니다: $e');
-    }
-  }
-  */
 
   /// 페이지 가져오기 (캐시 활용)
   Future<page_model.Page?> getPageById(String pageId) async {
@@ -474,38 +436,7 @@ class PageService {
     }
   }
 
-  /// 페이지 텍스트 번역
-  /* 
-  // 현재 미사용: MVP에서는 사용되지 않는 단순 번역 메서드
-  // 이 메서드는 세그먼트 분할, pinyin 생성 등을 제공하지 않고 단순 번역만 수행함
-  // 실제 텍스트 처리는 EnhancedOcrService와 ContentManager를 통해 이루어짐
-  Future<String> translatePageText(String pageId, {String? targetLanguage}) async {
-    try {
-      // 페이지 정보 가져오기
-      final page = await getPageById(pageId);
-      if (page == null) {
-        throw Exception('페이지를 찾을 수 없습니다.');
-      }
 
-      // 원본 텍스트 번역
-      final translatedText = await _translationService.translateText(
-        page.originalText,
-        targetLanguage: targetLanguage,
-      );
-
-      // 번역 결과 저장
-      await updatePage(
-        pageId,
-        translatedText: translatedText,
-      );
-
-      return translatedText;
-    } catch (e) {
-      debugPrint('페이지 텍스트 번역 중 오류 발생: $e');
-      throw Exception('페이지 텍스트를 번역할 수 없습니다: $e');
-    }
-  }
-  */
 
   /// 개별 페이지 삭제 - MVP 이후 UI 제공 예정
   Future<void> deletePage(String pageId) async {

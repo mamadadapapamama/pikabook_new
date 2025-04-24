@@ -49,6 +49,16 @@ class UnifiedCacheService {
     _initCurrentUserId(); // 기존 초기화 메서드 호출 유지
   }
   
+  // 캐시 히트 기록
+  void _recordCacheHit(String cacheType) {
+    _cacheHitCount[cacheType] = (_cacheHitCount[cacheType] ?? 0) + 1;
+  }
+  
+  // 캐시 미스 기록
+  void _recordCacheMiss(String cacheType) {
+    _cacheMissCount[cacheType] = (_cacheMissCount[cacheType] ?? 0) + 1;
+  }
+  
   // 현재 사용자 ID 초기화
   Future<void> _initCurrentUserId() async {
     debugPrint('    [CacheService] _initCurrentUserId 시작');
@@ -233,6 +243,7 @@ class UnifiedCacheService {
   static const String _pageKeyPrefix = 'page_cache_';
   static const String _notePageIdsPrefix = 'note_page_ids_';
   static const String _translationKeyPrefix = 'translation_cache_';
+  static const String _imageOcrResultPrefix = 'image_ocr_result_'; // OCR 결과 캐시 접두사 추가
   
   // 사용자별 캐시 키 생성 (로컬 저장소용)
   String _getUserSpecificKey(String baseKey) {
@@ -1166,6 +1177,66 @@ class UnifiedCacheService {
       debugPrint('플래시카드 $flashcardId 캐시에서 삭제 완료');
     } catch (e) {
       debugPrint('플래시카드 삭제 중 오류 발생: $e');
+    }
+  }
+
+  /// OCR 결과 저장 (이미지 해시 -> 추출된 텍스트)
+  Future<void> setImageOcrResult(String imageHash, String extractedText) async {
+    await _ensureInitialized();
+    
+    if (imageHash.isEmpty || extractedText.isEmpty) return;
+    
+    try {
+      final key = _getUserSpecificKey(_imageOcrResultPrefix + imageHash);
+      
+      // 메모리 캐시에 저장
+      _memoryCache[key] = extractedText;
+      
+      // 로컬 저장소에 저장
+      await _prefs!.setString(key, extractedText);
+      
+      // 타임스탬프 저장
+      final timestampKey = '${key}_timestamp';
+      await _prefs!.setString(timestampKey, DateTime.now().toIso8601String());
+      
+      debugPrint('OCR 결과 캐싱 완료: ${extractedText.length} 자 (${imageHash.substring(0, 8)}...)');
+    } catch (e) {
+      debugPrint('OCR 결과 캐싱 중 오류 발생: $e');
+    }
+  }
+  
+  /// OCR 결과 조회 (이미지 해시로)
+  Future<String?> getImageOcrResult(String imageHash) async {
+    await _ensureInitialized();
+    
+    if (imageHash.isEmpty) return null;
+    
+    try {
+      final key = _getUserSpecificKey(_imageOcrResultPrefix + imageHash);
+      
+      // 메모리 캐시 확인
+      if (_memoryCache.containsKey(key)) {
+        _recordCacheHit('ocr_result');
+        final result = _memoryCache[key] as String;
+        debugPrint('메모리 캐시에서 OCR 결과 로드: ${result.length} 자');
+        return result;
+      }
+      
+      // 로컬 저장소 확인
+      final result = _prefs!.getString(key);
+      if (result != null && result.isNotEmpty) {
+        // 메모리 캐시에 로드
+        _memoryCache[key] = result;
+        _recordCacheHit('ocr_result');
+        debugPrint('로컬 저장소에서 OCR 결과 로드: ${result.length} 자');
+        return result;
+      }
+      
+      _recordCacheMiss('ocr_result');
+      return null;
+    } catch (e) {
+      debugPrint('OCR 결과 조회 중 오류 발생: $e');
+      return null;
     }
   }
 }
