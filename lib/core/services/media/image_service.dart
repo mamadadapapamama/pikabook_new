@@ -52,7 +52,9 @@ class ImageService {
   static const int _defaultJpegQuality = 85; // 기본 JPEG 품질
   
   ImageService._internal() {
-    debugPrint('🖼️ ImageService: 생성자 호출됨');
+    if (kDebugMode) {
+      debugPrint('🖼️ ImageService: 생성자 호출됨');
+    }
   }
 
   // 현재 사용자 ID 가져오기
@@ -64,7 +66,9 @@ class ImageService {
   /// 이미지 선택 (갤러리)
   Future<File?> pickImage({ImageSource source = ImageSource.gallery}) async {
     try {
-      debugPrint('이미지 선택 시작: $source');
+      if (kDebugMode) {
+        debugPrint('이미지 선택 시작: $source');
+      }
       
       // 이미지 피커 설정
       final ImagePicker picker = ImagePicker();
@@ -82,11 +86,15 @@ class ImageService {
         
         // 사용자가 취소한 경우
         if (pickedFile == null) {
-          debugPrint('이미지 선택이 취소되었습니다');
+          if (kDebugMode) {
+            debugPrint('이미지 선택이 취소되었습니다');
+          }
           return null;
         }
       } catch (pickError) {
-        debugPrint('이미지 선택 API 오류: $pickError');
+        if (kDebugMode) {
+          debugPrint('이미지 선택 API 오류: $pickError');
+        }
         return null;
       }
       
@@ -100,20 +108,30 @@ class ImageService {
       try {
         fileExists = file.existsSync();
         fileSize = fileExists ? file.lengthSync() : 0;
-        debugPrint('파일 상태: 존재=$fileExists, 크기=$fileSize, 경로=${file.path}');
+        if (kDebugMode) {
+          debugPrint('파일 상태: 존재=$fileExists, 크기=$fileSize, 경로=${file.path}');
+        }
       } catch (fileCheckError) {
-        debugPrint('파일 확인 중 오류: $fileCheckError');
+        if (kDebugMode) {
+          debugPrint('파일 확인 중 오류: $fileCheckError');
+        }
       }
       
       if (!fileExists || fileSize == 0) {
-        debugPrint('선택된 이미지 파일이 유효하지 않습니다: 존재=$fileExists, 크기=$fileSize');
+        if (kDebugMode) {
+          debugPrint('선택된 이미지 파일이 유효하지 않습니다: 존재=$fileExists, 크기=$fileSize');
+        }
         return null;
       }
       
-      debugPrint('이미지 선택 성공: 경로=${file.path}, 크기=$fileSize 바이트');
+      if (kDebugMode) {
+        debugPrint('이미지 선택 성공: 경로=${file.path}, 크기=$fileSize 바이트');
+      }
       return file;
     } catch (e) {
-      debugPrint('이미지 선택 중 예외 발생: $e');
+      if (kDebugMode) {
+        debugPrint('이미지 선택 중 예외 발생: $e');
+      }
       return null;
     }
   }
@@ -121,7 +139,9 @@ class ImageService {
   /// 이미지 선택 (갤러리 또는 카메라)
   Future<List<File>> pickMultipleImages() async {
     try {
-      debugPrint('다중 이미지 선택 시작');
+      if (kDebugMode) {
+        debugPrint('다중 이미지 선택 시작');
+      }
       
       // 이미지 피커 설정
       final ImagePicker picker = ImagePicker();
@@ -138,11 +158,15 @@ class ImageService {
         
         // 사용자가 취소했거나 선택된 이미지가 없는 경우
         if (pickedFiles.isEmpty) {
-          debugPrint('다중 이미지 선택이 취소되었거나 이미지가 선택되지 않았습니다');
+          if (kDebugMode) {
+            debugPrint('다중 이미지 선택이 취소되었거나 이미지가 선택되지 않았습니다');
+          }
           return [];
         }
       } catch (pickError) {
-        debugPrint('다중 이미지 선택 API 오류: $pickError');
+        if (kDebugMode) {
+          debugPrint('다중 이미지 선택 API 오류: $pickError');
+        }
         return [];
       }
       
@@ -156,14 +180,20 @@ class ImageService {
         if (file.existsSync() && file.lengthSync() > 0) {
           validFiles.add(file);
         } else {
-          debugPrint('유효하지 않은 이미지 파일 무시: ${pickedFile.path}');
+          if (kDebugMode) {
+            debugPrint('유효하지 않은 이미지 파일 무시: ${pickedFile.path}');
+          }
         }
       }
       
-      debugPrint('선택된 유효한 이미지 수: ${validFiles.length}');
+      if (kDebugMode) {
+        debugPrint('선택된 유효한 이미지 수: ${validFiles.length}');
+      }
       return validFiles;
     } catch (e) {
-      debugPrint('다중 이미지 선택 중 예외 발생: $e');
+      if (kDebugMode) {
+        debugPrint('다중 이미지 선택 중 예외 발생: $e');
+      }
       return [];
     }
   }
@@ -188,7 +218,9 @@ class ImageService {
       // 파일이 없으면 다운로드
       return await downloadImage(relativePath);
     } catch (e) {
-      debugPrint('이미지 파일 가져오기 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('이미지 파일 가져오기 중 오류: $e');
+      }
       return null;
     }
   }
@@ -229,7 +261,9 @@ class ImageService {
         return await _downloadFromFirebase(relativePath, file);
       }
     } catch (e) {
-      debugPrint('이미지 다운로드 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('이미지 다운로드 중 오류: $e');
+      }
       return null;
     }
   }
@@ -244,11 +278,15 @@ class ImageService {
         await file.writeAsBytes(response.bodyBytes);
         return file;
       } else {
-        debugPrint('HTTP 다운로드 실패: $url, 상태 코드: ${response.statusCode}');
+        if (kDebugMode) {
+          debugPrint('HTTP 다운로드 실패: $url, 상태 코드: ${response.statusCode}');
+        }
         return null;
       }
     } catch (httpError) {
-      debugPrint('HTTP 다운로드 중 오류: $httpError');
+      if (kDebugMode) {
+        debugPrint('HTTP 다운로드 중 오류: $httpError');
+      }
       return null;
     }
   }
@@ -264,7 +302,9 @@ class ImageService {
       
       // Firebase 다운로드 재시도 방지 (메모리에 경로 캐싱)
       if (_failedDownloadPaths.contains(storagePath)) {
-        debugPrint('이전에 실패한 다운로드 경로, 재시도 방지: $storagePath');
+        if (kDebugMode) {
+          debugPrint('이전에 실패한 다운로드 경로, 재시도 방지: $storagePath');
+        }
         return null;
       }
       
@@ -275,7 +315,9 @@ class ImageService {
         await storageRef.getDownloadURL();
       } catch (e) {
         if (e is FirebaseException && e.code == 'object-not-found') {
-          debugPrint('Firebase Storage에서 파일을 찾을 수 없음: $storagePath');
+          if (kDebugMode) {
+            debugPrint('Firebase Storage에서 파일을 찾을 수 없음: $storagePath');
+          }
           _failedDownloadPaths.add(storagePath); // 실패한 경로 캐싱
           
           // 사용자 ID 없이 직접 경로도 시도
@@ -294,7 +336,9 @@ class ImageService {
       if (await file.exists() && await file.length() > 0) {
         return file;
       } else {
-        debugPrint('Firebase에서 다운로드했으나 파일이 비어 있음: $storagePath');
+        if (kDebugMode) {
+          debugPrint('Firebase에서 다운로드했으나 파일이 비어 있음: $storagePath');
+        }
         _failedDownloadPaths.add(storagePath); // 실패한 경로 캐싱
         
         // 사용자 ID 없이 직접 경로도 시도
@@ -304,7 +348,9 @@ class ImageService {
         return null;
       }
     } catch (storageError) {
-      debugPrint('Firebase Storage에서 다운로드 중 오류: $storageError');
+      if (kDebugMode) {
+        debugPrint('Firebase Storage에서 다운로드 중 오류: $storageError');
+      }
       
       // 실패한 경로 캐싱 (사용 중인 storagePath 변수 사용)
       final String pathToCache = relativePath.startsWith('users/') ? 
@@ -324,7 +370,9 @@ class ImageService {
     try {
       // 실패한 다운로드 캐싱
       if (_failedDownloadPaths.contains(relativePath)) {
-        debugPrint('이전에 실패한 직접 경로, 재시도 방지: $relativePath');
+        if (kDebugMode) {
+          debugPrint('이전에 실패한 직접 경로, 재시도 방지: $relativePath');
+        }
         return null;
       }
       
@@ -338,7 +386,9 @@ class ImageService {
       // 실패한 경로 캐싱
       _failedDownloadPaths.add(relativePath);
     } catch (retryError) {
-      debugPrint('직접 경로로 재시도 중 오류: $retryError');
+      if (kDebugMode) {
+        debugPrint('직접 경로로 재시도 중 오류: $retryError');
+      }
       _failedDownloadPaths.add(relativePath);
     }
     return null;
@@ -359,7 +409,9 @@ class ImageService {
       
       return null;
     } catch (e) {
-      debugPrint('이미지 바이트 가져오기 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('이미지 바이트 가져오기 중 오류: $e');
+      }
       return null;
     }
   }
@@ -369,7 +421,9 @@ class ImageService {
     try {
       // 파일 유효성 확인
       if (!await imageFile.exists()) {
-        debugPrint('이미지 파일이 존재하지 않습니다 - 대체 파일 경로 반환');
+        if (kDebugMode) {
+          debugPrint('이미지 파일이 존재하지 않습니다 - 대체 파일 경로 반환');
+        }
         return _getFallbackPath();
       }
       
@@ -378,7 +432,9 @@ class ImageService {
       
       // 저장 공간 제한 도달 시 오류 발생
       if (usage['storageLimitReached'] == true) {
-        debugPrint('저장 공간 제한에 도달했습니다 - 대체 파일 경로 반환');
+        if (kDebugMode) {
+          debugPrint('저장 공간 제한에 도달했습니다 - 대체 파일 경로 반환');
+        }
         return _getFallbackPath();
       }
       
@@ -387,13 +443,17 @@ class ImageService {
       
       // 결과 검증
       if (relativePath.isEmpty) {
-        debugPrint('이미지 저장 결과 경로가 비어 있습니다 - 대체 경로 생성');
+        if (kDebugMode) {
+          debugPrint('이미지 저장 결과 경로가 비어 있습니다 - 대체 경로 생성');
+        }
         relativePath = _createEmergencyPath(imageFile);
       }
       
       return relativePath;
     } catch (e) {
-      debugPrint('이미지 업로드 중 예외 발생: $e - 대체 파일 경로 반환');
+      if (kDebugMode) {
+        debugPrint('이미지 업로드 중 예외 발생: $e - 대체 파일 경로 반환');
+      }
       
       // 오류 발생 시 기본 경로 반환 (null 체크 오류 방지)
       return _getFallbackPath();
@@ -405,7 +465,9 @@ class ImageService {
     try {
       // 파일 유효성 확인
       if (!await imageFile.exists()) {
-        debugPrint('이미지 파일이 존재하지 않습니다');
+        if (kDebugMode) {
+          debugPrint('이미지 파일이 존재하지 않습니다');
+        }
         return _createEmergencyPath(imageFile);
       }
       
@@ -453,7 +515,9 @@ class ImageService {
         // Firebase Storage 업로드는 별도 스레드에서 비동기로 처리 (앱 응답성 유지)
         await _uploadToFirebaseStorageIfNotExists(File(targetPath), relativePath);
       } catch (e) {
-        debugPrint('Firebase Storage 업로드 중 오류: $e');
+        if (kDebugMode) {
+          debugPrint('Firebase Storage 업로드 중 오류: $e');
+        }
       }
       
       // 스토리지 사용량 추적 - 압축된 실제 파일 크기 사용
@@ -461,7 +525,9 @@ class ImageService {
 
       return relativePath;
     } catch (e) {
-      debugPrint('이미지 저장 및 최적화 중 치명적 오류: $e');
+      if (kDebugMode) {
+        debugPrint('이미지 저장 및 최적화 중 치명적 오류: $e');
+      }
       return _createEmergencyPath(imageFile);
     }
   }
@@ -493,7 +559,9 @@ class ImageService {
         await File(targetPath).writeAsBytes(jpegBytes);
         compressionSuccess = true;
       } catch (jpgError) {
-        debugPrint('JPG 인코딩 실패: $jpgError');
+        if (kDebugMode) {
+          debugPrint('JPG 인코딩 실패: $jpgError');
+        }
         
         // 2.2 두 번째 시도: PNG 인코딩
         try {
@@ -501,7 +569,9 @@ class ImageService {
           await File(targetPath).writeAsBytes(pngBytes);
           compressionSuccess = true;
         } catch (pngError) {
-          debugPrint('PNG 인코딩도 실패: $pngError');
+          if (kDebugMode) {
+            debugPrint('PNG 인코딩도 실패: $pngError');
+          }
         }
       }
       
@@ -549,7 +619,9 @@ class ImageService {
     try {
       await originalFile.copy(targetPath);
     } catch (e) {
-      debugPrint('원본 파일 복사 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('원본 파일 복사 중 오류: $e');
+      }
       
       // 타겟 디렉토리 확인 및 생성
       final dir = Directory(path.dirname(targetPath));
@@ -561,7 +633,9 @@ class ImageService {
         // 다시 시도
         await originalFile.copy(targetPath);
       } catch (retryError) {
-        debugPrint('원본 파일 복사 재시도 중 오류: $retryError');
+        if (kDebugMode) {
+          debugPrint('원본 파일 복사 재시도 중 오류: $retryError');
+        }
         
         // 최후의 수단: 빈 파일 생성
         final file = File(targetPath);
@@ -590,7 +664,9 @@ class ImageService {
       final digest = sha256.convert(bytes);
       return digest.toString();
     } catch (e) {
-      debugPrint('파일 해시 계산 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('파일 해시 계산 중 오류: $e');
+      }
       
       // 오류 발생 시 UUID로 대체 (내용 기반 중복 감지는 불가능)
       return const Uuid().v4();
@@ -607,11 +683,15 @@ class ImageService {
         // 존재 여부 이중 체크
         try {
           await ref.getDownloadURL();
-          debugPrint('이미지가 이미 존재함: $relativePath');
+          if (kDebugMode) {
+            debugPrint('이미지가 이미 존재함: $relativePath');
+          }
           return;
         } catch (e) {
           // 파일이 존재하지 않음 - 정상 진행
-          debugPrint('신규 이미지 업로드 시작: $relativePath');
+          if (kDebugMode) {
+            debugPrint('신규 이미지 업로드 시작: $relativePath');
+          }
         }
         
         // 파일 크기 확인
@@ -637,20 +717,32 @@ class ImageService {
         final uploadTask = ref.putFile(file, metadata);
         
         // 업로드 완료 대기
-        await uploadTask.whenComplete(() => debugPrint('이미지 업로드 완료: $relativePath'));
+        await uploadTask.whenComplete(() {
+          if (kDebugMode) {
+            debugPrint('이미지 업로드 완료: $relativePath');
+          }
+        });
         
         // 업로드 상태 확인
         final snapshot = await uploadTask;
         if (snapshot.state == TaskState.success) {
-          debugPrint('이미지 성공적으로 업로드됨: $relativePath');
+          if (kDebugMode) {
+            debugPrint('이미지 성공적으로 업로드됨: $relativePath');
+          }
         } else {
-          debugPrint('이미지 업로드 실패 상태: ${snapshot.state}');
+          if (kDebugMode) {
+            debugPrint('이미지 업로드 실패 상태: ${snapshot.state}');
+          }
         }
       } else {
-        debugPrint('이미지가 이미 존재함: $relativePath');
+        if (kDebugMode) {
+          debugPrint('이미지가 이미 존재함: $relativePath');
+        }
       }
     } catch (e) {
-      debugPrint('_uploadToFirebaseStorageIfNotExists 오류: $e');
+      if (kDebugMode) {
+        debugPrint('_uploadToFirebaseStorageIfNotExists 오류: $e');
+      }
       // 업로드 실패해도 치명적 오류 처리하지 않음 (로컬 파일 사용)
     }
   }
@@ -687,7 +779,9 @@ class ImageService {
         return false;
       }
       // 다른 오류는 존재하지 않는 것으로 간주 (안전)
-      debugPrint('이미지 존재 확인 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('이미지 존재 확인 중 오류: $e');
+      }
       return false;
     }
   }
@@ -701,12 +795,16 @@ class ImageService {
       // 사용량 추적
       final canAddStorage = await _usageLimitService.addStorageUsage(actualSize);
       if (!canAddStorage) {
-        debugPrint('⚠️ 저장 공간 제한에 도달했습니다. 이미지를 추가로 저장할 수 없습니다.');
+        if (kDebugMode) {
+          debugPrint('⚠️ 저장 공간 제한에 도달했습니다. 이미지를 추가로 저장할 수 없습니다.');
+        }
       }
       
       return canAddStorage;
     } catch (e) {
-      debugPrint('저장 공간 사용량 추적 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('저장 공간 사용량 추적 중 오류: $e');
+      }
       return true; // 오류 발생 시 기본적으로 허용
     }
   }
@@ -744,7 +842,9 @@ class ImageService {
         return response.statusCode == 200;
       }
     } catch (e) {
-      debugPrint('이미지 존재 확인 중 오류 (URL): $e');
+      if (kDebugMode) {
+        debugPrint('이미지 존재 확인 중 오류 (URL): $e');
+      }
       return false;
     }
   }
@@ -774,14 +874,18 @@ class ImageService {
           }
         } catch (e) {
           // Firebase 삭제 실패는 무시 (로컬만 삭제해도 됨)
-          debugPrint('Firebase에서 이미지 삭제 중 오류: $e');
+          if (kDebugMode) {
+            debugPrint('Firebase에서 이미지 삭제 중 오류: $e');
+          }
         }
         
         return true;
       }
       return false;
     } catch (e) {
-      debugPrint('이미지 삭제 중 오류 발생: $e');
+      if (kDebugMode) {
+        debugPrint('이미지 삭제 중 오류 발생: $e');
+      }
       return false;
     }
   }
@@ -822,10 +926,14 @@ class ImageService {
       }
       
       if (removedCount > 0) {
-        debugPrint('$removedCount개의 임시 파일을 정리했습니다.');
+        if (kDebugMode) {
+          debugPrint('$removedCount개의 임시 파일을 정리했습니다.');
+        }
       }
     } catch (e) {
-      debugPrint('임시 파일 정리 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('임시 파일 정리 중 오류: $e');
+      }
     }
   }
   
@@ -835,9 +943,13 @@ class ImageService {
       // 대기 중인 이미지 프로바이더 캐시 정리
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
-      debugPrint('이미지 캐시를 정리했습니다.');
+      if (kDebugMode) {
+        debugPrint('이미지 캐시를 정리했습니다.');
+      }
     } catch (e) {
-      debugPrint('이미지 캐시 정리 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('이미지 캐시 정리 중 오류: $e');
+      }
     }
   }
 
@@ -845,7 +957,9 @@ class ImageService {
   /// 일반 ImagePicker가 작동하지 않을 때 사용
   Future<File?> pickImageAlternative({ImageSource source = ImageSource.gallery}) async {
     try {
-      debugPrint('이미지 선택 시작 (단순화된 메서드): $source');
+      if (kDebugMode) {
+        debugPrint('이미지 선택 시작 (단순화된 메서드): $source');
+      }
       
       // 단순화된 이미지 피커 구현
       final ImagePicker picker = ImagePicker();
@@ -855,27 +969,37 @@ class ImageService {
       
       // 선택 취소 처리
       if (pickedFile == null) {
-        debugPrint('이미지 선택 취소됨');
+        if (kDebugMode) {
+          debugPrint('이미지 선택 취소됨');
+        }
         return null;
       }
       
       // 파일 변환 및 확인
       final File file = File(pickedFile.path);
       if (!file.existsSync()) {
-        debugPrint('선택된 파일이 존재하지 않음: $file.path');
+        if (kDebugMode) {
+          debugPrint('선택된 파일이 존재하지 않음: ${file.path}');
+        }
         return null;
       }
       
       final int fileSize = file.lengthSync();
       if (fileSize <= 0) {
-        debugPrint('선택된 파일의 크기가 0 또는 음수: $fileSize');
+        if (kDebugMode) {
+          debugPrint('선택된 파일의 크기가 0 또는 음수: $fileSize');
+        }
         return null;
       }
       
-      debugPrint('이미지 선택 성공: $file.path (${fileSize}바이트)');
+      if (kDebugMode) {
+        debugPrint('이미지 선택 성공: ${file.path} (${fileSize}바이트)');
+      }
       return file;
     } catch (e) {
-      debugPrint('이미지 선택 중 예외 발생: $e');
+      if (kDebugMode) {
+        debugPrint('이미지 선택 중 예외 발생: $e');
+      }
       return null;
     }
   }
@@ -883,7 +1007,9 @@ class ImageService {
   /// 여러 이미지 선택 (갤러리) - 대체 메서드
   Future<List<File>> pickMultipleImagesAlternative() async {
     try {
-      debugPrint('다중 이미지 선택 시작 (단순화된 메서드)');
+      if (kDebugMode) {
+        debugPrint('다중 이미지 선택 시작 (단순화된 메서드)');
+      }
       
       // 단순화된 이미지 피커 구현
       final ImagePicker picker = ImagePicker();
@@ -893,7 +1019,9 @@ class ImageService {
       
       // 선택 취소 또는 실패 처리
       if (pickedFiles == null || pickedFiles.isEmpty) {
-        debugPrint('이미지가 선택되지 않음');
+        if (kDebugMode) {
+          debugPrint('이미지가 선택되지 않음');
+        }
         return [];
       }
       
@@ -905,16 +1033,24 @@ class ImageService {
         
         if (file.existsSync() && file.lengthSync() > 0) {
           validFiles.add(file);
-          debugPrint('유효한 이미지 추가: ${file.path}');
+          if (kDebugMode) {
+            debugPrint('유효한 이미지 추가: ${file.path}');
+          }
         } else {
-          debugPrint('유효하지 않은 이미지 무시: ${file.path}');
+          if (kDebugMode) {
+            debugPrint('유효하지 않은 이미지 무시: ${file.path}');
+          }
         }
       }
       
-      debugPrint('총 $validFiles.length개의 이미지가 선택됨');
+      if (kDebugMode) {
+        debugPrint('총 ${validFiles.length}개의 이미지가 선택됨');
+      }
       return validFiles;
     } catch (e) {
-      debugPrint('다중 이미지 선택 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('다중 이미지 선택 중 오류: $e');
+      }
       return [];
     }
   }
@@ -928,13 +1064,17 @@ class ImageService {
       // 이미지 파일이 null이 아니고 존재하는지 확인
       if (_currentImageFile != null) {
         if (!_currentImageFile!.existsSync()) {
-          debugPrint('⚠️ 현재 이미지 파일이 더 이상 존재하지 않습니다. null 반환');
+          if (kDebugMode) {
+            debugPrint('⚠️ 현재 이미지 파일이 더 이상 존재하지 않습니다. null 반환');
+          }
           _currentImageFile = null;
         }
       }
       return _currentImageFile;
     } catch (e) {
-      debugPrint('❌ getCurrentImageFile 오류: $e - null 반환');
+      if (kDebugMode) {
+        debugPrint('❌ getCurrentImageFile 오류: $e - null 반환');
+      }
       _currentImageFile = null;
       return null;
     }
@@ -945,12 +1085,16 @@ class ImageService {
     try {
       // 파일이 null이 아니고 실제로 존재하는지 확인
       if (file != null && !file.existsSync()) {
-        debugPrint('⚠️ 존재하지 않는 이미지 파일을 현재 이미지로 설정하려고 시도. 무시됨.');
+        if (kDebugMode) {
+          debugPrint('⚠️ 존재하지 않는 이미지 파일을 현재 이미지로 설정하려고 시도. 무시됨.');
+        }
         return;
       }
       _currentImageFile = file;
     } catch (e) {
-      debugPrint('❌ setCurrentImageFile 오류: $e');
+      if (kDebugMode) {
+        debugPrint('❌ setCurrentImageFile 오류: $e');
+      }
       _currentImageFile = null;
     }
   }
@@ -975,7 +1119,9 @@ class ImageService {
       
       // 이미 실패한 다운로드인 경우 빠르게 반환
       if (_failedDownloadPaths.contains(imageUrl)) {
-        debugPrint('⚠️ 이전에 실패한 이미지 URL, 재시도 방지: $imageUrl');
+        if (kDebugMode) {
+          debugPrint('⚠️ 이전에 실패한 이미지 URL, 재시도 방지: $imageUrl');
+        }
         // 현재 이미지 초기화
         _currentImageFile = null;
         return null;
@@ -988,14 +1134,18 @@ class ImageService {
         _currentImageFile = imageFile;
         return imageFile;
       } else {
-        debugPrint('⚠️ 이미지 로드 실패 또는 빈 파일: $imageUrl');
+        if (kDebugMode) {
+          debugPrint('⚠️ 이미지 로드 실패 또는 빈 파일: $imageUrl');
+        }
         _currentImageFile = null;
         // 실패한 경로 캐싱
         _failedDownloadPaths.add(imageUrl);
         return null;
       }
     } catch (e) {
-      debugPrint('❌ loadPageImage 오류: $e');
+      if (kDebugMode) {
+        debugPrint('❌ loadPageImage 오류: $e');
+      }
       _currentImageFile = null;
       return null;
     }
