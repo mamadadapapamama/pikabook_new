@@ -11,6 +11,7 @@ import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/utils/segment_utils.dart';
 import '../../core/widgets/tts_button.dart';
+import '../../core/widgets/dot_loading_indicator.dart';
 import 'note_detail_state.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
@@ -547,16 +548,23 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   Widget build(BuildContext context) {
     final processedText = widget.processedText;
     
-    // 처리 중인 경우
+    // 처리 중인 경우 - 상태만 보고하고 빈 컨테이너 반환
     if (processedText.fullOriginalText == "___PROCESSING___") {
       // 상태 콜백 호출 (로딩 중)
       if (widget.onStateChanged != null) {
         widget.onStateChanged!(ComponentState.loading);
       }
       
-      // 로딩 UI 제거하고 항상 빈 컨테이너만 반환
+      // 로딩 UI 없이 빈 컨테이너만 반환
       return const SizedBox();
     }
+
+    // 텍스트가 준비되었음을 알림
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.onStateChanged != null) {
+        widget.onStateChanged!(ComponentState.ready);
+      }
+    });
 
     // 세그먼트 모드인지 전체 텍스트 모드인지에 따라 다른 렌더링
     final bool isFullTextMode = widget.processedText.showFullText;

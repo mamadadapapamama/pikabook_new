@@ -1,28 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'dart:io';
-import '../../core/models/page.dart' as page_model;
 import '../../core/models/processed_text.dart';
 import '../../core/models/flash_card.dart';
-import '../../core/models/dictionary.dart';
-import 'processed_text_widget.dart';
-import 'managers/content_manager.dart';
-import '../../widgets/dictionary_result_widget.dart';
-import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
-import '../../core/widgets/dot_loading_indicator.dart';
-import '../../core/theme/tokens/typography_tokens.dart';
-import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/theme/tokens/spacing_tokens.dart';
-import '../../core/utils/segment_utils.dart';
-import '../../core/services/text_processing/text_reader_service.dart'; // TTS 서비스 추가
-import '../../core/services/common/usage_limit_service.dart';
-import '../../core/widgets/usage_dialog.dart';
-import '../../core/services/text_processing/translation_service.dart';
-import '../../core/services/text_processing/enhanced_ocr_service.dart';
+import '../../core/models/page.dart' as pika_page;
 import '../../core/services/dictionary/dictionary_service.dart';
 import '../../core/services/content/page_service.dart';
-import 'dart:async';
+import '../../core/services/media/tts_service.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import '../../core/services/common/usage_limit_service.dart';
+import '../../core/utils/usage_dialog.dart';
+import '../../core/utils/component_state.dart';
+import '../../core/utils/loading_state.dart';
+import '../../core/services/text_processing/enhanced_ocr_service.dart';
+import '../../core/services/text_processing/translation_service.dart';
+import 'processed_text_widget.dart';
+import 'managers/content_manager.dart';
 import 'page_image_widget.dart'; // PageImageWidget 추가
 import 'note_detail_state.dart'; // LoadingState Enum import 추가
+import '../../core/theme/tokens/spacing_tokens.dart';
+import '../../core/utils/segment_utils.dart';
+import '../../core/services/text_processing/.text_reader_service.dart'; // TTS 서비스 추가
+import '../../core/widgets/usage_dialog.dart';
+import '../../core/services/text_processing/tts_service.dart';
 
 /// PageContentWidget은 노트의 페이지 전체 컨텐츠를 관리하고 표시하는 위젯입니다.
 ///
@@ -48,7 +51,7 @@ import 'note_detail_state.dart'; // LoadingState Enum import 추가
 /// 이 구조를 통해 UI 로직과 텍스트 처리 로직이 깔끔하게 분리됨
 
 class PageContentWidget extends StatefulWidget {
-  final page_model.Page page;
+  final pika_page.Page page;
   final File? imageFile;
   final bool isLoadingImage;
   final String noteId;
@@ -82,7 +85,7 @@ class PageContentWidget extends StatefulWidget {
 class _PageContentWidgetState extends State<PageContentWidget> {
   final ContentManager _contentManager = ContentManager();
   final DictionaryService _dictionaryService = DictionaryService();
-  final TextReaderService _textReaderService = TextReaderService();
+  final TtsService _ttsService = TtsService();
   final PageService _pageService = PageService();
   
   // 상태 변수들
@@ -126,13 +129,22 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     super.initState();
     
     // 서비스 초기화
-    _textReaderService.init();
+    _ttsService.init();
     
     // 플래시카드 단어 목록 업데이트
     _updateFlashcardWords();
     
     // 스타일 초기화
     _initStyles();
+    
+    // 초기 상태값 설정
+    _isImageReady = false;
+    _isTextReady = false;
+    
+    // 디버그 로깅
+    if (kDebugMode) {
+      debugPrint('PageContentWidget 초기화: pageId=${widget.page.id}, 이미지=${widget.imageFile != null ? "있음" : "없음"}, 텍스트=${widget.page.originalText.isNotEmpty ? "있음" : "없음"}');
+    }
     
     // 비동기 데이터 로드
     if (widget.page.id != null) {
@@ -148,6 +160,18 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     // 이미지가 없는 경우 이미지는 이미 준비됨으로 처리
     if (widget.imageFile == null && (widget.page.imageUrl == null || widget.page.imageUrl!.isEmpty)) {
       _isImageReady = true;
+      if (kDebugMode) {
+        debugPrint('이미지 없음 - 이미지 준비 상태로 설정');
+      }
+      _checkAndUpdateReadyState();
+    }
+    
+    // 텍스트가 없는 경우 텍스트는 이미 준비됨으로 처리
+    if (widget.page.originalText.isEmpty) {
+      _isTextReady = true;
+      if (kDebugMode) {
+        debugPrint('텍스트 없음 - 텍스트 준비 상태로 설정');
+      }
       _checkAndUpdateReadyState();
     }
   }
@@ -247,12 +271,14 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           _isError = false;
         });
         
-        // 로딩 상태 변경 콜백 호출
-        if (widget.onLoadingStateChanged != null) {
-          widget.onLoadingStateChanged!(LoadingState.contentReady);
-        }
-        
-        debugPrint('페이지 텍스트 처리 완료: 소요 시간 = ${duration.inMilliseconds}ms');
+       // 로딩 상태 변경 콜백 호출
+if (widget.onLoadingStateChanged != null) {
+  widget.onLoadingStateChanged!(LoadingState.contentReady);
+}
+
+if (kDebugMode) {
+  debugPrint('페이지 텍스트 처리 완료: 소요 시간 = ${duration.inMilliseconds}ms');
+}
       }
     } catch (e) {
       if (mounted) {
@@ -277,16 +303,16 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   void dispose() {
     // 화면을 나갈 때 TTS 중지
     _contentManager.stopSpeaking();
-    _textReaderService.dispose(); // TTS 서비스 정리
+    _ttsService.dispose(); // TTS 서비스 정리
     super.dispose();
   }
 
   // TTS 초기화 메서드 추가
   void _initTextReader() async {
-    await _textReaderService.init();
+    await _ttsService.init();
     
     // TTS 상태 변경 콜백 설정
-    _textReaderService.setOnPlayingStateChanged((segmentIndex) {
+    _ttsService.setOnPlayingStateChanged((segmentIndex) {
       if (mounted) {
         setState(() {
           _playingSegmentIndex = segmentIndex;
@@ -296,7 +322,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     });
     
     // TTS 재생 완료 콜백 설정
-    _textReaderService.setOnPlayingCompleted(() {
+    _ttsService.setOnPlayingCompleted(() {
       if (mounted) {
         setState(() {
           _playingSegmentIndex = null;
@@ -348,7 +374,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     
     if (_playingSegmentIndex == segmentIndex) {
       // 이미 재생 중인 세그먼트를 다시 클릭한 경우 중지
-      _textReaderService.stop();
+      _ttsService.stop();
       
       // 명시적으로 상태 업데이트 (콜백이 호출되지 않을 수 있어 추가)
       if (mounted) {
@@ -368,9 +394,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       
       try {
         if (segmentIndex != null) {
-          await _textReaderService.readSegment(text, segmentIndex);
+          await _ttsService.speakSegment(text, segmentIndex);
         } else {
-          await _textReaderService.readText(text);
+          await _ttsService.speak(text);
         }
         
         // 안전장치: 10초 후 재생이 여전히 진행 중인 경우 상태 리셋
@@ -427,12 +453,19 @@ class _PageContentWidgetState extends State<PageContentWidget> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 텍스트 처리 중 표시
-                if (_isProcessingText)
-                  const DotLoadingIndicator(message: '텍스트 처리 중이에요!')
-                // 특수 처리 중 마커가 있는 경우
-                else if (widget.page.originalText == '___PROCESSING___')
-                  const DotLoadingIndicator(message: '텍스트 처리 중이에요!')
+                // 텍스트 처리 중인 경우 - 로딩 인디케이터 없이 상태만 보고
+                if (_isProcessingText || widget.page.originalText == '___PROCESSING___') 
+                  Builder(builder: (context) {
+                    // 콘텐츠 준비 콜백 호출
+                    if (widget.onContentReady != null) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        widget.onContentReady!(ComponentState.loading);
+                      });
+                    }
+                    
+                    // 빈 컨테이너 반환
+                    return const SizedBox();
+                  })
                 // 처리된 텍스트가 있는 경우
                 else if (_processedText != null) ...[
                   Builder(builder: (context) {
@@ -445,6 +478,25 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                         // 위젯이 dispose 되었는지 확인
                         if (!mounted) {
                           return const SizedBox.shrink();
+                        }
+                        
+                        // 로딩 중이거나 데이터가 없는 경우
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          // 로딩 상태 콜백 호출
+                          if (widget.onContentReady != null) {
+                            widget.onContentReady!(ComponentState.loading);
+                          }
+                          // 로딩 UI 없이 빈 컨테이너 반환
+                          return const SizedBox();
+                        }
+                        
+                        if (!snapshot.hasData || snapshot.data == null) {
+                          // 에러 상태 콜백 호출
+                          if (widget.onContentReady != null) {
+                            widget.onContentReady!(ComponentState.error);
+                          }
+                          // 에러 UI 없이 빈 컨테이너 반환
+                          return const SizedBox();
                         }
                         
                         // 데이터가 있는 경우
@@ -514,27 +566,22 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                     );
                   }),
                 ]
-                // 처리된 텍스트가 없는 경우 (특수 처리 중 문자열이 아닌 경우)
-                else if ((widget.page.originalText.isNotEmpty && widget.page.originalText != '___PROCESSING___') || widget.isLoadingImage)
-                  const Center(
-                    child: DotLoadingIndicator(message: '텍스트 처리 중...'),
-                  )
-                // 빈 페이지인 경우
+                // 빈 페이지인 경우 - 상태만 보고하고 최소한의 UI 유지
                 else
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.text_snippet_outlined, size: 48, color: Colors.grey),
-                        const SizedBox(height: 16),
-                        const Text('처리된 텍스트가 없습니다.'),
-                        if (widget.page.id != null) ...[
-                          const SizedBox(height: 16),
-                          _buildAddTextButton(),
-                        ],
-                      ],
-                    ),
-                  ),
+                  Builder(builder: (context) {
+                    // 콘텐츠 준비 콜백 호출 - 빈 페이지도 준비된 상태로 간주
+                    if (widget.onContentReady != null) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        widget.onContentReady!(ComponentState.ready);
+                      });
+                    }
+                    
+                    // 텍스트 준비 완료 상태로 설정
+                    _isTextReady = true;
+                    _checkAndUpdateReadyState();
+                    
+                    return const SizedBox();
+                  })
               ],
             ),
           ),
@@ -1055,6 +1102,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   // 이미지 상태 업데이트 받는 메서드
   void _handleImageStateChanged(ComponentState state) {
+    debugPrint('이미지 상태 변경: $state');
     setState(() {
       _isImageReady = state == ComponentState.ready;
     });
@@ -1063,6 +1111,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   // 텍스트 상태 업데이트 받는 메서드
   void _handleTextStateChanged(ComponentState state) {
+    debugPrint('텍스트 상태 변경: $state');
     setState(() {
       _isTextReady = state == ComponentState.ready;
     });
@@ -1071,11 +1120,15 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   // 통합 상태 체크 및 부모에게 알림
   void _checkAndUpdateReadyState() {
+    debugPrint('상태 체크: 이미지=$_isImageReady, 텍스트=$_isTextReady');
+    
     if (_isImageReady && _isTextReady) {
+      debugPrint('모든 컴포넌트 준비 완료, 상위 컴포넌트에 알림');
       if (widget.onContentReady != null) {
         widget.onContentReady!(ComponentState.ready);
       }
     } else {
+      debugPrint('일부 컴포넌트 아직 로딩 중');
       if (widget.onContentReady != null) {
         widget.onContentReady!(ComponentState.loading);
       }

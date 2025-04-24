@@ -1,7 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:io';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:quill_html_editor/quill_html_editor.dart';
 import '../../core/models/note.dart';
-import '../../core/models/page.dart' as pika_page;
+import '../../core/models/page.dart' as page_model;
+import '../../core/models/processed_text.dart';
+import '../../core/models/flash_card.dart';
+import '../../core/services/content/note_service.dart';
+import '../../core/services/content/page_service.dart';
+import '../../core/services/dictionary/dictionary_service.dart';
+import '../../core/services/content/flashcard_service.dart';
+import '../../core/services/media/tts_service.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/utils/loading_state.dart';
+import '../../core/widgets/loading_experience.dart';
+import 'note_detail_state.dart';
 import 'note_detail_viewmodel.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import 'page_content_widget.dart';
@@ -9,12 +24,8 @@ import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../flashcard/flashcard_screen.dart';
 import 'note_detail_bottom_bar.dart';
-import '../../core/services/text_processing/text_reader_service.dart';
 import 'package:provider/provider.dart';
-import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
-import '../../core/widgets/loading_experience.dart';
-import 'note_detail_state.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatelessWidget {
@@ -85,6 +96,10 @@ class NoteDetailScreenMVVM extends StatelessWidget {
   
   // 바디 구성 - 중앙집중식 로딩 상태 관리 적용
   Widget _buildBody(BuildContext context, NoteDetailViewModel viewModel) {
+    if (kDebugMode) {
+      print("🔄 NoteDetailScreen: 바디 구성 - 로딩 상태: ${viewModel.isContentLoading}, 콘텐츠 상태: ${viewModel.loadingState}");
+    }
+    
     return LoadingExperience(
       loadingMessage: '페이지 로딩 중...',
       loadData: () async {
@@ -126,6 +141,9 @@ class NoteDetailScreenMVVM extends StatelessWidget {
       contentBuilder: (context) {
         // 콘텐츠 준비 확인
         if (viewModel.isContentLoading) {
+          if (kDebugMode) {
+            print("🔄 NoteDetailScreen: 콘텐츠 로딩 중...");
+          }
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -140,6 +158,10 @@ class NoteDetailScreenMVVM extends StatelessWidget {
               ],
             ),
           );
+        }
+
+        if (kDebugMode) {
+          print("✅ NoteDetailScreen: 콘텐츠 준비 완료, 페이지 뷰 표시");
         }
 
         // 콘텐츠 준비 완료 - 페이지 뷰 표시
@@ -164,7 +186,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
   }
   
   // 페이지 콘텐츠 위젯
-  Widget _buildPageContent(BuildContext context, NoteDetailViewModel viewModel, pika_page.Page page) {
+  Widget _buildPageContent(BuildContext context, NoteDetailViewModel viewModel, page_model.Page page) {
     return RepaintBoundary(
       child: PageContentWidget(
         key: ValueKey('page_content_${page.id}'),
@@ -420,7 +442,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
       onToggleFullTextMode: viewModel.toggleFullTextMode,
       isFullTextMode: viewModel.isFullTextMode,
       contentManager: viewModel.getContentManager(),
-      textReaderService: TextReaderService(),
+      ttsService: TtsService(),
       isProcessing: viewModel.loadingState == LoadingState.pageProcessing,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.totalImageCount > 0 ? viewModel.totalImageCount : (viewModel.pages?.length ?? 1)),
       onTtsPlay: () {

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../../core/models/page.dart' as page_model;
 import '../../core/models/processed_text.dart';
-import '../../core/services/text_processing/text_reader_service.dart';
 import '../../core/services/media/tts_service.dart';
 import '../../core/services/workflow/text_processing_workflow.dart';
 import '../../core/utils/text_display_mode.dart';
@@ -24,7 +23,7 @@ class NoteDetailBottomBar extends StatefulWidget {
   final VoidCallback onToggleFullTextMode;
   final bool isFullTextMode;
   final ContentManager contentManager;
-  final TextReaderService textReaderService;
+  final TtsService ttsService;
   final bool isProcessing; // 현재 페이지가 처리 중인지 여부
   final double progressValue;
   final VoidCallback? onTtsPlay;
@@ -40,7 +39,7 @@ class NoteDetailBottomBar extends StatefulWidget {
     required this.onToggleFullTextMode,
     required this.isFullTextMode,
     required this.contentManager,
-    required this.textReaderService,
+    required this.ttsService,
     this.isProcessing = false, // 기본값은 false (처리 중이 아님)
     this.progressValue = 0.0,
     this.onTtsPlay,

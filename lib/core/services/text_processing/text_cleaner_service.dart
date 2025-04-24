@@ -2,8 +2,29 @@ import 'package:flutter/foundation.dart';
 import 'pinyin_creation_service.dart';
 
 /// 텍스트 정리 서비스
-/// OCR 결과에서 불필요한 텍스트를 제거하고 텍스트를 분석하는 기능을 제공합니다.
-
+/// 
+/// OCR 결과 및 일반 텍스트에 대한 정리, 분석 기능을 제공합니다.
+/// 
+/// ## 주요 기능
+/// - 핀인 줄 제거 및 추출
+/// - 중국어 문자 추출 및 분석
+/// - 불필요한 텍스트 제거 (페이지 번호, 문장부호 등)
+/// - 언어 감지 및 문자 분석
+/// - 특수문자 제거 및 줄바꿈 정리
+///
+/// ## 사용 예시
+/// ```dart
+/// final textCleanerService = TextCleanerService();
+/// 
+/// // OCR 결과 정리
+/// final cleanedText = textCleanerService.cleanText(ocrText);
+/// 
+/// // 핀인 줄 제거
+/// final textWithoutPinyin = textCleanerService.removePinyinLines(text);
+/// 
+/// // 중국어 문자 추출
+/// final chineseCharsOnly = textCleanerService.extractChineseChars(text);
+/// ```
 class TextCleanerService {
   // 싱글톤 패턴 구현
   static final TextCleanerService _instance = TextCleanerService._internal();
@@ -60,7 +81,6 @@ class TextCleanerService {
   /// - 숫자만 단독으로 있는 문장 제거
   /// - 문장부호만 있는 문장 제거
   /// - 너무 짧은 줄 제거 (중국어가 아닌 경우)
-
   String cleanText(String text) {
     if (text.isEmpty) return text;
 
@@ -194,5 +214,42 @@ class TextCleanerService {
     _cleanTextCache.clear();
     _pinyinRemovalCache.clear();
     debugPrint('TextCleanerService: 캐시 정리됨');
+  }
+  
+  /// 문장에서 중국어 문자만 추출하여 병음 생성 (EnhancedOcrService에서 이동)
+  Future<String> generatePinyinForSentence(String sentence) async {
+    try {
+      // 중국어 문자만 추출
+      final chineseCharsOnly = extractChineseChars(sentence);
+      if (chineseCharsOnly.isEmpty) {
+        return '';
+      }
+
+      // 핀인 생성
+      return await _pinyinService.generatePinyin(chineseCharsOnly);
+    } catch (e) {
+      debugPrint('핀인 생성 중 오류 발생: $e');
+      return '';
+    }
+  }
+  
+  /// OCR 텍스트 정리 (EnhancedOcrService에서 이동)
+  /// 
+  /// 특수 문자, 핀인 줄 등을 제거하고 깔끔한 텍스트로 변환합니다.
+  String normalizeOcrText(String text) {
+    if (text.isEmpty) return text;
+    
+    // 핀인 줄 제거
+    final textWithoutPinyin = removePinyinLines(text);
+    
+    // 줄바꿈 정리 (연속된 줄바꿈을 하나로)
+    final normalizedNewlines = textWithoutPinyin.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    
+    // 특수문자 제거 (필요에 따라 추가)
+    final cleanedText = normalizedNewlines
+        .replaceAll(RegExp(r'[^\w\s\p{P}\u4e00-\u9fff]', unicode: true), '')
+        .trim();
+    
+    return cleanedText;
   }
 }

@@ -1298,30 +1298,70 @@ class NoteDetailViewModel extends ChangeNotifier {
 
   // 페이지 콘텐츠 상태 업데이트
   void updatePageContentState(String pageId, ComponentState state) {
+    if (kDebugMode) {
+      debugPrint("📝 페이지 컴포넌트 상태 업데이트: pageId=$pageId, state=$state");
+    }
+    
     _pageContentStates[pageId] = state;
     
     // 모든 페이지가 준비되었는지 확인
     bool allPagesReady = true;
+    int readyPagesCount = 0;
+    int totalTrackedPages = 0;
     
     // 현재 로드된 페이지 중에서 확인
     if (_pages != null) {
       for (final page in _pages!) {
         if (page.id != null) {
+          totalTrackedPages++;
           final pageState = _pageContentStates[page.id];
-          if (pageState != ComponentState.ready) {
+          if (pageState == ComponentState.ready) {
+            readyPagesCount++;
+          } else {
             allPagesReady = false;
-            break;
           }
         }
       }
     }
     
-    // 전체 로딩 상태 업데이트
-    if (allPagesReady && _isContentLoading) {
-      _isContentLoading = false;
-      notifyListeners();
-    } else if (!allPagesReady && !_isContentLoading) {
+    if (kDebugMode) {
+      debugPrint("📊 페이지 준비 상태: $readyPagesCount/$totalTrackedPages 준비됨, allPagesReady=$allPagesReady");
+    }
+    
+    // 전체 로딩 상태 업데이트 - 강제로 값 변경 후 알림
+    bool previousLoadingState = _isContentLoading;
+    
+    // 페이지가 1개 이상이고 적어도 현재 페이지가 준비되었을 때
+    if (totalTrackedPages > 0 && readyPagesCount > 0) {
+      // 현재 페이지 ID 확인
+      String? currentPageId = currentPage?.id;
+      
+      // 현재 페이지가 준비되었는지 확인
+      if (currentPageId != null && _pageContentStates[currentPageId] == ComponentState.ready) {
+        _isContentLoading = false;
+        if (kDebugMode) {
+          debugPrint("✅ 현재 페이지 준비됨 - 로딩 상태 해제");
+        }
+      } else if (allPagesReady) {
+        _isContentLoading = false;
+        if (kDebugMode) {
+          debugPrint("✅ 모든 페이지 준비됨 - 로딩 상태 해제");
+        }
+      } else {
+        _isContentLoading = true;
+        if (kDebugMode) {
+          debugPrint("🔄 일부 페이지 준비 중 - 로딩 상태 유지");
+        }
+      }
+    } else {
       _isContentLoading = true;
+    }
+    
+    // 상태가 변경되었을 때만 알림
+    if (previousLoadingState != _isContentLoading) {
+      if (kDebugMode) {
+        debugPrint("🔔 콘텐츠 로딩 상태 변경: $previousLoadingState -> $_isContentLoading");
+      }
       notifyListeners();
     }
   }

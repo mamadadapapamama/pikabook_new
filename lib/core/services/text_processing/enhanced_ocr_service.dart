@@ -23,10 +23,28 @@ import '../authentication/user_preferences_service.dart';
 import 'package:crypto/crypto.dart';
 import '../../../features/note_detail/managers/content_manager.dart'; // ContentManager 임포트
 
-/// 개선된 OCR 서비스 : OCR 처리 후 모드에 따라 다른 처리를 수행합니다.
-/// 전문 서적 모드 : 핀인 제거 후 전체 텍스트 번역
-/// 언어 학습 모드:  문장별 분리, 번역 후 핀인 처리
-
+/// 고급 OCR 서비스
+/// 
+/// 이미지에서 텍스트를 추출하고 다양한 처리를 수행합니다.
+/// 
+/// ## 주요 기능
+/// - Google Cloud Vision API 기반 OCR 처리
+/// - 추출된 텍스트의 세그먼트화 및 번역
+/// - 중국어 텍스트 인식 및 처리 최적화
+/// - 다양한 모드별 텍스트 처리 (언어 학습, 전문 서적 등)
+/// - 처리된 결과를 ProcessedText 형태로 반환
+///
+/// ## 사용 예시
+/// ```dart
+/// final ocrService = EnhancedOcrService();
+/// await ocrService.initialize();
+/// 
+/// // 이미지에서 텍스트 추출
+/// final extractedText = await ocrService.extractText(imageFile);
+/// 
+/// // 추출된 텍스트 처리
+/// final processedText = await ocrService.processText(extractedText, "languageLearning");
+/// ```
 class EnhancedOcrService {
   // 싱글톤 패턴 구현
   static final EnhancedOcrService _instance = EnhancedOcrService._internal();
@@ -41,9 +59,7 @@ class EnhancedOcrService {
   // 감지할 언어 설정 (MVP에서는 중국어만 지원)
   final String _targetLanguage = 'zh-CN'; // 중국어
 
-  // 언어 감지 서비스
-
-  // 텍스트 정리 서비스
+  // 텍스트 정리 서비스 - 텍스트 클리닝 전담
   final TextCleanerService _textCleanerService = TextCleanerService();
 
   // 핀인 생성 서비스
@@ -180,7 +196,7 @@ class EnhancedOcrService {
         return ProcessedText(fullOriginalText: '');
       }
 
-      // 핀인 줄 제거한 전체 텍스트
+      // 텍스트 클리너 서비스를 통해 핀인 줄 제거 및 정리
       final cleanedText = _textCleanerService.removePinyinLines(fullText);
       debugPrint('OCR _processLanguageLearning: 정리된 텍스트 ${cleanedText.length}자');
 
@@ -329,8 +345,8 @@ class EnhancedOcrService {
   /// 개별 문장 처리
   Future<TextSegment> _processTextSegment(String sentence) async {
     try {
-      // 핀인 생성
-      final pinyin = await _generatePinyinForSentence(sentence);
+      // 핀인 생성 (TextCleanerService에 위임)
+      final pinyin = await _textCleanerService.generatePinyinForSentence(sentence);
 
       // 번역 시 언어 코드 명시적 설정
       debugPrint('_processTextSegment: 문장 번역 시작 (${sentence.length}자)');
@@ -364,24 +380,6 @@ class EnhancedOcrService {
         sourceLanguage: 'zh-CN',
         targetLanguage: 'ko',
       );
-    }
-  }
-
-  /// 문장에서 중국어 문자만 추출하여 핀인 생성
-  Future<String> _generatePinyinForSentence(String sentence) async {
-    try {
-      // 중국어 문자만 추출
-      final chineseCharsOnly =
-          _textCleanerService.extractChineseChars(sentence);
-      if (chineseCharsOnly.isEmpty) {
-        return '';
-      }
-
-      // 핀인 생성
-      return await _pinyinService.generatePinyin(chineseCharsOnly);
-    } catch (e) {
-      debugPrint('핀인 생성 중 오류 발생: $e');
-      return '';
     }
   }
 

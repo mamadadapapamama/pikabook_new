@@ -4,9 +4,32 @@ import 'package:flutter_tts/flutter_tts.dart';
 import '../../models/processed_text.dart';
 import '../../utils/language_constants.dart';
 import '../common/usage_limit_service.dart';
+import '../text_processing/internal_cn_segmenter_service.dart';
 
-// 텍스트 음성 변환 서비스를 제공합니다
-
+/// TextToSpeech 서비스 (TTS)
+/// 
+/// 앱 전체의 TTS 기능을 관리하는 중앙 서비스입니다.
+/// 
+/// ## 주요 기능
+/// - 다양한 언어(중국어, 한국어 등)의 텍스트 음성 변환
+/// - 세그먼트 단위 텍스트 읽기
+/// - ProcessedText 전체 읽기
+/// - 문장 분할 및 순차적 읽기
+/// - TTS 사용량 제한 관리
+/// - 언어별 최적화된 음성 설정
+///
+/// ## 사용 예시
+/// ```dart
+/// final ttsService = TtsService();
+/// await ttsService.init();
+/// await ttsService.speak("안녕하세요");
+/// 
+/// // 세그먼트 읽기
+/// await ttsService.speakSegment("你好", 0);
+/// 
+/// // 전체 ProcessedText 읽기
+/// await ttsService.speakAllSegments(processedText);
+/// ```
 enum TtsState { playing, stopped, paused, continued }
 
 class TtsService {
@@ -32,10 +55,16 @@ class TtsService {
 
   // 사용량 제한 서비스
   final UsageLimitService _usageLimitService = UsageLimitService();
+  
+  // 문장 분할 서비스 (text_reader_service에서 이동)
+  final InternalCnSegmenterService _segmenterService = InternalCnSegmenterService();
 
   // 초기화
   Future<void> init() async {
     _flutterTts = FlutterTts();
+    
+    // 문장 분할 서비스 초기화
+    await _segmenterService.initialize();
 
     try {
       // 오디오 세션 설정 (iOS/macOS에서 중요)
@@ -550,5 +579,56 @@ class TtsService {
         _onPlayingCompleted!();
       }
     });
+  }
+  
+  /// TextReaderService에서 이동한 기능: 문장 단위로 분리하여 읽기
+  Future<void> readTextBySentences(String text) async {
+    // 이미 재생 중인 경우 중지
+    if (currentSegmentIndex != null) {
+      await stop();
+      return;
+    }
+
+    // 텍스트를 문장 단위로 분리
+    final sentences = _segmenterService.splitIntoSentences(text);
+
+    // 문장이 없으면 전체 텍스트 읽기
+    if (sentences.isEmpty) {
+      await speak(text);
+      return;
+    }
+
+    // 각 문장을 순차적으로 읽기
+    for (int i = 0; i < sentences.length; i++) {
+      final sentence = sentences[i];
+      if (sentence.isEmpty) continue;
+
+      // 현재 문장 재생
+      await speakSegment(sentence, i);
+
+      // 재생 완료 대기 (대략적인 시간 계산)
+      await Future.delayed(
+          Duration(milliseconds: sentence.length * 100 + 1000));
+
+      // 재생이 중단되었는지 확인
+      if (currentSegmentIndex == null) break;
+    }
+  }
+
+  /// TextReaderService에서 이동: 텍스트를 문장 단위로 분리
+  List<String> splitIntoSentences(String text) {
+    return _segmenterService.splitIntoSentences(text);
+  }
+
+  /// TextReaderService에서 이동: ProcessedText에서 세그먼트 텍스트 추출
+  List<String> extractSegmentTexts(ProcessedText processedText) {
+    if (processedText.segments == null || processedText.segments!.isEmpty) {
+      return [processedText.fullOriginalText];
+    }
+
+    return processedText.segments!
+        .map((segment) => segment.originalText)
+        .where((text) => text.isNotEmpty)
+        .toList();
   }
 }
