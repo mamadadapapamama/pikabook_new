@@ -1104,36 +1104,70 @@ if (kDebugMode) {
 
   // 이미지 상태 업데이트 받는 메서드
   void _handleImageStateChanged(ComponentState state) {
-    debugPrint('이미지 상태 변경: $state');
+    // 이미지 상태가 이미 동일한 경우 중복 업데이트 방지
+    if ((_isImageReady && state == ComponentState.ready) ||
+        (!_isImageReady && state == ComponentState.loading)) {
+      return;
+    }
+    
+    if (kDebugMode) {
+      debugPrint('이미지 상태 변경: $state');
+    }
+    
     setState(() {
-      _isImageReady = state == ComponentState.ready;
+      _isImageReady = state == ComponentState.ready || state == ComponentState.error;
     });
-    _checkAndUpdateReadyState();
+    
+    // 상태가 ready로 변경된 경우에만 통합 상태 체크 실행
+    if (state == ComponentState.ready || state == ComponentState.error) {
+      _checkAndUpdateReadyState();
+    }
   }
 
   // 텍스트 상태 업데이트 받는 메서드
   void _handleTextStateChanged(ComponentState state) {
-    debugPrint('텍스트 상태 변경: $state');
+    // 텍스트 상태가 이미 동일한 경우 중복 업데이트 방지
+    if ((_isTextReady && state == ComponentState.ready) ||
+        (!_isTextReady && state == ComponentState.loading)) {
+      return;
+    }
+    
+    if (kDebugMode) {
+      debugPrint('텍스트 상태 변경: $state');
+    }
+    
     setState(() {
-      _isTextReady = state == ComponentState.ready;
+      _isTextReady = state == ComponentState.ready || state == ComponentState.error;
     });
-    _checkAndUpdateReadyState();
+    
+    // 상태가 ready로 변경된 경우에만 통합 상태 체크 실행
+    if (state == ComponentState.ready || state == ComponentState.error) {
+      _checkAndUpdateReadyState();
+    }
   }
 
   // 통합 상태 체크 및 부모에게 알림
   void _checkAndUpdateReadyState() {
-    debugPrint('상태 체크: 이미지=$_isImageReady, 텍스트=$_isTextReady');
+    if (kDebugMode) {
+      debugPrint('콘텐츠 상태 체크: 이미지=$_isImageReady, 텍스트=$_isTextReady');
+    }
     
-    if (_isImageReady && _isTextReady) {
-      debugPrint('모든 컴포넌트 준비 완료, 상위 컴포넌트에 알림');
-      if (widget.onContentReady != null) {
-        widget.onContentReady!(ComponentState.ready);
+    // widget.onContentReady가 null이 아닌 경우에만 콜백 호출
+    if (widget.onContentReady != null) {
+      // 모든 컴포넌트가 준비되었거나, 필수 구성 요소만 로드된 경우
+      final bool isAllReady = _isImageReady && _isTextReady;
+      final ComponentState newState = isAllReady ? ComponentState.ready : ComponentState.loading;
+      
+      if (kDebugMode) {
+        debugPrint(isAllReady ? '모든 컴포넌트 준비 완료' : '일부 컴포넌트 아직 로딩 중');
       }
-    } else {
-      debugPrint('일부 컴포넌트 아직 로딩 중');
-      if (widget.onContentReady != null) {
-        widget.onContentReady!(ComponentState.loading);
-      }
+      
+      // 상태 업데이트가 필요한 경우 한 번만 호출하기 위해 지연 실행
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onContentReady!(newState);
+        }
+      });
     }
   }
 }
