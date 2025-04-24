@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import '../core/services/common/usage_limit_service.dart';
 import '../core/theme/tokens/color_tokens.dart';
@@ -50,7 +51,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         });
       }
     } catch (e) {
-      debugPrint('사용량 확인 중 오류 발생: $e');
+      if (kDebugMode) {
+        debugPrint('사용량 확인 중 오류 발생: $e');
+      }
     }
   }
 

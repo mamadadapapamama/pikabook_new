@@ -271,7 +271,7 @@ class FlashCardUI {
             // 번역 (의미)
             Text(
               translation,
-              style: TypographyTokens.headline3.copyWith(
+              style: TypographyTokens.headline2.copyWith(
                 color: ColorTokens.textPrimary,
               ),
               textAlign: TextAlign.center,
@@ -281,7 +281,7 @@ class FlashCardUI {
             // 원문 (중국어)
             Text(
               original,
-              style: TypographyTokens.body1Cn.copyWith(
+              style: TypographyTokens.subtitle2Cn.copyWith(
                 color: ColorTokens.textGrey,
               ),
               textAlign: TextAlign.center,
