@@ -61,21 +61,9 @@ class PageImageWidget extends StatelessWidget {
     if ((imageFile == null && (imageUrl == null || imageUrl!.isEmpty)) || 
         (page != null && page!.originalText == '___PROCESSING___')) {
       
-      // 상태 콜백 호출 (로딩 중)
-      if (onStateChanged != null) {
-        onStateChanged!(ComponentState.loading);
-      }
-      
-      // 로딩 UI 제거하고 빈 공간만 표시
+      // 빈 공간만 표시. onStateChanged는 _buildImage 내부에서 한 번만 호출됨
       return const SizedBox(height: 150);
     }
-
-    // 이미지 로드 성공 시 상태 업데이트
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (onStateChanged != null) {
-        onStateChanged!(ComponentState.ready);
-      }
-    });
 
     return GestureDetector(
       onTap: () {
@@ -134,7 +122,23 @@ class PageImageWidget extends StatelessWidget {
 
   // 이미지 위젯
   Widget _buildImage() {
+    // 상태 콜백은 여기서 한 번만 호출
+    bool isCallbackSent = false;
+    
+    void _sendReadyCallback() {
+      if (!isCallbackSent && onStateChanged != null) {
+        isCallbackSent = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          onStateChanged!(ComponentState.ready);
+        });
+      }
+    }
+    
     if (imageFile != null) {
+      if (kDebugMode) {
+        debugPrint('이미지 파일 로드: ${imageFile!.path}');
+      }
+      
       return Image.file(
         imageFile!,
         height: height,
@@ -146,6 +150,7 @@ class PageImageWidget extends StatelessWidget {
         // 이미지 로딩 중에도 기본 이미지 표시
         frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
           if (wasSynchronouslyLoaded || frame != null) {
+            _sendReadyCallback();
             return child;
           } else {
             // 로딩 인디케이터 대신 빈 이미지만 표시
@@ -154,6 +159,10 @@ class PageImageWidget extends StatelessWidget {
         },
       );
     } else if (imageUrl != null && imageUrl!.isNotEmpty) {
+      if (kDebugMode) {
+        debugPrint('이미지 URL 로드: $imageUrl');
+      }
+      
       if (imageUrl!.startsWith('http')) {
         // 네트워크 이미지 처리
         return Image.network(
@@ -165,7 +174,10 @@ class PageImageWidget extends StatelessWidget {
             return _buildEmptyImageWidget();
           },
           loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
+            if (loadingProgress == null) {
+              _sendReadyCallback();
+              return child;
+            }
             // 로딩 인디케이터 제거하고 빈 이미지만 표시
             return _buildEmptyImageWidget();
           },
@@ -179,6 +191,7 @@ class PageImageWidget extends StatelessWidget {
               // 로딩 인디케이터 제거하고 빈 이미지만 표시
               return _buildEmptyImageWidget();
             } else if (snapshot.hasData && snapshot.data != null) {
+              _sendReadyCallback();
               return Image.file(
                 snapshot.data!,
                 height: height,
@@ -195,6 +208,7 @@ class PageImageWidget extends StatelessWidget {
         );
       }
     } else {
+      _sendReadyCallback();
       return _buildEmptyImageWidget();
     }
   }

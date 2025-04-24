@@ -137,39 +137,29 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     _initStyles();
     
     // 초기 상태값 설정
-    _isImageReady = false;
-    _isTextReady = false;
+    _isImageReady = widget.imageFile == null && (widget.page.imageUrl == null || widget.page.imageUrl!.isEmpty);
+    _isTextReady = widget.page.originalText.isEmpty;
     
     // 디버그 로깅
     if (kDebugMode) {
       debugPrint('PageContentWidget 초기화: pageId=${widget.page.id}, 이미지=${widget.imageFile != null ? "있음" : "없음"}, 텍스트=${widget.page.originalText.isNotEmpty ? "있음" : "없음"}');
+      debugPrint('초기 상태: _isImageReady=$_isImageReady, _isTextReady=$_isTextReady');
     }
     
     // 비동기 데이터 로드
     if (widget.page.id != null) {
       // 이미 처리된 텍스트가 있는지 확인
       _getProcessedTextFromCache();
-    }
-    
-    // 로딩 상태 변경 확인 및 콜백 호출
-    if (widget.onLoadingStateChanged != null && _isProcessingText) {
-      widget.onLoadingStateChanged!(LoadingState.pageProcessing);
-    }
-
-    // 이미지가 없는 경우 이미지는 이미 준비됨으로 처리
-    if (widget.imageFile == null && (widget.page.imageUrl == null || widget.page.imageUrl!.isEmpty)) {
-      _isImageReady = true;
-      if (kDebugMode) {
-        debugPrint('이미지 없음 - 이미지 준비 상태로 설정');
-      }
+    } else {
+      // 페이지 ID가 없는 경우 텍스트 준비 상태로 설정
+      _isTextReady = true;
       _checkAndUpdateReadyState();
     }
-    
-    // 텍스트가 없는 경우 텍스트는 이미 준비됨으로 처리
-    if (widget.page.originalText.isEmpty) {
-      _isTextReady = true;
+
+    // 이미지 또는 텍스트가 없는 경우 이미 준비됨으로 처리
+    if (_isImageReady && _isTextReady) {
       if (kDebugMode) {
-        debugPrint('텍스트 없음 - 텍스트 준비 상태로 설정');
+        debugPrint('이미지와 텍스트 모두 없음 - 준비 상태로 설정');
       }
       _checkAndUpdateReadyState();
     }
