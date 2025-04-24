@@ -407,6 +407,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: ColorTokens.surface,
         title: Text('학습자 이름 설정', style: TypographyTokens.subtitle2),
         content: TextField(
           controller: controller,
@@ -467,6 +468,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: ColorTokens.surface,
         title: Text('노트 스페이스 이름 변경', style: TypographyTokens.subtitle2),
         content: TextField(
           controller: controller,
@@ -573,6 +575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: ColorTokens.surface,
         title: Text('원문 언어 설정', style: TypographyTokens.subtitle2),
         content: SizedBox(
           width: double.maxFinite,
@@ -636,6 +639,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: ColorTokens.surface,
         title: Text('번역 언어 설정', style: TypographyTokens.subtitle2),
         content: SizedBox(
           width: double.maxFinite,
@@ -698,6 +702,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: ColorTokens.surface,
         title: Text(
           '회원 탈퇴',
           style: TypographyTokens.subtitle2.copyWith(

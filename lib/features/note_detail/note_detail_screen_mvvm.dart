@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' hide debugPrint;
 import '../../core/models/note.dart';
 import '../../core/models/page.dart' as pika_page;
 import 'note_detail_viewmodel.dart';
@@ -13,6 +13,8 @@ import '../../core/services/text_processing/text_reader_service.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
+import 'dart:async';
+import '../../widgets/note_action_bottom_sheet.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatelessWidget {
@@ -120,45 +122,34 @@ class NoteDetailScreenMVVM extends StatelessWidget {
           onPageChanged: viewModel.onPageChanged,
           itemBuilder: (context, index) {
             final page = viewModel.pages![index];
+            final isProcessed = viewModel.processedPageStatus[page.id] ?? false;
             
-            // 특수 처리 마커가 있는지 확인
-            if (page.originalText == "___PROCESSING___") {
-              return _buildProcessingPage();
+            // 페이지 처리 상태에 따라 다른 위젯 반환
+            if (!isProcessed && page.originalText == "___PROCESSING___") {
+              // 처리 중이고 마커가 있는 경우 로딩 위젯 표시
+              return _ProcessingPageWidget(
+                pageId: page.id,
+                pageIndex: index,
+                viewModel: viewModel,
+              );
+            } else {
+              // 처리 완료되었거나, 마커가 없는 경우 (오류 또는 초기 상태) 페이지 콘텐츠 표시
+              return _buildPageContent(context, viewModel, page);
             }
-            
-            // 페이지 콘텐츠 위젯 반환
-            return _buildPageContent(context, viewModel, page);
           },
         ),
       ),
     );
   }
   
-  // 처리 중인 페이지 UI
-  Widget _buildProcessingPage() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const DotLoadingIndicator(message: '텍스트 처리를 기다리는 중...'),
-          Text(
-            '이 페이지는 아직 처리 중입니다.\n잠시 후 자동으로 업데이트됩니다.',
-            textAlign: TextAlign.center,
-            style: TypographyTokens.body2,
-          ),
-        ],
-      ),
-    );
-  }
-  
-  // 페이지 콘텐츠 위젯
+  // 페이지 콘텐츠 위젯 (복원)
   Widget _buildPageContent(BuildContext context, NoteDetailViewModel viewModel, pika_page.Page page) {
     return RepaintBoundary(
       child: PageContentWidget(
         key: ValueKey('page_content_${page.id}'),
         page: page,
         imageFile: viewModel.getImageFileForPage(page),
-        isLoadingImage: false,
+        isLoadingImage: false, // 필요시 ViewModel에서 관리
         noteId: viewModel.noteId,
         onCreateFlashCard: (front, back, {pinyin}) => 
             _handleCreateFlashCard(context, viewModel, front, back, pinyin: pinyin),
@@ -169,7 +160,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     );
   }
   
-  // 세그먼트 삭제 처리
+  // 세그먼트 삭제 처리 (복원)
   void _handleDeleteSegment(BuildContext context, NoteDetailViewModel viewModel, int segmentIndex) async {
     final success = await viewModel.deleteSegment(segmentIndex);
     
@@ -184,79 +175,26 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     }
   }
   
-  // 더보기 옵션 표시
+  // 더보기 옵션 표시 (NoteActionBottomSheet 사용하도록 수정)
   void _showMoreOptions(BuildContext context, NoteDetailViewModel viewModel) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _buildBottomSheet(context, viewModel),
-    );
-  }
-  
-  // 바텀 시트 구성
-  Widget _buildBottomSheet(BuildContext context, NoteDetailViewModel viewModel) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(16.0),
-          topRight: Radius.circular(16.0),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 8),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.text_format),
-            title: Text(viewModel.isFullTextMode ? '세그먼트 모드로 보기' : '전체 텍스트로 보기'),
-            onTap: () {
-              viewModel.toggleFullTextMode();
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            leading: Icon(
-              viewModel.note?.isFavorite == true ? Icons.star : Icons.star_border,
-            ),
-            title: Text(viewModel.note?.isFavorite == true ? '즐겨찾기 해제' : '즐겨찾기 추가'),
-            onTap: () {
-              viewModel.toggleFavorite();
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.edit),
-            title: const Text('제목 수정'),
-            onTap: () {
-              Navigator.pop(context);
-              _showEditTitleDialog(context, viewModel);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete, color: Colors.red),
-            title: const Text('노트 삭제', style: TextStyle(color: Colors.red)),
-            onTap: () {
-              Navigator.pop(context);
-              _confirmDeleteNote(context, viewModel);
-            },
-          ),
-          const SizedBox(height: 20),
-        ],
+      builder: (context) => NoteActionBottomSheet(
+        onEditTitle: () => _showEditTitleDialog(context, viewModel),
+        onDeleteNote: () => _confirmDeleteNote(context, viewModel),
+        onToggleFavorite: viewModel.toggleFavorite,
+        onToggleFullTextMode: viewModel.toggleFullTextMode, // FullTextMode 토글 추가
+        isFavorite: viewModel.note?.isFavorite ?? false,
+        isFullTextMode: viewModel.isFullTextMode, // FullTextMode 상태 전달
       ),
     );
   }
+
+  // 바텀 시트 구성 (_buildBottomSheet) 제거 (NoteActionBottomSheet 사용)
   
-  // 제목 수정 다이얼로그
+  // 제목 수정 다이얼로그 (복원, NoteActionBottomSheet에서 호출됨)
   void _showEditTitleDialog(BuildContext context, NoteDetailViewModel viewModel) {
     final TextEditingController controller = TextEditingController(
       text: viewModel.note?.originalText,
@@ -293,13 +231,13 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     );
   }
   
-  // 노트 삭제 확인
+  // 노트 삭제 확인 (복원, NoteActionBottomSheet에서 호출됨)
   void _confirmDeleteNote(BuildContext context, NoteDetailViewModel viewModel) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('노트 삭제'),
-        content: const Text('이 노트를 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.'),
+        content: const Text('정말로 이 노트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -331,7 +269,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     );
   }
   
-  // 플래시카드 생성 처리
+  // 플래시카드 생성 처리 (복원)
   void _handleCreateFlashCard(
     BuildContext context, 
     NoteDetailViewModel viewModel,
@@ -352,7 +290,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     }
   }
   
-  // 플래시카드 화면으로 이동
+  // 플래시카드 화면으로 이동 (복원)
   void _navigateToFlashcards(BuildContext context, NoteDetailViewModel viewModel) {
     if (viewModel.flashCards.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -388,7 +326,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     });
   }
 
-  // 바텀 네비게이션 바 구성 (다중 선택 모드)
+  // 바텀 네비게이션 바 구성 (NoteDetailBottomBar 위젯 사용)
   Widget _buildBottomBar(BuildContext context, NoteDetailViewModel viewModel) {
     if (viewModel.pages == null || viewModel.pages!.isEmpty) {
       return const SizedBox.shrink();
@@ -408,8 +346,8 @@ class NoteDetailScreenMVVM extends StatelessWidget {
       onToggleFullTextMode: viewModel.toggleFullTextMode,
       isFullTextMode: viewModel.isFullTextMode,
       contentManager: viewModel.getContentManager(),
-      textReaderService: TextReaderService(),
-      isProcessing: false,
+      textReaderService: TextReaderService(), // 직접 생성 또는 의존성 주입 필요
+      isProcessing: viewModel.isProcessingBackground, // ViewModel 상태 사용
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.totalImageCount > 0 ? viewModel.totalImageCount : (viewModel.pages?.length ?? 1)),
       onTtsPlay: () {
         if (kDebugMode) {
@@ -417,12 +355,12 @@ class NoteDetailScreenMVVM extends StatelessWidget {
         }
         viewModel.speakCurrentPageText();
       },
-      isMinimalUI: false,
+      isMinimalUI: false, // 필요에 따라 조정
       processedPages: viewModel.getProcessedPagesStatus(),
     );
   }
   
-  // 페이지 처리 완료 콜백 설정 (스낵바 표시)
+  // 페이지 처리 완료 콜백 설정 (스낵바 표시) (복원)
   void _setupPageProcessedCallback(BuildContext context, NoteDetailViewModel viewModel) {
     // 이미 콜백이 설정되어 있는지 검사하는 로직이 필요할 수 있음
     // 일단 매번 새로 설정하도록 구현
@@ -442,5 +380,116 @@ class NoteDetailScreenMVVM extends StatelessWidget {
         );
       }
     });
+  }
+}
+
+/// 처리 중인 페이지를 위한 스테이트풀 위젯
+class _ProcessingPageWidget extends StatefulWidget {
+  final String? pageId;
+  final int pageIndex;
+  final NoteDetailViewModel viewModel;
+  
+  const _ProcessingPageWidget({
+    Key? key,
+    this.pageId,
+    required this.pageIndex,
+    required this.viewModel,
+  }) : super(key: key);
+  
+  @override
+  _ProcessingPageWidgetState createState() => _ProcessingPageWidgetState();
+}
+
+class _ProcessingPageWidgetState extends State<_ProcessingPageWidget> {
+  @override
+  void initState() {
+    super.initState();
+    if (kDebugMode) {
+      debugPrint('페이지 ${widget.pageIndex} 처리 위젯 초기화');
+    }
+  }
+  
+  @override
+  void dispose() {
+    super.dispose();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    // ViewModel의 public getter 사용 (다음 단계에서 추가 예정)
+    final isProcessed = widget.viewModel.processedPageStatus[widget.pageId] ?? false;
+    
+    if (!isProcessed) {
+      return _buildLoadingUI();
+    } else {
+      // 이론적으로 처리 완료 시 이 위젯은 더 이상 표시되지 않아야 함.
+      // PageView.builder에서 처리된 페이지에 대해 다른 위젯을 반환하도록 해야 함.
+      // 안전 장치로 로딩 UI를 계속 표시하거나 빈 컨테이너 반환
+      return Container(); // 처리 완료 시 빈 컨테이너 반환
+    }
+  }
+  
+  // 로딩 UI
+  Widget _buildLoadingUI() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const DotLoadingIndicator(message: '텍스트 처리를 기다리는 중...'),
+          const SizedBox(height: 16),
+          Text(
+            '이 페이지는 백그라운드에서 처리 중입니다.\n완료되면 자동으로 업데이트됩니다.',
+            textAlign: TextAlign.center,
+            style: TypographyTokens.body2,
+          ),
+          const SizedBox(height: 24),
+          // 이미지 파일이 있으면 보여주기
+          if (widget.pageId != null)
+            FutureBuilder<Widget>(
+              future: _loadImageWidget(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.done && 
+                    snapshot.hasData) {
+                  return snapshot.data!;
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+        ],
+      ),
+    );
+  }
+  
+  // 이미지 위젯 로드
+  Future<Widget> _loadImageWidget() async {
+    try {
+      final imageFile = widget.viewModel.getImageFileForPage(
+        widget.viewModel.pages?[widget.pageIndex]
+      );
+      
+      if (imageFile != null && await imageFile.exists()) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.file(
+            imageFile,
+            height: 200,
+            fit: BoxFit.contain,
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('이미지 로드 중 오류: $e');
+      }
+    }
+    
+    return const SizedBox.shrink();
+  }
+}
+
+// 로컬 debugPrint 함수 사용
+void debugPrint(String message) {
+  if (kDebugMode) {
+    print(message);
   }
 } 

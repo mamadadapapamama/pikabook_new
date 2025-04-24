@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' hide debugPrint;
+import 'package:flutter/foundation.dart' hide debugPrint;
 import 'dart:io';
 import '../core/services/common/usage_limit_service.dart';
 import '../core/theme/tokens/color_tokens.dart';
@@ -7,6 +7,13 @@ import '../core/theme/tokens/typography_tokens.dart';
 import '../core/widgets/pika_button.dart';
 import 'package:image_picker/image_picker.dart';
 import '../core/services/workflow/note_creation_workflow.dart';
+
+// 로컬 debugPrint 함수 정의
+void debugPrint(String message) {
+  if (kDebugMode) {
+    print(message);
+  }
+}
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);

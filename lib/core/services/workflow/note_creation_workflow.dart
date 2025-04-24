@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' hide debugPrint;
+import 'package:flutter/foundation.dart' hide debugPrint;
 import '../content/note_service.dart';
 import '../media/image_service.dart';
 import '../content/page_service.dart';
@@ -11,6 +11,13 @@ import '../../../core/models/page.dart' as page_model;
 import '../../../features/note_detail/note_detail_screen_mvvm.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
+
+// 로컬 debugPrint 함수 정의
+void debugPrint(String message) {
+  if (kDebugMode) {
+    print(message);
+  }
+}
 
 /// 노트 생성 워크플로우 클래스
 /// 이미지 선택부터 노트 생성, 화면 이동까지의 전체 프로세스를 관리합니다.

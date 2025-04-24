@@ -60,49 +60,53 @@ class _NoteListItemState extends State<NoteListItem> {
 
   // 이미지 로드가 필요한지 확인 후 로드
   void _loadImageIfNeeded() {
-    final imageUrl = widget.note.imageUrl;
+    final String? imageUrl = widget.note.imageUrl;
     
-    // 이미 동일한 URL을 로드 중이거나, 이미 로드했거나, URL이 없는 경우는 제외
-    if (_isLoadingImage || 
-        (imageUrl == _cachedImageUrl && _imageFile != null) || 
-        imageUrl == null || 
-        imageUrl.isEmpty) {
-      return;
+    // 로드할 URL이 현재 캐시된 URL과 다르거나, 파일이 없는데 URL은 있는 경우 로드 필요
+    bool needsLoading = (imageUrl != _cachedImageUrl || _imageFile == null) && 
+                       imageUrl != null && 
+                       imageUrl.isNotEmpty;
+    
+    // 이미 로딩 중이면 제외
+    if (_isLoadingImage) return;
+    
+    if (needsLoading) {
+      // 로드 시작 전에 상태 초기화
+      setState(() {
+        _imageFile = null;
+        _isLoadingImage = true;
+        _imageLoadError = false;
+        _cachedImageUrl = imageUrl; // 로드 시작할 URL 캐싱
+      });
+      _loadImage();
+    } else if (imageUrl == null || imageUrl.isEmpty) {
+      // URL이 없는 경우 상태 초기화 (Placeholder 표시용)
+      if (_imageFile != null || _isLoadingImage || _imageLoadError) {
+        setState(() {
+          _imageFile = null;
+          _isLoadingImage = false;
+          _imageLoadError = false;
+          _cachedImageUrl = null;
+        });
+      }
     }
-    
-    _loadImage();
   }
 
   Future<void> _loadImage() async {
-    final String imageUrl = widget.note.imageUrl ?? '';
-    final String noteId = widget.note.id ?? '';
-    
-    // 이미지 URL이 없거나 비어있으면 바로 반환
-    if (imageUrl.isEmpty) {
-      if (_isLoadingImage || _imageFile != null) {
-        setState(() {
-          _isLoadingImage = false;
-          _imageFile = null;
-          _imageLoadError = false;
-        });
-      }
-      return;
-    }
+    // 이미지 URL 가져오기 (null 체크는 _loadImageIfNeeded에서 이미 수행)
+    final String imageUrl = _cachedImageUrl!;
 
-    // 이미 로딩 중이면 중복 요청 방지
-    if (_isLoadingImage) return;
+    // _loadImageIfNeeded에서 이미 로딩 상태 설정했으므로 여기서는 설정 불필요
+    // if (!_isLoadingImage) {
+    //   setState(() {
+    //     _isLoadingImage = true;
+    //     _imageLoadError = false;
+    //   });
+    // }
 
-    // 로딩 상태만 변경
-    if (!_isLoadingImage) {
-      setState(() {
-        _isLoadingImage = true;
-        _imageLoadError = false;
-      });
-    }
-
+    File? downloadedImage;
     try {
       // 이미지 URL 처리 개선
-      File? downloadedImage;
       
       // Firebase Storage URL 패턴 체크
       bool isFirebaseUrl = imageUrl.startsWith('http') && 
@@ -111,53 +115,35 @@ class _NoteListItemState extends State<NoteListItem> {
            imageUrl.contains('storage'));
       
       if (isFirebaseUrl) {
-        // Firebase Storage URL에서 직접 다운로드
         downloadedImage = await _imageService.downloadImage(imageUrl);
       } else {
-        // 상대 경로로 시도
-        downloadedImage = await _imageService.downloadImage(imageUrl);
-        
-        // 실패한 경우 전체 URL로 다시 시도
-        if (downloadedImage == null) {
-          try {
-            // Firebase Storage 참조 생성 시도
-            final storageRef = FirebaseStorage.instance.ref().child(imageUrl);
-            final fullUrl = await storageRef.getDownloadURL();
-            downloadedImage = await _imageService.downloadImage(fullUrl);
-          } catch (e) {
-            // 마지막 시도: 기본 경로를 붙여서 시도
-            try {
-              final fallbackUrl = 'images/$imageUrl';
-              final storageRef = FirebaseStorage.instance.ref().child(fallbackUrl);
-              final fullUrl = await storageRef.getDownloadURL();
-              downloadedImage = await _imageService.downloadImage(fullUrl);
-            } catch (e) {
-              // 모든 시도 실패
-            }
-          }
+        // 다른 경로 처리 (필요시 구현)
+        // downloadedImage = await _imageService.downloadImageFromPath(imageUrl);
+        // 임시로 에러 처리
+        if (kDebugMode) {
+          debugPrint("처리되지 않은 이미지 경로 유형: $imageUrl");
         }
+        throw Exception("처리되지 않은 이미지 경로");
       }
 
-      // 마운트 상태와 결과에 따라 단 한 번의 setState 호출
+      // 마운트 상태와 결과에 따라 상태 업데이트
       if (mounted) {
-        if (downloadedImage != null) {
-          setState(() {
-            _imageFile = downloadedImage;
-            _isLoadingImage = false;
-          });
-        } else {
-          setState(() {
-            _isLoadingImage = false;
-            _imageLoadError = true;
-          });
-        }
+        setState(() {
+          _imageFile = downloadedImage;
+          _isLoadingImage = false;
+          _imageLoadError = (downloadedImage == null);
+        });
       }
     } catch (e) {
-      // 오류 발생 시에만 상태 변경
+      if (kDebugMode) {
+        debugPrint('이미지 로드 중 오류 발생 ($imageUrl): $e');
+      }
+      // 오류 발생 시 상태 변경
       if (mounted) {
         setState(() {
           _isLoadingImage = false;
           _imageLoadError = true;
+          _imageFile = null; // 오류 발생 시 이미지 파일 제거
         });
       }
     }
@@ -469,100 +455,48 @@ class _NoteListItemState extends State<NoteListItem> {
   
   Widget _buildImageWidget() {
     // 이미지 URL을 키로 사용하여 불필요한 재로드 방지
-    final String cacheKey = widget.note.id ?? '' + (widget.note.imageUrl ?? '');
+    // final String cacheKey = widget.note.id ?? '' + (_cachedImageUrl ?? '');
     
     if (_isLoadingImage) {
-      return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary),
-          strokeWidth: 2.0,
-        ),
-      );
-    } else if (_imageLoadError || _imageFile == null) {
-      // 이미지 URL이 있지만 로드에 실패한 경우
-      final hasUrl = widget.note.imageUrl != null && widget.note.imageUrl!.isNotEmpty;
-      
-      return GestureDetector(
-        onTap: hasUrl ? _loadImage : _showImageSourceOptions, // 이미지가 있으면 다시 로드 시도, 없으면 선택 다이얼로그
-        child: Container(
-          color: Colors.grey[200],
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  hasUrl ? Icons.refresh : Icons.add_photo_alternate,
-                  color: hasUrl ? Colors.grey[400] : ColorTokens.primary,
-                  size: 32.0,
-                ),
-                if (hasUrl) ...[
-                  const SizedBox(height: 4.0),
-                  Text(
-                    '이미지 불러오기 실패\n다시 시도',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 10.0,
-                    ),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 4.0),
-                  Text(
-                    '이미지 추가',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 10.0,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+      // 1. 로딩 중: 로딩 인디케이터 표시
+      return Container(
+        color: Colors.grey[200], // 로딩 중 배경색
+        child: const Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary),
+            strokeWidth: 2.0,
           ),
         ),
       );
-    } else {
+    } else if (_imageFile != null) {
+      // 2. 이미지 로드 성공: 이미지 표시
       return Stack(
         fit: StackFit.expand,
         children: [
           Image.file(
             _imageFile!,
             fit: BoxFit.cover,
-            key: ValueKey(cacheKey), // 고유 키 설정으로 불필요한 리빌드 방지
-            cacheHeight: 240, // 썸네일 2배 크기로 메모리 최적화
+            // key: ValueKey(cacheKey), // 키 사용은 상태 관리에 따라 조절
+            cacheHeight: 240, 
             cacheWidth: 240,
             errorBuilder: (context, error, stackTrace) {
+              // 이미지 파일 렌더링 중 오류 발생 시
               if (kDebugMode) {
-                debugPrint('이미지 렌더링 오류: $error');
+                debugPrint('Image.file 렌더링 오류: $error');
               }
-              return GestureDetector(
-                onTap: _loadImage,
-                child: Container(
-                  color: Colors.grey[200],
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.refresh,
-                          color: Colors.grey[400],
-                          size: 32.0,
-                        ),
-                        const SizedBox(height: 4.0),
-                        Text(
-                          '이미지 다시 로드',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 10.0,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
+              // 에러 상태로 전환하고 다시 빌드하도록 유도
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                 if (mounted) {
+                    setState(() {
+                      _imageLoadError = true;
+                      _imageFile = null;
+                    });
+                 }
+              });
+              return _buildPlaceholderWidget(); // 임시로 placeholder 표시
             },
           ),
-          // 업로드 중이면 오버레이 표시
+          // 업로드 중 오버레이 (필요시)
           if (_isUploadingImage)
             Container(
               color: Colors.black.withOpacity(0.5),
@@ -574,6 +508,73 @@ class _NoteListItemState extends State<NoteListItem> {
             ),
         ],
       );
+    } else if (_imageLoadError) {
+      // 3. 이미지 로드 실패: 새로고침 UI 표시
+      return _buildErrorWidget();
+    } else {
+      // 4. 초기 상태 또는 이미지 URL 없음: Placeholder 표시
+      return _buildPlaceholderWidget();
     }
+  }
+
+  // Placeholder 위젯 (이미지 없음 또는 초기 상태)
+  Widget _buildPlaceholderWidget() {
+    return GestureDetector(
+      onTap: _showImageSourceOptions, // 이미지 추가 옵션 표시
+      child: Container(
+        color: Colors.grey[200],
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.add_photo_alternate_outlined,
+                color: ColorTokens.primary, // 아이콘 색상 변경
+                size: 32.0,
+              ),
+              const SizedBox(height: 4.0),
+              Text(
+                '이미지 추가',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 10.0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 이미지 로드 에러 위젯
+  Widget _buildErrorWidget() {
+    return GestureDetector(
+      onTap: _loadImageIfNeeded, // 이미지 다시 로드 시도
+      child: Container(
+        color: Colors.grey[200],
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.refresh,
+                color: Colors.grey[400],
+                size: 32.0,
+              ),
+              const SizedBox(height: 4.0),
+              Text(
+                '이미지 로드 실패\n다시 시도',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 10.0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
