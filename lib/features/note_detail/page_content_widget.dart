@@ -187,8 +187,12 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       _isProcessingText = true;
     });
 
-    final startTime = DateTime.now();
-    debugPrint('페이지 텍스트 처리 시작: ${widget.page.id}');
+    // kDebugMode에서만 시간 측정 시작
+    final DateTime? startTime = kDebugMode ? DateTime.now() : null;
+    
+    if (kDebugMode) {
+      debugPrint('페이지 텍스트 처리 시작: ${widget.page.id}');
+    }
 
     try {
       final processedText = await _contentManager.processPageText(
@@ -196,10 +200,10 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         imageFile: widget.imageFile,
       );
 
-      final endTime = DateTime.now();
-      final duration = endTime.difference(startTime);
-      
-      if (kDebugMode) {
+      // kDebugMode에서만 시간 측정 종료 및 출력
+      if (kDebugMode && startTime != null) {
+        final endTime = DateTime.now();
+        final duration = endTime.difference(startTime);
         debugPrint('페이지 텍스트 처리 소요시간: ${duration.inMilliseconds}ms');
       }
 

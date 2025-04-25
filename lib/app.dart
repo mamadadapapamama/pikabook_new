@@ -258,6 +258,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (_error != null) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
+        showPerformanceOverlay: false,
         theme: themeData,
         scrollBehavior: const CustomScrollBehavior(),
         home: Scaffold(
@@ -276,6 +277,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (_isLoading || !_isInitialized || _isLoadingUserData) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
+        showPerformanceOverlay: false,
         theme: themeData,
         scrollBehavior: const CustomScrollBehavior(),
         home: const LoadingScreen(progress: 0.5, message: '앱을 초기화하는 중입니다...'),
@@ -286,6 +288,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (_user == null) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
+        showPerformanceOverlay: false,
         theme: themeData,
         scrollBehavior: const CustomScrollBehavior(),
         home: LoginScreen(
@@ -306,6 +309,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (!_isOnboardingCompleted) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
+        showPerformanceOverlay: false,
         theme: themeData,
         scrollBehavior: const CustomScrollBehavior(),
         home: OnboardingScreen(
@@ -324,6 +328,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     // 모든 조건을 만족한 경우 앱의 메인 화면 표시
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      showPerformanceOverlay: false,
       theme: themeData,
       scrollBehavior: const CustomScrollBehavior(),
       // 홈 화면 표시
