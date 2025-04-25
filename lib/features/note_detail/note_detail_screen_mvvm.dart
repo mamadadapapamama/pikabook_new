@@ -217,14 +217,6 @@ class NoteDetailScreenMVVM extends StatelessWidget {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.text_format),
-            title: Text(viewModel.isFullTextMode ? '세그먼트 모드로 보기' : '전체 텍스트로 보기'),
-            onTap: () {
-              viewModel.toggleFullTextMode();
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
             leading: Icon(
               viewModel.note?.isFavorite == true ? Icons.star : Icons.star_border,
             ),
@@ -265,6 +257,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: ColorTokens.surface,
         title: const Text('제목 수정'),
         content: TextField(
           controller: controller,
@@ -298,6 +291,7 @@ class NoteDetailScreenMVVM extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: ColorTokens.surface,
         title: const Text('노트 삭제'),
         content: const Text('이 노트를 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.'),
         actions: [

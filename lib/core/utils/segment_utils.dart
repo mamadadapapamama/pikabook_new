@@ -26,7 +26,7 @@ class SegmentUtils {
         direction: direction,
         background: PhysicalModel(
           color: ColorTokens.deleteSwipeBackground,
-          borderRadius: borderRadius ?? BorderRadius.zero,
+          borderRadius: borderRadius ?? BorderRadius.circular(8),
           clipBehavior: Clip.antiAlias,
           child: Container(
             alignment: direction == DismissDirection.endToStart

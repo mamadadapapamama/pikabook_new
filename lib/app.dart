@@ -11,7 +11,6 @@ import 'views/screens/login_screen.dart';
 import 'features/home/home_screen_mvvm.dart'; 
 import 'views/screens/onboarding_screen.dart';
 import 'views/screens/settings_screen.dart';
-import 'views/screens/page_test_screen.dart';
 import 'core/services/common/initialization_manager.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'widgets/loading_screen.dart';
@@ -336,7 +335,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             await FirebaseAuth.instance.signOut();
           },
         ),
-        '/page-test': (context) => PageTestScreen(),
       },
     );
   }

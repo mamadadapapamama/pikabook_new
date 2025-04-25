@@ -3,7 +3,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/models/processed_text.dart';
 import '../../core/models/flash_card.dart';
-import '../../core/utils/context_menu_helper.dart';
 import '../../core/services/text_processing/text_reader_service.dart';
 import '../../core/utils/text_highlight_manager.dart';
 import '../../core/utils/context_menu_manager.dart';
@@ -243,95 +242,102 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     return ValueListenableBuilder<String>(
       valueListenable: _selectedTextNotifier,
       builder: (context, selectedText, child) {
-        return SelectableText.rich(
-          TextSpan(
-            children: textSpans,
-            style: effectiveStyle,
+        return TextSelectionTheme(
+          data: TextSelectionThemeData(
+            selectionColor: ColorTokens.primary.withOpacity(0.2),
+            cursorColor: ColorTokens.primary,
+            selectionHandleColor: ColorTokens.primary,
           ),
-          contextMenuBuilder: (context, editableTextState) {
-            return ContextMenuManager.buildContextMenu(
-              context: context,
-              editableTextState: editableTextState,
-              flashcardWords: _flashcardWords,
-              selectedText: selectedText,
-              onSelectionChanged: (text) {
-                // 상태 변경을 ValueNotifier를 통해 처리하고, 빌드 후에 setState 호출
-                _selectedTextNotifier.value = text;
+          child: SelectableText.rich(
+            TextSpan(
+              children: textSpans,
+              style: effectiveStyle,
+            ),
+            contextMenuBuilder: (context, editableTextState) {
+              return ContextMenuManager.buildContextMenu(
+                context: context,
+                editableTextState: editableTextState,
+                flashcardWords: _flashcardWords,
+                selectedText: selectedText,
+                onSelectionChanged: (text) {
+                  // 상태 변경을 ValueNotifier를 통해 처리하고, 빌드 후에 setState 호출
+                  _selectedTextNotifier.value = text;
+                  Future.microtask(() {
+                    if (mounted) {
+                      setState(() {
+                        _selectedText = text;
+                      });
+                    }
+                  });
+                },
+                onDictionaryLookup: widget.onDictionaryLookup,
+                onCreateFlashCard: (word, meaning, {String? pinyin}) {
+                  if (widget.onCreateFlashCard != null) {
+                    widget.onCreateFlashCard!(word, meaning, pinyin: pinyin);
+                    // 빌드 후에 setState 호출
+                    Future.microtask(() {
+                      if (mounted) {
+                        setState(() {
+                          _flashcardWords.add(word);
+                        });
+                      }
+                    });
+                  }
+                },
+              );
+            },
+            enableInteractiveSelection: true,
+            showCursor: true,
+            cursorWidth: 2.0,
+            cursorColor: ColorTokens.primary,
+            onSelectionChanged: (selection, cause) {
+              // 선택 변경 시 로깅
+              if (kDebugMode) {
+                debugPrint(
+                    '선택 변경: ${selection.start}-${selection.end}, 원인: $cause');
+              }
+
+              // 선택이 취소된 경우 (빈 선택)
+              if (selection.isCollapsed) {
+                if (kDebugMode) {
+                  debugPrint('선택 취소됨 (빈 선택)');
+                }
+                // 선택된 텍스트 초기화
+                _selectedTextNotifier.value = '';
                 Future.microtask(() {
                   if (mounted) {
                     setState(() {
-                      _selectedText = text;
+                      _selectedText = '';
                     });
                   }
                 });
-              },
-              onDictionaryLookup: widget.onDictionaryLookup,
-              onCreateFlashCard: (word, meaning, {String? pinyin}) {
-                if (widget.onCreateFlashCard != null) {
-                  widget.onCreateFlashCard!(word, meaning, pinyin: pinyin);
-                  // 빌드 후에 setState 호출
-                  Future.microtask(() {
-                    if (mounted) {
-                      setState(() {
-                        _flashcardWords.add(word);
-                      });
+              } else {
+                // 텍스트가 선택된 경우, 선택된 텍스트 추출
+                try {
+                  final selectedText =
+                      text.substring(selection.start, selection.end);
+                  if (selectedText.isNotEmpty && selectedText != _selectedText) {
+                    if (kDebugMode) {
+                      debugPrint('새로운 텍스트 선택됨: "$selectedText"');
                     }
-                  });
-                }
-              },
-            );
-          },
-          enableInteractiveSelection: true,
-          showCursor: true,
-          cursorWidth: 2.0,
-          cursorColor: ColorTokens.primary,
-          onSelectionChanged: (selection, cause) {
-            // 선택 변경 시 로깅
-            if (kDebugMode) {
-              debugPrint(
-                  '선택 변경: ${selection.start}-${selection.end}, 원인: $cause');
-            }
-
-            // 선택이 취소된 경우 (빈 선택)
-            if (selection.isCollapsed) {
-              if (kDebugMode) {
-                debugPrint('선택 취소됨 (빈 선택)');
-              }
-              // 선택된 텍스트 초기화
-              _selectedTextNotifier.value = '';
-              Future.microtask(() {
-                if (mounted) {
-                  setState(() {
-                    _selectedText = '';
-                  });
-                }
-              });
-            } else {
-              // 텍스트가 선택된 경우, 선택된 텍스트 추출
-              try {
-                final selectedText =
-                    text.substring(selection.start, selection.end);
-                if (selectedText.isNotEmpty && selectedText != _selectedText) {
-                  if (kDebugMode) {
-                    debugPrint('새로운 텍스트 선택됨: "$selectedText"');
+                    // 선택된 텍스트 업데이트
+                    _selectedTextNotifier.value = selectedText;
+                    Future.microtask(() {
+                      if (mounted) {
+                        setState(() {
+                          _selectedText = selectedText;
+                        });
+                      }
+                    });
                   }
-                  // 선택된 텍스트 업데이트
-                  _selectedTextNotifier.value = selectedText;
-                  Future.microtask(() {
-                    if (mounted) {
-                      setState(() {
-                        _selectedText = selectedText;
-                      });
-                    }
-                  });
-                }
-              } catch (e) {
-                if (kDebugMode) {
-                  debugPrint('텍스트 선택 오류: $e');
+                } catch (e) {
+                  if (kDebugMode) {
+                    debugPrint('텍스트 선택 오류: $e');
+                  }
                 }
               }
-            }
-          },
+            },
+          ),
         );
       },
     );
@@ -487,12 +493,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             return await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
+                backgroundColor: ColorTokens.surface,
                 title: const Text('문장 삭제'),
                 content: const Text('이 문장을 삭제하시겠습니까?'),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(false),
                     child: const Text('취소'),
+                    style: TextButton.styleFrom(foregroundColor: ColorTokens.textPrimary),
                   ),
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(true),
