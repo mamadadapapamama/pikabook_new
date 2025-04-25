@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import '../../core/theme/tokens/color_tokens.dart';
 import '../../views/screens/full_image_screen.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import 'package:path_provider/path_provider.dart';
@@ -139,7 +140,7 @@ class PageImageWidget extends StatelessWidget {
             const Center(
               child: DotLoadingIndicator(
                 message: '이미지 로딩 중...',
-                dotColor: Color(0xFFFFD53C),
+                dotColor: ColorTokens.primary,
               ),
             ),
         ],

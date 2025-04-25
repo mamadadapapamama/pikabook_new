@@ -22,12 +22,8 @@ class NoteCreationLoader {
     int timeoutSeconds = 20, // 타임아웃 시간 (초 단위)
   }) async {
 
-    final displayMessage = kReleaseMode ? null : message;
-
-    // 디버그 타이머 방지 (디버그 모드에서만)
-    if (kDebugMode) {
-      timeDilation = 1.0;
-    }
+    // 성능 오버레이 및 디버그 타이머 비활성화
+    timeDilation = 1.0;
     
     if (!context.mounted) {
       if (kDebugMode) {
@@ -74,64 +70,72 @@ class NoteCreationLoader {
             useSafeArea: true,
             builder: (dialogContext) => WillPopScope(
               onWillPop: () async => false, // 뒤로 가기 방지
-              child: Material(
-                type: MaterialType.transparency,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-                    width: 300,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 도트 로딩 인디케이터
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // 도트 애니메이션
-                            const DotLoadingIndicator(),
-                            
-                            const SizedBox(width: 12),
-                            
-                            // 피카북 새 캐릭터 (고정된 상태)
-                            Image.asset(
-                              'assets/images/pikabook_bird.png',
-                              width: 40,
-                              height: 40,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: ColorTokens.primary.withOpacity(0.2),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.auto_awesome,
-                                    color: ColorTokens.primary,
-                                    size: 24,
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        
-                        const SizedBox(height: 24),
-                        
-                        // 텍스트 섹션
-                        Text(
-                          message,
-                          style: TypographyTokens.body1.copyWith(
-                            height: 1.4,
-                            color: ColorTokens.textPrimary,
+              child: Theme(
+                // 성능 오버레이 비활성화를 위한 명시적 테마 설정
+                data: ThemeData(
+                  scaffoldBackgroundColor: Colors.white,
+                  colorScheme: Theme.of(context).colorScheme,
+                  brightness: Theme.of(context).brightness,
+                ),
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+                      width: 300,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 도트 로딩 인디케이터
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // 도트 애니메이션
+                              const DotLoadingIndicator(),
+                              
+                              const SizedBox(width: 12),
+                              
+                              // 피카북 새 캐릭터 (고정된 상태)
+                              Image.asset(
+                                'assets/images/pikabook_bird.png',
+                                width: 40,
+                                height: 40,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: ColorTokens.primary.withOpacity(0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.auto_awesome,
+                                      color: ColorTokens.primary,
+                                      size: 24,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                          
+                          const SizedBox(height: 24),
+                          
+                          // 텍스트 섹션
+                          Text(
+                            message,
+                            style: TypographyTokens.body1.copyWith(
+                              height: 1.4,
+                              color: ColorTokens.textPrimary,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

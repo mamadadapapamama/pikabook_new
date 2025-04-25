@@ -131,7 +131,7 @@ class _LoadingExperienceState extends State<LoadingExperience> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const DotLoadingIndicator(),
-          if (widget.loadingMessage != null) ...[
+          if (widget.loadingMessage != null && !kReleaseMode) ...[
             const SizedBox(height: 16),
             Text(
               widget.loadingMessage!,
@@ -175,7 +175,7 @@ class _LoadingExperienceState extends State<LoadingExperience> {
   @override
   Widget build(BuildContext context) {
     // 로딩 중인 경우
-    if (_isLoading && _isFirstLoad) {
+    if (_isLoading && _isFirstLoad ) {
       return widget.loadingWidget ?? _buildDefaultLoadingWidget();
     }
     
@@ -200,7 +200,7 @@ class _LoadingExperienceState extends State<LoadingExperience> {
         widget.contentBuilder(context),
         
         // 오버레이 로딩 인디케이터 (첫 로드가 아니고 로딩 중인 경우)
-        if (_isLoading && !_isFirstLoad)
+        if (_isLoading && !_isFirstLoad && !kReleaseMode)
           Positioned(
             top: 16,
             right: 16,

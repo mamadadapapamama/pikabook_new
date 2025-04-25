@@ -164,13 +164,13 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerPr
             if (kReleaseMode || widget.message == null || widget.message!.isEmpty)
               const SizedBox.shrink()
             else
-              Text(
-                widget.message!,
-                textAlign: TextAlign.center,
-                style: TypographyTokens.body2.copyWith(
-                  color: textColor,
-                ),
+            Text(
+              widget.message!,
+              textAlign: TextAlign.center,
+              style: TypographyTokens.body2.copyWith(
+                color: textColor,
               ),
+            ),
           ],
         ],
       ),
