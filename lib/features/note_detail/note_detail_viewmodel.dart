@@ -136,7 +136,9 @@ class NoteDetailViewModel extends ChangeNotifier {
     if (_processingTimer != null) {
       _processingTimer!.cancel();
       _processingTimer = null;
-      debugPrint("⏱️ 처리 타이머 취소됨");
+      if (kDebugMode) {
+        debugPrint("⏱️ 처리 타이머 취소됨");
+      }
     }
     
     super.dispose();
@@ -713,28 +715,26 @@ class NoteDetailViewModel extends ChangeNotifier {
     }
   }
   
-  // 세그먼트 처리 시작
+  // 세그먼트 처리를 주기적으로 확인하는 타이머 시작
   void _startSegmentProcessing() {
-    if (_pages == null || _pages!.isEmpty) return;
-    
-    _isProcessingSegments = true;
-    
-    // 첫 번째 페이지부터 순차적으로 세그먼트 처리
-    _processPageSegments(_currentPageIndex);
-    
-    // 3초마다 세그먼트 처리 상태 확인
-    _processingTimer = Timer.periodic(Duration(seconds: 3), (timer) {
-      if (!_isProcessingSegments) {
-        timer.cancel();
-        _processingTimer = null;
-        if (kDebugMode) {
-          debugPrint("⏱️ 처리 타이머 종료됨: 모든 세그먼트 처리 완료");
-        }
+    // 기존 타이머가 있으면 취소
+    if (_processingTimer != null) {
+      _processingTimer!.cancel();
+      _processingTimer = null;
+      if (kDebugMode) {
+        debugPrint('🛑 세그먼트 처리 타이머 취소됨');
       }
-    });
-    
+    }
+
+    // 현재 페이지나 선택된 세그먼트가 없으면 시작하지 않음
+    if (currentPage == null) return;
+
     if (kDebugMode) {
-      debugPrint("⏱️ 세그먼트 처리 타이머 시작됨 (3초 간격)");
+      debugPrint('⏱️ 세그먼트 처리 상태 체크 타이머 시작됨 (3초 간격)');
+      
+      _processingTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+        _checkAndProcessPageIfNeeded(currentPage!);
+      });
     }
   }
   
@@ -1058,101 +1058,117 @@ class NoteDetailViewModel extends ChangeNotifier {
       return;
     }
     
-    // 타이머 간격을 15초로 늘림 (성능 향상 및 불필요한 체크 감소)
-    _processingTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
-      if (kDebugMode) {
+    if (kDebugMode) {
+      // 타이머 간격을 15초로 늘림 (성능 향상 및 불필요한 체크 감소)
+      debugPrint("⏱️ 페이지 처리 상태 체크 타이머 시작됨 (15초 간격)");
+      
+      _processingTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
         debugPrint("🔄 페이지 처리 상태 주기적 체크 실행 중...");
-      }
-      
-      bool allProcessed = true;
-      bool anyStatusChanged = false;
-      bool currentPageChanged = false;
-      
-      // 처리되지 않은 페이지만 체크하기 위한 목록
-      final List<int> unprocessedPageIndices = [];
-      
-      // 먼저 처리가 필요한 페이지만 식별
-      for (int i = 0; i < _pages!.length; i++) {
-        final page = _pages![i];
-        if (page.id == null) continue;
         
-        // 이미 처리된 페이지는 스킵
-        if (_processedPageStatus[page.id!] == true) continue;
+        bool allProcessed = true;
+        bool anyStatusChanged = false;
+        bool currentPageChanged = false;
         
-        unprocessedPageIndices.add(i);
-        allProcessed = false;
-      }
-      
-      // 처리가 필요한 페이지만 체크 (불필요한 체크 없이 최적화)
-      for (final index in unprocessedPageIndices) {
-        final page = _pages![index];
+        // 처리되지 않은 페이지만 체크하기 위한 목록
+        final List<int> unprocessedPageIndices = [];
         
-        try {
-          // 페이지 상태 확인
-          bool isProcessed = false;
+        // 먼저 처리가 필요한 페이지만 식별
+        for (int i = 0; i < _pages!.length; i++) {
+          final page = _pages![i];
+          if (page.id == null) continue;
           
-          // 텍스트가 이미 처리되어 있는지 확인
-          if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
-            isProcessed = true;
-          } else {
-            // 캐시된 페이지 체크로 성능 개선 (Firestore 호출 최소화)
-            if (kDebugMode) {
+          // 이미 처리된 페이지는 스킵
+          if (_processedPageStatus[page.id!] == true) continue;
+          
+          unprocessedPageIndices.add(i);
+          allProcessed = false;
+        }
+        
+        // 처리가 필요한 페이지만 체크 (불필요한 체크 없이 최적화)
+        for (final index in unprocessedPageIndices) {
+          final page = _pages![index];
+          
+          try {
+            // 페이지 상태 확인
+            bool isProcessed = false;
+            
+            // 텍스트가 이미 처리되어 있는지 확인
+            if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
+              isProcessed = true;
+            } else {
+              // 캐시된 페이지 체크로 성능 개선 (Firestore 호출 최소화)
               debugPrint("⚠️ 캐시된 페이지 확인 (임시 처리)");
-            }
-            // NoteService에 getCachedPage 메서드가 없으므로 대체 로직 사용
-            isProcessed = false; // 처리되지 않았다고 가정하고 나중에 ContentManager로 체크
-          }
-          
-          // 상태가 변경된 경우에만 업데이트
-          if (_processedPageStatus[page.id!] != isProcessed) {
-            _processedPageStatus[page.id!] = isProcessed;
-            anyStatusChanged = true;
-            
-            // 현재 페이지의 상태가 변경되었는지 확인
-            if (index == _currentPageIndex) {
-              currentPageChanged = true;
+              // NoteService에 getCachedPage 메서드가 없으므로 대체 로직 사용
+              isProcessed = false; // 처리되지 않았다고 가정하고 나중에 ContentManager로 체크
             }
             
-            // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
-            if (isProcessed && _pageProcessedCallback != null) {
-              _pageProcessedCallback!(index);
+            // 상태가 변경된 경우에만 업데이트
+            if (_processedPageStatus[page.id!] != isProcessed) {
+              _processedPageStatus[page.id!] = isProcessed;
+              anyStatusChanged = true;
               
-              // 모든 프로세스를 페이지 정보 업데이트
-              _pages![index] = _pages![index].copyWith(
-                originalText: await _getUpdatedPageText(page.id!),
-              );
+              // 현재 페이지의 상태가 변경되었는지 확인
+              if (index == _currentPageIndex) {
+                currentPageChanged = true;
+              }
+              
+              // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
+              if (isProcessed && _pageProcessedCallback != null) {
+                _pageProcessedCallback!(index);
+                
+                // 모든 프로세스를 페이지 정보 업데이트
+                _pages![index] = _pages![index].copyWith(
+                  originalText: await _getUpdatedPageText(page.id!),
+                );
+              }
             }
-          }
-        } catch (e) {
-          if (kDebugMode) {
+          } catch (e) {
             debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
           }
         }
-      }
-      
-      // 상태 변경이 있고 현재 페이지에 변경이 있을 때만 UI 갱신
-      // 또는 모든 페이지가 처리완료된 경우도 UI 갱신
-      if ((anyStatusChanged && currentPageChanged && _shouldUpdateUI) || 
-          (anyStatusChanged && unprocessedPageIndices.isEmpty)) {
-        notifyListeners();
         
-        if (kDebugMode) {
+        // 상태 변경이 있고 현재 페이지에 변경이 있을 때만 UI 갱신
+        // 또는 모든 페이지가 처리완료된 경우도 UI 갱신
+        if ((anyStatusChanged && currentPageChanged && _shouldUpdateUI) || 
+            (anyStatusChanged && unprocessedPageIndices.isEmpty)) {
+          notifyListeners();
           debugPrint("🔄 페이지 처리 상태 변경으로 UI 갱신됨");
         }
-      }
-      
-      // 모든 페이지가 처리되었으면 타이머 중지
-      if (unprocessedPageIndices.isEmpty) {
-        if (kDebugMode) {
+        
+        // 모든 페이지가 처리되었으면 타이머 중지
+        if (unprocessedPageIndices.isEmpty) {
           debugPrint("✅ 모든 페이지 처리 완료, 타이머 중지");
+          timer.cancel();
+          _processingTimer = null;
         }
-        timer.cancel();
-        _processingTimer = null;
-      }
-    });
+      });
+    } else {
+      // 디버그 모드가 아닐 때는 타이머 없이 1회 체크만 수행
+      _checkProcessingStatus();
+    }
+  }
+  
+  // 디버그 모드가 아닐 때 사용할 간단한 체크 메서드
+  void _checkProcessingStatus() async {
+    // 처리가 필요한 페이지만 식별하고 상태 업데이트
+    if (_pages == null || _pages!.isEmpty) return;
     
-    if (kDebugMode) {
-      debugPrint("⏱️ 페이지 처리 상태 체크 타이머 시작됨 (15초 간격)");
+    for (int i = 0; i < _pages!.length; i++) {
+      final page = _pages![i];
+      if (page.id == null) continue;
+      
+      // 이미 처리된 페이지는 스킵
+      if (_processedPageStatus[page.id!] == true) continue;
+      
+      // 텍스트가 이미 처리되어 있는지 확인
+      if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
+        _processedPageStatus[page.id!] = true;
+        
+        // 페이지가 처리 완료된 경우 콜백 함수 호출
+        if (_pageProcessedCallback != null) {
+          _pageProcessedCallback!(i);
+        }
+      }
     }
   }
   
