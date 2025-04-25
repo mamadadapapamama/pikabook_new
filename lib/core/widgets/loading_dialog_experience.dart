@@ -27,13 +27,17 @@ class NoteCreationLoader {
     }
     
     if (!context.mounted) {
-      debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
+      if (kDebugMode) {
+        debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
+      }
       return;
     }
     
     // 이미 로더가 표시되고 있는지 확인
     if (_isVisible) {
-      debugPrint('로더가 이미 표시되고 있습니다');
+      if (kDebugMode) {
+        debugPrint('로더가 이미 표시되고 있습니다');
+      }
       return;
     }
     
@@ -45,7 +49,9 @@ class NoteCreationLoader {
       _timeoutTimer = Timer(Duration(seconds: timeoutSeconds), () {
         // 타임아웃 시 안전하게 제거
         if (_isVisible) {
-          debugPrint('로더가 타임아웃으로 자동 종료됨');
+          if (kDebugMode) {
+            debugPrint('로더가 타임아웃으로 자동 종료됨');
+          }
           if (context.mounted) hide(context);
         }
       });
@@ -133,13 +139,17 @@ class NoteCreationLoader {
             _isVisible = false;
           });
         } catch (dialogError) {
-          debugPrint('다이얼로그 표시 중 내부 오류: $dialogError');
+          if (kDebugMode) {
+            debugPrint('다이얼로그 표시 중 내부 오류: $dialogError');
+          }
           _timeoutTimer?.cancel();
           _isVisible = false;
         }
       });
     } catch (e) {
-      debugPrint('노트 생성 로더 표시 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('노트 생성 로더 표시 중 오류: $e');
+      }
       _timeoutTimer?.cancel();
       _isVisible = false;
     }
@@ -154,10 +164,14 @@ class NoteCreationLoader {
       if (Navigator.of(context, rootNavigator: true).canPop()) {
         Navigator.of(context, rootNavigator: true).pop();
       } else {
-        debugPrint('숨길 다이얼로그가 없습니다');
+        if (kDebugMode) {
+          debugPrint('숨길 다이얼로그가 없습니다');
+        }
       }
     } catch (e) {
-      debugPrint('노트 생성 로더 숨기기 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('노트 생성 로더 숨기기 중 오류: $e');
+      }
     } finally {
       _timeoutTimer?.cancel();
       _isVisible = false;
