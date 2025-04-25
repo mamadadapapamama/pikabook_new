@@ -92,13 +92,17 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
     // 플래시카드 목록이 변경된 경우
     if (oldWidget.flashCards != widget.flashCards) {
-      debugPrint('플래시카드 목록 변경 감지: didUpdateWidget');
+      if (kDebugMode) {
+        debugPrint('플래시카드 목록 변경 감지: didUpdateWidget');
+      }
       _extractFlashcardWords();
     }
 
     // ProcessedText 변경 감지
     if (oldWidget.processedText != widget.processedText) {
-      debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
+      if (kDebugMode) {
+        debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
+      }
       
       // 선택된 텍스트 초기화
       setState(() {
@@ -109,17 +113,23 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     
     // 표시 설정 변경 감지 - 개별 속성 확인
     if (oldWidget.processedText.showFullText != widget.processedText.showFullText) {
-      debugPrint('전체 텍스트 모드 변경 감지: ${oldWidget.processedText.showFullText} -> ${widget.processedText.showFullText}');
+      if (kDebugMode) {
+        debugPrint('전체 텍스트 모드 변경 감지: ${oldWidget.processedText.showFullText} -> ${widget.processedText.showFullText}');
+      }
       setState(() {});
     }
     
     if (oldWidget.processedText.showPinyin != widget.processedText.showPinyin) {
-      debugPrint('병음 표시 설정 변경 감지: ${oldWidget.processedText.showPinyin} -> ${widget.processedText.showPinyin}');
+      if (kDebugMode) {
+        debugPrint('병음 표시 설정 변경 감지: ${oldWidget.processedText.showPinyin} -> ${widget.processedText.showPinyin}');
+      }
       setState(() {});
     }
     
     if (oldWidget.processedText.showTranslation != widget.processedText.showTranslation) {
-      debugPrint('번역 표시 설정 변경 감지: ${oldWidget.processedText.showTranslation} -> ${widget.processedText.showTranslation}');
+      if (kDebugMode) {
+        debugPrint('번역 표시 설정 변경 감지: ${oldWidget.processedText.showTranslation} -> ${widget.processedText.showTranslation}');
+      }
       setState(() {});
     }
   }
@@ -215,7 +225,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     
     // 스타일이 제공되지 않은 경우 경고
     if (style == null) {
-      debugPrint('경고: ProcessedTextWidget에 스타일이 제공되지 않았습니다.');
+      if (kDebugMode) {
+        debugPrint('경고: ProcessedTextWidget에 스타일이 제공되지 않았습니다.');
+      }
     }
     
     // 항상 제공된 스타일 사용 (PageContentWidget에서 관리)
@@ -243,11 +255,15 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       valueListenable: _selectedTextNotifier,
       builder: (context, selectedText, child) {
         return Theme(
-          data: Theme.of(context).copyWith(
+          data: ThemeData(
             textSelectionTheme: TextSelectionThemeData(
               selectionColor: ColorTokens.primary.withOpacity(0.3),
               selectionHandleColor: ColorTokens.primary,
             ),
+            // 기본 테마 유지를 위한 속성들 추가
+            scaffoldBackgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            colorScheme: Theme.of(context).colorScheme,
+            brightness: Theme.of(context).brightness,
           ),
           child: SelectableText.rich(
             TextSpan(
@@ -356,6 +372,16 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   /// **전체 텍스트 표시**
   Widget _buildFullTextView() {
+    // _processedText 체크
+    if (widget.processedText == null) {
+      return const SizedBox.shrink();
+    }
+    
+    // 디버그 로그 추가
+    if (kDebugMode) {
+      debugPrint('_buildFullTextView 호출 - 전체 문장 모드 렌더링');
+    }
+
     // 전체 텍스트를 위한 Column 위젯 (전체 너비 사용)
     return Column(
       mainAxisAlignment: MainAxisAlignment.start,
@@ -398,12 +424,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     }
 
     // 현재 표시 상태 정보 출력
-    debugPrint('세그먼트 뷰 빌드 정보:');
-    debugPrint(' - 병음 표시: ${widget.processedText.showPinyin}');
-    debugPrint(' - 번역 표시: ${widget.processedText.showTranslation}');
-    debugPrint(' - 전체 텍스트 모드: ${widget.processedText.showFullText}');
-    debugPrint(' - 위젯 hashCode: ${widget.hashCode}');
-    debugPrint(' - ProcessedText hashCode: ${widget.processedText.hashCode}');
+    if (kDebugMode) {
+      debugPrint('세그먼트 뷰 빌드 정보:');
+      debugPrint(' - 병음 표시: ${widget.processedText.showPinyin}');
+      debugPrint(' - 번역 표시: ${widget.processedText.showTranslation}');
+      debugPrint(' - 전체 텍스트 모드: ${widget.processedText.showFullText}');
+      debugPrint(' - 위젯 hashCode: ${widget.hashCode}');
+      debugPrint(' - ProcessedText hashCode: ${widget.processedText.hashCode}');
+    }
 
     // 세그먼트 목록을 위젯 목록으로 변환
     List<Widget> segmentWidgets = [];
@@ -554,17 +582,23 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     final bool isFullTextMode = widget.processedText.showFullText;
 
     // 로딩 확인용
-    // debugPrint('[${DateTime.now()}] ProcessedTextWidget build 호출');
+    // if (kDebugMode) {
+    //   debugPrint('[${DateTime.now()}] ProcessedTextWidget build 호출');
+    // }
     
     // 번역 텍스트 체크 로그 추가
     if (widget.processedText.fullTranslatedText != null && widget.processedText.fullTranslatedText!.isNotEmpty) {
       final sample = widget.processedText.fullTranslatedText!.length > 50 
           ? widget.processedText.fullTranslatedText!.substring(0, 50) + '...' 
           : widget.processedText.fullTranslatedText!;
-      debugPrint('ProcessedTextWidget: 번역 텍스트 있음 (${widget.processedText.fullTranslatedText!.length}자)');
-      debugPrint('ProcessedTextWidget: 번역 텍스트 샘플 - "$sample"');
+      if (kDebugMode) {
+        debugPrint('ProcessedTextWidget: 번역 텍스트 있음 (${widget.processedText.fullTranslatedText!.length}자)');
+        debugPrint('ProcessedTextWidget: 번역 텍스트 샘플 - "$sample"');
+      }
     } else {
-      debugPrint('ProcessedTextWidget: 번역 텍스트 없음 (null 또는 빈 문자열)');
+      if (kDebugMode) {
+        debugPrint('ProcessedTextWidget: 번역 텍스트 없음 (null 또는 빈 문자열)');
+      }
     }
     
     // 세그먼트별 번역 체크
@@ -575,7 +609,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           untranslatedSegments++;
         }
       }
-      debugPrint('ProcessedTextWidget: 세그먼트 ${widget.processedText.segments!.length}개 중 $untranslatedSegments개 번역 누락');
+      if (kDebugMode) {
+        debugPrint('ProcessedTextWidget: 세그먼트 ${widget.processedText.segments!.length}개 중 $untranslatedSegments개 번역 누락');
+      }
     }
 
     // 문장 바깥 탭 시 선택 취소를 위한 GestureDetector 추가
