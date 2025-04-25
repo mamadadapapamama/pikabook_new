@@ -472,46 +472,12 @@ class _NoteListItemState extends State<NoteListItem> {
         ),
       );
     } else if (_imageLoadError || _imageFile == null) {
-      // 이미지 URL이 있지만 로드에 실패한 경우
-      final hasUrl = widget.note.imageUrl != null && widget.note.imageUrl!.isNotEmpty;
-      
-      return GestureDetector(
-        onTap: hasUrl ? _loadImage : _showImageSourceOptions, // 이미지가 있으면 다시 로드 시도, 없으면 선택 다이얼로그
-        child: Container(
-          color: Colors.grey[200],
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  hasUrl ? Icons.refresh : Icons.add_photo_alternate,
-                  color: hasUrl ? Colors.grey[400] : ColorTokens.primary,
-                  size: 32.0,
-                ),
-                if (hasUrl) ...[
-                  const SizedBox(height: 4.0),
-                  Text(
-                    '이미지 불러오기 실패\n다시 시도',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 10.0,
-                    ),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 4.0),
-                  Text(
-                    '이미지 추가',
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 10.0,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+      // 이미지 URL이 있지만 로드에 실패한 경우나 이미지가 없는 경우 기본 이미지 표시
+      return Image.asset(
+        'assets/images/thumbnail_empty.png',
+        fit: BoxFit.cover,
+        width: 80,
+        height: 80,
       );
     } else {
       return Stack(
@@ -525,31 +491,9 @@ class _NoteListItemState extends State<NoteListItem> {
             cacheWidth: 240,
             errorBuilder: (context, error, stackTrace) {
               debugPrint('이미지 렌더링 오류: $error');
-              return GestureDetector(
-                onTap: _loadImage,
-                child: Container(
-                  color: Colors.grey[200],
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.refresh,
-                          color: Colors.grey[400],
-                          size: 32.0,
-                        ),
-                        const SizedBox(height: 4.0),
-                        Text(
-                          '이미지 다시 로드',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 10.0,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              return Image.asset(
+                'assets/images/thumbnail_empty.png',
+                fit: BoxFit.cover,
               );
             },
           ),
