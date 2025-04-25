@@ -216,11 +216,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: ColorTokens.background,
         elevation: 0,
         toolbarHeight: 0,
         systemOverlayStyle: const SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
+          statusBarColor: ColorTokens.background,
           statusBarIconBrightness: Brightness.dark, // 안드로이드용
           statusBarBrightness: Brightness.light, // iOS용
         ),
