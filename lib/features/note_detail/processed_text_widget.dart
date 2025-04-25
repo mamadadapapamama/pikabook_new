@@ -242,11 +242,12 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     return ValueListenableBuilder<String>(
       valueListenable: _selectedTextNotifier,
       builder: (context, selectedText, child) {
-        return TextSelectionTheme(
-          data: TextSelectionThemeData(
-            selectionColor: ColorTokens.primary.withOpacity(0.2),
-            cursorColor: ColorTokens.primary,
-            selectionHandleColor: ColorTokens.primary,
+        return Theme(
+          data: Theme.of(context).copyWith(
+            textSelectionTheme: TextSelectionThemeData(
+              selectionColor: ColorTokens.primary.withOpacity(0.3),
+              selectionHandleColor: ColorTokens.primary,
+            ),
           ),
           child: SelectableText.rich(
             TextSpan(

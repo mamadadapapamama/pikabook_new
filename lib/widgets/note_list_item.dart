@@ -305,12 +305,15 @@ class _NoteListItemState extends State<NoteListItem> {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
+              backgroundColor: ColorTokens.surface,
               title: const Text('노트 삭제'),
               content: const Text('정말로 이 노트를 삭제하시겠습니까?'),
               actions: <Widget>[
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
                   child: const Text('취소'),
+                  style: TextButton.styleFrom(foregroundColor: ColorTokens.textPrimary),
+
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(true),
