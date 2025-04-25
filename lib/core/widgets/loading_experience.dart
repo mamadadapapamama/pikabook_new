@@ -194,40 +194,7 @@ class _LoadingExperienceState extends State<LoadingExperience> {
     }
     
     // 콘텐츠 표시 (로딩 중이더라도 콘텐츠가 있다면 표시)
-    return Stack(
-      children: [
-        // 콘텐츠
-        widget.contentBuilder(context),
-        
-        // 오버레이 로딩 인디케이터 (첫 로드가 아니고 로딩 중인 경우)
-        if (_isLoading && !_isFirstLoad && !kReleaseMode)
-          Positioned(
-            top: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.8),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.0,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
+    return widget.contentBuilder(context);
   }
 }
 
