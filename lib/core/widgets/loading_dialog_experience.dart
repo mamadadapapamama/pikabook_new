@@ -21,6 +21,9 @@ class NoteCreationLoader {
     String message = '스마트한 학습 노트를 만들고 있어요.\n잠시만 기다려 주세요! 조금 시간이 걸릴수 있어요.',
     int timeoutSeconds = 20, // 타임아웃 시간 (초 단위)
   }) async {
+
+    final displayMessage = kReleaseMode ? null : message;
+
     // 디버그 타이머 방지 (디버그 모드에서만)
     if (kDebugMode) {
       timeDilation = 1.0;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
+import 'package:flutter/foundation.dart';
 
 /// 도트 애니메이션 로딩 인디케이터 위젯 (로딩의 기본 유닛)
 /// 세 개의 도트가 애니메이션되는 심플한 로딩 인디케이터입니다.
@@ -160,13 +161,16 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerPr
           ),
           if (widget.message != null) ...[
             const SizedBox(height: 16),
-            Text(
-              widget.message!,
-              textAlign: TextAlign.center,
-              style: TypographyTokens.body2.copyWith(
-                color: textColor,
+            if (kReleaseMode || widget.message == null || widget.message!.isEmpty)
+              const SizedBox.shrink()
+            else
+              Text(
+                widget.message!,
+                textAlign: TextAlign.center,
+                style: TypographyTokens.body2.copyWith(
+                  color: textColor,
+                ),
               ),
-            ),
           ],
         ],
       ),
