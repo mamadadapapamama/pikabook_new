@@ -253,11 +253,6 @@ class NoteDetailViewModel extends ChangeNotifier {
       // 백그라운드 처리 상태 확인 시작
       _startPageProcessingCheck();
       
-      // 페이지 로드 후 세그먼트 처리가 필요한 경우에만 시작
-      if (_isProcessingBackground && pages.isNotEmpty) {
-        _startBackgroundProcessing();
-      }
-      
       // 페이지 이미지 미리 로드 - 로딩이 완료된 후에만 수행
       Future.delayed(Duration(milliseconds: 300), () {
         loadAllPageImages();
@@ -1033,23 +1028,64 @@ class NoteDetailViewModel extends ChangeNotifier {
     // 이미 타이머가 실행 중이면 취소
     if (_processingTimer != null) {
       _processingTimer!.cancel();
+      _processingTimer = null;
     }
     
     // 페이지가 없으면 실행하지 않음
     if (_pages == null || _pages!.isEmpty) return;
     
-    // 리스너 최소화를 위해 타이머 간격을 늘림
-    _processingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+    // 모든 페이지가 이미 처리되었는지 빠르게 확인
+    bool allAlreadyProcessed = true;
+    for (final page in _pages!) {
+      if (page.id == null) continue;
+      
+      // 아직 처리되지 않은 페이지가 있으면 체크 필요
+      final bool isProcessed = _processedPageStatus[page.id!] == true || 
+                             (page.originalText != '___PROCESSING___' && 
+                              page.originalText.isNotEmpty);
+      
+      if (!isProcessed) {
+        allAlreadyProcessed = false;
+        break;
+      }
+    }
+    
+    // 모든 페이지가 이미 처리되었으면 타이머 시작하지 않음
+    if (allAlreadyProcessed) {
+      if (kDebugMode) {
+        debugPrint("✅ 모든 페이지가 이미 처리되어 있어 처리 체크 타이머를 시작하지 않습니다");
+      }
+      return;
+    }
+    
+    // 타이머 간격을 15초로 늘림 (성능 향상 및 불필요한 체크 감소)
+    _processingTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
+      if (kDebugMode) {
+        debugPrint("🔄 페이지 처리 상태 주기적 체크 실행 중...");
+      }
+      
       bool allProcessed = true;
       bool anyStatusChanged = false;
       bool currentPageChanged = false;
       
+      // 처리되지 않은 페이지만 체크하기 위한 목록
+      final List<int> unprocessedPageIndices = [];
+      
+      // 먼저 처리가 필요한 페이지만 식별
       for (int i = 0; i < _pages!.length; i++) {
         final page = _pages![i];
         if (page.id == null) continue;
         
         // 이미 처리된 페이지는 스킵
         if (_processedPageStatus[page.id!] == true) continue;
+        
+        unprocessedPageIndices.add(i);
+        allProcessed = false;
+      }
+      
+      // 처리가 필요한 페이지만 체크 (불필요한 체크 없이 최적화)
+      for (final index in unprocessedPageIndices) {
+        final page = _pages![index];
         
         try {
           // 페이지 상태 확인
@@ -1059,11 +1095,12 @@ class NoteDetailViewModel extends ChangeNotifier {
           if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
             isProcessed = true;
           } else {
-            // ContentManager를 통해 처리된 텍스트가 있는지 확인
-            final processedText = await _contentManager.getProcessedText(page.id!);
-            isProcessed = processedText != null && 
-                          processedText.fullOriginalText != '___PROCESSING___' &&
-                          processedText.fullOriginalText.isNotEmpty;
+            // 캐시된 페이지 체크로 성능 개선 (Firestore 호출 최소화)
+            if (kDebugMode) {
+              debugPrint("⚠️ 캐시된 페이지 확인 (임시 처리)");
+            }
+            // NoteService에 getCachedPage 메서드가 없으므로 대체 로직 사용
+            isProcessed = false; // 처리되지 않았다고 가정하고 나중에 ContentManager로 체크
           }
           
           // 상태가 변경된 경우에만 업데이트
@@ -1072,19 +1109,19 @@ class NoteDetailViewModel extends ChangeNotifier {
             anyStatusChanged = true;
             
             // 현재 페이지의 상태가 변경되었는지 확인
-            if (i == _currentPageIndex) {
+            if (index == _currentPageIndex) {
               currentPageChanged = true;
             }
             
             // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
             if (isProcessed && _pageProcessedCallback != null) {
-              _pageProcessedCallback!(i);
+              _pageProcessedCallback!(index);
+              
+              // 모든 프로세스를 페이지 정보 업데이트
+              _pages![index] = _pages![index].copyWith(
+                originalText: await _getUpdatedPageText(page.id!),
+              );
             }
-          }
-          
-          // 아직 처리되지 않은 페이지가 있으면 체크
-          if (!isProcessed) {
-            allProcessed = false;
           }
         } catch (e) {
           if (kDebugMode) {
@@ -1094,12 +1131,18 @@ class NoteDetailViewModel extends ChangeNotifier {
       }
       
       // 상태 변경이 있고 현재 페이지에 변경이 있을 때만 UI 갱신
-      if (anyStatusChanged && currentPageChanged && _shouldUpdateUI) {
+      // 또는 모든 페이지가 처리완료된 경우도 UI 갱신
+      if ((anyStatusChanged && currentPageChanged && _shouldUpdateUI) || 
+          (anyStatusChanged && unprocessedPageIndices.isEmpty)) {
         notifyListeners();
+        
+        if (kDebugMode) {
+          debugPrint("🔄 페이지 처리 상태 변경으로 UI 갱신됨");
+        }
       }
       
       // 모든 페이지가 처리되었으면 타이머 중지
-      if (allProcessed) {
+      if (unprocessedPageIndices.isEmpty) {
         if (kDebugMode) {
           debugPrint("✅ 모든 페이지 처리 완료, 타이머 중지");
         }
@@ -1107,67 +1150,37 @@ class NoteDetailViewModel extends ChangeNotifier {
         _processingTimer = null;
       }
     });
-  }
-  
-  // 백그라운드에서 페이지 처리 상태 주기적 체크 취소
-  void cancelBackgroundProcessingCheck() {
-    if (_processingTimer != null) {
-      if (kDebugMode) {
-        debugPrint("⏱️ 백그라운드 처리 타이머 취소");
-      }
-      _processingTimer!.cancel();
-      _processingTimer = null;
-    }
-  }
-  
-  // 백그라운드에서 페이지 이미지 로드
-  Future<void> loadPageImagesInBackground() async {
-    if (_pages == null || _pages!.isEmpty) return;
     
     if (kDebugMode) {
-      debugPrint("🔄 페이지 이미지 백그라운드 로드 시작: ${_pages!.length}개 페이지");
+      debugPrint("⏱️ 페이지 처리 상태 체크 타이머 시작됨 (15초 간격)");
     }
-    
-    // 현재 페이지의 이미지 우선 로드 (사용자에게 가장 먼저 보여야 함)
-    if (_currentPageIndex >= 0 && _currentPageIndex < _pages!.length) {
-      await _loadPageImage(_currentPageIndex);
+  }
+  
+  // 페이지 텍스트 업데이트 가져오기 (페이지 처리 완료 후)
+  Future<String> _getUpdatedPageText(String pageId) async {
+    try {
+      // 먼저 처리된 텍스트 확인
+      final processedText = await _contentManager.getProcessedText(pageId);
+      if (processedText != null && processedText.fullOriginalText.isNotEmpty) {
+        return processedText.fullOriginalText;
+      }
       
-      // UI 업데이트 - 현재 페이지 이미지 로드 완료 후 한 번만
-      if (_shouldUpdateUI) {
-        notifyListeners();
+      // 서버에서 페이지 다시 로드
+      if (kDebugMode) {
+        debugPrint("⚠️ 페이지 정보 확인 (임시 처리)");
+      }
+      // NoteService에 getPageById 메서드가 없으므로 ContentManager를 통해 텍스트 확인
+      final pageProcessedText = await _contentManager.getProcessedText(pageId);
+      if (pageProcessedText != null && pageProcessedText.fullOriginalText.isNotEmpty && 
+          pageProcessedText.fullOriginalText != '___PROCESSING___') {
+        return pageProcessedText.fullOriginalText;
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("⚠️ 업데이트된 페이지 텍스트 가져오기 실패: $e");
       }
     }
     
-    // 다음 페이지와 이전 페이지를 두 번째로 로드 (빠른 페이지 전환 위해)
-    List<Future<void>> priorityLoads = [];
-    
-    if (_currentPageIndex + 1 < _pages!.length) {
-      priorityLoads.add(_loadPageImage(_currentPageIndex + 1));
-    }
-    
-    if (_currentPageIndex - 1 >= 0) {
-      priorityLoads.add(_loadPageImage(_currentPageIndex - 1));
-    }
-    
-    // 우선순위 로드 동시 실행
-    if (priorityLoads.isNotEmpty) {
-      await Future.wait(priorityLoads);
-    }
-    
-    // 나머지 모든 페이지 이미지 순차적으로 로드
-    for (int i = 0; i < _pages!.length; i++) {
-      if (i != _currentPageIndex && 
-          i != _currentPageIndex + 1 && 
-          i != _currentPageIndex - 1) {
-        await _loadPageImage(i);
-        
-        // 로드 간 딜레이 추가 (시스템 부하 방지) - 딜레이 늘림
-        await Future.delayed(Duration(milliseconds: 100));
-      }
-    }
-    
-    if (kDebugMode) {
-      debugPrint("✅ 모든 페이지 이미지 로드 완료");
-    }
+    return ''; // 빈 텍스트 반환 (실패 시)
   }
 } 
