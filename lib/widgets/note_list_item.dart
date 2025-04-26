@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import '../core/models/note.dart';
 import '../core/utils/date_formatter.dart';
 import '../core/services/media/image_service.dart';
+import '../core/services/media/image_cache_service.dart';
 import '../core/services/content/note_service.dart';
 import 'flashcard_counter_badge.dart';
 import '../core/theme/tokens/color_tokens.dart';
@@ -33,6 +36,7 @@ class NoteListItem extends StatefulWidget {
 
 class _NoteListItemState extends State<NoteListItem> {
   final ImageService _imageService = ImageService();
+  final ImageCacheService _imageCacheService = ImageCacheService();
   final NoteService _noteService = NoteService();
   File? _imageFile;
   bool _isLoadingImage = false;
@@ -114,7 +118,25 @@ class _NoteListItemState extends State<NoteListItem> {
     });
 
     try {
-      // 이미지 URL 처리 최적화
+      // 1. 먼저 이미지 캐시에서 확인
+      final cachedBytes = _imageCacheService.getFromCache(imageUrl);
+      if (cachedBytes != null) {
+        // 임시 파일 생성하여 캐시된 바이트 저장
+        final tempDir = await getTemporaryDirectory();
+        final cacheFile = File('${tempDir.path}/cache_${imageUrl.hashCode}.jpg');
+        await cacheFile.writeAsBytes(cachedBytes);
+        
+        _safeSetState(() {
+          _imageFile = cacheFile;
+          _isLoadingImage = false;
+          _cachedImageUrl = imageUrl;
+          _imageLoadError = false;
+        });
+        
+        return;
+      }
+      
+      // 2. 캐시에 없으면 이미지 서비스로 다운로드
       File? downloadedImage;
       
       // Firebase Storage URL 패턴 체크
@@ -153,6 +175,17 @@ class _NoteListItemState extends State<NoteListItem> {
 
       // 모든 작업 완료 후 한 번만 상태 업데이트
       if (downloadedImage != null) {
+        // 다운로드 성공 시 캐시에 추가
+        try {
+          final imageBytes = await downloadedImage.readAsBytes();
+          _imageCacheService.addToCache(imageUrl, imageBytes);
+        } catch (cacheError) {
+          // 캐싱 실패는 무시하고 진행
+          if (kDebugMode) {
+            debugPrint('이미지 캐싱 오류: $cacheError');
+          }
+        }
+        
         _safeSetState(() {
           _imageFile = downloadedImage;
           _isLoadingImage = false;
@@ -166,7 +199,7 @@ class _NoteListItemState extends State<NoteListItem> {
       }
     } catch (e) {
       if (kDebugMode) {
-        print('이미지 로드 오류: $e');
+        debugPrint('이미지 로드 오류: $e');
       }
       _safeSetState(() {
         _isLoadingImage = false;

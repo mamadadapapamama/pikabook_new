@@ -19,6 +19,7 @@ import 'package:image/image.dart' as img;
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import '../../../views/screens/full_image_screen.dart';
+import 'image_cache_service.dart';
 
 /// 압축된 결과를 나타내는 클래스 (내부 사용)
 class _CompressionResult {
@@ -42,6 +43,9 @@ class ImageService {
 
   // 통합 캐시 서비스 참조 - 현재 사용되지 않음 (제거)
   final UsageLimitService _usageLimitService = UsageLimitService();
+  
+  // 이미지 캐시 서비스 추가
+  final ImageCacheService _imageCacheService = ImageCacheService();
   
   // Firebase Storage 참조
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -351,10 +355,23 @@ class ImageService {
         return null;
       }
       
-      // 먼저 로컬 파일에서 시도
+      // 1. 먼저 메모리 캐시 확인
+      final cachedBytes = _imageCacheService.getFromCache(relativePath);
+      if (cachedBytes != null) {
+        return cachedBytes;
+      }
+      
+      // 2. 로컬 파일에서 시도
       final file = await getImageFile(relativePath);
       if (file != null && await file.exists()) {
-        return await file.readAsBytes();
+        final bytes = await file.readAsBytes();
+        
+        // 유효한 이미지인지 확인 (0바이트 체크)
+        if (bytes.isNotEmpty) {
+          // 결과 메모리 캐시에 저장
+          _imageCacheService.addToCache(relativePath, bytes);
+          return bytes;
+        }
       }
       
       return null;
@@ -832,9 +849,13 @@ class ImageService {
   /// 이미지 캐시 정리 (추가된 메서드)
   Future<void> clearImageCache() async {
     try {
+      // 이미지 캐시 서비스 캐시 정리
+      _imageCacheService.clearCache();
+      
       // 대기 중인 이미지 프로바이더 캐시 정리
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
+      
       debugPrint('이미지 캐시를 정리했습니다.');
     } catch (e) {
       debugPrint('이미지 캐시 정리 중 오류: $e');
