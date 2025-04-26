@@ -160,10 +160,17 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             .toList();
         
       if (imageFiles.isEmpty) return;
-                
-      // 워크플로우 시작
-        if (mounted) {
-        await _noteCreationWorkflow.createNoteWithImages(context, imageFiles);
+      
+      // 바텀시트 먼저 닫기
+      if (mounted) {
+        Navigator.pop(context);
+        
+        // 바텀시트가 닫힌 후 워크플로우 시작
+        _noteCreationWorkflow.createNoteWithImages(
+          context, 
+          imageFiles,
+          closeBottomSheet: false // 이미 바텀시트를 닫았으므로 false로 설정
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -198,10 +205,17 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           }
           return;
         }
+      
+      // 바텀시트 먼저 닫기
+      if (mounted) {
+        Navigator.pop(context);
         
-      // 워크플로우 시작
-        if (mounted) {
-        await _noteCreationWorkflow.createNoteWithImages(context, [imageFile]);
+        // 바텀시트가 닫힌 후 워크플로우 시작
+        _noteCreationWorkflow.createNoteWithImages(
+          context, 
+          [imageFile],
+          closeBottomSheet: false // 이미 바텀시트를 닫았으므로 false로 설정
+        );
       }
     } catch (e) {
       if (mounted) {
