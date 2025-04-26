@@ -15,8 +15,8 @@ class UsageLimitService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
   // 베타 기간 정보
-  static const String BETA_END_DATE_STR = '2025-04-30'; // 베타 기간 종료일 (연도-월-일)
-  static const int BETA_PERIOD_DAYS = 30; // 베타 기간 (30일)
+  static const String BETA_END_DATE_STR = '2025-05-31'; // 베타 기간 종료일 (연도-월-일)
+  static const int BETA_PERIOD_DAYS = 14; // 베타 기간 (14일)
   
   // 베타 기간 동안의 무료 사용 제한 (테스트용)
   static const int MAX_FREE_TRANSLATION_CHARS = 20000;  // 번역 최대 글자 수
