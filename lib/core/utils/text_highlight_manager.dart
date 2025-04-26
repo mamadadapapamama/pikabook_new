@@ -180,7 +180,7 @@ class TextHighlightManager {
     // 하이라이트 스타일 정의 (한 번만 계산)
     final TextStyle effectiveHighlightStyle = highlightStyle ??
         const TextStyle(
-          backgroundColor: Colors.yellow,
+          backgroundColor: Color(0xFFFFEA9D),
           fontWeight: FontWeight.bold,
         );
 

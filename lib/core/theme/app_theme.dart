@@ -2,18 +2,26 @@ import 'package:flutter/material.dart';
 import 'tokens/color_tokens.dart';
 import 'tokens/typography_tokens.dart';
 
+/// 앱의 테마를 정의하는 클래스입니다.
 class AppTheme {
+  /// 라이트 테마를 반환합니다.
   static ThemeData get lightTheme {
     return ThemeData(
       primaryColor: ColorTokens.primary,
       scaffoldBackgroundColor: ColorTokens.background,
-      colorScheme: const ColorScheme.light(
+      colorScheme: ColorScheme(
+        brightness: Brightness.light,
         primary: ColorTokens.primary,
         secondary: ColorTokens.secondary,
         tertiary: ColorTokens.tertiary,
         surface: ColorTokens.surface,
         background: ColorTokens.background,
         error: ColorTokens.error,
+        onPrimary: ColorTokens.textLight,
+        onSecondary: ColorTokens.textLight,
+        onSurface: ColorTokens.textPrimary,
+        onBackground: ColorTokens.textPrimary,
+        onError: ColorTokens.textLight,
       ),
       textTheme: TextTheme(
         displayLarge: TypographyTokens.headline1,
@@ -26,6 +34,11 @@ class AppTheme {
         labelLarge: TypographyTokens.button,
         bodySmall: TypographyTokens.caption,
         labelSmall: TypographyTokens.overline,
+      ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: ColorTokens.primary,
+        selectionColor: ColorTokens.primary.withOpacity(0.3),
+        selectionHandleColor: ColorTokens.primary,
       ),
       appBarTheme: const AppBarTheme(
         backgroundColor: ColorTokens.primary,
@@ -51,7 +64,7 @@ class AppTheme {
         ),
       ),
       dividerTheme: const DividerThemeData(
-        color: ColorTokens.divider,
+        color: ColorTokens.textTertiary,
         thickness: 1,
       ),
     );
