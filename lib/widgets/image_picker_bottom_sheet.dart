@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
+import 'dart:async';
 import '../core/services/common/usage_limit_service.dart';
 import '../core/theme/tokens/color_tokens.dart';
 import '../core/theme/tokens/typography_tokens.dart';
@@ -50,7 +52,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         });
       }
     } catch (e) {
-      debugPrint('사용량 확인 중 오류 발생: $e');
+      if (kDebugMode) {
+        debugPrint('사용량 확인 중 오류 발생: $e');
+      }
     }
   }
 
@@ -160,25 +164,26 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         Navigator.pop(context);
       }
       
-      // 바텀시트가 닫힌 후 이미지 처리 진행
-      // XFile을 File로 변환
-      final List<File> imageFiles = selectedImages
-          .map((xFile) => File(xFile.path))
-          .where((file) => file.existsSync() && file.lengthSync() > 0)
-          .toList();
+      // 이미지 처리는 약간의 지연 후 진행 (UI 스레드 블로킹 방지)
+      // 이는 바텀시트가 완전히 닫힐 시간을 확보
+      await Future.delayed(const Duration(milliseconds: 100));
       
-      if (imageFiles.isEmpty) return;
-      
-      // 워크플로우 시작
-      if (mounted) {
-        _noteCreationWorkflow.createNoteWithImages(
-          context, 
-          imageFiles,
-          closeBottomSheet: false // 이미 바텀시트를 닫았으므로 false로 설정
-        );
-      }
+      // 백그라운드에서 이미지 처리
+      await compute(_processImages, selectedImages).then((imageFiles) {
+        if (imageFiles.isEmpty) return;
+        
+        // 워크플로우 시작
+        if (mounted) {
+          _noteCreationWorkflow.createNoteWithImages(
+            context, 
+            imageFiles,
+            closeBottomSheet: false // 이미 바텀시트를 닫았으므로 false로 설정
+          );
+        }
+      });
     } catch (e) {
-      if (mounted) {
+      if (mounted && kDebugMode) {
+        debugPrint('이미지 선택 중 오류: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('이미지 선택 중 오류: $e')),
         );
@@ -206,9 +211,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         Navigator.pop(context);
       }
       
-      // 바텀시트가 닫힌 후 이미지 처리 진행
-      // XFile을 File로 변환
-      final File imageFile = File(photo.path);
+      // 약간의 지연 후 이미지 처리
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // 백그라운드에서 이미지 처리
+      final File imageFile = await compute(_processImage, photo.path);
       
       if (!imageFile.existsSync() || imageFile.lengthSync() == 0) {
         if (mounted) {
@@ -228,11 +235,25 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && kDebugMode) {
+        debugPrint('카메라 촬영 중 오류: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('카메라 촬영 중 오류: $e')),
         );
       }
     }
   }
+}
+
+// 이미지 처리를 위한 격리된 함수 (UI 스레드 블로킹 방지)
+List<File> _processImages(List<XFile> selectedImages) {
+  return selectedImages
+      .map((xFile) => File(xFile.path))
+      .where((file) => file.existsSync() && file.lengthSync() > 0)
+      .toList();
+}
+
+// 단일 이미지 처리를 위한 격리된 함수
+File _processImage(String imagePath) {
+  return File(imagePath);
 } 
