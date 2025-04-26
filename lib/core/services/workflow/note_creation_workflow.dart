@@ -39,13 +39,6 @@ class NoteCreationWorkflow {
       return;
     }
     
-    // 바텀 시트가 있으면 먼저 닫기
-    if (closeBottomSheet && Navigator.canPop(context)) {
-      Navigator.pop(context);
-      // 약간의 지연 추가
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-    
     // 로딩 화면 표시 (글로벌 context 사용)
     final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
     if (!rootContext.mounted) {
@@ -62,6 +55,11 @@ class NoteCreationWorkflow {
       rootContext, 
       message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
     );
+    
+    // 바텀 시트가 있으면 닫기 (로딩 화면 표시 후)
+    if (closeBottomSheet && Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
     
     String? createdNoteId;
     bool isSuccess = false;
