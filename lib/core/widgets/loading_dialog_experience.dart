@@ -23,11 +23,11 @@ class NoteCreationLoader {
   }) async {
 
     // 성능 오버레이 및 디버그 타이머 비활성화
-    timeDilation = 1.0;
+      timeDilation = 1.0;
     
     if (!context.mounted) {
       if (kDebugMode) {
-        debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
+      debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
       }
       return;
     }
@@ -35,7 +35,7 @@ class NoteCreationLoader {
     // 이미 로더가 표시되고 있는지 확인
     if (_isVisible) {
       if (kDebugMode) {
-        debugPrint('로더가 이미 표시되고 있습니다');
+      debugPrint('로더가 이미 표시되고 있습니다');
       }
       return;
     }
@@ -49,7 +49,7 @@ class NoteCreationLoader {
         // 타임아웃 시 안전하게 제거
         if (_isVisible) {
           if (kDebugMode) {
-            debugPrint('로더가 타임아웃으로 자동 종료됨');
+          debugPrint('로더가 타임아웃으로 자동 종료됨');
           }
           if (context.mounted) hide(context);
         }
@@ -77,64 +77,64 @@ class NoteCreationLoader {
                   colorScheme: Theme.of(context).colorScheme,
                   brightness: Theme.of(context).brightness,
                 ),
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-                      width: 300,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 도트 로딩 인디케이터
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // 도트 애니메이션
-                              const DotLoadingIndicator(),
-                              
-                              const SizedBox(width: 12),
-                              
-                              // 피카북 새 캐릭터 (고정된 상태)
-                              Image.asset(
-                                'assets/images/pikabook_bird.png',
-                                width: 40,
-                                height: 40,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: ColorTokens.primary.withOpacity(0.2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.auto_awesome,
-                                      color: ColorTokens.primary,
-                                      size: 24,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                          
-                          const SizedBox(height: 24),
-                          
-                          // 텍스트 섹션
-                          Text(
-                            message,
-                            style: TypographyTokens.body1.copyWith(
-                              height: 1.4,
-                              color: ColorTokens.textPrimary,
+              child: Material(
+                type: MaterialType.transparency,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+                    width: 300,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 도트 로딩 인디케이터
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // 도트 애니메이션
+                            const DotLoadingIndicator(),
+                            
+                            const SizedBox(width: 12),
+                            
+                            // 피카북 새 캐릭터 (고정된 상태)
+                            Image.asset(
+                              'assets/images/pikabook_bird.png',
+                              width: 40,
+                              height: 40,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: ColorTokens.primary.withOpacity(0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.auto_awesome,
+                                    color: ColorTokens.primary,
+                                    size: 24,
+                                  ),
+                                );
+                              },
                             ),
-                            textAlign: TextAlign.center,
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 24),
+                        
+                        // 텍스트 섹션
+                        Text(
+                          message,
+                          style: TypographyTokens.body1.copyWith(
+                            height: 1.4,
+                            color: ColorTokens.textPrimary,
                           ),
-                        ],
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                       ),
                     ),
                   ),
@@ -147,7 +147,7 @@ class NoteCreationLoader {
           });
         } catch (dialogError) {
           if (kDebugMode) {
-            debugPrint('다이얼로그 표시 중 내부 오류: $dialogError');
+          debugPrint('다이얼로그 표시 중 내부 오류: $dialogError');
           }
           _timeoutTimer?.cancel();
           _isVisible = false;
@@ -155,7 +155,7 @@ class NoteCreationLoader {
       });
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('노트 생성 로더 표시 중 오류: $e');
+      debugPrint('노트 생성 로더 표시 중 오류: $e');
       }
       _timeoutTimer?.cancel();
       _isVisible = false;
@@ -172,12 +172,12 @@ class NoteCreationLoader {
         Navigator.of(context, rootNavigator: true).pop();
       } else {
         if (kDebugMode) {
-          debugPrint('숨길 다이얼로그가 없습니다');
+        debugPrint('숨길 다이얼로그가 없습니다');
         }
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('노트 생성 로더 숨기기 중 오류: $e');
+      debugPrint('노트 생성 로더 숨기기 중 오류: $e');
       }
     } finally {
       _timeoutTimer?.cancel();
