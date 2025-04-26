@@ -4,12 +4,14 @@ import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/note.dart' as note_model;
 import '../../../core/services/content/page_service.dart';
 import '../../../core/services/media/image_service.dart';
+import '../../../core/services/media/image_cache_service.dart';
 import '../../../core/services/storage/unified_cache_service.dart';
 import '../../../core/services/workflow/text_processing_workflow.dart';
 import '../../../core/services/content/note_service.dart';
 import '../../../core/services/content/flashcard_service.dart' hide debugPrint;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'content_manager.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 페이지 관리 클래스
 /// 페이지 로드, 병합, 이미지 로드 등의 기능 제공
@@ -21,6 +23,7 @@ class PageManager {
   final NoteService _noteService = NoteService();
   final FlashCardService _flashCardService = FlashCardService();
   final ImageService _imageService = ImageService();
+  final ImageCacheService _imageCacheService = ImageCacheService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ContentManager _contentManager = ContentManager();
@@ -359,15 +362,53 @@ class PageManager {
     if (_imageFiles[index] != null) return; // 이미 로드된 경우 스킵
 
     try {
-      // 이미지 로드 시도
-      final imageFile = await _imageService.getImageFile(page.imageUrl);
+      final imageUrl = page.imageUrl!;
       
-      // 인덱스 범위 확인
-      if (index < _imageFiles.length) {
-        _imageFiles[index] = imageFile;
+      // 1. 먼저 메모리 캐시에서 이미지 확인
+      final cachedBytes = _imageCacheService.getFromCache(imageUrl);
+      if (cachedBytes != null) {
+        // 캐시된 이미지가 있으면 임시 파일로 저장
+        try {
+          final tempDir = await getTemporaryDirectory();
+          final cacheFile = File('${tempDir.path}/cache_${imageUrl.hashCode}.jpg');
+          await cacheFile.writeAsBytes(cachedBytes);
+          
+          // 인덱스 범위 확인
+          if (index < _imageFiles.length) {
+            _imageFiles[index] = cacheFile;
+            
+            // 이미지 맵에도 추가
+            if (page.id != null) {
+              _imageFileMap[page.id!] = cacheFile;
+            }
+          }
+          
+          debugPrint('캐시에서 이미지 로드됨: $imageUrl');
+          return;
+        } catch (e) {
+          debugPrint('캐시된 이미지 처리 중 오류: $e');
+          // 오류 발생 시 일반 로드 로직으로 진행
+        }
+      }
+      
+      // 2. 캐시에 없으면 이미지 서비스로 로드
+      final imageFile = await _imageService.getImageFile(imageUrl);
+      
+      // 이미지 파일이 로드되었는지 확인
+      if (imageFile != null) {
+        // 메모리 캐시에 추가
+        try {
+          final imageBytes = await imageFile.readAsBytes();
+          _imageCacheService.addToCache(imageUrl, imageBytes);
+        } catch (e) {
+          debugPrint('이미지 캐싱 중 오류: $e');
+          // 캐싱 실패는 무시하고 진행
+        }
         
-        // 이미지가 로드되었는지 추가 확인
-        if (imageFile != null) {
+        // 인덱스 범위 확인
+        if (index < _imageFiles.length) {
+          _imageFiles[index] = imageFile;
+          
           // 이미지 맵에도 추가
           if (page.id != null) {
             _imageFileMap[page.id!] = imageFile;
@@ -462,11 +503,49 @@ class PageManager {
     }
     
     try {
-      // 이미지 서비스로 로드
-      debugPrint('이미지 로드 시작: ${page.imageUrl}');
-      final imageFile = await _imageService.getImageFile(page.imageUrl!);
+      final imageUrl = page.imageUrl!;
+      
+      // 1. 먼저 메모리 캐시에서 이미지 확인
+      final cachedBytes = _imageCacheService.getFromCache(imageUrl);
+      if (cachedBytes != null) {
+        // 캐시된 이미지가 있으면 임시 파일로 저장
+        try {
+          final tempDir = await getTemporaryDirectory();
+          final cacheFile = File('${tempDir.path}/cache_${imageUrl.hashCode}.jpg');
+          await cacheFile.writeAsBytes(cachedBytes);
+          
+          // 이미지 파일 배열 업데이트
+          if (index < _imageFiles.length) {
+            _imageFiles[index] = cacheFile;
+          }
+          
+          // 이미지 맵에 추가
+          if (page.id != null) {
+            _imageFileMap[page.id!] = cacheFile;
+          }
+          
+          debugPrint('캐시에서 이미지 로드됨: $imageUrl');
+          return cacheFile;
+        } catch (e) {
+          debugPrint('캐시된 이미지 처리 중 오류: $e');
+          // 오류 발생 시 일반 로드 로직으로 진행
+        }
+      }
+      
+      // 2. 캐시에 없으면 이미지 서비스로 로드
+      debugPrint('이미지 로드 시작: ${imageUrl}');
+      final imageFile = await _imageService.getImageFile(imageUrl);
       
       if (imageFile != null) {
+        // 메모리 캐시에 추가
+        try {
+          final imageBytes = await imageFile.readAsBytes();
+          _imageCacheService.addToCache(imageUrl, imageBytes);
+        } catch (e) {
+          debugPrint('이미지 캐싱 중 오류: $e');
+          // 캐싱 실패는 무시하고 진행
+        }
+        
         // 이미지 파일 배열 업데이트
         if (index < _imageFiles.length) {
           _imageFiles[index] = imageFile;

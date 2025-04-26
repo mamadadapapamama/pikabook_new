@@ -5,6 +5,7 @@ import '../../views/screens/full_image_screen.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/models/page.dart' as page_model;
+import '../../core/services/media/image_cache_service.dart';
 
 /// 이미지 컨테이너 스타일 정의
 enum ImageContainerStyle {
@@ -29,6 +30,9 @@ class PageImageWidget extends StatelessWidget {
   final Function(File)? onFullScreenTap;
   final VoidCallback? onTap;
   final bool enableFullScreen;
+  
+  // 이미지 캐시 서비스 인스턴스
+  static final ImageCacheService _imageCacheService = ImageCacheService();
 
   const PageImageWidget({
     super.key,
@@ -231,6 +235,18 @@ class PageImageWidget extends StatelessWidget {
   // 이미지 URL을 파일로 변환
   Future<File?> _getImageFile(String imageUrl) async {
     try {
+      // 1. 먼저 메모리 캐시에서 확인
+      final cachedBytes = _imageCacheService.getFromCache(imageUrl);
+      if (cachedBytes != null) {
+        // 임시 파일 생성하여 캐시된 바이트 저장
+        final tempDir = await getTemporaryDirectory();
+        final cacheFile = File('${tempDir.path}/cache_${imageUrl.hashCode}.jpg');
+        await cacheFile.writeAsBytes(cachedBytes);
+        
+        return cacheFile;
+      }
+      
+      // 2. 로컬 파일 시스템에서 확인
       if (imageUrl.startsWith('images/')) {
         // 로컬 파일 경로 가져오기
         final directory = await getApplicationDocumentsDirectory();
@@ -238,9 +254,19 @@ class PageImageWidget extends StatelessWidget {
         final file = File(filePath);
         
         if (await file.exists()) {
+          // 파일이 존재하면 메모리 캐시에도 추가
+          try {
+            final bytes = await file.readAsBytes();
+            _imageCacheService.addToCache(imageUrl, bytes);
+          } catch (e) {
+            // 캐싱 실패는 무시
+            debugPrint('이미지 캐싱 오류: $e');
+          }
+          
           return file;
         }
       }
+      
       return null;
     } catch (e) {
       debugPrint('이미지 파일 로드 오류: $e');
