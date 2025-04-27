@@ -123,17 +123,6 @@ class NoteCreationWorkflow {
       // 에러 처리는 아래 finally 블록에서 수행
       isSuccess = false;
     } finally {
-      // 로딩 화면 숨기기 (표시된 경우에만)
-      if (loadingDialogShown && rootContext.mounted) {
-        if (kDebugMode) {
-          debugPrint('로딩 다이얼로그 숨김');
-        }
-        NoteCreationLoader.hide(rootContext);
-        
-        // 약간의 딜레이 추가 (화면 전환 안정성 개선)
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
-      
       // 노트 생성 결과에 따른 처리
       if (isSuccess && createdNoteId != null && rootContext.mounted) {
         if (kDebugMode) {
@@ -152,14 +141,41 @@ class NoteCreationWorkflow {
           imageCount: totalImageCount,
         );
         
-        _navigateToNoteDetail(rootContext, tempNote, totalImageCount);
+        // 로딩 화면 숨기기 (표시된 경우에만)
+        if (loadingDialogShown && rootContext.mounted) {
+          if (kDebugMode) {
+            debugPrint('로딩 다이얼로그 숨김 - 노트 상세 화면 이동 전');
+          }
+          NoteCreationLoader.hide(rootContext);
+          
+          // 안정적인 화면 전환을 위한 약간의 딜레이
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+        
+        // 노트 상세 화면으로 이동
+        if (rootContext.mounted) {
+          _navigateToNoteDetail(rootContext, tempNote, totalImageCount);
+        }
       } else if (rootContext.mounted) {
+        // 로딩 화면 숨기기 (표시된 경우에만) - 실패 시
+        if (loadingDialogShown && rootContext.mounted) {
+          if (kDebugMode) {
+            debugPrint('로딩 다이얼로그 숨김 - 실패 처리');
+          }
+          NoteCreationLoader.hide(rootContext);
+          
+          // 약간의 딜레이 추가 (안정성 개선)
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+        
         // 실패 시 메시지 표시
-        ScaffoldMessenger.of(rootContext).showSnackBar(
-          const SnackBar(content: Text('노트 생성에 실패했습니다. 다시 시도해주세요.')),
-        );
-        if (kDebugMode) {
-          debugPrint('노트 생성 실패 또는 ID가 없음');
+        if (rootContext.mounted) {
+          ScaffoldMessenger.of(rootContext).showSnackBar(
+            const SnackBar(content: Text('노트 생성에 실패했습니다. 다시 시도해주세요.')),
+          );
+          if (kDebugMode) {
+            debugPrint('노트 생성 실패 또는 ID가 없음');
+          }
         }
       }
     }
@@ -271,6 +287,9 @@ class NoteCreationWorkflow {
         debugPrint('노트 상세 화면으로 이동 시작');
       }
       
+      // 로딩 다이얼로그가 완전히 닫혔는지 한번 더 확인 (안전 장치)
+      NoteCreationLoader.ensureHidden(context);
+      
       Navigator.of(context).push(
         NoteDetailScreenMVVM.route(
           note: note,
@@ -296,6 +315,9 @@ class NoteCreationWorkflow {
               label: '다시 시도',
               onPressed: () {
                 if (context.mounted) {
+                  // 로딩 다이얼로그 닫기 확인
+                  NoteCreationLoader.ensureHidden(context);
+                  
                   // 다시 한번 시도
                   Navigator.of(context).push(
                     NoteDetailScreenMVVM.route(

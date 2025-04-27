@@ -172,16 +172,46 @@ class NoteCreationLoader {
         Navigator.of(context, rootNavigator: true).pop();
       } else {
         if (kDebugMode) {
-        debugPrint('숨길 다이얼로그가 없습니다');
+          debugPrint('숨길 다이얼로그가 없습니다');
         }
       }
     } catch (e) {
       if (kDebugMode) {
-      debugPrint('노트 생성 로더 숨기기 중 오류: $e');
+        debugPrint('노트 생성 로더 숨기기 중 오류: $e');
       }
     } finally {
       _timeoutTimer?.cancel();
       _isVisible = false;
+    }
+  }
+  
+  /// 로더가 표시 중인지 확인하고 표시 중이면 강제로 닫음
+  /// 어떤 상황에서든 로딩 다이얼로그가 화면에 남아있지 않도록 보장
+  static void ensureHidden(BuildContext context) {
+    // 로더가 표시 중인지 확인
+    if (_isVisible) {
+      if (kDebugMode) {
+        debugPrint('로딩 다이얼로그가 표시 중이므로 강제로 닫습니다');
+      }
+      
+      try {
+        // 안전하게 다이얼로그 닫기 시도
+        if (Navigator.of(context, rootNavigator: true).canPop()) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('강제 다이얼로그 종료 중 오류: $e');
+        }
+      } finally {
+        // 상태 초기화
+        _timeoutTimer?.cancel();
+        _isVisible = false;
+      }
+    } else {
+      if (kDebugMode) {
+        debugPrint('로딩 다이얼로그가 이미 닫혀 있습니다');
+      }
     }
   }
   

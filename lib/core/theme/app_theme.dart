@@ -50,7 +50,7 @@ class AppTheme {
           backgroundColor: ColorTokens.primary,
           foregroundColor: Colors.white,
           textStyle: TypographyTokens.button,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),
