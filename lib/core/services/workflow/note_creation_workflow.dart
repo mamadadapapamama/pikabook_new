@@ -29,9 +29,10 @@ class NoteCreationWorkflow {
   /// 이미지 파일로 노트 생성 프로세스 실행
   Future<void> createNoteWithImages(
     BuildContext context,
-    List<File> imageFiles,
-    {bool closeBottomSheet = true}
-  ) async {
+    List<File> imageFiles, {
+    bool closeBottomSheet = true,
+    bool showLoadingDialog = true  // 로딩 다이얼로그 표시 여부 (기본값: true)
+  }) async {
     if (imageFiles.isEmpty) {
       if (kDebugMode) {
         debugPrint('이미지가 없어 노트 생성 취소');
@@ -39,8 +40,8 @@ class NoteCreationWorkflow {
       return;
     }
     
-    // 로딩 화면 표시 (글로벌 context 사용)
-    final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
+    // 컨텍스트 확인 (rootContext가 필요한 경우에만 가져옴)
+    final BuildContext rootContext = context;
     if (!rootContext.mounted) {
       if (kDebugMode) {
         debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
@@ -48,13 +49,23 @@ class NoteCreationWorkflow {
       return;
     }
     
-    if (kDebugMode) {
-      debugPrint('로딩 다이얼로그 표시 시작');
+    // 로딩 다이얼로그 표시 (옵션에 따라)
+    bool loadingDialogShown = false;
+    
+    if (showLoadingDialog) {
+      if (kDebugMode) {
+        debugPrint('로딩 다이얼로그 표시 시작');
+      }
+      await NoteCreationLoader.show(
+        rootContext, 
+        message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
+      );
+      loadingDialogShown = true;
+    } else {
+      if (kDebugMode) {
+        debugPrint('로딩 다이얼로그 표시 건너뜀 (이미 표시됨)');
+      }
     }
-    await NoteCreationLoader.show(
-      rootContext, 
-      message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
-    );
     
     // 바텀 시트가 있으면 닫기 (로딩 화면 표시 후)
     if (closeBottomSheet && Navigator.canPop(context)) {
@@ -70,9 +81,25 @@ class NoteCreationWorkflow {
         debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
       }
       
+      // 이미지 파일 유효성 검증
+      final List<File> validImageFiles = [];
+      for (final file in imageFiles) {
+        if (await file.exists() && await file.length() > 0) {
+          validImageFiles.add(file);
+        } else {
+          if (kDebugMode) {
+            debugPrint('유효하지 않은 이미지 파일 무시: ${file.path}');
+          }
+        }
+      }
+      
+      if (validImageFiles.isEmpty) {
+        throw Exception('유효한 이미지가 없습니다');
+      }
+      
       // 노트 생성 (백그라운드 처리 위임)
       final result = await _noteService.createNoteWithMultipleImages(
-        imageFiles: imageFiles,
+        imageFiles: validImageFiles,
         waitForFirstPageProcessing: true, // 첫 페이지 처리 기다리기 (변경됨)
       );
       
@@ -96,8 +123,8 @@ class NoteCreationWorkflow {
       // 에러 처리는 아래 finally 블록에서 수행
       isSuccess = false;
     } finally {
-      // 로딩 화면 숨기기 (먼저 실행)
-      if (rootContext.mounted) {
+      // 로딩 화면 숨기기 (표시된 경우에만)
+      if (loadingDialogShown && rootContext.mounted) {
         if (kDebugMode) {
           debugPrint('로딩 다이얼로그 숨김');
         }

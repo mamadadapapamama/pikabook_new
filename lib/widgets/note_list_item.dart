@@ -113,9 +113,9 @@ class _NoteListItemState extends State<NoteListItem> {
 
     // 로딩 상태 변경 (상태 변경 최소화)
     _safeSetState(() {
-      _isLoadingImage = true;
-      _imageLoadError = false;
-    });
+        _isLoadingImage = true;
+        _imageLoadError = false;
+      });
 
     try {
       // 1. 먼저 이미지 캐시에서 확인
@@ -174,7 +174,7 @@ class _NoteListItemState extends State<NoteListItem> {
       }
 
       // 모든 작업 완료 후 한 번만 상태 업데이트
-      if (downloadedImage != null) {
+        if (downloadedImage != null) {
         // 다운로드 성공 시 캐시에 추가
         try {
           final imageBytes = await downloadedImage.readAsBytes();
@@ -187,11 +187,11 @@ class _NoteListItemState extends State<NoteListItem> {
         }
         
         _safeSetState(() {
-          _imageFile = downloadedImage;
-          _isLoadingImage = false;
+            _imageFile = downloadedImage;
+            _isLoadingImage = false;
           _cachedImageUrl = imageUrl; // URL 캐싱 추가
-        });
-      } else {
+          });
+        } else {
         _safeSetState(() {
           _isLoadingImage = false;
           _imageLoadError = true;
@@ -207,7 +207,7 @@ class _NoteListItemState extends State<NoteListItem> {
       });
     }
   }
-  
+
   // 이미지 위젯 생성
   Widget _buildImageWidget() {
     // 메모이제이션을 위한 키
@@ -243,9 +243,9 @@ class _NoteListItemState extends State<NoteListItem> {
             'assets/images/thumbnail_empty.png',
             fit: BoxFit.cover,
           );
-        },
-      );
-    }
+              },
+    );
+  }
   }
   // -----------------------------------------------------
 
@@ -322,13 +322,13 @@ class _NoteListItemState extends State<NoteListItem> {
           onTap: () {
             try {
               if (kDebugMode) {
-                debugPrint('노트 아이템 탭됨: id=${widget.note.id ?? "없음"}, 제목=${widget.note.originalText}');
+              debugPrint('노트 아이템 탭됨: id=${widget.note.id ?? "없음"}, 제목=${widget.note.originalText}');
               }
               
               // 노트 ID가 null이거나 비어있는 경우 처리
               if (widget.note.id == null || widget.note.id!.isEmpty) {
                 if (kDebugMode) {
-                  debugPrint('⚠️ 경고: 유효하지 않은 노트 ID');
+                debugPrint('⚠️ 경고: 유효하지 않은 노트 ID');
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('유효하지 않은 노트 ID입니다.')),
@@ -340,8 +340,8 @@ class _NoteListItemState extends State<NoteListItem> {
               widget.onNoteTapped(widget.note);
             } catch (e, stackTrace) {
               if (kDebugMode) {
-                debugPrint('❌ 노트 탭 처리 중 오류 발생: $e');
-                debugPrint('스택 트레이스: $stackTrace');
+              debugPrint('❌ 노트 탭 처리 중 오류 발생: $e');
+              debugPrint('스택 트레이스: $stackTrace');
               }
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('노트를 열 수 없습니다: $e')),

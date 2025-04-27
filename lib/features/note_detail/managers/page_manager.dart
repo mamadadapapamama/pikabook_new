@@ -404,11 +404,11 @@ class PageManager {
           debugPrint('이미지 캐싱 중 오류: $e');
           // 캐싱 실패는 무시하고 진행
         }
+      
+      // 인덱스 범위 확인
+      if (index < _imageFiles.length) {
+        _imageFiles[index] = imageFile;
         
-        // 인덱스 범위 확인
-        if (index < _imageFiles.length) {
-          _imageFiles[index] = imageFile;
-          
           // 이미지 맵에도 추가
           if (page.id != null) {
             _imageFileMap[page.id!] = imageFile;

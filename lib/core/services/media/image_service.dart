@@ -802,7 +802,7 @@ class ImageService {
       return false;
     }
   }
-  
+
   /// 임시 파일 정리 (추가된 메서드)
   Future<void> cleanupTempFiles() async {
     try {
