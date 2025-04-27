@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:math';
 
 /// 도트 애니메이션 로딩 인디케이터 위젯 (로딩의 기본 유닛)
 /// 세 개의 도트가 애니메이션되는 심플한 로딩 인디케이터입니다.
@@ -17,8 +18,8 @@ class DotLoadingIndicator extends StatefulWidget {
     Key? key,
     this.message,
     this.dotColor = ColorTokens.primary,
-    this.dotSize = 10.0,  
-    this.spacing = 8.0,  
+    this.dotSize = 10.0,
+    this.spacing = 8.0,
     this.isLoginScreen = false,
   }) : super(key: key);
 
@@ -26,81 +27,24 @@ class DotLoadingIndicator extends StatefulWidget {
   State<DotLoadingIndicator> createState() => _DotLoadingIndicatorState();
 }
 
-class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerProviderStateMixin {
-  late AnimationController _controller1;
-  late AnimationController _controller2;
-  late AnimationController _controller3;
-  
-  late Animation<double> _animation1;
-  late Animation<double> _animation2;
-  late Animation<double> _animation3;
+class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with SingleTickerProviderStateMixin {
+  // 단일 컨트롤러로 변경
+  late AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
     
-    _controller1 = AnimationController(
+    // 단일 애니메이션 컨트롤러 사용
+    _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 600),
-    )..repeat(reverse: true);
-    
-    _controller2 = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    
-    _controller3 = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
-    
-    // 로그인 화면에서는 다른 애니메이션 효과 적용
-    if (widget.isLoginScreen) {
-      _animation1 = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _controller1, curve: Curves.easeInOut),
-      );
-      
-      _animation2 = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _controller2, curve: Curves.easeInOut),
-      );
-      
-      _animation3 = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _controller3, curve: Curves.easeInOut),
-      );
-    } else {
-      _animation1 = Tween<double>(begin: 0.0, end: 8.0).animate(
-        CurvedAnimation(parent: _controller1, curve: Curves.easeInOut),
-      );
-      
-      _animation2 = Tween<double>(begin: 0.0, end: 8.0).animate(
-        CurvedAnimation(parent: _controller2, curve: Curves.easeInOut),
-      );
-      
-      _animation3 = Tween<double>(begin: 0.0, end: 8.0).animate(
-        CurvedAnimation(parent: _controller3, curve: Curves.easeInOut),
-      );
-    }
-    
-    // 두 번째 도트 애니메이션 지연
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
-        _controller2.repeat(reverse: true);
-      }
-    });
-    
-    // 세 번째 도트 애니메이션 지연
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        _controller3.repeat(reverse: true);
-      }
-    });
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
   }
 
   @override
   void dispose() {
-    _controller1.dispose();
-    _controller2.dispose();
-    _controller3.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -116,92 +60,96 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with TickerPr
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 첫 번째 도트
-              widget.isLoginScreen 
-                ? _buildLoginDot(_animation1)
-                : AnimatedBuilder(
-                    animation: _animation1,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(0, -_animation1.value),
-                        child: _buildDot(),
-                      );
-                    },
-                  ),
-              SizedBox(width: widget.spacing),
-              // 두 번째 도트
-              widget.isLoginScreen 
-                ? _buildLoginDot(_animation2)
-                : AnimatedBuilder(
-                    animation: _animation2,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(0, -_animation2.value),
-                        child: _buildDot(),
-                      );
-                    },
-                  ),
-              SizedBox(width: widget.spacing),
-              // 세 번째 도트
-              widget.isLoginScreen 
-                ? _buildLoginDot(_animation3)
-                : AnimatedBuilder(
-                    animation: _animation3,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(0, -_animation3.value),
-                        child: _buildDot(),
-                      );
-                    },
-                  ),
-            ],
+          // CustomPaint를 사용하여 도트 애니메이션 직접 그리기
+          CustomPaint(
+            size: Size(
+              widget.dotSize * 3 + widget.spacing * 2,
+              widget.dotSize + (widget.isLoginScreen ? 0 : 8), // 위치 애니메이션 높이 고려
+            ),
+            painter: _DotsPainter(
+              animation: _controller,
+              dotColor: widget.dotColor,
+              dotSize: widget.dotSize,
+              spacing: widget.spacing,
+              isLoginScreen: widget.isLoginScreen,
+            ),
           ),
+          
           if (widget.message != null) ...[
             const SizedBox(height: 16),
             if (kReleaseMode || widget.message == null || widget.message!.isEmpty)
               const SizedBox.shrink()
             else
-            Text(
-              widget.message!,
-              textAlign: TextAlign.center,
-              style: TypographyTokens.body2.copyWith(
-                color: textColor,
+              Text(
+                widget.message!,
+                textAlign: TextAlign.center,
+                style: TypographyTokens.body2.copyWith(
+                  color: textColor,
+                ),
               ),
-            ),
           ],
         ],
       ),
     );
   }
+}
 
-  Widget _buildDot() {
-    return Container(
-      width: widget.dotSize,
-      height: widget.dotSize,
-      decoration: BoxDecoration(
-        color: widget.dotColor,
-        shape: BoxShape.circle,
-      ),
-    );
+/// 도트를 직접 그리는 CustomPainter
+class _DotsPainter extends CustomPainter {
+  final Animation<double> animation;
+  final Color dotColor;
+  final double dotSize;
+  final double spacing;
+  final bool isLoginScreen;
+
+  final Paint _paint;
+
+  _DotsPainter({
+    required this.animation,
+    required this.dotColor,
+    required this.dotSize,
+    required this.spacing,
+    required this.isLoginScreen,
+  }) : _paint = Paint()..color = dotColor,
+       super(repaint: animation);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.height / 2;
+    final totalWidth = dotSize * 3 + spacing * 2;
+    final startX = (size.width - totalWidth) / 2;
+
+    for (int i = 0; i < 3; i++) {
+      final double offsetPercent = i * 0.2; // 0.0, 0.2, 0.4 오프셋
+      final double value = (animation.value + offsetPercent) % 1.0;
+
+      final double x = startX + i * (dotSize + spacing);
+      double y = center;
+      double currentOpacity = 1.0;
+
+      if (isLoginScreen) {
+        // 투명도 애니메이션 (0.3 ~ 1.0)
+        currentOpacity = 0.3 + 0.7 * (sin(value * 2 * pi) * 0.5 + 0.5);
+      } else {
+        // 위치 애니메이션 (위로 최대 8)
+        y = center - (8.0 * (sin(value * 2 * pi) * 0.5 + 0.5));
+      }
+
+      // 페인트 색상 및 투명도 설정
+      _paint.color = dotColor.withOpacity(currentOpacity);
+
+      // 원 그리기
+      canvas.drawCircle(Offset(x + dotSize / 2, y), dotSize / 2, _paint);
+    }
   }
 
-  // 로그인 화면용 도트 빌더 - 투명도 애니메이션
-  Widget _buildLoginDot(Animation<double> animation) {
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (context, child) {
-        return Container(
-          width: widget.dotSize,
-          height: widget.dotSize,
-          decoration: BoxDecoration(
-            color: widget.dotColor.withOpacity(animation.value),
-            shape: BoxShape.circle,
-          ),
-        );
-      },
-    );
+  @override
+  bool shouldRepaint(_DotsPainter oldDelegate) {
+    // 애니메이션이 변경될 때만 다시 그림
+    return animation.value != oldDelegate.animation.value ||
+           dotColor != oldDelegate.dotColor ||
+           dotSize != oldDelegate.dotSize ||
+           spacing != oldDelegate.spacing ||
+           isLoginScreen != oldDelegate.isLoginScreen;
   }
 } 
