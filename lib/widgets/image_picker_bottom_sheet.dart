@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'dart:io';
 import 'dart:async';
 import '../core/services/common/usage_limit_service.dart';
@@ -152,108 +153,81 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
   /// 갤러리에서 이미지 선택
   Future<void> _selectGalleryImages() async {
-    try {
-      // 이미지 선택하기
-      final List<XFile> selectedImages = await _picker.pickMultiImage();
-      
-      // 이미지가 선택되지 않았다면 바로 반환
-      if (selectedImages.isEmpty) return;
-      
-      // 이미지 선택 완료 즉시 바텀시트 닫기
-      if (mounted) {
-        Navigator.pop(context);
-      }
-      
-      // 이미지 처리는 약간의 지연 후 진행 (UI 스레드 블로킹 방지)
-      // 이는 바텀시트가 완전히 닫힐 시간을 확보
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      // 백그라운드에서 이미지 처리
-      await compute(_processImages, selectedImages).then((imageFiles) {
-        if (imageFiles.isEmpty) return;
+    // 바텀시트를 먼저 닫아 UI 블로킹 방지
+    Navigator.of(context).pop();
+    
+    // 이미지 선택을 별도 스케줄링하여 UI 스레드 블로킹 방지
+    SchedulerBinding.instance.scheduleFrameCallback((_) async {
+      try {
+        final List<XFile>? selectedImages = await _picker.pickMultiImage();
         
-        // 워크플로우 시작
-        if (mounted) {
-          _noteCreationWorkflow.createNoteWithImages(
-            context, 
-            imageFiles,
-            closeBottomSheet: false // 이미 바텀시트를 닫았으므로 false로 설정
-          );
+        if (selectedImages != null && selectedImages.isNotEmpty) {
+          // 이미지 처리를 별도 프레임에서 진행
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            // XFile을 File로 변환 (간단한 변환)
+            final List<File> imageFiles = selectedImages
+                .map((xFile) => File(xFile.path))
+                .toList();
+            
+            _noteCreationWorkflow.createNoteWithImages(
+              context, 
+              imageFiles,
+              closeBottomSheet: false // 이미 바텀시트를 닫았으므로 false로 설정
+            );
+          });
         }
-      });
-    } catch (e) {
-      if (mounted && kDebugMode) {
-        debugPrint('이미지 선택 중 오류: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('이미지 선택 중 오류: $e')),
-        );
+      } catch (e) {
+        if (kDebugMode) {
+          print('Error picking images: $e');
+          // 다음 프레임에 스낵바 표시
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('이미지 선택 중 오류: $e')),
+              );
+            }
+          });
+        }
       }
-    }
+    });
   }
   
   /// 카메라로 사진 촬영
   Future<void> _takeCameraPhoto() async {
-    try {
-      // 카메라로 사진 촬영
-      final XFile? photo = await _picker.pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.rear,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 85,
-      );
-      
-      // 사진이 찍히지 않았다면 바로 반환
-      if (photo == null) return;
-      
-      // 카메라 촬영 완료 즉시 바텀시트 닫기
-      if (mounted) {
-        Navigator.pop(context);
-      }
-      
-      // 약간의 지연 후 이미지 처리
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      // 백그라운드에서 이미지 처리
-      final File imageFile = await compute(_processImage, photo.path);
-      
-      if (!imageFile.existsSync() || imageFile.lengthSync() == 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('이미지를 가져올 수 없습니다. 다시 시도하세요.')),
-          );
+    // 바텀시트를 먼저 닫아 UI 블로킹 방지
+    Navigator.of(context).pop();
+    
+    // 카메라 작업을 별도 스케줄링하여 UI 스레드 블로킹 방지
+    SchedulerBinding.instance.scheduleFrameCallback((_) async {
+      try {
+        final XFile? photo = await _picker.pickImage(source: ImageSource.camera);
+        
+        if (photo != null) {
+          // 이미지 처리를 별도 프레임에서 진행
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            // XFile을 File로 변환 (간단한 변환)
+            final File imageFile = File(photo.path);
+            
+            _noteCreationWorkflow.createNoteWithImages(
+              context, 
+              [imageFile],
+              closeBottomSheet: false // 이미 바텀시트를 닫았으므로 false로 설정
+            );
+          });
         }
-        return;
+      } catch (e) {
+        if (kDebugMode) {
+          print('Error taking photo: $e');
+          // 다음 프레임에 스낵바 표시
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('카메라 촬영 중 오류: $e')),
+              );
+            }
+          });
+        }
       }
-      
-      // 워크플로우 시작
-      if (mounted) {
-        _noteCreationWorkflow.createNoteWithImages(
-          context, 
-          [imageFile],
-          closeBottomSheet: false // 이미 바텀시트를 닫았으므로 false로 설정
-        );
-      }
-    } catch (e) {
-      if (mounted && kDebugMode) {
-        debugPrint('카메라 촬영 중 오류: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('카메라 촬영 중 오류: $e')),
-        );
-      }
-    }
+    });
   }
-}
-
-// 이미지 처리를 위한 격리된 함수 (UI 스레드 블로킹 방지)
-List<File> _processImages(List<XFile> selectedImages) {
-  return selectedImages
-      .map((xFile) => File(xFile.path))
-      .where((file) => file.existsSync() && file.lengthSync() > 0)
-      .toList();
-}
-
-// 단일 이미지 처리를 위한 격리된 함수
-File _processImage(String imagePath) {
-  return File(imagePath);
 } 
