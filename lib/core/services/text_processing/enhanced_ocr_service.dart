@@ -256,18 +256,6 @@ class EnhancedOcrService {
     }
   }
 
-  /// 전문 서적 모드 텍스트 처리 - 사용하지 않지만 호환성을 위해 유지
-  Future<ProcessedText> _processProfessionalReading(String fullText) async {
-    try {
-      // 단순히 원본 텍스트만 반환
-      return ProcessedText(
-        fullOriginalText: fullText,
-      );
-    } catch (e) {
-      debugPrint('전문 서적 모드 처리 오류: $e');
-      return ProcessedText(fullOriginalText: fullText);
-    }
-  }
 
   /// 문장을 병렬로 처리
   Future<List<TextSegment>> _processTextSegmentsInParallel(String text) async {
@@ -367,7 +355,7 @@ class EnhancedOcrService {
     }
   }
 
-  /// 문장에서 중국어 문자만 추출하여 핀인 생성
+  /// 문장에서 중국어 문자만 추출하여 핀인 생성 (Isolate 사용)
   Future<String> _generatePinyinForSentence(String sentence) async {
     try {
       // 중국어 문자만 추출
@@ -377,8 +365,9 @@ class EnhancedOcrService {
         return '';
       }
 
-      // 핀인 생성
-      return await _pinyinService.generatePinyin(chineseCharsOnly);
+      // PinyinCreationService의 Isolate 처리 메서드 호출
+      // 텍스트 클리닝은 메인 Isolate에서 수행하고, 실제 핀인 생성만 Isolate로 보냄
+      return await _pinyinService.generatePinyinIsolate(chineseCharsOnly); 
     } catch (e) {
       debugPrint('핀인 생성 중 오류 발생: $e');
       return '';

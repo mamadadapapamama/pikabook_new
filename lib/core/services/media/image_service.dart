@@ -21,6 +21,54 @@ import 'package:flutter/services.dart';
 import '../../../views/screens/full_image_screen.dart';
 import 'image_cache_service.dart';
 
+// compute 함수에 전달하기 위한 최상위 레벨 함수
+Future<_CompressionResult> _compressImageIsolate(Map<String, dynamic> params) async {
+  final Uint8List imageBytes = params['imageBytes'];
+  final String targetPath = params['targetPath'];
+  final int maxDimension = params['maxDimension'];
+  final int quality = params['quality'];
+
+  try {
+    img.Image? image = img.decodeImage(imageBytes);
+    if (image == null) {
+      return _CompressionResult.failure('이미지 디코딩 실패');
+    }
+
+    // 리사이징
+    if (image.width > maxDimension || image.height > maxDimension) {
+      double ratio = (image.width > image.height)
+          ? maxDimension / image.width
+          : maxDimension / image.height;
+      image = img.copyResize(
+        image,
+        width: (image.width * ratio).round(),
+        height: (image.height * ratio).round(),
+        interpolation: img.Interpolation.average,
+      );
+    }
+
+    // 압축 시도 (JPG)
+    try {
+      final jpegBytes = img.encodeJpg(image, quality: quality);
+      await File(targetPath).writeAsBytes(jpegBytes);
+      return _CompressionResult.success();
+    } catch (jpgError) {
+      debugPrint('JPG 인코딩 실패 (Isolate): $jpgError');
+      // PNG 시도
+      try {
+        final pngBytes = img.encodePng(image);
+        await File(targetPath).writeAsBytes(pngBytes);
+        return _CompressionResult.success();
+      } catch (pngError) {
+        debugPrint('PNG 인코딩 실패 (Isolate): $pngError');
+        return _CompressionResult.failure('이미지 압축 실패 (JPG/PNG)');
+      }
+    }
+  } catch (e) {
+    return _CompressionResult.failure('이미지 처리 중 예외 (Isolate): $e');
+  }
+}
+
 /// 압축된 결과를 나타내는 클래스 (내부 사용)
 class _CompressionResult {
   final bool success;
@@ -451,29 +499,37 @@ class ImageService {
         if (fileSize > 0) {
           return relativePath; // 이미 존재하는 파일 사용
         } else {
-          // 빈 파일이면 삭제하고 다시 처리
           await existingFile.delete();
         }
       }
 
-      // 이미지 압축 및 저장 (단일 통합 메서드)
-      final result = await _compressAndSaveImage(imageFile, targetPath);
-      
+      // 이미지 압축 및 저장을 compute를 사용하여 별도 Isolate에서 실행
+      final Uint8List imageBytes = await imageFile.readAsBytes();
+      final _CompressionResult result = await compute<_CompressionParams, _CompressionResult>(
+        _compressImageIsolateWrapper,
+        _CompressionParams(
+          imageBytes: imageBytes,
+          targetPath: targetPath,
+          maxDimension: _maxImageDimension,
+          quality: _defaultJpegQuality,
+        ),
+      );
+
       // 압축 결과가 없거나 실패한 경우
       if (!result.success) {
+        debugPrint('Isolate 이미지 압축 실패 (${result.error}) - 원본 복사');
         // 원본 파일을 타겟 경로에 복사
         await _copyOriginalToTarget(imageFile, targetPath);
       }
       
-      // Firebase Storage에 업로드 시도 - 중복 업로드 방지를 위해 존재 여부 확인 추가
+      // Firebase Storage에 업로드 시도 (기존 로직 유지)
       try {
-        // Firebase Storage 업로드는 별도 스레드에서 비동기로 처리 (앱 응답성 유지)
         await _uploadToFirebaseStorageIfNotExists(File(targetPath), relativePath);
       } catch (e) {
         debugPrint('Firebase Storage 업로드 중 오류: $e');
       }
       
-      // 스토리지 사용량 추적 - 압축된 실제 파일 크기 사용
+      // 스토리지 사용량 추적 (기존 로직 유지)
       await _trackStorageUsage(File(targetPath));
 
       return relativePath;
@@ -481,84 +537,6 @@ class ImageService {
       debugPrint('이미지 저장 및 최적화 중 치명적 오류: $e');
       return _createEmergencyPath(imageFile);
     }
-  }
-  
-  /// 이미지 압축 및 저장 (다양한 방법 시도)
-  Future<_CompressionResult> _compressAndSaveImage(File imageFile, String targetPath) async {
-    try {
-      // 이미지 정보 가져오기
-      final Uint8List imageBytes = await imageFile.readAsBytes();
-      final img.Image? image = img.decodeImage(imageBytes);
-      
-      // 이미지 디코딩 실패시
-      if (image == null) {
-        return _CompressionResult.failure('이미지 디코딩 실패');
-      }
-      
-      // 1. 이미지 리사이징 (필요한 경우)
-      img.Image processedImage = image;
-      if (image.width > _maxImageDimension || image.height > _maxImageDimension) {
-        processedImage = _resizeImage(image);
-      }
-      
-      // 2. 다양한 압축 방법 시도 (통합된 방식)
-      bool compressionSuccess = false;
-      
-      // 2.1 첫 번째 시도: JPG 인코딩
-      try {
-        final jpegBytes = img.encodeJpg(processedImage, quality: _defaultJpegQuality);
-        await File(targetPath).writeAsBytes(jpegBytes);
-        compressionSuccess = true;
-      } catch (jpgError) {
-        debugPrint('JPG 인코딩 실패: $jpgError');
-        
-        // 2.2 두 번째 시도: PNG 인코딩
-        try {
-          final pngBytes = img.encodePng(processedImage);
-          await File(targetPath).writeAsBytes(pngBytes);
-          compressionSuccess = true;
-        } catch (pngError) {
-          debugPrint('PNG 인코딩도 실패: $pngError');
-        }
-      }
-      
-      // 3. 압축 성공 여부 확인
-      final targetFile = File(targetPath);
-      if (!compressionSuccess || !await targetFile.exists() || await targetFile.length() == 0) {
-        return _CompressionResult.failure('이미지 압축 및 저장 실패');
-      }
-      
-      // 4. 메모리 해제 힌트
-      processedImage.clear();
-      
-      return _CompressionResult.success();
-    } catch (e) {
-      return _CompressionResult.failure('이미지 압축 중 예외 발생: $e');
-    }
-  }
-  
-  /// 이미지 리사이징 (단순화된 로직)
-  img.Image _resizeImage(img.Image image) {
-    final int maxDimension = _maxImageDimension;
-    
-    if (image.width <= maxDimension && image.height <= maxDimension) {
-      return image; // 이미 적절한 크기
-    }
-    
-    // 가로/세로 비율 유지하며 리사이징
-    double ratio;
-    if (image.width > image.height) {
-      ratio = maxDimension / image.width;
-    } else {
-      ratio = maxDimension / image.height;
-    }
-    
-    return img.copyResize(
-      image,
-      width: (image.width * ratio).round(),
-      height: (image.height * ratio).round(),
-      interpolation: img.Interpolation.average,
-    );
   }
   
   /// 원본 파일을 타겟 경로에 복사 (Helper)
@@ -1034,4 +1012,32 @@ class ImageService {
       ),
     );
   }
+}
+
+// compute 함수에 타입 안전성을 제공하기 위한 래퍼 함수 및 파라미터 클래스
+// compute 함수에 전달하기 위한 파라미터 클래스
+@immutable
+class _CompressionParams {
+  final Uint8List imageBytes;
+  final String targetPath;
+  final int maxDimension;
+  final int quality;
+
+  const _CompressionParams({
+    required this.imageBytes,
+    required this.targetPath,
+    required this.maxDimension,
+    required this.quality,
+  });
+}
+
+// compute에 직접 전달될 최상위 또는 static 래퍼 함수
+Future<_CompressionResult> _compressImageIsolateWrapper(_CompressionParams params) async {
+  // 실제 작업 함수 호출
+  return _compressImageIsolate({
+    'imageBytes': params.imageBytes,
+    'targetPath': params.targetPath,
+    'maxDimension': params.maxDimension,
+    'quality': params.quality,
+  });
 }
