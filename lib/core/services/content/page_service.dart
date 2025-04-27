@@ -280,6 +280,17 @@ class PageService {
     }
   }
 
+  /// 페이지 번호가 연속되지 않은 경우 재정렬 및 Firestore 업데이트 함수
+  Future<void> _updatePageNumber(String pageId, int newPageNumber) async {
+    try {
+      final updateTask = _pagesCollection.doc(pageId).update({'pageNumber': newPageNumber});
+      await updateTask; // 명시적 작업 완료 대기
+      debugPrint('페이지 번호 업데이트 완료: $pageId -> $newPageNumber');
+    } catch (e) {
+      debugPrint('페이지 번호 업데이트 중 오류: $e');
+    }
+  }
+
   /// 캐시와 서버에서 가져온 페이지 병합
   List<page_model.Page> _mergePages(List<page_model.Page> cachedPages, List<page_model.Page> serverPages) {
     // ID 기준으로 페이지 맵 생성 
@@ -309,9 +320,9 @@ class PageService {
         final updatedPage = mergedPages[i].copyWith(pageNumber: i);
         mergedPages[i] = updatedPage;
         
-        // 페이지 번호 업데이트가 필요한 경우 Firestore도 업데이트
+        // 페이지 번호 업데이트가 필요한 경우 Firestore도 업데이트 (별도 함수로 분리)
         if (updatedPage.id != null) {
-          _pagesCollection.doc(updatedPage.id).update({'pageNumber': i});
+          _updatePageNumber(updatedPage.id!, i);
         }
       }
     }
@@ -326,7 +337,7 @@ class PageService {
     return mergedPages;
   }
 
-  /// 페이지 업데이트 (단순 버전)
+  /// 페이지 업데이트
   Future<page_model.Page?> updatePage(
     String pageId, {
     String? originalText,
@@ -359,10 +370,11 @@ class PageService {
         }
         final newImageUrl = await _imageService.uploadImage(imageFile);
         updates['imageUrl'] = newImageUrl;
-        // OCR/번역 로직 제거
       }
 
-      await _pagesCollection.doc(pageId).update(updates);
+      // 명시적으로 업데이트 작업 완료 대기
+      final updateTask = _pagesCollection.doc(pageId).update(updates);
+      await updateTask;
 
       final updatedDoc = await _pagesCollection.doc(pageId).get();
       if (updatedDoc.exists) {
@@ -437,12 +449,13 @@ class PageService {
   Future<page_model.Page?> updatePageContent(
       String pageId, String originalText, String translatedText) async {
     try {
-      // Firestore에 업데이트
-      await _pagesCollection.doc(pageId).update({
+      // Firestore에 업데이트하고 명시적으로 작업 완료 대기
+      final updateTask = _pagesCollection.doc(pageId).update({
         'originalText': originalText,
         'translatedText': translatedText,
         'updatedAt': DateTime.now(),
       });
+      await updateTask;
 
       // 업데이트된 페이지 객체 반환
       final pageDoc = await _pagesCollection.doc(pageId).get();
@@ -599,11 +612,12 @@ class PageService {
   /// 페이지 이미지 URL 업데이트
   Future<bool> updatePageImageUrl(String pageId, String imageUrl) async {
     try {
-      // 페이지 문서 업데이트
-      await _pagesCollection.doc(pageId).update({
+      // 페이지 문서 업데이트하고 명시적으로 작업 완료 대기
+      final updateTask = _pagesCollection.doc(pageId).update({
         'imageUrl': imageUrl,
         'updatedAt': DateTime.now(),
       });
+      await updateTask;
       
       // 업데이트된 페이지 가져오기
       final pageDoc = await _pagesCollection.doc(pageId).get();

@@ -304,7 +304,8 @@ class NoteService {
       }
 
       // Firestore에 업데이트
-      await _notesCollection.doc(noteId).update(updateData);
+      final updateTask = _notesCollection.doc(noteId).update(updateData);
+      await updateTask; // 명시적으로 작업 완료 대기
 
       // 캐시 업데이트
       await _cacheService.cacheNote(updatedNote);
@@ -348,10 +349,12 @@ class NoteService {
   /// 즐겨찾기 토글
   Future<void> toggleFavorite(String noteId, bool isFavorite) async {
     try {
-      await _notesCollection.doc(noteId).update({
+      final updateTask = _notesCollection.doc(noteId).update({
         'isFavorite': isFavorite,
         'updatedAt': DateTime.now(),
       });
+      
+      await updateTask; // 명시적으로 작업 완료 대기
 
       // 캐시된 노트 업데이트
       final cachedNote = await _cacheService.getCachedNote(noteId);
@@ -469,10 +472,13 @@ class NoteService {
       await prefs.setBool(key, isProcessing);
 
       // 2. Firestore 노트 문서에도 상태 저장 (영구적)
-      await _notesCollection.doc(noteId).update({
+      final updateTask = _notesCollection.doc(noteId).update({
         'isProcessingBackground': isProcessing,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      
+      // 명시적으로 작업 완료 대기
+      await updateTask;
 
       debugPrint('백그라운드 처리 상태 설정: $noteId, 처리 중: $isProcessing');
     } catch (e) {
@@ -602,7 +608,8 @@ class NoteService {
       
       // 변경할 내용이 있을 때만 Firestore 업데이트
       if (updateData.length > 1) { // 'updatedAt'만 있는 경우가 아닐 때
-        await _notesCollection.doc(noteId).update(updateData);
+        final updateTask = _notesCollection.doc(noteId).update(updateData);
+        await updateTask; // 명시적으로 작업 완료 대기
         await _cacheService.removeCachedNote(noteId); // 캐시 갱신을 위해 제거
       }
     } catch (e) {
@@ -701,6 +708,9 @@ class NoteService {
         
         // 처리 진행 상황 업데이트
         await _updateProcessingProgress(noteId, pageNumber, imageFiles.length + 1);
+        
+        // 짧은 지연을 통해 이전 작업이 완료되도록 보장
+        await Future.delayed(const Duration(milliseconds: 100));
       }
       
       // 모든 처리 완료 후 상태 업데이트
@@ -721,11 +731,14 @@ class NoteService {
       
       // Firestore 업데이트 (매 페이지마다 하면 비효율적이므로 50% 간격으로만 업데이트)
       if (processedCount == totalCount || processedCount % max(1, (totalCount ~/ 2)) == 0) {
-        await _notesCollection.doc(noteId).update({
+        final updateTask = _notesCollection.doc(noteId).update({
           'processedPageCount': processedCount,
           'totalPageCount': totalCount,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+        
+        // 명시적으로 작업 완료 대기
+        await updateTask;
       }
     } catch (e) {
       debugPrint('처리 진행 상황 업데이트 중 오류: $e');
@@ -740,11 +753,14 @@ class NoteService {
       await prefs.remove('processing_note_$noteId');
       
       // Firestore 업데이트
-      await _notesCollection.doc(noteId).update({
+      final updateTask = _notesCollection.doc(noteId).update({
         'isProcessingBackground': false,
         'processingCompleted': true,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      
+      // 명시적으로 작업 완료 대기
+      await updateTask;
       
       debugPrint('노트 $noteId의 백그라운드 처리 완료');
     } catch (e) {

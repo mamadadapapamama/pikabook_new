@@ -8,12 +8,12 @@ import 'dot_loading_indicator.dart';
 
 /// 다이얼로그 형태의 로딩 경험을 제공하는 클래스들(현재는 노트 생성 전용)
 
-
 /// 노트 생성 중 표시할 로딩 다이얼로그
 /// Pikabook 스타일의 로딩 UI를 제공합니다.
 class NoteCreationLoader {
   static bool _isVisible = false;
   static Timer? _timeoutTimer;
+  static BuildContext? _lastContext;
   
   /// 노트 생성 로더 표시
   static Future<void> show(
@@ -22,24 +22,26 @@ class NoteCreationLoader {
     int timeoutSeconds = 20, // 타임아웃 시간 (초 단위)
   }) async {
 
+    // 이미 로더가 표시되고 있는 경우 먼저 닫음
+    if (_isVisible && _lastContext != null && _lastContext!.mounted) {
+      debugPrint('이전 로더가 표시 중이므로 먼저 닫습니다');
+      hide(_lastContext!);
+      // 잠시 대기하여 이전 다이얼로그가 닫히도록 함
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
     // 성능 오버레이 및 디버그 타이머 비활성화
-      timeDilation = 1.0;
+    timeDilation = 1.0;
     
     if (!context.mounted) {
       if (kDebugMode) {
-      debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
+        debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
       }
       return;
     }
     
-    // 이미 로더가 표시되고 있는지 확인
-    if (_isVisible) {
-      if (kDebugMode) {
-      debugPrint('로더가 이미 표시되고 있습니다');
-      }
-      return;
-    }
-    
+    // 현재 컨텍스트 저장
+    _lastContext = context;
     _isVisible = true;
     
     // 타임아웃 설정 - 지정된 시간 후 자동으로 닫힘
@@ -47,11 +49,13 @@ class NoteCreationLoader {
     if (timeoutSeconds > 0) {
       _timeoutTimer = Timer(Duration(seconds: timeoutSeconds), () {
         // 타임아웃 시 안전하게 제거
-        if (_isVisible) {
+        if (_isVisible && _lastContext != null && _lastContext!.mounted) {
           if (kDebugMode) {
-          debugPrint('로더가 타임아웃으로 자동 종료됨');
+            debugPrint('로더가 타임아웃으로 자동 종료됨');
           }
-          if (context.mounted) hide(context);
+          hide(_lastContext!);
+        } else {
+          _forceResetState();
         }
       });
     }
@@ -142,29 +146,31 @@ class NoteCreationLoader {
               ),
             ),
           ).then((_) {
+            // 다이얼로그가 닫힐 때 상태 초기화
             _timeoutTimer?.cancel();
             _isVisible = false;
           });
         } catch (dialogError) {
           if (kDebugMode) {
-          debugPrint('다이얼로그 표시 중 내부 오류: $dialogError');
+            debugPrint('다이얼로그 표시 중 내부 오류: $dialogError');
           }
-          _timeoutTimer?.cancel();
-          _isVisible = false;
+          _forceResetState();
         }
       });
     } catch (e) {
       if (kDebugMode) {
-      debugPrint('노트 생성 로더 표시 중 오류: $e');
+        debugPrint('노트 생성 로더 표시 중 오류: $e');
       }
-      _timeoutTimer?.cancel();
-      _isVisible = false;
+      _forceResetState();
     }
   }
 
   /// 노트 생성 로더 숨기기
   static void hide(BuildContext context) {
-    if (!context.mounted) return;
+    if (!context.mounted) {
+      _forceResetState();
+      return;
+    }
     
     try {
       // 안전하게 다이얼로그 닫기
@@ -180,9 +186,15 @@ class NoteCreationLoader {
         debugPrint('노트 생성 로더 숨기기 중 오류: $e');
       }
     } finally {
-      _timeoutTimer?.cancel();
-      _isVisible = false;
+      _forceResetState();
     }
+  }
+  
+  /// 상태 강제 초기화 (타이머 해제 및 플래그 리셋)
+  static void _forceResetState() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = null;
+    _isVisible = false;
   }
   
   /// 로더가 표시 중인지 확인하고 표시 중이면 강제로 닫음
@@ -205,14 +217,21 @@ class NoteCreationLoader {
         }
       } finally {
         // 상태 초기화
-        _timeoutTimer?.cancel();
-        _isVisible = false;
+        _forceResetState();
       }
     } else {
       if (kDebugMode) {
         debugPrint('로딩 다이얼로그가 이미 닫혀 있습니다');
       }
     }
+  }
+  
+  /// 애플리케이션 종료 전 리소스 정리
+  static void dispose() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = null;
+    _isVisible = false;
+    _lastContext = null;
   }
   
   /// 로더가 표시 중인지 확인
