@@ -409,6 +409,13 @@ class UsageLimitService {
     return await incrementUsage('ttsRequests', 1);
   }
   
+  /// 사전 검색 수 증가
+  Future<bool> incrementDictionaryCount() async {
+    // 사전 검색은 별도 카운트하지 않고 무조건 성공으로 처리 (제한없음)
+    debugPrint('사전 검색 사용량 계산 (제한 없음)');
+    return true;
+  }
+  
   /// 저장 공간 사용량 증가
   Future<bool> addStorageUsage(int bytes) async {
     return await incrementUsage('storageUsageBytes', bytes);

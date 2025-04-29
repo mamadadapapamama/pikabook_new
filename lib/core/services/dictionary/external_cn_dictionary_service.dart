@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 import 'dart:io' show Platform;
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/dictionary.dart';
-import '../common/usage_limit_service.dart';
 import '../text_processing/pinyin_creation_service.dart';
+import '../common/usage_limit_service.dart';
 
 /// 외부 중국어 사전 서비스 타입 (구글, 네이버, 바이두)
 enum ExternalCnDictType {
@@ -26,12 +26,15 @@ class ExternalCnDictionaryService {
     // 초기화 시 API 키 로드
     loadApiKeys();
     // 사용량 제한 서비스 초기화
+    _usageLimitService = UsageLimitService();
   }
 
   // API 키 저장 변수
   String? _papagoClientId;
   String? _papagoClientSecret;
   
+  // 사용량 제한 서비스
+  late final UsageLimitService _usageLimitService;
 
   // 검색 결과 캐시 (메모리 캐시)
   final Map<String, DictionaryEntry> _searchResultCache = {};
@@ -63,12 +66,22 @@ class ExternalCnDictionaryService {
   // API 키 로드 메서드
   Future<void> loadApiKeys() async {
     try {
+      debugPrint('API 키 파일 로드 시도: assets/credentials/api_keys.json');
       final String jsonString =
           await rootBundle.loadString('assets/credentials/api_keys.json');
+      debugPrint('API 키 파일 로드 성공: ${jsonString.length} 바이트');
+      
       final Map<String, dynamic> jsonData = json.decode(jsonString);
+      debugPrint('API 키 JSON 파싱 성공: ${jsonData.keys.length} 개의 키');
+      
       _papagoClientId = jsonData['papago_client_id'];
       _papagoClientSecret = jsonData['papago_client_secret'];
-      debugPrint('Papago API 키 로드 완료');
+      debugPrint('Papago API 키 로드 완료 - ID: ${_papagoClientId?.substring(0, 3)}..., Secret: ${_papagoClientSecret?.substring(0, 3)}...');
+      
+      // 키가 null인지 확인
+      if (_papagoClientId == null || _papagoClientSecret == null) {
+        debugPrint('경고: API 키가 null입니다. ID: $_papagoClientId, Secret: $_papagoClientSecret');
+      }
     } catch (e) {
       debugPrint('API 키 로드 오류: $e');
       _papagoClientId = null;
@@ -85,6 +98,17 @@ class ExternalCnDictionaryService {
         return {
           'entry': _searchResultCache[word],
           'success': true,
+        };
+      }
+      
+      // 사용량 제한 확인 (외부 API 호출 전 확인)
+      final canLookup = await _usageLimitService.incrementDictionaryCount();
+      if (!canLookup) {
+        debugPrint('외부 사전 검색 사용량 한도 초과: $word');
+        return {
+          'success': false,
+          'message': '무료 버전 사전 검색 한도를 초과했습니다. 관리자에게 문의해주세요.',
+          'limitExceeded': true,
         };
       }
       
@@ -173,7 +197,7 @@ class ExternalCnDictionaryService {
         return null;
       }
 
-      debugPrint('Papago API 번역 시작: "$word"');
+      debugPrint('Papago API 번역 시작: "$word", 키: $_papagoClientId');
 
       // Papago API URL
       final url =
@@ -193,6 +217,9 @@ class ExternalCnDictionaryService {
         'text': word,
       };
 
+      debugPrint('Papago API 요청 헤더: $headers');
+      debugPrint('Papago API 요청 바디: $body');
+
       // 타임아웃 설정 (5초)
       final response = await http
           .post(
@@ -206,14 +233,18 @@ class ExternalCnDictionaryService {
       });
 
       debugPrint('API 응답 상태 코드: ${response.statusCode}');
+      debugPrint('API 응답 헤더: ${response.headers}');
+      debugPrint('API 응답 바디: ${response.body}');
 
       if (response.statusCode == 200) {
         // JSON 응답 파싱
         final Map<String, dynamic> data = json.decode(response.body);
+        debugPrint('API 응답 데이터: $data');
 
         if (data.containsKey('message')) {
           if (data['message'].containsKey('result')) {
             final translatedText = data['message']['result']['translatedText'];
+            debugPrint('번역 결과: $translatedText');
 
             // 번역 결과를 DictionaryEntry로 변환
             final entry = DictionaryEntry(
@@ -225,8 +256,14 @@ class ExternalCnDictionaryService {
             );
 
             return entry;
+          } else {
+            debugPrint('API 응답 데이터에 result 필드가 없습니다');
           }
+        } else {
+          debugPrint('API 응답 데이터에 message 필드가 없습니다');
         }
+      } else {
+        debugPrint('API 응답 실패: ${response.statusCode}, ${response.body}');
       }
 
       return null;

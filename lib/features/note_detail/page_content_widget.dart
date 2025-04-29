@@ -638,10 +638,13 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         return;
       }
 
+      debugPrint('사전 서비스에서 단어 검색 시작: $word');
+      
       // 사전 서비스에서 단어 검색 
       final entry = await _contentManager.lookupWord(word);
 
       if (entry != null) {
+        debugPrint('단어 검색 성공: ${entry.word}, 의미: ${entry.meaning}');
         if (mounted) {
           DictionaryResultWidget.showDictionaryBottomSheet(
             context: context,
@@ -652,11 +655,15 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         }
       } else {
         // 내부 사전에서 찾지 못한 경우, DictionaryService를 직접 사용하여 Papago API로 검색
+        debugPrint('내부 사전에서 단어를 찾지 못해 외부 API 직접 사용을 시도합니다');
         final dictionaryService = DictionaryService();
         final result = await dictionaryService.lookupWord(word);
         
+        debugPrint('외부 API 검색 결과: ${result['success']}, 메시지: ${result['message'] ?? "없음"}');
+        
         if (result['success'] == true && result['entry'] != null) {
           final apiEntry = result['entry'] as DictionaryEntry;
+          debugPrint('외부 API에서 단어 찾음: ${apiEntry.word}, 의미: ${apiEntry.meaning}');
           
           if (mounted) {
             DictionaryResultWidget.showDictionaryBottomSheet(
@@ -668,6 +675,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           }
         } else {
           // 그래도 찾지 못한 경우에만 스낵바 표시
+          debugPrint('내부 및 외부 사전 모두에서 단어를 찾지 못했습니다: $word');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('단어 "$word"를 사전에서 찾을 수 없습니다.')),
