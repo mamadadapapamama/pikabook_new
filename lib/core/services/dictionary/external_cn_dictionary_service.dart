@@ -2,36 +2,29 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'dart:io' show Platform;
-import 'package:url_launcher/url_launcher.dart';
+import 'package:googleapis_auth/auth_io.dart';
 import '../../models/dictionary.dart';
 import '../text_processing/pinyin_creation_service.dart';
 import '../common/usage_limit_service.dart';
 
-/// 외부 중국어 사전 서비스 타입 (구글, 네이버, 바이두)
-enum ExternalCnDictType {
-  google,
-  naver,
-  baidu,
-}
-
 /// 외부 API를 통해 중국어 사전 기능을 제공하는 서비스
-/// Papago, Google Translate 등 외부 사전 API 연동을 담당합니다.
+/// Google Translation API를 사용하여 중국어 단어 번역 기능을 제공합니다.
 class ExternalCnDictionaryService {
   // 싱글톤 패턴 구현
   static final ExternalCnDictionaryService _instance = ExternalCnDictionaryService._internal();
   factory ExternalCnDictionaryService() => _instance;
   
   ExternalCnDictionaryService._internal() {
-    // 초기화 시 API 키 로드
-    loadApiKeys();
+    // 초기화 시 Google API 초기화
+    _initializeApi();
     // 사용량 제한 서비스 초기화
     _usageLimitService = UsageLimitService();
   }
-
-  // API 키 저장 변수
-  String? _papagoClientId;
-  String? _papagoClientSecret;
+  
+  // API 클라이언트
+  http.Client? _httpClient;
+  String? _projectId;
+  bool _isInitializing = false;
   
   // 사용량 제한 서비스
   late final UsageLimitService _usageLimitService;
@@ -43,6 +36,66 @@ class ExternalCnDictionaryService {
   final List<Function()> _dictionaryUpdateListeners = [];
   
   final PinyinCreationService _pinyinService = PinyinCreationService();
+
+  // API 초기화
+  Future<void> _initializeApi() async {
+    if (_httpClient != null || _isInitializing) return;
+
+    _isInitializing = true;
+    try {
+      debugPrint('ExternalCnDictionaryService: Google Cloud Translation API 초기화 중...');
+
+      // 서비스 계정 JSON 파일 로드
+      final String serviceAccountPath = 'assets/credentials/service-account.json';
+      debugPrint('ExternalCnDictionaryService: 서비스 계정 파일 로드 시도: $serviceAccountPath');
+      
+      String serviceAccountJson;
+      try {
+        serviceAccountJson = await rootBundle.loadString(serviceAccountPath);
+        debugPrint('ExternalCnDictionaryService: 서비스 계정 JSON 파일 로드 성공 (${serviceAccountJson.length}바이트)');
+      } catch (e) {
+        throw Exception('서비스 계정 JSON 파일 로드 실패: $e');
+      }
+      
+      // JSON 데이터 파싱
+      Map<String, dynamic> jsonData;
+      try {
+        jsonData = jsonDecode(serviceAccountJson);
+        debugPrint('ExternalCnDictionaryService: 서비스 계정 JSON 파싱 성공');
+      } catch (e) {
+        throw Exception('서비스 계정 JSON 파싱 실패: $e');
+      }
+
+      // 프로젝트 ID 추출
+      _projectId = jsonData['project_id'];
+      if (_projectId == null) {
+        throw Exception('서비스 계정 JSON에 project_id가 없습니다.');
+      }
+      debugPrint('ExternalCnDictionaryService: 프로젝트 ID 확인: $_projectId');
+
+      // 서비스 계정 인증 정보 생성
+      final accountCredentials = ServiceAccountCredentials.fromJson(jsonData);
+      
+      // 스코프 설정
+      final scopes = ['https://www.googleapis.com/auth/cloud-platform'];
+      
+      // 인증 클라이언트 생성
+      debugPrint('ExternalCnDictionaryService: 인증 클라이언트 생성 중...');
+      _httpClient = await clientViaServiceAccount(accountCredentials, scopes);
+      debugPrint('ExternalCnDictionaryService: 인증 클라이언트 생성 완료');
+
+      _isInitializing = false;
+      debugPrint('ExternalCnDictionaryService: Google Cloud Translation API 초기화 완료');
+    } catch (e) {
+      _isInitializing = false;
+      _httpClient = null;
+      _projectId = null;
+      debugPrint('ExternalCnDictionaryService: Google Cloud Translation API 초기화 실패: $e');
+      if (e.toString().contains('No such file') || e.toString().contains('Unable to load asset')) {
+        debugPrint('ExternalCnDictionaryService: 서비스 계정 파일이 존재하지 않거나 접근할 수 없습니다. pubspec.yaml에 assets 정의가 있는지 확인하세요.');
+      }
+    }
+  }
 
   // 사전 업데이트 리스너 추가
   void addDictionaryUpdateListener(Function() listener) {
@@ -63,33 +116,7 @@ class ExternalCnDictionaryService {
     }
   }
 
-  // API 키 로드 메서드
-  Future<void> loadApiKeys() async {
-    try {
-      debugPrint('API 키 파일 로드 시도: assets/credentials/api_keys.json');
-      final String jsonString =
-          await rootBundle.loadString('assets/credentials/api_keys.json');
-      debugPrint('API 키 파일 로드 성공: ${jsonString.length} 바이트');
-      
-      final Map<String, dynamic> jsonData = json.decode(jsonString);
-      debugPrint('API 키 JSON 파싱 성공: ${jsonData.keys.length} 개의 키');
-      
-      _papagoClientId = jsonData['papago_client_id'];
-      _papagoClientSecret = jsonData['papago_client_secret'];
-      debugPrint('Papago API 키 로드 완료 - ID: ${_papagoClientId?.substring(0, 3)}..., Secret: ${_papagoClientSecret?.substring(0, 3)}...');
-      
-      // 키가 null인지 확인
-      if (_papagoClientId == null || _papagoClientSecret == null) {
-        debugPrint('경고: API 키가 null입니다. ID: $_papagoClientId, Secret: $_papagoClientSecret');
-      }
-    } catch (e) {
-      debugPrint('API 키 로드 오류: $e');
-      _papagoClientId = null;
-      _papagoClientSecret = null;
-    }
-  }
-
-  // 외부 사전을 통한 단어 검색
+  // 외부 사전을 통한 단어 검색 (Google API 사용)
   Future<Map<String, dynamic>> lookupWord(String word) async {
     try {
       // 캐시된 결과 있으면 바로 반환
@@ -112,22 +139,43 @@ class ExternalCnDictionaryService {
         };
       }
       
-      // API 키가 로드되지 않았으면 로드
-      if (_papagoClientId == null || _papagoClientSecret == null) {
-        await loadApiKeys();
+      // API가 초기화되지 않았으면 초기화
+      if (_httpClient == null || _projectId == null) {
+        debugPrint('ExternalCnDictionaryService: API 초기화 시도');
+        await _initializeApi();
       }
 
-      // Papago API 사용
-      final papagoResult = await _lookupWithPapagoApi(word);
-      if (papagoResult != null) {
-        // 파파고는 병음을 제공하지 않으므로 항상 생성
+      // API가 여전히 null이면 대체 API 사용
+      if (_httpClient == null || _projectId == null) {
+        debugPrint('ExternalCnDictionaryService: API 초기화 실패, 무료 API 사용');
+        final fallbackResult = await _lookupWithFallbackApi(word);
+        if (fallbackResult != null) {
+          // 캐시에 저장
+          _searchResultCache[word] = fallbackResult;
+          return {
+            'entry': fallbackResult,
+            'success': true,
+          };
+        }
+        return {
+          'success': false,
+          'message': 'Google 번역에서 단어를 찾을 수 없습니다.',
+        };
+      }
+
+      // Google Cloud Translation API 사용
+      debugPrint('Google API로 단어 검색 시작: $word');
+      final googleResult = await _lookupWithGoogleCloud(word);
+      
+      if (googleResult != null) {
+        // Google도 병음을 제공하지 않으므로 항상 생성
         final pinyin = await _pinyinService.generatePinyin(word);
         final entryWithPinyin = DictionaryEntry(
-          word: papagoResult.word,
+          word: googleResult.word,
           pinyin: pinyin,
-          meaning: papagoResult.meaning,
-          examples: papagoResult.examples,
-          source: papagoResult.source,
+          meaning: googleResult.meaning,
+          examples: googleResult.examples,
+          source: googleResult.source,
         );
         
         // 캐시에 저장
@@ -142,45 +190,14 @@ class ExternalCnDictionaryService {
         };
       }
 
-      // 시스템 사전 기능 활용 (iOS/Android)
-      final systemDictResult = await _lookupInSystemDictionary(word);
-      if (systemDictResult != null) {
-        // 병음이 없는 경우에도 생성
-        if (systemDictResult.pinyin.isEmpty) {
-          final pinyin = await _pinyinService.generatePinyin(word);
-          final entry = DictionaryEntry(
-            word: systemDictResult.word,
-            pinyin: pinyin,
-            meaning: systemDictResult.meaning,
-            examples: systemDictResult.examples,
-            source: systemDictResult.source,
-          );
-          
-          // 캐시에 저장
-          _searchResultCache[word] = entry;
-          
-          return {
-            'entry': entry,
-            'success': true,
-          };
-        }
-        
-        // 캐시에 저장
-        _searchResultCache[word] = systemDictResult;
-        
-        return {
-          'entry': systemDictResult,
-          'success': true,
-        };
-      }
-
       // 검색 결과가 없는 경우
+      debugPrint('Google API에서 단어를 찾을 수 없음: $word');
       return {
         'success': false,
-        'message': '외부 사전에서 단어를 찾을 수 없습니다.',
+        'message': 'Google 번역에서 단어를 찾을 수 없습니다.',
       };
     } catch (e) {
-      debugPrint('외부 사전 단어 검색 중 오류 발생: $e');
+      debugPrint('Google 단어 검색 중 오류 발생: $e');
       return {
         'success': false,
         'message': '단어 검색 중 오류가 발생했습니다: $e',
@@ -188,79 +205,64 @@ class ExternalCnDictionaryService {
     }
   }
 
-  // Papago API를 사용하여 단어 번역
-  Future<DictionaryEntry?> _lookupWithPapagoApi(String word) async {
+  // Google Cloud Translation API를 사용하여 단어 번역
+  Future<DictionaryEntry?> _lookupWithGoogleCloud(String word) async {
     try {
-      // API 키가 없으면 검색 불가
-      if (_papagoClientId == null || _papagoClientSecret == null) {
-        debugPrint('유효한 Papago API 키가 없습니다.');
+      // API 클라이언트 확인
+      if (_httpClient == null || _projectId == null) {
+        debugPrint('Google API 클라이언트가 초기화되지 않았습니다.');
         return null;
       }
 
-      debugPrint('Papago API 번역 시작: "$word", 키: $_papagoClientId');
+      debugPrint('Google Cloud Translation API 번역 시작: "$word"');
 
-      // Papago API URL
-      final url =
-          Uri.parse('https://naveropenapi.apigw.ntruss.com/nmt/v1/translation');
-
-      // API 요청 헤더
-      final headers = {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-NCP-APIGW-API-KEY-ID': _papagoClientId!,
-        'X-NCP-APIGW-API-KEY': _papagoClientSecret!,
+      // 요청 준비
+      final parent = 'projects/$_projectId/locations/global';
+      final url = Uri.parse('https://translation.googleapis.com/v3/$parent:translateText');
+      
+      // 요청 본문
+      final requestBody = {
+        'contents': [word],
+        'sourceLanguageCode': 'zh-CN',
+        'targetLanguageCode': 'ko',
+        'mimeType': 'text/plain',
       };
-
-      // API 요청 바디 (중국어 -> 한국어)
-      final body = {
-        'source': 'zh-CN',
-        'target': 'ko',
-        'text': word,
-      };
-
-      debugPrint('Papago API 요청 헤더: $headers');
-      debugPrint('Papago API 요청 바디: $body');
-
-      // 타임아웃 설정 (5초)
-      final response = await http
-          .post(
+      
+      // API 요청
+      final response = await _httpClient!.post(
         url,
-        headers: headers,
-        body: body,
-      )
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-        debugPrint('Papago API 요청 타임아웃');
+        body: jsonEncode(requestBody),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 5), onTimeout: () {
+        debugPrint('Google API 요청 타임아웃');
         return http.Response('{"error":"timeout"}', 408);
       });
 
       debugPrint('API 응답 상태 코드: ${response.statusCode}');
-      debugPrint('API 응답 헤더: ${response.headers}');
-      debugPrint('API 응답 바디: ${response.body}');
+      if (kDebugMode) {
+        debugPrint('API 응답 바디: ${response.body}');
+      }
 
       if (response.statusCode == 200) {
-        // JSON 응답 파싱
-        final Map<String, dynamic> data = json.decode(response.body);
-        debugPrint('API 응답 데이터: $data');
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        
+        final translations = data['translations'];
+        if (translations != null && translations is List && translations.isNotEmpty) {
+          final translatedText = translations[0]['translatedText'];
+          debugPrint('번역 결과: $translatedText');
 
-        if (data.containsKey('message')) {
-          if (data['message'].containsKey('result')) {
-            final translatedText = data['message']['result']['translatedText'];
-            debugPrint('번역 결과: $translatedText');
+          // 번역 결과를 DictionaryEntry로 변환
+          final entry = DictionaryEntry(
+            word: word,
+            pinyin: '', // Google은 발음 정보를 제공하지 않음
+            meaning: translatedText,
+            examples: [],
+            source: 'google',
+          );
 
-            // 번역 결과를 DictionaryEntry로 변환
-            final entry = DictionaryEntry(
-              word: word,
-              pinyin: '', // Papago는 발음 정보를 제공하지 않음
-              meaning: translatedText,
-              examples: [],
-              source: 'papago',
-            );
-
-            return entry;
-          } else {
-            debugPrint('API 응답 데이터에 result 필드가 없습니다');
-          }
+          return entry;
         } else {
-          debugPrint('API 응답 데이터에 message 필드가 없습니다');
+          debugPrint('API 응답 데이터에 translations 필드가 없거나 비어 있습니다');
         }
       } else {
         debugPrint('API 응답 실패: ${response.statusCode}, ${response.body}');
@@ -268,71 +270,66 @@ class ExternalCnDictionaryService {
 
       return null;
     } catch (e) {
-      debugPrint('Papago API 번역 중 오류 발생: $e');
+      debugPrint('Google API 번역 중 오류 발생: $e');
       return null;
     }
   }
 
-  // 시스템 사전에서 단어 검색 (iOS/Android)
-  Future<DictionaryEntry?> _lookupInSystemDictionary(String word) async {
+  // 대체 API (무료 버전 Google Translation API)
+  Future<DictionaryEntry?> _lookupWithFallbackApi(String word) async {
     try {
-      // iOS의 경우 사전 앱 URL 스킴 사용
-      if (Platform.isIOS) {
-        // iOS 사전 앱은 직접적인 API가 없어 URL 스킴을 통해 열기만 가능
-        // 결과를 직접 가져올 수는 없음
-        return null;
+      debugPrint('Google 번역 API(무료) 번역 시작: "$word"');
+
+      // 무료 번역 API 활용
+      final url = Uri.parse('https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=ko&dt=t&q=${Uri.encodeComponent(word)}');
+      
+      final response = await http.get(url).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          debugPrint('Google API 요청 타임아웃');
+          return http.Response('{"error":"timeout"}', 408);
+        }
+      );
+
+      debugPrint('API 응답 상태 코드: ${response.statusCode}');
+      if (kDebugMode) {
+        debugPrint('API 응답 바디: ${response.body}');
       }
 
-      // Android의 경우 시스템 사전 API 사용 (실제로는 구현 필요)
-      if (Platform.isAndroid) {
-        // Android에는 표준 사전 API가 없어 제조사별 구현이 다를 수 있음
-        return null;
+      if (response.statusCode == 200) {
+        // 응답 파싱 (무료 API는 특수한 응답 형식)
+        final data = json.decode(response.body);
+        if (data is List && data.isNotEmpty && data[0] is List && data[0].isNotEmpty) {
+          final translatedText = data[0][0][0];
+          debugPrint('번역 결과: $translatedText');
+
+          // 번역 결과를 DictionaryEntry로 변환
+          final entry = DictionaryEntry(
+            word: word,
+            pinyin: '', // 발음 정보는 없음
+            meaning: translatedText,
+            examples: [],
+            source: 'google',
+          );
+
+          return entry;
+        } else {
+          debugPrint('API 응답 파싱 실패: 예상치 못한 형식');
+        }
+      } else {
+        debugPrint('API 응답 실패: ${response.statusCode}, ${response.body}');
       }
 
       return null;
     } catch (e) {
-      debugPrint('시스템 사전 검색 중 오류 발생: $e');
+      debugPrint('Google API(무료) 번역 중 오류 발생: $e');
       return null;
     }
   }
 
-  // 외부 사전 서비스로 연결 (Google Translate, Naver 사전 등)
-  Future<bool> openExternalDictionary(String word,
-      {ExternalCnDictType type = ExternalCnDictType.google}) async {
-    try {
-      final Uri uri = _getExternalDictionaryUri(word, type);
-      return await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (e) {
-      debugPrint('외부 사전 열기 중 오류 발생: $e');
-      return false;
-    }
-  }
-
-  // 외부 사전 서비스 URL 생성
-  Uri _getExternalDictionaryUri(String word, ExternalCnDictType type) {
-    switch (type) {
-      case ExternalCnDictType.google:
-        // Google Translate (중국어 -> 한국어)
-        return Uri.parse(
-            'https://translate.google.com/?sl=zh-CN&tl=ko&text=${Uri.encodeComponent(word)}&op=translate');
-
-      case ExternalCnDictType.naver:
-        // Naver 사전 (중국어)
-        return Uri.parse(
-            'https://dict.naver.com/search.dict?dicQuery=${Uri.encodeComponent(word)}&query=${Uri.encodeComponent(word)}&target=dic&ie=utf8&query_utf=&isOnlyViewEE=');
-
-      case ExternalCnDictType.baidu:
-        // Baidu 사전
-        return Uri.parse(
-            'https://fanyi.baidu.com/#zh/ko/${Uri.encodeComponent(word)}');
-    }
-  }
-  
   // 검색 캐시 초기화
   void clearCache() {
     _searchResultCache.clear();
     debugPrint('외부 사전 검색 캐시 정리됨');
   }
-  
-
 } 

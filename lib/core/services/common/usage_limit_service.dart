@@ -56,7 +56,7 @@ class UsageLimitService {
   /// Firestore에서 사용량 데이터 로드
   Future<Map<String, dynamic>> _loadUsageData() async {
     try {
-      final userId = _currentUserId;
+    final userId = _currentUserId;
       if (userId == null) {
         debugPrint('사용량 데이터 로드: 사용자 ID가 없음');
         return _getDefaultUsageData();
@@ -213,9 +213,9 @@ class UsageLimitService {
       // 3. 제한 체크
       if (currentValue + amount > limit) {
         debugPrint('$key 사용량 제한 초과: ${currentValue + amount} > $limit');
-        return false;
-      }
-      
+      return false;
+    }
+    
       // 4. 사용량 증가
       final newValue = currentValue + amount;
       await _updateUsage(key, newValue);
@@ -518,7 +518,7 @@ class UsageLimitService {
       return result;
     } catch (e) {
       debugPrint('실제 사용량 계산 중 오류: $e');
-      return {
+    return {
         'ocrPages': 0,
         'ttsRequests': 0,
         'translatedChars': 0,
@@ -573,7 +573,7 @@ class UsageLimitService {
                   final metadata = await item.getMetadata();
                   final fileSize = metadata.size ?? 0;
                   totalSize += fileSize;
-                } catch (e) {
+    } catch (e) {
                   debugPrint('저장 공간 계산: 서브폴더 파일 메타데이터 오류 (${item.fullPath}): $e');
                 }
               }
@@ -745,8 +745,8 @@ class UsageLimitService {
       });
       
       // 2. 캐시 무효화
-      _cachedUsageData = null;
-      _lastFetchTime = null;
+    _cachedUsageData = null;
+    _lastFetchTime = null;
       
       debugPrint('모든 사용량 초기화 완료');
     } catch (e) {
