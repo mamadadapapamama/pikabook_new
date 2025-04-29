@@ -327,6 +327,16 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   Widget _buildTitleWithPlanBadge(BuildContext context) {
+    // 설정 페이지인 경우 단순 타이틀만 표시
+    if (title == '설정') {
+      return Text(
+        title!,
+        style: TypographyTokens.headline2.copyWith(
+          color: ColorTokens.textPrimary,
+        ),
+      );
+    }
+
     return FutureBuilder<String>(
       future: PlanService().getCurrentPlanType(),
       builder: (context, snapshot) {
@@ -340,22 +350,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                 Expanded(
                   child: _buildLogoTitle(noteSpaceName),
                 ),
-                if (isPlanFree) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: ColorTokens.secondary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'free plan',
-                      style: TypographyTokens.caption.copyWith(
-                        color: ColorTokens.secondary,
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
             if (subtitle != null) ...[
