@@ -26,16 +26,13 @@ class ExternalCnDictionaryService {
     // 초기화 시 API 키 로드
     loadApiKeys();
     // 사용량 제한 서비스 초기화
-    _usageLimitService = UsageLimitService();
   }
 
   // API 키 저장 변수
   String? _papagoClientId;
   String? _papagoClientSecret;
   
-  // 사용량 제한 서비스
-  late final UsageLimitService _usageLimitService;
-  
+
   // 검색 결과 캐시 (메모리 캐시)
   final Map<String, DictionaryEntry> _searchResultCache = {};
   
@@ -300,10 +297,5 @@ class ExternalCnDictionaryService {
     debugPrint('외부 사전 검색 캐시 정리됨');
   }
   
-  /// 외부 사전 URL 문자열 가져오기
-  /// [word] 검색할 단어
-  /// [type] 외부 사전 유형
-  String getExternalDictionaryUrl(String word, ExternalCnDictType type) {
-    return _getExternalDictionaryUri(word, type).toString();
-  }
+
 } 

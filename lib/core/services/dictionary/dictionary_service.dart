@@ -205,18 +205,6 @@ class DictionaryService {
       debugPrint('사전 캐시 정리 중 오류 발생: $e');
     }
   }
-
-  /// 외부 사전 열기
-  /// [word] 검색할 단어
-  /// [type] 사전 타입 (구글, 네이버, 바이두)
-  String getExternalDictionaryUrl(String word, ExternalDictType type) {
-    if (_currentLanguage == 'zh-CN') {
-      final cnDictType = ExternalCnDictType.values[type.index];
-      return _externalCnDictionaryService.getExternalDictionaryUrl(word, cnDictType);
-    } else {
-      throw UnsupportedError('지원되지 않는 언어입니다: $_currentLanguage');
-    }
-  }
 }
 
 // 단어 분석 결과를 담는 클래스
