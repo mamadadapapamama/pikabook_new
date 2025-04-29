@@ -136,6 +136,8 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: true,
       height: 108,
       backgroundColor: backgroundColor,
+      showLogo: false,  // 로고를 표시하지 않음
+      centerTitle: false,  // 타이틀을 왼쪽 정렬
       actions: [
         // 플래시카드 카운터
         GestureDetector(
@@ -328,7 +330,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   Widget _buildTitleWithPlanBadge(BuildContext context) {
     // 설정 페이지인 경우 단순 타이틀만 표시
-    if (title == '설정') {
+    if (title != null && !showLogo) {
       return Text(
         title!,
         style: TypographyTokens.headline2.copyWith(
@@ -340,8 +342,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     return FutureBuilder<String>(
       future: PlanService().getCurrentPlanType(),
       builder: (context, snapshot) {
-        final isPlanFree = snapshot.data == PlanService.PLAN_FREE;
-        
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

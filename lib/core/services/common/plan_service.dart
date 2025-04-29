@@ -130,14 +130,14 @@ class PlanService {
     String name = '';
     switch (planType) {
       case PLAN_PREMIUM:
-        name = '프리미엄';
+        name = 'Premium';
         break;
       case PLAN_TRIAL:
-        name = '체험판';
+        name = 'Beta';
         break;
       case PLAN_FREE:
       default:
-        name = '무료';
+        name = 'Trial';
     }
     return showBadge && planType == PLAN_FREE ? '$name plan' : name;
   }
