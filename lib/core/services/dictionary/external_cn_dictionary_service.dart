@@ -91,17 +91,6 @@ class ExternalCnDictionaryService {
         };
       }
       
-      // 사용량 제한 확인 (외부 API 호출 전 확인)
-      final canLookup = await _usageLimitService.incrementDictionaryCount();
-      if (!canLookup) {
-        debugPrint('외부 사전 검색 사용량 한도 초과: $word');
-        return {
-          'success': false,
-          'message': '무료 버전 사전 검색 한도를 초과했습니다. 관리자에게 문의해주세요.',
-          'limitExceeded': true,
-        };
-      }
-
       // API 키가 로드되지 않았으면 로드
       if (_papagoClientId == null || _papagoClientSecret == null) {
         await loadApiKeys();
