@@ -966,13 +966,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   
   // 사용량 다이얼로그 표시
   Future<void> _showUsageDialog() async {
-    final limitStatus = await _planService.checkUserLimits();
-    
+    // 다이얼로그를 즉시 표시하고 내부에서 데이터 로드
     if (context.mounted) {
       await UsageDialog.show(
         context,
-        limitStatus: limitStatus,
-        usagePercentages: _usagePercentages,
+        // 현재 캐시된 데이터를 먼저 전달 (빠른 초기 표시용)
+        limitStatus: null,  // null로 설정하여 다이얼로그 내부에서 새로 로드하도록 함
+        usagePercentages: _usagePercentages,  // 현재 있는 데이터 전달
         onContactSupport: _contactSupport,
       );
     }

@@ -107,10 +107,10 @@ class PlanService {
   String getPlanName(String planType, {bool showBadge = false}) {
     switch (planType) {
       case PLAN_PREMIUM:
-        return 'Premium';
+        return '프리미엄';
       case PLAN_FREE:
       default:
-        return showBadge ? 'Free plan' : 'Free';
+        return showBadge ? '무료 플랜' : '무료';
     }
   }
   
