@@ -10,7 +10,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'plan_service.dart';
 
 /// 사용량 제한 관리 서비스
-/// 베타 기간 동안 사용자의 사용량을 추적하고 제한을 적용합니다.
+/// 사용자의 사용량을 추적하고 제한을 적용합니다.
 class UsageLimitService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -175,178 +175,207 @@ class UsageLimitService {
     }
   }
 
-  /// OCR 페이지 사용량 증가
-  Future<bool> incrementOcrPages(int pageCount) async {
+  /// 캐시 무효화 및 새로고침
+  void invalidateCache() {
+    _cachedUsageData = null;
+    _lastFetchTime = null;
+    debugPrint('사용량 데이터 캐시 무효화됨');
+  }
+
+  /// 캐시 새로고침
+  Future<Map<String, dynamic>> refreshCache() async {
+    invalidateCache();
+    return await getUserUsage(forceRefresh: true);
+  }
+
+  /// 사용량 제한 통합 체크
+  Future<bool> checkLimit(String key, int amount) async {
+    final limits = await getUserLimits();
+    final currentUsage = await getUserUsage();
+    final currentAmount = currentUsage[key] as int? ?? 0;
+    final limit = limits[key] ?? 0;
+    
+    debugPrint('제한 확인: $key, 현재=${currentAmount}, 추가=$amount, 제한=$limit');
+    return (currentAmount + amount) <= limit;
+  }
+
+  /// 범용 사용량 증가 메서드
+  Future<bool> _incrementUsage(String key, int amount) async {
     try {
-      final usageData = await _loadUsageData();
-      final int currentUsage = (usageData['ocrPages'] ?? 0) as int;
-      
-      // 현재 남은 페이지 수 계산
-      final int remainingPages = _getFreePlanLimit('ocrPages') - currentUsage;
-      
-      // 남은 페이지가 없으면 실패 반환
-      if (remainingPages <= 0) {
-        debugPrint('OCR 페이지 한도 초과: $currentUsage/${_getFreePlanLimit('ocrPages')}');
+      // 제한 체크
+      if (!await checkLimit(key, amount)) {
+        debugPrint('$key 사용량 제한 초과');
         return false;
       }
+
+      final usageData = await _loadUsageData();
+      final currentUsage = usageData[key] ?? 0;
+      final newUsage = currentUsage + amount;
       
-      // 남은 페이지 내에서 최대한 처리
-      final int newUsage = currentUsage + pageCount;
-      usageData['ocrPages'] = newUsage;
-      
-      // 사용량 데이터 저장 (Firestore + SharedPreferences)
+      // 사용량 업데이트
+      usageData[key] = newUsage;
       await _saveUsageData(usageData);
       
-      debugPrint('OCR 페이지 사용량 증가: $newUsage/${_getFreePlanLimit('ocrPages')} (요청: $pageCount, 남은 페이지: ${remainingPages - pageCount})');
+      // Firestore에 직접 업데이트 (중요 지표)
+      await _updateFirestoreUsage(key, newUsage);
       
+      debugPrint('$key 사용량 증가: $currentUsage → $newUsage');
       return true;
     } catch (e) {
-      debugPrint('OCR 페이지 사용량 증가 중 오류: $e');
+      debugPrint('사용량 증가 중 오류: $e');
       return false;
     }
   }
-  
-  /// OCR 요청을 페이지 수 기준으로 증가 (기존 메서드 유지, 하위 호환성)
-  @Deprecated('incrementOcrPages 메서드를 대신 사용하세요')
-  Future<bool> incrementOcrCount() async {
-    // 이전 버전 호환성을 위해 유지하지만 내부적으로는 페이지 1개로 처리
-    return await incrementOcrPages(1);
-  }
-  
-  /// 번역 문자 사용량 증가
-  Future<bool> incrementTranslationCharCount(int charCount) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['translatedChars'] ?? 0;
-    final limit = _getFreePlanLimit('translatedChars');
-    
-    // 현재 상태 로깅
-    debugPrint('번역 현재 사용량: $currentUsage/$limit');
-    
-    // 사용량 제한 확인
-    if (currentUsage >= limit) {
-      debugPrint('번역 사용량 제한 초과: $currentUsage/$limit');
-      return false;
+
+  /// 범용 사용량 감소 메서드
+  Future<void> _decrementUsage(String key, int amount) async {
+    try {
+      final usageData = await _loadUsageData();
+      final currentUsage = usageData[key] ?? 0;
+      final newUsage = (currentUsage - amount).clamp(0, double.maxFinite.toInt());
+      
+      // 사용량 업데이트
+      usageData[key] = newUsage;
+      await _saveUsageData(usageData);
+      
+      // Firestore에 직접 업데이트
+      await _updateFirestoreUsage(key, newUsage);
+      
+      debugPrint('$key 사용량 감소: $currentUsage → $newUsage');
+    } catch (e) {
+      debugPrint('사용량 감소 중 오류: $e');
     }
-    
-    // 사용량 증가
-    final int newUsage = currentUsage + charCount;
-    usageData['translatedChars'] = newUsage;
-    await _saveUsageData(usageData);
-    
-    debugPrint('번역 사용량 증가: $newUsage/$limit (${charCount}자 추가, 남은 번역: ${limit - newUsage}자)');
-    
-    // Firestore에도 사용량 업데이트 (중요 지표)
-    _updateFirestoreUsage('translatedChars', newUsage);
-    
-    return newUsage <= limit;
   }
-  
-  /// Firestore에 사용량 업데이트 (중요 지표)
+
+  /// Firestore 사용량 업데이트
   Future<void> _updateFirestoreUsage(String key, int value) async {
     try {
       final userId = _currentUserId;
       if (userId == null) return;
       
-      await _firestore.collection('users').doc(userId).update({
-        'usage.$key': value,
-        'usage.lastUpdated': FieldValue.serverTimestamp(),
-      });
+      await _firestore.collection('users').doc(userId).set({
+        'usage': {
+          key: value,
+          'lastUpdated': FieldValue.serverTimestamp(),
+        }
+      }, SetOptions(merge: true));
       
-      debugPrint('Firestore 사용량 업데이트 완료: $key=$value');
+      debugPrint('Firestore 사용량 업데이트: $key=$value');
     } catch (e) {
-      debugPrint('Firestore 사용량 업데이트 실패: $e');
+      debugPrint('Firestore 업데이트 실패: $e');
     }
   }
-  
-  /// TTS 문자 사용량 증가
+
+  /// OCR 페이지 사용량 증가
+  Future<bool> incrementOcrPages(int pageCount) async {
+    return await _incrementUsage('ocrPages', pageCount);
+  }
+
+  /// OCR 페이지 사용량 감소
+  Future<void> decrementOcrPages(int pageCount) async {
+    await _decrementUsage('ocrPages', pageCount);
+  }
+
+  /// 번역 문자 사용량 증가
+  Future<bool> incrementTranslationCharCount(int charCount) async {
+    return await _incrementUsage('translatedChars', charCount);
+  }
+
+  /// TTS 요청 사용량 증가
   Future<bool> incrementTtsCharCount(int charCount) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['ttsRequests'] ?? 0;
-    final limit = _getFreePlanLimit('ttsRequests');
-    
-    // 현재 상태 로깅
-    debugPrint('TTS 현재 사용량: $currentUsage/$limit');
-    
-    // 사용량 제한 확인
-    if (currentUsage >= limit) {
-      debugPrint('TTS 사용량 제한 초과: $currentUsage/$limit');
-      return false;
-    }
-    
-    // 실제 증가되는 카운트 (길이에 따라 달라짐)
-    final int incrementCount = 1; // 텍스트 길이에 상관없이 항상 1회로 카운트
-    
-    // 사용량 증가 후 값
-    final int newUsage = currentUsage + incrementCount;
-    
-    // 사용량 증가
-    usageData['ttsRequests'] = newUsage;
-    await _saveUsageData(usageData);
-    
-    debugPrint('TTS 사용량 증가 완료: $newUsage/$limit (${incrementCount}회 증가)');
-    return newUsage <= limit;
+    return await _incrementUsage('ttsRequests', 1); // 텍스트 길이와 관계없이 1회로 카운트
   }
-  
+
+  /// 저장 공간 사용량 증가
+  Future<bool> addStorageUsage(int bytes) async {
+    return await _incrementUsage('storageUsageBytes', bytes);
+  }
+
+  /// 저장 공간 사용량 감소
+  Future<void> reduceStorageUsage(int bytes) async {
+    await _decrementUsage('storageUsageBytes', bytes);
+  }
+
   /// 사전 조회 사용량 증가 (제한 없음)
   Future<bool> incrementDictionaryCount() async {
     // 사전 검색은 제한 없이 항상 성공 반환
     return true;
   }
-  
-  /// 범용 사용량 증가 메서드
-  Future<bool> _incrementUsage(String key, int amount, int limit) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData[key] ?? 0;
+
+  /// 사용량 제한 체크 메서드들
+  Future<bool> checkOcrLimit(int pages) async {
+    return await checkLimit('ocrPages', pages);
+  }
+
+  Future<bool> checkTranslationLimit(int chars) async {
+    return await checkLimit('translatedChars', chars);
+  }
+
+  Future<bool> checkTtsLimit(int requests) async {
+    return await checkLimit('ttsRequests', requests);
+  }
+
+  Future<bool> checkStorageLimit(int bytes) async {
+    return await checkLimit('storageBytes', bytes);
+  }
+
+  /// 모든 사용량 초기화
+  Future<void> resetAllUsage() async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) return;
+
+      final resetData = {
+        'ocrPages': 0,
+        'ttsRequests': 0,
+        'translatedChars': 0,
+        'storageUsageBytes': 0,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      };
+
+      // Firestore 업데이트
+      await _firestore.collection('users').doc(userId).set({
+        'usage': resetData
+      }, SetOptions(merge: true));
+
+      // 캐시 초기화
+      await refreshCache();
+      
+      debugPrint('모든 사용량 초기화 완료');
+    } catch (e) {
+      debugPrint('사용량 초기화 중 오류: $e');
+    }
+  }
+
+  /// 월간 사용량 초기화
+  Future<void> resetMonthlyUsage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final resetDateKey = _getUserKey(_kResetDateKey);
+    final now = DateTime.now();
+    final currentMonthStart = DateTime(now.year, now.month, 1);
     
-    // 사용량 제한 확인
-    if (currentUsage >= limit) {
-      return false;
+    // 마지막 초기화 날짜 확인
+    final lastResetDateStr = prefs.getString(resetDateKey);
+    
+    if (lastResetDateStr == null) {
+      await resetAllUsage();
+      await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
+      return;
     }
     
-    // 사용량 증가
-    usageData[key] = currentUsage + amount;
-    await _saveUsageData(usageData);
-    
-    debugPrint('$key 사용량 증가: ${currentUsage + amount}/$limit');
-    return (currentUsage + amount) <= limit;
-  }
-  
-  /// 저장 공간 사용량 증가
-  Future<bool> addStorageUsage(int bytes) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['storageUsageBytes'] ?? 0;
-    final limit = _getFreePlanLimit('storageBytes');
-    
-    // 사용량 제한 확인
-    if (currentUsage >= limit) {
-      return false;
+    try {
+      final lastResetDate = DateTime.parse(lastResetDateStr);
+      if (lastResetDate.isBefore(currentMonthStart)) {
+        await resetAllUsage();
+        await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
+      }
+    } catch (e) {
+      debugPrint('날짜 파싱 오류: $e');
+      await resetAllUsage();
+      await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
     }
-    
-    // 사용량 증가
-    usageData['storageUsageBytes'] = currentUsage + bytes;
-    await _saveUsageData(usageData);
-    
-    final usageInMB = ((currentUsage + bytes) / (1024 * 1024)).toStringAsFixed(2);
-    final limitInMB = (limit / (1024 * 1024)).toStringAsFixed(0);
-    debugPrint('저장 공간 사용량 증가: ${usageInMB}MB/${limitInMB}MB (${bytes / 1024} KB 추가)');
-    
-    return (currentUsage + bytes) <= limit;
   }
-  
-  /// 저장 공간 사용량 감소
-  Future<void> reduceStorageUsage(int bytes) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['storageUsageBytes'] ?? 0;
-    
-    final newUsage = (currentUsage - bytes).clamp(0, double.maxFinite.toInt());
-    usageData['storageUsageBytes'] = newUsage;
-    await _saveUsageData(usageData);
-    
-    final usageInMB = (newUsage / (1024 * 1024)).toStringAsFixed(2);
-    final limitInMB = (_getFreePlanLimit('storageBytes') / (1024 * 1024)).toStringAsFixed(0);
-    debugPrint('저장 공간 사용량 감소: ${usageInMB}MB/${limitInMB}MB');
-  }
-  
+
   /// 사용자의 현재 사용량 가져오기 (전체)
   /// forceRefresh가 true이면 캐시를 무시하고 최신 데이터를 가져옵니다.
   Future<Map<String, dynamic>> getUserUsage({bool forceRefresh = false}) async {
@@ -428,22 +457,29 @@ class UsageLimitService {
       final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
       
       // 디버그 로그 추가
-      debugPrint('현재 사용량 데이터: $usageData');
-      debugPrint('현재 플랜 타입: $planType');
-      debugPrint('플랜 제한: $limits');
+      debugPrint('=== 사용량 계산 디버그 ===');
+      debugPrint('현재 플랜: $planType');
+      debugPrint('OCR 사용량: $ocrUsage / ${limits['ocrPages']} = ${(ocrUsage / (limits['ocrPages'] ?? 1) * 100).toStringAsFixed(2)}%');
+      debugPrint('TTS 사용량: $ttsUsage / ${limits['ttsRequests']} = ${(ttsUsage / (limits['ttsRequests'] ?? 1) * 100).toStringAsFixed(2)}%');
+      debugPrint('번역 사용량: $translatedChars / ${limits['translatedChars']} = ${(translatedChars / (limits['translatedChars'] ?? 1) * 100).toStringAsFixed(2)}%');
+      debugPrint('저장공간 사용량: $storageUsageBytes / ${limits['storageBytes']} = ${(storageUsageBytes / (limits['storageBytes'] ?? 1) * 100).toStringAsFixed(2)}%');
+      debugPrint('전체 사용량 데이터: $usageData');
+      debugPrint('제한값: $limits');
       
-      // 0으로 나누는 것을 방지하기 위해 기본값 1 사용
-      return {
-        'ocr': (ocrUsage / (limits['ocrPages'] ?? 1)) * 100,
-        'tts': (ttsUsage / (limits['ttsRequests'] ?? 1)) * 100,
-        'translation': (translatedChars / (limits['translatedChars'] ?? 1)) * 100,
-        'storage': (storageUsageBytes / (limits['storageBytes'] ?? 1)) * 100,
-        // 제한 없는 기능은 항상 0% 사용량 반환
+      // 사용량 비율 계산 (소수점 2자리까지)
+      final Map<String, double> percentages = {
+        'ocr': double.parse(((ocrUsage / (limits['ocrPages'] ?? 1)) * 100).toStringAsFixed(2)),
+        'tts': double.parse(((ttsUsage / (limits['ttsRequests'] ?? 1)) * 100).toStringAsFixed(2)),
+        'translation': double.parse(((translatedChars / (limits['translatedChars'] ?? 1)) * 100).toStringAsFixed(2)),
+        'storage': double.parse(((storageUsageBytes / (limits['storageBytes'] ?? 1)) * 100).toStringAsFixed(2)),
         'dictionary': 0.0,
         'flashcard': 0.0,
         'note': 0.0,
         'page': 0.0,
       };
+      
+      debugPrint('계산된 비율: $percentages');
+      return percentages;
     } catch (e) {
       debugPrint('사용량 비율 계산 중 오류: $e');
       return {
@@ -495,6 +531,14 @@ class UsageLimitService {
         };
       }
       
+      // 데이터 타입 확인 및 변환
+      usage = {
+        'ocrPages': int.tryParse(usage['ocrPages']?.toString() ?? '0') ?? 0,
+        'ttsRequests': int.tryParse(usage['ttsRequests']?.toString() ?? '0') ?? 0,
+        'translatedChars': int.tryParse(usage['translatedChars']?.toString() ?? '0') ?? 0,
+        'storageUsageBytes': int.tryParse(usage['storageUsageBytes']?.toString() ?? '0') ?? 0,
+      };
+      
       debugPrint('사용량 데이터 로드 완료: $usage');
       return usage;
     } catch (e) {
@@ -503,18 +547,6 @@ class UsageLimitService {
     }
   }
   
-  /// 범용 사용량 감소 메서드
-  Future<void> decrementUsage(String key) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData[key] ?? 0;
-    
-    if (currentUsage > 0) {
-      usageData[key] = currentUsage - 1;
-      await _saveUsageData(usageData);
-      debugPrint('$key 사용량 감소: ${currentUsage - 1}');
-    }
-  }
-
   /// 플래시카드 사용량 증가
   Future<bool> incrementFlashcardCount() async {
     // 플래시카드 사용량은 추적하지 않고 항상 true 반환
@@ -594,18 +626,6 @@ class UsageLimitService {
     return usageData['ocrPages'] ?? 0;
   }
 
-  /// OCR 페이지 사용량 감소 (오류 발생 시 롤백에 사용)
-  Future<void> decrementOcrPages(int pageCount) async {
-    final usageData = await _loadUsageData();
-    final currentUsage = usageData['ocrPages'] ?? 0;
-    final newValue = (currentUsage - pageCount).clamp(0, double.maxFinite.toInt());
-    final limit = _getFreePlanLimit('ocrPages');
-    
-    usageData['ocrPages'] = newValue;
-    await _saveUsageData(usageData);
-    debugPrint('OCR 페이지 사용량 감소: $newValue/$limit');
-  }
-
   /// OCR 페이지를 추가할 수 있는지 확인
   Future<bool> canAddOcrPages(int pageCount) async {
     // 0 또는 음수의 페이지 요청은 항상 가능
@@ -620,13 +640,6 @@ class UsageLimitService {
     
     // 하나라도 더 추가할 수 있는지 확인 (최소 1페이지 이상 처리 가능해야 함)
     return remainingPages > 0;
-  }
-
-  /// 캐시된 사용량 데이터 무효화
-  void invalidateCache() {
-    _cachedUsageData = null;
-    _lastFetchTime = null;
-    debugPrint('사용량 데이터 캐시 무효화됨');
   }
 
   /// 저장 공간 사용량 재계산
@@ -741,103 +754,5 @@ class UsageLimitService {
       debugPrint('Firebase Storage 데이터 삭제 실패: $e');
       return false;
     }
-  }
-
-  /// 현재 사용량이 제한을 초과하는지 확인
-  Future<bool> checkOcrLimit(int pages) async {
-    final limits = await getUserLimits();
-    final currentUsage = await getUserUsage();
-    final currentOcrPages = currentUsage['ocrPages'] as int? ?? 0;
-    
-    return (currentOcrPages + pages) <= limits['ocrPages']!;
-  }
-
-  /// 번역 글자 수 제한 확인
-  Future<bool> checkTranslationLimit(int chars) async {
-    final limits = await getUserLimits();
-    final currentUsage = await getUserUsage();
-    final currentChars = currentUsage['translatedChars'] as int? ?? 0;
-    
-    return (currentChars + chars) <= limits['translatedChars']!;
-  }
-
-  /// TTS 요청 제한 확인
-  Future<bool> checkTtsLimit(int requests) async {
-    final limits = await getUserLimits();
-    final currentUsage = await getUserUsage();
-    final currentRequests = currentUsage['ttsRequests'] as int? ?? 0;
-    
-    return (currentRequests + requests) <= limits['ttsRequests']!;
-  }
-
-  /// 스토리지 용량 제한 확인
-  Future<bool> checkStorageLimit(int bytes) async {
-    final limits = await getUserLimits();
-    final currentUsage = await getUserUsage();
-    final currentBytes = currentUsage['storageBytes'] as int? ?? 0;
-    
-    return (currentBytes + bytes) <= limits['storageBytes']!;
-  }
-
-  /// 월간 사용량 초기화 (매월 1일에 호출)
-  Future<void> resetMonthlyUsage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final resetDateKey = _getUserKey(_kResetDateKey);
-    
-    // 마지막 초기화 날짜 확인
-    final lastResetDateStr = prefs.getString(resetDateKey);
-    final now = DateTime.now();
-    final currentMonthStart = DateTime(now.year, now.month, 1);
-    
-    // 마지막 초기화 날짜가 없거나 이번 달 1일보다 이전이면 초기화
-    if (lastResetDateStr == null) {
-      await _doResetMonthlyUsage(prefs);
-      await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
-      return;
-    }
-    
-    try {
-      final lastResetDate = DateTime.parse(lastResetDateStr);
-      if (lastResetDate.isBefore(currentMonthStart)) {
-        await _doResetMonthlyUsage(prefs);
-        await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
-      }
-    } catch (e) {
-      debugPrint('날짜 파싱 오류: $e');
-      await _doResetMonthlyUsage(prefs);
-      await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
-    }
-  }
-  
-  /// 실제 월간 사용량 초기화 작업
-  Future<void> _doResetMonthlyUsage(SharedPreferences prefs) async {
-    final planType = await planService.getCurrentPlanType();
-    
-    // Premium 사용자가 아닌 경우에만 초기화
-    if (planType != PlanService.PLAN_PREMIUM) {
-      await resetAllUsage();
-      debugPrint('무료 사용자의 월간 사용량 초기화 완료');
-    }
-  }
-
-  /// 모든 사용량 초기화
-  Future<void> resetAllUsage() async {
-    final userId = _currentUserId;
-    
-    if (userId != null) {
-      // 사용량 데이터 초기화
-      await _saveUsageData({
-        'ocrPages': 0,
-        'ttsRequests': 0,
-        'translatedChars': 0,
-        'storageUsageBytes': 0,
-        'dictionaryLookups': 0,
-        'pages': 0,
-        'flashcards': 0,
-        'notes': 0,
-      });
-    }
-    
-    debugPrint('모든 사용량 초기화 완료');
   }
 } 

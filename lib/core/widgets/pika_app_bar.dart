@@ -286,7 +286,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                 Expanded(
                   child: Text(
                     noteSpaceName ?? '',
-                    style: TypographyTokens.headline2.copyWith(
+                    style: TypographyTokens.headline3.copyWith(
                       color: ColorTokens.textPrimary,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -317,7 +317,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     if (title != null && !showLogo) {
       return Text(
         title!,
-        style: TypographyTokens.headline2.copyWith(
+        style: TypographyTokens.headline3.copyWith(
           color: ColorTokens.textPrimary,
         ),
       );
