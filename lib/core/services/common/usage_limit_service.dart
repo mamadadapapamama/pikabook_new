@@ -244,9 +244,94 @@ class UsageLimitService {
     }
   }
   
-  /// OCR 페이지 카운트 증가
-  Future<bool> incrementOcrPages(int pages) async {
-    return await incrementUsage('ocrPages', pages);
+  /// OCR 페이지 수 계산
+  /// 삭제된 노트나 페이지에 대한 OCR 사용량도 카운트하기 위해
+  /// Firestore에 저장된 카운터를 우선적으로 사용합니다.
+  Future<int> _calculateOcrPages() async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) return 0;
+      
+      debugPrint('OCR 페이지 수 계산 시작 (Firestore 카운터 우선)');
+      
+      // 1. Firestore에서 저장된 OCR 사용량 가져오기
+      final usage = await getUserUsage();
+      final ocrPagesFromFirestore = usage['ocrPages'] ?? 0;
+      
+      debugPrint('Firestore에 저장된 OCR 페이지 수: $ocrPagesFromFirestore');
+      
+      // 2. OCR 카운터가 이미 저장되어 있으면 그대로 사용
+      // 삭제된 노트나 파일의 OCR 사용량도 계속 유지됨
+      if (ocrPagesFromFirestore > 0) {
+        return ocrPagesFromFirestore;
+      }
+      
+      // 3. Firestore에 저장된 값이 없는 경우에만 메모리 캐시 확인 (레거시 지원)
+      final memoryCache = await _getMemoryCachedImageCount();
+      if (memoryCache > 0) {
+        debugPrint('메모리 캐시에서 발견한 이미지 파일: $memoryCache개');
+        // 캐시 값을 Firestore에 업데이트
+        await _updateUsage('ocrPages', memoryCache);
+        return memoryCache;
+      }
+      
+      // 4. 마지막 수단으로 Firebase Storage에서 계산 (초기 설정용)
+      // 이 방식은 현재 Storage에 있는 파일만 카운트하므로, 삭제된 노트의 OCR은 포함하지 않음
+      // 이후부터는 incrementOcrPageCount 메서드로 추적
+      int count = 0;
+      
+      try {
+        // 메인 이미지 폴더 확인
+        final imagesRef = _storage.ref().child('users/$userId/images');
+        final mainFolderResult = await imagesRef.listAll();
+        
+        // 모든 .jpg, .jpeg, .png 파일 카운트
+        for (final item in mainFolderResult.items) {
+          final name = item.name.toLowerCase();
+          if (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png')) {
+            count++;
+          }
+        }
+        
+        debugPrint('Firebase Storage에서 발견한 이미지 파일: $count개');
+        
+        // Storage에서 계산한 값을 Firestore에 저장 (앞으로의 기준점)
+        if (count > 0) {
+          await _updateUsage('ocrPages', count);
+        }
+      } catch (e) {
+        debugPrint('Firebase Storage 접근 중 오류: $e');
+      }
+      
+      return count;
+    } catch (e) {
+      debugPrint('OCR 페이지 수 계산 중 오류: $e');
+      return 0;
+    }
+  }
+  
+  /// OCR 페이지 수 증가
+  /// 이 메서드는 OCR을 사용할 때마다 호출되어야 함
+  /// 삭제된 노트나 페이지에 대한 OCR 사용량도 카운트하기 위해
+  /// Firestore에 직접 저장된 카운터를 증가시킵니다.
+  Future<bool> incrementOcrPageCount(int pages) async {
+    try {
+      if (pages <= 0) return true; // 0 이하는 무시
+      
+      // OCR을 사용한 페이지 수를 Firestore에 직접 증가
+      final result = await incrementUsage('ocrPages', pages);
+      
+      if (result) {
+        debugPrint('OCR 페이지 수 증가: $pages페이지 추가됨 (삭제되어도 카운트 유지)');
+      } else {
+        debugPrint('OCR 페이지 수 증가 실패: 사용량 제한 초과');
+      }
+      
+      return result;
+    } catch (e) {
+      debugPrint('OCR 페이지 수 증가 중 오류: $e');
+      return false;
+    }
   }
   
   /// 번역 문자 수 증가
@@ -358,79 +443,6 @@ class UsageLimitService {
         'translatedChars': 0,
         'storageUsageBytes': 0,
       };
-    }
-  }
-  
-  /// OCR 페이지 수 계산 (Firebase Storage 기반)
-  Future<int> _calculateOcrPages() async {
-    try {
-      final userId = _currentUserId;
-      if (userId == null) return 0;
-      
-      debugPrint('OCR 페이지 수 계산 시작');
-      
-      // 1. 캐시 메모리에 있는 이미지 파일 목록 가져오기 (대안)
-      final memoryCache = await _getMemoryCachedImageCount();
-      if (memoryCache > 0) {
-        debugPrint('메모리 캐시에서 발견한 이미지 파일: $memoryCache개');
-        return memoryCache;
-      }
-      
-      // 2. Firebase Storage에서 직접 계산
-      int count = 0;
-      
-      try {
-        // 메인 이미지 폴더 확인
-        final imagesRef = _storage.ref().child('users/$userId/images');
-        final mainFolderResult = await imagesRef.listAll();
-        
-        // 모든 .jpg, .jpeg, .png 파일 카운트
-        for (final item in mainFolderResult.items) {
-          final name = item.name.toLowerCase();
-          if (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png')) {
-            count++;
-            debugPrint('이미지 발견: ${item.name}');
-          }
-        }
-        
-        debugPrint('Firebase Storage에서 발견한 이미지 파일: $count개');
-      } catch (e) {
-        debugPrint('Firebase Storage 접근 중 오류: $e');
-        // 오류 발생 시 Firestore 데이터 사용
-        final usage = await getUserUsage();
-        return usage['ocrPages'] ?? 0;
-      }
-      
-      return count;
-    } catch (e) {
-      debugPrint('OCR 페이지 수 계산 중 오류: $e');
-      return 0;
-    }
-  }
-  
-  /// 메모리 캐시에 있는 이미지 파일 수 가져오기
-  Future<int> _getMemoryCachedImageCount() async {
-    try {
-      // 여기에 메모리 캐시 카운팅 로직 구현
-      // SharedPreferences나 앱 내부 캐시에서 정보 가져오기
-      final prefs = await SharedPreferences.getInstance();
-      final cacheData = prefs.getString('image_cache_info');
-      
-      if (cacheData != null) {
-        try {
-          final cache = json.decode(cacheData) as Map<String, dynamic>;
-          if (cache.containsKey('count') && cache['count'] is int) {
-            return cache['count'];
-          }
-        } catch (e) {
-          debugPrint('캐시 데이터 파싱 오류: $e');
-        }
-      }
-      
-      return 0;
-    } catch (e) {
-      debugPrint('메모리 캐시 확인 중 오류: $e');
-      return 0;
     }
   }
   
@@ -683,6 +695,32 @@ class UsageLimitService {
     } catch (e) {
       debugPrint('Firebase Storage 데이터 삭제 실패: $e');
       return false;
+    }
+  }
+  
+  /// 메모리 캐시에 있는 이미지 파일 수 가져오기
+  Future<int> _getMemoryCachedImageCount() async {
+    try {
+      // 여기에 메모리 캐시 카운팅 로직 구현
+      // SharedPreferences나 앱 내부 캐시에서 정보 가져오기
+      final prefs = await SharedPreferences.getInstance();
+      final cacheData = prefs.getString('image_cache_info');
+      
+      if (cacheData != null) {
+        try {
+          final cache = json.decode(cacheData) as Map<String, dynamic>;
+          if (cache.containsKey('count') && cache['count'] is int) {
+            return cache['count'];
+          }
+        } catch (e) {
+          debugPrint('캐시 데이터 파싱 오류: $e');
+        }
+      }
+      
+      return 0;
+    } catch (e) {
+      debugPrint('메모리 캐시 확인 중 오류: $e');
+      return 0;
     }
   }
 } 

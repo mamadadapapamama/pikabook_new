@@ -333,13 +333,13 @@ class NoteService {
       // 캐시에서 노트 삭제
       await _cacheService.removeCachedNote(noteId);
       
-      // 페이지 카운트 감소
-      if (pageCount > 0) {
-        // 페이지 수만큼 반복하여 카운트 감소
-        for (int i = 0; i < pageCount; i++) {
-          await _usageLimitService.decrementPageCount();
-        }
-      }
+      // 페이지 카운트 감소 코드 삭제 - 페이지 사용량 제한이 없으므로
+      // if (pageCount > 0) {
+      //   // 페이지 수만큼 반복하여 카운트 감소
+      //   for (int i = 0; i < pageCount; i++) {
+      //     await _usageLimitService.decrementPageCount();
+      //   }
+      // }
     } catch (e) {
       debugPrint('노트 삭제 중 오류 발생: $e');
       rethrow;
