@@ -14,8 +14,19 @@ class UsageLimitService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
+  // Trial 기간 정보
+  static const int TRIAL_PERIOD_DAYS = 14; // Trial 기간 (14일)
+  
+  // 기본 Trial 기간 동안의 무료 사용 제한
+  static const int DEFAULT_FREE_TRANSLATION_CHARS = 20000;  // 번역 최대 글자 수
+  static const int DEFAULT_FREE_OCR_PAGES = 100;           // OCR 최대 페이지 수
+  static const int DEFAULT_FREE_TTS_REQUESTS = 1000;       // TTS 요청 최대 수
+  static const int DEFAULT_FREE_STORAGE_BYTES = 100 * 1024 * 1024; // 100MB 스토리지
+
+  // 사용자별 커스텀 제한 설정을 위한 Firestore 컬렉션
+  static const String _CUSTOM_LIMITS_COLLECTION = 'user_limits';
+  
   // 베타 기간 정보
-  static const String BETA_END_DATE_STR = '2025-05-31'; // 베타 기간 종료일 (연도-월-일)
   static const int BETA_PERIOD_DAYS = 14; // 베타 기간 (14일)
   
   // 베타 기간 동안의 무료 사용 제한 (테스트용)
@@ -56,17 +67,156 @@ class UsageLimitService {
   Map<String, dynamic>? _cachedUsageData;
   DateTime? _lastFetchTime;
   
+  /// 특정 사용자의 사용량 제한 가져오기
+  Future<Map<String, int>> getUserLimits() async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        return _getDefaultLimits();
+      }
+
+      // Firestore에서 사용자별 제한 확인
+      final doc = await _firestore
+          .collection(_CUSTOM_LIMITS_COLLECTION)
+          .doc(userId)
+          .get();
+
+      if (!doc.exists) {
+        return _getDefaultLimits();
+      }
+
+      final data = doc.data() as Map<String, dynamic>;
+      return {
+        'translationChars': data['translationChars'] ?? DEFAULT_FREE_TRANSLATION_CHARS,
+        'ocrPages': data['ocrPages'] ?? DEFAULT_FREE_OCR_PAGES,
+        'ttsRequests': data['ttsRequests'] ?? DEFAULT_FREE_TTS_REQUESTS,
+        'storageBytes': data['storageBytes'] ?? DEFAULT_FREE_STORAGE_BYTES,
+      };
+    } catch (e) {
+      debugPrint('사용자 제한 로드 중 오류: $e');
+      return _getDefaultLimits();
+    }
+  }
+
+  /// 기본 제한 값 반환
+  Map<String, int> _getDefaultLimits() {
+    return {
+      'translationChars': DEFAULT_FREE_TRANSLATION_CHARS,
+      'ocrPages': DEFAULT_FREE_OCR_PAGES,
+      'ttsRequests': DEFAULT_FREE_TTS_REQUESTS,
+      'storageBytes': DEFAULT_FREE_STORAGE_BYTES,
+    };
+  }
+
+  /// 특정 사용자의 사용량 제한 설정
+  Future<void> setUserLimits(String userId, {
+    int? translationChars,
+    int? ocrPages,
+    int? ttsRequests,
+    int? storageBytes,
+  }) async {
+    try {
+      final Map<String, dynamic> limits = {};
+      
+      if (translationChars != null) limits['translationChars'] = translationChars;
+      if (ocrPages != null) limits['ocrPages'] = ocrPages;
+      if (ttsRequests != null) limits['ttsRequests'] = ttsRequests;
+      if (storageBytes != null) limits['storageBytes'] = storageBytes;
+      
+      if (limits.isNotEmpty) {
+        await _firestore
+            .collection(_CUSTOM_LIMITS_COLLECTION)
+            .doc(userId)
+            .set(limits, SetOptions(merge: true));
+            
+        debugPrint('사용자 $userId의 제한이 업데이트됨: $limits');
+      }
+    } catch (e) {
+      debugPrint('사용자 제한 설정 중 오류: $e');
+      rethrow;
+    }
+  }
+
+  /// Trial 기간 종료 날짜 가져오기
+  Future<DateTime> getTrialEndDate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final trialStartDateStr = prefs.getString(_kBetaPeriodEndKey);
+    
+    if (trialStartDateStr == null) {
+      // 처음 사용할 때는 현재 시간을 Trial 시작 시간으로 설정
+      final now = DateTime.now();
+      await prefs.setString(_kBetaPeriodEndKey, now.toIso8601String());
+      return now.add(Duration(days: TRIAL_PERIOD_DAYS));
+    }
+    
+    try {
+      final trialStartDate = DateTime.parse(trialStartDateStr);
+      return trialStartDate.add(Duration(days: TRIAL_PERIOD_DAYS));
+    } catch (e) {
+      debugPrint('Trial 기간 종료일 파싱 오류: $e');
+      final now = DateTime.now();
+      await prefs.setString(_kBetaPeriodEndKey, now.toIso8601String());
+      return now.add(Duration(days: TRIAL_PERIOD_DAYS));
+    }
+  }
+
+  /// Trial 기간 남은 일수 계산
+  Future<int> getRemainingTrialDays() async {
+    final endDate = await getTrialEndDate();
+    final today = DateTime.now();
+    
+    final difference = endDate.difference(today).inDays;
+    return difference > 0 ? difference : 0;
+  }
+
+  /// Trial 기간 종료 여부 확인
+  Future<bool> isTrialPeriodEnded() async {
+    final endDate = await getTrialEndDate();
+    final today = DateTime.now();
+    
+    return today.isAfter(endDate);
+  }
+
+  /// 현재 Trial 기간인지 확인
+  Future<bool> isTrialPeriod() async {
+    return !(await isTrialPeriodEnded());
+  }
+
+  /// Trial 기간 정보 제공
+  Future<Map<String, dynamic>> getTrialPeriodInfo() async {
+    final remainingDays = await getRemainingTrialDays();
+    final isTrial = await isTrialPeriod();
+    final userLimits = await getUserLimits();
+    
+    return {
+      'isTrialPeriod': isTrial,
+      'remainingDays': remainingDays,
+      'trialPeriodDays': TRIAL_PERIOD_DAYS,
+      'limits': userLimits,
+    };
+  }
+  
   /// 베타 기간 종료 날짜 가져오기
   Future<DateTime> getBetaPeriodEndDate() async {
     final prefs = await SharedPreferences.getInstance();
-    final endDateStr = prefs.getString(_kBetaPeriodEndKey) ?? BETA_END_DATE_STR;
+    final betaStartDateStr = prefs.getString(_kBetaPeriodEndKey);
+    
+    if (betaStartDateStr == null) {
+      // 처음 사용할 때는 현재 시간을 베타 시작 시간으로 설정
+      final now = DateTime.now();
+      await prefs.setString(_kBetaPeriodEndKey, now.toIso8601String());
+      return now.add(Duration(days: BETA_PERIOD_DAYS));
+    }
     
     try {
-      return DateFormat('yyyy-MM-dd').parse(endDateStr);
+      final betaStartDate = DateTime.parse(betaStartDateStr);
+      return betaStartDate.add(Duration(days: BETA_PERIOD_DAYS));
     } catch (e) {
       debugPrint('베타 기간 종료일 파싱 오류: $e');
-      // 기본값: 문자열 상수에서 파싱
-      return DateFormat('yyyy-MM-dd').parse(BETA_END_DATE_STR);
+      // 오류 발생 시 현재 시간 기준으로 새로 설정
+      final now = DateTime.now();
+      await prefs.setString(_kBetaPeriodEndKey, now.toIso8601String());
+      return now.add(Duration(days: BETA_PERIOD_DAYS));
     }
   }
   
@@ -441,7 +591,7 @@ class UsageLimitService {
     return {
       'isBetaPeriod': isBeta,
       'remainingDays': remainingDays,
-      'betaEndDate': BETA_END_DATE_STR,
+      'betaEndDate': BETA_PERIOD_DAYS.toString(),
     };
   }
 

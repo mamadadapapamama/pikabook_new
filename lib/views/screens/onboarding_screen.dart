@@ -144,6 +144,58 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _completeOnboarding();
   }
 
+  // 온보딩 건너뛰기 처리
+  void _skipOnboarding() async {
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      // 기본값 설정
+      final defaultName = "사용자";
+      final defaultNoteSpace = "${defaultName}의 학습노트";
+      
+      // 기본 설정 저장
+      await _userPreferences.setUseSegmentMode(true);
+      await _userPreferences.setDefaultNoteSpace(defaultNoteSpace);
+      await _userPreferences.addNoteSpace(defaultNoteSpace);
+      await _userPreferences.setUserName(defaultName);
+      await _userPreferences.setLearningPurpose("직접 원서 공부");
+
+      // 툴팁 설정
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hasShownTooltip', false);
+      
+      // Firestore에 기본 데이터 저장
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await _userPreferences.setCurrentUserId(user.uid);
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'userName': defaultName,
+          'learningPurpose': "직접 원서 공부",
+          'translationMode': 'segment',
+          'hasOnboarded': true,
+          'onboardingCompleted': true,
+          'defaultNoteSpace': defaultNoteSpace,
+          'noteSpaces': [defaultNoteSpace],
+        }, SetOptions(merge: true));
+      }
+      
+      // 온보딩 완료 표시
+      await _userPreferences.setOnboardingCompleted(true);
+      await _userPreferences.setHasOnboarded(true);
+      
+      // 온보딩 완료 콜백 호출
+      widget.onComplete();
+      
+    } catch (e) {
+      debugPrint('온보딩 건너뛰기 처리 중 오류 발생: $e');
+      setState(() {
+        _isProcessing = false;
+      });
+    }
+  }
+
   // 온보딩 데이터 저장 및 완료 처리
   Future<void> _completeOnboarding() async {
     try {
@@ -261,11 +313,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ],
                       ),
                       
-                      // 오른쪽: 로고 이미지
-                      SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Image.asset('assets/images/pikabook_bird.png'),
+                      // 오른쪽: 건너뛰기 버튼
+                      TextButton(
+                        onPressed: _isProcessing ? null : _skipOnboarding,
+                        style: TextButton.styleFrom(
+                          foregroundColor: ColorTokens.textSecondary,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 16,
+                          ),
+                        ),
+                        child: Text(
+                          'Skip',
+                          style: TypographyTokens.button.copyWith(
+                            color: ColorTokens.textSecondary,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -307,17 +370,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             isFullWidth: true,
                           ),
                         ),
-                        
+                            
                       // 뒤로 버튼과 다음 버튼 사이 간격
                       if (_currentPage > 0)
                         const SizedBox(width: 16),
-                        
-                      // 다음 버튼
+                            
+                      // 다음/시작 버튼
                       Expanded(
                         child: PikaButton(
                           text: _currentPage == 2 ? '시작해요!' : '다음으로',
                           variant: PikaButtonVariant.primary,
-                          size: _currentPage == 0 ? PikaButtonSize.large : PikaButtonSize.medium,
+                          size: PikaButtonSize.medium,
                           onPressed: _isNextButtonEnabled() ? _nextPage : null,
                           isLoading: _isProcessing,
                           isFullWidth: true,
