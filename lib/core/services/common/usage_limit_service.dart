@@ -258,52 +258,73 @@ class UsageLimitService {
       final userId = _currentUserId;
       if (userId == null) return 0;
       
-      debugPrint('OCR 페이지 수 계산 시작 (Firestore 카운터 우선)');
+      debugPrint('OCR 페이지 수 계산 시작');
       
-      // 1. Firestore에서 저장된 OCR 사용량 가져오기
+      // 1. Firestore에서 저장된 값 먼저 확인
       final usage = await getUserUsage();
-      final ocrPagesFromFirestore = usage['ocrPages'] ?? 0;
+      final storedCount = usage['ocrPages'] ?? 0;
       
-      debugPrint('Firestore에 저장된 OCR 페이지 수: $ocrPagesFromFirestore');
-      
-      // 2. OCR 카운터가 이미 저장되어 있으면 그대로 사용
-      // 삭제된 노트나 파일의 OCR 사용량도 계속 유지됨
-      if (ocrPagesFromFirestore > 0) {
-        return ocrPagesFromFirestore;
+      if (storedCount > 0) {
+        debugPrint('Firestore에 저장된 OCR 페이지 수 사용: $storedCount');
+        return storedCount;
       }
       
-      // 3. Firestore에 저장된 값이 없는 경우에만 메모리 캐시 확인 (레거시 지원)
-      final memoryCache = await _getMemoryCachedImageCount();
-      if (memoryCache > 0) {
-        debugPrint('메모리 캐시에서 발견한 이미지 파일: $memoryCache개');
-        // 캐시 값을 Firestore에 업데이트
-        await _updateUsage('ocrPages', memoryCache);
-        return memoryCache;
-      }
-      
-      // 4. 마지막 수단으로 Firebase Storage에서 계산 (초기 설정용)
-      // 이 방식은 현재 Storage에 있는 파일만 카운트하므로, 삭제된 노트의 OCR은 포함하지 않음
-      // 이후부터는 incrementOcrPageCount 메서드로 추적
+      // 2. Storage에서 직접 계산 시도
       int count = 0;
       
       try {
-        // 메인 이미지 폴더 확인
-        final imagesRef = _storage.ref().child('users/$userId/images');
-        final mainFolderResult = await imagesRef.listAll();
+        // 사용자 루트 폴더
+        final userRef = _storage.ref().child('users/$userId');
         
-        // 모든 .jpg, .jpeg, .png 파일 카운트
-        for (final item in mainFolderResult.items) {
+        // 사용자 폴더 아래 모든 항목 확인
+        final result = await userRef.listAll();
+        
+        // 'images' 폴더 찾기
+        for (final folder in result.prefixes) {
+          if (folder.name == 'images') {
+            final imageResult = await folder.listAll();
+            
+            // 모든 이미지 파일 카운트
+            for (final item in imageResult.items) {
+              final name = item.name.toLowerCase();
+              if (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png')) {
+                count++;
+              }
+            }
+            
+            // 이미지 폴더의 하위 폴더도 확인 (예: 사용자별 폴더)
+            for (final subFolder in imageResult.prefixes) {
+              try {
+                final subFolderResult = await subFolder.listAll();
+                for (final item in subFolderResult.items) {
+                  final name = item.name.toLowerCase();
+                  if (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png')) {
+                    count++;
+                  }
+                }
+              } catch (e) {
+                debugPrint('하위 폴더 접근 중 오류: $e');
+              }
+            }
+            
+            debugPrint('images 폴더에서 발견한 이미지 파일: $count개');
+          }
+        }
+        
+        // 이미지를 images 폴더 외부에서도 확인
+        for (final item in result.items) {
           final name = item.name.toLowerCase();
           if (name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png')) {
             count++;
           }
         }
         
-        debugPrint('Firebase Storage에서 발견한 이미지 파일: $count개');
+        debugPrint('총 발견된 이미지 파일: $count개');
         
-        // Storage에서 계산한 값을 Firestore에 저장 (앞으로의 기준점)
+        // 결과가 0이 아니면 Firestore에 업데이트
         if (count > 0) {
           await _updateUsage('ocrPages', count);
+          debugPrint('OCR 페이지 수 업데이트: $count');
         }
       } catch (e) {
         debugPrint('Firebase Storage 접근 중 오류: $e');
@@ -489,17 +510,27 @@ class UsageLimitService {
       // 2. 제한 가져오기
       final limits = await getCurrentLimits();
       
-      // 3. 제한 상태 확인
+      // 3. null 안전 비교를 위한 기본값 설정
+      final ocrPages = usage['ocrPages'] ?? 0;
+      final ttsRequests = usage['ttsRequests'] ?? 0;
+      final translatedChars = usage['translatedChars'] ?? 0;
+      final storageUsageBytes = usage['storageUsageBytes'] ?? 0;
+      
+      final ocrLimit = limits['ocrPages'] ?? 30;
+      final ttsLimit = limits['ttsRequests'] ?? 100;
+      final translationLimit = limits['translatedChars'] ?? 3000;
+      final storageLimit = limits['storageBytes'] ?? 52428800;
+      
+      // 4. 제한 상태 확인 (null 안전하게)
       return {
-        'ocrLimitReached': usage['ocrPages']! >= limits['ocrPages']!,
-        'ttsLimitReached': usage['ttsRequests']! >= limits['ttsRequests']!,
-        'translationLimitReached': usage['translatedChars']! >= limits['translatedChars']!,
-        'storageLimitReached': usage['storageUsageBytes']! >= limits['storageBytes']!,
-        // 제한값 포함
-        'ocrLimit': limits['ocrPages'],
-        'ttsLimit': limits['ttsRequests'],
-        'translationLimit': limits['translatedChars'],
-        'storageLimit': limits['storageBytes'],
+        'ocrLimitReached': ocrPages >= ocrLimit,
+        'ttsLimitReached': ttsRequests >= ttsLimit,
+        'translationLimitReached': translatedChars >= translationLimit,
+        'storageLimitReached': storageUsageBytes >= storageLimit,
+        'ocrLimit': ocrLimit,
+        'ttsLimit': ttsLimit,
+        'translationLimit': translationLimit, 
+        'storageLimit': storageLimit,
       };
     } catch (e) {
       debugPrint('제한 상태 확인 중 오류: $e');
