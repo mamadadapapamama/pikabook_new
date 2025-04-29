@@ -6,6 +6,7 @@ import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
 import '../theme/tokens/ui_tokens.dart';
 import '../../widgets/flashcard_counter_badge.dart';
+import '../services/common/plan_service.dart';
 
 /// 공통 앱바 위젯
 /// 모든 스크린에서 재사용할 수 있도록 설계된 커스터마이저블 앱바
@@ -16,10 +17,10 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onBackPressed;
   final List<Widget>? actions;
   final Widget? leading;
-  final Color backgroundColor;
+  final Color? backgroundColor;
   final bool centerTitle;
   final Widget? subtitle;
-  final double height;
+  final double? height;
   final bool showBackButton;
   final bool showLogo;
   final String? noteSpaceName;
@@ -37,16 +38,23 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final int? currentPageIndex;
   final int? totalPages;
 
+  final VoidCallback? onSettingsPressed;
+  final bool isHome;
+  final double? elevation;
+  final double? titleSpacing;
+  final double? leadingWidth;
+  final double? toolbarHeight;
+
   const PikaAppBar({
     Key? key,
     this.title,
     this.onBackPressed,
     this.actions,
     this.leading,
-    this.backgroundColor = Colors.transparent,
+    this.backgroundColor,
     this.centerTitle = false,
     this.subtitle,
-    this.height = 102,
+    this.height,
     this.showBackButton = false,
     this.showLogo = false,
     this.noteSpaceName,
@@ -59,6 +67,12 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.totalPages,
     this.automaticallyImplyLeading = true,
     this.bottomHeight = 16,
+    this.onSettingsPressed,
+    this.isHome = false,
+    this.elevation,
+    this.titleSpacing,
+    this.leadingWidth,
+    this.toolbarHeight,
   }) : super(key: key);
 
   /// 홈 스크린용 앱바 팩토리 생성자
@@ -193,10 +207,14 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (isHome) {
+      return _buildHomeAppBar(context);
+    }
+
     // 앱바 컨텐츠
     AppBar appBar = AppBar(
-      backgroundColor: backgroundColor,
-      elevation: 0,
+      backgroundColor: backgroundColor ?? Colors.transparent,
+      elevation: elevation ?? 0,
       centerTitle: centerTitle,
       automaticallyImplyLeading: automaticallyImplyLeading,
       titleSpacing: showLogo ? 24.0 : 4.0,
@@ -212,19 +230,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               onPressed: onBackPressed ?? () => Navigator.of(context).popUntil((route) => route.isFirst),
             )
           : leading,
-      title: title != null
-          ? Text(
-              title!,
-              style: TypographyTokens.headline3.copyWith(
-                color: ColorTokens.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
-          : showLogo
-              ? _buildLogoTitle(noteSpaceName)
-              : null,
+      title: _buildTitleWithPlanBadge(context),
       actions: actions,
       bottom: bottom != null
           ? PreferredSize(
@@ -242,9 +248,123 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
               : null,
     );
 
+    // 페이지 인디케이터가 있는 경우
+    if (currentPageIndex != null && totalPages != null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          appBar,
+          SizedBox(height: bottomHeight),
+          _buildPageIndicator(),
+        ],
+      );
+    }
+
     return Container(
       height: preferredSize.height,
       child: appBar,
+    );
+  }
+
+  Widget _buildHomeAppBar(BuildContext context) {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      automaticallyImplyLeading: false,
+      titleSpacing: 0,
+      title: Padding(
+        padding: EdgeInsets.only(left: SpacingTokens.lg),
+        child: FutureBuilder<String>(
+          future: PlanService().getCurrentPlanType(),
+          builder: (context, snapshot) {
+            final isPlanFree = snapshot.data == PlanService.PLAN_FREE;
+            
+            return Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    noteSpaceName ?? '',
+                    style: TypographyTokens.headline2.copyWith(
+                      color: ColorTokens.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isPlanFree) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: ColorTokens.secondary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'free plan',
+                      style: TypographyTokens.caption.copyWith(
+                        color: ColorTokens.secondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+      actions: [
+        if (onSettingsPressed != null)
+          IconButton(
+            icon: Icon(
+              Icons.settings_outlined,
+              color: ColorTokens.textPrimary,
+              size: SpacingTokens.iconSizeMedium,
+            ),
+            onPressed: onSettingsPressed,
+          ),
+        SizedBox(width: SpacingTokens.md),
+      ],
+    );
+  }
+
+  Widget _buildTitleWithPlanBadge(BuildContext context) {
+    return FutureBuilder<String>(
+      future: PlanService().getCurrentPlanType(),
+      builder: (context, snapshot) {
+        final isPlanFree = snapshot.data == PlanService.PLAN_FREE;
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _buildLogoTitle(noteSpaceName),
+                ),
+                if (isPlanFree) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: ColorTokens.secondary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'free plan',
+                      style: TypographyTokens.caption.copyWith(
+                        color: ColorTokens.secondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (subtitle != null) ...[
+              SizedBox(height: SpacingTokens.xs),
+              subtitle!,
+            ],
+          ],
+        );
+      },
     );
   }
 
@@ -278,19 +398,69 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
         SizedBox(height: SpacingTokens.xs),
         // 노트 스페이스 이름
         if (noteSpaceName != null)
-          Text(
-            noteSpaceName,
-            style: TypographyTokens.headline3.copyWith(
-              color: ColorTokens.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          FutureBuilder<String>(
+            future: PlanService().getCurrentPlanType(),
+            builder: (context, snapshot) {
+              final isPlanFree = snapshot.data == PlanService.PLAN_FREE;
+              
+              return Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      noteSpaceName,
+                      style: TypographyTokens.headline3.copyWith(
+                        color: ColorTokens.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isPlanFree) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: ColorTokens.secondary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'free plan',
+                        style: TypographyTokens.caption.copyWith(
+                          color: ColorTokens.secondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            },
           ),
       ],
     );
   }
 
+  // 페이지 인디케이터 빌드
+  Widget _buildPageIndicator() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          '$currentPageIndex / $totalPages',
+          style: TypographyTokens.body2.copyWith(
+            color: ColorTokens.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
-  Size get preferredSize => Size.fromHeight(height);
+  Size get preferredSize {
+    final double appBarHeight = height ?? toolbarHeight ?? kToolbarHeight;
+    final double bottomExtent = bottom is PreferredSizeWidget 
+        ? (bottom as PreferredSizeWidget).preferredSize.height 
+        : 0.0;
+    return Size.fromHeight(appBarHeight + bottomExtent);
+  }
 } 

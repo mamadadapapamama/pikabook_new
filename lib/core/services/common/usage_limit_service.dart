@@ -7,45 +7,35 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'plan_service.dart';
 
 /// 사용량 제한 관리 서비스
 /// 베타 기간 동안 사용자의 사용량을 추적하고 제한을 적용합니다.
 class UsageLimitService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  PlanService? _planService;
   
   // Trial 기간 정보
   static const int TRIAL_PERIOD_DAYS = 14; // Trial 기간 (14일)
   
-  // 기본 Trial 기간 동안의 무료 사용 제한
-  static const int DEFAULT_FREE_TRANSLATION_CHARS = 20000;  // 번역 최대 글자 수
-  static const int DEFAULT_FREE_OCR_PAGES = 100;           // OCR 최대 페이지 수
-  static const int DEFAULT_FREE_TTS_REQUESTS = 1000;       // TTS 요청 최대 수
-  static const int DEFAULT_FREE_STORAGE_BYTES = 100 * 1024 * 1024; // 100MB 스토리지
-
   // 사용자별 커스텀 제한 설정을 위한 Firestore 컬렉션
   static const String _CUSTOM_LIMITS_COLLECTION = 'user_limits';
   
   // 베타 기간 정보
   static const int BETA_PERIOD_DAYS = 14; // 베타 기간 (14일)
   
-  // 베타 기간 동안의 무료 사용 제한 (테스트용)
-  static const int MAX_FREE_TRANSLATION_CHARS = 20000;  // 번역 최대 글자 수
-  static const int MAX_FREE_OCR_PAGES = 100;           // OCR 최대 페이지 수 (요청당 아닌 총 페이지 수)
-  static const int MAX_FREE_TTS_REQUESTS = 1000;       // TTS 요청 최대 수
-  static const int MAX_FREE_STORAGE_BYTES = 100 * 1024 * 1024; // 100MB 스토리지
-  
-  // 월별 기본 무료 사용 제한 (베타 이후)
-  static const int BASIC_FREE_TRANSLATION_CHARS = 999;   // 번역 최대 글자 수
-  static const int BASIC_FREE_OCR_PAGES = 999;           // OCR 최대 페이지 수 (월별)
-  static const int BASIC_FREE_TTS_REQUESTS = 999;        // TTS 요청 최대 글자 수
-  static const int BASIC_FREE_STORAGE_MB = 999;           // 저장 공간 최대 크기 (MB)
-  
   // 싱글톤 패턴 구현
   static final UsageLimitService _instance = UsageLimitService._internal();
   factory UsageLimitService() => _instance;
   
   UsageLimitService._internal();
+  
+  // PlanService lazy getter
+  PlanService get planService {
+    _planService ??= PlanService();
+    return _planService!;
+  }
   
   // SharedPreferences 키
   static const String _kOcrPagesKey = 'ocr_pages';
@@ -67,6 +57,26 @@ class UsageLimitService {
   Map<String, dynamic>? _cachedUsageData;
   DateTime? _lastFetchTime;
   
+  /// 안전하게 플랜 제한값 가져오기
+  Map<String, int> _getFreePlanLimits() {
+    final freePlanLimits = PlanService.PLAN_LIMITS[PlanService.PLAN_FREE];
+    if (freePlanLimits == null) {
+      // 기본값 반환
+      return {
+        'ocrPages': 30,
+        'translatedChars': 3000,
+        'ttsRequests': 100,
+        'storageBytes': 52428800, // 50MB
+      };
+    }
+    return Map<String, int>.from(freePlanLimits);
+  }
+
+  /// 특정 제한값 안전하게 가져오기
+  int _getFreePlanLimit(String key) {
+    return _getFreePlanLimits()[key] ?? 0;
+  }
+
   /// 특정 사용자의 사용량 제한 가져오기
   Future<Map<String, int>> getUserLimits() async {
     try {
@@ -86,11 +96,13 @@ class UsageLimitService {
       }
 
       final data = doc.data() as Map<String, dynamic>;
+      final defaultLimits = await _getDefaultLimits();
+      
       return {
-        'translationChars': data['translationChars'] ?? DEFAULT_FREE_TRANSLATION_CHARS,
-        'ocrPages': data['ocrPages'] ?? DEFAULT_FREE_OCR_PAGES,
-        'ttsRequests': data['ttsRequests'] ?? DEFAULT_FREE_TTS_REQUESTS,
-        'storageBytes': data['storageBytes'] ?? DEFAULT_FREE_STORAGE_BYTES,
+        'translatedChars': data['translatedChars'] ?? defaultLimits['translatedChars']!,
+        'ocrPages': data['ocrPages'] ?? defaultLimits['ocrPages']!,
+        'ttsRequests': data['ttsRequests'] ?? defaultLimits['ttsRequests']!,
+        'storageBytes': data['storageBytes'] ?? defaultLimits['storageBytes']!,
       };
     } catch (e) {
       debugPrint('사용자 제한 로드 중 오류: $e');
@@ -99,13 +111,10 @@ class UsageLimitService {
   }
 
   /// 기본 제한 값 반환
-  Map<String, int> _getDefaultLimits() {
-    return {
-      'translationChars': DEFAULT_FREE_TRANSLATION_CHARS,
-      'ocrPages': DEFAULT_FREE_OCR_PAGES,
-      'ttsRequests': DEFAULT_FREE_TTS_REQUESTS,
-      'storageBytes': DEFAULT_FREE_STORAGE_BYTES,
-    };
+  Future<Map<String, int>> _getDefaultLimits() async {
+    final planType = await planService.getCurrentPlanType();
+    final limits = PlanService.PLAN_LIMITS[planType] ?? _getFreePlanLimits();
+    return Map<String, int>.from(limits);
   }
 
   /// 특정 사용자의 사용량 제한 설정
@@ -118,7 +127,7 @@ class UsageLimitService {
     try {
       final Map<String, dynamic> limits = {};
       
-      if (translationChars != null) limits['translationChars'] = translationChars;
+      if (translationChars != null) limits['translatedChars'] = translationChars;
       if (ocrPages != null) limits['ocrPages'] = ocrPages;
       if (ttsRequests != null) limits['ttsRequests'] = ttsRequests;
       if (storageBytes != null) limits['storageBytes'] = storageBytes;
@@ -249,7 +258,7 @@ class UsageLimitService {
     final int currentUsage = (usageData['ocrPages'] ?? 0) as int;
     
     // 현재 남은 페이지 수 계산
-    final int remainingPages = MAX_FREE_OCR_PAGES - currentUsage;
+    final int remainingPages = _getFreePlanLimit('ocrPages') - currentUsage;
     
     // 남은 페이지가 없으면 실패 반환
     if (remainingPages <= 0) {
@@ -261,7 +270,7 @@ class UsageLimitService {
     usageData['ocrPages'] = newUsage;
     await _saveUsageData(usageData);
     
-    debugPrint('OCR 페이지 사용량 증가: $newUsage/$MAX_FREE_OCR_PAGES (요청: $pageCount, 남은 페이지: $remainingPages)');
+    debugPrint('OCR 페이지 사용량 증가: $newUsage/${_getFreePlanLimit('ocrPages')} (요청: $pageCount, 남은 페이지: $remainingPages)');
     
     // 요청을 처리했으므로 true 반환
     return true;
@@ -278,13 +287,14 @@ class UsageLimitService {
   Future<bool> incrementTranslationCharCount(int charCount) async {
     final usageData = await _loadUsageData();
     final currentUsage = usageData['translatedChars'] ?? 0;
+    final limit = _getFreePlanLimit('translatedChars');
     
     // 현재 상태 로깅
-    debugPrint('번역 현재 사용량: $currentUsage/$MAX_FREE_TRANSLATION_CHARS');
+    debugPrint('번역 현재 사용량: $currentUsage/$limit');
     
     // 사용량 제한 확인
-    if (currentUsage >= MAX_FREE_TRANSLATION_CHARS) {
-      debugPrint('번역 사용량 제한 초과: $currentUsage/$MAX_FREE_TRANSLATION_CHARS');
+    if (currentUsage >= limit) {
+      debugPrint('번역 사용량 제한 초과: $currentUsage/$limit');
       return false;
     }
     
@@ -293,13 +303,12 @@ class UsageLimitService {
     usageData['translatedChars'] = newUsage;
     await _saveUsageData(usageData);
     
-    // Google Translate API는 캐릭터 단위로 과금되므로 캐릭터 수를 정확히 기록
-    debugPrint('번역 사용량 증가: $newUsage/$MAX_FREE_TRANSLATION_CHARS (${charCount}자 추가, 남은 번역: ${MAX_FREE_TRANSLATION_CHARS - newUsage}자)');
+    debugPrint('번역 사용량 증가: $newUsage/$limit (${charCount}자 추가, 남은 번역: ${limit - newUsage}자)');
     
     // Firestore에도 사용량 업데이트 (중요 지표)
     _updateFirestoreUsage('translatedChars', newUsage);
     
-    return newUsage <= MAX_FREE_TRANSLATION_CHARS;
+    return newUsage <= limit;
   }
   
   /// Firestore에 사용량 업데이트 (중요 지표)
@@ -321,21 +330,16 @@ class UsageLimitService {
   
   /// TTS 문자 사용량 증가
   Future<bool> incrementTtsCharCount(int charCount) async {
-    debugPrint('TTS 사용량 증가 시도: $charCount 문자');
-    
-    // 캐시 무효화하여 항상 최신 데이터 사용
-    _cachedUsageData = null;
-    
-    // 사용량 데이터 직접 로드
     final usageData = await _loadUsageData();
     final currentUsage = usageData['ttsRequests'] ?? 0;
+    final limit = _getFreePlanLimit('ttsRequests');
     
     // 현재 상태 로깅
-    debugPrint('TTS 현재 사용량: $currentUsage/$MAX_FREE_TTS_REQUESTS');
+    debugPrint('TTS 현재 사용량: $currentUsage/$limit');
     
     // 사용량 제한 확인
-    if (currentUsage >= MAX_FREE_TTS_REQUESTS) {
-      debugPrint('TTS 사용량 제한 초과: $currentUsage/$MAX_FREE_TTS_REQUESTS');
+    if (currentUsage >= limit) {
+      debugPrint('TTS 사용량 제한 초과: $currentUsage/$limit');
       return false;
     }
     
@@ -349,8 +353,8 @@ class UsageLimitService {
     usageData['ttsRequests'] = newUsage;
     await _saveUsageData(usageData);
     
-    debugPrint('TTS 사용량 증가 완료: $newUsage/$MAX_FREE_TTS_REQUESTS (${incrementCount}회 증가)');
-    return newUsage <= MAX_FREE_TTS_REQUESTS;
+    debugPrint('TTS 사용량 증가 완료: $newUsage/$limit (${incrementCount}회 증가)');
+    return newUsage <= limit;
   }
   
   /// 사전 조회 사용량 증가 (제한 없음)
@@ -381,9 +385,10 @@ class UsageLimitService {
   Future<bool> addStorageUsage(int bytes) async {
     final usageData = await _loadUsageData();
     final currentUsage = usageData['storageUsageBytes'] ?? 0;
+    final limit = _getFreePlanLimit('storageBytes');
     
     // 사용량 제한 확인
-    if (currentUsage >= MAX_FREE_STORAGE_BYTES) {
+    if (currentUsage >= limit) {
       return false;
     }
     
@@ -392,10 +397,10 @@ class UsageLimitService {
     await _saveUsageData(usageData);
     
     final usageInMB = ((currentUsage + bytes) / (1024 * 1024)).toStringAsFixed(2);
-    final limitInMB = (MAX_FREE_STORAGE_BYTES / (1024 * 1024)).toStringAsFixed(0);
+    final limitInMB = (limit / (1024 * 1024)).toStringAsFixed(0);
     debugPrint('저장 공간 사용량 증가: ${usageInMB}MB/${limitInMB}MB (${bytes / 1024} KB 추가)');
     
-    return (currentUsage + bytes) <= MAX_FREE_STORAGE_BYTES;
+    return (currentUsage + bytes) <= limit;
   }
   
   /// 저장 공간 사용량 감소
@@ -408,13 +413,14 @@ class UsageLimitService {
     await _saveUsageData(usageData);
     
     final usageInMB = (newUsage / (1024 * 1024)).toStringAsFixed(2);
-    final limitInMB = (MAX_FREE_STORAGE_BYTES / (1024 * 1024)).toStringAsFixed(0);
+    final limitInMB = (_getFreePlanLimit('storageBytes') / (1024 * 1024)).toStringAsFixed(0);
     debugPrint('저장 공간 사용량 감소: ${usageInMB}MB/${limitInMB}MB');
   }
   
   /// 베타 기간 사용량 및 제한 확인
   Future<Map<String, dynamic>> getBetaUsageLimits() async {
     final usageData = await _loadUsageData();
+    final limits = _getFreePlanLimits();
     
     // 베타 시작 날짜 확인
     DateTime? betaStartDate;
@@ -443,15 +449,11 @@ class UsageLimitService {
     final translatedChars = usageData['translatedChars'] ?? 0;
     final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
     
-    // 디버그 로그 추가: 저장 공간 사용량 확인
-    final storagePercent = ((storageUsageBytes * 100.0) / MAX_FREE_STORAGE_BYTES);
-    debugPrint('현재 저장 공간 사용량: ${(storageUsageBytes / 1024 / 1024).toStringAsFixed(2)}MB/${(MAX_FREE_STORAGE_BYTES / 1024 / 1024).toStringAsFixed(0)}MB (${storagePercent.toStringAsFixed(2)}%)');
-    
     // 각 제한 초과 여부 확인
-    final bool ocrLimitReached = ocrUsage >= MAX_FREE_OCR_PAGES;
-    final bool ttsLimitReached = ttsUsage >= MAX_FREE_TTS_REQUESTS;
-    final bool translationLimitReached = translatedChars >= MAX_FREE_TRANSLATION_CHARS;
-    final bool storageLimitReached = storageUsageBytes >= MAX_FREE_STORAGE_BYTES;
+    final bool ocrLimitReached = ocrUsage >= (limits['ocrPages'] ?? 0);
+    final bool ttsLimitReached = ttsUsage >= (limits['ttsRequests'] ?? 0);
+    final bool translationLimitReached = translatedChars >= (limits['translatedChars'] ?? 0);
+    final bool storageLimitReached = storageUsageBytes >= (limits['storageBytes'] ?? 0);
     
     // 어느 하나라도 제한에 도달했는지 확인
     final bool anyLimitReached = 
@@ -665,6 +667,7 @@ class UsageLimitService {
   /// 각 기능별 사용량 비율(%) 계산
   Future<Map<String, double>> getUsagePercentages() async {
     final usageData = await _loadUsageData();
+    final limits = _getFreePlanLimits();
     
     // 각 항목별 사용량 비율 계산
     final ocrUsage = usageData['ocrPages'] ?? 0;
@@ -673,10 +676,10 @@ class UsageLimitService {
     final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
     
     return {
-      'ocr': (ocrUsage / MAX_FREE_OCR_PAGES) * 100,
-      'tts': (ttsUsage / MAX_FREE_TTS_REQUESTS) * 100,
-      'translation': (translatedChars / MAX_FREE_TRANSLATION_CHARS) * 100,
-      'storage': (storageUsageBytes / MAX_FREE_STORAGE_BYTES) * 100,
+      'ocr': (ocrUsage / (limits['ocrPages'] ?? 1)) * 100,
+      'tts': (ttsUsage / (limits['ttsRequests'] ?? 1)) * 100,
+      'translation': (translatedChars / (limits['translatedChars'] ?? 1)) * 100,
+      'storage': (storageUsageBytes / (limits['storageBytes'] ?? 1)) * 100,
       // 제한 없는 기능은 항상 0% 사용량 반환
       'dictionary': 0.0,
       'flashcard': 0.0,
@@ -793,7 +796,8 @@ class UsageLimitService {
   Future<int> getRemainingOcrPages() async {
     final usageData = await _loadUsageData();
     final int usedPages = (usageData['ocrPages'] ?? 0) as int;
-    final int remaining = MAX_FREE_OCR_PAGES - usedPages;
+    final int limit = _getFreePlanLimit('ocrPages');
+    final int remaining = limit - usedPages;
     return remaining < 0 ? 0 : remaining;
   }
 
@@ -808,10 +812,11 @@ class UsageLimitService {
     final usageData = await _loadUsageData();
     final currentUsage = usageData['ocrPages'] ?? 0;
     final newValue = (currentUsage - pageCount).clamp(0, double.maxFinite.toInt());
+    final limit = _getFreePlanLimit('ocrPages');
     
     usageData['ocrPages'] = newValue;
     await _saveUsageData(usageData);
-    debugPrint('OCR 페이지 사용량 감소: $newValue/$MAX_FREE_OCR_PAGES');
+    debugPrint('OCR 페이지 사용량 감소: $newValue/$limit');
   }
 
   /// OCR 페이지를 추가할 수 있는지 확인
@@ -821,9 +826,10 @@ class UsageLimitService {
     
     final usageData = await _loadUsageData();
     final int currentUsage = (usageData['ocrPages'] ?? 0) as int;
+    final limit = _getFreePlanLimit('ocrPages');
     
     // 현재 남은 페이지 수 계산
-    final int remainingPages = MAX_FREE_OCR_PAGES - currentUsage;
+    final int remainingPages = limit - currentUsage;
     
     // 하나라도 더 추가할 수 있는지 확인 (최소 1페이지 이상 처리 가능해야 함)
     return remainingPages > 0;
@@ -849,6 +855,7 @@ class UsageLimitService {
       
       int totalSize = 0;
       int fileCount = 0;
+      final limit = _getFreePlanLimit('storageBytes');
       
       debugPrint('저장 공간 사용량 재계산 시작...');
       
@@ -872,14 +879,14 @@ class UsageLimitService {
       await resetStorageUsage();
       await addStorageUsage(totalSize);
       
-      final limitInMB = (MAX_FREE_STORAGE_BYTES / (1024 * 1024)).toStringAsFixed(0);
+      final limitInMB = (limit / (1024 * 1024)).toStringAsFixed(0);
       final totalMB = (totalSize / (1024 * 1024)).toStringAsFixed(2);
       final oldMB = (oldStorageUsage / (1024 * 1024)).toStringAsFixed(2);
-      final percentUsed = ((totalSize * 100.0) / MAX_FREE_STORAGE_BYTES).toStringAsFixed(2);
+      final percentUsed = ((totalSize * 100.0) / limit).toStringAsFixed(2);
       
       debugPrint('저장 공간 사용량 재계산 완료: $fileCount개 파일');
       debugPrint('이전: ${oldMB}MB → 현재: ${totalMB}MB (제한: ${limitInMB}MB)');
-      debugPrint('총 사용률: $percentUsed% (${totalSize}바이트/${MAX_FREE_STORAGE_BYTES}바이트)');
+      debugPrint('총 사용률: $percentUsed% (${totalSize}바이트/${limit}바이트)');
       
       return totalSize;
     } catch (e) {
@@ -947,5 +954,41 @@ class UsageLimitService {
       debugPrint('Firebase Storage 데이터 삭제 실패: $e');
       return false;
     }
+  }
+
+  /// 현재 사용량이 제한을 초과하는지 확인
+  Future<bool> checkOcrLimit(int pages) async {
+    final limits = await getUserLimits();
+    final currentUsage = await getUserUsage();
+    final currentOcrPages = currentUsage['ocrPages'] as int? ?? 0;
+    
+    return (currentOcrPages + pages) <= limits['ocrPages']!;
+  }
+
+  /// 번역 글자 수 제한 확인
+  Future<bool> checkTranslationLimit(int chars) async {
+    final limits = await getUserLimits();
+    final currentUsage = await getUserUsage();
+    final currentChars = currentUsage['translatedChars'] as int? ?? 0;
+    
+    return (currentChars + chars) <= limits['translatedChars']!;
+  }
+
+  /// TTS 요청 제한 확인
+  Future<bool> checkTtsLimit(int requests) async {
+    final limits = await getUserLimits();
+    final currentUsage = await getUserUsage();
+    final currentRequests = currentUsage['ttsRequests'] as int? ?? 0;
+    
+    return (currentRequests + requests) <= limits['ttsRequests']!;
+  }
+
+  /// 스토리지 용량 제한 확인
+  Future<bool> checkStorageLimit(int bytes) async {
+    final limits = await getUserLimits();
+    final currentUsage = await getUserUsage();
+    final currentBytes = currentUsage['storageBytes'] as int? ?? 0;
+    
+    return (currentBytes + bytes) <= limits['storageBytes']!;
   }
 } 

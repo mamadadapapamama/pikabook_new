@@ -13,6 +13,7 @@ import 'views/screens/onboarding_screen.dart';
 import 'views/screens/settings_screen.dart';
 import 'core/services/common/initialization_manager.dart';
 import 'core/services/authentication/user_preferences_service.dart';
+import 'core/services/common/plan_service.dart';
 import 'widgets/loading_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,6 +61,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   late UserPreferencesService _preferencesService;
   String? _error;
   final MarketingCampaignService _marketingService = MarketingCampaignService();
+  final PlanService _planService = PlanService();
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   
   @override
   void initState() {
@@ -208,6 +211,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         setState(() {
           _isLoadingUserData = false; // 데이터 로딩 완료
         });
+        // 사용자 데이터 로드 후 플랜 변경 체크
+        await _checkPlanChange();
       }
     } catch (e) {
       // 사용자 설정 로드 실패 처리
@@ -237,6 +242,33 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('노트 존재 여부 확인 중 오류: $e');
       return false; // 오류 발생 시 기본값으로 false 반환
+    }
+  }
+  
+  /// 플랜 변경 체크
+  Future<void> _checkPlanChange() async {
+    if (_userId != null) {
+      final hasChangedToFree = await _planService.hasPlanChangedToFree();
+      if (hasChangedToFree && mounted) {
+        // 스낵바 표시
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Free plan으로 전환 되었습니다. 자세한 설명은 설정 -> 내 플랜 을 참고하세요.',
+              style: TextStyle(color: Colors.white),
+            ),
+            backgroundColor: ColorTokens.secondary,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: '확인',
+              textColor: Colors.white,
+              onPressed: () {
+                _scaffoldMessengerKey.currentState?.hideCurrentSnackBar();
+              },
+            ),
+          ),
+        );
+      }
     }
   }
   
@@ -319,7 +351,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       scrollBehavior: const CustomScrollBehavior(),
-      // 홈 화면 표시
+      scaffoldMessengerKey: _scaffoldMessengerKey,
+      title: 'Pikabook',
       home: const HomeScreen(),
       routes: {
         '/settings': (context) => SettingsScreen(
