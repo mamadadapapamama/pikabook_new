@@ -113,6 +113,15 @@ class ImageService {
   // 클래스 내부에서 모든 메서드에서 공유할 실패한 다운로드 경로 목록
   static final Set<String> _failedDownloadPaths = <String>{};
 
+  // Firebase Storage에 업로드된 이미지 URL 캐시
+  final Map<String, String> _fileUrlCache = {};
+
+  /// 앱 내부 저장소 경로를 반환합니다.
+  Future<String> get _localPath async {
+    final appDir = await getApplicationDocumentsDirectory();
+    return appDir.path;
+  }
+
   /// 이미지 선택 (갤러리)
   Future<File?> pickImage({ImageSource source = ImageSource.gallery}) async {
     try {
@@ -429,114 +438,159 @@ class ImageService {
     }
   }
 
-  /// 이미지 업로드 (로컬 저장소에 저장)
-  Future<String> uploadImage(File imageFile) async {
+  /// 이미지 업로드 (파일 경로 또는 파일 객체)
+  Future<String> uploadImage(dynamic image) async {
     try {
-      // 파일 유효성 확인
-      if (!await imageFile.exists()) {
-        debugPrint('이미지 파일이 존재하지 않습니다 - 대체 파일 경로 반환');
-        return _getFallbackPath();
+      if (image == null) {
+        throw Exception('이미지가 null입니다');
       }
       
-      // 사용량 제한 확인
-      final fileSize = await imageFile.length();
-      final canAddStorage = await _usageLimitService.checkStorageLimit(fileSize);
-      
-      // 저장 공간 제한 도달 시 오류 발생
-      if (!canAddStorage) {
-        debugPrint('저장 공간 제한에 도달했습니다 - 대체 파일 경로 반환');
-        return _getFallbackPath();
+      // 이미지가 경로인 경우
+      if (image is String) {
+        final imagePath = image;
+        
+        // 해당 경로에 파일이 존재하는지 확인
+        if (!await File(imagePath).exists()) {
+          throw Exception('파일이 존재하지 않습니다: $imagePath');
+        }
+        
+        // 이미지 저장 및 최적화
+        final targetPath = await saveAndOptimizeImage(imagePath);
+        return targetPath;
       }
       
-      // 이미지 저장 및 최적화
-      String relativePath = await saveAndOptimizeImage(imageFile);
-      
-      // 결과 검증
-      if (relativePath.isEmpty) {
-        debugPrint('이미지 저장 결과 경로가 비어 있습니다 - 대체 경로 생성');
-        relativePath = _createEmergencyPath(imageFile);
+      // 이미지가 File 객체인 경우
+      if (image is File) {
+        final imageFile = image;
+        
+        // 파일이 존재하는지 확인
+        if (!await imageFile.exists()) {
+          throw Exception('파일이 존재하지 않습니다: ${imageFile.path}');
+        }
+        
+        // 이미지 저장 및 최적화
+        final targetPath = await saveAndOptimizeImage(imageFile.path);
+        return targetPath;
       }
-      
-      return relativePath;
+
+      throw Exception('지원되지 않는 이미지 형식입니다: ${image.runtimeType}');
     } catch (e) {
-      debugPrint('이미지 업로드 중 예외 발생: $e - 대체 파일 경로 반환');
-      
-      // 오류 발생 시 기본 경로 반환 (null 체크 오류 방지)
-      return _getFallbackPath();
+      debugPrint('⚠️ 이미지 업로드 중 오류 발생: $e');
+      return _fallbackImagePath;
     }
   }
 
-  /// 이미지 파일을 앱의 영구 저장소에 저장하고 최적화
-  Future<String> saveAndOptimizeImage(File imageFile) async {
+  /// 이미지 저장 및 최적화 
+  /// 
+  /// 이미지를 압축하고 최적화한 후 로컬 및 Firebase Storage에 저장합니다.
+  /// [imagePath]는 원본 이미지 경로, [quality]는 압축 품질입니다.
+  Future<String> saveAndOptimizeImage(String imagePath, {int quality = 85}) async {
+    if (kDebugMode) {
+      print('이미지 저장 시작: $imagePath');
+    }
+
+    // 이미지 파일 확인
+    final originalFile = File(imagePath);
+    if (!await originalFile.exists()) {
+      throw Exception('원본 이미지 파일을 찾을 수 없습니다: $imagePath');
+    }
+
+    // 이미지 크기 확인 및 저장 공간 제한 확인
+    final fileSize = await originalFile.length();
+    final canStoreFile = await _checkStorageLimit(fileSize);
+    if (!canStoreFile) {
+      throw Exception('저장 공간 제한을 초과했습니다. 이미지를 저장할 수 없습니다.');
+    }
+    
+    // 사용자별 디렉토리 생성
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final filename = 'img_$timestamp${path.extension(imagePath)}';
+    
+    // 사용자 ID 기반 경로 생성
+    final userId = _currentUserId ?? 'anonymous';
+    final relativePath = path.join('images', userId, filename);
+    final targetPath = path.join(await _localPath, relativePath);
+    
+    // 타겟 디렉토리 확인 및 생성
+    final directory = Directory(path.dirname(targetPath));
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+
     try {
-      // 파일 유효성 확인
-      if (!await imageFile.exists()) {
-        debugPrint('이미지 파일이 존재하지 않습니다');
-        return _createEmergencyPath(imageFile);
-      }
-      
-      // 앱의 영구 저장소 디렉토리 가져오기
-      final appDir = await getApplicationDocumentsDirectory();
-      final imagesDir = Directory('${appDir.path}/images');
-
-      // 이미지 디렉토리가 없으면 생성
-      if (!await imagesDir.exists()) {
-        await imagesDir.create(recursive: true);
-      }
-
-      // 이미지 파일의 해시값 계산 (파일 내용 기반 고유 식별자)
-      final fileHash = await _computeFileHash(imageFile);
-      
-      // 해시값을 파일명에 사용 (동일 내용의 파일은 동일한 이름을 가짐)
-      final fileExtension = path.extension(imageFile.path).toLowerCase();
-      final fileName = '$fileHash$fileExtension';
-      final targetPath = '${imagesDir.path}/$fileName';
-      final relativePath = 'images/$fileName';
-      
-      // 동일한 해시값의 파일이 이미 존재하는지 확인
-      final existingFile = File(targetPath);
-      if (await existingFile.exists()) {
-        final fileSize = await existingFile.length();
-        if (fileSize > 0) {
-          return relativePath; // 이미 존재하는 파일 사용
-        } else {
-          await existingFile.delete();
-        }
-      }
-
-      // 이미지 압축 및 저장을 compute를 사용하여 별도 Isolate에서 실행
-      final Uint8List imageBytes = await imageFile.readAsBytes();
-      final _CompressionResult result = await compute<_CompressionParams, _CompressionResult>(
-        _compressImageIsolateWrapper,
-        _CompressionParams(
-          imageBytes: imageBytes,
-          targetPath: targetPath,
-          maxDimension: _maxImageDimension,
-          quality: _defaultJpegQuality,
-        ),
+      // 압축 시도
+      final result = await FlutterImageCompress.compressAndGetFile(
+        originalFile.absolute.path,
+        targetPath,
+        minWidth: 1920,
+        minHeight: 1920,
+        quality: quality,
       );
 
-      // 압축 결과가 없거나 실패한 경우
-      if (!result.success) {
-        debugPrint('Isolate 이미지 압축 실패 (${result.error}) - 원본 복사');
-        // 원본 파일을 타겟 경로에 복사
-        await _copyOriginalToTarget(imageFile, targetPath);
+      if (result == null) {
+        // 압축 실패 시 원본 파일 복사
+        await _copyOriginalToTarget(originalFile, targetPath);
+        debugPrint('이미지 압축 실패, 원본 파일 사용: $targetPath');
+      } else {
+        debugPrint('이미지 압축 성공: ${await result.length()} bytes');
       }
-      
-      // Firebase Storage에 업로드 시도 (기존 로직 유지)
+
+      // Firebase에 업로드
       try {
         await _uploadToFirebaseStorageIfNotExists(File(targetPath), relativePath);
       } catch (e) {
-        debugPrint('Firebase Storage 업로드 중 오류: $e');
+        debugPrint('Firebase 업로드 실패, 로컬 파일 사용: $e');
+      }
+
+      // 저장 공간 사용량 추적
+      final compressedFile = File(targetPath);
+      final tracked = await _trackStorageUsage(compressedFile);
+      if (!tracked) {
+        debugPrint('⚠️ 저장 공간 사용량 추적 실패, 로컬 파일만 사용: $targetPath');
       }
       
-      // 스토리지 사용량 추적 (기존 로직 유지)
-      await _trackStorageUsage(File(targetPath));
-
       return relativePath;
     } catch (e) {
-      debugPrint('이미지 저장 및 최적화 중 치명적 오류: $e');
-      return _createEmergencyPath(imageFile);
+      debugPrint('이미지 저장 중 오류 발생: $e');
+      
+      // 에러 발생 시 원본 파일 복사 시도
+      try {
+        await _copyOriginalToTarget(originalFile, targetPath);
+        
+        // 저장 공간 사용량 추적 (원본 파일 크기)
+        final tracked = await _trackStorageUsage(originalFile);
+        if (!tracked) {
+          debugPrint('⚠️ 원본 파일 저장 공간 사용량 추적 실패, 로컬 파일만 사용: $targetPath');
+        }
+        
+        return relativePath;
+      } catch (copyError) {
+        throw Exception('이미지 저장 실패: $e, 복사 오류: $copyError');
+      }
+    }
+  }
+  
+  /// 저장 공간 제한 확인
+  Future<bool> _checkStorageLimit(int additionalBytes) async {
+    try {
+      // 사용량 제한 확인
+      final limitStatus = await _usageLimitService.checkLimitStatus();
+      final currentUsage = await _usageLimitService.getUserUsage();
+      final currentStorageUsage = currentUsage['storageUsageBytes'] ?? 0;
+      final storageLimit = limitStatus['storageLimit'] ?? 52428800; // 기본 50MB
+      
+      // 예상 총 사용량 계산
+      final estimatedTotalUsage = currentStorageUsage + additionalBytes;
+      
+      if (estimatedTotalUsage > storageLimit) {
+        debugPrint('⚠️ 저장 공간 제한 초과: ${estimatedTotalUsage / 1024 / 1024}MB > ${storageLimit / 1024 / 1024}MB');
+        return false;
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('저장 공간 제한 확인 중 오류: $e');
+      return true; // 오류 발생 시에도 항상 허용
     }
   }
   
@@ -546,24 +600,7 @@ class ImageService {
       await originalFile.copy(targetPath);
     } catch (e) {
       debugPrint('원본 파일 복사 중 오류: $e');
-      
-      // 타겟 디렉토리 확인 및 생성
-      final dir = Directory(path.dirname(targetPath));
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
-      }
-      
-      try {
-        // 다시 시도
-        await originalFile.copy(targetPath);
-      } catch (retryError) {
-        debugPrint('원본 파일 복사 재시도 중 오류: $retryError');
-        
-        // 최후의 수단: 빈 파일 생성
-        final file = File(targetPath);
-        await file.create();
-        await file.writeAsBytes(Uint8List(0));
-      }
+      throw Exception('원본 파일 복사 실패: $e');
     }
   }
   
@@ -593,61 +630,32 @@ class ImageService {
     }
   }
   
-  /// Firebase Storage에 이미지 업로드 (중복 확인)
+  /// Firebase Storage에 파일 업로드 (존재하지 않는 경우에만)
   Future<void> _uploadToFirebaseStorageIfNotExists(File file, String relativePath) async {
+    if (_currentUserId == null) {
+      debugPrint('로그인된 사용자가 없어 Firebase Storage 업로드를 건너뜁니다');
+      return;
+    }
+
     try {
-      if (!await _imageExists(relativePath)) {
-        // 파일이 존재하지 않는 경우에만 업로드
-        final ref = _storage.ref().child(relativePath);
-        
-        // 존재 여부 이중 체크
-        try {
-          await ref.getDownloadURL();
-          debugPrint('이미지가 이미 존재함: $relativePath');
-          return;
-        } catch (e) {
-          // 파일이 존재하지 않음 - 정상 진행
-          debugPrint('신규 이미지 업로드 시작: $relativePath');
-        }
-        
-        // 파일 크기 확인
-        final fileSize = await file.length();
-        if (fileSize <= 0) {
-          throw Exception('파일 크기가 0바이트 이하: $relativePath');
-        }
-        
-        // 파일 확장자 확인
-        final extension = path.extension(file.path).toLowerCase();
-        final contentType = _getContentType(extension);
-        
-        // 업로드 메타데이터 설정
-        final metadata = SettableMetadata(
-          contentType: contentType,
-          customMetadata: {
-            'uploaded': DateTime.now().toIso8601String(),
-            'size': fileSize.toString(),
-          },
-        );
-        
-        // 업로드 작업
-        final uploadTask = ref.putFile(file, metadata);
-        
-        // 업로드 완료 대기
-        await uploadTask.whenComplete(() => debugPrint('이미지 업로드 완료: $relativePath'));
-        
-        // 업로드 상태 확인
-        final snapshot = await uploadTask;
-        if (snapshot.state == TaskState.success) {
-          debugPrint('이미지 성공적으로 업로드됨: $relativePath');
-        } else {
-          debugPrint('이미지 업로드 실패 상태: ${snapshot.state}');
-        }
-      } else {
-        debugPrint('이미지가 이미 존재함: $relativePath');
+      // Firebase Storage 참조 생성
+      final storageRef = _storage.ref().child(relativePath);
+      
+      // 이미 존재하는지 확인 시도
+      try {
+        await storageRef.getDownloadURL();
+        debugPrint('파일이 이미 Firebase Storage에 존재합니다: $relativePath');
+        return; // 이미 존재하면 업로드 건너뛰기
+      } catch (e) {
+        // 파일이 존재하지 않는 경우 (예외 발생) 계속 진행
       }
+      
+      // 업로드 실행
+      await storageRef.putFile(file);
+      debugPrint('Firebase Storage에 파일 업로드 완료: $relativePath');
     } catch (e) {
-      debugPrint('_uploadToFirebaseStorageIfNotExists 오류: $e');
-      // 업로드 실패해도 치명적 오류 처리하지 않음 (로컬 파일 사용)
+      debugPrint('Firebase Storage 업로드 오류: $e');
+      throw Exception('Firebase Storage 업로드 실패: $e');
     }
   }
   
@@ -689,21 +697,19 @@ class ImageService {
   }
   
   /// 저장 공간 사용량 추적
-  Future<bool> _trackStorageUsage(File compressedFile) async {
+  Future<bool> _trackStorageUsage(File file) async {
     try {
       // 실제 파일 크기 측정
-      final actualSize = await compressedFile.length();
+      final actualSize = await file.length();
       
       // 사용량 추적
-      final canAddStorage = await _usageLimitService.addStorageUsage(actualSize);
-      if (!canAddStorage) {
-        debugPrint('⚠️ 저장 공간 제한에 도달했습니다. 이미지를 추가로 저장할 수 없습니다.');
-      }
+      await _usageLimitService.addStorageUsage(actualSize);
       
-      return canAddStorage;
+      debugPrint('저장 공간 사용량 추적: +${actualSize / 1024}KB');
+      return true;
     } catch (e) {
       debugPrint('저장 공간 사용량 추적 중 오류: $e');
-      return true; // 오류 발생 시 기본적으로 허용
+      return false; // 추적에 실패하면 false 반환
     }
   }
   

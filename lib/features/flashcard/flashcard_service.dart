@@ -43,12 +43,6 @@ class FlashCardService {
     }
 
     try {
-      // 사용량 제한 확인
-      final canAddFlashcard = await _usageLimitService.incrementFlashcardCount();
-      if (!canAddFlashcard) {
-        throw Exception('무료 플래시카드 사용량 한도를 초과했습니다.');
-      }
-      
       // 병음 생성 (항상 병음을 생성하도록 처리)
       String pinyinValue = pinyin ?? '';
 
@@ -111,17 +105,6 @@ class FlashCardService {
 
       return flashCard;
     } catch (e) {
-      // 오류 발생 시 사용량 감소 시도
-      if (e.toString().contains('무료 플래시카드 사용량 한도를 초과했습니다')) {
-        debugPrint('플래시카드 생성 중 사용량 제한 오류: $e');
-      } else {
-        // 다른 오류인 경우 사용량 감소 (플래시카드가 생성되지 않았으므로)
-        try {
-          await _usageLimitService.decrementFlashcardCount();
-        } catch (countError) {
-          debugPrint('사용량 감소 중 오류: $countError');
-        }
-      }
       debugPrint('플래시카드 생성 중 오류 발생: $e');
       throw Exception('플래시카드를 생성할 수 없습니다: $e');
     }
