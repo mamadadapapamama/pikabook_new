@@ -666,14 +666,17 @@ class UsageLimitService {
   
   /// 각 기능별 사용량 비율(%) 계산
   Future<Map<String, double>> getUsagePercentages() async {
-    final usageData = await _loadUsageData();
-    final limits = _getFreePlanLimits();
+    final usageData = await getUserUsage(forceRefresh: true);  // 강제로 최신 데이터 가져오기
+    final planType = await planService.getCurrentPlanType();
+    final limits = PlanService.PLAN_LIMITS[planType] ?? _getFreePlanLimits();
     
     // 각 항목별 사용량 비율 계산
     final ocrUsage = usageData['ocrPages'] ?? 0;
     final ttsUsage = usageData['ttsRequests'] ?? 0;
     final translatedChars = usageData['translatedChars'] ?? 0;
     final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
+    
+    debugPrint('OCR 사용량 계산: $ocrUsage / ${limits['ocrPages']} = ${(ocrUsage / (limits['ocrPages'] ?? 1)) * 100}%');
     
     return {
       'ocr': (ocrUsage / (limits['ocrPages'] ?? 1)) * 100,
@@ -691,14 +694,28 @@ class UsageLimitService {
   /// 사용자 사용량 데이터 로드
   Future<Map<String, dynamic>> _loadUsageData() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? jsonData = prefs.getString(_getUserKey(_USAGE_KEY));
-      
-      if (jsonData == null || jsonData.isEmpty) {
+      final userId = _currentUserId;
+      if (userId == null) {
+        debugPrint('사용량 데이터 로드: 사용자 ID가 없음');
         return {};
       }
+
+      // Firestore에서 사용량 데이터 가져오기
+      final doc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .get();
+
+      if (!doc.exists) {
+        debugPrint('사용량 데이터 로드: 문서가 존재하지 않음');
+        return {};
+      }
+
+      final data = doc.data() as Map<String, dynamic>;
+      final usage = data['usage'] as Map<String, dynamic>? ?? {};
       
-      return json.decode(jsonData);
+      debugPrint('사용량 데이터 로드 완료: $usage');
+      return Map<String, dynamic>.from(usage);
     } catch (e) {
       debugPrint('사용량 데이터 로드 중 오류: $e');
       return {};
