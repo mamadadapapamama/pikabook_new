@@ -632,4 +632,10 @@ class UsageLimitService {
       debugPrint('이미지 캐시 정보 업데이트 중 오류: $e');
     }
   }
+  
+  /// PlanService와의 호환성을 위한 메서드
+  Future<Map<String, dynamic>> checkFreeLimits() async {
+    // checkLimitStatus와 동일한 형식으로 결과 반환
+    return await checkLimitStatus();
+  }
 } 
