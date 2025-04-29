@@ -667,16 +667,34 @@ class UsageLimitService {
   /// 사용량 정보 가져오기
   Future<Map<String, dynamic>> getUsageInfo() async {
     try {
+      // 캐시 확인 (30초 동안 유효)
+      final now = DateTime.now();
+      final useCache = _cachedUsageInfo != null && 
+                      _lastUsageInfoFetchTime != null &&
+                      now.difference(_lastUsageInfoFetchTime!).inSeconds < 30;
+      
+      if (useCache) {
+        debugPrint('사용량 정보 캐시 사용 (30초 이내)');
+        return Map<String, dynamic>.from(_cachedUsageInfo!);
+      }
+      
+      debugPrint('사용량 정보 새로 로드 시작');
+      
       // 1. 사용량 비율 계산
       final percentages = await getUsagePercentages();
       
       // 2. 제한 상태 확인
       final limitStatus = await checkLimitStatus();
       
-      return {
+      // 결과 캐싱
+      _cachedUsageInfo = {
         'percentages': percentages,
         'limitStatus': limitStatus,
       };
+      _lastUsageInfoFetchTime = now;
+      
+      debugPrint('사용량 정보 로드 완료 및 캐싱');
+      return _cachedUsageInfo!;
     } catch (e) {
       debugPrint('사용량 정보 가져오기 중 오류: $e');
       return {
@@ -699,6 +717,10 @@ class UsageLimitService {
       };
     }
   }
+  
+  // 사용량 정보 캐시
+  Map<String, dynamic>? _cachedUsageInfo;
+  DateTime? _lastUsageInfoFetchTime;
   
   /// 모든 사용량 초기화
   Future<void> resetAllUsage() async {
@@ -781,6 +803,9 @@ class UsageLimitService {
   void invalidateCache() {
     _cachedUsageData = null;
     _lastFetchTime = null;
+    _cachedUsageInfo = null;  // 사용량 정보 캐시도 초기화
+    _lastUsageInfoFetchTime = null;
+    debugPrint('모든 사용량 캐시 무효화 완료');
   }
   
   /// 이미지 캐시 정보 업데이트
