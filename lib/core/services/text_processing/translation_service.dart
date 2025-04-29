@@ -28,6 +28,9 @@ class TranslationService {
   // 사용량 추적 서비스
   final UsageLimitService _usageLimitService = UsageLimitService();
 
+  // 번역 캐시 추가 (성능 개선)
+  final Map<String, String> _translationCache = {};
+  
   // 생성자 로그 추가
   TranslationService._internal() {
     debugPrint('🌐 TranslationService: 생성자 호출됨');
@@ -102,6 +105,11 @@ class TranslationService {
       return '';
     }
     
+    Stopwatch? stopwatch;
+    if (kDebugMode) {
+      stopwatch = Stopwatch()..start();
+    }
+    
     // 특수 마커 텍스트인 경우 번역하지 않고 빈 문자열 반환
     if (text == '___PROCESSING___' || text == 'processing' || text.contains('텍스트 처리 중')) {
       debugPrint('TranslationService: 특수 마커 텍스트("$text") 감지됨 - 번역 생략');
@@ -112,7 +120,32 @@ class TranslationService {
     final effectiveTargetLanguage = targetLanguage ?? TargetLanguage.DEFAULT;
     final effectiveSourceLanguage = sourceLanguage == 'auto' ? null : sourceLanguage;
     
-    debugPrint('TranslationService: 검증된 언어 설정 - 소스: ${effectiveSourceLanguage ?? 'auto'}, 타겟: $effectiveTargetLanguage');
+    // 캐시 키 생성
+    final cacheKey = '${effectiveSourceLanguage ?? 'auto'}_${effectiveTargetLanguage}_$text';
+    
+    // 캐시에서 번역 결과 확인 (성능 개선)
+    if (_translationCache.containsKey(cacheKey)) {
+      final cachedResult = _translationCache[cacheKey];
+      if (kDebugMode && stopwatch != null) {
+        debugPrint('⚡ 캐시된 번역 반환 (${stopwatch.elapsedMilliseconds}ms)');
+      }
+      
+      // 캐시 히트 시에도 사용량은 기록 (첫 번역 시만)
+      if (countCharacters && cachedResult != text) {
+        // 백그라운드로 사용량 증가 (UI 차단 방지)
+        _usageLimitService.incrementTranslationCharCount(text.length).then((_) {
+          if (kDebugMode) {
+            debugPrint('사용량 증가 완료: ${text.length}자');
+          }
+        });
+      }
+      
+      return cachedResult ?? text;
+    }
+
+    if (kDebugMode) {
+      debugPrint('🌐 번역 시작: ${text.length}자 (소스: ${effectiveSourceLanguage ?? 'auto'}, 타겟: $effectiveTargetLanguage)');
+    }
 
     try {
       // API가 초기화되지 않았으면 초기화
@@ -140,21 +173,24 @@ class TranslationService {
       
       // 요청 본문 로깅 (길이가 긴 경우 일부만 출력)
       final textSample = text.length > 50 ? '${text.substring(0, 50)}...' : text;
-      debugPrint('TranslationService: 요청 본문 샘플 - "$textSample"');
-      debugPrint('TranslationService: 타겟 언어: $effectiveTargetLanguage');
+      if (kDebugMode) {
+        debugPrint('번역 요청: "$textSample"');
+      }
 
       // API 엔드포인트 URL
       final url = Uri.parse(
           'https://translation.googleapis.com/v3/$parent:translateText');
-
-      debugPrint('TranslationService: HTTP 요청 보내는 중... URL: $url');
       
       // POST 요청 전송
+      final httpStopwatch = Stopwatch()..start();
       final response = await _httpClient!.post(
         url,
         body: jsonEncode(requestBody),
         headers: {'Content-Type': 'application/json'},
       );
+      if (kDebugMode) {
+        debugPrint('HTTP 요청 완료 (${httpStopwatch.elapsedMilliseconds}ms)');
+      }
 
       // 응답 처리
       String translatedText = text; // 기본값은 원본 텍스트
@@ -171,24 +207,41 @@ class TranslationService {
             // 번역 결과가 원본과 다른지 확인
             if (translatedResult == text) {
               // 원본과 동일한 경우 사용량을 기록하지 않음
+              if (kDebugMode) {
+                debugPrint('번역 결과가 원본과 동일함 (사용량 미기록)');
+              }
             } else {
               // 사용량 카운팅 옵션이 활성화된 경우에만 사용량 증가
               if (countCharacters) {
-                // 번역된 글자 수 기록 (실제 번역 필요한 텍스트 길이만큼만 카운트)
-                await _usageLimitService.incrementTranslationCharCount(text.length);
+                // 백그라운드로 사용량 증가 (UI 차단 방지)
+                _usageLimitService.incrementTranslationCharCount(text.length).then((_) {
+                  if (kDebugMode) {
+                    debugPrint('사용량 증가 완료: ${text.length}자');
+                  }
+                });
               }
             }
             translatedText = translatedResult;
+            
+            // 캐시에 결과 저장 (성능 개선)
+            _translationCache[cacheKey] = translatedText;
           }
         }
       } else {
-        // 오류 발생 시 fallback 전략 - Papago API 등 다른 번역 서비스 사용 가능
-        // 현재는 fallback 구현 없이 원본 텍스트 반환
+        if (kDebugMode) {
+          debugPrint('번역 API 오류: ${response.statusCode} - ${response.body}');
+        }
       }
-
+      
+      if (kDebugMode && stopwatch != null) {
+        debugPrint('✅ 번역 완료 (${stopwatch.elapsedMilliseconds}ms)');
+      }
+      
       return translatedText;
     } catch (e) {
-      debugPrint('TranslationService: 번역 중 오류 발생 - $e');
+      if (kDebugMode && stopwatch != null) {
+        debugPrint('❌ 번역 오류: $e (${stopwatch.elapsedMilliseconds}ms)');
+      }
       // 오류 발생 시 원본 텍스트 반환
       return text;
     }
