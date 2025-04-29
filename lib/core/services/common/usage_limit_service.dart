@@ -253,14 +253,31 @@ class UsageLimitService {
       final userId = _currentUserId;
       if (userId == null) return;
       
-      await _firestore.collection('users').doc(userId).set({
+      debugPrint('Firestore 업데이트 시작: $key = $value');
+      
+      // 현재 전체 사용량 데이터 로드
+      final currentUsage = await _loadUsageData();
+      currentUsage[key] = value;
+      
+      final updateData = {
         'usage': {
-          key: value,
+          ...currentUsage,
           'lastUpdated': FieldValue.serverTimestamp(),
         }
-      }, SetOptions(merge: true));
+      };
       
-      debugPrint('Firestore 사용량 업데이트: $key=$value');
+      debugPrint('업데이트할 데이터: $updateData');
+      
+      // 전체 사용량 데이터를 한 번에 업데이트
+      await _firestore.collection('users').doc(userId).set(
+        updateData,
+        SetOptions(merge: true)
+      );
+      
+      debugPrint('Firestore 사용량 업데이트 완료');
+      
+      // 캐시 무효화
+      invalidateCache();
     } catch (e) {
       debugPrint('Firestore 업데이트 실패: $e');
     }
@@ -446,39 +463,40 @@ class UsageLimitService {
   /// 각 기능별 사용량 비율(%) 계산
   Future<Map<String, double>> getUsagePercentages() async {
     try {
-      final usageData = await getUserUsage(forceRefresh: true);  // 강제로 최신 데이터 가져오기
+      final usageData = await getUserUsage(forceRefresh: true);
       final planType = await planService.getCurrentPlanType();
       final limits = PlanService.PLAN_LIMITS[planType] ?? _getFreePlanLimits();
-      
-      // 각 항목별 사용량 비율 계산
-      final ocrUsage = usageData['ocrPages'] ?? 0;
-      final ttsUsage = usageData['ttsRequests'] ?? 0;
-      final translatedChars = usageData['translatedChars'] ?? 0;
-      final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
       
       // 디버그 로그 추가
       debugPrint('=== 사용량 계산 디버그 ===');
       debugPrint('현재 플랜: $planType');
-      debugPrint('OCR 사용량: $ocrUsage / ${limits['ocrPages']} = ${(ocrUsage / (limits['ocrPages'] ?? 1) * 100).toStringAsFixed(2)}%');
-      debugPrint('TTS 사용량: $ttsUsage / ${limits['ttsRequests']} = ${(ttsUsage / (limits['ttsRequests'] ?? 1) * 100).toStringAsFixed(2)}%');
-      debugPrint('번역 사용량: $translatedChars / ${limits['translatedChars']} = ${(translatedChars / (limits['translatedChars'] ?? 1) * 100).toStringAsFixed(2)}%');
-      debugPrint('저장공간 사용량: $storageUsageBytes / ${limits['storageBytes']} = ${(storageUsageBytes / (limits['storageBytes'] ?? 1) * 100).toStringAsFixed(2)}%');
-      debugPrint('전체 사용량 데이터: $usageData');
-      debugPrint('제한값: $limits');
+      debugPrint('현재 사용량: $usageData');
+      debugPrint('현재 제한: $limits');
       
-      // 사용량 비율 계산 (소수점 2자리까지)
-      final Map<String, double> percentages = {
-        'ocr': double.parse(((ocrUsage / (limits['ocrPages'] ?? 1)) * 100).toStringAsFixed(2)),
-        'tts': double.parse(((ttsUsage / (limits['ttsRequests'] ?? 1)) * 100).toStringAsFixed(2)),
-        'translation': double.parse(((translatedChars / (limits['translatedChars'] ?? 1)) * 100).toStringAsFixed(2)),
-        'storage': double.parse(((storageUsageBytes / (limits['storageBytes'] ?? 1)) * 100).toStringAsFixed(2)),
-        'dictionary': 0.0,
-        'flashcard': 0.0,
-        'note': 0.0,
-        'page': 0.0,
-      };
+      // 각 항목별 사용량 비율 계산
+      final Map<String, double> percentages = {};
       
-      debugPrint('계산된 비율: $percentages');
+      void calculatePercentage(String usageKey, String displayKey, String limitKey) {
+        final usage = _parseIntSafely(usageData[usageKey]);
+        final limit = limits[limitKey] ?? 1;
+        final percentage = (usage / limit * 100).clamp(0.0, 100.0);
+        percentages[displayKey] = double.parse(percentage.toStringAsFixed(2));
+        debugPrint('$displayKey 사용량: $usage / $limit = ${percentages[displayKey]}%');
+      }
+      
+      // 키 매핑 수정
+      calculatePercentage('ocrPages', 'ocr', 'ocrPages');
+      calculatePercentage('ttsRequests', 'tts', 'ttsRequests');
+      calculatePercentage('translatedChars', 'translation', 'translatedChars');
+      calculatePercentage('storageUsageBytes', 'storage', 'storageBytes');
+      
+      // 제한 없는 항목들
+      percentages['dictionary'] = 0.0;
+      percentages['flashcard'] = 0.0;
+      percentages['note'] = 0.0;
+      percentages['page'] = 0.0;
+      
+      debugPrint('계산된 최종 비율: $percentages');
       return percentages;
     } catch (e) {
       debugPrint('사용량 비율 계산 중 오류: $e');
@@ -504,6 +522,8 @@ class UsageLimitService {
         return {};
       }
 
+      debugPrint('사용량 데이터 로드 시작: userId=$userId');
+
       // Firestore에서 사용량 데이터 가져오기
       final doc = await _firestore
           .collection('users')
@@ -516,37 +536,46 @@ class UsageLimitService {
       }
 
       final data = doc.data() as Map<String, dynamic>;
+      debugPrint('Firestore 원본 데이터: $data');
+
       Map<String, dynamic> usage = {};
       
-      // 'usage' 필드가 있는 경우
+      // 'usage' 필드에서 데이터 추출 시도
       if (data.containsKey('usage') && data['usage'] is Map) {
-        usage = Map<String, dynamic>.from(data['usage'] as Map);
-      } else {
-        // 직접 필드에서 데이터 추출
+        final usageData = data['usage'] as Map<String, dynamic>;
         usage = {
-          'ocrPages': data['ocrPages'] ?? 0,
-          'ttsRequests': data['ttsRequests'] ?? 0,
-          'translatedChars': data['translatedChars'] ?? 0,
-          'storageUsageBytes': data['storageUsageBytes'] ?? 0,
+          'ocrPages': _parseIntSafely(usageData['ocrPages']),
+          'ttsRequests': _parseIntSafely(usageData['ttsRequests']),
+          'translatedChars': _parseIntSafely(usageData['translatedChars']),
+          'storageUsageBytes': _parseIntSafely(usageData['storageUsageBytes']),
+        };
+      } else {
+        // 최상위 필드에서도 확인
+        usage = {
+          'ocrPages': _parseIntSafely(data['ocrPages']),
+          'ttsRequests': _parseIntSafely(data['ttsRequests']),
+          'translatedChars': _parseIntSafely(data['translatedChars']),
+          'storageUsageBytes': _parseIntSafely(data['storageUsageBytes']),
         };
       }
       
-      // 데이터 타입 확인 및 변환
-      usage = {
-        'ocrPages': int.tryParse(usage['ocrPages']?.toString() ?? '0') ?? 0,
-        'ttsRequests': int.tryParse(usage['ttsRequests']?.toString() ?? '0') ?? 0,
-        'translatedChars': int.tryParse(usage['translatedChars']?.toString() ?? '0') ?? 0,
-        'storageUsageBytes': int.tryParse(usage['storageUsageBytes']?.toString() ?? '0') ?? 0,
-      };
-      
-      debugPrint('사용량 데이터 로드 완료: $usage');
+      debugPrint('로드된 사용량 데이터: $usage');
       return usage;
     } catch (e) {
       debugPrint('사용량 데이터 로드 중 오류: $e');
       return {};
     }
   }
-  
+
+  /// 안전한 정수 파싱
+  int _parseIntSafely(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value) ?? 0;
+    if (value is double) return value.toInt();
+    return 0;
+  }
+
   /// 플래시카드 사용량 증가
   Future<bool> incrementFlashcardCount() async {
     // 플래시카드 사용량은 추적하지 않고 항상 true 반환
