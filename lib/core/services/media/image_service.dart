@@ -445,6 +445,9 @@ class ImageService {
         throw Exception('이미지가 null입니다');
       }
       
+      // 최종 저장 경로
+      String targetPath;
+      
       // 이미지가 경로인 경우
       if (image is String) {
         final imagePath = image;
@@ -455,12 +458,10 @@ class ImageService {
         }
         
         // 이미지 저장 및 최적화
-        final targetPath = await saveAndOptimizeImage(imagePath);
-        return targetPath;
+        targetPath = await saveAndOptimizeImage(imagePath);
       }
-      
       // 이미지가 File 객체인 경우
-      if (image is File) {
+      else if (image is File) {
         final imageFile = image;
         
         // 파일이 존재하는지 확인
@@ -468,12 +469,14 @@ class ImageService {
           throw Exception('파일이 존재하지 않습니다: ${imageFile.path}');
         }
         
-        // 이미지 저장 및 최적화
-        final targetPath = await saveAndOptimizeImage(imageFile.path);
-        return targetPath;
+        // 이미지 저장 및 최적화 (경로 전달)
+        targetPath = await saveAndOptimizeImage(imageFile.path);
+      }
+      else {
+        throw Exception('지원되지 않는 이미지 형식입니다: ${image.runtimeType}');
       }
 
-      throw Exception('지원되지 않는 이미지 형식입니다: ${image.runtimeType}');
+      return targetPath;
     } catch (e) {
       debugPrint('⚠️ 이미지 업로드 중 오류 발생: $e');
       return _fallbackImagePath;
@@ -497,7 +500,7 @@ class ImageService {
 
     // 이미지 크기 확인 및 저장 공간 제한 확인
     final fileSize = await originalFile.length();
-    final canStoreFile = await _checkStorageLimit(fileSize);
+    final canStoreFile = await _checkStorageLimit(originalFile);
     if (!canStoreFile) {
       throw Exception('저장 공간 제한을 초과했습니다. 이미지를 저장할 수 없습니다.');
     }
@@ -570,28 +573,41 @@ class ImageService {
     }
   }
   
-  /// 저장 공간 제한 확인
-  Future<bool> _checkStorageLimit(int additionalBytes) async {
+  /// 스토리지 용량 제한 확인
+  Future<bool> _checkStorageLimit(File imageFile) async {
     try {
-      // 사용량 제한 확인
-      final limitStatus = await _usageLimitService.checkLimitStatus();
-      final currentUsage = await _usageLimitService.getUserUsage();
-      final currentStorageUsage = currentUsage['storageUsageBytes'] ?? 0;
-      final storageLimit = limitStatus['storageLimit'] ?? 52428800; // 기본 50MB
+      final fileSize = await imageFile.length();
+      debugPrint('💾 이미지 파일 크기: ${_formatSize(fileSize)}');
       
-      // 예상 총 사용량 계산
-      final estimatedTotalUsage = currentStorageUsage + additionalBytes;
+      final usageLimitService = UsageLimitService();
+      final currentStorageUsage = await usageLimitService.getUserCurrentStorageSize();
+      final currentLimits = await usageLimitService.getCurrentLimits();
       
-      if (estimatedTotalUsage > storageLimit) {
-        debugPrint('⚠️ 저장 공간 제한 초과: ${estimatedTotalUsage / 1024 / 1024}MB > ${storageLimit / 1024 / 1024}MB');
-        return false;
-      }
+      // 스토리지 제한 가져오기 (기본값 50MB)
+      final storageLimitBytes = currentLimits['storageBytes'] ?? (50 * 1024 * 1024);
       
-      return true;
+      debugPrint('💾 현재 스토리지 사용량: ${_formatSize(currentStorageUsage)}');
+      debugPrint('💾 스토리지 제한: ${_formatSize(storageLimitBytes)}');
+      
+      // 현재 사용량 + 새 파일 크기
+      final estimatedTotalUsage = currentStorageUsage + fileSize;
+      
+      debugPrint('💾 예상 총 사용량: ${_formatSize(estimatedTotalUsage)}');
+      debugPrint('💾 사용량 초과 여부: ${estimatedTotalUsage > storageLimitBytes}');
+      
+      return estimatedTotalUsage <= storageLimitBytes;
     } catch (e) {
-      debugPrint('저장 공간 제한 확인 중 오류: $e');
-      return true; // 오류 발생 시에도 항상 허용
+      debugPrint('⚠️ 스토리지 제한 확인 중 오류: $e');
+      return true; // 오류 발생 시 기본적으로 저장 허용
     }
+  }
+  
+  /// 파일 크기를 포맷팅
+  String _formatSize(num bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(2)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
   
   /// 원본 파일을 타겟 경로에 복사 (Helper)
