@@ -155,6 +155,12 @@ class UsageLimitService {
     }
   }
   
+  /// 사용자 제한값 가져오기 (TTS 서비스 호환용)
+  Future<Map<String, int>> getUserLimits() async {
+    // 내부적으로 getCurrentLimits() 호출
+    return await getCurrentLimits();
+  }
+  
   /// 사용자별 커스텀 제한 가져오기
   Future<Map<String, int>> _getUserCustomLimits(String userId) async {
     try {
