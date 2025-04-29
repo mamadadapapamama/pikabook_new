@@ -42,7 +42,7 @@ class ContentManager {
   late final DictionaryService _dictionaryService = DictionaryService();
   late final UnifiedCacheService _cacheService = UnifiedCacheService();
   late final TranslationService _translationService = TranslationService();
-  late final TextProcessingWorkflow _textProcessingWorkflow = TextProcessingWorkflow();
+  late final OptimizedTextProcessingWorkflow _textProcessingWorkflow = OptimizedTextProcessingWorkflow();
   late final PinyinCreationService _pinyinService = PinyinCreationService();
 
   ContentManager._internal() {

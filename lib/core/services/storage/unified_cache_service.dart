@@ -547,8 +547,8 @@ class UnifiedCacheService {
     _memoryCache.clear();
     _noteCache.clear();
     _pageCache.clear();
-    _notePageIds.clear();
     _translationCache.clear();
+    _notePageIds.clear();
     _cacheTimestamps.clear();
     _cacheHitCount.clear();
     _cacheMissCount.clear();
@@ -559,6 +559,69 @@ class UnifiedCacheService {
   void clearCache() {
     _clearMemoryCache();
     debugPrint('모든 메모리 캐시가 초기화되었습니다.');
+  }
+
+  /// 번역 결과를 캐시에서 조회
+  Future<String?> getTranslationCache(String key) async {
+    try {
+      // 1. 메모리 캐시 확인
+      if (_translationCache.containsKey(key)) {
+        return _translationCache[key];
+      }
+      
+      // 2. 로컬 스토리지 확인
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'translation_cache_$key';
+      final cachedValue = prefs.getString(cacheKey);
+      
+      if (cachedValue != null) {
+        // 메모리 캐시에도 저장
+        _translationCache[key] = cachedValue;
+        return cachedValue;
+      }
+      
+      return null;
+    } catch (e) {
+      debugPrint('번역 캐시 조회 중 오류: $e');
+      return null;
+    }
+  }
+
+  /// 번역 결과를 캐시에 저장
+  Future<void> setTranslationCache(String key, String translation) async {
+    try {
+      // 1. 메모리 캐시에 저장
+      _translationCache[key] = translation;
+      
+      // 2. 로컬 스토리지에 저장
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'translation_cache_$key';
+      await prefs.setString(cacheKey, translation);
+    } catch (e) {
+      debugPrint('번역 캐시 저장 중 오류: $e');
+    }
+  }
+
+  /// 특정 언어 조합의 모든 번역 캐시를 초기화
+  Future<void> clearTranslationCache(String sourceLanguage, String targetLanguage) async {
+    try {
+      final keyPrefix = '$sourceLanguage:$targetLanguage:';
+      
+      // 1. 메모리 캐시 초기화
+      _translationCache.removeWhere((key, _) => key.startsWith(keyPrefix));
+      
+      // 2. 로컬 스토리지 초기화 (필요한 경우)
+      final prefs = await SharedPreferences.getInstance();
+      final allKeys = prefs.getKeys();
+      
+      for (final key in allKeys) {
+        if (key.startsWith('translation_cache_$keyPrefix')) {
+          await prefs.remove(key);
+        }
+      }
+    } catch (e) {
+      debugPrint('번역 캐시 초기화 중 오류: $e');
+    }
   }
 
   /// 번역 가져오기

@@ -472,7 +472,7 @@ class UsageLimitService {
       return percentages;
     } catch (e) {
       debugPrint('사용량 비율 계산 중 오류: $e');
-      return {
+    return {
         'ocr': 0.0,
         'tts': 0.0,
         'translation': 0.0,
@@ -552,7 +552,7 @@ class UsageLimitService {
               final fileSize = metadata.size ?? 0;
               totalSize += fileSize;
               debugPrint('저장 공간 계산: 파일 크기 (${item.name}): ${fileSize / 1024}KB');
-            } catch (e) {
+    } catch (e) {
               debugPrint('저장 공간 계산: 파일 메타데이터 오류 (${item.fullPath}): $e');
             }
           }
@@ -803,7 +803,7 @@ class UsageLimitService {
     // checkLimitStatus와 동일한 형식으로 결과 반환
     return await checkLimitStatus();
   }
-  
+
   /// 탈퇴 시 Firebase Storage 데이터 삭제
   Future<bool> deleteFirebaseStorageData(String userId) async {
     try {

@@ -573,7 +573,7 @@ class PageManager {
   Future<Map<String, dynamic>> loadPageContent(
     page_model.Page page, 
     {
-      TextProcessingWorkflow? textProcessingWorkflow, // 선택적 매개변수로 변경
+      OptimizedTextProcessingWorkflow? textProcessingWorkflow, // 선택적 매개변수로 변경
       ImageService? imageService, // 선택적 매개변수로 변경
       dynamic note,
     }) async {
