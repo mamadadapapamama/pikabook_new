@@ -292,22 +292,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (isPlanFree) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: ColorTokens.secondary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'free plan',
-                      style: TypographyTokens.caption.copyWith(
-                        color: ColorTokens.secondary,
-                      ),
-                    ),
-                  ),
-                ],
               ],
             );
           },
@@ -410,22 +394,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (isPlanFree) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: ColorTokens.secondary.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'free plan',
-                        style: TypographyTokens.caption.copyWith(
-                          color: ColorTokens.secondary,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               );
             },

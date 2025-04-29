@@ -16,14 +16,8 @@ class UsageLimitService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   PlanService? _planService;
   
-  // Trial 기간 정보
-  static const int TRIAL_PERIOD_DAYS = 14; // Trial 기간 (14일)
-  
   // 사용자별 커스텀 제한 설정을 위한 Firestore 컬렉션
   static const String _CUSTOM_LIMITS_COLLECTION = 'user_limits';
-  
-  // 베타 기간 정보
-  static const int BETA_PERIOD_DAYS = 14; // 베타 기간 (14일)
   
   // 싱글톤 패턴 구현
   static final UsageLimitService _instance = UsageLimitService._internal();
@@ -45,7 +39,6 @@ class UsageLimitService {
   static const String _kStorageUsageKey = 'storage_usage';
   static const String _kResetDateKey = 'usage_reset_date';
   static const String _kMonthlyLimitsKey = 'monthly_limits';
-  static const String _kBetaPeriodEndKey = 'beta_period_end';
   
   // 사용량 데이터 키
   static const String _USAGE_KEY = 'user_usage_data';
@@ -56,6 +49,12 @@ class UsageLimitService {
   // 캐시 변수를 클래스 레벨로 이동
   Map<String, dynamic>? _cachedUsageData;
   DateTime? _lastFetchTime;
+  
+  /// 사용자별 키 생성
+  String _getUserKey(String baseKey) {
+    final userId = _currentUserId;
+    return userId != null ? '${userId}_$baseKey' : baseKey;
+  }
   
   /// 안전하게 플랜 제한값 가져오기
   Map<String, int> _getFreePlanLimits() {
@@ -146,112 +145,6 @@ class UsageLimitService {
     }
   }
 
-  /// Trial 기간 종료 날짜 가져오기
-  Future<DateTime> getTrialEndDate() async {
-    final prefs = await SharedPreferences.getInstance();
-    final trialStartDateStr = prefs.getString(_kBetaPeriodEndKey);
-    
-    if (trialStartDateStr == null) {
-      // 처음 사용할 때는 현재 시간을 Trial 시작 시간으로 설정
-      final now = DateTime.now();
-      await prefs.setString(_kBetaPeriodEndKey, now.toIso8601String());
-      return now.add(Duration(days: TRIAL_PERIOD_DAYS));
-    }
-    
-    try {
-      final trialStartDate = DateTime.parse(trialStartDateStr);
-      return trialStartDate.add(Duration(days: TRIAL_PERIOD_DAYS));
-    } catch (e) {
-      debugPrint('Trial 기간 종료일 파싱 오류: $e');
-      final now = DateTime.now();
-      await prefs.setString(_kBetaPeriodEndKey, now.toIso8601String());
-      return now.add(Duration(days: TRIAL_PERIOD_DAYS));
-    }
-  }
-
-  /// Trial 기간 남은 일수 계산
-  Future<int> getRemainingTrialDays() async {
-    final endDate = await getTrialEndDate();
-    final today = DateTime.now();
-    
-    final difference = endDate.difference(today).inDays;
-    return difference > 0 ? difference : 0;
-  }
-
-  /// Trial 기간 종료 여부 확인
-  Future<bool> isTrialPeriodEnded() async {
-    final endDate = await getTrialEndDate();
-    final today = DateTime.now();
-    
-    return today.isAfter(endDate);
-  }
-
-  /// 현재 Trial 기간인지 확인
-  Future<bool> isTrialPeriod() async {
-    return !(await isTrialPeriodEnded());
-  }
-
-  /// Trial 기간 정보 제공
-  Future<Map<String, dynamic>> getTrialPeriodInfo() async {
-    final remainingDays = await getRemainingTrialDays();
-    final isTrial = await isTrialPeriod();
-    final userLimits = await getUserLimits();
-    
-    return {
-      'isTrialPeriod': isTrial,
-      'remainingDays': remainingDays,
-      'trialPeriodDays': TRIAL_PERIOD_DAYS,
-      'limits': userLimits,
-    };
-  }
-  
-  /// 베타 기간 종료 날짜 가져오기
-  Future<DateTime> getBetaPeriodEndDate() async {
-    final prefs = await SharedPreferences.getInstance();
-    final betaStartDateStr = prefs.getString(_kBetaPeriodEndKey);
-    
-    if (betaStartDateStr == null) {
-      // 처음 사용할 때는 현재 시간을 베타 시작 시간으로 설정
-      final now = DateTime.now();
-      await prefs.setString(_kBetaPeriodEndKey, now.toIso8601String());
-      return now.add(Duration(days: BETA_PERIOD_DAYS));
-    }
-    
-    try {
-      final betaStartDate = DateTime.parse(betaStartDateStr);
-      return betaStartDate.add(Duration(days: BETA_PERIOD_DAYS));
-    } catch (e) {
-      debugPrint('베타 기간 종료일 파싱 오류: $e');
-      // 오류 발생 시 현재 시간 기준으로 새로 설정
-      final now = DateTime.now();
-      await prefs.setString(_kBetaPeriodEndKey, now.toIso8601String());
-      return now.add(Duration(days: BETA_PERIOD_DAYS));
-    }
-  }
-  
-  /// 베타 기간 남은 일수 계산
-  Future<int> getRemainingBetaDays() async {
-    final endDate = await getBetaPeriodEndDate();
-    final today = DateTime.now();
-    
-    final difference = endDate.difference(today).inDays;
-    return difference > 0 ? difference : 0;
-  }
-  
-  /// 베타 기간 종료 여부 확인
-  Future<bool> isBetaPeriodEnded() async {
-    final endDate = await getBetaPeriodEndDate();
-    final today = DateTime.now();
-    
-    return today.isAfter(endDate);
-  }
-  
-  /// 사용자별 키 생성
-  String _getUserKey(String baseKey) {
-    final userId = _currentUserId;
-    return userId != null ? '${userId}_$baseKey' : baseKey;
-  }
-  
   /// 사용자 사용량 데이터 저장
   Future<void> _saveUsageData(Map<String, dynamic> usageData) async {
     try {
@@ -270,7 +163,7 @@ class UsageLimitService {
       // SharedPreferences에도 백업으로 저장
       final prefs = await SharedPreferences.getInstance();
       final String jsonData = json.encode(usageData);
-      await prefs.setString(_getUserKey(_USAGE_KEY), jsonData);
+      await prefs.setString(_USAGE_KEY, jsonData);
       
       debugPrint('사용량 데이터 저장 완료 (Firestore + SharedPreferences)');
       
@@ -454,186 +347,6 @@ class UsageLimitService {
     debugPrint('저장 공간 사용량 감소: ${usageInMB}MB/${limitInMB}MB');
   }
   
-  /// 베타 기간 사용량 및 제한 확인
-  Future<Map<String, dynamic>> getBetaUsageLimits() async {
-    final usageData = await _loadUsageData();
-    final limits = _getFreePlanLimits();
-    
-    // 베타 시작 날짜 확인
-    DateTime? betaStartDate;
-    if (usageData['betaStartDate'] != null) {
-      betaStartDate = DateTime.parse(usageData['betaStartDate']);
-    } else {
-      // 처음 사용할 때 베타 시작 날짜 설정
-      betaStartDate = DateTime.now();
-      usageData['betaStartDate'] = betaStartDate.toIso8601String();
-      await _saveUsageData(usageData);
-    }
-    
-    // 베타 종료일 계산
-    final betaEndDate = betaStartDate.add(Duration(days: BETA_PERIOD_DAYS));
-    final now = DateTime.now();
-    
-    // 베타 기간 남은 일수 계산
-    final remainingDays = betaEndDate.difference(now).inDays;
-    
-    // 베타 기간이 종료되었는지 확인
-    final bool betaEnded = now.isAfter(betaEndDate);
-    
-    // 현재 사용량
-    final ocrUsage = usageData['ocrPages'] ?? 0;
-    final ttsUsage = usageData['ttsRequests'] ?? 0;
-    final translatedChars = usageData['translatedChars'] ?? 0;
-    final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
-    
-    // 각 제한 초과 여부 확인
-    final bool ocrLimitReached = ocrUsage >= (limits['ocrPages'] ?? 0);
-    final bool ttsLimitReached = ttsUsage >= (limits['ttsRequests'] ?? 0);
-    final bool translationLimitReached = translatedChars >= (limits['translatedChars'] ?? 0);
-    final bool storageLimitReached = storageUsageBytes >= (limits['storageBytes'] ?? 0);
-    
-    // 어느 하나라도 제한에 도달했는지 확인
-    final bool anyLimitReached = 
-        ocrLimitReached ||
-        ttsLimitReached ||
-        translationLimitReached ||
-        storageLimitReached ||
-        betaEnded;
-    
-    return {
-      'betaStartDate': betaStartDate.toIso8601String(),
-      'betaEndDate': betaEndDate.toIso8601String(),
-      'remainingDays': remainingDays,
-      'betaEnded': betaEnded,
-      'ocrLimitReached': ocrLimitReached,
-      'ttsLimitReached': ttsLimitReached,
-      'translationLimitReached': translationLimitReached,
-      'storageLimitReached': storageLimitReached,
-      'dictionaryLimitReached': false, 
-      'pageLimitReached': false,
-      'flashcardLimitReached': false, 
-      'noteLimitReached': false, 
-      'anyLimitReached': anyLimitReached,
-    };
-  }
-  
-  /// 모든 사용량 초기화 (테스트용)
-  Future<void> resetAllUsage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final userId = _currentUserId;
-    
-    if (userId != null) {
-      // 사용량 데이터 초기화
-      await _saveUsageData({
-        'betaStartDate': DateTime.now().toIso8601String(),
-        'ocrPages': 0,
-        'ttsRequests': 0,
-        'translatedChars': 0,
-        'storageUsageBytes': 0,
-        'dictionaryLookups': 0,
-        'pages': 0,
-        'flashcards': 0,
-        'notes': 0,
-      });
-    }
-    
-    debugPrint('모든 사용량 초기화 완료');
-  }
-  
-  /// 월간 사용량 제한 설정 (프리미엄 사용자용)
-  Future<void> setMonthlyLimits({
-    int? ocrLimit,
-    int? translationCharLimit,
-    int? ttsCharLimit,
-    int? dictionaryLimit,
-    int? storageLimit,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final key = _getUserKey(_kMonthlyLimitsKey);
-    
-    // 기존 설정 불러오기
-    final Map<String, dynamic> currentLimits = 
-        json.decode(prefs.getString(key) ?? '{}') as Map<String, dynamic>;
-    
-    // 새 설정 업데이트
-    if (ocrLimit != null) currentLimits['ocrLimit'] = ocrLimit;
-    if (translationCharLimit != null) currentLimits['translationCharLimit'] = translationCharLimit;
-    if (ttsCharLimit != null) currentLimits['ttsCharLimit'] = ttsCharLimit;
-    if (dictionaryLimit != null) currentLimits['dictionaryLimit'] = dictionaryLimit;
-    if (storageLimit != null) currentLimits['storageLimit'] = storageLimit;
-    
-    // 설정 저장
-    await prefs.setString(key, json.encode(currentLimits));
-    
-    debugPrint('월간 사용량 제한 설정 완료: $currentLimits');
-  }
-  
-  /// 월간 사용량 초기화 (매월 1일에 호출)
-  Future<void> resetMonthlyUsage() async {
-    final prefs = await SharedPreferences.getInstance();
-    final resetDateKey = _getUserKey(_kResetDateKey);
-    
-    // 마지막 초기화 날짜 확인
-    final lastResetDateStr = prefs.getString(resetDateKey);
-    final now = DateTime.now();
-    final currentMonthStart = DateTime(now.year, now.month, 1);
-    
-    // 마지막 초기화 날짜가 없거나 이번 달 1일보다 이전이면 초기화
-    if (lastResetDateStr == null) {
-      await _doResetMonthlyUsage(prefs);
-      await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
-      return;
-    }
-    
-    try {
-      final lastResetDate = DateTime.parse(lastResetDateStr);
-      if (lastResetDate.isBefore(currentMonthStart)) {
-        await _doResetMonthlyUsage(prefs);
-        await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
-      }
-    } catch (e) {
-      debugPrint('날짜 파싱 오류: $e');
-      // 오류 발생 시 그냥 초기화
-      await _doResetMonthlyUsage(prefs);
-      await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
-    }
-  }
-  
-  /// 실제 월간 사용량 초기화 작업
-  Future<void> _doResetMonthlyUsage(SharedPreferences prefs) async {
-    // 베타 기간이 끝났는지 확인
-    final isBetaEnded = await isBetaPeriodEnded();
-    if (!isBetaEnded) {
-      // 베타 기간 중에는 모든 사용량 초기화
-      await resetAllUsage();
-      return;
-    }
-    
-    // 베타 기간 종료 후에는 무료 사용자와 프리미엄 사용자 구분하여 처리
-    // TODO: 프리미엄 사용자 확인 및 처리 로직 추가
-    
-    // 일단은 모든 사용자 초기화
-    await resetAllUsage();
-    debugPrint('월간 사용량 초기화 완료');
-  }
-  
-  /// 현재 베타 기간인지 확인
-  Future<bool> isBetaPeriod() async {
-    return !(await isBetaPeriodEnded());
-  }
-  
-  /// 베타 기간 정보 제공
-  Future<Map<String, dynamic>> getBetaPeriodInfo() async {
-    final remainingDays = await getRemainingBetaDays();
-    final isBeta = await isBetaPeriod();
-    
-    return {
-      'isBetaPeriod': isBeta,
-      'remainingDays': remainingDays,
-      'betaEndDate': BETA_PERIOD_DAYS.toString(),
-    };
-  }
-
   /// 사용자의 현재 사용량 가져오기 (전체)
   /// forceRefresh가 true이면 캐시를 무시하고 최신 데이터를 가져옵니다.
   Future<Map<String, dynamic>> getUserUsage({bool forceRefresh = false}) async {
@@ -674,14 +387,14 @@ class UsageLimitService {
 
   /// 무료 사용량 제한 확인 (전체)
   Future<Map<String, dynamic>> checkFreeLimits() async {
-    final limits = await getBetaUsageLimits();
+    final limits = await getUserLimits();
     
     // 결과 맵 생성
     final result = <String, dynamic>{};
     
     // 모든 키에 대해 타입 안전성 확보
     limits.forEach((key, value) {
-      if (key.endsWith('LimitReached') || key == 'betaEnded' || key == 'anyLimitReached') {
+      if (key.endsWith('LimitReached') || key == 'anyLimitReached') {
         // 불리언 값이어야 하는 키들
         if (value is bool) {
           result[key] = value;
@@ -703,29 +416,47 @@ class UsageLimitService {
   
   /// 각 기능별 사용량 비율(%) 계산
   Future<Map<String, double>> getUsagePercentages() async {
-    final usageData = await getUserUsage(forceRefresh: true);  // 강제로 최신 데이터 가져오기
-    final planType = await planService.getCurrentPlanType();
-    final limits = PlanService.PLAN_LIMITS[planType] ?? _getFreePlanLimits();
-    
-    // 각 항목별 사용량 비율 계산
-    final ocrUsage = usageData['ocrPages'] ?? 0;
-    final ttsUsage = usageData['ttsRequests'] ?? 0;
-    final translatedChars = usageData['translatedChars'] ?? 0;
-    final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
-    
-    debugPrint('OCR 사용량 계산: $ocrUsage / ${limits['ocrPages']} = ${(ocrUsage / (limits['ocrPages'] ?? 1)) * 100}%');
-    
-    return {
-      'ocr': (ocrUsage / (limits['ocrPages'] ?? 1)) * 100,
-      'tts': (ttsUsage / (limits['ttsRequests'] ?? 1)) * 100,
-      'translation': (translatedChars / (limits['translatedChars'] ?? 1)) * 100,
-      'storage': (storageUsageBytes / (limits['storageBytes'] ?? 1)) * 100,
-      // 제한 없는 기능은 항상 0% 사용량 반환
-      'dictionary': 0.0,
-      'flashcard': 0.0,
-      'note': 0.0,
-      'page': 0.0,
-    };
+    try {
+      final usageData = await getUserUsage(forceRefresh: true);  // 강제로 최신 데이터 가져오기
+      final planType = await planService.getCurrentPlanType();
+      final limits = PlanService.PLAN_LIMITS[planType] ?? _getFreePlanLimits();
+      
+      // 각 항목별 사용량 비율 계산
+      final ocrUsage = usageData['ocrPages'] ?? 0;
+      final ttsUsage = usageData['ttsRequests'] ?? 0;
+      final translatedChars = usageData['translatedChars'] ?? 0;
+      final storageUsageBytes = usageData['storageUsageBytes'] ?? 0;
+      
+      // 디버그 로그 추가
+      debugPrint('현재 사용량 데이터: $usageData');
+      debugPrint('현재 플랜 타입: $planType');
+      debugPrint('플랜 제한: $limits');
+      
+      // 0으로 나누는 것을 방지하기 위해 기본값 1 사용
+      return {
+        'ocr': (ocrUsage / (limits['ocrPages'] ?? 1)) * 100,
+        'tts': (ttsUsage / (limits['ttsRequests'] ?? 1)) * 100,
+        'translation': (translatedChars / (limits['translatedChars'] ?? 1)) * 100,
+        'storage': (storageUsageBytes / (limits['storageBytes'] ?? 1)) * 100,
+        // 제한 없는 기능은 항상 0% 사용량 반환
+        'dictionary': 0.0,
+        'flashcard': 0.0,
+        'note': 0.0,
+        'page': 0.0,
+      };
+    } catch (e) {
+      debugPrint('사용량 비율 계산 중 오류: $e');
+      return {
+        'ocr': 0.0,
+        'tts': 0.0,
+        'translation': 0.0,
+        'storage': 0.0,
+        'dictionary': 0.0,
+        'flashcard': 0.0,
+        'note': 0.0,
+        'page': 0.0,
+      };
+    }
   }
 
   /// 사용자 사용량 데이터 로드
@@ -749,10 +480,23 @@ class UsageLimitService {
       }
 
       final data = doc.data() as Map<String, dynamic>;
-      final usage = data['usage'] as Map<String, dynamic>? ?? {};
+      Map<String, dynamic> usage = {};
+      
+      // 'usage' 필드가 있는 경우
+      if (data.containsKey('usage') && data['usage'] is Map) {
+        usage = Map<String, dynamic>.from(data['usage'] as Map);
+      } else {
+        // 직접 필드에서 데이터 추출
+        usage = {
+          'ocrPages': data['ocrPages'] ?? 0,
+          'ttsRequests': data['ttsRequests'] ?? 0,
+          'translatedChars': data['translatedChars'] ?? 0,
+          'storageUsageBytes': data['storageUsageBytes'] ?? 0,
+        };
+      }
       
       debugPrint('사용량 데이터 로드 완료: $usage');
-      return Map<String, dynamic>.from(usage);
+      return usage;
     } catch (e) {
       debugPrint('사용량 데이터 로드 중 오류: $e');
       return {};
@@ -1033,5 +777,67 @@ class UsageLimitService {
     final currentBytes = currentUsage['storageBytes'] as int? ?? 0;
     
     return (currentBytes + bytes) <= limits['storageBytes']!;
+  }
+
+  /// 월간 사용량 초기화 (매월 1일에 호출)
+  Future<void> resetMonthlyUsage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final resetDateKey = _getUserKey(_kResetDateKey);
+    
+    // 마지막 초기화 날짜 확인
+    final lastResetDateStr = prefs.getString(resetDateKey);
+    final now = DateTime.now();
+    final currentMonthStart = DateTime(now.year, now.month, 1);
+    
+    // 마지막 초기화 날짜가 없거나 이번 달 1일보다 이전이면 초기화
+    if (lastResetDateStr == null) {
+      await _doResetMonthlyUsage(prefs);
+      await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
+      return;
+    }
+    
+    try {
+      final lastResetDate = DateTime.parse(lastResetDateStr);
+      if (lastResetDate.isBefore(currentMonthStart)) {
+        await _doResetMonthlyUsage(prefs);
+        await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
+      }
+    } catch (e) {
+      debugPrint('날짜 파싱 오류: $e');
+      await _doResetMonthlyUsage(prefs);
+      await prefs.setString(resetDateKey, currentMonthStart.toIso8601String());
+    }
+  }
+  
+  /// 실제 월간 사용량 초기화 작업
+  Future<void> _doResetMonthlyUsage(SharedPreferences prefs) async {
+    final planType = await planService.getCurrentPlanType();
+    
+    // Premium 사용자가 아닌 경우에만 초기화
+    if (planType != PlanService.PLAN_PREMIUM) {
+      await resetAllUsage();
+      debugPrint('무료 사용자의 월간 사용량 초기화 완료');
+    }
+  }
+
+  /// 모든 사용량 초기화
+  Future<void> resetAllUsage() async {
+    final userId = _currentUserId;
+    
+    if (userId != null) {
+      // 사용량 데이터 초기화
+      await _saveUsageData({
+        'ocrPages': 0,
+        'ttsRequests': 0,
+        'translatedChars': 0,
+        'storageUsageBytes': 0,
+        'dictionaryLookups': 0,
+        'pages': 0,
+        'flashcards': 0,
+        'notes': 0,
+      });
+    }
+    
+    debugPrint('모든 사용량 초기화 완료');
   }
 } 

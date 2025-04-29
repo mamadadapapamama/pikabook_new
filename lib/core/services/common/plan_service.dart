@@ -14,10 +14,6 @@ class PlanService {
   // 플랜 유형
   static const String PLAN_FREE = 'free';
   static const String PLAN_PREMIUM = 'premium';
-  static const String PLAN_TRIAL = 'trial';
-  
-  // 베타/Trial 종료일 (2024년 5월 31일)
-  static final DateTime TRIAL_END_DATE = DateTime(2024, 5, 31, 23, 59, 59);
   
   // 플랜별 제한
   static const Map<String, Map<String, int>> PLAN_LIMITS = {
@@ -32,12 +28,6 @@ class PlanService {
       'translatedChars': 100000, // 월 10만자
       'ttsRequests': 1000,      // 월 1,000회
       'storageBytes': 1073741824, // 1GB (1024 * 1024 * 1024)
-    },
-    PLAN_TRIAL: {
-      'ocrPages': 100,          // 14일간 100페이지
-      'translatedChars': 20000,  // 14일간 2만자
-      'ttsRequests': 500,       // 14일간 500회
-      'storageBytes': 104857600, // 100MB (100 * 1024 * 1024)
     },
   };
   
@@ -58,7 +48,7 @@ class PlanService {
   /// 현재 사용자의 플랜 타입 가져오기
   Future<String> getCurrentPlanType() async {
     try {
-      // 1. Premium 확인
+      // Premium 확인
       if (_currentUserId != null) {
         final userDoc = await _firestore
             .collection('users')
@@ -82,19 +72,7 @@ class PlanService {
         }
       }
 
-      // 2. Trial 확인
-      final now = DateTime.now();
-      
-      // 전체 Trial 기간이 끝나지 않았고
-      if (now.isBefore(TRIAL_END_DATE)) {
-        // 개별 사용자의 14일 Trial 기간이 유효하면
-        final isTrialValid = await _usageLimitService.isTrialPeriod();
-        if (isTrialValid) {
-          return PLAN_TRIAL;
-        }
-      }
-
-      // 3. 나머지는 Free
+      // Premium이 아니면 Free
       return PLAN_FREE;
     } catch (e) {
       debugPrint('플랜 정보 조회 오류: $e');
@@ -127,19 +105,13 @@ class PlanService {
   
   /// 플랜 이름 가져오기 (표시용)
   String getPlanName(String planType, {bool showBadge = false}) {
-    String name = '';
     switch (planType) {
       case PLAN_PREMIUM:
-        name = 'Premium';
-        break;
-      case PLAN_TRIAL:
-        name = 'Beta';
-        break;
+        return 'Premium';
       case PLAN_FREE:
       default:
-        name = 'Trial';
+        return showBadge ? 'Free plan' : 'Free';
     }
-    return showBadge && planType == PLAN_FREE ? '$name plan' : name;
   }
   
   /// 플랜별 기능 제한 정보 가져오기
@@ -170,24 +142,12 @@ class PlanService {
     final currentUsage = await getCurrentUsage();
     final usagePercentages = await getUsagePercentages();
     
-    Map<String, dynamic> additionalInfo = {};
-    
-    // Trial 플랜인 경우 남은 기간 정보 추가
-    if (planType == PLAN_TRIAL) {
-      final trialInfo = await _usageLimitService.getTrialPeriodInfo();
-      additionalInfo = {
-        'remainingDays': trialInfo['remainingDays'],
-        'trialEndDate': TRIAL_END_DATE.toIso8601String(),
-      };
-    }
-    
     return {
       'planType': planType,
       'planName': getPlanName(planType),
       'planLimits': planLimits,
       'currentUsage': currentUsage,
       'usagePercentages': usagePercentages,
-      ...additionalInfo,
     };
   }
   
@@ -236,7 +196,7 @@ class PlanService {
   Future<void> resetMonthlyUsage() async {
     final planType = await getCurrentPlanType();
     
-    // Trial이나 Premium 플랜이 아닌 경우만 초기화
+    // Premium이 아닌 경우만 초기화
     if (planType == PLAN_FREE) {
       await _usageLimitService.resetAllUsage();
     }

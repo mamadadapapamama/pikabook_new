@@ -439,10 +439,11 @@ class ImageService {
       }
       
       // 사용량 제한 확인
-      final usage = await _usageLimitService.getBetaUsageLimits();
+      final fileSize = await imageFile.length();
+      final canAddStorage = await _usageLimitService.checkStorageLimit(fileSize);
       
       // 저장 공간 제한 도달 시 오류 발생
-      if (usage['storageLimitReached'] == true) {
+      if (!canAddStorage) {
         debugPrint('저장 공간 제한에 도달했습니다 - 대체 파일 경로 반환');
         return _getFallbackPath();
       }
