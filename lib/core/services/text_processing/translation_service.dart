@@ -97,7 +97,7 @@ class TranslationService {
 
   // 번역 함수
   Future<String> translateText(String text,
-      {String sourceLanguage = 'auto', String? targetLanguage}) async {
+      {String sourceLanguage = 'auto', String? targetLanguage, bool countCharacters = true}) async {
     if (text.isEmpty) {
       return '';
     }
@@ -172,8 +172,11 @@ class TranslationService {
             if (translatedResult == text) {
               // 원본과 동일한 경우 사용량을 기록하지 않음
             } else {
-              // 번역된 글자 수 기록 (실제 번역 필요한 텍스트 길이만큼만 카운트)
-              await _usageLimitService.incrementTranslationCharCount(text.length);
+              // 사용량 카운팅 옵션이 활성화된 경우에만 사용량 증가
+              if (countCharacters) {
+                // 번역된 글자 수 기록 (실제 번역 필요한 텍스트 길이만큼만 카운트)
+                await _usageLimitService.incrementTranslationCharCount(text.length);
+              }
             }
             translatedText = translatedResult;
           }

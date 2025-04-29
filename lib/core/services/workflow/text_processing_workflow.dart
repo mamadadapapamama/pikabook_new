@@ -185,47 +185,50 @@ class TextProcessingWorkflow {
       // 4. 발음 생성 (병음 등)
       final pronunciation = await processor.generatePronunciation(text);
       
-      // 5. 번역 수행
+      // 5. 사용자 선호도 확인
+      final useSegmentMode = await _preferencesService.getUseSegmentMode();
+      final hasCompletedOnboarding = await _preferencesService.getOnboardingCompleted();
+      
+      // onboarding을 완료하지 않았으면 세그먼트 모드로 간주
+      final effectiveSegmentMode = hasCompletedOnboarding ? useSegmentMode : true;
+      
+      // 6. 사용자 선호도에 따라 필요한 번역만 수행
       String translatedText = '';
+      List<String> segmentTranslations = List.filled(segments.length, '');
+      
       if (text.isNotEmpty) {
-        translatedText = await _translationService.translateText(
-          text,
-          sourceLanguage: note.sourceLanguage,
-          targetLanguage: note.targetLanguage,
-        );
-      }
-      
-      // 6. 세그먼트별 번역 수행 (중요: 각 세그먼트별 번역 추가)
-      List<String> segmentTranslations = [];
-      
-      // 세그먼트가 있고 전체 번역도 있는 경우 세그먼트별 번역 수행
-      if (segments.isNotEmpty && translatedText.isNotEmpty) {
-        try {
-          // 각 세그먼트를 개별적으로 번역
-          for (var segment in segments) {
-            final originalText = segment['text'] as String;
-            if (originalText.trim().isEmpty) {
-              segmentTranslations.add('');
-              continue;
+        if (!effectiveSegmentMode) {
+          // 전체 텍스트 모드: 전체 텍스트만 번역
+          debugPrint('전체 텍스트 모드로 번역 수행');
+          translatedText = await _translationService.translateText(
+            text,
+            sourceLanguage: note.sourceLanguage,
+            targetLanguage: note.targetLanguage,
+          );
+        } else {
+          // 세그먼트 모드: 각 세그먼트만 번역
+          debugPrint('세그먼트 모드로 번역 수행');
+          
+          if (segments.isNotEmpty) {
+            for (var i = 0; i < segments.length; i++) {
+              final segment = segments[i];
+              final originalText = segment['text'] as String;
+              if (originalText.trim().isEmpty) continue;
+              
+              final segmentTranslation = await _translationService.translateText(
+                originalText,
+                sourceLanguage: note.sourceLanguage,
+                targetLanguage: note.targetLanguage,
+              );
+              
+              segmentTranslations[i] = segmentTranslation;
             }
             
-            // 개별 세그먼트 번역
-            final segmentTranslation = await _translationService.translateText(
-              originalText,
-              sourceLanguage: note.sourceLanguage,
-              targetLanguage: note.targetLanguage,
-            );
-            
-            segmentTranslations.add(segmentTranslation);
+            // 세그먼트 번역 결과를 합쳐서 전체 번역 텍스트로 설정
+            // 이렇게 하면 전체 텍스트 모드로 변경해도 번역이 있음
+            translatedText = segmentTranslations.join(' ');
           }
-        } catch (e) {
-          debugPrint('세그먼트별 번역 중 오류: $e');
-          // 오류 발생 시 빈 번역으로 채우기
-          segmentTranslations = List.filled(segments.length, '');
         }
-      } else {
-        // 세그먼트나 전체 번역이 없는 경우 빈 번역으로 채우기
-        segmentTranslations = List.filled(segments.length, '');
       }
       
       // 7. TextSegment 리스트 생성
@@ -247,15 +250,13 @@ class TextProcessingWorkflow {
           }
         }
         
-        // 세그먼트별 번역 적용 (인덱스 범위 확인)
-        final segmentTranslation = i < segmentTranslations.length 
-            ? segmentTranslations[i] 
-            : '';
+        // 세그먼트별 번역 적용
+        final segmentTranslation = effectiveSegmentMode ? segmentTranslations[i] : '';
         
         textSegments.add(TextSegment(
           originalText: originalText,
           pinyin: segmentPinyin,
-          translatedText: segmentTranslation, // 개별 세그먼트 번역 설정
+          translatedText: segmentTranslation,
           sourceLanguage: note.sourceLanguage,
           targetLanguage: note.targetLanguage,
         ));
@@ -266,7 +267,7 @@ class TextProcessingWorkflow {
         fullOriginalText: text,
         fullTranslatedText: translatedText,
         segments: textSegments,
-        showFullText: false,
+        showFullText: !effectiveSegmentMode,
         showPinyin: true,
         showTranslation: true,
       );

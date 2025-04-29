@@ -41,6 +41,7 @@ class GoogleCloudService {
   Future<String> translateText(String text, {
     String? sourceLanguage,
     String? targetLanguage,
+    bool countCharacters = true,
   }) async {
     try {
       if (text.isEmpty) {
@@ -60,13 +61,14 @@ class GoogleCloudService {
       // 텍스트가 너무 길면 분할하여 번역
       if (text.length > 5000) {
         debugPrint('GoogleCloudService: 텍스트가 너무 길어 분할하여 번역합니다.');
-        return await _translateLongText(text, sourceLanguage: source, targetLanguage: target);
+        return await _translateLongText(text, sourceLanguage: source, targetLanguage: target, countCharacters: countCharacters);
       }
 
       final result = await _translationService.translateText(
         text,
         sourceLanguage: source,
         targetLanguage: target,
+        countCharacters: countCharacters,
       );
 
       debugPrint('GoogleCloudService: 텍스트 번역 완료 (${result.length} 자)');
@@ -79,7 +81,7 @@ class GoogleCloudService {
 
   /// 긴 텍스트를 분할하여 번역
   Future<String> _translateLongText(String text,
-      {String? sourceLanguage, String? targetLanguage}) async {
+      {String? sourceLanguage, String? targetLanguage, bool countCharacters = true}) async {
     try {
       // 소스 언어가 지정되지 않은 경우 자동 감지
       final source = sourceLanguage ?? 'auto';
@@ -118,6 +120,7 @@ class GoogleCloudService {
               sentence,
               sourceLanguage: source,
               targetLanguage: target,
+              countCharacters: countCharacters,
             );
 
             translatedSentences.add(translatedSentence);
@@ -130,6 +133,7 @@ class GoogleCloudService {
             paragraph,
             sourceLanguage: source,
             targetLanguage: target,
+            countCharacters: countCharacters,
           );
 
           translatedParagraphs.add(translatedParagraph);
