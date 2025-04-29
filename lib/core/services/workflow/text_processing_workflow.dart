@@ -45,13 +45,6 @@ class TextProcessingWorkflow {
   final InternalCnSegmenterService _segmenterService = InternalCnSegmenterService();
   final UserPreferencesService _preferencesService = UserPreferencesService();
 
-  // 언어별 처리기 맵 (확장 가능)
-  final Map<String, LanguageProcessor> _languageProcessors = {
-    'zh': ChineseProcessor(), // 중국어 처리기
-    'ko': KoreanProcessor(),  // 한국어 처리기
-    // 추후 더 많은 언어 추가 가능: 'ja': JapaneseProcessor() 등
-  };
-
   /// 페이지 텍스트 처리 - ContentManager 의존성 제거하고 직접 구현
   Future<ProcessedText?> processPageText({
     required page_model.Page? page,
@@ -65,11 +58,15 @@ class TextProcessingWorkflow {
     try {
       final cachedText = await _cacheService.getProcessedText(pageId);
       if (cachedText != null) {
-        debugPrint('캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId');
+        if (kDebugMode) {
+          debugPrint('캐시에서 처리된 텍스트 로드: 페이지 ID=$pageId');
+        }
         return cachedText;
       }
     } catch (e) {
-      debugPrint('캐시 확인 중 오류 (무시됨): $e');
+      if (kDebugMode) {
+        debugPrint('캐시 확인 중 오류 (무시됨): $e');
+      }
     }
     
     // 2. 텍스트 처리 로직
@@ -79,11 +76,20 @@ class TextProcessingWorkflow {
     // 3. 이미지 파일이 있고 텍스트가 없는 경우 OCR 처리
     if (imageFile != null && (originalText.isEmpty || translatedText.isEmpty)) {
       try {
+        if (kDebugMode) {
+          debugPrint('이미지 파일에서 OCR 처리 시작');
+        }
+        
         final extractedText = await _ocrService.extractText(
           imageFile,
           skipUsageCount: false,
         );
         
+        if (kDebugMode) {
+          debugPrint('OCR 텍스트 추출 완료: ${extractedText.length}자');
+        }
+        
+        // OCR로 추출한 텍스트로 바로 처리 (캐시 확인 불필요)
         final note = Note(
           id: null,
           userId: '',
@@ -94,15 +100,16 @@ class TextProcessingWorkflow {
           targetLanguage: 'ko',
         );
         
-        final processedText = await processText(
+        return await processText(
           text: extractedText,
           note: note,
           pageId: pageId,
+          forceRefresh: true, // 캐시 확인을 건너뛰기 위해 forceRefresh 설정
         );
-        
-        return processedText;
       } catch (e) {
-        debugPrint('이미지 처리 중 오류: $e');
+        if (kDebugMode) {
+          debugPrint('이미지 처리 중 오류: $e');
+        }
         return ProcessedText(
           fullOriginalText: originalText.isNotEmpty ? originalText : "이미지 처리 중 오류가 발생했습니다.",
           fullTranslatedText: translatedText,
@@ -115,6 +122,10 @@ class TextProcessingWorkflow {
     // 4. 텍스트 처리
     if (originalText.isNotEmpty) {
       try {
+        if (kDebugMode) {
+          debugPrint('페이지 원본 텍스트 처리 시작: ${originalText.length}자');
+        }
+        
         final note = Note(
           id: null,
           userId: '',
@@ -125,10 +136,12 @@ class TextProcessingWorkflow {
           targetLanguage: 'ko',
         );
         
+        // 원본 텍스트로 처리 (이미 캐시 확인을 했으므로 forceRefresh 설정)
         ProcessedText processedText = await processText(
           text: originalText,
           note: note,
           pageId: pageId,
+          forceRefresh: true, // 불필요한 캐시 확인 방지
         );
         
         // 번역 텍스트가 있는 경우 설정
@@ -139,7 +152,9 @@ class TextProcessingWorkflow {
         
         return processedText;
       } catch (e) {
-        debugPrint('텍스트 처리 중 오류: $e');
+        if (kDebugMode) {
+          debugPrint('텍스트 처리 중 오류: $e');
+        }
         return ProcessedText(
           fullOriginalText: originalText,
           fullTranslatedText: translatedText,
@@ -170,7 +185,7 @@ class TextProcessingWorkflow {
       debugPrint('🔄 텍스트 처리 시작: ${text.length}자');
     }
     
-    // 1. 캐시 확인 (forceRefresh가 false일 때만)
+    // 캐시 확인은 forceRefresh가 false일 때만 수행 (processPageText에서 넘어온 경우는 forceRefresh=true)
     if (!forceRefresh) {
       final cachedResult = await _cacheService.getProcessedText(pageId);
       if (cachedResult != null) {
@@ -186,35 +201,25 @@ class TextProcessingWorkflow {
         debugPrint('새로운 텍스트 처리 시작 (소스언어: ${note.sourceLanguage}, 타겟언어: ${note.targetLanguage})');
       }
       
-      // 2. 언어 처리기 가져오기
-      final processor = _getProcessorForLanguage(note.sourceLanguage);
-      
-      // 3. 텍스트 세그멘테이션 수행
-      final segmentationStart = kDebugMode ? (Stopwatch()..start()) : null;
-      final segments = await processor.segmentText(text);
-      if (kDebugMode && segmentationStart != null) {
-        debugPrint('세그멘테이션 완료 (${segmentationStart.elapsedMilliseconds}ms): ${segments.length}개 세그먼트');
-      }
-      
-      // 4. 발음 생성 (병음 등) - 병렬 처리로 번역과 동시에 진행
-      final pronunciationFuture = processor.generatePronunciation(text);
-      
-      // 5. 사용자 선호도 확인
+      // 사용자 선호도 확인
       final useSegmentMode = await _preferencesService.getUseSegmentMode();
       final hasCompletedOnboarding = await _preferencesService.getOnboardingCompleted();
       
       // onboarding을 완료하지 않았으면 세그먼트 모드로 간주
       final effectiveSegmentMode = hasCompletedOnboarding ? useSegmentMode : true;
       
-      // 6. 사용자 선호도에 따라 필요한 번역만 수행
+      if (kDebugMode) {
+        debugPrint('텍스트 처리 모드: ${effectiveSegmentMode ? "세그먼트" : "전체 텍스트"}');
+      }
+      
       String translatedText = '';
-      List<String> segmentTranslations = List.filled(segments.length, '');
+      List<TextSegment> textSegments = [];
       
       if (text.isNotEmpty) {
         final translationStart = kDebugMode ? (Stopwatch()..start()) : null;
         
+        // 전체 텍스트 모드: 번역만 수행
         if (!effectiveSegmentMode) {
-          // 전체 텍스트 모드: 전체 텍스트만 번역
           if (kDebugMode) {
             debugPrint('전체 텍스트 모드로 번역 수행');
           }
@@ -223,10 +228,84 @@ class TextProcessingWorkflow {
             sourceLanguage: note.sourceLanguage,
             targetLanguage: note.targetLanguage,
           );
-        } else {
-          // 세그먼트 모드: 각 세그먼트 배치 처리로 최적화
+          
+          // 전체 텍스트 모드에서는 단일 세그먼트만 생성
+          textSegments = [
+            TextSegment(
+              originalText: text,
+              translatedText: translatedText,
+              pinyin: '',
+              sourceLanguage: note.sourceLanguage,
+              targetLanguage: note.targetLanguage,
+            )
+          ];
+        } 
+        // 세그먼트 모드: 세그먼테이션, 발음 생성, 세그먼트별 번역 수행
+        else {
           if (kDebugMode) {
-            debugPrint('세그먼트 모드로 번역 수행 (배치 처리)');
+            debugPrint('세그먼트 모드로 처리 시작');
+          }
+          
+          // 1. 세그멘테이션 수행 (세그먼트 모드에서만 필요)
+          final segmentationStart = kDebugMode ? (Stopwatch()..start()) : null;
+          
+          // 직접 InternalCnSegmenterService 사용
+          final segmenterService = InternalCnSegmenterService();
+          // 문장 단위로 분리
+          final sentences = segmenterService.splitIntoSentences(text);
+          
+          // segments 구조 생성
+          final segments = <Map<String, dynamic>>[];
+          int currentIndex = 0;
+          for (final sentence in sentences) {
+            if (sentence.isEmpty) continue;
+            
+            segments.add({
+              'text': sentence,
+              'index': currentIndex,
+              'isSegmentStart': true,
+            });
+            
+            currentIndex += sentence.length;
+          }
+          
+          if (kDebugMode && segmentationStart != null) {
+            debugPrint('세그멘테이션 완료 (${segmentationStart.elapsedMilliseconds}ms): ${segments.length}개 세그먼트');
+          }
+          
+          // 2. 발음 생성 (세그먼트 모드에서만 필요)
+          final pronunciationStart = kDebugMode ? (Stopwatch()..start()) : null;
+          
+          // 직접 PinyinCreationService 사용
+          final pinyinService = PinyinCreationService();
+          final pronunciation = <String, String>{};
+          
+          // 전체 텍스트에 대한 병음 생성
+          final wholePinyin = await pinyinService.generatePinyin(text);
+          pronunciation[text] = wholePinyin;
+          
+          // 각 문장별 병음 생성
+          for (final sentence in sentences) {
+            if (sentence.isEmpty) continue;
+            
+            final sentencePinyin = await pinyinService.generatePinyin(sentence);
+            pronunciation[sentence] = sentencePinyin;
+          }
+          
+          // 개별 글자에 대한 병음 생성
+          for (int i = 0; i < text.length; i++) {
+            final char = text[i];
+            final charPinyin = await pinyinService.generatePinyin(char);
+            pronunciation[char] = charPinyin;
+          }
+          
+          if (kDebugMode && pronunciationStart != null) {
+            debugPrint('발음 생성 완료 (${pronunciationStart.elapsedMilliseconds}ms)');
+          }
+          
+          // 3. 세그먼트별 번역
+          if (kDebugMode) {
+            debugPrint('세그먼트 번역 시작');
           }
           
           if (segments.isNotEmpty) {
@@ -239,9 +318,12 @@ class TextProcessingWorkflow {
               }
             }
             
+            // 번역 결과 저장용 배열
+            List<String> segmentTranslations = List.filled(segments.length, '');
+            
             if (segmentsToTranslate.isNotEmpty) {
               // 세그먼트 최적화를 위한 배치 처리
-              final batchSize = 10; // 한 번에 처리할 세그먼트 수
+              final batchSize = 15; // 한 번에 처리할 세그먼트 수
               final segmentBatches = <List<int>>[];
               final keys = segmentsToTranslate.keys.toList()..sort();
               
@@ -276,49 +358,39 @@ class TextProcessingWorkflow {
               // 세그먼트 번역 결과를 합쳐서 전체 번역 텍스트로 설정
               translatedText = segmentTranslations.join(' ');
             }
+            
+            // 4. TextSegment 리스트 생성
+            textSegments = [];
+            for (int i = 0; i < segments.length; i++) {
+              final originalText = segments[i]['text'] as String;
+              String segmentPinyin = '';
+              
+              // 발음 추가
+              segmentPinyin = pronunciation[originalText] ?? '';
+              
+              // 병음이 없고 세그먼트가 한 글자 이상인 경우 개별 처리 시도
+              if (segmentPinyin.isEmpty && originalText.length > 1) {
+                segmentPinyin = await pinyinService.generatePinyin(originalText);
+              }
+              
+              // 세그먼트별 번역 적용
+              textSegments.add(TextSegment(
+                originalText: originalText,
+                pinyin: segmentPinyin,
+                translatedText: segmentTranslations[i],
+                sourceLanguage: note.sourceLanguage,
+                targetLanguage: note.targetLanguage,
+              ));
+            }
           }
         }
         
         if (kDebugMode && translationStart != null) {
-          debugPrint('번역 완료 (${translationStart.elapsedMilliseconds}ms)');
+          debugPrint('번역/처리 완료 (${translationStart.elapsedMilliseconds}ms)');
         }
       }
       
-      // 발음 생성 완료 대기
-      final pronunciation = await pronunciationFuture;
-      
-      // 7. TextSegment 리스트 생성
-      final List<TextSegment> textSegments = [];
-      for (int i = 0; i < segments.length; i++) {
-        final originalText = segments[i]['text'] as String;
-        String segmentPinyin = '';
-        
-        // 7-1. 개별 세그먼트에 대한 발음 추가
-        if (note.sourceLanguage.startsWith('zh')) {
-          // 중국어인 경우 해당 세그먼트의 병음 찾기
-          segmentPinyin = pronunciation[originalText] ?? '';
-          
-          // 병음이 없고 세그먼트가 한 글자 이상인 경우 개별 처리 시도
-          if (segmentPinyin.isEmpty && originalText.length > 1) {
-            final processor = ChineseProcessor();
-            final segmentPronunciation = await processor.generatePronunciation(originalText);
-            segmentPinyin = segmentPronunciation[originalText] ?? '';
-          }
-        }
-        
-        // 세그먼트별 번역 적용
-        final segmentTranslation = effectiveSegmentMode ? segmentTranslations[i] : '';
-        
-        textSegments.add(TextSegment(
-          originalText: originalText,
-          pinyin: segmentPinyin,
-          translatedText: segmentTranslation,
-          sourceLanguage: note.sourceLanguage,
-          targetLanguage: note.targetLanguage,
-        ));
-      }
-      
-      // 8. ProcessedText 객체 생성
+      // ProcessedText 객체 생성
       final processedText = ProcessedText(
         fullOriginalText: text,
         fullTranslatedText: translatedText,
@@ -328,7 +400,7 @@ class TextProcessingWorkflow {
         showTranslation: true,
       );
       
-      // 9. 결과 캐싱
+      // 결과 캐싱
       await _cacheService.setProcessedText(pageId, processedText);
       
       if (kDebugMode && stopwatch != null) {
@@ -506,15 +578,6 @@ class TextProcessingWorkflow {
   Future<void> clearProcessedTextCache(String? pageId) async {
     if (pageId == null) return;
     await _cacheService.removeProcessedText(pageId);
-  }
-
-  /// 언어 코드에 맞는 처리기 반환
-  LanguageProcessor _getProcessorForLanguage(String language) {
-    // 언어 코드에서 기본 언어 추출 (예: zh-CN → zh)
-    final baseLanguage = language.split('-')[0].toLowerCase();
-    
-    // 해당 언어 처리기 반환 (없으면 기본 처리기)
-    return _languageProcessors[baseLanguage] ?? GenericProcessor();
   }
 
   // 사용자 선호 설정에 따른 모드 로드 메서드 추가
@@ -928,160 +991,3 @@ class TextProcessingWorkflow {
   }
 }
 
-/// 언어별 텍스트 처리 인터페이스
-abstract class LanguageProcessor {
-  /// 텍스트 세그멘테이션 (단어/구 단위 분리)
-  Future<List<Map<String, dynamic>>> segmentText(String text);
-  
-  /// 발음 생성 (병음, 후리가나 등)
-  Future<Map<String, String>> generatePronunciation(String text);
-}
-
-/// 중국어 처리기
-class ChineseProcessor implements LanguageProcessor {
-  // 필요한 서비스 인스턴스들
-  final InternalCnSegmenterService _segmenterService = InternalCnSegmenterService();
-  final PinyinCreationService _pinyinService = PinyinCreationService();
-  
-  @override
-  Future<List<Map<String, dynamic>>> segmentText(String text) async {
-    // 문장 단위로 분리
-    final sentences = _segmenterService.splitIntoSentences(text);
-    List<Map<String, dynamic>> result = [];
-    
-    // 각 문장을 세그먼트로 변환
-    int currentIndex = 0;
-    for (final sentence in sentences) {
-      if (sentence.isEmpty) continue;
-      
-      result.add({
-        'text': sentence,
-        'index': currentIndex,
-        'isSegmentStart': true,
-      });
-      
-      currentIndex += sentence.length;
-    }
-    
-    // 빈 리스트인 경우, 문자별로 분리 (폴백 처리)
-    if (result.isEmpty) {
-      final chars = text.split('');
-      
-      for (int i = 0; i < chars.length; i++) {
-        result.add({
-          'text': chars[i],
-          'index': i,
-          'isSegmentStart': true,
-        });
-      }
-    }
-    
-    return result;
-  }
-  
-  @override
-  Future<Map<String, String>> generatePronunciation(String text) async {
-    // 중국어 병음 생성 서비스 사용
-    Map<String, String> result = {};
-    
-    try {
-      // 전체 텍스트에 대한 병음 생성
-      final wholePinyin = await _pinyinService.generatePinyin(text);
-      result[text] = wholePinyin;
-      
-      // 세그먼트 단위로 병음 생성 (문장별)
-      final sentences = _segmenterService.splitIntoSentences(text);
-      for (final sentence in sentences) {
-        if (sentence.isEmpty) continue;
-        
-        final sentencePinyin = await _pinyinService.generatePinyin(sentence);
-        result[sentence] = sentencePinyin;
-      }
-      
-      // 단어 단위로 병음 생성 (최대 2-4자 중국어 단어)
-      if (text.length <= 4) {
-        for (int i = 0; i < text.length; i++) {
-          for (int j = i + 1; j <= i + 4 && j <= text.length; j++) {
-            final word = text.substring(i, j);
-            if (word.length <= 1) continue; // 1글자는 이미 개별 글자로 처리됨
-            
-            final wordPinyin = await _pinyinService.generatePinyin(word);
-            result[word] = wordPinyin;
-          }
-        }
-      }
-      
-      // 개별 글자에 대한 병음도 생성
-      for (int i = 0; i < text.length; i++) {
-        final char = text[i];
-        final charPinyin = await _pinyinService.generatePinyin(char);
-        result[char] = charPinyin;
-      }
-      
-      return result;
-    } catch (e) {
-      debugPrint('병음 생성 중 오류 발생: $e');
-      return {}; // 오류 시 빈 맵 반환
-    }
-  }
-}
-
-/// 한국어 처리기
-class KoreanProcessor implements LanguageProcessor {
-  @override
-  Future<List<Map<String, dynamic>>> segmentText(String text) async {
-    // 한국어 세그멘테이션 로직 (공백 기준 분리)
-    List<Map<String, dynamic>> result = [];
-    final words = text.split(' ');
-    
-    int currentIndex = 0;
-    for (final word in words) {
-      if (word.isEmpty) continue;
-      
-      result.add({
-        'text': word,
-        'index': currentIndex,
-        'isSegmentStart': true,
-      });
-      currentIndex += word.length + 1; // 공백 포함
-    }
-    
-    return result;
-  }
-  
-  @override
-  Future<Map<String, String>> generatePronunciation(String text) async {
-    // 한국어는 발음 생성이 필요 없지만, 로마자 변환 등이 필요하면 여기 구현
-    return {};
-  }
-}
-
-/// 기본 언어 처리기 (언어 특화 처리기가 없을 때 사용)
-class GenericProcessor implements LanguageProcessor {
-  @override
-  Future<List<Map<String, dynamic>>> segmentText(String text) async {
-    // 간단한 공백 기반 분리
-    List<Map<String, dynamic>> result = [];
-    final words = text.split(' ');
-    
-    int currentIndex = 0;
-    for (final word in words) {
-      if (word.isNotEmpty) {
-        result.add({
-          'text': word,
-          'index': currentIndex,
-          'isSegmentStart': true,
-        });
-      }
-      currentIndex += word.length + 1; // 공백 포함
-    }
-    
-    return result;
-  }
-  
-  @override
-  Future<Map<String, String>> generatePronunciation(String text) async {
-    // 기본 처리기는 발음 생성 없음
-    return {};
-  }
-} 
