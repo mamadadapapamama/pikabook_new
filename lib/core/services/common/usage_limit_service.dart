@@ -252,28 +252,65 @@ class UsageLimitService {
     return userId != null ? '${userId}_$baseKey' : baseKey;
   }
   
+  /// 사용자 사용량 데이터 저장
+  Future<void> _saveUsageData(Map<String, dynamic> usageData) async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) {
+        debugPrint('사용량 데이터 저장: 사용자 ID가 없음');
+        return;
+      }
+
+      // Firestore에 저장
+      await _firestore.collection('users').doc(userId).set({
+        'usage': usageData,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // SharedPreferences에도 백업으로 저장
+      final prefs = await SharedPreferences.getInstance();
+      final String jsonData = json.encode(usageData);
+      await prefs.setString(_getUserKey(_USAGE_KEY), jsonData);
+      
+      debugPrint('사용량 데이터 저장 완료 (Firestore + SharedPreferences)');
+      
+      // 캐시 업데이트
+      _cachedUsageData = Map<String, dynamic>.from(usageData);
+      _lastFetchTime = DateTime.now();
+    } catch (e) {
+      debugPrint('사용량 데이터 저장 중 오류: $e');
+    }
+  }
+
   /// OCR 페이지 사용량 증가
   Future<bool> incrementOcrPages(int pageCount) async {
-    final usageData = await _loadUsageData();
-    final int currentUsage = (usageData['ocrPages'] ?? 0) as int;
-    
-    // 현재 남은 페이지 수 계산
-    final int remainingPages = _getFreePlanLimit('ocrPages') - currentUsage;
-    
-    // 남은 페이지가 없으면 실패 반환
-    if (remainingPages <= 0) {
+    try {
+      final usageData = await _loadUsageData();
+      final int currentUsage = (usageData['ocrPages'] ?? 0) as int;
+      
+      // 현재 남은 페이지 수 계산
+      final int remainingPages = _getFreePlanLimit('ocrPages') - currentUsage;
+      
+      // 남은 페이지가 없으면 실패 반환
+      if (remainingPages <= 0) {
+        debugPrint('OCR 페이지 한도 초과: $currentUsage/${_getFreePlanLimit('ocrPages')}');
+        return false;
+      }
+      
+      // 남은 페이지 내에서 최대한 처리
+      final int newUsage = currentUsage + pageCount;
+      usageData['ocrPages'] = newUsage;
+      
+      // 사용량 데이터 저장 (Firestore + SharedPreferences)
+      await _saveUsageData(usageData);
+      
+      debugPrint('OCR 페이지 사용량 증가: $newUsage/${_getFreePlanLimit('ocrPages')} (요청: $pageCount, 남은 페이지: ${remainingPages - pageCount})');
+      
+      return true;
+    } catch (e) {
+      debugPrint('OCR 페이지 사용량 증가 중 오류: $e');
       return false;
     }
-    
-    // 남은 페이지 내에서 최대한 처리 (초과해도 일단 처리)
-    final int newUsage = currentUsage + pageCount;
-    usageData['ocrPages'] = newUsage;
-    await _saveUsageData(usageData);
-    
-    debugPrint('OCR 페이지 사용량 증가: $newUsage/${_getFreePlanLimit('ocrPages')} (요청: $pageCount, 남은 페이지: $remainingPages)');
-    
-    // 요청을 처리했으므로 true 반환
-    return true;
   }
   
   /// OCR 요청을 페이지 수 기준으로 증가 (기존 메서드 유지, 하위 호환성)
@@ -722,17 +759,6 @@ class UsageLimitService {
     }
   }
   
-  /// 사용자 사용량 데이터 저장
-  Future<void> _saveUsageData(Map<String, dynamic> usageData) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final String jsonData = json.encode(usageData);
-      await prefs.setString(_getUserKey(_USAGE_KEY), jsonData);
-    } catch (e) {
-      debugPrint('사용량 데이터 저장 중 오류: $e');
-    }
-  }
-
   /// 범용 사용량 감소 메서드
   Future<void> decrementUsage(String key) async {
     final usageData = await _loadUsageData();

@@ -217,7 +217,7 @@ class UsageDialog extends StatelessWidget {
   String _getUsageLabel(String key) {
     switch (key) {
       case 'ocr':
-        return 'OCR 페이지';
+        return '글자 추출';
       case 'tts':
         return '음성 읽기';
       case 'translation':
