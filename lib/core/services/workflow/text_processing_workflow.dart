@@ -458,34 +458,115 @@ class TextProcessingWorkflow {
     required Note note
   }) async {
     try {
-      // 1. 텍스트 처리 (캐시에 없는 경우)
-      final processedText = await processPageText(
-        page: page,
-        imageFile: imageFile,
-      );
+      // 1. 사용자 선호도 확인
+      final useSegmentMode = await _preferencesService.getUseSegmentMode();
+      final hasCompletedOnboarding = await _preferencesService.getOnboardingCompleted();
       
-      if (processedText != null && page.id != null) {
-        // 2. 기본 표시 설정 지정
-        final useSegmentMode = await _preferencesService.getUseSegmentMode();
-        final updatedProcessedText = processedText.copyWith(
-          showFullText: !useSegmentMode, // 현재 선택된 모드 적용
-          showPinyin: true,              // 병음 표시는 기본적으로 활성화
-          showTranslation: true,         // 번역은 항상 표시
-        );
-        
-        // 3. 업데이트된 텍스트 캐싱
-        await setProcessedText(page.id!, updatedProcessedText);
-        
-        // 4. 필요한 번역 데이터 확인 및 로드
-        final finalProcessedText = await checkAndLoadTranslationData(
-          note: note,
+      // onboarding을 완료하지 않았으면 세그먼트 모드로 간주
+      final effectiveSegmentMode = hasCompletedOnboarding ? useSegmentMode : true;
+      
+      // 2. 텍스트 처리 (캐시에 없는 경우)
+      ProcessedText? processedText = await getProcessedText(page.id!);
+      
+      if (processedText == null) {
+        // 새로 처리 필요
+        processedText = await processPageText(
           page: page,
           imageFile: imageFile,
-          currentProcessedText: updatedProcessedText,
+        );
+      }
+      
+      if (processedText != null) {
+        // 3. 기본 표시 설정 지정
+        ProcessedText updatedProcessedText = processedText.copyWith(
+          showFullText: !effectiveSegmentMode, // 현재 선택된 모드 적용
+          showPinyin: true,                   // 병음 표시는 기본적으로 활성화
+          showTranslation: true,              // 번역은 항상 표시
         );
         
-        return finalProcessedText ?? updatedProcessedText;
+        // 4. 번역 데이터 확인 - 필요한 경우에만 번역 수행
+        if (effectiveSegmentMode) {
+          // 세그먼트 모드: 각 세그먼트 번역이 필요한지 확인
+          if (updatedProcessedText.segments != null) {
+            bool needsSegmentTranslation = false;
+            
+            for (var segment in updatedProcessedText.segments!) {
+              if ((segment.translatedText == null || segment.translatedText!.isEmpty) && 
+                  segment.originalText.isNotEmpty) {
+                needsSegmentTranslation = true;
+                break;
+              }
+            }
+            
+            if (needsSegmentTranslation) {
+              // 세그먼트 번역 필요
+              debugPrint('세그먼트 모드: 일부 세그먼트 번역 필요');
+              
+              // 세그먼트별 번역 수행
+              final updatedSegments = <TextSegment>[];
+              
+              for (var segment in updatedProcessedText.segments!) {
+                if ((segment.translatedText == null || segment.translatedText!.isEmpty) && 
+                    segment.originalText.isNotEmpty) {
+                  // 세그먼트 번역 수행
+                  final translatedText = await _translationService.translateText(
+                    segment.originalText,
+                    sourceLanguage: segment.sourceLanguage,
+                    targetLanguage: segment.targetLanguage,
+                  );
+                  
+                  // 업데이트된 세그먼트 추가
+                  updatedSegments.add(TextSegment(
+                    originalText: segment.originalText,
+                    translatedText: translatedText,
+                    pinyin: segment.pinyin ?? '',
+                    sourceLanguage: segment.sourceLanguage,
+                    targetLanguage: segment.targetLanguage,
+                  ));
+                } else {
+                  updatedSegments.add(segment);
+                }
+              }
+              
+              // 세그먼트 번역 결과를 합쳐서 전체 번역 텍스트로 설정
+              final combinedTranslation = updatedSegments
+                  .map((s) => s.translatedText)
+                  .where((t) => t != null && t.isNotEmpty)
+                  .join(' ');
+              
+              updatedProcessedText = updatedProcessedText.copyWith(
+                segments: updatedSegments,
+                fullTranslatedText: combinedTranslation,
+              );
+            }
+          }
+        } else {
+          // 전체 텍스트 모드: 전체 번역이 필요한지 확인
+          if ((updatedProcessedText.fullTranslatedText == null || updatedProcessedText.fullTranslatedText!.isEmpty) &&
+              updatedProcessedText.fullOriginalText.isNotEmpty) {
+            debugPrint('전체 텍스트 모드: 전체 번역 필요');
+            
+            // 전체 텍스트 번역 수행
+            final translatedText = await _translationService.translateText(
+              updatedProcessedText.fullOriginalText,
+              sourceLanguage: note.sourceLanguage,
+              targetLanguage: note.targetLanguage,
+            );
+            
+            updatedProcessedText = updatedProcessedText.copyWith(
+              fullTranslatedText: translatedText,
+            );
+          }
+        }
+        
+        // 5. 업데이트된 텍스트 캐싱
+        if (page.id != null) {
+          await setProcessedText(page.id!, updatedProcessedText);
+        }
+        
+        return updatedProcessedText;
       }
+      
       return processedText;
     } catch (e) {
       debugPrint('페이지 컨텐츠 처리 중 오류: $e');
@@ -508,8 +589,101 @@ class TextProcessingWorkflow {
       return null;
     }
     
-    // 원래 모드 토글
-    final updatedText = toggleDisplayMode(processedText);
+    // 현재 모드 확인
+    final isCurrentlyFullText = processedText.showFullText;
+    final willBeSegmentMode = isCurrentlyFullText; // 토글되므로 현재 값의 반대가 될 것임
+    
+    // 세그먼트 모드로 전환하는데 세그먼트별 번역이 없는 경우
+    if (willBeSegmentMode && processedText.segments != null) {
+      bool needsSegmentTranslation = false;
+      
+      for (var segment in processedText.segments!) {
+        if ((segment.translatedText == null || segment.translatedText!.isEmpty) && 
+            segment.originalText.isNotEmpty) {
+          needsSegmentTranslation = true;
+          break;
+        }
+      }
+      
+      if (needsSegmentTranslation) {
+        debugPrint('세그먼트 모드로 전환하는데 일부 세그먼트 번역이 없어 번역 수행');
+        
+        // 새 세그먼트 리스트 생성
+        final updatedSegments = <TextSegment>[];
+        
+        for (var segment in processedText.segments!) {
+          if ((segment.translatedText == null || segment.translatedText!.isEmpty) && 
+              segment.originalText.isNotEmpty) {
+            // 세그먼트 번역 수행
+            final translatedText = await _translationService.translateText(
+              segment.originalText,
+              sourceLanguage: segment.sourceLanguage,
+              targetLanguage: segment.targetLanguage,
+            );
+            
+            // 업데이트된 세그먼트 추가
+            updatedSegments.add(TextSegment(
+              originalText: segment.originalText,
+              translatedText: translatedText,
+              pinyin: segment.pinyin ?? '',
+              sourceLanguage: segment.sourceLanguage,
+              targetLanguage: segment.targetLanguage,
+            ));
+          } else {
+            updatedSegments.add(segment);
+          }
+        }
+        
+        // 업데이트된 ProcessedText 생성
+        final updatedText = processedText.copyWith(
+          showFullText: !isCurrentlyFullText,
+          segments: updatedSegments
+        );
+        
+        // 업데이트된 상태 저장
+        await setProcessedText(pageId, updatedText);
+        return updatedText;
+      }
+    }
+    
+    // 전체 텍스트 모드로 전환하는데 전체 번역이 없는 경우
+    if (!willBeSegmentMode && (processedText.fullTranslatedText == null || processedText.fullTranslatedText!.isEmpty) &&
+        processedText.fullOriginalText.isNotEmpty) {
+      debugPrint('전체 텍스트로 전환하는데 전체 번역이 없어 번역 수행');
+      
+      // 기본 소스 및 타겟 언어 설정
+      String sourceLanguage = 'zh-CN';
+      String targetLanguage = 'ko';
+      
+      // 세그먼트에서 언어 정보 추출 시도
+      if (processedText.segments != null && processedText.segments!.isNotEmpty) {
+        final firstSegment = processedText.segments!.first;
+        sourceLanguage = firstSegment.sourceLanguage;
+        targetLanguage = firstSegment.targetLanguage;
+      }
+      
+      // 전체 텍스트 번역 수행
+      final translatedText = await _translationService.translateText(
+        processedText.fullOriginalText,
+        sourceLanguage: sourceLanguage,
+        targetLanguage: targetLanguage,
+      );
+      
+      // 번역 결과 적용
+      final updatedText = processedText.copyWith(
+        showFullText: !isCurrentlyFullText,
+        fullTranslatedText: translatedText
+      );
+      
+      // 업데이트된 상태 저장
+      await setProcessedText(pageId, updatedText);
+      return updatedText;
+    }
+    
+    // 기존 번역이 모두 있는 경우 모드만 토글
+    final updatedText = processedText.copyWith(
+      showFullText: !isCurrentlyFullText
+    );
     
     // 업데이트된 상태 저장
     await setProcessedText(pageId, updatedText);
