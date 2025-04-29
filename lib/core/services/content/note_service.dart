@@ -20,7 +20,7 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
 
 /// 노트 서비스: 노트 관리, 생성, 처리, 캐싱 로직을 담당합니다.
-/// 
+///  
 class NoteService {
   // 서비스 인스턴스
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -767,7 +767,7 @@ class NoteService {
       debugPrint('처리 완료 표시 중 오류: $e');
     }
   }
-  
+
   /// 마지막 캐시 시간 저장 (HomeViewModel에서 사용)
   Future<void> saveLastCacheTime(DateTime time) async {
     try {

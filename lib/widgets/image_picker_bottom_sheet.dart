@@ -57,7 +57,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('사용량 확인 중 오류 발생: $e');
+      debugPrint('사용량 확인 중 오류 발생: $e');
       }
     }
   }
@@ -171,7 +171,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       selectedImages = await _picker.pickMultiImage(
         requestFullMetadata: false, // 불필요한 메타데이터 요청 안함
       );
-      
+        
       // 이미지 선택이 취소되었거나 이미지가 없는 경우
       if (selectedImages == null || selectedImages.isEmpty) {
         if (kDebugMode) {
@@ -254,16 +254,16 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     try {
       // 압축 문제를 피하기 위해 imageQuality 파라미터를 제거하고 원본 품질 사용
       photo = await _picker.pickImage(
-        source: ImageSource.camera,
+          source: ImageSource.camera,
         requestFullMetadata: false, // 불필요한 메타데이터 요청 안함
       );
-      
+        
       // 사진 촬영이 취소되었거나 이미지가 없는 경우
       if (photo == null) {
         if (kDebugMode) {
           print('사진 촬영이 취소되었습니다.');
-        }
-        return;
+          }
+          return;
       }
     } catch (e) {
       if (kDebugMode) {

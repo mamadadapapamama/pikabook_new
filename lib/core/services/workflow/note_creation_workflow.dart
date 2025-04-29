@@ -35,7 +35,7 @@ class NoteCreationWorkflow {
   }) async {
     if (imageFiles.isEmpty) {
       if (kDebugMode) {
-        debugPrint('이미지가 없어 노트 생성 취소');
+      debugPrint('이미지가 없어 노트 생성 취소');
       }
       return;
     }
@@ -44,7 +44,7 @@ class NoteCreationWorkflow {
     final BuildContext rootContext = context;
     if (!rootContext.mounted) {
       if (kDebugMode) {
-        debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
+      debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
       }
       return;
     }
@@ -54,12 +54,12 @@ class NoteCreationWorkflow {
     
     if (showLoadingDialog) {
       if (kDebugMode) {
-        debugPrint('로딩 다이얼로그 표시 시작');
+    debugPrint('로딩 다이얼로그 표시 시작');
       }
-      await NoteCreationLoader.show(
-        rootContext, 
+    await NoteCreationLoader.show(
+      rootContext, 
         message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
-      );
+    );
       loadingDialogShown = true;
     } else {
       if (kDebugMode) {
@@ -78,7 +78,7 @@ class NoteCreationWorkflow {
     
     try {
       if (kDebugMode) {
-        debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
+      debugPrint('노트 생성 시작: ${imageFiles.length}개 이미지');
       }
       
       // 이미지 파일 유효성 검증
@@ -104,7 +104,7 @@ class NoteCreationWorkflow {
       );
       
       if (kDebugMode) {
-        debugPrint('노트 생성 완료: $result');
+      debugPrint('노트 생성 완료: $result');
       }
       
       // 성공 여부 체크
@@ -118,7 +118,7 @@ class NoteCreationWorkflow {
       
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('노트 생성 중 예외 발생: $e');
+      debugPrint('노트 생성 중 예외 발생: $e');
       }
       // 에러 처리는 아래 finally 블록에서 수행
       isSuccess = false;
@@ -126,7 +126,7 @@ class NoteCreationWorkflow {
       // 노트 생성 결과에 따른 처리
       if (isSuccess && createdNoteId != null && rootContext.mounted) {
         if (kDebugMode) {
-          debugPrint('노트 생성 성공: $createdNoteId - 상세 화면으로 이동');
+        debugPrint('노트 생성 성공: $createdNoteId - 상세 화면으로 이동');
         }
         
         // 노트 정보 로드
@@ -154,7 +154,7 @@ class NoteCreationWorkflow {
         
         // 노트 상세 화면으로 이동
         if (rootContext.mounted) {
-          _navigateToNoteDetail(rootContext, tempNote, totalImageCount);
+        _navigateToNoteDetail(rootContext, tempNote, totalImageCount);
         }
       } else if (rootContext.mounted) {
         // 로딩 화면 숨기기 (표시된 경우에만) - 실패 시
@@ -170,11 +170,11 @@ class NoteCreationWorkflow {
         
         // 실패 시 메시지 표시
         if (rootContext.mounted) {
-          ScaffoldMessenger.of(rootContext).showSnackBar(
-            const SnackBar(content: Text('노트 생성에 실패했습니다. 다시 시도해주세요.')),
-          );
+        ScaffoldMessenger.of(rootContext).showSnackBar(
+          const SnackBar(content: Text('노트 생성에 실패했습니다. 다시 시도해주세요.')),
+        );
           if (kDebugMode) {
-            debugPrint('노트 생성 실패 또는 ID가 없음');
+        debugPrint('노트 생성 실패 또는 ID가 없음');
           }
         }
       }
@@ -184,7 +184,7 @@ class NoteCreationWorkflow {
   /// 첫 번째 페이지의 처리 완료를 확인
   Future<void> _ensureFirstPageProcessed(String noteId) async {
     if (kDebugMode) {
-      debugPrint('첫 번째 페이지 처리 상태 확인 시작: noteId=$noteId');
+    debugPrint('첫 번째 페이지 처리 상태 확인 시작: noteId=$noteId');
     }
     
     // 최대 10초 동안 첫 페이지 처리 상태 확인 (500ms 간격)
@@ -209,7 +209,7 @@ class NoteCreationWorkflow {
           if (page.originalText != '___PROCESSING___' && 
               page.originalText.isNotEmpty) {
             if (kDebugMode) {
-              debugPrint('첫 번째 페이지 처리 완료 확인됨: ${page.id}');
+            debugPrint('첫 번째 페이지 처리 완료 확인됨: ${page.id}');
             }
             
             // 캐시 업데이트
@@ -222,18 +222,18 @@ class NoteCreationWorkflow {
         await Future.delayed(const Duration(milliseconds: 500));
         attempts++;
         if (kDebugMode) {
-          debugPrint('첫 번째 페이지 처리 대기 중... ($attempts/$maxAttempts)');
+        debugPrint('첫 번째 페이지 처리 대기 중... ($attempts/$maxAttempts)');
         }
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('페이지 처리 상태 확인 중 오류: $e');
+        debugPrint('페이지 처리 상태 확인 중 오류: $e');
         }
         break;
       }
     }
     
     if (kDebugMode) {
-      debugPrint('첫 번째 페이지 처리 완료 확인 시간 초과');
+    debugPrint('첫 번째 페이지 처리 완료 확인 시간 초과');
     }
   }
   
@@ -272,7 +272,7 @@ class NoteCreationWorkflow {
       return note;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('완전한 노트 정보 로드 중 오류: $e');
+      debugPrint('완전한 노트 정보 로드 중 오류: $e');
       }
       return null;
     }
@@ -284,7 +284,7 @@ class NoteCreationWorkflow {
     
     try {
       if (kDebugMode) {
-        debugPrint('노트 상세 화면으로 이동 시작');
+      debugPrint('노트 상세 화면으로 이동 시작');
       }
       
       // 로딩 다이얼로그가 완전히 닫혔는지 한번 더 확인 (안전 장치)
@@ -299,11 +299,11 @@ class NoteCreationWorkflow {
       );
       
       if (kDebugMode) {
-        debugPrint('노트 상세 화면으로 이동 완료');
+      debugPrint('노트 상세 화면으로 이동 완료');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('노트 상세 화면 이동 중 오류: $e');
+      debugPrint('노트 상세 화면 이동 중 오류: $e');
       }
       
       // 오류 발생 시 스낵바 표시

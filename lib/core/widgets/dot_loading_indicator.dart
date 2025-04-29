@@ -18,8 +18,8 @@ class DotLoadingIndicator extends StatefulWidget {
     Key? key,
     this.message,
     this.dotColor = ColorTokens.primary,
-    this.dotSize = 10.0,
-    this.spacing = 8.0,
+    this.dotSize = 10.0,  
+    this.spacing = 8.0,  
     this.isLoginScreen = false,
   }) : super(key: key);
 
@@ -80,13 +80,13 @@ class _DotLoadingIndicatorState extends State<DotLoadingIndicator> with SingleTi
             if (kReleaseMode || widget.message == null || widget.message!.isEmpty)
               const SizedBox.shrink()
             else
-              Text(
-                widget.message!,
-                textAlign: TextAlign.center,
-                style: TypographyTokens.body2.copyWith(
-                  color: textColor,
-                ),
+            Text(
+              widget.message!,
+              textAlign: TextAlign.center,
+              style: TypographyTokens.body2.copyWith(
+                color: textColor,
               ),
+            ),
           ],
         ],
       ),

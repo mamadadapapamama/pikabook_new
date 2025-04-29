@@ -79,7 +79,7 @@ class UsageLimitService {
   /// 특정 사용자의 사용량 제한 가져오기
   Future<Map<String, int>> getUserLimits() async {
     try {
-      final userId = _currentUserId;
+    final userId = _currentUserId;
       if (userId == null) {
         return _getDefaultLimits();
       }
@@ -205,39 +205,39 @@ class UsageLimitService {
       // 제한 체크
       if (!await checkLimit(key, amount)) {
         debugPrint('$key 사용량 제한 초과');
-        return false;
-      }
-
+      return false;
+    }
+    
       final usageData = await _loadUsageData();
       final currentUsage = usageData[key] ?? 0;
       final newUsage = currentUsage + amount;
       
       // 사용량 업데이트
       usageData[key] = newUsage;
-      await _saveUsageData(usageData);
-      
+    await _saveUsageData(usageData);
+    
       // Firestore에 직접 업데이트 (중요 지표)
       await _updateFirestoreUsage(key, newUsage);
-      
+  
       debugPrint('$key 사용량 증가: $currentUsage → $newUsage');
-      return true;
+    return true;
     } catch (e) {
       debugPrint('사용량 증가 중 오류: $e');
       return false;
     }
   }
-
+  
   /// 범용 사용량 감소 메서드
   Future<void> _decrementUsage(String key, int amount) async {
     try {
-      final usageData = await _loadUsageData();
-      final currentUsage = usageData[key] ?? 0;
+    final usageData = await _loadUsageData();
+    final currentUsage = usageData[key] ?? 0;
       final newUsage = (currentUsage - amount).clamp(0, double.maxFinite.toInt());
       
       // 사용량 업데이트
       usageData[key] = newUsage;
-      await _saveUsageData(usageData);
-      
+    await _saveUsageData(usageData);
+    
       // Firestore에 직접 업데이트
       await _updateFirestoreUsage(key, newUsage);
       
@@ -339,9 +339,9 @@ class UsageLimitService {
   /// 모든 사용량 초기화
   Future<void> resetAllUsage() async {
     try {
-      final userId = _currentUserId;
+    final userId = _currentUserId;
       if (userId == null) return;
-
+    
       final resetData = {
         'ocrPages': 0,
         'ttsRequests': 0,
@@ -460,7 +460,7 @@ class UsageLimitService {
     return result;
   }
   
-  /// 각 기능별 사용량 비율(%) 계산
+  /// 사용량 비율 계산
   Future<Map<String, double>> getUsagePercentages() async {
     try {
       final usageData = await getUserUsage(forceRefresh: true);
@@ -472,43 +472,108 @@ class UsageLimitService {
       debugPrint('현재 플랜: $planType');
       debugPrint('현재 사용량: $usageData');
       debugPrint('현재 제한: $limits');
-      
-      // 각 항목별 사용량 비율 계산
+    
+    // 각 항목별 사용량 비율 계산
       final Map<String, double> percentages = {};
       
-      void calculatePercentage(String usageKey, String displayKey, String limitKey) {
-        final usage = _parseIntSafely(usageData[usageKey]);
-        final limit = limits[limitKey] ?? 1;
-        final percentage = (usage / limit * 100).clamp(0.0, 100.0);
-        percentages[displayKey] = double.parse(percentage.toStringAsFixed(2));
-        debugPrint('$displayKey 사용량: $usage / $limit = ${percentages[displayKey]}%');
-      }
+      // OCR 사용량 (Firebase Storage 기반)
+      final ocrPages = await recalculateOcrPages();
+      final ocrLimit = limits['ocrPages'] ?? 1;
+      percentages['ocr'] = double.parse(((ocrPages / ocrLimit) * 100).clamp(0.0, 100.0).toStringAsFixed(2));
+      debugPrint('OCR 사용량: $ocrPages / $ocrLimit = ${percentages['ocr']}%');
       
-      // 키 매핑 수정
-      calculatePercentage('ocrPages', 'ocr', 'ocrPages');
-      calculatePercentage('ttsRequests', 'tts', 'ttsRequests');
-      calculatePercentage('translatedChars', 'translation', 'translatedChars');
-      calculatePercentage('storageUsageBytes', 'storage', 'storageBytes');
+      // 저장 공간 사용량 (Firebase Storage 기반)
+      final storageBytes = await recalculateStorageUsage();
+      final storageLimit = limits['storageBytes'] ?? 1;
+      percentages['storage'] = double.parse(((storageBytes / storageLimit) * 100).clamp(0.0, 100.0).toStringAsFixed(2));
+      debugPrint('저장 공간 사용량: ${storageBytes / 1024 / 1024}MB / ${storageLimit / 1024 / 1024}MB = ${percentages['storage']}%');
       
-      // 제한 없는 항목들
-      percentages['dictionary'] = 0.0;
-      percentages['flashcard'] = 0.0;
-      percentages['note'] = 0.0;
-      percentages['page'] = 0.0;
+      // TTS 사용량
+      final ttsUsage = _parseIntSafely(usageData['ttsRequests']);
+      final ttsLimit = limits['ttsRequests'] ?? 1;
+      percentages['tts'] = double.parse(((ttsUsage / ttsLimit) * 100).clamp(0.0, 100.0).toStringAsFixed(2));
+      debugPrint('TTS 사용량: $ttsUsage / $ttsLimit = ${percentages['tts']}%');
+      
+      // 번역 사용량
+      final translationUsage = _parseIntSafely(usageData['translatedChars']);
+      final translationLimit = limits['translatedChars'] ?? 1;
+      percentages['translation'] = double.parse(((translationUsage / translationLimit) * 100).clamp(0.0, 100.0).toStringAsFixed(2));
+      debugPrint('번역 사용량: $translationUsage / $translationLimit = ${percentages['translation']}%');
       
       debugPrint('계산된 최종 비율: $percentages');
       return percentages;
     } catch (e) {
       debugPrint('사용량 비율 계산 중 오류: $e');
-      return {
+    return {
         'ocr': 0.0,
         'tts': 0.0,
         'translation': 0.0,
         'storage': 0.0,
-        'dictionary': 0.0,
-        'flashcard': 0.0,
-        'note': 0.0,
-        'page': 0.0,
+      };
+    }
+  }
+
+  /// 제한 상태 확인
+  Future<Map<String, dynamic>> checkLimitStatus() async {
+    try {
+      final usageData = await getUserUsage(forceRefresh: true);
+      final planType = await planService.getCurrentPlanType();
+      final limits = PlanService.PLAN_LIMITS[planType] ?? _getFreePlanLimits();
+      
+      // OCR과 저장공간은 Firebase Storage에서 직접 계산
+      final ocrPages = await recalculateOcrPages();
+      final storageBytes = await recalculateStorageUsage();
+      
+      return {
+        'ocrLimitReached': ocrPages >= (limits['ocrPages'] ?? 0),
+        'ttsLimitReached': _parseIntSafely(usageData['ttsRequests']) >= (limits['ttsRequests'] ?? 0),
+        'translationLimitReached': _parseIntSafely(usageData['translatedChars']) >= (limits['translatedChars'] ?? 0),
+        'storageLimitReached': storageBytes >= (limits['storageBytes'] ?? 0),
+        // 제한값도 함께 전달
+        'ocrLimit': limits['ocrPages'],
+        'ttsLimit': limits['ttsRequests'],
+        'translationLimit': limits['translatedChars'],
+        'storageLimit': limits['storageBytes'],
+      };
+    } catch (e) {
+      debugPrint('제한 상태 확인 중 오류: $e');
+      return {
+        'ocrLimitReached': false,
+        'ttsLimitReached': false,
+        'translationLimitReached': false,
+        'storageLimitReached': false,
+        'ocrLimit': 30,
+        'ttsLimit': 100,
+        'translationLimit': 3000,
+        'storageLimit': 104857600, // 100MB
+      };
+    }
+  }
+
+  /// 사용량 정보 가져오기 (비율과 제한 상태)
+  Future<Map<String, dynamic>> getUsageInfo() async {
+    try {
+      final percentages = await getUsagePercentages();
+      final limitStatus = await checkLimitStatus();
+      
+      debugPrint('=== 사용량 정보 ===');
+      debugPrint('사용 비율: $percentages');
+      debugPrint('제한 상태: $limitStatus');
+      
+      return {
+        'percentages': percentages,
+        'limitStatus': limitStatus,
+      };
+    } catch (e) {
+      debugPrint('사용량 정보 가져오기 중 오류: $e');
+      return {
+        'percentages': {
+          'ocr': 0.0,
+          'tts': 0.0,
+          'translation': 0.0,
+          'storage': 0.0,
+        },
+        'limitStatus': await checkLimitStatus(),
       };
     }
   }
@@ -521,7 +586,7 @@ class UsageLimitService {
         debugPrint('사용량 데이터 로드: 사용자 ID가 없음');
         return {};
       }
-
+      
       debugPrint('사용량 데이터 로드 시작: userId=$userId');
 
       // Firestore에서 사용량 데이터 가져오기
@@ -532,8 +597,8 @@ class UsageLimitService {
 
       if (!doc.exists) {
         debugPrint('사용량 데이터 로드: 문서가 존재하지 않음');
-        return {};
-      }
+      return {};
+    }
 
       final data = doc.data() as Map<String, dynamic>;
       debugPrint('Firestore 원본 데이터: $data');
@@ -674,53 +739,176 @@ class UsageLimitService {
   /// 저장 공간 사용량 재계산
   Future<int> recalculateStorageUsage() async {
     try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final imageDir = Directory('${appDir.path}/images');
+      final userId = _currentUserId;
+      if (userId == null) return 0;
       
-      if (!await imageDir.exists()) {
-        debugPrint('이미지 디렉토리가 존재하지 않음');
+      debugPrint('저장 공간 사용량 재계산 시작: userId=$userId');
+      
+      // Firebase Storage에서 사용자 폴더 참조
+      final storageRef = FirebaseStorage.instance.ref().child('users/$userId');
+      int totalSize = 0;
+
+      try {
+        // 모든 파일 리스트 가져오기 (재귀적으로)
+        Future<int> calculateFolderSize(Reference ref) async {
+          int size = 0;
+          try {
+            final result = await ref.listAll();
+            debugPrint('폴더 ${ref.fullPath}의 파일 수: ${result.items.length}');
+
+            // 파일 크기 계산
+            for (final item in result.items) {
+              try {
+                final metadata = await item.getMetadata();
+                size += metadata.size ?? 0;
+                debugPrint('파일 크기 추가: ${item.name} = ${metadata.size ?? 0} bytes');
+              } catch (e) {
+                debugPrint('파일 메타데이터 가져오기 실패: ${item.fullPath} - $e');
+              }
+            }
+
+            // 하위 폴더 처리
+            for (final prefix in result.prefixes) {
+              size += await calculateFolderSize(prefix);
+            }
+          } catch (e) {
+            debugPrint('폴더 처리 중 오류: ${ref.fullPath} - $e');
+          }
+          return size;
+        }
+
+        totalSize = await calculateFolderSize(storageRef);
+        debugPrint('계산된 총 저장 공간: ${totalSize / 1024 / 1024}MB');
+
+        // Firestore에 업데이트
+        await _updateFirestoreUsage('storageUsageBytes', totalSize);
+        
+        return totalSize;
+      } catch (e) {
+        debugPrint('Firebase Storage 접근 실패: $e');
         return 0;
       }
+    } catch (e) {
+      debugPrint('저장 공간 계산 중 오류: $e');
+      return 0;
+    }
+  }
+
+  /// OCR 페이지 수 재계산 (업로드된 모든 이미지 수)
+  Future<int> recalculateOcrPages() async {
+    try {
+      final userId = _currentUserId;
+      if (userId == null) return 0;
+
+      debugPrint('OCR 페이지 수 재계산 시작: userId=$userId');
+
+      // Firebase Storage에서 사용자의 이미지 폴더 참조
+      final storageRef = FirebaseStorage.instance.ref().child('users/$userId');
+      int totalPages = 0;
+
+      try {
+        // 재귀적으로 모든 이미지 파일 찾기
+        Future<int> countImagesInFolder(Reference ref) async {
+          int count = 0;
+          try {
+            final result = await ref.listAll();
+            debugPrint('폴더 ${ref.fullPath}의 파일 수: ${result.items.length}');
+
+            // 이미지 파일 카운트
+            for (final item in result.items) {
+              if (item.name.toLowerCase().endsWith('.jpg') || 
+                  item.name.toLowerCase().endsWith('.jpeg') || 
+                  item.name.toLowerCase().endsWith('.png')) {
+                count++;
+                debugPrint('이미지 파일 발견: ${item.name}');
+              }
+            }
+
+            // 하위 폴더 처리
+            for (final prefix in result.prefixes) {
+              count += await countImagesInFolder(prefix);
+            }
+          } catch (e) {
+            debugPrint('폴더 처리 중 오류: ${ref.fullPath} - $e');
+          }
+          return count;
+        }
+
+        totalPages = await countImagesInFolder(storageRef);
+        debugPrint('계산된 총 OCR 페이지 수: $totalPages');
+
+        // Firestore에 업데이트
+        await _updateFirestoreUsage('ocrPages', totalPages);
+        
+        return totalPages;
+      } catch (e) {
+        debugPrint('Firebase Storage 접근 실패: $e');
+        return 0;
+      }
+    } catch (e) {
+      debugPrint('OCR 페이지 수 계산 중 오류: $e');
+      return 0;
+    }
+  }
+
+  /// 사용량 데이터 새로고침 (전체)
+  Future<void> refreshAllUsage() async {
+    try {
+      debugPrint('전체 사용량 데이터 새로고침 시작');
       
-      int totalSize = 0;
-      int fileCount = 0;
+      // 저장 공간과 OCR 페이지 수 재계산
+      final storageUsage = await recalculateStorageUsage();
+      final ocrPages = await recalculateOcrPages();
+      
+      debugPrint('재계산된 저장 공간: ${storageUsage / 1024 / 1024}MB');
+      debugPrint('재계산된 OCR 페이지 수: $ocrPages');
+      
+      // 캐시 초기화
+      await refreshCache();
+      
+      debugPrint('전체 사용량 데이터 새로고침 완료');
+    } catch (e) {
+      debugPrint('사용량 데이터 새로고침 중 오류: $e');
+    }
+  }
+
+  /// 저장 공간 사용량 증가 (Firebase Storage 기반)
+  Future<bool> checkAndAddStorageUsage(int bytes) async {
+    try {
+      // 현재 저장 공간 사용량 가져오기
+      final currentUsage = await recalculateStorageUsage();
       final limit = _getFreePlanLimit('storageBytes');
       
-      debugPrint('저장 공간 사용량 재계산 시작...');
-      
-      await for (final entity in imageDir.list(recursive: true)) {
-        if (entity is File) {
-          final fileSize = await entity.length();
-          totalSize += fileSize;
-          fileCount++;
-          
-          if (fileCount % 20 == 0) { // 20개 파일마다 로그 출력
-            debugPrint('진행 중: $fileCount개 파일 처리, 현재 크기: ${(totalSize / 1024 / 1024).toStringAsFixed(2)}MB');
-          }
-        }
+      // 제한 체크
+      if (currentUsage + bytes > limit) {
+        debugPrint('저장 공간 한도 초과: ${currentUsage + bytes} > $limit');
+        return false;
       }
       
-      // 이전 사용량 저장
-      final previousUsage = await _loadUsageData();
-      final oldStorageUsage = previousUsage['storageUsageBytes'] ?? 0;
-      
-      // 재계산된 값으로 저장 공간 사용량 업데이트
-      await resetStorageUsage();
-      await addStorageUsage(totalSize);
-      
-      final limitInMB = (limit / (1024 * 1024)).toStringAsFixed(0);
-      final totalMB = (totalSize / (1024 * 1024)).toStringAsFixed(2);
-      final oldMB = (oldStorageUsage / (1024 * 1024)).toStringAsFixed(2);
-      final percentUsed = ((totalSize * 100.0) / limit).toStringAsFixed(2);
-      
-      debugPrint('저장 공간 사용량 재계산 완료: $fileCount개 파일');
-      debugPrint('이전: ${oldMB}MB → 현재: ${totalMB}MB (제한: ${limitInMB}MB)');
-      debugPrint('총 사용률: $percentUsed% (${totalSize}바이트/${limit}바이트)');
-      
-      return totalSize;
+      return true;
     } catch (e) {
-      debugPrint('저장 공간 사용량 재계산 중 오류: $e');
-      return 0;
+      debugPrint('저장 공간 사용량 증가 중 오류: $e');
+      return false;
+    }
+  }
+
+  /// OCR 페이지 사용량 증가 (Firebase Storage 기반)
+  Future<bool> checkAndIncrementOcrPages(int pageCount) async {
+    try {
+      // 현재 OCR 페이지 수 가져오기
+      final currentPages = await recalculateOcrPages();
+      final limit = _getFreePlanLimit('ocrPages');
+      
+      // 제한 체크
+      if (currentPages + pageCount > limit) {
+        debugPrint('OCR 페이지 한도 초과: ${currentPages + pageCount} > $limit');
+        return false;
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('OCR 페이지 사용량 증가 중 오류: $e');
+      return false;
     }
   }
 
@@ -783,5 +971,10 @@ class UsageLimitService {
       debugPrint('Firebase Storage 데이터 삭제 실패: $e');
       return false;
     }
+  }
+
+  /// 앱 시작시 사용량 초기화
+  Future<void> initializeUsage() async {
+    await refreshAllUsage();
   }
 } 
