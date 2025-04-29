@@ -638,4 +638,51 @@ class UsageLimitService {
     // checkLimitStatus와 동일한 형식으로 결과 반환
     return await checkLimitStatus();
   }
+  
+  /// 탈퇴 시 Firebase Storage 데이터 삭제
+  Future<bool> deleteFirebaseStorageData(String userId) async {
+    try {
+      if (userId.isEmpty) {
+        debugPrint('Firebase Storage 데이터 삭제 실패: 사용자 ID가 비어있음');
+        return false;
+      }
+      
+      // Firebase Storage 참조
+      final userFolderRef = _storage.ref().child('users/$userId');
+      
+      try {
+        // 1. 사용자 폴더 모든 파일 리스트 가져오기
+        final result = await userFolderRef.listAll();
+        debugPrint('탈퇴한 사용자의 Firebase Storage 파일 ${result.items.length}개, 폴더 ${result.prefixes.length}개 발견');
+        
+        // 2. 모든 파일 삭제
+        for (final item in result.items) {
+          await item.delete();
+          debugPrint('파일 삭제됨: ${item.fullPath}');
+        }
+        
+        // 3. 하위 폴더 처리
+        for (final prefix in result.prefixes) {
+          // 하위 폴더의 모든 파일 가져오기
+          final subResult = await prefix.listAll();
+          
+          // 하위 폴더의 모든 파일 삭제
+          for (final subItem in subResult.items) {
+            await subItem.delete();
+            debugPrint('하위 폴더 파일 삭제됨: ${subItem.fullPath}');
+          }
+        }
+        
+        debugPrint('Firebase Storage에서 사용자 $userId의 데이터 삭제 완료');
+        return true;
+      } catch (e) {
+        // 폴더가 없거나 권한이 없는 경우 등
+        debugPrint('Firebase Storage 접근 중 오류: $e');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Firebase Storage 데이터 삭제 실패: $e');
+      return false;
+    }
+  }
 } 
