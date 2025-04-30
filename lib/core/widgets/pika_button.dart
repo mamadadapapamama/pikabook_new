@@ -47,11 +47,11 @@ class PikaButton extends StatelessWidget {
   Widget build(BuildContext context) {
     if (variant == PikaButtonVariant.floating) {
       final Color backgroundColor = onPressed == null 
-          ? ColorTokens.textGrey.withOpacity(0.5)
+          ? ColorTokens.greyMedium
           : ColorTokens.primary;
       
       final Color foregroundColor = onPressed == null
-          ? ColorTokens.textGrey.withOpacity(0.7)
+          ? Colors.white
           : Colors.white;
           
       return FloatingActionButton.extended(

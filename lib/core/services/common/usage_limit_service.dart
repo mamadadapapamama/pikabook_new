@@ -125,7 +125,7 @@ class UsageLimitService {
   /// 현재 플랜 제한 가져오기
   Future<Map<String, int>> getCurrentLimits() async {
     try {
-      final userId = _currentUserId;
+    final userId = _currentUserId;
       if (userId == null) {
         return _getDefaultLimits();
       }

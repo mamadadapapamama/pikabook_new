@@ -451,19 +451,19 @@ class ImageService {
       // 이미지가 경로인 경우
       if (image is String) {
         final imagePath = image;
-        
+      
         // 해당 경로에 파일이 존재하는지 확인
         if (!await File(imagePath).exists()) {
           throw Exception('파일이 존재하지 않습니다: $imagePath');
-        }
-        
-        // 이미지 저장 및 최적화
+      }
+      
+      // 이미지 저장 및 최적화
         targetPath = await saveAndOptimizeImage(imagePath);
       }
       // 이미지가 File 객체인 경우
       else if (image is File) {
         final imageFile = image;
-        
+      
         // 파일이 존재하는지 확인
         if (!await imageFile.exists()) {
           throw Exception('파일이 존재하지 않습니다: ${imageFile.path}');
@@ -475,7 +475,7 @@ class ImageService {
       else {
         throw Exception('지원되지 않는 이미지 형식입니다: ${image.runtimeType}');
       }
-
+      
       return targetPath;
     } catch (e) {
       debugPrint('⚠️ 이미지 업로드 중 오류 발생: $e');
@@ -496,15 +496,15 @@ class ImageService {
     final originalFile = File(imagePath);
     if (!await originalFile.exists()) {
       throw Exception('원본 이미지 파일을 찾을 수 없습니다: $imagePath');
-    }
-
+      }
+      
     // 이미지 크기 확인 및 저장 공간 제한 확인
     final fileSize = await originalFile.length();
     final canStoreFile = await _checkStorageLimit(originalFile);
     if (!canStoreFile) {
       throw Exception('저장 공간 제한을 초과했습니다. 이미지를 저장할 수 없습니다.');
-    }
-    
+      }
+
     // 사용자별 디렉토리 생성
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final filename = 'img_$timestamp${path.extension(imagePath)}';
@@ -513,12 +513,12 @@ class ImageService {
     final userId = _currentUserId ?? 'anonymous';
     final relativePath = path.join('images', userId, filename);
     final targetPath = path.join(await _localPath, relativePath);
-    
+      
     // 타겟 디렉토리 확인 및 생성
     final directory = Directory(path.dirname(targetPath));
     if (!await directory.exists()) {
       await directory.create(recursive: true);
-    }
+        }
 
     try {
       // 압축 시도
@@ -544,14 +544,14 @@ class ImageService {
       } catch (e) {
         debugPrint('Firebase 업로드 실패, 로컬 파일 사용: $e');
       }
-
+      
       // 저장 공간 사용량 추적
       final compressedFile = File(targetPath);
       final tracked = await _trackStorageUsage(compressedFile);
       if (!tracked) {
         debugPrint('⚠️ 저장 공간 사용량 추적 실패, 로컬 파일만 사용: $targetPath');
       }
-      
+
       return relativePath;
     } catch (e) {
       debugPrint('이미지 저장 중 오류 발생: $e');
@@ -582,7 +582,7 @@ class ImageService {
       final usageLimitService = UsageLimitService();
       final currentStorageUsage = await usageLimitService.getUserCurrentStorageSize();
       final currentLimits = await usageLimitService.getCurrentLimits();
-      
+        
       // 스토리지 제한 가져오기 (기본값 50MB)
       final storageLimitBytes = currentLimits['storageBytes'] ?? (50 * 1024 * 1024);
       
@@ -656,13 +656,13 @@ class ImageService {
     try {
       // Firebase Storage 참조 생성
       final storageRef = _storage.ref().child(relativePath);
-      
+        
       // 이미 존재하는지 확인 시도
-      try {
+        try {
         await storageRef.getDownloadURL();
         debugPrint('파일이 이미 Firebase Storage에 존재합니다: $relativePath');
         return; // 이미 존재하면 업로드 건너뛰기
-      } catch (e) {
+        } catch (e) {
         // 파일이 존재하지 않는 경우 (예외 발생) 계속 진행
       }
       

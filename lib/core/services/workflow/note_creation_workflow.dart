@@ -69,7 +69,21 @@ class NoteCreationWorkflow {
     
     // 바텀 시트가 있으면 닫기 (로딩 화면 표시 후)
     if (closeBottomSheet && Navigator.canPop(context)) {
-      Navigator.pop(context);
+      try {
+        // 더 안정적인 바텀 시트 닫기
+        Navigator.of(context).pop();
+        
+        // 안정성을 위해 약간의 딜레이 추가
+        await Future.delayed(const Duration(milliseconds: 50));
+        
+        if (kDebugMode) {
+          debugPrint('바텀 시트 닫기 완료');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('바텀 시트 닫기 중 오류: $e');
+        }
+      }
     }
     
     String? createdNoteId;

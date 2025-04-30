@@ -191,52 +191,60 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       return;
     }
     
-    // 이미지를 선택한 후에 바텀시트를 닫습니다
-    if (mounted && Navigator.canPop(context)) {
-      Navigator.pop(context);
-    }
-    
-    // 로딩 화면 표시
-    final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
-    if (rootContext.mounted) {
-      await NoteCreationLoader.show(
-        rootContext, 
-        message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
-      );
-    }
-    
-    // 메인 UI 스레드에서 작업을 분리하기 위해 마이크로태스크 큐에 작업 예약
-    Future.microtask(() async {
-      try {
-        // XFile에서 File로 변환
-        final List<File> imageFiles = selectedImages!
-            .map((xFile) => File(xFile.path))
-            .toList();
+    // 이미지를 선택한 후에 바텀시트를 닫습니다 (강력한 방식 적용)
+    if (mounted) {
+      // 루트 컨텍스트 가져오기
+      final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
+      
+      // 바텀 시트 닫기 (물리적 뒤로가기 제스처 동작과 동일하게)
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
         
-        // 이미지가 유효한 경우 노트 생성 시작
-        // 이미 로딩 화면이 표시되었으므로 showLoadingDialog=false
-        await _noteCreationWorkflow.createNoteWithImages(
-          rootContext, 
-          imageFiles,
-          closeBottomSheet: false, // 이미 바텀시트를 닫았으므로 false로 설정
-          showLoadingDialog: false  // 이미 로딩 화면이 표시되었으므로 false로 설정
-        );
-      } catch (e) {
-        if (kDebugMode) {
-          print('이미지 처리 중 오류: $e');
-        }
-        
-        // 오류 발생 시 로딩 화면 닫기
-        if (rootContext.mounted) {
-          NoteCreationLoader.hide(rootContext);
-          
-          // 사용자에게 오류 알림
-          ScaffoldMessenger.of(rootContext).showSnackBar(
-            SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
-          );
-        }
+        // 안정성을 위해 약간의 딜레이 추가
+        await Future.delayed(const Duration(milliseconds: 50));
       }
-    });
+      
+      // 로딩 화면 표시
+      if (rootContext.mounted) {
+        await NoteCreationLoader.show(
+          rootContext, 
+          message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
+        );
+      }
+      
+      // 메인 UI 스레드에서 작업을 분리하기 위해 마이크로태스크 큐에 작업 예약
+      Future.microtask(() async {
+        try {
+          // XFile에서 File로 변환
+          final List<File> imageFiles = selectedImages!
+              .map((xFile) => File(xFile.path))
+              .toList();
+          
+          // 이미지가 유효한 경우 노트 생성 시작
+          // 이미 로딩 화면이 표시되었으므로 showLoadingDialog=false
+          await _noteCreationWorkflow.createNoteWithImages(
+            rootContext, 
+            imageFiles,
+            closeBottomSheet: false, // 이미 바텀시트를 닫았으므로 false로 설정
+            showLoadingDialog: false  // 이미 로딩 화면이 표시되었으므로 false로 설정
+          );
+        } catch (e) {
+          if (kDebugMode) {
+            print('이미지 처리 중 오류: $e');
+          }
+          
+          // 오류 발생 시 로딩 화면 닫기
+          if (rootContext.mounted) {
+            NoteCreationLoader.hide(rootContext);
+            
+            // 사용자에게 오류 알림
+            ScaffoldMessenger.of(rootContext).showSnackBar(
+              SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
+            );
+          }
+        }
+      });
+    }
   }
   
   /// 카메라로 사진 촬영
@@ -277,49 +285,57 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       return;
     }
     
-    // 사진을 촬영한 후에 바텀시트를 닫습니다
-    if (mounted && Navigator.canPop(context)) {
-      Navigator.pop(context);
-    }
-    
-    // 로딩 화면 표시
-    final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
-    if (rootContext.mounted) {
-      await NoteCreationLoader.show(
-        rootContext, 
-        message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
-      );
-    }
-    
-    // 메인 UI 스레드에서 작업을 분리하기 위해 마이크로태스크 큐에 작업 예약
-    Future.microtask(() async {
-      try {
-        // XFile을 File로 변환
-        final File imageFile = File(photo!.path);
+    // 이미지를 선택한 후에 바텀시트를 닫습니다 (강력한 방식 적용)
+    if (mounted) {
+      // 루트 컨텍스트 가져오기
+      final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
+      
+      // 바텀 시트 닫기 (물리적 뒤로가기 제스처 동작과 동일하게)
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
         
-        // 이미지가 유효한 경우 노트 생성 시작
-        // 이미 로딩 화면이 표시되었으므로 showLoadingDialog=false
-        await _noteCreationWorkflow.createNoteWithImages(
-          rootContext, 
-          [imageFile],
-          closeBottomSheet: false, // 이미 바텀시트를 닫았으므로 false로 설정
-          showLoadingDialog: false  // 이미 로딩 화면이 표시되었으므로 false로 설정
-        );
-      } catch (e) {
-        if (kDebugMode) {
-          print('이미지 처리 중 오류: $e');
-        }
-        
-        // 오류 발생 시 로딩 화면 닫기
-        if (rootContext.mounted) {
-          NoteCreationLoader.hide(rootContext);
-          
-          // 사용자에게 오류 알림
-          ScaffoldMessenger.of(rootContext).showSnackBar(
-            SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
-          );
-        }
+        // 안정성을 위해 약간의 딜레이 추가 
+        await Future.delayed(const Duration(milliseconds: 50));
       }
-    });
+      
+      // 로딩 화면 표시
+      if (rootContext.mounted) {
+        await NoteCreationLoader.show(
+          rootContext, 
+          message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
+        );
+      }
+      
+      // 메인 UI 스레드에서 작업을 분리하기 위해 마이크로태스크 큐에 작업 예약
+      Future.microtask(() async {
+        try {
+          // XFile을 File로 변환
+          final File imageFile = File(photo!.path);
+          
+          // 이미지가 유효한 경우 노트 생성 시작
+          // 이미 로딩 화면이 표시되었으므로 showLoadingDialog=false
+          await _noteCreationWorkflow.createNoteWithImages(
+            rootContext, 
+            [imageFile],
+            closeBottomSheet: false, // 이미 바텀시트를 닫았으므로 false로 설정
+            showLoadingDialog: false  // 이미 로딩 화면이 표시되었으므로 false로 설정
+          );
+        } catch (e) {
+          if (kDebugMode) {
+            print('이미지 처리 중 오류: $e');
+          }
+          
+          // 오류 발생 시 로딩 화면 닫기
+          if (rootContext.mounted) {
+            NoteCreationLoader.hide(rootContext);
+            
+            // 사용자에게 오류 알림
+            ScaffoldMessenger.of(rootContext).showSnackBar(
+              SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
+            );
+          }
+        }
+      });
+    }
   }
 } 
