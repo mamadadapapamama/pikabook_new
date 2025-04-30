@@ -240,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                                   variant: PikaButtonVariant.primary,
                                                   isFullWidth: false,
                                                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                                  onPressed: null,
+                                                  onPressed: () => _showUsageLimitInfo(context),
                                                 ),
                                               )
                                             : PikaButton(
@@ -537,7 +537,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     variant: PikaButtonVariant.primary,
                     isFullWidth: true,
                     padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                    onPressed: null,
+                    onPressed: () => _showUsageLimitInfo(context),
                   ),
                 )
               : PikaButton(
@@ -671,5 +671,49 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // 설정 화면으로 이동
   void _navigateToSettings(BuildContext context) {
     Navigator.of(context).pushNamed('/settings');
+  }
+
+  // 사용량 제한 정보 다이얼로그 표시 메서드 추가
+  void _showUsageLimitInfo(BuildContext context) {
+    // 다이얼로그 표시 (다이얼로그 방식)
+    UsageDialog.show(
+      context,
+      title: '사용량 제한에 도달했습니다',
+      message: '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.',
+      limitStatus: _limitStatus,
+      usagePercentages: _usagePercentages,
+      onContactSupport: _handleContactSupport,
+    );
+    
+    // 스낵바 방식 (주석 처리하여 비활성화)
+    /*
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          '사용량 한도에 도달하여 노트 생성이 제한됩니다. 설정에서 사용량을 확인해 보세요.',
+          style: TextStyle(color: Colors.white),
+        ),
+        backgroundColor: ColorTokens.secondary,
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: '자세히',
+          textColor: Colors.white,
+          onPressed: () {
+            // 스낵바 닫기
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            // 상세 사용량 다이얼로그 표시
+            UsageDialog.show(
+              context,
+              title: '사용량 제한에 도달했습니다',
+              message: '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.',
+              limitStatus: _limitStatus,
+              usagePercentages: _usagePercentages,
+              onContactSupport: _handleContactSupport,
+            );
+          },
+        ),
+      ),
+    );
+    */
   }
 } 
