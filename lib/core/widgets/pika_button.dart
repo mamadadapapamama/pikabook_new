@@ -156,7 +156,7 @@ class PikaButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),
-          disabledBackgroundColor: ColorTokens.primary.withOpacity(0.5),
+          disabledBackgroundColor: ColorTokens.greyMedium,
         );
       
       

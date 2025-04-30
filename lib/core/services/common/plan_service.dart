@@ -19,7 +19,7 @@ class PlanService {
   static const Map<String, Map<String, int>> PLAN_LIMITS = {
     PLAN_FREE: {
       'ocrPages': 30,          // 월 30페이지
-      'translatedChars': 3000,  // 월 3,000자
+      'translatedChars': 10000,  // 월 10,000자
       'ttsRequests': 100,      // 월 100회
       'storageBytes': 52428800, // 50MB (50 * 1024 * 1024)
     },

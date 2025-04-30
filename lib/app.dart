@@ -14,6 +14,8 @@ import 'views/screens/settings_screen.dart';
 import 'core/services/common/initialization_manager.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
+import 'core/services/common/usage_limit_service.dart';
+import 'core/widgets/usage_dialog.dart';
 import 'widgets/loading_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,6 +24,8 @@ import 'core/theme/app_theme.dart';
 import 'dart:io';
 import 'core/theme/tokens/ui_tokens.dart';
 import 'core/theme/tokens/color_tokens.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -59,10 +63,17 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   StreamSubscription<User?>? _authStateSubscription;
   late InitializationManager _initializationManager;
   late UserPreferencesService _preferencesService;
+  final UsageLimitService _usageLimitService = UsageLimitService();
   String? _error;
   final MarketingCampaignService _marketingService = MarketingCampaignService();
   final PlanService _planService = PlanService();
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+  
+  bool _ttsExceed = false;
+  bool _noteExceed = false;
+  
+  // 사용량 한도 다이얼로그 표시 여부 추적
+  bool _hasShownUsageLimitDialog = false;
   
   @override
   void initState() {
@@ -207,6 +218,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         _isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
       }
       
+      // 4. 사용량 제한 확인
+      await _checkUsageLimits();
+      
       if (mounted) {
         setState(() {
           _isLoadingUserData = false; // 데이터 로딩 완료
@@ -242,6 +256,25 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('노트 존재 여부 확인 중 오류: $e');
       return false; // 오류 발생 시 기본값으로 false 반환
+    }
+  }
+  
+  /// 사용량 제한 확인
+  Future<void> _checkUsageLimits() async {
+    try {
+      // 사용량 제한 플래그 확인
+      final limitFlags = await _usageLimitService.checkUsageLimitFlags();
+      final ttsExceed = limitFlags['ttsExceed'] ?? false;
+      final noteExceed = limitFlags['noteExceed'] ?? false;
+      
+      setState(() {
+        _ttsExceed = ttsExceed;
+        _noteExceed = noteExceed;
+      });
+      
+      debugPrint('사용자 사용량 제한 확인: TTS 제한=$ttsExceed, 노트 제한=$noteExceed');
+    } catch (e) {
+      debugPrint('사용량 제한 확인 중 오류: $e');
     }
   }
   
@@ -353,7 +386,21 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       scrollBehavior: const CustomScrollBehavior(),
       scaffoldMessengerKey: _scaffoldMessengerKey,
       title: 'Pikabook',
-      home: const HomeScreen(),
+      home: Builder(
+        builder: (context) {
+          // 사용량 제한에 도달한 경우 다이얼로그 표시 (딜레이 적용)
+          if ((_ttsExceed || _noteExceed) && !_hasShownUsageLimitDialog) {
+            // 약간의 지연을 두고 다이얼로그 표시 (화면 전환 후)
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!_hasShownUsageLimitDialog) {
+                _showUsageLimitDialog(context);
+              }
+            });
+          }
+          
+          return const HomeScreen();
+        },
+      ),
       routes: {
         '/settings': (context) => SettingsScreen(
           onLogout: () async {
@@ -363,5 +410,57 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         ),
       },
     );
+  }
+  
+  // 사용량 제한 다이얼로그 표시
+  void _showUsageLimitDialog(BuildContext context) async {
+    // 사용량 정보 가져오기
+    final usageInfo = await _usageLimitService.getUsageInfo();
+    final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
+    final usagePercentages = usageInfo['percentages'] as Map<String, double>;
+    
+    // 다이얼로그 표시
+    if (mounted && !_hasShownUsageLimitDialog) {
+      UsageDialog.show(
+        context,
+        title: _noteExceed ? '사용량 제한에 도달했습니다' : null,
+        message: _noteExceed 
+            ? '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 눌러 요청해 주세요.'
+            : null,
+        limitStatus: limitStatus,
+        usagePercentages: usagePercentages,
+        onContactSupport: _handleContactSupport,
+      );
+      setState(() {
+        _hasShownUsageLimitDialog = true;
+      });
+    }
+  }
+  
+  // 지원팀 문의하기 처리
+  void _handleContactSupport() async {
+    // 프리미엄 문의 구글 폼 URL
+    const String formUrl = 'https://forms.gle/9EBEV1vaLpNbkhxD9';
+    final Uri url = Uri.parse(formUrl);
+    
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        // URL을 열 수 없는 경우 스낵바로 알림
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text('문의 폼을 열 수 없습니다. 직접 브라우저에서 다음 주소를 입력해 주세요: $formUrl'),
+            duration: const Duration(seconds: 10),
+          ),
+        );
+      }
+    } catch (e) {
+      // 오류 발생 시 스낵바로 알림
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('문의 폼을 여는 중 오류가 발생했습니다. 이메일로 문의해 주세요: hello.pikabook@gmail.com'),
+          duration: const Duration(seconds: 10),
+        ),
+      );
+    }
   }
 }

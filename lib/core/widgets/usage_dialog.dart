@@ -150,8 +150,8 @@ class _UsageDialogState extends State<UsageDialog> {
       ),
       content: _isLoading
           ? SizedBox(
-              width: 250, // 고정된 너비
-              height: 250, // 로드된 콘텐츠와 비슷한 높이
+              width: 260, // 고정된 너비
+              height: 220, // 로드된 콘텐츠와 비슷한 높이
               child: Center(child: CircularProgressIndicator()),
             )
           : SingleChildScrollView(
@@ -174,16 +174,8 @@ class _UsageDialogState extends State<UsageDialog> {
             ),
       actionsPadding: EdgeInsets.all(SpacingTokens.md),
       actions: [
-        // 새로고침 버튼 추가
-        PikaButton(
-          text: '새로고침',
-          variant: PikaButtonVariant.outline,
-          size: PikaButtonSize.small,
-          onPressed: () {
-            _loadUsageData();
-          },
-        ),
-        
+    
+    
         // 1:1 문의하기 버튼
         if (widget.onContactSupport != null)
           PikaButton(

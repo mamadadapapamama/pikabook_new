@@ -193,7 +193,7 @@ class UsageLimitService {
     return {
       'ocrPages': 30,
       'ttsRequests': 100,
-      'translatedChars': 3000,
+      'translatedChars': 10000,
       'storageBytes': 52428800, // 50MB
     };
   }
@@ -736,6 +736,40 @@ class UsageLimitService {
           'translationLimit': 3000,
           'storageLimit': 52428800,
         },
+      };
+    }
+  }
+  
+  /// 사용량 제한 플래그 확인
+  /// 앱 UI에서 사용자 경험을 제어하기 위한 플래그 정보를 반환합니다.
+  /// [ttsExceed] - TTS 사용량 제한 도달 여부
+  /// [noteExceed] - 노트 생성 관련 기능(OCR, 번역, 저장공간) 제한 도달 여부
+  Future<Map<String, bool>> checkUsageLimitFlags() async {
+    try {
+      // 제한 상태 확인
+      final usageInfo = await getUsageInfo();
+      final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
+      
+      // 플래그 설정
+      final ttsExceed = limitStatus['ttsLimitReached'] ?? false;
+      
+      // OCR, 번역, 저장공간 중 하나라도 제한에 도달하면 noteExceed = true
+      final noteExceed = 
+          (limitStatus['ocrLimitReached'] ?? false) ||
+          (limitStatus['translationLimitReached'] ?? false) ||
+          (limitStatus['storageLimitReached'] ?? false);
+      
+      debugPrint('사용량 제한 플래그 확인: ttsExceed=$ttsExceed, noteExceed=$noteExceed');
+      
+      return {
+        'ttsExceed': ttsExceed,
+        'noteExceed': noteExceed,
+      };
+    } catch (e) {
+      debugPrint('사용량 제한 플래그 확인 중 오류: $e');
+      return {
+        'ttsExceed': false,
+        'noteExceed': false,
       };
     }
   }

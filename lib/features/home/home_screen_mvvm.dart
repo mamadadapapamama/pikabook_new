@@ -70,6 +70,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _hasCheckedUsage = false;
   Map<String, dynamic> _limitStatus = {};
   Map<String, double> _usagePercentages = {};
+  bool _noteExceed = false; // 노트 생성 관련 제한 플래그 추가
   
   HomeViewModel? _viewModel;
 
@@ -127,6 +128,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // 노트스페이스 이름을 다시 로드
       _loadNoteSpaceName();
+      // 사용량 제한도 다시 확인
+      _checkUsageLimits();
     }
   }
 
@@ -136,6 +139,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     // 화면이 활성화될 때마다 노트스페이스 이름 다시 로드
     _loadNoteSpaceName();
+    
+    // 화면이 활성화될 때마다 사용량 제한도 다시 확인
+    _checkUsageLimits();
   }
 
   @override
@@ -282,26 +288,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final limitStatus = await _usageLimitService.checkFreeLimits();
       final usagePercentages = await _usageLimitService.getUsagePercentages();
       
-      setState(() {
-        _limitStatus = limitStatus;
-        _usagePercentages = usagePercentages;
-        _hasCheckedUsage = true;
-      });
+      // 사용량 제한 플래그 확인
+      final limitFlags = await _usageLimitService.checkUsageLimitFlags();
+      final noteExceed = limitFlags['noteExceed'] ?? false;
       
-      // 한도 초과 시 다이얼로그 표시
-      if (limitStatus['anyLimitReached'] == true && mounted) {
-        // 약간의 지연 후 다이얼로그 표시 (화면 전환 애니메이션 완료 후)
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            UsageDialog.show(
-              context,
-              limitStatus: limitStatus,
-              usagePercentages: usagePercentages,
-              onContactSupport: _handleContactSupport,
-            );
-          }
+      // OCR 제한 확인 (noteExceed 플래그와 별개로 직접 확인)
+      final bool ocrLimitReached = limitStatus['ocrLimitReached'] == true;
+      final bool translationLimitReached = limitStatus['translationLimitReached'] == true;
+      final bool storageLimitReached = limitStatus['storageLimitReached'] == true;
+
+      // 디버깅을 위해 상세 로깅
+      debugPrint('Home 화면: OCR 제한 도달=${limitStatus['ocrLimitReached']}, 노트 제한=$noteExceed');
+      debugPrint('Home 화면: 번역 제한=${limitStatus['translationLimitReached']}, 저장소 제한=${limitStatus['storageLimitReached']}');
+      
+      // 명시적으로 로컬 변수를 설정하고 setState를 호출하여 UI 업데이트 강제
+      final bool shouldDisableButton = ocrLimitReached || translationLimitReached || storageLimitReached || noteExceed;
+      
+      if (mounted) {
+        setState(() {
+          _limitStatus = limitStatus;
+          _usagePercentages = usagePercentages;
+          _noteExceed = shouldDisableButton; // 버튼 비활성화 플래그 설정
+          _hasCheckedUsage = true;
         });
       }
+      
+      // 다이얼로그 자동 표시 제거 - App 클래스에서 이미 표시하고 있음
+      // 특정 동작 시에만 표시하도록 변경 (버튼 클릭 시 등)
+      
+      debugPrint('사용량 확인 완료: 노트 생성 제한=$_noteExceed, 버튼 비활성화=$shouldDisableButton');
     } catch (e) {
       DebugUtils.error('사용량 확인 중 오류 발생: $e');
     }
@@ -338,7 +353,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _showImagePickerBottomSheet(BuildContext context) {
+  void _showImagePickerBottomSheet(BuildContext context) async {
+    // 사용량 제한 재확인
+    await _checkUsageLimits();
+    
+    // 사용량 제한 재확인 후 제한되었으면 다이얼로그 표시
+    if (_noteExceed) {
+      UsageDialog.show(
+        context,
+        title: '사용량 제한에 도달했습니다',
+        message: '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.',
+        limitStatus: _limitStatus,
+        usagePercentages: _usagePercentages,
+        onContactSupport: _handleContactSupport,
+      );
+      return;
+    }
+    
+    // 제한이 없으면 이미지 피커 바텀시트 표시
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
@@ -496,15 +528,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   // 버튼 비활성화 여부 확인
   bool _isButtonDisabled() {
-    // _limitStatus가 비어있거나 null이면 false 반환 (버튼 활성화)
-    if (_limitStatus.isEmpty) {
-      return false;
+    // OCR, 번역, 저장 공간 중 하나라도 한도 도달 시 버튼 비활성화
+    // _noteExceed 플래그는 이미 이러한 조건들을 종합적으로 체크함
+    debugPrint('버튼 비활성화 확인: _noteExceed=$_noteExceed, limitStatus=$_limitStatus');
+    
+    if (_noteExceed) {
+      return true;
     }
     
-    // OCR, 번역, 저장 공간 중 하나라도 한도 도달 시 버튼 비활성화
-    return _limitStatus['ocrLimitReached'] == true || 
-           _limitStatus['translationLimitReached'] == true || 
-           _limitStatus['storageLimitReached'] == true;
+    // 플래그에 의존하지 않고 직접 확인 (안전장치)
+    if (_limitStatus.isNotEmpty) {
+      final bool ocrLimitReached = _limitStatus['ocrLimitReached'] == true;
+      final bool translationLimitReached = _limitStatus['translationLimitReached'] == true;
+      final bool storageLimitReached = _limitStatus['storageLimitReached'] == true;
+      
+      return ocrLimitReached || translationLimitReached || storageLimitReached;
+    }
+    
+    return false;
   }
 
   // HomeViewModel 변경 시 호출될 메서드
