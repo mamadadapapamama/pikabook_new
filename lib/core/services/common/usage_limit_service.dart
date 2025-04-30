@@ -252,9 +252,9 @@ class UsageLimitService {
       final bool willExceedLimit = currentValue + amount > limit;
       if (willExceedLimit && !allowOverLimit) {
         debugPrint('$key 사용량 제한 초과: ${currentValue + amount} > $limit');
-        return false;
-      }
-      
+      return false;
+    }
+    
       // 4. 사용량 증가
       final newValue = currentValue + amount;
       await _updateUsage(key, newValue);
@@ -556,12 +556,12 @@ class UsageLimitService {
   Future<Map<String, int>> _calculateActualUsage() async {
     try {
       // 캐시 확인 (30초 동안 유효)
-      final now = DateTime.now();
+    final now = DateTime.now();
       final useCache = _cachedActualUsage != null && 
                     _lastActualUsageTime != null &&
                     now.difference(_lastActualUsageTime!).inSeconds < 30;
-      
-      if (useCache) {
+    
+    if (useCache) {
         debugPrint('실제 사용량 계산: 캐시 사용 (30초 이내)');
         return Map<String, int>.from(_cachedActualUsage!);
       }
@@ -864,8 +864,8 @@ class UsageLimitService {
       });
       
       // 2. 모든 캐시 무효화
-      _cachedUsageData = null;
-      _lastFetchTime = null;
+    _cachedUsageData = null;
+    _lastFetchTime = null;
       _cachedActualUsage = null;
       _lastActualUsageTime = null;
       _cachedUsageInfo = null;

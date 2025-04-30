@@ -199,9 +199,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime);
       
-      if (kDebugMode) {
-        debugPrint('페이지 텍스트 처리 소요시간: ${duration.inMilliseconds}ms');
-      }
+        if (kDebugMode) {
+          debugPrint('페이지 텍스트 처리 소요시간: ${duration.inMilliseconds}ms');
+        }
 
       if (mounted) {
         setState(() {

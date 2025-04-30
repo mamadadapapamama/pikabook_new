@@ -1038,6 +1038,34 @@ class ImageService {
       ),
     );
   }
+
+  /// 이미지 업로드 및 URL 가져오기 (단일 메서드)
+  Future<String> uploadAndGetUrl(File imageFile, {bool forThumbnail = false}) async {
+    try {
+      if (!await imageFile.exists()) {
+        throw Exception('이미지 파일이 존재하지 않습니다: ${imageFile.path}');
+      }
+      
+      // 이미지 저장 및 최적화
+      final int quality = forThumbnail ? 70 : 85; // 썸네일은 더 낮은 품질로 압축
+      final String relativePath = await saveAndOptimizeImage(imageFile.path, quality: quality);
+      
+      // Firebase Storage에서 URL 가져오기
+      String? downloadUrl;
+      try {
+        final storageRef = _storage.ref().child(relativePath);
+        downloadUrl = await storageRef.getDownloadURL();
+      } catch (e) {
+        debugPrint('Firebase URL 가져오기 실패, 로컬 경로 사용: $e');
+      }
+      
+      // URL이 있으면 반환, 없으면 로컬 상대 경로 반환
+      return downloadUrl ?? relativePath;
+    } catch (e) {
+      debugPrint('이미지 업로드 및 URL 가져오기 오류: $e');
+      return _fallbackImagePath;
+    }
+  }
 }
 
 // compute 함수에 타입 안전성을 제공하기 위한 래퍼 함수 및 파라미터 클래스

@@ -507,66 +507,96 @@ class NoteService {
   /// 이미지 처리 및 페이지 생성
   Future<Map<String, dynamic>> _processImageAndCreatePage(
     String noteId, 
-    File imageFile, 
-    {int pageNumber = 1, String? pageId, String? targetLanguage, bool shouldProcess = true, bool skipOcrUsageCount = false}
-  ) async {
+    File imageFile, {
+    int pageNumber = 1,
+    bool shouldProcess = false,
+    String? existingImageUrl,
+  }) async {
     try {
-      // 1. 이미지 업로드
-      String imageUrl = '';
-      try {
-        imageUrl = await _imageService.uploadImage(imageFile);
-        if (imageUrl.isEmpty) {
-          debugPrint('이미지 업로드 결과가 비어있습니다 - 기본 경로 사용');
-          imageUrl = 'images/fallback_image.jpg';
-        }
-      } catch (uploadError) {
-        debugPrint('이미지 업로드 중 오류: $uploadError - 기본 경로 사용');
-        imageUrl = 'images/fallback_image.jpg';
+      // 이미지가 없거나 존재하지 않으면 처리 중단
+      if (!await imageFile.exists()) {
+        return {'success': false, 'error': '이미지 파일이 존재하지 않습니다'};
       }
-
-      // 2. OCR 및 번역 처리
-      String extractedText = '';
-      String translatedText = '';
       
-      if (shouldProcess) {
-        // OCR로 텍스트 추출
-        extractedText = await _ocrService.extractText(imageFile, skipUsageCount: skipOcrUsageCount);
-        
-        // 텍스트 번역
-        if (extractedText.isNotEmpty) {
-          translatedText = await _translationService.translateText(
-            extractedText,
-            targetLanguage: targetLanguage ?? 'ko',
-          );
-        }
-      } else {
-        // 처리하지 않는 경우 특수 마커 사용
-        extractedText = '___PROCESSING___';
-        translatedText = '';
-      }
-
-      // 3. 페이지 생성
+      // 이미지 업로드 및 URL 가져오기 (이미 썸네일이 있는 경우 재사용)
+      final imageUrl = existingImageUrl != null && existingImageUrl.isNotEmpty 
+          ? existingImageUrl 
+          : await _imageService.uploadAndGetUrl(imageFile);
+      
+      // 페이지 생성 - 초기 상태는 "처리 중"으로 표시
       final page = await _pageService.createPage(
         noteId: noteId,
-        originalText: extractedText,
-        translatedText: translatedText,
         pageNumber: pageNumber,
-        imageFile: imageFile,
+        imageUrl: imageUrl,
+        originalText: shouldProcess ? '' : '___PROCESSING___', // 즉시 처리 여부에 따라 초기 텍스트 설정
+        translatedText: '',
       );
 
-      // 4. 첫 페이지인 경우 노트 썸네일 업데이트
-      if (pageNumber == 1) {
-        await _updateNoteFirstPageInfo(noteId, imageUrl, extractedText, translatedText);
+      if (shouldProcess) {
+        // OCR 텍스트 추출 (동기 처리)
+        final extractedText = await _ocrService.extractText(imageFile);
+        
+        // 텍스트 번역 (동기 처리)
+        final translatedText = await _translationService.translateText(extractedText);
+        
+        // 페이지 업데이트
+        await _pageService.updatePage(
+          page.id!,
+          originalText: extractedText,
+          translatedText: translatedText,
+        );
+        
+        // 첫 번째 페이지인 경우 노트 정보 업데이트
+        if (pageNumber == 1) {
+          await _updateNoteFirstPageInfo(noteId, imageUrl, extractedText, translatedText);
+        }
+        
+        return {
+          'success': true,
+          'imageUrl': imageUrl,
+          'extractedText': extractedText,
+          'translatedText': translatedText,
+          'pageId': page.id,
+        };
+      } else {
+        // 비동기 처리를 위한 마이크로태스크 예약
+        Future.microtask(() async {
+          try {
+            // OCR 텍스트 추출
+            final extractedText = await _ocrService.extractText(imageFile);
+            
+            // 텍스트 번역
+            final translatedText = await _translationService.translateText(extractedText);
+            
+            // 페이지 업데이트
+            await _pageService.updatePage(
+              page.id!,
+              originalText: extractedText,
+              translatedText: translatedText,
+            );
+            
+            // 첫 번째 페이지인 경우 노트 정보 업데이트
+            if (pageNumber == 1) {
+              await _updateNoteFirstPageInfo(noteId, imageUrl, extractedText, translatedText);
+              
+              // 첫 페이지 처리 완료 표시
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setBool('first_page_processed_$noteId', true);
+            }
+          } catch (e) {
+            debugPrint('비동기 이미지 처리 중 오류: $e');
+          }
+        });
+        
+        // 즉시 결과 반환 (처리는 백그라운드에서 진행)
+        return {
+          'success': true,
+          'imageUrl': imageUrl,
+          'extractedText': '___PROCESSING___',
+          'translatedText': '',
+          'pageId': page.id,
+        };
       }
-
-      // 5. 결과 반환
-      return {
-        'success': true,
-        'imageUrl': imageUrl,
-        'extractedText': extractedText,
-        'translatedText': translatedText,
-        'pageId': page.id,
-      };
     } catch (e) {
       debugPrint('이미지 처리 및 페이지 생성 중 오류 발생: $e');
       return {
@@ -657,25 +687,28 @@ class NoteService {
         'isProcessingBackground': true, // 백그라운드 처리 상태 설정
       };
 
+      // 첫 번째 이미지 썸네일 URL 미리 준비 (간단한 처리만 수행)
+      String? firstImageUrl;
+      if (imageFiles.isNotEmpty) {
+        try {
+          // 간단한 썸네일만 미리 생성 (최소한의 처리)
+          firstImageUrl = await _imageService.uploadAndGetUrl(imageFiles[0], forThumbnail: true);
+          if (firstImageUrl != null && firstImageUrl.isNotEmpty) {
+            noteData['imageUrl'] = firstImageUrl; // 첫 이미지 URL을 노트 썸네일로 설정
+          }
+        } catch (e) {
+          debugPrint('첫 이미지 썸네일 생성 중 오류 (무시됨): $e');
+        }
+      }
+
       // Firestore에 노트 추가
       final docRef = await _notesCollection.add(noteData);
       final noteId = docRef.id;
       
-      // 첫 번째 이미지 즉시 처리 (나머지는 백그라운드에서)
-      if (imageFiles.isNotEmpty) {
-        // 첫 번째 이미지는 동기적으로 처리
-        await _processImageAndCreatePage(
-          noteId, 
-          imageFiles[0],
-          shouldProcess: waitForFirstPageProcessing,
-        );
-        
-        // 2번째 이미지부터는 백그라운드에서 처리
-        if (imageFiles.length > 1) {
-          _processRemainingImagesInBackground(noteId, imageFiles.sublist(1));
-        }
-      }
-
+      // 모든 이미지 처리는 백그라운드로 이동 (로딩 시간 단축)
+      _processAllImagesInBackground(noteId, imageFiles, firstImageUrl);
+      
+      // 즉시 성공 결과 반환 (처리 완료를 기다리지 않음)
       return {
         'success': true,
         'noteId': noteId,
@@ -690,24 +723,35 @@ class NoteService {
     }
   }
   
-  // 나머지 이미지 백그라운드 처리
-  Future<void> _processRemainingImagesInBackground(String noteId, List<File> imageFiles) async {
+  // 모든 이미지를 백그라운드에서 처리 (새로운 메서드)
+  Future<void> _processAllImagesInBackground(String noteId, List<File> imageFiles, String? firstImageUrl) async {
     // 백그라운드 처리 상태 설정
     await _setBackgroundProcessingState(noteId, true);
     
     try {
-      // 각 이미지에 대해 순차적으로 페이지 생성
-      for (int i = 0; i < imageFiles.length; i++) {
-        final pageNumber = i + 2; // 첫 번째 이미지는 이미 처리됨
+      // 첫 번째 이미지 처리 (이미 썸네일은 생성되었을 수 있음)
+      if (imageFiles.isNotEmpty) {
+        final firstPageResult = await _processImageAndCreatePage(
+          noteId, 
+          imageFiles[0],
+          pageNumber: 1,
+          existingImageUrl: firstImageUrl,
+        );
         
+        // 첫 페이지 처리 진행 상황 업데이트
+        await _updateProcessingProgress(noteId, 1, imageFiles.length);
+      }
+      
+      // 나머지 이미지 처리 (2번째 이미지부터)
+      for (int i = 1; i < imageFiles.length; i++) {
         await _processImageAndCreatePage(
           noteId, 
           imageFiles[i],
-          pageNumber: pageNumber,
+          pageNumber: i + 1,
         );
         
         // 처리 진행 상황 업데이트
-        await _updateProcessingProgress(noteId, pageNumber, imageFiles.length + 1);
+        await _updateProcessingProgress(noteId, i + 1, imageFiles.length);
         
         // 짧은 지연을 통해 이전 작업이 완료되도록 보장
         await Future.delayed(const Duration(milliseconds: 100));

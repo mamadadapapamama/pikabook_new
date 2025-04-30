@@ -408,8 +408,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (_noteExceed) {
         UsageDialog.show(
           context,
-          title: '사용량 제한에 도달했습니다',
-          message: '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.',
+          title: '사용량 한도에 도달했습니다',
+          message: '다음 달 1일부터 다시 이용하실수 있습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.',
           limitStatus: _limitStatus,
           usagePercentages: _usagePercentages,
           onContactSupport: _handleContactSupport,
