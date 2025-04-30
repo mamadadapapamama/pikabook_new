@@ -178,7 +178,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               color: ColorTokens.textLight,
                             ),
                           ),
-                          SizedBox(height: SpacingTokens.xxl + SpacingTokens.xs),
+                          SizedBox(height: SpacingTokens.xl),
 
                           // 로딩 인디케이터 또는 오류 메시지
                           if (_isLoading)
@@ -250,6 +250,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                       },
                                     ),
                                   ),
+                                ),
+                                
+                                SizedBox(height: SpacingTokens.md),
+                                // 로그인 안내 메시지 추가
+                                Text(
+                                  '노트 저장과 맞춤 학습을 위해 로그인이 필요합니다.',
+                                  style: TypographyTokens.body2.copyWith(
+                                    color: ColorTokens.textLight,
+                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
                               ],
                             ),
