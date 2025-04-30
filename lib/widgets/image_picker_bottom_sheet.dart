@@ -27,16 +27,46 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   bool _isButtonDisabled = false;
   String _limitTooltip = '';
   
+  // 이미지 처리 중인지 추적하는 변수 추가
+  bool _isProcessing = false;
+  
+  // 사용량 확인 관련 변수 추가
+  bool _isCheckingLimits = false;
+  DateTime? _lastCheckTime;
+  
   @override
   void initState() {
     super.initState();
-    _checkUsageLimits();
+    // UI를 먼저 표시하고 사용량은 백그라운드에서 확인
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkUsageLimits();
+    });
   }
   
   // 사용량 한도 확인
   Future<void> _checkUsageLimits() async {
+    // 이미 확인 중이면 중복 호출 방지
+    if (_isCheckingLimits) {
+      if (kDebugMode) {
+        debugPrint('사용량 확인이 이미 진행 중입니다. 중복 호출 방지');
+      }
+      return;
+    }
+    
+    // 최근 10초 이내에 확인했으면 재확인 건너뜀
+    final now = DateTime.now();
+    if (_lastCheckTime != null && now.difference(_lastCheckTime!).inSeconds < 10) {
+      if (kDebugMode) {
+        debugPrint('사용량 최근에 확인함 (${now.difference(_lastCheckTime!).inSeconds}초 전)');
+      }
+      return;
+    }
+    
+    _isCheckingLimits = true;
+    
     try {
       final limitStatus = await _usageLimitService.checkFreeLimits(withBuffer: true);
+      _lastCheckTime = DateTime.now();
       
       final bool ocrLimitReached = limitStatus['ocrLimitReached'] == true;
       final bool translationLimitReached = limitStatus['translationLimitReached'] == true;
@@ -59,6 +89,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       if (kDebugMode) {
       debugPrint('사용량 확인 중 오류 발생: $e');
       }
+    } finally {
+      // 확인 중 상태 해제
+      _isCheckingLimits = false;
     }
   }
 
@@ -156,6 +189,19 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
   /// 갤러리에서 이미지 선택
   Future<void> _selectGalleryImages() async {
+    // 이미 처리 중이면 중복 호출 방지
+    if (_isProcessing) {
+      if (kDebugMode) {
+        print('이미지 선택 처리가 이미 진행 중입니다. 중복 호출 방지.');
+      }
+      return;
+    }
+    
+    // 처리 중 상태로 설정
+    setState(() {
+      _isProcessing = true;
+    });
+    
     // 작업 시작 - 이미지 선택 중임을 사용자에게 알립니다
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -184,6 +230,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         print('Error picking images: $e');
       }
       if (mounted) {
+        // 처리 중 상태 초기화
+        setState(() {
+          _isProcessing = false;
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('이미지 선택 중 오류: $e')),
         );
@@ -249,6 +300,19 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   
   /// 카메라로 사진 촬영
   Future<void> _takeCameraPhoto() async {
+    // 이미 처리 중이면 중복 호출 방지
+    if (_isProcessing) {
+      if (kDebugMode) {
+        print('카메라 촬영 처리가 이미 진행 중입니다. 중복 호출 방지.');
+      }
+      return;
+    }
+    
+    // 처리 중 상태로 설정
+    setState(() {
+      _isProcessing = true;
+    });
+    
     // 작업 시작 - 카메라 준비 중임을 사용자에게 알립니다
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -270,14 +334,25 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       if (photo == null) {
         if (kDebugMode) {
           print('사진 촬영이 취소되었습니다.');
-          }
-          return;
+        }
+        // 처리 중 상태 초기화
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+          });
+        }
+        return;
       }
     } catch (e) {
       if (kDebugMode) {
         print('Error taking photo: $e');
       }
       if (mounted) {
+        // 처리 중 상태 초기화
+        setState(() {
+          _isProcessing = false;
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('카메라 촬영 중 오류: $e')),
         );

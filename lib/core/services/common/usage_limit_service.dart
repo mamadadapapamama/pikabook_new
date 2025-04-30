@@ -25,9 +25,17 @@ class UsageLimitService {
   // 현재 사용자 ID 가져오기
   String? get _currentUserId => _auth.currentUser?.uid;
   
-  // 캐시 관련 변수
+  // 사용량 계산 결과 캐시 변수
   Map<String, dynamic>? _cachedUsageData;
   DateTime? _lastFetchTime;
+  Map<String, dynamic>? _cachedActualUsage;
+  DateTime? _lastActualUsageTime;
+  Map<String, dynamic>? _cachedUsageInfo;
+  DateTime? _lastUsageInfoFetchTime;
+  
+  // 제한 정보 캐시 추가
+  Map<String, int>? _cachedLimits;
+  DateTime? _lastLimitsTime;
   
   /// 사용량 데이터 가져오기 (캐시 사용)
   Future<Map<String, dynamic>> getUserUsage({bool forceRefresh = false}) async {
@@ -36,7 +44,7 @@ class UsageLimitService {
     final useCache = !forceRefresh && 
                     _cachedUsageData != null && 
                     _lastFetchTime != null &&
-                    now.difference(_lastFetchTime!).inSeconds < 5; // 5초 캐시
+                    now.difference(_lastFetchTime!).inSeconds < 30; // 30초 캐시
     
     if (useCache) {
       debugPrint('사용량 데이터 캐시 사용');
@@ -125,7 +133,20 @@ class UsageLimitService {
   /// 현재 플랜 제한 가져오기
   Future<Map<String, int>> getCurrentLimits() async {
     try {
-    final userId = _currentUserId;
+      // 캐시 확인 (30초 이내 재사용)
+      final now = DateTime.now();
+      final useCache = _cachedLimits != null && 
+                    _lastLimitsTime != null &&
+                    now.difference(_lastLimitsTime!).inSeconds < 30;
+      
+      if (useCache) {
+        debugPrint('제한 정보 캐시 사용 (30초 이내)');
+        return Map<String, int>.from(_cachedLimits!);
+      }
+      
+      debugPrint('제한 정보 새로 로드 시작');
+      
+      final userId = _currentUserId;
       if (userId == null) {
         return _getDefaultLimits();
       }
@@ -134,6 +155,11 @@ class UsageLimitService {
       final customLimits = await _getUserCustomLimits(userId);
       if (customLimits.isNotEmpty) {
         debugPrint('사용자별 커스텀 제한 적용: $customLimits');
+        
+        // 캐시 업데이트
+        _cachedLimits = customLimits;
+        _lastLimitsTime = now;
+        
         return customLimits;
       }
       
@@ -143,12 +169,24 @@ class UsageLimitService {
       
       final limits = PlanService.PLAN_LIMITS[planType];
       if (limits != null) {
-        debugPrint('플랜 기반 제한 적용 ($planType): $limits');
-        return Map<String, int>.from(limits);
+        final result = Map<String, int>.from(limits);
+        debugPrint('플랜 기반 제한 적용 ($planType): $result');
+        
+        // 캐시 업데이트
+        _cachedLimits = result;
+        _lastLimitsTime = now;
+        
+        return result;
       }
       
       // 3. 기본 제한 적용
-      return _getDefaultLimits();
+      final defaultLimits = _getDefaultLimits();
+      
+      // 캐시 업데이트
+      _cachedLimits = defaultLimits;
+      _lastLimitsTime = now;
+      
+      return defaultLimits;
     } catch (e) {
       debugPrint('제한 가져오기 오류: $e');
       return _getDefaultLimits();
@@ -245,11 +283,17 @@ class UsageLimitService {
         'usage.lastUpdated': FieldValue.serverTimestamp(),
       });
       
-      // 2. 캐시 무효화
+      // 2. 모든 캐시 무효화
       _cachedUsageData = null;
       _lastFetchTime = null;
+      _cachedActualUsage = null;
+      _lastActualUsageTime = null;
+      _cachedUsageInfo = null;
+      _lastUsageInfoFetchTime = null;
+      _cachedLimits = null;
+      _lastLimitsTime = null;
       
-      debugPrint('사용량 업데이트 완료: $key = $value');
+      debugPrint('사용량 업데이트 완료: $key = $value (모든 캐시 초기화)');
     } catch (e) {
       debugPrint('사용량 업데이트 중 오류: $e');
     }
@@ -511,8 +555,21 @@ class UsageLimitService {
   /// 실제 사용량 계산 (Firebase Storage 기반)
   Future<Map<String, int>> _calculateActualUsage() async {
     try {
+      // 캐시 확인 (30초 동안 유효)
+      final now = DateTime.now();
+      final useCache = _cachedActualUsage != null && 
+                    _lastActualUsageTime != null &&
+                    now.difference(_lastActualUsageTime!).inSeconds < 30;
+      
+      if (useCache) {
+        debugPrint('실제 사용량 계산: 캐시 사용 (30초 이내)');
+        return Map<String, int>.from(_cachedActualUsage!);
+      }
+      
+      debugPrint('실제 사용량 계산: 새로 로드 시작');
+      
       // 1. Firestore에서 기존 데이터 가져오기
-      final usage = await getUserUsage(forceRefresh: true);
+      final usage = await getUserUsage(forceRefresh: false);
       
       // 2. Firebase Storage에서 실제 OCR 페이지 수와 저장공간 계산
       final ocrPages = await _calculateOcrPages();
@@ -535,10 +592,16 @@ class UsageLimitService {
         await _updateUsage('storageUsageBytes', storageBytes);
       }
       
+      // 결과 캐싱
+      _cachedActualUsage = result;
+      _lastActualUsageTime = now;
+      
+      debugPrint('실제 사용량 계산: 완료 및 캐싱');
+      
       return result;
     } catch (e) {
       debugPrint('실제 사용량 계산 중 오류: $e');
-    return {
+      return {
         'ocrPages': 0,
         'ttsRequests': 0,
         'translatedChars': 0,
@@ -785,10 +848,6 @@ class UsageLimitService {
     }
   }
   
-  // 사용량 정보 캐시
-  Map<String, dynamic>? _cachedUsageInfo;
-  DateTime? _lastUsageInfoFetchTime;
-  
   /// 모든 사용량 초기화
   Future<void> resetAllUsage() async {
     try {
@@ -804,11 +863,17 @@ class UsageLimitService {
         'usage.lastUpdated': FieldValue.serverTimestamp(),
       });
       
-      // 2. 캐시 무효화
-    _cachedUsageData = null;
-    _lastFetchTime = null;
+      // 2. 모든 캐시 무효화
+      _cachedUsageData = null;
+      _lastFetchTime = null;
+      _cachedActualUsage = null;
+      _lastActualUsageTime = null;
+      _cachedUsageInfo = null;
+      _lastUsageInfoFetchTime = null;
+      _cachedLimits = null;
+      _lastLimitsTime = null;
       
-      debugPrint('모든 사용량 초기화 완료');
+      debugPrint('모든 사용량 초기화 및 캐시 무효화 완료');
     } catch (e) {
       debugPrint('사용량 초기화 중 오류: $e');
     }
@@ -870,8 +935,12 @@ class UsageLimitService {
   void invalidateCache() {
     _cachedUsageData = null;
     _lastFetchTime = null;
-    _cachedUsageInfo = null;  // 사용량 정보 캐시도 초기화
+    _cachedActualUsage = null;
+    _lastActualUsageTime = null;
+    _cachedUsageInfo = null;
     _lastUsageInfoFetchTime = null;
+    _cachedLimits = null;
+    _lastLimitsTime = null;
     debugPrint('모든 사용량 캐시 무효화 완료');
   }
   

@@ -72,6 +72,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Map<String, double> _usagePercentages = {};
   bool _noteExceed = false; // 노트 생성 관련 제한 플래그 추가
   
+  // 이미지 피커 상태 변수 추가
+  bool _isImagePickerShowing = false;
+  
+  // 사용량 확인 중인지 추적하는 변수 추가
+  bool _isCheckingUsage = false;
+  DateTime? _lastUsageCheckTime;
+  
   HomeViewModel? _viewModel;
 
   @override
@@ -284,6 +291,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // 사용량 제한 확인 및 다이얼로그 표시
   Future<void> _checkUsageLimits() async {
     try {
+      // 이미 확인 중이면 중복 호출 방지
+      if (_isCheckingUsage) {
+        debugPrint('사용량 확인이 이미 진행 중입니다. 중복 호출 방지.');
+        return;
+      }
+      
+      // 최근에 확인했으면 캐시 사용 (10초 이내)
+      final now = DateTime.now();
+      if (_lastUsageCheckTime != null && 
+          now.difference(_lastUsageCheckTime!).inSeconds < 10 &&
+          _hasCheckedUsage) {
+        debugPrint('사용량 확인: 캐시 사용 (10초 이내)');
+        return;
+      }
+      
+      // 확인 중 상태로 설정
+      _isCheckingUsage = true;
+      
+      debugPrint('사용량 확인 시작...');
+      
       // 사용량 제한 상태 확인 (버퍼 추가)
       final limitStatus = await _usageLimitService.checkFreeLimits(withBuffer: true);
       final usagePercentages = await _usageLimitService.getUsagePercentages();
@@ -310,6 +337,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _usagePercentages = usagePercentages;
           _noteExceed = shouldDisableButton; // 버튼 비활성화 플래그 설정
           _hasCheckedUsage = true;
+          _lastUsageCheckTime = now;
         });
       }
       
@@ -319,6 +347,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       debugPrint('사용량 확인 완료: 노트 생성 제한=$_noteExceed, 버튼 비활성화=$shouldDisableButton');
     } catch (e) {
       DebugUtils.error('사용량 확인 중 오류 발생: $e');
+    } finally {
+      // 확인 중 상태 해제
+      _isCheckingUsage = false;
     }
   }
   
@@ -354,29 +385,74 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _showImagePickerBottomSheet(BuildContext context) async {
-    // 사용량 제한 재확인
-    await _checkUsageLimits();
-    
-    // 사용량 제한 재확인 후 제한되었으면 다이얼로그 표시
-    if (_noteExceed) {
-      UsageDialog.show(
-        context,
-        title: '사용량 제한에 도달했습니다',
-        message: '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.',
-        limitStatus: _limitStatus,
-        usagePercentages: _usagePercentages,
-        onContactSupport: _handleContactSupport,
-      );
+    // 이미 표시 중이면 중복 호출 방지
+    if (_isImagePickerShowing) {
+      debugPrint('이미지 피커가 이미 표시 중입니다. 중복 호출 방지');
       return;
     }
     
-    // 제한이 없으면 이미지 피커 바텀시트 표시
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext context) {
-        return ImagePickerBottomSheet();
-      },
-    );
+    try {
+      // 최근에 확인한 경우 다시 확인하지 않음 (10초 이내)
+      final now = DateTime.now();
+      final skipCheck = _hasCheckedUsage && _lastUsageCheckTime != null && 
+          now.difference(_lastUsageCheckTime!).inSeconds < 10;
+          
+      if (!skipCheck) {
+        debugPrint('사용량 확인 필요 - 확인 중...');
+        await _checkUsageLimits();
+      } else {
+        debugPrint('최근에 사용량 이미 확인함 (캐시 사용)');
+      }
+      
+      // 제한에 도달했으면 다이얼로그 표시하고 종료
+      if (_noteExceed) {
+        UsageDialog.show(
+          context,
+          title: '사용량 제한에 도달했습니다',
+          message: '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.',
+          limitStatus: _limitStatus,
+          usagePercentages: _usagePercentages,
+          onContactSupport: _handleContactSupport,
+        );
+        return;
+      }
+      
+      // 표시 중 상태로 설정
+      setState(() {
+        _isImagePickerShowing = true;
+      });
+      
+      // 제한이 없으면 이미지 피커 바텀시트 표시
+      if (mounted) {
+        await showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          isDismissible: true,
+          enableDrag: true,
+          backgroundColor: Colors.transparent,
+          builder: (BuildContext context) {
+            return const ImagePickerBottomSheet();
+          },
+        );
+        
+        // 바텀 시트가 닫힌 후 상태 업데이트
+        if (mounted) {
+          setState(() {
+            _isImagePickerShowing = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('이미지 피커 표시 중 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isImagePickerShowing = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('이미지 선택 화면을 열 수 없습니다')),
+        );
+      }
+    }
   }
 
   void _navigateToNoteDetail(BuildContext context, Note note) async {
