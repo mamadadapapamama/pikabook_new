@@ -149,7 +149,11 @@ class _UsageDialogState extends State<UsageDialog> {
         ],
       ),
       content: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? SizedBox(
+              width: 300, // 고정된 너비
+              height: 250, // 로드된 콘텐츠와 비슷한 높이
+              child: Center(child: CircularProgressIndicator()),
+            )
           : SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
