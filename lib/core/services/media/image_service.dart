@@ -595,7 +595,10 @@ class ImageService {
       debugPrint('💾 예상 총 사용량: ${_formatSize(estimatedTotalUsage)}');
       debugPrint('💾 사용량 초과 여부: ${estimatedTotalUsage > storageLimitBytes}');
       
-      return estimatedTotalUsage <= storageLimitBytes;
+      // "버퍼 추가" 전략: 사용량이 제한을 초과해도 현재 작업은 완료하고
+      // 다음 작업부터 제한 메시지를 표시하기 위해 항상 true 반환
+      // _trackStorageUsage 메서드에서 allowOverLimit=true로 사용량을 증가시킴
+      return true;
     } catch (e) {
       debugPrint('⚠️ 스토리지 제한 확인 중 오류: $e');
       return true; // 오류 발생 시 기본적으로 저장 허용
@@ -718,8 +721,8 @@ class ImageService {
       // 실제 파일 크기 측정
       final actualSize = await file.length();
       
-      // 사용량 추적
-      await _usageLimitService.addStorageUsage(actualSize);
+      // 사용량 추적 (버퍼 지원 활성화)
+      await _usageLimitService.addStorageUsage(actualSize, allowOverLimit: true);
       
       debugPrint('저장 공간 사용량 추적: +${actualSize / 1024}KB');
       return true;

@@ -133,7 +133,7 @@ class TranslationService {
       // 캐시 히트 시에도 사용량은 기록 (첫 번역 시만)
       if (countCharacters && cachedResult != text) {
         // 백그라운드로 사용량 증가 (UI 차단 방지)
-        _usageLimitService.incrementTranslationCharCount(text.length).then((_) {
+        _usageLimitService.incrementTranslationCharCount(text.length, allowOverLimit: true).then((_) {
           if (kDebugMode) {
             debugPrint('사용량 증가 완료: ${text.length}자');
           }
@@ -214,7 +214,7 @@ class TranslationService {
               // 사용량 카운팅 옵션이 활성화된 경우에만 사용량 증가
               if (countCharacters) {
                 // 백그라운드로 사용량 증가 (UI 차단 방지)
-                _usageLimitService.incrementTranslationCharCount(text.length).then((_) {
+                _usageLimitService.incrementTranslationCharCount(text.length, allowOverLimit: true).then((_) {
                   if (kDebugMode) {
                     debugPrint('사용량 증가 완료: ${text.length}자');
                   }

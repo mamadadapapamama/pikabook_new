@@ -36,7 +36,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   // 사용량 한도 확인
   Future<void> _checkUsageLimits() async {
     try {
-      final limitStatus = await _usageLimitService.checkFreeLimits();
+      final limitStatus = await _usageLimitService.checkFreeLimits(withBuffer: true);
       
       final bool ocrLimitReached = limitStatus['ocrLimitReached'] == true;
       final bool translationLimitReached = limitStatus['translationLimitReached'] == true;

@@ -199,7 +199,7 @@ class UsageLimitService {
   }
   
   /// 사용량 증가
-  Future<bool> incrementUsage(String key, int amount) async {
+  Future<bool> incrementUsage(String key, int amount, {bool allowOverLimit = false}) async {
     try {
       // 1. 현재 사용량 가져오기
       final usage = await getUserUsage();
@@ -211,16 +211,21 @@ class UsageLimitService {
       final limit = limits[limitKey] ?? 0;
       
       // 3. 제한 체크
-      if (currentValue + amount > limit) {
+      final bool willExceedLimit = currentValue + amount > limit;
+      if (willExceedLimit && !allowOverLimit) {
         debugPrint('$key 사용량 제한 초과: ${currentValue + amount} > $limit');
-      return false;
-    }
-    
+        return false;
+      }
+      
       // 4. 사용량 증가
       final newValue = currentValue + amount;
       await _updateUsage(key, newValue);
       
-      debugPrint('$key 사용량 증가: $currentValue → $newValue (제한: $limit)');
+      if (willExceedLimit && allowOverLimit) {
+        debugPrint('$key 사용량 제한 초과하지만 허용됨 (버퍼): ${currentValue + amount} > $limit');
+      } else {
+        debugPrint('$key 사용량 증가: $currentValue → $newValue (제한: $limit)');
+      }
       return true;
     } catch (e) {
       debugPrint('사용량 증가 중 오류: $e');
@@ -378,12 +383,12 @@ class UsageLimitService {
   /// 이 메서드는 OCR을 사용할 때마다 호출되어야 함
   /// 삭제된 노트나 페이지에 대한 OCR 사용량도 카운트하기 위해
   /// Firestore에 직접 저장된 카운터를 증가시킵니다.
-  Future<bool> incrementOcrPageCount(int pages) async {
+  Future<bool> incrementOcrPageCount(int pages, {bool allowOverLimit = false}) async {
     try {
       if (pages <= 0) return true; // 0 이하는 무시
       
       // OCR을 사용한 페이지 수를 Firestore에 직접 증가
-      final result = await incrementUsage('ocrPages', pages);
+      final result = await incrementUsage('ocrPages', pages, allowOverLimit: allowOverLimit);
       
       if (result) {
         debugPrint('OCR 페이지 수 증가: $pages페이지 추가됨 (삭제되어도 카운트 유지)');
@@ -399,24 +404,24 @@ class UsageLimitService {
   }
   
   /// 번역 문자 수 증가
-  Future<bool> incrementTranslationCharCount(int chars) async {
-    return await incrementUsage('translatedChars', chars);
+  Future<bool> incrementTranslationCharCount(int chars, {bool allowOverLimit = false}) async {
+    return await incrementUsage('translatedChars', chars, allowOverLimit: allowOverLimit);
   }
   
   /// TTS 요청 수 증가
-  Future<bool> incrementTtsCharCount(int chars) async {
+  Future<bool> incrementTtsCharCount(int chars, {bool allowOverLimit = false}) async {
     // 텍스트 길이와 상관없이 요청 1회로 카운트
-    return await incrementUsage('ttsRequests', 1);
+    return await incrementUsage('ttsRequests', 1, allowOverLimit: allowOverLimit);
   }
   
   /// 사전 사용 횟수 증가
   /// 사전 기능 사용 시 호출되어야 함
-  Future<bool> incrementDictionaryCount(int count) async {
+  Future<bool> incrementDictionaryCount(int count, {bool allowOverLimit = false}) async {
     try {
       if (count <= 0) return true; // 0 이하는 무시
       
       // 사전 사용 횟수를 Firestore에 직접 증가
-      final result = await incrementUsage('dictionaryCount', count);
+      final result = await incrementUsage('dictionaryCount', count, allowOverLimit: allowOverLimit);
       
       if (result) {
         debugPrint('사전 사용 횟수 증가: $count회 추가됨');
@@ -432,8 +437,8 @@ class UsageLimitService {
   }
   
   /// 저장 공간 사용량 증가
-  Future<bool> addStorageUsage(int bytes) async {
-    return await incrementUsage('storageUsageBytes', bytes);
+  Future<bool> addStorageUsage(int bytes, {bool allowOverLimit = false}) async {
+    return await incrementUsage('storageUsageBytes', bytes, allowOverLimit: allowOverLimit);
   }
   
   /// 사용량 비율 계산
@@ -640,7 +645,7 @@ class UsageLimitService {
   }
   
   /// 제한 상태 확인
-  Future<Map<String, dynamic>> checkLimitStatus() async {
+  Future<Map<String, dynamic>> checkLimitStatus({bool withBuffer = false}) async {
     try {
       // 1. 실제 사용량 계산
       final usage = await _calculateActualUsage();
@@ -659,12 +664,19 @@ class UsageLimitService {
       final translationLimit = limits['translatedChars'] ?? 3000;
       final storageLimit = limits['storageBytes'] ?? 52428800;
       
-      // 4. 제한 상태 확인 (null 안전하게)
+      // 버퍼 계산 (10% 추가 여유)
+      final bufferMultiplier = withBuffer ? 1.1 : 1.0;
+      final ocrBufferedLimit = (ocrLimit * bufferMultiplier).toInt();
+      final ttsBufferedLimit = (ttsLimit * bufferMultiplier).toInt();
+      final translationBufferedLimit = (translationLimit * bufferMultiplier).toInt();
+      final storageBufferedLimit = (storageLimit * bufferMultiplier).toInt();
+      
+      // 4. 제한 상태 확인 (null 안전하게) - 버퍼 적용
       return {
-        'ocrLimitReached': ocrPages >= ocrLimit,
-        'ttsLimitReached': ttsRequests >= ttsLimit,
-        'translationLimitReached': translatedChars >= translationLimit,
-        'storageLimitReached': storageUsageBytes >= storageLimit,
+        'ocrLimitReached': ocrPages >= ocrBufferedLimit,
+        'ttsLimitReached': ttsRequests >= ttsBufferedLimit,
+        'translationLimitReached': translatedChars >= translationBufferedLimit,
+        'storageLimitReached': storageUsageBytes >= storageBufferedLimit,
         'ocrLimit': ocrLimit,
         'ttsLimit': ttsLimit,
         'translationLimit': translationLimit, 
@@ -687,7 +699,7 @@ class UsageLimitService {
   }
   
   /// 사용량 정보 가져오기
-  Future<Map<String, dynamic>> getUsageInfo() async {
+  Future<Map<String, dynamic>> getUsageInfo({bool withBuffer = false}) async {
     try {
       // 캐시 확인 (30초 동안 유효)
       final now = DateTime.now();
@@ -700,13 +712,13 @@ class UsageLimitService {
         return Map<String, dynamic>.from(_cachedUsageInfo!);
       }
       
-      debugPrint('사용량 정보 새로 로드 시작');
+      debugPrint('사용량 정보 새로 로드 시작 (withBuffer=$withBuffer)');
       
       // 1. 사용량 비율 계산
       final percentages = await getUsagePercentages();
       
-      // 2. 제한 상태 확인
-      final limitStatus = await checkLimitStatus();
+      // 2. 제한 상태 확인 (버퍼 적용)
+      final limitStatus = await checkLimitStatus(withBuffer: withBuffer);
       
       // 결과 캐싱
       _cachedUsageInfo = {
@@ -744,11 +756,10 @@ class UsageLimitService {
   /// 앱 UI에서 사용자 경험을 제어하기 위한 플래그 정보를 반환합니다.
   /// [ttsExceed] - TTS 사용량 제한 도달 여부
   /// [noteExceed] - 노트 생성 관련 기능(OCR, 번역, 저장공간) 제한 도달 여부
-  Future<Map<String, bool>> checkUsageLimitFlags() async {
+  Future<Map<String, bool>> checkUsageLimitFlags({bool withBuffer = false}) async {
     try {
-      // 제한 상태 확인
-      final usageInfo = await getUsageInfo();
-      final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
+      // 제한 상태 확인 (버퍼 적용)
+      final limitStatus = await checkLimitStatus(withBuffer: withBuffer);
       
       // 플래그 설정
       final ttsExceed = limitStatus['ttsLimitReached'] ?? false;
@@ -759,7 +770,7 @@ class UsageLimitService {
           (limitStatus['translationLimitReached'] ?? false) ||
           (limitStatus['storageLimitReached'] ?? false);
       
-      debugPrint('사용량 제한 플래그 확인: ttsExceed=$ttsExceed, noteExceed=$noteExceed');
+      debugPrint('사용량 제한 플래그 확인 (withBuffer=$withBuffer): ttsExceed=$ttsExceed, noteExceed=$noteExceed');
       
       return {
         'ttsExceed': ttsExceed,
@@ -880,9 +891,9 @@ class UsageLimitService {
   }
   
   /// PlanService와의 호환성을 위한 메서드
-  Future<Map<String, dynamic>> checkFreeLimits() async {
+  Future<Map<String, dynamic>> checkFreeLimits({bool withBuffer = false}) async {
     // checkLimitStatus와 동일한 형식으로 결과 반환
-    return await checkLimitStatus();
+    return await checkLimitStatus(withBuffer: withBuffer);
   }
 
   /// 탈퇴 시 Firebase Storage 데이터 삭제

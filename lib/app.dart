@@ -262,8 +262,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   /// 사용량 제한 확인
   Future<void> _checkUsageLimits() async {
     try {
-      // 사용량 제한 플래그 확인
-      final limitFlags = await _usageLimitService.checkUsageLimitFlags();
+      // 사용량 제한 플래그 확인 (버퍼 추가)
+      final limitFlags = await _usageLimitService.checkUsageLimitFlags(withBuffer: true);
       final ttsExceed = limitFlags['ttsExceed'] ?? false;
       final noteExceed = limitFlags['noteExceed'] ?? false;
       
@@ -272,7 +272,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         _noteExceed = noteExceed;
       });
       
-      debugPrint('사용자 사용량 제한 확인: TTS 제한=$ttsExceed, 노트 제한=$noteExceed');
+      debugPrint('사용자 사용량 제한 확인 (버퍼 적용): TTS 제한=$ttsExceed, 노트 제한=$noteExceed');
     } catch (e) {
       debugPrint('사용량 제한 확인 중 오류: $e');
     }
@@ -414,8 +414,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   // 사용량 제한 다이얼로그 표시
   void _showUsageLimitDialog(BuildContext context) async {
-    // 사용량 정보 가져오기
-    final usageInfo = await _usageLimitService.getUsageInfo();
+    // 사용량 정보 가져오기 (버퍼 적용)
+    final usageInfo = await _usageLimitService.getUsageInfo(withBuffer: true);
     final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
     final usagePercentages = usageInfo['percentages'] as Map<String, double>;
     

@@ -284,8 +284,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // 사용량 제한 확인 및 다이얼로그 표시
   Future<void> _checkUsageLimits() async {
     try {
-      // 사용량 제한 상태 확인
-      final limitStatus = await _usageLimitService.checkFreeLimits();
+      // 사용량 제한 상태 확인 (버퍼 추가)
+      final limitStatus = await _usageLimitService.checkFreeLimits(withBuffer: true);
       final usagePercentages = await _usageLimitService.getUsagePercentages();
       
       // 사용량 제한 플래그 확인

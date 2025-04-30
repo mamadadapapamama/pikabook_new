@@ -429,7 +429,7 @@ class EnhancedOcrService {
         try {
           debugPrint('OCR 사용량 카운트 증가 시작');
           // 이미지당 1페이지로 계산하여 OCR 사용량 증가
-          await _usageLimitService.incrementOcrPageCount(1);
+          await _usageLimitService.incrementOcrPageCount(1, allowOverLimit: true);
           debugPrint('OCR 사용량 카운트 증가 완료');
         } catch (e) {
           debugPrint('OCR 사용량 증가 중 오류 발생: $e');
