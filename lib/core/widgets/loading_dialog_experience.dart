@@ -75,7 +75,7 @@ class NoteCreationLoader {
           await showDialog(
             context: context,
             barrierDismissible: false,
-            barrierColor: Colors.black.withOpacity(0.3),
+            barrierColor: Colors.black.withOpacity(0.4),
             useSafeArea: true,
             builder: (dialogContext) => WillPopScope(
               onWillPop: () async => false, // 뒤로 가기 방지

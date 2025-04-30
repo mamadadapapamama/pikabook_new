@@ -203,7 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
             child: PikaButton(
               text: '로그아웃',
-              variant: PikaButtonVariant.primary,
+              variant: PikaButtonVariant.outline,
               onPressed: () {
                 widget.onLogout();
                 Navigator.pop(context);

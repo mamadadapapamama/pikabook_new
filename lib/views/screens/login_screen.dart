@@ -341,17 +341,21 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           // 로그인 성공 콜백 호출
           widget.onLoginSuccess(user);
         } else {
-          throw Exception('로그인 중 오류가 발생했습니다.');
+          // throw Exception('로그인이 취소되었습니다.');
+          setState(() {
+            _errorMessage = '로그인이 취소되었습니다.';
+            _isLoading = false;
+          });
         }
       } catch (e) {
         setState(() {
-          _errorMessage = '구글 로그인 실패: ${e.toString()}';
+          _errorMessage = '구글 로그인 실패: ${e.toString().replaceAll('Exception: ', '')}';
           _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = '로그인 중 오류가 발생했습니다: ${e.toString()}';
+        _errorMessage = '로그인 중 오류가 발생했습니다: ${e.toString().replaceAll('Exception: ', '')}';
         _isLoading = false;
       });
     }
@@ -413,13 +417,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       // 여기까지 왔다면 로그인이 실패한 경우
       if (user == null) {
         setState(() {
-          _errorMessage = '로그인 중 오류가 발생했습니다.';
+          _errorMessage = '로그인이 취소되었습니다.';
           _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = '로그인 중 오류가 발생했습니다: ${e.toString()}';
+        _errorMessage = '로그인 중 오류가 발생했습니다: ${e.toString().replaceAll('Exception: ', '')}';
         _isLoading = false;
       });
     }
