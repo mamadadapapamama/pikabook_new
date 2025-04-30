@@ -129,14 +129,12 @@ class ExternalCnDictionaryService {
       }
       
       // 사용량 제한 확인 (외부 API 호출 전 확인)
-      final canLookup = await _usageLimitService.incrementDictionaryCount();
-      if (!canLookup) {
-        debugPrint('외부 사전 검색 사용량 한도 초과: $word');
-        return {
-          'success': false,
-          'message': '무료 버전 사전 검색 한도를 초과했습니다. 관리자에게 문의해주세요.',
-          'limitExceeded': true,
-        };
+      // 사용량만 카운트하고 제한은 체크하지 않음
+      try {
+        await _usageLimitService.incrementDictionaryCount(1);
+        debugPrint('사전 검색 사용량 카운트 증가: $word');
+      } catch (e) {
+        debugPrint('사전 검색 사용량 카운트 중 오류: $e');
       }
       
       // API가 초기화되지 않았으면 초기화

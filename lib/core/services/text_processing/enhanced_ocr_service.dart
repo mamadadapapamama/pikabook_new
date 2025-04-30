@@ -20,6 +20,7 @@ import 'internal_cn_segmenter_service.dart';
 import 'text_cleaner_service.dart';
 import 'pinyin_creation_service.dart';
 import '../authentication/user_preferences_service.dart';
+import '../common/usage_limit_service.dart'; // 사용량 제한 서비스 추가
 import 'package:crypto/crypto.dart';
 import '../../../features/note_detail/managers/content_manager.dart'; // ContentManager 임포트
 
@@ -57,6 +58,9 @@ class EnhancedOcrService {
 
   // 사용자 설정 서비스 추가
   final UserPreferencesService _preferencesService = UserPreferencesService();
+  
+  // 사용량 제한 서비스 추가
+  final UsageLimitService _usageLimitService = UsageLimitService();
 
   // API 초기화
   Future<void> initialize() async {
@@ -419,6 +423,21 @@ class EnhancedOcrService {
 
       // TextCleanerService를 사용하여 불필요한 텍스트 제거
       extractedText = _textCleanerService.cleanText(extractedText);
+      
+      // OCR 사용량 증가 (skipUsageCount가 false인 경우에만)
+      if (!skipUsageCount) {
+        try {
+          debugPrint('OCR 사용량 카운트 증가 시작');
+          // 이미지당 1페이지로 계산하여 OCR 사용량 증가
+          await _usageLimitService.incrementOcrPageCount(1);
+          debugPrint('OCR 사용량 카운트 증가 완료');
+        } catch (e) {
+          debugPrint('OCR 사용량 증가 중 오류 발생: $e');
+          // 사용량 증가 실패해도 OCR 결과는 반환
+        }
+      } else {
+        debugPrint('OCR 사용량 카운트 건너뜀 (skipUsageCount=true)');
+      }
 
       return extractedText;
     } catch (e) {

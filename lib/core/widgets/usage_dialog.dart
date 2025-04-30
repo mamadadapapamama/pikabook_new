@@ -150,7 +150,7 @@ class _UsageDialogState extends State<UsageDialog> {
       ),
       content: _isLoading
           ? SizedBox(
-              width: 300, // 고정된 너비
+              width: 250, // 고정된 너비
               height: 250, // 로드된 콘텐츠와 비슷한 높이
               child: Center(child: CircularProgressIndicator()),
             )
