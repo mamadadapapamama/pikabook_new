@@ -28,21 +28,28 @@ class HomeViewModel extends ChangeNotifier {
 
   // ViewModel 초기화
   Future<void> _initializeViewModel() async {
+    debugPrint('[HomeViewModel] 초기화 시작');
     try {
       // 캐시된 데이터가 있고 유효한 경우 먼저 표시
       final cachedNotes = await _noteService.getCachedNotes();
       if (cachedNotes.isNotEmpty) {
+        debugPrint('[HomeViewModel] 캐시된 노트 ${cachedNotes.length}개 로드됨');
         _notes = cachedNotes;
         _isLoading = false;
         notifyListeners();
 
         // 캐시 시간 확인
         _lastRefreshTime = await _noteService.getLastCacheTime();
+        debugPrint('[HomeViewModel] 마지막 캐시 시간: $_lastRefreshTime');
+      } else {
+        debugPrint('[HomeViewModel] 캐시된 노트 없음');
       }
       
       // 서버에서 최신 데이터 로드 - 캐시 유효성과 상관없이 항상 백그라운드로 실행
       _loadNotes();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[HomeViewModel] 초기화 중 오류 발생: $e');
+      debugPrint('[HomeViewModel] 스택 트레이스: $stackTrace');
       // 캐시 로드 실패는 무시하고 서버에서 로드 진행
       _loadNotes();
     }
@@ -59,6 +66,7 @@ class HomeViewModel extends ChangeNotifier {
 
   // 노트 목록 로드
   void _loadNotes() {
+    debugPrint('[HomeViewModel] _loadNotes 시작');
     _error = null;
 
     // 이미 로드된 캐시가 있는 경우 로딩 상태 표시하지 않음
@@ -70,10 +78,13 @@ class HomeViewModel extends ChangeNotifier {
     try {
       // 기존 구독이 있으면 취소
       _cancelSubscription();
+      debugPrint('[HomeViewModel] 기존 구독 취소 완료');
 
-      // 모든 노트 목록 구독
+      // 모든 노트 목록 구독 시도
+      debugPrint('[HomeViewModel] 노트 스트림 구독 시작');
       _notesSubscription = _noteService.getNotes().listen(
         (notesList) {
+          debugPrint('[HomeViewModel] 노트 데이터 수신: ${notesList.length}개');
           _notes = notesList;
           _isLoading = false;
           _error = null;
@@ -82,7 +93,9 @@ class HomeViewModel extends ChangeNotifier {
           // 캐시 업데이트
           _updateCache();
         },
-        onError: (e) {
+        onError: (e, stackTrace) {
+          debugPrint('[HomeViewModel] 노트 스트림 구독 중 오류: $e');
+          debugPrint('[HomeViewModel] 스택 트레이스: $stackTrace');
           // 캐시된 데이터가 있으면 오류 표시하지 않음
           if (_notes.isEmpty) {
             _isLoading = false;
@@ -91,7 +104,9 @@ class HomeViewModel extends ChangeNotifier {
           }
         },
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[HomeViewModel] _loadNotes에서 예외 발생: $e');
+      debugPrint('[HomeViewModel] 스택 트레이스: $stackTrace');
       // 캐시된 데이터가 있으면 오류 표시하지 않음
       if (_notes.isEmpty) {
         _isLoading = false;
@@ -130,8 +145,12 @@ class HomeViewModel extends ChangeNotifier {
 
   // 구독 취소
   void _cancelSubscription() {
-    _notesSubscription?.cancel();
-    _notesSubscription = null;
+    debugPrint('[HomeViewModel] 구독 취소 시도');
+    if (_notesSubscription != null) {
+      _notesSubscription!.cancel();
+      _notesSubscription = null;
+      debugPrint('[HomeViewModel] 구독 취소 완료');
+    }
   }
 
   // 노트 즐겨찾기 토글 메서드
@@ -179,6 +198,7 @@ class HomeViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    debugPrint('[HomeViewModel] dispose 호출됨');
     _cancelSubscription();
     super.dispose();
   }

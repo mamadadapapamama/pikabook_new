@@ -455,8 +455,17 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         _isLoading = true;
       });
       
+      debugPrint('[LoginScreen] 로그인 없이 둘러보기 시작: 샘플 모드 활성화');
+      
+      // 현재 로그인된 사용자가 있다면 로그아웃
+      if (FirebaseAuth.instance.currentUser != null) {
+        debugPrint('[LoginScreen] 기존 로그인 사용자 감지, 로그아웃 실행');
+        await FirebaseAuth.instance.signOut();
+      }
+      
       // 샘플 모드 활성화
       await _sampleModeService.enableSampleMode();
+      debugPrint('[LoginScreen] 샘플 모드 활성화 완료');
       
       // 샘플 홈 화면으로 이동
       Navigator.pushReplacement(
@@ -469,6 +478,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         widget.onSkipLogin!();
       }
     } catch (e) {
+      debugPrint('[LoginScreen] 샘플 모드 진입 중 오류: $e');
+      
       setState(() {
         _errorMessage = '샘플 모드 진입 중 오류가 발생했습니다.';
         _isLoading = false;

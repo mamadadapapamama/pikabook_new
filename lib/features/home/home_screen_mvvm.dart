@@ -49,15 +49,19 @@ class OrangeOverscrollBehavior extends ScrollBehavior {
 /// profile setting, note detail, flashcard 화면으로 이동 가능
 
 class HomeScreen extends StatefulWidget {
-  final Function(BuildContext)? onSettingsPressed;
-  
-  const HomeScreen({
-    Key? key,
-    this.onSettingsPressed,
-  }) : super(key: key);
-  
+  const HomeScreen({Key? key}) : super(key: key);
+
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  _HomeScreenState createState() {
+    try {
+      debugPrint('[HomeScreen] createState 호출됨');
+      return _HomeScreenState();
+    } catch (e, stackTrace) {
+      debugPrint('[HomeScreen] createState 중 오류 발생: $e');
+      debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+      rethrow; // 오류 전파 (상위 위젯에서 처리)
+    }
+  }
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
@@ -79,207 +83,296 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isCheckingUsage = false;
   DateTime? _lastUsageCheckTime;
   
+  // 화면 초기화 실패를 추적하는 변수
+  bool _initializationFailed = false;
+  String? _initFailReason;
+  
   HomeViewModel? _viewModel;
 
   @override
   void initState() {
-    super.initState();
+    debugPrint('[HomeScreen] initState 호출됨');
     
-    // WidgetsBinding 옵저버 등록
-    WidgetsBinding.instance.addObserver(this);
-    
-    // 화면 구성하는 동안 필요한 데이터 즉시 로드
-    _loadNoteSpaceName();
-    _checkUsageLimits();
-    
-    // 마케팅 캠페인 서비스 초기화
-    _initializeMarketingService();
-    
-    // Route 변경 감지를 위한 리스너 추가
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 현재 라우트 감지를 위한 observer 등록
-      final navigator = Navigator.of(context);
-      // 페이지 리로드를 위한 포커스 리스너 추가
-      if (ModalRoute.of(context) != null) {
-        ModalRoute.of(context)!.addScopedWillPopCallback(() async {
-          // 화면으로 돌아올 때마다 노트스페이스 이름을 다시 로드
-          await _loadNoteSpaceName();
-          return false; // false를 반환하여 pop을 방해하지 않음
-        });
-      }
-    });
+    try {
+      super.initState();
+      
+      // WidgetsBinding 옵저버 등록
+      WidgetsBinding.instance.addObserver(this);
+      
+      // 화면 구성하는 동안 필요한 데이터 즉시 로드
+      _loadNoteSpaceName();
+      _checkUsageLimits();
+      
+      // 마케팅 캠페인 서비스 초기화
+      _initializeMarketingService();
+      
+      // Route 변경 감지를 위한 리스너 추가
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // 현재 라우트 감지를 위한 observer 등록
+        final navigator = Navigator.of(context);
+        // 페이지 리로드를 위한 포커스 리스너 추가
+        if (ModalRoute.of(context) != null) {
+          ModalRoute.of(context)!.addScopedWillPopCallback(() async {
+            // 화면으로 돌아올 때마다 노트스페이스 이름을 다시 로드
+            await _loadNoteSpaceName();
+            return false; // false를 반환하여 pop을 방해하지 않음
+          });
+        }
+      });
+    } catch (e, stackTrace) {
+      debugPrint('[HomeScreen] initState 초기화 중 오류 발생: $e');
+      debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+      
+      // 초기화 실패 상태 저장
+      _initializationFailed = true;
+      _initFailReason = e.toString();
+      
+      // 중요: 에러가 발생해도 WidgetsBinding 옵저버는 등록해야 함
+      WidgetsBinding.instance.addObserver(this);
+    }
   }
   
   // 마케팅 캠페인 서비스 초기화
   Future<void> _initializeMarketingService() async {
-    await _marketingService.initialize();
+    try {
+      await _marketingService.initialize();
+    } catch (e) {
+      debugPrint('[HomeScreen] 마케팅 서비스 초기화 중 오류: $e');
+      // 마케팅 서비스 초기화 실패는 무시하고 계속 진행
+    }
   }
   
   @override
   void dispose() {
-    // 리스너 제거
-    _viewModel?.removeListener(_onViewModelChanged);
+    debugPrint('[HomeScreen] dispose 호출됨');
     
-    // WidgetsBinding 옵저버 제거
-    WidgetsBinding.instance.removeObserver(this);
-    
-    super.dispose();
-  }
-  
-  // 앱 라이프사이클 변경 감지
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    
-    // 앱이 다시 포그라운드로 돌아왔을 때
-    if (state == AppLifecycleState.resumed) {
-      // 노트스페이스 이름을 다시 로드
-      _loadNoteSpaceName();
-      // 사용량 제한도 다시 확인
-      _checkUsageLimits();
+    try {
+      // 리스너 제거
+      _viewModel?.removeListener(_onViewModelChanged);
+      
+      // WidgetsBinding 옵저버 제거
+      WidgetsBinding.instance.removeObserver(this);
+      
+      super.dispose();
+    } catch (e) {
+      debugPrint('[HomeScreen] dispose 중 오류 발생: $e');
+      super.dispose(); // 오류가 발생해도 부모 dispose는 호출해야 함
     }
   }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    
-    // 화면이 활성화될 때마다 노트스페이스 이름 다시 로드
-    _loadNoteSpaceName();
-    
-    // 화면이 활성화될 때마다 사용량 제한도 다시 확인
-    _checkUsageLimits();
-  }
-
+  
   @override
   Widget build(BuildContext context) {
-    // ChangeNotifierProvider로 HomeViewModel 제공
-    return ChangeNotifierProvider(
-      create: (_) => HomeViewModel(),
-      child: Builder(
-        builder: (context) {
-          // 각 Consumer에서 viewModel 참조를 설정하므로 여기서는 필요 없음
-
-          return Scaffold(
-            backgroundColor: const Color(0xFFFFF9F1), // Figma 디자인의 #FFF9F1 배경색 적용
-            appBar: PikaAppBar.home(
-              noteSpaceName: _noteSpaceName.isNotEmpty ? _noteSpaceName : '로딩 중...',
-              onSettingsPressed: () => _navigateToSettings(context),
+    // 디버그 로그 추가
+    debugPrint('[HomeScreen] build 메서드 시작');
+    
+    // 초기화 실패 시 복구 UI 표시
+    if (_initializationFailed) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Pikabook'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () {
+                setState(() {
+                  _initializationFailed = false;
+                });
+              },
             ),
-            body: Consumer<HomeViewModel>(
-              builder: (context, viewModel, _) {
-                _viewModel = viewModel;
-                
-                if (viewModel.isLoading) {
-                  return const Center(
-                    child: DotLoadingIndicator(),
-                  );
-                } else if (viewModel.notes.isEmpty) {
-                  return _buildZeroState(context);
-                }
-                
-                return SafeArea(
-                  child: Stack(
-                    children: [
-                      // 리스트 뷰
-                      Column(
+          ],
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('화면을 초기화하는 중 문제가 발생했습니다'),
+              if (_initFailReason != null) ...[
+                const SizedBox(height: 16),
+                Text(_initFailReason!),
+              ],
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _initializationFailed = false;
+                  });
+                },
+                child: const Text('다시 시도'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    try {
+      // ChangeNotifierProvider로 HomeViewModel 제공
+      return ChangeNotifierProvider(
+        create: (_) {
+          debugPrint('[HomeScreen] HomeViewModel 인스턴스 생성');
+          return HomeViewModel();
+        },
+        child: Builder(
+          builder: (context) {
+            debugPrint('[HomeScreen] Builder 시작');
+            
+            // 각 Consumer에서 viewModel 참조를 설정하므로 여기서는 필요 없음
+            return Scaffold(
+              backgroundColor: const Color(0xFFFFF9F1), // Figma 디자인의 #FFF9F1 배경색 적용
+              appBar: PikaAppBar.home(
+                noteSpaceName: _noteSpaceName.isNotEmpty ? _noteSpaceName : '로딩 중...',
+                onSettingsPressed: () => _navigateToSettings(context),
+              ),
+              body: Consumer<HomeViewModel>(
+                builder: (context, viewModel, _) {
+                  debugPrint('[HomeScreen] Consumer<HomeViewModel> 빌드');
+                  _viewModel = viewModel;
+                  
+                  try {
+                    if (viewModel.isLoading) {
+                      return const Center(
+                        child: DotLoadingIndicator(),
+                      );
+                    } else if (viewModel.notes.isEmpty) {
+                      return _buildZeroState(context);
+                    }
+                    
+                    return SafeArea(
+                      child: Stack(
                         children: [
-                          // 노트 목록
-                          Expanded(
-                            child: RefreshIndicator(
-                              color: ColorTokens.primary,
-                              backgroundColor: Colors.white,
-                              onRefresh: () async {
-                                await viewModel.refreshNotes();
-                              },
-                              child: ListView.builder(
-                                padding: const EdgeInsets.only(top: 4, bottom: 16),
-                                itemCount: viewModel.notes.length,
-                                itemBuilder: (context, index) {
-                                  final note = viewModel.notes[index];
-                                  
-                                  return Padding(
-                                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
-                                    child: GestureDetector(
-                                      onTap: () => _navigateToNoteDetail(context, note),
-                                      child: NoteListItem(
-                                        note: note,
-                                        onNoteTapped: (note) => _navigateToNoteDetail(context, note),
-                                        onFavoriteToggled: (noteId, isFavorite) {
-                                          viewModel.toggleFavorite(noteId, isFavorite);
-                                        },
-                                        onDismissed: () {
-                                          if (note.id != null) {
-                                            viewModel.deleteNote(note.id!);
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // 스마트 노트 만들기 버튼 - 노트가 있을 때만 표시
-                                Consumer<HomeViewModel>(
-                                  builder: (context, viewModel, _) {
-                                    // 노트가 있을 때만 버튼 표시
-                                    if (viewModel.hasNotes) {
-                                      return Column(
-                                        children: [
-                                          _isButtonDisabled()
-                                            ? Tooltip(
-                                                message: '사용량 한도 초과로 비활성화되었습니다',
-                                                child: PikaButton(
-                                                  text: '스마트 노트 만들기',
-                                                  variant: PikaButtonVariant.primary,
-                                                  isFullWidth: false,
-                                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                                  onPressed: () => _showUsageLimitInfo(context),
-                                                ),
-                                              )
-                                            : PikaButton(
-                                                text: '스마트 노트 만들기',
-                                                variant: PikaButtonVariant.primary,
-                                                isFullWidth: false,
-                                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                                onPressed: () => _showImagePickerBottomSheet(context),
-                                              ),
-                                          const SizedBox(height: 16),
-                                        ],
-                                      );
-                                    }
-                                    return const SizedBox.shrink(); // 노트가 없으면 버튼 숨김
+                          // 리스트 뷰
+                          Column(
+                            children: [
+                              // 노트 목록
+                              Expanded(
+                                child: RefreshIndicator(
+                                  color: ColorTokens.primary,
+                                  backgroundColor: Colors.white,
+                                  onRefresh: () async {
+                                    await viewModel.refreshNotes();
                                   },
+                                  child: ListView.builder(
+                                    padding: const EdgeInsets.only(top: 4, bottom: 16),
+                                    itemCount: viewModel.notes.length,
+                                    itemBuilder: (context, index) {
+                                      final note = viewModel.notes[index];
+                                      
+                                      return Padding(
+                                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
+                                        child: GestureDetector(
+                                          onTap: () => _navigateToNoteDetail(context, note),
+                                          child: NoteListItem(
+                                            note: note,
+                                            onNoteTapped: (note) => _navigateToNoteDetail(context, note),
+                                            onFavoriteToggled: (noteId, isFavorite) {
+                                              viewModel.toggleFavorite(noteId, isFavorite);
+                                            },
+                                            onDismissed: () {
+                                              if (note.id != null) {
+                                                viewModel.deleteNote(note.id!);
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ),
-                              ],
-                            ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // 스마트 노트 만들기 버튼 - 노트가 있을 때만 표시
+                                    Consumer<HomeViewModel>(
+                                      builder: (context, viewModel, _) {
+                                        // 노트가 있을 때만 버튼 표시
+                                        if (viewModel.hasNotes) {
+                                          return Column(
+                                            children: [
+                                              _isButtonDisabled()
+                                                ? Tooltip(
+                                                    message: '사용량 한도 초과로 비활성화되었습니다',
+                                                    child: PikaButton(
+                                                      text: '스마트 노트 만들기',
+                                                      variant: PikaButtonVariant.primary,
+                                                      isFullWidth: false,
+                                                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                                      onPressed: () => _showUsageLimitInfo(context),
+                                                    ),
+                                                  )
+                                                : PikaButton(
+                                                    text: '스마트 노트 만들기',
+                                                    variant: PikaButtonVariant.primary,
+                                                    isFullWidth: false,
+                                                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                                    onPressed: () => _showImagePickerBottomSheet(context),
+                                                  ),
+                                              const SizedBox(height: 16),
+                                            ],
+                                          );
+                                        }
+                                        return const SizedBox.shrink(); // 노트가 없으면 버튼 숨김
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      
-                      // FTUE 위젯 (첫 방문 시에만 표시)
-                      FTUEWidget(
-                        screenName: 'home',
-                        position: const EdgeInsets.only(bottom: 150, left: 16, right: 16),
-                        onDismiss: () {
-                          setState(() {}); // UI 갱신
-                        },
+                    );
+                  } catch (e, stackTrace) {
+                    debugPrint('[HomeScreen] Consumer 내부에서 오류 발생: $e');
+                    debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+                    
+                    // 간단한 에러 복구 UI
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text('화면 로딩 중 문제가 발생했습니다.'),
+                          const SizedBox(height: 20),
+                          ElevatedButton(
+                            onPressed: () {
+                              viewModel.refreshNotes();
+                            },
+                            child: const Text('새로고침'),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                );
+                    );
+                  }
+                },
+              ),
+            );
+          },
+        ),
+      );
+    } catch (e, stackTrace) {
+      debugPrint('[HomeScreen] 전체 빌드 과정에서 오류 발생: $e');
+      debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+      
+      // 빌드 실패 시 표시할 위젯
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Pikabook'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () {
+                setState(() {});
               },
             ),
-          );
-        }
-      ),
-    );
+          ],
+        ),
+        body: Center(
+          child: Text('화면을 표시할 수 없습니다: $e'),
+        ),
+      );
+    }
   }
 
   // 날짜 포맷팅 함수

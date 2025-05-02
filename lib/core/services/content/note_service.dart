@@ -75,13 +75,72 @@ class NoteService {
 
   /// 모든 노트 목록 가져오기 (스트림)
   Stream<List<Note>> getNotes() {
+    debugPrint('[NoteService] getNotes 메서드 호출됨');
+    
+    // 오류 생성 없이 사용자 인증 상태 확인
+    final User? currentUser = _auth.currentUser;
+    if (currentUser == null) {
+      debugPrint('[NoteService] 사용자가 로그인되지 않음, 빈 노트 목록 반환');
+      return Stream.value([]);
+    }
+    
+    final String userId = currentUser.uid;
+    debugPrint('[NoteService] 사용자 ID: $userId로 노트 조회 시작');
+    
     try {
-      return _userNotesQuery.snapshots().map((snapshot) {
-        final notes = snapshot.docs.map((doc) => Note.fromFirestore(doc)).toList();
+      // Firestore에서 사용자의 노트 쿼리
+      final notesStream = _userNotesQuery.snapshots().map((snapshot) {
+        final List<Note> notes = snapshot.docs.map((doc) {
+          try {
+            return Note.fromFirestore(doc);
+          } catch (e) {
+            debugPrint('[NoteService] 노트 변환 중 오류 (docId: ${doc.id}): $e');
+            // 변환 오류 시 빈 노트 반환 (스트림 유지를 위해)
+            return Note(
+              id: doc.id,
+              originalText: '오류 발생한 노트',
+              translatedText: '오류 발생한 노트',
+              extractedText: '',
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
+          }
+        }).toList();
+        
+        debugPrint('[NoteService] 노트 ${notes.length}개 로드됨');
+        
+        // 로드된 노트 캐싱 (백그라운드로 처리)
+        if (notes.isNotEmpty) {
+          Future.microtask(() async {
+            try {
+              await cacheNotes(notes);
+              debugPrint('[NoteService] 노트 ${notes.length}개 캐싱 완료');
+            } catch (e) {
+              debugPrint('[NoteService] 노트 캐싱 중 오류: $e');
+            }
+          });
+        }
+        
         return notes;
       });
-    } catch (e) {
-      debugPrint('노트 목록을 가져오는 중 오류가 발생했습니다: $e');
+      
+      // 스트림에 오류 핸들러 추가
+      return notesStream.handleError((error, stackTrace) {
+        debugPrint('[NoteService] 노트 스트림에서 오류 발생: $error');
+        debugPrint('[NoteService] 스택 트레이스: $stackTrace');
+        
+        // 오류 발생 시 마지막으로 캐시된 노트를 조회하여 반환
+        return Future.microtask(() async {
+          final cachedNotes = await getCachedNotes();
+          debugPrint('[NoteService] 오류 복구: 캐시에서 ${cachedNotes.length}개 노트 로드');
+          return cachedNotes;
+        });
+      });
+    } catch (e, stackTrace) {
+      debugPrint('[NoteService] getNotes 메서드에서 오류 발생: $e');
+      debugPrint('[NoteService] 스택 트레이스: $stackTrace');
+      
+      // 오류 발생 시 빈 목록 반환
       return Stream.value([]);
     }
   }

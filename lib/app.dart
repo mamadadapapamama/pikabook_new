@@ -28,6 +28,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'features/auth/sample_mode_service.dart';
 import 'features/sample/sample_home_screen.dart';
+import 'package:phoenix/phoenix.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -213,55 +214,81 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   /// 사용자 인증 상태 관찰 설정
   void _setupAuthStateListener() {
-    debugPrint('[setupAuthStateListener] 인증 상태 관찰 시작');
+    debugPrint('앱: 인증 상태 변경 리스너 설정');
     
-    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen((User? user) async {
-      debugPrint('[authStateChanges] 인증 상태 변경 감지: user=${user?.uid}');
+    try {
+      // Firebase Auth 상태 변경 감지
+      _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen(
+        (User? user) async {
+          debugPrint('앱: 인증 상태 변경 감지: ${user != null ? "로그인" : "로그아웃"}');
+          
+          if (!mounted) {
+            debugPrint('앱: 위젯이 마운트되지 않음, 처리 중단');
+            return;
+          }
+          
+          if (user != null) {
+            // 사용자가 로그인한 경우
+            debugPrint('앱: 사용자 로그인 감지 (${user.uid})');
+            
+            // 샘플 모드이면 비활성화
+            if (_isSampleMode) {
+              debugPrint('앱: 샘플 모드 비활성화 중...');
+              await _sampleModeService.disableSampleMode();
+              _isSampleMode = false;
+            }
+            
+            setState(() {
+              _user = user;
+              _userId = user.uid;
+              _isLoading = false;
+              _isLoadingUserData = true; // 사용자 데이터 로딩 시작
+            });
+            
+            // 사용자 데이터 로드
+            await _loadUserPreferences();
+          } else {
+            // 사용자가 로그아웃한 경우
+            debugPrint('앱: 사용자 로그아웃 감지');
+            
+            // 샘플 모드 상태 확인
+            await _checkSampleMode();
+            
+            setState(() {
+              _user = null;
+              _userId = null;
+              _isOnboardingCompleted = false;
+              _isLoading = false;
+              _isLoadingUserData = false;
+            });
+          }
+        },
+        onError: (error, stackTrace) {
+          debugPrint('앱: 인증 상태 변경 감지 중 오류: $error');
+          debugPrint('앱: 스택 트레이스: $stackTrace');
+          
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+              _isLoadingUserData = false;
+              _error = '인증 상태 확인 중 오류가 발생했습니다: $error';
+            });
+          }
+        },
+      );
       
-      if (!mounted) {
-        debugPrint('[authStateChanges] 위젯이 마운트 되지 않음, 처리 중단');
-        return;
-      }
-      
-      // 샘플 모드 상태 확인 (로그인/로그아웃 시 모두 확인)
-      await _checkSampleMode();
-      
-      if (user != null) {
-        // 사용자가 로그인됨
-        debugPrint('[authStateChanges] 사용자 로그인 감지: ${user.uid}');
-        
-        setState(() {
-          _user = user;
-          _userId = user.uid;
-          _isLoading = false;
-          _isLoadingUserData = true; // 사용자 데이터 로딩 시작
-        });
-        
-        // 데이터 로딩 시작
-        await _loadUserPreferences();
-      } else {
-        // 사용자가 로그아웃됨
-        debugPrint('[authStateChanges] 사용자 로그아웃 감지');
-        
-        setState(() {
-          _user = null;
-          _userId = null;
-          _isOnboardingCompleted = false;
-          _isLoading = false;
-          _isLoadingUserData = false;
-        });
-      }
-    }, onError: (error) {
-      debugPrint('[authStateChanges] 오류 발생: $error');
+      debugPrint('앱: 인증 상태 변경 리스너 설정 완료');
+    } catch (e, stackTrace) {
+      debugPrint('앱: 인증 상태 변경 리스너 설정 중 오류: $e');
+      debugPrint('앱: 스택 트레이스: $stackTrace');
       
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _isLoadingUserData = false;
-          _error = '인증 상태 확인 중 오류가 발생했습니다: $error';
+          _error = '인증 상태 변경 리스너 설정 중 오류가 발생했습니다: $e';
         });
       }
-    });
+    }
   }
   
   /// 사용자 로그인 후 처리 로직
@@ -505,88 +532,182 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
     
     // 모든 조건을 만족한 경우 앱의 메인 화면 표시
-    debugPrint('App 홈 화면 표시');
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      scrollBehavior: const CustomScrollBehavior(),
-      scaffoldMessengerKey: _scaffoldMessengerKey,
-      title: 'Pikabook',
-      home: Builder(
-        builder: (context) {
-          // 사용량 제한에 도달한 경우 다이얼로그 표시 (딜레이 적용)
-          if ((_ttsExceed || _noteExceed) && !_hasShownUsageLimitDialog) {
-            // 약간의 지연을 두고 다이얼로그 표시 (화면 전환 후)
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!_hasShownUsageLimitDialog) {
-                _showUsageLimitDialog(context);
-              }
-            });
-          }
-          
-          return const HomeScreen();
-        },
-      ),
-      routes: {
-        '/settings': (context) => SettingsScreen(
-          onLogout: () async {
-            // 로그아웃 처리
-            await FirebaseAuth.instance.signOut();
+    debugPrint('App 홈 화면 표시 시도');
+    try {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        scrollBehavior: const CustomScrollBehavior(),
+        navigatorKey: _navigatorKey,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
+        home: Builder(
+          builder: (context) {
+            // 사용량 제한에 도달한 경우 다이얼로그 표시 (딜레이 적용)
+            if ((_ttsExceed || _noteExceed) && !_hasShownUsageLimitDialog) {
+              // 약간의 지연을 두고 다이얼로그 표시 (화면 전환 후)
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!_hasShownUsageLimitDialog) {
+                  _showUsageLimitDialog(context);
+                }
+              });
+            }
+            
+            debugPrint('HomeScreen 클래스 인스턴스 생성 및 반환');
+            try {
+              // HomeScreen 표시 시 예외 처리
+              return const HomeScreen();
+            } catch (e, stackTrace) {
+              debugPrint('⚠️ HomeScreen 인스턴스 생성 중 오류 발생: $e');
+              debugPrint('스택 트레이스: $stackTrace');
+              
+              // 홈 화면 렌더링 실패 시 복구 UI 표시
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text('Pikabook'),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.refresh),
+                      onPressed: () {
+                        setState(() {
+                          _isLoading = true;
+                        });
+                        Future.delayed(const Duration(milliseconds: 300), () {
+                          if (mounted) {
+                            setState(() {
+                              _isLoading = false;
+                            });
+                          }
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                body: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('화면을 불러오는 중 문제가 발생했습니다'),
+                      const SizedBox(height: 16),
+                      Text('$e'),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () {
+                          // 로그아웃하고 샘플 모드로 전환
+                          FirebaseAuth.instance.signOut();
+                          setState(() {
+                            _isLoading = true;
+                          });
+                        },
+                        child: const Text('로그아웃'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
           },
         ),
-      },
-    );
-  }
-  
-  // 사용량 제한 다이얼로그 표시
-  void _showUsageLimitDialog(BuildContext context) async {
-    // 사용량 정보 가져오기 (버퍼 적용)
-    final usageInfo = await _usageLimitService.getUsageInfo(withBuffer: true);
-    final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
-    final usagePercentages = usageInfo['percentages'] as Map<String, double>;
-    
-    // 다이얼로그 표시
-    if (mounted && !_hasShownUsageLimitDialog) {
-      UsageDialog.show(
-        context,
-        title: _noteExceed ? '사용량 제한에 도달했습니다' : null,
-        message: _noteExceed 
-            ? '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 눌러 요청해 주세요.'
-            : null,
-        limitStatus: limitStatus,
-        usagePercentages: usagePercentages,
-        onContactSupport: _handleContactSupport,
       );
-      setState(() {
-        _hasShownUsageLimitDialog = true;
-      });
+    } catch (e, stackTrace) {
+      debugPrint('⚠️ 홈 화면 생성 중 오류 발생: $e');
+      debugPrint('스택 트레이스: $stackTrace');
+      
+      // 에러 복구용 대체 화면 표시
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          appBar: AppBar(
+            title: const Text('Pikabook'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.logout),
+                onPressed: () async {
+                  await FirebaseAuth.instance.signOut();
+                },
+              ),
+            ],
+          ),
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('화면 로딩 중 문제가 발생했습니다.'),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () async {
+                    // 설정 초기화 및 재시작
+                    await _sampleModeService.disableSampleMode();
+                    if (mounted) {
+                      setState(() {
+                        _isLoading = true;
+                      });
+                    }
+                  },
+                  child: const Text('다시 시도'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
   }
   
-  // 지원팀 문의하기 처리
-  void _handleContactSupport() async {
-    // 프리미엄 문의 구글 폼 URL
-    const String formUrl = 'https://forms.gle/9EBEV1vaLpNbkhxD9';
-    final Uri url = Uri.parse(formUrl);
+  // 로그인 콜백
+  void _onLogin(AppState appState) {
+    // 홈 화면으로 이동
+    debugPrint('앱: 로그인 완료, 홈 화면으로 이동합니다');
     
     try {
-      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-        // URL을 열 수 없는 경우 스낵바로 알림
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text('문의 폼을 열 수 없습니다. 직접 브라우저에서 다음 주소를 입력해 주세요: $formUrl'),
-            duration: const Duration(seconds: 10),
-          ),
-        );
+      // 샘플 모드 비활성화
+      _sampleModeService.disableSampleMode();
+      _isSampleMode = false;
+      
+      // 앱 상태 업데이트
+      appState.updateAuthState(AuthState.authenticated);
+      
+      // 홈 화면으로 이동
+      _navigateToHome(appState);
+    } catch (e, stackTrace) {
+      debugPrint('앱: 로그인 완료 후 처리 중 오류 발생: $e');
+      debugPrint('앱: 스택 트레이스: $stackTrace');
+      
+      // 에러가 발생해도 앱 상태는 업데이트하고 홈 화면으로 이동 시도
+      appState.updateAuthState(AuthState.authenticated);
+      _navigateToHome(appState);
+    }
+  }
+
+  // 홈 화면으로 이동
+  void _navigateToHome(AppState appState) {
+    debugPrint('앱: 홈 화면으로 네비게이션 시작');
+    
+    try {
+      // 네비게이터 키 참조 유효성 확인
+      if (_navigatorKey.currentState == null) {
+        debugPrint('앱: 네비게이터 상태가 null입니다. 홈 화면 이동 불가');
+        return;
       }
-    } catch (e) {
-      // 오류 발생 시 스낵바로 알림
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text('문의 폼을 여는 중 오류가 발생했습니다. 이메일로 문의해 주세요: hello.pikabook@gmail.com'),
-          duration: const Duration(seconds: 10),
+      
+      // 현재 라우트 정보 확인
+      final currentRoute = ModalRoute.of(_navigatorKey.currentContext!);
+      final currentRouteName = currentRoute?.settings.name;
+      debugPrint('앱: 현재 라우트: $currentRouteName');
+      
+      // 홈 화면으로 이동 - 기존 스택을 모두 제거하고 새로운 홈 화면 표시
+      _navigatorKey.currentState!.pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => const HomeScreen(),
+          settings: const RouteSettings(name: '/home'),
         ),
+        (route) => false, // 모든 이전 라우트 제거
       );
+      
+      debugPrint('앱: 홈 화면으로 네비게이션 완료');
+    } catch (e, stackTrace) {
+      debugPrint('앱: 홈 화면 네비게이션 중 오류 발생: $e');
+      debugPrint('앱: 스택 트레이스: $stackTrace');
     }
   }
 
