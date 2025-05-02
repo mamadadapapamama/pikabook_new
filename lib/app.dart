@@ -10,22 +10,16 @@ import 'dart:async';
 import 'views/screens/login_screen.dart';
 import 'features/home/home_screen_mvvm.dart'; 
 import 'views/screens/onboarding_screen.dart';
-import 'views/screens/settings_screen.dart';
 import 'core/services/common/initialization_manager.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
 import 'core/services/common/usage_limit_service.dart';
 import 'core/widgets/usage_dialog.dart';
 import 'widgets/loading_screen.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'core/services/marketing/marketing_campaign_service.dart';
 import 'core/theme/app_theme.dart';
-import 'dart:io';
-import 'core/theme/tokens/ui_tokens.dart';
 import 'core/theme/tokens/color_tokens.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 import 'features/auth/sample_mode_service.dart';
 import 'features/sample/sample_home_screen.dart';
 
@@ -140,29 +134,35 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   /// 앱 초기화 로직
   Future<void> _initializeApp() async {
     try {
-      // Firebase 초기화
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      // Firebase 초기화는 InitializationManager에서 처리하도록 변경
+      debugPrint('앱: 초기화 시작');
       
-      // 마케팅 캠페인 서비스 초기화
+      // 공통 서비스 초기화 (Firebase 포함)
+      final initResult = await _initializationManager.initialize();
+      
+      // 마케팅 캠페인 서비스 초기화 (필요 시에만)
       await _marketingService.initialize();
       
-      // 공통 서비스 초기화
-      await _initializationManager.initialize();
+      // 초기화 결과에서 로그인 정보 가져오기
+      final isLoggedIn = initResult['isLoggedIn'] as bool;
+      final isOnboardingCompleted = initResult['isOnboardingCompleted'] as bool;
       
-      // 샘플 모드 상태 확인
+      // 샘플 모드 상태 확인 (앱 특화 로직)
       await _checkSampleMode();
       
-      // 인증 상태 관찰
+      // 인증 상태 관찰 설정
       _setupAuthStateListener();
       
-      // 성공적으로 초기화 완료
+      // 초기화 상태 업데이트
       setState(() {
         _isInitialized = true;
+        _isLoading = !_isSampleMode; // 샘플 모드가 아니면 계속 로딩
       });
+      
+      debugPrint('앱: 초기화 완료 (로그인: $isLoggedIn, 온보딩 완료: $isOnboardingCompleted)');
     } catch (e) {
       // 초기화 실패 처리
+      debugPrint('앱: 초기화 실패 - $e');
       setState(() {
         _error = '앱 초기화 중 오류가 발생했습니다: $e';
         _isInitialized = false;
@@ -219,20 +219,14 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // Firebase Auth 상태 변경 감지
       _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen(
         (User? user) async {
+          if (!mounted) return;
+          
           debugPrint('앱: 인증 상태 변경 감지: ${user != null ? "로그인" : "로그아웃"}');
           
-          if (!mounted) {
-            debugPrint('앱: 위젯이 마운트되지 않음, 처리 중단');
-            return;
-          }
-          
+          // 사용자 로그인/로그아웃 처리
           if (user != null) {
-            // 사용자가 로그인한 경우
-            debugPrint('앱: 사용자 로그인 감지 (${user.uid})');
-            
-            // 샘플 모드이면 비활성화
+            // 로그인 처리
             if (_isSampleMode) {
-              debugPrint('앱: 샘플 모드 비활성화 중...');
               await _sampleModeService.disableSampleMode();
               _isSampleMode = false;
             }
@@ -241,16 +235,13 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               _user = user;
               _userId = user.uid;
               _isLoading = false;
-              _isLoadingUserData = true; // 사용자 데이터 로딩 시작
+              _isLoadingUserData = true;
             });
             
             // 사용자 데이터 로드
             await _loadUserPreferences();
           } else {
-            // 사용자가 로그아웃한 경우
-            debugPrint('앱: 사용자 로그아웃 감지');
-            
-            // 샘플 모드 상태 확인
+            // 로그아웃 처리
             await _checkSampleMode();
             
             setState(() {
@@ -263,28 +254,23 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           }
         },
         onError: (error, stackTrace) {
-          debugPrint('앱: 인증 상태 변경 감지 중 오류: $error');
-          debugPrint('앱: 스택 트레이스: $stackTrace');
+          debugPrint('앱: 인증 상태 감지 오류: $error');
           
           if (mounted) {
             setState(() {
               _isLoading = false;
               _isLoadingUserData = false;
-              _error = '인증 상태 확인 중 오류가 발생했습니다: $error';
+              _error = '인증 상태 확인 중 오류 발생: $error';
             });
           }
         },
       );
-      
-      debugPrint('앱: 인증 상태 변경 리스너 설정 완료');
-    } catch (e, stackTrace) {
-      debugPrint('앱: 인증 상태 변경 리스너 설정 중 오류: $e');
-      debugPrint('앱: 스택 트레이스: $stackTrace');
-      
+    } catch (e) {
+      debugPrint('앱: 인증 리스너 설정 오류: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = '인증 상태 변경 리스너 설정 중 오류가 발생했습니다: $e';
+          _error = '인증 상태 변경 리스너 설정 중 오류 발생: $e';
         });
       }
     }
@@ -294,11 +280,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   Future<void> _loadUserPreferences() async {
     if (!mounted) return;
     
-    debugPrint('[loadUserPreferences] 시작: userId=$_userId, isLoadingUserData=$_isLoadingUserData');
+    debugPrint('[loadUserPreferences] 시작');
     
     try {
       if (_userId == null) {
-        debugPrint('[loadUserPreferences] 사용자 ID가 없음, 로딩 상태 해제');
         setState(() {
           _isLoadingUserData = false;
           _isLoading = false;
@@ -306,71 +291,47 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         return;
       }
       
-      // 로그인 사용자가 있으므로 샘플 모드 강제 비활성화
+      // 샘플 모드 비활성화 확인
       if (_isSampleMode) {
-        debugPrint('[loadUserPreferences] 로그인 사용자 감지, 샘플 모드 강제 비활성화');
         await _sampleModeService.disableSampleMode();
-        if (mounted) {
-          setState(() {
-            _isSampleMode = false;
-          });
-        }
+        _isSampleMode = false;
       }
       
-      // 현재 사용자 ID를 UserPreferencesService에 설정
+      // 사용자 데이터 로드
       await _preferencesService.setCurrentUserId(_userId!);
-
-      // Firestore에서 사용자 설정 로드
       await _preferencesService.loadUserSettingsFromFirestore();
-  
-      // 1. 먼저 사용자가 노트를 가지고 있는지 확인
-      bool hasNotes = await _checkUserHasNotes();
-      debugPrint('[loadUserPreferences] 사용자($_userId)의 노트 존재 여부: $hasNotes');
       
-      // 2. 노트가 있는 경우 온보딩 완료 상태로 설정하고 홈화면으로 이동
+      // 노트 존재 여부 확인 및 온보딩 상태 설정
+      bool hasNotes = await _checkUserHasNotes();      
       if (hasNotes) {
-        debugPrint('[loadUserPreferences] 사용자($_userId)의 노트가 존재하여 온보딩 완료 상태로 설정');
         await _preferencesService.setOnboardingCompleted(true);
         _isOnboardingCompleted = true;
-      } 
-      // 3. 노트가 없는 경우 기존 온보딩 완료 여부 확인
-      else {
-        debugPrint('[loadUserPreferences] 사용자($_userId)의 노트가 없어 온보딩 완료 여부 확인');
+      } else {
         _isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
-        debugPrint('[loadUserPreferences] 온보딩 완료 상태: $_isOnboardingCompleted');
       }
       
-      // 4. 사용량 제한 확인
+      // 사용량 제한 확인
       await _checkUsageLimits();
       
-      // 5. UI 상태 업데이트
+      // 상태 업데이트
       if (mounted) {
-        debugPrint('[loadUserPreferences] 데이터 로딩 완료, 상태 업데이트');
         setState(() {
-          _isLoadingUserData = false; // 데이터 로딩 완료
-          _isLoading = false; // 추가: 모든 로딩 완료
+          _isLoadingUserData = false;
+          _isLoading = false;
         });
         
-        // 6. 사용자 데이터 로드 후 플랜 변경 체크
-        debugPrint('[loadUserPreferences] 플랜 변경 체크');
+        // 플랜 변경 체크
         await _checkPlanChange();
       }
     } catch (e) {
-      // 사용자 설정 로드 실패 처리
-      debugPrint('[loadUserPreferences] 오류 발생: $e');
+      debugPrint('[loadUserPreferences] 오류: $e');
       if (mounted) {
         setState(() {
-          _error = '사용자 설정을 로드하는 중 오류가 발생했습니다: $e';
-          _isLoadingUserData = false; // 오류 발생 시에도 로딩 상태 해제
-          _isLoading = false; // 모든 로딩 완료
+          _error = '사용자 데이터 로드 중 오류: $e';
+          _isLoadingUserData = false;
+          _isLoading = false;
         });
       }
-    }
-    
-    // 로딩 완료 후 홈 화면 표시를 위한 추가 상태 업데이트
-    if (mounted) {
-      debugPrint('[loadUserPreferences] 최종 상태 확인: isOnboardingCompleted=$_isOnboardingCompleted, isLoading=$_isLoading, isLoadingUserData=$_isLoadingUserData');
-      setState(() {}); // 상태 변경 강제
     }
   }
   
@@ -445,33 +406,18 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     // 디버그 로그 추가
     debugPrint('App build 호출: isInitialized=$_isInitialized, isLoading=$_isLoading, isLoadingUserData=$_isLoadingUserData, user=${_user?.uid}, isOnboardingCompleted=$_isOnboardingCompleted, isSampleMode=$_isSampleMode');
     
-    // 앱 자체가 초기화되지 않았거나 오류가 있는 경우
+    // 상태에 따른 화면 표시
     if (!_isInitialized && _error != null) {
       return _buildErrorScreen(_error!);
-    }
-    
-    // 앱이 로딩 중인 경우
-    if (_isLoading || (_isLoadingUserData && _user != null)) {
+    } else if (_isLoading || (_isLoadingUserData && _user != null)) {
       return _buildLoadingScreen();
-    }
-    
-    // 사용자가 로그인하지 않은 경우 (인증 화면 표시)
-    if (_user == null) {
-      // 샘플 모드인 경우
-      if (_isSampleMode) {
-        return _buildSampleModeScreen();
-      }
-
-      return _buildLoginScreen();
-    }
-    
-    // 사용자가 로그인했지만 온보딩을 완료하지 않은 경우
-    if (!_isOnboardingCompleted) {
+    } else if (_user == null) {
+      return _isSampleMode ? _buildSampleModeScreen() : _buildLoginScreen();
+    } else if (!_isOnboardingCompleted) {
       return _buildOnboardingScreen();
+    } else {
+      return _buildHomeScreen();
     }
-    
-    // 모든 조건을 만족한 경우 앱의 메인 화면 표시
-    return _buildHomeScreen();
   }
   
   // 에러 화면 빌드
