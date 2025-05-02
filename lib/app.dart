@@ -245,6 +245,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           _isLoadingUserData = false; // 데이터 로딩 완료
+          _isLoading = false; // 추가: 모든 로딩 완료
         });
         // 사용자 데이터 로드 후 플랜 변경 체크
         await _checkPlanChange();
@@ -342,7 +343,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
     
     // 앱이 로딩 중인 경우
-    if (_isLoading) {
+    if (_isLoading || (_isLoadingUserData && _user != null)) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
@@ -367,11 +368,15 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         theme: AppTheme.lightTheme,
         scrollBehavior: const CustomScrollBehavior(),
         home: LoginScreen(
-          onLoginSuccess: (user) {
+          onLoginSuccess: (user) async {
+            // 샘플 모드 비활성화
+            await _sampleModeService.disableSampleMode();
+            
             // 사용자 로그인 성공 처리
             setState(() {
               _user = user;
               _userId = user.uid;
+              _isSampleMode = false;
             });
             _loadUserPreferences();
           },
