@@ -12,6 +12,8 @@ import '../../core/services/authentication/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../features/auth/sample_mode_service.dart';
 import '../../features/sample/sample_home_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/gestures.dart';
 
 class LoginScreen extends StatefulWidget {
   final Function(User) onLoginSuccess;
@@ -272,12 +274,34 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 
                                 SizedBox(height: SpacingTokens.sm),
                                 // 로그인 안내 메시지 추가
-                                Text(
-                                  '노트 저장과 맞춤 학습을 위해 로그인이 필요합니다.',
-                                  style: TypographyTokens.body2.copyWith(
-                                    color: ColorTokens.textLight,
-                                  ),
+                                RichText(
                                   textAlign: TextAlign.center,
+                                  text: TextSpan(
+                                    style: TypographyTokens.body2.copyWith(
+                                      color: ColorTokens.textLight,
+                                    ),
+                                    children: [
+                                      TextSpan(text: '로그인 시 '),
+                                      TextSpan(
+                                        text: '개인정보처리방침',
+                                        style: TypographyTokens.body2.copyWith(
+                                          color: ColorTokens.textLight,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                        recognizer: TapGestureRecognizer()
+                                          ..onTap = () {
+                                            if (kDebugMode) {
+                                              print('개인정보처리방침 링크 클릭됨');
+                                            }
+                                            launchUrl(
+                                              Uri.parse('https://www.pikabook.co/privacy.html'),
+                                              mode: LaunchMode.externalApplication,
+                                            );
+                                          },
+                                      ),
+                                      TextSpan(text: '에 동의한 것으로 간주합니다.'),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
