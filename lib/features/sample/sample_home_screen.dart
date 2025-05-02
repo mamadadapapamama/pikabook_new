@@ -11,6 +11,7 @@ import '../../views/screens/login_screen.dart';
 import 'sample_notes_service.dart';
 import '../../features/auth/sample_mode_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'sample_note_detail_screen.dart';
 
 class SampleHomeScreen extends StatelessWidget {
   // 콜백 함수 타입 정의 및 이름 변경 (onLogin -> onRequestLogin)
@@ -78,7 +79,7 @@ class SampleHomeScreen extends StatelessWidget {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null) {
         if (kDebugMode) {
-          debugPrint('[SampleHomeScreen] 기존 사용자 감지, 로그아웃 수행');
+          debugPrint('[SampleHomeScreen] 기존 로그인 사용자 감지, 로그아웃 수행');
         }
         await FirebaseAuth.instance.signOut();
       }
@@ -159,6 +160,22 @@ class SampleHomeScreen extends StatelessWidget {
       ),
     );
   }
+  
+  // 노트 상세 화면으로 이동
+  void _navigateToNoteDetail(BuildContext context, Note note) {
+    if (kDebugMode) {
+      debugPrint('[SampleHomeScreen] 샘플 노트 상세 화면으로 이동: ${note.id}');
+    }
+    
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => SampleNoteDetailScreen(
+          note: note,
+          sampleNotesService: _sampleNotesService,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -166,17 +183,36 @@ class SampleHomeScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF9F1), // Figma 디자인의 #FFF9F1 배경색
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-          '샘플 모드',
-          style: TypographyTokens.headline3.copyWith(
-            color: ColorTokens.textPrimary,
-          ),
-        ),
+      appBar: PikaAppBar(
+        showLogo: true,
+        noteSpaceName: '샘플 학습 노트',
+        backgroundColor: const Color(0xFFFFF9F1),
+        height: 108,
         actions: [
+          // 설정 버튼
+          Padding(
+            padding: EdgeInsets.only(right: SpacingTokens.md),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => _showLoginRequiredDialog(context),
+                borderRadius: BorderRadius.circular(24),
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  padding: const EdgeInsets.all(12),
+                  child: Icon(
+                    Icons.settings_outlined,
+                    color: ColorTokens.textPrimary,
+                    size: 24,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // 로그인 버튼
           _buildLoginButton(context),
+          SizedBox(width: 8),
         ],
       ),
       body: SafeArea(
@@ -197,7 +233,7 @@ class SampleHomeScreen extends StatelessWidget {
                   child: NoteListItem(
                     note: note,
                     onDismissed: () {},
-                    onNoteTapped: (_) => _showLoginRequiredDialog(context),
+                    onNoteTapped: (_) => _navigateToNoteDetail(context, note),
                     onFavoriteToggled: (_, __) {},
                     isFilteredList: false,
                   ),

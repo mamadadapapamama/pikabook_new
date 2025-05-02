@@ -20,7 +20,7 @@ class ExternalCnDictionaryService {
     // 사용량 제한 서비스 초기화
     _usageLimitService = UsageLimitService();
   }
-  
+
   // API 클라이언트
   http.Client? _httpClient;
   String? _projectId;
@@ -28,7 +28,7 @@ class ExternalCnDictionaryService {
   
   // 사용량 제한 서비스
   late final UsageLimitService _usageLimitService;
-
+  
   // 검색 결과 캐시 (메모리 캐시)
   final Map<String, DictionaryEntry> _searchResultCache = {};
   
@@ -217,7 +217,7 @@ class ExternalCnDictionaryService {
       // 요청 준비
       final parent = 'projects/$_projectId/locations/global';
       final url = Uri.parse('https://translation.googleapis.com/v3/$parent:translateText');
-      
+
       // 요청 본문
       final requestBody = {
         'contents': [word],
@@ -225,7 +225,7 @@ class ExternalCnDictionaryService {
         'targetLanguageCode': 'ko',
         'mimeType': 'text/plain',
       };
-      
+
       // API 요청
       final response = await _httpClient!.post(
         url,
@@ -243,22 +243,22 @@ class ExternalCnDictionaryService {
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
-        
+
         final translations = data['translations'];
         if (translations != null && translations is List && translations.isNotEmpty) {
           final translatedText = translations[0]['translatedText'];
           debugPrint('번역 결과: $translatedText');
 
-          // 번역 결과를 DictionaryEntry로 변환
-          final entry = DictionaryEntry(
-            word: word,
+            // 번역 결과를 DictionaryEntry로 변환
+            final entry = DictionaryEntry(
+              word: word,
             pinyin: '', // Google은 발음 정보를 제공하지 않음
-            meaning: translatedText,
-            examples: [],
+              meaning: translatedText,
+              examples: [],
             source: 'google',
-          );
+            );
 
-          return entry;
+            return entry;
         } else {
           debugPrint('API 응답 데이터에 translations 필드가 없거나 비어 있습니다');
         }
@@ -324,7 +324,7 @@ class ExternalCnDictionaryService {
       return null;
     }
   }
-
+  
   // 검색 캐시 초기화
   void clearCache() {
     _searchResultCache.clear();

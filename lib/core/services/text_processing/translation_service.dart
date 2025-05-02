@@ -236,7 +236,7 @@ class TranslationService {
       if (kDebugMode && stopwatch != null) {
         debugPrint('✅ 번역 완료 (${stopwatch.elapsedMilliseconds}ms)');
       }
-      
+
       return translatedText;
     } catch (e) {
       if (kDebugMode && stopwatch != null) {

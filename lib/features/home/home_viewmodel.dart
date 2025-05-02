@@ -148,7 +148,7 @@ class HomeViewModel extends ChangeNotifier {
     debugPrint('[HomeViewModel] 구독 취소 시도');
     if (_notesSubscription != null) {
       _notesSubscription!.cancel();
-      _notesSubscription = null;
+    _notesSubscription = null;
       debugPrint('[HomeViewModel] 구독 취소 완료');
     }
   }
