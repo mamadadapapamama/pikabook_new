@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
@@ -455,30 +456,35 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         _isLoading = true;
       });
       
-      debugPrint('[LoginScreen] 로그인 없이 둘러보기 시작: 샘플 모드 활성화');
+      if (kDebugMode) {
+        debugPrint('[LoginScreen] 로그인 없이 둘러보기 시작');
+      }
       
       // 현재 로그인된 사용자가 있다면 로그아웃
       if (FirebaseAuth.instance.currentUser != null) {
-        debugPrint('[LoginScreen] 기존 로그인 사용자 감지, 로그아웃 실행');
+        if (kDebugMode) {
+          debugPrint('[LoginScreen] 기존 로그인 사용자 감지, 로그아웃 실행');
+        }
         await FirebaseAuth.instance.signOut();
       }
       
-      // 샘플 모드 활성화
-      await _sampleModeService.enableSampleMode();
-      debugPrint('[LoginScreen] 샘플 모드 활성화 완료');
-      
-      // LoginScreen을 pop하여 App 위젯이 SampleHomeScreen을 그리도록 함
-      if (mounted) {
-        Navigator.of(context).pop(); // 현재 화면 닫기
-      }
-      
-      // App 위젯으로 샘플 모드 진입을 알릴 필요가 있다면 onSkipLogin 호출
+      // App 위젯에 샘플 모드 전환 요청
       if (widget.onSkipLogin != null) {
-        widget.onSkipLogin!(); 
+        if (kDebugMode) {
+          debugPrint('[LoginScreen] App 위젯에 샘플 모드 전환 요청 콜백 호출');
+        }
+        widget.onSkipLogin!(); // App 위젯의 _requestSampleModeScreen 호출
+      } else {
+        // 콜백이 없는 경우 (예상치 못한 상황)
+        if (kDebugMode) {
+          debugPrint('[LoginScreen] 경고: onSkipLogin 콜백이 null입니다.');
+        }
+        setState(() { _isLoading = false; }); // 로딩 해제
       }
     } catch (e) {
-      debugPrint('[LoginScreen] 샘플 모드 진입 중 오류: $e');
-      
+      if (kDebugMode) {
+        debugPrint('[LoginScreen] 샘플 모드 진입 중 오류: $e');
+      }
       setState(() {
         _errorMessage = '샘플 모드 진입 중 오류가 발생했습니다.';
         _isLoading = false;

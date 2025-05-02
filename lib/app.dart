@@ -446,39 +446,83 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
+  /// 샘플 모드 화면으로 전환 요청 (LoginScreen에서 호출)
+  void _requestSampleModeScreen() async {
+    if (mounted) {
+      if (kDebugMode) {
+        debugPrint('[App] 샘플 모드 화면 요청: 샘플 모드 활성화');
+      }
+      // 샘플 모드 활성화 (서비스 호출)
+      await _sampleModeService.enableSampleMode();
+      // 상태 업데이트하여 App 위젯이 SampleHomeScreen을 빌드하도록 유도
+      setState(() {
+        _isSampleMode = true;
+      });
+    }
+  }
+  
   @override
   Widget build(BuildContext context) {
-    // 디버그 로그 추가
     if (kDebugMode) {
       debugPrint('App build 호출: isInitialized=$_isInitialized, isLoading=$_isLoading, isLoadingUserData=$_isLoadingUserData, user=${_user?.uid}, isOnboardingCompleted=$_isOnboardingCompleted, isSampleMode=$_isSampleMode');
     }
     
-    // 상태에 따른 화면 표시
-    if (!_isInitialized && _error != null) {
-      return _buildErrorScreen(_error!);
-    } else if (_isLoading || (_isLoadingUserData && _user != null)) {
-      return _buildLoadingScreen();
-    } else if (_user == null) {
-      return _isSampleMode ? _buildSampleModeScreen() : _buildLoginScreen();
-    } else if (!_isOnboardingCompleted) {
-      return _buildOnboardingScreen();
-    } else {
-      return _buildHomeScreen();
-    }
+    // 단일 MaterialApp 반환
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      scrollBehavior: const CustomScrollBehavior(),
+      scaffoldMessengerKey: _scaffoldMessengerKey, // ScaffoldMessenger 키 설정
+      home: _buildCurrentScreen(), // 상태에 따라 적절한 화면 위젯 반환
+    );
   }
   
+  // 현재 상태에 맞는 화면 위젯을 반환하는 헬퍼 메서드
+  Widget _buildCurrentScreen() {
+    // 상태에 따른 화면 표시
+    if (!_isInitialized && _error != null) {
+      return _buildErrorScreen(_error!); // Scaffold 반환
+    } else if (_isLoading || (_isLoadingUserData && _user != null)) {
+      return _buildLoadingScreen(); // LoadingScreen 위젯 반환
+    } else if (_user == null) {
+      return _isSampleMode ? _buildSampleModeScreen() : _buildLoginScreen(); // SampleHomeScreen 또는 LoginScreen 위젯 반환
+    } else if (!_isOnboardingCompleted) {
+      return _buildOnboardingScreen(); // OnboardingScreen 위젯 반환
+    } else {
+      // return _buildHomeScreen(); // HomeScreen 위젯 반환 (기존)
+      // HomeScreen에서 사용량 다이얼로그를 표시해야 하므로 Builder 사용 고려
+      // 또는 HomeScreen initState에서 다이얼로그 표시 로직 실행
+      return Builder(
+        builder: (context) {
+           // 사용량 제한 다이얼로그 표시 로직 (HomeScreen으로 이동 권장)
+           // WidgetsBinding.instance?.addPostFrameCallback((_) {
+           //   if ((_ttsExceed || _noteExceed) && !_hasShownUsageLimitDialog && mounted) {
+           //     _showUsageLimitDialog(context); 
+           //   }
+           // });
+           try {
+             return const HomeScreen();
+           } catch (e, stackTrace) {
+             if (kDebugMode) {
+                debugPrint('⚠️ HomeScreen 인스턴스 생성 중 오류 발생: $e');
+                debugPrint('스택 트레이스: $stackTrace');
+             }
+             // 여기서 context는 MaterialApp 하위의 context이므로 ScaffoldMessenger 사용 가능
+             return _buildHomeScreenErrorFallback(e, context);
+           }
+        });
+    }
+  }
+
   // 에러 화면 빌드
   Widget _buildErrorScreen(String errorMessage) {
     if (kDebugMode) {
       debugPrint('App 초기화 실패 화면 표시: $errorMessage');
     }
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: Scaffold(
-        body: Center(
-          child: Text(errorMessage),
-        ),
+    // MaterialApp 제거, Scaffold 반환
+    return Scaffold(
+      body: Center(
+        child: Text(errorMessage),
       ),
     );
   }
@@ -488,11 +532,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (kDebugMode) {
       debugPrint('App 로딩 화면 표시: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData');
     }
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: const LoadingScreen(progress: 0.5, message: '앱을 초기화하는 중입니다...'),
-    );
+    // MaterialApp 제거, LoadingScreen 직접 반환
+    return const LoadingScreen(progress: 0.5, message: '앱을 초기화하는 중입니다...');
   }
   
   // 샘플 모드 화면 빌드
@@ -500,14 +541,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (kDebugMode) {
       debugPrint('App 샘플 모드 화면 표시 (로그인 안됨)');
     }
-    return MaterialApp(
-      scrollBehavior: const CustomScrollBehavior(),
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: SampleHomeScreen(
-        // App 위젯의 상태 변경 콜백 전달
-        onRequestLogin: _requestLoginScreen, 
-      ),
+    // MaterialApp 제거, SampleHomeScreen 직접 반환
+    return SampleHomeScreen(
+      onRequestLogin: _requestLoginScreen, 
     );
   }
   
@@ -516,21 +552,16 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (kDebugMode) {
       debugPrint('App 로그인 화면 표시');
     }
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      scrollBehavior: const CustomScrollBehavior(),
-      home: LoginScreen(
-        onLoginSuccess: (user) {
-          // 로그인 성공 시 특별한 상태 변경 없음
-          // authStateChanges 리스너가 user 변경을 감지하고 처리할 것임
-          if (kDebugMode) {
-            debugPrint('로그인 성공 콜백 실행 (상태 변경은 리스너가 처리): 사용자 ID=${user.uid}');
-          }
-          // 필요하다면 Navigator.pop(context) 등을 호출하여 로그인 화면을 닫을 수 있음
-        },
-        isInitializing: false,
-      ),
+    // MaterialApp 제거, LoginScreen 직접 반환
+    return LoginScreen(
+      onLoginSuccess: (user) {
+        if (kDebugMode) {
+          debugPrint('로그인 성공 콜백 실행 (상태 변경은 리스너가 처리): 사용자 ID=${user.uid}');
+        }
+      },
+      // 샘플 모드 전환 콜백 전달
+      onSkipLogin: _requestSampleModeScreen, 
+      isInitializing: false,
     );
   }
   
@@ -539,73 +570,22 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (kDebugMode) {
       debugPrint('App 온보딩 화면 표시');
     }
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      scrollBehavior: const CustomScrollBehavior(),
-      home: OnboardingScreen(
-        onComplete: () async {
-          await _preferencesService.setOnboardingCompleted(true);
-          if (mounted) {
-            setState(() {
-              _isOnboardingCompleted = true;
-            });
-          }
-        },
-      ),
+    // MaterialApp 제거, OnboardingScreen 직접 반환
+    return OnboardingScreen(
+      onComplete: () async {
+        await _preferencesService.setOnboardingCompleted(true);
+        if (mounted) {
+          setState(() {
+            _isOnboardingCompleted = true;
+          });
+        }
+      },
     );
-  }
-  
-  // 홈 화면 빌드
-  Widget _buildHomeScreen() {
-    if (kDebugMode) {
-      debugPrint('App 홈 화면 표시 시도');
-    }
-    try {
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        scrollBehavior: const CustomScrollBehavior(),
-        scaffoldMessengerKey: _scaffoldMessengerKey,
-        home: Builder(
-          builder: (context) {
-            // 사용량 제한에 도달한 경우 다이얼로그 표시 (딜레이 적용)
-            if ((_ttsExceed || _noteExceed) && !_hasShownUsageLimitDialog) {
-              // 약간의 지연을 두고 다이얼로그 표시 (화면 전환 후)
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!_hasShownUsageLimitDialog) {
-                  _showUsageLimitDialog(context);
-                }
-              });
-            }
-            
-            if (kDebugMode) {
-              debugPrint('HomeScreen 클래스 인스턴스 생성 및 반환');
-            }
-            try {
-              // HomeScreen 표시 시 예외 처리
-              return const HomeScreen();
-            } catch (e, stackTrace) {
-              if (kDebugMode) {
-                debugPrint('⚠️ HomeScreen 인스턴스 생성 중 오류 발생: $e');
-                debugPrint('스택 트레이스: $stackTrace');
-              }
-              return _buildHomeScreenErrorFallback(e, context);
-            }
-          },
-        ),
-      );
-    } catch (e, stackTrace) {
-      if (kDebugMode) {
-        debugPrint('⚠️ 홈 화면 생성 중 오류 발생: $e');
-        debugPrint('스택 트레이스: $stackTrace');
-      }
-      return _buildGlobalErrorFallback(e);
-    }
   }
   
   // 홈 화면 렌더링 실패 시 표시할 대체 UI
   Widget _buildHomeScreenErrorFallback(Object error, BuildContext context) {
+    // MaterialApp 제거, Scaffold 반환
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pikabook'),
@@ -613,15 +593,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {
+              // TODO: 새로고침 로직 개선 (setState만으론 부족할 수 있음)
               setState(() {
-                _isLoading = true;
-              });
-              Future.delayed(const Duration(milliseconds: 300), () {
-                if (mounted) {
-                  setState(() {
-                    _isLoading = false;
-                  });
-                }
+                _isLoading = true; // 로딩 상태로 만들어 재시도 유도?
               });
             },
           ),
@@ -637,11 +611,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () {
-                // 로그아웃하고 샘플 모드로 전환
-                FirebaseAuth.instance.signOut();
-                setState(() {
-                  _isLoading = true;
-                });
+                FirebaseAuth.instance.signOut(); // 로그아웃하여 로그인 화면으로 이동
               },
               child: const Text('로그아웃'),
             ),
@@ -653,48 +623,55 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   // 글로벌 에러 시 표시할 대체 UI
   Widget _buildGlobalErrorFallback(Object error) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Pikabook'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
+    // MaterialApp 제거, Scaffold 반환
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Pikabook'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+            },
+          ),
+        ],
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('화면 로딩 중 문제가 발생했습니다.'),
+            const SizedBox(height: 20),
+            ElevatedButton(
               onPressed: () async {
-                await FirebaseAuth.instance.signOut();
+                // 앱 재시작 또는 초기화 로직 필요
+                // TODO: 앱 재시작 로직 구현
+                await _initializeApp(); // 임시로 초기화 재시도
               },
+              child: const Text('다시 시도'),
             ),
           ],
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('화면 로딩 중 문제가 발생했습니다.'),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () async {
-                  // 설정 초기화 및 재시작
-                  await _sampleModeService.disableSampleMode();
-                  if (mounted) {
-                    setState(() {
-                      _isLoading = true;
-                    });
-                  }
-                },
-                child: const Text('다시 시도'),
-              ),
-            ],
-          ),
         ),
       ),
     );
   }
-  
-  // 사용량 제한 다이얼로그 표시
+
+  @override
+  void setState(VoidCallback fn) {
+    if (kDebugMode) {
+      debugPrint('[App] setState 호출 전 상태: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData, _user=${_user?.uid}, _isOnboardingCompleted=$_isOnboardingCompleted, _isSampleMode=$_isSampleMode');
+    }
+    super.setState(fn);
+    if (kDebugMode) {
+      debugPrint('[App] setState 호출 후 상태: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData, _user=${_user?.uid}, _isOnboardingCompleted=$_isOnboardingCompleted, _isSampleMode=$_isSampleMode');
+    }
+  }
+
+  // 사용량 제한 다이얼로그 표시 (HomeScreen 내부 등으로 이동 필요)
   void _showUsageLimitDialog(BuildContext context) async {
+    if (kDebugMode) {
+      debugPrint('[_showUsageLimitDialog] 호출됨 (HomeScreen 내부로 이동 권장)');
+    }
     // 사용량 정보 가져오기 (버퍼 적용)
     final usageInfo = await _usageLimitService.getUsageInfo(withBuffer: true);
     final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
@@ -712,14 +689,16 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         usagePercentages: usagePercentages,
         onContactSupport: _handleContactSupport,
       );
-      setState(() {
-        _hasShownUsageLimitDialog = true;
-      });
+      // setState 호출을 여기서 하는 것은 적절하지 않음
+      // _hasShownUsageLimitDialog = true; 
     }
   }
   
-  // 지원팀 문의하기 처리
+  // 지원팀 문의하기 처리 (HomeScreen 내부 등으로 이동 필요)
   void _handleContactSupport() async {
+    if (kDebugMode) {
+      debugPrint('[_handleContactSupport] 호출됨 (HomeScreen 내부로 이동 권장)');
+    }
     // 프리미엄 문의 구글 폼 URL
     const String formUrl = 'https://forms.gle/9EBEV1vaLpNbkhxD9';
     final Uri url = Uri.parse(formUrl);
@@ -727,6 +706,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     try {
       if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
         // URL을 열 수 없는 경우 스낵바로 알림
+        // ScaffoldMessenger.of(context) 사용 필요 (키 또는 Builder context 사용)
         _scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
             content: Text('문의 폼을 열 수 없습니다. 직접 브라우저에서 다음 주소를 입력해 주세요: $formUrl'),
@@ -742,17 +722,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           duration: const Duration(seconds: 10),
         ),
       );
-    }
-  }
-
-  @override
-  void setState(VoidCallback fn) {
-    if (kDebugMode) {
-      debugPrint('[App] setState 호출 전 상태: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData, _user=${_user?.uid}, _isOnboardingCompleted=$_isOnboardingCompleted, _isSampleMode=$_isSampleMode');
-    }
-    super.setState(fn);
-    if (kDebugMode) {
-      debugPrint('[App] setState 호출 후 상태: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData, _user=${_user?.uid}, _isOnboardingCompleted=$_isOnboardingCompleted, _isSampleMode=$_isSampleMode');
     }
   }
 }
