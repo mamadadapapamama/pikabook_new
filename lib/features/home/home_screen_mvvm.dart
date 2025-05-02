@@ -30,6 +30,7 @@ import '../../core/utils/debug_utils.dart';
 import '../../core/models/note.dart';
 import '../note_detail/note_detail_screen_mvvm.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/foundation.dart'; // kDebugMode 사용 위해 추가
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -54,11 +55,15 @@ class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() {
     try {
-      debugPrint('[HomeScreen] createState 호출됨');
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] createState 호출됨');
+      }
       return _HomeScreenState();
     } catch (e, stackTrace) {
-      debugPrint('[HomeScreen] createState 중 오류 발생: $e');
-      debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] createState 중 오류 발생: $e');
+        debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+      }
       rethrow; // 오류 전파 (상위 위젯에서 처리)
     }
   }
@@ -91,7 +96,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void initState() {
-    debugPrint('[HomeScreen] initState 호출됨');
+    if (kDebugMode) {
+      debugPrint('[HomeScreen] initState 호출됨');
+    }
     
     try {
       super.initState();
@@ -120,8 +127,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       });
     } catch (e, stackTrace) {
-      debugPrint('[HomeScreen] initState 초기화 중 오류 발생: $e');
-      debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] initState 초기화 중 오류 발생: $e');
+        debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+      }
       
       // 초기화 실패 상태 저장
       _initializationFailed = true;
@@ -137,14 +146,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       await _marketingService.initialize();
     } catch (e) {
-      debugPrint('[HomeScreen] 마케팅 서비스 초기화 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 마케팅 서비스 초기화 중 오류: $e');
+      }
       // 마케팅 서비스 초기화 실패는 무시하고 계속 진행
     }
   }
   
   @override
   void dispose() {
-    debugPrint('[HomeScreen] dispose 호출됨');
+    if (kDebugMode) {
+      debugPrint('[HomeScreen] dispose 호출됨');
+    }
     
     try {
       // 리스너 제거
@@ -155,7 +168,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       super.dispose();
     } catch (e) {
-      debugPrint('[HomeScreen] dispose 중 오류 발생: $e');
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] dispose 중 오류 발생: $e');
+      }
       super.dispose(); // 오류가 발생해도 부모 dispose는 호출해야 함
     }
   }
@@ -163,7 +178,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     // 디버그 로그 추가
-    debugPrint('[HomeScreen] build 메서드 시작');
+    if (kDebugMode) {
+      debugPrint('[HomeScreen] build 메서드 시작');
+    }
     
     // 초기화 실패 시 복구 UI 표시
     if (_initializationFailed) {
@@ -209,12 +226,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // ChangeNotifierProvider로 HomeViewModel 제공
       return ChangeNotifierProvider(
         create: (_) {
-          debugPrint('[HomeScreen] HomeViewModel 인스턴스 생성');
+          if (kDebugMode) {
+            debugPrint('[HomeScreen] HomeViewModel 인스턴스 생성');
+          }
           return HomeViewModel();
         },
         child: Builder(
           builder: (context) {
-            debugPrint('[HomeScreen] Builder 시작');
+            if (kDebugMode) {
+              debugPrint('[HomeScreen] Builder 시작');
+            }
             
             // 각 Consumer에서 viewModel 참조를 설정하므로 여기서는 필요 없음
             return Scaffold(
@@ -225,7 +246,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
               body: Consumer<HomeViewModel>(
                 builder: (context, viewModel, _) {
-                  debugPrint('[HomeScreen] Consumer<HomeViewModel> 빌드');
+                  if (kDebugMode) {
+                    debugPrint('[HomeScreen] Consumer<HomeViewModel> 빌드');
+                  }
                   _viewModel = viewModel;
                   
                   try {
@@ -325,8 +348,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                     );
                   } catch (e, stackTrace) {
-                    debugPrint('[HomeScreen] Consumer 내부에서 오류 발생: $e');
-                    debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+                    if (kDebugMode) {
+                      debugPrint('[HomeScreen] Consumer 내부에서 오류 발생: $e');
+                      debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+                    }
                     
                     // 간단한 에러 복구 UI
                     return Center(
@@ -352,8 +377,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
       );
     } catch (e, stackTrace) {
-      debugPrint('[HomeScreen] 전체 빌드 과정에서 오류 발생: $e');
-      debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 전체 빌드 과정에서 오류 발생: $e');
+        debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+      }
       
       // 빌드 실패 시 표시할 위젯
       return Scaffold(
@@ -386,7 +413,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       // 이미 확인 중이면 중복 호출 방지
       if (_isCheckingUsage) {
-        debugPrint('사용량 확인이 이미 진행 중입니다. 중복 호출 방지.');
+        if (kDebugMode) {
+          debugPrint('사용량 확인이 이미 진행 중입니다. 중복 호출 방지.');
+        }
         return;
       }
       
@@ -395,14 +424,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (_lastUsageCheckTime != null && 
           now.difference(_lastUsageCheckTime!).inSeconds < 10 &&
           _hasCheckedUsage) {
-        debugPrint('사용량 확인: 캐시 사용 (10초 이내)');
+        if (kDebugMode) {
+          debugPrint('사용량 확인: 캐시 사용 (10초 이내)');
+        }
         return;
       }
       
       // 확인 중 상태로 설정
       _isCheckingUsage = true;
       
-      debugPrint('사용량 확인 시작...');
+      if (kDebugMode) {
+        debugPrint('사용량 확인 시작...');
+      }
       
       // 사용량 제한 상태 확인 (버퍼 추가)
       final limitStatus = await _usageLimitService.checkFreeLimits(withBuffer: true);
@@ -418,8 +451,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final bool storageLimitReached = limitStatus['storageLimitReached'] == true;
 
       // 디버깅을 위해 상세 로깅
-      debugPrint('Home 화면: OCR 제한 도달=${limitStatus['ocrLimitReached']}, 노트 제한=$noteExceed');
-      debugPrint('Home 화면: 번역 제한=${limitStatus['translationLimitReached']}, 저장소 제한=${limitStatus['storageLimitReached']}');
+      if (kDebugMode) {
+        debugPrint('Home 화면: OCR 제한 도달=${limitStatus['ocrLimitReached']}, 노트 제한=$noteExceed');
+        debugPrint('Home 화면: 번역 제한=${limitStatus['translationLimitReached']}, 저장소 제한=${limitStatus['storageLimitReached']}');
+      }
       
       // 명시적으로 로컬 변수를 설정하고 setState를 호출하여 UI 업데이트 강제
       final bool shouldDisableButton = ocrLimitReached || translationLimitReached || storageLimitReached || noteExceed;
@@ -437,9 +472,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 다이얼로그 자동 표시 제거 - App 클래스에서 이미 표시하고 있음
       // 특정 동작 시에만 표시하도록 변경 (버튼 클릭 시 등)
       
-      debugPrint('사용량 확인 완료: 노트 생성 제한=$_noteExceed, 버튼 비활성화=$shouldDisableButton');
+      if (kDebugMode) {
+        debugPrint('사용량 확인 완료: 노트 생성 제한=$_noteExceed, 버튼 비활성화=$shouldDisableButton');
+      }
     } catch (e) {
-      DebugUtils.error('사용량 확인 중 오류 발생: $e');
+      if (kDebugMode) {
+        DebugUtils.error('사용량 확인 중 오류 발생: $e');
+      }
     } finally {
       // 확인 중 상태 해제
       _isCheckingUsage = false;
@@ -480,7 +519,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _showImagePickerBottomSheet(BuildContext context) async {
     // 이미 표시 중이면 중복 호출 방지
     if (_isImagePickerShowing) {
-      debugPrint('이미지 피커가 이미 표시 중입니다. 중복 호출 방지');
+      if (kDebugMode) {
+        debugPrint('이미지 피커가 이미 표시 중입니다. 중복 호출 방지');
+      }
       return;
     }
     
@@ -491,10 +532,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           now.difference(_lastUsageCheckTime!).inSeconds < 10;
           
       if (!skipCheck) {
-        debugPrint('사용량 확인 필요 - 확인 중...');
+        if (kDebugMode) {
+          debugPrint('사용량 확인 필요 - 확인 중...');
+        }
         await _checkUsageLimits();
       } else {
-        debugPrint('최근에 사용량 이미 확인함 (캐시 사용)');
+        if (kDebugMode) {
+          debugPrint('최근에 사용량 이미 확인함 (캐시 사용)');
+        }
       }
       
       // 제한에 도달했으면 다이얼로그 표시하고 종료
@@ -536,7 +581,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       }
     } catch (e) {
-      debugPrint('이미지 피커 표시 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('이미지 피커 표시 중 오류: $e');
+      }
       if (mounted) {
         setState(() {
           _isImagePickerShowing = false;
@@ -699,7 +746,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isButtonDisabled() {
     // OCR, 번역, 저장 공간 중 하나라도 한도 도달 시 버튼 비활성화
     // _noteExceed 플래그는 이미 이러한 조건들을 종합적으로 체크함
-    debugPrint('버튼 비활성화 확인: _noteExceed=$_noteExceed, limitStatus=$_limitStatus');
+    if (kDebugMode) {
+      debugPrint('버튼 비활성화 확인: _noteExceed=$_noteExceed, limitStatus=$_limitStatus');
+    }
     
     if (_noteExceed) {
       return true;
@@ -726,7 +775,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // 노트스페이스 옵션 표시
   void _showNoteSpaceOptions() {
     // 현재는 기능 구현 없이 로그만 출력
-    print('노트스페이스 옵션 메뉴 표시 예정');
+    if (kDebugMode) {
+      print('노트스페이스 옵션 메뉴 표시 예정');
+    }
     // TODO: 노트스페이스 선택 또는 관리 메뉴 표시 구현
   }
 
@@ -763,7 +814,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   // 설정 화면으로 이동
   void _navigateToSettings(BuildContext context) {
-    Navigator.of(context).pushNamed('/settings');
+    if (kDebugMode) {
+      debugPrint('설정 화면으로 이동 시도');
+    }
+    try {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => SettingsScreen(
+            onLogout: () async {
+              if (kDebugMode) {
+                debugPrint('로그아웃 콜백 호출됨');
+              }
+              // 로그아웃 처리
+              await FirebaseAuth.instance.signOut();
+              // 홈 화면으로 돌아가기
+              if (mounted) {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('설정 화면 이동 중 오류: $e');
+      }
+      // 오류 발생 시 사용자에게 알림
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('설정 화면 이동 중 오류가 발생했습니다: $e')),
+      );
+    }
   }
 
   // 사용량 제한 정보 다이얼로그 표시 메서드 추가

@@ -135,7 +135,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   Future<void> _initializeApp() async {
     try {
       // Firebase 초기화는 InitializationManager에서 처리하도록 변경
-      debugPrint('앱: 초기화 시작');
+      if (kDebugMode) {
+        debugPrint('앱: 초기화 시작');
+      }
       
       // 공통 서비스 초기화 (Firebase 포함)
       final initResult = await _initializationManager.initialize();
@@ -159,10 +161,14 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         _isLoading = !_isSampleMode; // 샘플 모드가 아니면 계속 로딩
       });
       
-      debugPrint('앱: 초기화 완료 (로그인: $isLoggedIn, 온보딩 완료: $isOnboardingCompleted)');
+      if (kDebugMode) {
+        debugPrint('앱: 초기화 완료 (로그인: $isLoggedIn, 온보딩 완료: $isOnboardingCompleted)');
+      }
     } catch (e) {
       // 초기화 실패 처리
-      debugPrint('앱: 초기화 실패 - $e');
+      if (kDebugMode) {
+        debugPrint('앱: 초기화 실패 - $e');
+      }
       setState(() {
         _error = '앱 초기화 중 오류가 발생했습니다: $e';
         _isInitialized = false;
@@ -176,7 +182,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     try {
       // 로그인한 사용자가 있으면 샘플 모드 강제 비활성화
       if (_user != null) {
-        debugPrint('[checkSampleMode] 로그인 사용자 감지, 샘플 모드 강제 비활성화');
+        if (kDebugMode) {
+          debugPrint('[checkSampleMode] 로그인 사용자 감지, 샘플 모드 강제 비활성화');
+        }
         await _sampleModeService.disableSampleMode();
         if (mounted) {
           setState(() {
@@ -187,21 +195,27 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       }
       
       final isSampleMode = await _sampleModeService.isSampleModeEnabled();
-      debugPrint('[checkSampleMode] 샘플 모드 상태: $isSampleMode');
+      if (kDebugMode) {
+        debugPrint('[checkSampleMode] 샘플 모드 상태: $isSampleMode');
+      }
       
       if (mounted) {
         setState(() {
           _isSampleMode = isSampleMode;
           // 샘플 모드이면 로딩 상태 해제
           if (isSampleMode) {
-            debugPrint('[checkSampleMode] 샘플 모드 활성화 확인, 로딩 상태 해제');
+            if (kDebugMode) {
+              debugPrint('[checkSampleMode] 샘플 모드 활성화 확인, 로딩 상태 해제');
+            }
             _isLoading = false;
             _isLoadingUserData = false;
           }
         });
       }
     } catch (e) {
-      debugPrint('[checkSampleMode] 샘플 모드 확인 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('[checkSampleMode] 샘플 모드 확인 중 오류: $e');
+      }
       // 오류 발생 시 샘플 모드 비활성화 상태로 설정
       if (mounted) {
         setState(() {
@@ -213,7 +227,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   /// 사용자 인증 상태 관찰 설정
   void _setupAuthStateListener() {
-    debugPrint('앱: 인증 상태 변경 리스너 설정');
+    if (kDebugMode) {
+      debugPrint('앱: 인증 상태 변경 리스너 설정');
+    }
     
     try {
       // Firebase Auth 상태 변경 감지
@@ -221,7 +237,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         (User? user) async {
           if (!mounted) return;
           
-          debugPrint('앱: 인증 상태 변경 감지: ${user != null ? "로그인" : "로그아웃"}');
+          if (kDebugMode) {
+            debugPrint('앱: 인증 상태 변경 감지: ${user != null ? "로그인" : "로그아웃"}');
+          }
           
           // 사용자 로그인/로그아웃 처리
           if (user != null) {
@@ -254,7 +272,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           }
         },
         onError: (error, stackTrace) {
-          debugPrint('앱: 인증 상태 감지 오류: $error');
+          if (kDebugMode) {
+            debugPrint('앱: 인증 상태 감지 오류: $error');
+          }
           
           if (mounted) {
             setState(() {
@@ -266,7 +286,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         },
       );
     } catch (e) {
-      debugPrint('앱: 인증 리스너 설정 오류: $e');
+      if (kDebugMode) {
+        debugPrint('앱: 인증 리스너 설정 오류: $e');
+      }
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -280,7 +302,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   Future<void> _loadUserPreferences() async {
     if (!mounted) return;
     
-    debugPrint('[loadUserPreferences] 시작');
+    if (kDebugMode) {
+      debugPrint('[loadUserPreferences] 시작');
+    }
     
     try {
       if (_userId == null) {
@@ -324,7 +348,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         await _checkPlanChange();
       }
     } catch (e) {
-      debugPrint('[loadUserPreferences] 오류: $e');
+      if (kDebugMode) {
+        debugPrint('[loadUserPreferences] 오류: $e');
+      }
       if (mounted) {
         setState(() {
           _error = '사용자 데이터 로드 중 오류: $e';
@@ -350,7 +376,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 노트가 하나라도 있으면 true
       return notesSnapshot.docs.isNotEmpty;
     } catch (e) {
-      debugPrint('노트 존재 여부 확인 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('노트 존재 여부 확인 중 오류: $e');
+      }
       return false; // 오류 발생 시 기본값으로 false 반환
     }
   }
@@ -368,9 +396,13 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         _noteExceed = noteExceed;
       });
       
-      debugPrint('사용자 사용량 제한 확인 (버퍼 적용): TTS 제한=$ttsExceed, 노트 제한=$noteExceed');
+      if (kDebugMode) {
+        debugPrint('사용자 사용량 제한 확인 (버퍼 적용): TTS 제한=$ttsExceed, 노트 제한=$noteExceed');
+      }
     } catch (e) {
-      debugPrint('사용량 제한 확인 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('사용량 제한 확인 중 오류: $e');
+      }
     }
   }
   
@@ -404,7 +436,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     // 디버그 로그 추가
-    debugPrint('App build 호출: isInitialized=$_isInitialized, isLoading=$_isLoading, isLoadingUserData=$_isLoadingUserData, user=${_user?.uid}, isOnboardingCompleted=$_isOnboardingCompleted, isSampleMode=$_isSampleMode');
+    if (kDebugMode) {
+      debugPrint('App build 호출: isInitialized=$_isInitialized, isLoading=$_isLoading, isLoadingUserData=$_isLoadingUserData, user=${_user?.uid}, isOnboardingCompleted=$_isOnboardingCompleted, isSampleMode=$_isSampleMode');
+    }
     
     // 상태에 따른 화면 표시
     if (!_isInitialized && _error != null) {
@@ -422,7 +456,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   // 에러 화면 빌드
   Widget _buildErrorScreen(String errorMessage) {
-    debugPrint('App 초기화 실패 화면 표시: $errorMessage');
+    if (kDebugMode) {
+      debugPrint('App 초기화 실패 화면 표시: $errorMessage');
+    }
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
@@ -436,7 +472,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   // 로딩 화면 빌드
   Widget _buildLoadingScreen() {
-    debugPrint('App 로딩 화면 표시: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData');
+    if (kDebugMode) {
+      debugPrint('App 로딩 화면 표시: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData');
+    }
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
@@ -446,7 +484,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   // 샘플 모드 화면 빌드
   Widget _buildSampleModeScreen() {
-    debugPrint('App 샘플 모드 화면 표시 (로그인 안됨)');
+    if (kDebugMode) {
+      debugPrint('App 샘플 모드 화면 표시 (로그인 안됨)');
+    }
     return MaterialApp(
       scrollBehavior: const CustomScrollBehavior(),
       debugShowCheckedModeBanner: false,
@@ -457,28 +497,21 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   // 로그인 화면 빌드
   Widget _buildLoginScreen() {
-    debugPrint('App 로그인 화면 표시');
+    if (kDebugMode) {
+      debugPrint('App 로그인 화면 표시');
+    }
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       scrollBehavior: const CustomScrollBehavior(),
       home: LoginScreen(
-        onLoginSuccess: (user) async {
-          debugPrint('로그인 성공 콜백: 사용자 ID=${user.uid}');
-          // 샘플 모드 비활성화
-          await _sampleModeService.disableSampleMode();
-          
-          // 사용자 로그인 성공 처리
-          setState(() {
-            _user = user;
-            _userId = user.uid;
-            _isSampleMode = false;
-            _isLoadingUserData = true; // 사용자 데이터 로딩 시작
-          });
-          
-          // 시간 지연 후 사용자 데이터 로드 (최대 5초 타임아웃)
-          await Future.delayed(const Duration(milliseconds: 100));
-          await _loadUserPreferences();
+        onLoginSuccess: (user) {
+          // 로그인 성공 시 특별한 상태 변경 없음
+          // authStateChanges 리스너가 user 변경을 감지하고 처리할 것임
+          if (kDebugMode) {
+            debugPrint('로그인 성공 콜백 실행 (상태 변경은 리스너가 처리): 사용자 ID=${user.uid}');
+          }
+          // 필요하다면 Navigator.pop(context) 등을 호출하여 로그인 화면을 닫을 수 있음
         },
         isInitializing: false,
       ),
@@ -487,7 +520,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   // 온보딩 화면 빌드
   Widget _buildOnboardingScreen() {
-    debugPrint('App 온보딩 화면 표시');
+    if (kDebugMode) {
+      debugPrint('App 온보딩 화면 표시');
+    }
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
@@ -507,7 +542,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   // 홈 화면 빌드
   Widget _buildHomeScreen() {
-    debugPrint('App 홈 화면 표시 시도');
+    if (kDebugMode) {
+      debugPrint('App 홈 화면 표시 시도');
+    }
     try {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -526,23 +563,27 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               });
             }
             
-            debugPrint('HomeScreen 클래스 인스턴스 생성 및 반환');
+            if (kDebugMode) {
+              debugPrint('HomeScreen 클래스 인스턴스 생성 및 반환');
+            }
             try {
               // HomeScreen 표시 시 예외 처리
               return const HomeScreen();
             } catch (e, stackTrace) {
-              debugPrint('⚠️ HomeScreen 인스턴스 생성 중 오류 발생: $e');
-              debugPrint('스택 트레이스: $stackTrace');
-              
+              if (kDebugMode) {
+                debugPrint('⚠️ HomeScreen 인스턴스 생성 중 오류 발생: $e');
+                debugPrint('스택 트레이스: $stackTrace');
+              }
               return _buildHomeScreenErrorFallback(e, context);
             }
           },
         ),
       );
     } catch (e, stackTrace) {
-      debugPrint('⚠️ 홈 화면 생성 중 오류 발생: $e');
-      debugPrint('스택 트레이스: $stackTrace');
-      
+      if (kDebugMode) {
+        debugPrint('⚠️ 홈 화면 생성 중 오류 발생: $e');
+        debugPrint('스택 트레이스: $stackTrace');
+      }
       return _buildGlobalErrorFallback(e);
     }
   }
@@ -690,8 +731,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
 
   @override
   void setState(VoidCallback fn) {
-    debugPrint('[App] setState 호출 전 상태: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData, _user=${_user?.uid}, _isOnboardingCompleted=$_isOnboardingCompleted, _isSampleMode=$_isSampleMode');
+    if (kDebugMode) {
+      debugPrint('[App] setState 호출 전 상태: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData, _user=${_user?.uid}, _isOnboardingCompleted=$_isOnboardingCompleted, _isSampleMode=$_isSampleMode');
+    }
     super.setState(fn);
-    debugPrint('[App] setState 호출 후 상태: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData, _user=${_user?.uid}, _isOnboardingCompleted=$_isOnboardingCompleted, _isSampleMode=$_isSampleMode');
+    if (kDebugMode) {
+      debugPrint('[App] setState 호출 후 상태: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData, _user=${_user?.uid}, _isOnboardingCompleted=$_isOnboardingCompleted, _isSampleMode=$_isSampleMode');
+    }
   }
 }

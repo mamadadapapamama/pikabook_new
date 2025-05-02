@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
@@ -69,68 +70,62 @@ class SampleHomeScreen extends StatelessWidget {
   // 로그인 화면으로 이동
   void _navigateToLogin(BuildContext context) async {
     try {
-      debugPrint('[SampleHomeScreen] 샘플 화면에서 로그인 화면으로 이동 시도');
+      if (kDebugMode) {
+        debugPrint('[SampleHomeScreen] 샘플 화면에서 로그인 화면으로 이동 시도');
+      }
       
-      // 현재 사용자가 있다면 로그아웃
+      // 현재 사용자가 있다면 로그아웃 (안전 장치)
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null) {
-        debugPrint('[SampleHomeScreen] 기존 사용자 감지, 로그아웃 수행');
+        if (kDebugMode) {
+          debugPrint('[SampleHomeScreen] 기존 사용자 감지, 로그아웃 수행');
+        }
         await FirebaseAuth.instance.signOut();
       }
       
-      // 샘플 모드 비활성화 (먼저 비활성화)
-      debugPrint('[SampleHomeScreen] 샘플 모드 비활성화 시도');
+      // 샘플 모드 비활성화
+      if (kDebugMode) {
+        debugPrint('[SampleHomeScreen] 샘플 모드 비활성화 시도');
+      }
       await _sampleModeService.disableSampleMode();
-      debugPrint('[SampleHomeScreen] 샘플 모드 비활성화 완료');
-      
-      // 콜백이 있으면 호출
-      if (onLogin != null) {
-        debugPrint('[SampleHomeScreen] 로그인 콜백 실행');
-        onLogin!();
-        return;
+      if (kDebugMode) {
+        debugPrint('[SampleHomeScreen] 샘플 모드 비활성화 완료');
       }
       
-      // 로그인 화면으로 이동
-      debugPrint('[SampleHomeScreen] 로그인 화면으로 네비게이션');
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => LoginScreen(
-            onLoginSuccess: (user) {
-              debugPrint('[SampleHomeScreen] 로그인 성공: ${user.uid}');
-            },
-            isInitializing: false,
-          ),
-        ),
-      );
+      // SampleHomeScreen을 pop하여 App 위젯이 LoginScreen을 그리도록 함
+      if (context.mounted) {
+        if (kDebugMode) {
+          debugPrint('[SampleHomeScreen] SampleHomeScreen pop');
+        }
+        Navigator.of(context).pop(); 
+      }
+      
     } catch (e, stackTrace) {
-      debugPrint('[SampleHomeScreen] 로그인 화면으로 이동 중 오류: $e');
-      debugPrint('[SampleHomeScreen] 스택 트레이스: $stackTrace');
+      if (kDebugMode) {
+        debugPrint('[SampleHomeScreen] 로그인 화면으로 이동 중 오류: $e');
+        debugPrint('[SampleHomeScreen] 스택 트레이스: $stackTrace');
+      }
       
       // 오류 발생 시 사용자에게 알림
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('로그인 화면으로 이동 중 문제가 발생했습니다. 다시 시도해주세요.'),
-          duration: Duration(seconds: 3),
-        ),
-      );
-      
-      // 강제로 샘플 모드 비활성화 재시도
-      try {
-        await _sampleModeService.disableSampleMode();
-        
-        // 로그인 화면으로 강제 전환
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => LoginScreen(
-              onLoginSuccess: (user) {
-                debugPrint('[SampleHomeScreen] 로그인 성공 (복구): ${user.uid}');
-              },
-              isInitializing: false,
-            ),
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('로그인 화면으로 이동 중 문제가 발생했습니다. 다시 시도해주세요.'),
+            duration: Duration(seconds: 3),
           ),
         );
+      }
+      
+      // 오류 복구 시도: 강제로 샘플 모드 비활성화 후 pop
+      try {
+        await _sampleModeService.disableSampleMode();
+        if (context.mounted) {
+           Navigator.of(context).pop();
+        }
       } catch (e) {
-        debugPrint('[SampleHomeScreen] 복구 시도 중에도 오류 발생: $e');
+        if (kDebugMode) {
+          debugPrint('[SampleHomeScreen] 복구 시도 중에도 오류 발생: $e');
+        }
       }
     }
   }
