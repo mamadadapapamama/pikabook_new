@@ -26,6 +26,8 @@ import 'core/theme/tokens/ui_tokens.dart';
 import 'core/theme/tokens/color_tokens.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import 'features/auth/sample_mode_service.dart';
+import 'features/sample/sample_home_screen.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -58,12 +60,14 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   bool _isLoading = true;
   bool _isOnboardingCompleted = false;
   bool _isLoadingUserData = false;
+  bool _isSampleMode = false;
   String? _userId;
   User? _user;
   StreamSubscription<User?>? _authStateSubscription;
   late InitializationManager _initializationManager;
   late UserPreferencesService _preferencesService;
   final UsageLimitService _usageLimitService = UsageLimitService();
+  final SampleModeService _sampleModeService = SampleModeService();
   String? _error;
   final MarketingCampaignService _marketingService = MarketingCampaignService();
   final PlanService _planService = PlanService();
@@ -127,6 +131,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     // 앱 라이프사이클 상태 관리
     if (state == AppLifecycleState.resumed) {
       // 앱이 포그라운드로 돌아왔을 때
+      _checkSampleMode();
     } else if (state == AppLifecycleState.paused) {
       // 앱이 백그라운드로 갔을 때
     }
@@ -146,6 +151,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 공통 서비스 초기화
       await _initializationManager.initialize();
       
+      // 샘플 모드 상태 확인
+      await _checkSampleMode();
+      
       // 인증 상태 관찰
       _setupAuthStateListener();
       
@@ -159,6 +167,19 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         _error = '앱 초기화 중 오류가 발생했습니다: $e';
         _isInitialized = false;
         _isLoading = false;
+      });
+    }
+  }
+  
+  /// 샘플 모드 확인
+  Future<void> _checkSampleMode() async {
+    final isSampleMode = await _sampleModeService.isSampleModeEnabled();
+    if (mounted) {
+      setState(() {
+        _isSampleMode = isSampleMode;
+        if (isSampleMode) {
+          _isLoading = false;
+        }
       });
     }
   }
@@ -307,36 +328,35 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   @override
   Widget build(BuildContext context) {
-    // 디버그 타이머 비활성화 (디버그 모드에서만)
-    if (kDebugMode) {
-      timeDilation = 1.0;
-    }
-    
-    // 에러 발생한 경우
-    if (_error != null) {
+    // 앱 자체가 초기화되지 않았거나 오류가 있는 경우
+    if (!_isInitialized && _error != null) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
-        scrollBehavior: const CustomScrollBehavior(),
         home: Scaffold(
           body: Center(
-            child: Text(
-              '오류가 발생했습니다:\n$_error',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red),
-            ),
+            child: Text(_error ?? '오류가 발생했습니다'),
           ),
         ),
       );
     }
     
-    // 초기화 중인 경우
-    if (_isLoading || !_isInitialized || _isLoadingUserData) {
+    // 앱이 로딩 중인 경우
+    if (_isLoading) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
-        scrollBehavior: const CustomScrollBehavior(),
         home: const LoadingScreen(progress: 0.5, message: '앱을 초기화하는 중입니다...'),
+      );
+    }
+    
+    // 샘플 모드인 경우
+    if (_isSampleMode) {
+      return MaterialApp(
+        scrollBehavior: const CustomScrollBehavior(),
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        home: SampleHomeScreen(),
       );
     }
     

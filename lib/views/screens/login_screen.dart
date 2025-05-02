@@ -9,6 +9,8 @@ import '../../../firebase_options.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../core/services/authentication/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../features/auth/sample_mode_service.dart';
+import '../../features/sample/sample_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final Function(User) onLoginSuccess;
@@ -32,6 +34,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   
   // 인증 서비스
   final AuthService _authService = AuthService();
+  final SampleModeService _sampleModeService = SampleModeService();
   
   // 애니메이션 컨트롤러 및 애니메이션 변수
   late AnimationController _animationController;
@@ -253,6 +256,20 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 ),
                                 
                                 SizedBox(height: SpacingTokens.md),
+                                
+                                // 로그인 없이 둘러보기 버튼 추가
+                                TextButton(
+                                  onPressed: _isLoading ? null : _handleSkipLogin,
+                                  child: Text(
+                                    '로그인 없이 둘러보기',
+                                    style: TypographyTokens.button.copyWith(
+                                      color: ColorTokens.textLight,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                                
+                                SizedBox(height: SpacingTokens.sm),
                                 // 로그인 안내 메시지 추가
                                 Text(
                                   '노트 저장과 맞춤 학습을 위해 로그인이 필요합니다.',
@@ -424,6 +441,36 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     } catch (e) {
       setState(() {
         _errorMessage = '로그인 중 오류가 발생했습니다: ${e.toString().replaceAll('Exception: ', '')}';
+        _isLoading = false;
+      });
+    }
+  }
+
+  // 로그인 없이 둘러보기 처리
+  Future<void> _handleSkipLogin() async {
+    if (_isLoading) return;
+    
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      // 샘플 모드 활성화
+      await _sampleModeService.enableSampleMode();
+      
+      // 샘플 홈 화면으로 이동
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => SampleHomeScreen()),
+      );
+      
+      // widget.onSkipLogin이 있으면 호출
+      if (widget.onSkipLogin != null) {
+        widget.onSkipLogin!();
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = '샘플 모드 진입 중 오류가 발생했습니다.';
         _isLoading = false;
       });
     }

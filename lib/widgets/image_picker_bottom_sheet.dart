@@ -39,7 +39,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     super.initState();
     // UI를 먼저 표시하고 사용량은 백그라운드에서 확인
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkUsageLimits();
+    _checkUsageLimits();
     });
   }
   
