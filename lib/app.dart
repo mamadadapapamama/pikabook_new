@@ -433,6 +433,19 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
+  /// 샘플 모드에서 로그인 화면으로 전환 요청
+  void _requestLoginScreen() {
+    if (mounted) {
+      if (kDebugMode) {
+        debugPrint('[App] 로그인 화면 요청: 샘플 모드 비활성화');
+      }
+      // 샘플 모드를 비활성화하여 App 위젯이 LoginScreen을 빌드하도록 유도
+      setState(() {
+        _isSampleMode = false;
+      });
+    }
+  }
+  
   @override
   Widget build(BuildContext context) {
     // 디버그 로그 추가
@@ -491,7 +504,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       scrollBehavior: const CustomScrollBehavior(),
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: SampleHomeScreen(),
+      home: SampleHomeScreen(
+        // App 위젯의 상태 변경 콜백 전달
+        onRequestLogin: _requestLoginScreen, 
+      ),
     );
   }
   

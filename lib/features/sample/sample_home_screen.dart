@@ -13,11 +13,11 @@ import '../../features/auth/sample_mode_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class SampleHomeScreen extends StatelessWidget {
-  // 콜백 함수 추가
-  final VoidCallback? onLogin;
+  // 콜백 함수 타입 정의 및 이름 변경 (onLogin -> onRequestLogin)
+  final VoidCallback? onRequestLogin;
   
   // 생성자 수정
-  SampleHomeScreen({Key? key, this.onLogin}) : super(key: key);
+  SampleHomeScreen({Key? key, this.onRequestLogin}) : super(key: key);
 
   // 샘플 노트 서비스
   final SampleNotesService _sampleNotesService = SampleNotesService();
@@ -83,21 +83,30 @@ class SampleHomeScreen extends StatelessWidget {
         await FirebaseAuth.instance.signOut();
       }
       
-      // 샘플 모드 비활성화
+      // 샘플 모드 비활성화 (서비스 호출은 유지)
       if (kDebugMode) {
-        debugPrint('[SampleHomeScreen] 샘플 모드 비활성화 시도');
+        debugPrint('[SampleHomeScreen] 샘플 모드 비활성화 시도 (Service)');
       }
       await _sampleModeService.disableSampleMode();
       if (kDebugMode) {
-        debugPrint('[SampleHomeScreen] 샘플 모드 비활성화 완료');
+        debugPrint('[SampleHomeScreen] 샘플 모드 비활성화 완료 (Service)');
       }
       
-      // SampleHomeScreen을 pop하여 App 위젯이 LoginScreen을 그리도록 함
-      if (context.mounted) {
+      // App 위젯에 상태 변경 요청 (pop 대신 콜백 호출)
+      if (onRequestLogin != null) {
         if (kDebugMode) {
-          debugPrint('[SampleHomeScreen] SampleHomeScreen pop');
+          debugPrint('[SampleHomeScreen] App 위젯에 로그인 화면 전환 요청');
         }
-        Navigator.of(context).pop(); 
+        onRequestLogin!(); // App 위젯의 setState 호출
+      } else {
+        // 콜백이 없는 경우 (예상치 못한 상황)
+        if (kDebugMode) {
+          debugPrint('[SampleHomeScreen] 경고: onRequestLogin 콜백이 null입니다.');
+        }
+        // 안전하게 pop 시도 (만약 가능하다면)
+        if (context.mounted && Navigator.canPop(context)) {
+          Navigator.of(context).pop();
+        }
       }
       
     } catch (e, stackTrace) {
@@ -116,10 +125,12 @@ class SampleHomeScreen extends StatelessWidget {
         );
       }
       
-      // 오류 복구 시도: 강제로 샘플 모드 비활성화 후 pop
+      // 오류 복구 시도: 강제로 샘플 모드 비활성화 후 콜백 호출 시도
       try {
         await _sampleModeService.disableSampleMode();
-        if (context.mounted) {
+        if (onRequestLogin != null) {
+          onRequestLogin!();
+        } else if (context.mounted && Navigator.canPop(context)) {
            Navigator.of(context).pop();
         }
       } catch (e) {

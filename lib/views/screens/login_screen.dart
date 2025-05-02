@@ -467,15 +467,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       await _sampleModeService.enableSampleMode();
       debugPrint('[LoginScreen] 샘플 모드 활성화 완료');
       
-      // 샘플 홈 화면으로 이동
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => SampleHomeScreen()),
-      );
+      // LoginScreen을 pop하여 App 위젯이 SampleHomeScreen을 그리도록 함
+      if (mounted) {
+        Navigator.of(context).pop(); // 현재 화면 닫기
+      }
       
-      // widget.onSkipLogin이 있으면 호출
+      // App 위젯으로 샘플 모드 진입을 알릴 필요가 있다면 onSkipLogin 호출
       if (widget.onSkipLogin != null) {
-        widget.onSkipLogin!();
+        widget.onSkipLogin!(); 
       }
     } catch (e) {
       debugPrint('[LoginScreen] 샘플 모드 진입 중 오류: $e');
