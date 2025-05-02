@@ -591,7 +591,7 @@ class NoteService {
         // 즉시 결과 반환 (처리는 백그라운드에서 진행)
         return {
           'success': true,
-          'imageUrl': imageUrl,
+        'imageUrl': imageUrl,
           'extractedText': '___PROCESSING___',
           'translatedText': '',
           'pageId': page.id,
