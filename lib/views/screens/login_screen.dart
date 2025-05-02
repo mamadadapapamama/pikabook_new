@@ -385,19 +385,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         } else {
           // throw Exception('로그인이 취소되었습니다.');
           setState(() {
-            _errorMessage = '로그인이 취소되었습니다.';
+            _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
             _isLoading = false;
           });
         }
       } catch (e) {
         setState(() {
-          _errorMessage = '구글 로그인 실패: ${e.toString().replaceAll('Exception: ', '')}';
+          _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
           _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = '로그인 중 오류가 발생했습니다: ${e.toString().replaceAll('Exception: ', '')}';
+        _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
         _isLoading = false;
       });
     }
@@ -449,7 +449,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           // 두 번째 방식도 실패한 경우
           debugPrint('대안적 방식도 실패: $alternativeError');
           setState(() {
-            _errorMessage = '애플 로그인에 실패했습니다. 다시 시도해 주세요.';
+            _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
             _isLoading = false;
           });
           return; // 실패 시 함수 종료
@@ -459,13 +459,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       // 여기까지 왔다면 로그인이 실패한 경우
       if (user == null) {
         setState(() {
-          _errorMessage = '로그인이 취소되었습니다.';
+          _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
           _isLoading = false;
         });
       }
     } catch (e) {
       setState(() {
-        _errorMessage = '로그인 중 오류가 발생했습니다: ${e.toString().replaceAll('Exception: ', '')}';
+        _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
         _isLoading = false;
       });
     }
@@ -510,7 +510,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         debugPrint('[LoginScreen] 샘플 모드 진입 중 오류: $e');
       }
       setState(() {
-        _errorMessage = '샘플 모드 진입 중 오류가 발생했습니다.';
+        _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
         _isLoading = false;
       });
     }
