@@ -314,32 +314,74 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     });
     
     // 작업 시작 - 카메라 준비 중임을 사용자에게 알립니다
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('카메라를 준비하는 중...'),
-        duration: Duration(seconds: 1),
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('카메라를 준비하는 중...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
     
-    XFile? photo;
+    File? imageFile;
     
     try {
-      // 압축 문제를 피하기 위해 imageQuality 파라미터를 제거하고 원본 품질 사용
-      photo = await _picker.pickImage(
-          source: ImageSource.camera,
-        requestFullMetadata: false, // 불필요한 메타데이터 요청 안함
-      );
-        
-      // 사진 촬영이 취소되었거나 이미지가 없는 경우
-      if (photo == null) {
+      // 먼저 ImageService의 pickImage 메서드를 사용 (가장 최적화된 방법)
+      imageFile = await _imageService.pickImage(source: ImageSource.camera);
+      
+      // 실패한 경우 직접 ImagePicker 사용
+      if (imageFile == null) {
         if (kDebugMode) {
-          print('사진 촬영이 취소되었습니다.');
+          print('ImageService.pickImage 실패, 직접 ImagePicker 시도');
         }
-        // 처리 중 상태 초기화
+        
+        // iOS 18에 최적화된 설정으로 시도
+        final XFile? photo = await _picker.pickImage(
+          source: ImageSource.camera,
+          requestFullMetadata: false,
+          // 추가 옵션
+          maxWidth: 1920,  // 적절한 해상도 제한
+          maxHeight: 1080,
+        );
+        
+        // 사진 촬영이 취소되었거나 이미지가 없는 경우
+        if (photo == null) {
+          if (kDebugMode) {
+            print('사진 촬영이 취소되었습니다.');
+          }
+          // 처리 중 상태 초기화
+          if (mounted) {
+            setState(() {
+              _isProcessing = false;
+            });
+          }
+          return;
+        }
+        
+        imageFile = File(photo.path);
+      }
+      
+      // 마지막 대안으로 대체 메서드 시도
+      if (imageFile == null) {
+        if (kDebugMode) {
+          print('표준 방법 실패, 대체 메서드 시도');
+        }
+        imageFile = await _imageService.pickImageAlternative(source: ImageSource.camera);
+      }
+      
+      // 여전히 실패한 경우 종료
+      if (imageFile == null) {
+        if (kDebugMode) {
+          print('모든 카메라 시도 실패');
+        }
         if (mounted) {
           setState(() {
             _isProcessing = false;
           });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('카메라를 열 수 없습니다. 기기 설정에서 카메라 접근 권한을 확인해주세요.')),
+          );
         }
         return;
       }
@@ -384,14 +426,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       // 메인 UI 스레드에서 작업을 분리하기 위해 마이크로태스크 큐에 작업 예약
       Future.microtask(() async {
         try {
-          // XFile을 File로 변환
-          final File imageFile = File(photo!.path);
-          
           // 이미지가 유효한 경우 노트 생성 시작
           // 이미 로딩 화면이 표시되었으므로 showLoadingDialog=false
           await _noteCreationWorkflow.createNoteWithImages(
             rootContext, 
-            [imageFile],
+            [imageFile!],
             closeBottomSheet: false, // 이미 바텀시트를 닫았으므로 false로 설정
             showLoadingDialog: false  // 이미 로딩 화면이 표시되었으므로 false로 설정
           );
