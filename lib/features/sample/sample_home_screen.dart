@@ -311,7 +311,7 @@ class SampleHomeScreen extends StatelessWidget {
                   child: PikaButton(
                     variant: PikaButtonVariant.outline,
                     onPressed: () => _navigateToLogin(context),
-                    text: '로그인하여 시작하기',
+                    text: '로그인해서\n나만의 노트를 만들어보세요!',
                     width: 200,
                   ),
                 ),

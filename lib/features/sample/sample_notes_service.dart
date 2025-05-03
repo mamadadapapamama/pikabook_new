@@ -25,6 +25,8 @@ class SampleNotesService {
   
   // 이미지 경로 상수
   static const String sampleImagePath = 'assets/images/sample_1.jpg';
+  static const String sampleAnimalImage1 = 'assets/images/sample_2.jpg';
+  static const String sampleAnimalImage2 = 'assets/images/sample_3.jpg';
   
   /// 샘플 노트 목록 가져오기
   List<Note> getSampleNotes() {
@@ -32,8 +34,70 @@ class SampleNotesService {
       debugPrint('샘플 노트 목록 요청됨');
     }
     return [
+      _getSampleAnimalBookNote(),
       _getSampleChineseNote()
     ];
+  }
+  
+  /// 중국어 동물 동화책 샘플 노트
+  Note _getSampleAnimalBookNote() {
+    if (kDebugMode) {
+      debugPrint('중국어 동물 동화책 샘플 노트 생성');
+    }
+    
+    // 첫 번째 페이지 (하마 이미지)
+    final chineseContent1 = '''河马爷爷的家里也有很多水果。
+从家里带来紫色的葡萄、
+红色的草莓和褐色的奇异果。''';
+    
+    final koreanTranslation1 = '''하마 할아버지의 집에도 많은 과일이 있어요.
+집에서 가져온 보라색 포도,
+빨간색 딸기와 갈색 키위가 있어요.''';
+    
+    // 두 번째 페이지 (곰 이미지)
+    final chineseContent2 = '''"木瓜软软的，真好吃！"
+熊妈妈把黄梨做成果汁，
+味道甜甜的，真好喝！''';
+    
+    final koreanTranslation2 = '''"파파야는 부드럽고 정말 맛있어요!"
+곰 엄마가 파인애플로 주스를 만들었어요,
+맛이 달콤하고 정말 맛있어요!''';
+    
+    return Note(
+      id: 'sample-animal-book',
+      originalText: '동물 친구들의 과일 파티',
+      translatedText: '동물 친구들의 과일 파티 - 중국어 동화',
+      createdAt: DateTime.now().subtract(const Duration(days: 3)),
+      updatedAt: DateTime.now().subtract(const Duration(hours: 12)),
+      imageUrl: sampleAnimalImage1,
+      sourceLanguage: SourceLanguage.CHINESE,
+      targetLanguage: TargetLanguage.KOREAN,
+      processingCompleted: true,
+      isProcessingBackground: false,
+      extractedText: chineseContent1 + '\n\n' + chineseContent2,
+      pages: [
+        pika_page.Page(
+          id: 'sample-animal-page-1',
+          originalText: chineseContent1,
+          translatedText: koreanTranslation1,
+          pageNumber: 1,
+          imageUrl: sampleAnimalImage1,
+          sourceLanguage: SourceLanguage.CHINESE,
+          targetLanguage: TargetLanguage.KOREAN,
+        ),
+        pika_page.Page(
+          id: 'sample-animal-page-2',
+          originalText: chineseContent2,
+          translatedText: koreanTranslation2,
+          pageNumber: 2,
+          imageUrl: sampleAnimalImage2,
+          sourceLanguage: SourceLanguage.CHINESE,
+          targetLanguage: TargetLanguage.KOREAN,
+        ),
+      ],
+      flashcardCount: 4,
+      imageCount: 2,
+    );
   }
   
   /// 중국어 샘플 노트 2
@@ -91,6 +155,88 @@ class SampleNotesService {
   ProcessedText getProcessedTextForPage(String pageId) {
     if (kDebugMode) {
       debugPrint('페이지 ID $pageId에 대한 ProcessedText 요청됨');
+    }
+    
+    // 동물 동화책 첫 번째 페이지인 경우
+    if (pageId == 'sample-animal-page-1') {
+      final originalSegments = [
+        '河马爷爷的家里也有很多水果。',
+        '从家里带来紫色的葡萄、',
+        '红色的草莓和褐色的奇异果。',
+      ];
+      
+      final translatedSegments = [
+        '하마 할아버지의 집에도 많은 과일이 있어요.',
+        '집에서 가져온 보라색 포도,',
+        '빨간색 딸기와 갈색 키위가 있어요.',
+      ];
+      
+      final pinyinSegments = [
+        'Hémǎ yéye de jiā lǐ yě yǒu hěnduō shuǐguǒ.',
+        'Cóng jiā lǐ dài lái zǐsè de pútáo,',
+        'Hóngsè de cǎoméi hé hèsè de qíyìguǒ.',
+      ];
+      
+      List<TextSegment> segments = [];
+      for (int i = 0; i < originalSegments.length; i++) {
+        segments.add(TextSegment(
+          originalText: originalSegments[i],
+          translatedText: translatedSegments[i],
+          pinyin: pinyinSegments[i],
+          sourceLanguage: SourceLanguage.CHINESE,
+          targetLanguage: TargetLanguage.KOREAN,
+        ));
+      }
+      
+      return ProcessedText(
+        fullOriginalText: segments.map((s) => s.originalText).join('\n'),
+        fullTranslatedText: segments.map((s) => s.translatedText).join('\n'),
+        segments: segments,
+        showFullText: false,
+        showPinyin: true,
+        showTranslation: true,
+      );
+    }
+    
+    // 동물 동화책 두 번째 페이지인 경우
+    if (pageId == 'sample-animal-page-2') {
+      final originalSegments = [
+        '"木瓜软软的，真好吃！"',
+        '熊妈妈把黄梨做成果汁，',
+        '味道甜甜的，真好喝！',
+      ];
+      
+      final translatedSegments = [
+        '"파파야는 부드럽고 정말 맛있어요!"',
+        '곰 엄마가 파인애플로 주스를 만들었어요,',
+        '맛이 달콤하고 정말 맛있어요!',
+      ];
+      
+      final pinyinSegments = [
+        '"Mùguā ruǎn ruǎn de, zhēn hǎochī!"',
+        'Xióng māma bǎ huánglí zuò chéng guǒzhī,',
+        'Wèidào tián tián de, zhēn hǎo hē!',
+      ];
+      
+      List<TextSegment> segments = [];
+      for (int i = 0; i < originalSegments.length; i++) {
+        segments.add(TextSegment(
+          originalText: originalSegments[i],
+          translatedText: translatedSegments[i],
+          pinyin: pinyinSegments[i],
+          sourceLanguage: SourceLanguage.CHINESE,
+          targetLanguage: TargetLanguage.KOREAN,
+        ));
+      }
+      
+      return ProcessedText(
+        fullOriginalText: segments.map((s) => s.originalText).join('\n'),
+        fullTranslatedText: segments.map((s) => s.translatedText).join('\n'),
+        segments: segments,
+        showFullText: false,
+        showPinyin: true,
+        showTranslation: true,
+      );
     }
     
     // 중국어 샘플 페이지인 경우
@@ -170,6 +316,10 @@ class SampleNotesService {
   String? getImagePathForPageId(String pageId) {
     if (pageId == 'sample-page-2') {
       return sampleImagePath;
+    } else if (pageId == 'sample-animal-page-1') {
+      return sampleAnimalImage1;
+    } else if (pageId == 'sample-animal-page-2') {
+      return sampleAnimalImage2;
     }
     return null;
   }
