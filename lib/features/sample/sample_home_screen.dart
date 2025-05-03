@@ -30,13 +30,22 @@ class SampleHomeScreen extends StatelessWidget {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
+          ),
+          backgroundColor: Colors.white,
           title: Text(
             '로그인이 필요한 서비스입니다',
-            style: TypographyTokens.subtitle2,
+            style: TypographyTokens.subtitle2.copyWith(
+              fontWeight: FontWeight.bold,
+              color: ColorTokens.textPrimary,
+            ),
           ),
           content: Text(
             '노트 저장과 맞춤 학습을 위해 로그인이 필요합니다.',
-            style: TypographyTokens.body2,
+            style: TypographyTokens.body2.copyWith(
+              color: ColorTokens.textSecondary,
+            ),
           ),
           actions: [
             TextButton(
@@ -50,15 +59,23 @@ class SampleHomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-            TextButton(
+            ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop(); // 다이얼로그 닫기
                 _navigateToLogin(context);
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ColorTokens.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
               child: Text(
                 '로그인',
                 style: TypographyTokens.button.copyWith(
-                  color: ColorTokens.primary,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
@@ -122,6 +139,10 @@ class SampleHomeScreen extends StatelessWidget {
           SnackBar(
             content: Text('로그인 화면으로 이동 중 문제가 발생했습니다. 다시 시도해주세요.'),
             duration: Duration(seconds: 3),
+            backgroundColor: ColorTokens.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            margin: EdgeInsets.all(12),
           ),
         );
       }
@@ -142,20 +163,18 @@ class SampleHomeScreen extends StatelessWidget {
     }
   }
 
-  // 앱바에 로그인 버튼 추가
-  Widget _buildLoginButton(BuildContext context) {
+  // 앱바에 나가기 버튼 추가
+  Widget _buildExitButton(BuildContext context) {
     return TextButton(
       onPressed: () => _navigateToLogin(context),
       style: TextButton.styleFrom(
-        foregroundColor: ColorTokens.textLight,
+        foregroundColor: ColorTokens.textPrimary,
         padding: EdgeInsets.symmetric(horizontal: SpacingTokens.sm),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.login, size: 18),
-          SizedBox(width: 4),
-          Text('로그인', style: TypographyTokens.button),
+          Text('나가기', style: TypographyTokens.button.copyWith(color: ColorTokens.primary)),
         ],
       ),
     );
@@ -177,97 +196,124 @@ class SampleHomeScreen extends StatelessWidget {
     );
   }
 
+  // 헤더 위젯 구현
+  Widget _buildHeader() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Pikabook의 샘플 노트를\n둘러보세요! ',
+            style: TypographyTokens.headline2En.copyWith(
+              color: ColorTokens.textPrimary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            '교재 사진을 피카북에 올리면,\n아래와 같은 노트가 만들어져요. ',
+            style: TypographyTokens.body1.copyWith(
+              color: ColorTokens.textPrimary,
+            ),
+          ),
+          SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final sampleNotes = _sampleNotesService.getSampleNotes();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF9F1), // Figma 디자인의 #FFF9F1 배경색
+      backgroundColor: const Color(0xFFFEFAF1), // 조금 더 밝은 배경색으로 변경
       appBar: PikaAppBar(
         showLogo: true,
-        noteSpaceName: '샘플 학습 노트',
-        backgroundColor: const Color(0xFFFFF9F1),
-        height: 108,
+        backgroundColor: const Color(0xFFFEFAF1),
+        height: 96,
         actions: [
-          // 설정 버튼
-          Padding(
-            padding: EdgeInsets.only(right: SpacingTokens.md),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => _showLoginRequiredDialog(context),
-                borderRadius: BorderRadius.circular(24),
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  padding: const EdgeInsets.all(12),
-                  child: Icon(
-                    Icons.settings_outlined,
-                    color: ColorTokens.textPrimary,
-                    size: 24,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // 로그인 버튼
-          _buildLoginButton(context),
-          SizedBox(width: 8),
+          // 나가기 버튼
+          _buildExitButton(context),
+          SizedBox(width: 16),
         ],
       ),
       body: SafeArea(
         child: Stack(
           children: [
             // 노트 목록
-            ListView.builder(
-              padding: const EdgeInsets.only(top: 4, bottom: 80), // 하단 FAB 공간 확보
-              itemCount: sampleNotes.length,
-              itemBuilder: (context, index) {
-                final note = sampleNotes[index];
-                return Padding(
-                  padding: const EdgeInsets.only(
-                    left: 16, 
-                    right: 16, 
-                    bottom: 8
+            CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: _buildHeader(),
+                ),
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final note = sampleNotes[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(
+                          left: 16, 
+                          right: 16, 
+                          bottom: 12
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.03),
+                                blurRadius: 8,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: NoteListItem(
+                            note: note,
+                            onDismissed: () {},
+                            onNoteTapped: (_) => _navigateToNoteDetail(context, note),
+                            onFavoriteToggled: (_, __) {},
+                            isFilteredList: false,
+                          ),
+                        ),
+                      );
+                    },
+                    childCount: sampleNotes.length,
                   ),
-                  child: NoteListItem(
-                    note: note,
-                    onDismissed: () {},
-                    onNoteTapped: (_) => _navigateToNoteDetail(context, note),
-                    onFavoriteToggled: (_, __) {},
-                    isFilteredList: false,
-                  ),
-                );
-              },
+                ),
+                // 하단 여백 추가
+                SliverToBoxAdapter(
+                  child: SizedBox(height: 120),
+                ),
+              ],
             ),
             
-            // 하단 스마트 노트 만들기 버튼
+            // 하단 로그인 버튼 
             Positioned(
-              bottom: 16,
+              bottom: 0,
               left: 0,
               right: 0,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    PikaButton(
-                      text: '스마트 노트 만들기',
-                      onPressed: () => _showLoginRequiredDialog(context),
-                      width: 220,
-                      variant: PikaButtonVariant.primary,
-                    ),
-                    SizedBox(height: 12),
-                    TextButton(
-                      onPressed: () => _navigateToLogin(context),
-                      child: Text(
-                        '로그인하여 시작하기',
-                        style: TypographyTokens.button.copyWith(
-                          color: ColorTokens.primary,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-                  ],
+              child: Container(
+                height: 120,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      const Color(0xFFFEFAF1).withOpacity(0),
+                      const Color(0xFFFEFAF1),
+                    ],
+                    stops: [0.0, 0.5],
+                  ),
+                ),
+                child: Center(
+                  child: PikaButton(
+                    variant: PikaButtonVariant.outline,
+                    onPressed: () => _navigateToLogin(context),
+                    text: '로그인하여 시작하기',
+                    width: 200,
+                  ),
                 ),
               ),
             ),

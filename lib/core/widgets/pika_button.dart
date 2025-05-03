@@ -163,7 +163,7 @@ class PikaButton extends StatelessWidget {
       
       case PikaButtonVariant.outline:
         return ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
+          backgroundColor: Colors.white,
           foregroundColor: ColorTokens.primary,
           elevation: 0,
           shape: RoundedRectangleBorder(
