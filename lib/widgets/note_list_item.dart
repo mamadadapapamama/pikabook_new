@@ -454,7 +454,16 @@ class _NoteListItemState extends State<NoteListItem> {
                           count: widget.note.flashcardCount > 0 
                               ? widget.note.flashcardCount 
                               : widget.note.flashCards.length,
-                          noteId: widget.note.id,
+                          noteId: widget.note.id != null && !widget.note.id!.startsWith('sample-') 
+                              ? widget.note.id 
+                              : null,
+                          // 샘플 노트인 경우 샘플 데이터 전달
+                          flashcards: widget.note.id != null && widget.note.id!.startsWith('sample-') 
+                              ? widget.note.flashCards 
+                              : null,
+                          sampleNoteTitle: widget.note.id != null && widget.note.id!.startsWith('sample-') 
+                              ? widget.note.translatedText
+                              : null,
                         ),
                     ],
                   ),

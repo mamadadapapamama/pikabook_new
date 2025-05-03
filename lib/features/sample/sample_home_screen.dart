@@ -11,6 +11,7 @@ import 'sample_notes_service.dart';
 import '../../features/auth/sample_mode_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'sample_note_detail_screen.dart';
+import 'sample_flashcard_screen.dart';
 
 class SampleHomeScreen extends StatelessWidget {
   // 콜백 함수 타입 정의 및 이름 변경 (onLogin -> onRequestLogin)
@@ -193,6 +194,28 @@ class SampleHomeScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  // 플래시카드 화면으로 이동
+  void _navigateToFlashcards(BuildContext context, Note note) {
+    if (kDebugMode) {
+      debugPrint('[SampleHomeScreen] 샘플 플래시카드 화면으로 이동: ${note.id}');
+    }
+    
+    if (note.flashcardCount > 0 || note.flashCards.isNotEmpty) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => SampleFlashCardScreen(
+            flashcards: note.flashCards,
+            noteTitle: note.translatedText,
+          ),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('이 노트에는 플래시카드가 없습니다.')),
+      );
+    }
   }
 
   // 헤더 위젯 구현

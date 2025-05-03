@@ -249,16 +249,40 @@ class _SampleNoteDetailScreenContent extends StatelessWidget {
   PreferredSizeWidget _buildAppBar(BuildContext context, SampleNoteDetailViewModel viewModel) {
     final currentPageNum = viewModel.currentPageIndex + 1;
     final totalPages = viewModel.pages?.length ?? 0;
+    final bool isSampleNote = viewModel.note.id != null && viewModel.note.id!.startsWith('sample-');
     
     return PikaAppBar.noteDetail(
       title: viewModel.note.originalText,
       currentPage: currentPageNum,
       totalPages: totalPages,
       flashcardCount: viewModel.flashCards?.length ?? 0,
-      onMorePressed: () => _showMoreOptions(context),
-      onFlashcardTap: () => _showLoginRequiredDialog(context),
+      onMorePressed: () {
+        // 샘플 모드에서는 더보기 버튼을 비활성화
+      },
+      onFlashcardTap: () {
+        // 플래시카드 화면으로 이동
+        if (viewModel.flashCards != null && viewModel.flashCards!.isNotEmpty) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SampleFlashCardScreen(
+                flashcards: viewModel.flashCards!,
+                noteTitle: viewModel.note.translatedText,
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('이 노트에는 플래시카드가 없습니다.')),
+          );
+        }
+      },
       onBackPressed: () => Navigator.of(context).pop(),
       backgroundColor: UITokens.screenBackground,
+      // 샘플 모드 정보 추가
+      noteId: isSampleNote ? null : viewModel.note.id,
+      flashcards: isSampleNote ? viewModel.flashCards : null,
+      sampleNoteTitle: isSampleNote ? viewModel.note.translatedText : null,
     );
   }
   

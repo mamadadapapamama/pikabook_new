@@ -1,4 +1,5 @@
 import 'package:pikabook_new/widgets/flashcard_counter_badge.dart';
+import '../../core/models/flash_card.dart';
 
 import '../../core/models/note.dart';
 import '../../core/models/page.dart' as pika_page;
@@ -65,6 +66,9 @@ class SampleNotesService {
 곰 엄마가 파인애플로 주스를 만들었어요,
 맛이 달콤하고 정말 맛있어요!''';
     
+    // 플래시카드 없음 - 빈 리스트 사용
+    final flashCards = <FlashCard>[];
+    
     return Note(
       id: 'sample-animal-book',
       originalText: '2과: 동물 친구들의 과일 파티',
@@ -77,6 +81,8 @@ class SampleNotesService {
       processingCompleted: true,
       isProcessingBackground: false,
       extractedText: chineseContent1 + '\n\n' + chineseContent2,
+      flashcardCount: 0, // 플래시카드 없음
+      flashCards: flashCards,
       pages: [
         pika_page.Page(
           id: 'sample-animal-page-1',
@@ -124,6 +130,60 @@ class SampleNotesService {
 말씀을 듣고, 성실하게 공부하고, 집중해서 글씨를 쓰고, 학우들과
 사이좋게 지내야, 좋은 학생이 될 수 있어요.''';
     
+    // 플래시카드 생성
+    final flashCards = [
+      FlashCard(
+        id: 'sample-school-card-1',
+        front: '学校',
+        back: '학교',
+        pinyin: 'xuéxiào',
+        createdAt: DateTime.now(),
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko',
+        noteId: 'sample-note-2',
+      ),
+      FlashCard(
+        id: 'sample-school-card-2',
+        front: '老师',
+        back: '선생님',
+        pinyin: 'lǎoshī',
+        createdAt: DateTime.now(),
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko',
+        noteId: 'sample-note-2',
+      ),
+      FlashCard(
+        id: 'sample-school-card-3',
+        front: '同学',
+        back: '학우, 급우',
+        pinyin: 'tóngxué',
+        createdAt: DateTime.now(),
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko',
+        noteId: 'sample-note-2',
+      ),
+      FlashCard(
+        id: 'sample-school-card-4',
+        front: '认真',
+        back: '성실하다',
+        pinyin: 'rènzhēn',
+        createdAt: DateTime.now(),
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko',
+        noteId: 'sample-note-2',
+      ),
+      FlashCard(
+        id: 'sample-school-card-5',
+        front: '专心',
+        back: '집중하다',
+        pinyin: 'zhuānxīn',
+        createdAt: DateTime.now(),
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko',
+        noteId: 'sample-note-2',
+      ),
+    ];
+    
     return Note(
       id: 'sample-note-2',
       originalText: '1과 복습: 학교에서',
@@ -136,6 +196,8 @@ class SampleNotesService {
       processingCompleted: true,
       isProcessingBackground: false,
       extractedText: chineseContent,
+      flashcardCount: 5,
+      flashCards: flashCards,
       pages: [
         pika_page.Page(
           id: 'sample-page-2',
@@ -147,7 +209,6 @@ class SampleNotesService {
           targetLanguage: TargetLanguage.KOREAN,
         ),
       ],
-      flashcardCount: 5,
     );
   }
   

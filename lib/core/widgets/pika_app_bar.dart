@@ -128,6 +128,9 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     required VoidCallback onFlashcardTap,
     VoidCallback? onBackPressed,
     Color backgroundColor = UITokens.screenBackground,
+    String? noteId,
+    List<dynamic>? flashcards,
+    String? sampleNoteTitle,
   }) {
     return PikaAppBar(
       title: title,
@@ -146,6 +149,9 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
             padding: const EdgeInsets.only(right: 8.0),
             child: FlashcardCounterBadge(
               count: flashcardCount,
+              noteId: noteId,
+              flashcards: flashcards,
+              sampleNoteTitle: sampleNoteTitle,
             ),
           ),
         ),
