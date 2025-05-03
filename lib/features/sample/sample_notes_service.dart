@@ -1,3 +1,5 @@
+import 'package:pikabook_new/widgets/flashcard_counter_badge.dart';
+
 import '../../core/models/note.dart';
 import '../../core/models/page.dart' as pika_page;
 import '../../core/models/processed_text.dart';
@@ -65,7 +67,7 @@ class SampleNotesService {
     
     return Note(
       id: 'sample-animal-book',
-      originalText: '동물 친구들의 과일 파티',
+      originalText: '2과: 동물 친구들의 과일 파티',
       translatedText: '동물 친구들의 과일 파티 - 중국어 동화',
       createdAt: DateTime.now().subtract(const Duration(days: 3)),
       updatedAt: DateTime.now().subtract(const Duration(hours: 12)),
@@ -95,8 +97,6 @@ class SampleNotesService {
           targetLanguage: TargetLanguage.KOREAN,
         ),
       ],
-      flashcardCount: 4,
-      imageCount: 2,
     );
   }
   
@@ -126,7 +126,7 @@ class SampleNotesService {
     
     return Note(
       id: 'sample-note-2',
-      originalText: '중국어 학습 노트',
+      originalText: '1과 복습: 학교에서',
       translatedText: '중국어 학습 노트 - 제7과 학교에서',
       createdAt: DateTime.now().subtract(const Duration(days: 1)),
       updatedAt: DateTime.now().subtract(const Duration(days: 1)),
@@ -147,7 +147,7 @@ class SampleNotesService {
           targetLanguage: TargetLanguage.KOREAN,
         ),
       ],
-      flashcardCount: 0,
+      flashcardCount: 5,
     );
   }
   

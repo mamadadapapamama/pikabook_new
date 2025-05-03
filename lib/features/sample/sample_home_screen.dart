@@ -7,7 +7,6 @@ import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/pika_button.dart';
 import '../../core/models/note.dart';
 import '../../widgets/note_list_item.dart';
-import '../../views/screens/login_screen.dart';
 import 'sample_notes_service.dart';
 import '../../features/auth/sample_mode_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -226,24 +225,25 @@ class SampleHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sampleNotes = _sampleNotesService.getSampleNotes();
+    // 화면 하단 패딩 계산 (안전 영역 포함)
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFEFAF1), // 조금 더 밝은 배경색으로 변경
+      backgroundColor: const Color(0xFFFEFAF1),
       appBar: PikaAppBar(
         showLogo: true,
         backgroundColor: const Color(0xFFFEFAF1),
         height: 96,
         actions: [
-          // 나가기 버튼
           _buildExitButton(context),
           SizedBox(width: 16),
         ],
       ),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // 노트 목록
-            CustomScrollView(
+      body: Column(
+        children: [
+          // 메인 콘텐츠 영역 (확장 가능한 영역)
+          Expanded(
+            child: CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(
                   child: _buildHeader(),
@@ -282,43 +282,41 @@ class SampleHomeScreen extends StatelessWidget {
                     childCount: sampleNotes.length,
                   ),
                 ),
-                // 하단 여백 추가
+                // 하단 여백 추가 (하단 버튼 영역을 위한 공간)
                 SliverToBoxAdapter(
-                  child: SizedBox(height: 120),
+                  child: SizedBox(height: 24),
                 ),
               ],
             ),
-            
-            // 하단 로그인 버튼 
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 120,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      const Color(0xFFFEFAF1).withOpacity(0),
-                      const Color(0xFFFEFAF1),
-                    ],
-                    stops: [0.0, 0.5],
-                  ),
-                ),
-                child: Center(
-                  child: PikaButton(
-                    variant: PikaButtonVariant.outline,
-                    onPressed: () => _navigateToLogin(context),
-                    text: '로그인해서\n나만의 노트를 만들어보세요!',
-                    width: 200,
-                  ),
-                ),
+          ),
+          
+          // 하단 로그인 버튼 (고정 높이)
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFFFEFAF1).withOpacity(0.8),
+                  const Color(0xFFFEFAF1),
+                ],
+                stops: [0.0, 0.5],
               ),
             ),
-          ],
-        ),
+            padding: EdgeInsets.only(
+              left: 16, 
+              right: 16, 
+              top: 16, 
+              bottom: 16 + bottomPadding // 안전 영역 고려
+            ),
+            child: PikaButton(
+              variant: PikaButtonVariant.primary,
+              onPressed: () => _navigateToLogin(context),
+              text: '로그인하고 시작하기',
+              width: 240,
+            ),
+          ),
+        ],
       ),
     );
   }

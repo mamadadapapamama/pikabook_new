@@ -299,7 +299,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                             );
                                           },
                                       ),
-                                      TextSpan(text: '에 동의한 것으로 간주합니다.'),
+                                      TextSpan(text: '에 동의합니다.'),
                                     ],
                                   ),
                                 ),
