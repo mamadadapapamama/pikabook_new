@@ -221,7 +221,13 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       // 이미지 선택이 취소되었거나 이미지가 없는 경우
       if (selectedImages == null || selectedImages.isEmpty) {
         if (kDebugMode) {
-          print('이미지 선택이 취소되었거나 이미지가 없습니다.');
+          print('이미지 선택이 취소되었습니다.');
+        }
+        // 처리 중 상태 초기화
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+          });
         }
         return;
       }
@@ -293,6 +299,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
               SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
             );
           }
+        } finally {
+          // 처리 완료 후 상태 초기화 (추가)
+          _isProcessing = false;
         }
       });
     }
@@ -448,6 +457,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
               SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
             );
           }
+        } finally {
+          // 처리 완료 후 상태 초기화 (추가)
+          _isProcessing = false;
         }
       });
     }
