@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:io';
 import 'dart:async';
+import 'dart:math';  // min 함수를 위한 import 추가
 import '../core/services/common/usage_limit_service.dart';
 import '../core/theme/tokens/color_tokens.dart';
 import '../core/theme/tokens/typography_tokens.dart';
@@ -41,6 +42,13 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
     _checkUsageLimits();
     });
+  }
+  
+  @override
+  void dispose() {
+    // dispose 될 때 처리 상태 초기화
+    _isProcessing = false;
+    super.dispose();
   }
   
   // 사용량 한도 확인
@@ -97,91 +105,106 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 20,
-            offset: Offset(0, -4),
-          )
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 60),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 상단 헤더 (제목 + X 버튼)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '스마트 노트 만들기',
-                  style: TypographyTokens.subtitle2.copyWith(
-                    color: Colors.black,
+    return WillPopScope(
+      onWillPop: () {
+        // 뒤로가기 시 처리 상태 초기화
+        setState(() {
+          _isProcessing = false;
+        });
+        return Future.value(true);
+      },
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x26000000),
+              blurRadius: 20,
+              offset: Offset(0, -4),
+            )
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 60),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 상단 헤더 (제목 + X 버튼)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '스마트 노트 만들기',
+                    style: TypographyTokens.subtitle2.copyWith(
+                      color: Colors.black,
+                    ),
                   ),
-                ),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Icon(
-                    Icons.close,
-                    size: 24,
-                    color: Colors.black,
+                  GestureDetector(
+                    onTap: () {
+                      // X 버튼 클릭시 처리 상태 초기화 후 닫기
+                      setState(() {
+                        _isProcessing = false;
+                      });
+                      Navigator.pop(context);
+                    },
+                    child: const Icon(
+                      Icons.close,
+                      size: 24,
+                      color: Colors.black,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            
-            // 갤러리 및 카메라 옵션 버튼
-            Column(
-              children: [
-                _isButtonDisabled
-                ? Tooltip(
-                    message: _limitTooltip,
-                    child: PikaButton(
+                ],
+              ),
+              const SizedBox(height: 24),
+              
+              // 갤러리 및 카메라 옵션 버튼
+              Column(
+                children: [
+                  _isButtonDisabled
+                  ? Tooltip(
+                      message: _limitTooltip,
+                      child: PikaButton(
+                        text: '갤러리에서 선택',
+                        variant: PikaButtonVariant.outline,
+                        leadingIcon: Icon(Icons.photo_library, color: ColorTokens.disabled),
+                        onPressed: null,
+                        isFullWidth: true,
+                      ),
+                    )
+                  : PikaButton(
                       text: '갤러리에서 선택',
                       variant: PikaButtonVariant.outline,
-                      leadingIcon: Icon(Icons.photo_library, color: ColorTokens.disabled),
-                      onPressed: null,
+                      leadingIcon: Icon(Icons.photo_library, color: ColorTokens.primary),
+                      onPressed: _selectGalleryImages,
                       isFullWidth: true,
                     ),
-                  )
-                : PikaButton(
-                    text: '갤러리에서 선택',
-                    variant: PikaButtonVariant.outline,
-                    leadingIcon: Icon(Icons.photo_library, color: ColorTokens.primary),
-                    onPressed: _selectGalleryImages,
-                    isFullWidth: true,
-                  ),
-                
-                const SizedBox(height: 16),
-                
-                _isButtonDisabled
-                ? Tooltip(
-                    message: _limitTooltip,
-                    child: PikaButton(
+                  
+                  const SizedBox(height: 16),
+                  
+                  _isButtonDisabled
+                  ? Tooltip(
+                      message: _limitTooltip,
+                      child: PikaButton(
+                        text: '카메라로 촬영',
+                        variant: PikaButtonVariant.outline,
+                        leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.disabled),
+                        onPressed: null,
+                        isFullWidth: true,
+                      ),
+                    )
+                  : PikaButton(
                       text: '카메라로 촬영',
                       variant: PikaButtonVariant.outline,
-                      leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.disabled),
-                      onPressed: null,
+                      leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.primary),
+                      onPressed: _takeCameraPhoto,
                       isFullWidth: true,
                     ),
-                  )
-                : PikaButton(
-                    text: '카메라로 촬영',
-                    variant: PikaButtonVariant.outline,
-                    leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.primary),
-                    onPressed: _takeCameraPhoto,
-                    isFullWidth: true,
-                  ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -242,7 +265,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         });
         
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('이미지 선택 중 오류: $e')),
+          SnackBar(content: Text('이미지 선택 중 오류: ${kDebugMode ? e.toString() : "이미지를 선택할 수 없습니다. 다시 시도해주세요."}')),
         );
       }
       return;
@@ -296,7 +319,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             
             // 사용자에게 오류 알림
             ScaffoldMessenger.of(rootContext).showSnackBar(
-              SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
+              SnackBar(content: Text(kDebugMode ? '노트 생성 중 오류가 발생했습니다: $e' : '노트 생성 중 오류가 발생했습니다. 다시 시도해주세요.')),
             );
           }
         } finally {
@@ -322,6 +345,38 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       _isProcessing = true;
     });
     
+    // 시뮬레이터에서 실행 중인지 확인 (iOS 시뮬레이터에서는 카메라가 작동하지 않음)
+    bool isSimulator = false;
+    if (Platform.isIOS) {
+      try {
+        // 간단한 시뮬레이터 확인 방법 - 실제 디바이스에는 '/Applications' 경로가 없음
+        isSimulator = await File('/Applications').exists();
+      } catch (e) {
+        // 확인 실패 시 기본적으로 시뮬레이터가 아니라고 가정
+        isSimulator = false;
+      }
+    }
+    
+    if (isSimulator) {
+      if (kDebugMode) {
+        print('iOS 시뮬레이터에서는 카메라를 사용할 수 없습니다.');
+      }
+      
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('iOS 시뮬레이터에서는 카메라 기능을 사용할 수 없습니다. 실제 기기에서 테스트해주세요.'),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+    
     // 작업 시작 - 카메라 준비 중임을 사용자에게 알립니다
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -335,39 +390,83 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     File? imageFile;
     
     try {
-      // 먼저 ImageService의 pickImage 메서드를 사용 (가장 최적화된 방법)
-      imageFile = await _imageService.pickImage(source: ImageSource.camera);
+      if (kDebugMode) {
+        print('이미지 선택 시작: ImageSource.camera');
+      }
       
-      // 실패한 경우 직접 ImagePicker 사용
+      // iOS 18 이상에서 최적화된 접근 방식 시도
+      if (Platform.isIOS) {
+        try {
+          final XFile? photo = await _picker.pickImage(
+            source: ImageSource.camera,
+            requestFullMetadata: false,
+            maxWidth: 1920,
+            maxHeight: 1080,
+            imageQuality: 80, // 품질 조정으로 처리 부담 감소
+          );
+          
+          if (photo != null) {
+            imageFile = File(photo.path);
+          } else {
+            if (kDebugMode) {
+              print('iOS 카메라 선택이 취소되었거나 실패했습니다.');
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('iOS 카메라 접근 중 오류 발생: $e');
+          }
+        }
+      } else {
+        // 기존 코드 흐름 - 먼저 ImageService의 pickImage 메서드를 사용
+        imageFile = await _imageService.pickImage(source: ImageSource.camera);
+      }
+      
+      // 첫 번째 방법 실패 시 다른 방법 시도
       if (imageFile == null) {
         if (kDebugMode) {
           print('ImageService.pickImage 실패, 직접 ImagePicker 시도');
         }
         
-        // iOS 18에 최적화된 설정으로 시도
-        final XFile? photo = await _picker.pickImage(
-          source: ImageSource.camera,
-          requestFullMetadata: false,
-          // 추가 옵션
-          maxWidth: 1920,  // 적절한 해상도 제한
-          maxHeight: 1080,
-        );
-        
-        // 사진 촬영이 취소되었거나 이미지가 없는 경우
-        if (photo == null) {
+        try {
+          // iOS 18에 최적화된 설정으로 시도
+          final XFile? photo = await _picker.pickImage(
+            source: ImageSource.camera,
+            requestFullMetadata: false,
+            maxWidth: 1920,
+            maxHeight: 1080,
+          );
+          
+          // 사진 촬영이 취소되었거나 이미지가 없는 경우
+          if (photo == null) {
+            if (kDebugMode) {
+              print('사진 촬영이 취소되었습니다.');
+            }
+            // 처리 중 상태 초기화
+            if (mounted) {
+              setState(() {
+                _isProcessing = false;
+              });
+              
+              // iOS 18.4 버전에서는 더 구체적인 오류 메시지 표시
+              if (Platform.isIOS) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('iOS 18.4에서는 카메라 접근 권한이 필요합니다. 앱 설정에서 권한을 확인해주세요.'),
+                    duration: Duration(seconds: 4),
+                  ),
+                );
+              }
+            }
+            return;
+          }
+          
+          imageFile = File(photo.path);
+        } catch (e) {
           if (kDebugMode) {
-            print('사진 촬영이 취소되었습니다.');
+            print('직접 ImagePicker 사용 중 오류: $e');
           }
-          // 처리 중 상태 초기화
-          if (mounted) {
-            setState(() {
-              _isProcessing = false;
-            });
-          }
-          return;
         }
-        
-        imageFile = File(photo.path);
       }
       
       // 마지막 대안으로 대체 메서드 시도
@@ -375,7 +474,22 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         if (kDebugMode) {
           print('표준 방법 실패, 대체 메서드 시도');
         }
-        imageFile = await _imageService.pickImageAlternative(source: ImageSource.camera);
+        
+        try {
+          imageFile = await _imageService.pickImageAlternative(source: ImageSource.camera);
+        } catch (e) {
+          if (kDebugMode) {
+            print('대체 메서드 중 오류: $e');
+          }
+        }
+        
+        // 대체 메서드도 null을 반환했다면 처리 중 상태 초기화
+        if (imageFile == null && mounted) {
+          setState(() {
+            _isProcessing = false;
+          });
+          return;
+        }
       }
       
       // 여전히 실패한 경우 종료
@@ -388,9 +502,22 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             _isProcessing = false;
           });
           
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('카메라를 열 수 없습니다. 기기 설정에서 카메라 접근 권한을 확인해주세요.')),
-          );
+          // iOS 18.4 버전에 맞춘 구체적인 오류 메시지
+          if (Platform.isIOS) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('iOS 18.4에서 카메라를 열 수 없습니다. 설정 앱에서 카메라 권한을 확인하거나 갤러리에서 이미지를 선택해주세요.'),
+                duration: Duration(seconds: 5),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('카메라를 열 수 없습니다. 기기 설정에서 카메라 접근 권한을 확인해주세요.'),
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
         }
         return;
       }
@@ -404,8 +531,15 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           _isProcessing = false;
         });
         
+        // 에러 메시지가 중복으로 표시되지 않도록 SnackBar 관리
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('카메라 촬영 중 오류: $e')),
+          SnackBar(
+            content: Text(kDebugMode 
+              ? '카메라 촬영 중 오류: ${e.toString().substring(0, min(e.toString().length, 100))}' 
+              : '카메라를 사용할 수 없습니다. 다시 시도해주세요.'),
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
       return;
@@ -454,7 +588,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             
             // 사용자에게 오류 알림
             ScaffoldMessenger.of(rootContext).showSnackBar(
-              SnackBar(content: Text('노트 생성 중 오류가 발생했습니다: $e')),
+              SnackBar(content: Text(kDebugMode ? '노트 생성 중 오류가 발생했습니다: $e' : '노트 생성 중 오류가 발생했습니다. 다시 시도해주세요.')),
             );
           }
         } finally {
@@ -462,6 +596,9 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           _isProcessing = false;
         }
       });
+    } else {
+      // mounted가 false인 경우 (드문 경우지만 안전장치)
+      _isProcessing = false;
     }
   }
 } 
