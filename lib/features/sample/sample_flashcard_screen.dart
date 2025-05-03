@@ -4,7 +4,7 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/models/flash_card.dart';
-import '../../core/widgets/loading_experience.dart';
+import '../../core/widgets/tts_button.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
@@ -31,6 +31,7 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
 
   int _currentIndex = 0;
   bool _isFlipped = false;
+  bool _isSpeaking = false; // TTS 상태 표시용 (실제 기능은 없음)
 
   @override
   void dispose() {
@@ -44,202 +45,345 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
     setState(() => _isFlipped = !_isFlipped);
   }
 
-  // 다음 카드로 이동
-  void _goToNextCard() {
-    if (_currentIndex < widget.flashcards.length - 1) {
-      _cardController.swipe(CardSwiperDirection.right);
-    }
-  }
-
-  // 이전 카드로 이동
-  void _goToPrevCard() {
-    if (_currentIndex > 0) {
-      // 이전 카드로 이동하는 기능은 CardSwiper에서 직접 지원하지 않으므로
-      // 여기서는 단순히 메시지만 출력합니다.
-      if (kDebugMode) {
-        print('이전 카드로 이동 - 이 기능은 실제로 작동하지 않습니다.');
+  // TTS 재생 시뮬레이션
+  void _simulateSpeakText() {
+    setState(() {
+      _isSpeaking = true;
+    });
+    
+    // 2초 후 자동으로 종료
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+        });
       }
+    });
+  }
+
+  // 다음 카드 정보 가져오기
+  String? _getNextCardInfo() {
+    if (_currentIndex < widget.flashcards.length - 1) {
+      return widget.flashcards[_currentIndex + 1].front;
     }
+    return null;
   }
 
-  // 현재 진행 상태 표시
-  Widget _buildProgressIndicator() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '${_currentIndex + 1}/${widget.flashcards.length}',
-            style: TypographyTokens.caption.copyWith(
-              color: ColorTokens.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 하단 컨트롤 버튼 영역
-  Widget _buildBottomControls() {
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          // 이전 카드 버튼
-          IconButton(
-            onPressed: _goToPrevCard,
-            icon: const Icon(Icons.arrow_back),
-            color: ColorTokens.primary,
-            tooltip: '이전 카드',
-          ),
-          
-          // 카드 뒤집기 버튼
-          IconButton(
-            onPressed: _flipCard,
-            icon: const Icon(Icons.flip),
-            color: ColorTokens.primary,
-            tooltip: '카드 뒤집기',
-          ),
-          
-          // 다음 카드 버튼
-          IconButton(
-            onPressed: _goToNextCard,
-            icon: const Icon(Icons.arrow_forward),
-            color: ColorTokens.primary,
-            tooltip: '다음 카드',
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 플래시카드 위젯 빌드
-  Widget _buildFlashCard(FlashCard card) {
-    return FlipCard(
-      key: _flipCardKey,
-      direction: FlipDirection.HORIZONTAL,
-      flipOnTouch: false,
-      speed: 400,
-      onFlip: () {
-        setState(() => _isFlipped = !_isFlipped);
-      },
-      front: _buildCardSide(card.front, card.pinyin, true),
-      back: _buildCardSide(card.back, null, false),
-    );
-  }
-
-  // 카드 앞/뒷면 빌드
-  Widget _buildCardSide(String mainText, String? subText, bool isFront) {
-    return Container(
-      margin: const EdgeInsets.all(8.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                mainText,
-                style: isFront
-                    ? TypographyTokens.headline1.copyWith(color: ColorTokens.textPrimary)
-                    : TypographyTokens.headline2.copyWith(color: ColorTokens.textPrimary),
-                textAlign: TextAlign.center,
-              ),
-              if (subText != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  subText,
-                  style: TypographyTokens.subtitle1.copyWith(
-                    color: ColorTokens.textSecondary,
-                    fontStyle: FontStyle.italic,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              const SizedBox(height: 16),
-              Text(
-                isFront ? '클릭하여 한국어 뜻 보기' : '클릭하여 중국어로 돌아가기',
-                style: TypographyTokens.caption.copyWith(
-                  color: ColorTokens.textTertiary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  // 이전 카드 정보 가져오기
+  String? _getPreviousCardInfo() {
+    if (_currentIndex > 0) {
+      return widget.flashcards[_currentIndex - 1].front;
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFEFAF1),
-      appBar: PikaAppBar(
-        title: '플래시카드 - ${widget.noteTitle}',
-        backgroundColor: const Color(0xFFFEFAF1),
+      backgroundColor: Colors.white,
+      appBar: PikaAppBar.flashcard(
+        onBackPressed: () => Navigator.of(context).pop(),
+        currentCardIndex: _currentIndex,
+        totalCards: widget.flashcards.length,
       ),
-      body: Column(
+      body: Stack(
         children: [
-          _buildProgressIndicator(),
-          const SizedBox(height: 8),
-          
-          // 메인 카드 영역
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: CardSwiper(
-                controller: _cardController,
-                cardsCount: widget.flashcards.length,
-                onSwipe: (previousIndex, currentIndex, direction) {
-                  // 카드가 스와이프되면 상태 업데이트
-                  if (currentIndex != null) {
-                    setState(() {
-                      _currentIndex = currentIndex;
-                      _isFlipped = false; // 새 카드는 항상 앞면부터
-                    });
-                  }
-                  return true;
-                },
-                onEnd: () {
-                  if (kDebugMode) {
-                    print('카드 끝에 도달했습니다.');
-                  }
-                },
-                numberOfCardsDisplayed: 1,
-                allowedSwipeDirection: AllowedSwipeDirection.symmetric(
-                  horizontal: true,
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                cardBuilder: (context, index, _, __) {
-                  return GestureDetector(
-                    onTap: _flipCard,
-                    child: _buildFlashCard(widget.flashcards[index]),
-                  );
-                },
+          Padding(
+            padding: EdgeInsets.all(SpacingTokens.md),
+            child: CardSwiper(
+              controller: _cardController,
+              cardsCount: widget.flashcards.length,
+              onSwipe: (previousIndex, currentIndex, direction) {
+                // 카드가 스와이프되면 상태 업데이트
+                if (currentIndex != null) {
+                  setState(() {
+                    _currentIndex = currentIndex;
+                    _isFlipped = false; // 새 카드는 항상 앞면부터
+                  });
+                }
+                return true;
+              },
+              onEnd: () {
+                if (kDebugMode) {
+                  print('카드 끝에 도달했습니다.');
+                }
+              },
+              numberOfCardsDisplayed: widget.flashcards.length == 1 ? 1 : 2,
+              allowedSwipeDirection: AllowedSwipeDirection.symmetric(
+                horizontal: true,
               ),
+              padding: EdgeInsets.all(SpacingTokens.lg),
+              isLoop: widget.flashcards.length > 1,
+              cardBuilder: (context, index, horizontalThreshold, verticalThreshold) {
+                final bool isCurrentCard = index == _currentIndex;
+                final double cardScale = isCurrentCard ? 1.0 : 0.9;
+                final double cardOffset = isCurrentCard ? 0 : 40;
+                
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final double cardWidth = constraints.maxWidth * 0.95;
+                    final double cardHeight = constraints.maxHeight * 0.9;
+                    
+                    return Stack(
+                      children: [
+                        Center(
+                          child: Transform.scale(
+                            scale: cardScale,
+                            child: Transform.translate(
+                              offset: Offset(0, cardOffset - 20),
+                              child: SizedBox(
+                                width: cardWidth,
+                                height: cardHeight,
+                                child: GestureDetector(
+                                  onTap: _flipCard,
+                                  child: FlipCard(
+                                    key: isCurrentCard ? _flipCardKey : null,
+                                    direction: FlipDirection.HORIZONTAL,
+                                    speed: 300,
+                                    onFlipDone: (isFront) {
+                                      if (isCurrentCard) {
+                                        setState(() => _isFlipped = !isFront);
+                                      }
+                                    },
+                                    front: _buildCardSide(
+                                      card: widget.flashcards[index],
+                                      bgColor: ColorTokens.flashcardBackground,
+                                      textColor: ColorTokens.textPrimary,
+                                      isFront: true,
+                                      isCurrentCard: isCurrentCard,
+                                      cardIndex: index,
+                                    ),
+                                    back: _buildCardSide(
+                                      card: widget.flashcards[index],
+                                      bgColor: ColorTokens.surface,
+                                      textColor: ColorTokens.textPrimary,
+                                      isFront: false,
+                                      isCurrentCard: isCurrentCard,
+                                      cardIndex: index,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                );
+              },
             ),
           ),
           
-          // 하단 컨트롤 영역
-          _buildBottomControls(),
-          
-          // 안전 영역 확보
-          SizedBox(height: MediaQuery.of(context).padding.bottom),
+          // 이동 안내 텍스트 (하단)
+          if (widget.flashcards.length > 1)
+            Positioned(
+              bottom: SpacingTokens.xl,
+              left: 0,
+              right: 0,
+              child: Material(
+                color: ColorTokens.surface.withOpacity(0),
+                child: Text(
+                  '좌우로 스와이프 해서 다음 카드로 이동',
+                  style: TypographyTokens.caption.copyWith(
+                    color: ColorTokens.disabled,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+  
+  /// 카드 앞/뒷면 위젯 생성
+  Widget _buildCardSide({
+    required FlashCard card,
+    required Color bgColor,
+    required Color textColor,
+    required bool isFront,
+    required bool isCurrentCard,
+    required int cardIndex,
+  }) {
+    // 표시할 텍스트와 핀인 결정
+    final String displayText = isFront ? card.front : card.back;
+    // 핀인은 항상 표시
+    final String displayPinyin = card.pinyin;
+
+    return Container(
+      decoration: _buildCardDecoration(bgColor, isCurrentCard),
+      child: Stack(
+        children: [
+          // 카드 내용 (중앙)
+          isFront 
+            ? _buildFrontCardContent(
+                card.front,
+                displayPinyin,
+                textColor,
+              )
+            : _buildBackCardContent(
+                card.back,
+                card.front,
+                displayPinyin,
+                textColor,
+              ),
+
+          // 카드 번호 배지 (좌상단)
+          _buildCardNumberBadge(cardIndex, ColorTokens.tertiary, ColorTokens.surface),
+        ],
+      ),
+    );
+  }
+
+  /// 카드 장식 (배경, 테두리, 그림자) 생성
+  BoxDecoration _buildCardDecoration(Color bgColor, bool isCurrentCard) {
+    return BoxDecoration(
+      color: bgColor,
+      borderRadius: BorderRadius.circular(SpacingTokens.radiusLarge),
+      boxShadow: [
+        BoxShadow(
+          color: ColorTokens.black.withOpacity(0.15),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ],
+      border: Border.all(
+        color: ColorTokens.tertiary,
+        width: 2.0,
+      ),
+    );
+  }
+
+  /// 카드 앞면 내용 (단어, 핀인) 생성
+  Widget _buildFrontCardContent(
+    String text,
+    String pinyin,
+    Color textColor,
+  ) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(SpacingTokens.lg),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // TTS 버튼 (단어 위에 위치)
+            TtsButton(
+              text: text, // 실제 텍스트 전달
+              size: TtsButton.sizeMedium,
+              tooltip: '샘플 모드에서는 TTS 기능을 사용할 수 없습니다.',
+              iconColor: ColorTokens.secondary,
+              activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
+              onPlayStart: _simulateSpeakText,
+              onPlayEnd: () => setState(() => _isSpeaking = false),
+            ),
+            SizedBox(height: SpacingTokens.sm),
+            
+            // 단어/의미 텍스트
+            Text(
+              text,
+              style: TypographyTokens.headline2Cn.copyWith(
+                color: ColorTokens.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            // 핀인 표시 (항상 표시)
+            SizedBox(height: SpacingTokens.lg),
+            Text(
+              pinyin.isEmpty ? 'xíng zǒu' : pinyin,
+              style: TypographyTokens.caption.copyWith(
+                color: ColorTokens.textGrey,
+                fontFamily: TypographyTokens.poppins,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 카드 뒷면 내용 (번역, 원문, 핀인) 생성
+  Widget _buildBackCardContent(
+    String translation,
+    String original,
+    String pinyin,
+    Color textColor,
+  ) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.all(SpacingTokens.lg),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // TTS 버튼 (단어 위에 위치)
+            TtsButton(
+              text: original, // 원문 텍스트 전달
+              size: TtsButton.sizeMedium,
+              tooltip: '샘플 모드에서는 TTS 기능을 사용할 수 없습니다.',
+              iconColor: ColorTokens.secondary,
+              activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
+              onPlayStart: _simulateSpeakText,
+              onPlayEnd: () => setState(() => _isSpeaking = false),
+            ),
+            SizedBox(height: SpacingTokens.sm),
+            
+            // 번역 (의미)
+            Text(
+              translation,
+              style: TypographyTokens.headline2.copyWith(
+                color: ColorTokens.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: SpacingTokens.lg),
+            
+            // 원문 (중국어)
+            Text(
+              original,
+              style: TypographyTokens.headline3Cn.copyWith(
+                color: ColorTokens.textGrey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            
+            // 핀인 표시 (항상 표시)
+            SizedBox(height: SpacingTokens.sm),
+            Text(
+              pinyin.isEmpty ? 'xíng zǒu' : pinyin,
+              style: TypographyTokens.body2.copyWith(
+                color: ColorTokens.textGrey,
+                fontFamily: TypographyTokens.poppins,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 카드 번호 배지 생성
+  Widget _buildCardNumberBadge(int index, Color bgColor, Color textColor) {
+    return Positioned(
+      top: SpacingTokens.lg,
+      left: SpacingTokens.lg,
+      child: Container(
+        width: SpacingTokens.iconSizeMedium,
+        height: SpacingTokens.iconSizeMedium,
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Center(
+          child: Text(
+            '${index + 1}',
+            style: TypographyTokens.captionEn.copyWith(
+              fontWeight: FontWeight.w500,
+              color: ColorTokens.black,
+            ),
+          ),
+        ),
       ),
     );
   }
