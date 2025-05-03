@@ -17,6 +17,7 @@ import '../../core/services/text_processing/text_reader_service.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
 import 'sample_notes_service.dart';
 import '../../features/note_detail/managers/content_manager.dart'; // ContentManager import 추가
+import 'sample_flashcard_screen.dart'; // 샘플 플래시카드 화면 import 추가
 
 // 샘플 모드용 ViewModel - 실제 ViewModel을 간소화
 class SampleNoteDetailViewModel extends ChangeNotifier {
@@ -386,6 +387,30 @@ class _SampleNoteDetailScreenContent extends StatelessWidget {
   
   // 바텀 시트 구성
   Widget _buildBottomSheet(BuildContext context) {
+    // 플래시카드 화면으로 이동하는 메서드
+    void _navigateToFlashcards(BuildContext context, SampleNoteDetailViewModel viewModel) {
+      if (viewModel.flashCards != null && viewModel.flashCards!.isNotEmpty) {
+        Navigator.pop(context); // 바텀 시트 닫기
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SampleFlashCardScreen(
+              flashcards: viewModel.flashCards!,
+              noteTitle: viewModel.note.translatedText,
+            ),
+          ),
+        );
+      } else {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('이 노트에는 플래시카드가 없습니다.')),
+        );
+      }
+    }
+
+    // Provider에서 ViewModel 가져오기
+    final viewModel = Provider.of<SampleNoteDetailViewModel>(context, listen: false);
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -405,6 +430,12 @@ class _SampleNoteDetailScreenContent extends StatelessWidget {
               color: Colors.grey[300],
               borderRadius: BorderRadius.circular(2),
             ),
+          ),
+          // 플래시카드 보기 버튼 추가
+          ListTile(
+            leading: const Icon(Icons.style),
+            title: const Text('플래시카드 보기'),
+            onTap: () => _navigateToFlashcards(context, viewModel),
           ),
           ListTile(
             leading: const Icon(Icons.star_border),

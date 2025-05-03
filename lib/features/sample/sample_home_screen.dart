@@ -203,7 +203,7 @@ class SampleHomeScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Pikabook의 샘플 노트를\n둘러보세요! ',
+            'Pikabook으로 만든 노트를\n미리 살펴보세요! ',
             style: TypographyTokens.headline2En.copyWith(
               color: ColorTokens.textPrimary,
               fontWeight: FontWeight.bold,
@@ -211,7 +211,7 @@ class SampleHomeScreen extends StatelessWidget {
           ),
           SizedBox(height: 8),
           Text(
-            '교재 사진을 피카북에 올리면,\n아래와 같은 노트가 만들어져요. ',
+            '교재 사진을 올리면,\n아래와 같은 노트가 자동으로 만들어져요. ',
             style: TypographyTokens.body1.copyWith(
               color: ColorTokens.textPrimary,
             ),
