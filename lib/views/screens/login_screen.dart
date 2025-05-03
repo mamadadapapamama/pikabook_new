@@ -422,7 +422,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       User? user;
       
       try {
-        debugPrint('Apple Sign In: 첫 번째 방식 시도...');
+        if (kDebugMode) {
+          debugPrint('Apple Sign In: 첫 번째 방식 시도...');
+        }
         // 직접 구현된 Apple 로그인 시도
         user = await _authService.signInWithApple();
         
@@ -433,11 +435,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           return; // 성공 시 함수 종료
         }
       } catch (e) {
-        debugPrint('첫 번째 방식 로그인 실패. 대안적 방식 시도 중...');
+        if (kDebugMode) {
+          debugPrint('첫 번째 방식 로그인 실패. 대안적 방식 시도 중...');
+        }
         
         // 첫 번째 방식 실패 시 대안적 방식 시도
         try {
-          debugPrint('Apple Sign In: 대안적 방식 시도...');
+          if (kDebugMode) {
+            debugPrint('Apple Sign In: 대안적 방식 시도...');
+          }
           user = await _authService.signInWithAppleAlternative();
           
           if (user != null) {
@@ -447,7 +453,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           }
         } catch (alternativeError) {
           // 두 번째 방식도 실패한 경우
-          debugPrint('대안적 방식도 실패: $alternativeError');
+          if (kDebugMode) {
+            debugPrint('대안적 방식도 실패: $alternativeError');
+          }
           setState(() {
             _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
             _isLoading = false;

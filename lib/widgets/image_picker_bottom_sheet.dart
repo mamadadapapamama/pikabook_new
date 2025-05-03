@@ -87,7 +87,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
     } catch (e) {
       if (kDebugMode) {
-      debugPrint('사용량 확인 중 오류 발생: $e');
+        debugPrint('사용량 확인 중 오류 발생: $e');
       }
     } finally {
       // 확인 중 상태 해제
