@@ -16,6 +16,7 @@ import '../../features/note_detail/note_detail_bottom_bar.dart';
 import '../../core/services/text_processing/text_reader_service.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
 import 'sample_notes_service.dart';
+import '../../features/note_detail/managers/content_manager.dart'; // ContentManager import 추가
 
 // 샘플 모드용 ViewModel - 실제 ViewModel을 간소화
 class SampleNoteDetailViewModel extends ChangeNotifier {
@@ -189,7 +190,7 @@ class SampleNoteDetailViewModel extends ChangeNotifier {
   
   // 더미 메서드 - ContentManager 대용
   dynamic getContentManager() {
-    return null;
+    return ContentManager(); // ContentManager 인스턴스 반환
   }
   
   // 콜백 설정 더미 메서드

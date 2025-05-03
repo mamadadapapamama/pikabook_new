@@ -174,7 +174,9 @@ class _FullImageScreenState extends State<FullImageScreen> {
       final bool fileExists = widget.imageFile!.existsSync();
       final int fileSize = fileExists ? widget.imageFile!.lengthSync() : 0;
       
-      print('이미지 파일 상태: 존재=${fileExists}, 파일 크기=${fileSize}바이트, 경로=${widget.imageFile!.path}');
+      if (kDebugMode) {
+        print('이미지 파일 상태: 존재=${fileExists}, 파일 크기=${fileSize}바이트, 경로=${widget.imageFile!.path}');
+      }
       
       if (fileExists && fileSize > 0) {
         return Image.file(
@@ -183,7 +185,9 @@ class _FullImageScreenState extends State<FullImageScreen> {
           width: double.infinity,
           height: double.infinity,
           errorBuilder: (context, error, stackTrace) {
-            print('이미지 파일 로드 에러: $error');
+            if (kDebugMode) {
+              print('이미지 파일 로드 에러: $error');
+            }
             return _buildPlaceholderImage();
           },
           // 이미지 로딩 중에도 기본 이미지 표시
@@ -201,13 +205,33 @@ class _FullImageScreenState extends State<FullImageScreen> {
           },
         );
       } else {
-        print('이미지 파일이 존재하지 않거나 빈 파일입니다: ${widget.imageFile!.path}');
+        if (kDebugMode) {
+          print('이미지 파일이 존재하지 않거나 빈 파일입니다: ${widget.imageFile!.path}');
+        }
         return _buildPlaceholderImage();
       }
     } 
     // 이미지 URL이 있는 경우
     else if (widget.imageUrl != null && widget.imageUrl!.isNotEmpty) {
-      print('이미지 URL로 로딩 시도: ${widget.imageUrl}');
+      if (kDebugMode) {
+        print('이미지 URL로 로딩 시도: ${widget.imageUrl}');
+      }
+      
+      // assets 이미지 경로 처리
+      if (widget.imageUrl!.startsWith('assets/')) {
+        return Image.asset(
+          widget.imageUrl!,
+          fit: BoxFit.contain,
+          width: double.infinity,
+          height: double.infinity,
+          errorBuilder: (context, error, stackTrace) {
+            if (kDebugMode) {
+              print('이미지 URL 로드 에러: $error');
+            }
+            return _buildPlaceholderImage();
+          },
+        );
+      }
       
       // imageUrl이 상대 경로인 경우 (images/로 시작하는 경우) 파일로 로드
       if (widget.imageUrl!.startsWith('images/')) {
@@ -228,7 +252,9 @@ class _FullImageScreenState extends State<FullImageScreen> {
                   width: double.infinity,
                   height: double.infinity,
                   errorBuilder: (context, error, stackTrace) {
-                    print('이미지 파일 로드 에러: $error');
+                    if (kDebugMode) {
+                      print('이미지 파일 로드 에러: $error');
+                    }
                     return _buildPlaceholderImage();
                   },
                   // 이미지 로딩 중에도 기본 이미지 표시
@@ -246,7 +272,9 @@ class _FullImageScreenState extends State<FullImageScreen> {
                   },
                 );
               } else {
-                print('이미지 파일이 존재하지 않습니다: $imagePath');
+                if (kDebugMode) {
+                  print('이미지 파일이 존재하지 않습니다: $imagePath');
+                }
                 return _buildPlaceholderImage();
               }
             } else {
@@ -279,7 +307,9 @@ class _FullImageScreenState extends State<FullImageScreen> {
             );
           },
           errorBuilder: (context, error, stackTrace) {
-            print('이미지 URL 로드 에러: $error');
+            if (kDebugMode) {
+              print('이미지 URL 로드 에러: $error');
+            }
             return _buildPlaceholderImage();
           },
         );
@@ -287,7 +317,9 @@ class _FullImageScreenState extends State<FullImageScreen> {
     } 
     // 이미지 정보가 없거나 존재하지 않는 경우
     else {
-      print('이미지 정보가 없음: 파일=${widget.imageFile}, URL=${widget.imageUrl}');
+      if (kDebugMode) {
+        print('이미지 정보가 없음: 파일=${widget.imageFile}, URL=${widget.imageUrl}');
+      }
       return _buildPlaceholderImage();
     }
   }

@@ -204,6 +204,18 @@ class PageImageWidget extends StatelessWidget {
             );
           },
         );
+      } else if (imageUrl!.startsWith('assets/')) {
+        // assets 이미지 처리
+        return Image.asset(
+          imageUrl!,
+          height: height,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint('assets 이미지 로드 오류: $error');
+            return _buildEmptyImageWidget();
+          },
+        );
       } else {
         // 로컬 이미지 경로 처리
         return FutureBuilder<File?>(

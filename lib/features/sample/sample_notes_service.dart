@@ -3,6 +3,7 @@ import '../../core/models/page.dart' as pika_page;
 import '../../core/models/processed_text.dart';
 import '../../core/models/text_segment.dart';
 import '../../core/utils/language_constants.dart';
+import 'package:flutter/foundation.dart';
 
 /// 샘플 모드에서 사용할 노트 데이터를 제공하는 서비스
 class SampleNotesService {
@@ -10,48 +11,37 @@ class SampleNotesService {
   static final SampleNotesService _instance = SampleNotesService._internal();
   
   factory SampleNotesService() {
+    if (kDebugMode) {
+      debugPrint('SampleNotesService 팩토리 생성자 호출됨');
+    }
     return _instance;
   }
   
-  SampleNotesService._internal();
+  SampleNotesService._internal() {
+    if (kDebugMode) {
+      debugPrint('SampleNotesService 내부 생성자 호출됨');
+    }
+  }
+  
+  // 이미지 경로 상수
+  static const String sampleImagePath = 'assets/images/sample_1.jpg';
   
   /// 샘플 노트 목록 가져오기
   List<Note> getSampleNotes() {
+    if (kDebugMode) {
+      debugPrint('샘플 노트 목록 요청됨');
+    }
     return [
-      _getSampleEnglishNote(),
-      _getSampleChineseNote(),
+      _getSampleChineseNote()
     ];
-  }
-  
-  /// 영어 샘플 노트
-  Note _getSampleEnglishNote() {
-    return Note(
-      id: 'sample-note-1',
-      originalText: '영어 원서 학습 노트',
-      translatedText: '영어 원서 학습 노트',
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      updatedAt: DateTime.now().subtract(const Duration(days: 2)),
-      imageUrl: null,
-      sourceLanguage: SourceLanguage.ENGLISH,
-      targetLanguage: TargetLanguage.KOREAN,
-      processingCompleted: true,
-      isProcessingBackground: false,
-      extractedText: '샘플 영어 원서 내용입니다.',
-      pages: [
-        pika_page.Page(
-          id: 'sample-page-1',
-          originalText: 'This is a sample English page content.',
-          translatedText: '이것은 샘플 영어 페이지 내용입니다.',
-          pageNumber: 1,
-          sourceLanguage: SourceLanguage.ENGLISH,
-          targetLanguage: TargetLanguage.KOREAN,
-        ),
-      ],
-    );
   }
   
   /// 중국어 샘플 노트
   Note _getSampleChineseNote() {
+    if (kDebugMode) {
+      debugPrint('중국어 샘플 노트 생성');
+    }
+    
     final chineseContent = '''小一预备第七课 学校里
 开学了，我去学校上课。看见
 老师，我对他说："早安！" 看见
@@ -76,7 +66,7 @@ class SampleNotesService {
       translatedText: '중국어 학습 노트 - 제7과 학교에서',
       createdAt: DateTime.now().subtract(const Duration(days: 1)),
       updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-      imageUrl: null,
+      imageUrl: sampleImagePath,
       sourceLanguage: SourceLanguage.CHINESE,
       targetLanguage: TargetLanguage.KOREAN,
       processingCompleted: true,
@@ -88,6 +78,7 @@ class SampleNotesService {
           originalText: chineseContent,
           translatedText: koreanTranslation,
           pageNumber: 1,
+          imageUrl: sampleImagePath,
           sourceLanguage: SourceLanguage.CHINESE,
           targetLanguage: TargetLanguage.KOREAN,
         ),
@@ -98,6 +89,10 @@ class SampleNotesService {
   
   /// 샘플 노트의 ProcessedText 객체 가져오기
   ProcessedText getProcessedTextForPage(String pageId) {
+    if (kDebugMode) {
+      debugPrint('페이지 ID $pageId에 대한 ProcessedText 요청됨');
+    }
+    
     // 중국어 샘플 페이지인 경우
     if (pageId == 'sample-page-2') {
       final originalSegments = [
@@ -157,22 +152,25 @@ class SampleNotesService {
       );
     }
     
-    // 영어 샘플 페이지인 경우 기본 ProcessedText 반환
+    // 기본 ProcessedText 반환
     return ProcessedText(
-      fullOriginalText: 'This is a sample English page content.',
-      fullTranslatedText: '이것은 샘플 영어 페이지 내용입니다.',
+      fullOriginalText: '샘플 텍스트입니다.',
+      fullTranslatedText: '샘플 텍스트입니다.',
       segments: [
         TextSegment(
-          originalText: 'This is a sample English page content.',
-          translatedText: '이것은 샘플 영어 페이지 내용입니다.',
-          pinyin: '',
-          sourceLanguage: SourceLanguage.ENGLISH,
-          targetLanguage: TargetLanguage.KOREAN,
-        ),
+          originalText: '샘플 텍스트입니다.',
+          translatedText: '샘플 텍스트입니다.',
+        )
       ],
-      showFullText: false,
-      showPinyin: false,
-      showTranslation: true,
+      showFullText: true,
     );
   }
-} 
+  
+  // 샘플 노트 페이지의 이미지 파일 경로 가져오기
+  String? getImagePathForPageId(String pageId) {
+    if (pageId == 'sample-page-2') {
+      return sampleImagePath;
+    }
+    return null;
+  }
+}

@@ -394,29 +394,17 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   }
   
   // 텍스트 표시 모드 토글 - 비동기 작업을 UI 블로킹 없이 처리
-  void _toggleDisplayMode() {
-    // 모드 전환 애니메이션을 즉시 표시하기 위해 먼저 부모의 콜백 호출
-    widget.onToggleFullTextMode();
-    
-    // 페이지 ID가 없으면 더 이상 진행하지 않음
-    if (widget.currentPage?.id == null) return;
-    
-    // 이미 처리된 텍스트가 없으면 추가 작업 필요 없음
-    if (processedText == null) return;
-    
-    // 비동기 작업을 백그라운드로 실행
-    widget.contentManager.toggleDisplayModeForPage(widget.currentPage!.id!)
-      .then((updatedText) {
-        if (updatedText != null && mounted) {
-          setState(() {
-            processedText = updatedText;
-          });
-        }
-      })
-      .catchError((e) {
-        if (kDebugMode) {
-          debugPrint('디스플레이 모드 토글 중 오류: $e');
-        }
-      });
+  void _toggleDisplayMode() async {
+    try {
+      // 콘텐트 매니저를 통해 페이지 표시 모드 토글
+      if (widget.currentPage?.id != null) {
+        await widget.contentManager.toggleDisplayModeForPage(widget.currentPage!.id!);
+        _fetchProcessedTextSafely(); // 변경된 ProcessedText 다시 로드
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('디스플레이 모드 토글 중 오류: $e');
+      }
+    }
   }
 } 

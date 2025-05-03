@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/text_segment.dart';
@@ -24,14 +25,20 @@ import '../../../core/models/note.dart';
 class ContentManager {
   // 싱글톤 패턴 구현
   static final ContentManager _instance = () {
-    debugPrint('🏭 ContentManager: 싱글톤 인스턴스 생성 시작');
+    if (kDebugMode) {
+      debugPrint('🏭 ContentManager: 싱글톤 인스턴스 생성 시작');
+    }
     final instance = ContentManager._internal();
-    debugPrint('🏭 ContentManager: 싱글톤 인스턴스 생성 완료');
+    if (kDebugMode) {
+      debugPrint('🏭 ContentManager: 싱글톤 인스턴스 생성 완료');
+    }
     return instance;
   }();
   
   factory ContentManager() {
-    debugPrint('🏭 ContentManager: 팩토리 생성자 호출됨 (싱글톤 반환)');
+    if (kDebugMode) {
+      debugPrint('🏭 ContentManager: 팩토리 생성자 호출됨 (싱글톤 반환)');
+    }
     return _instance;
   }
 
@@ -46,7 +53,9 @@ class ContentManager {
   late final PinyinCreationService _pinyinService = PinyinCreationService();
 
   ContentManager._internal() {
-    debugPrint('🤫 ContentManager: 내부 생성자(_internal) 호출됨 - 서비스 초기화 지연됨');
+    if (kDebugMode) {
+      debugPrint('🤫 ContentManager: 내부 생성자(_internal) 호출됨 - 서비스 초기화 지연됨');
+    }
     // _initTts(); // TTS 초기화는 필요 시 별도 호출 또는 _ttsService 접근 시 자동 초기화
   }
 
@@ -74,10 +83,14 @@ class ContentManager {
     int recursionDepth = 0, // 재귀 호출 깊이 추적을 위한 매개변수 추가
   }) async {
     // 재귀 호출 깊이 제한 (스택 오버플로우 방지)
-    print("ContentManager.processPageText 시작: pageId=${page.id}, recursionDepth=$recursionDepth");
+    if (kDebugMode) {
+      print("ContentManager.processPageText 시작: pageId=${page.id}, recursionDepth=$recursionDepth");
+    }
     
     if (recursionDepth > 2) {
-      debugPrint('❌ 무한 루프 방지: 최대 재귀 깊이(2) 초과');
+      if (kDebugMode) {
+        debugPrint('❌ 무한 루프 방지: 최대 재귀 깊이(2) 초과');
+      }
       return null;
     }
     
@@ -90,8 +103,10 @@ class ContentManager {
         imageFile: imageFile,
       );
     } catch (e, stack) {
-      debugPrint('페이지 텍스트 처리 중 오류 발생: $e');
-      debugPrint('스택 트레이스: $stack');
+      if (kDebugMode) {
+        debugPrint('페이지 텍스트 처리 중 오류 발생: $e');
+        debugPrint('스택 트레이스: $stack');
+      }
       // 오류 발생 시 기본 텍스트 반환
       return ProcessedText(
         fullOriginalText: page.originalText,
@@ -112,7 +127,9 @@ class ContentManager {
     try {
       return await _cacheService.getProcessedText(pageId);
     } catch (e) {
-      debugPrint('처리된 텍스트 조회 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('처리된 텍스트 조회 중 오류: $e');
+      }
       return null;
     }
   }
@@ -121,7 +138,9 @@ class ContentManager {
     try {
       await _cacheService.setProcessedText(pageId, processedText);
     } catch (e) {
-      debugPrint('ProcessedText 캐싱 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('ProcessedText 캐싱 중 오류: $e');
+      }
     }
   }
 
@@ -129,7 +148,9 @@ class ContentManager {
     try {
       await _cacheService.removeProcessedText(pageId);
     } catch (e) {
-      debugPrint('ProcessedText 캐시 제거 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('ProcessedText 캐시 제거 중 오류: $e');
+      }
     }
   }
 
@@ -137,7 +158,9 @@ class ContentManager {
     try {
       _cacheService.clearCache();
     } catch (e) {
-      debugPrint('전체 캐시 초기화 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('전체 캐시 초기화 중 오류: $e');
+      }
     }
   }
 
@@ -149,7 +172,9 @@ class ContentManager {
       await _ttsService.setLanguage('zh-CN');
       await _ttsService.speak(text);
     } catch (e) {
-      debugPrint('TTS 실행 중 오류 발생: $e');
+      if (kDebugMode) {
+        debugPrint('TTS 실행 중 오류 발생: $e');
+      }
     }
   }
 
@@ -167,7 +192,9 @@ class ContentManager {
       }
       return null;
     } catch (e) {
-      debugPrint('단어 검색 중 오류 발생: $e');
+      if (kDebugMode) {
+        debugPrint('단어 검색 중 오류 발생: $e');
+      }
       return null;
     }
   }

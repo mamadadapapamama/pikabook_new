@@ -108,6 +108,20 @@ class _NoteListItemState extends State<NoteListItem> {
       return;
     }
 
+    // assets 경로인 경우 로컬 이미지로 처리 (다운로드 시도하지 않음)
+    if (imageUrl.startsWith('assets/')) {
+      if (kDebugMode) {
+        debugPrint('assets 이미지 감지: $imageUrl');
+      }
+      _safeSetState(() {
+        _isLoadingImage = false;
+        _imageFile = null;  // assets는 File로 처리하지 않음
+        _cachedImageUrl = imageUrl;
+        _imageLoadError = false;
+      });
+      return;
+    }
+
     // 이미 로딩 중이면 중복 요청 방지
     if (_isLoadingImage) return;
 
@@ -220,6 +234,26 @@ class _NoteListItemState extends State<NoteListItem> {
           strokeWidth: 2.0,
         ),
       );
+    } else if (widget.note.imageUrl != null && widget.note.imageUrl!.startsWith('assets/')) {
+      // assets 이미지 처리
+      return Image.asset(
+        widget.note.imageUrl!,
+        fit: BoxFit.cover,
+        width: 80,
+        height: 80,
+        key: ValueKey(cacheKey),
+        errorBuilder: (context, error, stackTrace) {
+          if (kDebugMode) {
+            debugPrint('assets 이미지 렌더링 오류: $error');
+          }
+          return Image.asset(
+            'assets/images/thumbnail_empty.png',
+            fit: BoxFit.cover,
+            width: 80,
+            height: 80,
+          );
+        },
+      );
     } else if (_imageLoadError || _imageFile == null) {
       // 이미지 URL이 있지만 로드에 실패한 경우나 이미지가 없는 경우 기본 이미지 표시
       return Image.asset(
@@ -239,15 +273,15 @@ class _NoteListItemState extends State<NoteListItem> {
           if (kDebugMode) {
             debugPrint('이미지 렌더링 오류: $error');
           }
-          return Image.asset(
-            'assets/images/thumbnail_empty.png',
+          return Image.asset('assets/images/thumbnail_empty.png',
             fit: BoxFit.cover,
+            width: 80,
+            height: 80,
           );
-              },
-    );
+        },
+      );
+    }
   }
-  }
-  // -----------------------------------------------------
 
   void _showSnackBar(String message) {
     if (!mounted) return;
