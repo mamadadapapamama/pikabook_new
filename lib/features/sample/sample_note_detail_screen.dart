@@ -250,16 +250,26 @@ class _SampleNoteDetailScreenContent extends StatelessWidget {
     final currentPageNum = viewModel.currentPageIndex + 1;
     final totalPages = viewModel.pages?.length ?? 0;
     final bool isSampleNote = viewModel.note.id != null && viewModel.note.id!.startsWith('sample-');
+    final bool isAnimalNote = viewModel.note.id == 'sample-animal-book';
     
     return PikaAppBar.noteDetail(
       title: viewModel.note.originalText,
       currentPage: currentPageNum,
       totalPages: totalPages,
-      flashcardCount: viewModel.flashCards?.length ?? 0,
+      // 동물 노트인 경우 flashcardCount를 0으로 설정
+      flashcardCount: isAnimalNote ? 0 : (viewModel.flashCards?.length ?? 0),
       onMorePressed: () {
         // 샘플 모드에서는 더보기 버튼을 비활성화
       },
       onFlashcardTap: () {
+        // 동물 노트인 경우 메시지 표시 후 반환
+        if (isAnimalNote) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('이 노트에는 플래시카드가 없습니다.')),
+          );
+          return;
+        }
+        
         // 플래시카드 화면으로 이동
         if (viewModel.flashCards != null && viewModel.flashCards!.isNotEmpty) {
           Navigator.push(
@@ -281,7 +291,7 @@ class _SampleNoteDetailScreenContent extends StatelessWidget {
       backgroundColor: UITokens.screenBackground,
       // 샘플 모드 정보 추가
       noteId: isSampleNote ? null : viewModel.note.id,
-      flashcards: isSampleNote ? viewModel.flashCards : null,
+      flashcards: isAnimalNote ? null : (isSampleNote ? viewModel.flashCards : null),
       sampleNoteTitle: isSampleNote ? viewModel.note.translatedText : null,
     );
   }

@@ -24,6 +24,11 @@ class FlashcardCounterBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 동물 테마 샘플 노트인 경우 배지를 표시하지 않음
+    if (noteId == 'sample-animal-book') {
+      return const SizedBox.shrink();
+    }
+    
     // 플래시카드 개수에 따라 스타일 조정
     final bool hasFlashcards = count > 0;
     

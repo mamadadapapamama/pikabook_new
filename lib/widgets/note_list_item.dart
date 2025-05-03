@@ -457,7 +457,6 @@ class _NoteListItemState extends State<NoteListItem> {
                           noteId: widget.note.id != null && !widget.note.id!.startsWith('sample-') 
                               ? widget.note.id 
                               : null,
-                          // 샘플 노트인 경우 샘플 데이터 전달
                           flashcards: widget.note.id != null && widget.note.id!.startsWith('sample-') 
                               ? widget.note.flashCards 
                               : null,
@@ -468,7 +467,8 @@ class _NoteListItemState extends State<NoteListItem> {
                     ],
                   ),
                 ),
-                // 즐겨찾기 아이콘
+                // 즐겨찾기 아이콘 - 샘플 노트가 아닌 경우에만 표시
+                if (widget.note.id == null || !widget.note.id!.startsWith("sample-"))
                 GestureDetector(
                   onTap: () {
                     widget.onFavoriteToggled(

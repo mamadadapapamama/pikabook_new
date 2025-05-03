@@ -5,6 +5,7 @@ import 'package:flip_card/flip_card.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/models/flash_card.dart';
 import '../../core/widgets/tts_button.dart';
+import '../../core/services/media/tts_service.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
@@ -28,13 +29,50 @@ class SampleFlashCardScreen extends StatefulWidget {
 class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
   final CardSwiperController _cardController = CardSwiperController();
   final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
+  final TtsService _ttsService = TtsService();
 
   int _currentIndex = 0;
   bool _isFlipped = false;
-  bool _isSpeaking = false; // TTS 상태 표시용 (실제 기능은 없음)
+  bool _isSpeaking = false;
+  bool _ttsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initTts();
+  }
+
+  // TTS 초기화
+  Future<void> _initTts() async {
+    try {
+      await _ttsService.init();
+      
+      // TTS 완료 리스너 설정
+      _ttsService.setOnPlayingCompleted(() {
+        if (mounted && _isSpeaking) {
+          setState(() {
+            _isSpeaking = false;
+          });
+        }
+      });
+      
+      // 사용 가능 여부 확인
+      final isAvailable = await _ttsService.isTtsAvailable();
+      if (mounted) {
+        setState(() {
+          _ttsEnabled = isAvailable;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('TTS 초기화 오류: $e');
+      }
+    }
+  }
 
   @override
   void dispose() {
+    _ttsService.dispose();
     _cardController.dispose();
     super.dispose();
   }
@@ -45,20 +83,55 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
     setState(() => _isFlipped = !_isFlipped);
   }
 
-  // TTS 재생 시뮬레이션
-  void _simulateSpeakText() {
+  // TTS 재생
+  Future<void> _speakText(String text) async {
+    if (_isSpeaking) {
+      await _stopSpeaking();
+      return;
+    }
+
+    if (!_ttsEnabled) return;
+
     setState(() {
       _isSpeaking = true;
     });
-    
-    // 2초 후 자동으로 종료
-    Future.delayed(const Duration(seconds: 2), () {
+
+    try {
+      // 중국어로 설정
+      await _ttsService.setLanguage('zh-CN');
+      await _ttsService.speak(text);
+    } catch (e) {
+      if (kDebugMode) {
+        print('TTS 실행 오류: $e');
+      }
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('음성 재생 중 오류가 발생했습니다: $e')),
+        );
+      }
+    }
+  }
+
+  // TTS 중지
+  Future<void> _stopSpeaking() async {
+    if (!_isSpeaking) return;
+
+    try {
+      await _ttsService.stop();
+    } catch (e) {
+      if (kDebugMode) {
+        print('TTS 중지 오류: $e');
+      }
+    } finally {
       if (mounted) {
         setState(() {
           _isSpeaking = false;
         });
       }
-    });
+    }
   }
 
   // 다음 카드 정보 가져오기
@@ -192,6 +265,23 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
                 ),
               ),
             ),
+            
+          // 삭제 안내 텍스트 (상단)
+          Positioned(
+            top: SpacingTokens.md,
+            left: 0,
+            right: 0,
+            child: Material(
+              color: ColorTokens.surface.withOpacity(0),
+              child: Text(
+                '실제 플래시카드는 위로 스와이프해서 삭제 가능합니다',
+                style: TypographyTokens.caption.copyWith(
+                  color: ColorTokens.disabled,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -271,11 +361,11 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
             TtsButton(
               text: text, // 실제 텍스트 전달
               size: TtsButton.sizeMedium,
-              tooltip: '샘플 모드에서는 TTS 기능을 사용할 수 없습니다.',
+              tooltip: !_ttsEnabled ? '샘플 모드에서는 TTS 사용이 제한될 수 있습니다.' : null,
               iconColor: ColorTokens.secondary,
               activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
-              onPlayStart: _simulateSpeakText,
-              onPlayEnd: () => setState(() => _isSpeaking = false),
+              onPlayStart: () => _speakText(text),
+              onPlayEnd: _stopSpeaking,
             ),
             SizedBox(height: SpacingTokens.sm),
             
@@ -320,11 +410,11 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
             TtsButton(
               text: original, // 원문 텍스트 전달
               size: TtsButton.sizeMedium,
-              tooltip: '샘플 모드에서는 TTS 기능을 사용할 수 없습니다.',
+              tooltip: !_ttsEnabled ? '샘플 모드에서는 TTS 사용이 제한될 수 있습니다.' : null,
               iconColor: ColorTokens.secondary,
               activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
-              onPlayStart: _simulateSpeakText,
-              onPlayEnd: () => setState(() => _isSpeaking = false),
+              onPlayStart: () => _speakText(original),
+              onPlayEnd: _stopSpeaking,
             ),
             SizedBox(height: SpacingTokens.sm),
             

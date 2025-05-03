@@ -29,7 +29,8 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool automaticallyImplyLeading;
   final double bottomHeight;
   
-  // 플래시카드 카운터 관련 속성
+  // 플래시카드 카운터 - noteId가 sample-animal-book이 아닌 경우에만 표시
+        
   final int? flashcardCount;
   final String? noteId;
   final VoidCallback? onFlashCardPressed;
@@ -142,7 +143,8 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       showLogo: false,  // 로고를 표시하지 않음
       centerTitle: false,  // 타이틀을 왼쪽 정렬
       actions: [
-        // 플래시카드 카운터
+        // 플래시카드 카운터 - noteId가 sample-animal-book이 아닌 경우에만 표시
+        if (noteId != "sample-animal-book")
         GestureDetector(
           onTap: onFlashcardTap,
           child: Padding(
