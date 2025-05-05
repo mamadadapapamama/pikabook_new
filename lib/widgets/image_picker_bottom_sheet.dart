@@ -367,34 +367,117 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           _isProcessing = false;
         });
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('iOS 시뮬레이터에서는 카메라 기능을 사용할 수 없습니다. 실제 기기에서 테스트해주세요.'),
-            duration: Duration(seconds: 4),
-          ),
+        // 시뮬레이터용 얼럿 표시 (스낵바 대신 얼럿 사용)
+        _showSingleAlert(
+          '카메라 사용 불가',
+          'iOS 시뮬레이터에서는 카메라 기능을 사용할 수 없습니다. 실제 기기에서 테스트해주세요.'
         );
       }
       return;
     }
     
-    // 작업 시작 - 카메라 준비 중임을 사용자에게 알립니다
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('카메라를 준비하는 중...'),
-          duration: Duration(seconds: 1),
-        ),
-      );
+    // iOS 18.4 버전 확인 (카메라 문제가 있는 버전)
+    bool isIOS184OrLater = false;
+    if (Platform.isIOS) {
+      try {
+        final String platformVersion = Platform.operatingSystemVersion;
+        if (kDebugMode) {
+          print('iOS 버전: $platformVersion');
+        }
+        
+        // 버전 체크 (18.4 이상 확인)
+        if (platformVersion.contains('18.4') || 
+            platformVersion.contains('18.5') || 
+            platformVersion.contains('18.6') || 
+            platformVersion.contains('19.')) {
+          isIOS184OrLater = true;
+          if (kDebugMode) {
+            print('iOS 18.4 이상 버전 감지됨: $platformVersion');
+          }
+        }
+      } catch (e) {
+        // 버전 확인 실패 시 기본값
+        isIOS184OrLater = false;
+      }
     }
     
+    // iOS 18.4 이상에서 카메라 사용 시 사전 경고
+    if (isIOS184OrLater && mounted) {
+      // 카메라 시도 전에 상태 초기화
+      setState(() {
+        _isProcessing = false;
+      });
+      
+      // 경고 대화상자 표시
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('안내'),
+            content: const Text(
+              'iOS 18.4 버전에서는 카메라 접근에 문제가 있을 수 있습니다. '
+              '오류가 발생할 경우, 갤러리에서 이미지를 선택하는 방법을 이용해주세요.'
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('취소'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(true); // 계속 진행
+                },
+                child: const Text('계속 진행'),
+              ),
+            ],
+          );
+        },
+      ).then((continueCamera) {
+        if (continueCamera == true) {
+          // 계속 진행 선택 시 다시 처리 상태 활성화하고 실제 카메라 실행
+          if (mounted) {
+            setState(() {
+              _isProcessing = true;
+            });
+            _executeCameraPickerWithErrorHandling();
+          }
+        }
+      });
+      
+      return; // 대화상자에서 처리되므로 여기서 종료
+    } else {
+      // iOS 18.4가 아니거나 다른 플랫폼인 경우 바로 실행
+      await _executeCameraPickerWithErrorHandling();
+    }
+  }
+  
+  // 카메라 실행 및 오류 처리를 담당하는 별도 메서드 (중복 코드 방지)
+  Future<void> _executeCameraPickerWithErrorHandling() async {
+    if (!mounted) {
+      _isProcessing = false;
+      return;
+    }
+    
+    // 작업 시작 - 카메라 준비 중임을 사용자에게 알립니다
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('카메라를 준비하는 중...'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+    
     File? imageFile;
+    String? errorMessage;
     
     try {
       if (kDebugMode) {
         print('이미지 선택 시작: ImageSource.camera');
       }
       
-      // iOS 18 이상에서 최적화된 접근 방식 시도
+      // iOS에서 권장되는 최신 방식으로 먼저 시도
       if (Platform.isIOS) {
         try {
           final XFile? photo = await _picker.pickImage(
@@ -402,7 +485,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             requestFullMetadata: false,
             maxWidth: 1920,
             maxHeight: 1080,
-            imageQuality: 80, // 품질 조정으로 처리 부담 감소
+            imageQuality: 80,
           );
           
           if (photo != null) {
@@ -416,189 +499,183 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           if (kDebugMode) {
             print('iOS 카메라 접근 중 오류 발생: $e');
           }
+          errorMessage = '카메라 접근 중 오류가 발생했습니다.';
         }
       } else {
-        // 기존 코드 흐름 - 먼저 ImageService의 pickImage 메서드를 사용
+        // 안드로이드나 다른 플랫폼용 기본 방식
         imageFile = await _imageService.pickImage(source: ImageSource.camera);
       }
       
-      // 첫 번째 방법 실패 시 다른 방법 시도
-      if (imageFile == null) {
+      // 이전 방법이 실패했고 아직 오류 메시지가 없는 경우 다른 방법 시도
+      if (imageFile == null && errorMessage == null) {
         if (kDebugMode) {
-          print('ImageService.pickImage 실패, 직접 ImagePicker 시도');
+          print('첫 번째 방법 실패, 대체 방법 시도');
         }
         
         try {
-          // iOS 18에 최적화된 설정으로 시도
+          // 다른 설정으로 시도
           final XFile? photo = await _picker.pickImage(
             source: ImageSource.camera,
             requestFullMetadata: false,
-            maxWidth: 1920,
-            maxHeight: 1080,
+            maxWidth: 1280,  // 해상도 낮춤
+            maxHeight: 720,
           );
           
-          // 사진 촬영이 취소되었거나 이미지가 없는 경우
-          if (photo == null) {
+          if (photo != null) {
+            imageFile = File(photo.path);
+          } else {
             if (kDebugMode) {
-              print('사진 촬영이 취소되었습니다.');
+              print('카메라 선택이 취소되었습니다.');
             }
-            // 처리 중 상태 초기화
+            // 명시적인 취소는 오류가 아님
             if (mounted) {
               setState(() {
                 _isProcessing = false;
               });
-              
-              // iOS 18.4 버전에서는 더 구체적인 오류 메시지 표시
-              if (Platform.isIOS) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('iOS 18.4에서는 카메라 접근 권한이 필요합니다. 앱 설정에서 권한을 확인해주세요.'),
-                    duration: Duration(seconds: 4),
-                  ),
-                );
-              }
+              return;
             }
-            return;
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('두 번째 시도 중 오류: $e');
+          }
+          errorMessage = '카메라를 열 수 없습니다.';
+        }
+      }
+      
+      // 이미지 파일을 얻었으면 성공
+      if (imageFile != null) {
+        // 이미지를 선택한 후에 바텀시트를 닫습니다
+        if (mounted) {
+          // 루트 컨텍스트 가져오기
+          final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
+          
+          // 바텀 시트 닫기
+          if (Navigator.canPop(context)) {
+            Navigator.of(context).pop();
+            
+            // 안정성을 위해 약간의 딜레이 추가 
+            await Future.delayed(const Duration(milliseconds: 50));
           }
           
-          imageFile = File(photo.path);
-        } catch (e) {
-          if (kDebugMode) {
-            print('직접 ImagePicker 사용 중 오류: $e');
+          // 로딩 화면 표시
+          if (rootContext.mounted) {
+            await NoteCreationLoader.show(
+              rootContext, 
+              message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
+            );
           }
-        }
-      }
-      
-      // 마지막 대안으로 대체 메서드 시도
-      if (imageFile == null) {
-        if (kDebugMode) {
-          print('표준 방법 실패, 대체 메서드 시도');
-        }
-        
-        try {
-          imageFile = await _imageService.pickImageAlternative(source: ImageSource.camera);
-        } catch (e) {
-          if (kDebugMode) {
-            print('대체 메서드 중 오류: $e');
-          }
-        }
-        
-        // 대체 메서드도 null을 반환했다면 처리 중 상태 초기화
-        if (imageFile == null && mounted) {
-          setState(() {
-            _isProcessing = false;
+          
+          // 메인 UI 스레드에서 작업을 분리하기 위해 마이크로태스크 큐에 작업 예약
+          Future.microtask(() async {
+            try {
+              // 이미지가 유효한 경우 노트 생성 시작
+              await _noteCreationWorkflow.createNoteWithImages(
+                rootContext, 
+                [imageFile!], // null이 아님을 확신하므로 !로 강제 변환
+                closeBottomSheet: false,
+                showLoadingDialog: false
+              );
+            } catch (e) {
+              if (kDebugMode) {
+                print('이미지 처리 중 오류: $e');
+              }
+              
+              // 오류 발생 시 로딩 화면 닫기
+              if (rootContext.mounted) {
+                NoteCreationLoader.hide(rootContext);
+                
+                // 사용자에게 오류 알림
+                _showSingleAlert(
+                  '처리 오류',
+                  kDebugMode 
+                    ? '노트 생성 중 오류가 발생했습니다: $e' 
+                    : '노트 생성 중 오류가 발생했습니다. 다시 시도해주세요.',
+                  context: rootContext
+                );
+              }
+            } finally {
+              // 처리 완료 후 상태 초기화
+              _isProcessing = false;
+            }
           });
-          return;
+        } else {
+          _isProcessing = false;
         }
-      }
-      
-      // 여전히 실패한 경우 종료
-      if (imageFile == null) {
-        if (kDebugMode) {
-          print('모든 카메라 시도 실패');
-        }
+      } 
+      // 이미지 파일을 얻지 못했고 오류 메시지가 있는 경우
+      else if (errorMessage != null) {
         if (mounted) {
           setState(() {
             _isProcessing = false;
           });
           
-          // iOS 18.4 버전에 맞춘 구체적인 오류 메시지
-          if (Platform.isIOS) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('iOS 18.4에서 카메라를 열 수 없습니다. 설정 앱에서 카메라 권한을 확인하거나 갤러리에서 이미지를 선택해주세요.'),
-                duration: Duration(seconds: 5),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('카메라를 열 수 없습니다. 기기 설정에서 카메라 접근 권한을 확인해주세요.'),
-                duration: Duration(seconds: 4),
-              ),
-            );
-          }
+          // iOS 18.4 버전에 맞는 메시지
+          final String message = Platform.isIOS 
+            ? 'iOS 18.4 버전에서는 카메라 접근에 제한이 있을 수 있습니다. 갤러리에서 이미지를 선택해주세요.'
+            : '카메라를 열 수 없습니다. 갤러리에서 이미지를 선택해주세요.';
+          
+          _showSingleAlert('카메라 사용 불가', message);
+        } else {
+          _isProcessing = false;
         }
-        return;
+      } 
+      // 이미지 파일도 없고 오류 메시지도 없는 경우 (사용자가 취소한 경우)
+      else {
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+          });
+        } else {
+          _isProcessing = false;
+        }
       }
     } catch (e) {
       if (kDebugMode) {
-        print('Error taking photo: $e');
+        print('카메라 처리 중 예상치 못한 오류: $e');
       }
+      
       if (mounted) {
-        // 처리 중 상태 초기화
         setState(() {
           _isProcessing = false;
         });
         
-        // 에러 메시지가 중복으로 표시되지 않도록 SnackBar 관리
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(kDebugMode 
-              ? '카메라 촬영 중 오류: ${e.toString().substring(0, min(e.toString().length, 100))}' 
-              : '카메라를 사용할 수 없습니다. 다시 시도해주세요.'),
-            duration: const Duration(seconds: 4),
-          ),
+        _showSingleAlert(
+          '카메라 오류',
+          kDebugMode 
+            ? '카메라 사용 중 오류가 발생했습니다: ${e.toString().substring(0, min(e.toString().length, 100))}' 
+            : '카메라를 사용할 수 없습니다. 갤러리에서 이미지를 선택해주세요.'
         );
+      } else {
+        _isProcessing = false;
       }
-      return;
     }
+  }
+  
+  // 한 번만 표시되는 얼럿 메시지 (중복 방지)
+  void _showSingleAlert(String title, String message, {BuildContext? context}) {
+    final ctx = context ?? this.context;
     
-    // 이미지를 선택한 후에 바텀시트를 닫습니다 (강력한 방식 적용)
-    if (mounted) {
-      // 루트 컨텍스트 가져오기
-      final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
-      
-      // 바텀 시트 닫기 (물리적 뒤로가기 제스처 동작과 동일하게)
-      if (Navigator.canPop(context)) {
-        Navigator.of(context).pop();
-        
-        // 안정성을 위해 약간의 딜레이 추가 
-        await Future.delayed(const Duration(milliseconds: 50));
-      }
-      
-      // 로딩 화면 표시
-      if (rootContext.mounted) {
-        await NoteCreationLoader.show(
-          rootContext, 
-          message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
-        );
-      }
-      
-      // 메인 UI 스레드에서 작업을 분리하기 위해 마이크로태스크 큐에 작업 예약
-      Future.microtask(() async {
-        try {
-          // 이미지가 유효한 경우 노트 생성 시작
-          // 이미 로딩 화면이 표시되었으므로 showLoadingDialog=false
-          await _noteCreationWorkflow.createNoteWithImages(
-            rootContext, 
-            [imageFile!],
-            closeBottomSheet: false, // 이미 바텀시트를 닫았으므로 false로 설정
-            showLoadingDialog: false  // 이미 로딩 화면이 표시되었으므로 false로 설정
-          );
-        } catch (e) {
-          if (kDebugMode) {
-            print('이미지 처리 중 오류: $e');
-          }
-          
-          // 오류 발생 시 로딩 화면 닫기
-          if (rootContext.mounted) {
-            NoteCreationLoader.hide(rootContext);
-            
-            // 사용자에게 오류 알림
-            ScaffoldMessenger.of(rootContext).showSnackBar(
-              SnackBar(content: Text(kDebugMode ? '노트 생성 중 오류가 발생했습니다: $e' : '노트 생성 중 오류가 발생했습니다. 다시 시도해주세요.')),
-            );
-          }
-        } finally {
-          // 처리 완료 후 상태 초기화 (추가)
-          _isProcessing = false;
-        }
-      });
-    } else {
-      // mounted가 false인 경우 (드문 경우지만 안전장치)
-      _isProcessing = false;
-    }
+    // 이미 표시된 메시지 닫기
+    Navigator.of(ctx, rootNavigator: true).popUntil((route) {
+      return route.isFirst || !(route is DialogRoute);
+    });
+    
+    // 새 얼럿 표시
+    showDialog(
+      context: ctx,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
   }
 } 
