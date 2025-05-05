@@ -21,8 +21,6 @@ class NoteDetailBottomBar extends StatefulWidget {
   final int currentPageIndex;
   final int totalPages;
   final Function(int) onPageChanged;
-  final VoidCallback onToggleFullTextMode;
-  final bool isFullTextMode;
   final ContentManager contentManager;
   final TextReaderService textReaderService;
   final bool isProcessing; // 현재 페이지가 처리 중인지 여부
@@ -37,8 +35,6 @@ class NoteDetailBottomBar extends StatefulWidget {
     required this.currentPageIndex,
     required this.totalPages,
     required this.onPageChanged,
-    required this.onToggleFullTextMode,
-    required this.isFullTextMode,
     required this.contentManager,
     required this.textReaderService,
     this.isProcessing = false, // 기본값은 false (처리 중이 아님)
@@ -188,7 +184,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     
     // 디버그 정보 출력을 kDebugMode 상태에서만 실행
     if (kDebugMode) {
-      debugPrint('NoteDetailBottomBar - 현재 모드: ${widget.isFullTextMode}, 세그먼트: ${hasSegments ? "있음" : "없음"}');
+      debugPrint('NoteDetailBottomBar - 세그먼트: ${hasSegments ? "있음" : "없음"}');
     }
     
     // 현재 페이지 진행률 계산 (0.0 ~ 1.0 사이 값)
@@ -261,44 +257,49 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // 모드 전환 버튼
-                          GestureDetector(
-                            onTap: () => _toggleDisplayMode(),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8, 
-                                vertical: 2
-                              ),
-                              decoration: BoxDecoration(
-                                color: ColorTokens.surface,
-                                borderRadius: BorderRadius.circular(100),
-                                border: Border.all(color: ColorTokens.secondary),
-                              ),
-                              child: Text(
-                                widget.isFullTextMode ? '문장별 보기' : '원문 전체 보기',
-                                style: TypographyTokens.caption.copyWith(
-                                  color: ColorTokens.secondary,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                          
-                          // 간격 추가
-                          const SizedBox(width: 4),
-                          
                           // TTS 버튼
                           if (widget.currentPage != null && !widget.isMinimalUI)
-                            SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: TtsButton(
-                                text: widget.currentPage?.translatedText ?? widget.currentPage?.originalText ?? '',
-                                size: TtsButton.sizeSmall,
-                                useCircularShape: false,
-                                iconColor: ColorTokens.secondary,
-                                activeBackgroundColor: ColorTokens.secondaryLight,
-                                onPlayStart: widget.onTtsPlay,
+                            GestureDetector(
+                              onTap: () {
+                                if (widget.onTtsPlay != null) {
+                                  widget.onTtsPlay!();
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, 
+                                  vertical: 3
+                                ),
+                                decoration: BoxDecoration(
+                                  color: ColorTokens.surface,
+                                  borderRadius: BorderRadius.circular(100),
+                                  border: Border.all(color: ColorTokens.secondary),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: TtsButton(
+                                        text: widget.currentPage?.translatedText ?? widget.currentPage?.originalText ?? '',
+                                        size: TtsButton.sizeSmall,
+                                        useCircularShape: false,
+                                        iconColor: ColorTokens.secondary,
+                                        activeBackgroundColor: ColorTokens.secondaryLight,
+                                        onPlayStart: widget.onTtsPlay,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '본문 전체 듣기',
+                                      style: TypographyTokens.caption.copyWith(
+                                        color: ColorTokens.secondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                         ],
@@ -391,20 +392,5 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
         ),
       ),
     );
-  }
-  
-  // 텍스트 표시 모드 토글 - 비동기 작업을 UI 블로킹 없이 처리
-  void _toggleDisplayMode() async {
-    try {
-      // 콘텐트 매니저를 통해 페이지 표시 모드 토글
-      if (widget.currentPage?.id != null) {
-        await widget.contentManager.toggleDisplayModeForPage(widget.currentPage!.id!);
-        _fetchProcessedTextSafely(); // 변경된 ProcessedText 다시 로드
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('디스플레이 모드 토글 중 오류: $e');
-      }
-    }
   }
 } 
