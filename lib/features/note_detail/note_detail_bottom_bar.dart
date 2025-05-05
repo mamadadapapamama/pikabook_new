@@ -261,7 +261,13 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                           if (widget.currentPage != null && !widget.isMinimalUI)
                             GestureDetector(
                               onTap: () {
-                                if (widget.onTtsPlay != null) {
+                                // 현재 재생 상태 확인 (모든 종류의 재생에 적용)
+                                final isPlaying = _ttsService.state == TtsState.playing;
+                                if (isPlaying) {
+                                  // 현재 재생 중이면 정지
+                                  _ttsService.stop();
+                                } else if (widget.onTtsPlay != null) {
+                                  // 정지 상태면 재생
                                   widget.onTtsPlay!();
                                 }
                               },
@@ -288,6 +294,10 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                                         iconColor: ColorTokens.secondary,
                                         activeBackgroundColor: ColorTokens.secondaryLight,
                                         onPlayStart: widget.onTtsPlay,
+                                        onPlayEnd: () {
+                                          // 모든 종류의 재생 종료 처리
+                                          _ttsService.stop();
+                                        },
                                       ),
                                     ),
                                     const SizedBox(width: 4),

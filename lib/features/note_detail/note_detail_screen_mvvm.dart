@@ -14,6 +14,7 @@ import '../../core/utils/note_tutorial.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
+import '../../core/services/media/tts_service.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatefulWidget {
@@ -421,17 +422,23 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         // 네비게이션 버튼 클릭 시 PageController를 사용하여 페이지 이동
         viewModel.navigateToPage(index);
       },
-      onToggleFullTextMode: viewModel.toggleFullTextMode,
-      isFullTextMode: viewModel.isFullTextMode,
       contentManager: viewModel.getContentManager(),
       textReaderService: TextReaderService(),
       isProcessing: false,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.totalImageCount > 0 ? viewModel.totalImageCount : (viewModel.pages?.length ?? 1)),
       onTtsPlay: () {
         if (kDebugMode) {
-          print("TTS 재생 시작");
+          print("TTS 재생/정지 토글");
         }
-        viewModel.speakCurrentPageText();
+        // TtsService에서 현재 상태 확인
+        final ttsService = viewModel.getContentManager().ttsService;
+        // 재생 중이면 정지, 정지 상태면 재생
+        final currentState = ttsService.state.toString();
+        if (currentState.contains('playing')) {
+          viewModel.stopTts();
+        } else {
+          viewModel.speakCurrentPageText();
+        }
       },
       isMinimalUI: false,
       processedPages: viewModel.getProcessedPagesStatus(),

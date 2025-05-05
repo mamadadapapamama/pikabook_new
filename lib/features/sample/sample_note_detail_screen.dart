@@ -39,9 +39,6 @@ class SampleNoteDetailViewModel extends ChangeNotifier {
   pika_page.Page? get currentPage => 
       (_pages != null && _pages!.isNotEmpty) ? _pages![_currentPageIndex] : null;
   
-  bool _isFullTextMode = false;
-  bool get isFullTextMode => _isFullTextMode;
-  
   final PageController _pageController = PageController();
   PageController get pageController => _pageController;
   
@@ -144,12 +141,6 @@ class SampleNoteDetailViewModel extends ChangeNotifier {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
     );
-  }
-  
-  // 전체 텍스트 모드 토글
-  void toggleFullTextMode() {
-    _isFullTextMode = !_isFullTextMode;
-    notifyListeners();
   }
   
   // ViewModel에서 ContentManager 대신 사용할 수 있는 메서드
@@ -374,7 +365,7 @@ class _SampleNoteDetailScreenContent extends StatelessWidget {
             onCreateFlashCard: (front, back, {pinyin}) => 
                 _handleLoginRequired(context),
             flashCards: viewModel.flashCards,
-            useSegmentMode: !viewModel.isFullTextMode,
+            useSegmentMode: true,
             onDeleteSegment: (segmentIndex) => _handleLoginRequired(context),
           );
         },
@@ -395,15 +386,14 @@ class _SampleNoteDetailScreenContent extends StatelessWidget {
       onPageChanged: (index) {
         viewModel.navigateToPage(index);
       },
-      onToggleFullTextMode: () {
-        viewModel.toggleFullTextMode();
-      },
-      isFullTextMode: viewModel.isFullTextMode,
       contentManager: viewModel.getContentManager(),
       textReaderService: TextReaderService(),
       isProcessing: false,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),
-      onTtsPlay: () => _showLoginRequiredDialog(context),
+      onTtsPlay: () {
+        // 샘플 모드에서는 로그인 요구 다이얼로그 표시
+        _showLoginRequiredDialog(context);
+      },
       isMinimalUI: false,
       processedPages: viewModel.getProcessedPagesStatus(),
     );
