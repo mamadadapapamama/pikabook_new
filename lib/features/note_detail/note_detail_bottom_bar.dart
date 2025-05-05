@@ -12,6 +12,7 @@ import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/widgets/tts_button.dart';
 import 'managers/content_manager.dart';
+import 'dart:async';
 
 /// 노트 상세 화면 하단 내비게이션 바
 /// 페이지 탐색, 텍스트 표시 모드 토글, 모드 전환, 진행률 바 제공
@@ -55,12 +56,26 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   
   ProcessedText? processedText;
   bool _isLoadingText = false; // 로딩 상태 추적 변수 추가
+  bool _isTtsPlaying = false; // TTS 재생 상태 추적 변수 추가
+  Timer? _ttsStateCheckTimer; // TTS 상태 확인 타이머
   
   @override
   void initState() {
     super.initState();
     // 초기화 중에는 Future 시작만 하고 즉시 리턴 (non-blocking)
     _fetchProcessedTextSafely();
+    
+    // TTS 상태 변경 리스너 설정
+    _setupTtsListener();
+    
+    // 현재 TTS 상태 확인
+    _checkTtsState();
+    
+    // 주기적으로 TTS 상태 확인 (백업 메커니즘)
+    _ttsStateCheckTimer = Timer.periodic(
+      const Duration(milliseconds: 500), 
+      (_) => _checkTtsState()
+    );
   }
   
   @override
@@ -253,33 +268,53 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                         ),
                       ),
                       
-                      // 중앙 - 원문 전체보기 버튼과 TTS 버튼을 한 프레임에 넣기
+                      // 중앙 -  TTS 버튼을 한 프레임에 넣기
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           // TTS 버튼
                           if (widget.currentPage != null && !widget.isMinimalUI)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10, 
-                                vertical: 3
-                              ),
-                              decoration: BoxDecoration(
-                                color: ColorTokens.surface,
-                                borderRadius: BorderRadius.circular(100),
-                                border: Border.all(color: ColorTokens.secondary),
-                              ),
+                            GestureDetector(
+                              onTap: () {
+                                // 현재 상태 토글 및 UI 즉시 업데이트
+                                setState(() {
+                                  _isTtsPlaying = !_isTtsPlaying;
+                                });
+                                
+                                if (_isTtsPlaying) {
+                                  // 재생 시작
+                                  if (widget.onTtsPlay != null) {
+                                    if (kDebugMode) {
+                                      print("본문 전체 듣기 시작");
+                                    }
+                                    widget.onTtsPlay!();
+                                  }
+                                } else {
+                                  // 재생 중지
+                                  if (kDebugMode) {
+                                    print("본문 전체 듣기 중지");
+                                  }
+                                  _ttsService.stop();
+                                }
+                              },
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  TtsButton(
-                                    text: widget.currentPage?.originalText ?? '',
-                                    size: TtsButton.sizeSmall,
-                                    useCircularShape: false,
-                                    iconColor: ColorTokens.secondary,
-                                    activeBackgroundColor: ColorTokens.secondaryLight,
-                                    onPlayStart: widget.onTtsPlay,
-                                    onPlayEnd: null, // TtsButton이 자체적으로 상태 관리
+                                  // 상태에 따라 아이콘 직접 변경 (더 명확한 시각적 피드백)
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: _isTtsPlaying 
+                                          ? ColorTokens.secondaryLight 
+                                          : Colors.transparent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      _isTtsPlaying ? Icons.stop : Icons.volume_up,
+                                      color: ColorTokens.secondary,
+                                      size: 14,
+                                    ),
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
@@ -382,5 +417,59 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
         ),
       ),
     );
+  }
+
+  // TTS 상태 변경 리스너 설정
+  void _setupTtsListener() {
+    // 재생 상태 변경 리스너
+    _ttsService.setOnPlayingStateChanged((segmentIndex) {
+      if (mounted) {
+        // 상태가 변경될 때마다 UI 업데이트 및 디버그 로그 출력
+        if (kDebugMode) {
+          print("TTS 상태 변경: currentSegmentIndex=$segmentIndex, state=${_ttsService.state}");
+        }
+        setState(() {
+          _isTtsPlaying = _ttsService.state == TtsState.playing;
+        });
+      }
+    });
+    
+    // 재생 완료 리스너
+    _ttsService.setOnPlayingCompleted(() {
+      if (mounted) {
+        // 재생이 완료되면 UI 업데이트 및 디버그 로그 출력
+        if (kDebugMode) {
+          print("TTS 재생 완료 콜백: state=${_ttsService.state}");
+        }
+        setState(() {
+          _isTtsPlaying = false;
+        });
+      }
+    });
+  }
+
+  // TTS 상태 확인 및 UI 업데이트
+  void _checkTtsState() {
+    final isPlaying = _ttsService.state == TtsState.playing;
+    if (_isTtsPlaying != isPlaying) {
+      if (kDebugMode) {
+        print("타이머에 의한 TTS 상태 업데이트: $_isTtsPlaying -> $isPlaying");
+      }
+      setState(() {
+        _isTtsPlaying = isPlaying;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    // 위젯이 제거될 때 리스너 정리
+    _ttsService.setOnPlayingStateChanged((_) {});
+    _ttsService.setOnPlayingCompleted(() {});
+    
+    // 타이머 취소
+    _ttsStateCheckTimer?.cancel();
+    
+    super.dispose();
   }
 } 
