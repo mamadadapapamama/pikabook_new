@@ -259,57 +259,37 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                         children: [
                           // TTS 버튼
                           if (widget.currentPage != null && !widget.isMinimalUI)
-                            GestureDetector(
-                              onTap: () {
-                                // 현재 재생 상태 확인 (모든 종류의 재생에 적용)
-                                final isPlaying = _ttsService.state == TtsState.playing;
-                                if (isPlaying) {
-                                  // 현재 재생 중이면 정지
-                                  _ttsService.stop();
-                                } else if (widget.onTtsPlay != null) {
-                                  // 정지 상태면 재생
-                                  widget.onTtsPlay!();
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, 
-                                  vertical: 3
-                                ),
-                                decoration: BoxDecoration(
-                                  color: ColorTokens.surface,
-                                  borderRadius: BorderRadius.circular(100),
-                                  border: Border.all(color: ColorTokens.secondary),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: TtsButton(
-                                        text: widget.currentPage?.translatedText ?? widget.currentPage?.originalText ?? '',
-                                        size: TtsButton.sizeSmall,
-                                        useCircularShape: false,
-                                        iconColor: ColorTokens.secondary,
-                                        activeBackgroundColor: ColorTokens.secondaryLight,
-                                        onPlayStart: widget.onTtsPlay,
-                                        onPlayEnd: () {
-                                          // 모든 종류의 재생 종료 처리
-                                          _ttsService.stop();
-                                        },
-                                      ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10, 
+                                vertical: 3
+                              ),
+                              decoration: BoxDecoration(
+                                color: ColorTokens.surface,
+                                borderRadius: BorderRadius.circular(100),
+                                border: Border.all(color: ColorTokens.secondary),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TtsButton(
+                                    text: widget.currentPage?.originalText ?? '',
+                                    size: TtsButton.sizeSmall,
+                                    useCircularShape: false,
+                                    iconColor: ColorTokens.secondary,
+                                    activeBackgroundColor: ColorTokens.secondaryLight,
+                                    onPlayStart: widget.onTtsPlay,
+                                    onPlayEnd: null, // TtsButton이 자체적으로 상태 관리
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '본문 전체 듣기',
+                                    style: TypographyTokens.caption.copyWith(
+                                      color: ColorTokens.secondary,
+                                      fontSize: 12,
                                     ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '본문 전체 듣기',
-                                      style: TypographyTokens.caption.copyWith(
-                                        color: ColorTokens.secondary,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                         ],
