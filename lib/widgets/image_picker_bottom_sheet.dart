@@ -51,6 +51,17 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     super.dispose();
   }
   
+  // 상태 초기화를 위한 별도 메서드 (일관된 처리를 위함)
+  void _resetProcessingState() {
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+      });
+    } else {
+      _isProcessing = false;
+    }
+  }
+  
   // 사용량 한도 확인
   Future<void> _checkUsageLimits() async {
     // 이미 확인 중이면 중복 호출 방지
@@ -362,102 +373,31 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         print('iOS 시뮬레이터에서는 카메라를 사용할 수 없습니다.');
       }
       
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
-        
-        // 시뮬레이터용 얼럿 표시 (스낵바 대신 얼럿 사용)
-        _showSingleAlert(
-          '카메라 사용 불가',
-          'iOS 시뮬레이터에서는 카메라 기능을 사용할 수 없습니다. 실제 기기에서 테스트해주세요.'
-        );
-      }
+      _resetProcessingState();
+      
+      // 시뮬레이터용 얼럿 표시 (스낵바 대신 얼럿 사용)
+      _showSingleAlert(
+        '카메라 사용 불가',
+        'iOS 시뮬레이터에서는 카메라 기능을 사용할 수 없습니다. 실제 기기에서 테스트해주세요.'
+      );
       return;
     }
     
-    // iOS 18.4 버전 확인 (카메라 문제가 있는 버전)
-    bool isIOS184OrLater = false;
-    if (Platform.isIOS) {
-      try {
-        final String platformVersion = Platform.operatingSystemVersion;
-        if (kDebugMode) {
-          print('iOS 버전: $platformVersion');
-        }
-        
-        // 버전 체크 (18.4 이상 확인)
-        if (platformVersion.contains('18.4') || 
-            platformVersion.contains('18.5') || 
-            platformVersion.contains('18.6') || 
-            platformVersion.contains('19.')) {
-          isIOS184OrLater = true;
-          if (kDebugMode) {
-            print('iOS 18.4 이상 버전 감지됨: $platformVersion');
-          }
-        }
-      } catch (e) {
-        // 버전 확인 실패 시 기본값
-        isIOS184OrLater = false;
-      }
-    }
-    
-    // iOS 18.4 이상에서 카메라 사용 시 사전 경고
-    if (isIOS184OrLater && mounted) {
-      // 카메라 시도 전에 상태 초기화
-      setState(() {
-        _isProcessing = false;
-      });
-      
-      // 경고 대화상자 표시
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: const Text('안내'),
-            content: const Text(
-              'iOS 18.4 버전에서는 카메라 접근에 문제가 있을 수 있습니다. '
-              '오류가 발생할 경우, 갤러리에서 이미지를 선택하는 방법을 이용해주세요.'
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-                child: const Text('취소'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(true); // 계속 진행
-                },
-                child: const Text('계속 진행'),
-              ),
-            ],
-          );
-        },
-      ).then((continueCamera) {
-        if (continueCamera == true) {
-          // 계속 진행 선택 시 다시 처리 상태 활성화하고 실제 카메라 실행
-          if (mounted) {
-            setState(() {
-              _isProcessing = true;
-            });
-            _executeCameraPickerWithErrorHandling();
-          }
-        }
-      });
-      
-      return; // 대화상자에서 처리되므로 여기서 종료
-    } else {
-      // iOS 18.4가 아니거나 다른 플랫폼인 경우 바로 실행
+    try {
+      // 카메라 실행
       await _executeCameraPickerWithErrorHandling();
+    } catch (e) {
+      if (kDebugMode) {
+        print('카메라 실행 메인 함수에서 예외 발생: $e');
+      }
+      _resetProcessingState();
     }
   }
   
   // 카메라 실행 및 오류 처리를 담당하는 별도 메서드 (중복 코드 방지)
   Future<void> _executeCameraPickerWithErrorHandling() async {
     if (!mounted) {
-      _isProcessing = false;
+      _resetProcessingState();
       return;
     }
     
@@ -471,6 +411,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     
     File? imageFile;
     String? errorMessage;
+    bool userCancelled = false;
     
     try {
       if (kDebugMode) {
@@ -490,24 +431,69 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           
           if (photo != null) {
             imageFile = File(photo.path);
+            // 성공 시 두 번째 시도가 필요 없음을 표시
+            if (kDebugMode) {
+              print('첫 번째 카메라 시도 성공, 두 번째 시도 건너뜀');
+            }
           } else {
             if (kDebugMode) {
               print('iOS 카메라 선택이 취소되었거나 실패했습니다.');
             }
+            // 사용자가 취소한 것으로 표시
+            userCancelled = true;
           }
         } catch (e) {
           if (kDebugMode) {
             print('iOS 카메라 접근 중 오류 발생: $e');
           }
-          errorMessage = '카메라 접근 중 오류가 발생했습니다.';
+          
+          // 취소로 간주할 수 있는 에러 유형
+          if (e.toString().contains('multiple_request') || 
+              e.toString().contains('Cancelled') ||
+              e.toString().contains('cancelled') ||
+              e.toString().contains('denied') ||
+              e.toString().contains('permission')) {
+            userCancelled = true;
+          } else {
+            errorMessage = '카메라 접근 중 오류가 발생했습니다.';
+          }
         }
       } else {
         // 안드로이드나 다른 플랫폼용 기본 방식
-        imageFile = await _imageService.pickImage(source: ImageSource.camera);
+        try {
+          imageFile = await _imageService.pickImage(source: ImageSource.camera);
+          if (imageFile == null) {
+            // 안드로이드에서 null 반환은 사용자 취소로 간주
+            userCancelled = true;
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('안드로이드 카메라 접근 중 오류: $e');
+          }
+          
+          // 안드로이드에서도 취소 유형 확인
+          if (e.toString().contains('cancelled') || 
+              e.toString().contains('denied') ||
+              e.toString().contains('permission')) {
+            userCancelled = true;
+          } else {
+            errorMessage = '카메라 접근 중 오류가 발생했습니다.';
+          }
+        }
       }
       
-      // 이전 방법이 실패했고 아직 오류 메시지가 없는 경우 다른 방법 시도
-      if (imageFile == null && errorMessage == null) {
+      // 사용자가 취소한 경우 처리
+      if (userCancelled) {
+        if (kDebugMode) {
+          print('사용자가 카메라를 취소했습니다. 상태 초기화');
+        }
+        
+        _resetProcessingState();
+        return;
+      }
+      
+      // 이전 방법이 실패했고 아직 오류 메시지가 없고 사용자가 취소하지 않은 경우만 두 번째 시도
+      if (imageFile == null && errorMessage == null && !userCancelled) {
         if (kDebugMode) {
           print('첫 번째 방법 실패, 대체 방법 시도');
         }
@@ -525,20 +511,30 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             imageFile = File(photo.path);
           } else {
             if (kDebugMode) {
-              print('카메라 선택이 취소되었습니다.');
+              print('두 번째 카메라 시도에서 사용자가 취소했습니다.');
             }
-            // 명시적인 취소는 오류가 아님
-            if (mounted) {
-              setState(() {
-                _isProcessing = false;
-              });
-              return;
-            }
+            // 취소는 오류가 아님
+            _resetProcessingState();
+            return;
           }
         } catch (e) {
           if (kDebugMode) {
             print('두 번째 시도 중 오류: $e');
           }
+          
+          // 취소 관련 오류인지 확인
+          if (e.toString().contains('cancelled') || 
+              e.toString().contains('Cancelled') ||
+              e.toString().contains('multiple_request') ||
+              e.toString().contains('denied') ||
+              e.toString().contains('permission')) {
+            if (kDebugMode) {
+              print('두 번째 시도에서 사용자가 취소했습니다.');
+            }
+            _resetProcessingState();
+            return;
+          }
+          
           errorMessage = '카메라를 열 수 없습니다.';
         }
       }
@@ -596,19 +592,17 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
               }
             } finally {
               // 처리 완료 후 상태 초기화
-              _isProcessing = false;
+              _resetProcessingState();
             }
           });
         } else {
-          _isProcessing = false;
+          _resetProcessingState();
         }
       } 
       // 이미지 파일을 얻지 못했고 오류 메시지가 있는 경우
       else if (errorMessage != null) {
         if (mounted) {
-          setState(() {
-            _isProcessing = false;
-          });
+          _resetProcessingState();
           
           // iOS 18.4 버전에 맞는 메시지
           final String message = Platform.isIOS 
@@ -617,18 +611,12 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           
           _showSingleAlert('카메라 사용 불가', message);
         } else {
-          _isProcessing = false;
+          _resetProcessingState();
         }
       } 
       // 이미지 파일도 없고 오류 메시지도 없는 경우 (사용자가 취소한 경우)
       else {
-        if (mounted) {
-          setState(() {
-            _isProcessing = false;
-          });
-        } else {
-          _isProcessing = false;
-        }
+        _resetProcessingState();
       }
     } catch (e) {
       if (kDebugMode) {
@@ -636,9 +624,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
       
       if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
+        _resetProcessingState();
         
         _showSingleAlert(
           '카메라 오류',
@@ -647,7 +633,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             : '카메라를 사용할 수 없습니다. 갤러리에서 이미지를 선택해주세요.'
         );
       } else {
-        _isProcessing = false;
+        _resetProcessingState();
       }
     }
   }
