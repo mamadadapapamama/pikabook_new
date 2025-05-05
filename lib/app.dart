@@ -293,9 +293,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         setState(() {
           _isLoading = false;
           _error = '인증 상태 변경 리스너 설정 중 오류 발생: $e';
-        });
+          });
+        }
       }
-    }
   }
   
   /// 사용자 로그인 후 처리 로직
@@ -324,9 +324,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 사용자 데이터 로드
       await _preferencesService.setCurrentUserId(_userId!);
       await _preferencesService.loadUserSettingsFromFirestore();
-      
+  
       // 노트 존재 여부 확인 및 온보딩 상태 설정
-      bool hasNotes = await _checkUserHasNotes();      
+      bool hasNotes = await _checkUserHasNotes();
       if (hasNotes) {
         await _preferencesService.setOnboardingCompleted(true);
         _isOnboardingCompleted = true;
@@ -377,7 +377,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       return notesSnapshot.docs.isNotEmpty;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('노트 존재 여부 확인 중 오류: $e');
+      debugPrint('노트 존재 여부 확인 중 오류: $e');
       }
       return false; // 오류 발생 시 기본값으로 false 반환
     }
@@ -468,10 +468,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
     
     // 단일 MaterialApp 반환
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      scrollBehavior: const CustomScrollBehavior(),
+        scrollBehavior: const CustomScrollBehavior(),
       scaffoldMessengerKey: _scaffoldMessengerKey, // ScaffoldMessenger 키 설정
       home: _buildCurrentScreen(), // 상태에 따라 적절한 화면 위젯 반환
     );
@@ -521,12 +521,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
     // MaterialApp 제거, Scaffold 반환
     return Scaffold(
-      body: Center(
+          body: Center(
         child: Text(errorMessage),
-      ),
-    );
-  }
-  
+        ),
+      );
+    }
+    
   // 로딩 화면 빌드
   Widget _buildLoadingScreen() {
     if (kDebugMode) {
@@ -534,8 +534,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
     // MaterialApp 제거, LoadingScreen 직접 반환
     return const LoadingScreen(progress: 0.5, message: '앱을 초기화하는 중입니다...');
-  }
-  
+    }
+    
   // 샘플 모드 화면 빌드
   Widget _buildSampleModeScreen() {
     if (kDebugMode) {
@@ -554,17 +554,17 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
     // MaterialApp 제거, LoginScreen 직접 반환
     return LoginScreen(
-      onLoginSuccess: (user) {
+          onLoginSuccess: (user) {
         if (kDebugMode) {
           debugPrint('로그인 성공 콜백 실행 (상태 변경은 리스너가 처리): 사용자 ID=${user.uid}');
         }
       },
       // 샘플 모드 전환 콜백 전달
       onSkipLogin: _requestSampleModeScreen, 
-      isInitializing: false,
-    );
-  }
-  
+          isInitializing: false,
+      );
+    }
+    
   // 온보딩 화면 빌드
   Widget _buildOnboardingScreen() {
     if (kDebugMode) {
@@ -572,14 +572,14 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
     // MaterialApp 제거, OnboardingScreen 직접 반환
     return OnboardingScreen(
-      onComplete: () async {
-        await _preferencesService.setOnboardingCompleted(true);
-        if (mounted) {
-          setState(() {
-            _isOnboardingCompleted = true;
-          });
-        }
-      },
+          onComplete: () async {
+            await _preferencesService.setOnboardingCompleted(true);
+            if (mounted) {
+              setState(() {
+                _isOnboardingCompleted = true;
+              });
+            }
+          },
     );
   }
   
@@ -617,10 +617,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             ),
           ],
         ),
-      ),
-    );
-  }
-  
+        ),
+      );
+    }
+    
   // 글로벌 에러 시 표시할 대체 UI
   Widget _buildGlobalErrorFallback(Object error) {
     // MaterialApp 제거, Scaffold 반환
@@ -631,9 +631,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-            },
-          ),
+            await FirebaseAuth.instance.signOut();
+          },
+        ),
         ],
       ),
       body: Center(

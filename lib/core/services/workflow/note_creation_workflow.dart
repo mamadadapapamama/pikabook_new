@@ -9,6 +9,7 @@ import '../../../core/widgets/loading_dialog_experience.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../features/note_detail/note_detail_screen_mvvm.dart';
+import '../../../core/utils/note_tutorial.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 
@@ -304,6 +305,9 @@ class NoteCreationWorkflow {
       // 로딩 다이얼로그가 완전히 닫혔는지 한번 더 확인 (안전 장치)
       NoteCreationLoader.ensureHidden(context);
       
+      // 노트 개수 확인 및 업데이트 (튜토리얼 표시 여부 결정)
+      _checkAndUpdateNoteCount(context);
+      
       Navigator.of(context).push(
         NoteDetailScreenMVVM.route(
           note: note,
@@ -345,6 +349,34 @@ class NoteCreationWorkflow {
             ),
           ),
         );
+      }
+    }
+  }
+  
+  /// 노트 개수 확인 및 업데이트 (튜토리얼 표시 여부 결정)
+  Future<void> _checkAndUpdateNoteCount(BuildContext context) async {
+    try {
+      // Firestore에서 현재 노트 개수 가져오기
+      final notesCollection = _firestore.collection('notes');
+      final querySnapshot = await notesCollection.get();
+      final noteCount = querySnapshot.docs.length;
+      
+      if (kDebugMode) {
+        debugPrint('현재 노트 개수: $noteCount');
+      }
+      
+      // NoteTutorial에 노트 개수 업데이트
+      await NoteTutorial.updateNoteCount(noteCount);
+      
+      // 디버그 모드에서 테스트를 위한 튜토리얼 상태 리셋
+      if (kDebugMode && false) { // false로 설정하여 기본적으로 비활성화
+        debugPrint('⚠️ 튜토리얼 상태 리셋 (테스트용)');
+        await NoteTutorial.resetTutorialState();
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('노트 개수 확인 중 오류: $e');
       }
     }
   }

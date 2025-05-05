@@ -10,12 +10,13 @@ import '../../core/widgets/pika_app_bar.dart';
 import '../flashcard/flashcard_screen.dart';
 import 'note_detail_bottom_bar.dart';
 import '../../core/services/text_processing/text_reader_service.dart';
+import '../../core/utils/note_tutorial.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
 
-/// MVVM 패턴을 적용한 노트 상세 화면
-class NoteDetailScreenMVVM extends StatelessWidget {
+/// MVVM 패턴을 적용한 노트 상세 화면 (StatefulWidget으로 변경)
+class NoteDetailScreenMVVM extends StatefulWidget {
   final String noteId;
   final Note? initialNote;
 
@@ -49,6 +50,22 @@ class NoteDetailScreenMVVM extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  State<NoteDetailScreenMVVM> createState() => _NoteDetailScreenMVVMState();
+}
+
+/// NoteDetailScreenMVVM의 상태 클래스
+class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
+  @override
+  void initState() {
+    super.initState();
+    
+    // 화면이 완전히 빌드된 후 튜토리얼 체크 (포스트 프레임 콜백)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NoteTutorial.checkAndShowTutorial(context);
+    });
   }
 
   @override

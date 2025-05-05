@@ -106,7 +106,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('사용량 확인 중 오류 발생: $e');
+      debugPrint('사용량 확인 중 오류 발생: $e');
       }
     } finally {
       // 확인 중 상태 해제
@@ -125,34 +125,34 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         return Future.value(true);
       },
       child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x26000000),
-              blurRadius: 20,
-              offset: Offset(0, -4),
-            )
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 60),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 상단 헤더 (제목 + X 버튼)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '스마트 노트 만들기',
-                    style: TypographyTokens.subtitle2.copyWith(
-                      color: Colors.black,
-                    ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x26000000),
+            blurRadius: 20,
+            offset: Offset(0, -4),
+          )
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 60),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 상단 헤더 (제목 + X 버튼)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '스마트 노트 만들기',
+                  style: TypographyTokens.subtitle2.copyWith(
+                    color: Colors.black,
                   ),
-                  GestureDetector(
+                ),
+                GestureDetector(
                     onTap: () {
                       // X 버튼 클릭시 처리 상태 초기화 후 닫기
                       setState(() {
@@ -160,61 +160,61 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                       });
                       Navigator.pop(context);
                     },
-                    child: const Icon(
-                      Icons.close,
-                      size: 24,
-                      color: Colors.black,
-                    ),
+                  child: const Icon(
+                    Icons.close,
+                    size: 24,
+                    color: Colors.black,
                   ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              
-              // 갤러리 및 카메라 옵션 버튼
-              Column(
-                children: [
-                  _isButtonDisabled
-                  ? Tooltip(
-                      message: _limitTooltip,
-                      child: PikaButton(
-                        text: '갤러리에서 선택',
-                        variant: PikaButtonVariant.outline,
-                        leadingIcon: Icon(Icons.photo_library, color: ColorTokens.disabled),
-                        onPressed: null,
-                        isFullWidth: true,
-                      ),
-                    )
-                  : PikaButton(
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            
+            // 갤러리 및 카메라 옵션 버튼
+            Column(
+              children: [
+                _isButtonDisabled
+                ? Tooltip(
+                    message: _limitTooltip,
+                    child: PikaButton(
                       text: '갤러리에서 선택',
                       variant: PikaButtonVariant.outline,
-                      leadingIcon: Icon(Icons.photo_library, color: ColorTokens.primary),
-                      onPressed: _selectGalleryImages,
+                      leadingIcon: Icon(Icons.photo_library, color: ColorTokens.disabled),
+                      onPressed: null,
                       isFullWidth: true,
                     ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  _isButtonDisabled
-                  ? Tooltip(
-                      message: _limitTooltip,
-                      child: PikaButton(
-                        text: '카메라로 촬영',
-                        variant: PikaButtonVariant.outline,
-                        leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.disabled),
-                        onPressed: null,
-                        isFullWidth: true,
-                      ),
-                    )
-                  : PikaButton(
+                  )
+                : PikaButton(
+                    text: '갤러리에서 선택',
+                    variant: PikaButtonVariant.outline,
+                    leadingIcon: Icon(Icons.photo_library, color: ColorTokens.primary),
+                    onPressed: _selectGalleryImages,
+                    isFullWidth: true,
+                  ),
+                
+                const SizedBox(height: 16),
+                
+                _isButtonDisabled
+                ? Tooltip(
+                    message: _limitTooltip,
+                    child: PikaButton(
                       text: '카메라로 촬영',
                       variant: PikaButtonVariant.outline,
-                      leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.primary),
-                      onPressed: _takeCameraPhoto,
+                      leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.disabled),
+                      onPressed: null,
                       isFullWidth: true,
                     ),
-                ],
-              ),
-            ],
+                  )
+                : PikaButton(
+                    text: '카메라로 촬영',
+                    variant: PikaButtonVariant.outline,
+                    leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.primary),
+                    onPressed: _takeCameraPhoto,
+                    isFullWidth: true,
+                  ),
+              ],
+            ),
+          ],
           ),
         ),
       ),
@@ -420,15 +420,15 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       
       // iOS에서 권장되는 최신 방식으로 먼저 시도
       if (Platform.isIOS) {
-        try {
-          final XFile? photo = await _picker.pickImage(
-            source: ImageSource.camera,
+    try {
+        final XFile? photo = await _picker.pickImage(
+          source: ImageSource.camera,
             requestFullMetadata: false,
             maxWidth: 1920,
             maxHeight: 1080,
             imageQuality: 80,
-          );
-          
+        );
+        
           if (photo != null) {
             imageFile = File(photo.path);
             // 성공 시 두 번째 시도가 필요 없음을 표시
@@ -506,7 +506,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             maxWidth: 1280,  // 해상도 낮춤
             maxHeight: 720,
           );
-          
+        
           if (photo != null) {
             imageFile = File(photo.path);
           } else {
@@ -542,7 +542,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       // 이미지 파일을 얻었으면 성공
       if (imageFile != null) {
         // 이미지를 선택한 후에 바텀시트를 닫습니다
-        if (mounted) {
+          if (mounted) {
           // 루트 컨텍스트 가져오기
           final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
           
@@ -662,6 +662,6 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
           ),
         ],
       ),
-    );
+        );
   }
 } 
