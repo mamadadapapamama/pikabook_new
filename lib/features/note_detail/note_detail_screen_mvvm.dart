@@ -15,7 +15,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
 
-/// MVVM 패턴을 적용한 노트 상세 화면 (StatefulWidget으로 변경)
+/// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatefulWidget {
   final String noteId;
   final Note? initialNote;
@@ -51,18 +51,17 @@ class NoteDetailScreenMVVM extends StatefulWidget {
       ),
     );
   }
-
+  
   @override
   State<NoteDetailScreenMVVM> createState() => _NoteDetailScreenMVVMState();
 }
 
-/// NoteDetailScreenMVVM의 상태 클래스
 class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   @override
   void initState() {
     super.initState();
     
-    // 화면이 완전히 빌드된 후 튜토리얼 체크 (포스트 프레임 콜백)
+    // 화면 렌더링 완료 후 튜토리얼 체크
     WidgetsBinding.instance.addPostFrameCallback((_) {
       NoteTutorial.checkAndShowTutorial(context);
     });
@@ -95,6 +94,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       onFlashcardTap: () => _navigateToFlashcards(context, viewModel),
       onBackPressed: () => Navigator.of(context).pop(),
       backgroundColor: UITokens.screenBackground, 
+      noteId: viewModel.noteId,
     );
   }
   
@@ -365,13 +365,6 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   
   // 플래시카드 화면으로 이동
   void _navigateToFlashcards(BuildContext context, NoteDetailViewModel viewModel) {
-    if (viewModel.flashCards.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('저장된 플래시카드가 없습니다. 먼저 플래시카드를 추가해주세요.')),
-      );
-      return;
-    }
-    
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FlashCardScreen(

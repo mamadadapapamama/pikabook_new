@@ -68,34 +68,6 @@ class _HelpTextTooltipState extends State<HelpTextTooltip> with SingleTickerProv
   late AnimationController _animationController;
   late Animation<double> _bounceAnimation;
 
-  @override
-  void initState() {
-    super.initState();
-    
-    // 바운스 애니메이션 컨트롤러 초기화
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),  // 속도 증가
-    );
-    
-    // 위아래로 움직이는 바운스 애니메이션 설정
-    _bounceAnimation = Tween<double>(
-      begin: 0.0,
-      end: 6.0,  // 움직임 범위 증가
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ));
-    
-    // 애니메이션 반복 설정
-    _animationController.repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
   
   // 스타일 프리셋에 따른 배경색 반환
   Color get _getBackgroundColor {
