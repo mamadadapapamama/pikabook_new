@@ -12,6 +12,7 @@ import '../../../features/note_detail/note_detail_screen_mvvm.dart';
 import '../../../core/utils/note_tutorial.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// 노트 생성 워크플로우 클래스
 /// 이미지 선택부터 노트 생성, 화면 이동까지의 전체 프로세스를 관리합니다.
@@ -21,6 +22,7 @@ class NoteCreationWorkflow {
   final PageService _pageService = PageService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   
   // 싱글톤 패턴
   static final NoteCreationWorkflow _instance = NoteCreationWorkflow._internal();
@@ -305,9 +307,15 @@ class NoteCreationWorkflow {
       // 로딩 다이얼로그가 완전히 닫혔는지 한번 더 확인 (안전 장치)
       NoteCreationLoader.ensureHidden(context);
       
-      // 노트 개수 확인 및 업데이트 (튜토리얼 표시 여부 결정)
-      _checkAndUpdateNoteCount(context);
+      // 노트 개수를 강제로 1로 설정 (첫 번째 노트 생성 시 확실하게 튜토리얼 표시)
+      // 이후에 _forceUpdateNoteCount 메서드에서 실제 개수로 업데이트됨
+      NoteTutorial.updateNoteCount(1);
       
+      if (kDebugMode) {
+        debugPrint('노트 상세 화면 이동 전: 노트 개수를 1로 강제 설정 (튜토리얼용)');
+      }
+      
+      // 노트 상세 화면으로 이동
       Navigator.of(context).push(
         NoteDetailScreenMVVM.route(
           note: note,
@@ -315,6 +323,11 @@ class NoteCreationWorkflow {
           totalImageCount: totalImageCount,
         ),
       );
+      
+      // 이동 후에 백그라운드로 실제 노트 개수 조회 및 업데이트
+      Future.microtask(() async {
+        await _forceUpdateNoteCount(context);
+      });
       
       if (kDebugMode) {
       debugPrint('노트 상세 화면으로 이동 완료');
@@ -353,30 +366,42 @@ class NoteCreationWorkflow {
     }
   }
   
-  /// 노트 개수 확인 및 업데이트 (튜토리얼 표시 여부 결정)
-  Future<void> _checkAndUpdateNoteCount(BuildContext context) async {
+  /// 노트 개수 업데이트 (튜토리얼 표시 여부 결정)
+  Future<void> _forceUpdateNoteCount(BuildContext context) async {
     try {
       // Firestore에서 현재 노트 개수 가져오기
       final notesCollection = _firestore.collection('notes');
-      final querySnapshot = await notesCollection.get();
-      final noteCount = querySnapshot.docs.length;
+      final User? currentUser = _auth.currentUser;
       
-      if (kDebugMode) {
-        debugPrint('현재 노트 개수: $noteCount');
+      if (currentUser == null) {
+        if (kDebugMode) {
+          debugPrint('사용자가 로그인되지 않음, 노트 개수 업데이트 건너뜀');
+        }
+        return;
       }
       
-      // NoteTutorial에 노트 개수 업데이트
+      final querySnapshot = await notesCollection
+          .where('userId', isEqualTo: currentUser.uid)
+          .count()
+          .get();
+      
+      final noteCount = querySnapshot.count ?? 0;
+      
+      // NoteTutorial에 실제 노트 개수 업데이트
       await NoteTutorial.updateNoteCount(noteCount);
+      
+      if (kDebugMode) {
+        debugPrint('노트 튜토리얼: 실제 노트 개수 업데이트 = $noteCount');
+      }
       
       // 디버그 모드에서 테스트를 위한 튜토리얼 상태 리셋
       if (kDebugMode && false) { // false로 설정하여 기본적으로 비활성화
         debugPrint('⚠️ 튜토리얼 상태 리셋 (테스트용)');
         await NoteTutorial.resetTutorialState();
       }
-      
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('노트 개수 확인 중 오류: $e');
+        debugPrint('노트 개수 업데이트 중 오류: $e');
       }
     }
   }

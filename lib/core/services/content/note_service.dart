@@ -1023,4 +1023,43 @@ class NoteService {
       return '노트 1';
     }
   }
+
+  /// 현재 사용자의 노트 개수 가져오기
+  Future<int> getNoteCount() async {
+    try {
+      final User? currentUser = _auth.currentUser;
+      if (currentUser == null) {
+        debugPrint('[NoteService] 사용자가 로그인되지 않음, 노트 개수 0 반환');
+        return 0;
+      }
+      
+      final String userId = currentUser.uid;
+      
+      // Firestore에서 사용자의 노트 개수 조회
+      final snapshot = await _firestore
+          .collection('notes')
+          .where('userId', isEqualTo: userId)
+          .count()
+          .get();
+      
+      final count = snapshot.count ?? 0;
+      
+      if (kDebugMode) {
+        debugPrint('[NoteService] 노트 개수 조회 결과: $count');
+      }
+      
+      return count;
+    } catch (e) {
+      debugPrint('[NoteService] 노트 개수 조회 중 오류: $e');
+      
+      // 오류 발생 시 캐시된 노트 개수 조회 시도
+      try {
+        final cachedNotes = await getCachedNotes();
+        return cachedNotes.length;
+      } catch (_) {
+        // 모든 방법 실패 시 0 반환
+        return 0;
+      }
+    }
+  }
 }

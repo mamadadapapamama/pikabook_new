@@ -1,3 +1,10 @@
+/**
+ * 경고: 이 클래스는 현재 사용되지 않습니다.
+ * 대신 lib/core/utils/note_tutorial.dart 파일의 NoteTutorial 클래스를 사용하세요.
+ * 이 클래스는 향후 제거될 예정입니다.
+ */
+
+/*
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -140,3 +147,4 @@ class NoteTutorialService {
   bool _isLastStep(List<TutorialStep> steps) => 
       _currentStep == steps.length - 1;
 }
+*/
