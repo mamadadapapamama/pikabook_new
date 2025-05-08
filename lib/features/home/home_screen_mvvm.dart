@@ -108,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     // 화면 구성하는 동안 필요한 데이터 즉시 로드
     _loadNoteSpaceName();
-    _checkUsageLimits();
+    _checkUsageAndButtonStatus();
     
     // 마케팅 캠페인 서비스 초기화
     _initializeMarketingService();
@@ -408,49 +408,53 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return '${months[date.month - 1]} ${date.day.toString().padLeft(2, '0')}, ${date.year}';
   }
 
-  // 사용량 제한 확인 및 다이얼로그 표시
-  Future<void> _checkUsageLimits() async {
+  // 사용량 확인 - 제한 초과 시 버튼 비활성화
+  Future<void> _checkUsageAndButtonStatus() async {
+    // 이미 확인 중이면 중복 호출 방지
+    if (_isCheckingUsage) {
+      if (kDebugMode) {
+        debugPrint('사용량 확인이 이미 진행 중입니다. 중복 호출 건너뜀');
+      }
+      return;
+    }
+    
+    // 캐시 적용 (30초) - 너무 자주 호출되지 않도록
+    final now = DateTime.now();
+    if (_lastUsageCheckTime != null && now.difference(_lastUsageCheckTime!).inSeconds < 30) {
+      if (kDebugMode) {
+        debugPrint('사용량 최근에 확인함 (${now.difference(_lastUsageCheckTime!).inSeconds}초 전) - 캐시 사용');
+      }
+      
+      // 버튼 비활성화 상태 확인 - 한번만 디버그 메시지 출력
+      if (kDebugMode) {
+        debugPrint('버튼 비활성화 확인: _noteExceed=$_noteExceed, limitStatus=$_limitStatus');
+      }
+      return;
+    }
+    
+    if (kDebugMode) {
+      debugPrint('사용량 확인 필요 - 확인 중...');
+    }
+    
+    _isCheckingUsage = true;
+    
     try {
-      // 이미 확인 중이면 중복 호출 방지
-      if (_isCheckingUsage) {
-        if (kDebugMode) {
-          debugPrint('사용량 확인이 이미 진행 중입니다. 중복 호출 방지.');
-        }
-        return;
-      }
-      
-      // 최근에 확인했으면 캐시 사용 (10초 이내)
-      final now = DateTime.now();
-      if (_lastUsageCheckTime != null && 
-          now.difference(_lastUsageCheckTime!).inSeconds < 10 &&
-          _hasCheckedUsage) {
-        if (kDebugMode) {
-          debugPrint('사용량 확인: 캐시 사용 (10초 이내)');
-        }
-        return;
-      }
-      
-      // 확인 중 상태로 설정
-      _isCheckingUsage = true;
-      
       if (kDebugMode) {
         debugPrint('사용량 확인 시작...');
       }
-      
-      // 사용량 제한 상태 확인 (버퍼 추가)
-      final limitStatus = await _usageLimitService.checkFreeLimits(withBuffer: true);
-      final usagePercentages = await _usageLimitService.getUsagePercentages();
-      
-      // 사용량 제한 플래그 확인
-      final limitFlags = await _usageLimitService.checkUsageLimitFlags();
-      final noteExceed = limitFlags['noteExceed'] ?? false;
-      
-      // OCR 제한 확인 (noteExceed 플래그와 별개로 직접 확인)
-      final bool ocrLimitReached = limitStatus['ocrLimitReached'] == true;
-      final bool translationLimitReached = limitStatus['translationLimitReached'] == true;
-      final bool storageLimitReached = limitStatus['storageLimitReached'] == true;
 
-      // 디버깅을 위해 상세 로깅
+      // 사용량 제한 체크 (모든 확인을 한 번에 처리)
+      final usageInfo = await _usageLimitService.getUsageInfo(withBuffer: false);
+      final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
+      final usagePercentages = usageInfo['percentages'] as Map<String, double>;
+      
+      // 노트 제한 확인 (반복 호출하지 않도록 로컬 변수에 저장)
+      final ocrLimitReached = limitStatus['ocrLimitReached'] == true;
+      final ttsLimitReached = limitStatus['ttsLimitReached'] == true;
+      final translationLimitReached = limitStatus['translationLimitReached'] == true;
+      final storageLimitReached = limitStatus['storageLimitReached'] == true;
+      final noteExceed = ocrLimitReached || translationLimitReached || storageLimitReached;
+      
       if (kDebugMode) {
         debugPrint('Home 화면: OCR 제한 도달=${limitStatus['ocrLimitReached']}, 노트 제한=$noteExceed');
         debugPrint('Home 화면: 번역 제한=${limitStatus['translationLimitReached']}, 저장소 제한=${limitStatus['storageLimitReached']}');
@@ -468,9 +472,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _lastUsageCheckTime = now;
         });
       }
-      
-      // 다이얼로그 자동 표시 제거 - App 클래스에서 이미 표시하고 있음
-      // 특정 동작 시에만 표시하도록 변경 (버튼 클릭 시 등)
       
       if (kDebugMode) {
         debugPrint('사용량 확인 완료: 노트 생성 제한=$_noteExceed, 버튼 비활성화=$shouldDisableButton');
@@ -535,7 +536,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (kDebugMode) {
           debugPrint('사용량 확인 필요 - 확인 중...');
         }
-        await _checkUsageLimits();
+        await _checkUsageAndButtonStatus();
       } else {
         if (kDebugMode) {
           debugPrint('최근에 사용량 이미 확인함 (캐시 사용)');

@@ -444,41 +444,12 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
           shape: BoxShape.circle,
           color: bgColor,
         ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // 아이콘
-            Icon(
-              icon, 
-              color: iconColor,
-              size: SpacingTokens.iconSizeMedium,
-            ),
-            
-            // 처리 중 표시 (비활성화된 경우)
-            if (isDisabled)
-              Positioned(
-                bottom: 3,
-                right: 3,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: ColorTokens.primarylight,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 4,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: ColorTokens.primary,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
+        child: Center(
+          child: Icon(
+            icon, 
+            color: iconColor,
+            size: SpacingTokens.iconSizeMedium,
+          ),
         ),
       ),
     );
