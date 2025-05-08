@@ -997,6 +997,22 @@ class NoteDetailViewModel extends ChangeNotifier {
       }
     }
     
+    if (kDebugMode) {
+      final processed = processedStatus.where((status) => status).length;
+      final total = processedStatus.length;
+      debugPrint("📊 페이지 처리 상태: $processed/$total 페이지 처리됨");
+      
+      for (int i = 0; i < processedStatus.length; i++) {
+        if (i == _currentPageIndex) {
+          // 현재 페이지는 강조 표시
+          debugPrint("   ${i+1}/${processedStatus.length} 페이지: ${processedStatus[i] ? "✅ 처리됨" : "⏳ 처리중"} (현재 페이지)");
+        } else if (!processedStatus[i]) {
+          // 미처리 페이지만 표시 (처리된 페이지는 많을 수 있으므로 표시 안함)
+          debugPrint("   ${i+1}/${processedStatus.length} 페이지: ⏳ 처리중");
+        }
+      }
+    }
+    
     return processedStatus;
   }
   
@@ -1042,20 +1058,42 @@ class NoteDetailViewModel extends ChangeNotifier {
       debugPrint("🔄 Firestore 페이지 실시간 모니터링 시작: $_noteId");
     }
     
-    // Firestore에서 페이지 변경 감지 (처리 중인 페이지만 모니터링)
+    // Firestore에서 페이지 변경 감지 (특정 노트의 모든 페이지 구독)
     _pagesSubscription = _firestore
         .collection('pages')
         .where('noteId', isEqualTo: _noteId)
         .snapshots()
-        .listen((snapshot) {
-      _handlePagesUpdate(snapshot);
-    }, onError: (error) {
-      if (kDebugMode) {
-        debugPrint("⚠️ Firestore 페이지 리스너 오류: $error");
+        .listen(
+      (snapshot) {
+        if (kDebugMode) {
+          debugPrint("📱 Firestore 페이지 업데이트 감지: ${snapshot.docs.length}개 문서");
+        }
+        _handlePagesUpdate(snapshot);
+      }, 
+      onError: (error) {
+        if (kDebugMode) {
+          debugPrint("⚠️ Firestore 페이지 리스너 오류: $error");
+        }
+        // 오류 시 백업으로 타이머 방식 사용
+        _startFallbackTimerCheck();
+      },
+      onDone: () {
+        if (kDebugMode) {
+          debugPrint("✅ Firestore 페이지 리스너 완료");
+        }
       }
-      // 오류 시 백업으로 타이머 방식 사용
-      _startFallbackTimerCheck();
-    });
+    );
+    
+    // 백업 안전장치: 리스너가 제대로 작동하지 않을 경우를 대비한 타이머 설정
+    // 주 리스너와 함께 작동하지만 주기는 더 길게 설정 (30초)
+    if (_processingTimer == null) {
+      _processingTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+        if (kDebugMode) {
+          debugPrint("⏱️ 백업 타이머 실행 중 (안전장치)");
+        }
+        _checkProcessingStatus();
+      });
+    }
   }
   
   // 페이지 상태 업데이트 처리
@@ -1064,6 +1102,10 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     bool anyStatusChanged = false;
     bool currentPageChanged = false;
+    
+    if (kDebugMode) {
+      debugPrint("🔍 페이지 업데이트 처리 시작: ${snapshot.docs.length}개 문서");
+    }
     
     // 스냅샷에서 페이지 정보 처리
     for (final doc in snapshot.docs) {
@@ -1086,10 +1128,24 @@ class NoteDetailViewModel extends ChangeNotifier {
       final originalText = pageData['originalText'] as String? ?? '';
       final isProcessed = originalText != '___PROCESSING___' && originalText.isNotEmpty;
       
+      if (kDebugMode && originalText.isNotEmpty && originalText != '___PROCESSING___') {
+        final shortText = originalText.length > 30 
+          ? "${originalText.substring(0, 30)}..." 
+          : originalText;
+        debugPrint("📄 페이지 #$pageIndex (ID:$pageId) 텍스트: $shortText");
+      }
+      
+      // 현재 상태 체크
+      final currentStatus = _processedPageStatus[pageId] ?? false;
+      
       // 기존 상태와 다르면 업데이트
-      if (_processedPageStatus[pageId] != isProcessed) {
+      if (currentStatus != isProcessed) {
         _processedPageStatus[pageId] = isProcessed;
         anyStatusChanged = true;
+        
+        if (kDebugMode) {
+          debugPrint("🔄 페이지 #$pageIndex (ID:$pageId) 상태 변경: $currentStatus → $isProcessed");
+        }
         
         // 현재 표시 중인 페이지인지 확인
         if (pageIndex == _currentPageIndex) {
@@ -1111,6 +1167,10 @@ class NoteDetailViewModel extends ChangeNotifier {
               'updatedAt': (pageData['updatedAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
             });
             _pages![pageIndex] = updatedPage;
+            
+            if (kDebugMode) {
+              debugPrint("✅ 페이지 #$pageIndex 객체 업데이트 완료");
+            }
           }
         }
       }
@@ -1118,10 +1178,10 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     // 변경 사항이 있으면 UI 업데이트
     if (anyStatusChanged && (currentPageChanged || _shouldUpdateUI)) {
-      notifyListeners();
       if (kDebugMode) {
         debugPrint("🔄 실시간 페이지 업데이트로 UI 갱신됨");
       }
+      notifyListeners();
     }
   }
   
@@ -1138,14 +1198,14 @@ class NoteDetailViewModel extends ChangeNotifier {
     });
   }
   
-  // 디버그 모드가 아닐 때 사용할 간단한 체크 메서드
+  // 백그라운드 체크 메서드 - Firestore API를 직접 호출하여 페이지 상태 확인
   void _checkProcessingStatus() async {
-    // 처리가 필요한 페이지만 식별하고 상태 업데이트
     if (_pages == null || _pages!.isEmpty) return;
     
-    bool anyStatusChanged = false;
-    bool currentPageChanged = false;
+    // 처리되지 않은 페이지만 확인 (리소스 절약)
+    List<String> unprocessedPageIds = [];
     
+    // 처리되지 않은 페이지 ID 수집
     for (int i = 0; i < _pages!.length; i++) {
       final page = _pages![i];
       if (page.id == null) continue;
@@ -1153,26 +1213,97 @@ class NoteDetailViewModel extends ChangeNotifier {
       // 이미 처리된 페이지는 스킵
       if (_processedPageStatus[page.id!] == true) continue;
       
-      // 텍스트가 이미 처리되어 있는지 확인
-      if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
-        _processedPageStatus[page.id!] = true;
-        anyStatusChanged = true;
-        
-        // 현재 페이지 변경 여부 확인
-        if (i == _currentPageIndex) {
-          currentPageChanged = true;
-        }
-        
-        // 페이지가 처리 완료된 경우 콜백 함수 호출
-        if (_pageProcessedCallback != null) {
-          _pageProcessedCallback!(i);
-        }
-      }
+      unprocessedPageIds.add(page.id!);
     }
     
-    // 상태 변경이 있고 UI 업데이트 필요시에만 갱신
-    if (anyStatusChanged && (currentPageChanged || _shouldUpdateUI)) {
-      notifyListeners();
+    if (unprocessedPageIds.isEmpty) {
+      if (kDebugMode) {
+        debugPrint("✅ 모든 페이지가 처리되었습니다. 백업 체크 건너뜀");
+      }
+      return;
+    }
+    
+    if (kDebugMode) {
+      debugPrint("🔍 백업 체크: ${unprocessedPageIds.length}개 미처리 페이지 상태 확인 중");
+    }
+    
+    try {
+      // Firestore에서 처리되지 않은 페이지 문서만 조회
+      final snapshot = await _firestore
+          .collection('pages')
+          .where(FieldPath.documentId, whereIn: unprocessedPageIds.take(10).toList()) // 최대 10개씩만 조회
+          .get();
+      
+      if (kDebugMode) {
+        debugPrint("📥 백업 체크로 ${snapshot.docs.length}개 페이지 정보 수신");
+      }
+      
+      bool anyStatusChanged = false;
+      bool currentPageChanged = false;
+      
+      // 가져온 페이지 문서 처리
+      for (final doc in snapshot.docs) {
+        final pageId = doc.id;
+        final pageData = doc.data();
+        final originalText = pageData['originalText'] as String? ?? '';
+        final isProcessed = originalText != '___PROCESSING___' && originalText.isNotEmpty;
+        
+        // 현재 페이지 목록에서 해당 ID의 페이지 찾기
+        int pageIndex = -1;
+        for (int i = 0; i < _pages!.length; i++) {
+          if (_pages![i].id == pageId) {
+            pageIndex = i;
+            break;
+          }
+        }
+        
+        // 페이지를 찾지 못했으면 다음으로
+        if (pageIndex == -1) continue;
+        
+        // 상태가 변경된 경우만 업데이트
+        if (_processedPageStatus[pageId] != isProcessed) {
+          if (kDebugMode) {
+            debugPrint("🔄 백업 체크: 페이지 #$pageIndex (ID:$pageId) 상태 변경됨 → $isProcessed");
+          }
+          
+          _processedPageStatus[pageId] = isProcessed;
+          anyStatusChanged = true;
+          
+          // 현재 페이지 변경 여부 확인
+          if (pageIndex == _currentPageIndex) {
+            currentPageChanged = true;
+          }
+          
+          // 페이지가 처리 완료된 경우 콜백 함수 호출
+          if (isProcessed && _pageProcessedCallback != null) {
+            _pageProcessedCallback!(pageIndex);
+            
+            // 페이지 객체 업데이트
+            if (pageIndex < _pages!.length) {
+              final updatedPage = pika_page.Page.fromJson({
+                'id': pageId,
+                ...pageData,
+                // timestamp를 날짜 문자열로 변환
+                'createdAt': (pageData['createdAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
+                'updatedAt': (pageData['updatedAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
+              });
+              _pages![pageIndex] = updatedPage;
+            }
+          }
+        }
+      }
+      
+      // 상태 변경이 있고 UI 업데이트 필요시에만 갱신
+      if (anyStatusChanged && (currentPageChanged || _shouldUpdateUI)) {
+        if (kDebugMode) {
+          debugPrint("🔄 백업 체크: UI 갱신됨");
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("⚠️ 백업 체크 중 오류 발생: $e");
+      }
     }
   }
   

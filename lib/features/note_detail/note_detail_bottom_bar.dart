@@ -180,10 +180,39 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   // 처리되지 않은 페이지로 이동하려 할 때 메시지 표시
   void _showPageProcessingMessage(BuildContext context, int pageIndex) {
     final pageNum = pageIndex + 1;
+    final int progress = (pageIndex + 1);
+    final int total = widget.totalPages;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$pageNum번째 페이지가 아직 준비 중이에요. 잠시만 기다려주세요.'),
-        duration: const Duration(seconds: 2),
+        content: Row(
+          children: [
+            // 로딩 인디케이터
+            Container(
+              width: 16,
+              height: 16,
+              margin: const EdgeInsets.only(right: 12),
+              child: const CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            // 텍스트 메시지
+            Expanded(
+              child: Text(
+                '$pageNum번째 페이지($progress/$total)가 아직 처리 중입니다.\n잠시 후 이동할 수 있습니다.',
+              ),
+            ),
+          ],
+        ),
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: '닫기',
+          textColor: Colors.white,
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          },
+        ),
       ),
     );
   }
@@ -397,23 +426,59 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     VoidCallback? onTap,
     bool isDisabled = false,
   }) {
+    // 상태에 따른 색상 설정
+    final Color bgColor = isDisabled 
+      ? ColorTokens.greyLight  // 비활성화 상태 배경색
+      : (onTap != null ? ColorTokens.surface : Colors.transparent);
+      
+    final Color iconColor = isDisabled 
+      ? ColorTokens.greyMedium  // 비활성화 상태 아이콘 색상
+      : (onTap != null ? ColorTokens.secondary : ColorTokens.greyMedium);
+    
     return GestureDetector(
-      onTap: onTap,
+      onTap: isDisabled ? () {} : onTap,  // 비활성화 상태에서는 onTap을 실행하지 않음
       child: Container(
         width: 40,
         height: 40,
-        decoration: onTap != null ? BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isDisabled ? ColorTokens.greyLight : ColorTokens.surface,
-        ) : null,
-        child: Center(
-          child: Icon(
-            icon, 
-            color: onTap != null 
-                ? (isDisabled ? ColorTokens.greyMedium : ColorTokens.secondary) 
-                : ColorTokens.greyMedium,
-            size: SpacingTokens.iconSizeMedium,
-          ),
+          color: bgColor,
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 아이콘
+            Icon(
+              icon, 
+              color: iconColor,
+              size: SpacingTokens.iconSizeMedium,
+            ),
+            
+            // 처리 중 표시 (비활성화된 경우)
+            if (isDisabled)
+              Positioned(
+                bottom: 3,
+                right: 3,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: ColorTokens.primarylight,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: ColorTokens.primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

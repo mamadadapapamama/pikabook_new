@@ -13,6 +13,8 @@ import '../../../core/utils/note_tutorial.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 노트 생성 워크플로우 클래스
 /// 이미지 선택부터 노트 생성, 화면 이동까지의 전체 프로세스를 관리합니다.
@@ -198,60 +200,83 @@ class NoteCreationWorkflow {
     }
   }
   
-  /// 첫 번째 페이지의 처리 완료를 확인
+  /// 첫 번째 페이지의 처리 완료를 확인 (실시간 리스너 사용)
   Future<void> _ensureFirstPageProcessed(String noteId) async {
     if (kDebugMode) {
-    debugPrint('첫 번째 페이지 처리 상태 확인 시작: noteId=$noteId');
+      debugPrint('첫 번째 페이지 처리 상태 확인 시작: noteId=$noteId');
     }
     
-    // 최대 10초 동안 첫 페이지 처리 상태 확인 (500ms 간격)
-    final maxAttempts = 20; 
-    int attempts = 0;
+    // 응답 대기를 위한 Completer 생성
+    final completer = Completer<void>();
     
-    while (attempts < maxAttempts) {
-      try {
-        // Firestore에서 페이지 문서 확인
-        final snapshot = await _firestore
-            .collection('pages')
-            .where('noteId', isEqualTo: noteId)
-            .orderBy('pageNumber')
-            .limit(1)
-            .get();
+    // 실시간 리스너 설정
+    StreamSubscription? subscription;
+    subscription = _firestore
+      .collection('pages')
+      .where('noteId', isEqualTo: noteId)
+      .orderBy('pageNumber')
+      .limit(1)
+      .snapshots()
+      .listen((snapshot) {
+        if (snapshot.docs.isEmpty) return;
         
-        if (snapshot.docs.isNotEmpty) {
-          final pageDoc = snapshot.docs.first;
-          final page = page_model.Page.fromFirestore(pageDoc);
+        final pageDoc = snapshot.docs.first;
+        final page = page_model.Page.fromFirestore(pageDoc);
+        
+        // 페이지 처리 상태 확인
+        if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
+          if (kDebugMode) {
+            debugPrint('✅ 첫 번째 페이지 처리 완료 확인됨: ${page.id}');
+          }
           
-          // 페이지 처리 상태 확인
-          if (page.originalText != '___PROCESSING___' && 
-              page.originalText.isNotEmpty) {
-            if (kDebugMode) {
-            debugPrint('첫 번째 페이지 처리 완료 확인됨: ${page.id}');
-            }
-            
-            // 캐시 업데이트
+          // 캐시 업데이트 (백그라운드로 처리)
+          Future.microtask(() async {
             await _cacheService.cachePage(noteId, page);
-            return;
+          });
+          
+          // 리스너 취소
+          subscription?.cancel();
+          
+          // 응답 반환
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        } else {
+          if (kDebugMode) {
+            debugPrint('⏳ 첫 번째 페이지 처리 중: ${page.id}');
           }
         }
+      }, onError: (error) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 페이지 처리 상태 확인 중 오류: $error');
+        }
         
-        // 0.5초 대기 후 다시 시도
-        await Future.delayed(const Duration(milliseconds: 500));
-        attempts++;
-        if (kDebugMode) {
-        debugPrint('첫 번째 페이지 처리 대기 중... ($attempts/$maxAttempts)');
+        // 리스너 취소
+        subscription?.cancel();
+        
+        // 오류 상황에서도 계속 진행 (실패해도 화면으로 진입)
+        if (!completer.isCompleted) {
+          completer.complete();
         }
-      } catch (e) {
-        if (kDebugMode) {
-        debugPrint('페이지 처리 상태 확인 중 오류: $e');
-        }
-        break;
-      }
-    }
+      });
     
-    if (kDebugMode) {
-    debugPrint('첫 번째 페이지 처리 완료 확인 시간 초과');
-    }
+    // 최대 10초 타임아웃 설정
+    Timer(const Duration(seconds: 10), () {
+      if (!completer.isCompleted) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 첫 번째 페이지 처리 감지 타임아웃 (10초)');
+        }
+        
+        // 리스너 취소
+        subscription?.cancel();
+        
+        // 타임아웃 시 화면 진입 허용
+        completer.complete();
+      }
+    });
+    
+    // 처리 완료 또는 타임아웃 대기
+    await completer.future;
   }
   
   /// 완전한 노트 정보 로드

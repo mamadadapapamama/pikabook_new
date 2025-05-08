@@ -173,35 +173,27 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     }
 
     // 페이지 뷰 구성 - PageController 연결
-    return Stack(
-      children: [
-        SafeArea(
-          child: Container(
-            color: Colors.white,
-            padding: EdgeInsets.zero,
-            child: PageView.builder(
-              controller: viewModel.pageController, // 뷰모델의 컨트롤러 사용
-              itemCount: viewModel.pages!.length,
-              onPageChanged: viewModel.onPageChanged,
-              itemBuilder: (context, index) {
-                final page = viewModel.pages![index];
-                
-                // 특수 처리 마커가 있는지 확인
-                if (page.originalText == "___PROCESSING___") {
-                  return _buildProcessingPage();
-                }
-                
-                // 페이지 콘텐츠 위젯 반환
-                return _buildPageContent(context, viewModel, page);
-              },
-            ),
-          ),
+    return SafeArea(
+      child: Container(
+        color: Colors.white,
+        padding: EdgeInsets.zero,
+        child: PageView.builder(
+          controller: viewModel.pageController, // 뷰모델의 컨트롤러 사용
+          itemCount: viewModel.pages!.length,
+          onPageChanged: viewModel.onPageChanged,
+          itemBuilder: (context, index) {
+            final page = viewModel.pages![index];
+            
+            // 특수 처리 마커가 있는지 확인
+            if (page.originalText == "___PROCESSING___") {
+              return _buildProcessingPage();
+            }
+            
+            // 페이지 콘텐츠 위젯 반환
+            return _buildPageContent(context, viewModel, page);
+          },
         ),
-        
-        // 백그라운드 처리 상태 표시기
-        if (viewModel.isProcessingBackground)
-          _buildProcessingStatusIndicator(context, viewModel),
-      ],
+      ),
     );
   }
   
@@ -477,6 +469,16 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     // 페이지 처리 완료 콜백 설정 (한 번만 설정)
     _setupPageProcessedCallback(context, viewModel);
     
+    // 페이지 처리 상태 가져오기 - Consumer 안에서 호출하면 UI가 자동으로 업데이트됨
+    final processedPages = viewModel.getProcessedPagesStatus();
+    
+    if (kDebugMode) {
+      // 처리된 페이지 수와 총 페이지 수 계산
+      final completedPages = processedPages.where((status) => status).length;
+      final totalPages = processedPages.length;
+      print("🔄 바텀바 리빌드: 처리된 페이지 $completedPages/$totalPages");
+    }
+    
     return NoteDetailBottomBar(
       currentPage: viewModel.currentPage,
       currentPageIndex: viewModel.currentPageIndex,
@@ -504,7 +506,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         }
       },
       isMinimalUI: false,
-      processedPages: viewModel.getProcessedPagesStatus(),
+      processedPages: processedPages,
     );
   }
   
@@ -528,51 +530,5 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         );
       }
     });
-  }
-
-  // 백그라운드 처리 상태 표시기
-  Widget _buildProcessingStatusIndicator(BuildContext context, NoteDetailViewModel viewModel) {
-    // 처리 상태 정보
-    final processedPages = viewModel.getProcessedPagesStatus();
-    final totalPages = processedPages.length;
-    final completedPages = processedPages.where((status) => status).length;
-    final progress = totalPages > 0 ? completedPages / totalPages : 0.0;
-    
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        color: Colors.black.withOpacity(0.7),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Colors.grey[700],
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Text(
-                  '$completedPages/$totalPages',
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '페이지 텍스트 처리 중...',
-              style: const TextStyle(color: Colors.white, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
   }
 } 
