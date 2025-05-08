@@ -571,6 +571,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   // 플래시카드 단어 목록 업데이트
   void _updateFlashcardWords() {
+    final Set<String> newFlashcardWords = {};
+    
     if (widget.flashCards == null || widget.flashCards!.isEmpty) {
       setState(() {
         _flashcardWords = {};
@@ -579,17 +581,28 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     }
     
     // 플래시카드 앞면(중국어 단어)만 추출
-    final newWords = <String>{};
     for (var card in widget.flashCards!) {
-      newWords.add(card.front);
+      if (card.front.isNotEmpty) {
+        newFlashcardWords.add(card.front);
+      }
     }
     
-    setState(() {
-      _flashcardWords = newWords;
+    // 변경 사항이 있는 경우에만 setState 호출
+    if (_flashcardWords.length != newFlashcardWords.length ||
+        !_flashcardWords.containsAll(newFlashcardWords) ||
+        !newFlashcardWords.containsAll(_flashcardWords)) {
+      
+      setState(() {
+        _flashcardWords = newFlashcardWords;
+      });
+      
       if (kDebugMode) {
         print('플래시카드 단어 목록 업데이트: ${_flashcardWords.length}개');
+        if (_flashcardWords.isNotEmpty) {
+          print('첫 5개 단어: ${_flashcardWords.take(5).join(', ')}');
+        }
       }
-    });
+    }
   }
 
   Widget _buildAddTextButton() {

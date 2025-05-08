@@ -8,6 +8,7 @@ import 'managers/content_manager.dart';
 import 'managers/note_options_manager.dart';
 import '../../core/services/content/note_service.dart';
 import '../../core/services/media/tts_service.dart';
+import '../../core/services/content/flashcard_service.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -47,6 +48,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   bool _isProcessingBackground = false; // 백그라운드 처리 상태
   int _totalImageCount = 0;           // 총 이미지 수
   StreamSubscription? _pagesSubscription; // Firestore 페이지 리스너
+  
+  // 플래시카드 목록 저장용 멤버 변수
+  List<FlashCard> _flashcards = [];
   
   // 게터
   Note? get note => _note;
@@ -92,8 +96,11 @@ class NoteDetailViewModel extends ChangeNotifier {
     }
     
     // 초기 데이터 로드 (지연 실행)
-    Future.microtask(() {
-      loadInitialPages();
+    Future.microtask(() async {
+      await loadInitialPages();
+      
+      // 플래시카드 목록도 로드 (하이라이트를 위해)
+      await loadFlashcardsForNote();
     });
   }
   
@@ -348,6 +355,9 @@ class NoteDetailViewModel extends ChangeNotifier {
     if (kDebugMode) {
       debugPrint("📄 페이지 변경됨: $_currentPageIndex");
     }
+    
+    // 페이지가 변경될 때마다 플래시카드 하이라이트 효과 적용 위해 항상 UI 갱신
+    notifyListeners();
     
     // 페이지가 변경될 때 해당 페이지의 세그먼트가 처리되지 않았다면 처리 시작
     if (_pages != null && index < _pages!.length) {
@@ -1164,5 +1174,43 @@ class NoteDetailViewModel extends ChangeNotifier {
     }
     
     notifyListeners();
+  }
+  
+  // 플래시카드 목록 업데이트
+  void updateFlashcards(List<FlashCard> flashcards) {
+    _flashcards = flashcards;
+    notifyListeners();
+  }
+  
+  // 현재 페이지에 해당하는 플래시카드 목록 반환
+  List<FlashCard> getFlashcardsForCurrentPage() {
+    return _flashcards;
+  }
+  
+  // 플래시카드 목록 로드
+  Future<void> loadFlashcardsForNote() async {
+    if (_noteId.isEmpty) return;
+    
+    if (kDebugMode) {
+      debugPrint("🔄 노트의 플래시카드 로드 시작: $_noteId");
+    }
+    
+    try {
+      // FlashCardService 인스턴스 생성
+      final flashCardService = FlashCardService();
+      final List<FlashCard> cards = await flashCardService.getFlashCardsForNote(_noteId);
+      
+      if (kDebugMode) {
+        debugPrint("✅ 플래시카드 ${cards.length}개 로드 완료");
+      }
+      
+      // 상태 업데이트
+      _flashcards = cards;
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint("❌ 플래시카드 로드 중 오류: $e");
+      }
+    }
   }
 } 

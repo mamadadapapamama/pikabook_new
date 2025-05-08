@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/models/note.dart';
 import '../../core/models/page.dart' as pika_page;
+import '../../core/models/flash_card.dart';
 import 'note_detail_viewmodel.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import 'page_content_widget.dart';
@@ -248,8 +249,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         noteId: viewModel.noteId,
         onCreateFlashCard: (front, back, {pinyin}) => 
             _handleCreateFlashCard(context, viewModel, front, back, pinyin: pinyin),
-        // 플래시카드는 더 이상 여기서 전달하지 않음 - 필요시 FlashcardViewModel에서 로드
-        flashCards: [], 
+        // 플래시카드 목록을 전달하도록 수정
+        flashCards: viewModel.getFlashcardsForCurrentPage(), 
         useSegmentMode: !viewModel.isFullTextMode,
         onDeleteSegment: (segmentIndex) => _handleDeleteSegment(context, viewModel, segmentIndex),
       ),
@@ -438,6 +439,16 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         
         // 뷰모델에 플래시카드 카운트 업데이트
         viewModel.updateFlashcardCount(viewModel.flashcardCount + 1);
+        
+        // 새로 생성된 플래시카드 목록에 추가
+        List<FlashCard> updatedFlashcards = List.from(viewModel.getFlashcardsForCurrentPage());
+        updatedFlashcards.add(newFlashCard);
+        viewModel.updateFlashcards(updatedFlashcards);
+        
+        if (kDebugMode) {
+          print("✅ 새 플래시카드 추가 완료: ${newFlashCard.front}");
+          print("✅ 현재 플래시카드 목록 크기: ${updatedFlashcards.length}개");
+        }
       }
     } catch (e) {
       if (kDebugMode) {
@@ -453,27 +464,54 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 플래시카드 화면으로 이동
-  void _navigateToFlashcards(BuildContext context, NoteDetailViewModel viewModel) {
-    Navigator.of(context).push(
+  void _navigateToFlashcards(BuildContext context, NoteDetailViewModel viewModel) async {
+    // 플래시카드 화면으로 이동하여 결과 받아오기
+    final result = await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FlashCardScreen(
           noteId: viewModel.noteId,
-          // initialFlashcards 제거 - FlashCardViewModel에서 직접 로드하도록 함
         ),
       ),
-    ).then((result) {
-      // 플래시카드 화면에서 돌아왔을 때 카운트만 업데이트
-      if (result != null && result is Map && result.containsKey('flashcardCount')) {
-        final int count = result['flashcardCount'] as int;
-        
-        // 카운트 업데이트
+    );
+    
+    // 플래시카드 화면에서 돌아왔을 때 결과 처리
+    if (result != null && result is Map<String, dynamic>) {
+      // 플래시카드 개수가 있으면 업데이트
+      if (result.containsKey('count') && result['count'] is int) {
+        int count = result['count'] as int;
         viewModel.updateFlashcardCount(count);
+      }
+      
+      // 플래시카드 목록이 있으면 화면 갱신하여 하이라이트 효과 적용
+      if (result.containsKey('flashcards') && result['flashcards'] is List) {
+        List<dynamic> cards = result['flashcards'] as List<dynamic>;
+        List<FlashCard> flashcards = cards.map((card) {
+          if (card is FlashCard) {
+            return card;
+          } else if (card is Map<String, dynamic>) {
+            return FlashCard.fromJson(card);
+          }
+          // 타입이 잘못된 경우 빈 카드 반환
+          return FlashCard(
+            id: '',
+            front: '',
+            back: '',
+            pinyin: '',
+            createdAt: DateTime.now(),
+          );
+        }).toList();
+        
+        // 비어있지 않은 플래시카드만 필터링
+        flashcards = flashcards.where((card) => card.front.isNotEmpty).toList();
         
         if (kDebugMode) {
-          print("🔄 플래시카드 화면에서 돌아옴: 카운트=$count");
+          print('플래시카드 목록 업데이트: ${flashcards.length}개');
         }
+        
+        // 플래시카드 목록 업데이트
+        viewModel.updateFlashcards(flashcards);
       }
-    });
+    }
   }
 
   // 바텀 네비게이션 바 구성 (다중 선택 모드)

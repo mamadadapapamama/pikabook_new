@@ -557,40 +557,31 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     });
   }
 
+  /// 뒤로 가기 처리
+  Future<bool> _handleBackButtonPressed() async {
+    // TTS 실행 중인 경우 먼저 중지
+    if (_isSpeaking) {
+      await _ttsService.stop();
+      _isSpeaking = false;
+    }
+    
+    // 결과 반환: 플래시카드 개수와 함께 플래시카드 목록도 반환
+    Navigator.of(context).pop({
+      'count': _flashCards.length,
+      'flashcards': _flashCards
+    });
+    
+    return false; // 이미 명시적으로 pop을 호출했으므로 false 반환
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-      onWillPop: () async {
-        // 화면을 나갈 때 현재 플래시카드 카운트를 전달 (onBackPressed와 동일한 형식)
-        if (widget.noteId != null && mounted) {
-          Navigator.of(context).pop({
-            'flashcardCount': _flashCards.length,
-            'success': _error == null,
-            'noteId': widget.noteId,
-            'flashcards': _flashCards, // 플래시카드 목록 전체 반환
-          });
-        }
-        return false; // 이미 명시적으로 pop을 호출했으므로 false 반환
-      },
+      onWillPop: _handleBackButtonPressed,
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: PikaAppBar.flashcard(
-          onBackPressed: () async {
-            // 뒤로가기 버튼 클릭 시 현재 플래시카드 수 반환
-            // TTS 실행 중인 경우 먼저 중지
-            if (_isSpeaking) {
-              await _ttsService.stop();
-              _isSpeaking = false;
-            }
-            
-            // 화면전환 깜빡임 최소화를 위해 즉시 처리
-            Navigator.of(context).pop({
-              'flashcardCount': _flashCards.length,
-              'success': _error == null,
-              'noteId': widget.noteId,
-              'flashcards': _flashCards, // 플래시카드 목록 전체 반환
-            });
-          },
+          onBackPressed: _handleBackButtonPressed,
           currentCardIndex: _currentIndex,
           totalCards: _flashCards.length,
         ),
@@ -682,24 +673,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                       
                       // 노트로 돌아가기 버튼
                       GestureDetector(
-                        onTap: () async {
-                          // TTS 실행 중인 경우 먼저 중지
-                          if (_isSpeaking) {
-                            await _ttsService.stop();
-                            _isSpeaking = false;
-                          }
-                          
-                          if (widget.noteId != null && mounted) {
-                            // 노트 화면으로 돌아가면서 카드 개수 0 전달
-                            Navigator.of(context).pop({
-                              'flashcardCount': 0,
-                              'success': true,
-                              'noteId': widget.noteId
-                            });
-                          } else {
-                            Navigator.of(context).pushReplacementNamed('/notes');
-                          }
-                        },
+                        onTap: _handleBackButtonPressed,
                         child: Container(
                           padding: EdgeInsets.symmetric(
                             horizontal: SpacingTokens.lg,
