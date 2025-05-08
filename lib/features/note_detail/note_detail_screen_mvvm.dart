@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
 import '../../core/services/media/tts_service.dart';
+import '../../core/services/content/flashcard_service.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatefulWidget {
@@ -419,14 +420,36 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     String back, 
     {String? pinyin}
   ) async {
-    // NoteDetailViewModel에서 createFlashCard 함수가 제거되었으므로
-    // 직접 FlashCardScreen으로 이동하여 생성하도록 안내
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('플래시카드 화면에서 추가해주세요.')),
-    );
-    
-    // 플래시카드 화면으로 이동
-    _navigateToFlashcards(context, viewModel);
+    try {
+      // 직접 FlashCardService 사용하여 플래시카드 생성
+      final flashCardService = FlashCardService();
+      final newFlashCard = await flashCardService.createFlashCard(
+        front: front,
+        back: back,
+        noteId: viewModel.noteId,
+        pinyin: pinyin,
+      );
+      
+      // 성공 메시지 표시
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('플래시카드가 추가되었습니다')),
+        );
+        
+        // 뷰모델에 플래시카드 카운트 업데이트
+        viewModel.updateFlashcardCount(viewModel.flashcardCount + 1);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print("❌ 플래시카드 생성 중 오류: $e");
+      }
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('플래시카드 추가 중 오류가 발생했습니다: $e')),
+        );
+      }
+    }
   }
   
   // 플래시카드 화면으로 이동

@@ -571,10 +571,24 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   // 플래시카드 단어 목록 업데이트
   void _updateFlashcardWords() {
+    if (widget.flashCards == null || widget.flashCards!.isEmpty) {
+      setState(() {
+        _flashcardWords = {};
+      });
+      return;
+    }
+    
+    // 플래시카드 앞면(중국어 단어)만 추출
+    final newWords = <String>{};
+    for (var card in widget.flashCards!) {
+      newWords.add(card.front);
+    }
+    
     setState(() {
-      _flashcardWords =
-          _contentManager.extractFlashcardWords(widget.flashCards);
-      debugPrint('플래시카드 단어 목록 업데이트: ${_flashcardWords.length}개');
+      _flashcardWords = newWords;
+      if (kDebugMode) {
+        print('플래시카드 단어 목록 업데이트: ${_flashcardWords.length}개');
+      }
     });
   }
 

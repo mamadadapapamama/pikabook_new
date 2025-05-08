@@ -56,25 +56,9 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   @override
   void initState() {
     super.initState();
-    // 초기 플래시카드가 있는 경우 바로 사용
-    if (widget.initialFlashcards != null && widget.initialFlashcards!.isNotEmpty) {
-      setState(() {
-        _flashCards = widget.initialFlashcards!;
-        _isLoading = false;
-      });
-      // 사용량 업데이트는 여전히 수행
-      if (_flashCards.isNotEmpty) {
-        _updateFlashCardReviewCount();
-      }
-    } else if (widget.noteId != null) {
-      // noteId가 있는 경우 Firestore에서 로드
-      _loadFlashCards();
-    } else {
-      // 모든 플래시카드 로드
-      _loadAllFlashcards();
-    }
+    // 초기화 시 로드 로직 개선
+    _initializeData();
     _initTts(); // TTS 초기화
-    // 중국어 사전은 필요할 때만 로드하도록 변경
   }
 
   @override
@@ -90,6 +74,44 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       await _ttsService.init();
     } catch (e) {
       debugPrint('TTS 초기화 중 오류 발생: $e');
+    }
+  }
+
+  // 데이터 초기화 로직 분리
+  Future<void> _initializeData() async {
+    // 초기 플래시카드가 있는 경우 바로 사용
+    if (widget.initialFlashcards != null && widget.initialFlashcards!.isNotEmpty) {
+      setState(() {
+        _flashCards = widget.initialFlashcards!;
+        _isLoading = false;
+      });
+      // 사용량 업데이트는 여전히 수행
+      if (_flashCards.isNotEmpty) {
+        _updateFlashCardReviewCount();
+      }
+      return;
+    }
+    
+    // 로딩 시작
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      if (widget.noteId != null) {
+        // noteId가 있는 경우 Firestore에서 로드
+        await _loadFlashCards();
+      } else {
+        // 모든 플래시카드 로드
+        await _loadAllFlashcards();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = '플래시카드를 불러오는 중 오류가 발생했습니다: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -574,11 +596,14 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
         ),
         body: Stack(
           children: [
-            // 메인 카드 화면
-            LoadingExperience(
-              loadingMessage: '플래시카드 로딩 중...',
-              loadData: _loadFlashCards,
-              errorWidgetBuilder: (error, retry) => Center(
+            // 로딩 중이면 로딩 인디케이터 표시
+            if (_isLoading)
+              const Center(
+                child: CircularProgressIndicator(),
+              )
+            // 오류가 있으면 오류 메시지 표시
+            else if (_error != null)
+              Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -587,7 +612,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                         color: ColorTokens.error),
                     SizedBox(height: SpacingTokens.md),
                     Text(
-                      error.toString(), 
+                      _error!, 
                       textAlign: TextAlign.center,
                       style: TypographyTokens.body1.copyWith(
                         color: ColorTokens.textPrimary,
@@ -595,7 +620,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                     ),
                     SizedBox(height: SpacingTokens.md),
                     ElevatedButton(
-                      onPressed: retry,
+                      onPressed: _initializeData,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: ColorTokens.primary,
                         foregroundColor: ColorTokens.textLight,
@@ -616,8 +641,10 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                     ),
                   ],
                 ),
-              ),
-              emptyStateWidget: Center(
+              )
+            // 플래시카드가 없으면 빈 상태 표시
+            else if (_flashCards.isEmpty)
+              Center(
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
@@ -693,9 +720,10 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                     ],
                   ),
                 ),
-              ),
-              isEmptyState: () => _flashCards.isEmpty,
-              contentBuilder: (context) => FutureBuilder<bool>(
+              )
+            // 플래시카드가 있으면 카드 스와이퍼 표시
+            else
+              FutureBuilder<bool>(
                 future: _ttsService.isTtsAvailable(),
                 builder: (context, snapshot) {
                   final bool isTtsEnabled = snapshot.data ?? true;
@@ -722,15 +750,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                           isLoop: _flashCards.length > 1,
                           cardBuilder: (context, index, horizontalThreshold,
                               verticalThreshold) {
-                            debugPrint('CardSwiper가 카드 빌드: index=$index, 총 카드=${_flashCards.length}, 현재 인덱스=$_currentIndex');
-                            
                             final double scale;
                             final double yOffset;
 
                             if (_flashCards.length == 1) {
                               scale = 1.0;
                               yOffset = 0.0;
-                              debugPrint('카드 1장만 표시: 스케일=$scale, 오프셋=$yOffset');
                             } else {
                               final int indexDiff = (index - _currentIndex).abs();
                               scale = index == _currentIndex
@@ -739,7 +764,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               yOffset = index == _currentIndex
                                   ? 0
                                   : 20.0 * indexDiff;
-                              debugPrint('여러 카드 표시: 인덱스=$index, 현재 인덱스=$_currentIndex, 스케일=$scale, 오프셋=$yOffset');
                             }
 
                             return FlashCardUI.buildFlashCard(
@@ -819,7 +843,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                   );
                 },
               ),
-            ),
           ],
         ),
       ),
