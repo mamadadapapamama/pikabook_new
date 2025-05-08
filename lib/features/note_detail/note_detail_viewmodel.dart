@@ -15,6 +15,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // debugPrint 함수 - 커스텀 구현
 void debugPrint(String message) {
@@ -29,6 +30,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   final NoteOptionsManager _noteOptionsManager = NoteOptionsManager();
   late NoteService _noteService;
   final TtsService _ttsService = TtsService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
   // PageController 추가
   final PageController pageController = PageController();
@@ -49,6 +51,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   bool _shouldUpdateUI = true;        // UI 업데이트 제어 플래그
   bool _isProcessingBackground = false; // 백그라운드 처리 상태
   int _totalImageCount = 0;           // 총 이미지 수
+  StreamSubscription? _pagesSubscription; // Firestore 페이지 리스너
   
   // 게터
   Note? get note => _note;
@@ -140,6 +143,9 @@ class NoteDetailViewModel extends ChangeNotifier {
       debugPrint("⏱️ 처리 타이머 취소됨");
       }
     }
+    
+    // Firestore 리스너 정리
+    _pagesSubscription?.cancel();
     
     super.dispose();
   }
@@ -252,8 +258,8 @@ class NoteDetailViewModel extends ChangeNotifier {
         _resumeUIUpdates();
       });
       
-      // 백그라운드 처리 상태 확인 시작
-      _startPageProcessingCheck();
+      // 실시간 페이지 상태 모니터링 시작
+      _startRealtimePageMonitoring();
       
       // 페이지 이미지 미리 로드 - 로딩이 완료된 후에만 수행
       Future.delayed(Duration(milliseconds: 300), () {
@@ -1023,135 +1029,122 @@ class NoteDetailViewModel extends ChangeNotifier {
     _pageProcessedCallback = callback;
   }
   
-  // 백그라운드에서 페이지 처리 상태 주기적 체크
-  void _startPageProcessingCheck() {
-    // 이미 타이머가 실행 중이면 취소
-    if (_processingTimer != null) {
-      _processingTimer!.cancel();
-      _processingTimer = null;
-    }
+  // Firestore 실시간 리스너로 페이지 상태 모니터링
+  void _startRealtimePageMonitoring() {
+    // 기존 타이머나 리스너가 있으면 취소
+    _processingTimer?.cancel();
+    _processingTimer = null;
+    _pagesSubscription?.cancel();
     
-    // 페이지가 없으면 실행하지 않음
-    if (_pages == null || _pages!.isEmpty) return;
-    
-    // 모든 페이지가 이미 처리되었는지 빠르게 확인
-    bool allAlreadyProcessed = true;
-    for (final page in _pages!) {
-      if (page.id == null) continue;
-      
-      // 아직 처리되지 않은 페이지가 있으면 체크 필요
-      final bool isProcessed = _processedPageStatus[page.id!] == true || 
-                             (page.originalText != '___PROCESSING___' && 
-                              page.originalText.isNotEmpty);
-      
-      if (!isProcessed) {
-        allAlreadyProcessed = false;
-        break;
-      }
-    }
-    
-    // 모든 페이지가 이미 처리되었으면 타이머 시작하지 않음
-    if (allAlreadyProcessed) {
-      if (kDebugMode) {
-        debugPrint("✅ 모든 페이지가 이미 처리되어 있어 처리 체크 타이머를 시작하지 않습니다");
-      }
-      return;
-    }
+    if (_noteId.isEmpty) return;
     
     if (kDebugMode) {
-      // 타이머 간격을 15초로 늘림 (성능 향상 및 불필요한 체크 감소)
-      debugPrint("⏱️ 페이지 처리 상태 체크 타이머 시작됨 (15초 간격)");
-      
-      _processingTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
-        debugPrint("🔄 페이지 처리 상태 주기적 체크 실행 중...");
-        
-      bool allProcessed = true;
-      bool anyStatusChanged = false;
-      bool currentPageChanged = false;
-      
-        // 처리되지 않은 페이지만 체크하기 위한 목록
-        final List<int> unprocessedPageIndices = [];
-        
-        // 먼저 처리가 필요한 페이지만 식별
-      for (int i = 0; i < _pages!.length; i++) {
-        final page = _pages![i];
-        if (page.id == null) continue;
-        
-        // 이미 처리된 페이지는 스킵
-        if (_processedPageStatus[page.id!] == true) continue;
-          
-          unprocessedPageIndices.add(i);
-          allProcessed = false;
-        }
-        
-        // 처리가 필요한 페이지만 체크 (불필요한 체크 없이 최적화)
-        for (final index in unprocessedPageIndices) {
-          final page = _pages![index];
-        
-        try {
-          // 페이지 상태 확인
-          bool isProcessed = false;
-          
-          // 텍스트가 이미 처리되어 있는지 확인
-          if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
-            isProcessed = true;
-          } else {
-              // 캐시된 페이지 체크로 성능 개선 (Firestore 호출 최소화)
-              debugPrint("⚠️ 캐시된 페이지 확인 (임시 처리)");
-              // NoteService에 getCachedPage 메서드가 없으므로 대체 로직 사용
-              isProcessed = false; // 처리되지 않았다고 가정하고 나중에 ContentManager로 체크
-          }
-          
-          // 상태가 변경된 경우에만 업데이트
-          if (_processedPageStatus[page.id!] != isProcessed) {
-            _processedPageStatus[page.id!] = isProcessed;
-            anyStatusChanged = true;
-            
-            // 현재 페이지의 상태가 변경되었는지 확인
-              if (index == _currentPageIndex) {
-              currentPageChanged = true;
-            }
-            
-            // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
-            if (isProcessed && _pageProcessedCallback != null) {
-                _pageProcessedCallback!(index);
-                
-                // 모든 프로세스를 페이지 정보 업데이트
-                _pages![index] = _pages![index].copyWith(
-                  originalText: await _getUpdatedPageText(page.id!),
-                );
-              }
-          }
-        } catch (e) {
-            debugPrint("⚠️ 페이지 처리 상태 확인 중 오류: $e");
-        }
+      debugPrint("🔄 Firestore 페이지 실시간 모니터링 시작: $_noteId");
+    }
+    
+    // Firestore에서 페이지 변경 감지 (처리 중인 페이지만 모니터링)
+    _pagesSubscription = _firestore
+        .collection('pages')
+        .where('noteId', isEqualTo: _noteId)
+        .snapshots()
+        .listen((snapshot) {
+      _handlePagesUpdate(snapshot);
+    }, onError: (error) {
+      if (kDebugMode) {
+        debugPrint("⚠️ Firestore 페이지 리스너 오류: $error");
       }
-      
-      // 상태 변경이 있고 현재 페이지에 변경이 있을 때만 UI 갱신
-        // 또는 모든 페이지가 처리완료된 경우도 UI 갱신
-        if ((anyStatusChanged && currentPageChanged && _shouldUpdateUI) || 
-            (anyStatusChanged && unprocessedPageIndices.isEmpty)) {
-        notifyListeners();
-          debugPrint("🔄 페이지 처리 상태 변경으로 UI 갱신됨");
-      }
-      
-      // 모든 페이지가 처리되었으면 타이머 중지
-        if (unprocessedPageIndices.isEmpty) {
-          debugPrint("✅ 모든 페이지 처리 완료, 타이머 중지");
-        timer.cancel();
-        _processingTimer = null;
-      }
+      // 오류 시 백업으로 타이머 방식 사용
+      _startFallbackTimerCheck();
     });
-    } else {
-      // 디버그 모드가 아닐 때는 타이머 없이 1회 체크만 수행
-      _checkProcessingStatus();
+  }
+  
+  // 페이지 상태 업데이트 처리
+  void _handlePagesUpdate(QuerySnapshot snapshot) {
+    if (_pages == null || _pages!.isEmpty) return;
+    
+    bool anyStatusChanged = false;
+    bool currentPageChanged = false;
+    
+    // 스냅샷에서 페이지 정보 처리
+    for (final doc in snapshot.docs) {
+      final pageData = doc.data() as Map<String, dynamic>;
+      final pageId = doc.id;
+      
+      // 현재 페이지 목록에서 해당 ID의 페이지 찾기
+      int pageIndex = -1;
+      for (int i = 0; i < _pages!.length; i++) {
+        if (_pages![i].id == pageId) {
+          pageIndex = i;
+          break;
+        }
       }
+      
+      // 페이지를 찾지 못했으면 다음으로
+      if (pageIndex == -1) continue;
+      
+      // 페이지 텍스트 확인하여 처리 상태 업데이트
+      final originalText = pageData['originalText'] as String? ?? '';
+      final isProcessed = originalText != '___PROCESSING___' && originalText.isNotEmpty;
+      
+      // 기존 상태와 다르면 업데이트
+      if (_processedPageStatus[pageId] != isProcessed) {
+        _processedPageStatus[pageId] = isProcessed;
+        anyStatusChanged = true;
+        
+        // 현재 표시 중인 페이지인지 확인
+        if (pageIndex == _currentPageIndex) {
+          currentPageChanged = true;
+        }
+        
+        // 페이지가 처리 완료된 경우 콜백 호출 및 페이지 업데이트
+        if (isProcessed && _pageProcessedCallback != null) {
+          _pageProcessedCallback!(pageIndex);
+          
+          // 페이지 객체 업데이트
+          if (pageIndex < _pages!.length) {
+            // 기존 ID를 유지하고 업데이트된 데이터로 페이지 객체 갱신
+            final updatedPage = pika_page.Page.fromJson({
+              'id': pageId,
+              ...pageData,
+              // timestamp를 날짜 문자열로 변환
+              'createdAt': (pageData['createdAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
+              'updatedAt': (pageData['updatedAt'] as Timestamp?)?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
+            });
+            _pages![pageIndex] = updatedPage;
+          }
+        }
+      }
+    }
+    
+    // 변경 사항이 있으면 UI 업데이트
+    if (anyStatusChanged && (currentPageChanged || _shouldUpdateUI)) {
+      notifyListeners();
+      if (kDebugMode) {
+        debugPrint("🔄 실시간 페이지 업데이트로 UI 갱신됨");
+      }
+    }
+  }
+  
+  // 백업용 타이머 체크 (리스너가 실패할 경우)
+  void _startFallbackTimerCheck() {
+    if (_processingTimer != null) return;
+    
+    if (kDebugMode) {
+      debugPrint("⏱️ 백업용 타이머 모니터링 시작 (리스너 실패 대응)");
+    }
+    
+    _processingTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+      _checkProcessingStatus();
+    });
   }
   
   // 디버그 모드가 아닐 때 사용할 간단한 체크 메서드
   void _checkProcessingStatus() async {
     // 처리가 필요한 페이지만 식별하고 상태 업데이트
     if (_pages == null || _pages!.isEmpty) return;
+    
+    bool anyStatusChanged = false;
+    bool currentPageChanged = false;
     
     for (int i = 0; i < _pages!.length; i++) {
       final page = _pages![i];
@@ -1163,15 +1156,26 @@ class NoteDetailViewModel extends ChangeNotifier {
       // 텍스트가 이미 처리되어 있는지 확인
       if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
         _processedPageStatus[page.id!] = true;
-      
+        anyStatusChanged = true;
+        
+        // 현재 페이지 변경 여부 확인
+        if (i == _currentPageIndex) {
+          currentPageChanged = true;
+        }
+        
         // 페이지가 처리 완료된 경우 콜백 함수 호출
         if (_pageProcessedCallback != null) {
           _pageProcessedCallback!(i);
         }
       }
-      }
     }
     
+    // 상태 변경이 있고 UI 업데이트 필요시에만 갱신
+    if (anyStatusChanged && (currentPageChanged || _shouldUpdateUI)) {
+      notifyListeners();
+    }
+  }
+  
   // 페이지 텍스트 업데이트 가져오기 (페이지 처리 완료 후)
   Future<String> _getUpdatedPageText(String pageId) async {
     try {
@@ -1179,22 +1183,36 @@ class NoteDetailViewModel extends ChangeNotifier {
       final processedText = await _contentManager.getProcessedText(pageId);
       if (processedText != null && processedText.fullOriginalText.isNotEmpty) {
         return processedText.fullOriginalText;
-    }
+      }
     
       // 서버에서 페이지 다시 로드
       if (kDebugMode) {
         debugPrint("⚠️ 페이지 정보 확인 (임시 처리)");
       }
-      // NoteService에 getPageById 메서드가 없으므로 ContentManager를 통해 텍스트 확인
+      
+      try {
+        final doc = await _firestore.collection('pages').doc(pageId).get();
+        if (doc.exists) {
+          final data = doc.data();
+          final originalText = data?['originalText'] as String? ?? '';
+          if (originalText != '___PROCESSING___' && originalText.isNotEmpty) {
+            return originalText;
+          }
+        }
+      } catch (e) {
+        debugPrint("⚠️ Firestore에서 페이지 텍스트 로드 실패: $e");
+      }
+      
+      // Firestore 실패 시 ContentManager 사용
       final pageProcessedText = await _contentManager.getProcessedText(pageId);
       if (pageProcessedText != null && pageProcessedText.fullOriginalText.isNotEmpty && 
           pageProcessedText.fullOriginalText != '___PROCESSING___') {
         return pageProcessedText.fullOriginalText;
       }
     } catch (e) {
-    if (kDebugMode) {
+      if (kDebugMode) {
         debugPrint("⚠️ 업데이트된 페이지 텍스트 가져오기 실패: $e");
-    }
+      }
     }
     
     return ''; // 빈 텍스트 반환 (실패 시)

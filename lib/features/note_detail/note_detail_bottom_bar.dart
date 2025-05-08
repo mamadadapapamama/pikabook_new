@@ -274,7 +274,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                         children: [
                           // TTS 버튼
                           if (widget.currentPage != null && !widget.isMinimalUI)
-                            GestureDetector(
+                          GestureDetector(
                               onTap: () {
                                 // 현재 상태 토글 및 UI 즉시 업데이트
                                 setState(() {
@@ -304,7 +304,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                                   Container(
                                     width: 24,
                                     height: 24,
-                                    decoration: BoxDecoration(
+                              decoration: BoxDecoration(
                                       color: _isTtsPlaying 
                                           ? ColorTokens.secondaryLight 
                                           : Colors.transparent,
@@ -315,15 +315,15 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                                       color: ColorTokens.secondary,
                                       size: 14,
                                     ),
-                                  ),
+                              ),
                                   const SizedBox(width: 4),
                                   Text(
                                     '본문 전체 듣기',
-                                    style: TypographyTokens.caption.copyWith(
-                                      color: ColorTokens.secondary,
-                                      fontSize: 12,
-                                    ),
-                                  ),
+                                style: TypographyTokens.caption.copyWith(
+                                  color: ColorTokens.secondary,
+                                  fontSize: 12,
+                                ),
+                              ),
                                 ],
                               ),
                             ),
@@ -418,7 +418,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
       ),
     );
   }
-
+  
   // TTS 상태 변경 리스너 설정
   void _setupTtsListener() {
     // 재생 상태 변경 리스너
@@ -458,8 +458,8 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
       setState(() {
         _isTtsPlaying = isPlaying;
       });
+      }
     }
-  }
 
   @override
   void dispose() {

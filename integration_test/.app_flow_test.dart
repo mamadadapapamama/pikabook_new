@@ -8,16 +8,6 @@ import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:pikabook_new/main.dart' as app;
 
-// 테스트 계정 정보
-class TestCredentials {
-  // 첫 번째 테스트 계정
-  static const String email1 = 'pika.test0001@gmail.com';
-  static const String password1 = 'pikatest123!';
-  
-  // 두 번째 테스트 계정 (첫 번째가 실패할 경우 사용)
-  static const String email2 = 'pikabook.test0002@gmail.com';
-  static const String password2 = 'vlzkvlzk002!';
-}
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

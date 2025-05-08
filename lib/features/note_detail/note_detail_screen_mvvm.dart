@@ -77,7 +77,40 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       
       // 튜토리얼 표시 확인
       NoteTutorial.checkAndShowTutorial(context);
+      
+      // 페이지 처리 상태 표시 콜백 설정
+      final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
+      viewModel.setPageProcessedCallback(_showPageProcessedMessage);
     });
+  }
+  
+  // 페이지 처리 완료 시 스낵바로 알림
+  void _showPageProcessedMessage(int pageIndex) {
+    if (!mounted) return;
+    
+    final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
+    final pageNumber = pageIndex + 1;
+    final totalPages = viewModel.pages?.length ?? 0;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$pageNumber/$totalPages 페이지 처리가 완료되었습니다.'),
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: '확인',
+          onPressed: () {
+            // 현재 다른 페이지를 보고 있는 경우, 처리 완료된 페이지로 이동
+            if (viewModel.currentPageIndex != pageIndex) {
+              viewModel.pageController.animateToPage(
+                pageIndex,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            }
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -140,27 +173,35 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     }
 
     // 페이지 뷰 구성 - PageController 연결
-    return SafeArea(
-      child: Container(
-        color: Colors.white,
-        padding: EdgeInsets.zero,
-        child: PageView.builder(
-          controller: viewModel.pageController, // 뷰모델의 컨트롤러 사용
-          itemCount: viewModel.pages!.length,
-          onPageChanged: viewModel.onPageChanged,
-          itemBuilder: (context, index) {
-            final page = viewModel.pages![index];
-            
-            // 특수 처리 마커가 있는지 확인
-            if (page.originalText == "___PROCESSING___") {
-              return _buildProcessingPage();
-            }
-            
-            // 페이지 콘텐츠 위젯 반환
-            return _buildPageContent(context, viewModel, page);
-          },
+    return Stack(
+      children: [
+        SafeArea(
+          child: Container(
+            color: Colors.white,
+            padding: EdgeInsets.zero,
+            child: PageView.builder(
+              controller: viewModel.pageController, // 뷰모델의 컨트롤러 사용
+              itemCount: viewModel.pages!.length,
+              onPageChanged: viewModel.onPageChanged,
+              itemBuilder: (context, index) {
+                final page = viewModel.pages![index];
+                
+                // 특수 처리 마커가 있는지 확인
+                if (page.originalText == "___PROCESSING___") {
+                  return _buildProcessingPage();
+                }
+                
+                // 페이지 콘텐츠 위젯 반환
+                return _buildPageContent(context, viewModel, page);
+              },
+            ),
+          ),
         ),
-      ),
+        
+        // 백그라운드 처리 상태 표시기
+        if (viewModel.isProcessingBackground)
+          _buildProcessingStatusIndicator(context, viewModel),
+      ],
     );
   }
   
@@ -171,10 +212,32 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const DotLoadingIndicator(message: '텍스트 처리를 기다리는 중...'),
+          const SizedBox(height: 16),
           Text(
             '이 페이지는 아직 처리 중입니다.\n잠시 후 자동으로 업데이트됩니다.',
             textAlign: TextAlign.center,
             style: TypographyTokens.body2,
+          ),
+          const SizedBox(height: 24),
+          // 진행 상태 표시기 추가
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 240,
+              height: 8,
+              child: LinearProgressIndicator(
+                backgroundColor: Colors.grey[300],
+                valueColor: AlwaysStoppedAnimation<Color>(ColorTokens.primary),
+                // 무한 로딩 인디케이터
+                value: null,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '페이지가 처리되면 바로 확인하실 수 있습니다',
+            style: TypographyTokens.caption.copyWith(color: Colors.grey[600]),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -465,5 +528,51 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         );
       }
     });
+  }
+
+  // 백그라운드 처리 상태 표시기
+  Widget _buildProcessingStatusIndicator(BuildContext context, NoteDetailViewModel viewModel) {
+    // 처리 상태 정보
+    final processedPages = viewModel.getProcessedPagesStatus();
+    final totalPages = processedPages.length;
+    final completedPages = processedPages.where((status) => status).length;
+    final progress = totalPages > 0 ? completedPages / totalPages : 0.0;
+    
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        color: Colors.black.withOpacity(0.7),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.grey[700],
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Text(
+                  '$completedPages/$totalPages',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '페이지 텍스트 처리 중...',
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 } 

@@ -374,7 +374,7 @@ class NoteCreationWorkflow {
       final User? currentUser = _auth.currentUser;
       
       if (currentUser == null) {
-        if (kDebugMode) {
+      if (kDebugMode) {
           debugPrint('사용자가 로그인되지 않음, 노트 개수 업데이트 건너뜀');
         }
         return;
