@@ -135,7 +135,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       title: viewModel.note?.originalText ?? '노트 로딩 중...',
       currentPage: currentPageNum,
       totalPages: totalPages,
-      flashcardCount: viewModel.flashCards.length,
+      flashcardCount: viewModel.flashcardCount,
       onMorePressed: () => _showMoreOptions(context, viewModel),
       onFlashcardTap: () => _navigateToFlashcards(context, viewModel),
       onBackPressed: () => Navigator.of(context).pop(),
@@ -247,7 +247,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         noteId: viewModel.noteId,
         onCreateFlashCard: (front, back, {pinyin}) => 
             _handleCreateFlashCard(context, viewModel, front, back, pinyin: pinyin),
-        flashCards: viewModel.flashCards,
+        // 플래시카드는 더 이상 여기서 전달하지 않음 - 필요시 FlashcardViewModel에서 로드
+        flashCards: [], 
         useSegmentMode: !viewModel.isFullTextMode,
         onDeleteSegment: (segmentIndex) => _handleDeleteSegment(context, viewModel, segmentIndex),
       ),
@@ -418,17 +419,14 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     String back, 
     {String? pinyin}
   ) async {
-    final success = await viewModel.createFlashCard(front, back, pinyin: pinyin);
+    // NoteDetailViewModel에서 createFlashCard 함수가 제거되었으므로
+    // 직접 FlashCardScreen으로 이동하여 생성하도록 안내
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('플래시카드 화면에서 추가해주세요.')),
+    );
     
-    if (success && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('플래시카드가 추가되었습니다')),
-      );
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('플래시카드 추가 중 오류가 발생했습니다')),
-      );
-    }
+    // 플래시카드 화면으로 이동
+    _navigateToFlashcards(context, viewModel);
   }
   
   // 플래시카드 화면으로 이동
@@ -437,25 +435,20 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       MaterialPageRoute(
         builder: (context) => FlashCardScreen(
           noteId: viewModel.noteId,
-          initialFlashcards: viewModel.flashCards,
+          // initialFlashcards 제거 - FlashCardViewModel에서 직접 로드하도록 함
         ),
       ),
     ).then((result) {
-      // 플래시카드 화면에서 돌아왔을 때 데이터 갱신
+      // 플래시카드 화면에서 돌아왔을 때 카운트만 업데이트
       if (result != null && result is Map && result.containsKey('flashcardCount')) {
         final int count = result['flashcardCount'] as int;
         
-        if (result.containsKey('flashcards') && result['flashcards'] is List) {
-          // 새로운 플래시카드 목록으로 교체
-          viewModel.loadFlashcards();
-          
-          if (kDebugMode) {
-            print("🔄 플래시카드 화면에서 돌아옴: 카운트=$count, 데이터 갱신 요청됨");
-          }
+        // 카운트 업데이트
+        viewModel.updateFlashcardCount(count);
+        
+        if (kDebugMode) {
+          print("🔄 플래시카드 화면에서 돌아옴: 카운트=$count");
         }
-      } else {
-        // 결과가 없어도 최신 데이터로 갱신
-        viewModel.loadFlashcards();
       }
     });
   }

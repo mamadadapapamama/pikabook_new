@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' hide debugPrint;
 import 'package:flutter/material.dart' hide debugPrint;
 import 'dart:async';
 import '../../core/models/flash_card.dart';
-import 'flashcard_service.dart';
+import '../../core/services/content/flashcard_service.dart';
 import '../../core/services/media/tts_service.dart';
 import '../../core/services/storage/unified_cache_service.dart';
 import 'dart:developer' as dev;
@@ -90,11 +90,9 @@ class FlashcardViewModel extends ChangeNotifier {
     _error = null;
     notifyListeners();
   
-    final flashCardService = FlashCardService();
-  
     try {
       // 먼저 Firestore에서 플래시카드 로드 시도
-      var firestoreFlashcards = await flashCardService.getFlashCardsForNote(_noteId);
+      var firestoreFlashcards = await _flashCardService.getFlashCardsForNote(_noteId);
       if (firestoreFlashcards.isNotEmpty) {
         debugPrint("[FlashcardViewModel] Firestore에서 ${firestoreFlashcards.length}개의 플래시카드 로드 성공");
         _flashCards = firestoreFlashcards;
@@ -117,7 +115,7 @@ class FlashcardViewModel extends ChangeNotifier {
         
         // 캐시에서 로드된 플래시카드를 Firestore에 동기화
         for (var card in cachedFlashcards) {
-          await flashCardService.updateFlashCard(card);
+          await _flashCardService.updateFlashCard(card);
         }
         
         notifyListeners();
@@ -138,14 +136,37 @@ class FlashcardViewModel extends ChangeNotifier {
     }
   }
   
+  // 모든 플래시카드 로드 
+  Future<void> loadAllFlashcards() async {
+    debugPrint("[FlashcardViewModel] 모든 플래시카드 로드 시작");
+    
+    _loadingFlashcards = true;
+    _error = null;
+    notifyListeners();
+    
+    try {
+      final allFlashcards = await _flashCardService.getAllFlashCards();
+      
+      debugPrint("[FlashcardViewModel] ${allFlashcards.length}개의 플래시카드 로드 성공");
+      _flashCards = allFlashcards;
+      _loadingFlashcards = false;
+      notifyListeners();
+    } catch (e) {
+      debugPrint("[FlashcardViewModel] 모든 플래시카드 로드 중 오류: $e");
+      _error = "플래시카드 로드 중 오류: $e";
+      _flashCards = [];
+      _loadingFlashcards = false;
+      notifyListeners();
+    }
+  }
+  
   // 플래시카드 생성
   Future<bool> createFlashCard(String front, String back, {String? pinyin}) async {
     debugPrint("[FlashcardViewModel] 플래시카드 생성 시작: $front - $back (병음: $pinyin)");
     
     try {
-      // FlashCardService를 사용하여 플래시카드 생성
-      final flashCardService = FlashCardService();
-      final newFlashCard = await flashCardService.createFlashCard(
+      // 플래시카드 서비스 사용
+      final newFlashCard = await _flashCardService.createFlashCard(
         front: front,
         back: back,
         noteId: _noteId,

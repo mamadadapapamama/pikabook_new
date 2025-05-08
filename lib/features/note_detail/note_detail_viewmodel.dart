@@ -3,18 +3,14 @@ import 'package:flutter/foundation.dart' hide debugPrint;
 import '../../core/models/note.dart';
 import '../../core/models/page.dart' as pika_page;
 import '../../core/models/flash_card.dart';
-import '../../core/models/processed_text.dart';
 import 'managers/page_manager.dart';
 import 'managers/content_manager.dart';
 import 'managers/note_options_manager.dart';
 import '../../core/services/content/note_service.dart';
-import '../../core/services/content/flashcard_service.dart';
-import '../../core/services/storage/unified_cache_service.dart';
 import '../../core/services/media/tts_service.dart';
 import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 // debugPrint 함수 - 커스텀 구현
@@ -43,8 +39,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   String? _error;                     // 오류 메시지
   int _currentPageIndex = 0;          // 현재 페이지 인덱스
   bool _isProcessingSegments = false; // 텍스트 처리 상태
-  List<FlashCard> _flashCards = [];   // 플래시카드 목록
-  bool _loadingFlashcards = true;     // 플래시카드 로딩 상태
+  int? _flashcardCount;               // 플래시카드 개수 (로드하지 않고 개수만 추적)
   bool _isFullTextMode = false;       // 전체 텍스트 모드 상태
   Map<String, bool> _processedPageStatus = {}; // 페이지 처리 상태
   Timer? _processingTimer;            // 처리 타이머
@@ -61,8 +56,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   String? get error => _error;
   int get currentPageIndex => _currentPageIndex;
   bool get isProcessingSegments => _isProcessingSegments;
-  List<FlashCard> get flashCards => _flashCards;
-  bool get loadingFlashcards => _loadingFlashcards;
+  int get flashcardCount => _flashcardCount ?? 0;
   bool get isFullTextMode => _isFullTextMode;
   bool get isProcessingBackground => _isProcessingBackground;
   int get totalImageCount => _totalImageCount;
@@ -92,11 +86,13 @@ class NoteDetailViewModel extends ChangeNotifier {
     // 초기화 로직 수행
     if (_note == null && _noteId.isNotEmpty) {
       loadNoteFromFirestore();
+    } else if (_note != null) {
+      // 초기 노트가 있는 경우 플래시카드 카운트 설정
+      _flashcardCount = _note!.flashcardCount;
     }
     
     // 초기 데이터 로드 (지연 실행)
     Future.microtask(() {
-      loadFlashcards();
       loadInitialPages();
     });
   }
@@ -129,12 +125,6 @@ class NoteDetailViewModel extends ChangeNotifier {
     // PageController 정리
     pageController.dispose();
     
-    // 앱 종료 전 플래시카드 저장
-    if (_noteId.isNotEmpty && _flashCards.isNotEmpty) {
-      debugPrint("[NoteDetailViewModel] dispose - ${_flashCards.length}개의 플래시카드 캐시에 저장");
-      UnifiedCacheService().cacheFlashcards(_flashCards);
-    }
-    
     // 타이머 정리
     if (_processingTimer != null) {
       _processingTimer!.cancel();
@@ -164,14 +154,10 @@ class NoteDetailViewModel extends ChangeNotifier {
         }
         
         _note = loadedNote;
+        _flashcardCount = loadedNote.flashcardCount;
         _isLoading = false;
         _error = null;
         notifyListeners();
-        
-        // 플래시카드 카운트가 있으면 플래시카드 로드
-        if (loadedNote.flashcardCount != null && loadedNote.flashcardCount! > 0) {
-          loadFlashcards();
-        }
       } else {
         if (kDebugMode) {
           debugPrint("[NoteDetailViewModel] 노트를 찾을 수 없음: $_noteId");
@@ -353,93 +339,6 @@ class NoteDetailViewModel extends ChangeNotifier {
     });
   }
   
-  // 플래시카드 로드
-  Future<void> loadFlashcards() async {
-    if (_noteId.isEmpty) {
-      if (kDebugMode) {
-        debugPrint("[NoteDetailViewModel] 플래시카드 로드 실패: noteId가 없음");
-      }
-      return;
-    }
-
-    if (kDebugMode) {
-      debugPrint("[NoteDetailViewModel] 플래시카드 로드 시작: noteId = $_noteId");
-    }
-  
-    final flashCardService = FlashCardService();
-  
-    try {
-      // 먼저 Firestore에서 플래시카드 로드 시도
-      var firestoreFlashcards = await flashCardService.getFlashCardsForNote(_noteId);
-      if (firestoreFlashcards != null && firestoreFlashcards.isNotEmpty) {
-        if (kDebugMode) {
-          debugPrint("[NoteDetailViewModel] Firestore에서 ${firestoreFlashcards.length}개의 플래시카드 로드 성공");
-        }
-        _flashCards = firestoreFlashcards;
-        _loadingFlashcards = false;
-        
-        // Firestore에서 로드된 플래시카드를 캐시에 저장
-        await UnifiedCacheService().cacheFlashcards(firestoreFlashcards);
-        
-        // 노트 객체의 flashcardCount 업데이트
-        if (_note != null) {
-          _note = _note!.copyWith(flashcardCount: _flashCards.length);
-        }
-        if (kDebugMode) {
-          debugPrint("[NoteDetailViewModel] 노트 객체의 flashcardCount 업데이트: ${_flashCards.length}");
-        }
-        notifyListeners();
-        return;
-      }
-
-      // Firestore에서 로드 실패한 경우 캐시에서 로드 시도
-      if (kDebugMode) {
-        debugPrint("[NoteDetailViewModel] Firestore에서 플래시카드를 찾지 못함, 캐시 확인 중");
-      }
-      var cachedFlashcards = await UnifiedCacheService().getFlashcardsByNoteId(_noteId);
-      if (cachedFlashcards.isNotEmpty) {
-        if (kDebugMode) {
-          debugPrint("[NoteDetailViewModel] 캐시에서 ${cachedFlashcards.length}개의 플래시카드 로드 성공");
-        }
-        _flashCards = cachedFlashcards;
-        _loadingFlashcards = false;
-        
-        // 캐시에서 로드된 플래시카드를 Firestore에 동기화 - 백그라운드로 처리하여 UI 차단 방지
-        Future.microtask(() async {
-          for (var card in cachedFlashcards) {
-            await flashCardService.updateFlashCard(card);
-          }
-        });
-        
-        // 노트 객체의 flashcardCount 업데이트
-        if (_note != null) {
-          _note = _note!.copyWith(flashcardCount: _flashCards.length);
-        }
-        if (kDebugMode) {
-          debugPrint("[NoteDetailViewModel] 노트 객체의 flashcardCount 업데이트: ${_flashCards.length}");
-        }
-        notifyListeners();
-        return;
-      }
-
-      // 모든 시도 실패시 빈 리스트로 초기화
-      if (kDebugMode) {
-        debugPrint("[NoteDetailViewModel] 플래시카드를 찾지 못함 (Firestore 및 캐시 모두)");
-      }
-      _flashCards = [];
-      _loadingFlashcards = false;
-      notifyListeners();
-    } catch (e, stackTrace) {
-      if (kDebugMode) {
-        debugPrint("[NoteDetailViewModel] 플래시카드 로드 중 오류 발생: $e");
-        debugPrint(stackTrace.toString());
-      }
-      _flashCards = [];
-      _loadingFlashcards = false;
-      notifyListeners();
-    }
-  }
-  
   // 페이지 변경 처리
   void onPageChanged(int index) {
     if (_pages == null || index >= _pages!.length || _currentPageIndex == index) return;
@@ -521,53 +420,6 @@ class NoteDetailViewModel extends ChangeNotifier {
     return success;
   }
   
-  // 플래시카드 생성
-  Future<bool> createFlashCard(String front, String back, {String? pinyin}) async {
-    if (kDebugMode) {
-      debugPrint("📝 플래시카드 생성 시작: $front - $back (병음: $pinyin)");
-    }
-    
-    try {
-      // FlashCardService를 사용하여 플래시카드 생성
-      final flashCardService = FlashCardService();
-      final newFlashCard = await flashCardService.createFlashCard(
-        front: front,
-        back: back,
-        noteId: _noteId,
-        pinyin: pinyin,
-      );
-      
-      // 상태 업데이트
-      _flashCards.add(newFlashCard);
-      notifyListeners();
-      
-      if (kDebugMode) {
-        debugPrint("✅ 플래시카드 생성 완료: ${newFlashCard.front} - ${newFlashCard.back} (병음: ${newFlashCard.pinyin})");
-        debugPrint("📊 현재 플래시카드 수: ${_flashCards.length}");
-      }
-      
-      // 노트의 플래시카드 카운터 업데이트
-      _updateNoteFlashcardCount();
-      
-      return true;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint("❌ 플래시카드 생성 중 오류: $e");
-      }
-      return false;
-    }
-  }
-  
-  // 플래시카드 업데이트 (플래시카드 화면에서 돌아올 때)
-  void updateFlashcards(List<FlashCard> updatedFlashcards) {
-    _flashCards = updatedFlashcards;
-    _updateNoteFlashcardCount();
-    notifyListeners();
-    if (kDebugMode) {
-      debugPrint("🔄 플래시카드 목록 업데이트됨: ${_flashCards.length}개");
-    }
-  }
-  
   // 노트 제목 업데이트
   Future<bool> updateNoteTitle(String newTitle) async {
     if (_note == null || _note!.id == null) return false;
@@ -601,37 +453,6 @@ class NoteDetailViewModel extends ChangeNotifier {
         debugPrint("❌ 노트 삭제 중 오류: $e");
       }
       return false;
-    }
-  }
-  
-  // 플래시카드 카운트 업데이트
-  Future<void> _updateNoteFlashcardCount() async {
-    if (_note == null || _note!.id == null) return;
-    
-    try {
-      // 현재 노트 정보 가져오기
-      final note = await _noteService.getNoteById(_note!.id!);
-      if (note == null) return;
-      
-      // 플래시카드 카운트 업데이트
-      final updatedNote = note.copyWith(flashcardCount: _flashCards.length);
-      
-      // UI 차단 방지를 위해 백그라운드에서 처리
-      Future.microtask(() async {
-        await _noteService.updateNote(updatedNote.id!, updatedNote);
-      });
-      
-      // 현재 노트 정보 업데이트
-      _note = updatedNote;
-      notifyListeners();
-      
-      if (kDebugMode) {
-        debugPrint("✅ 노트 플래시카드 카운트 업데이트: ${_flashCards.length}");
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint("❌ 노트 플래시카드 카운트 업데이트 실패: $e");
-      }
     }
   }
   
@@ -1089,13 +910,17 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     if (kDebugMode) {
       debugPrint("🔄 Firestore 페이지 실시간 모니터링 시작: $_noteId");
-      debugPrint("📊 현재 페이지 처리 상태: ${_processedPageStatus.entries.where((e) => e.value).length}/${_processedPageStatus.length}개 처리됨");
+      
+      // 페이지 처리 상태 요약 로그
+      final processedCount = _processedPageStatus.entries.where((e) => e.value).length;
+      final totalCount = _processedPageStatus.length;
+      debugPrint("📊 현재 페이지 처리 상태: $processedCount/$totalCount개 처리됨");
       
       // 전체 페이지 개수와 이미지 수 정보 명시적 출력
       if (_pages != null) {
         debugPrint("📊 전체 페이지 개수: ${_pages!.length}개 / 총 이미지: $_totalImageCount개");
         
-        // 각 페이지의 현재 처리 상태 출력
+        // 디버그 모드에서만 모든 페이지 상태 출력
         for (int i = 0; i < _pages!.length; i++) {
           final page = _pages![i];
           final bool isProcessed = page.id != null ? (_processedPageStatus[page.id!] ?? false) : false;
@@ -1104,14 +929,13 @@ class NoteDetailViewModel extends ChangeNotifier {
       }
     }
     
-    // 초기 상태 강제 확인 - 일단 한 번 직접 확인
+    // 초기 상태 강제 확인
     _checkAllPagesStatus();
     
     // Firestore에서 페이지 변경 감지 (특정 노트의 모든 페이지 구독)
     _pagesSubscription = _firestore
         .collection('pages')
         .where('noteId', isEqualTo: _noteId)
-        // 비용 절감을 위해 originalText 필드만 모니터링
         .snapshots(includeMetadataChanges: true)
         .listen(
       (snapshot) {
@@ -1127,11 +951,6 @@ class NoteDetailViewModel extends ChangeNotifier {
         }
         // 오류 시 백업으로 타이머 방식 사용
         _startFallbackTimerCheck();
-      },
-      onDone: () {
-        if (kDebugMode) {
-          debugPrint("✅ Firestore 페이지 리스너 완료");
-        }
       }
     );
     
@@ -1149,9 +968,14 @@ class NoteDetailViewModel extends ChangeNotifier {
           return;
         }
         
+        // 상태 로그 출력 간소화
         if (kDebugMode) {
-          debugPrint("⏱️ 백업 타이머: 페이지 상태 확인 중 (${_processedPageStatus.entries.where((e) => e.value).length}/${_processedPageStatus.length}개 처리됨)");
+          final processed = _processedPageStatus.values.where((v) => v).length;
+          final total = _processedPageStatus.length;
+          debugPrint("⏱️ 백업 타이머: 페이지 상태 확인 중 ($processed/$total개 처리됨)");
         }
+        
+        // 모든 페이지 상태 확인
         _checkAllPagesStatus();
       });
     }
@@ -1320,5 +1144,25 @@ class NoteDetailViewModel extends ChangeNotifier {
     }
     
     return ''; // 빈 텍스트 반환 (실패 시)
+  }
+
+  // 플래시카드 카운트 업데이트
+  void updateFlashcardCount(int count) {
+    _flashcardCount = count;
+    
+    // 노트 객체의 플래시카드 카운트 업데이트
+    if (_note != null && _note!.id != null) {
+      _note = _note!.copyWith(flashcardCount: count);
+      
+      // UI 차단 방지를 위해 백그라운드에서 Firestore 업데이트
+      Future.microtask(() async {
+        await _noteService.updateNote(_note!.id!, _note!);
+        if (kDebugMode) {
+          debugPrint("✅ 노트 플래시카드 카운트 업데이트: $count");
+        }
+      });
+    }
+    
+    notifyListeners();
   }
 } 

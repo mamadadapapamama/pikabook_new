@@ -66,9 +66,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       if (_flashCards.isNotEmpty) {
         _updateFlashCardReviewCount();
       }
-    } else {
-      // 기존 방식대로 로드
+    } else if (widget.noteId != null) {
+      // noteId가 있는 경우 Firestore에서 로드
       _loadFlashCards();
+    } else {
+      // 모든 플래시카드 로드
+      _loadAllFlashcards();
     }
     _initTts(); // TTS 초기화
     // 중국어 사전은 필요할 때만 로드하도록 변경
@@ -90,26 +93,96 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     }
   }
 
-  /// 플래시카드 목록 로드
-  Future<void> _loadFlashCards() async {
+  // 모든 플래시카드 로드
+  Future<void> _loadAllFlashcards() async {
     try {
-      // noteId가 있으면 해당 노트의 플래시카드만, 없으면 모든 플래시카드 로드
-      _flashCards = widget.noteId != null
-          ? await _flashCardService.getFlashCardsForNote(widget.noteId!)
-          : await _flashCardService.getAllFlashCards();
-
-      // 초기화 인덱스 설정
-      _currentIndex = 0;
-      _isFlipped = false;
-
+      final allFlashcards = await _flashCardService.getAllFlashCards();
+      setState(() {
+        _flashCards = allFlashcards;
+        _isLoading = false;
+      });
+      
       // 플래시카드가 있으면 첫 번째 카드의 복습 횟수 업데이트
       if (_flashCards.isNotEmpty) {
         await _updateFlashCardReviewCount();
       }
     } catch (e) {
+      debugPrint('모든 플래시카드를 불러오는 중 오류 발생: $e');
+      setState(() {
+        _error = '플래시카드를 불러오는 중 오류가 발생했습니다: $e';
+        _isLoading = false;
+      });
+    }
+  }
+  
+  /// 플래시카드 목록 로드
+  Future<void> _loadFlashCards() async {
+    try {
+      // noteId가 있으면 해당 노트의 플래시카드만 로드
+      if (widget.noteId != null) {
+        setState(() {
+          _isLoading = true;
+        });
+        
+        // 먼저 Firestore에서 로드 시도
+        var firestoreFlashcards = await _flashCardService.getFlashCardsForNote(widget.noteId!);
+        
+        if (firestoreFlashcards.isNotEmpty) {
+          debugPrint('Firestore에서 ${firestoreFlashcards.length}개의 플래시카드 로드 성공');
+          setState(() {
+            _flashCards = firestoreFlashcards;
+            _isLoading = false;
+            _error = null;
+          });
+          
+          // Firestore에서 로드된 플래시카드를 캐시에 저장
+          await UnifiedCacheService().cacheFlashcards(firestoreFlashcards);
+          
+          // 첫 번째 카드의 복습 횟수 업데이트
+          if (_flashCards.isNotEmpty) {
+            await _updateFlashCardReviewCount();
+          }
+          return;
+        }
+        
+        // Firestore에서 로드 실패한 경우 캐시에서 로드 시도
+        debugPrint('Firestore에서 플래시카드를 찾지 못함, 캐시 확인 중');
+        var cachedFlashcards = await UnifiedCacheService().getFlashcardsByNoteId(widget.noteId!);
+        
+        if (cachedFlashcards.isNotEmpty) {
+          debugPrint('캐시에서 ${cachedFlashcards.length}개의 플래시카드 로드 성공');
+          setState(() {
+            _flashCards = cachedFlashcards;
+            _isLoading = false;
+            _error = null;
+          });
+          
+          // 캐시에서 로드된 플래시카드를 Firestore에 동기화
+          for (var card in cachedFlashcards) {
+            await _flashCardService.updateFlashCard(card);
+          }
+          
+          // 첫 번째 카드의 복습 횟수 업데이트
+          if (_flashCards.isNotEmpty) {
+            await _updateFlashCardReviewCount();
+          }
+          return;
+        }
+        
+        // 모든 시도 실패시 빈 리스트로 초기화
+        debugPrint('플래시카드를 찾지 못함 (Firestore 및 캐시 모두)');
+        setState(() {
+          _flashCards = [];
+          _isLoading = false;
+          _error = null;
+        });
+      }
+    } catch (e) {
       debugPrint('플래시카드를 불러오는 중 오류가 발생했습니다: $e');
-      // 에러를 LoadingExperience에서 처리하기 위해 에러를 throw
-      throw '플래시카드를 불러오는 중 오류가 발생했습니다: $e';
+      setState(() {
+        _error = '플래시카드를 불러오는 중 오류가 발생했습니다: $e';
+        _isLoading = false;
+      });
     }
   }
 
