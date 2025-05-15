@@ -350,23 +350,34 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   @override
   Widget build(BuildContext context) {
     final pt = _processedText;
-    final List<Widget> segmentWidgets = pt != null && pt.segments != null && pt.segments!.isNotEmpty
-      ? pt.segments!.map((seg) => Column(
+    final List<Widget> segmentWidgets = [];
+    if (pt != null && pt.segments != null && pt.segments!.isNotEmpty) {
+      for (final seg in pt.segments!) {
+        segmentWidgets.add(Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 1. 중국어(원문)는 항상 바로 표시
+            if (seg.original != null && seg.original!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0, bottom: 2.0),
+                child: Text(seg.original!, style: _originalTextStyle),
+              ),
+            // 2. 병음은 준비되는 대로 표시
             if (seg.pinyin != null && seg.pinyin!.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 2.0),
+                padding: const EdgeInsets.only(bottom: 2.0),
                 child: Text(seg.pinyin!, style: _pinyinTextStyle),
               ),
+            // 3. 번역도 준비되는 대로 표시
             if (seg.translatedText != null && seg.translatedText!.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
-                child: _buildSelectableText(seg.translatedText!, _translatedTextStyle),
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text(seg.translatedText!, style: _translatedTextStyle),
               ),
           ],
-        )).toList()
-      : [];
+        ));
+      }
+    }
     return SingleChildScrollView(
       key: ValueKey('page_${widget.page.id}'),
       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -417,8 +428,6 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   const DotLoadingIndicator(message: '텍스트 처리 중이에요!'),
                 ]
                 else if (_processedText != null) ...[
-                  if (pt!.fullOriginalText.isNotEmpty)
-                    _buildSelectableText(pt.fullOriginalText, _originalTextStyle),
                   ...segmentWidgets,
                 ]
                 else if ((widget.page.originalText.isNotEmpty && widget.page.originalText != '___PROCESSING___') || widget.isLoadingImage) ...[

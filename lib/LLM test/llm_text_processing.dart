@@ -21,8 +21,16 @@ class UnifiedTextProcessingService {
   // 캐시 저장소 (메모리 캐시)
   final Map<String, String> _cache = {};
   
+  Future<void>? _initFuture;
+  
   UnifiedTextProcessingService._internal() {
-    _initialize();
+    _initFuture = _initialize();
+  }
+  
+  Future<void> ensureInitialized() async {
+    if (_initFuture != null) {
+      await _initFuture;
+    }
   }
   
   /// 서비스 초기화
@@ -40,7 +48,7 @@ class UnifiedTextProcessingService {
           debugPrint('API 키가 비어 있거나 null입니다.');
         } else {
           debugPrint('UnifiedTextProcessingService: API 키 로드 완료');
-        }
+        }        
       } catch (e) {
         debugPrint('API 키 로드 실패: $e');
       }
@@ -51,6 +59,7 @@ class UnifiedTextProcessingService {
   
   /// LLM을 통한 통합 텍스트 처리 (세그먼테이션, 번역, 병음 생성)
   Future<ChineseText> processWithLLM(String text, {String sourceLanguage = 'zh'}) async {
+    await ensureInitialized();
     if (text.isEmpty) {
       return ChineseText.empty();
     }
@@ -82,7 +91,7 @@ class UnifiedTextProcessingService {
     
     // API 키 확인
     if (_apiKey == null || _apiKey!.isEmpty) {
-      throw Exception('API 키가 설정되지 않았습니다. assets/credentials/openai.json 파일을 확인하세요.');
+      throw Exception('API 키가 설정되지 않았습니다.');
     }
     
     try {
@@ -177,6 +186,7 @@ Output:
   
   /// 병음만 GPT-3.5-turbo로 요청
   Future<List<String>> processPinyinWithLLM(List<String> chineseList) async {
+    await ensureInitialized();
     if (chineseList.isEmpty) return [];
     if (_apiKey == null || _apiKey!.isEmpty) {
       throw Exception('API 키가 설정되지 않았습니다.');

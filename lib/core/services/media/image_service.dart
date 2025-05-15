@@ -656,6 +656,8 @@ class ImageService {
       return;
     }
 
+    debugPrint('업로드 직전 uid: $_currentUserId');
+
     try {
       // Firebase Storage 참조 생성
       final storageRef = _storage.ref().child(relativePath);
