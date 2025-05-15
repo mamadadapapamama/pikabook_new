@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/models/note.dart';
 import '../../core/models/page.dart' as pika_page;
 import '../../core/models/flash_card.dart';
-import 'note_detail_viewmodel.dart';
+import 'note_detail_viewmodel_new.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 import 'page_content_widget.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
@@ -36,15 +36,14 @@ class NoteDetailScreenMVVM extends StatefulWidget {
     int totalImageCount = 0,
   }) {
     if (kDebugMode) {
-      print("🚀 Navigating to NoteDetailScreenMVVM for note: ${note.id}, processing: $isProcessingBackground, totalImages: $totalImageCount");
+      print("🚀 Navigating to NoteDetailScreenMVVM for note: ${note.id}, totalImages: $totalImageCount");
     }
     return MaterialPageRoute(
       settings: const RouteSettings(name: '/note_detail'),
       builder: (context) => ChangeNotifierProvider(
-        create: (context) => NoteDetailViewModel(
+        create: (context) => NoteDetailViewModelNew(
           noteId: note.id!,
           initialNote: note,
-          isProcessingBackground: isProcessingBackground,
           totalImageCount: totalImageCount,
         ),
         child: NoteDetailScreenMVVM(
@@ -81,7 +80,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       NoteTutorial.checkAndShowTutorial(context);
       
       // 페이지 처리 상태 표시 콜백 설정
-      final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
+      final viewModel = Provider.of<NoteDetailViewModelNew>(context, listen: false);
       viewModel.setPageProcessedCallback(_showPageProcessedMessage);
     });
   }
@@ -90,7 +89,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   void _showPageProcessedMessage(int pageIndex) {
     if (!mounted) return;
     
-    final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
+    final viewModel = Provider.of<NoteDetailViewModelNew>(context, listen: false);
     final pageNumber = pageIndex + 1;
     final totalPages = viewModel.pages?.length ?? 0;
     
@@ -118,7 +117,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   @override
   Widget build(BuildContext context) {
     // ViewModel에 접근
-    final viewModel = Provider.of<NoteDetailViewModel>(context);
+    final viewModel = Provider.of<NoteDetailViewModelNew>(context);
     
     return Scaffold(
       backgroundColor: Colors.white,
@@ -129,7 +128,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 앱바 구성
-  PreferredSizeWidget _buildAppBar(BuildContext context, NoteDetailViewModel viewModel) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, NoteDetailViewModelNew viewModel) {
     final currentPageNum = viewModel.currentPageIndex + 1;
     final totalPages = viewModel.pages?.length ?? 0;
     
@@ -147,7 +146,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 바디 구성
-  Widget _buildBody(BuildContext context, NoteDetailViewModel viewModel) {
+  Widget _buildBody(BuildContext context, NoteDetailViewModelNew viewModel) {
     if (viewModel.isLoading) {
       return const Center(child: DotLoadingIndicator(message: '페이지 로딩 중...'));
     }
@@ -239,12 +238,12 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 페이지 콘텐츠 위젯
-  Widget _buildPageContent(BuildContext context, NoteDetailViewModel viewModel, pika_page.Page page) {
+  Widget _buildPageContent(BuildContext context, NoteDetailViewModelNew viewModel, pika_page.Page page) {
     return RepaintBoundary(
       child: PageContentWidget(
         key: ValueKey('page_content_${page.id}'),
         page: page,
-        imageFile: viewModel.getImageFileForPage(page),
+        imageFile: viewModel.getCurrentPageImageFile(),
         isLoadingImage: false,
         noteId: viewModel.noteId,
         onCreateFlashCard: (front, back, {pinyin}) => 
@@ -258,7 +257,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 세그먼트 삭제 처리
-  void _handleDeleteSegment(BuildContext context, NoteDetailViewModel viewModel, int segmentIndex) async {
+  void _handleDeleteSegment(BuildContext context, NoteDetailViewModelNew viewModel, int segmentIndex) async {
     final success = await viewModel.deleteSegment(segmentIndex);
     
     if (success && context.mounted) {
@@ -273,7 +272,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 더보기 옵션 표시
-  void _showMoreOptions(BuildContext context, NoteDetailViewModel viewModel) {
+  void _showMoreOptions(BuildContext context, NoteDetailViewModelNew viewModel) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -283,7 +282,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 바텀 시트 구성
-  Widget _buildBottomSheet(BuildContext context, NoteDetailViewModel viewModel) {
+  Widget _buildBottomSheet(BuildContext context, NoteDetailViewModelNew viewModel) {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -337,7 +336,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 제목 수정 다이얼로그
-  void _showEditTitleDialog(BuildContext context, NoteDetailViewModel viewModel) {
+  void _showEditTitleDialog(BuildContext context, NoteDetailViewModelNew viewModel) {
     final TextEditingController controller = TextEditingController(
       text: viewModel.note?.originalText,
     );
@@ -375,7 +374,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 노트 삭제 확인
-  void _confirmDeleteNote(BuildContext context, NoteDetailViewModel viewModel) {
+  void _confirmDeleteNote(BuildContext context, NoteDetailViewModelNew viewModel) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -416,7 +415,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   // 플래시카드 생성 처리
   void _handleCreateFlashCard(
     BuildContext context, 
-    NoteDetailViewModel viewModel,
+    NoteDetailViewModelNew viewModel,
     String front, 
     String back, 
     {String? pinyin}
@@ -464,7 +463,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 플래시카드 화면으로 이동
-  void _navigateToFlashcards(BuildContext context, NoteDetailViewModel viewModel) async {
+  void _navigateToFlashcards(BuildContext context, NoteDetailViewModelNew viewModel) async {
     // 플래시카드 화면으로 이동하여 결과 받아오기
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
@@ -515,7 +514,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
 
   // 바텀 네비게이션 바 구성 (다중 선택 모드)
-  Widget _buildBottomBar(BuildContext context, NoteDetailViewModel viewModel) {
+  Widget _buildBottomBar(BuildContext context, NoteDetailViewModelNew viewModel) {
     if (viewModel.pages == null || viewModel.pages!.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -536,15 +535,15 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     return NoteDetailBottomBar(
       currentPage: viewModel.currentPage,
       currentPageIndex: viewModel.currentPageIndex,
-      totalPages: viewModel.totalImageCount > 0 ? viewModel.totalImageCount : (viewModel.pages?.length ?? 0),
+      totalPages: viewModel.pages?.length ?? 0,
       onPageChanged: (index) {
         // 네비게이션 버튼 클릭 시 PageController를 사용하여 페이지 이동
         viewModel.navigateToPage(index);
       },
-      contentManager: viewModel.getContentManager(),
+      contentManager: viewModel.getSegmentManager(),
       textReaderService: TextReaderService(),
       isProcessing: false,
-      progressValue: (viewModel.currentPageIndex + 1) / (viewModel.totalImageCount > 0 ? viewModel.totalImageCount : (viewModel.pages?.length ?? 1)),
+      progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),
       onTtsPlay: () {
         // TTS 재생/정지 토글 (ViewModel만 사용)
         if (viewModel.isTtsPlaying) {
@@ -559,7 +558,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   }
   
   // 페이지 처리 완료 콜백 설정 (스낵바 표시)
-  void _setupPageProcessedCallback(BuildContext context, NoteDetailViewModel viewModel) {
+  void _setupPageProcessedCallback(BuildContext context, NoteDetailViewModelNew viewModel) {
     // 이미 콜백이 설정되어 있는지 검사하는 로직이 필요할 수 있음
     // 일단 매번 새로 설정하도록 구현
     

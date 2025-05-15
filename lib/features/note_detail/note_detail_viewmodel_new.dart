@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' as flutter_foundation;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/models/note.dart';
@@ -120,7 +120,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   /// TTS 초기화
   void _initTts() {
     _ttsService.init();
-    if (kDebugMode) {
+    if (flutter_foundation.kDebugMode) {
       debugPrint("[NoteDetailViewModelNew] TTS 서비스 초기화됨");
     }
   }
@@ -144,7 +144,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       _state.setLoading(false);
       _state.setError("노트 로드 중 오류가 발생했습니다: $e");
       notifyListeners();
-      if (kDebugMode) {
+      if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 노트 로드 중 오류: $e");
       }
     }
@@ -152,7 +152,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   
   /// 초기 페이지 로드
   Future<void> loadInitialPages() async {
-    if (kDebugMode) {
+    if (flutter_foundation.kDebugMode) {
       debugPrint("🔄 페이지 로드 시작");
     }
     
@@ -179,7 +179,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       _state.setLoading(false);
       _state.setError("페이지 로드 중 오류가 발생했습니다: $e");
       notifyListeners();
-      if (kDebugMode) {
+      if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 페이지 로드 중 오류: $e");
       }
     }
@@ -231,7 +231,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 페이지 이미지 로드 중 오류: $e");
       }
     }
@@ -252,7 +252,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       _pageProcessedCallback!(pageIndex);
     }
     
-    if (kDebugMode) {
+    if (flutter_foundation.kDebugMode) {
       debugPrint("✅ 페이지 ${pageIndex + 1} 처리 완료");
     }
   }
@@ -267,7 +267,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     // 전방/후방 이미지 프리로드
     _preloadAdjacentImages(index);
     
-    if (kDebugMode) {
+    if (flutter_foundation.kDebugMode) {
       debugPrint("📄 페이지 변경됨: ${index + 1}");
     }
   }
@@ -353,7 +353,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       await _noteService.deleteNote(_state.note!.id!);
       return true;
     } catch (e) {
-      if (kDebugMode) {
+      if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 노트 삭제 중 오류: $e");
       }
       return false;
@@ -388,7 +388,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
         await _ttsService.speak(textToSpeak);
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (flutter_foundation.kDebugMode) {
         debugPrint("❌ TTS 중 오류: $e");
       }
     }
@@ -434,7 +434,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       
       return true;
     } catch (e) {
-      if (kDebugMode) {
+      if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 세그먼트 삭제 중 오류: $e");
       }
       return false;
@@ -462,7 +462,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       _flashcards = cards;
       notifyListeners();
     } catch (e) {
-      if (kDebugMode) {
+      if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 플래시카드 로드 중 오류: $e");
       }
     }
@@ -502,5 +502,12 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     _ttsService.dispose();
     _state.dispose();
     super.dispose();
+  }
+}
+
+// 내부 debugging 함수
+void debugPrint(String message) {
+  if (flutter_foundation.kDebugMode) {
+    print(message);
   }
 }
