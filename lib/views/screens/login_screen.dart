@@ -10,7 +10,7 @@ import '../../../firebase_options.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../core/services/authentication/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../features/auth/sample_mode_service.dart';
+import '../../features/sample/sample_mode_service.dart';
 import '../../features/sample/sample_home_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/gestures.dart';

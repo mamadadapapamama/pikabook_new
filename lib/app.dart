@@ -20,7 +20,7 @@ import 'core/services/marketing/marketing_campaign_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'features/auth/sample_mode_service.dart';
+import 'features/sample/sample_mode_service.dart';
 import 'features/sample/sample_home_screen.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어

@@ -8,7 +8,7 @@ import '../../core/widgets/pika_button.dart';
 import '../../core/models/note.dart';
 import '../../widgets/note_list_item.dart';
 import 'sample_notes_service.dart';
-import '../../features/auth/sample_mode_service.dart';
+import 'sample_mode_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'sample_note_detail_screen.dart';
 import 'sample_flashcard_screen.dart';
