@@ -11,7 +11,7 @@ import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/widgets/tts_button.dart';
-import 'managers/content_manager.dart';
+import 'managers/segment_manager.dart';
 import 'dart:async';
 
 /// 노트 상세 화면 하단 내비게이션 바
@@ -22,7 +22,7 @@ class NoteDetailBottomBar extends StatefulWidget {
   final int currentPageIndex;
   final int totalPages;
   final Function(int) onPageChanged;
-  final ContentManager contentManager;
+  final SegmentManager contentManager;
   final TextReaderService textReaderService;
   final bool isProcessing; // 현재 페이지가 처리 중인지 여부
   final double progressValue;

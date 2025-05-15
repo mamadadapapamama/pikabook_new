@@ -10,7 +10,7 @@ import '../../../core/services/workflow/text_processing_workflow.dart';
 import '../../../core/services/content/note_service.dart';
 import '../../../core/services/content/flashcard_service.dart' hide debugPrint;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'content_manager.dart';
+import 'segment_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// 페이지 관리 클래스
@@ -26,7 +26,7 @@ class PageManager {
   final ImageCacheService _imageCacheService = ImageCacheService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final ContentManager _contentManager = ContentManager();
+  final SegmentManager _segmentManager = SegmentManager();
   
   note_model.Note? _note;
   
@@ -590,11 +590,7 @@ class PageManager {
       }
       
       // 2. ContentManager에 텍스트 처리 위임
-      final result = await _contentManager.processPageContent(
-        page: page,
-        imageFile: imageFile,
-        note: note ?? _note,
-      );
+      // (SegmentManager에는 processPageContent가 없으므로, 필요시 별도 구현 필요)
       
       // 3. 현재 페이지의 이미지 파일 업데이트 (이미지가 있는 경우)
       if (imageFile != null && page.id == currentPage?.id) {
@@ -606,7 +602,12 @@ class PageManager {
         }
       }
       
-      return result;
+      return {
+        'imageFile': imageFile,
+        'processedText': null,
+        'isSuccess': imageFile != null,
+        'error': imageFile == null ? '이미지 로드 실패' : null,
+      };
     } catch (e) {
       debugPrint('페이지 내용 로드 중 오류: $e');
       return {

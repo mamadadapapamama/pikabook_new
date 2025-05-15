@@ -22,7 +22,7 @@ import 'pinyin_creation_service.dart';
 import '../authentication/user_preferences_service.dart';
 import '../common/usage_limit_service.dart'; // 사용량 제한 서비스 추가
 import 'package:crypto/crypto.dart';
-import '../../../features/note_detail/managers/content_manager.dart'; // ContentManager 임포트
+import '../../../features/note_detail/managers/segment_manager.dart'; // SegmentManager 임포트
 
 /// 개선된 OCR 서비스 : OCR 처리 후 모드에 따라 다른 처리를 수행합니다.
 /// 전문 서적 모드 : 핀인 제거 후 전체 텍스트 번역

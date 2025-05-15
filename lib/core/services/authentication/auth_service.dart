@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../media/image_service.dart';
 import '../common/usage_limit_service.dart';
-import '../../../features/note_detail/managers/content_manager.dart';
+import '../../../features/note_detail/managers/segment_manager.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -203,7 +203,7 @@ class AuthService {
       await ImageService().clearImageCache();
       
       // 5. 처리된 텍스트 캐시 정리
-      ContentManager().clearProcessedTextCache();
+      SegmentManager().clearProcessedTextCache();
       
       // 6. Firebase 로그아웃
       await _auth.signOut();

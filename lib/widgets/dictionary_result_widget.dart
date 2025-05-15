@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../features/note_detail/managers/content_manager.dart';
+import '../features/note_detail/managers/segment_manager.dart';
 import '../core/models/dictionary.dart';
 import '../core/theme/tokens/color_tokens.dart';
 import '../core/theme/tokens/typography_tokens.dart';
@@ -24,7 +24,7 @@ class DictionaryResultWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final contentManager = ContentManager();
+    final segmentManager = SegmentManager();
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -93,11 +93,11 @@ class DictionaryResultWidget extends StatelessWidget {
                   SizedBox(width: SpacingTokens.xs),
                   // 발음 듣기 버튼 - TtsButton 위젯으로 변경
                   FutureBuilder<bool>(
-                    future: contentManager.ttsService.isTtsAvailable(),
+                    future: segmentManager.ttsService.isTtsAvailable(),
                     builder: (context, snapshot) {
                       final bool isTtsEnabled = snapshot.data ?? true;
                       final String? ttsTooltip = !isTtsEnabled ? 
-                          contentManager.ttsService.getTtsLimitMessage() : null;
+                          segmentManager.ttsService.getTtsLimitMessage() : null;
                       
                       // 표준 TtsButton 위젯 사용
                       return TtsButton(

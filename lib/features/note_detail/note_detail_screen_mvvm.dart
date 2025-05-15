@@ -546,14 +546,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       isProcessing: false,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.totalImageCount > 0 ? viewModel.totalImageCount : (viewModel.pages?.length ?? 1)),
       onTtsPlay: () {
-        if (kDebugMode) {
-          print("TTS 재생/정지 토글");
-        }
-        // TtsService에서 현재 상태 확인
-        final ttsService = viewModel.getContentManager().ttsService;
-        // 재생 중이면 정지, 정지 상태면 재생
-        final currentState = ttsService.state.toString();
-        if (currentState.contains('playing')) {
+        // TTS 재생/정지 토글 (ViewModel만 사용)
+        if (viewModel.isTtsPlaying) {
           viewModel.stopTts();
         } else {
           viewModel.speakCurrentPageText();

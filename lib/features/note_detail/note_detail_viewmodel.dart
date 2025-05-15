@@ -4,7 +4,7 @@ import '../../core/models/note.dart';
 import '../../core/models/page.dart' as pika_page;
 import '../../core/models/flash_card.dart';
 import 'managers/page_manager.dart';
-import 'managers/content_manager.dart';
+import 'managers/segment_manager.dart';
 import 'managers/note_options_manager.dart';
 import '../../core/services/content/note_service.dart';
 import '../../core/services/media/tts_service.dart';
@@ -23,7 +23,7 @@ void debugPrint(String message) {
 class NoteDetailViewModel extends ChangeNotifier {
   // 모델 및 매니저 참조
   late PageManager _pageManager;
-  late ContentManager _contentManager;
+  late SegmentManager _segmentManager;
   final NoteOptionsManager _noteOptionsManager = NoteOptionsManager();
   late NoteService _noteService;
   final TtsService _ttsService = TtsService();
@@ -64,6 +64,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   bool get isFullTextMode => _isFullTextMode;
   bool get isProcessingBackground => _isProcessingBackground;
   int get totalImageCount => _totalImageCount;
+  
+  // TTS 재생 상태 확인을 위한 getter 추가
+  bool get isTtsPlaying => _segmentManager.ttsService.state.toString().contains('playing');
   
   // 현재 페이지 (nullable)
   pika_page.Page? get currentPage {
@@ -107,7 +110,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   // 의존성 초기화
   void _initializeDependencies() {
     _noteService = NoteService();
-    _contentManager = ContentManager();
+    _segmentManager = SegmentManager();
     _pageManager = PageManager(
       noteId: _noteId,
       initialNote: _note,
@@ -224,7 +227,7 @@ class NoteDetailViewModel extends ChangeNotifier {
           } else {
             try {
               // ContentManager를 통해 처리된 텍스트가 있는지 확인
-              final processedText = await _contentManager.getProcessedText(page.id!);
+              final processedText = await _segmentManager.getProcessedText(page.id!);
               isProcessed = processedText != null && 
                            processedText.fullOriginalText != '___PROCESSING___' &&
                            processedText.fullOriginalText.isNotEmpty;
@@ -487,7 +490,7 @@ class NoteDetailViewModel extends ChangeNotifier {
     }
     
     try {
-      final processedText = await _contentManager.getProcessedText(page.id!);
+      final processedText = await _segmentManager.getProcessedText(page.id!);
       if (processedText != null) {
         if (kDebugMode) {
           debugPrint("✅ 페이지 ${page.id}의 처리된 텍스트가 있습니다: ${processedText.segments?.length ?? 0}개 세그먼트");
@@ -516,7 +519,7 @@ class NoteDetailViewModel extends ChangeNotifier {
         }
         
         // 처리된 텍스트가 없으면 처리 시작
-        _contentManager.processPageText(
+        _segmentManager.processPageText(
           page: page,
           imageFile: null,
         ).then((result) {
@@ -611,7 +614,7 @@ class NoteDetailViewModel extends ChangeNotifier {
       }
       
       // ContentManager를 통해 페이지 텍스트 처리
-      final processedText = await _contentManager.processPageText(
+      final processedText = await _segmentManager.processPageText(
         page: page,
         imageFile: null,
       );
@@ -684,7 +687,7 @@ class NoteDetailViewModel extends ChangeNotifier {
       
       // 세그먼트 모드인 경우 세그먼트 텍스트 사용, 아니면 원본 텍스트 사용
       if (!_isFullTextMode && currentPage.id != null) {
-        final processedText = await _contentManager.getProcessedText(currentPage.id!);
+        final processedText = await _segmentManager.getProcessedText(currentPage.id!);
         if (processedText?.segments != null && processedText!.segments!.isNotEmpty) {
           // 모든 세그먼트 텍스트 합치기
           textToSpeak = processedText.segments!
@@ -784,8 +787,8 @@ class NoteDetailViewModel extends ChangeNotifier {
   }
   
   // ContentManager 객체 가져오기
-  ContentManager getContentManager() {
-    return _contentManager;
+  SegmentManager getContentManager() {
+    return _segmentManager;
   }
   
   // 세그먼트 삭제 메서드
@@ -803,7 +806,7 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     try {
       // ContentManager의 deleteSegment 메서드 호출
-      final updatedPage = await _contentManager.deleteSegment(
+      final updatedPage = await _segmentManager.deleteSegment(
         noteId: _noteId,
         page: currentPage!,
         segmentIndex: segmentIndex,
@@ -1118,7 +1121,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   Future<String> _getUpdatedPageText(String pageId) async {
     try {
       // 먼저 처리된 텍스트 확인
-      final processedText = await _contentManager.getProcessedText(pageId);
+      final processedText = await _segmentManager.getProcessedText(pageId);
       if (processedText != null && processedText.fullOriginalText.isNotEmpty) {
         return processedText.fullOriginalText;
       }
@@ -1142,7 +1145,7 @@ class NoteDetailViewModel extends ChangeNotifier {
       }
       
       // Firestore 실패 시 ContentManager 사용
-      final pageProcessedText = await _contentManager.getProcessedText(pageId);
+      final pageProcessedText = await _segmentManager.getProcessedText(pageId);
       if (pageProcessedText != null && pageProcessedText.fullOriginalText.isNotEmpty && 
           pageProcessedText.fullOriginalText != '___PROCESSING___') {
         return pageProcessedText.fullOriginalText;

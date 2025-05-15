@@ -4,7 +4,7 @@ import '../../core/models/page.dart' as page_model;
 import '../../core/models/processed_text.dart';
 import '../../core/models/flash_card.dart';
 import '../../core/models/dictionary.dart';
-import 'managers/content_manager.dart';
+import 'managers/segment_manager.dart';
 import '../../widgets/dictionary_result_widget.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
 import '../../core/widgets/dot_loading_indicator.dart';
@@ -71,7 +71,7 @@ class PageContentWidget extends StatefulWidget {
 }
 
 class _PageContentWidgetState extends State<PageContentWidget> {
-  final ContentManager _contentManager = ContentManager();
+  final SegmentManager _segmentManager = SegmentManager();
   final TextReaderService _textReaderService = TextReaderService();
   final PageService _pageService = PageService();
   
@@ -135,7 +135,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     if (widget.page.id == null) return;
     
     try {
-      final cachedText = await _contentManager.getProcessedText(widget.page.id!);
+      final cachedText = await _segmentManager.getProcessedText(widget.page.id!);
       
       if (mounted) {
         setState(() {
@@ -165,7 +165,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     super.didUpdateWidget(oldWidget);
     // 페이지가 변경되면 TTS 중지
     if (oldWidget.page.id != widget.page.id) {
-      _contentManager.stopSpeaking();
+      _segmentManager.stopSpeaking();
       _processPageText();
     }
 
@@ -186,9 +186,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     });
     _startTimeoutTimer();
     final startTime = DateTime.now();
-    debugPrint('페이지 텍스트 처리 시작: [32m${widget.page.id}[0m');
+    debugPrint('페이지 텍스트 처리 시작: \x1b[32m[32m${widget.page.id}\x1b[0m');
     try {
-      final processedText = await _contentManager.processPageText(
+      final processedText = await _segmentManager.processPageText(
         page: widget.page,
         imageFile: widget.imageFile,
       );
@@ -216,136 +216,36 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     }
   }
 
-  // 세그먼트 삭제 핸들러 추가
-  void _handleDeleteSegment(int index) {
-    if (_processedText == null || _processedText!.segments == null) return;
-    setState(() {
-      _processedText = _processedText!.copyWith(
-        segments: List.from(_processedText!.segments!)..removeAt(index),
-      );
-    });
+  // 세그먼트 삭제 핸들러: SegmentManager만 사용
+  Future<void> _handleDeleteSegment(int index) async {
+    if (widget.page.id == null) return;
+    final updatedPage = await _segmentManager.deleteSegment(
+      noteId: widget.noteId,
+      page: widget.page,
+      segmentIndex: index,
+    );
+    if (updatedPage != null) {
+      final processedText = await _segmentManager.getProcessedText(widget.page.id!);
+      if (mounted) {
+        setState(() {
+          _processedText = processedText;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     // 화면을 나갈 때 TTS 중지
-    _contentManager.stopSpeaking();
-    _textReaderService.dispose(); // TTS 서비스 정리
+    _segmentManager.stopSpeaking();
     _timeoutTimer?.cancel();
     super.dispose();
   }
 
-  // TTS 초기화 메서드 추가
-  void _initTextReader() async {
-    await _textReaderService.init();
-    
-    // TTS 상태 변경 콜백 설정
-    _textReaderService.setOnPlayingStateChanged((segmentIndex) {
-      if (mounted) {
-        setState(() {
-          _playingSegmentIndex = segmentIndex;
-        });
-        debugPrint('페이지 콘텐츠 TTS 상태 변경: segmentIndex=$segmentIndex');
-      }
-    });
-    
-    // TTS 재생 완료 콜백 설정
-    _textReaderService.setOnPlayingCompleted(() {
-      if (mounted) {
-        setState(() {
-          _playingSegmentIndex = null;
-        });
-        debugPrint('페이지 콘텐츠 TTS 재생 완료');
-      }
-    });
-  }
-
-  // TTS 제한 확인
-  Future<bool> _checkTtsLimit() async {
-    if (_isCheckingTtsLimit) return false;
-    _isCheckingTtsLimit = true;
-    
-    try {
-      final usageLimitService = UsageLimitService();
-      _ttsLimitStatus = await usageLimitService.checkFreeLimits();
-      _ttsUsagePercentages = await usageLimitService.getUsagePercentages();
-      
-      _isCheckingTtsLimit = false;
-      return _ttsLimitStatus?['ttsLimitReached'] == true;
-    } catch (e) {
-      debugPrint('TTS 제한 확인 중 오류: $e');
-      _isCheckingTtsLimit = false;
-      return false;
-    }
-  }
-
-  // TTS 재생 메서드 추가
+  // TTS 재생: SegmentManager만 사용
   void _playTts(String text, {int? segmentIndex}) async {
-    if (text.isEmpty) return;
-    
-    // TTS 제한 확인
-    bool isLimitReached = await _checkTtsLimit();
-    if (isLimitReached) {
-      // TTS 제한에 도달한 경우 다이얼로그 표시
-      if (mounted) {
-        UsageDialog.show(
-          context,
-          limitStatus: _ttsLimitStatus!,
-          usagePercentages: _ttsUsagePercentages!,
-          onContactSupport: () {
-            // TODO: 지원팀 문의 기능 구현
-          },
-        );
-      }
-      return;
-    }
-    
-    if (_playingSegmentIndex == segmentIndex) {
-      // 이미 재생 중인 세그먼트를 다시 클릭한 경우 중지
-      _textReaderService.stop();
-      
-      // 명시적으로 상태 업데이트 (콜백이 호출되지 않을 수 있어 추가)
-      if (mounted) {
-        setState(() {
-          _playingSegmentIndex = null;
-        });
-        debugPrint('페이지 콘텐츠 TTS 중지 (사용자에 의해)');
-      }
-    } else {
-      // 새로운 세그먼트 재생
-      // 상태 먼저 업데이트
-      if (mounted) {
-        setState(() {
-          _playingSegmentIndex = segmentIndex;
-        });
-      }
-      
-      try {
-        if (segmentIndex != null) {
-          await _textReaderService.readSegment(text, segmentIndex);
-        } else {
-          await _textReaderService.readText(text);
-        }
-        
-        // 안전장치: 10초 후 재생이 여전히 진행 중인 경우 상태 리셋
-        Future.delayed(const Duration(seconds: 10), () {
-          if (mounted && _playingSegmentIndex == segmentIndex) {
-            setState(() {
-              _playingSegmentIndex = null;
-            });
-            debugPrint('페이지 콘텐츠 TTS 타임아웃으로 상태 리셋');
-          }
-        });
-      } catch (e) {
-        // 오류 발생 시 상태 리셋
-        if (mounted) {
-          setState(() {
-            _playingSegmentIndex = null;
-          });
-          debugPrint('페이지 콘텐츠 TTS 재생 중 오류: $e');
-        }
-      }
-    }
+    await _segmentManager.speakText(text);
+    // playingSegmentIndex 등 UI 상태는 필요시 SegmentManager 콜백으로만 처리
   }
 
   @override
@@ -426,36 +326,27 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     );
   }
 
-  // 사전 결과 표시
+  // 사전 결과 표시: SegmentManager만 사용
   void _showDictionaryResult(String word) async {
-    // 디버그 로그 추가
-    debugPrint('사전 검색 요청: $word');
-
-    // 이미 플래시카드에 있는 단어인지 확인
+    // 플래시카드에 이미 있는 단어인지 확인
     FlashCard? existingCard;
-
     if (widget.flashCards != null) {
       for (final card in widget.flashCards!) {
         if (card.front == word) {
           existingCard = card;
-          debugPrint('플래시카드에 이미 있는 단어: $word');
           break;
         }
       }
     }
-
     try {
-      // 플래시카드에 이미 있는 단어인 경우, 플래시카드 정보로 사전 결과 표시
       if (existingCard != null) {
         if (!mounted) return;
-
         final customEntry = DictionaryEntry(
           word: existingCard.front,
           pinyin: existingCard.pinyin ?? '',
           meaning: existingCard.back,
           examples: [],
         );
-
         DictionaryResultWidget.showDictionaryBottomSheet(
           context: context,
           entry: customEntry,
@@ -464,10 +355,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
         );
         return;
       }
-
-      // 사전 서비스에서 단어 검색
-      final entry = await _contentManager.lookupWord(word);
-
+      final entry = await _segmentManager.lookupWord(word);
       if (entry != null) {
         if (mounted) {
           DictionaryResultWidget.showDictionaryBottomSheet(
@@ -478,10 +366,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           );
         }
       } else {
-        // 사전에서 찾을 수 없는 경우, API로도 찾을 수 없는 경우
         if (!mounted) return;
-        
-        // 오류 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('단어 "$word"를 사전에서 찾을 수 없습니다.')),
         );
@@ -598,7 +483,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       debugPrint('사전 서비스에서 단어 검색 시작: $word');
       
       // 사전 서비스에서 단어 검색 
-      final entry = await _contentManager.lookupWord(word);
+      final entry = await _segmentManager.lookupWord(word);
 
       if (entry != null) {
         debugPrint('단어 검색 성공: ${entry.word}, 의미: ${entry.meaning}');
@@ -679,7 +564,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     try {
       if (!mounted) return; // 위젯이 이미 dispose된 경우 중단
       
-      await _contentManager.setProcessedText(pageId, processedText);
+      await _segmentManager.setProcessedText(pageId, processedText);
       
       // 로깅
       debugPrint('processedText 저장 완료: pageId=$pageId');
