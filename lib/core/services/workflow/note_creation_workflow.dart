@@ -223,27 +223,24 @@ class NoteCreationWorkflow {
         final pageDoc = snapshot.docs.first;
         final page = page_model.Page.fromFirestore(pageDoc);
         
-        // 페이지 처리 상태 확인
-        if (page.originalText != '___PROCESSING___' && page.originalText.isNotEmpty) {
+        // 페이지 이미지가 mount(저장) 되었는지 확인
+        if (page.imageUrl != null && page.imageUrl!.isNotEmpty) {
           if (kDebugMode) {
-            debugPrint('✅ 첫 번째 페이지 처리 완료 확인됨: ${page.id}');
+            debugPrint('✅ 첫 번째 페이지 이미지 mount 확인됨: ${page.id}');
           }
-          
           // 캐시 업데이트 (백그라운드로 처리)
           Future.microtask(() async {
             await _cacheService.cachePage(noteId, page);
           });
-          
           // 리스너 취소
           subscription?.cancel();
-          
           // 응답 반환
           if (!completer.isCompleted) {
             completer.complete();
           }
         } else {
           if (kDebugMode) {
-            debugPrint('⏳ 첫 번째 페이지 처리 중: ${page.id}');
+            debugPrint('⏳ 첫 번째 페이지 이미지 미완료: ${page.id}');
           }
         }
       }, onError: (error) {
@@ -260,16 +257,14 @@ class NoteCreationWorkflow {
         }
       });
     
-    // 최대 20초 타임아웃 설정 (기존 10초에서 늘림)
-    Timer(const Duration(seconds: 20), () {
+    // 최대 40초 타임아웃 설정 (기존 20초에서 늘림)
+    Timer(const Duration(seconds: 40), () {
       if (!completer.isCompleted) {
         if (kDebugMode) {
-          debugPrint('⚠️ 첫 번째 페이지 처리 감지 타임아웃 (20초)');
+          debugPrint('⚠️ 첫 번째 페이지 처리 감지 타임아웃 (40초)');
         }
-        
         // 리스너 취소
         subscription?.cancel();
-        
         // 타임아웃 시 화면 진입 허용
         completer.complete();
       }

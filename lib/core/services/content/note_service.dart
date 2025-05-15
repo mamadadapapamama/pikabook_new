@@ -18,6 +18,9 @@ import '../text_processing/enhanced_ocr_service.dart';
 import '../common/usage_limit_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
+import '../../../LLM test/llm_text_processing.dart';
+import '../../models/processed_text.dart';
+import '../../models/text_segment.dart';
 
 /// 노트 서비스: 노트 관리, 생성, 처리, 캐싱 로직을 담당합니다.
 ///  
@@ -328,7 +331,7 @@ class NoteService {
 
       // 이미지가 있으면 처리
       if (imageFile != null) {
-        await _processImageAndCreatePage(noteId, imageFile);
+        await _processImageAndCreatePage(noteId, imageFile, pageNumber: 1);
       }
 
       // 생성된 노트 가져오기
@@ -563,53 +566,39 @@ class NoteService {
     });
   }
   
-  /// 이미지 처리 및 페이지 생성
-  Future<Map<String, dynamic>> _processImageAndCreatePage(
-    String noteId, 
+  /// 기존(legacy) 방식: OCR + 번역 서비스
+  Future<Map<String, dynamic>> _processImageAndCreatePageLegacy(
+    String noteId,
     File imageFile, {
-    int pageNumber = 1,
-    bool shouldProcess = false,
+    required int pageNumber,
     String? existingImageUrl,
+    bool shouldProcess = true,
   }) async {
     try {
-      // 이미지가 없거나 존재하지 않으면 처리 중단
       if (!await imageFile.exists()) {
         return {'success': false, 'error': '이미지 파일이 존재하지 않습니다'};
       }
-      
-      // 이미지 업로드 및 URL 가져오기 (이미 썸네일이 있는 경우 재사용)
-      final imageUrl = existingImageUrl != null && existingImageUrl.isNotEmpty 
-          ? existingImageUrl 
+      final imageUrl = existingImageUrl != null && existingImageUrl.isNotEmpty
+          ? existingImageUrl
           : await _imageService.uploadAndGetUrl(imageFile);
-      
-      // 페이지 생성 - 초기 상태는 "처리 중"으로 표시
       final page = await _pageService.createPage(
         noteId: noteId,
         pageNumber: pageNumber,
         imageUrl: imageUrl,
-        originalText: shouldProcess ? '' : '___PROCESSING___', // 즉시 처리 여부에 따라 초기 텍스트 설정
+        originalText: shouldProcess ? '' : '___PROCESSING___',
         translatedText: '',
       );
-
       if (shouldProcess) {
-        // OCR 텍스트 추출 (동기 처리)
         final extractedText = await _ocrService.extractText(imageFile);
-        
-        // 텍스트 번역 (동기 처리)
         final translatedText = await _translationService.translateText(extractedText);
-        
-        // 페이지 업데이트
         await _pageService.updatePage(
           page.id!,
           originalText: extractedText,
           translatedText: translatedText,
         );
-        
-        // 첫 번째 페이지인 경우 노트 정보 업데이트
         if (pageNumber == 1) {
           await _updateNoteFirstPageInfo(noteId, imageUrl, extractedText, translatedText);
         }
-        
         return {
           'success': true,
           'imageUrl': imageUrl,
@@ -618,27 +607,17 @@ class NoteService {
           'pageId': page.id,
         };
       } else {
-        // 비동기 처리를 위한 마이크로태스크 예약
         Future.microtask(() async {
           try {
-            // OCR 텍스트 추출
             final extractedText = await _ocrService.extractText(imageFile);
-            
-            // 텍스트 번역
             final translatedText = await _translationService.translateText(extractedText);
-            
-            // 페이지 업데이트
             await _pageService.updatePage(
               page.id!,
               originalText: extractedText,
               translatedText: translatedText,
             );
-            
-            // 첫 번째 페이지인 경우 노트 정보 업데이트
             if (pageNumber == 1) {
               await _updateNoteFirstPageInfo(noteId, imageUrl, extractedText, translatedText);
-              
-              // 첫 페이지 처리 완료 표시
               final prefs = await SharedPreferences.getInstance();
               await prefs.setBool('first_page_processed_$noteId', true);
             }
@@ -646,11 +625,9 @@ class NoteService {
             debugPrint('비동기 이미지 처리 중 오류: $e');
           }
         });
-        
-        // 즉시 결과 반환 (처리는 백그라운드에서 진행)
         return {
           'success': true,
-        'imageUrl': imageUrl,
+          'imageUrl': imageUrl,
           'extractedText': '___PROCESSING___',
           'translatedText': '',
           'pageId': page.id,
@@ -662,6 +639,101 @@ class NoteService {
         'success': false,
         'error': e.toString(),
       };
+    }
+  }
+
+  // LLM 기반 방식: OCR + LLM 통합 처리
+  Future<Map<String, dynamic>> _processImageAndCreatePageLLM(
+    String noteId,
+    File imageFile, {
+    required int pageNumber,
+    String? existingImageUrl,
+  }) async {
+    try {
+      if (!await imageFile.exists()) {
+        return {'success': false, 'error': '이미지 파일이 존재하지 않습니다'};
+      }
+      final imageUrl = existingImageUrl != null && existingImageUrl.isNotEmpty
+          ? existingImageUrl
+          : await _imageService.uploadAndGetUrl(imageFile);
+      // 1. OCR
+      final extractedText = await _ocrService.extractText(imageFile);
+      // 2. LLM 처리
+      final llmService = UnifiedTextProcessingService();
+      final chineseText = await llmService.processWithLLM(extractedText);
+      // 3. 페이지 생성
+      final page = await _pageService.createPage(
+        noteId: noteId,
+        pageNumber: pageNumber,
+        imageUrl: imageUrl,
+        originalText: chineseText.originalText,
+        translatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
+      );
+      // 4. 세그먼트 정보(ProcessedText) 캐싱
+      final processedText = ProcessedText(
+        fullOriginalText: chineseText.originalText,
+        fullTranslatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
+        segments: chineseText.sentences.map((s) => TextSegment(
+          originalText: s.original,
+          translatedText: s.translation,
+          pinyin: s.pinyin,
+          sourceLanguage: 'zh-CN',
+          targetLanguage: 'ko',
+        )).toList(),
+        showFullText: false,
+        showPinyin: true,
+        showTranslation: true,
+      );
+      await _cacheService.setProcessedText(page.id!, processedText);
+      // 5. 첫 페이지라면 노트 정보 업데이트
+      if (pageNumber == 1) {
+        await _updateNoteFirstPageInfo(
+          noteId,
+          imageUrl,
+          chineseText.originalText,
+          chineseText.sentences.map((s) => s.translation).join('\n'),
+        );
+      }
+      return {
+        'success': true,
+        'imageUrl': imageUrl,
+        'extractedText': chineseText.originalText,
+        'translatedText': chineseText.sentences.map((s) => s.translation).join('\n'),
+        'pageId': page.id,
+      };
+    } catch (e) {
+      debugPrint('LLM 이미지 처리 및 페이지 생성 중 오류 발생: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  // 실제 사용할 함수에서 분기
+  Future<Map<String, dynamic>> _processImageAndCreatePage(
+    String noteId,
+    File imageFile, {
+    required int pageNumber,
+    String? existingImageUrl,
+    bool useLLM = true, // LLM 사용 여부 (문제 생기면 false로 롤백)
+    bool shouldProcess = true,
+  }) async {
+    if (useLLM) {
+      return await _processImageAndCreatePageLLM(
+        noteId,
+        imageFile,
+        pageNumber: pageNumber,
+        existingImageUrl: existingImageUrl,
+      );
+    } else {
+      return await _processImageAndCreatePageLegacy(
+        noteId,
+        imageFile,
+        pageNumber: pageNumber,
+        existingImageUrl: existingImageUrl,
+        shouldProcess: shouldProcess,
+      );
     }
   }
   
