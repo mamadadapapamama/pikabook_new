@@ -184,9 +184,9 @@ class TextCleanerService {
     return onlyPunctuationPattern.hasMatch(text);
   }
 
-  /// 너무 짧은 줄인지 확인 (1-2글자이면서 중국어가 아닌 경우)
+  /// 너무 짧은 줄인지 확인 (10글자 이내이면서 중국어가 아닌 경우)
   bool _isTooShort(String text) {
-    return text.length <= 2 && !containsChinese(text);
+    return text.length <= 10 && !containsChinese(text);
   }
 
   // 캐시 정리
