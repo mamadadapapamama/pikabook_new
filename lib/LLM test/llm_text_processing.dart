@@ -56,12 +56,11 @@ class UnifiedTextProcessingService {
     }
     
     // 캐시 확인 (간단한 메모리 캐싱)
-    final cacheKey = '$sourceLanguage:$text';
+    final cacheKey = 'v2-$sourceLanguage:$text';
     if (_cache.containsKey(cacheKey)) {
       try {
         final cachedData = _cache[cacheKey]!;
         final List<dynamic> parsedData = jsonDecode(cachedData);
-        
         final List<ChineseSentence> sentences = parsedData.map<ChineseSentence>((data) =>
           ChineseSentence(
             original: data['chinese'] ?? '',
@@ -69,18 +68,15 @@ class UnifiedTextProcessingService {
             pinyin: data['pinyin'] ?? '',
           )
         ).toList();
-        
         if (kDebugMode) {
           debugPrint('캐시에서 LLM 처리 결과 로드: ${sentences.length}개 문장');
         }
-        
         return ChineseText(
           originalText: text,
           sentences: sentences,
         );
       } catch (e) {
         debugPrint('캐시된 데이터 파싱 중 오류: $e');
-        // 캐시 오류 시 API 호출로 진행
       }
     }
     
@@ -92,14 +88,20 @@ class UnifiedTextProcessingService {
     try {
       final Stopwatch stopwatch = Stopwatch()..start();
       
-      // LLM 프롬프트 구성 (GPT-4o용)
+      // 1. GPT-4o로 원문+번역만 요청
       final prompt = '''
-Split the following Chinese text into natural sentences and provide Korean translation and Pinyin for each. 
-Return all non-ASCII characters (Chinese, Korean, Pinyin) as real text, and ensure the response is valid UTF-8 JSON.
+You are a Primary school Chinese teacher for Korean students. Split the following Chinese text. For each sentence, return a JSON object with:
+- the original Chinese,
+- a natural Korean translation
 
+Respond in a valid UTF-8 encoded JSON array, with each item:
+{
+  "chinese": "...",
+  "korean": "..."
+}
+DO NOT include any explanations, comments, or formatting such as code blocks.
 Chinese text:
 $text
-
 Output:
 ''';
 
@@ -111,17 +113,19 @@ Output:
           'Authorization': 'Bearer $_apiKey',
         },
         body: jsonEncode({
-          'model': _defaultModel,
+          'model': 'gpt-4o',
           'messages': [
             {
               'role': 'user',
               'content': prompt,
             }
           ],
-          'temperature': 0.1,
+          'temperature': 0,
           'max_tokens': 2000,
         }),
       );
+
+      
       
       if (response.statusCode == 200) {
         final decodedBody = utf8.decode(response.bodyBytes);
@@ -130,40 +134,38 @@ Output:
         
         debugPrint('LLM content: $content');
         
-        // JSON 파싱
-        final jsonStart = content.indexOf('[');
-        final jsonEnd = content.lastIndexOf(']');
-        
-        if (jsonStart != -1 && jsonEnd != -1) {
-          final jsonString = content.substring(jsonStart, jsonEnd + 1);
-          var parsedData = jsonDecode(jsonString);
-          // 이중 인코딩된 경우 한 번 더 파싱
-          if (parsedData.isNotEmpty && parsedData[0] is String) {
-            parsedData = parsedData.map((e) => jsonDecode(e)).toList();
-          }
-          // ChineseSentence 리스트 생성
-          final List<ChineseSentence> sentences = parsedData.map<ChineseSentence>((data) =>
-            ChineseSentence(
-              original: data['chinese'] ?? '',
-              translation: data['korean'] ?? '',
-              pinyin: data['pinyin'] ?? '',
-            )
-          ).toList();
-          
-          // 결과 메모리 캐싱
-          _cache[cacheKey] = jsonString;
-          
-          if (kDebugMode) {
-            debugPrint('LLM 처리 완료 (${stopwatch.elapsedMilliseconds}ms): ${sentences.length}개 문장');
-          }
-          
-          return ChineseText(
-            originalText: text,
-            sentences: sentences,
-          );
-        } else {
-          throw Exception('LLM 응답에서 JSON 형식을 찾을 수 없습니다: $content');
+        // robust JSON 파싱
+        final jsonString = extractJsonArray(content);
+        final List<dynamic> parsedData = jsonDecode(jsonString);
+        // 2. chinese 문장 리스트 추출
+        final List<String> chineseList = parsedData.map<String>((e) => e['chinese'] ?? '').toList();
+        // 3. 병음 요청 (gpt-3.5-turbo)
+        final List<String> pinyinList = await processPinyinWithLLM(chineseList);
+        // 4. 최종 합치기
+        final List<ChineseSentence> sentences = [];
+        for (int i = 0; i < parsedData.length; i++) {
+          sentences.add(ChineseSentence(
+            original: parsedData[i]['chinese'] ?? '',
+            translation: parsedData[i]['korean'] ?? '',
+            pinyin: i < pinyinList.length ? pinyinList[i] : '',
+          ));
         }
+        
+        // 결과 메모리 캐싱
+        _cache[cacheKey] = jsonEncode(sentences.map((s) => {
+          'chinese': s.original,
+          'korean': s.translation,
+          'pinyin': s.pinyin,
+        }).toList());
+        
+        if (kDebugMode) {
+          debugPrint('LLM 처리 완료 (${stopwatch.elapsedMilliseconds}ms): ${sentences.length}개 문장');
+        }
+        
+        return ChineseText(
+          originalText: text,
+          sentences: sentences,
+        );
       } else {
         throw Exception('LLM API 오류: ${response.statusCode} - ${response.body}');
       }
@@ -173,9 +175,73 @@ Output:
     }
   }
   
+  /// 병음만 GPT-3.5-turbo로 요청
+  Future<List<String>> processPinyinWithLLM(List<String> chineseList) async {
+    if (chineseList.isEmpty) return [];
+    if (_apiKey == null || _apiKey!.isEmpty) {
+      throw Exception('API 키가 설정되지 않았습니다.');
+    }
+    final prompt = '''
+For each of the following Chinese sentences, return the Hanyu Pinyin (with tone marks, not numbers) in a JSON array, matching the order:
+[
+${chineseList.map((e) => '  "$e"').join(',\n')}
+]
+Respond as:
+[
+  "pinyin1",
+  "pinyin2",
+  ...
+]
+DO NOT include any explanations, comments, or formatting such as code blocks.
+''';
+    final response = await http.post(
+      Uri.parse('https://api.openai.com/v1/chat/completions'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_apiKey',
+      },
+      body: jsonEncode({
+        'model': 'gpt-3.5-turbo',
+        'messages': [
+          {
+            'role': 'user',
+            'content': prompt,
+          }
+        ],
+        'temperature': 0,
+        'max_tokens': 1000,
+      }),
+    );
+    if (response.statusCode == 200) {
+      final decodedBody = utf8.decode(response.bodyBytes);
+      final responseData = jsonDecode(decodedBody);
+      final content = responseData['choices'][0]['message']['content'] as String;
+      debugPrint('Pinyin LLM content: $content');
+      final jsonString = extractJsonArray(content);
+      final List<dynamic> parsedData = jsonDecode(jsonString);
+      return parsedData.map<String>((e) => e.toString()).toList();
+    } else {
+      throw Exception('Pinyin LLM API 오류: ${response.statusCode} - ${response.body}');
+    }
+  }
+  
   /// 캐시 관련 메서드
   void clearCache() {
     _cache.clear();
     debugPrint('모든 캐시가 삭제되었습니다.');
+  }
+
+  String extractJsonArray(String raw) {
+    // 1. 코드블록 제거
+    raw = raw.replaceAll(RegExp(r'```(json)?', caseSensitive: false), '');
+
+    // 2. JSON array만 추출 (가장 바깥의 [ ... ] )
+    final jsonArrayMatch = RegExp(r'\[[\s\S]*\]').firstMatch(raw);
+    if (jsonArrayMatch != null) {
+      return jsonArrayMatch.group(0)!;
+    }
+
+    // fallback: raw 자체를 반환 (실패 시 디버깅용)
+    return raw;
   }
 }
