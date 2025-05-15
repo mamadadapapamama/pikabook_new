@@ -3,6 +3,7 @@ import '../../core/models/page.dart' as page_model;
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'page_processing_state.dart';
 
 class NoteDetailState {
   Note? note;
@@ -20,6 +21,9 @@ class NoteDetailState {
   int expectedTotalPages = 0;
   bool isProcessingBackground = false;
   Timer? backgroundCheckTimer;
+  
+  // 페이지 처리 상태 객체
+  PageProcessingState? pageProcessingState;
   
   // 상태 업데이트 메서드
   void updateNote(Note note) {
@@ -82,5 +86,19 @@ class NoteDetailState {
   void cancelBackgroundTimer() {
     backgroundCheckTimer?.cancel();
     backgroundCheckTimer = null;
+  }
+  
+  // 페이지 처리 상태 객체 초기화
+  void initPageProcessingState(String noteId, Function(int, page_model.Page) onPageProcessed) {
+    pageProcessingState = PageProcessingState(
+      noteId: noteId,
+      onPageProcessed: onPageProcessed,
+    );
+  }
+  
+  // 리소스 정리
+  void dispose() {
+    cancelBackgroundTimer();
+    pageProcessingState?.dispose();
   }
 }

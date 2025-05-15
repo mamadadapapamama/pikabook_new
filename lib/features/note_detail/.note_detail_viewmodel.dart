@@ -13,6 +13,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'page_processing_monitor.dart';
 
 // debugPrint 함수 - 커스텀 구현
 void debugPrint(String message) {
@@ -42,7 +43,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   bool _isProcessingSegments = false; // 텍스트 처리 상태
   int? _flashcardCount;               // 플래시카드 개수 (로드하지 않고 개수만 추적)
   bool _isFullTextMode = false;       // 전체 텍스트 모드 상태
-  Map<String, bool> _processedPageStatus = {}; // 페이지 처리 상태
+  // 페이지 처리 상태는 PageProcessingMonitor로 이관
   Timer? _processingTimer;            // 처리 타이머
   bool _shouldUpdateUI = true;        // UI 업데이트 제어 플래그
   bool _isProcessingBackground = false; // 백그라운드 처리 상태
@@ -89,6 +90,12 @@ class NoteDetailViewModel extends ChangeNotifier {
     _totalImageCount = totalImageCount;
     
     _initializeDependencies();
+    
+    // 페이지 처리 모니터 초기화
+    _pageMonitor = PageProcessingMonitor(
+      noteId: _noteId,
+      onPageProcessed: _handlePageProcessed,
+    );
     
     // 초기화 로직 수행
     if (_note == null && _noteId.isNotEmpty) {
@@ -146,6 +153,9 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     // Firestore 리스너 정리
     _pagesSubscription?.cancel();
+    
+    // 페이지 처리 모니터 정리
+    _pageMonitor.dispose();
     
     super.dispose();
   }
@@ -262,13 +272,18 @@ class NoteDetailViewModel extends ChangeNotifier {
         _resumeUIUpdates();
       });
       
-      // 실시간 페이지 상태 모니터링 시작
-      _startRealtimePageMonitoring();
-      
-      // 페이지 이미지 미리 로드 - 로딩이 완료된 후에만 수행
-      Future.delayed(Duration(milliseconds: 300), () {
-        loadAllPageImages();
-      });
+        // 실시간 페이지 상태 모니터링 시작
+  _startRealtimePageMonitoring();
+  
+  // 페이지 이미지 미리 로드 - 로딩이 완료된 후에만 수행
+  Future.delayed(Duration(milliseconds: 300), () {
+    loadAllPageImages();
+  });
+  
+  // 페이지 처리 상태 변경 리스너 추가
+  if (_pages != null && _pages!.isNotEmpty) {
+    _pageMonitor.startMonitoring(_pages!);
+  }
     } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint("❌ NoteDetailViewModel: 페이지 로드 중 오류 발생: $e");
@@ -474,7 +489,7 @@ class NoteDetailViewModel extends ChangeNotifier {
     if (page.id == null) return;
     
     // 이미 처리 상태를 알고 있는 경우 체크 스킵
-    if (_processedPageStatus.containsKey(page.id!) && _processedPageStatus[page.id!] == true) {
+    if (_pageMonitor.isPageProcessed(page.id!)) {
       if (kDebugMode) {
         debugPrint("✅ 페이지 ${page.id}는 이미 처리되어 있어 다시 처리하지 않습니다.");
       }
@@ -847,37 +862,8 @@ class NoteDetailViewModel extends ChangeNotifier {
       return [];
     }
     
-    List<bool> processedStatus = List.filled(_totalImageCount > 0 ? _totalImageCount : _pages!.length, false);
-    
-    // 현재 pages 목록에 있는 페이지들의 상태 설정
-    for (int i = 0; i < _pages!.length; i++) {
-      final page = _pages![i];
-      if (page.id != null && _processedPageStatus.containsKey(page.id!)) {
-        processedStatus[i] = _processedPageStatus[page.id!] ?? false;
-      } else {
-        // 상태 정보가 없는 경우, 처리 중인지 여부로 판단
-        processedStatus[i] = page.originalText != '___PROCESSING___' && 
-                             page.originalText.isNotEmpty;
-      }
-    }
-    
-    if (kDebugMode) {
-      final processed = processedStatus.where((status) => status).length;
-      final total = processedStatus.length;
-      debugPrint("📊 페이지 처리 상태: $processed/$total 페이지 처리됨");
-      
-      for (int i = 0; i < processedStatus.length; i++) {
-        if (i == _currentPageIndex) {
-          // 현재 페이지는 강조 표시
-          debugPrint("   ${i+1}/${processedStatus.length} 페이지: ${processedStatus[i] ? "✅ 처리됨" : "⏳ 처리중"} (현재 페이지)");
-        } else if (!processedStatus[i]) {
-          // 미처리 페이지만 표시 (처리된 페이지는 많을 수 있으므로 표시 안함)
-          debugPrint("   ${i+1}/${processedStatus.length} 페이지: ⏳ 처리중");
-        }
-      }
-    }
-    
-    return processedStatus;
+    // PageProcessingMonitor를 통해 처리 상태 가져오기
+    return _pageMonitor.getProcessedPagesStatus(_pages!);
   }
   
   // 페이지 처리 상태 업데이트 메서드 추가
@@ -890,8 +876,8 @@ class NoteDetailViewModel extends ChangeNotifier {
     if (page.id == null) return;
     
     // 상태가 변경된 경우에만 업데이트
-    if (_processedPageStatus[page.id] != isProcessed) {
-      _processedPageStatus[page.id!] = isProcessed;
+    if (_pageMonitor.isPageProcessed(page.id!) != isProcessed) {
+      _pageMonitor.updatePageStatus(page.id!, isProcessed);
       notifyListeners();
       
       // 페이지가 처리 완료된 경우 스낵바 표시 (콜백 함수 호출)
@@ -1214,6 +1200,35 @@ class NoteDetailViewModel extends ChangeNotifier {
       if (kDebugMode) {
         debugPrint("❌ 플래시카드 로드 중 오류: $e");
       }
+    }
+  }
+  
+  // 페이지 처리 모니터링 클래스
+  late PageProcessingMonitor _pageMonitor;
+  
+  // 페이지 처리 완료 핸들러
+  void _handlePageProcessed(int pageIndex, pika_page.Page updatedPage) {
+    if (_pages == null || pageIndex < 0 || pageIndex >= _pages!.length) return;
+    
+    // 페이지 업데이트
+    _pages![pageIndex] = updatedPage;
+    
+    // UI 업데이트
+    notifyListeners();
+    
+    // 콜백 호출 (처리 완료 알림)
+    if (_pageProcessedCallback != null) {
+      _pageProcessedCallback!(pageIndex);
+    }
+    
+    // 캐시된 처리 텍스트 확인
+    if (updatedPage.id != null) {
+      _segmentManager.getProcessedText(updatedPage.id!).then((processedText) {
+        if (processedText == null && pageIndex == _currentPageIndex) {
+          // 현재 페이지가 처리되었지만 세그먼트 정보가 없는 경우 새로고침
+          loadInitialPages();
+        }
+      });
     }
   }
 } 

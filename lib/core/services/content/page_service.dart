@@ -4,11 +4,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/processed_text.dart';
+import '../../models/text_segment.dart';
 import '../media/image_service.dart';
 import '../text_processing/enhanced_ocr_service.dart';
 import '../text_processing/translation_service.dart';
 import '../storage/unified_cache_service.dart';
+import '../../../LLM test/llm_text_processing.dart';
 import 'dart:convert';
+import 'dart:math';
 
 /// 페이지 서비스: 페이지 관리 (CRUD) 기능을 제공합니다.
 /// 
@@ -16,10 +19,8 @@ class PageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final ImageService _imageService = ImageService();
-  // 아래 서비스 의존성 제거
-  // final EnhancedOcrService _ocrService = EnhancedOcrService();
-  // final TranslationService _translationService = TranslationService();
-  // final UnifiedCacheService _cacheService = UnifiedCacheService();
+  final EnhancedOcrService _ocrService = EnhancedOcrService();
+  final TranslationService _translationService = TranslationService();
 
   // UnifiedCacheService 직접 사용 대신 getter 또는 메서드로 접근 고려
   UnifiedCacheService get _cacheService => UnifiedCacheService();
@@ -90,43 +91,6 @@ class PageService {
       throw Exception('페이지를 생성할 수 없습니다: $e');
     }
   }
-
-  /* // createPageWithImage 메서드 주석 처리 (ContentManager로 이동 고려)
-  /// 이미지로 페이지 생성 (OCR 및 번역 포함) - ContentManager 역할
-  Future<page_model.Page> createPageWithImage({
-    required String noteId,
-    required int pageNumber,
-    required File imageFile,
-    String? targetLanguage,
-  }) async {
-    try {
-      // 이미지에서 텍스트 추출 (OCR)
-      // final extractedText = await _ocrService.extractText(imageFile);
-      throw UnimplementedError('OCR 기능은 ContentManager로 이동해야 합니다.');
-      String extractedText = ''; // 임시
-
-      // 추출된 텍스트 번역
-      // final translatedText = await _translationService.translateText(
-      //   extractedText,
-      //   targetLanguage: targetLanguage,
-      // );
-      throw UnimplementedError('번역 기능은 ContentManager로 이동해야 합니다.');
-      String translatedText = ''; // 임시
-
-      // 페이지 생성
-      return await createPage(
-        noteId: noteId,
-        originalText: extractedText,
-        translatedText: translatedText,
-        pageNumber: pageNumber,
-        imageFile: imageFile,
-      );
-    } catch (e) {
-      debugPrint('이미지로 페이지 생성 중 오류 발생: $e');
-      throw Exception('이미지로 페이지를 생성할 수 없습니다: $e');
-    }
-  }
-  */
 
   /// 페이지 가져오기 (캐시 활용)
   Future<page_model.Page?> getPageById(String pageId) async {
@@ -637,6 +601,327 @@ class PageService {
     } catch (e) {
       debugPrint('페이지 이미지 URL 업데이트 중 오류 발생: $e');
       return false;
+    }
+  }
+
+  /// LLM을 사용하여 이미지 처리 및 페이지 생성
+  Future<Map<String, dynamic>> processImageAndCreatePageLLM(
+    String noteId,
+    File imageFile, {
+    required int pageNumber,
+    String? existingImageUrl,
+  }) async {
+    try {
+      if (!await imageFile.exists()) {
+        return {'success': false, 'error': '이미지 파일이 존재하지 않습니다'};
+      }
+      
+      final imageUrl = existingImageUrl != null && existingImageUrl.isNotEmpty
+          ? existingImageUrl
+          : await _imageService.uploadAndGetUrl(imageFile);
+      
+      // 1. OCR
+      final extractedText = await _ocrService.extractText(imageFile);
+      
+      // 2. LLM 처리
+      final llmService = UnifiedTextProcessingService();
+      final chineseText = await llmService.processWithLLM(extractedText);
+      
+      // 3. 페이지 생성
+      final page = await createPage(
+        noteId: noteId,
+        pageNumber: pageNumber,
+        imageUrl: imageUrl,
+        originalText: chineseText.originalText,
+        translatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
+      );
+      
+      // 4. 세그먼트 정보(ProcessedText) 캐싱
+      final processedText = ProcessedText(
+        fullOriginalText: chineseText.originalText,
+        fullTranslatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
+        segments: chineseText.sentences.map((s) => TextSegment(
+          originalText: s.original,
+          translatedText: s.translation,
+          pinyin: s.pinyin,
+          sourceLanguage: 'zh-CN',
+          targetLanguage: 'ko',
+        )).toList(),
+        showFullText: false,
+        showPinyin: true,
+        showTranslation: true,
+      );
+      
+      await _cacheService.setProcessedText(page.id!, processedText);
+      
+      // 5. 첫 페이지라면 노트 정보 업데이트
+      if (pageNumber == 1) {
+        await updateNoteFirstPageInfo(
+          noteId,
+          imageUrl,
+          chineseText.originalText,
+          chineseText.sentences.map((s) => s.translation).join('\n'),
+        );
+      }
+      
+      return {
+        'success': true,
+        'imageUrl': imageUrl,
+        'extractedText': chineseText.originalText,
+        'translatedText': chineseText.sentences.map((s) => s.translation).join('\n'),
+        'pageId': page.id,
+      };
+    } catch (e) {
+      debugPrint('LLM 이미지 처리 및 페이지 생성 중 오류 발생: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// 첫 페이지 정보로 노트 업데이트
+  Future<void> updateNoteFirstPageInfo(String noteId, String imageUrl, String extractedText, String translatedText) async {
+    try {
+      final noteDoc = await _firestore.collection('notes').doc(noteId).get();
+      if (!noteDoc.exists) return;
+      
+      final Map<String, dynamic> data = noteDoc.data() as Map<String, dynamic>;
+      final bool imageUrlNeedsUpdate = data['imageUrl'] == null || 
+                                     data['imageUrl'] == '' || 
+                                     data['imageUrl'] == 'images/fallback_image.jpg';
+      
+      // 필요한 필드만 선택적으로 업데이트
+      final Map<String, dynamic> updateData = {
+        'updatedAt': DateTime.now(),
+      };
+      
+      if (extractedText != '___PROCESSING___') {
+        updateData['extractedText'] = extractedText;
+      }
+      
+      if (translatedText.isNotEmpty) {
+        updateData['translatedText'] = translatedText;
+      } else if (data['translatedText'] != null && data['translatedText'].isNotEmpty) {
+        updateData['translatedText'] = data['translatedText'];
+      }
+      
+      // 이미지 URL은 필요한 경우에만 업데이트
+      if (imageUrlNeedsUpdate) {
+        updateData['imageUrl'] = imageUrl;
+        debugPrint('노트 썸네일 설정: $noteId -> $imageUrl');
+      }
+      
+      // 변경할 내용이 있을 때만 Firestore 업데이트
+      if (updateData.length > 1) { // 'updatedAt'만 있는 경우가 아닐 때
+        final updateTask = _firestore.collection('notes').doc(noteId).update(updateData);
+        await updateTask; // 명시적으로 작업 완료 대기
+        await _cacheService.removeCachedNote(noteId); // 캐시 갱신을 위해 제거
+      }
+    } catch (e) {
+      debugPrint('노트 첫 페이지 정보 업데이트 중 오류: $e');
+    }
+  }
+
+  /// 기존 방식으로 이미지 처리 및 페이지 생성 (LLM 사용 안함)
+  Future<Map<String, dynamic>> processImageAndCreatePageLegacy(
+    String noteId,
+    File imageFile, {
+    required int pageNumber,
+    String? existingImageUrl,
+    bool shouldProcess = true,
+  }) async {
+    try {
+      if (!await imageFile.exists()) {
+        return {'success': false, 'error': '이미지 파일이 존재하지 않습니다'};
+      }
+
+      // 이미지 업로드 (기존 URL이 있으면 사용)
+      final imageUrl = existingImageUrl != null && existingImageUrl.isNotEmpty
+          ? existingImageUrl
+          : await _imageService.uploadAndGetUrl(imageFile);
+
+      // 페이지 생성
+      late page_model.Page page;
+      if (shouldProcess) {
+        // 텍스트 처리가 필요한 경우
+        final extractedText = await _ocrService.extractText(imageFile);
+        final translatedText = await _translationService.translateText(
+          extractedText,
+          targetLanguage: 'ko',
+        );
+
+        page = await createPage(
+          noteId: noteId,
+          pageNumber: pageNumber,
+          imageUrl: imageUrl,
+          originalText: extractedText,
+          translatedText: translatedText,
+        );
+      } else {
+        // 처리 마커만 생성 (나중에 처리하기 위한 임시 상태)
+        page = await createPage(
+          noteId: noteId,
+          pageNumber: pageNumber,
+          imageUrl: imageUrl,
+          originalText: '___PROCESSING___',  // 특수 마커
+          translatedText: '',
+        );
+      }
+
+      return {
+        'success': true,
+        'imageUrl': imageUrl,
+        'extractedText': page.originalText,
+        'translatedText': page.translatedText,
+        'pageId': page.id,
+      };
+    } catch (e) {
+      debugPrint('이미지 처리 및 페이지 생성 중 오류 발생: $e');
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
+  }
+
+  /// 실제 사용할 메서드 - 이미지만 즉시 처리하고 텍스트 처리는 백그라운드로 진행
+  Future<Map<String, dynamic>> processImageAndCreatePage(
+    String noteId,
+    File imageFile, {
+    required int pageNumber,
+    String? existingImageUrl,
+    bool useLLM = true, // LLM 사용 여부 (문제 생기면 false로 롤백)
+    bool shouldProcess = true,
+  }) async {
+    try {
+      if (!await imageFile.exists()) {
+        return {'success': false, 'error': '이미지 파일이 존재하지 않습니다'};
+      }
+      
+      // 1. 이미지 업로드 (기존 URL이 있으면 사용)
+      final imageUrl = existingImageUrl != null && existingImageUrl.isNotEmpty
+          ? existingImageUrl
+          : await _imageService.uploadAndGetUrl(imageFile);
+      
+      // 2. 빈 페이지 또는 처리 중 마커로 페이지 생성 (즉시 반환 위함)
+      final page = await createPage(
+        noteId: noteId,
+        pageNumber: pageNumber,
+        imageUrl: imageUrl,
+        originalText: '___PROCESSING___',  // 처리 중 마커
+        translatedText: '',
+      );
+      
+      // 3. 백그라운드에서 텍스트 처리 진행
+      Future.microtask(() async {
+        try {
+          if (kDebugMode) {
+            debugPrint('🔄 페이지 ${page.id}: 백그라운드에서 텍스트 처리 시작');
+          }
+          
+          if (useLLM) {
+            // LLM 방식으로 처리
+            // OCR 처리
+            final extractedText = await _ocrService.extractText(imageFile);
+            
+            // LLM 처리
+            final llmService = UnifiedTextProcessingService();
+            final chineseText = await llmService.processWithLLM(extractedText);
+            
+            // 처리된 텍스트로 페이지 업데이트
+            final updatedPage = await updatePage(
+              page.id!,
+              originalText: chineseText.originalText,
+              translatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
+            );
+            
+            // 세그먼트 정보 캐싱
+            if (updatedPage != null) {
+              final processedText = ProcessedText(
+                fullOriginalText: chineseText.originalText,
+                fullTranslatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
+                segments: chineseText.sentences.map((s) => TextSegment(
+                  originalText: s.original,
+                  translatedText: s.translation,
+                  pinyin: s.pinyin,
+                  sourceLanguage: 'zh-CN',
+                  targetLanguage: 'ko',
+                )).toList(),
+                showFullText: false,
+                showPinyin: true,
+                showTranslation: true,
+              );
+              
+              await _cacheService.setProcessedText(page.id!, processedText);
+              
+              // 첫 페이지면 노트 정보 업데이트
+              if (pageNumber == 1) {
+                await updateNoteFirstPageInfo(
+                  noteId,
+                  imageUrl,
+                  chineseText.originalText,
+                  chineseText.sentences.map((s) => s.translation).join('\n'),
+                );
+              }
+            }
+          } else {
+            // 레거시 방식으로 처리
+            final extractedText = await _ocrService.extractText(imageFile);
+            final translatedText = await _translationService.translateText(
+              extractedText,
+              targetLanguage: 'ko',
+            );
+            
+            await updatePage(
+              page.id!,
+              originalText: extractedText,
+              translatedText: translatedText,
+            );
+            
+            // 첫 페이지면 노트 정보 업데이트
+            if (pageNumber == 1) {
+              await updateNoteFirstPageInfo(
+                noteId,
+                imageUrl,
+                extractedText,
+                translatedText
+              );
+            }
+          }
+          
+          if (kDebugMode) {
+            debugPrint('✅ 페이지 ${page.id}: 백그라운드 텍스트 처리 완료');
+          }
+          
+          // 처리 완료 이벤트 발생 - UI 수동 갱신을 위한 스트림 이벤트 추가
+          _firestore.collection('pages').doc(page.id).update({
+            'lastProcessedAt': FieldValue.serverTimestamp(),
+            'processingStatus': 'completed',
+          });
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('❌ 백그라운드 텍스트 처리 중 오류: $e');
+          }
+        }
+      });
+      
+      // 4. 이미지 URL과 페이지 ID만 즉시 반환 (텍스트 처리 기다리지 않음)
+      return {
+        'success': true,
+        'imageUrl': imageUrl,
+        'extractedText': '___PROCESSING___',
+        'translatedText': '',
+        'pageId': page.id,
+      };
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 페이지 생성 중 오류: $e');
+      }
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
     }
   }
 }

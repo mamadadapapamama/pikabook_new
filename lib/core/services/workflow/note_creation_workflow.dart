@@ -119,7 +119,7 @@ class NoteCreationWorkflow {
       // 노트 생성 (백그라운드 처리 위임)
       final result = await _noteService.createNoteWithMultipleImages(
         imageFiles: validImageFiles,
-        waitForFirstPageProcessing: true, // 첫 페이지 처리 기다리기 (변경됨)
+        waitForFirstPageProcessing: false, // 텍스트 처리를 기다리지 않고 이미지만 확인
       );
       
       if (kDebugMode) {
@@ -130,7 +130,7 @@ class NoteCreationWorkflow {
       isSuccess = result['success'] == true;
       createdNoteId = result['noteId'] as String?;
       
-      // 첫 페이지 처리 확인
+      // 첫 페이지 이미지 업로드 확인 (텍스트 처리는 노트 상세에서 처리)
       if (isSuccess && createdNoteId != null) {
         await _ensureFirstPageProcessed(createdNoteId);
       }
@@ -200,10 +200,10 @@ class NoteCreationWorkflow {
     }
   }
   
-  /// 첫 번째 페이지의 처리 완료를 확인 (실시간 리스너 사용)
+  /// 첫 번째 페이지의 이미지 저장 확인 (텍스트 처리 기다리지 않음)
   Future<void> _ensureFirstPageProcessed(String noteId) async {
     if (kDebugMode) {
-      debugPrint('첫 번째 페이지 처리 상태 확인 시작: noteId=$noteId');
+      debugPrint('첫 번째 페이지 이미지 저장 확인 시작: noteId=$noteId');
     }
     
     // 응답 대기를 위한 Completer 생성
@@ -223,10 +223,10 @@ class NoteCreationWorkflow {
         final pageDoc = snapshot.docs.first;
         final page = page_model.Page.fromFirestore(pageDoc);
         
-        // 페이지 이미지가 mount(저장) 되었는지 확인
+        // 페이지 이미지가 저장되었는지 확인 (텍스트 처리 여부는 확인하지 않음)
         if (page.imageUrl != null && page.imageUrl!.isNotEmpty) {
           if (kDebugMode) {
-            debugPrint('✅ 첫 번째 페이지 이미지 mount 확인됨: ${page.id}');
+            debugPrint('✅ 첫 번째 페이지 이미지 확인됨: ${page.id} - 노트 상세로 이동');
           }
           // 캐시 업데이트 (백그라운드로 처리)
           Future.microtask(() async {
@@ -234,18 +234,18 @@ class NoteCreationWorkflow {
           });
           // 리스너 취소
           subscription?.cancel();
-          // 응답 반환
+          // 응답 반환 (이미지만 확인되면 바로 진행)
           if (!completer.isCompleted) {
             completer.complete();
           }
         } else {
           if (kDebugMode) {
-            debugPrint('⏳ 첫 번째 페이지 이미지 미완료: ${page.id}');
+            debugPrint('⏳ 첫 번째 페이지 이미지 업로드 대기 중: ${page.id}');
           }
         }
       }, onError: (error) {
         if (kDebugMode) {
-          debugPrint('⚠️ 페이지 처리 상태 확인 중 오류: $error');
+          debugPrint('⚠️ 페이지 이미지 확인 중 오류: $error');
         }
         
         // 리스너 취소
@@ -257,11 +257,11 @@ class NoteCreationWorkflow {
         }
       });
     
-    // 최대 90초 타임아웃 설정 (기존 40초에서 늘림)
-    Timer(const Duration(seconds: 90), () {
+    // 타임아웃 설정 (30초로 단축)
+    Timer(const Duration(seconds: 30), () {
       if (!completer.isCompleted) {
         if (kDebugMode) {
-          debugPrint('⚠️ 첫 번째 페이지 처리 감지 타임아웃 (90초)');
+          debugPrint('⚠️ 이미지 업로드 타임아웃 (30초) - 계속 진행');
         }
         // 리스너 취소
         subscription?.cancel();
@@ -270,7 +270,7 @@ class NoteCreationWorkflow {
       }
     });
     
-    // 처리 완료 또는 타임아웃 대기
+    // 이미지 저장 확인 완료 또는 타임아웃 대기
     await completer.future;
   }
   

@@ -18,9 +18,7 @@ import '../text_processing/enhanced_ocr_service.dart';
 import '../common/usage_limit_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
-import '../../../LLM test/llm_text_processing.dart';
-import '../../models/processed_text.dart';
-import '../../models/text_segment.dart';
+// 리팩토링으로 제거된 import
 
 /// 노트 서비스: 노트 관리, 생성, 처리, 캐싱 로직을 담당합니다.
 ///  
@@ -329,9 +327,9 @@ class NoteService {
       final docRef = await _notesCollection.add(noteData);
       final noteId = docRef.id;
 
-      // 이미지가 있으면 처리
+      // 이미지가 있으면 처리 (PageService 사용)
       if (imageFile != null) {
-        await _processImageAndCreatePage(noteId, imageFile, pageNumber: 1);
+        await _pageService.processImageAndCreatePage(noteId, imageFile, pageNumber: 1);
       }
 
       // 생성된 노트 가져오기
@@ -567,6 +565,7 @@ class NoteService {
   }
   
   /// 기존(legacy) 방식: OCR + 번역 서비스
+  /* 
   Future<Map<String, dynamic>> _processImageAndCreatePageLegacy(
     String noteId,
     File imageFile, {
@@ -641,142 +640,12 @@ class NoteService {
       };
     }
   }
+*/
+  // LLM 기반 이미지 처리 메서드는 PageService로 이동되었습니다.
 
-  // LLM 기반 방식: OCR + LLM 통합 처리
-  Future<Map<String, dynamic>> _processImageAndCreatePageLLM(
-    String noteId,
-    File imageFile, {
-    required int pageNumber,
-    String? existingImageUrl,
-  }) async {
-    try {
-      if (!await imageFile.exists()) {
-        return {'success': false, 'error': '이미지 파일이 존재하지 않습니다'};
-      }
-      final imageUrl = existingImageUrl != null && existingImageUrl.isNotEmpty
-          ? existingImageUrl
-          : await _imageService.uploadAndGetUrl(imageFile);
-      // 1. OCR
-      final extractedText = await _ocrService.extractText(imageFile);
-      // 2. LLM 처리
-      final llmService = UnifiedTextProcessingService();
-      final chineseText = await llmService.processWithLLM(extractedText);
-      // 3. 페이지 생성
-      final page = await _pageService.createPage(
-        noteId: noteId,
-        pageNumber: pageNumber,
-        imageUrl: imageUrl,
-        originalText: chineseText.originalText,
-        translatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
-      );
-      // 4. 세그먼트 정보(ProcessedText) 캐싱
-      final processedText = ProcessedText(
-        fullOriginalText: chineseText.originalText,
-        fullTranslatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
-        segments: chineseText.sentences.map((s) => TextSegment(
-          originalText: s.original,
-          translatedText: s.translation,
-          pinyin: s.pinyin,
-          sourceLanguage: 'zh-CN',
-          targetLanguage: 'ko',
-        )).toList(),
-        showFullText: false,
-        showPinyin: true,
-        showTranslation: true,
-      );
-      await _cacheService.setProcessedText(page.id!, processedText);
-      // 5. 첫 페이지라면 노트 정보 업데이트
-      if (pageNumber == 1) {
-        await _updateNoteFirstPageInfo(
-          noteId,
-          imageUrl,
-          chineseText.originalText,
-          chineseText.sentences.map((s) => s.translation).join('\n'),
-        );
-      }
-      return {
-        'success': true,
-        'imageUrl': imageUrl,
-        'extractedText': chineseText.originalText,
-        'translatedText': chineseText.sentences.map((s) => s.translation).join('\n'),
-        'pageId': page.id,
-      };
-    } catch (e) {
-      debugPrint('LLM 이미지 처리 및 페이지 생성 중 오류 발생: $e');
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
-    }
-  }
-
-  // 실제 사용할 함수에서 분기
-  Future<Map<String, dynamic>> _processImageAndCreatePage(
-    String noteId,
-    File imageFile, {
-    required int pageNumber,
-    String? existingImageUrl,
-    bool useLLM = true, // LLM 사용 여부 (문제 생기면 false로 롤백)
-    bool shouldProcess = true,
-  }) async {
-    if (useLLM) {
-      return await _processImageAndCreatePageLLM(
-        noteId,
-        imageFile,
-        pageNumber: pageNumber,
-        existingImageUrl: existingImageUrl,
-      );
-    } else {
-      return await _processImageAndCreatePageLegacy(
-        noteId,
-        imageFile,
-        pageNumber: pageNumber,
-        existingImageUrl: existingImageUrl,
-        shouldProcess: shouldProcess,
-      );
-    }
-  }
+  // 이미지 처리 및 페이지 생성 메서드는 PageService로 이동되었습니다.
   
-  /// 첫 페이지 정보로 노트 업데이트
-  Future<void> _updateNoteFirstPageInfo(String noteId, String imageUrl, String extractedText, String translatedText) async {
-    try {
-      final noteDoc = await _notesCollection.doc(noteId).get();
-      if (!noteDoc.exists) return;
-      
-      final note = Note.fromFirestore(noteDoc);
-      final bool imageUrlNeedsUpdate = note.imageUrl == null || note.imageUrl!.isEmpty || note.imageUrl == 'images/fallback_image.jpg';
-      
-      // 필요한 필드만 선택적으로 업데이트
-      final Map<String, dynamic> updateData = {
-        'updatedAt': DateTime.now(),
-      };
-      
-      if (extractedText != '___PROCESSING___') {
-        updateData['extractedText'] = extractedText;
-      }
-      
-      if (translatedText.isNotEmpty) {
-        updateData['translatedText'] = translatedText;
-      } else if (note.translatedText.isNotEmpty) {
-        updateData['translatedText'] = note.translatedText;
-      }
-      
-      // 이미지 URL은 필요한 경우에만 업데이트
-      if (imageUrlNeedsUpdate) {
-        updateData['imageUrl'] = imageUrl;
-        debugPrint('노트 썸네일 설정: $noteId -> $imageUrl');
-      }
-      
-      // 변경할 내용이 있을 때만 Firestore 업데이트
-      if (updateData.length > 1) { // 'updatedAt'만 있는 경우가 아닐 때
-        final updateTask = _notesCollection.doc(noteId).update(updateData);
-        await updateTask; // 명시적으로 작업 완료 대기
-        await _cacheService.removeCachedNote(noteId); // 캐시 갱신을 위해 제거
-      }
-    } catch (e) {
-      debugPrint('노트 첫 페이지 정보 업데이트 중 오류: $e');
-    }
-  }
+  // _updateNoteFirstPageInfo 메서드는 PageService로 이동되었습니다.
 
   // 여러 이미지로 노트 생성 (ImagePickerBottomSheet에서 사용)
   Future<Map<String, dynamic>> createNoteWithMultipleImages({
@@ -854,7 +723,7 @@ class NoteService {
     }
   }
   
-  // 모든 이미지를 백그라운드에서 처리 (새로운 메서드)
+  // 모든 이미지를 백그라운드에서 처리 (PageService 사용)
   Future<void> _processAllImagesInBackground(String noteId, List<File> imageFiles, String? firstImageUrl) async {
     // 백그라운드 처리 상태 설정
     await _setBackgroundProcessingState(noteId, true);
@@ -862,7 +731,7 @@ class NoteService {
     try {
       // 첫 번째 이미지 처리 (이미 썸네일은 생성되었을 수 있음)
       if (imageFiles.isNotEmpty) {
-        final firstPageResult = await _processImageAndCreatePage(
+        final firstPageResult = await _pageService.processImageAndCreatePage(
           noteId, 
           imageFiles[0],
           pageNumber: 1,
@@ -875,7 +744,7 @@ class NoteService {
       
       // 나머지 이미지 처리 (2번째 이미지부터)
       for (int i = 1; i < imageFiles.length; i++) {
-        await _processImageAndCreatePage(
+        await _pageService.processImageAndCreatePage(
           noteId, 
           imageFiles[i],
           pageNumber: i + 1,
