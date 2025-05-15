@@ -257,11 +257,11 @@ class NoteCreationWorkflow {
         }
       });
     
-    // 최대 40초 타임아웃 설정 (기존 20초에서 늘림)
-    Timer(const Duration(seconds: 40), () {
+    // 최대 90초 타임아웃 설정 (기존 40초에서 늘림)
+    Timer(const Duration(seconds: 90), () {
       if (!completer.isCompleted) {
         if (kDebugMode) {
-          debugPrint('⚠️ 첫 번째 페이지 처리 감지 타임아웃 (40초)');
+          debugPrint('⚠️ 첫 번째 페이지 처리 감지 타임아웃 (90초)');
         }
         // 리스너 취소
         subscription?.cancel();
