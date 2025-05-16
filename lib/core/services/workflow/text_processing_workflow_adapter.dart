@@ -4,32 +4,30 @@ import '../../models/processed_text.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/text_segment.dart';
 import '../../../LLM test/llm_text_processing.dart';
-import 'text_processing_workflow.dart';
 
 /// 텍스트 처리 워크플로우 어댑터
-/// useLLM 플래그에 따라 기존 워크플로우 또는 LLM 기반 워크플로우를 선택적으로 사용
+/// 기존 레거시 워크플로우를 제거하고 LLM 기반 워크플로우만 사용하도록 수정됨
 class TextProcessingWorkflowAdapter {
-  final OptimizedTextProcessingWorkflow legacyWorkflow;
   final UnifiedTextProcessingService llmWorkflow;
 
   TextProcessingWorkflowAdapter({
-    OptimizedTextProcessingWorkflow? legacyWorkflow,
     UnifiedTextProcessingService? llmWorkflow,
-  })  : legacyWorkflow = legacyWorkflow ?? OptimizedTextProcessingWorkflow(),
-        llmWorkflow = llmWorkflow ?? UnifiedTextProcessingService();
+  }) : llmWorkflow = llmWorkflow ?? UnifiedTextProcessingService();
 
-  /// 페이지 텍스트 처리 (useLLM: true면 LLM, false면 기존 워크플로우)
+  /// 페이지 텍스트 처리 (항상 LLM 사용)
   Future<ProcessedText?> processPageText({
     required page_model.Page? page,
-    required bool useLLM,
+    bool useLLM = true, // 하위 호환성을 위해 유지하되 기본값은 true
     String? llmSourceLanguage,
   }) async {
-    if (useLLM) {
-      if (page == null) return null;
+    if (page == null) return null;
+    
+    try {
       final chineseText = await llmWorkflow.processWithLLM(
         page.originalText,
         sourceLanguage: llmSourceLanguage ?? 'zh',
       );
+      
       // LLM 결과를 ProcessedText로 변환
       return ProcessedText(
         fullOriginalText: chineseText.originalText,
@@ -47,9 +45,9 @@ class TextProcessingWorkflowAdapter {
         showPinyin: true,
         showTranslation: true,
       );
-    } else {
-      // 기존 워크플로우 사용
-      return await legacyWorkflow.processPageText(page: page, imageFile: null);
+    } catch (e) {
+      debugPrint('텍스트 처리 중 오류: $e');
+      return null;
     }
   }
 }

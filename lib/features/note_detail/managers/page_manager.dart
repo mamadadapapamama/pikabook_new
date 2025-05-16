@@ -6,7 +6,7 @@ import '../../../core/services/content/page_service.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/services/media/image_cache_service.dart';
 import '../../../core/services/storage/unified_cache_service.dart';
-import '../../../core/services/workflow/text_processing_workflow.dart';
+import '../../../LLM test/llm_text_processing.dart';
 import '../../../core/services/content/note_service.dart';
 import '../../../core/services/content/flashcard_service.dart' hide debugPrint;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -27,6 +27,7 @@ class PageManager {
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final SegmentManager _segmentManager = SegmentManager();
+  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
   
   note_model.Note? _note;
   
@@ -569,16 +570,15 @@ class PageManager {
   }
   
   /// 페이지 내용을 로드하는 통합 메서드
-  /// ContentManager로 로직을 위임하여 중복 코드 제거
+  /// LLM 텍스트 처리 서비스를 사용하도록 수정됨
   Future<Map<String, dynamic>> loadPageContent(
     page_model.Page page, 
     {
-      OptimizedTextProcessingWorkflow? textProcessingWorkflow, // 선택적 매개변수로 변경
+      UnifiedTextProcessingService? textProcessingService, // LLM 서비스로 변경
       ImageService? imageService, // 선택적 매개변수로 변경
       dynamic note,
     }) async {
     
-    // ContentManager에 작업 위임
     try {
       // 1. 이미지 로드
       File? imageFile;
@@ -589,8 +589,17 @@ class PageManager {
         imageFile = getImageFileForPage(page);
       }
       
-      // 2. ContentManager에 텍스트 처리 위임
-      // (SegmentManager에는 processPageContent가 없으므로, 필요시 별도 구현 필요)
+      // 2. 텍스트 처리 (LLM 서비스 사용)
+      var processedText;
+      if (page.originalText.isNotEmpty) {
+        try {
+          final textService = textProcessingService ?? _textProcessingService;
+          final result = await textService.processWithLLM(page.originalText, sourceLanguage: 'zh');
+          processedText = result;
+        } catch (e) {
+          debugPrint('LLM 텍스트 처리 중 오류: $e');
+        }
+      }
       
       // 3. 현재 페이지의 이미지 파일 업데이트 (이미지가 있는 경우)
       if (imageFile != null && page.id == currentPage?.id) {
@@ -604,9 +613,9 @@ class PageManager {
       
       return {
         'imageFile': imageFile,
-        'processedText': null,
-        'isSuccess': imageFile != null,
-        'error': imageFile == null ? '이미지 로드 실패' : null,
+        'processedText': processedText,
+        'isSuccess': imageFile != null || processedText != null,
+        'error': (imageFile == null && processedText == null) ? '콘텐츠 로드 실패' : null,
       };
     } catch (e) {
       debugPrint('페이지 내용 로드 중 오류: $e');
