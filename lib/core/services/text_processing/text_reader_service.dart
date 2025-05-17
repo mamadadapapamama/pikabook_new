@@ -1,17 +1,24 @@
 import 'package:flutter/foundation.dart';
 import '../../models/processed_text.dart';
 import '../media/tts_service.dart';
-import 'internal_cn_segmenter_service.dart';
+import '../../../LLM test/llm_text_processing.dart';
+import '../../models/chinese_text.dart';
 
 /// 텍스트 읽기 서비스
-/// TTS 기능과 문장 분할 기능을 통합하여 제공합니다.
 class TextReaderService {
   static final TextReaderService _instance = TextReaderService._internal();
   factory TextReaderService() => _instance;
   TextReaderService._internal();
 
   final TtsService _ttsService = TtsService();
-  final InternalCnSegmenterService _segmenterService = InternalCnSegmenterService();
+  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
+  
+  // TtsService getter 추가
+  TtsService get ttsService => _ttsService;
+  
+  // 마지막으로 처리한 텍스트를 캐싱하여 불필요한 LLM 호출 방지
+  String? _lastProcessedText;
+  ChineseText? _lastProcessedResult;
 
   // 현재 재생 중인 세그먼트 인덱스
   int? get currentSegmentIndex => _ttsService.currentSegmentIndex;
@@ -32,7 +39,7 @@ class TextReaderService {
   /// 서비스 초기화
   Future<void> init() async {
     await _ttsService.init();
-    await _segmenterService.initialize();
+    await _textProcessingService.ensureInitialized();
     
     // TTS 상태 변경 리스너 등록
     _ttsService.setOnPlayingStateChanged((segmentIndex) {
@@ -49,6 +56,8 @@ class TextReaderService {
   /// 리소스 해제
   void dispose() {
     _ttsService.dispose();
+    _lastProcessedText = null;
+    _lastProcessedResult = null;
   }
 
   /// 언어 설정
@@ -103,9 +112,12 @@ class TextReaderService {
       await stop();
       return;
     }
+    
+    if (text.isEmpty) return;
 
-    // 텍스트를 문장 단위로 분리
-    final sentences = _segmenterService.splitIntoSentences(text);
+    // 텍스트를 LLM을 사용하여 처리하고 문장 가져오기
+    final ChineseText chineseText = await _processWithLLM(text);
+    final List<String> sentences = chineseText.sentences.map((s) => s.original).toList();
 
     // 문장이 없으면 전체 텍스트 읽기
     if (sentences.isEmpty) {
@@ -130,9 +142,23 @@ class TextReaderService {
     }
   }
 
-  /// 텍스트를 문장 단위로 분리
-  List<String> splitIntoSentences(String text) {
-    return _segmenterService.splitIntoSentences(text);
+  /// 텍스트를 문장 단위로 분리 - LLM 처리 결과 재사용
+  Future<List<String>> splitIntoSentences(String text) async {
+    if (text.isEmpty) return [];
+    
+    try {
+      // LLM을 통해 처리된 ChineseText에서 문장만 추출
+      final ChineseText chineseText = await _processWithLLM(text);
+      return chineseText.sentences.map((sentence) => sentence.original).toList();
+    } catch (e) {
+      debugPrint('TextReaderService: 문장 분리 중 오류 발생 - $e');
+      
+      // 오류 발생 시 간단한 구분자로 분리 (백업 방식)
+      return text.split(RegExp(r'[.!?。！？\n]'))
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
   }
 
   /// ProcessedText에서 세그먼트 텍스트 추출
@@ -145,5 +171,23 @@ class TextReaderService {
         .map((segment) => segment.originalText)
         .where((text) => text.isNotEmpty)
         .toList();
+  }
+  
+  /// LLM 텍스트 처리 - 중복 호출 방지를 위한 캐싱 추가
+  Future<ChineseText> _processWithLLM(String text) async {
+    // 이미 처리된 텍스트인 경우 캐시된 결과 반환
+    if (_lastProcessedText == text && _lastProcessedResult != null) {
+      debugPrint('TextReaderService: 캐시된 LLM 처리 결과 사용');
+      return _lastProcessedResult!;
+    }
+    
+    // 새로운 텍스트 처리
+    final result = await _textProcessingService.processWithLLM(text);
+    
+    // 결과 캐싱
+    _lastProcessedText = text;
+    _lastProcessedResult = result;
+    
+    return result;
   }
 }

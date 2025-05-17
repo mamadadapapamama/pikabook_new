@@ -7,7 +7,6 @@ import '../../models/processed_text.dart';
 import '../../models/text_segment.dart';
 import '../media/image_service.dart';
 import '../text_processing/enhanced_ocr_service.dart';
-import '../text_processing/translation_service.dart';
 import '../storage/unified_cache_service.dart';
 import '../../../LLM test/llm_text_processing.dart';
 import 'dart:convert';
@@ -20,7 +19,7 @@ class PageService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final ImageService _imageService = ImageService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
-  final TranslationService _translationService = TranslationService();
+  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
 
   // UnifiedCacheService 직접 사용 대신 getter 또는 메서드로 접근 고려
   UnifiedCacheService get _cacheService => UnifiedCacheService();
@@ -464,11 +463,9 @@ class PageService {
         throw Exception('페이지를 찾을 수 없습니다.');
       }
 
-      // 원본 텍스트 번역
-      final translatedText = await _translationService.translateText(
-        page.originalText,
-        targetLanguage: targetLanguage,
-      );
+      // 원본 텍스트 번역 - LLM 처리 사용
+      final chineseText = await _textProcessingService.processWithLLM(page.originalText);
+      final translatedText = chineseText.sentences.map((s) => s.translation).join('\n');
 
       // 번역 결과 저장
       await updatePage(
@@ -746,10 +743,10 @@ class PageService {
       if (shouldProcess) {
         // 텍스트 처리가 필요한 경우
         final extractedText = await _ocrService.extractText(imageFile);
-        final translatedText = await _translationService.translateText(
-          extractedText,
-          targetLanguage: 'ko',
-        );
+        
+        // TranslationService 대신 LLM 처리 사용
+        final chineseText = await _textProcessingService.processWithLLM(extractedText);
+        final translatedText = chineseText.sentences.map((s) => s.translation).join('\n');
 
         page = await createPage(
           noteId: noteId,
@@ -866,12 +863,12 @@ class PageService {
               }
             }
           } else {
-            // 레거시 방식으로 처리
+            // 레거시 방식으로 처리 (TranslationService 대신 LLM 사용)
             final extractedText = await _ocrService.extractText(imageFile);
-            final translatedText = await _translationService.translateText(
-              extractedText,
-              targetLanguage: 'ko',
-            );
+            
+            // LLM을 사용하여 번역
+            final chineseText = await _textProcessingService.processWithLLM(extractedText);
+            final translatedText = chineseText.sentences.map((s) => s.translation).join('\n');
             
             await updatePage(
               page.id!,

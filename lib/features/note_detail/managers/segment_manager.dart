@@ -6,7 +6,7 @@ import '../../../core/models/processed_text.dart';
 import '../../../core/models/text_segment.dart';
 import '../../../core/models/dictionary.dart';
 import '../../../core/services/content/page_service.dart';
-import '../../../core/services/media/tts_service.dart';
+import '../../../core/services/text_processing/text_reader_service.dart';
 import '../../../core/services/dictionary/dictionary_service.dart';
 import '../../../core/services/storage/unified_cache_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
@@ -17,8 +17,7 @@ import 'dart:async';
 /// - 페이지 캐시(processed text, LLM 처리 결과를 저장 조회 삭제)
 /// - 사전 검색 (내부/외부 API 통합)
 /// - 세그먼트 삭제/수정/처리
-/// - TTS 서비스 연동 (세그먼트 + 전체 텍스트)
-/// - TTS 사용량 제한 확인 및 관리
+/// - 텍스트 읽기를 위한 TextReaderService 연동
 
 class SegmentManager {
   static final SegmentManager _instance = () {
@@ -35,108 +34,56 @@ class SegmentManager {
   
   // 필요한 서비스들
   late final PageService _pageService = PageService();
-  late final TtsService _ttsService = TtsService();
+  late final TextReaderService _textReaderService = TextReaderService();
   late final DictionaryService _dictionaryService = DictionaryService();
   late final UnifiedCacheService _cacheService = UnifiedCacheService();
   late final UsageLimitService _usageLimitService = UsageLimitService();
-  
-  // TTS 상태 관련 변수
-  int? _currentPlayingSegmentIndex;
-  bool _isTtsInitialized = false;
-  Timer? _ttsTimeoutTimer;
-  
-  // TTS 콜백 (UI 상태 관리용)
-  Function(int?)? _onTtsStateChanged;
-  Function()? _onTtsCompleted;
-  
-  // TTS 제한 관련 변수
-  bool _isCheckingTtsLimit = false;
-  Map<String, dynamic>? _ttsLimitStatus;
-  Map<String, double>? _ttsUsagePercentages;
+  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
   
   // getter
-  TtsService get ttsService => _ttsService;
-  int? get currentPlayingSegmentIndex => _currentPlayingSegmentIndex;
-  bool get isTtsInitialized => _isTtsInitialized;
+  TextReaderService get textReaderService => _textReaderService;
+  int? get currentPlayingSegmentIndex => _textReaderService.currentSegmentIndex;
+  bool get isPlaying => _textReaderService.isPlaying;
 
   SegmentManager._internal() {
-    _initTts();
+    _initReader();
   }
   
-  // TTS 초기화
-  Future<void> _initTts() async {
-    if (_isTtsInitialized) return;
-    
+  // TextReaderService 초기화
+  Future<void> _initReader() async {
     try {
-      await _ttsService.init();
-      
-      // TTS 상태 변경 리스너
-      _ttsService.setOnPlayingStateChanged((segmentIndex) {
-        _currentPlayingSegmentIndex = segmentIndex;
-        if (_onTtsStateChanged != null) {
-          _onTtsStateChanged!(segmentIndex);
-        }
-        debugPrint('TTS 상태 변경: 세그먼트 인덱스 = $segmentIndex');
-      });
-      
-      // TTS 재생 완료 리스너
-      _ttsService.setOnPlayingCompleted(() {
-        _currentPlayingSegmentIndex = null;
-        if (_onTtsCompleted != null) {
-          _onTtsCompleted!();
-        }
-        debugPrint('TTS 재생 완료');
-      });
-      
-      _isTtsInitialized = true;
-      debugPrint('✅ TTS 서비스 초기화 완료');
+      await _textReaderService.init();
+      await _textProcessingService.ensureInitialized();
+      debugPrint('✅ TextReaderService 초기화 완료');
     } catch (e) {
-      debugPrint('❌ TTS 서비스 초기화 오류: $e');
+      debugPrint('❌ TextReaderService 초기화 오류: $e');
     }
   }
   
   // TTS 상태 변경 콜백 설정
   void setOnTtsStateChanged(Function(int?) callback) {
-    _onTtsStateChanged = callback;
+    _textReaderService.setOnPlayingStateChanged(callback);
   }
   
   // TTS 재생 완료 콜백 설정
   void setOnTtsCompleted(Function() callback) {
-    _onTtsCompleted = callback;
+    _textReaderService.setOnPlayingCompleted(callback);
   }
   
   // TTS 제한 확인
   Future<Map<String, dynamic>> checkTtsLimit() async {
-    if (_isCheckingTtsLimit) {
-      return {'ttsLimitReached': false, 'message': '이미 확인중'};
-    }
+    final remainingCount = await _textReaderService.ttsService.getRemainingTtsCount();
+    final usagePercentages = await _usageLimitService.getUsagePercentages();
     
-    _isCheckingTtsLimit = true;
-    
-    try {
-      _ttsLimitStatus = await _usageLimitService.checkFreeLimits();
-      _ttsUsagePercentages = await _usageLimitService.getUsagePercentages();
-      
-      _isCheckingTtsLimit = false;
-      
-      return {
-        'ttsLimitReached': _ttsLimitStatus?['ttsLimitReached'] == true,
-        'limitStatus': _ttsLimitStatus,
-        'usagePercentages': _ttsUsagePercentages,
-      };
-    } catch (e) {
-      debugPrint('TTS 제한 확인 중 오류: $e');
-      _isCheckingTtsLimit = false;
-      return {'ttsLimitReached': false, 'error': e.toString()};
-    }
+    return {
+      'ttsLimitReached': remainingCount <= 0,
+      'remainingCount': remainingCount,
+      'usagePercentages': usagePercentages,
+    };
   }
 
-  // TTS 텍스트 재생 (세그먼트 인덱스 포함)
+  // TTS 텍스트 재생 (세그먼트 인덱스 포함) - TextReaderService 직접 활용
   Future<bool> playTts(String text, {int? segmentIndex}) async {
-    if (!_isTtsInitialized) {
-      await _initTts();
-    }
-    
     if (text.isEmpty) {
       debugPrint('⚠️ TTS: 재생할 텍스트가 비어있습니다');
       return false;
@@ -144,80 +91,35 @@ class SegmentManager {
     
     try {
       // 현재 재생 중인 세그먼트를 다시 클릭한 경우 중지
-      if (_currentPlayingSegmentIndex == segmentIndex) {
+      if (_textReaderService.currentSegmentIndex == segmentIndex) {
         await stopSpeaking();
         return true;
       }
       
-      // TTS 제한 확인
-      final limitCheck = await checkTtsLimit();
-      if (limitCheck['ttsLimitReached'] == true) {
-        debugPrint('⚠️ TTS: 사용 제한에 도달했습니다');
-        return false;
-      }
-      
-      // 타임아웃 타이머 설정 (안전장치)
-      _setupTtsTimeoutTimer(segmentIndex);
-      
-      // 상태 업데이트 (UI 변경 즉시 반영 위해)
-      _currentPlayingSegmentIndex = segmentIndex;
-      if (_onTtsStateChanged != null) {
-        _onTtsStateChanged!(segmentIndex);
-      }
-      
       // 세그먼트 인덱스에 따라 처리
       if (segmentIndex != null) {
-        await _ttsService.speak(text);
+        await _textReaderService.readSegment(text, segmentIndex);
       } else {
-        await _ttsService.speak(text);
+        await _textReaderService.readText(text);
       }
       
       debugPrint('✅ TTS 재생 시작: ${text.length > 20 ? text.substring(0, 20) + '...' : text}');
       return true;
     } catch (e) {
       debugPrint('❌ TTS 재생 중 오류: $e');
-      
-      // 오류 발생 시 상태 리셋
-      _currentPlayingSegmentIndex = null;
-      if (_onTtsStateChanged != null) {
-        _onTtsStateChanged!(null);
-      }
-      
       return false;
     }
   }
   
-  // TTS 타임아웃 타이머 설정 (장시간 재생 시 상태가 막히는 것을 방지)
-  void _setupTtsTimeoutTimer(int? segmentIndex) {
-    _ttsTimeoutTimer?.cancel();
-    
-    _ttsTimeoutTimer = Timer(const Duration(seconds: 30), () {
-      if (_currentPlayingSegmentIndex == segmentIndex) {
-        debugPrint('⚠️ TTS 타임아웃: 상태 리셋');
-        _currentPlayingSegmentIndex = null;
-        if (_onTtsStateChanged != null) {
-          _onTtsStateChanged!(null);
-        }
-      }
-    });
-  }
-  
   // TTS 중지
   Future<void> stopSpeaking() async {
-    await _ttsService.stop();
-    
-    // 상태 리셋
-    _currentPlayingSegmentIndex = null;
-    if (_onTtsStateChanged != null) {
-      _onTtsStateChanged!(null);
-    }
-    
+    await _textReaderService.stop();
     debugPrint('🛑 TTS 중지됨');
   }
   
-  // 일반 텍스트 재생 (이전 메서드와 통합)
-  Future<void> speakText(String text) async {
-    await playTts(text);
+  // ProcessedText의 모든 세그먼트 읽기
+  Future<void> readAllSegments(ProcessedText processedText) async {
+    await _textReaderService.readAllSegments(processedText);
   }
 
   // ProcessedText 캐시 메서드들
@@ -456,9 +358,6 @@ class SegmentManager {
   
   // 자원 정리
   void dispose() {
-    _ttsTimeoutTimer?.cancel();
-    _ttsService.dispose();
-    _onTtsStateChanged = null;
-    _onTtsCompleted = null;
+    _textReaderService.dispose();
   }
 }

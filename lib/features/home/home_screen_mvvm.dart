@@ -31,8 +31,6 @@ import '../../core/models/note.dart';
 import '../note_detail/note_detail_screen_mvvm.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용 위해 추가
-import '../../LLM test/llm_test_page.dart';
-import '../../LLM test/llm_test_controller.dart';
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -902,21 +900,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // LLM 테스트 화면으로 이동
   void _navigateToLLMTest(BuildContext context) {
     if (kDebugMode) {
-      debugPrint('LLM 테스트 화면으로 이동 시도');
+      debugPrint('LLM 테스트 기능이 제거되었습니다');
     }
-    try {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => const LLMTestPage(),
-        ),
-      );
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('LLM 테스트 화면 이동 중 오류: $e');
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('LLM 테스트 화면 이동 중 오류가 발생했습니다: $e')),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('LLM 테스트 기능이 제거되었습니다.')),
+    );
   }
 } 

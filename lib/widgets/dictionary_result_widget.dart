@@ -7,6 +7,7 @@ import '../core/theme/tokens/spacing_tokens.dart';
 import '../core/theme/tokens/ui_tokens.dart';
 import '../core/widgets/pika_button.dart';
 import '../core/widgets/tts_button.dart';
+import '../core/services/text_processing/text_reader_service.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
 
@@ -24,7 +25,8 @@ class DictionaryResultWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final segmentManager = SegmentManager();
+    // TextReaderService 직접 사용
+    final textReaderService = TextReaderService();
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -91,13 +93,13 @@ class DictionaryResultWidget extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: SpacingTokens.xs),
-                  // 발음 듣기 버튼 - TtsButton 위젯으로 변경
+                  // 발음 듣기 버튼 - TtsButton 위젯 사용
                   FutureBuilder<bool>(
-                    future: segmentManager.ttsService.isTtsAvailable(),
+                    future: textReaderService.ttsService.isTtsAvailable(),
                     builder: (context, snapshot) {
                       final bool isTtsEnabled = snapshot.data ?? true;
                       final String? ttsTooltip = !isTtsEnabled ? 
-                          segmentManager.ttsService.getTtsLimitMessage() : null;
+                          textReaderService.ttsService.getTtsLimitMessage() : null;
                       
                       // 표준 TtsButton 위젯 사용
                       return TtsButton(

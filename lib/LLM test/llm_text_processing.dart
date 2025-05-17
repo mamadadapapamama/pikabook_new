@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import '../core/models/chinese_text.dart';
+import '../core/services/authentication/user_preferences_service.dart';
 
 // 모델 임포트
 
@@ -14,12 +15,19 @@ class UnifiedTextProcessingService {
   static final UnifiedTextProcessingService _instance = UnifiedTextProcessingService._internal();
   factory UnifiedTextProcessingService() => _instance;
   
+  // 세그먼테이션 설정
+  static bool _segmentationEnabled = false;
+  static bool get isSegmentationEnabled => _segmentationEnabled;
+  
   // API 키 및 엔드포인트 설정
   String? _apiKey;
   final String _defaultModel = 'gpt-3.5-turbo';
   
   // 캐시 저장소 (메모리 캐시)
   final Map<String, String> _cache = {};
+  
+  // 사용자 설정 서비스
+  final UserPreferencesService _preferencesService = UserPreferencesService();
   
   Future<void>? _initFuture;
   
@@ -31,6 +39,12 @@ class UnifiedTextProcessingService {
     if (_initFuture != null) {
       await _initFuture;
     }
+  }
+  
+  /// 세그먼테이션 활성화 설정
+  void setSegmentationEnabled(bool enabled) {
+    _segmentationEnabled = enabled;
+    debugPrint('UnifiedTextProcessingService: 세그먼테이션 ${enabled ? "활성화" : "비활성화"}');
   }
   
   /// 서비스 초기화
@@ -64,8 +78,19 @@ class UnifiedTextProcessingService {
       return ChineseText.empty();
     }
     
-    // 캐시 확인 (간단한 메모리 캐싱)
-    final cacheKey = 'v2-$sourceLanguage:$text';
+    // 번역 모드 확인 - segment 또는 full
+    bool useSegmentMode = await _preferencesService.getUseSegmentMode();
+    
+    // 세그먼테이션 설정 적용 - 전역 설정이 비활성화면 무조건 full 모드 사용
+    if (!_segmentationEnabled) {
+      useSegmentMode = false;
+    }
+    
+    String translationMode = useSegmentMode ? 'segment' : 'full';
+    debugPrint('LLM 처리: 번역 모드 = $translationMode (세그먼트 모드: $useSegmentMode)');
+    
+    // 캐시 확인 (간단한 메모리 캐싱) - 번역 모드를 캐시 키에 추가
+    final cacheKey = 'v3-$translationMode-$sourceLanguage:$text';
     if (_cache.containsKey(cacheKey)) {
       try {
         final cachedData = _cache[cacheKey]!;
@@ -97,8 +122,25 @@ class UnifiedTextProcessingService {
     try {
       final Stopwatch stopwatch = Stopwatch()..start();
       
-      // 1. GPT-4o로 원문+번역만 요청
-      final prompt = '''
+      if (useSegmentMode) {
+        // 세그먼트 모드 (기존 처리 방식) - 문장별 분리 및 번역, 병음 생성
+        return await _processSegmentMode(text, sourceLanguage, cacheKey);
+      } else {
+        // 전체 번역 모드 - 문단 전체 번역, 병음 생략
+        return await _processFullMode(text, sourceLanguage, cacheKey);
+      }
+    } catch (e) {
+      debugPrint('LLM 처리 중 오류: $e');
+      throw Exception('LLM 처리 실패: $e');
+    }
+  }
+  
+  /// 세그먼트 모드 처리 - 문장별 분리 및 번역, 병음 생성
+  Future<ChineseText> _processSegmentMode(String text, String sourceLanguage, String cacheKey) async {
+    final Stopwatch stopwatch = Stopwatch()..start();
+    
+    // 1. GPT-4o로 원문+번역만 요청
+    final prompt = '''
 You are a Primary school Chinese teacher for Korean students. Split the following Chinese text. For each sentence, return a JSON object with:
 - the original Chinese,
 - a natural Korean translation
@@ -114,73 +156,136 @@ $text
 Output:
 ''';
 
-      // LLM API 호출
-      final response = await http.post(
-        Uri.parse('https://api.openai.com/v1/chat/completions'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_apiKey',
-        },
-        body: jsonEncode({
-          'model': 'gpt-4o',
-          'messages': [
-            {
-              'role': 'user',
-              'content': prompt,
-            }
-          ],
-          'temperature': 0,
-          'max_tokens': 2000,
-        }),
-      );
+    // LLM API 호출
+    final response = await http.post(
+      Uri.parse('https://api.openai.com/v1/chat/completions'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_apiKey',
+      },
+      body: jsonEncode({
+        'model': 'gpt-4o',
+        'messages': [
+          {
+            'role': 'user',
+            'content': prompt,
+          }
+        ],
+        'temperature': 0,
+        'max_tokens': 2000,
+      }),
+    );
 
+    if (response.statusCode == 200) {
+      final decodedBody = utf8.decode(response.bodyBytes);
+      final responseData = jsonDecode(decodedBody);
+      final content = responseData['choices'][0]['message']['content'] as String;
       
+      debugPrint('LLM content: $content');
       
-      if (response.statusCode == 200) {
-        final decodedBody = utf8.decode(response.bodyBytes);
-        final responseData = jsonDecode(decodedBody);
-        final content = responseData['choices'][0]['message']['content'] as String;
-        
-        debugPrint('LLM content: $content');
-        
-        // robust JSON 파싱
-        final jsonString = extractJsonArray(content);
-        final List<dynamic> parsedData = jsonDecode(jsonString);
-        // 2. chinese 문장 리스트 추출
-        final List<String> chineseList = parsedData.map<String>((e) => e['chinese'] ?? '').toList();
-        // 3. 병음 요청 (gpt-3.5-turbo)
-        final List<String> pinyinList = await processPinyinWithLLM(chineseList);
-        // 4. 최종 합치기
-        final List<ChineseSentence> sentences = [];
-        for (int i = 0; i < parsedData.length; i++) {
-          sentences.add(ChineseSentence(
-            original: parsedData[i]['chinese'] ?? '',
-            translation: parsedData[i]['korean'] ?? '',
-            pinyin: i < pinyinList.length ? pinyinList[i] : '',
-          ));
-        }
-        
-        // 결과 메모리 캐싱
-        _cache[cacheKey] = jsonEncode(sentences.map((s) => {
-          'chinese': s.original,
-          'korean': s.translation,
-          'pinyin': s.pinyin,
-        }).toList());
-        
-        if (kDebugMode) {
-          debugPrint('LLM 처리 완료 (${stopwatch.elapsedMilliseconds}ms): ${sentences.length}개 문장');
-        }
-        
-        return ChineseText(
-          originalText: text,
-          sentences: sentences,
-        );
-      } else {
-        throw Exception('LLM API 오류: ${response.statusCode} - ${response.body}');
+      // robust JSON 파싱
+      final jsonString = extractJsonArray(content);
+      final List<dynamic> parsedData = jsonDecode(jsonString);
+      // 2. chinese 문장 리스트 추출
+      final List<String> chineseList = parsedData.map<String>((e) => e['chinese'] ?? '').toList();
+      // 3. 병음 요청 (gpt-3.5-turbo)
+      final List<String> pinyinList = await processPinyinWithLLM(chineseList);
+      // 4. 최종 합치기
+      final List<ChineseSentence> sentences = [];
+      for (int i = 0; i < parsedData.length; i++) {
+        sentences.add(ChineseSentence(
+          original: parsedData[i]['chinese'] ?? '',
+          translation: parsedData[i]['korean'] ?? '',
+          pinyin: i < pinyinList.length ? pinyinList[i] : '',
+        ));
       }
-    } catch (e) {
-      debugPrint('LLM 처리 중 오류: $e');
-      throw Exception('LLM 처리 실패: $e');
+      
+      // 결과 메모리 캐싱
+      _cache[cacheKey] = jsonEncode(sentences.map((s) => {
+        'chinese': s.original,
+        'korean': s.translation,
+        'pinyin': s.pinyin,
+      }).toList());
+      
+      if (kDebugMode) {
+        debugPrint('LLM 세그먼트 모드 처리 완료 (${stopwatch.elapsedMilliseconds}ms): ${sentences.length}개 문장');
+      }
+      
+      return ChineseText(
+        originalText: text,
+        sentences: sentences,
+      );
+    } else {
+      throw Exception('LLM API 오류: ${response.statusCode} - ${response.body}');
+    }
+  }
+  
+  /// 전체 번역 모드 처리 - 문단 전체 번역, 병음 생략
+  Future<ChineseText> _processFullMode(String text, String sourceLanguage, String cacheKey) async {
+    final Stopwatch stopwatch = Stopwatch()..start();
+    
+    // 1. GPT-4o로 전체 텍스트 번역 요청
+    final prompt = '''
+You are a professional translator. Translate the following Chinese text into Korean NATURALLY.
+You should preserve paragraph breaks.
+Respond with ONLY the Korean translation, without explanations or formatting.
+
+Chinese text:
+$text
+Output:
+''';
+
+    // LLM API 호출
+    final response = await http.post(
+      Uri.parse('https://api.openai.com/v1/chat/completions'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_apiKey',
+      },
+      body: jsonEncode({
+        'model': 'gpt-4o',
+        'messages': [
+          {
+            'role': 'user',
+            'content': prompt,
+          }
+        ],
+        'temperature': 0,
+        'max_tokens': 2000,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final decodedBody = utf8.decode(response.bodyBytes);
+      final responseData = jsonDecode(decodedBody);
+      final fullTranslation = responseData['choices'][0]['message']['content'] as String;
+      
+      // 전체 텍스트를 단일 문장으로 처리 (병음 생략)
+      final List<ChineseSentence> sentences = [
+        ChineseSentence(
+          original: text,
+          translation: fullTranslation,
+          pinyin: '', // 병음 생략
+        )
+      ];
+      
+      // 결과 메모리 캐싱
+      _cache[cacheKey] = jsonEncode(sentences.map((s) => {
+        'chinese': s.original,
+        'korean': s.translation,
+        'pinyin': s.pinyin,
+      }).toList());
+      
+      if (kDebugMode) {
+        debugPrint('LLM 전체 번역 모드 처리 완료 (${stopwatch.elapsedMilliseconds}ms): 원문 ${text.length}자, 번역 ${fullTranslation.length}자');
+      }
+      
+      return ChineseText(
+        originalText: text,
+        sentences: sentences,
+      );
+    } else {
+      throw Exception('LLM API 오류: ${response.statusCode} - ${response.body}');
     }
   }
   
@@ -239,6 +344,34 @@ DO NOT include any explanations, comments, or formatting such as code blocks.
   void clearCache() {
     _cache.clear();
     debugPrint('모든 캐시가 삭제되었습니다.');
+  }
+
+  /// 특정 단어에 대한 캐시 데이터 확인
+  Map<String, dynamic>? getWordCacheData(String word) {
+    try {
+      final cacheKey = 'v3-segment-zh:$word';
+      if (_cache.containsKey(cacheKey)) {
+        final cachedData = _cache[cacheKey]!;
+        final List<dynamic> parsedData = jsonDecode(cachedData);
+        if (parsedData.isNotEmpty) {
+          return {
+            'chinese': parsedData[0]['chinese'] ?? word,
+            'korean': parsedData[0]['korean'] ?? '',
+            'pinyin': parsedData[0]['pinyin'] ?? '',
+          };
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('캐시 데이터 확인 중 오류: $e');
+      return null;
+    }
+  }
+
+  /// 캐시에 해당 단어 존재 여부 확인
+  bool hasWordInCache(String word) {
+    final cacheKey = 'v3-segment-zh:$word';
+    return _cache.containsKey(cacheKey);
   }
 
   String extractJsonArray(String raw) {

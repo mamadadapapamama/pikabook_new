@@ -1,8 +1,9 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../text_processing/enhanced_ocr_service.dart';
-import '../text_processing/translation_service.dart';
+import '../../../LLM test/llm_text_processing.dart';
 import '../../utils/language_constants.dart';
+import '../../models/chinese_text.dart';
 
 /// Google Cloud 서비스를 통합적으로 관리하는 클래스
 /// OCR 및 번역 기능을 제공합니다.
@@ -10,7 +11,7 @@ import '../../utils/language_constants.dart';
 
 class GoogleCloudService {
   final EnhancedOcrService _ocrService = EnhancedOcrService();
-  final TranslationService _translationService = TranslationService();
+  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
 
   // 싱글톤 패턴 구현
   static final GoogleCloudService _instance = GoogleCloudService._internal();
@@ -50,7 +51,7 @@ class GoogleCloudService {
       }
 
       // 소스 언어가 지정되지 않은 경우 자동 감지
-      final source = sourceLanguage ?? 'auto';
+      final source = sourceLanguage ?? 'zh';
       
       // 타겟 언어는 기본값 설정
       final target = targetLanguage ?? TargetLanguage.DEFAULT;
@@ -64,12 +65,9 @@ class GoogleCloudService {
         return await _translateLongText(text, sourceLanguage: source, targetLanguage: target, countCharacters: countCharacters);
       }
 
-      final result = await _translationService.translateText(
-        text,
-        sourceLanguage: source,
-        targetLanguage: target,
-        countCharacters: countCharacters,
-      );
+      // LLM 처리 서비스 사용
+      final chineseText = await _textProcessingService.processWithLLM(text, sourceLanguage: source);
+      final result = chineseText.sentences.map((s) => s.translation).join('\n');
 
       debugPrint('GoogleCloudService: 텍스트 번역 완료 (${result.length} 자)');
       return result;
@@ -84,7 +82,7 @@ class GoogleCloudService {
       {String? sourceLanguage, String? targetLanguage, bool countCharacters = true}) async {
     try {
       // 소스 언어가 지정되지 않은 경우 자동 감지
-      final source = sourceLanguage ?? 'auto';
+      final source = sourceLanguage ?? 'zh';
       
       // 타겟 언어는 기본값 설정
       final target = targetLanguage ?? TargetLanguage.DEFAULT;
@@ -116,12 +114,12 @@ class GoogleCloudService {
           for (final sentence in sentences) {
             if (sentence.isEmpty) continue;
 
-            final translatedSentence = await _translationService.translateText(
+            // LLM 서비스로 번역
+            final chineseText = await _textProcessingService.processWithLLM(
               sentence,
-              sourceLanguage: source,
-              targetLanguage: target,
-              countCharacters: countCharacters,
+              sourceLanguage: source
             );
+            final translatedSentence = chineseText.sentences.map((s) => s.translation).join('\n');
 
             translatedSentences.add(translatedSentence);
           }
@@ -129,12 +127,11 @@ class GoogleCloudService {
           translatedParagraphs.add(translatedSentences.join(' '));
         } else {
           // 문단 단위로 번역
-          final translatedParagraph = await _translationService.translateText(
-            paragraph,
-            sourceLanguage: source,
-            targetLanguage: target,
-            countCharacters: countCharacters,
+          final chineseText = await _textProcessingService.processWithLLM(
+            paragraph, 
+            sourceLanguage: source
           );
+          final translatedParagraph = chineseText.sentences.map((s) => s.translation).join('\n');
 
           translatedParagraphs.add(translatedParagraph);
         }
@@ -152,16 +149,20 @@ class GoogleCloudService {
   Future<List<Map<String, String>>> getSupportedLanguages() async {
     try {
       debugPrint('GoogleCloudService: 지원 언어 목록 조회 시작');
-      final languages = await _translationService.getSupportedLanguages();
-      debugPrint(
-          'GoogleCloudService: 지원 언어 목록 조회 완료 (${languages.length}개 언어)');
+      // 현재는 중국어->한국어만 지원
+      final languages = [
+        {'code': 'zh', 'name': '중국어'},
+        {'code': 'ko', 'name': '한국어'},
+      ];
+      
+      debugPrint('GoogleCloudService: 지원 언어 목록 조회 완료 (${languages.length}개 언어)');
       return languages;
     } catch (e) {
       debugPrint('GoogleCloudService: 지원 언어 목록 조회 중 오류 발생: $e');
       // MVP에서는 한국어와 영어만 지원
       return [
         {'code': 'ko', 'name': '한국어'},
-        {'code': 'en', 'name': 'English'},
+        {'code': 'zh', 'name': '중국어'},
       ];
     }
   }

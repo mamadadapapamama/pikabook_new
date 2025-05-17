@@ -1,9 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../models/dictionary.dart';
+import '../../../LLM test/llm_text_processing.dart';
+import '../../models/chinese_text.dart';
 
 /// 내부 중국어 사전 데이터를 로드 관리하는 서비스
+/// LLM 캐시를 먼저 확인하고, 내부 사전 DB에서 검색하는 기능 제공
 
 class InternalCnDictionaryService {
   static final InternalCnDictionaryService _instance =
@@ -13,7 +17,13 @@ class InternalCnDictionaryService {
     return _instance;
   }
 
-  InternalCnDictionaryService._internal();
+  InternalCnDictionaryService._internal() {
+    // LLM 텍스트 처리 서비스 초기화
+    _textProcessingService = UnifiedTextProcessingService();
+  }
+
+  // LLM 텍스트 처리 서비스 (캐시 연동용)
+  late final UnifiedTextProcessingService _textProcessingService;
 
   Map<String, DictionaryEntry> _entries = {};
   bool _isLoaded = false;
@@ -100,21 +110,78 @@ class InternalCnDictionaryService {
     }
   }
 
-  // 단어 검색 (지연 로드 지원)
+  // LLM 캐시에서 단어 정보 찾기
+  Future<DictionaryEntry?> _lookupFromLLMCache(String word) async {
+    try {
+      // LLM 서비스가 캐시하고 있는지 확인
+      final cacheData = _textProcessingService.getWordCacheData(word);
+      
+      if (cacheData != null) {
+        if (kDebugMode) {
+          debugPrint('LLM 캐시에서 단어 정보 찾음: $word');
+        }
+        
+        return DictionaryEntry(
+          word: cacheData['chinese'] ?? word,
+          pinyin: cacheData['pinyin'] ?? '',
+          meaning: cacheData['korean'] ?? '',
+          source: 'llm_cache'
+        );
+      }
+      
+      return null;
+    } catch (e) {
+      debugPrint('LLM 캐시 조회 중 오류: $e');
+      return null;
+    }
+  }
+
+  // 단어 검색 (지연 로드 지원) - LLM 캐시 먼저 확인
   Future<DictionaryEntry?> lookupAsync(String word) async {
+    // 1. LLM 캐시에서 먼저 확인
+    final llmCacheResult = await _lookupFromLLMCache(word);
+    if (llmCacheResult != null) {
+      return llmCacheResult;
+    }
+    
+    // 2. 내부 사전에서 확인
     if (!_isLoaded) {
       await loadDictionary();
     }
     return _entries[word];
   }
 
-  // 단어 검색 (동기식)
+  // 단어 검색 (동기식) - LLM 캐시 먼저 확인
   DictionaryEntry? lookup(String word) {
+    // 내부 사전이 로드되지 않았으면 로드 시작
     if (!_isLoaded) {
-      // 사전이 로드되지 않았으면 로드 시작 (결과는 반환하지 않음)
       loadDictionary();
+      
+      // LLM 캐시에서 확인 - 비동기지만 async 메서드 내부에서 처리
+      _lookupFromLLMCache(word).then((llmResult) {
+        if (llmResult != null) {
+          // 여기서는 결과를 반환할 수 없고, UI가 새로고침되어야 함
+          if (kDebugMode) {
+            debugPrint('LLM 캐시에서 단어 정보 찾음 (비동기): $word');
+          }
+        }
+      });
+      
+      // 초기 요청에서는 null 반환 (UI가 나중에 새로고침해야 함)
       return null;
     }
+    
+    // LLM 캐시에서 즉시 확인 시도 (이미 캐시되어 있는지 확인)
+    if (_textProcessingService.hasWordInCache(word)) {
+      // 비동기 작업 시작 (결과는 UI 갱신에 사용)
+      _lookupFromLLMCache(word).then((llmResult) {
+        if (kDebugMode && llmResult != null) {
+          debugPrint('LLM 캐시에서 단어 정보 찾음 (사전 로드 완료 후): $word');
+        }
+      });
+    }
+    
+    // 내부 사전에서 확인
     return _entries[word];
   }
 

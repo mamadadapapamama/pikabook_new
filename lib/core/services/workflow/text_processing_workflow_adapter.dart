@@ -4,11 +4,13 @@ import '../../models/processed_text.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/text_segment.dart';
 import '../../../LLM test/llm_text_processing.dart';
+import '../authentication/user_preferences_service.dart';
 
 /// 텍스트 처리 워크플로우 어댑터
 /// 기존 레거시 워크플로우를 제거하고 LLM 기반 워크플로우만 사용하도록 수정됨
 class TextProcessingWorkflowAdapter {
   final UnifiedTextProcessingService llmWorkflow;
+  final UserPreferencesService _preferencesService = UserPreferencesService();
 
   TextProcessingWorkflowAdapter({
     UnifiedTextProcessingService? llmWorkflow,
@@ -23,13 +25,18 @@ class TextProcessingWorkflowAdapter {
     if (page == null) return null;
     
     try {
+      // 사용자의 번역 모드 설정 확인
+      final useSegmentMode = await _preferencesService.getUseSegmentMode();
+      final translationMode = useSegmentMode ? 'segment' : 'full';
+      debugPrint('TextProcessingWorkflowAdapter: 번역 모드 = $translationMode');
+      
       final chineseText = await llmWorkflow.processWithLLM(
         page.originalText,
         sourceLanguage: llmSourceLanguage ?? 'zh',
       );
       
       // LLM 결과를 ProcessedText로 변환
-      return ProcessedText(
+      final processedText = ProcessedText(
         fullOriginalText: chineseText.originalText,
         fullTranslatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
         segments: chineseText.sentences.map((s) =>
@@ -41,10 +48,13 @@ class TextProcessingWorkflowAdapter {
             targetLanguage: 'ko',
           )
         ).toList(),
-        showFullText: false,
-        showPinyin: true,
+        showFullText: !useSegmentMode, // 번역 모드에 따라 초기 표시 설정
+        showPinyin: useSegmentMode, // full 모드에서는 병음 표시하지 않음
         showTranslation: true,
       );
+      
+      debugPrint('TextProcessingWorkflowAdapter: 처리 완료 - ${chineseText.sentences.length}개 세그먼트, 전체 텍스트 모드: ${!useSegmentMode}');
+      return processedText;
     } catch (e) {
       debugPrint('텍스트 처리 중 오류: $e');
       return null;

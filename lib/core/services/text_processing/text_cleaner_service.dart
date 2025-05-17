@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'pinyin_creation_service.dart';
 
 /// 텍스트 정리 서비스
 /// OCR 결과에서 불필요한 텍스트를 제거하고 텍스트를 분석하는 기능을 제공합니다.
@@ -9,9 +8,6 @@ class TextCleanerService {
   static final TextCleanerService _instance = TextCleanerService._internal();
   factory TextCleanerService() => _instance;
   TextCleanerService._internal();
-
-  // 핀인 생성 서비스
-  final PinyinCreationService _pinyinService = PinyinCreationService();
 
   // 중국어 문자 범위 (유니코드)
   static final RegExp chineseCharPattern = RegExp(r'[\u4e00-\u9fff]');

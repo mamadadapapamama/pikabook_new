@@ -12,10 +12,10 @@ import '../../models/page.dart' as page_model;
 import '../../models/flash_card.dart';
 import 'page_service.dart';
 import '../media/image_service.dart';
-import '../text_processing/translation_service.dart';
 import '../storage/unified_cache_service.dart';
 import '../text_processing/enhanced_ocr_service.dart';
 import '../common/usage_limit_service.dart';
+import '../../../LLM test/llm_text_processing.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
 // 리팩토링으로 제거된 import
@@ -28,7 +28,7 @@ class NoteService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final PageService _pageService = PageService();
   final ImageService _imageService = ImageService();
-  final TranslationService _translationService = TranslationService();
+  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UsageLimitService _usageLimitService = UsageLimitService();
@@ -589,7 +589,8 @@ class NoteService {
       );
       if (shouldProcess) {
         final extractedText = await _ocrService.extractText(imageFile);
-        final translatedText = await _translationService.translateText(extractedText);
+        final chineseText = await _textProcessingService.processWithLLM(extractedText);
+        final translatedText = chineseText.sentences.map((s) => s.translation).join('\n');
         await _pageService.updatePage(
           page.id!,
           originalText: extractedText,
@@ -609,7 +610,8 @@ class NoteService {
         Future.microtask(() async {
           try {
             final extractedText = await _ocrService.extractText(imageFile);
-            final translatedText = await _translationService.translateText(extractedText);
+            final chineseText = await _textProcessingService.processWithLLM(extractedText);
+            final translatedText = chineseText.sentences.map((s) => s.translation).join('\n');
             await _pageService.updatePage(
               page.id!,
               originalText: extractedText,

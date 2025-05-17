@@ -6,8 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../storage/unified_cache_service.dart';
 import '../authentication/user_preferences_service.dart';
 import '../authentication/auth_service.dart';
-import '../text_processing/internal_cn_segmenter_service.dart';
 import '../media/image_service.dart';
+import '../../../LLM test/llm_text_processing.dart';
 
 /// 앱 초기화 단계를 정의합니다.
 enum InitializationStep {
@@ -41,6 +41,7 @@ class InitializationManager {
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final UserPreferencesService _prefsService = UserPreferencesService();
   final AuthService _authService = AuthService();
+  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
   
   // 초기화 상태 관리
   InitializationStep _currentStep = InitializationStep.preparing;
@@ -263,9 +264,10 @@ class InitializationManager {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // 중국어 분할 설정 로드
-      InternalCnSegmenterService.isSegmentationEnabled =
-          prefs.getBool('segmentation_enabled') ?? false;
+      // 중국어 분할 설정 로드 및 적용
+      final segmentationEnabled = prefs.getBool('segmentation_enabled') ?? false;
+      _textProcessingService.setSegmentationEnabled(segmentationEnabled);
+      debugPrint('중국어 분할 설정 로드 완료: ${segmentationEnabled ? "활성화" : "비활성화"}');
       
       // 언어 설정 로드 - 기본값 설정
       final sourceLanguage = await _cacheService.getSourceLanguage();
@@ -275,7 +277,8 @@ class InitializationManager {
     } catch (e) {
       debugPrint('앱 설정 로드 중 오류: $e');
       // 기본값 설정
-      InternalCnSegmenterService.isSegmentationEnabled = false;
+      _textProcessingService.setSegmentationEnabled(false);
+      debugPrint('앱 설정 로드 오류로 기본값(세그먼테이션 비활성화) 적용');
     }
   }
   

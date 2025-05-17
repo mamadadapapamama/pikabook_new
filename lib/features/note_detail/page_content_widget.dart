@@ -244,7 +244,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
 
   // TTS 재생: SegmentManager만 사용
   void _playTts(String text, {int? segmentIndex}) async {
-    await _segmentManager.speakText(text);
+    await _segmentManager.playTts(text, segmentIndex: segmentIndex);
     // playingSegmentIndex 등 UI 상태는 필요시 SegmentManager 콜백으로만 처리
   }
 
