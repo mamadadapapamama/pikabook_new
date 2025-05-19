@@ -347,22 +347,46 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           meaning: existingCard.back,
           examples: [],
         );
-        DictionaryResultWidget.showDictionaryBottomSheet(
+        showModalBottomSheet(
           context: context,
-          entry: customEntry,
-          onCreateFlashCard: widget.onCreateFlashCard,
-          isExistingFlashcard: true,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => Container(
+            decoration: BoxDecoration(
+              color: ColorTokens.surface,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(SpacingTokens.lg),
+              ),
+            ),
+            child: DictionaryResultWidget(
+              entry: customEntry,
+              onCreateFlashCard: widget.onCreateFlashCard,
+              isExistingFlashcard: true,
+            ),
+          ),
         );
         return;
       }
       final entry = await _segmentManager.lookupWord(word);
       if (entry != null) {
         if (mounted) {
-          DictionaryResultWidget.showDictionaryBottomSheet(
+          showModalBottomSheet(
             context: context,
-            entry: entry,
-            onCreateFlashCard: widget.onCreateFlashCard,
-            isExistingFlashcard: false,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => Container(
+              decoration: BoxDecoration(
+                color: ColorTokens.surface,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(SpacingTokens.lg),
+                ),
+              ),
+              child: DictionaryResultWidget(
+                entry: entry,
+                onCreateFlashCard: widget.onCreateFlashCard,
+                isExistingFlashcard: false,
+              ),
+            ),
           );
         }
       } else {
@@ -471,11 +495,23 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           examples: [],
         );
 
-        DictionaryResultWidget.showDictionaryBottomSheet(
+        showModalBottomSheet(
           context: context,
-          entry: customEntry,
-          onCreateFlashCard: widget.onCreateFlashCard,
-          isExistingFlashcard: true,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => Container(
+            decoration: BoxDecoration(
+              color: ColorTokens.surface,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(SpacingTokens.lg),
+              ),
+            ),
+            child: DictionaryResultWidget(
+              entry: customEntry,
+              onCreateFlashCard: widget.onCreateFlashCard,
+              isExistingFlashcard: true,
+            ),
+          ),
         );
         return;
       }
@@ -488,11 +524,23 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       if (entry != null) {
         debugPrint('단어 검색 성공: ${entry.word}, 의미: ${entry.meaning}');
         if (mounted) {
-          DictionaryResultWidget.showDictionaryBottomSheet(
+          showModalBottomSheet(
             context: context,
-            entry: entry,
-            onCreateFlashCard: widget.onCreateFlashCard,
-            isExistingFlashcard: false,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => Container(
+              decoration: BoxDecoration(
+                color: ColorTokens.surface,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(SpacingTokens.lg),
+                ),
+              ),
+              child: DictionaryResultWidget(
+                entry: entry,
+                onCreateFlashCard: widget.onCreateFlashCard,
+                isExistingFlashcard: false,
+              ),
+            ),
           );
         }
       } else {
@@ -508,11 +556,23 @@ class _PageContentWidgetState extends State<PageContentWidget> {
           debugPrint('외부 API에서 단어 찾음: ${apiEntry.word}, 의미: ${apiEntry.meaning}');
           
           if (mounted) {
-            DictionaryResultWidget.showDictionaryBottomSheet(
+            showModalBottomSheet(
               context: context,
-              entry: apiEntry,
-              onCreateFlashCard: widget.onCreateFlashCard,
-              isExistingFlashcard: false,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (context) => Container(
+                decoration: BoxDecoration(
+                  color: ColorTokens.surface,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(SpacingTokens.lg),
+                  ),
+                ),
+                child: DictionaryResultWidget(
+                  entry: apiEntry,
+                  onCreateFlashCard: widget.onCreateFlashCard,
+                  isExistingFlashcard: false,
+                ),
+              ),
             );
           }
         } else {

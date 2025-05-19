@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
-import 'package:googleapis_auth/auth_io.dart';
-import 'package:googleapis/texttospeech/v1.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import '../../models/processed_text.dart';
 import '../../utils/language_constants.dart';
 import '../common/usage_limit_service.dart';
@@ -24,6 +24,7 @@ class TtsService {
   final AudioPlayer _audioPlayer = AudioPlayer();
   TtsState _ttsState = TtsState.stopped;
   String _currentLanguage = SourceLanguage.DEFAULT; // 기본 언어: 중국어
+  String? _apiKey;
 
   // 현재 재생 중인 세그먼트 인덱스
   int? _currentSegmentIndex;
@@ -40,14 +41,14 @@ class TtsService {
   // 사용량 제한 서비스
   final UsageLimitService _usageLimitService = UsageLimitService();
 
-  // Google Cloud TTS API 키
-  final String _apiKey = const String.fromEnvironment('GOOGLE_CLOUD_API_KEY', defaultValue: '');
-
   // 초기화
   Future<void> init() async {
     try {
-      if (_apiKey.isEmpty) {
-        throw Exception('Google Cloud API 키가 설정되지 않았습니다.');
+      // API 키 로드
+      await _loadApiKey();
+      
+      if (_apiKey == null || _apiKey!.isEmpty) {
+        throw Exception('ElevenLabs API 키를 로드할 수 없습니다.');
       }
 
       // 오디오 플레이어 이벤트 리스너 설정
@@ -64,7 +65,7 @@ class TtsService {
       debugPrint('TTS 엔진 초기화 성공');
     } catch (e) {
       debugPrint('TTS 엔진 초기화 중 오류: $e');
-      rethrow; // 오류를 상위로 전파하여 처리할 수 있도록 함
+      rethrow;
     }
     
     // 이벤트 리스너 설정
@@ -72,6 +73,19 @@ class TtsService {
 
     // 언어 설정
     await setLanguage(_currentLanguage);
+  }
+
+  // API 키 로드
+  Future<void> _loadApiKey() async {
+    try {
+      final String jsonString = await rootBundle.loadString('assets/credentials/api_keys.json');
+      final Map<String, dynamic> jsonData = json.decode(jsonString);
+      _apiKey = jsonData['elevenlabs_key'] as String?;
+      debugPrint('ElevenLabs API 키 로드 성공');
+    } catch (e) {
+      debugPrint('API 키 로드 중 오류: $e');
+      rethrow;
+    }
   }
 
   // 언어 설정
@@ -385,52 +399,47 @@ class TtsService {
     });
   }
 
-  /// Google Cloud TTS API를 사용하여 음성 합성
+  /// ElevenLabs TTS API를 사용하여 음성 합성
   Future<Uint8List?> _synthesizeSpeech(String text) async {
     try {
-      // 서비스 계정 인증 정보를 환경 변수에서 가져옴
-      final serviceAccountJson = const String.fromEnvironment('GOOGLE_SERVICE_ACCOUNT_JSON', defaultValue: '');
-      if (serviceAccountJson.isEmpty) {
-        throw Exception('Google 서비스 계정 정보가 설정되지 않았습니다.');
+      if (_apiKey == null) {
+        throw Exception('API 키가 설정되지 않았습니다.');
       }
 
-      // JSON 문자열을 Map으로 변환
-      final Map<String, dynamic> credentialsJson = json.decode(serviceAccountJson);
-      
-      // 서비스 계정 인증 정보 로드
-      final credentials = ServiceAccountCredentials.fromJson(credentialsJson);
+      // API 엔드포인트
+      const url = 'https://api.elevenlabs.io/v1/text-to-speech/4VZIsMPtgggwNg7OXbPY';
 
-      // 인증 클라이언트 생성
-      final client = await clientViaServiceAccount(
-        credentials,
-        [TexttospeechApi.cloudPlatformScope],
-      );
+      // 요청 헤더
+      final headers = {
+        'Accept': 'audio/mpeg',
+        'Content-Type': 'application/json',
+        'xi-api-key': _apiKey!,
+      };
 
-      // TTS API 클라이언트 생성
-      final ttsApi = TexttospeechApi(client);
-
-      // 음성 합성 요청
-      final request = SynthesizeSpeechRequest(
-        input: SynthesisInput(text: text),
-        voice: VoiceSelectionParams(
-          languageCode: _getLanguageCode(_currentLanguage),
-          name: _getVoiceName(_currentLanguage),
-        ),
-        audioConfig: AudioConfig(
-          audioEncoding: 'MP3',
-          speakingRate: _getSpeakingRate(_currentLanguage),
-          pitch: 0.0,
-        ),
-      );
+      // 요청 본문
+      final body = {
+        'text': text,
+        'model_id': 'eleven_flash_v2_5',
+        'voice_settings': {
+          'stability': 0.5,
+          'similarity_boost': 0.75,
+          'style': 0.0,
+          'use_speaker_boost': true
+        }
+      };
 
       // API 호출
-      final response = await ttsApi.text.synthesize(request);
-      
+      final response = await http.post(
+        Uri.parse(url),
+        headers: headers,
+        body: json.encode(body),
+      );
+
       // 응답 처리
-      if (response.audioContent != null) {
-        return base64Decode(response.audioContent!);
+      if (response.statusCode == 200) {
+        return response.bodyBytes;
       } else {
-        debugPrint('TTS API 응답에 오디오 콘텐츠가 없습니다.');
+        debugPrint('ElevenLabs API 오류: ${response.statusCode} - ${response.body}');
         return null;
       }
     } catch (e) {
@@ -463,59 +472,6 @@ class TtsService {
       await _audioPlayer.play();
     } catch (e) {
       debugPrint('오디오 파일 재생 중 오류: $e');
-    }
-  }
-
-  /// 언어 코드 가져오기
-  String _getLanguageCode(String language) {
-    switch (language) {
-      case SourceLanguage.CHINESE:
-        return 'zh-CN';
-      case SourceLanguage.CHINESE_TRADITIONAL:
-        return 'zh-TW';
-      case SourceLanguage.KOREAN:
-        return 'ko-KR';
-      case SourceLanguage.ENGLISH:
-        return 'en-US';
-      case SourceLanguage.JAPANESE:
-        return 'ja-JP';
-      default:
-        return 'zh-CN';
-    }
-  }
-
-  /// 음성 이름 가져오기
-  String _getVoiceName(String language) {
-    switch (language) {
-      case SourceLanguage.CHINESE:
-        return 'cmn-CN-Standard-A';
-      case SourceLanguage.CHINESE_TRADITIONAL:
-        return 'cmn-TW-Standard-A';
-      case SourceLanguage.KOREAN:
-        return 'ko-KR-Standard-A';
-      case SourceLanguage.ENGLISH:
-        return 'en-US-Standard-A';
-      case SourceLanguage.JAPANESE:
-        return 'ja-JP-Standard-A';
-      default:
-        return 'cmn-CN-Standard-A';
-    }
-  }
-
-  /// 발화 속도 가져오기
-  double _getSpeakingRate(String language) {
-    switch (language) {
-      case SourceLanguage.CHINESE:
-      case SourceLanguage.CHINESE_TRADITIONAL:
-        return 0.8;  // 중국어는 조금 느리게
-      case SourceLanguage.KOREAN:
-        return 0.8;  // 한국어
-      case SourceLanguage.ENGLISH:
-        return 1.0;  // 영어는 조금 빠르게
-      case SourceLanguage.JAPANESE:
-        return 0.8;  // 일본어
-      default:
-        return 0.8;  // 기본값
     }
   }
 }

@@ -7,11 +7,11 @@ import '../core/theme/tokens/spacing_tokens.dart';
 import '../core/theme/tokens/ui_tokens.dart';
 import '../core/widgets/pika_button.dart';
 import '../core/widgets/tts_button.dart';
-import '../core/services/text_processing/text_reader_service.dart';
+import '../core/services/media/tts_service.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
 
-class DictionaryResultWidget extends StatelessWidget {
+class DictionaryResultWidget extends StatefulWidget {
   final DictionaryEntry entry;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
   final bool isExistingFlashcard;
@@ -24,138 +24,160 @@ class DictionaryResultWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    // TextReaderService 직접 사용
-    final textReaderService = TextReaderService();
+  State<DictionaryResultWidget> createState() => _DictionaryResultWidgetState();
+}
 
+class _DictionaryResultWidgetState extends State<DictionaryResultWidget> {
+  final TtsService _ttsService = TtsService();
+  bool _isSpeaking = false;
+  bool _ttsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initTts();
+  }
+
+  Future<void> _initTts() async {
+    try {
+      await _ttsService.init();
+      final isAvailable = await _ttsService.isTtsAvailable();
+      if (mounted) {
+        setState(() {
+          _ttsEnabled = isAvailable;
+        });
+      }
+    } catch (e) {
+      debugPrint('TTS 초기화 오류: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _ttsService.dispose();
+    super.dispose();
+  }
+
+  Future<void> _speakText(String text) async {
+    if (_isSpeaking) {
+      await _stopSpeaking();
+      return;
+    }
+
+    if (!_ttsEnabled) return;
+
+    setState(() {
+      _isSpeaking = true;
+    });
+
+    try {
+      await _ttsService.setLanguage('zh-CN');
+      await _ttsService.speak(text);
+    } catch (e) {
+      debugPrint('TTS 실행 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('음성 재생 중 오류가 발생했습니다: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopSpeaking() async {
+    if (!_isSpeaking) return;
+
+    try {
+      await _ttsService.stop();
+    } catch (e) {
+      debugPrint('TTS 중지 오류: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        SpacingTokens.lg, 
-        SpacingTokens.lg, 
-        SpacingTokens.lg, 
-        SpacingTokens.lg + 10 // 패딩 바텀 +10 추가
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(SpacingTokens.md)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
+      padding: EdgeInsets.all(SpacingTokens.lg),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 헤더 (제목 및 닫기 버튼)
+          // 단어와 TTS 버튼
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '사전',
-                style: TypographyTokens.button.copyWith(
-                  color: ColorTokens.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              InkWell(
-                onTap: () => Navigator.pop(context),
-                borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-                child: Padding(
-                  padding: EdgeInsets.all(SpacingTokens.xs),
-                  child: Icon(
-                    Icons.close,
+              Expanded(
+                child: Text(
+                  widget.entry.word,
+                  style: TypographyTokens.headline2Cn.copyWith(
                     color: ColorTokens.textPrimary,
-                    size: SpacingTokens.iconSizeMedium,
                   ),
                 ),
+              ),
+              TtsButton(
+                text: widget.entry.word,
+                size: TtsButton.sizeMedium,
+                tooltip: !_ttsEnabled ? '무료 TTS 사용량을 모두 사용했습니다.' : null,
+                iconColor: ColorTokens.secondary,
+                activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
+                onPlayStart: () => _speakText(widget.entry.word),
+                onPlayEnd: _stopSpeaking,
               ),
             ],
           ),
           
-          SizedBox(height: SpacingTokens.md),
+          // 핀인
+          if (widget.entry.pinyin.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: SpacingTokens.sm),
+              child: Text(
+                widget.entry.pinyin,
+                style: TypographyTokens.caption.copyWith(
+                  color: ColorTokens.textGrey,
+                  fontFamily: TypographyTokens.poppins,
+                ),
+              ),
+            ),
           
-          // 단어 내용
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 원문 및 발음 듣기 버튼
-              Row(
-                children: [
-                  Text(
-                    entry.word,
-                    style: TypographyTokens.headline3.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: ColorTokens.textPrimary,
-                    ),
-                  ),
-                  SizedBox(width: SpacingTokens.xs),
-                  // 발음 듣기 버튼 - TtsButton 위젯 사용
-                  FutureBuilder<bool>(
-                    future: textReaderService.ttsService.isTtsAvailable(),
-                    builder: (context, snapshot) {
-                      final bool isTtsEnabled = snapshot.data ?? true;
-                      final String? ttsTooltip = !isTtsEnabled ? 
-                          textReaderService.ttsService.getTtsLimitMessage() : null;
-                      
-                      // 표준 TtsButton 위젯 사용
-                      return TtsButton(
-                        text: entry.word,
-                        size: TtsButton.sizeMedium,
-                        tooltip: ttsTooltip,
-                      );
-                    }
-                  ),
-                ],
-              ),
-              
-              // 발음 (Pinyin) - 항상 표시
-              Padding(
-                padding: EdgeInsets.only(top: SpacingTokens.xs),
-                child: Text(
-                  entry.pinyin.isEmpty ? '발음 정보 없음' : entry.pinyin,
-                  style: TypographyTokens.body2.copyWith(
-                    color: ColorTokens.textSecondary,
-                  ),
+          // 의미
+          if (widget.entry.meaning.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: SpacingTokens.sm),
+              child: Text(
+                widget.entry.meaning,
+                style: TypographyTokens.body1.copyWith(
+                  color: ColorTokens.secondary,
                 ),
               ),
-              
-              // 의미
-              Padding(
-                padding: EdgeInsets.only(top: SpacingTokens.sm),
-                child: Text(
-                  entry.meaning,
-                  style: TypographyTokens.body1.copyWith(
-                    color: ColorTokens.secondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
           
           SizedBox(height: SpacingTokens.lg),
           
           // 플래시카드 추가 버튼
           PikaButton(
-            text: isExistingFlashcard ? '플래시카드로 설정됨' : '플래시카드 추가',
-            variant: isExistingFlashcard ? PikaButtonVariant.primary : PikaButtonVariant.primary,
-            leadingIcon: !isExistingFlashcard 
+            text: widget.isExistingFlashcard ? '플래시카드로 설정됨' : '플래시카드 추가',
+            variant: widget.isExistingFlashcard ? PikaButtonVariant.primary : PikaButtonVariant.primary,
+            leadingIcon: !widget.isExistingFlashcard 
               ? Image.asset(
                   'assets/images/icon_flashcard_dic.png',
                   width: 24,
                   height: 24,
                 )
               : null,
-            onPressed: isExistingFlashcard
+            onPressed: widget.isExistingFlashcard
                 ? null
                 : () {
-                    onCreateFlashCard(
-                      entry.word,
-                      entry.meaning,
-                      pinyin: entry.pinyin,
+                    widget.onCreateFlashCard(
+                      widget.entry.word,
+                      widget.entry.meaning,
+                      pinyin: widget.entry.pinyin,
                     );
                     Navigator.pop(context);
 
@@ -185,9 +207,12 @@ class DictionaryResultWidget extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: ColorTokens.surface,
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(SpacingTokens.lg),
+          ),
         ),
         child: DictionaryResultWidget(
           entry: entry,
