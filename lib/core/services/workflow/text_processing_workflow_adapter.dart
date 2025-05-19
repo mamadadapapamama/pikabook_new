@@ -3,7 +3,7 @@ import 'dart:async';
 import '../../models/processed_text.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/text_segment.dart';
-import '../../../LLM test/llm_text_processing.dart';
+import '../text_processing/llm_text_processing.dart';
 import '../authentication/user_preferences_service.dart';
 
 /// 텍스트 처리 워크플로우 어댑터

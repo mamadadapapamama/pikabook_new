@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../../models/dictionary.dart';
-import '../../../LLM test/llm_text_processing.dart';
+import '../text_processing/llm_text_processing.dart';
 import '../../models/chinese_text.dart';
 
 /// 내부 중국어 사전 데이터를 로드 관리하는 서비스

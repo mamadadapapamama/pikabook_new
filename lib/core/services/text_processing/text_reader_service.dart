@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../models/processed_text.dart';
 import '../media/tts_service.dart';
-import '../../../LLM test/llm_text_processing.dart';
+import 'llm_text_processing.dart';
 import '../../models/chinese_text.dart';
 
 /// 텍스트 읽기 서비스

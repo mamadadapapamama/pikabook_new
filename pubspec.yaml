@@ -64,7 +64,6 @@ dependencies:
   path: ^1.9.0
   
   # Chinese
-  flutter_tts: ^4.2.2
   pinyin: ^3.3.0
   shared_preferences: ^2.2.2
   badges: ^3.1.2
@@ -77,6 +76,7 @@ dependencies:
   flutter_native_splash: ^2.4.5
   webview_flutter: ^4.10.0
   get_it: ^8.0.3
+  just_audio: ^0.10.1
 
 
 dev_dependencies:

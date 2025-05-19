@@ -1,6 +1,12 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
+import 'package:googleapis_auth/auth_io.dart';
+import 'package:googleapis/texttospeech/v1.dart';
 import '../../models/processed_text.dart';
 import '../../utils/language_constants.dart';
 import '../common/usage_limit_service.dart';
@@ -15,7 +21,7 @@ class TtsService {
   factory TtsService() => _instance;
   TtsService._internal();
 
-  FlutterTts? _flutterTts;
+  final AudioPlayer _audioPlayer = AudioPlayer();
   TtsState _ttsState = TtsState.stopped;
   String _currentLanguage = SourceLanguage.DEFAULT; // 기본 언어: 중국어
 
@@ -28,36 +34,37 @@ class TtsService {
   // 재생 완료 콜백
   Function? _onPlayingCompleted;
 
-  // 캐시된 음성 데이터 (텍스트 -> 사용 가능 여부)
-  final Map<String, bool> _ttsCache = {};
+  // 캐시된 음성 데이터 (텍스트 -> 파일 경로)
+  final Map<String, String> _ttsCache = {};
 
   // 사용량 제한 서비스
   final UsageLimitService _usageLimitService = UsageLimitService();
 
+  // Google Cloud TTS API 키
+  final String _apiKey = const String.fromEnvironment('GOOGLE_CLOUD_API_KEY', defaultValue: '');
+
   // 초기화
   Future<void> init() async {
-    _flutterTts = FlutterTts();
-
     try {
-      // 오디오 세션 설정 (iOS/macOS에서 중요)
-      await _flutterTts?.setSharedInstance(true);
-      await _flutterTts?.setIosAudioCategory(
-        IosTextToSpeechAudioCategory.playback,
-        [
-          IosTextToSpeechAudioCategoryOptions.allowBluetooth,
-          IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
-          IosTextToSpeechAudioCategoryOptions.mixWithOthers,
-          IosTextToSpeechAudioCategoryOptions.defaultToSpeaker
-        ],
-        IosTextToSpeechAudioMode.defaultMode
+      if (_apiKey.isEmpty) {
+        throw Exception('Google Cloud API 키가 설정되지 않았습니다.');
+      }
+
+      // 오디오 플레이어 이벤트 리스너 설정
+      _audioPlayer.playbackEventStream.listen(
+        (event) {
+          // 재생 상태 변경 처리
+          debugPrint('TTS 재생 상태 변경: ${event.processingState}');
+        },
+        onError: (Object e, StackTrace stackTrace) {
+          debugPrint('오디오 플레이어 오류: $e');
+        },
       );
-      
-      // 오디오 포커스 설정 (Android용)
-      await _flutterTts?.setQueueMode(1); // 1: QUEUE_ADD
       
       debugPrint('TTS 엔진 초기화 성공');
     } catch (e) {
-      debugPrint('오디오 세션 설정 중 오류(무시 가능): $e');
+      debugPrint('TTS 엔진 초기화 중 오류: $e');
+      rethrow; // 오류를 상위로 전파하여 처리할 수 있도록 함
     }
     
     // 이벤트 리스너 설정
@@ -65,83 +72,27 @@ class TtsService {
 
     // 언어 설정
     await setLanguage(_currentLanguage);
-    
-    // 가용성 확인
-    try {
-      bool isAvailable = await _flutterTts?.isLanguageAvailable(_currentLanguage) ?? false;
-      debugPrint('TTS 언어 가용성: $_currentLanguage = $isAvailable');
-      
-      // 음성 목록 확인
-      final voices = await _flutterTts?.getVoices;
-      debugPrint('사용 가능한 음성 수: ${voices?.length ?? 0}');
-      
-      // 시스템 볼륨 확인 (iOS에서만 가능)
-      final volume = await _flutterTts?.getMaxSpeechInputLength;
-      debugPrint('현재 설정된 볼륨 정보: $volume');
-    } catch (e) {
-      debugPrint('TTS 가용성 확인 중 오류(무시 가능): $e');
-    }
   }
 
   // 언어 설정
   Future<void> setLanguage(String language) async {
-    if (_flutterTts == null) await init();
-
     _currentLanguage = language;
-    
-    // TTS에 맞는 언어 코드로 변환
-    final ttsLanguageCode = TtsLanguage.getTtsLanguageCode(language);
-    await _flutterTts?.setLanguage(ttsLanguageCode);
-    debugPrint('TTS 언어 설정: $ttsLanguageCode');
-
-    // 언어에 따른 음성 설정
-    final voiceName = TtsLanguage.getVoiceName(ttsLanguageCode);
-    await _flutterTts?.setVoice({"name": voiceName, "locale": ttsLanguageCode});
-    debugPrint('TTS 음성 설정: $voiceName, 로케일: $ttsLanguageCode');
-    
-    // 언어별 발화 속도 조정
-    double speechRate = 0.5;  // 기본값
-    
-    // MARK: 다국어 지원을 위한 확장 포인트
-    // 언어별로 다른 발화 속도 설정
-    switch (language) {
-      case SourceLanguage.CHINESE:
-      case SourceLanguage.CHINESE_TRADITIONAL:
-        speechRate = 0.5;  // 중국어는 조금 느리게
-        break;
-      case SourceLanguage.KOREAN:
-        speechRate = 0.5;  // 한국어
-        break;
-      case SourceLanguage.ENGLISH:
-        speechRate = 0.6;  // 영어는 조금 빠르게
-        break;
-      case SourceLanguage.JAPANESE:
-        speechRate = 0.5;  // 일본어
-        break;
-      default:
-        speechRate = 0.5;  // 기본값
-    }
-    
-    await _flutterTts?.setSpeechRate(speechRate);
-    await _flutterTts?.setVolume(1.0);
-    await _flutterTts?.setPitch(1.0);
-    debugPrint('TTS 설정 완료: 속도=$speechRate, 볼륨=1.0, 피치=1.0');
+    debugPrint('TTS 언어 설정: $_currentLanguage');
   }
 
   /// 텍스트 읽기
   Future<void> speak(String text) async {
-    if (_flutterTts == null) await init();
     if (text.isEmpty) return;
 
-    // 이미 캐시된 텍스트인지 확인 (같은 단어를 반복해서 API 호출하지 않도록)
+    // 이미 캐시된 텍스트인지 확인
     if (_ttsCache.containsKey(text)) {
-      if (_ttsCache[text] == true) {
-        // 동일 단어 반복 재생 시, 재생 상태 업데이트만 하고 사용량은 증가시키지 않음
-        await _flutterTts?.speak(text);
-        (kDebugMode) ? debugPrint('캐시된 TTS 재생 (사용량 변화 없음): $text') : debugPrint('캐시된 TTS 재생 (사용량 변화 없음): $text');
+      final audioFile = _ttsCache[text];
+      if (audioFile != null) {
+        // 캐시된 오디오 파일 재생
+        await _playAudioFile(audioFile);
+        debugPrint('캐시된 TTS 재생 (사용량 변화 없음): $text');
       } else {
-        (kDebugMode) ? debugPrint('TTS 사용량 제한으로 재생 불가: $text') : debugPrint('TTS 사용량 제한으로 재생 불가: $text');
-        // 여기서 알림을 표시하거나 다른 처리를 할 수 있음
+        debugPrint('TTS 사용량 제한으로 재생 불가: $text');
       }
       return;
     }
@@ -151,39 +102,36 @@ class TtsService {
       debugPrint('TTS 요청: ${text.length} 글자');
       final canUseTts = await _usageLimitService.incrementTtsCharCount(text.length);
       if (!canUseTts) {
-        _ttsCache[text] = false; // 사용 불가로 캐싱
+        _ttsCache[text] = ''; // 사용 불가로 캐싱
         debugPrint('TTS 사용량 제한 초과로 재생 불가: $text');
-        
-        // 여기서 사용자에게 알림을 표시하거나 다른 처리를 할 수 있음
         return;
       }
       
-      // 사용량 제한이 없으면 재생
-      _ttsCache[text] = true; // 사용 가능으로 캐싱
-      await _flutterTts?.speak(text);
-      debugPrint('TTS 재생 시작 (사용량 증가): $text');
+      // Google Cloud TTS API 호출
+      final audioData = await _synthesizeSpeech(text);
+      if (audioData != null) {
+        // 오디오 데이터를 파일로 저장
+        final audioFile = await _saveAudioToFile(audioData, text);
+        _ttsCache[text] = audioFile; // 파일 경로 캐싱
+        
+        // 오디오 파일 재생
+        await _playAudioFile(audioFile);
+        debugPrint('TTS 재생 시작 (사용량 증가): $text');
+      }
     } catch (e) {
-      debugPrint('TTS 사용량 확인 중 오류: $e');
-      // 오류 발생 시 캐싱하지 않음 (다음에 다시 시도)
+      debugPrint('TTS 처리 중 오류: $e');
     }
   }
 
   // 재생 중지
   Future<void> stop() async {
-    if (_flutterTts == null) return;
-
     try {
-      debugPrint('TtsService: stop() 호출됨');
-      await _flutterTts?.stop();
+      await _audioPlayer.stop();
       _ttsState = TtsState.stopped;
-
-      // 현재 재생 중인 세그먼트 초기화
       _updateCurrentSegment(null);
-      
       debugPrint('TtsService: stop() 완료');
     } catch (e) {
       debugPrint('TtsService: stop() 중 오류 발생: $e');
-      // 오류 발생시에도 상태 초기화
       _ttsState = TtsState.stopped;
       _updateCurrentSegment(null);
     }
@@ -191,9 +139,7 @@ class TtsService {
 
   // 재생 일시정지
   Future<void> pause() async {
-    if (_flutterTts == null) return;
-
-    await _flutterTts?.pause();
+    await _audioPlayer.pause();
     _ttsState = TtsState.paused;
   }
 
@@ -208,48 +154,9 @@ class TtsService {
 
   // 리소스 해제
   Future<void> dispose() async {
-    if (_flutterTts == null) return;
-
-    await _flutterTts?.stop();
-    _flutterTts = null;
+    await _audioPlayer.dispose();
     _onPlayingStateChanged = null;
     _onPlayingCompleted = null;
-  }
-
-  // 사용 가능한 언어 목록 가져오기
-  Future<List<String>> getAvailableLanguages() async {
-    if (_flutterTts == null) await init();
-
-    try {
-      final languages = await _flutterTts?.getLanguages;
-      return languages?.cast<String>() ?? [];
-    } catch (e) {
-      debugPrint('언어 목록을 가져오는 중 오류 발생: $e');
-      return [];
-    }
-  }
-
-  // 사용 가능한 음성 목록 가져오기
-  Future<List<dynamic>> getAvailableVoices() async {
-    if (_flutterTts == null) await init();
-
-    try {
-      final voices = await _flutterTts?.getVoices;
-      return voices ?? [];
-    } catch (e) {
-      debugPrint('음성 목록을 가져오는 중 오류 발생: $e');
-      return [];
-    }
-  }
-
-  // 재생 상태 변경 콜백 설정
-  void setOnPlayingStateChanged(Function(int?) callback) {
-    _onPlayingStateChanged = callback;
-  }
-
-  // 재생 완료 콜백 설정
-  void setOnPlayingCompleted(Function callback) {
-    _onPlayingCompleted = callback;
   }
 
   // 현재 재생 중인 세그먼트 업데이트
@@ -261,23 +168,21 @@ class TtsService {
   }
 
   /// **세그먼트 단위로 텍스트 읽기**
-  /// - segmentIndex: 재생할 세그먼트 인덱스
-  /// - text: 재생할 텍스트
   Future<void> speakSegment(String text, int segmentIndex) async {
-    if (_flutterTts == null) await init();
     if (text.isEmpty) return;
     
-    // 현재 재생 중인 세그먼트 설정 (즉시 업데이트)
+    // 현재 재생 중인 세그먼트 설정
     _updateCurrentSegment(segmentIndex);
     
     // 이미 캐시된 텍스트인지 확인
     if (_ttsCache.containsKey(text)) {
-      if (_ttsCache[text] == true) {
-        await _flutterTts?.speak(text);
+      final audioFile = _ttsCache[text];
+      if (audioFile != null && audioFile.isNotEmpty) {
+        await _playAudioFile(audioFile);
         debugPrint('캐시된 세그먼트 TTS 재생 (사용량 변화 없음): $text (segmentIndex: $segmentIndex)');
       } else {
         debugPrint('TTS 사용량 제한으로 세그먼트 재생 불가: $text');
-        _updateCurrentSegment(null); // 재생 불가 시 세그먼트 인덱스 초기화
+        _updateCurrentSegment(null);
       }
       return;
     }
@@ -287,25 +192,31 @@ class TtsService {
       debugPrint('TTS 세그먼트 요청: ${text.length} 글자 (segmentIndex: $segmentIndex)');
       final canUseTts = await _usageLimitService.incrementTtsCharCount(text.length);
       if (!canUseTts) {
-        _ttsCache[text] = false; // 사용 불가로 캐싱
+        _ttsCache[text] = ''; // 사용 불가로 캐싱
         debugPrint('TTS 사용량 제한 초과로 세그먼트 재생 불가: $text');
-        _updateCurrentSegment(null); // 재생 불가 시 세그먼트 인덱스 초기화
+        _updateCurrentSegment(null);
         return;
       }
       
-      _ttsCache[text] = true; // 사용 가능으로 캐싱
-      await _flutterTts?.speak(text);
-      debugPrint('세그먼트 TTS 재생 시작 (사용량 증가): $text (segmentIndex: $segmentIndex)');
+      // Google Cloud TTS API 호출
+      final audioData = await _synthesizeSpeech(text);
+      if (audioData != null) {
+        // 오디오 데이터를 파일로 저장
+        final audioFile = await _saveAudioToFile(audioData, text);
+        _ttsCache[text] = audioFile; // 파일 경로 캐싱
+        
+        // 오디오 파일 재생
+        await _playAudioFile(audioFile);
+        debugPrint('세그먼트 TTS 재생 시작 (사용량 증가): $text (segmentIndex: $segmentIndex)');
+      }
     } catch (e) {
-      debugPrint('TTS 사용량 확인 중 오류: $e');
-      _updateCurrentSegment(null); // 오류 발생 시 세그먼트 인덱스 초기화
+      debugPrint('TTS 세그먼트 처리 중 오류: $e');
+      _updateCurrentSegment(null);
     }
   }
 
   /// **ProcessedText의 모든 세그먼트 순차적으로 읽기**
   Future<void> speakAllSegments(ProcessedText processedText) async {
-    if (_flutterTts == null) await init();
-
     // 이미 재생 중이면 중지
     if (_ttsState == TtsState.playing) {
       await stop();
@@ -322,12 +233,10 @@ class TtsService {
       // 남은 사용량이 부족한 경우
       if (remainingCount < segmentCount) {
         debugPrint('TTS 사용량 부족: 필요=$segmentCount, 남음=$remainingCount');
-        // 여기서 사용자에게 알림 표시
         return;
       }
     } catch (e) {
       debugPrint('TTS 사용량 확인 중 오류: $e');
-      // 오류 발생 시 계속 진행
     }
 
     // 세그먼트가 없거나 비어있는 경우 전체 원문 텍스트 읽기
@@ -353,33 +262,7 @@ class TtsService {
       
       // 각 세그먼트 발화
       _updateCurrentSegment(i);
-
-      // 이미 캐시된 텍스트인지 확인
-      if (_ttsCache.containsKey(text)) {
-        if (_ttsCache[text] == true) {
-          await _flutterTts?.speak(text);
-        } else {
-          debugPrint('TTS 사용량 제한으로 세그먼트 재생 불가: $text');
-          continue; // 다음 세그먼트로 진행
-        }
-      } else {
-        // 사용량 제한 확인
-        try {
-          debugPrint('TTS 세그먼트 요청: ${text.length} 글자');
-          final canUseTts = await _usageLimitService.incrementTtsCharCount(text.length);
-          if (!canUseTts) {
-            _ttsCache[text] = false; // 사용 불가로 캐싱
-            debugPrint('TTS 사용량 제한 초과로 세그먼트 재생 불가: $text');
-            continue; // 다음 세그먼트로 진행
-          }
-          
-          _ttsCache[text] = true; // 사용 가능으로 캐싱
-          await _flutterTts?.speak(text);
-        } catch (e) {
-          debugPrint('TTS 사용량 확인 중 오류: $e');
-          continue; // 다음 세그먼트로 진행
-        }
-      }
+      await speakSegment(text, i);
 
       // 발화 완료 대기
       await _waitForSpeechCompletion();
@@ -468,61 +351,171 @@ class TtsService {
     return '현재 TTS 사용량: $currentCount/$limit회';
   }
 
-  /// 이벤트 핸들러 초기화 (TTS 이벤트 리스너 설정)
+  // 재생 상태 변경 콜백 설정
+  void setOnPlayingStateChanged(Function(int?) callback) {
+    _onPlayingStateChanged = callback;
+  }
+
+  // 재생 완료 콜백 설정
+  void setOnPlayingCompleted(Function callback) {
+    _onPlayingCompleted = callback;
+  }
+
+  /// 이벤트 핸들러 초기화
   Future<void> _setupEventHandlers() async {
-    // 이벤트 리스너 설정
-    _flutterTts?.setStartHandler(() {
-      debugPrint("TTS 재생 시작");
-      _ttsState = TtsState.playing;
-    });
-
-    _flutterTts?.setCompletionHandler(() {
-      debugPrint("TTS 재생 완료");
-      _ttsState = TtsState.stopped;
-      
-      // 재생 완료 시 현재 재생 중인 세그먼트 초기화
-      _updateCurrentSegment(null);
-
-      // 재생 완료 콜백 호출 - 항상 호출하도록 수정
-      if (_onPlayingCompleted != null) {
-        _onPlayingCompleted!();
+    // 재생 시작 이벤트
+    _audioPlayer.playbackEventStream.listen((event) {
+      if (event.processingState == ProcessingState.ready) {
+        debugPrint("TTS 재생 시작");
+        _ttsState = TtsState.playing;
       }
     });
 
-    _flutterTts?.setCancelHandler(() {
-      debugPrint("TTS 재생 취소");
-      _ttsState = TtsState.stopped;
-      
-      // 재생 취소 시 현재 재생 중인 세그먼트 초기화
-      _updateCurrentSegment(null);
-      
-      // 재생 취소 시에도 완료 콜백 호출 (추가)
-      if (_onPlayingCompleted != null) {
-        _onPlayingCompleted!();
+    // 재생 완료 이벤트
+    _audioPlayer.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        debugPrint("TTS 재생 완료");
+        _ttsState = TtsState.stopped;
+        _updateCurrentSegment(null);
+        
+        if (_onPlayingCompleted != null) {
+          _onPlayingCompleted!();
+        }
       }
     });
+  }
 
-    _flutterTts?.setPauseHandler(() {
-      debugPrint("TTS 재생 일시정지");
-      _ttsState = TtsState.paused;
-    });
-
-    _flutterTts?.setContinueHandler(() {
-      debugPrint("TTS 재생 계속");
-      _ttsState = TtsState.continued;
-    });
-
-    _flutterTts?.setErrorHandler((msg) {
-      debugPrint("TTS 오류: $msg");
-      _ttsState = TtsState.stopped;
-      
-      // 오류 발생 시 현재 재생 중인 세그먼트 초기화
-      _updateCurrentSegment(null);
-      
-      // 오류 발생 시에도 완료 콜백 호출 (추가)
-      if (_onPlayingCompleted != null) {
-        _onPlayingCompleted!();
+  /// Google Cloud TTS API를 사용하여 음성 합성
+  Future<Uint8List?> _synthesizeSpeech(String text) async {
+    try {
+      // 서비스 계정 인증 정보를 환경 변수에서 가져옴
+      final serviceAccountJson = const String.fromEnvironment('GOOGLE_SERVICE_ACCOUNT_JSON', defaultValue: '');
+      if (serviceAccountJson.isEmpty) {
+        throw Exception('Google 서비스 계정 정보가 설정되지 않았습니다.');
       }
-    });
+
+      // JSON 문자열을 Map으로 변환
+      final Map<String, dynamic> credentialsJson = json.decode(serviceAccountJson);
+      
+      // 서비스 계정 인증 정보 로드
+      final credentials = ServiceAccountCredentials.fromJson(credentialsJson);
+
+      // 인증 클라이언트 생성
+      final client = await clientViaServiceAccount(
+        credentials,
+        [TexttospeechApi.cloudPlatformScope],
+      );
+
+      // TTS API 클라이언트 생성
+      final ttsApi = TexttospeechApi(client);
+
+      // 음성 합성 요청
+      final request = SynthesizeSpeechRequest(
+        input: SynthesisInput(text: text),
+        voice: VoiceSelectionParams(
+          languageCode: _getLanguageCode(_currentLanguage),
+          name: _getVoiceName(_currentLanguage),
+        ),
+        audioConfig: AudioConfig(
+          audioEncoding: 'MP3',
+          speakingRate: _getSpeakingRate(_currentLanguage),
+          pitch: 0.0,
+        ),
+      );
+
+      // API 호출
+      final response = await ttsApi.text.synthesize(request);
+      
+      // 응답 처리
+      if (response.audioContent != null) {
+        return base64Decode(response.audioContent!);
+      } else {
+        debugPrint('TTS API 응답에 오디오 콘텐츠가 없습니다.');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('TTS API 호출 중 오류: $e');
+      return null;
+    }
+  }
+
+  /// 오디오 데이터를 파일로 저장
+  Future<String> _saveAudioToFile(Uint8List audioData, String text) async {
+    try {
+      // 캐시 디렉토리 가져오기
+      final cacheDir = await getTemporaryDirectory();
+      final fileName = 'tts_${DateTime.now().millisecondsSinceEpoch}.mp3';
+      final file = File('${cacheDir.path}/$fileName');
+      
+      // 파일 저장
+      await file.writeAsBytes(audioData);
+      return file.path;
+    } catch (e) {
+      debugPrint('오디오 파일 저장 중 오류: $e');
+      return '';
+    }
+  }
+
+  /// 오디오 파일 재생
+  Future<void> _playAudioFile(String filePath) async {
+    try {
+      await _audioPlayer.setFilePath(filePath);
+      await _audioPlayer.play();
+    } catch (e) {
+      debugPrint('오디오 파일 재생 중 오류: $e');
+    }
+  }
+
+  /// 언어 코드 가져오기
+  String _getLanguageCode(String language) {
+    switch (language) {
+      case SourceLanguage.CHINESE:
+        return 'zh-CN';
+      case SourceLanguage.CHINESE_TRADITIONAL:
+        return 'zh-TW';
+      case SourceLanguage.KOREAN:
+        return 'ko-KR';
+      case SourceLanguage.ENGLISH:
+        return 'en-US';
+      case SourceLanguage.JAPANESE:
+        return 'ja-JP';
+      default:
+        return 'zh-CN';
+    }
+  }
+
+  /// 음성 이름 가져오기
+  String _getVoiceName(String language) {
+    switch (language) {
+      case SourceLanguage.CHINESE:
+        return 'cmn-CN-Standard-A';
+      case SourceLanguage.CHINESE_TRADITIONAL:
+        return 'cmn-TW-Standard-A';
+      case SourceLanguage.KOREAN:
+        return 'ko-KR-Standard-A';
+      case SourceLanguage.ENGLISH:
+        return 'en-US-Standard-A';
+      case SourceLanguage.JAPANESE:
+        return 'ja-JP-Standard-A';
+      default:
+        return 'cmn-CN-Standard-A';
+    }
+  }
+
+  /// 발화 속도 가져오기
+  double _getSpeakingRate(String language) {
+    switch (language) {
+      case SourceLanguage.CHINESE:
+      case SourceLanguage.CHINESE_TRADITIONAL:
+        return 0.8;  // 중국어는 조금 느리게
+      case SourceLanguage.KOREAN:
+        return 0.8;  // 한국어
+      case SourceLanguage.ENGLISH:
+        return 1.0;  // 영어는 조금 빠르게
+      case SourceLanguage.JAPANESE:
+        return 0.8;  // 일본어
+      default:
+        return 0.8;  // 기본값
+    }
   }
 }

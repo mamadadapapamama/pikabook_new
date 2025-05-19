@@ -21,15 +21,8 @@ import '../../core/widgets/dot_loading_indicator.dart';
 /// - 텍스트 선택 및 컨텍스트 메뉴
 /// - 플래시카드 단어 하이라이트
 /// - TTS(Text-to-Speech) 기능
-/// - 세그먼트 삭제 기능
-/// 
-/// ## Page Content Widget과의 관계
-/// - PageContentWidget은 페이지 전체 UI를 담당 (이미지, 버튼, 로딩 상태 등)
-/// - ProcessedTextWidget은 PageContentWidget의 일부로 사용되어 텍스트 표시와 상호작용만 전담
-/// - PageContentWidget → ProcessedTextWidget 계층 구조로 사용됨
-/// - ProcessedTextWidget은 순수하게 텍스트 렌더링과 텍스트 관련 상호작용만 담당
-///
-/// 이 구조를 통해 관심사 분리(텍스트 처리 vs 페이지 UI)가 이루어짐
+
+
 
 class ProcessedTextWidget extends StatefulWidget {
   final ProcessedText processedText;

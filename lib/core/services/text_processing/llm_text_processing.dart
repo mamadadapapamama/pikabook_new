@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import '../core/models/chinese_text.dart';
-import '../core/services/authentication/user_preferences_service.dart';
+import '../../models/chinese_text.dart';
+import '../authentication/user_preferences_service.dart';
 
 // 모델 임포트
 
@@ -73,10 +73,12 @@ class UnifiedTextProcessingService {
   
   /// LLM을 통한 통합 텍스트 처리 (세그먼테이션, 번역, 병음 생성)
   Future<ChineseText> processWithLLM(String text, {String sourceLanguage = 'zh'}) async {
-    await ensureInitialized();
+    debugPrint('🔍 LLM 처리 시작: 텍스트 길이=${text.length}, 언어=$sourceLanguage');
     if (text.isEmpty) {
+      debugPrint('⚠️ [LLM] 입력 텍스트가 비어있음');
       return ChineseText.empty();
     }
+    await ensureInitialized();
     
     // 번역 모드 확인 - segment 또는 full
     bool useSegmentMode = await _preferencesService.getUseSegmentMode();
@@ -87,13 +89,14 @@ class UnifiedTextProcessingService {
     }
     
     String translationMode = useSegmentMode ? 'segment' : 'full';
-    debugPrint('LLM 처리: 번역 모드 = $translationMode (세그먼트 모드: $useSegmentMode)');
+    debugPrint('🔄 LLM 처리: 번역 모드 = $translationMode (세그먼트 모드: $useSegmentMode)');
     
     // 캐시 확인 (간단한 메모리 캐싱) - 번역 모드를 캐시 키에 추가
     final cacheKey = 'v3-$translationMode-$sourceLanguage:$text';
     if (_cache.containsKey(cacheKey)) {
       try {
         final cachedData = _cache[cacheKey]!;
+        debugPrint('💾 캐시에서 LLM 처리 결과 로드 시도: $cacheKey');
         final List<dynamic> parsedData = jsonDecode(cachedData);
         final List<ChineseSentence> sentences = parsedData.map<ChineseSentence>((data) =>
           ChineseSentence(
@@ -103,19 +106,20 @@ class UnifiedTextProcessingService {
           )
         ).toList();
         if (kDebugMode) {
-          debugPrint('캐시에서 LLM 처리 결과 로드: ${sentences.length}개 문장');
+          debugPrint('✅ 캐시에서 LLM 처리 결과 로드 성공: ${sentences.length}개 문장');
         }
         return ChineseText(
           originalText: text,
           sentences: sentences,
         );
       } catch (e) {
-        debugPrint('캐시된 데이터 파싱 중 오류: $e');
+        debugPrint('❌ 캐시된 데이터 파싱 중 오류: $e');
       }
     }
     
     // API 키 확인
     if (_apiKey == null || _apiKey!.isEmpty) {
+      debugPrint('❌ API 키가 설정되지 않았습니다.');
       throw Exception('API 키가 설정되지 않았습니다.');
     }
     
@@ -124,13 +128,15 @@ class UnifiedTextProcessingService {
       
       if (useSegmentMode) {
         // 세그먼트 모드 (기존 처리 방식) - 문장별 분리 및 번역, 병음 생성
+        debugPrint('🔄 세그먼트 모드 처리 시작');
         return await _processSegmentMode(text, sourceLanguage, cacheKey);
       } else {
         // 전체 번역 모드 - 문단 전체 번역, 병음 생략
+        debugPrint('🔄 전체 번역 모드 처리 시작');
         return await _processFullMode(text, sourceLanguage, cacheKey);
       }
     } catch (e) {
-      debugPrint('LLM 처리 중 오류: $e');
+      debugPrint('❌ LLM 처리 중 오류: $e');
       throw Exception('LLM 처리 실패: $e');
     }
   }
@@ -138,6 +144,7 @@ class UnifiedTextProcessingService {
   /// 세그먼트 모드 처리 - 문장별 분리 및 번역, 병음 생성
   Future<ChineseText> _processSegmentMode(String text, String sourceLanguage, String cacheKey) async {
     final Stopwatch stopwatch = Stopwatch()..start();
+    debugPrint('📝 세그먼트 모드: 입력 텍스트 = $text');
     
     // 1. GPT-4o로 원문+번역만 요청
     final prompt = '''
@@ -156,6 +163,24 @@ $text
 Output:
 ''';
 
+    debugPrint('🤖 OpenAI API 요청 시작');
+    debugPrint('🤖 OpenAI API 요청 URL: https://api.openai.com/v1/chat/completions');
+    debugPrint('🤖 OpenAI API 요청 헤더: ${jsonEncode({
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ${_apiKey?.substring(0, 10)}...',
+    })}');
+    debugPrint('🤖 OpenAI API 요청 본문: ${jsonEncode({
+      'model': 'gpt-4o',
+      'messages': [
+        {
+          'role': 'user',
+          'content': prompt,
+        }
+      ],
+      'temperature': 0,
+      'max_tokens': 2000,
+    })}');
+    
     // LLM API 호출
     final response = await http.post(
       Uri.parse('https://api.openai.com/v1/chat/completions'),
@@ -176,20 +201,34 @@ Output:
       }),
     );
 
+    debugPrint('📡 OpenAI API 응답 상태 코드: ${response.statusCode}');
+    debugPrint('📡 OpenAI API 응답 헤더: ${response.headers}');
+    debugPrint('📡 OpenAI API 응답 본문: ${response.body}');
+
     if (response.statusCode == 200) {
       final decodedBody = utf8.decode(response.bodyBytes);
       final responseData = jsonDecode(decodedBody);
-      final content = responseData['choices'][0]['message']['content'] as String;
+      debugPrint('✅ OpenAI API 디코딩된 응답: $responseData');
       
-      debugPrint('LLM content: $content');
+      final content = responseData['choices'][0]['message']['content'] as String;
+      debugPrint('✅ OpenAI API 추출된 content: $content');
       
       // robust JSON 파싱
       final jsonString = extractJsonArray(content);
+      debugPrint('🔄 JSON 배열 추출: $jsonString');
+      
       final List<dynamic> parsedData = jsonDecode(jsonString);
+      debugPrint('✅ JSON 파싱 완료: ${parsedData.length}개 항목');
+      
       // 2. chinese 문장 리스트 추출
       final List<String> chineseList = parsedData.map<String>((e) => e['chinese'] ?? '').toList();
+      debugPrint('📝 중국어 문장 추출: ${chineseList.length}개');
+      
       // 3. 병음 요청 (gpt-3.5-turbo)
+      debugPrint('🔄 병음 처리 시작');
       final List<String> pinyinList = await processPinyinWithLLM(chineseList);
+      debugPrint('✅ 병음 처리 완료: ${pinyinList.length}개');
+      
       // 4. 최종 합치기
       final List<ChineseSentence> sentences = [];
       for (int i = 0; i < parsedData.length; i++) {
@@ -208,7 +247,7 @@ Output:
       }).toList());
       
       if (kDebugMode) {
-        debugPrint('LLM 세그먼트 모드 처리 완료 (${stopwatch.elapsedMilliseconds}ms): ${sentences.length}개 문장');
+        debugPrint('✅ LLM 세그먼트 모드 처리 완료 (${stopwatch.elapsedMilliseconds}ms): ${sentences.length}개 문장');
       }
       
       return ChineseText(
@@ -216,6 +255,7 @@ Output:
         sentences: sentences,
       );
     } else {
+      debugPrint('❌ LLM API 오류: ${response.statusCode} - ${response.body}');
       throw Exception('LLM API 오류: ${response.statusCode} - ${response.body}');
     }
   }

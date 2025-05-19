@@ -10,7 +10,7 @@ import '../../../core/services/text_processing/text_reader_service.dart';
 import '../../../core/services/dictionary/dictionary_service.dart';
 import '../../../core/services/storage/unified_cache_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
-import '../../../LLM test/llm_text_processing.dart';
+import '../../../core/services/text_processing/llm_text_processing.dart';
 import 'dart:async';
 
 /// 세그먼트(문장)와 관련된 모든 기능을 중앙화하는 매니저
@@ -345,11 +345,43 @@ class SegmentManager {
         return cachedText;
       }
       
-      // 여기서는 실제 텍스트 처리가 LLM에서 이루어졌다고 가정하고,
-      // 단순히 캐시에서 반환만 합니다.
-      // 실제 LLM 처리 로직을 추가하려면 이 부분을 확장해야 합니다.
-      debugPrint('⚠️ 처리된 텍스트가 없습니다');
-      return null;
+      // 원본 텍스트가 없는 경우 처리 불가
+      if (page.originalText.isEmpty) {
+        debugPrint('⚠️ 원본 텍스트가 비어있어 처리할 수 없습니다');
+        return null;
+      }
+      
+      // LLM 처리
+      debugPrint('🔄 LLM 텍스트 처리 시작: ${page.originalText.length}자');
+      final llmService = UnifiedTextProcessingService();
+      final chineseText = await llmService.processWithLLM(page.originalText);
+      
+      if (chineseText == null || chineseText.sentences.isEmpty) {
+        debugPrint('⚠️ LLM 처리 결과가 비어있습니다');
+        return null;
+      }
+      
+      // ProcessedText 생성
+      final processedText = ProcessedText(
+        fullOriginalText: chineseText.originalText,
+        fullTranslatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
+        segments: chineseText.sentences.map((s) => TextSegment(
+          originalText: s.original,
+          translatedText: s.translation,
+          pinyin: s.pinyin,
+          sourceLanguage: 'zh-CN',
+          targetLanguage: 'ko',
+        )).toList(),
+        showFullText: false,
+        showPinyin: true,
+        showTranslation: true,
+      );
+      
+      // 캐시에 저장
+      await setProcessedText(page.id!, processedText);
+      debugPrint('✅ LLM 텍스트 처리 완료 및 캐시 저장');
+      
+      return processedText;
     } catch (e) {
       debugPrint('❌ 페이지 텍스트 처리 중 오류 발생: $e');
       return null;

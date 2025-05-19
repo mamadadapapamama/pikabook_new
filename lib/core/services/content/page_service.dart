@@ -8,7 +8,7 @@ import '../../models/text_segment.dart';
 import '../media/image_service.dart';
 import '../text_processing/enhanced_ocr_service.dart';
 import '../storage/unified_cache_service.dart';
-import '../../../LLM test/llm_text_processing.dart';
+import '../text_processing/llm_text_processing.dart';
 import 'dart:convert';
 import 'dart:math';
 

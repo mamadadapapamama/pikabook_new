@@ -6,7 +6,7 @@ import '../../../core/services/content/page_service.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/services/media/image_cache_service.dart';
 import '../../../core/services/storage/unified_cache_service.dart';
-import '../../../LLM test/llm_text_processing.dart';
+import '../../../core/services/text_processing/llm_text_processing.dart';
 import '../../../core/services/content/note_service.dart';
 import '../../../core/services/content/flashcard_service.dart' hide debugPrint;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -570,15 +570,13 @@ class PageManager {
   }
   
   /// 페이지 내용을 로드하는 통합 메서드
-  /// LLM 텍스트 처리 서비스를 사용하도록 수정됨
   Future<Map<String, dynamic>> loadPageContent(
     page_model.Page page, 
     {
-      UnifiedTextProcessingService? textProcessingService, // LLM 서비스로 변경
-      ImageService? imageService, // 선택적 매개변수로 변경
+      UnifiedTextProcessingService? textProcessingService,
+      ImageService? imageService,
       dynamic note,
-    }) async {
-    
+  }) async {
     try {
       // 1. 이미지 로드
       File? imageFile;
@@ -589,15 +587,13 @@ class PageManager {
         imageFile = getImageFileForPage(page);
       }
       
-      // 2. 텍스트 처리 (LLM 서비스 사용)
+      // 2. 텍스트 처리 (SegmentManager 사용)
       var processedText;
       if (page.originalText.isNotEmpty) {
         try {
-          final textService = textProcessingService ?? _textProcessingService;
-          final result = await textService.processWithLLM(page.originalText, sourceLanguage: 'zh');
-          processedText = result;
+          processedText = await _segmentManager.processPageText(page: page);
         } catch (e) {
-          debugPrint('LLM 텍스트 처리 중 오류: $e');
+          debugPrint('텍스트 처리 중 오류: $e');
         }
       }
       

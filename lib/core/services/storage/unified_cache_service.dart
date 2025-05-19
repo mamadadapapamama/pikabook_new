@@ -1062,17 +1062,19 @@ class UnifiedCacheService {
     await _ensureInitialized();
     final key = 'processed_text_$pageId';
     
+    debugPrint('ProcessedText 캐시 조회 시도: $key');
+    
     if (_processedTextCache.containsKey(pageId)) {
-      // 타임스탬프 업데이트
-      _cacheTimestamps[pageId] = DateTime.now();
+      final timestamp = _cacheTimestamps[pageId];
+      debugPrint('ProcessedText 캐시 타임스탬프: $timestamp');
       
-      // 통계 업데이트
+      _cacheTimestamps[pageId] = DateTime.now();
       _updateCacheStats(key, CacheOperationType.read);
       
       return _processedTextCache[pageId];
     }
     
-    // 캐시 미스
+    debugPrint('ProcessedText 캐시 미스: $key');
     _updateCacheStats(key, CacheOperationType.read);
     return null;
   }

@@ -12,8 +12,6 @@ import 'external_cn_dictionary_service.dart';
 /// 외부 사전 유형 (구글, 네이버, 바이두)
 enum ExternalDictType {
   google,
-  naver,
-  baidu,
 }
 
 class DictionaryService {

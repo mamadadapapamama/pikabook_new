@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../text_processing/enhanced_ocr_service.dart';
-import '../../../LLM test/llm_text_processing.dart';
+import '../text_processing/llm_text_processing.dart';
 import '../../utils/language_constants.dart';
 import '../../models/chinese_text.dart';
 

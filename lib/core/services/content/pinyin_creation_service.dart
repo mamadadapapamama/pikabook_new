@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:pinyin/pinyin.dart' as pinyin;
 import 'dart:async';
 import 'dart:convert';
-import '../../../LLM test/llm_text_processing.dart';
+import '../text_processing/llm_text_processing.dart';
 
 /// 중국어 텍스트에 대한 핀인 생성 서비스
 /// LLM 기반 핀인 생성을 우선 시도하고, 실패 시 로컬 라이브러리로 폴백

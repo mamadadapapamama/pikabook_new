@@ -15,7 +15,7 @@ import '../media/image_service.dart';
 import '../storage/unified_cache_service.dart';
 import '../text_processing/enhanced_ocr_service.dart';
 import '../common/usage_limit_service.dart';
-import '../../../LLM test/llm_text_processing.dart';
+import '../text_processing/llm_text_processing.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
 // 리팩토링으로 제거된 import
