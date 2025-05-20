@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'text_segment.dart';
 import 'text_full.dart';
 import 'package:flutter/foundation.dart';
@@ -14,157 +15,119 @@ enum TextDisplayMode {
   noPinyin,  // 원문 + 번역만 표시 (병음 없음)
 }
 
-/// OCR로 추출된 텍스트를 처리하고 관리하는 모델
+/// 처리된 텍스트를 나타내는 모델입니다.
 class ProcessedText {
-  /// 전체 원문
-  final String fullOriginalText;
-  
-  /// 전체 번역문
-  final String fullTranslatedText;
-  
-  /// 텍스트 세그먼트 목록 (문장 단위 처리 시 사용)
-  final List<TextSegment> segments;
-  
-  /// 텍스트 처리 모드
-  final TextProcessingMode mode;
-  
-  /// 텍스트 표시 모드
+  final String original;
+  final String translated;
+  final String? pinyin;
+  final String? ttsPath;
+  final DateTime processedAt;
   final TextDisplayMode displayMode;
-  
-  /// 소스 언어
-  final String sourceLanguage;
-  
-  /// 타겟 언어
-  final String targetLanguage;
 
   ProcessedText({
-    required this.mode,
-    required this.displayMode,
-    required this.fullOriginalText,
-    required this.fullTranslatedText,
-    required this.segments,
-    required this.sourceLanguage,
-    required this.targetLanguage,
-  });
+    required this.original,
+    required this.translated,
+    this.pinyin,
+    this.ttsPath,
+    DateTime? processedAt,
+    TextDisplayMode? displayMode,
+  })  : processedAt = processedAt ?? DateTime.now(),
+        displayMode = displayMode ?? TextDisplayMode.full;
 
-  /// JSON에서 생성
+  /// JSON에서 ProcessedText 생성
   factory ProcessedText.fromJson(Map<String, dynamic> json) {
     return ProcessedText(
-      mode: TextProcessingMode.values.firstWhere(
-        (e) => e.toString() == json['mode'],
-        orElse: () => TextProcessingMode.segment,
-      ),
-      displayMode: TextDisplayMode.values.firstWhere(
-        (e) => e.toString() == json['displayMode'],
-        orElse: () => TextDisplayMode.full,
-      ),
-      fullOriginalText: json['fullOriginalText'] as String,
-      fullTranslatedText: json['fullTranslatedText'] as String,
-      segments: (json['segments'] as List)
-          .map((s) => TextSegment.fromJson(s as Map<String, dynamic>))
-          .toList(),
-      sourceLanguage: json['sourceLanguage'] as String,
-      targetLanguage: json['targetLanguage'] as String,
+      original: json['original'] as String,
+      translated: json['translated'] as String,
+      pinyin: json['pinyin'] as String?,
+      ttsPath: json['ttsPath'] as String?,
+      processedAt: json['processedAt'] != null
+          ? DateTime.parse(json['processedAt'] as String)
+          : null,
+      displayMode: json['displayMode'] != null
+          ? TextDisplayMode.values.firstWhere(
+              (e) => e.toString() == json['displayMode'],
+              orElse: () => TextDisplayMode.full,
+            )
+          : null,
     );
   }
 
-  /// JSON으로 변환
+  /// ProcessedText를 JSON으로 변환
   Map<String, dynamic> toJson() {
     return {
-      'mode': mode.toString(),
+      'original': original,
+      'translated': translated,
+      'pinyin': pinyin,
+      'ttsPath': ttsPath,
+      'processedAt': processedAt.toIso8601String(),
       'displayMode': displayMode.toString(),
-      'fullOriginalText': fullOriginalText,
-      'fullTranslatedText': fullTranslatedText,
-      'segments': segments.map((s) => s.toJson()).toList(),
-      'sourceLanguage': sourceLanguage,
-      'targetLanguage': targetLanguage,
     };
   }
 
-  /// 복사본 생성 (일부 필드 업데이트)
+  /// ProcessedText 복사
   ProcessedText copyWith({
-    TextProcessingMode? mode,
+    String? original,
+    String? translated,
+    String? pinyin,
+    String? ttsPath,
+    DateTime? processedAt,
     TextDisplayMode? displayMode,
-    String? fullOriginalText,
-    String? fullTranslatedText,
-    List<TextSegment>? segments,
-    String? sourceLanguage,
-    String? targetLanguage,
   }) {
     return ProcessedText(
-      mode: mode ?? this.mode,
+      original: original ?? this.original,
+      translated: translated ?? this.translated,
+      pinyin: pinyin ?? this.pinyin,
+      ttsPath: ttsPath ?? this.ttsPath,
+      processedAt: processedAt ?? this.processedAt,
       displayMode: displayMode ?? this.displayMode,
-      fullOriginalText: fullOriginalText ?? this.fullOriginalText,
-      fullTranslatedText: fullTranslatedText ?? this.fullTranslatedText,
-      segments: segments ?? this.segments,
-      sourceLanguage: sourceLanguage ?? this.sourceLanguage,
-      targetLanguage: targetLanguage ?? this.targetLanguage,
-    );
-  }
-
-  /// 빈 인스턴스 생성
-  factory ProcessedText.empty() {
-    return ProcessedText(
-      mode: TextProcessingMode.segment,
-      displayMode: TextDisplayMode.full,
-      fullOriginalText: '',
-      fullTranslatedText: '',
-      segments: [],
-      sourceLanguage: 'zh-CN',
-      targetLanguage: 'ko',
     );
   }
 
   /// 복사본 생성 (일부 필드 업데이트) - 디버그 로그 추가
   ProcessedText copyWithDebug({
-    String? fullOriginalText,
-    String? fullTranslatedText,
-    List<TextSegment>? segments,
-    TextProcessingMode? mode,
+    String? original,
+    String? translated,
+    String? pinyin,
+    String? ttsPath,
+    DateTime? processedAt,
     TextDisplayMode? displayMode,
-    String? sourceLanguage,
-    String? targetLanguage,
   }) {
     // 디버그 로그 추가
-    if (kDebugMode && (fullOriginalText != this.fullOriginalText || 
-                       fullTranslatedText != this.fullTranslatedText || 
-                       segments != this.segments || 
-                       mode != this.mode || 
-                       displayMode != this.displayMode || 
-                       sourceLanguage != this.sourceLanguage || 
-                       targetLanguage != this.targetLanguage)) {
+    if (kDebugMode && (original != this.original || 
+                       translated != this.translated || 
+                       pinyin != this.pinyin || 
+                       ttsPath != this.ttsPath || 
+                       processedAt != this.processedAt ||
+                       displayMode != this.displayMode)) {
       debugPrint('ProcessedText.copyWith - 필드 변경:');
-      if (fullOriginalText != null && fullOriginalText != this.fullOriginalText) {
-        debugPrint(' - fullOriginalText: ${this.fullOriginalText} -> $fullOriginalText');
+      if (original != null && original != this.original) {
+        debugPrint(' - original: ${this.original} -> $original');
       }
-      if (fullTranslatedText != null && fullTranslatedText != this.fullTranslatedText) {
-        debugPrint(' - fullTranslatedText: ${this.fullTranslatedText} -> $fullTranslatedText');
+      if (translated != null && translated != this.translated) {
+        debugPrint(' - translated: ${this.translated} -> $translated');
       }
-      if (segments != null && segments != this.segments) {
-        debugPrint(' - segments: ${this.segments.length} -> ${segments.length}');
+      if (pinyin != null && pinyin != this.pinyin) {
+        debugPrint(' - pinyin: ${this.pinyin} -> $pinyin');
       }
-      if (mode != null && mode != this.mode) {
-        debugPrint(' - mode: ${this.mode} -> $mode');
+      if (ttsPath != null && ttsPath != this.ttsPath) {
+        debugPrint(' - ttsPath: ${this.ttsPath} -> $ttsPath');
+      }
+      if (processedAt != null && processedAt != this.processedAt) {
+        debugPrint(' - processedAt: ${this.processedAt} -> $processedAt');
       }
       if (displayMode != null && displayMode != this.displayMode) {
         debugPrint(' - displayMode: ${this.displayMode} -> $displayMode');
       }
-      if (sourceLanguage != null && sourceLanguage != this.sourceLanguage) {
-        debugPrint(' - sourceLanguage: ${this.sourceLanguage} -> $sourceLanguage');
-      }
-      if (targetLanguage != null && targetLanguage != this.targetLanguage) {
-        debugPrint(' - targetLanguage: ${this.targetLanguage} -> $targetLanguage');
-      }
     }
     
     return ProcessedText(
-      mode: mode ?? this.mode,
+      original: original ?? this.original,
+      translated: translated ?? this.translated,
+      pinyin: pinyin ?? this.pinyin,
+      ttsPath: ttsPath ?? this.ttsPath,
+      processedAt: processedAt ?? this.processedAt,
       displayMode: displayMode ?? this.displayMode,
-      fullOriginalText: fullOriginalText ?? this.fullOriginalText,
-      fullTranslatedText: fullTranslatedText ?? this.fullTranslatedText,
-      segments: segments ?? this.segments,
-      sourceLanguage: sourceLanguage ?? this.sourceLanguage,
-      targetLanguage: targetLanguage ?? this.targetLanguage,
     );
   }
 
@@ -179,10 +142,11 @@ class ProcessedText {
   @override
   String toString() {
     return 'ProcessedText(hashCode=$hashCode, '
-        'mode=$mode, '
-        'segments=${segments.length}, '
-        'displayMode=$displayMode, '
-        'sourceLanguage=$sourceLanguage, '
-        'targetLanguage=$targetLanguage)';
+        'original=$original, '
+        'translated=$translated, '
+        'pinyin=$pinyin, '
+        'ttsPath=$ttsPath, '
+        'processedAt=$processedAt, '
+        'displayMode=$displayMode)';
   }
 }

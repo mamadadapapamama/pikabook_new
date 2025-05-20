@@ -41,7 +41,7 @@ class InitializationManager {
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final UserPreferencesService _prefsService = UserPreferencesService();
   final AuthService _authService = AuthService();
-  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
+  final LLMTextProcessing _textProcessingService = LLMTextProcessing();
   
   // 초기화 상태 관리
   InitializationStep _currentStep = InitializationStep.preparing;

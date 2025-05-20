@@ -5,6 +5,7 @@ import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/processed_text.dart';
 import '../../models/flash_card.dart'; // FlashCard 모델 임포트 추가
+import '../../models/processing_mode.dart';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../features/note_detail/managers/page_content_manager.dart'; // SegmentManager 임포트
@@ -1093,144 +1094,118 @@ class UnifiedCacheService {
     debugPrint('ProcessedText 메모리 캐시 삭제 완료: 페이지 ID=$pageId');
   }
 
+  /// 페이지 컨텐츠 캐싱
+  Future<void> cachePageContent(String pageId, {
+    required String originalText,
+    required String translatedText,
+    String? pinyin,
+    String? ttsPath,
+  }) async {
+    await _ensureInitialized();
+    
+    final content = {
+      'original': originalText,
+      'translated': translatedText,
+      'pinyin': pinyin,
+      'ttsPath': ttsPath,
+      'cachedAt': DateTime.now().toIso8601String(),
+    };
+    
+    final key = _getUserSpecificKey('page_$pageId');
+    await _prefs!.setString(key, jsonEncode(content));
+    debugPrint('페이지 컨텐츠 캐싱 완료: $pageId');
+  }
+
+  /// OCR 결과만 따로 저장
+  Future<void> cacheOCRResult(String pageId, String ocrText) async {
+    await _ensureInitialized();
+    
+    final key = _getUserSpecificKey('ocr_$pageId');
+    await _prefs!.setString(key, ocrText);
+    debugPrint('OCR 결과 캐싱 완료: $pageId');
+  }
+
+  /// 모드에 따른 페이지 컨텐츠 조회
+  Future<Map<String, dynamic>?> getPageContent(
+    String pageId,
+    ProcessingMode mode,
+  ) async {
+    await _ensureInitialized();
+    
+    final key = _getUserSpecificKey('page_$pageId');
+    final data = _prefs!.getString(key);
+    if (data == null) return null;
+    
+    final content = jsonDecode(data);
+    
+    switch (mode) {
+      case ProcessingMode.original:
+        return {'text': content['original']};
+      case ProcessingMode.translated:
+        return {
+          'text': content['translated'],
+          'original': content['original'],
+        };
+      case ProcessingMode.pinyin:
+        return {
+          'text': content['pinyin'],
+          'original': content['original'],
+          'translated': content['translated'],
+        };
+    }
+  }
+
+  /// OCR 결과 조회
+  Future<String?> getOCRResult(String pageId) async {
+    await _ensureInitialized();
+    
+    final key = _getUserSpecificKey('ocr_$pageId');
+    return _prefs!.getString(key);
+  }
+
+  /// 노트 관련 캐시를 모두 삭제합니다.
+  Future<void> clearNoteCaches(String noteId) async {
+    await _ensureInitialized();
+    if (_prefs != null) {
+      await _prefs!.remove('note_$noteId');
+      await _prefs!.remove('pages_$noteId');
+      await _prefs!.remove('segments_$noteId');
+    }
+  }
+
+  /// 세그먼트 캐시 정리
+  Future<void> clearSegmentCache(String pageId, int segmentIndex) async {
+    await _ensureInitialized();
+    
+    final content = await getPageContent(pageId, ProcessingMode.original);
+    if (content != null) {
+      // 세그먼트 데이터만 삭제하고 나머지는 유지
+      content['segments']?.removeAt(segmentIndex);
+      await cachePageContent(
+        pageId,
+        originalText: content['original'],
+        translatedText: content['translated'],
+        pinyin: content['pinyin'],
+        ttsPath: content['ttsPath'],
+      );
+    }
+    
+    debugPrint('세그먼트 캐시 정리 완료: $pageId, 세그먼트 $segmentIndex');
+  }
+
+  /// 노트의 페이지 ID 목록 가져오기
+  Future<List<String>> _getPageIdsForNote(String noteId) async {
+    await _ensureInitialized();
+    
+    final key = _getUserSpecificKey('note_pages_$noteId');
+    return _prefs!.getStringList(key) ?? [];
+  }
+
   // 초기화 확인 및 수행
   Future<void> _ensureInitialized() async {
     if (!_isInitialized) {
       _prefs = await SharedPreferences.getInstance();
       _isInitialized = true;
-    }
-  }
-
-  /// 특정 노트의 페이지 목록 캐시에서 가져오기
-  Future<List<page_model.Page>> getCachedPagesByNoteId(String noteId) async {
-    try {
-      if (!_isInitialized) await initialize();
-
-      // 캐시에서 페이지 ID 목록 가져오기
-      final pageIds = _notePageIds[noteId] ?? [];
-      if (pageIds.isEmpty) {
-        return [];
-      }
-
-      // 페이지 ID로 페이지 객체 가져오기
-      final pages = <page_model.Page>[];
-      for (final pageId in pageIds) {
-        final page = _pageCache[pageId];
-        if (page != null) {
-          pages.add(page);
-        }
-      }
-
-      // 페이지 번호로 정렬
-      pages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-
-      return pages;
-    } catch (e) {
-      debugPrint('캐시에서 페이지 목록을 가져오는 중 오류 발생: $e');
-      return [];
-    }
-  }
-  
-  /// 특정 노트의 플래시카드 목록 캐시에서 가져오기
-  Future<List<FlashCard>> getFlashcardsByNoteId(String noteId) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final key = 'flashcards_$noteId';
-      
-      // 캐시된 값이 없으면 빈 배열 반환
-      if (!prefs.containsKey(key)) {
-        return [];
-      }
-      
-      final jsonString = prefs.getString(key) ?? '[]';
-      
-      final List<dynamic> jsonList = jsonDecode(jsonString);
-      return jsonList.map((json) => FlashCard.fromJson(json)).toList();
-    } catch (e) {
-      debugPrint('캐시에서 플래시카드 목록을 가져오는 중 오류 발생: $e');
-      return [];
-    }
-  }
-  
-  /// 플래시카드 목록 캐싱
-  Future<void> cacheFlashcards(List<FlashCard> flashcards) async {
-    if (flashcards.isEmpty) return;
-    
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      
-      // 노트 ID별로 그룹화
-      final groupedByNote = <String, List<FlashCard>>{};
-      for (final card in flashcards) {
-        if (card.noteId != null && card.noteId!.isNotEmpty) {
-          if (!groupedByNote.containsKey(card.noteId)) {
-            groupedByNote[card.noteId!] = [];
-          }
-          groupedByNote[card.noteId]!.add(card);
-        }
-      }
-      
-      // 노트 ID별로 캐싱
-      for (final entry in groupedByNote.entries) {
-        final noteId = entry.key;
-        final cards = entry.value;
-        
-        final jsonList = cards.map((card) => card.toJson()).toList();
-        final jsonString = jsonEncode(jsonList);
-        
-        await prefs.setString('flashcards_$noteId', jsonString);
-        debugPrint('노트 $noteId의 플래시카드 ${cards.length}개 캐싱 완료');
-      }
-    } catch (e) {
-      debugPrint('플래시카드 캐싱 중 오류 발생: $e');
-    }
-  }
-  
-  /// 단일 플래시카드 캐싱
-  Future<void> cacheFlashcard(FlashCard flashcard) async {
-    if (flashcard.noteId == null || flashcard.noteId!.isEmpty) return;
-    
-    try {
-      // 해당 노트의 기존 캐시된 플래시카드 가져오기
-      final cachedCards = await getFlashcardsByNoteId(flashcard.noteId!);
-      
-      // 이미 같은 ID의 카드가 있는지 확인
-      final existingIndex = cachedCards.indexWhere((card) => card.id == flashcard.id);
-      
-      if (existingIndex >= 0) {
-        // 기존 카드 업데이트
-        cachedCards[existingIndex] = flashcard;
-      } else {
-        // 새 카드 추가
-        cachedCards.add(flashcard);
-      }
-      
-      // 업데이트된 목록 다시 캐싱
-      await cacheFlashcards(cachedCards);
-      
-      debugPrint('플래시카드 ${flashcard.id} 캐싱 완료');
-    } catch (e) {
-      debugPrint('단일 플래시카드 캐싱 중 오류 발생: $e');
-    }
-  }
-
-  /// 캐시에서 플래시카드 삭제
-  Future<void> removeFlashcard(String flashcardId, String? noteId) async {
-    if (noteId == null || noteId.isEmpty) return;
-    
-    try {
-      // 해당 노트의 기존 캐시된 플래시카드 가져오기
-      final cachedCards = await getFlashcardsByNoteId(noteId);
-      
-      // 지정된 ID의 카드 제거
-      cachedCards.removeWhere((card) => card.id == flashcardId);
-      
-      // 업데이트된 목록 다시 캐싱
-      await cacheFlashcards(cachedCards);
-      
-      debugPrint('플래시카드 $flashcardId 캐시에서 삭제 완료');
-    } catch (e) {
-      debugPrint('플래시카드 삭제 중 오류 발생: $e');
     }
   }
 }

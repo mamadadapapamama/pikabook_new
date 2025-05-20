@@ -6,7 +6,7 @@ import '../../models/flash_card.dart';
 import '../../models/dictionary.dart';
 import 'package:pinyin/pinyin.dart';
 import '../dictionary/dictionary_service.dart';
-import '../content/pinyin_creation_service.dart';
+import '../text_processing/backup_pinyin_service.dart';
 import '../common/usage_limit_service.dart';
 
 /// 플래시카드 생성 및 관리 기능(CRUD)을 제공합니다
@@ -16,7 +16,7 @@ class FlashCardService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
   final DictionaryService _dictionaryService = DictionaryService();
-  final PinyinCreationService _pinyinService = PinyinCreationService();
+  final BackupPinyinService _backupPinyinService = BackupPinyinService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   
   // 캐시 추가
@@ -46,63 +46,27 @@ class FlashCardService {
     }
 
     try {
-      // 사용량 제한 확인 - 플래시카드는 제한이 없으므로 관련 코드 제거
-      // final canAddFlashcard = await _usageLimitService.incrementFlashcardCount();
-      // if (!canAddFlashcard) {
-      //   throw Exception('무료 플래시카드 사용량 한도를 초과했습니다.');
-      // }
-      
-      // 병음 생성 (항상 병음을 생성하도록 처리)
+      // 1. LLM 캐시 및 내부 사전에서 단어 검색 (lookupWord가 모두 처리)
+      final dictResult = await _dictionaryService.lookupWord(front);
       String pinyinValue = pinyin ?? '';
       String meaningValue = back;
-
-      // 1. 먼저 캐시에서 단어 검색
-      if (_wordCache.containsKey(front)) {
-        final cachedEntry = _wordCache[front]!;
-        if (kDebugMode) debugPrint('캐시에서 단어 정보 가져옴: $front');
-        
-        // 뜻이 비어있으면 캐시의 뜻 사용
-        if (meaningValue.isEmpty) {
-          meaningValue = cachedEntry.meaning;
-        }
-        
-        // 병음이 비어있으면 캐시의 병음 사용
-        if (pinyinValue.isEmpty && cachedEntry.pinyin.isNotEmpty) {
-          pinyinValue = cachedEntry.pinyin;
-        }
-      } 
-      // 2. 캐시에 없으면 사전에서 단어 검색
-      else {
-      final dictResult = await _dictionaryService.lookupWord(front);
-      
       if (dictResult['success'] == true && dictResult['entry'] != null) {
         final dictEntry = dictResult['entry'];
-          
-          // 캐시에 추가
-          _wordCache[front] = dictEntry;
-          
+        // 캐시에 추가
+        _wordCache[front] = dictEntry;
         // 뜻이 비어있으면 사전의 뜻 사용
-          if (meaningValue.isEmpty) {
-            meaningValue = dictEntry.meaning;
-            if (kDebugMode) debugPrint('사전에서 뜻 찾음: $front -> $meaningValue');
+        if (meaningValue.isEmpty) {
+          meaningValue = dictEntry.meaning;
         }
-        
-        // 사전의 병음 사용 (있는 경우)
-        if (dictEntry.pinyin.isNotEmpty) {
+        // 병음이 비어있으면 사전의 병음 사용
+        if (pinyinValue.isEmpty && dictEntry.pinyin.isNotEmpty) {
           pinyinValue = dictEntry.pinyin;
-            if (kDebugMode) debugPrint('사전에서 핀인 찾음: $front -> $pinyinValue');
-        }
-        } else if (meaningValue.isEmpty) {
-        // 사전에서 찾지 못하고 뜻도 없는 경우
-          meaningValue = '뜻을 찾을 수 없습니다';
-          if (kDebugMode) debugPrint('사전에서 뜻을 찾을 수 없음: $front');
         }
       }
-
-      // 3. 병음이 여전히 비어있으면 직접 생성
+      // 2. 병음이 여전히 비어있으면 백업 핀인 서비스 사용
       if (pinyinValue.isEmpty) {
-        pinyinValue = await _pinyinService.generatePinyin(front);
-        if (kDebugMode) debugPrint('핀인 생성됨: $front -> $pinyinValue');
+        pinyinValue = await _backupPinyinService.generatePinyin(front);
+        if (kDebugMode) debugPrint('백업 핀인 서비스로 핀인 생성: $front -> $pinyinValue');
       }
 
       // 플래시카드 ID 생성
@@ -134,7 +98,6 @@ class FlashCardService {
 
       return flashCard;
     } catch (e) {
-      // 오류 발생 시 사용량 감소 로직 제거
       if (kDebugMode) debugPrint('플래시카드 생성 중 오류 발생: $e');
       throw Exception('플래시카드를 생성할 수 없습니다: $e');
     }

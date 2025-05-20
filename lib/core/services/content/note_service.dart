@@ -29,7 +29,7 @@ class NoteService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final PageService _pageService = PageService();
   final ImageService _imageService = ImageService();
-  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
+  final LLMTextProcessing _textProcessingService = LLMTextProcessing();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UsageLimitService _usageLimitService = UsageLimitService();
