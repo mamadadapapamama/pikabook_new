@@ -41,6 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _noteSpaceName = '';
   String _sourceLanguage = SourceLanguage.DEFAULT;
   String _targetLanguage = TargetLanguage.DEFAULT;
+  bool _useSegmentMode = false;  // 추가: 세그먼트 모드 상태
   
   // 플랜 정보 상태
   String _planType = PlanService.PLAN_FREE;
@@ -86,33 +87,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     
     try {
-      // 사용자 이름 로드
-      final userName = await _userPreferences.getUserName();
-      
-      // 노트 스페이스 정보 로드
-      final defaultNoteSpace = await _userPreferences.getDefaultNoteSpace();
-      
-      // 언어 설정 로드
-      final sourceLanguage = await _userPreferences.getSourceLanguage();
-      final targetLanguage = await _userPreferences.getTargetLanguage();
-      
-      // 언어 설정 유효성 검사 및 수정
-      String validSourceLanguage = sourceLanguage;
-      
-      // 'zh'와 같은 잘못된 언어 코드가 발견되면 'zh-CN'으로 수정
-      if (sourceLanguage == 'zh' || 
-          ![...SourceLanguage.SUPPORTED, ...SourceLanguage.FUTURE_SUPPORTED].contains(sourceLanguage)) {
-        validSourceLanguage = SourceLanguage.CHINESE;
-        // 언어 설정 저장
-        await _userPreferences.setSourceLanguage(validSourceLanguage);
-      }
+      final preferences = await _userPreferences.getPreferences();
       
       if (mounted) {
         setState(() {
-          _userName = userName ?? '사용자';
-          _noteSpaceName = defaultNoteSpace;
-          _sourceLanguage = validSourceLanguage;
-          _targetLanguage = targetLanguage;
+          _userName = preferences.userName ?? '사용자';
+          _noteSpaceName = preferences.defaultNoteSpace;
+          _sourceLanguage = preferences.sourceLanguage;
+          _targetLanguage = preferences.targetLanguage;
+          _useSegmentMode = preferences.useSegmentMode;
           _isLoading = false;
         });
       }
@@ -257,6 +240,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: '번역 언어',
             value: TargetLanguage.getName(_targetLanguage),
             onTap: _showTargetLanguageDialog,
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // 텍스트 처리 모드 설정 추가
+          _buildSettingItem(
+            title: '텍스트 처리 모드',
+            value: _useSegmentMode ? '문장 단위' : '문단 단위',
+            onTap: _showTextProcessingModeDialog,
           ),
           
           const SizedBox(height: 32),
@@ -450,10 +442,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (result != null && result.isNotEmpty) {
-      await _userPreferences.setUserName(result);
-      // 사용자 이름이 변경되면 노트 스페이스 이름도 업데이트
-      final noteSpaceName = "${result}의 학습 노트";
-      await _userPreferences.setDefaultNoteSpace(noteSpaceName);
+      final preferences = await _userPreferences.getPreferences();
+      await _userPreferences.savePreferences(
+        preferences.copyWith(
+          userName: result,
+          defaultNoteSpace: "${result}의 학습 노트"
+        )
+      );
       _loadUserPreferences();
     }
   }
@@ -511,11 +506,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     if (result != null && result.isNotEmpty) {
       try {
-        // 노트 스페이스 이름 변경 (이전 이름과 새 이름 전달)
-        final success = await _userPreferences.renameNoteSpace(_noteSpaceName, result);
+        final preferences = await _userPreferences.getPreferences();
+        final noteSpaces = List<String>.from(preferences.noteSpaces);
         
-        // 노트 스페이스 이름 저장
-        await _userPreferences.setDefaultNoteSpace(result);
+        // 노트 스페이스 이름 변경
+        if (noteSpaces.contains(_noteSpaceName)) {
+          final index = noteSpaces.indexOf(_noteSpaceName);
+          noteSpaces[index] = result;
+        } else if (!noteSpaces.contains(result)) {
+          noteSpaces.add(result);
+        }
+        
+        await _userPreferences.savePreferences(
+          preferences.copyWith(
+            defaultNoteSpace: result,
+            noteSpaces: noteSpaces
+          )
+        );
         
         // UI 다시 로드
         await _loadUserPreferences();
@@ -527,9 +534,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                success 
-                  ? '노트 스페이스 이름이 변경되었습니다.' 
-                  : '노트 스페이스 이름이 설정되었습니다.',
+                '노트 스페이스 이름이 변경되었습니다.',
                 style: TypographyTokens.caption.copyWith(
                   color: ColorTokens.textLight,
                 ),
@@ -624,7 +629,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (result != null) {
-      await _userPreferences.setSourceLanguage(result);
+      final preferences = await _userPreferences.getPreferences();
+      await _userPreferences.savePreferences(
+        preferences.copyWith(sourceLanguage: result)
+      );
       _loadUserPreferences();
     }
   }
@@ -688,8 +696,92 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (result != null) {
-      await _userPreferences.setTargetLanguage(result);
+      final preferences = await _userPreferences.getPreferences();
+      await _userPreferences.savePreferences(
+        preferences.copyWith(targetLanguage: result)
+      );
       _loadUserPreferences();
+    }
+  }
+  
+  // 텍스트 처리 모드 설정 다이얼로그
+  Future<void> _showTextProcessingModeDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: ColorTokens.surface,
+        title: Text('텍스트 처리 모드 설정', style: TypographyTokens.subtitle2),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<bool>(
+              title: Text(
+                '문장 단위',
+                style: TypographyTokens.body2,
+              ),
+              subtitle: Text(
+                '문장별로 분리하여 번역하고 발음을 제공합니다.',
+                style: TypographyTokens.caption.copyWith(
+                  color: ColorTokens.textTertiary,
+                ),
+              ),
+              value: true,
+              groupValue: _useSegmentMode,
+              activeColor: ColorTokens.primary,
+              onChanged: (value) => Navigator.pop(context, value),
+            ),
+            RadioListTile<bool>(
+              title: Text(
+                '문단 단위',
+                style: TypographyTokens.body2,
+              ),
+              subtitle: Text(
+                '문단 단위로 번역하여 전체적인 맥락을 유지합니다.',
+                style: TypographyTokens.caption.copyWith(
+                  color: ColorTokens.textTertiary,
+                ),
+              ),
+              value: false,
+              groupValue: _useSegmentMode,
+              activeColor: ColorTokens.primary,
+              onChanged: (value) => Navigator.pop(context, value),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              '취소',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.textTertiary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    if (result != null) {
+      final preferences = await _userPreferences.getPreferences();
+      await _userPreferences.savePreferences(
+        preferences.copyWith(useSegmentMode: result)
+      );
+      _loadUserPreferences();
+      
+      // 설정 변경 알림
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '텍스트 처리 모드가 변경되었습니다. 새로 열리는 노트에 적용됩니다.',
+              style: TypographyTokens.caption.copyWith(
+                color: ColorTokens.textLight,
+              ),
+            ),
+          ),
+        );
+      }
     }
   }
   
