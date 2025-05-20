@@ -1,127 +1,177 @@
 import 'text_segment.dart';
+import 'text_full.dart';
 import 'package:flutter/foundation.dart';
 
 /// 텍스트 처리 모드
 enum TextProcessingMode {
-  full,
-  segment
+  segment,  // 문장 단위 처리
+  full,     // 문단 단위 처리
 }
 
-/// OCR 결과를 처리한 텍스트 모델. text_segment의 리스트를 담을 수 있음
+/// 텍스트 표시 모드
+enum TextDisplayMode {
+  all,       // 원문 + 병음 + 번역 표시
+  nopinyin,  // 원문 + 번역만 표시 (병음 없음)
+}
+
+/// OCR로 추출된 텍스트를 처리하고 관리하는 모델
 class ProcessedText {
-  /// 처리 모드 (전체/세그먼트)
-  final TextProcessingMode mode;
-
-  /// 전체 원문 텍스트
+  /// 전체 원문
   final String fullOriginalText;
-
-  /// 전체 번역 텍스트 (없을 수 있음)
-  final String? fullTranslatedText;
-
-  /// 문장별 세그먼트 목록 (언어 학습 모드에서 사용)
-  final List<TextSegment>? segments;
-
-  /// 표시 모드 관련 설정
-  final bool showFullText;
-  final bool showPinyin;
-  final bool showTranslation;
   
-  /// 개별 노트에서 showFullText 값이 수정되었는지 여부
-  final bool showFullTextModified;
+  /// 전체 번역문
+  final String fullTranslatedText;
+  
+  /// 텍스트 세그먼트 목록 (문장 단위 처리 시 사용)
+  final List<TextSegment> segments;
+  
+  /// 텍스트 처리 모드
+  final TextProcessingMode mode;
+  
+  /// 텍스트 표시 모드
+  final TextDisplayMode displayMode;
+  
+  /// 소스 언어
+  final String sourceLanguage;
+  
+  /// 타겟 언어
+  final String targetLanguage;
 
   ProcessedText({
-    required this.mode,
     required this.fullOriginalText,
-    this.fullTranslatedText,
-    this.segments,
-    this.showFullText = false,
-    this.showPinyin = true,
-    this.showTranslation = true,
-    this.showFullTextModified = false,
+    required this.fullTranslatedText,
+    required this.segments,
+    required this.mode,
+    this.displayMode = TextDisplayMode.all,
+    required this.sourceLanguage,
+    required this.targetLanguage,
   });
 
   /// JSON에서 생성
   factory ProcessedText.fromJson(Map<String, dynamic> json) {
     return ProcessedText(
+      fullOriginalText: json['fullOriginalText'] as String,
+      fullTranslatedText: json['fullTranslatedText'] as String,
+      segments: (json['segments'] as List<dynamic>)
+          .map((e) => TextSegment.fromJson(e as Map<String, dynamic>))
+          .toList(),
       mode: TextProcessingMode.values.firstWhere(
         (e) => e.toString() == 'TextProcessingMode.${json['mode']}',
         orElse: () => TextProcessingMode.segment,
       ),
-      fullOriginalText: json['fullOriginalText'] as String,
-      fullTranslatedText: json['fullTranslatedText'] as String?,
-      segments: json['segments'] != null
-          ? (json['segments'] as List)
-              .map((e) => TextSegment.fromJson(e as Map<String, dynamic>))
-              .toList()
-          : null,
-      showFullText: json['showFullText'] as bool? ?? false,
-      showPinyin: json['showPinyin'] as bool? ?? true,
-      showTranslation: json['showTranslation'] as bool? ?? true,
-      showFullTextModified: json['showFullTextModified'] as bool? ?? false,
+      displayMode: TextDisplayMode.values.firstWhere(
+        (e) => e.toString() == 'TextDisplayMode.${json['displayMode']}',
+        orElse: () => TextDisplayMode.all,
+      ),
+      sourceLanguage: json['sourceLanguage'] as String,
+      targetLanguage: json['targetLanguage'] as String,
     );
   }
 
   /// JSON으로 변환
   Map<String, dynamic> toJson() {
     return {
-      'mode': mode.toString().split('.').last,
       'fullOriginalText': fullOriginalText,
       'fullTranslatedText': fullTranslatedText,
-      'segments': segments?.map((e) => e.toJson()).toList(),
-      'showFullText': showFullText,
-      'showPinyin': showPinyin,
-      'showTranslation': showTranslation,
-      'showFullTextModified': showFullTextModified,
+      'segments': segments.map((e) => e.toJson()).toList(),
+      'mode': mode.toString().split('.').last,
+      'displayMode': displayMode.toString().split('.').last,
+      'sourceLanguage': sourceLanguage,
+      'targetLanguage': targetLanguage,
     };
   }
 
-  /// 복사본 생성 (일부 필드 업데이트) - 디버그 로그 추가
+  /// 복사본 생성 (일부 필드 업데이트)
   ProcessedText copyWith({
-    TextProcessingMode? mode,
     String? fullOriginalText,
     String? fullTranslatedText,
     List<TextSegment>? segments,
-    bool? showFullText,
-    bool? showPinyin,
-    bool? showTranslation,
-    bool? showFullTextModified,
+    TextProcessingMode? mode,
+    TextDisplayMode? displayMode,
+    String? sourceLanguage,
+    String? targetLanguage,
+  }) {
+    return ProcessedText(
+      fullOriginalText: fullOriginalText ?? this.fullOriginalText,
+      fullTranslatedText: fullTranslatedText ?? this.fullTranslatedText,
+      segments: segments ?? this.segments,
+      mode: mode ?? this.mode,
+      displayMode: displayMode ?? this.displayMode,
+      sourceLanguage: sourceLanguage ?? this.sourceLanguage,
+      targetLanguage: targetLanguage ?? this.targetLanguage,
+    );
+  }
+
+  /// 빈 인스턴스 생성
+  factory ProcessedText.empty() {
+    return ProcessedText(
+      fullOriginalText: '',
+      fullTranslatedText: '',
+      segments: [],
+      mode: TextProcessingMode.segment,
+      displayMode: TextDisplayMode.all,
+      sourceLanguage: 'zh-CN',
+      targetLanguage: 'ko',
+    );
+  }
+
+  /// 복사본 생성 (일부 필드 업데이트) - 디버그 로그 추가
+  ProcessedText copyWithDebug({
+    String? fullOriginalText,
+    String? fullTranslatedText,
+    List<TextSegment>? segments,
+    TextProcessingMode? mode,
+    TextDisplayMode? displayMode,
+    String? sourceLanguage,
+    String? targetLanguage,
   }) {
     // 디버그 로그 추가
-    if (kDebugMode && (showFullText != this.showFullText || 
-                       showPinyin != this.showPinyin || 
-                       showTranslation != this.showTranslation)) {
-      debugPrint('ProcessedText.copyWith - 표시 설정 변경:');
-      if (showFullText != null && showFullText != this.showFullText) {
-        debugPrint(' - showFullText: ${this.showFullText} -> $showFullText');
+    if (kDebugMode && (fullOriginalText != this.fullOriginalText || 
+                       fullTranslatedText != this.fullTranslatedText || 
+                       segments != this.segments || 
+                       mode != this.mode || 
+                       displayMode != this.displayMode || 
+                       sourceLanguage != this.sourceLanguage || 
+                       targetLanguage != this.targetLanguage)) {
+      debugPrint('ProcessedText.copyWith - 필드 변경:');
+      if (fullOriginalText != null && fullOriginalText != this.fullOriginalText) {
+        debugPrint(' - fullOriginalText: ${this.fullOriginalText} -> $fullOriginalText');
       }
-      if (showPinyin != null && showPinyin != this.showPinyin) {
-        debugPrint(' - showPinyin: ${this.showPinyin} -> $showPinyin');
+      if (fullTranslatedText != null && fullTranslatedText != this.fullTranslatedText) {
+        debugPrint(' - fullTranslatedText: ${this.fullTranslatedText} -> $fullTranslatedText');
       }
-      if (showTranslation != null && showTranslation != this.showTranslation) {
-        debugPrint(' - showTranslation: ${this.showTranslation} -> $showTranslation');
+      if (segments != null && segments != this.segments) {
+        debugPrint(' - segments: ${this.segments.length} -> ${segments.length}');
       }
-      if (showFullTextModified != null && showFullTextModified != this.showFullTextModified) {
-        debugPrint(' - showFullTextModified: ${this.showFullTextModified} -> $showFullTextModified');
+      if (mode != null && mode != this.mode) {
+        debugPrint(' - mode: ${this.mode} -> $mode');
+      }
+      if (displayMode != null && displayMode != this.displayMode) {
+        debugPrint(' - displayMode: ${this.displayMode} -> $displayMode');
+      }
+      if (sourceLanguage != null && sourceLanguage != this.sourceLanguage) {
+        debugPrint(' - sourceLanguage: ${this.sourceLanguage} -> $sourceLanguage');
+      }
+      if (targetLanguage != null && targetLanguage != this.targetLanguage) {
+        debugPrint(' - targetLanguage: ${this.targetLanguage} -> $targetLanguage');
       }
     }
     
     return ProcessedText(
-      mode: mode ?? this.mode,
       fullOriginalText: fullOriginalText ?? this.fullOriginalText,
       fullTranslatedText: fullTranslatedText ?? this.fullTranslatedText,
       segments: segments ?? this.segments,
-      showFullText: showFullText ?? this.showFullText,
-      showPinyin: showPinyin ?? this.showPinyin,
-      showTranslation: showTranslation ?? this.showTranslation,
-      showFullTextModified: showFullTextModified ?? this.showFullTextModified,
+      mode: mode ?? this.mode,
+      displayMode: displayMode ?? this.displayMode,
+      sourceLanguage: sourceLanguage ?? this.sourceLanguage,
+      targetLanguage: targetLanguage ?? this.targetLanguage,
     );
   }
 
   /// 표시 모드 전환
   ProcessedText toggleDisplayMode() {
     return copyWith(
-      showFullText: !showFullText,
-      showFullTextModified: true, // 수동으로 변경되었음을 표시
+      displayMode: displayMode == TextDisplayMode.all ? TextDisplayMode.nopinyin : TextDisplayMode.all,
     );
   }
   
@@ -130,10 +180,9 @@ class ProcessedText {
   String toString() {
     return 'ProcessedText(hashCode=$hashCode, '
         'mode=$mode, '
-        'segments=${segments?.length ?? 0}, '
-        'showFullText=$showFullText, '
-        'showPinyin=$showPinyin, '
-        'showTranslation=$showTranslation, '
-        'showFullTextModified=$showFullTextModified)';
+        'segments=${segments.length}, '
+        'displayMode=$displayMode, '
+        'sourceLanguage=$sourceLanguage, '
+        'targetLanguage=$targetLanguage)';
   }
 }

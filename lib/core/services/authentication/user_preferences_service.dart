@@ -3,15 +3,20 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import '../../models/user_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// 사용자 설정을 관리하는 서비스
 /// SharedPreferences를 사용하여 로컬에 설정을 저장하고 관리합니다.
 class UserPreferencesService {
   static const String _preferencesKey = 'user_preferences';
   static const String _currentUserIdKey = 'current_user_id';
+  static const String _loginHistoryKey = 'has_login_history';
 
   // 현재 사용자 ID
   String? _currentUserId;
+
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // 싱글톤 패턴
   static final UserPreferencesService _instance = UserPreferencesService._internal();
@@ -148,5 +153,70 @@ class UserPreferencesService {
     } catch (e) {
       debugPrint('⚠️ Firestore에서 사용자 설정 로드 실패: $e');
     }
+  }
+
+  /// 로그인 이력이 있는지 확인
+  Future<bool> hasLoginHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_loginHistoryKey) ?? false;
+  }
+  
+  /// 로그인 이력 저장
+  Future<void> setLoginHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_loginHistoryKey, true);
+  }
+  
+  /// 온보딩 완료 여부 확인
+  Future<bool> getOnboardingCompleted() async {
+    final prefs = await getPreferences();
+    return prefs.onboardingCompleted;
+  }
+  
+  /// 온보딩 완료 상태 저장
+  Future<void> setOnboardingCompleted(bool completed) async {
+    final prefs = await getPreferences();
+    await savePreferences(prefs.copyWith(onboardingCompleted: completed));
+  }
+  
+  /// 사용자 이름 설정
+  Future<void> setUserName(String name) async {
+    final prefs = await getPreferences();
+    await savePreferences(prefs.copyWith(userName: name));
+  }
+  
+  /// 기본 노트스페이스 설정
+  Future<void> setDefaultNoteSpace(String spaceId) async {
+    final prefs = await getPreferences();
+    await savePreferences(prefs.copyWith(defaultNoteSpace: spaceId));
+  }
+  
+  /// 노트스페이스 이름 변경
+  Future<void> renameNoteSpace(String oldName, String newName) async {
+    final prefs = await getPreferences();
+    final spaces = List<String>.from(prefs.noteSpaces);
+    final index = spaces.indexOf(oldName);
+    if (index != -1) {
+      spaces[index] = newName;
+      await savePreferences(prefs.copyWith(noteSpaces: spaces));
+    }
+  }
+  
+  /// 소스 언어 설정
+  Future<void> setSourceLanguage(String language) async {
+    final prefs = await getPreferences();
+    await savePreferences(prefs.copyWith(sourceLanguage: language));
+  }
+  
+  /// 타겟 언어 설정
+  Future<void> setTargetLanguage(String language) async {
+    final prefs = await getPreferences();
+    await savePreferences(prefs.copyWith(targetLanguage: language));
+  }
+  
+  /// 세그먼트 모드 설정
+  Future<void> setUseSegmentMode(bool useSegmentMode) async {
+    final prefs = await getPreferences();
+    await savePreferences(prefs.copyWith(useSegmentMode: useSegmentMode));
   }
 } 
