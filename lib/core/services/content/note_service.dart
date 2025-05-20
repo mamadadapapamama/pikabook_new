@@ -295,51 +295,62 @@ class NoteService {
   }
 
   /// 노트 생성
-  Future<Note> createNote(String title, File? imageFile) async {
+  Future<String> createNote({
+    required String title,
+    required List<File> imageFiles,
+    String? description,
+  }) async {
     try {
-      // 현재 사용자 확인
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('로그인이 필요합니다.');
-      }
-
-      // 기본 노트 데이터 생성
-      final now = DateTime.now();
+      // 1. 노트 문서 생성
+      final noteRef = _notesCollection.doc();
+      final noteId = noteRef.id;
       
-      // 빈 제목이거나 '새 노트'인 경우 순차적 이름 부여
-      String noteTitle = title;
-      if (title.isEmpty || title == '새 노트') {
-        noteTitle = await _generateSequentialNoteTitle();
+      // 2. 첫 번째 이미지 처리 및 썸네일 생성
+      String? thumbnailUrl;
+      String? firstImageUrl;
+      
+      if (imageFiles.isNotEmpty) {
+        final firstImage = imageFiles[0];
+        
+        // 썸네일 생성
+        thumbnailUrl = await _imageService.uploadAndGetUrl(firstImage, forThumbnail: true);
+        
+        // 첫 번째 이미지 업로드
+        firstImageUrl = await _imageService.uploadImage(firstImage);
       }
       
+      // 3. 노트 데이터 저장
       final noteData = {
-        'userId': user.uid,
-        'originalText': noteTitle,
-        'translatedText': '',
-        'isFavorite': false,
-        'flashcardCount': 0,
-        'flashCards': [],
-        'createdAt': now,
-        'updatedAt': now,
+        'title': title,
+        'description': description ?? '',
+        'thumbnailUrl': thumbnailUrl,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'pageCount': imageFiles.length,
+        'isProcessing': false,
+        'processingProgress': 0,
       };
-
-      // Firestore에 노트 추가
-      final docRef = await _notesCollection.add(noteData);
-      final noteId = docRef.id;
-
-      // 이미지가 있으면 처리 (PageService 사용)
-      if (imageFile != null) {
-        await _pageService.processImageAndCreatePage(noteId, imageFile, pageNumber: 1);
+      
+      await noteRef.set(noteData);
+      
+      // 4. 첫 번째 페이지 및 나머지 페이지 생성 (백그라운드 처리)
+      if (imageFiles.isNotEmpty) {
+        await _pageService.processImageAndCreatePage(
+          noteId,
+          imageFiles[0],
+          pageNumber: 1,
+          existingImageUrl: firstImageUrl,
+        );
+        for (int i = 1; i < imageFiles.length; i++) {
+          await _pageService.processImageAndCreatePage(
+            noteId,
+            imageFiles[i],
+            pageNumber: i + 1,
+          );
+        }
       }
-
-      // 생성된 노트 가져오기
-      final docSnapshot = await docRef.get();
-      final note = Note.fromFirestore(docSnapshot);
-
-      // 노트 캐싱
-      await _cacheService.cacheNote(note);
-
-      return note;
+      
+      return noteId;
     } catch (e) {
       debugPrint('노트 생성 중 오류 발생: $e');
       rethrow;
@@ -564,89 +575,8 @@ class NoteService {
     });
   }
   
-  /// 기존(legacy) 방식: OCR + 번역 서비스
-  /* 
-  Future<Map<String, dynamic>> _processImageAndCreatePageLegacy(
-    String noteId,
-    File imageFile, {
-    required int pageNumber,
-    String? existingImageUrl,
-    bool shouldProcess = true,
-  }) async {
-    try {
-      if (!await imageFile.exists()) {
-        return {'success': false, 'error': '이미지 파일이 존재하지 않습니다'};
-      }
-      final imageUrl = existingImageUrl != null && existingImageUrl.isNotEmpty
-          ? existingImageUrl
-          : await _imageService.uploadAndGetUrl(imageFile);
-      final page = await _pageService.createPage(
-        noteId: noteId,
-        pageNumber: pageNumber,
-        imageUrl: imageUrl,
-        originalText: shouldProcess ? '' : '___PROCESSING___',
-        translatedText: '',
-      );
-      if (shouldProcess) {
-        final extractedText = await _ocrService.extractText(imageFile);
-        final chineseText = await _textProcessingService.processWithLLM(extractedText);
-        final translatedText = chineseText.sentences.map((s) => s.translation).join('\n');
-        await _pageService.updatePage(
-          page.id!,
-          originalText: extractedText,
-          translatedText: translatedText,
-        );
-        if (pageNumber == 1) {
-          await _updateNoteFirstPageInfo(noteId, imageUrl, extractedText, translatedText);
-        }
-        return {
-          'success': true,
-          'imageUrl': imageUrl,
-          'extractedText': extractedText,
-          'translatedText': translatedText,
-          'pageId': page.id,
-        };
-      } else {
-        Future.microtask(() async {
-          try {
-            final extractedText = await _ocrService.extractText(imageFile);
-            final chineseText = await _textProcessingService.processWithLLM(extractedText);
-            final translatedText = chineseText.sentences.map((s) => s.translation).join('\n');
-            await _pageService.updatePage(
-              page.id!,
-              originalText: extractedText,
-              translatedText: translatedText,
-            );
-            if (pageNumber == 1) {
-              await _updateNoteFirstPageInfo(noteId, imageUrl, extractedText, translatedText);
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setBool('first_page_processed_$noteId', true);
-            }
-          } catch (e) {
-            debugPrint('비동기 이미지 처리 중 오류: $e');
-          }
-        });
-        return {
-          'success': true,
-          'imageUrl': imageUrl,
-          'extractedText': '___PROCESSING___',
-          'translatedText': '',
-          'pageId': page.id,
-        };
-      }
-    } catch (e) {
-      debugPrint('이미지 처리 및 페이지 생성 중 오류 발생: $e');
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
-    }
-  }
-*/
   // LLM 기반 이미지 처리 메서드는 PageService로 이동되었습니다.
-
   // 이미지 처리 및 페이지 생성 메서드는 PageService로 이동되었습니다.
-  
   // _updateNoteFirstPageInfo 메서드는 PageService로 이동되었습니다.
 
   // 여러 이미지로 노트 생성 (ImagePickerBottomSheet에서 사용)

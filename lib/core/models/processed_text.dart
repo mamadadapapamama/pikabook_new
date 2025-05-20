@@ -4,14 +4,14 @@ import 'package:flutter/foundation.dart';
 
 /// 텍스트 처리 모드
 enum TextProcessingMode {
-  segment,  // 문장 단위 처리
-  full,     // 문단 단위 처리
+  segment,   // 문장 단위 처리
+  paragraph, // 문단 단위 처리
 }
 
 /// 텍스트 표시 모드
 enum TextDisplayMode {
-  all,       // 원문 + 병음 + 번역 표시
-  nopinyin,  // 원문 + 번역만 표시 (병음 없음)
+  full,      // 원문 + 병음 + 번역 표시
+  noPinyin,  // 원문 + 번역만 표시 (병음 없음)
 }
 
 /// OCR로 추출된 텍스트를 처리하고 관리하는 모델
@@ -38,11 +38,11 @@ class ProcessedText {
   final String targetLanguage;
 
   ProcessedText({
+    required this.mode,
+    required this.displayMode,
     required this.fullOriginalText,
     required this.fullTranslatedText,
     required this.segments,
-    required this.mode,
-    this.displayMode = TextDisplayMode.all,
     required this.sourceLanguage,
     required this.targetLanguage,
   });
@@ -50,19 +50,19 @@ class ProcessedText {
   /// JSON에서 생성
   factory ProcessedText.fromJson(Map<String, dynamic> json) {
     return ProcessedText(
-      fullOriginalText: json['fullOriginalText'] as String,
-      fullTranslatedText: json['fullTranslatedText'] as String,
-      segments: (json['segments'] as List<dynamic>)
-          .map((e) => TextSegment.fromJson(e as Map<String, dynamic>))
-          .toList(),
       mode: TextProcessingMode.values.firstWhere(
-        (e) => e.toString() == 'TextProcessingMode.${json['mode']}',
+        (e) => e.toString() == json['mode'],
         orElse: () => TextProcessingMode.segment,
       ),
       displayMode: TextDisplayMode.values.firstWhere(
-        (e) => e.toString() == 'TextDisplayMode.${json['displayMode']}',
-        orElse: () => TextDisplayMode.all,
+        (e) => e.toString() == json['displayMode'],
+        orElse: () => TextDisplayMode.full,
       ),
+      fullOriginalText: json['fullOriginalText'] as String,
+      fullTranslatedText: json['fullTranslatedText'] as String,
+      segments: (json['segments'] as List)
+          .map((s) => TextSegment.fromJson(s as Map<String, dynamic>))
+          .toList(),
       sourceLanguage: json['sourceLanguage'] as String,
       targetLanguage: json['targetLanguage'] as String,
     );
@@ -71,11 +71,11 @@ class ProcessedText {
   /// JSON으로 변환
   Map<String, dynamic> toJson() {
     return {
+      'mode': mode.toString(),
+      'displayMode': displayMode.toString(),
       'fullOriginalText': fullOriginalText,
       'fullTranslatedText': fullTranslatedText,
-      'segments': segments.map((e) => e.toJson()).toList(),
-      'mode': mode.toString().split('.').last,
-      'displayMode': displayMode.toString().split('.').last,
+      'segments': segments.map((s) => s.toJson()).toList(),
       'sourceLanguage': sourceLanguage,
       'targetLanguage': targetLanguage,
     };
@@ -83,20 +83,20 @@ class ProcessedText {
 
   /// 복사본 생성 (일부 필드 업데이트)
   ProcessedText copyWith({
+    TextProcessingMode? mode,
+    TextDisplayMode? displayMode,
     String? fullOriginalText,
     String? fullTranslatedText,
     List<TextSegment>? segments,
-    TextProcessingMode? mode,
-    TextDisplayMode? displayMode,
     String? sourceLanguage,
     String? targetLanguage,
   }) {
     return ProcessedText(
+      mode: mode ?? this.mode,
+      displayMode: displayMode ?? this.displayMode,
       fullOriginalText: fullOriginalText ?? this.fullOriginalText,
       fullTranslatedText: fullTranslatedText ?? this.fullTranslatedText,
       segments: segments ?? this.segments,
-      mode: mode ?? this.mode,
-      displayMode: displayMode ?? this.displayMode,
       sourceLanguage: sourceLanguage ?? this.sourceLanguage,
       targetLanguage: targetLanguage ?? this.targetLanguage,
     );
@@ -105,11 +105,11 @@ class ProcessedText {
   /// 빈 인스턴스 생성
   factory ProcessedText.empty() {
     return ProcessedText(
+      mode: TextProcessingMode.segment,
+      displayMode: TextDisplayMode.full,
       fullOriginalText: '',
       fullTranslatedText: '',
       segments: [],
-      mode: TextProcessingMode.segment,
-      displayMode: TextDisplayMode.all,
       sourceLanguage: 'zh-CN',
       targetLanguage: 'ko',
     );
@@ -158,11 +158,11 @@ class ProcessedText {
     }
     
     return ProcessedText(
+      mode: mode ?? this.mode,
+      displayMode: displayMode ?? this.displayMode,
       fullOriginalText: fullOriginalText ?? this.fullOriginalText,
       fullTranslatedText: fullTranslatedText ?? this.fullTranslatedText,
       segments: segments ?? this.segments,
-      mode: mode ?? this.mode,
-      displayMode: displayMode ?? this.displayMode,
       sourceLanguage: sourceLanguage ?? this.sourceLanguage,
       targetLanguage: targetLanguage ?? this.targetLanguage,
     );
@@ -171,7 +171,7 @@ class ProcessedText {
   /// 표시 모드 전환
   ProcessedText toggleDisplayMode() {
     return copyWith(
-      displayMode: displayMode == TextDisplayMode.all ? TextDisplayMode.nopinyin : TextDisplayMode.all,
+      displayMode: displayMode == TextDisplayMode.full ? TextDisplayMode.noPinyin : TextDisplayMode.full,
     );
   }
   

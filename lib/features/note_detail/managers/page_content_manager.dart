@@ -11,6 +11,9 @@ import '../../../core/services/dictionary/dictionary_service.dart';
 import '../../../core/services/storage/unified_cache_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
+import '../../../core/services/media/image_service.dart';
+import '../../../core/services/text_processing/enhanced_ocr_service.dart';
+import '../../../core/services/authentication/user_preferences_service.dart';
 import 'dart:async';
 
 /// - 페이지 캐시(processed text, LLM 처리 결과를 저장 조회 삭제)
@@ -38,6 +41,9 @@ class SegmentManager {
   late final UnifiedCacheService _cacheService = UnifiedCacheService();
   late final UsageLimitService _usageLimitService = UsageLimitService();
   final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
+  final ImageService _imageService = ImageService();
+  final EnhancedOcrService _ocrService = EnhancedOcrService();
+  final UserPreferencesService _userPreferencesService = UserPreferencesService();
   
   // getter
   TextReaderService get textReaderService => _textReaderService;
@@ -405,5 +411,114 @@ class SegmentManager {
   // 자원 정리
   void dispose() {
     _textReaderService.dispose();
+  }
+}
+
+/// 페이지 콘텐츠 관리자: 텍스트 처리와 콘텐츠 관리를 담당합니다.
+class PageContentManager {
+  final ImageService _imageService = ImageService();
+  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
+  final EnhancedOcrService _ocrService = EnhancedOcrService();
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
+  final UserPreferencesService _userPreferencesService = UserPreferencesService();
+
+  // 콘텐츠 상태 관리
+  final ValueNotifier<ProcessedText?> processedText = ValueNotifier<ProcessedText?>(null);
+  final ValueNotifier<File?> imageFile = ValueNotifier<File?>(null);
+  final ValueNotifier<bool> isLoading = ValueNotifier<bool>(false);
+  final ValueNotifier<String?> error = ValueNotifier<String?>(null);
+
+  /// 페이지 콘텐츠 로드
+  Future<void> loadPageContent(ProcessedText content) async {
+    try {
+      isLoading.value = true;
+      error.value = null;
+      processedText.value = content;
+    } catch (e) {
+      error.value = '콘텐츠를 로드하는 중 오류가 발생했습니다: $e';
+      debugPrint('콘텐츠 로드 중 오류: $e');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// 이미지에서 텍스트 추출 및 처리
+  Future<ProcessedText?> processImage(File file) async {
+    try {
+      isLoading.value = true;
+      error.value = null;
+
+      // 이미지 파일 저장
+      imageFile.value = file;
+
+      // OCR로 텍스트 추출
+      final extractedText = await _ocrService.extractTextFromImage(file);
+      if (extractedText.isEmpty) {
+        throw Exception('이미지에서 텍스트를 추출할 수 없습니다.');
+      }
+
+      // 사용자 설정 가져오기
+      final preferences = await _userPreferencesService.getPreferences();
+      
+      // 텍스트 처리
+      final processedText = await _textProcessingService.processWithLLM(
+        extractedText,
+        sourceLanguage: preferences.sourceLanguage,
+        targetLanguage: preferences.targetLanguage,
+      );
+
+      return processedText;
+    } catch (e) {
+      error.value = '이미지 처리 중 오류가 발생했습니다: $e';
+      debugPrint('이미지 처리 중 오류: $e');
+      return null;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// 페이지 콘텐츠 업데이트
+  Future<void> updatePageContent({
+    String? originalText,
+    String? translatedText,
+    List<TextSegment>? segments,
+    TextProcessingMode? mode,
+    TextDisplayMode? displayMode,
+  }) async {
+    if (processedText.value == null) return;
+
+    try {
+      isLoading.value = true;
+      error.value = null;
+
+      final updatedContent = processedText.value!.copyWith(
+        fullOriginalText: originalText,
+        fullTranslatedText: translatedText,
+        segments: segments,
+        mode: mode,
+        displayMode: displayMode,
+      );
+
+      processedText.value = updatedContent;
+    } catch (e) {
+      error.value = '콘텐츠를 업데이트하는 중 오류가 발생했습니다: $e';
+      debugPrint('콘텐츠 업데이트 중 오류: $e');
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// 표시 모드 전환
+  void toggleDisplayMode() {
+    if (processedText.value == null) return;
+    processedText.value = processedText.value!.toggleDisplayMode();
+  }
+
+  /// 리소스 정리
+  void dispose() {
+    processedText.dispose();
+    imageFile.dispose();
+    isLoading.dispose();
+    error.dispose();
   }
 }

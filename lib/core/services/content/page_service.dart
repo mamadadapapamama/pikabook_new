@@ -450,52 +450,11 @@ class PageService {
     }
   }
 
-  /// 페이지 텍스트 번역
-  /* 
-  // 현재 미사용: MVP에서는 사용되지 않는 단순 번역 메서드
-  // 이 메서드는 세그먼트 분할, pinyin 생성 등을 제공하지 않고 단순 번역만 수행함
-  // 실제 텍스트 처리는 EnhancedOcrService와 ContentManager를 통해 이루어짐
-  Future<String> translatePageText(String pageId, {String? targetLanguage}) async {
-    try {
-      // 페이지 정보 가져오기
-      final page = await getPageById(pageId);
-      if (page == null) {
-        throw Exception('페이지를 찾을 수 없습니다.');
-      }
-
-      // 원본 텍스트 번역 - LLM 처리 사용
-      final chineseText = await _textProcessingService.processWithLLM(page.originalText);
-      final translatedText = chineseText.sentences.map((s) => s.translation).join('\n');
-
-      // 번역 결과 저장
-      await updatePage(
-        pageId,
-        translatedText: translatedText,
-      );
-
-      return translatedText;
-    } catch (e) {
-      debugPrint('페이지 텍스트 번역 중 오류 발생: $e');
-      throw Exception('페이지 텍스트를 번역할 수 없습니다: $e');
-    }
-  }
-  */
-
-  /// 개별 페이지 삭제 - MVP 이후 UI 제공 예정
-  Future<void> deletePage(String pageId) async {
-    // Implementation needed
-  }
-
   /// 노트의 모든 페이지 삭제
   Future<void> deleteAllPagesForNote(String noteId) async {
     try {
       final snapshot = await getPagesForNoteQuery(noteId).get();
-
-      // 각 페이지 삭제
-      for (final doc in snapshot.docs) {
-        await deletePage(doc.id);
       }
-
       // 노트의 모든 페이지를 캐시에서 제거
       await _cacheService.removePagesForNote(noteId);
     } catch (e) {

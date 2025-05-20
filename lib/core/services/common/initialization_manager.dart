@@ -264,11 +264,6 @@ class InitializationManager {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // 중국어 분할 설정 로드 및 적용
-      final segmentationEnabled = prefs.getBool('segmentation_enabled') ?? false;
-      _textProcessingService.setSegmentationEnabled(segmentationEnabled);
-      debugPrint('중국어 분할 설정 로드 완료: ${segmentationEnabled ? "활성화" : "비활성화"}');
-      
       // 언어 설정 로드 - 기본값 설정
       final sourceLanguage = await _cacheService.getSourceLanguage();
       final targetLanguage = await _cacheService.getTargetLanguage();
@@ -276,9 +271,6 @@ class InitializationManager {
       debugPrint('언어 설정 로드 완료 - 소스: $sourceLanguage, 타겟: $targetLanguage');
     } catch (e) {
       debugPrint('앱 설정 로드 중 오류: $e');
-      // 기본값 설정
-      _textProcessingService.setSegmentationEnabled(false);
-      debugPrint('앱 설정 로드 오류로 기본값(세그먼테이션 비활성화) 적용');
     }
   }
   

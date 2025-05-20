@@ -1,8 +1,3 @@
-// MARK: 다국어 지원을 위한 확장 포인트
-// 이 서비스는 향후 다국어 지원을 위해 확장될 예정입니다.
-// 현재는 중국어 텍스트 추출에 초점이 맞춰져 있습니다.
-// 향후 각 언어별 최적화된 OCR 처리가 추가될 예정입니다.
-
 import 'dart:io';
 import 'dart:convert';
 import 'dart:math';
@@ -13,6 +8,7 @@ import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../../models/processed_text.dart';
+import '../../models/text_segment.dart';
 import 'text_cleaner_service.dart';
 import '../authentication/user_preferences_service.dart';
 import '../common/usage_limit_service.dart'; // 사용량 제한 서비스 추가
@@ -81,7 +77,7 @@ class EnhancedOcrService {
       } else {
         // 앱 문서 디렉토리에 파일이 없으면 assets에서 로드하여 복사
         try {
-          // assets에서 키 파일 로드 (service-account.json으로 변경)
+          // assets에서 키 파일 로드
           final String jsonString = await rootBundle
               .loadString('assets/credentials/service-account.json');
 
@@ -101,10 +97,10 @@ class EnhancedOcrService {
     }
   }
 
-  /// 이미지에서 텍스트 추출만 수행 (처리 로직 제거)
+  /// 이미지에서 텍스트 추출 및 처리
   Future<ProcessedText> processImage(
     File imageFile,
-    String mode,
+    TextProcessingMode mode,
     {bool skipUsageCount = false}
   ) async {
     try {
@@ -112,21 +108,52 @@ class EnhancedOcrService {
       final extractedText = await extractText(imageFile, skipUsageCount: skipUsageCount);
       if (extractedText.isEmpty) {
         return ProcessedText(
-          mode: TextProcessingMode.segment,
-          fullOriginalText: ''
+          mode: mode,
+          displayMode: TextDisplayMode.full,
+          fullOriginalText: '',
+          fullTranslatedText: '',
+          segments: [],
+          sourceLanguage: 'zh-CN',
+          targetLanguage: 'ko'
         );
       }
 
-      // 추출된 텍스트만 반환 (추가 처리 없음)
+      // 모드에 따라 텍스트 처리
+      List<String> processedTexts = [];
+      if (mode == TextProcessingMode.segment) {
+        // 문장 단위로 분리
+        processedTexts = _splitIntoSentences(extractedText);
+      } else {
+        // 문단 단위로 분리
+        processedTexts = _splitIntoParagraphs(extractedText);
+      }
+
+      // ProcessedText 생성
       return ProcessedText(
-        mode: TextProcessingMode.segment,
-        fullOriginalText: extractedText
+        mode: mode,
+        displayMode: TextDisplayMode.full,
+        fullOriginalText: extractedText,
+        fullTranslatedText: '',
+        segments: processedTexts.map((text) => TextSegment(
+          originalText: text,
+          translatedText: '',
+          pinyin: '',
+          sourceLanguage: 'zh-CN',
+          targetLanguage: 'ko'
+        )).toList(),
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko'
       );
     } catch (e) {
       debugPrint('OCR 이미지 처리 오류: $e');
       return ProcessedText(
-        mode: TextProcessingMode.segment,
-        fullOriginalText: ''
+        mode: mode,
+        displayMode: TextDisplayMode.full,
+        fullOriginalText: '',
+        fullTranslatedText: '',
+        segments: [],
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko'
       );
     }
   }
@@ -149,7 +176,7 @@ class EnhancedOcrService {
       request.image = vision.Image()..content = base64Image;
       request.features = [
         vision.Feature()
-          ..type = 'TEXT_DETECTION'
+          ..type = 'DOCUMENT_TEXT_DETECTION'
           ..maxResults = 1
       ];
 
@@ -181,12 +208,10 @@ class EnhancedOcrService {
       if (!skipUsageCount) {
         try {
           debugPrint('OCR 사용량 카운트 증가 시작');
-          // 이미지당 1페이지로 계산하여 OCR 사용량 증가
           await _usageLimitService.incrementOcrPageCount(1, allowOverLimit: true);
           debugPrint('OCR 사용량 카운트 증가 완료');
         } catch (e) {
           debugPrint('OCR 사용량 증가 중 오류 발생: $e');
-          // 사용량 증가 실패해도 OCR 결과는 반환
         }
       } else {
         debugPrint('OCR 사용량 카운트 건너뜀 (skipUsageCount=true)');
@@ -197,6 +222,27 @@ class EnhancedOcrService {
       debugPrint('텍스트 추출 중 오류 발생: $e');
       return '';
     }
+  }
+
+  /// 문장 단위로 텍스트 분리
+  List<String> _splitIntoSentences(String text) {
+    // 중국어 문장 구분자: 。！？!?
+    final sentenceDelimiters = RegExp(r'[。！？!?]');
+    final sentences = text.split(sentenceDelimiters)
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    return sentences;
+  }
+
+  /// 문단 단위로 텍스트 분리
+  List<String> _splitIntoParagraphs(String text) {
+    // 빈 줄로 문단 구분
+    final paragraphs = text.split('\n\n')
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
+    return paragraphs;
   }
 
   // 텍스트에 대한 해시 생성 (세그먼트 캐싱용)
