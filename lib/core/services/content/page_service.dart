@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/processed_text.dart';
 import '../../models/text_segment.dart';
@@ -12,7 +13,7 @@ import '../text_processing/llm_text_processing.dart';
 import 'dart:convert';
 import 'dart:math';
 
-/// 페이지 서비스: 페이지 관리 (CRUD) 기능을 제공합니다.
+/// 페이지 서비스: 페이지 생성, 처리, 캐싱을 담당합니다.
 /// 
 class PageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -131,56 +132,13 @@ class PageService {
     try {
       debugPrint('📄 getPagesForNote 호출: noteId=$noteId, forceReload=$forceReload');
       
-      // 1. forceReload가 true인 경우 서버에서만 로드
-      if (forceReload) {
-        debugPrint('🔄 강제 로드 모드: 캐시를 완전히 건너뛰고 서버에서 직접 로드합니다.');
-        
-        // Firestore에서 페이지 가져오기
-        final snapshot = await _pagesCollection
-          .where('noteId', isEqualTo: noteId)
-          .orderBy('pageNumber')
-          .get()
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-            debugPrint('⚠️ 서버에서 페이지 가져오기 타임아웃');
-            throw Exception('서버에서 페이지 가져오기 타임아웃');
-          });
-        
-        final serverPages = snapshot.docs
-          .map((doc) => page_model.Page.fromFirestore(doc))
-          .toList();
-        
-        debugPrint('✅ Firestore에서 노트 $noteId의 페이지 ${serverPages.length}개 로드됨');
-        
-        // 서버에서 가져온 페이지로 캐시 업데이트 (백그라운드로 처리)
-        Future.microtask(() async {
-          try {
-            await _cacheService.cachePages(noteId, serverPages);
-            debugPrint('✅ 백그라운드에서 서버 데이터로 캐시 업데이트 완료');
-          } catch (e) {
-            debugPrint('⚠️ 백그라운드 캐시 업데이트 중 오류 (무시됨): $e');
-          }
-        });
-        
-        return serverPages;
-      }
-      
-      // 2. 일반 모드: 캐시에서 먼저 페이지 확인
-      List<page_model.Page> cachedPages = [];
-      cachedPages = await _cacheService.getPagesForNote(noteId);
-      
-      if (cachedPages.isNotEmpty) {
-        debugPrint('✅ 캐시에서 노트 $noteId의 페이지 ${cachedPages.length}개 로드됨');
-        
-        // 서버와 동기화는 백그라운드에서 진행 (UI를 막지 않기 위해)
-        Future.microtask(() async {
-          try {
-            await _syncPagesWithServer(noteId, cachedPages);
-          } catch (e) {
-            debugPrint('⚠️ 백그라운드 페이지 동기화 중 오류 (무시됨): $e');
-          }
-        });
-        
-        return cachedPages;
+      // 캐시에서 페이지 가져오기 시도 (forceReload가 아닌 경우)
+      if (!forceReload) {
+        final cachedPages = await _cacheService.getCachedPages(noteId);
+        if (cachedPages.isNotEmpty) {
+          debugPrint('캐시에서 ${cachedPages.length}개 페이지 로드: $noteId');
+          return cachedPages;
+        }
       }
       
       // 3. 캐시에 없는 경우 서버에서 페이지 로드
@@ -453,13 +411,24 @@ class PageService {
   /// 노트의 모든 페이지 삭제
   Future<void> deleteAllPagesForNote(String noteId) async {
     try {
-      final snapshot = await getPagesForNoteQuery(noteId).get();
+      // Firestore에서 페이지 삭제
+      final querySnapshot = await _pagesCollection
+          .where('noteId', isEqualTo: noteId)
+          .get();
+
+      final batch = _firestore.batch();
+      for (var doc in querySnapshot.docs) {
+        batch.delete(doc.reference);
       }
-      // 노트의 모든 페이지를 캐시에서 제거
-      await _cacheService.removePagesForNote(noteId);
+      await batch.commit();
+
+      // 캐시에서 페이지 삭제
+      await _cacheService.removeCachedPages(noteId);
+      
+      debugPrint('노트 $noteId의 모든 페이지 삭제 완료');
     } catch (e) {
       debugPrint('노트의 모든 페이지 삭제 중 오류 발생: $e');
-      throw Exception('페이지를 삭제할 수 없습니다: $e');
+      rethrow;
     }
   }
 
