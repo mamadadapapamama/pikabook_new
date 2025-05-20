@@ -1,9 +1,17 @@
 import 'text_segment.dart';
 import 'package:flutter/foundation.dart';
 
-/// OCR 결과를 처리한 텍스트 모델. text_segment의 리스트를 담을 수 있음
+/// 텍스트 처리 모드
+enum TextProcessingMode {
+  full,
+  segment
+}
 
+/// OCR 결과를 처리한 텍스트 모델. text_segment의 리스트를 담을 수 있음
 class ProcessedText {
+  /// 처리 모드 (전체/세그먼트)
+  final TextProcessingMode mode;
+
   /// 전체 원문 텍스트
   final String fullOriginalText;
 
@@ -22,6 +30,7 @@ class ProcessedText {
   final bool showFullTextModified;
 
   ProcessedText({
+    required this.mode,
     required this.fullOriginalText,
     this.fullTranslatedText,
     this.segments,
@@ -34,6 +43,10 @@ class ProcessedText {
   /// JSON에서 생성
   factory ProcessedText.fromJson(Map<String, dynamic> json) {
     return ProcessedText(
+      mode: TextProcessingMode.values.firstWhere(
+        (e) => e.toString() == 'TextProcessingMode.${json['mode']}',
+        orElse: () => TextProcessingMode.segment,
+      ),
       fullOriginalText: json['fullOriginalText'] as String,
       fullTranslatedText: json['fullTranslatedText'] as String?,
       segments: json['segments'] != null
@@ -51,6 +64,7 @@ class ProcessedText {
   /// JSON으로 변환
   Map<String, dynamic> toJson() {
     return {
+      'mode': mode.toString().split('.').last,
       'fullOriginalText': fullOriginalText,
       'fullTranslatedText': fullTranslatedText,
       'segments': segments?.map((e) => e.toJson()).toList(),
@@ -63,6 +77,7 @@ class ProcessedText {
 
   /// 복사본 생성 (일부 필드 업데이트) - 디버그 로그 추가
   ProcessedText copyWith({
+    TextProcessingMode? mode,
     String? fullOriginalText,
     String? fullTranslatedText,
     List<TextSegment>? segments,
@@ -91,6 +106,7 @@ class ProcessedText {
     }
     
     return ProcessedText(
+      mode: mode ?? this.mode,
       fullOriginalText: fullOriginalText ?? this.fullOriginalText,
       fullTranslatedText: fullTranslatedText ?? this.fullTranslatedText,
       segments: segments ?? this.segments,
@@ -113,6 +129,7 @@ class ProcessedText {
   @override
   String toString() {
     return 'ProcessedText(hashCode=$hashCode, '
+        'mode=$mode, '
         'segments=${segments?.length ?? 0}, '
         'showFullText=$showFullText, '
         'showPinyin=$showPinyin, '

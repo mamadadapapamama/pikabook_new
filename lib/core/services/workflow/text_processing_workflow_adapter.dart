@@ -37,6 +37,7 @@ class TextProcessingWorkflowAdapter {
       
       // LLM 결과를 ProcessedText로 변환
       final processedText = ProcessedText(
+        mode: useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.full,
         fullOriginalText: chineseText.originalText,
         fullTranslatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
         segments: chineseText.sentences.map((s) =>

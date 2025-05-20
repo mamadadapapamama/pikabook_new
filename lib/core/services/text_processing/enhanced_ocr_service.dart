@@ -111,14 +111,23 @@ class EnhancedOcrService {
       // 이미지에서 텍스트 추출
       final extractedText = await extractText(imageFile, skipUsageCount: skipUsageCount);
       if (extractedText.isEmpty) {
-        return ProcessedText(fullOriginalText: '');
+        return ProcessedText(
+          mode: TextProcessingMode.segment,
+          fullOriginalText: ''
+        );
       }
 
       // 추출된 텍스트만 반환 (추가 처리 없음)
-      return ProcessedText(fullOriginalText: extractedText);
+      return ProcessedText(
+        mode: TextProcessingMode.segment,
+        fullOriginalText: extractedText
+      );
     } catch (e) {
       debugPrint('OCR 이미지 처리 오류: $e');
-      return ProcessedText(fullOriginalText: '');
+      return ProcessedText(
+        mode: TextProcessingMode.segment,
+        fullOriginalText: ''
+      );
     }
   }
 

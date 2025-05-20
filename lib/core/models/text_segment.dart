@@ -13,7 +13,7 @@ class TextSegment {
   /// 번역 텍스트 (없을 수 있음)
   final String? translatedText;
   
-  /// 언어 관련 필드 추가
+  /// 언어 관련 필드
   final String sourceLanguage; // 원문 언어
   final String targetLanguage; // 번역 언어
 
@@ -21,7 +21,6 @@ class TextSegment {
     required this.originalText,
     this.pinyin,
     this.translatedText,
-    // 언어 관련 필드 기본값 설정
     String? sourceLanguage,
     String? targetLanguage,
   }) : 

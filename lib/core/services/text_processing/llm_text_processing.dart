@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import '../../models/chinese_text.dart';
+import '../../models/text_segment.dart';
+import '../../models/text_full.dart';
 import '../authentication/user_preferences_service.dart';
 
 // 모델 임포트
@@ -72,21 +73,21 @@ class UnifiedTextProcessingService {
   }
   
   /// LLM을 통한 통합 텍스트 처리 (세그먼테이션, 번역, 병음 생성)
-  Future<ChineseText> processWithLLM(String text, {String sourceLanguage = 'zh'}) async {
+  Future<dynamic> processWithLLM(String text, {String sourceLanguage = 'zh'}) async {
     debugPrint('🔍 LLM 처리 시작: 텍스트 길이=${text.length}, 언어=$sourceLanguage');
     if (text.isEmpty) {
       debugPrint('⚠️ [LLM] 입력 텍스트가 비어있음');
-      return ChineseText.empty();
+      return _segmentationEnabled ? [] : TextFull(
+        originalParagraphs: [],
+        translatedParagraphs: [],
+        sourceLanguage: sourceLanguage,
+        targetLanguage: 'ko',
+      );
     }
     await ensureInitialized();
     
-    // 번역 모드는 항상 세그먼트 모드 사용 (true로 강제 설정)
-    bool useSegmentMode = true;
-    
-    // 세그먼테이션 설정 적용
-    if (!_segmentationEnabled) {
-      useSegmentMode = false;
-    }
+    // 번역 모드는 세그먼트 모드 사용 여부에 따라 결정
+    bool useSegmentMode = _segmentationEnabled;
     
     String translationMode = useSegmentMode ? 'segment' : 'full';
     debugPrint('🔄 LLM 처리: 번역 모드 = $translationMode (세그먼트 모드: $useSegmentMode)');
@@ -97,21 +98,30 @@ class UnifiedTextProcessingService {
       try {
         final cachedData = _cache[cacheKey]!;
         debugPrint('💾 캐시에서 LLM 처리 결과 로드 시도: $cacheKey');
-        final List<dynamic> parsedData = jsonDecode(cachedData);
-        final List<ChineseSentence> sentences = parsedData.map<ChineseSentence>((data) =>
-          ChineseSentence(
-            original: data['chinese'] ?? '',
-            translation: data['korean'] ?? '',
-            pinyin: data['pinyin'] ?? '',
-          )
-        ).toList();
-        if (kDebugMode) {
-          debugPrint('✅ 캐시에서 LLM 처리 결과 로드 성공: ${sentences.length}개 문장');
+        
+        if (useSegmentMode) {
+          final List<dynamic> parsedData = jsonDecode(cachedData);
+          final List<TextSegment> segments = parsedData.map<TextSegment>((data) =>
+            TextSegment(
+              originalText: data['chinese'] ?? '',
+              translatedText: data['korean'] ?? '',
+              pinyin: data['pinyin'] ?? '',
+              sourceLanguage: sourceLanguage,
+              targetLanguage: 'ko',
+            )
+          ).toList();
+          if (kDebugMode) {
+            debugPrint('✅ 캐시에서 LLM 처리 결과 로드 성공: ${segments.length}개 문장');
+          }
+          return segments;
+        } else {
+          final Map<String, dynamic> parsedData = jsonDecode(cachedData);
+          final textFull = TextFull.fromJson(parsedData);
+          if (kDebugMode) {
+            debugPrint('✅ 캐시에서 LLM 처리 결과 로드 성공: ${textFull.originalParagraphs.length}개 문단');
+          }
+          return textFull;
         }
-        return ChineseText(
-          originalText: text,
-          sentences: sentences,
-        );
       } catch (e) {
         debugPrint('❌ 캐시된 데이터 파싱 중 오류: $e');
       }
@@ -131,7 +141,7 @@ class UnifiedTextProcessingService {
         debugPrint('🔄 세그먼트 모드 처리 시작');
         return await _processSegmentMode(text, sourceLanguage, cacheKey);
       } else {
-        // 전체 번역 모드 - 문단 전체 번역, 병음 생략
+        // 전체 번역 모드 - 문단별 분리 및 번역
         debugPrint('🔄 전체 번역 모드 처리 시작');
         return await _processFullMode(text, sourceLanguage, cacheKey);
       }
@@ -142,7 +152,7 @@ class UnifiedTextProcessingService {
   }
   
   /// 세그먼트 모드 처리 - 문장별 분리 및 번역, 병음 생성
-  Future<ChineseText> _processSegmentMode(String text, String sourceLanguage, String cacheKey) async {
+  Future<List<TextSegment>> _processSegmentMode(String text, String sourceLanguage, String cacheKey) async {
     final Stopwatch stopwatch = Stopwatch()..start();
     debugPrint('📝 세그먼트 모드: 입력 텍스트 = $text');
     
@@ -230,48 +240,66 @@ Output:
       debugPrint('✅ 병음 처리 완료: ${pinyinList.length}개');
       
       // 4. 최종 합치기
-      final List<ChineseSentence> sentences = [];
+      final List<TextSegment> segments = [];
       for (int i = 0; i < parsedData.length; i++) {
-        sentences.add(ChineseSentence(
-          original: parsedData[i]['chinese'] ?? '',
-          translation: parsedData[i]['korean'] ?? '',
+        segments.add(TextSegment(
+          originalText: parsedData[i]['chinese'] ?? '',
+          translatedText: parsedData[i]['korean'] ?? '',
           pinyin: i < pinyinList.length ? pinyinList[i] : '',
+          sourceLanguage: sourceLanguage,
+          targetLanguage: 'ko',
         ));
       }
       
       // 결과 메모리 캐싱
-      _cache[cacheKey] = jsonEncode(sentences.map((s) => {
-        'chinese': s.original,
-        'korean': s.translation,
+      _cache[cacheKey] = jsonEncode(segments.map((s) => {
+        'chinese': s.originalText,
+        'korean': s.translatedText,
         'pinyin': s.pinyin,
       }).toList());
       
       if (kDebugMode) {
-        debugPrint('✅ LLM 세그먼트 모드 처리 완료 (${stopwatch.elapsedMilliseconds}ms): ${sentences.length}개 문장');
+        debugPrint('✅ LLM 세그먼트 모드 처리 완료 (${stopwatch.elapsedMilliseconds}ms): ${segments.length}개 문장');
       }
       
-      return ChineseText(
-        originalText: text,
-        sentences: sentences,
-      );
+      return segments;
     } else {
       debugPrint('❌ LLM API 오류: ${response.statusCode} - ${response.body}');
       throw Exception('LLM API 오류: ${response.statusCode} - ${response.body}');
     }
   }
   
-  /// 전체 번역 모드 처리 - 문단 전체 번역, 병음 생략
-  Future<ChineseText> _processFullMode(String text, String sourceLanguage, String cacheKey) async {
+  /// 전체 번역 모드 처리 - 문단별 분리 및 번역
+  Future<TextFull> _processFullMode(String text, String sourceLanguage, String cacheKey) async {
     final Stopwatch stopwatch = Stopwatch()..start();
     
-    // 1. GPT-4o로 전체 텍스트 번역 요청
+    // 1. 문단 분리 (빈 줄로 구분)
+    final paragraphs = text.split('\n\n')
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
+    
+    debugPrint('📝 전체 번역 모드: ${paragraphs.length}개 문단 분리됨');
+    
+    // 2. GPT-4o로 문단별 번역 요청
     final prompt = '''
-You are a professional translator. Translate the following Chinese text into Korean NATURALLY.
-You should preserve paragraph breaks.
-Respond with ONLY the Korean translation, without explanations or formatting.
+You are a professional translator. Translate the following Chinese paragraphs into Korean NATURALLY.
+Each paragraph should be translated separately, preserving the original paragraph structure.
+Respond with a JSON array where each item contains the original and translated text:
+[
+  {
+    "original": "첫 번째 문단 원문",
+    "translated": "첫 번째 문단 번역"
+  },
+  {
+    "original": "두 번째 문단 원문",
+    "translated": "두 번째 문단 번역"
+  }
+]
 
-Chinese text:
-$text
+Chinese paragraphs:
+${paragraphs.map((p) => p).join('\n\n')}
+
 Output:
 ''';
 
@@ -298,32 +326,28 @@ Output:
     if (response.statusCode == 200) {
       final decodedBody = utf8.decode(response.bodyBytes);
       final responseData = jsonDecode(decodedBody);
-      final fullTranslation = responseData['choices'][0]['message']['content'] as String;
+      final content = responseData['choices'][0]['message']['content'] as String;
       
-      // 전체 텍스트를 단일 문장으로 처리 (병음 생략)
-      final List<ChineseSentence> sentences = [
-        ChineseSentence(
-          original: text,
-          translation: fullTranslation,
-          pinyin: '', // 병음 생략
-        )
-      ];
+      // JSON 파싱
+      final jsonString = extractJsonArray(content);
+      final List<dynamic> parsedData = jsonDecode(jsonString);
+      
+      // TextFull 객체 생성
+      final textFull = TextFull(
+        originalParagraphs: parsedData.map<String>((item) => item['original'] as String).toList(),
+        translatedParagraphs: parsedData.map<String>((item) => item['translated'] as String).toList(),
+        sourceLanguage: sourceLanguage,
+        targetLanguage: 'ko',
+      );
       
       // 결과 메모리 캐싱
-      _cache[cacheKey] = jsonEncode(sentences.map((s) => {
-        'chinese': s.original,
-        'korean': s.translation,
-        'pinyin': s.pinyin,
-      }).toList());
+      _cache[cacheKey] = jsonEncode(textFull.toJson());
       
       if (kDebugMode) {
-        debugPrint('LLM 전체 번역 모드 처리 완료 (${stopwatch.elapsedMilliseconds}ms): 원문 ${text.length}자, 번역 ${fullTranslation.length}자');
+        debugPrint('LLM 전체 번역 모드 처리 완료 (${stopwatch.elapsedMilliseconds}ms): ${textFull.originalParagraphs.length}개 문단');
       }
       
-      return ChineseText(
-        originalText: text,
-        sentences: sentences,
-      );
+      return textFull;
     } else {
       throw Exception('LLM API 오류: ${response.statusCode} - ${response.body}');
     }

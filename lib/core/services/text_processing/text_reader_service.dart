@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import '../../models/processed_text.dart';
+import '../../models/text_segment.dart';
 import '../media/tts_service.dart';
 import 'llm_text_processing.dart';
-import '../../models/chinese_text.dart';
 
 /// 텍스트 읽기 서비스
 class TextReaderService {
@@ -18,7 +18,7 @@ class TextReaderService {
   
   // 마지막으로 처리한 텍스트를 캐싱하여 불필요한 LLM 호출 방지
   String? _lastProcessedText;
-  ChineseText? _lastProcessedResult;
+  List<TextSegment>? _lastProcessedResult;
 
   // 현재 재생 중인 세그먼트 인덱스
   int? get currentSegmentIndex => _ttsService.currentSegmentIndex;
@@ -108,12 +108,12 @@ class TextReaderService {
       await stop();
       return;
     }
-    
+
     if (text.isEmpty) return;
 
     // 텍스트를 LLM을 사용하여 처리하고 문장 가져오기
-    final ChineseText chineseText = await _processWithLLM(text);
-    final List<String> sentences = chineseText.sentences.map((s) => s.original).toList();
+    final segments = await _processWithLLM(text);
+    final List<String> sentences = segments.map((s) => s.originalText).toList();
 
     // 문장이 없으면 전체 텍스트 읽기
     if (sentences.isEmpty) {
@@ -143,9 +143,9 @@ class TextReaderService {
     if (text.isEmpty) return [];
     
     try {
-      // LLM을 통해 처리된 ChineseText에서 문장만 추출
-      final ChineseText chineseText = await _processWithLLM(text);
-      return chineseText.sentences.map((sentence) => sentence.original).toList();
+      // LLM을 통해 처리된 세그먼트에서 문장만 추출
+      final segments = await _processWithLLM(text);
+      return segments.map((segment) => segment.originalText).toList();
     } catch (e) {
       debugPrint('TextReaderService: 문장 분리 중 오류 발생 - $e');
       
@@ -170,7 +170,7 @@ class TextReaderService {
   }
   
   /// LLM 텍스트 처리 - 중복 호출 방지를 위한 캐싱 추가
-  Future<ChineseText> _processWithLLM(String text) async {
+  Future<List<TextSegment>> _processWithLLM(String text) async {
     // 이미 처리된 텍스트인 경우 캐시된 결과 반환
     if (_lastProcessedText == text && _lastProcessedResult != null) {
       debugPrint('TextReaderService: 캐시된 LLM 처리 결과 사용');

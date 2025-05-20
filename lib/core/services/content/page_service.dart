@@ -635,6 +635,7 @@ class PageService {
       
       // 4. 세그먼트 정보(ProcessedText) 캐싱
       final processedText = ProcessedText(
+        mode: TextProcessingMode.segment,
         fullOriginalText: chineseText.originalText,
         fullTranslatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
         segments: chineseText.sentences.map((s) => TextSegment(
@@ -836,6 +837,7 @@ class PageService {
             // 세그먼트 정보 캐싱
             if (updatedPage != null) {
               final processedText = ProcessedText(
+                mode: TextProcessingMode.segment,
                 fullOriginalText: chineseText.originalText,
                 fullTranslatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
                 segments: chineseText.sentences.map((s) => TextSegment(

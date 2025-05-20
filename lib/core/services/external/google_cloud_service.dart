@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../text_processing/enhanced_ocr_service.dart';
 import '../text_processing/llm_text_processing.dart';
 import '../../utils/language_constants.dart';
-import '../../models/chinese_text.dart';
+import '../../models/text_segment.dart';
 
 /// Google Cloud 서비스를 통합적으로 관리하는 클래스
 /// OCR 및 번역 기능을 제공합니다.
@@ -66,8 +66,8 @@ class GoogleCloudService {
       }
 
       // LLM 처리 서비스 사용
-      final chineseText = await _textProcessingService.processWithLLM(text, sourceLanguage: source);
-      final result = chineseText.sentences.map((s) => s.translation).join('\n');
+      final segments = await _textProcessingService.processWithLLM(text, sourceLanguage: source);
+      final result = segments.map((s) => s.translatedText).join('\n');
 
       debugPrint('GoogleCloudService: 텍스트 번역 완료 (${result.length} 자)');
       return result;
@@ -115,11 +115,11 @@ class GoogleCloudService {
             if (sentence.isEmpty) continue;
 
             // LLM 서비스로 번역
-            final chineseText = await _textProcessingService.processWithLLM(
+            final segments = await _textProcessingService.processWithLLM(
               sentence,
               sourceLanguage: source
             );
-            final translatedSentence = chineseText.sentences.map((s) => s.translation).join('\n');
+            final translatedSentence = segments.map((s) => s.translatedText).join('\n');
 
             translatedSentences.add(translatedSentence);
           }
@@ -127,11 +127,11 @@ class GoogleCloudService {
           translatedParagraphs.add(translatedSentences.join(' '));
         } else {
           // 문단 단위로 번역
-          final chineseText = await _textProcessingService.processWithLLM(
+          final segments = await _textProcessingService.processWithLLM(
             paragraph, 
             sourceLanguage: source
           );
-          final translatedParagraph = chineseText.sentences.map((s) => s.translation).join('\n');
+          final translatedParagraph = segments.map((s) => s.translatedText).join('\n');
 
           translatedParagraphs.add(translatedParagraph);
         }
