@@ -16,7 +16,7 @@ import '../../features/note_detail/note_detail_bottom_bar.dart';
 import '../../core/services/text_processing/text_reader_service.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
 import 'sample_notes_service.dart';
-import '../../features/note_detail/managers/segment_manager.dart'; // SegmentManager import
+import '../note_detail/managers/page_content_manager.dart'; // SegmentManager import
 import 'sample_flashcard_screen.dart'; // 샘플 플래시카드 화면 import 추가
 
 // 샘플 모드용 ViewModel - 실제 ViewModel을 간소화

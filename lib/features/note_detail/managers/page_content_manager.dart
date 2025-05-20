@@ -13,7 +13,6 @@ import '../../../core/services/common/usage_limit_service.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
 import 'dart:async';
 
-/// 세그먼트(문장)와 관련된 모든 기능을 중앙화하는 매니저
 /// - 페이지 캐시(processed text, LLM 처리 결과를 저장 조회 삭제)
 /// - 사전 검색 (내부/외부 API 통합)
 /// - 세그먼트 삭제/수정/처리
@@ -80,6 +79,21 @@ class SegmentManager {
       'remainingCount': remainingCount,
       'usagePercentages': usagePercentages,
     };
+  }
+
+  // 노트/페이지 변경 시 TTS 플레이어 초기화
+  Future<void> resetTtsForNewContext() async {
+    try {
+      // TTS 플레이어 완전 재설정 (캐시 상태 초기화, 오디오 플레이어 재생성)
+      await _textReaderService.ttsService.resetPlayer();
+      
+      // 캐시 정리 (오래된 파일 삭제)
+      _textReaderService.ttsService.cleanupCache();
+      
+      debugPrint('✅ 페이지/노트 변경으로 TTS 플레이어 재설정 완료');
+    } catch (e) {
+      debugPrint('❌ TTS 플레이어 재설정 중 오류: $e');
+    }
   }
 
   // TTS 텍스트 재생 (세그먼트 인덱스 포함) - TextReaderService 직접 활용

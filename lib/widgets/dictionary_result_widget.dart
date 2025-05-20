@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../features/note_detail/managers/segment_manager.dart';
+import '../features/note_detail/managers/page_content_manager.dart';
 import '../core/models/dictionary.dart';
 import '../core/theme/tokens/color_tokens.dart';
 import '../core/theme/tokens/typography_tokens.dart';

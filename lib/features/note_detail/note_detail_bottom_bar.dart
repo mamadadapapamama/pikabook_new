@@ -11,7 +11,7 @@ import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/widgets/tts_button.dart';
-import 'managers/segment_manager.dart';
+import 'managers/page_content_manager.dart';
 import 'dart:async';
 
 /// 노트 상세 화면 하단 내비게이션 바

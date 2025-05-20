@@ -4,7 +4,7 @@ import '../../core/models/page.dart' as page_model;
 import '../../core/models/processed_text.dart';
 import '../../core/models/flash_card.dart';
 import '../../core/models/dictionary.dart';
-import 'managers/segment_manager.dart';
+import 'managers/page_content_manager.dart';
 import '../../widgets/dictionary_result_widget.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용하기 위한 import
 import '../../core/widgets/dot_loading_indicator.dart';
@@ -28,7 +28,6 @@ import 'processed_text_widget.dart'; // ProcessedTextWidget 추가
 /// - 사전 검색 및 바텀시트 표시
 /// - 플래시카드 관련 상태 관리
 /// - 텍스트 모드 전환(세그먼트/전체) 처리
-/// - TTS(Text-to-Speech) 기능 관리
 /// - ProcessedTextWidget과 상호작용 관리
 ///
 /// ## ProcessedTextWidget과의 관계

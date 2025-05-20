@@ -10,7 +10,7 @@ import '../../../core/services/text_processing/llm_text_processing.dart';
 import '../../../core/services/content/note_service.dart';
 import '../../../core/services/content/flashcard_service.dart' hide debugPrint;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'segment_manager.dart';
+import 'page_content_manager.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// 페이지 관리 클래스

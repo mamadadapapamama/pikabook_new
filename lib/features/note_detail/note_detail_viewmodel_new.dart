@@ -6,7 +6,7 @@ import '../../core/models/note.dart';
 import '../../core/models/page.dart' as page_model;
 import '../../core/models/flash_card.dart';
 import 'managers/page_manager.dart';
-import 'managers/segment_manager.dart';
+import 'managers/page_content_manager.dart';
 import 'managers/note_options_manager.dart';
 import '../../core/services/content/note_service.dart';
 import '../../core/services/media/tts_service.dart';
@@ -113,8 +113,13 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       useCacheFirst: false,
     );
     
-    // TTS 초기화
+    // TTS 초기화 및 재설정 (노트 변경 시)
     _initTts();
+    _segmentManager.resetTtsForNewContext();
+    
+    if (flutter_foundation.kDebugMode) {
+      debugPrint("🔄 노트 변경으로 TTS 플레이어 재설정 (노트 ID: $_noteId)");
+    }
   }
   
   /// TTS 초기화
@@ -263,6 +268,9 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     
     _currentPageIndex = index;
     notifyListeners();
+    
+    // TTS 플레이어 재설정 - 페이지 변경 시
+    _segmentManager.resetTtsForNewContext();
     
     // 전방/후방 이미지 프리로드
     _preloadAdjacentImages(index);

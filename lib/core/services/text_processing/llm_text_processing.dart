@@ -16,7 +16,7 @@ class UnifiedTextProcessingService {
   factory UnifiedTextProcessingService() => _instance;
   
   // 세그먼테이션 설정
-  static bool _segmentationEnabled = false;
+  static bool _segmentationEnabled = true;
   static bool get isSegmentationEnabled => _segmentationEnabled;
   
   // API 키 및 엔드포인트 설정
@@ -80,10 +80,10 @@ class UnifiedTextProcessingService {
     }
     await ensureInitialized();
     
-    // 번역 모드 확인 - segment 또는 full
-    bool useSegmentMode = await _preferencesService.getUseSegmentMode();
+    // 번역 모드는 항상 세그먼트 모드 사용 (true로 강제 설정)
+    bool useSegmentMode = true;
     
-    // 세그먼테이션 설정 적용 - 전역 설정이 비활성화면 무조건 full 모드 사용
+    // 세그먼테이션 설정 적용
     if (!_segmentationEnabled) {
       useSegmentMode = false;
     }

@@ -901,9 +901,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _navigateToLLMTest(BuildContext context) {
     if (kDebugMode) {
       debugPrint('LLM 테스트 기능이 제거되었습니다');
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('LLM 테스트 기능이 제거되었습니다.')),
-    );
+      );
   }
 } 

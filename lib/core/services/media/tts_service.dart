@@ -11,6 +11,7 @@ import '../../models/processed_text.dart';
 import '../../utils/language_constants.dart';
 import '../common/usage_limit_service.dart';
 import '../common/plan_service.dart';
+import 'dart:async';
 
 // 텍스트 음성 변환 서비스를 제공합니다
 
@@ -21,7 +22,7 @@ class TtsService {
   factory TtsService() => _instance;
   TtsService._internal();
 
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  late AudioPlayer _audioPlayer = AudioPlayer();
   TtsState _ttsState = TtsState.stopped;
   String _currentLanguage = SourceLanguage.DEFAULT; // 기본 언어: 중국어
   String? _apiKey;
@@ -40,6 +41,8 @@ class TtsService {
 
   // 사용량 제한 서비스
   final UsageLimitService _usageLimitService = UsageLimitService();
+
+  bool _isSpeaking = false;
 
   // 초기화
   Future<void> init() async {
@@ -96,32 +99,46 @@ class TtsService {
 
   /// 텍스트 읽기
   Future<void> speak(String text) async {
-    if (text.isEmpty) return;
+    // 이미 재생 중이면 중지하고 상태 초기화
+    if (_isSpeaking) {
+      debugPrint('⏹️ 이미 재생 중이므로 중지 후 새로 시작');
+      await stop();
+      // 상태 초기화가 확실히 반영되도록 잠시 대기
+      await Future.delayed(Duration(milliseconds: 300));
+    }
+    
+    _isSpeaking = true;
+    if (text.isEmpty) {
+      _isSpeaking = false;
+      return;
+    }
 
     // 이미 캐시된 텍스트인지 확인
     if (_ttsCache.containsKey(text)) {
       final audioFile = _ttsCache[text];
-      if (audioFile != null) {
+      if (audioFile != null && audioFile.isNotEmpty) {
         // 캐시된 오디오 파일 재생
         await _playAudioFile(audioFile);
-        debugPrint('캐시된 TTS 재생 (사용량 변화 없음): $text');
+        debugPrint('💾 캐시된 TTS 재생: $text');
       } else {
-        debugPrint('TTS 사용량 제한으로 재생 불가: $text');
+        _isSpeaking = false;
+        debugPrint('⚠️ TTS 사용량 제한으로 재생 불가: $text');
       }
       return;
     }
 
     // 사용량 제한 확인
     try {
-      debugPrint('TTS 요청: ${text.length} 글자');
+      debugPrint('🔊 TTS 새 요청: ${text.length} 글자');
       final canUseTts = await _usageLimitService.incrementTtsCharCount(text.length);
       if (!canUseTts) {
         _ttsCache[text] = ''; // 사용 불가로 캐싱
-        debugPrint('TTS 사용량 제한 초과로 재생 불가: $text');
+        _isSpeaking = false;
+        debugPrint('⚠️ TTS 사용량 제한 초과로 재생 불가: $text');
         return;
       }
       
-      // Google Cloud TTS API 호출
+      // ElevenLabs API 호출
       final audioData = await _synthesizeSpeech(text);
       if (audioData != null) {
         // 오디오 데이터를 파일로 저장
@@ -130,24 +147,34 @@ class TtsService {
         
         // 오디오 파일 재생
         await _playAudioFile(audioFile);
-        debugPrint('TTS 재생 시작 (사용량 증가): $text');
+        debugPrint('🔊 TTS 재생 중: $text');
+      } else {
+        _isSpeaking = false;
+        debugPrint('❌ TTS API 응답 없음: $text');
       }
     } catch (e) {
-      debugPrint('TTS 처리 중 오류: $e');
+      _isSpeaking = false;
+      debugPrint('❌ TTS 처리 중 오류: $e');
     }
   }
 
   // 재생 중지
   Future<void> stop() async {
     try {
-      await _audioPlayer.stop();
-      _ttsState = TtsState.stopped;
-      _updateCurrentSegment(null);
-      debugPrint('TtsService: stop() 완료');
+      debugPrint('⏹️ TTS 재생 중지 요청');
+      if (_audioPlayer != null) {
+        await _audioPlayer.stop();
+        _ttsState = TtsState.stopped;
+        _updateCurrentSegment(null);
+      }
+      _isSpeaking = false;
+      debugPrint('✅ TTS 재생 중지 완료');
     } catch (e) {
-      debugPrint('TtsService: stop() 중 오류 발생: $e');
+      debugPrint('❌ TTS 중지 중 오류: $e');
+      // 오류가 발생해도 상태는 초기화
       _ttsState = TtsState.stopped;
       _updateCurrentSegment(null);
+      _isSpeaking = false;
     }
   }
 
@@ -468,10 +495,134 @@ class TtsService {
   /// 오디오 파일 재생
   Future<void> _playAudioFile(String filePath) async {
     try {
+      // 파일이 존재하는지 확인
+      final file = File(filePath);
+      if (!await file.exists()) {
+        debugPrint('❌ 오디오 파일이 존재하지 않음: $filePath');
+        _updateCurrentSegment(null);
+        _isSpeaking = false;
+        return;
+      }
+
+      // 먼저 이전 재생 중지 및 리소스 해제
+      await _audioPlayer.stop();
+      
+      // 파일 경로 설정
       await _audioPlayer.setFilePath(filePath);
+      
+      // 재생 완료 이벤트 추가 리스너
+      final completer = Completer<void>();
+      
+      // 일회성 이벤트 리스너
+      void onComplete() {
+        if (!completer.isCompleted) {
+          completer.complete();
+          debugPrint('🎵 오디오 재생 완료됨');
+          _isSpeaking = false;
+          _updateCurrentSegment(null);
+        }
+      }
+      
+      // 재생 완료 시 호출될 콜백 등록
+      _audioPlayer.playerStateStream.listen((state) {
+        if (state.processingState == ProcessingState.completed) {
+          onComplete();
+        }
+      });
+      
+      // 오류 발생 시 호출될 콜백 등록
+      _audioPlayer.playbackEventStream.listen(
+        (_) {},  // 정상 이벤트는 무시
+        onError: (Object e, StackTrace stackTrace) {
+          debugPrint('❌ 오디오 재생 중 오류: $e');
+          onComplete();  // 오류 발생 시에도 완료 처리
+        },
+      );
+      
+      // 실제 재생 시작
       await _audioPlayer.play();
+      debugPrint('▶️ 오디오 재생 시작: $filePath');
+      
+      // 안전장치: 10초 후 강제 종료 (무한 재생 방지)
+      Future.delayed(const Duration(seconds: 10), () {
+        if (_isSpeaking) {
+          debugPrint('⚠️ 오디오 재생 타임아웃으로 강제 종료');
+          onComplete();
+        }
+      });
     } catch (e) {
-      debugPrint('오디오 파일 재생 중 오류: $e');
+      debugPrint('❌ 오디오 파일 재생 중 오류: $e');
+      _isSpeaking = false;
+      _updateCurrentSegment(null);
+    }
+  }
+
+  // 오디오 플레이어 완전 재설정 (노트 이동 시 호출)
+  Future<void> resetPlayer() async {
+    debugPrint('🔄 TTS 플레이어 완전 재설정 시작');
+    try {
+      // 재생 중지
+      await stop();
+      
+      // 기존 오디오 플레이어 해제
+      await _audioPlayer.dispose();
+      
+      // 새 오디오 플레이어 생성
+      _audioPlayer = AudioPlayer();
+      _ttsState = TtsState.stopped;
+      _isSpeaking = false;
+      _currentSegmentIndex = null;
+      
+      // 이벤트 리스너 다시 설정
+      await _setupEventHandlers();
+      
+      debugPrint('✅ TTS 플레이어 완전 재설정 완료');
+    } catch (e) {
+      debugPrint('❌ TTS 플레이어 재설정 중 오류: $e');
+    }
+  }
+  
+  // 캐시 관리 개선
+  void cleanupCache() {
+    // 오래된 캐시 항목 제거 (15분 이상 된 항목)
+    debugPrint('🧹 TTS 캐시 정리 시작: ${_ttsCache.length}개 항목');
+    int removed = 0;
+    
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final cacheEntries = Map<String, String>.from(_ttsCache);
+      
+      for (final entry in cacheEntries.entries) {
+        final filePath = entry.value;
+        if (filePath.isNotEmpty) {
+          final file = File(filePath);
+          
+          // 파일이 존재하는지, 그리고 15분 이상 지났는지 확인
+          if (file.existsSync()) {
+            final fileStats = file.statSync();
+            final fileAge = now - fileStats.modified.millisecondsSinceEpoch;
+            
+            // 15분(900,000ms) 이상 지난 파일 삭제
+            if (fileAge > 900000) {
+              try {
+                file.deleteSync();
+                _ttsCache.remove(entry.key);
+                removed++;
+              } catch (e) {
+                debugPrint('❌ 캐시 파일 삭제 실패: $e');
+              }
+            }
+          } else {
+            // 파일이 존재하지 않으면 캐시에서 제거
+            _ttsCache.remove(entry.key);
+            removed++;
+          }
+        }
+      }
+      
+      debugPrint('✅ TTS 캐시 정리 완료: $removed개 항목 제거됨');
+    } catch (e) {
+      debugPrint('❌ TTS 캐시 정리 중 오류: $e');
     }
   }
 }

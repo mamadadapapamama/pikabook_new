@@ -73,27 +73,27 @@ class FlashCardService {
       } 
       // 2. 캐시에 없으면 사전에서 단어 검색
       else {
-        final dictResult = await _dictionaryService.lookupWord(front);
-        
-        if (dictResult['success'] == true && dictResult['entry'] != null) {
-          final dictEntry = dictResult['entry'];
+      final dictResult = await _dictionaryService.lookupWord(front);
+      
+      if (dictResult['success'] == true && dictResult['entry'] != null) {
+        final dictEntry = dictResult['entry'];
           
           // 캐시에 추가
           _wordCache[front] = dictEntry;
           
-          // 뜻이 비어있으면 사전의 뜻 사용
+        // 뜻이 비어있으면 사전의 뜻 사용
           if (meaningValue.isEmpty) {
             meaningValue = dictEntry.meaning;
             if (kDebugMode) debugPrint('사전에서 뜻 찾음: $front -> $meaningValue');
-          }
-          
-          // 사전의 병음 사용 (있는 경우)
-          if (dictEntry.pinyin.isNotEmpty) {
-            pinyinValue = dictEntry.pinyin;
+        }
+        
+        // 사전의 병음 사용 (있는 경우)
+        if (dictEntry.pinyin.isNotEmpty) {
+          pinyinValue = dictEntry.pinyin;
             if (kDebugMode) debugPrint('사전에서 핀인 찾음: $front -> $pinyinValue');
-          }
+        }
         } else if (meaningValue.isEmpty) {
-          // 사전에서 찾지 못하고 뜻도 없는 경우
+        // 사전에서 찾지 못하고 뜻도 없는 경우
           meaningValue = '뜻을 찾을 수 없습니다';
           if (kDebugMode) debugPrint('사전에서 뜻을 찾을 수 없음: $front');
         }
