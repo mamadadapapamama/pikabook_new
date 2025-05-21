@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:collection/collection.dart';
+import '../../models/flash_card.dart';
 
 /// 처리 모드
 enum ProcessingMode {
@@ -38,10 +39,12 @@ class UnifiedCacheService {
   
   // 최대 캐시 항목 수
   static const int _maxSegmentCacheItems = 100;
+  static const int _maxFlashcardCacheItems = 200;
   
   // Firebase 컬렉션/버킷 경로
   static const String _segmentsCollection = 'segments_cache';
   static const String _ttsBucket = 'tts_cache';
+  static const String _flashcardsCollection = 'flashcards';
   
   UnifiedCacheService._internal();
   
@@ -67,6 +70,11 @@ class UnifiedCacheService {
   /// TTS 캐시 키 생성
   String _getTtsCacheKey(String segmentId) {
     return 'tts_$segmentId';
+  }
+  
+  /// 플래시카드 캐시 키 생성
+  String _getFlashcardCacheKey(String noteId) {
+    return 'flashcards_$noteId';
   }
   
   /// 세그먼트 결과 캐싱
@@ -290,6 +298,149 @@ class UnifiedCacheService {
       debugPrint('세그먼트 캐시 삭제 완료: $segmentId');
     } catch (e) {
       debugPrint('세그먼트 캐시 삭제 중 오류 발생: $e');
+    }
+  }
+  
+  /// 플래시카드 캐싱
+  Future<void> cacheFlashcards(String noteId, List<FlashCard> flashcards) async {
+    try {
+      final key = _getFlashcardCacheKey(noteId);
+      
+      // 로컬 캐시에 저장
+      _cache[key] = flashcards;
+      _updateLastAccessed(key);
+      
+      // 캐시 크기 제한 확인
+      _checkFlashcardCacheSize();
+      
+      // 백그라운드에서 클라우드에 업로드
+      _uploadFlashcardsToCloud(noteId, flashcards);
+      
+      debugPrint('플래시카드 캐싱 완료: $key (${flashcards.length}개)');
+    } catch (e) {
+      debugPrint('플래시카드 캐싱 중 오류 발생: $e');
+    }
+  }
+
+  /// 플래시카드 조회
+  Future<List<FlashCard>?> getFlashcards(String noteId) async {
+    try {
+      final key = _getFlashcardCacheKey(noteId);
+      
+      // 1. 로컬 캐시 확인
+      var flashcards = _cache[key] as List<FlashCard>?;
+      if (flashcards != null) {
+        _updateLastAccessed(key);
+        return flashcards;
+      }
+      
+      // 2. 클라우드 캐시 확인
+      flashcards = await _getFlashcardsFromCloud(noteId);
+      if (flashcards != null) {
+        // 로컬 캐시에 저장
+        _cache[key] = flashcards;
+        _updateLastAccessed(key);
+        _checkFlashcardCacheSize();
+        return flashcards;
+      }
+      
+      return null;
+    } catch (e) {
+      debugPrint('플래시카드 조회 중 오류 발생: $e');
+      return null;
+    }
+  }
+
+  /// 플래시카드 캐시 크기 제한 확인
+  void _checkFlashcardCacheSize() {
+    final flashcardKeys = _cache.keys.where((key) => key.startsWith('flashcards_')).toList();
+    
+    if (flashcardKeys.length > _maxFlashcardCacheItems) {
+      // LRU 알고리즘으로 정렬
+      flashcardKeys.sort((a, b) => 
+        (_lastAccessed[a] ?? DateTime(0)).compareTo(_lastAccessed[b] ?? DateTime(0)));
+      
+      // 가장 오래된 항목부터 제거
+      final keysToRemove = flashcardKeys.sublist(0, flashcardKeys.length - _maxFlashcardCacheItems);
+      for (final key in keysToRemove) {
+        _cache.remove(key);
+        _lastAccessed.remove(key);
+      }
+      debugPrint('플래시카드 캐시 정리: ${keysToRemove.length}개 항목 제거');
+    }
+  }
+
+  /// 클라우드에 플래시카드 업로드
+  Future<void> _uploadFlashcardsToCloud(String noteId, List<FlashCard> flashcards) async {
+    try {
+      final batch = _firestore.batch();
+      
+      // 기존 플래시카드 삭제
+      final existingDocs = await _firestore
+          .collection(_flashcardsCollection)
+          .where('noteId', isEqualTo: noteId)
+          .get();
+      
+      for (var doc in existingDocs.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // 새로운 플래시카드 추가
+      for (var card in flashcards) {
+        final docRef = _firestore.collection(_flashcardsCollection).doc();
+        batch.set(docRef, card.toJson());
+      }
+      
+      await batch.commit();
+      debugPrint('플래시카드 클라우드 업로드 완료: $noteId (${flashcards.length}개)');
+    } catch (e) {
+      debugPrint('플래시카드 클라우드 업로드 중 오류 발생: $e');
+    }
+  }
+
+  /// 클라우드에서 플래시카드 조회
+  Future<List<FlashCard>?> _getFlashcardsFromCloud(String noteId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection(_flashcardsCollection)
+          .where('noteId', isEqualTo: noteId)
+          .get();
+      
+      if (querySnapshot.docs.isEmpty) return null;
+      
+      return querySnapshot.docs
+          .map((doc) => FlashCard.fromJson(doc.data()))
+          .toList();
+    } catch (e) {
+      debugPrint('플래시카드 클라우드 조회 중 오류 발생: $e');
+      return null;
+    }
+  }
+
+  /// 플래시카드 캐시 삭제
+  Future<void> clearFlashcardCache(String noteId) async {
+    try {
+      final key = _getFlashcardCacheKey(noteId);
+      
+      // 로컬 캐시 삭제
+      _cache.remove(key);
+      _lastAccessed.remove(key);
+      
+      // 클라우드 캐시 삭제
+      final querySnapshot = await _firestore
+          .collection(_flashcardsCollection)
+          .where('noteId', isEqualTo: noteId)
+          .get();
+      
+      final batch = _firestore.batch();
+      for (var doc in querySnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      
+      debugPrint('플래시카드 캐시 삭제 완료: $noteId');
+    } catch (e) {
+      debugPrint('플래시카드 캐시 삭제 중 오류 발생: $e');
     }
   }
   

@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../storage/unified_cache_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../media/image_service.dart';
@@ -192,25 +191,15 @@ class AuthService {
       // 1. 현재 UID 저장
       final currentUid = _auth.currentUser?.uid;
       
-      // 2. 현재 사용자 ID를 캐시 서비스에서 제거
-      final cacheService = UnifiedCacheService();
-      await cacheService.clearCurrentUserId();
-      
-      // 3. 메모리 캐시 초기화
-      cacheService.clearCache();
-      
-      // 4. 이미지 캐시 정리
+      // 2. 이미지 캐시 정리
       await ImageService().clearImageCache();
       
-      // 5. 처리된 텍스트 캐시 정리
-      SegmentManager().clearProcessedTextCache();
-      
-      // 6. Firebase 로그아웃
+      // 3. Firebase 로그아웃
       await _auth.signOut();
       
       debugPrint('로그아웃 완료');
       
-      // 7. 세션 종료 처리 (필요시)
+      // 4. 세션 종료 처리 (필요시)
       if (currentUid != null) {
         await _endUserSession(currentUid);
       }
@@ -331,7 +320,6 @@ class AuthService {
   Future<void> _clearAllLocalData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cacheService = UnifiedCacheService();
       
       // 1. 이미지 파일 삭제
       final appDir = await getApplicationDocumentsDirectory();
@@ -344,10 +332,7 @@ class AuthService {
       // 2. SharedPreferences 완전 초기화
       await prefs.clear();
       
-      // 3. 캐시 서비스 초기화
-      await cacheService.clearAllCache();
-      
-      // 4. 중요 키 개별 삭제 (혹시 모를 잔여 데이터 제거)
+      // 3. 중요 키 개별 삭제 (혹시 모를 잔여 데이터 제거)
       final keys = [
         'current_user_id',
         'login_history',
@@ -503,14 +488,7 @@ class AuthService {
         debugPrint('Apple 로그인 정보 정리 중 오류: $e');
       }
       
-      // 3. 로컬 캐시 완전 초기화
-      try {
-        final cacheService = UnifiedCacheService();
-        await cacheService.clearAllCache();
-        debugPrint('모든 캐시 데이터 초기화 완료');
-      } catch (e) {
-        debugPrint('캐시 데이터 초기화 중 오류: $e');
-      }
+      debugPrint('모든 캐시 데이터 초기화 완료');
     } catch (e) {
       debugPrint('소셜 로그인 세션 정리 중 오류: $e');
     }

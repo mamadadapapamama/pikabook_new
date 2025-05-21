@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../storage/unified_cache_service.dart';
 import '../authentication/user_preferences_service.dart';
 import '../authentication/auth_service.dart';
 import '../media/image_service.dart';
@@ -38,7 +37,6 @@ class InitializationManager {
   factory InitializationManager() => _instance;
   
   // 서비스 참조
-  final UnifiedCacheService _cacheService = UnifiedCacheService();
   final UserPreferencesService _prefsService = UserPreferencesService();
   final AuthService _authService = AuthService();
   final LLMTextProcessing _textProcessingService = LLMTextProcessing();
@@ -222,30 +220,18 @@ class InitializationManager {
       
       await _loadAppSettings();
       
-      // 5. 캐시 준비 (우선순위 낮음)
-      _updateProgress(
-        InitializationStep.cache,
-        0.9,
-        '캐시 준비 중...',
-      );
-      
-      await _cacheService.initialize();
-      
-      // 6. 마무리 작업 (정리, 최적화 등)
+      // 5. 마무리 작업 (정리, 최적화 등)
       _updateProgress(
         InitializationStep.finalizing,
         0.95,
         '마무리 중...',
       );
       
-      // 오래된 캐시 정리
-      await _cleanupOldCache();
-      
       // 임시 파일 정리
       final imageService = ImageService();
       await imageService.cleanupTempFiles();
       
-      // 7. 완료
+      // 6. 완료
       _updateProgress(
         InitializationStep.completed,
         1.0,
@@ -263,24 +249,9 @@ class InitializationManager {
   Future<void> _loadAppSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
-      // 언어 설정 로드 - 기본값 설정
-      final sourceLanguage = await _cacheService.getSourceLanguage();
-      final targetLanguage = await _cacheService.getTargetLanguage();
-      
-      debugPrint('언어 설정 로드 완료 - 소스: $sourceLanguage, 타겟: $targetLanguage');
+      debugPrint('앱 설정 로드 완료');
     } catch (e) {
       debugPrint('앱 설정 로드 중 오류: $e');
-    }
-  }
-  
-  // 오래된 캐시 정리
-  Future<void> _cleanupOldCache() async {
-    try {
-      await _cacheService.cleanupOldCache();
-      debugPrint('오래된 캐시 정리 완료');
-    } catch (e) {
-      debugPrint('캐시 정리 중 오류: $e');
     }
   }
   

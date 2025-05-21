@@ -11,13 +11,13 @@ class UserPreferencesService {
   static const String _preferencesKey = 'user_preferences';
   static const String _currentUserIdKey = 'current_user_id';
   static const String _loginHistoryKey = 'has_login_history';
-
+    
   // 현재 사용자 ID
   String? _currentUserId;
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-
+    
   // 싱글톤 패턴
   static final UserPreferencesService _instance = UserPreferencesService._internal();
   factory UserPreferencesService() => _instance;
@@ -59,7 +59,7 @@ class UserPreferencesService {
     await prefs.setString(_currentUserIdKey, userId);
     debugPrint('🔐 캐시 서비스에 현재 사용자 ID 설정: $userId');
   }
-
+  
   /// 현재 사용자 ID 가져오기
   Future<String?> getCurrentUserId() async {
     if (_currentUserId != null) return _currentUserId;

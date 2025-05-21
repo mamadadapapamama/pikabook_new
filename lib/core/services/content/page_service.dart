@@ -3,14 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../models/page.dart' as page_model;
-import '../storage/unified_cache_service.dart';
 import '../text_processing/llm_text_processing.dart';
 
 /// 페이지 서비스: 페이지 CRUD 작업만 담당합니다.
 class PageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final UnifiedCacheService _cacheService = UnifiedCacheService();
   final LLMTextProcessing _llmProcessor = LLMTextProcessing();
 
   // 생성자 로그 추가
@@ -49,10 +47,7 @@ class PageService {
 
       await pageRef.set(page.toJson());
 
-      // 2. OCR 결과 캐싱
-      await _cacheService.cacheOCRResult(pageRef.id, extractedText);
-
-      // 3. LLM 처리 (번역 + 병음)
+      // 2. LLM 처리 (번역 + 병음)
       final processed = await _llmProcessor.processText(
         extractedText,
         sourceLanguage: 'zh-CN',
@@ -60,17 +55,8 @@ class PageService {
         needPinyin: true,
       );
 
-      // 4. TTS 생성
+      // 3. TTS 생성
       final ttsPath = await _llmProcessor.generateTTS(extractedText, 'zh-CN');
-
-      // 5. 페이지 컨텐츠 캐싱
-      await _cacheService.cachePageContent(
-        pageRef.id,
-        originalText: extractedText,
-        translatedText: processed.translated,
-        pinyin: processed.pinyin,
-        ttsPath: ttsPath,
-      );
 
       return page;
     } catch (e) {
@@ -95,10 +81,6 @@ class PageService {
     try {
       // 1. Firestore에서 페이지 삭제
       await _pagesCollection.doc(pageId).delete();
-
-      // 2. 캐시에서 페이지 데이터 삭제
-      await _cacheService.clearNoteCaches(pageId);
-
       debugPrint('페이지 삭제 완료: $pageId');
     } catch (e) {
       debugPrint('페이지 삭제 중 오류 발생: $e');

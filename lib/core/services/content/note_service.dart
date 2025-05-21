@@ -12,17 +12,13 @@ import '../../models/page.dart' as page_model;
 import '../../models/flash_card.dart';
 import 'page_service.dart';
 import '../media/image_service.dart';
-import '../storage/unified_cache_service.dart';
 import '../text_processing/enhanced_ocr_service.dart';
 import '../common/usage_limit_service.dart';
 import '../text_processing/llm_text_processing.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
-// 리팩토링으로 제거된 import
 
 /// 노트 서비스: 노트 메타데이터 관리만 담당합니다. (Note CRUD)
-
-
 class NoteService {
   // 서비스 인스턴스
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -30,7 +26,6 @@ class NoteService {
   final PageService _pageService = PageService();
   final ImageService _imageService = ImageService();
   final LLMTextProcessing _textProcessingService = LLMTextProcessing();
-  final UnifiedCacheService _cacheService = UnifiedCacheService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UsageLimitService _usageLimitService = UsageLimitService();
 
@@ -212,7 +207,7 @@ class NoteService {
       return snapshot.count ?? 0;
     } catch (e) {
       debugPrint('노트 개수 조회 중 오류: $e');
-      return 0;
+        return 0;
     }
   }
 }
