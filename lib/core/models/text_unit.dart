@@ -1,9 +1,9 @@
 import '../utils/language_constants.dart';
 
-/// 텍스트 세그먼트 모델 (문장별 모드에서 사용)
+/// 텍스트 단위 모델 (문장 또는 문단)
 /// 원문, 핀인, 번역을 함께 관리합니다.
 
-class TextSegment {
+class TextUnit {
   /// 원문 텍스트
   final String originalText;
 
@@ -17,7 +17,7 @@ class TextSegment {
   final String sourceLanguage; // 원문 언어
   final String targetLanguage; // 번역 언어
 
-  TextSegment({
+  TextUnit({
     required this.originalText,
     this.pinyin,
     this.translatedText,
@@ -28,8 +28,8 @@ class TextSegment {
     this.targetLanguage = targetLanguage ?? TargetLanguage.DEFAULT;
 
   /// JSON에서 생성
-  factory TextSegment.fromJson(Map<String, dynamic> json) {
-    return TextSegment(
+  factory TextUnit.fromJson(Map<String, dynamic> json) {
+    return TextUnit(
       originalText: json['originalText'] as String,
       pinyin: json['pinyin'] as String?,
       translatedText: json['translatedText'] as String?,
@@ -50,14 +50,14 @@ class TextSegment {
   }
 
   /// 복사본 생성 (일부 필드 업데이트)
-  TextSegment copyWith({
+  TextUnit copyWith({
     String? originalText,
     String? pinyin,
     String? translatedText,
     String? sourceLanguage,
     String? targetLanguage,
   }) {
-    return TextSegment(
+    return TextUnit(
       originalText: originalText ?? this.originalText,
       pinyin: pinyin ?? this.pinyin,
       translatedText: translatedText ?? this.translatedText,
@@ -65,4 +65,4 @@ class TextSegment {
       targetLanguage: targetLanguage ?? this.targetLanguage,
     );
   }
-}
+} 

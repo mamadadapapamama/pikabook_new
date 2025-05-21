@@ -1,6 +1,5 @@
 import 'dart:convert';
-import 'text_segment.dart';
-import 'text_full.dart';
+import 'text_unit.dart';
 import 'package:flutter/foundation.dart';
 
 /// 텍스트 처리 모드
@@ -17,168 +16,70 @@ enum TextDisplayMode {
 
 /// 처리된 텍스트를 나타내는 모델입니다.
 class ProcessedText {
-  final String original;
-  final String translated;
-  final String? pinyin;
-  final String? ttsPath;
-  final DateTime processedAt;
+  final TextProcessingMode mode;
   final TextDisplayMode displayMode;
-  final List<TextSegment> contentList;
-  final bool showFullText;
-  final bool showPinyin;
-  final bool showTranslation;
+  final String fullOriginalText;
+  final String fullTranslatedText;
+  final List<TextUnit> units;
+  final String sourceLanguage;
+  final String targetLanguage;
 
   ProcessedText({
-    required this.original,
-    required this.translated,
-    this.pinyin,
-    this.ttsPath,
-    DateTime? processedAt,
-    TextDisplayMode? displayMode,
-    List<TextSegment>? contentList,
-    this.showFullText = false,
-    this.showPinyin = true,
-    this.showTranslation = true,
-  })  : processedAt = processedAt ?? DateTime.now(),
-        displayMode = displayMode ?? TextDisplayMode.full,
-        contentList = contentList ?? [];
+    required this.mode,
+    required this.displayMode,
+    required this.fullOriginalText,
+    required this.fullTranslatedText,
+    required this.units,
+    required this.sourceLanguage,
+    required this.targetLanguage,
+  });
 
   /// JSON에서 ProcessedText 생성
   factory ProcessedText.fromJson(Map<String, dynamic> json) {
     return ProcessedText(
-      original: json['original'] as String,
-      translated: json['translated'] as String,
-      pinyin: json['pinyin'] as String?,
-      ttsPath: json['ttsPath'] as String?,
-      processedAt: json['processedAt'] != null
-          ? DateTime.parse(json['processedAt'] as String)
-          : null,
-      displayMode: json['displayMode'] != null
-          ? TextDisplayMode.values.firstWhere(
-              (e) => e.toString() == json['displayMode'],
-              orElse: () => TextDisplayMode.full,
-            )
-          : null,
-      contentList: (json['contentList'] as List<dynamic>?)
-          ?.map((e) => TextSegment.fromJson(e as Map<String, dynamic>))
-          .toList() ?? [],
-      showFullText: json['showFullText'] as bool? ?? false,
-      showPinyin: json['showPinyin'] as bool? ?? true,
-      showTranslation: json['showTranslation'] as bool? ?? true,
+      mode: TextProcessingMode.values[json['mode'] as int],
+      displayMode: TextDisplayMode.values[json['displayMode'] as int],
+      fullOriginalText: json['fullOriginalText'] as String,
+      fullTranslatedText: json['fullTranslatedText'] as String,
+      units: (json['units'] as List)
+          .map((e) => TextUnit.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      sourceLanguage: json['sourceLanguage'] as String,
+      targetLanguage: json['targetLanguage'] as String,
     );
   }
 
   /// ProcessedText를 JSON으로 변환
   Map<String, dynamic> toJson() {
     return {
-      'original': original,
-      'translated': translated,
-      'pinyin': pinyin,
-      'ttsPath': ttsPath,
-      'processedAt': processedAt.toIso8601String(),
-      'displayMode': displayMode.toString(),
-      'contentList': contentList.map((e) => e.toJson()).toList(),
-      'showFullText': showFullText,
-      'showPinyin': showPinyin,
-      'showTranslation': showTranslation,
+      'mode': mode.index,
+      'displayMode': displayMode.index,
+      'fullOriginalText': fullOriginalText,
+      'fullTranslatedText': fullTranslatedText,
+      'units': units.map((e) => e.toJson()).toList(),
+      'sourceLanguage': sourceLanguage,
+      'targetLanguage': targetLanguage,
     };
   }
 
   /// ProcessedText 복사
   ProcessedText copyWith({
-    String? original,
-    String? translated,
-    String? pinyin,
-    String? ttsPath,
-    DateTime? processedAt,
+    TextProcessingMode? mode,
     TextDisplayMode? displayMode,
-    List<TextSegment>? contentList,
-    bool? showFullText,
-    bool? showPinyin,
-    bool? showTranslation,
+    String? fullOriginalText,
+    String? fullTranslatedText,
+    List<TextUnit>? units,
+    String? sourceLanguage,
+    String? targetLanguage,
   }) {
     return ProcessedText(
-      original: original ?? this.original,
-      translated: translated ?? this.translated,
-      pinyin: pinyin ?? this.pinyin,
-      ttsPath: ttsPath ?? this.ttsPath,
-      processedAt: processedAt ?? this.processedAt,
+      mode: mode ?? this.mode,
       displayMode: displayMode ?? this.displayMode,
-      contentList: contentList ?? this.contentList,
-      showFullText: showFullText ?? this.showFullText,
-      showPinyin: showPinyin ?? this.showPinyin,
-      showTranslation: showTranslation ?? this.showTranslation,
-    );
-  }
-
-  /// 복사본 생성 (일부 필드 업데이트) - 디버그 로그 추가
-  ProcessedText copyWithDebug({
-    String? original,
-    String? translated,
-    String? pinyin,
-    String? ttsPath,
-    DateTime? processedAt,
-    TextDisplayMode? displayMode,
-    List<TextSegment>? contentList,
-    bool? showFullText,
-    bool? showPinyin,
-    bool? showTranslation,
-  }) {
-    // 디버그 로그 추가
-    if (kDebugMode && (original != this.original || 
-                       translated != this.translated || 
-                       pinyin != this.pinyin || 
-                       ttsPath != this.ttsPath || 
-                       processedAt != this.processedAt ||
-                       displayMode != this.displayMode ||
-                       contentList != this.contentList ||
-                       showFullText != this.showFullText ||
-                       showPinyin != this.showPinyin ||
-                       showTranslation != this.showTranslation)) {
-      
-      if (original != null && original != this.original) {
-        debugPrint(' - original: ${this.original} -> $original');
-      }
-      if (translated != null && translated != this.translated) {
-        debugPrint(' - translated: ${this.translated} -> $translated');
-      }
-      if (pinyin != null && pinyin != this.pinyin) {
-        debugPrint(' - pinyin: ${this.pinyin} -> $pinyin');
-      }
-      if (ttsPath != null && ttsPath != this.ttsPath) {
-        debugPrint(' - ttsPath: ${this.ttsPath} -> $ttsPath');
-      }
-      if (processedAt != null && processedAt != this.processedAt) {
-        debugPrint(' - processedAt: ${this.processedAt} -> $processedAt');
-      }
-      if (displayMode != null && displayMode != this.displayMode) {
-        debugPrint(' - displayMode: ${this.displayMode} -> $displayMode');
-      }
-      if (contentList != null && contentList != this.contentList) {
-        debugPrint(' - contentList: ${this.contentList.length} -> ${contentList.length}');
-      }
-      if (showFullText != null && showFullText != this.showFullText) {
-        debugPrint(' - showFullText: ${this.showFullText} -> $showFullText');
-      }
-      if (showPinyin != null && showPinyin != this.showPinyin) {
-        debugPrint(' - showPinyin: ${this.showPinyin} -> $showPinyin');
-      }
-      if (showTranslation != null && showTranslation != this.showTranslation) {
-        debugPrint(' - showTranslation: ${this.showTranslation} -> $showTranslation');
-      }
-    }
-    
-    return ProcessedText(
-      original: original ?? this.original,
-      translated: translated ?? this.translated,
-      pinyin: pinyin ?? this.pinyin,
-      ttsPath: ttsPath ?? this.ttsPath,
-      processedAt: processedAt ?? this.processedAt,
-      displayMode: displayMode ?? this.displayMode,
-      contentList: contentList ?? this.contentList,
-      showFullText: showFullText ?? this.showFullText,
-      showPinyin: showPinyin ?? this.showPinyin,
-      showTranslation: showTranslation ?? this.showTranslation,
+      fullOriginalText: fullOriginalText ?? this.fullOriginalText,
+      fullTranslatedText: fullTranslatedText ?? this.fullTranslatedText,
+      units: units ?? this.units,
+      sourceLanguage: sourceLanguage ?? this.sourceLanguage,
+      targetLanguage: targetLanguage ?? this.targetLanguage,
     );
   }
 
@@ -192,16 +93,12 @@ class ProcessedText {
   /// 디버그 정보 문자열 반환
   @override
   String toString() {
-    return 'ProcessedText(hashCode=$hashCode, '
-        'original=$original, '
-        'translated=$translated, '
-        'pinyin=$pinyin, '
-        'ttsPath=$ttsPath, '
-        'processedAt=$processedAt, '
+    return 'ProcessedText(mode=$mode, '
         'displayMode=$displayMode, '
-        'contentList=${contentList.length} items, '
-        'showFullText=$showFullText, '
-        'showPinyin=$showPinyin, '
-        'showTranslation=$showTranslation)';
+        'fullOriginalText=$fullOriginalText, '
+        'fullTranslatedText=$fullTranslatedText, '
+        'units=${units.length} items, '
+        'sourceLanguage=$sourceLanguage, '
+        'targetLanguage=$targetLanguage)';
   }
 }

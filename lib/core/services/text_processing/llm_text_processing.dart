@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import '../../models/text_segment.dart';
-import '../../models/text_full.dart';
+import 'package:path_provider/path_provider.dart';
+import '../../models/text_unit.dart';
 import '../../models/processed_text.dart';
 import '../cache/unified_cache_service.dart';
 import '../authentication/user_preferences_service.dart';
@@ -79,12 +79,6 @@ class LLMTextProcessing {
   }) async {
     await ensureInitialized();
     
-    // 캐시 확인
-    final cached = await _cacheService.getPageContent(text, ProcessingMode.translated);
-    if (cached != null) {
-      return ProcessedText.fromJson(cached);
-    }
-    
     // LLM 처리
     final result = await _processWithLLM(text, {
       'sourceLanguage': sourceLanguage,
@@ -92,16 +86,8 @@ class LLMTextProcessing {
       'needPinyin': needPinyin,
     });
     
-    // 캐시 저장
-    await _cacheService.cachePageContent(
-      text,
-          originalText: text,
-      translatedText: result.translated,
-      pinyin: result.pinyin,
-        );
-    
     return result;
-    }
+  }
     
   /// LLM API 호출
   Future<ProcessedText> _processWithLLM(String text, Map<String, dynamic> options) async {
@@ -109,85 +95,100 @@ class LLMTextProcessing {
       throw Exception('API 키가 설정되지 않았습니다.');
     }
     
-    final response = await http.post(
-      Uri.parse('https://api.openai.com/v1/chat/completions'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
-      },
-      body: jsonEncode({
-        'model': _defaultModel,
-        'messages': [
-          {
-            'role': 'system',
-            'content': 'You are a Chinese language expert. Translate the given text and provide pinyin if requested.',
-      },
-          {
-            'role': 'user',
-            'content': jsonEncode({
-              'text': text,
-              'sourceLanguage': options['sourceLanguage'],
-              'targetLanguage': options['targetLanguage'],
-              'needPinyin': options['needPinyin'],
-            }),
-          },
-        ],
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('LLM API 호출 실패: ${response.body}');
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.openai.com/v1/chat/completions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
+        body: jsonEncode({
+          'model': _defaultModel,
+          'messages': [
+            {
+              'role': 'system',
+              'content': 'You are a helpful assistant that translates Chinese text to Korean and provides pinyin when requested.',
+            },
+            {
+              'role': 'user',
+              'content': 'Translate the following Chinese text to Korean${options['needPinyin'] ? ' and provide pinyin' : ''}: $text',
+            },
+          ],
+        }),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['choices'][0]['message']['content'];
+        
+        // 응답 파싱
+        final translatedText = content.split('\n')[0]; // 첫 번째 줄은 번역
+        final pinyin = options['needPinyin'] ? content.split('\n')[1] : ''; // 두 번째 줄은 병음
+        
+        return ProcessedText(
+          mode: TextProcessingMode.segment,
+          displayMode: TextDisplayMode.full,
+          fullOriginalText: text,
+          fullTranslatedText: translatedText,
+          units: [
+            TextUnit(
+              originalText: text,
+              pinyin: pinyin,
+              translatedText: translatedText,
+              sourceLanguage: options['sourceLanguage'],
+              targetLanguage: options['targetLanguage'],
+            ),
+          ],
+          sourceLanguage: options['sourceLanguage'],
+          targetLanguage: options['targetLanguage'],
+        );
+      } else {
+        throw Exception('API 호출 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('LLM API 호출 중 오류 발생: $e');
+      rethrow;
     }
-    
-    final result = jsonDecode(response.body);
-    final content = result['choices'][0]['message']['content'];
-    
-    return ProcessedText.fromJson(jsonDecode(content));
   }
   
   /// TTS 생성
   Future<String> generateTTS(String text, String language) async {
     await ensureInitialized();
     
-    // 캐시 확인
-    final cached = await _cacheService.getPageContent(text, ProcessingMode.original);
-    if (cached != null && cached['ttsPath'] != null) {
-      return cached['ttsPath'];
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.openai.com/v1/audio/speech'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
+        body: jsonEncode({
+          'model': 'tts-1',
+          'input': text,
+          'voice': 'alloy',
+          'language': language,
+        }),
+      );
+      
+      if (response.statusCode == 200) {
+        // 임시 파일로 저장
+        final tempDir = await getTemporaryDirectory();
+        final filePath = '${tempDir.path}/tts_${DateTime.now().millisecondsSinceEpoch}.mp3';
+        final file = File(filePath);
+        await file.writeAsBytes(response.bodyBytes);
+        return filePath;
+      } else {
+        throw Exception('TTS API 호출 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('TTS 생성 중 오류 발생: $e');
+      rethrow;
     }
-    
-    // TTS API 호출
-    final ttsPath = await _generateTTSWithAPI(text, language);
-    
-    // 캐시 저장
-    await _cacheService.cachePageContent(
-      text,
-      originalText: text,
-      translatedText: '',
-      ttsPath: ttsPath,
-    );
-    
-    return ttsPath;
   }
   
-  /// TTS API 호출
-  Future<String> _generateTTSWithAPI(String text, String language) async {
-    // TTS API 호출 로직 구현
-    // 임시로 더미 파일 경로 반환
-    return '/tmp/tts_${DateTime.now().millisecondsSinceEpoch}.mp3';
-  }
-
-  /// 단어의 캐시 데이터를 가져옵니다.
+  /// 단어 캐시 데이터 가져오기
   Map<String, String>? getWordCacheData(String word) {
-    try {
-      final cacheKey = 'word_$word';
-      final cachedData = _cacheService.get(cacheKey);
-      if (cachedData != null) {
-        return Map<String, String>.from(cachedData);
-      }
-      return null;
-    } catch (e) {
-      debugPrint('단어 캐시 데이터 조회 중 오류 발생: $e');
-      return null;
-    }
+    // 단어 캐시 구현
+    return null;
   }
 }

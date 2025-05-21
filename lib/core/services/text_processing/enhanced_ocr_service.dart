@@ -8,14 +8,17 @@ import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../../models/processed_text.dart';
-import '../../models/text_segment.dart';
+import '../../models/text_unit.dart';
 import 'text_cleaner_service.dart';
 import '../authentication/user_preferences_service.dart';
 import '../common/usage_limit_service.dart'; // 사용량 제한 서비스 추가
 import 'package:crypto/crypto.dart';
 
-/// 개선된 OCR 서비스 : 이미지에서 텍스트 추출 기능 제공
-
+/// 확장된 OCR 서비스
+/// 이미지에서 '중국어' 우선추출
+/// 문장 단위 처리및 문단 단위 지원 
+/// LLM으로 분리된 중국어 전달
+///  
 class EnhancedOcrService {
   // 싱글톤 패턴 구현
   static final EnhancedOcrService _instance = EnhancedOcrService._internal();
@@ -98,6 +101,10 @@ class EnhancedOcrService {
   }
 
   /// 이미지에서 텍스트 추출 및 처리
+  /// 처리 순서:
+  /// 1. OCR로 텍스트 추출 (Google Cloud Vision API)
+  /// 2. TextCleanerService로 불필요한 텍스트 제거
+  /// 3. 모드에 따라 문장/문단 단위로 분리
   Future<ProcessedText> processImage(
     File imageFile,
     TextProcessingMode mode,
@@ -112,7 +119,7 @@ class EnhancedOcrService {
           displayMode: TextDisplayMode.full,
           fullOriginalText: '',
           fullTranslatedText: '',
-          segments: [],
+          units: [],
           sourceLanguage: 'zh-CN',
           targetLanguage: 'ko'
         );
@@ -134,7 +141,7 @@ class EnhancedOcrService {
         displayMode: TextDisplayMode.full,
         fullOriginalText: extractedText,
         fullTranslatedText: '',
-        segments: processedTexts.map((text) => TextSegment(
+        units: processedTexts.map((text) => TextUnit(
           originalText: text,
           translatedText: '',
           pinyin: '',
@@ -151,7 +158,7 @@ class EnhancedOcrService {
         displayMode: TextDisplayMode.full,
         fullOriginalText: '',
         fullTranslatedText: '',
-        segments: [],
+        units: [],
         sourceLanguage: 'zh-CN',
         targetLanguage: 'ko'
       );
@@ -243,12 +250,5 @@ class EnhancedOcrService {
         .where((p) => p.isNotEmpty)
         .toList();
     return paragraphs;
-  }
-
-  // 텍스트에 대한 해시 생성 (세그먼트 캐싱용)
-  String _computeTextHash(String text) {
-    var bytes = utf8.encode(text);
-    var digest = sha256.convert(bytes);
-    return digest.toString().substring(0, 16); // 16자리로 제한
   }
 }
