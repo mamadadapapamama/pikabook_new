@@ -110,4 +110,50 @@ class BackupPinyinService {
     if (text.length <= 20) return text;
     return '${text.substring(0, 20)}...';
   }
+  
+  /// Google Translation API로 핀인과 한글 번역 모두 반환
+  Future<Map<String, String>> generatePinyinAndTranslation(String text) async {
+    if (_googleApiKey == null) {
+      throw Exception('Google API 키가 설정되지 않았습니다.');
+    }
+
+    // 1. 핀인(영어로 번역) 요청
+    final pinyinResponse = await http.post(
+      Uri.parse('https://translation.googleapis.com/language/translate/v2'),
+      body: {
+        'q': text,
+        'source': 'zh-CN',
+        'target': 'en',
+        'format': 'text',
+        'key': _googleApiKey,
+      },
+    );
+    if (pinyinResponse.statusCode != 200) {
+      throw Exception('Google Translation API(핀인) 호출 실패: ${pinyinResponse.body}');
+    }
+    final pinyinResult = jsonDecode(pinyinResponse.body);
+    final pinyin = pinyinResult['data']['translations'][0]['translatedText'] ?? '';
+
+    // 2. 한글 번역 요청
+    final korResponse = await http.post(
+      Uri.parse('https://translation.googleapis.com/language/translate/v2'),
+      body: {
+        'q': text,
+        'source': 'zh-CN',
+        'target': 'ko',
+        'format': 'text',
+        'key': _googleApiKey,
+      },
+    );
+    if (korResponse.statusCode != 200) {
+      throw Exception('Google Translation API(한글) 호출 실패: ${korResponse.body}');
+    }
+    final korResult = jsonDecode(korResponse.body);
+    final korean = korResult['data']['translations'][0]['translatedText'] ?? '';
+
+    return {
+      'pinyin': pinyin,
+      'korean': korean,
+    };
+  }
 } 

@@ -15,10 +15,10 @@ enum ExternalDictType {
   google,
 }
 
-class DictionaryService {
+class BackupDictionaryService {
   // 싱글톤 패턴 구현
-  static final DictionaryService _instance = DictionaryService._internal();
-  factory DictionaryService() => _instance;
+  static final BackupDictionaryService _instance = BackupDictionaryService._internal();
+  factory BackupDictionaryService() => _instance;
   
   // 서비스 인스턴스
   final InternalCnDictionaryService _chineseDictionaryService = InternalCnDictionaryService();
@@ -32,7 +32,7 @@ class DictionaryService {
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
   
-  DictionaryService._internal() {
+  BackupDictionaryService._internal() {
     _dictionaryUpdateListeners = [];
   }
 
@@ -127,21 +127,21 @@ class DictionaryService {
             };
           }
           
-          // 3. Google Translation API로 핀인 생성
+          // 3. Google Translation API로 핀인 및 한글 번역 생성
           try {
-            final pinyin = await _backupPinyinService.generatePinyin(word);
-            if (pinyin.isNotEmpty) {
+            final result = await _backupPinyinService.generatePinyinAndTranslation(word);
+            final pinyin = result['pinyin'] ?? '';
+            final korean = result['korean'] ?? '';
+            if (pinyin.isNotEmpty || korean.isNotEmpty) {
               final newEntry = DictionaryEntry(
                 word: word,
                 pinyin: pinyin,
-                meaning: '', // Google Translation API는 핀인만 제공
+                meaning: korean,
                 source: 'google_translate'
               );
-              
               // 내부 사전에 추가
               _chineseDictionaryService.addEntry(newEntry);
               _notifyDictionaryUpdated();
-              
               return {
                 'entry': newEntry,
                 'success': true,

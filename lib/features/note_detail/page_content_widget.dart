@@ -15,7 +15,7 @@ import '../../core/utils/segment_utils.dart';
 import '../../core/services/text_processing/text_reader_service.dart'; // TTS 서비스 추가
 import '../../core/services/common/usage_limit_service.dart';
 import '../../core/widgets/usage_dialog.dart';
-import '../../core/services/dictionary/dictionary_service.dart';
+import '../../core/services/dictionary/backup_dictionary_service.dart';
 import '../../core/services/content/page_service.dart';
 import 'dart:async';
 import 'page_image_widget.dart'; // PageImageWidget 추가
@@ -105,6 +105,8 @@ class _PageContentWidgetState extends State<PageContentWidget> {
   // timeout 안내 관련 변수 추가
   Timer? _timeoutTimer;
   bool _isTimeout = false;
+
+  late final BackupDictionaryService _dictionaryService;
 
   @override
   void initState() {
@@ -545,7 +547,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       } else {
         // 내부 사전에서 찾지 못한 경우, DictionaryService를 직접 사용하여 Papago API로 검색
         debugPrint('내부 사전에서 단어를 찾지 못해 외부 API 직접 사용을 시도합니다');
-        final dictionaryService = DictionaryService();
+        final dictionaryService = BackupDictionaryService();
         final result = await dictionaryService.lookupWord(word);
         
         debugPrint('외부 API 검색 결과: ${result['success']}, 메시지: ${result['message'] ?? "없음"}');

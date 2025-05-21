@@ -5,7 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../models/flash_card.dart';
 import '../../models/dictionary.dart';
 import 'package:pinyin/pinyin.dart';
-import '../dictionary/dictionary_service.dart';
+import '../dictionary/backup_dictionary_service.dart';
 import '../text_processing/backup_pinyin_service.dart';
 import '../common/usage_limit_service.dart';
 
@@ -15,7 +15,7 @@ class FlashCardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
-  final DictionaryService _dictionaryService = DictionaryService();
+  final BackupDictionaryService _dictionaryService = BackupDictionaryService();
   final BackupPinyinService _backupPinyinService = BackupPinyinService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   

@@ -7,7 +7,7 @@ import '../../../core/models/text_segment.dart';
 import '../../../core/models/dictionary.dart';
 import '../../../core/services/content/page_service.dart';
 import '../../../core/services/text_processing/text_reader_service.dart';
-import '../../../core/services/dictionary/dictionary_service.dart';
+import '../../../core/services/dictionary/backup_dictionary_service.dart';
 import '../../../core/services/storage/unified_cache_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
@@ -37,7 +37,7 @@ class SegmentManager {
   // 필요한 서비스들
   late final PageService _pageService = PageService();
   late final TextReaderService _textReaderService = TextReaderService();
-  late final DictionaryService _dictionaryService = DictionaryService();
+  late final BackupDictionaryService _dictionaryService = BackupDictionaryService();
   late final UnifiedCacheService _cacheService = UnifiedCacheService();
   late final UsageLimitService _usageLimitService = UsageLimitService();
   final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
