@@ -95,14 +95,14 @@ class LLMTextProcessing {
     // 캐시 저장
     await _cacheService.cachePageContent(
       text,
-      originalText: text,
+          originalText: text,
       translatedText: result.translated,
       pinyin: result.pinyin,
-    );
+        );
     
     return result;
-  }
-  
+    }
+    
   /// LLM API 호출
   Future<ProcessedText> _processWithLLM(String text, Map<String, dynamic> options) async {
     if (_apiKey == null) {
@@ -121,7 +121,7 @@ class LLMTextProcessing {
           {
             'role': 'system',
             'content': 'You are a Chinese language expert. Translate the given text and provide pinyin if requested.',
-          },
+      },
           {
             'role': 'user',
             'content': jsonEncode({
@@ -134,7 +134,7 @@ class LLMTextProcessing {
         ],
       }),
     );
-    
+
     if (response.statusCode != 200) {
       throw Exception('LLM API 호출 실패: ${response.body}');
     }
@@ -175,7 +175,7 @@ class LLMTextProcessing {
     // 임시로 더미 파일 경로 반환
     return '/tmp/tts_${DateTime.now().millisecondsSinceEpoch}.mp3';
   }
-  
+
   /// 단어의 캐시 데이터를 가져옵니다.
   Map<String, String>? getWordCacheData(String word) {
     try {

@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 이미지 캐싱 서비스
 /// 앱 내에서 사용되는 이미지를 메모리에 캐싱하여 성능을 향상시킵니다.
@@ -13,8 +15,8 @@ class ImageCacheService {
   factory ImageCacheService() => _instance;
 
   // 캐시 설정
-  static const int _maxCacheSize = 20; // 최대 캐시 항목 수
-  static const int _maxCacheSizeBytes = 50 * 1024 * 1024; // 50MB
+  static const int _maxCacheItems = 20;
+  static const int _maxCacheSize = 50 * 1024 * 1024; // 50MB
 
   // 이미지 바이트 캐시 (경로 -> 이미지 바이트)
   final Map<String, Uint8List> _memoryImageCache = {};
@@ -64,8 +66,8 @@ class ImageCacheService {
     final imageSize = imageBytes.length;
     
     // 캐시 크기 제한 확인
-    while (_totalCacheSize + imageSize > _maxCacheSizeBytes || 
-           _memoryImageCache.length >= _maxCacheSize) {
+    while (_totalCacheSize + imageSize > _maxCacheSize || 
+           _memoryImageCache.length >= _maxCacheItems) {
       _removeOldestItem();
     }
     
@@ -93,24 +95,24 @@ class ImageCacheService {
       return cachedBytes;
     }
     
-    _cacheMisses++;
-    return null;
-  }
+      _cacheMisses++;
+      return null;
+    }
   
   void _removeOldestItem() {
     if (_memoryImageCache.isEmpty) return;
     
     String? oldestKey;
-    DateTime? oldestTimestamp;
-    
-    _accessTimestamps.forEach((key, timestamp) {
-      if (_memoryImageCache.containsKey(key) && 
-          (oldestTimestamp == null || timestamp.isBefore(oldestTimestamp!))) {
-        oldestTimestamp = timestamp;
+      DateTime? oldestTimestamp;
+      
+      _accessTimestamps.forEach((key, timestamp) {
+        if (_memoryImageCache.containsKey(key) && 
+            (oldestTimestamp == null || timestamp.isBefore(oldestTimestamp!))) {
+          oldestTimestamp = timestamp;
         oldestKey = key;
-      }
-    });
-    
+        }
+      });
+      
     if (oldestKey != null) {
       removeFromCache(oldestKey!);
     }
@@ -120,7 +122,7 @@ class ImageCacheService {
   void clearCache({bool partial = false}) {
     if (partial) {
       // 가장 오래된 항목부터 제거
-      final itemsToKeep = _maxCacheSize ~/ 2;
+      final itemsToKeep = _maxCacheItems ~/ 2;
       final sortedKeys = _accessTimestamps.keys.toList()
         ..sort((a, b) => _accessTimestamps[a]!.compareTo(_accessTimestamps[b]!));
       
@@ -177,7 +179,7 @@ class ImageCacheService {
   Map<String, dynamic> getCacheStats() {
     return {
       'itemCount': _memoryImageCache.length,
-      'maxItems': _maxCacheSize,
+      'maxItems': _maxCacheItems,
       'totalSize': _totalCacheSize,
       'totalSizeMB': _totalCacheSize ~/ (1024 * 1024),
       'cacheHits': _cacheHits,
@@ -222,5 +224,70 @@ class ImageCacheService {
       debugPrint('Firebase Storage에서 이미지 다운로드 실패: $e');
       return null;
     }
+  }
+
+  /// 이미지 캐시 정리
+  /// 
+  /// 메모리 캐시와 Flutter의 내장 이미지 캐시를 모두 정리합니다.
+  Future<void> clearImageCache() async {
+    try {
+      clearCache();
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      
+      if (kDebugMode) {
+        debugPrint('이미지 캐시 정리 완료');
+      }
+    } catch (e) {
+      debugPrint('이미지 캐시 정리 실패: $e');
+    }
+  }
+
+  /// 임시 이미지 파일 정리
+  /// 
+  /// 임시 디렉토리에서 24시간 이상 된 이미지 파일을 정리합니다.
+  /// 이미지 파일은 'image_' 또는 '_img_'로 시작하고 .jpg 또는 .png로 끝나는 파일만 대상으로 합니다.
+  Future<void> cleanupTempFiles() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final dir = Directory(tempDir.path);
+      final entities = await dir.list().toList();
+      
+      int removedCount = 0;
+      
+      for (var entity in entities) {
+        if (entity is File) {
+          final fileName = path.basename(entity.path);
+          
+          if ((fileName.contains('image_') || fileName.contains('_img_')) && 
+              (fileName.endsWith('.jpg') || fileName.endsWith('.png'))) {
+            
+            final stat = await entity.stat();
+            if (DateTime.now().difference(stat.modified).inHours > 24) {
+              try {
+                await entity.delete();
+                removedCount++;
+              } catch (e) {
+                // 무시
+              }
+            }
+          }
+        }
+      }
+      
+      if (kDebugMode && removedCount > 0) {
+        debugPrint('$removedCount개의 임시 이미지 파일 정리됨');
+      }
+    } catch (e) {
+      debugPrint('임시 파일 정리 실패: $e');
+    }
+  }
+
+  /// 바이트 크기를 사람이 읽기 쉬운 형식으로 변환
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(2)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 } 

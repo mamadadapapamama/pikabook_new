@@ -5,8 +5,8 @@ import 'package:uuid/uuid.dart';
 import '../../models/flash_card.dart';
 import '../../models/dictionary.dart';
 import 'package:pinyin/pinyin.dart';
-import '../dictionary/backup_dictionary_service.dart';
-import '../text_processing/backup_pinyin_service.dart';
+import '../dictionary/dictionary_service.dart';
+import '../dictionary/cc_cedict_service.dart';
 import '../common/usage_limit_service.dart';
 
 /// 플래시카드 생성 및 관리 기능(CRUD)을 제공합니다
@@ -16,7 +16,7 @@ class FlashCardService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
   final BackupDictionaryService _dictionaryService = BackupDictionaryService();
-  final BackupPinyinService _backupPinyinService = BackupPinyinService();
+  final CcCedictService _ccCedictService = CcCedictService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   
   // 캐시 추가
@@ -63,10 +63,13 @@ class FlashCardService {
           pinyinValue = dictEntry.pinyin;
         }
       }
-      // 2. 병음이 여전히 비어있으면 백업 핀인 서비스 사용
+      // 2. 병음이 여전히 비어있으면 CC-CEDICT 서비스 사용
       if (pinyinValue.isEmpty) {
-        pinyinValue = await _backupPinyinService.generatePinyin(front);
-        if (kDebugMode) debugPrint('백업 핀인 서비스로 핀인 생성: $front -> $pinyinValue');
+        final ccCedictEntry = await _ccCedictService.lookup(front);
+        if (ccCedictEntry != null) {
+          pinyinValue = ccCedictEntry.pinyin;
+          if (kDebugMode) debugPrint('CC-CEDICT 서비스로 병음 생성: $front -> $pinyinValue');
+        }
       }
 
       // 플래시카드 ID 생성

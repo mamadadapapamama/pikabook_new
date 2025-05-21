@@ -1037,4 +1037,15 @@ class UsageLimitService {
       return 0;
     }
   }
+
+  /// TTS 사용량 가져오기
+  Future<int> getTtsUsage() async {
+    try {
+      final usage = await getUserUsage(forceRefresh: true);
+      return _parseIntSafely(usage['ttsRequests']);
+    } catch (e) {
+      debugPrint('TTS 사용량 가져오기 중 오류: $e');
+      return 0;
+    }
+  }
 } 

@@ -195,9 +195,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
       );
       final endTime = DateTime.now();
       final duration = endTime.difference(startTime);
-      if (kDebugMode) {
-        debugPrint('페이지 텍스트 처리 소요시간: ${duration.inMilliseconds}ms');
-      }
+        if (kDebugMode) {
+          debugPrint('페이지 텍스트 처리 소요시간: ${duration.inMilliseconds}ms');
+        }
       if (mounted) {
         setState(() {
           _processedText = processedText;
@@ -304,14 +304,14 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   ProcessedTextWidget(
                     processedText: _processedText!,
                     onDictionaryLookup: _showDictionaryResult,
-                    onCreateFlashCard: widget.onCreateFlashCard,
-                    flashCards: widget.flashCards,
+                          onCreateFlashCard: widget.onCreateFlashCard,
+                          flashCards: widget.flashCards,
                     onDeleteSegment: _handleDeleteSegment,
-                    onPlayTts: _playTts,
-                    playingSegmentIndex: _playingSegmentIndex,
-                    originalTextStyle: _originalTextStyle,
-                    pinyinTextStyle: _pinyinTextStyle,
-                    translatedTextStyle: _translatedTextStyle,
+                          onPlayTts: _playTts,
+                          playingSegmentIndex: _playingSegmentIndex,
+                          originalTextStyle: _originalTextStyle,
+                          pinyinTextStyle: _pinyinTextStyle,
+                          translatedTextStyle: _translatedTextStyle,
                   ),
                 ]
                 else if ((widget.page.originalText.isNotEmpty && widget.page.originalText != '___PROCESSING___') || widget.isLoadingImage) ...[
@@ -360,9 +360,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               ),
             ),
             child: DictionaryResultWidget(
-              entry: customEntry,
-              onCreateFlashCard: widget.onCreateFlashCard,
-              isExistingFlashcard: true,
+          entry: customEntry,
+          onCreateFlashCard: widget.onCreateFlashCard,
+          isExistingFlashcard: true,
             ),
           ),
         );
@@ -383,9 +383,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 ),
               ),
               child: DictionaryResultWidget(
-                entry: entry,
-                onCreateFlashCard: widget.onCreateFlashCard,
-                isExistingFlashcard: false,
+            entry: entry,
+            onCreateFlashCard: widget.onCreateFlashCard,
+            isExistingFlashcard: false,
               ),
             ),
           );
@@ -508,9 +508,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
               ),
             ),
             child: DictionaryResultWidget(
-              entry: customEntry,
-              onCreateFlashCard: widget.onCreateFlashCard,
-              isExistingFlashcard: true,
+          entry: customEntry,
+          onCreateFlashCard: widget.onCreateFlashCard,
+          isExistingFlashcard: true,
             ),
           ),
         );
@@ -537,9 +537,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                 ),
               ),
               child: DictionaryResultWidget(
-                entry: entry,
-                onCreateFlashCard: widget.onCreateFlashCard,
-                isExistingFlashcard: false,
+            entry: entry,
+            onCreateFlashCard: widget.onCreateFlashCard,
+            isExistingFlashcard: false,
               ),
             ),
           );
@@ -569,9 +569,9 @@ class _PageContentWidgetState extends State<PageContentWidget> {
                   ),
                 ),
                 child: DictionaryResultWidget(
-                  entry: apiEntry,
-                  onCreateFlashCard: widget.onCreateFlashCard,
-                  isExistingFlashcard: false,
+              entry: apiEntry,
+              onCreateFlashCard: widget.onCreateFlashCard,
+              isExistingFlashcard: false,
                 ),
               ),
             );
@@ -619,7 +619,7 @@ class _PageContentWidgetState extends State<PageContentWidget> {
     );
   }
 
-  
+
   // ProcessedText 저장 함수 추가 (비동기 처리를 FutureBuilder에서 분리)
   Future<void> _saveProcessedText(String pageId, ProcessedText processedText) async {
     try {

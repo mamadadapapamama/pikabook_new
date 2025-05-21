@@ -199,7 +199,7 @@ class ImageService {
   }
 
   /// 이미지 업로드 (파일 경로 또는 파일 객체)
-  Future<String> uploadImage(dynamic image) async {
+  Future<String> uploadImage(dynamic image, {bool forThumbnail = false}) async {
     try {
       if (image == null) throw Exception('이미지가 null입니다');
       
@@ -208,12 +208,12 @@ class ImageService {
         if (!await File(image).exists()) {
           throw Exception('파일이 존재하지 않습니다: $image');
         }
-        targetPath = await saveAndOptimizeImage(image);
+        targetPath = await saveAndOptimizeImage(image, quality: forThumbnail ? 70 : 85);
       } else if (image is File) {
         if (!await image.exists()) {
           throw Exception('파일이 존재하지 않습니다: ${image.path}');
         }
-        targetPath = await saveAndOptimizeImage(image.path);
+        targetPath = await saveAndOptimizeImage(image.path, quality: forThumbnail ? 70 : 85);
       } else {
         throw Exception('지원되지 않는 이미지 형식입니다: ${image.runtimeType}');
       }
@@ -238,17 +238,20 @@ class ImageService {
         throw Exception('저장 공간 제한을 초과했습니다');
       }
 
+      // 저장 경로 설정
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final filename = 'img_$timestamp${path.extension(imagePath)}';
       final userId = _currentUserId ?? 'anonymous';
       final relativePath = path.join('images', userId, filename);
       final targetPath = path.join(await _localPath, relativePath);
       
+      // 디렉토리 생성
       final directory = Directory(path.dirname(targetPath));
       if (!await directory.exists()) {
         await directory.create(recursive: true);
       }
 
+      // 이미지 압축 및 최적화
       final result = await _compression.compressAndOptimizeImage(
         imagePath,
         targetPath: targetPath,
@@ -259,12 +262,14 @@ class ImageService {
         throw Exception(result.error ?? '압축 실패');
       }
 
+      // Firebase Storage에 업로드
       try {
         await _uploadToFirebaseStorageIfNotExists(File(targetPath), relativePath);
       } catch (e) {
         debugPrint('Firebase 업로드 실패: $e');
       }
       
+      // 저장 공간 사용량 추적
       final compressedFile = File(targetPath);
       await _trackStorageUsage(compressedFile);
 
@@ -419,52 +424,14 @@ class ImageService {
     }
   }
 
-  /// 임시 파일 정리
-  Future<void> cleanupTempFiles() async {
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final dir = Directory(tempDir.path);
-      final entities = await dir.list().toList();
-      
-      int removedCount = 0;
-      
-      for (var entity in entities) {
-        if (entity is File) {
-          final fileName = path.basename(entity.path);
-          
-          if ((fileName.contains('image_') || fileName.contains('_img_')) && 
-              (fileName.endsWith('.jpg') || fileName.endsWith('.png'))) {
-            
-            final stat = await entity.stat();
-            if (DateTime.now().difference(stat.modified).inHours > 24) {
-              try {
-                await entity.delete();
-                removedCount++;
-              } catch (e) {
-                // 무시
-              }
-            }
-          }
-        }
-      }
-      
-      if (removedCount > 0) {
-        debugPrint('$removedCount개의 임시 파일 정리됨');
-      }
-    } catch (e) {
-      debugPrint('임시 파일 정리 실패: $e');
-    }
-  }
-  
   /// 이미지 캐시 정리
   Future<void> clearImageCache() async {
-    try {
-      _imageCacheService.clearCache();
-      PaintingBinding.instance.imageCache.clear();
-      PaintingBinding.instance.imageCache.clearLiveImages();
-    } catch (e) {
-      debugPrint('이미지 캐시 정리 실패: $e');
-    }
+    await _imageCacheService.clearImageCache();
+  }
+
+  /// 임시 파일 정리
+  Future<void> cleanupTempFiles() async {
+    await _imageCacheService.cleanupTempFiles();
   }
 
   // 현재 보고 있는 이미지 파일 관리
@@ -543,25 +510,14 @@ class ImageService {
     );
   }
 
-  /// 이미지 업로드 및 URL 가져오기 (단일 메서드)
-  Future<String> uploadAndGetUrl(File imageFile, {bool forThumbnail = false}) async {
+  /// 이미지 URL 가져오기
+  Future<String> getImageUrl(String relativePath) async {
     try {
-      if (!await imageFile.exists()) {
-        throw Exception('이미지 파일이 존재하지 않습니다: ${imageFile.path}');
-      }
-      
-      final quality = forThumbnail ? 70 : 85;
-      final relativePath = await saveAndOptimizeImage(imageFile.path, quality: quality);
-      
-      try {
-        final storageRef = _storage.ref().child(relativePath);
-        return await storageRef.getDownloadURL();
-      } catch (e) {
-        return relativePath;
-      }
+      final storageRef = _storage.ref().child(relativePath);
+      return await storageRef.getDownloadURL();
     } catch (e) {
-      debugPrint('이미지 업로드 실패: $e');
-      return _fallbackImagePath;
+      debugPrint('이미지 URL 가져오기 실패: $e');
+      return relativePath;
     }
   }
 }

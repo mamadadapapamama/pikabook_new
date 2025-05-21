@@ -42,7 +42,7 @@ class PageManager {
 
       final loadedPages = await _pageService.getPagesForNote(_currentNoteId!, forceReload: forceReload);
       pages.value = loadedPages;
-    } catch (e) {
+            } catch (e) {
       error.value = '페이지를 로드하는 중 오류가 발생했습니다: $e';
       debugPrint('페이지 로드 중 오류: $e');
     } finally {
@@ -72,7 +72,7 @@ class PageManager {
       );
 
       pages.value = [...pages.value, newPage];
-    } catch (e) {
+        } catch (e) {
       error.value = '페이지를 추가하는 중 오류가 발생했습니다: $e';
       debugPrint('페이지 추가 중 오류: $e');
     } finally {

@@ -73,7 +73,7 @@ class PageService {
     } catch (e) {
       debugPrint('페이지 업데이트 중 오류 발생: $e');
       rethrow;
-    }
+      }
   }
 
   /// 페이지 삭제

@@ -156,6 +156,33 @@ class PlanService {
     return await _usageLimitService.checkFreeLimits();
   }
   
+  /// 현재 플랜 정보 가져오기
+  Future<Map<String, dynamic>> getCurrentPlan() async {
+    try {
+      final planType = await getCurrentPlanType();
+      final limits = await getPlanLimits(planType);
+      
+      return {
+        'type': planType,
+        'name': getPlanName(planType),
+        'maxOcrPages': limits['ocrPages'] ?? 30,
+        'maxTtsCount': limits['ttsRequests'] ?? 100,
+        'maxTranslationChars': limits['translatedChars'] ?? 10000,
+        'maxStorageBytes': limits['storageBytes'] ?? 52428800,
+      };
+    } catch (e) {
+      debugPrint('현재 플랜 정보 가져오기 중 오류: $e');
+      return {
+        'type': PLAN_FREE,
+        'name': getPlanName(PLAN_FREE),
+        'maxOcrPages': 30,
+        'maxTtsCount': 100,
+        'maxTranslationChars': 10000,
+        'maxStorageBytes': 52428800,
+      };
+    }
+  }
+  
   /// 문의하기 기능
   Future<void> contactSupport({String? subject, String? body}) async {
     try {

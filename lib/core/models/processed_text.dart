@@ -23,6 +23,10 @@ class ProcessedText {
   final String? ttsPath;
   final DateTime processedAt;
   final TextDisplayMode displayMode;
+  final List<TextSegment> contentList;
+  final bool showFullText;
+  final bool showPinyin;
+  final bool showTranslation;
 
   ProcessedText({
     required this.original,
@@ -31,8 +35,13 @@ class ProcessedText {
     this.ttsPath,
     DateTime? processedAt,
     TextDisplayMode? displayMode,
+    List<TextSegment>? contentList,
+    this.showFullText = false,
+    this.showPinyin = true,
+    this.showTranslation = true,
   })  : processedAt = processedAt ?? DateTime.now(),
-        displayMode = displayMode ?? TextDisplayMode.full;
+        displayMode = displayMode ?? TextDisplayMode.full,
+        contentList = contentList ?? [];
 
   /// JSON에서 ProcessedText 생성
   factory ProcessedText.fromJson(Map<String, dynamic> json) {
@@ -50,6 +59,12 @@ class ProcessedText {
               orElse: () => TextDisplayMode.full,
             )
           : null,
+      contentList: (json['contentList'] as List<dynamic>?)
+          ?.map((e) => TextSegment.fromJson(e as Map<String, dynamic>))
+          .toList() ?? [],
+      showFullText: json['showFullText'] as bool? ?? false,
+      showPinyin: json['showPinyin'] as bool? ?? true,
+      showTranslation: json['showTranslation'] as bool? ?? true,
     );
   }
 
@@ -62,6 +77,10 @@ class ProcessedText {
       'ttsPath': ttsPath,
       'processedAt': processedAt.toIso8601String(),
       'displayMode': displayMode.toString(),
+      'contentList': contentList.map((e) => e.toJson()).toList(),
+      'showFullText': showFullText,
+      'showPinyin': showPinyin,
+      'showTranslation': showTranslation,
     };
   }
 
@@ -73,6 +92,10 @@ class ProcessedText {
     String? ttsPath,
     DateTime? processedAt,
     TextDisplayMode? displayMode,
+    List<TextSegment>? contentList,
+    bool? showFullText,
+    bool? showPinyin,
+    bool? showTranslation,
   }) {
     return ProcessedText(
       original: original ?? this.original,
@@ -81,6 +104,10 @@ class ProcessedText {
       ttsPath: ttsPath ?? this.ttsPath,
       processedAt: processedAt ?? this.processedAt,
       displayMode: displayMode ?? this.displayMode,
+      contentList: contentList ?? this.contentList,
+      showFullText: showFullText ?? this.showFullText,
+      showPinyin: showPinyin ?? this.showPinyin,
+      showTranslation: showTranslation ?? this.showTranslation,
     );
   }
 
@@ -92,6 +119,10 @@ class ProcessedText {
     String? ttsPath,
     DateTime? processedAt,
     TextDisplayMode? displayMode,
+    List<TextSegment>? contentList,
+    bool? showFullText,
+    bool? showPinyin,
+    bool? showTranslation,
   }) {
     // 디버그 로그 추가
     if (kDebugMode && (original != this.original || 
@@ -99,8 +130,12 @@ class ProcessedText {
                        pinyin != this.pinyin || 
                        ttsPath != this.ttsPath || 
                        processedAt != this.processedAt ||
-                       displayMode != this.displayMode)) {
-      debugPrint('ProcessedText.copyWith - 필드 변경:');
+                       displayMode != this.displayMode ||
+                       contentList != this.contentList ||
+                       showFullText != this.showFullText ||
+                       showPinyin != this.showPinyin ||
+                       showTranslation != this.showTranslation)) {
+      
       if (original != null && original != this.original) {
         debugPrint(' - original: ${this.original} -> $original');
       }
@@ -119,6 +154,18 @@ class ProcessedText {
       if (displayMode != null && displayMode != this.displayMode) {
         debugPrint(' - displayMode: ${this.displayMode} -> $displayMode');
       }
+      if (contentList != null && contentList != this.contentList) {
+        debugPrint(' - contentList: ${this.contentList.length} -> ${contentList.length}');
+      }
+      if (showFullText != null && showFullText != this.showFullText) {
+        debugPrint(' - showFullText: ${this.showFullText} -> $showFullText');
+      }
+      if (showPinyin != null && showPinyin != this.showPinyin) {
+        debugPrint(' - showPinyin: ${this.showPinyin} -> $showPinyin');
+      }
+      if (showTranslation != null && showTranslation != this.showTranslation) {
+        debugPrint(' - showTranslation: ${this.showTranslation} -> $showTranslation');
+      }
     }
     
     return ProcessedText(
@@ -128,6 +175,10 @@ class ProcessedText {
       ttsPath: ttsPath ?? this.ttsPath,
       processedAt: processedAt ?? this.processedAt,
       displayMode: displayMode ?? this.displayMode,
+      contentList: contentList ?? this.contentList,
+      showFullText: showFullText ?? this.showFullText,
+      showPinyin: showPinyin ?? this.showPinyin,
+      showTranslation: showTranslation ?? this.showTranslation,
     );
   }
 
@@ -147,6 +198,10 @@ class ProcessedText {
         'pinyin=$pinyin, '
         'ttsPath=$ttsPath, '
         'processedAt=$processedAt, '
-        'displayMode=$displayMode)';
+        'displayMode=$displayMode, '
+        'contentList=${contentList.length} items, '
+        'showFullText=$showFullText, '
+        'showPinyin=$showPinyin, '
+        'showTranslation=$showTranslation)';
   }
 }

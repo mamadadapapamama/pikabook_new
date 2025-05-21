@@ -5,14 +5,14 @@ import 'package:flutter/foundation.dart';
 import '../../models/dictionary.dart';
 import 'internal_cn_dictionary_service.dart';
 import '../text_processing/llm_text_processing.dart';
-import '../text_processing/backup_pinyin_service.dart';
+import 'cc_cedict_service.dart';
 
 /// 범용 사전 서비스
 /// 여러 언어의 사전 기능을 통합 관리합니다.
 
-/// 외부 사전 유형 (구글, 네이버, 바이두)
+/// 외부 사전 유형 (CC-CEDICT)
 enum ExternalDictType {
-  google,
+  ccCedict,
 }
 
 class BackupDictionaryService {
@@ -23,7 +23,7 @@ class BackupDictionaryService {
   // 서비스 인스턴스
   final InternalCnDictionaryService _chineseDictionaryService = InternalCnDictionaryService();
   final LLMTextProcessing _llmService = LLMTextProcessing();
-  final BackupPinyinService _backupPinyinService = BackupPinyinService();
+  final CcCedictService _ccCedictService = CcCedictService();
   
   // 사전 업데이트 리스너 목록
   late final List<Function()> _dictionaryUpdateListeners;
@@ -59,6 +59,7 @@ class BackupDictionaryService {
     
     try {
       await _chineseDictionaryService.loadDictionary();
+      await _ccCedictService.initialize();
       _isInitialized = true;
       debugPrint('DictionaryService 초기화 완료');
     } catch (e) {
@@ -93,7 +94,7 @@ class BackupDictionaryService {
     }
   }
 
-  // 단어 검색 - LLM 캐시 -> 내부 사전 -> Google Translation 순서
+  // 단어 검색 - LLM 캐시 -> 내부 사전 -> CC-CEDICT 순서
   Future<Map<String, dynamic>> lookupWord(String word) async {
     try {
       await _ensureInitialized();
@@ -127,17 +128,15 @@ class BackupDictionaryService {
             };
           }
           
-          // 3. Google Translation API로 핀인 및 한글 번역 생성
+          // 3. CC-CEDICT에서 검색
           try {
-            final result = await _backupPinyinService.generatePinyinAndTranslation(word);
-            final pinyin = result['pinyin'] ?? '';
-            final korean = result['korean'] ?? '';
-            if (pinyin.isNotEmpty || korean.isNotEmpty) {
+            final ccCedictEntry = await _ccCedictService.lookup(word);
+            if (ccCedictEntry != null) {
               final newEntry = DictionaryEntry(
                 word: word,
-                pinyin: pinyin,
-                meaning: korean,
-                source: 'google_translate'
+                pinyin: ccCedictEntry.pinyin,
+                meaning: ccCedictEntry.meaning,
+                source: 'cc_cedict'
               );
               // 내부 사전에 추가
               _chineseDictionaryService.addEntry(newEntry);
@@ -145,11 +144,11 @@ class BackupDictionaryService {
               return {
                 'entry': newEntry,
                 'success': true,
-                'source': 'google_translate',
+                'source': 'cc_cedict',
               };
             }
           } catch (e) {
-            debugPrint('Google Translation API 호출 실패: $e');
+            debugPrint('CC-CEDICT 검색 실패: $e');
           }
           
           // 모든 방법 실패
@@ -212,7 +211,7 @@ class BackupDictionaryService {
   // 사전 캐시 정리
   Future<void> clearCache() async {
     try {
-      _backupPinyinService.clearCache();
+      _ccCedictService.clearCache();
       debugPrint('사전 캐시 정리 완료');
     } catch (e) {
       debugPrint('사전 캐시 정리 중 오류 발생: $e');
