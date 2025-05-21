@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/painting.dart';
 import 'package:path/path.dart' as path;
+import 'package:firebase_storage/firebase_storage.dart';
 
 /// 이미지 캐싱 서비스
 /// 앱 내에서 사용되는 이미지를 메모리에 캐싱하여 성능을 향상시킵니다.
@@ -12,22 +12,30 @@ class ImageCacheService {
   static final ImageCacheService _instance = ImageCacheService._internal();
   factory ImageCacheService() => _instance;
 
+  // 캐시 설정
+  static const int _maxCacheSize = 20; // 최대 캐시 항목 수
+  static const int _maxCacheSizeBytes = 50 * 1024 * 1024; // 50MB
+
   // 이미지 바이트 캐시 (경로 -> 이미지 바이트)
   final Map<String, Uint8List> _memoryImageCache = {};
   
   // 이미지 키 타임스탬프 (LRU 정책용)
   final Map<String, DateTime> _accessTimestamps = {};
   
-  // 캐시 크기 제한
-  final int _maxCacheSize = 20; // 메모리에 최대 20개 이미지만 보관
+  final Map<String, int> _imageSizes = {};
+  
+  int _totalCacheSize = 0;
   
   // 캐시 적중/실패 통계
   int _cacheHits = 0;
   int _cacheMisses = 0;
   
+  // Firebase Storage 참조
+  final FirebaseStorage _storage = FirebaseStorage.instance;
+  
   ImageCacheService._internal() {
     if (kDebugMode) {
-      debugPrint('🖼️ ImageCacheService: 내부 생성자(_internal) 호출됨');
+      debugPrint('🖼️ ImageCacheService: 초기화됨');
     }
     
     // Flutter의 내장 이미지 캐시도 관리
@@ -52,110 +60,78 @@ class ImageCacheService {
   void addToCache(String relativePath, Uint8List imageBytes) {
     if (imageBytes.isEmpty) return;
     
-    if (kDebugMode) {
-      debugPrint('메모리 캐시에 이미지 추가: $relativePath (${imageBytes.length ~/ 1024}KB)');
+    final normalizedPath = _normalizePath(relativePath);
+    final imageSize = imageBytes.length;
+    
+    // 캐시 크기 제한 확인
+    while (_totalCacheSize + imageSize > _maxCacheSizeBytes || 
+           _memoryImageCache.length >= _maxCacheSize) {
+      _removeOldestItem();
     }
     
-    // 캐시 크기 제한 확인 및 관리
-    _manageCache();
-    
-    // 경로 정규화 (슬래시 방향 통일)
-    final normalizedPath = _normalizePath(relativePath);
-    
-    // 캐시에 추가
+    // 새 항목 추가
     _memoryImageCache[normalizedPath] = imageBytes;
     _accessTimestamps[normalizedPath] = DateTime.now();
+    _imageSizes[normalizedPath] = imageSize;
+    _totalCacheSize += imageSize;
+    
+    if (kDebugMode) {
+      debugPrint('캐시 추가: $normalizedPath (${imageSize ~/ 1024}KB)');
+    }
   }
   
   /// 메모리 캐시에서 이미지 가져오기
   Uint8List? getFromCache(String? relativePath) {
     if (relativePath == null || relativePath.isEmpty) return null;
     
-    // 경로 정규화 (슬래시 방향 통일)
     final normalizedPath = _normalizePath(relativePath);
-    
-    // 캐시에서 이미지 조회
     final cachedBytes = _memoryImageCache[normalizedPath];
     
     if (cachedBytes != null) {
-      // 접근 타임스탬프 업데이트 (LRU 정책)
       _accessTimestamps[normalizedPath] = DateTime.now();
-      
-      // 캐시 적중 통계 업데이트
       _cacheHits++;
-      
-      if (kDebugMode && _cacheHits % 10 == 0) { // 로그 줄이기 위해 10번에 1번만 출력
-        debugPrint('메모리 캐시 히트($_cacheHits번째): $normalizedPath');
-      }
-      
       return cachedBytes;
-    } else {
-      // 캐시 미스 통계 업데이트
-      _cacheMisses++;
-      return null;
     }
+    
+    _cacheMisses++;
+    return null;
   }
   
-  /// 캐시 관리 (LRU - Least Recently Used 정책)
-  void _manageCache() {
-    // 캐시 크기가 제한을 초과하는 경우
-    if (_memoryImageCache.length >= _maxCacheSize) {
-      // 가장 오래 사용되지 않은 항목 찾기
-      String? leastRecentlyUsedKey;
-      DateTime? oldestTimestamp;
-      
-      _accessTimestamps.forEach((key, timestamp) {
-        if (_memoryImageCache.containsKey(key) && 
-            (oldestTimestamp == null || timestamp.isBefore(oldestTimestamp!))) {
-          oldestTimestamp = timestamp;
-          leastRecentlyUsedKey = key;
-        }
-      });
-      
-      // 가장 오래 사용되지 않은 항목 제거
-      if (leastRecentlyUsedKey != null) {
-        _memoryImageCache.remove(leastRecentlyUsedKey);
-        _accessTimestamps.remove(leastRecentlyUsedKey);
-        
-        if (kDebugMode) {
-          debugPrint('메모리 캐시 정리: $leastRecentlyUsedKey 제거됨 (LRU 정책)');
-        }
+  void _removeOldestItem() {
+    if (_memoryImageCache.isEmpty) return;
+    
+    String? oldestKey;
+    DateTime? oldestTimestamp;
+    
+    _accessTimestamps.forEach((key, timestamp) {
+      if (_memoryImageCache.containsKey(key) && 
+          (oldestTimestamp == null || timestamp.isBefore(oldestTimestamp!))) {
+        oldestTimestamp = timestamp;
+        oldestKey = key;
       }
+    });
+    
+    if (oldestKey != null) {
+      removeFromCache(oldestKey!);
     }
   }
   
   /// 캐시 정리 (전체 또는 일부)
   void clearCache({bool partial = false}) {
     if (partial) {
-      // 부분 정리: 절반만 정리
+      // 가장 오래된 항목부터 제거
       final itemsToKeep = _maxCacheSize ~/ 2;
-      
-      // 최근 접근 시간으로 정렬
       final sortedKeys = _accessTimestamps.keys.toList()
-        ..sort((a, b) {
-          final timeA = _accessTimestamps[a]!;
-          final timeB = _accessTimestamps[b]!;
-          return timeB.compareTo(timeA); // 최근 것이 앞으로 (내림차순)
-        });
+        ..sort((a, b) => _accessTimestamps[a]!.compareTo(_accessTimestamps[b]!));
       
-      // 최근 항목들은 유지, 나머지는 제거
-      final keysToKeep = sortedKeys.take(itemsToKeep).toSet();
-      final keysToRemove = _memoryImageCache.keys
-          .where((key) => !keysToKeep.contains(key))
-          .toList();
-      
-      for (final key in keysToRemove) {
-        _memoryImageCache.remove(key);
-        _accessTimestamps.remove(key);
-      }
-      
-      if (kDebugMode) {
-        debugPrint('메모리 캐시 부분 정리: ${keysToRemove.length}개 항목 제거됨');
+      for (var i = 0; i < sortedKeys.length - itemsToKeep; i++) {
+        removeFromCache(sortedKeys[i]);
       }
     } else {
-      // 전체 정리
       _memoryImageCache.clear();
       _accessTimestamps.clear();
+      _imageSizes.clear();
+      _totalCacheSize = 0;
       
       // Flutter 이미지 캐시도 정리
       PaintingBinding.instance.imageCache.clear();
@@ -174,9 +150,12 @@ class ImageCacheService {
   /// 특정 이미지 경로 캐시에서 제거
   void removeFromCache(String relativePath) {
     final normalizedPath = _normalizePath(relativePath);
+    final imageSize = _imageSizes[normalizedPath] ?? 0;
     
     _memoryImageCache.remove(normalizedPath);
     _accessTimestamps.remove(normalizedPath);
+    _imageSizes.remove(normalizedPath);
+    _totalCacheSize -= imageSize;
     
     if (kDebugMode) {
       debugPrint('메모리 캐시에서 이미지 제거: $normalizedPath');
@@ -196,14 +175,11 @@ class ImageCacheService {
   
   /// 캐시 상태 정보 가져오기
   Map<String, dynamic> getCacheStats() {
-    final totalBytes = _memoryImageCache.values
-        .fold<int>(0, (sum, bytes) => sum + bytes.length);
-    
     return {
       'itemCount': _memoryImageCache.length,
       'maxItems': _maxCacheSize,
-      'totalBytes': totalBytes,
-      'totalKB': totalBytes ~/ 1024,
+      'totalSize': _totalCacheSize,
+      'totalSizeMB': _totalCacheSize ~/ (1024 * 1024),
       'cacheHits': _cacheHits,
       'cacheMisses': _cacheMisses,
       'hitRatio': _cacheHits + _cacheMisses > 0 
@@ -229,4 +205,22 @@ class ImageCacheService {
   
   /// 캐싱이 비활성화되었는지 확인
   bool get isCachingDisabled => _disableImageCaching && kDebugMode;
+  
+  /// Firebase Storage에서 이미지 다운로드 및 캐싱
+  Future<Uint8List?> downloadAndCacheImage(String relativePath) async {
+    try {
+      final storageRef = _storage.ref().child(relativePath);
+      final maxSize = 10 * 1024 * 1024; // 10MB 제한
+      final bytes = await storageRef.getData(maxSize);
+      
+      if (bytes != null) {
+        addToCache(relativePath, bytes);
+        return bytes;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Firebase Storage에서 이미지 다운로드 실패: $e');
+      return null;
+    }
+  }
 } 
