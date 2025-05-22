@@ -15,7 +15,7 @@ class FlashCardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
-  final BackupDictionaryService _dictionaryService = BackupDictionaryService();
+  final DictionaryService _dictionaryService = DictionaryService();
   final CcCedictService _ccCedictService = CcCedictService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   

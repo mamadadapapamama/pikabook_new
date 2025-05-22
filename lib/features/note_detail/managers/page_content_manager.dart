@@ -3,16 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/processed_text.dart';
-import '../../../core/models/text_segment.dart';
+import '../../../core/models/text_unit.dart';
 import '../../../core/models/dictionary.dart';
 import '../../../core/services/content/page_service.dart';
-import '../../../core/services/text_processing/text_reader_service.dart';
-import '../../../core/services/dictionary/backup_dictionary_service.dart';
-import '../../../core/services/storage/unified_cache_service.dart';
-import '../../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/tts/tts_service.dart';
+import '../../../core/services/cache/unified_cache_service.dart';
+import '../../../core/services/text_processing/enhanced_ocr_service.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
 import '../../../core/services/media/image_service.dart';
-import '../../../core/services/text_processing/enhanced_ocr_service.dart';
+import '../../../core/services/authentication/user_preferences_service.dart';
+import '../../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/text_processing/text_reader_service.dart';
+import '../../../core/services/dictionary/dictionary_service.dart';
 import '../../../core/services/authentication/user_preferences_service.dart';
 import 'dart:async';
 
@@ -21,6 +23,7 @@ import 'dart:async';
 /// - 세그먼트 삭제/수정/처리
 /// - 텍스트 읽기를 위한 TextReaderService 연동
 
+/// 세그먼트 관리자: 세그먼트 처리를 담당합니다.
 class SegmentManager {
   static final SegmentManager _instance = () {
     if (kDebugMode) debugPrint('🏭 SegmentManager: 싱글톤 인스턴스 생성 시작');
@@ -35,20 +38,20 @@ class SegmentManager {
   }
   
   // 필요한 서비스들
-  late final PageService _pageService = PageService();
-  late final TextReaderService _textReaderService = TextReaderService();
-  late final BackupDictionaryService _dictionaryService = BackupDictionaryService();
-  late final UnifiedCacheService _cacheService = UnifiedCacheService();
-  late final UsageLimitService _usageLimitService = UsageLimitService();
-  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
+  final PageService _pageService = PageService();
+  final TTSService _ttsService = TTSService();
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
+  final LLMTextProcessing _textProcessingService = LLMTextProcessing();
+  final DictionaryService _dictionaryService = DictionaryService();
+  final UsageLimitService _usageLimitService = UsageLimitService();
   final ImageService _imageService = ImageService();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UserPreferencesService _userPreferencesService = UserPreferencesService();
   
   // getter
-  TextReaderService get textReaderService => _textReaderService;
-  int? get currentPlayingSegmentIndex => _textReaderService.currentSegmentIndex;
-  bool get isPlaying => _textReaderService.isPlaying;
+  TTSService get ttsService => _ttsService;
+  int? get currentPlayingSegmentIndex => _ttsService.currentSegmentIndex;
+  bool get isPlaying => _ttsService.state == TtsState.playing;
 
   SegmentManager._internal() {
     _initReader();
@@ -57,7 +60,7 @@ class SegmentManager {
   // TextReaderService 초기화
   Future<void> _initReader() async {
     try {
-      await _textReaderService.init();
+      await _ttsService.init();
       await _textProcessingService.ensureInitialized();
       debugPrint('✅ TextReaderService 초기화 완료');
     } catch (e) {
@@ -67,17 +70,24 @@ class SegmentManager {
   
   // TTS 상태 변경 콜백 설정
   void setOnTtsStateChanged(Function(int?) callback) {
-    _textReaderService.setOnPlayingStateChanged(callback);
+    _ttsService.segmentStream?.listen((index) {
+      callback(index);
+    });
   }
   
   // TTS 재생 완료 콜백 설정
   void setOnTtsCompleted(Function() callback) {
-    _textReaderService.setOnPlayingCompleted(callback);
+    // TTSService에는 완료 콜백 함수가 없으므로 상태 변경 스트림을 사용
+    _ttsService.segmentStream?.listen((index) {
+      if (_ttsService.state != TtsState.playing) {
+        callback();
+      }
+    });
   }
   
   // TTS 제한 확인
   Future<Map<String, dynamic>> checkTtsLimit() async {
-    final remainingCount = await _textReaderService.ttsService.getRemainingTtsCount();
+    final remainingCount = await _ttsService.getRemainingTtsCount();
     final usagePercentages = await _usageLimitService.getUsagePercentages();
     
     return {
@@ -87,59 +97,56 @@ class SegmentManager {
     };
   }
 
-  // 노트/페이지 변경 시 TTS 플레이어 초기화
+  // TTS 플레이어 재설정 - 페이지/노트 전환 시
   Future<void> resetTtsForNewContext() async {
     try {
-      // TTS 플레이어 완전 재설정 (캐시 상태 초기화, 오디오 플레이어 재생성)
-      await _textReaderService.ttsService.resetPlayer();
-      
-      // 캐시 정리 (오래된 파일 삭제)
-      _textReaderService.ttsService.cleanupCache();
+      // TTS 플레이어 완전 재설정
+      await _ttsService.stop();
+      await _ttsService.init();  // 플레이어 재초기화
       
       debugPrint('✅ 페이지/노트 변경으로 TTS 플레이어 재설정 완료');
     } catch (e) {
-      debugPrint('❌ TTS 플레이어 재설정 중 오류: $e');
+      debugPrint('❌ TTS 재설정 중 오류: $e');
     }
   }
 
-  // TTS 텍스트 재생 (세그먼트 인덱스 포함) - TextReaderService 직접 활용
-  Future<bool> playTts(String text, {int? segmentIndex}) async {
-    if (text.isEmpty) {
-      debugPrint('⚠️ TTS: 재생할 텍스트가 비어있습니다');
-      return false;
-    }
-    
+  // 재생
+  Future<bool> playSpeech(String text, {int? segmentIndex}) async {
     try {
       // 현재 재생 중인 세그먼트를 다시 클릭한 경우 중지
-      if (_textReaderService.currentSegmentIndex == segmentIndex) {
+      if (_ttsService.currentSegmentIndex == segmentIndex) {
         await stopSpeaking();
         return true;
       }
-      
+
+      // 재생 중이면 멈추고 새로 시작
+      if (isPlaying) {
+        await stopSpeaking();
+      }
+
       // 세그먼트 인덱스에 따라 처리
       if (segmentIndex != null) {
-        await _textReaderService.readSegment(text, segmentIndex);
+        await _ttsService.speakSegment(text, segmentIndex);
       } else {
-        await _textReaderService.readText(text);
+        await _ttsService.speak(text);
       }
       
-      debugPrint('✅ TTS 재생 시작: ${text.length > 20 ? text.substring(0, 20) + '...' : text}');
       return true;
     } catch (e) {
       debugPrint('❌ TTS 재생 중 오류: $e');
       return false;
     }
   }
-  
+
   // TTS 중지
   Future<void> stopSpeaking() async {
-    await _textReaderService.stop();
+    await _ttsService.stop();
     debugPrint('🛑 TTS 중지됨');
   }
   
   // ProcessedText의 모든 세그먼트 읽기
   Future<void> readAllSegments(ProcessedText processedText) async {
-    await _textReaderService.readAllSegments(processedText);
+    await _ttsService.speakAllSegments(processedText);
   }
 
   // ProcessedText 캐시 메서드들
@@ -236,8 +243,8 @@ class SegmentManager {
       
       final processedText = await getProcessedText(page.id!);
       if (processedText == null || 
-          processedText.segments == null || 
-          segmentIndex >= processedText.segments!.length) {
+          processedText.units == null || 
+          segmentIndex >= processedText.units!.length) {
         debugPrint('⚠️ 유효하지 않은 ProcessedText 또는 세그먼트 인덱스');
         return null;
       }
@@ -249,23 +256,23 @@ class SegmentManager {
       }
       
       // 3. 세그먼트 삭제 및 전체 텍스트 업데이트
-      final updatedSegments = List<TextSegment>.from(processedText.segments!);
-      updatedSegments.removeAt(segmentIndex);
+      final updatedUnits = List<TextUnit>.from(processedText.units!);
+      updatedUnits.removeAt(segmentIndex);
       
       // 4. 전체 텍스트 다시 조합
       String updatedFullOriginalText = '';
       String updatedFullTranslatedText = '';
       
-      for (final segment in updatedSegments) {
-        updatedFullOriginalText += segment.originalText;
-        if (segment.translatedText != null) {
-          updatedFullTranslatedText += segment.translatedText!;
+      for (final unit in updatedUnits) {
+        updatedFullOriginalText += unit.originalText;
+        if (unit.translatedText != null) {
+          updatedFullTranslatedText += unit.translatedText!;
         }
       }
       
       // 5. 업데이트된 ProcessedText 생성
       final updatedProcessedText = processedText.copyWith(
-        segments: updatedSegments,
+        units: updatedUnits,
         fullOriginalText: updatedFullOriginalText,
         fullTranslatedText: updatedFullTranslatedText,
         showFullText: processedText.showFullText,
@@ -373,7 +380,7 @@ class SegmentManager {
       
       // LLM 처리
       debugPrint('🔄 LLM 텍스트 처리 시작: ${page.originalText.length}자');
-      final llmService = UnifiedTextProcessingService();
+      final llmService = LLMTextProcessing();
       final chineseText = await llmService.processWithLLM(page.originalText);
       
       if (chineseText == null || chineseText.sentences.isEmpty) {
@@ -383,18 +390,19 @@ class SegmentManager {
       
       // ProcessedText 생성
       final processedText = ProcessedText(
+        mode: TextProcessingMode.segment,
+        displayMode: TextDisplayMode.full,
         fullOriginalText: chineseText.originalText,
         fullTranslatedText: chineseText.sentences.map((s) => s.translation).join('\n'),
-        segments: chineseText.sentences.map((s) => TextSegment(
+        units: chineseText.sentences.map((s) => TextUnit(
           originalText: s.original,
           translatedText: s.translation,
           pinyin: s.pinyin,
           sourceLanguage: 'zh-CN',
           targetLanguage: 'ko',
         )).toList(),
-        showFullText: false,
-        showPinyin: true,
-        showTranslation: true,
+        sourceLanguage: 'zh-CN',
+        targetLanguage: 'ko',
       );
       
       // 캐시에 저장
@@ -410,14 +418,14 @@ class SegmentManager {
   
   // 자원 정리
   void dispose() {
-    _textReaderService.dispose();
+    _ttsService.dispose();
   }
 }
 
 /// 페이지 콘텐츠 관리자: 텍스트 처리와 콘텐츠 관리를 담당합니다.
 class PageContentManager {
   final ImageService _imageService = ImageService();
-  final UnifiedTextProcessingService _textProcessingService = UnifiedTextProcessingService();
+  final LLMTextProcessing _textProcessingService = LLMTextProcessing();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final UserPreferencesService _userPreferencesService = UserPreferencesService();
@@ -481,7 +489,7 @@ class PageContentManager {
   Future<void> updatePageContent({
     String? originalText,
     String? translatedText,
-    List<TextSegment>? segments,
+    List<TextUnit>? units,
     TextProcessingMode? mode,
     TextDisplayMode? displayMode,
   }) async {
@@ -494,7 +502,7 @@ class PageContentManager {
       final updatedContent = processedText.value!.copyWith(
         fullOriginalText: originalText,
         fullTranslatedText: translatedText,
-        segments: segments,
+        units: units,
         mode: mode,
         displayMode: displayMode,
       );

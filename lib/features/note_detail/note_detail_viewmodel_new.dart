@@ -6,14 +6,13 @@ import '../../core/models/note.dart';
 import '../../core/models/page.dart' as page_model;
 import '../../core/models/flash_card.dart';
 import 'managers/page_manager.dart';
-import 'managers/page_content_manager.dart';
 import 'managers/note_options_manager.dart';
 import '../../core/services/content/note_service.dart';
-import '../../core/services/media/tts_service.dart';
-import '../../core/services/content/flashcard_service.dart';
+import '../flashcard/flashcard_service.dart';
 import 'dart:io';
 import 'note_detail_state.dart';
 import 'page_processing_state.dart';
+import 'view_model/text_view_model.dart';
 
 /// 노트 상세 화면의 ViewModel (리팩토링 버전)
 class NoteDetailViewModelNew extends ChangeNotifier {
@@ -23,14 +22,13 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   
   // 매니저 인스턴스
   late PageManager _pageManager;
-  late SegmentManager _segmentManager;
   final NoteOptionsManager _noteOptionsManager = NoteOptionsManager();
+  
+  // 텍스트 처리를 위한 ViewModel
+  final TextViewModel textViewModel;
   
   // 상태 관리 클래스
   late NoteDetailState _state;
-  
-  // TTS 서비스
-  final TtsService _ttsService = TtsService();
   
   // PageController (페이지 스와이프)
   final PageController pageController = PageController();
@@ -47,9 +45,6 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   // 플래시카드 목록
   List<FlashCard> _flashcards = [];
   
-  // 전체 텍스트 모드 상태
-  bool _isFullTextMode = false;
-  
   // 페이지 처리 콜백
   Function(int)? _pageProcessedCallback;
   
@@ -61,8 +56,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   Note? get note => _state.note;
   int get currentPageIndex => _currentPageIndex;
   int get flashcardCount => _state.note?.flashcardCount ?? 0;
-  bool get isFullTextMode => _isFullTextMode;
-  bool get isTtsPlaying => _ttsService.state.toString().contains('playing');
+  bool get isFullTextMode => textViewModel.isFullTextMode;
   
   // 현재 페이지 getter
   page_model.Page? get currentPage {
@@ -77,7 +71,10 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     required String noteId,
     Note? initialNote,
     int totalImageCount = 0,
-  }) : _noteId = noteId {
+    TextViewModel? textViewModel,
+  }) : 
+    _noteId = noteId,
+    textViewModel = textViewModel ?? TextViewModel() {
     // 상태 초기화
     _state = NoteDetailState();
     _state.note = initialNote;
@@ -103,30 +100,11 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   
   /// 의존성 초기화
   void _initDependencies() {
-    // 세그먼트 매니저 초기화
-    _segmentManager = SegmentManager();
-    
     // 페이지 매니저 초기화
-    _pageManager = PageManager(
-      noteId: _noteId,
-      initialNote: _state.note,
-      useCacheFirst: false,
-    );
-    
-    // TTS 초기화 및 재설정 (노트 변경 시)
-    _initTts();
-    _segmentManager.resetTtsForNewContext();
+    _pageManager = PageManager(noteId: _noteId);
     
     if (flutter_foundation.kDebugMode) {
-      debugPrint("🔄 노트 변경으로 TTS 플레이어 재설정 (노트 ID: $_noteId)");
-    }
-  }
-  
-  /// TTS 초기화
-  void _initTts() {
-    _ttsService.init();
-    if (flutter_foundation.kDebugMode) {
-      debugPrint("[NoteDetailViewModelNew] TTS 서비스 초기화됨");
+      debugPrint("🔄 노트 변경으로 의존성 초기화 (노트 ID: $_noteId)");
     }
   }
   
@@ -166,7 +144,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     
     try {
       // 페이지 로드
-      final pages = await _pageManager.loadPagesFromServer(forceRefresh: true);
+      final pages = await _pageManager.getPages();
       _pages = pages;
       _state.setLoading(false);
       
@@ -179,6 +157,11 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       
       // 백그라운드에서 이미지 로드
       _loadPageImages();
+      
+      // 현재 페이지가 있으면 텍스트 처리 시작
+      if (_pages != null && _pages!.isNotEmpty && currentPage != null && currentPage!.id.isNotEmpty) {
+        textViewModel.setPageId(currentPage!.id);
+      }
       
     } catch (e) {
       _state.setLoading(false);
@@ -225,11 +208,16 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     if (_pages == null || pageIndex < 0 || pageIndex >= _pages!.length) return;
     
     final page = _pages![pageIndex];
-    if (page.id == null || page.imageUrl == null || page.imageUrl!.isEmpty) return;
+    if (page.id.isEmpty || page.imageUrl.isEmpty) return;
     
     try {
       // 페이지 이미지 로드
-      await _pageManager.loadPageImage(pageIndex);
+      final imageFile = await _pageManager.loadImage(page.imageUrl);
+      
+      // 현재 페이지인 경우 텍스트 처리 시작
+      if (pageIndex == _currentPageIndex && imageFile != null) {
+        textViewModel.processPageText(page, imageFile: imageFile);
+      }
       
       // 현재 페이지인 경우 UI 갱신
       if (pageIndex == _currentPageIndex) {
@@ -269,11 +257,13 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     _currentPageIndex = index;
     notifyListeners();
     
-    // TTS 플레이어 재설정 - 페이지 변경 시
-    _segmentManager.resetTtsForNewContext();
-    
     // 전방/후방 이미지 프리로드
     _preloadAdjacentImages(index);
+    
+    // 현재 페이지의 텍스트 처리 시작
+    if (currentPage != null && currentPage!.id.isNotEmpty) {
+      textViewModel.setPageId(currentPage!.id);
+    }
     
     if (flutter_foundation.kDebugMode) {
       debugPrint("📄 페이지 변경됨: ${index + 1}");
@@ -315,7 +305,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   
   /// 전체 텍스트 모드 토글
   void toggleFullTextMode() {
-    _isFullTextMode = !_isFullTextMode;
+    textViewModel.toggleFullTextMode();
     notifyListeners();
   }
   
@@ -368,85 +358,10 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     }
   }
   
-  /// TTS - 현재 페이지 텍스트 읽기
-  Future<void> speakCurrentPageText() async {
-    if (currentPage == null) return;
-    
-    try {
-      await _ttsService.stop(); // 기존 재생 중지
-      
-      // 텍스트 선택
-      String textToSpeak = "";
-      
-      // 세그먼트 모드인 경우 세그먼트 텍스트 사용, 아니면 원본 텍스트 사용
-      if (!_isFullTextMode && currentPage!.id != null) {
-        final processedText = await _segmentManager.getProcessedText(currentPage!.id!);
-        if (processedText?.segments != null && processedText!.segments!.isNotEmpty) {
-          textToSpeak = processedText.segments!
-              .map((segment) => segment.originalText)
-              .join(" ");
-        } else {
-          textToSpeak = currentPage!.originalText;
-        }
-      } else {
-        textToSpeak = currentPage!.originalText;
-      }
-      
-      if (textToSpeak.isNotEmpty) {
-        await _ttsService.speak(textToSpeak);
-      }
-    } catch (e) {
-      if (flutter_foundation.kDebugMode) {
-        debugPrint("❌ TTS 중 오류: $e");
-      }
-    }
-  }
-  
-  /// TTS 중지
-  void stopTts() {
-    _ttsService.stop();
-  }
-  
   /// 현재 페이지 이미지 파일 가져오기
   File? getCurrentPageImageFile() {
-    if (currentPage == null || currentPage!.id == null) return null;
-    return _pageManager.getImageFileForPage(currentPage!);
-  }
-  
-  /// SegmentManager 객체 가져오기
-  SegmentManager getSegmentManager() {
-    return _segmentManager;
-  }
-  
-  /// 세그먼트 삭제
-  Future<bool> deleteSegment(int segmentIndex) async {
-    if (currentPage == null || currentPage!.id == null) return false;
-    
-    try {
-      // SegmentManager의 deleteSegment 메서드 호출
-      final updatedPage = await _segmentManager.deleteSegment(
-        noteId: _noteId,
-        page: currentPage!,
-        segmentIndex: segmentIndex,
-      );
-      
-      if (updatedPage == null) return false;
-      
-      // 현재 페이지 업데이트
-      if (_pages != null && _currentPageIndex < _pages!.length) {
-        _pages![_currentPageIndex] = updatedPage;
-      }
-      
-      // 화면 갱신
-      notifyListeners();
-      
-      return true;
-    } catch (e) {
-      if (flutter_foundation.kDebugMode) {
-        debugPrint("❌ 세그먼트 삭제 중 오류: $e");
-      }
-      return false;
-    }
+    if (currentPage == null || currentPage!.imageUrl.isEmpty) return null;
+    return _pageManager.getImageFile(currentPage!.imageUrl);
   }
   
   /// 페이지 처리 상태 확인
@@ -468,6 +383,10 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     try {
       final cards = await _flashCardService.getFlashCardsForNote(_noteId);
       _flashcards = cards;
+      
+      // 텍스트 뷰모델에 플래시카드 단어 전달
+      textViewModel.extractFlashcardWords(_flashcards);
+      
       notifyListeners();
     } catch (e) {
       if (flutter_foundation.kDebugMode) {
@@ -494,6 +413,10 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   /// 플래시카드 목록 업데이트
   void updateFlashcards(List<FlashCard> flashcards) {
     _flashcards = flashcards;
+    
+    // 텍스트 뷰모델에 플래시카드 단어 전달
+    textViewModel.extractFlashcardWords(_flashcards);
+    
     notifyListeners();
   }
   
@@ -506,8 +429,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   @override
   void dispose() {
     pageController.dispose();
-    _ttsService.stop();
-    _ttsService.dispose();
+    // 노트: textViewModel은 여기서 dispose하지 않습니다. 외부에서 관리됩니다.
     _state.dispose();
     super.dispose();
   }

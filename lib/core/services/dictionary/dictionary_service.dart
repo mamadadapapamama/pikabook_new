@@ -15,10 +15,10 @@ enum ExternalDictType {
   ccCedict,
 }
 
-class BackupDictionaryService {
+class DictionaryService {
   // 싱글톤 패턴 구현
-  static final BackupDictionaryService _instance = BackupDictionaryService._internal();
-  factory BackupDictionaryService() => _instance;
+  static final DictionaryService _instance = DictionaryService._internal();
+  factory DictionaryService() => _instance;
   
   // 서비스 인스턴스
   final InternalCnDictionaryService _chineseDictionaryService = InternalCnDictionaryService();
@@ -32,7 +32,7 @@ class BackupDictionaryService {
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
   
-  BackupDictionaryService._internal() {
+  DictionaryService._internal() {
     _dictionaryUpdateListeners = [];
   }
 
@@ -91,6 +91,46 @@ class BackupDictionaryService {
   void _notifyDictionaryUpdated() {
     for (final listener in _dictionaryUpdateListeners) {
       listener();
+    }
+  }
+
+  // 외부 사전 검색 (추가 기능)
+  Future<Map<String, dynamic>> lookupExternalDictionary(String word) async {
+    try {
+      await _ensureInitialized();
+      
+      // CC-CEDICT에서 검색
+      try {
+        final ccCedictEntry = await _ccCedictService.lookup(word);
+        if (ccCedictEntry != null) {
+          final newEntry = DictionaryEntry(
+            word: word,
+            pinyin: ccCedictEntry.pinyin,
+            meaning: ccCedictEntry.meaning,
+            source: 'cc_cedict'
+          );
+          // 내부 사전에 추가
+          _chineseDictionaryService.addEntry(newEntry);
+          _notifyDictionaryUpdated();
+          return {
+            'entry': newEntry,
+            'success': true,
+            'source': 'cc_cedict',
+          };
+        }
+      } catch (e) {
+        debugPrint('CC-CEDICT 검색 실패: $e');
+      }
+      
+      return {
+        'success': false,
+        'message': '외부 사전에서 단어를 찾을 수 없습니다: $word'
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': '외부 사전 검색 중 오류 발생: $e'
+      };
     }
   }
 
@@ -206,6 +246,12 @@ class BackupDictionaryService {
     } catch (e) {
       debugPrint('단어 추가 중 오류 발생: $e');
     }
+  }
+  
+  // 최근 검색어 목록 가져오기
+  Future<List<String>> getRecentSearches() async {
+    // 임시로 빈 목록 반환
+    return [];
   }
   
   // 사전 캐시 정리

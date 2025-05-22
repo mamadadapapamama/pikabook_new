@@ -251,4 +251,9 @@ class EnhancedOcrService {
         .toList();
     return paragraphs;
   }
+
+  /// 이미지에서 텍스트 인식만 수행 (TextViewModel용)
+  Future<String> recognizeText(File imageFile) async {
+    return await extractText(imageFile, skipUsageCount: false);
+  }
 }
