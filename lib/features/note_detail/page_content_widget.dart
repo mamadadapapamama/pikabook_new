@@ -15,7 +15,7 @@ import '../../core/utils/segment_utils.dart';
 import '../../core/services/text_processing/text_reader_service.dart'; // TTS 서비스 추가
 import '../../core/services/common/usage_limit_service.dart';
 import '../../core/widgets/usage_dialog.dart';
-import '../../core/services/dictionary/backup_dictionary_service.dart';
+import '../../core/services/dictionary/dictionary_service.dart';
 import '../../core/services/content/page_service.dart';
 import 'dart:async';
 import 'page_image_widget.dart'; // PageImageWidget 추가

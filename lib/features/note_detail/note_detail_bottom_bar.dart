@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/models/page.dart' as page_model;
 import '../../core/models/processed_text.dart';
 import '../../core/services/text_processing/text_reader_service.dart';
-import '../../core/services/media/tts_service.dart';
+import '../../core/services/tts/tts_service.dart';
 import '../../core/services/text_processing/llm_text_processing.dart';
 import '../../core/utils/text_display_mode.dart';
 import '../../core/theme/tokens/color_tokens.dart';

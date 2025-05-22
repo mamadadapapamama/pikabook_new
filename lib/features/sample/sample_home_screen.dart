@@ -202,20 +202,27 @@ class SampleHomeScreen extends StatelessWidget {
       debugPrint('[SampleHomeScreen] 샘플 플래시카드 화면으로 이동: ${note.id}');
     }
     
-    if (note.flashcardCount > 0 || note.flashCards.isNotEmpty) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => SampleFlashCardScreen(
-            flashcards: note.flashCards,
-            noteTitle: note.translatedText,
+    if (note.flashcardCount > 0) {
+      // 새로운 API 사용하여 플래시카드 가져오기
+      final flashcards = _sampleNotesService.getFlashcardsForNote(note.id ?? '');
+      
+      if (flashcards.isNotEmpty) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => SampleFlashCardScreen(
+              flashcards: flashcards,
+              noteTitle: note.title,
+            ),
           ),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('이 노트에는 플래시카드가 없습니다.')),
-      );
+        );
+        return;
+      }
     }
+    
+    // 플래시카드가 없는 경우
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('이 노트에는 플래시카드가 없습니다.')),
+    );
   }
 
   // 헤더 위젯 구현
@@ -296,7 +303,6 @@ class SampleHomeScreen extends StatelessWidget {
                             note: note,
                             onDismissed: () {},
                             onNoteTapped: (_) => _navigateToNoteDetail(context, note),
-                            onFavoriteToggled: (_, __) {},
                             isFilteredList: false,
                           ),
                         ),

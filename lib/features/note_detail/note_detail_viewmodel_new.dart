@@ -5,7 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/models/note.dart';
 import '../../core/models/page.dart' as page_model;
 import '../../core/models/flash_card.dart';
-import 'managers/page_manager.dart';
+import '../../core/services/content/page_service.dart';
+import '../../core/services/media/image_service.dart';
 import 'managers/note_options_manager.dart';
 import '../../core/services/content/note_service.dart';
 import '../flashcard/flashcard_service.dart';
@@ -19,9 +20,10 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   // 서비스 인스턴스
   final NoteService _noteService = NoteService();
   final FlashCardService _flashCardService = FlashCardService();
+  final PageService _pageService = PageService();
+  final ImageService _imageService = ImageService();
   
   // 매니저 인스턴스
-  late PageManager _pageManager;
   final NoteOptionsManager _noteOptionsManager = NoteOptionsManager();
   
   // 텍스트 처리를 위한 ViewModel
@@ -42,6 +44,9 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   // 페이지 목록
   List<page_model.Page>? _pages;
   
+  // 이미지 파일 캐시
+  final Map<String, File> _imageFileCache = {};
+  
   // 플래시카드 목록
   List<FlashCard> _flashcards = [];
   
@@ -56,6 +61,8 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   Note? get note => _state.note;
   int get currentPageIndex => _currentPageIndex;
   int get flashcardCount => _state.note?.flashcardCount ?? 0;
+  
+  // TextViewModel에서 위임받는 getter들
   bool get isFullTextMode => textViewModel.isFullTextMode;
   
   // 현재 페이지 getter
@@ -80,9 +87,6 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     _state.note = initialNote;
     _state.expectedTotalPages = totalImageCount;
     
-    // 의존성 초기화
-    _initDependencies();
-    
     // 초기 노트 정보 로드
     if (initialNote == null && noteId.isNotEmpty) {
       _loadNoteInfo();
@@ -96,16 +100,6 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       await loadInitialPages();
       await loadFlashcardsForNote();
     });
-  }
-  
-  /// 의존성 초기화
-  void _initDependencies() {
-    // 페이지 매니저 초기화
-    _pageManager = PageManager(noteId: _noteId);
-    
-    if (flutter_foundation.kDebugMode) {
-      debugPrint("🔄 노트 변경으로 의존성 초기화 (노트 ID: $_noteId)");
-    }
   }
   
   /// 노트 정보 로드
@@ -143,8 +137,8 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     notifyListeners();
     
     try {
-      // 페이지 로드
-      final pages = await _pageManager.getPages();
+      // 페이지 로드 - PageManager 대신 PageService 직접 사용
+      final pages = await _pageService.getPagesForNote(_noteId);
       _pages = pages;
       _state.setLoading(false);
       
@@ -158,10 +152,8 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       // 백그라운드에서 이미지 로드
       _loadPageImages();
       
-      // 현재 페이지가 있으면 텍스트 처리 시작
-      if (_pages != null && _pages!.isNotEmpty && currentPage != null && currentPage!.id.isNotEmpty) {
-        textViewModel.setPageId(currentPage!.id);
-      }
+      // 현재 페이지 텍스트 처리 - TextViewModel에 위임
+      _initCurrentPageText();
       
     } catch (e) {
       _state.setLoading(false);
@@ -170,6 +162,13 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 페이지 로드 중 오류: $e");
       }
+    }
+  }
+  
+  /// 현재 페이지 텍스트 초기화 - TextViewModel에 위임
+  void _initCurrentPageText() {
+    if (currentPage != null && currentPage!.id.isNotEmpty) {
+      textViewModel.setPageId(currentPage!.id);
     }
   }
   
@@ -208,20 +207,26 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     if (_pages == null || pageIndex < 0 || pageIndex >= _pages!.length) return;
     
     final page = _pages![pageIndex];
-    if (page.id.isEmpty || page.imageUrl.isEmpty) return;
+    
+    // null 체크 개선
+    if (page.id.isEmpty) return;
+    if (page.imageUrl == null) return; // imageUrl은 nullable 필드임
     
     try {
-      // 페이지 이미지 로드
-      final imageFile = await _pageManager.loadImage(page.imageUrl);
+      // 페이지 이미지 로드 - ImageService 직접 사용
+      // String? 타입을 String으로 변환 (null 아님이 확인되었으므로 안전함)
+      final imageFile = await _imageService.getImageFile(page.imageUrl);
       
-      // 현재 페이지인 경우 텍스트 처리 시작
-      if (pageIndex == _currentPageIndex && imageFile != null) {
-        textViewModel.processPageText(page, imageFile: imageFile);
-      }
-      
-      // 현재 페이지인 경우 UI 갱신
-      if (pageIndex == _currentPageIndex) {
-        notifyListeners();
+      if (imageFile != null) {
+        // 이미지 파일 캐싱
+        _imageFileCache[page.imageUrl] = imageFile;
+        
+        // 현재 페이지인 경우 텍스트 처리 시작 - TextViewModel에 위임
+        if (pageIndex == _currentPageIndex) {
+          // TextViewModel에 텍스트 처리 요청 위임
+          textViewModel.processPageText(page, imageFile: imageFile);
+          notifyListeners();
+        }
       }
     } catch (e) {
       if (flutter_foundation.kDebugMode) {
@@ -260,10 +265,8 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     // 전방/후방 이미지 프리로드
     _preloadAdjacentImages(index);
     
-    // 현재 페이지의 텍스트 처리 시작
-    if (currentPage != null && currentPage!.id.isNotEmpty) {
-      textViewModel.setPageId(currentPage!.id);
-    }
+    // 현재 페이지의 텍스트 처리 시작 - TextViewModel에 위임
+    _initCurrentPageText();
     
     if (flutter_foundation.kDebugMode) {
       debugPrint("📄 페이지 변경됨: ${index + 1}");
@@ -303,7 +306,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     );
   }
   
-  /// 전체 텍스트 모드 토글
+  /// 전체 텍스트 모드 토글 - TextViewModel에 위임
   void toggleFullTextMode() {
     textViewModel.toggleFullTextMode();
     notifyListeners();
@@ -360,8 +363,12 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   
   /// 현재 페이지 이미지 파일 가져오기
   File? getCurrentPageImageFile() {
-    if (currentPage == null || currentPage!.imageUrl.isEmpty) return null;
-    return _pageManager.getImageFile(currentPage!.imageUrl);
+    // null 체크 개선
+    if (currentPage == null) return null;
+    if (currentPage!.imageUrl == null) return null; // imageUrl은 nullable 필드임
+    
+    // 캐시에서 이미지 파일 가져오기
+    return _imageFileCache[currentPage!.imageUrl];
   }
   
   /// 페이지 처리 상태 확인

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/media/tts_service.dart';
+import '../services/tts/tts_service.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
 

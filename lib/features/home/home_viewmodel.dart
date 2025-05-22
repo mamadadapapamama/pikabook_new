@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../core/models/note.dart';
 import '../../core/services/content/note_service.dart';
+import '../../core/services/cache/note_cache_service.dart';
 
 class HomeViewModel extends ChangeNotifier {
   final NoteService _noteService = NoteService();
+  final NoteCacheService _cacheService = NoteCacheService();
 
   List<Note> _notes = [];
   bool _isLoading = true;
   String? _error;
   StreamSubscription<List<Note>>? _notesSubscription;
-
-  // 캐싱 관련 변수
-  DateTime? _lastRefreshTime;
-  static const Duration _cacheValidDuration = Duration(minutes: 5);
 
   // Getter
   List<Note> get notes => _notes;
@@ -38,9 +36,8 @@ class HomeViewModel extends ChangeNotifier {
         _isLoading = false;
         notifyListeners();
 
-        // 캐시 시간 확인
-        _lastRefreshTime = await _noteService.getLastCacheTime();
-        debugPrint('[HomeViewModel] 마지막 캐시 시간: $_lastRefreshTime');
+        // 캐시 시간 확인을 위해 로컬 메모리에도 캐싱
+        await _cacheService.updateLastCacheTimeCache();
       } else {
         debugPrint('[HomeViewModel] 캐시된 노트 없음');
       }
@@ -57,11 +54,8 @@ class HomeViewModel extends ChangeNotifier {
 
   // 캐시 유효성 확인
   bool _isCacheValid() {
-    if (_lastRefreshTime == null) return false;
-
-    final now = DateTime.now();
-    final difference = now.difference(_lastRefreshTime!);
-    return difference < _cacheValidDuration;
+    // NoteCacheService의 메서드 사용
+    return _cacheService.isCacheValid(validDuration: const Duration(minutes: 5));
   }
 
   // 노트 목록 로드
@@ -89,9 +83,6 @@ class HomeViewModel extends ChangeNotifier {
           _isLoading = false;
           _error = null;
           notifyListeners();
-
-          // 캐시 업데이트
-          _updateCache();
         },
         onError: (e, stackTrace) {
           debugPrint('[HomeViewModel] 노트 스트림 구독 중 오류: $e');
@@ -116,29 +107,12 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  // 캐시 업데이트
-  void _updateCache() {
-    try {
-      // 노트 목록이 비어있으면 캐싱하지 않음
-      if (_notes.isEmpty) return;
-
-      // 마지막 캐싱 시간이 없거나 5분이 지났을 때만 캐싱
-      if (_lastRefreshTime == null ||
-          DateTime.now().difference(_lastRefreshTime!) >
-              const Duration(minutes: 5)) {
-        _noteService.cacheNotes(_notes);
-        _lastRefreshTime = DateTime.now();
-        _noteService.saveLastCacheTime(_lastRefreshTime!);
-      }
-    } catch (e) {
-      // 캐시 업데이트 오류는 무시
-    }
-  }
-
   // 노트 목록 새로고침
   Future<void> refreshNotes() async {
     _cancelSubscription();
     _notes = [];
+    // 캐시도 삭제하여 완전히 새로운 데이터 가져오기
+    await _cacheService.clearCache();
     _loadNotes();
     return Future.value(); // RefreshIndicator를 위해 Future 반환
   }
@@ -148,26 +122,8 @@ class HomeViewModel extends ChangeNotifier {
     debugPrint('[HomeViewModel] 구독 취소 시도');
     if (_notesSubscription != null) {
       _notesSubscription!.cancel();
-    _notesSubscription = null;
+      _notesSubscription = null;
       debugPrint('[HomeViewModel] 구독 취소 완료');
-    }
-  }
-
-  // 노트 즐겨찾기 토글 메서드
-  Future<void> toggleFavorite(String noteId, bool isFavorite) async {
-    try {
-      await _noteService.toggleFavorite(noteId, isFavorite);
-
-      // 로컬 상태 업데이트 (UI 즉시 반영)
-      final index = _notes.indexWhere((note) => note.id == noteId);
-      if (index >= 0) {
-        _notes[index] = _notes[index].copyWith(isFavorite: isFavorite);
-        notifyListeners();
-      }
-    } catch (e) {
-      debugPrint('즐겨찾기 설정 오류: $e');
-      _error = '즐겨찾기 설정 중 오류가 발생했습니다: $e';
-      notifyListeners();
     }
   }
 
@@ -183,9 +139,6 @@ class HomeViewModel extends ChangeNotifier {
 
       // 서버에서 삭제
       await _noteService.deleteNote(noteId);
-
-      // 캐시 업데이트
-      _updateCache();
     } catch (e) {
       debugPrint('노트 삭제 오류: $e');
       _error = '노트 삭제 중 오류가 발생했습니다: $e';

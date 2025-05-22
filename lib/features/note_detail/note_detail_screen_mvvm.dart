@@ -15,8 +15,8 @@ import '../../core/utils/note_tutorial.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
-import '../../core/services/media/tts_service.dart';
-import '../../core/services/content/flashcard_service.dart';
+import '../../core/services/tts/tts_service.dart';
+import '../flashcard/flashcard_service.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatefulWidget {

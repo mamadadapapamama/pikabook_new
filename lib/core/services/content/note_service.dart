@@ -10,6 +10,7 @@ import 'package:firebase_core/firebase_core.dart';
 import '../../models/note.dart';
 import '../../models/page.dart' as page_model;
 import '../../models/flash_card.dart';
+import '../cache/note_cache_service.dart';
 import 'page_service.dart';
 import '../media/image_service.dart';
 import '../text_processing/enhanced_ocr_service.dart';
@@ -17,6 +18,7 @@ import '../common/usage_limit_service.dart';
 import '../text_processing/llm_text_processing.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 노트 서비스: 노트 메타데이터 관리만 담당합니다. (Note CRUD)
 class NoteService {
@@ -28,6 +30,7 @@ class NoteService {
   final LLMTextProcessing _textProcessingService = LLMTextProcessing();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UsageLimitService _usageLimitService = UsageLimitService();
+  final NoteCacheService _cacheService = NoteCacheService();
 
   // 컬렉션 참조
   CollectionReference get _notesCollection => _firestore.collection('notes');
@@ -98,6 +101,10 @@ class NoteService {
         }).toList();
         
         debugPrint('[NoteService] 노트 ${notes.length}개 로드됨');
+        
+        // 스트림에서 로드된 노트를 자동으로 캐시 (NoteCacheService 사용)
+        _cacheService.cacheNotes(notes);
+        
         return notes;
       });
     } catch (e) {
@@ -209,5 +216,15 @@ class NoteService {
       debugPrint('노트 개수 조회 중 오류: $e');
         return 0;
     }
+  }
+  
+  /// 캐시된 노트 목록 가져오기 (NoteCacheService로 위임)
+  Future<List<Note>> getCachedNotes() async {
+    return _cacheService.getCachedNotes();
+  }
+  
+  /// 마지막 캐시 시간 조회 (NoteCacheService로 위임)
+  Future<DateTime?> getLastCacheTime() async {
+    return _cacheService.getLastCacheTime();
   }
 }

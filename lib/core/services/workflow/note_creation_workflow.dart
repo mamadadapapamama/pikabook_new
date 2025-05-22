@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../content/note_service.dart';
 import '../media/image_service.dart';
 import '../content/page_service.dart';
-import '../storage/unified_cache_service.dart';
+import '../cache/unified_cache_service.dart';
 import '../../../core/widgets/loading_dialog_experience.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;

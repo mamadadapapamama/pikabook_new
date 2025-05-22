@@ -185,6 +185,12 @@ class UserPreferencesService {
     await savePreferences(prefs.copyWith(userName: name));
   }
   
+  /// 기본 노트스페이스 가져오기
+  Future<String> getDefaultNoteSpace() async {
+    final prefs = await getPreferences();
+    return prefs.defaultNoteSpace.isEmpty ? '학습 노트' : prefs.defaultNoteSpace;
+  }
+  
   /// 기본 노트스페이스 설정
   Future<void> setDefaultNoteSpace(String spaceId) async {
     final prefs = await getPreferences();

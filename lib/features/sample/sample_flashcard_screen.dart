@@ -4,8 +4,6 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/models/flash_card.dart';
-import '../../core/widgets/tts_button.dart';
-import '../../core/services/media/tts_service.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
@@ -26,10 +24,49 @@ class SampleFlashCardScreen extends StatefulWidget {
   State<SampleFlashCardScreen> createState() => _SampleFlashCardScreenState();
 }
 
+/// 샘플용 간소화된 TTS 서비스
+class _SampleTtsService {
+  bool _isSpeaking = false;
+  Function? _onCompleted;
+  
+  // TTS 완료 콜백 설정
+  void setOnPlayingCompleted(Function callback) {
+    _onCompleted = callback;
+  }
+  
+  // 음성 재생 시작
+  Future<void> speak(String text) async {
+    if (_isSpeaking) return;
+    _isSpeaking = true;
+    
+    // 실제 TTS 대신 타이머로 1초 후 완료되는 것처럼 시뮬레이션
+    await Future.delayed(const Duration(seconds: 1));
+    _isSpeaking = false;
+    _onCompleted?.call();
+  }
+  
+  // 음성 재생 중지
+  Future<void> stop() async {
+    _isSpeaking = false;
+  }
+  
+  // 언어 설정 (샘플에서는 아무 동작 없음)
+  Future<void> setLanguage(String languageCode) async {}
+  
+  // TTS 사용 가능 여부 확인 (샘플에서는 항상 true)
+  Future<bool> isTtsAvailable() async => true;
+  
+  // 초기화 (샘플에서는 항상 성공)
+  Future<void> init() async {}
+  
+  // 리소스 해제
+  void dispose() {}
+}
+
 class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
   final CardSwiperController _cardController = CardSwiperController();
   final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
-  final TtsService _ttsService = TtsService();
+  final _SampleTtsService _ttsService = _SampleTtsService();
 
   int _currentIndex = 0;
   bool _isFlipped = false;
@@ -132,22 +169,6 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
         });
       }
     }
-  }
-
-  // 다음 카드 정보 가져오기
-  String? _getNextCardInfo() {
-    if (_currentIndex < widget.flashcards.length - 1) {
-      return widget.flashcards[_currentIndex + 1].front;
-    }
-    return null;
-  }
-
-  // 이전 카드 정보 가져오기
-  String? _getPreviousCardInfo() {
-    if (_currentIndex > 0) {
-      return widget.flashcards[_currentIndex - 1].front;
-    }
-    return null;
   }
 
   @override
@@ -358,14 +379,9 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TTS 버튼 (단어 위에 위치)
-            TtsButton(
-              text: text, // 실제 텍스트 전달
-              size: TtsButton.sizeMedium,
+            _buildTtsButton(
+              text: text,
               tooltip: !_ttsEnabled ? '샘플 모드에서는 TTS 사용이 제한될 수 있습니다.' : null,
-              iconColor: ColorTokens.secondary,
-              activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
-              onPlayStart: () => _speakText(text),
-              onPlayEnd: _stopSpeaking,
             ),
             SizedBox(height: SpacingTokens.sm),
             
@@ -407,14 +423,9 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TTS 버튼 (단어 위에 위치)
-            TtsButton(
-              text: original, // 원문 텍스트 전달
-              size: TtsButton.sizeMedium,
+            _buildTtsButton(
+              text: original,
               tooltip: !_ttsEnabled ? '샘플 모드에서는 TTS 사용이 제한될 수 있습니다.' : null,
-              iconColor: ColorTokens.secondary,
-              activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
-              onPlayStart: () => _speakText(original),
-              onPlayEnd: _stopSpeaking,
             ),
             SizedBox(height: SpacingTokens.sm),
             
@@ -448,6 +459,31 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
               textAlign: TextAlign.center,
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// TTS 버튼 위젯 (간소화된 버전)
+  Widget _buildTtsButton({
+    required String text,
+    String? tooltip,
+  }) {
+    return IconButton(
+      onPressed: () => _speakText(text),
+      icon: Icon(
+        _isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
+        color: ColorTokens.secondary,
+        size: 32,
+      ),
+      tooltip: tooltip,
+      style: IconButton.styleFrom(
+        backgroundColor: _isSpeaking 
+            ? ColorTokens.primary.withOpacity(0.2) 
+            : Colors.transparent,
+        padding: EdgeInsets.all(SpacingTokens.sm),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(100),
         ),
       ),
     );

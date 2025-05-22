@@ -293,9 +293,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                       child: NoteListItem(
                                         note: note,
                                         onNoteTapped: (note) => _navigateToNoteDetail(context, note),
-                                        onFavoriteToggled: (noteId, isFavorite) {
-                                          viewModel.toggleFavorite(noteId, isFavorite);
-                                        },
                                         onDismissed: () {
                                           if (note.id != null) {
                                             viewModel.deleteNote(note.id!);
@@ -613,19 +610,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
 
       print("[HOME] 노트 상세화면으로 이동합니다. ID: ${note.id!}");
-      print("[HOME] 노트 이미지 URL: ${note.imageUrl}");
-      print("[HOME] 노트 페이지 수: ${note.pages?.length ?? 0}, 플래시카드 수: ${note.flashcardCount ?? 0}");
+      print("[HOME] 노트 제목: ${note.title}");
+      print("[HOME] 노트 생성 시간: ${note.createdAt}");
       
-      // 페이지 로드 문제 해결을 위해 pages 필드를 null로 설정하여
-      // 상세 화면에서 직접 Firestore에서 페이지를 로드하도록 함
-      final cleanNote = note.copyWith(pages: null);
-      print("[HOME] 페이지 필드를 null로 설정하여 노트 전달");
-
       // 네비게이션 직전 로그 추가
-      print("🚀 [HOME] Navigator.push 호출 직전. Note ID: ${cleanNote.id}");
+      print("🚀 [HOME] Navigator.push 호출 직전. Note ID: ${note.id}");
 
       Navigator.of(context).push(
-        NoteDetailScreenMVVM.route(note: cleanNote), // MVVM 패턴 적용한 화면으로 변경
+        NoteDetailScreenMVVM.route(note: note), // MVVM 패턴 적용한 화면으로 변경
       ).then((_) {
         print("[HOME] 노트 상세화면에서 돌아왔습니다.");
         Provider.of<HomeViewModel>(context, listen: false).refreshNotes();
@@ -718,7 +710,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
       );
 
-      // 플래시카드 카운터 업데이트가 필요한 경우
+      /// 플래시카드 카운터 업데이트가 필요한 경우
       if (result != null && result is Map && result.containsKey('flashcardCount')) {
         final HomeViewModel viewModel = Provider.of<HomeViewModel>(context, listen: false);
         
@@ -726,14 +718,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (result.containsKey('noteId') && result['noteId'] != null) {
           String noteId = result['noteId'] as String;
           
-          // 해당 노트 찾아서 카운터 업데이트
+          // 해당 노트의 플래시카드 수만 업데이트 (NoteService를 통해 직접 업데이트)
+          final int flashcardCount = result['flashcardCount'] as int;
           final int index = viewModel.notes.indexWhere((note) => note.id == noteId);
           if (index >= 0) {
-            final int flashcardCount = result['flashcardCount'] as int;
             final note = viewModel.notes[index].copyWith(flashcardCount: flashcardCount);
-            
-            // 노트 서비스를 통해 캐시 업데이트
-            NoteService().cacheNotes([note]);
+            final noteService = NoteService();
+            await noteService.updateNote(noteId, note);
           }
         }
         
@@ -788,6 +779,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // TODO: 노트스페이스 선택 또는 관리 메뉴 표시 구현
   }
 
+  /// 노트스페이스 이름 로드
   Future<void> _loadNoteSpaceName() async {
     try {
       // 노트스페이스 이름 변경 이벤트를 확인
@@ -796,9 +788,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       // 일반적인 방법으로 노트스페이스 이름 로드
       final noteSpaceName = await _userPreferences.getDefaultNoteSpace();
-      
-      // 디버깅을 위해 현재 사용자 ID 로깅
-      final currentUserId = await _userPreferences.getCurrentUserId();
       
       if (mounted) {
         setState(() {
