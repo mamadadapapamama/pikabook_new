@@ -10,12 +10,12 @@ import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../flashcard/flashcard_screen.dart';
 import 'note_detail_bottom_bar.dart';
-import '../../core/services/text_processing/text_reader_service.dart';
+import '../../core/services/tts/tts_service.dart';
+import '../../core/services/tts/tts_playback_service.dart';
 import '../../core/utils/note_tutorial.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
-import '../../core/services/tts/tts_service.dart';
 import '../flashcard/flashcard_service.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
@@ -411,6 +411,9 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       print("🔄 바텀바 리빌드: 처리된 페이지 $completedPages/$totalPages");
     }
     
+    // TTS 재생 서비스 생성
+    final ttsPlaybackService = TtsPlaybackService();
+    
     return NoteDetailBottomBar(
       currentPage: viewModel.currentPage,
       currentPageIndex: viewModel.currentPageIndex,
@@ -420,7 +423,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         viewModel.navigateToPage(index);
       },
       contentManager: viewModel.getSegmentManager(),
-      textReaderService: TextReaderService(),
+      ttsPlaybackService: ttsPlaybackService,
       isProcessing: false,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),
       onTtsPlay: () {

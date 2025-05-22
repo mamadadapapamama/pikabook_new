@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
-import '../features/note_detail/managers/page_content_manager.dart';
 import '../core/models/dictionary.dart';
 import '../core/theme/tokens/color_tokens.dart';
 import '../core/theme/tokens/typography_tokens.dart';
 import '../core/theme/tokens/spacing_tokens.dart';
-import '../core/theme/tokens/ui_tokens.dart';
 import '../core/widgets/pika_button.dart';
 import '../core/widgets/tts_button.dart';
-import '../core/services/tts/tts_service.dart';
+import '../core/services/dictionary/dictionary_service.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
-
-class DictionaryResultWidget extends StatefulWidget {
+class DictionaryResultWidget extends StatelessWidget {
   final DictionaryEntry entry;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
   final bool isExistingFlashcard;
@@ -22,85 +19,6 @@ class DictionaryResultWidget extends StatefulWidget {
     required this.onCreateFlashCard,
     this.isExistingFlashcard = false,
   });
-
-  @override
-  State<DictionaryResultWidget> createState() => _DictionaryResultWidgetState();
-}
-
-class _DictionaryResultWidgetState extends State<DictionaryResultWidget> {
-  final TtsService _ttsService = TtsService();
-  bool _isSpeaking = false;
-  bool _ttsEnabled = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _initTts();
-  }
-
-  Future<void> _initTts() async {
-    try {
-      await _ttsService.init();
-      final isAvailable = await _ttsService.isTtsAvailable();
-      if (mounted) {
-        setState(() {
-          _ttsEnabled = isAvailable;
-        });
-      }
-    } catch (e) {
-      debugPrint('TTS 초기화 오류: $e');
-    }
-  }
-
-  @override
-  void dispose() {
-    _ttsService.dispose();
-    super.dispose();
-  }
-
-  Future<void> _speakText(String text) async {
-    if (_isSpeaking) {
-      await _stopSpeaking();
-      return;
-    }
-
-    if (!_ttsEnabled) return;
-
-    setState(() {
-      _isSpeaking = true;
-    });
-
-    try {
-      await _ttsService.setLanguage('zh-CN');
-      await _ttsService.speak(text);
-    } catch (e) {
-      debugPrint('TTS 실행 오류: $e');
-      if (mounted) {
-        setState(() {
-          _isSpeaking = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('음성 재생 중 오류가 발생했습니다: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _stopSpeaking() async {
-    if (!_isSpeaking) return;
-
-    try {
-      await _ttsService.stop();
-    } catch (e) {
-      debugPrint('TTS 중지 오류: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSpeaking = false;
-        });
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -115,30 +33,29 @@ class _DictionaryResultWidgetState extends State<DictionaryResultWidget> {
             children: [
               Expanded(
                 child: Text(
-                  widget.entry.word,
+                  entry.word,
                   style: TypographyTokens.headline2Cn.copyWith(
                     color: ColorTokens.textPrimary,
                   ),
                 ),
               ),
+              // TtsButton 위젯 사용 - 모든 상태 관리가 내부에서 자동으로 처리됨
               TtsButton(
-                text: widget.entry.word,
+                text: entry.word,
                 size: TtsButton.sizeMedium,
-                tooltip: !_ttsEnabled ? '무료 TTS 사용량을 모두 사용했습니다.' : null,
                 iconColor: ColorTokens.secondary,
                 activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
-                onPlayStart: () => _speakText(widget.entry.word),
-                onPlayEnd: _stopSpeaking,
+                tooltip: '단어 발음 듣기',
               ),
             ],
           ),
           
           // 핀인
-          if (widget.entry.pinyin.isNotEmpty)
+          if (entry.pinyin.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(top: SpacingTokens.sm),
               child: Text(
-                widget.entry.pinyin,
+                entry.pinyin,
                 style: TypographyTokens.caption.copyWith(
                   color: ColorTokens.textGrey,
                   fontFamily: TypographyTokens.poppins,
@@ -147,11 +64,11 @@ class _DictionaryResultWidgetState extends State<DictionaryResultWidget> {
             ),
           
           // 의미
-          if (widget.entry.meaning.isNotEmpty)
+          if (entry.meaning.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(top: SpacingTokens.sm),
               child: Text(
-                widget.entry.meaning,
+                entry.meaning,
                 style: TypographyTokens.body1.copyWith(
                   color: ColorTokens.secondary,
                 ),
@@ -162,22 +79,22 @@ class _DictionaryResultWidgetState extends State<DictionaryResultWidget> {
           
           // 플래시카드 추가 버튼
           PikaButton(
-            text: widget.isExistingFlashcard ? '플래시카드로 설정됨' : '플래시카드 추가',
-            variant: widget.isExistingFlashcard ? PikaButtonVariant.primary : PikaButtonVariant.primary,
-            leadingIcon: !widget.isExistingFlashcard 
+            text: isExistingFlashcard ? '플래시카드로 설정됨' : '플래시카드 추가',
+            variant: isExistingFlashcard ? PikaButtonVariant.primary : PikaButtonVariant.primary,
+            leadingIcon: !isExistingFlashcard 
               ? Image.asset(
                   'assets/images/icon_flashcard_dic.png',
                   width: 24,
                   height: 24,
                 )
               : null,
-            onPressed: widget.isExistingFlashcard
+            onPressed: isExistingFlashcard
                 ? null
                 : () {
-                    widget.onCreateFlashCard(
-                      widget.entry.word,
-                      widget.entry.meaning,
-                      pinyin: widget.entry.pinyin,
+                    onCreateFlashCard(
+                      entry.word,
+                      entry.meaning,
+                      pinyin: entry.pinyin,
                     );
                     Navigator.pop(context);
 
@@ -220,6 +137,100 @@ class _DictionaryResultWidgetState extends State<DictionaryResultWidget> {
           isExistingFlashcard: isExistingFlashcard,
         ),
       ),
+    );
+  }
+  
+  /// 단어 검색 및 결과 표시 메서드
+  static Future<void> searchAndShowDictionary({
+    required BuildContext context,
+    required String word,
+    required Function(String, String, {String? pinyin}) onCreateFlashCard,
+    required Function(DictionaryEntry) onEntryFound,
+    Function()? onNotFound,
+  }) async {
+    if (word.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('검색할 단어를 입력하세요')),
+      );
+      return;
+    }
+    
+    // 로딩 표시
+    final loadingDialog = _showLoadingDialog(context);
+    
+    try {
+      final dictionaryService = DictionaryService();
+      // 사전 초기화 확인
+      if (!dictionaryService.isInitialized) {
+        await dictionaryService.initialize();
+      }
+      
+      // 단어 검색
+      final result = await dictionaryService.lookupWord(word);
+      
+      // 로딩 다이얼로그 닫기
+      if (context.mounted) {
+        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
+      }
+      
+      if (result['success'] == true && result['entry'] != null) {
+        final entry = result['entry'] as DictionaryEntry;
+        
+        // 콜백 호출
+        onEntryFound(entry);
+        
+        // 바텀 시트 표시
+        if (context.mounted) {
+          showDictionaryBottomSheet(
+            context: context,
+            entry: entry,
+            onCreateFlashCard: onCreateFlashCard,
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result['message'] ?? '단어를 찾을 수 없습니다: $word')),
+          );
+        }
+        
+        // 결과 없음 콜백
+        if (onNotFound != null) {
+          onNotFound();
+        }
+      }
+    } catch (e) {
+      // 오류 발생 시 로딩 다이얼로그 닫기
+      if (context.mounted) {
+        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('사전 검색 중 오류가 발생했습니다: $e')),
+        );
+      }
+      
+      // 결과 없음 콜백
+      if (onNotFound != null) {
+        onNotFound();
+      }
+    }
+  }
+  
+  // 로딩 다이얼로그 표시
+  static Future<void> _showLoadingDialog(BuildContext context) {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          content: Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 20),
+              const Text('단어 검색 중...'),
+            ],
+          ),
+        );
+      },
     );
   }
 }
