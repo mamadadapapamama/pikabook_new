@@ -2,18 +2,19 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' as flutter_foundation;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../core/models/note.dart';
-import '../../core/models/page.dart' as page_model;
-import '../../core/models/flash_card.dart';
-import '../../core/services/content/page_service.dart';
-import '../../core/services/media/image_service.dart';
-import 'managers/note_options_manager.dart';
-import '../../core/services/content/note_service.dart';
-import '../flashcard/flashcard_service.dart';
+import '../../../core/models/note.dart';
+import '../../../core/models/page.dart' as page_model;
+import '../../../core/models/flash_card.dart';
+import '../../../core/models/processed_text.dart';
+import '../../../core/services/content/page_service.dart';
+import '../../../core/services/media/image_service.dart';
+import '../managers/note_options_manager.dart';
+import '../../../core/services/content/note_service.dart';
+import '../../flashcard/flashcard_service.dart';
 import 'dart:io';
-import 'note_detail_state.dart';
-import 'page_processing_state.dart';
-import 'view_model/text_view_model.dart';
+import '../note_detail_state.dart';
+import '../page_processing_state.dart';
+import 'text_view_model.dart';
 
 /// 노트 상세 화면의 ViewModel (리팩토링 버전)
 class NoteDetailViewModelNew extends ChangeNotifier {
@@ -26,8 +27,8 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   // 매니저 인스턴스
   final NoteOptionsManager noteOptionsManager = NoteOptionsManager();
   
-  // 텍스트 처리를 위한 ViewModel
-  final TextViewModel textViewModel;
+  // TextViewModel 관리 (페이지 ID를 키로 사용)
+  final Map<String, TextViewModel> _textViewModels = {};
   
   // 상태 관리 클래스
   late NoteDetailState _state;
@@ -62,9 +63,6 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   int get currentPageIndex => _currentPageIndex;
   int get flashcardCount => _state.note?.flashcardCount ?? 0;
   
-  // TextViewModel에서 위임받는 getter들
-  bool get isFullTextMode => textViewModel.isFullTextMode;
-  
   // 현재 페이지 getter
   page_model.Page? get currentPage {
     if (_pages == null || _pages!.isEmpty || _currentPageIndex >= _pages!.length) {
@@ -73,15 +71,28 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     return _pages![_currentPageIndex];
   }
   
+  // 현재 페이지의 TextViewModel 얻기
+  TextViewModel? get currentTextViewModel {
+    if (currentPage == null || currentPage!.id.isEmpty) {
+      return null;
+    }
+    return getTextViewModel(currentPage!.id);
+  }
+  
+  // 현재 텍스트 뷰 상태 (간소화된 상태)
+  TextViewState? get currentTextViewState {
+    return currentTextViewModel?.state;
+  }
+  
+  // 전체 텍스트 모드 getter (현재 텍스트 뷰모델에서 위임)
+  bool get isFullTextMode => currentTextViewModel?.isFullTextMode ?? false;
+  
   /// 생성자
   NoteDetailViewModelNew({
     required String noteId,
     Note? initialNote,
     int totalImageCount = 0,
-    TextViewModel? textViewModel,
-  }) : 
-    _noteId = noteId,
-    textViewModel = textViewModel ?? TextViewModel() {
+  }) : _noteId = noteId {
     // 상태 초기화
     _state = NoteDetailState();
     _state.note = initialNote;
@@ -100,6 +111,35 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       await loadInitialPages();
       await loadFlashcardsForNote();
     });
+  }
+  
+  /// 지정된 페이지 ID에 대한 TextViewModel 가져오기
+  /// 없으면 새로 생성하여 반환
+  TextViewModel getTextViewModel(String pageId) {
+    if (pageId.isEmpty) {
+      throw ArgumentError('페이지 ID가 비어있습니다');
+    }
+    
+    // 이미 존재하는 경우 반환
+    if (_textViewModels.containsKey(pageId)) {
+      return _textViewModels[pageId]!;
+    }
+    
+    // 새로 생성
+    final textViewModel = TextViewModel(id: pageId);
+    _textViewModels[pageId] = textViewModel;
+    
+    // 필요한 초기화 작업
+    if (_flashcards.isNotEmpty) {
+      textViewModel.extractFlashcardWords(_flashcards);
+    }
+    
+    // 현재 페이지에 해당하면 텍스트 처리 시작
+    if (currentPage != null && currentPage!.id == pageId) {
+      _initCurrentPageText(textViewModel);
+    }
+    
+    return textViewModel;
   }
   
   /// 노트 정보 로드
@@ -152,8 +192,11 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       // 백그라운드에서 이미지 로드
       _loadPageImages();
       
-      // 현재 페이지 텍스트 처리 - TextViewModel에 위임
-      _initCurrentPageText();
+      // 현재 페이지 텍스트 처리 시작
+      if (currentPage != null) {
+        final textViewModel = getTextViewModel(currentPage!.id);
+        _initCurrentPageText(textViewModel);
+      }
       
     } catch (e) {
       _state.setLoading(false);
@@ -165,8 +208,8 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     }
   }
   
-  /// 현재 페이지 텍스트 초기화 - TextViewModel에 위임
-  void _initCurrentPageText() {
+  /// 현재 페이지 텍스트 초기화
+  void _initCurrentPageText(TextViewModel textViewModel) {
     if (currentPage != null && currentPage!.id.isNotEmpty) {
       textViewModel.setPageId(currentPage!.id);
     }
@@ -215,15 +258,15 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     try {
       // 페이지 이미지 로드 - ImageService 직접 사용
       // String? 타입을 String으로 변환 (null 아님이 확인되었으므로 안전함)
-      final imageFile = await _imageService.getImageFile(page.imageUrl);
+      final imageFile = await _imageService.getImageFile(page.imageUrl!);
       
       if (imageFile != null) {
         // 이미지 파일 캐싱
-        _imageFileCache[page.imageUrl] = imageFile;
+        _imageFileCache[page.imageUrl!] = imageFile;
         
-        // 현재 페이지인 경우 텍스트 처리 시작 - TextViewModel에 위임
+        // 현재 페이지인 경우 텍스트 처리 시작
         if (pageIndex == _currentPageIndex) {
-          // TextViewModel에 텍스트 처리 요청 위임
+          final textViewModel = getTextViewModel(page.id);
           textViewModel.processPageText(page, imageFile: imageFile);
           notifyListeners();
         }
@@ -265,8 +308,11 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     // 전방/후방 이미지 프리로드
     _preloadAdjacentImages(index);
     
-    // 현재 페이지의 텍스트 처리 시작 - TextViewModel에 위임
-    _initCurrentPageText();
+    // 현재 페이지의 텍스트 처리 시작
+    if (currentPage != null) {
+      final textViewModel = getTextViewModel(currentPage!.id);
+      _initCurrentPageText(textViewModel);
+    }
     
     if (flutter_foundation.kDebugMode) {
       debugPrint("📄 페이지 변경됨: ${index + 1}");
@@ -306,25 +352,16 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     );
   }
   
-  /// 전체 텍스트 모드 토글 - TextViewModel에 위임
-  void toggleFullTextMode() {
-    textViewModel.toggleFullTextMode();
-    notifyListeners();
-  }
   
   /// 노트 제목 업데이트
   Future<bool> updateNoteTitle(String newTitle) async {
-    if (_state.note == null || _state.note!.id == null) return false;
+    if (_state.note == null) return false;
     
-    final success = await noteOptionsManager.updateNoteTitle(_state.note!.id!, newTitle);
+    final success = await noteOptionsManager.updateNoteTitle(_state.note!.id, newTitle);
     
-    if (success) {
-      // 노트 새로 로드
-      final updatedNote = await _noteService.getNoteById(_state.note!.id!);
-      if (updatedNote != null) {
-        _state.updateNote(updatedNote);
-        notifyListeners();
-      }
+    if (success && _state.note != null) {
+      // 성공 후 상태 업데이트만 담당
+      notifyListeners();
     }
     
     return success;
@@ -332,18 +369,13 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   
   /// 노트 삭제
   Future<bool> deleteNote(BuildContext context) async {
-    // 노트 객체가 없거나 ID가 없으면 삭제 불가
     if (_state.note == null) return false;
     
-    // Note 클래스에서 id는 non-null String 타입으로 정의되어 있습니다. 
-    // 하지만 타입 안전성을 위해 빈 문자열 체크를 추가합니다.
     final String id = _state.note!.id;
     if (id.isEmpty) return false;
     
     try {
-      // 삭제 요청
-      final success = await noteOptionsManager.deleteNote(context, id);
-      return success;
+      return await noteOptionsManager.deleteNote(context, id);
     } catch (e) {
       if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 노트 삭제 중 오류: $e");
@@ -371,6 +403,16 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     return _state.pageProcessingState!.getProcessedPagesStatus(_pages!);
   }
   
+  /// 세그먼트 매니저 가져오기
+  SegmentManager getSegmentManager() {
+    if (currentTextViewModel == null) {
+      throw StateError('현재 페이지의 TextViewModel이 초기화되지 않았습니다');
+    }
+    // 여기서는 임시로 SegmentManager의 빈 구현체를 반환합니다.
+    // 실제로는 TextViewModel을 이용하여 세그먼트 매니저를 생성하거나 반환해야 합니다.
+    return SegmentManager();
+  }
+  
   /// 페이지 처리 완료 콜백 설정
   void setPageProcessedCallback(Function(int) callback) {
     _pageProcessedCallback = callback;
@@ -382,8 +424,10 @@ class NoteDetailViewModelNew extends ChangeNotifier {
       final cards = await _flashCardService.getFlashCardsForNote(_noteId);
       _flashcards = cards;
       
-      // 텍스트 뷰모델에 플래시카드 단어 전달
-      textViewModel.extractFlashcardWords(_flashcards);
+      // 모든 텍스트 뷰모델에 플래시카드 단어 전달
+      for (final textViewModel in _textViewModels.values) {
+        textViewModel.extractFlashcardWords(_flashcards);
+      }
       
       notifyListeners();
     } catch (e) {
@@ -412,8 +456,10 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   void updateFlashcards(List<FlashCard> flashcards) {
     _flashcards = flashcards;
     
-    // 텍스트 뷰모델에 플래시카드 단어 전달
-    textViewModel.extractFlashcardWords(_flashcards);
+    // 모든 텍스트 뷰모델에 플래시카드 단어 전달
+    for (final textViewModel in _textViewModels.values) {
+      textViewModel.extractFlashcardWords(_flashcards);
+    }
     
     notifyListeners();
   }
@@ -423,11 +469,52 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     return _flashcards;
   }
   
+  /// 세그먼트 삭제
+  Future<bool> deleteSegment(int segmentIndex) async {
+    if (currentPage == null || currentTextViewModel == null) return false;
+    
+    return await currentTextViewModel!.deleteSegment(
+      segmentIndex, 
+      currentPage!.id, 
+      currentPage!
+    );
+  }
+  
+  /// TTS 관련 메서드
+  bool get isTtsPlaying => currentTextViewModel?.audioState == AudioState.playing;
+  
+  void stopTts() {
+    currentTextViewModel?.stopTts();
+  }
+  
+  void pauseTts() {
+    currentTextViewModel?.pauseTts();
+  }
+  
+  Future<void> speakText(String text, {int? segmentIndex}) async {
+    if (currentTextViewModel == null) return;
+    await currentTextViewModel!.playTts(text, segmentIndex: segmentIndex);
+  }
+  
+  /// 현재 페이지의 전체 텍스트 읽기
+  Future<void> speakCurrentPageText() async {
+    if (currentPage == null || currentTextViewModel == null) return;
+    
+    final fullText = currentTextViewModel!.processedText?.fullOriginalText ?? '';
+    await speakText(fullText);
+  }
+  
   /// 리소스 정리
   @override
   void dispose() {
     pageController.dispose();
-    // 노트: textViewModel은 여기서 dispose하지 않습니다. 외부에서 관리됩니다.
+    
+    // 모든 TextViewModel 정리
+    for (final textViewModel in _textViewModels.values) {
+      textViewModel.dispose();
+    }
+    _textViewModels.clear();
+    
     _state.dispose();
     super.dispose();
   }
@@ -442,5 +529,13 @@ class NoteDetailViewModelNew extends ChangeNotifier {
 void debugPrint(String message) {
   if (flutter_foundation.kDebugMode) {
     print(message);
+  }
+}
+
+// SegmentManager 임시 구현 (실제로는 다른 파일에 정의됨)
+class SegmentManager {
+  Future<ProcessedText?> getProcessedText(String pageId) async {
+    // 실제 구현에서는 텍스트 처리 결과를 반환해야 합니다.
+    return null;
   }
 }

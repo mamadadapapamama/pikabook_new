@@ -12,6 +12,9 @@ class DictionaryResultWidget extends StatelessWidget {
   final DictionaryEntry entry;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
   final bool isExistingFlashcard;
+  
+  // 정적 DictionaryService 인스턴스 (불필요한 재초기화 방지)
+  static final DictionaryService _dictionaryService = DictionaryService();
 
   const DictionaryResultWidget({
     super.key,
@@ -90,25 +93,28 @@ class DictionaryResultWidget extends StatelessWidget {
               : null,
             onPressed: isExistingFlashcard
                 ? null
-                : () {
-                    onCreateFlashCard(
-                      entry.word,
-                      entry.meaning,
-                      pinyin: entry.pinyin,
-                    );
-                    Navigator.pop(context);
-
-                    // 추가 완료 메시지
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('플래시카드에 추가되었습니다'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  },
+                : () => _handleAddToFlashcard(context),
             isFullWidth: true,
           ),
         ],
+      ),
+    );
+  }
+  
+  /// 플래시카드 추가 처리
+  void _handleAddToFlashcard(BuildContext context) {
+    onCreateFlashCard(
+      entry.word,
+      entry.meaning,
+      pinyin: entry.pinyin,
+    );
+    Navigator.pop(context);
+
+    // 추가 완료 메시지
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('플래시카드에 추가되었습니다'),
+        duration: Duration(seconds: 2),
       ),
     );
   }
@@ -159,14 +165,13 @@ class DictionaryResultWidget extends StatelessWidget {
     final loadingDialog = _showLoadingDialog(context);
     
     try {
-      final dictionaryService = DictionaryService();
-      // 사전 초기화 확인
-      if (!dictionaryService.isInitialized) {
-        await dictionaryService.initialize();
+      // 사전 초기화 확인 및 검색
+      if (!_dictionaryService.isInitialized) {
+        await _dictionaryService.initialize();
       }
       
       // 단어 검색
-      final result = await dictionaryService.lookupWord(word);
+      final result = await _dictionaryService.lookupWord(word);
       
       // 로딩 다이얼로그 닫기
       if (context.mounted) {
@@ -212,6 +217,25 @@ class DictionaryResultWidget extends StatelessWidget {
       if (onNotFound != null) {
         onNotFound();
       }
+    }
+  }
+  
+  /// 단어 검색 (사전 결과만 반환)
+  static Future<Map<String, dynamic>> searchWord(String word) async {
+    if (word.isEmpty) {
+      return {'success': false, 'message': '검색할 단어를 입력하세요'};
+    }
+    
+    try {
+      // 사전 초기화 확인
+      if (!_dictionaryService.isInitialized) {
+        await _dictionaryService.initialize();
+      }
+      
+      // 단어 검색
+      return await _dictionaryService.lookupWord(word);
+    } catch (e) {
+      return {'success': false, 'message': '사전 검색 중 오류가 발생했습니다: $e'};
     }
   }
   

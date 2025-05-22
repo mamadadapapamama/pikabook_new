@@ -8,6 +8,53 @@ import '../../../core/services/text_processing/enhanced_ocr_service.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/flash_card.dart';
 
+/// TextViewModel 상태를 나타내는 클래스
+/// 복잡한 내부 상태를 외부에 간단히 노출하기 위한 데이터 구조
+class TextViewState {
+  final bool isReady;      // 텍스트 처리가 완료되었는지 여부
+  final bool hasError;     // 오류가 발생했는지 여부
+  final String? errorMsg;  // 오류 메시지
+  final List<TextUnit> segments; // 텍스트 세그먼트
+  final bool isFullTextMode; // 전체 텍스트 모드 여부
+  final Set<String> flashcardWords; // 플래시카드 단어 목록
+  
+  const TextViewState({
+    this.isReady = false,
+    this.hasError = false,
+    this.errorMsg,
+    this.segments = const [],
+    this.isFullTextMode = false,
+    this.flashcardWords = const {},
+  });
+  
+  // 복사 메서드
+  TextViewState copyWith({
+    bool? isReady,
+    bool? hasError,
+    String? errorMsg,
+    List<TextUnit>? segments,
+    bool? isFullTextMode,
+    Set<String>? flashcardWords,
+  }) {
+    return TextViewState(
+      isReady: isReady ?? this.isReady,
+      hasError: hasError ?? this.hasError,
+      errorMsg: errorMsg ?? this.errorMsg,
+      segments: segments ?? this.segments,
+      isFullTextMode: isFullTextMode ?? this.isFullTextMode,
+      flashcardWords: flashcardWords ?? this.flashcardWords,
+    );
+  }
+}
+
+/// TTS 상태를 나타내는 열거형
+enum AudioState {
+  idle,    // 재생 중이 아님
+  playing, // 재생 중
+  paused,  // 일시 중지됨
+  error    // 오류 발생
+}
+
 /// 텍스트 처리 및 세그먼트 관리를 담당하는 ViewModel
 class TextViewModel extends ChangeNotifier {
   // 서비스 인스턴스
@@ -27,22 +74,52 @@ class TextViewModel extends ChangeNotifier {
   
   // TTS 관련 상태
   int? _playingSegmentIndex;
+  AudioState _audioState = AudioState.idle;
+  
+  // ID - 여러 뷰모델 인스턴스를 구분하기 위한 식별자
+  final String id;
   
   // Getters
   bool get isLoading => _isLoading;
   String? get error => _error;
+  bool get hasError => _error != null;
+  bool get isReady => _processedText != null && !_isLoading;
   bool get isFullTextMode => _isFullTextMode;
   ProcessedText? get processedText => _processedText;
+  List<TextUnit> get segments => _processedText?.units ?? [];
   
   // 플래시카드 관련 getter
   Set<String> get flashcardWords => _flashcardWords;
   
   // TTS 관련 getter
   int? get playingSegmentIndex => _playingSegmentIndex;
+  AudioState get audioState => _audioState;
+  
+  // 간소화된 상태 getter
+  TextViewState get state => TextViewState(
+    isReady: isReady,
+    hasError: hasError,
+    errorMsg: _error,
+    segments: segments,
+    isFullTextMode: _isFullTextMode,
+    flashcardWords: _flashcardWords,
+  );
+  
+  /// 생성자
+  /// [id]는 여러 TextViewModel 인스턴스를 구분하기 위한 식별자 (기본값: 빈 문자열)
+  TextViewModel({this.id = ''});
+  
+  /// ProcessedText로 직접 초기화
+  void initialize(ProcessedText processedText) {
+    _processedText = processedText;
+    _isLoading = false;
+    _error = null;
+    notifyListeners();
+  }
   
   // 페이지 설정 및 초기화
   Future<void> setPageId(String pageId) async {
-    if (_currentPageId == pageId) return;
+    if (_currentPageId == pageId && _processedText != null) return;
     
     _currentPageId = pageId;
     _processedText = null;
@@ -329,20 +406,11 @@ class TextViewModel extends ChangeNotifier {
     notifyListeners();
   }
   
-  // 단어 사전 검색 처리
-  Future<void> lookupDictionary(String word) async {
-    if (word.isEmpty) return;
-
-    // 사전 검색 로직...
-    // 이 부분은 실제 사전 검색 API를 호출하거나 처리하는 로직이 필요합니다.
-    // 여기서는 단어 검색 플래그만 처리합니다.
-    // 실제 구현은 DictionaryViewModel에서 관리하는 것이 더 적합할 수 있습니다.
-  }
-  
   // TTS 재생 처리
   Future<void> playTts(String text, {int? segmentIndex}) async {
     // 현재 재생 중인 세그먼트 설정
     _playingSegmentIndex = segmentIndex;
+    _audioState = AudioState.playing;
     notifyListeners();
     
     try {
@@ -353,12 +421,23 @@ class TextViewModel extends ChangeNotifier {
       // 외부 TTS 서비스/뷰모델에 위임할 수 있습니다.
     } catch (e) {
       setError('TTS 재생 중 오류 발생: $e');
+      _audioState = AudioState.error;
+      notifyListeners();
+    }
+  }
+  
+  // TTS 일시 중지
+  void pauseTts() {
+    if (_audioState == AudioState.playing) {
+      _audioState = AudioState.paused;
+      notifyListeners();
     }
   }
   
   // TTS 재생 종료
   void stopTts() {
     _playingSegmentIndex = null;
+    _audioState = AudioState.idle;
     notifyListeners();
   }
   
@@ -373,6 +452,18 @@ class TextViewModel extends ChangeNotifier {
     if (errorMessage != null && kDebugMode) {
       print('TextViewModel 오류: $errorMessage');
     }
+    notifyListeners();
+  }
+  
+  /// 상태 초기화 - 여러 TextViewModel 인스턴스를 관리할 때 유용
+  void reset() {
+    _isLoading = false;
+    _error = null;
+    _processedText = null;
+    _currentPageId = '';
+    _flashcardWords = {};
+    _playingSegmentIndex = null;
+    _audioState = AudioState.idle;
     notifyListeners();
   }
   
