@@ -28,7 +28,7 @@ import '../../app.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/debug_utils.dart';
 import '../../core/models/note.dart';
-import '../note_detail/note_detail_screen_mvvm.dart';
+import '../note_detail/note_detail_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용 위해 추가
 
@@ -243,12 +243,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             appBar: PikaAppBar.home(
               noteSpaceName: _noteSpaceName.isNotEmpty ? _noteSpaceName : '로딩 중...',
               onSettingsPressed: () => _navigateToSettings(context),
-            ),
-            floatingActionButton: FloatingActionButton(
-              onPressed: () => _navigateToLLMTest(context),
-              backgroundColor: ColorTokens.primary,
-              child: const Icon(Icons.science, color: Colors.white),
-              tooltip: 'LLM 테스트',
             ),
             body: Consumer<HomeViewModel>(
               builder: (context, viewModel, _) {
