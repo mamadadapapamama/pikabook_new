@@ -225,4 +225,53 @@ class UserPreferencesService {
     final prefs = await getPreferences();
     await savePreferences(prefs.copyWith(useSegmentMode: useSegmentMode));
   }
+  
+  /// 노트 스페이스 추가
+  Future<void> addNoteSpace(String spaceName) async {
+    final prefs = await getPreferences();
+    final spaces = List<String>.from(prefs.noteSpaces);
+    
+    // 이미 존재하는 경우 추가하지 않음
+    if (!spaces.contains(spaceName)) {
+      spaces.add(spaceName);
+      await savePreferences(prefs.copyWith(noteSpaces: spaces));
+      
+      // Firestore에도 업데이트
+      final userId = await getCurrentUserId();
+      if (userId != null && userId.isNotEmpty) {
+        try {
+          await FirebaseFirestore.instance.collection('users').doc(userId).update({
+            'noteSpaces': FieldValue.arrayUnion([spaceName])
+          });
+        } catch (e) {
+          debugPrint('⚠️ Firestore 노트 스페이스 추가 실패: $e');
+        }
+      }
+    }
+  }
+  
+  /// 학습 목적 설정
+  Future<void> setLearningPurpose(String purpose) async {
+    final prefs = await getPreferences();
+    await savePreferences(prefs.copyWith(learningPurpose: purpose));
+  }
+  
+  /// 온보딩 여부 설정
+  Future<void> setHasOnboarded(bool hasOnboarded) async {
+    final prefs = await getPreferences();
+    final updatedPrefs = prefs.copyWith(hasLoginHistory: hasOnboarded);
+    await savePreferences(updatedPrefs);
+    
+    // Firestore에도 업데이트
+    final userId = await getCurrentUserId();
+    if (userId != null && userId.isNotEmpty) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(userId).update({
+          'hasOnboarded': hasOnboarded
+        });
+      } catch (e) {
+        debugPrint('⚠️ Firestore 온보딩 상태 업데이트 실패: $e');
+      }
+    }
+  }
 } 

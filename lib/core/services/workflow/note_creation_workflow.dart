@@ -8,7 +8,7 @@ import '../cache/unified_cache_service.dart';
 import '../../../core/widgets/loading_dialog_experience.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
-import '../../../features/note_detail/note_detail_screen_mvvm.dart';
+import '../../../features/note_detail/note_detail_screen.dart';
 import '../../../core/utils/note_tutorial.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
@@ -117,18 +117,35 @@ class NoteCreationWorkflow {
       }
       
       // 노트 생성 (백그라운드 처리 위임)
-      final result = await _noteService.createNoteWithMultipleImages(
-        imageFiles: validImageFiles,
-        waitForFirstPageProcessing: false, // 텍스트 처리를 기다리지 않고 이미지만 확인
+      final noteId = await _noteService.createNote(
+        title: '새 노트',
       );
       
-      if (kDebugMode) {
-      debugPrint('노트 생성 완료: $result');
+      if (noteId.isNotEmpty) {
+        isSuccess = true;
+        createdNoteId = noteId;
+        
+        // 페이지 업로드는 간소화 - 이미지 업로드 로직은 별도 서비스에서 처리
+        // 여기서는 페이지를 생성만 하고 실제 이미지 업로드 및 텍스트 처리는 백그라운드로 위임
+        
+        // 이미지 처리는 ImageService에 위임
+        for (int i = 0; i < validImageFiles.length; i++) {
+          // 이미지 업로드 시작 - ImageService.uploadImage는 파일을 받아서 경로를 반환
+          final String imagePath = await _imageService.uploadImage(validImageFiles[i]);
+          
+          // 페이지 생성 - 추출 텍스트는 빈 값으로 시작하고 백그라운드에서 처리
+          await _pageService.createPage(
+            noteId: noteId,
+            extractedText: '', // 빈 텍스트로 시작 (추후 백그라운드에서 처리)
+            pageNumber: i,
+            imageUrl: imagePath,
+          );
+        }
       }
       
-      // 성공 여부 체크
-      isSuccess = result['success'] == true;
-      createdNoteId = result['noteId'] as String?;
+      if (kDebugMode) {
+      debugPrint('노트 생성 완료: $noteId');
+      }
       
       // 첫 페이지 이미지 업로드 확인 (텍스트 처리는 노트 상세에서 처리)
       if (isSuccess && createdNoteId != null) {
@@ -151,13 +168,18 @@ class NoteCreationWorkflow {
         // 노트 정보 로드
         final Note? completedNote = await _loadCompleteNote(createdNoteId);
         
+        // 사용자 ID 가져오기
+        final String userId = _auth.currentUser?.uid ?? '';
+        
         // 임시 Note 객체 생성
         final tempNote = completedNote ?? Note(
           id: createdNoteId,
-          originalText: '새 노트',
-          translatedText: '',
-          extractedText: '',
-          imageCount: totalImageCount,
+          userId: userId,
+          title: '새 노트',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          isFavorite: false,
+          flashcardCount: 0,
         );
         
         // 로딩 화면 숨기기 (표시된 경우에만)
@@ -228,10 +250,7 @@ class NoteCreationWorkflow {
           if (kDebugMode) {
             debugPrint('✅ 첫 번째 페이지 이미지 확인됨: ${page.id} - 노트 상세로 이동');
           }
-          // 캐시 업데이트 (백그라운드로 처리)
-          Future.microtask(() async {
-            await _cacheService.cachePage(noteId, page);
-          });
+          // 캐시 관련 로직 제거 - 상세화면에서 처리
           // 리스너 취소
           subscription?.cancel();
           // 응답 반환 (이미지만 확인되면 바로 진행)
@@ -303,7 +322,7 @@ class NoteCreationWorkflow {
             .map((doc) => page_model.Page.fromFirestore(doc))
             .toList();
         
-        return note.copyWith(pages: pages);
+        return note;
       }
       
       return note;

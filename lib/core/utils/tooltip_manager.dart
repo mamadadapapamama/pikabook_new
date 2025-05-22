@@ -3,6 +3,172 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/tokens/color_tokens.dart';
 import 'debug_utils.dart';
 
+// 툴팁 스타일 정의
+enum HelpTextTooltipStyle {
+  primary,
+  secondary,
+  info
+}
+
+// 커스텀 툴팁 위젯
+class HelpTextTooltip extends StatelessWidget {
+  final String text;
+  final String description;
+  final bool showTooltip;
+  final VoidCallback onDismiss;
+  final Color backgroundColor;
+  final Color borderColor;
+  final Color textColor;
+  final EdgeInsets tooltipPadding;
+  final double tooltipWidth;
+  final double spacing;
+  final HelpTextTooltipStyle style;
+  final Widget? image;
+  final int currentStep;
+  final int totalSteps;
+  final VoidCallback onNextStep;
+  final VoidCallback onPrevStep;
+
+  const HelpTextTooltip({
+    Key? key,
+    required this.text,
+    required this.description,
+    required this.showTooltip,
+    required this.onDismiss,
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.textColor,
+    required this.tooltipPadding,
+    required this.tooltipWidth,
+    required this.spacing,
+    required this.style,
+    this.image,
+    required this.currentStep,
+    required this.totalSteps,
+    required this.onNextStep,
+    required this.onPrevStep,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    if (!showTooltip) return const SizedBox.shrink();
+
+    return Container(
+      width: tooltipWidth,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: borderColor,
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: tooltipPadding,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: onDismiss,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.close,
+                    size: 20,
+                    color: textColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: spacing),
+          Text(
+            description,
+            style: TextStyle(
+              fontSize: 14,
+              color: textColor,
+            ),
+          ),
+          if (image != null) ...[
+            SizedBox(height: spacing),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: image,
+            ),
+          ],
+          SizedBox(height: spacing),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // 스텝 인디케이터
+              Row(
+                children: List.generate(
+                  totalSteps,
+                  (index) => Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.only(right: 4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: index == currentStep - 1
+                          ? borderColor
+                          : Colors.grey.withOpacity(0.3),
+                    ),
+                  ),
+                ),
+              ),
+              
+              // 이전/다음 버튼
+              Row(
+                children: [
+                  if (currentStep > 1)
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios, size: 16),
+                      onPressed: onPrevStep,
+                      color: textColor,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  if (currentStep < totalSteps) ...[
+                    const SizedBox(width: 16),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onPressed: onNextStep,
+                      color: textColor,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class TooltipManager {
   bool showTooltip = false;
   int tooltipStep = 1;

@@ -53,10 +53,8 @@ class PageImageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 이미지가 없거나 페이지가 처리 중인 경우
-    if ((imageFile == null && (imageUrl == null || imageUrl!.isEmpty)) || 
-        (page != null && page!.originalText == '___PROCESSING___') ||
-        isLoading) {
+    // 이미지가 없는 경우 또는 로딩 중인 경우
+    if ((imageFile == null && (imageUrl == null || imageUrl!.isEmpty)) || isLoading) {
       return _buildLoadingIndicator();
     }
 

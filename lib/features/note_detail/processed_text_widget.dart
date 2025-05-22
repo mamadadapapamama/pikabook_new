@@ -1,27 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/models/processed_text.dart';
 import '../../core/models/flash_card.dart';
-import '../../core/services/tts/tts_service.dart';
 import '../../core/utils/text_highlight_manager.dart';
 import '../../core/utils/context_menu_manager.dart';
 import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/theme/tokens/typography_tokens.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../core/utils/segment_utils.dart';
 import '../../core/widgets/tts_button.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
-/// 
-/// ## 주요 기능
-/// - 병음 및 번역 표시 토글
-/// - 단어 선택 및 사전 검색
-/// - 텍스트 선택 및 컨텍스트 메뉴
-/// - 플래시카드 단어 하이라이트
-/// - TTS(Text-to-Speech) 기능
-
 
 
 class ProcessedTextWidget extends StatefulWidget {

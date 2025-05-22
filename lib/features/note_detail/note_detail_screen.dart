@@ -3,9 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../../core/models/note.dart';
 import '../../core/models/page.dart' as pika_page;
 import '../../core/models/flash_card.dart';
-import 'note_detail_viewmodel_new.dart';
+import '../../features/note_detail/view_model/note_detail_viewmodel.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
-import 'page_content_widget.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../flashcard/flashcard_screen.dart';
@@ -17,6 +16,8 @@ import 'package:provider/provider.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
 import '../flashcard/flashcard_service.dart';
+import 'note_page_widget.dart';
+import 'view_model/text_view_model.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatefulWidget {
@@ -133,7 +134,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     final totalPages = viewModel.pages?.length ?? 0;
     
     return PikaAppBar.noteDetail(
-      title: viewModel.note?.originalText ?? '노트 로딩 중...',
+      title: viewModel.note?.title ?? '노트 로딩 중...',
       currentPage: currentPageNum,
       totalPages: totalPages,
       flashcardCount: viewModel.flashcardCount,
@@ -186,7 +187,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
             final page = viewModel.pages![index];
             
             // 특수 처리 마커가 있는지 확인
-            if (page.originalText == "___PROCESSING___") {
+            if (viewModel.isPageProcessing(page)) {
               return _buildProcessingPage();
             }
             
@@ -239,19 +240,22 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   
   // 페이지 콘텐츠 위젯
   Widget _buildPageContent(BuildContext context, NoteDetailViewModelNew viewModel, pika_page.Page page) {
+    // 현재 페이지에 대한 TextViewModel 얻기
+    final textViewModel = viewModel.getTextViewModel(page.id);
+    
     return RepaintBoundary(
-      child: PageContentWidget(
+      child: NotePageWidget(
         key: ValueKey('page_content_${page.id}'),
         page: page,
         imageFile: viewModel.getCurrentPageImageFile(),
-        isLoadingImage: false,
+        textViewModel: textViewModel,
         noteId: viewModel.noteId,
         onCreateFlashCard: (front, back, {pinyin}) => 
             _handleCreateFlashCard(context, viewModel, front, back, pinyin: pinyin),
         // 플래시카드 목록을 전달하도록 수정
         flashCards: viewModel.getFlashcardsForCurrentPage(), 
-        useSegmentMode: !viewModel.isFullTextMode,
         onDeleteSegment: (segmentIndex) => _handleDeleteSegment(context, viewModel, segmentIndex),
+        onPlayTts: (text, {segmentIndex}) => viewModel.playTts(text, segmentIndex: segmentIndex),
       ),
     );
   }
@@ -414,6 +418,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     // TTS 재생 서비스 생성
     final ttsPlaybackService = TtsPlaybackService();
     
+    // 임시 TTS 콜백 - 나중에 수정 필요
     return NoteDetailBottomBar(
       currentPage: viewModel.currentPage,
       currentPageIndex: viewModel.currentPageIndex,
@@ -422,7 +427,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         // 네비게이션 버튼 클릭 시 PageController를 사용하여 페이지 이동
         viewModel.navigateToPage(index);
       },
-      contentManager: viewModel.getSegmentManager(),
+      // 임시로 null 전달 - 타입 불일치 해결 위해
+      contentManager: null,
       ttsPlaybackService: ttsPlaybackService,
       isProcessing: false,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),

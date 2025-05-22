@@ -10,7 +10,6 @@ import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/widgets/tts_button.dart';
-import 'managers/page_content_manager.dart';
 import 'dart:async';
 import '../../widgets/note_progress_bar.dart';
 import '../../widgets/page_indicator.dart';
@@ -25,7 +24,7 @@ class NoteDetailBottomBar extends StatefulWidget {
   final int currentPageIndex;
   final int totalPages;
   final Function(int) onPageChanged;
-  final SegmentManager contentManager;
+  final dynamic contentManager;
   final TtsPlaybackService ttsPlaybackService;
   final bool isProcessing; // 현재 페이지가 처리 중인지 여부
   final double progressValue;
@@ -39,7 +38,7 @@ class NoteDetailBottomBar extends StatefulWidget {
     required this.currentPageIndex,
     required this.totalPages,
     required this.onPageChanged,
-    required this.contentManager,
+    this.contentManager,
     required this.ttsPlaybackService,
     this.isProcessing = false, // 기본값은 false (처리 중이 아님)
     this.progressValue = 0.0,
@@ -59,22 +58,24 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   @override
   void initState() {
     super.initState();
-    // 초기화 중에는 Future 시작만 하고 즉시 리턴 (non-blocking)
-    _fetchProcessedTextSafely();
+    // contentManager가 제공된 경우에만 텍스트 가져오기 시도
+    if (widget.contentManager != null) {
+      _fetchProcessedTextSafely();
+    }
   }
   
   @override
   void didUpdateWidget(NoteDetailBottomBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     // 페이지 ID가 변경된 경우에만 새로운 텍스트 가져오기
-    if (oldWidget.currentPage?.id != widget.currentPage?.id) {
+    if (oldWidget.currentPage?.id != widget.currentPage?.id && widget.contentManager != null) {
       _fetchProcessedTextSafely();
     }
   }
   
   // 안전하게 ProcessedText를 가져오는 메서드
   void _fetchProcessedTextSafely() {
-    if (widget.currentPage?.id == null) {
+    if (widget.currentPage?.id == null || widget.contentManager == null) {
       setState(() {
         processedText = null;
         _isLoadingText = false;
@@ -109,23 +110,28 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   }
   
   Future<void> _updateProcessedText() async {
-    if (widget.currentPage?.id == null) {
+    if (widget.currentPage?.id == null || widget.contentManager == null) {
       processedText = null;
       return;
     }
     
     try {
-      // 타임아웃 설정으로 무한 대기 방지
-      processedText = await widget.contentManager.getProcessedText(widget.currentPage!.id!)
-          .timeout(
-            const Duration(seconds: 3),
-            onTimeout: () {
-              if (kDebugMode) {
-                debugPrint("⚠️ ProcessedText 로드 타임아웃");
+      // contentManager가 getProcessedText 메서드를 가지고 있는지 확인
+      if (widget.contentManager != null && 
+          widget.contentManager is Function ||
+          widget.contentManager.getProcessedText is Function) {
+        // 타임아웃 설정으로 무한 대기 방지
+        processedText = await widget.contentManager.getProcessedText(widget.currentPage!.id!)
+            .timeout(
+              const Duration(seconds: 3),
+              onTimeout: () {
+                if (kDebugMode) {
+                  debugPrint("⚠️ ProcessedText 로드 타임아웃");
+                }
+                return null;
               }
-              return null;
-            }
-          );
+            );
+      }
     } catch (e) {
       if (kDebugMode) {
         debugPrint("❌ ProcessedText 업데이트 오류: $e");
