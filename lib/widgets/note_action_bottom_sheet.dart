@@ -2,23 +2,19 @@ import 'package:flutter/material.dart';
 import '../core/theme/tokens/color_tokens.dart';
 import '../core/theme/tokens/typography_tokens.dart';
 
-// 즐겨찾기, 노트제목 변경, 노트삭제 기능
+// 노트제목 변경, 노트삭제 기능
 class NoteActionBottomSheet extends StatelessWidget {
   final VoidCallback onEditTitle;
   final VoidCallback onDeleteNote;
   final VoidCallback onToggleFullTextMode;
-  final VoidCallback onToggleFavorite;
   final bool isFullTextMode;
-  final bool isFavorite;
 
   const NoteActionBottomSheet({
     Key? key,
     required this.onEditTitle,
     required this.onDeleteNote,
     required this.onToggleFullTextMode,
-    required this.onToggleFavorite,
     required this.isFullTextMode,
-    required this.isFavorite,
   }) : super(key: key);
 
   @override
@@ -54,20 +50,6 @@ class NoteActionBottomSheet extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-            ),
-            
-            // 즐겨찾기 추가/제거
-            _buildActionTile(
-              context: context,
-              title: isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가',
-              trailing: Icon(
-                isFavorite ? Icons.favorite : Icons.favorite_border,
-                color: isFavorite ? ColorTokens.primary : ColorTokens.greyMedium
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                onToggleFavorite();
-              },
             ),
             
             // 노트 제목 변경

@@ -28,10 +28,16 @@ class SampleFlashCardScreen extends StatefulWidget {
 class _SampleTtsService {
   bool _isSpeaking = false;
   Function? _onCompleted;
+  int? _currentSegmentIndex;
   
   // TTS 완료 콜백 설정
   void setOnPlayingCompleted(Function callback) {
     _onCompleted = callback;
+  }
+  
+  // 재생 상태 변경 콜백 설정
+  void setOnPlayingStateChanged(Function(int?) callback) {
+    // 샘플에서는 구현 필요 없음
   }
   
   // 음성 재생 시작
@@ -42,13 +48,24 @@ class _SampleTtsService {
     // 실제 TTS 대신 타이머로 1초 후 완료되는 것처럼 시뮬레이션
     await Future.delayed(const Duration(seconds: 1));
     _isSpeaking = false;
+    _currentSegmentIndex = null;
     _onCompleted?.call();
+  }
+  
+  // 세그먼트 음성 재생
+  Future<void> speakSegment(String text, int segmentIndex) async {
+    _currentSegmentIndex = segmentIndex;
+    await speak(text);
   }
   
   // 음성 재생 중지
   Future<void> stop() async {
     _isSpeaking = false;
+    _currentSegmentIndex = null;
   }
+  
+  // 현재 재생 중인 세그먼트 인덱스
+  int? get currentSegmentIndex => _currentSegmentIndex;
   
   // 언어 설정 (샘플에서는 아무 동작 없음)
   Future<void> setLanguage(String languageCode) async {}
@@ -61,6 +78,9 @@ class _SampleTtsService {
   
   // 리소스 해제
   void dispose() {}
+  
+  // 제한 메시지 가져오기
+  String getTtsLimitMessage() => "샘플 모드에서는 TTS 기능이 제한될 수 있습니다.";
 }
 
 class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
@@ -91,6 +111,11 @@ class _SampleFlashCardScreenState extends State<SampleFlashCardScreen> {
             _isSpeaking = false;
           });
         }
+      });
+      
+      // 재생 상태 변경 리스너 설정
+      _ttsService.setOnPlayingStateChanged((segmentIndex) {
+        // 샘플에서는 필요한 경우 여기에 구현
       });
       
       // 사용 가능 여부 확인

@@ -54,7 +54,7 @@ class TtsButton extends StatefulWidget {
 }
 
 class _TtsButtonState extends State<TtsButton> {
-  final TtsService _ttsService = TtsService();
+  final TTSService _ttsService = TTSService();
   bool _isPlaying = false;
   bool _isEnabled = true;
   

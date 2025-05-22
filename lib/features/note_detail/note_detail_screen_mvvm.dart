@@ -273,142 +273,21 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   
   // 더보기 옵션 표시
   void _showMoreOptions(BuildContext context, NoteDetailViewModelNew viewModel) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _buildBottomSheet(context, viewModel),
-    );
-  }
-  
-  // 바텀 시트 구성
-  Widget _buildBottomSheet(BuildContext context, NoteDetailViewModelNew viewModel) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(16.0),
-          topRight: Radius.circular(16.0),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 8),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          ListTile(
-            leading: Icon(
-              viewModel.note?.isFavorite == true ? Icons.star : Icons.star_border,
-            ),
-            title: Text(viewModel.note?.isFavorite == true ? '즐겨찾기 해제' : '즐겨찾기 추가'),
-            onTap: () {
-              viewModel.toggleFavorite();
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.edit),
-            title: const Text('제목 수정'),
-            onTap: () {
-              Navigator.pop(context);
-              _showEditTitleDialog(context, viewModel);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete, color: Colors.red),
-            title: const Text('노트 삭제', style: TextStyle(color: Colors.red)),
-            onTap: () {
-              Navigator.pop(context);
-              _confirmDeleteNote(context, viewModel);
-            },
-          ),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-  
-  // 제목 수정 다이얼로그
-  void _showEditTitleDialog(BuildContext context, NoteDetailViewModelNew viewModel) {
-    final TextEditingController controller = TextEditingController(
-      text: viewModel.note?.originalText,
-    );
+    final note = viewModel.note;
+    if (note == null) return;
     
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ColorTokens.surface,
-        title: const Text('제목 수정'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: '새 제목을 입력하세요',
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () {
-              final newTitle = controller.text.trim();
-              if (newTitle.isNotEmpty) {
-                viewModel.updateNoteTitle(newTitle);
-              }
-              Navigator.pop(context);
-            },
-            child: const Text('저장'),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  // 노트 삭제 확인
-  void _confirmDeleteNote(BuildContext context, NoteDetailViewModelNew viewModel) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ColorTokens.surface,
-        title: const Text('노트 삭제'),
-        content: const Text('이 노트를 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context); // 다이얼로그 닫기
-              final success = await viewModel.deleteNote();
-              if (success && context.mounted) {
-                // 홈 화면으로 바로 돌아가기 (첫 번째 화면까지 모든 화면 팝)
-                Navigator.of(context).popUntil((route) => route.isFirst);
-                
-                // 삭제 완료 메시지 표시
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('노트가 삭제되었습니다')),
-                );
-              } else if (context.mounted) {
-                // 삭제 실패 메시지 표시
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('노트 삭제 중 오류가 발생했습니다')),
-                );
-              }
-            },
-            child: const Text('삭제', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+    // 노트 옵션 매니저를 통해 옵션 표시
+    viewModel.noteOptionsManager.showMoreOptions(
+      context, 
+      note,
+      onTitleEditing: () {
+        // 노트 제목 업데이트 후 새로고침
+        viewModel.loadNote();
+      },
+      onNoteDeleted: () {
+        // 노트 삭제 후 이전 화면으로 이동
+        Navigator.of(context).pop();
+      }
     );
   }
   

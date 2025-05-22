@@ -6,15 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:collection/collection.dart';
 import '../../models/flash_card.dart';
-
-/// 처리 모드
-enum ProcessingMode {
-  /// 문장별 분리
-  sentence,
-  
-  /// 문단별 분리
-  paragraph
-}
+import '../../models/processed_text.dart';
 
 /// 통합 캐시 서비스
 /// 앱 전체에서 사용되는 캐시를 관리합니다.
@@ -63,7 +55,7 @@ class UnifiedCacheService {
   }
   
   /// 세그먼트 캐시 키 생성
-  String _getSegmentCacheKey(String imageId, ProcessingMode mode) {
+  String _getSegmentCacheKey(String imageId, TextProcessingMode mode) {
     return 'segments_${imageId}_${mode.toString().split('.').last}';
   }
   
@@ -78,7 +70,7 @@ class UnifiedCacheService {
   }
   
   /// 세그먼트 결과 캐싱
-  Future<void> cacheSegments(String imageId, ProcessingMode mode, List<Map<String, String>> segments) async {
+  Future<void> cacheSegments(String imageId, TextProcessingMode mode, List<Map<String, String>> segments) async {
     try {
       final key = _getSegmentCacheKey(imageId, mode);
       
@@ -99,7 +91,7 @@ class UnifiedCacheService {
   }
   
   /// 세그먼트 결과 조회
-  Future<List<Map<String, String>>?> getSegments(String imageId, ProcessingMode mode) async {
+  Future<List<Map<String, String>>?> getSegments(String imageId, TextProcessingMode mode) async {
     try {
       final key = _getSegmentCacheKey(imageId, mode);
       
@@ -257,14 +249,14 @@ class UnifiedCacheService {
   Future<void> clearImageCache(String imageId) async {
     try {
       // 로컬 캐시 삭제
-      for (final mode in ProcessingMode.values) {
+      for (final mode in TextProcessingMode.values) {
         final key = _getSegmentCacheKey(imageId, mode);
         _cache.remove(key);
         _lastAccessed.remove(key);
       }
       
       // 클라우드 캐시 삭제
-      for (final mode in ProcessingMode.values) {
+      for (final mode in TextProcessingMode.values) {
         final key = _getSegmentCacheKey(imageId, mode);
         await _firestore.collection(_segmentsCollection).doc(key).delete();
       }
@@ -465,7 +457,7 @@ class UnifiedCacheService {
   }
   
   /// 동기화 상태 확인
-  Future<bool> isSynced(String imageId, ProcessingMode mode) async {
+  Future<bool> isSynced(String imageId, TextProcessingMode mode) async {
     try {
       final key = _getSegmentCacheKey(imageId, mode);
       final localData = _cache[key];

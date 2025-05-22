@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/text_unit.dart';
-import '../../../core/services/cache/unified_cache_service.dart' as cache_service;
+import '../../../core/services/cache/unified_cache_service.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
 import '../../../core/services/text_processing/enhanced_ocr_service.dart';
 import '../../../core/models/page.dart' as page_model;
@@ -13,7 +13,7 @@ class TextViewModel extends ChangeNotifier {
   // 서비스 인스턴스
   final LLMTextProcessing _textProcessingService = LLMTextProcessing();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
-  final cache_service.UnifiedCacheService _cacheService = cache_service.UnifiedCacheService();
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
 
   // 상태 변수
   bool _isLoading = false;
@@ -222,7 +222,7 @@ class TextViewModel extends ChangeNotifier {
   Future<ProcessedText?> getProcessedText(String pageId) async {
     try {
       // 세그먼트 캐싱 사용
-      final segments = await _cacheService.getSegments(pageId, cache_service.ProcessingMode.paragraph);
+      final segments = await _cacheService.getSegments(pageId, TextProcessingMode.paragraph);
       
       if (segments == null || segments.isEmpty) return null;
       
@@ -274,7 +274,7 @@ class TextViewModel extends ChangeNotifier {
       }).toList();
       
       // 세그먼트 캐싱 사용
-      await _cacheService.cacheSegments(pageId, cache_service.ProcessingMode.paragraph, segments);
+      await _cacheService.cacheSegments(pageId, TextProcessingMode.paragraph, segments);
     } catch (e) {
       if (kDebugMode) {
         print('캐시에 처리된 텍스트 저장 실패: $e');

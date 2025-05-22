@@ -6,7 +6,7 @@ import '../../../core/services/content/page_service.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
 import '../../../core/services/text_processing/enhanced_ocr_service.dart';
-import '../../../core/services/storage/unified_cache_service.dart';
+import '../../../core/services/cache/unified_cache_service.dart';
 import '../../../core/services/authentication/user_preferences_service.dart';
 
 /// 페이지 관리자: 페이지 상태 관리와 UI 관련 로직을 담당합니다.

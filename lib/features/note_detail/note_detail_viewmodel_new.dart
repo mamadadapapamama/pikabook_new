@@ -24,7 +24,7 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   final ImageService _imageService = ImageService();
   
   // 매니저 인스턴스
-  final NoteOptionsManager _noteOptionsManager = NoteOptionsManager();
+  final NoteOptionsManager noteOptionsManager = NoteOptionsManager();
   
   // 텍스트 처리를 위한 ViewModel
   final TextViewModel textViewModel;
@@ -312,27 +312,11 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     notifyListeners();
   }
   
-  /// 즐겨찾기 토글
-  Future<bool> toggleFavorite() async {
-    if (_state.note == null || _state.note!.id == null) return false;
-    
-    final newValue = !(_state.note!.isFavorite);
-    final success = await _noteOptionsManager.toggleFavorite(_state.note!.id!, newValue);
-    
-    if (success) {
-      _state.note = _state.note!.copyWith(isFavorite: newValue);
-      _state.toggleFavorite();
-      notifyListeners();
-    }
-    
-    return success;
-  }
-  
   /// 노트 제목 업데이트
   Future<bool> updateNoteTitle(String newTitle) async {
     if (_state.note == null || _state.note!.id == null) return false;
     
-    final success = await _noteOptionsManager.updateNoteTitle(_state.note!.id!, newTitle);
+    final success = await noteOptionsManager.updateNoteTitle(_state.note!.id!, newTitle);
     
     if (success) {
       // 노트 새로 로드
@@ -347,12 +331,19 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   }
   
   /// 노트 삭제
-  Future<bool> deleteNote() async {
-    if (_state.note == null || _state.note!.id == null) return false;
+  Future<bool> deleteNote(BuildContext context) async {
+    // 노트 객체가 없거나 ID가 없으면 삭제 불가
+    if (_state.note == null) return false;
+    
+    // Note 클래스에서 id는 non-null String 타입으로 정의되어 있습니다. 
+    // 하지만 타입 안전성을 위해 빈 문자열 체크를 추가합니다.
+    final String id = _state.note!.id;
+    if (id.isEmpty) return false;
     
     try {
-      await _noteService.deleteNote(_state.note!.id!);
-      return true;
+      // 삭제 요청
+      final success = await noteOptionsManager.deleteNote(context, id);
+      return success;
     } catch (e) {
       if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 노트 삭제 중 오류: $e");
@@ -439,6 +430,11 @@ class NoteDetailViewModelNew extends ChangeNotifier {
     // 노트: textViewModel은 여기서 dispose하지 않습니다. 외부에서 관리됩니다.
     _state.dispose();
     super.dispose();
+  }
+  
+  /// 노트 정보 다시 로드
+  Future<void> loadNote() async {
+    await _loadNoteInfo();
   }
 }
 

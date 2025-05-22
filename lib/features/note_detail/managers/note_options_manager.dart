@@ -1,55 +1,38 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/note.dart';
 import '../../../core/services/content/note_service.dart';
+import '../../../core/services/cache/unified_cache_service.dart';
 import '../../../widgets/edit_title_dialog.dart';
+import '../../../widgets/delete_note_dialog.dart';
+import '../../../widgets/note_action_bottom_sheet.dart';
 
-// 노트 상세 화면의 옵션 메뉴 관리. 즐겨찾기, 삭제, 제목 편집
+// 노트 상세 화면의 옵션 메뉴 관리. 제목 편집, 삭제
 class NoteOptionsManager {
   final NoteService _noteService = NoteService();
+  final UnifiedCacheService _cacheService = UnifiedCacheService();
   
   void showMoreOptions(BuildContext context, Note? note, {
     required Function onTitleEditing,
-    required Function(bool) onFavoriteToggle,
     required Function onNoteDeleted,
   }) {
     if (note == null) return;
     
+    // NoteActionBottomSheet 위젯 사용
     showModalBottomSheet(
       context: context,
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.edit),
-            title: const Text('제목 편집'),
-            onTap: () {
-              Navigator.pop(context);
-              _showEditTitleDialog(context, note, onTitleEditing);
-            },
-          ),
-          ListTile(
-            leading: Icon(note.isFavorite ? Icons.star : Icons.star_border),
-            title: Text(note.isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'),
-            onTap: () {
-              Navigator.pop(context);
-              toggleFavorite(note.id!, !note.isFavorite).then((success) {
-                if (success) {
-                  onFavoriteToggle(!note.isFavorite);
-                }
-              });
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete, color: Colors.red),
-            title: const Text('노트 삭제', style: TextStyle(color: Colors.red)),
-            onTap: () {
-              Navigator.pop(context);
-              confirmDelete(context, note.id!, onDeleted: () {
-                onNoteDeleted();
-              });
-            },
-          ),
-        ],
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => NoteActionBottomSheet(
+        onEditTitle: () {
+          _showEditTitleDialog(context, note, onTitleEditing);
+        },
+        onDeleteNote: () {
+          confirmDelete(context, note.id, onDeleted: onNoteDeleted);
+        },
+        onToggleFullTextMode: () {
+          // 사용하지 않음
+        },
+        isFullTextMode: false, // 사용하지 않음
       ),
     );
   }
@@ -58,9 +41,9 @@ class NoteOptionsManager {
     showDialog(
       context: context,
       builder: (context) => EditTitleDialog(
-        currentTitle: note.originalText,
+        currentTitle: note.title,
         onTitleUpdated: (newTitle) {
-          updateNoteTitle(note.id!, newTitle).then((success) {
+          updateNoteTitle(note.id, newTitle).then((success) {
             if (success) {
               onTitleEditing();
             }
@@ -70,23 +53,17 @@ class NoteOptionsManager {
     );
   }
   
-  Future<bool> toggleFavorite(String noteId, bool isFavorite) async {
-    try {
-      await _noteService.toggleFavorite(noteId, isFavorite);
-      return true;
-    } catch (e) {
-      debugPrint('즐겨찾기 토글 중 오류 발생: $e');
-      return false;
-    }
-  }
-  
   Future<bool> updateNoteTitle(String noteId, String newTitle) async {
     try {
       final note = await _noteService.getNoteById(noteId);
       if (note == null) return false;
       
-      final updatedNote = note.copyWith(originalText: newTitle);
+      final updatedNote = note.copyWith(title: newTitle);
       await _noteService.updateNote(noteId, updatedNote);
+      
+      // 캐시 업데이트 - 노트 제목 변경 후 캐시도 갱신
+      await _clearRelatedCache(noteId);
+      
       return true;
     } catch (e) {
       debugPrint('노트 제목 업데이트 중 오류 발생: $e');
@@ -95,36 +72,29 @@ class NoteOptionsManager {
   }
   
   void confirmDelete(BuildContext context, String noteId, {required Function onDeleted}) {
+    // DeleteNoteDialog 위젯 사용
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('노트 삭제'),
-        content: const Text('이 노트를 정말 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              deleteNote(context, noteId).then((success) {
-                if (success) {
-                  onDeleted();
-                }
-              });
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('삭제'),
-          ),
-        ],
+      builder: (context) => DeleteNoteDialog(
+        onConfirm: () {
+          deleteNote(context, noteId).then((success) {
+            if (success) {
+              onDeleted();
+            }
+          });
+        },
       ),
     );
   }
   
   Future<bool> deleteNote(BuildContext context, String noteId) async {
     try {
+      // 노트 삭제 전에 관련 캐시 정리
+      await _clearRelatedCache(noteId);
+      
+      // 노트 삭제
       await _noteService.deleteNote(noteId);
+      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('노트가 삭제되었습니다.')),
       );
@@ -135,6 +105,19 @@ class NoteOptionsManager {
         SnackBar(content: Text('노트 삭제 중 오류가 발생했습니다: $e')),
       );
       return false;
+    }
+  }
+  
+  // 노트 관련 캐시 정리
+  Future<void> _clearRelatedCache(String noteId) async {
+    try {
+      // 플래시카드 캐시 정리
+      await _cacheService.clearFlashcardCache(noteId);
+      
+      // 노트와 관련된 다른 캐시도 필요하다면 여기에 추가
+      debugPrint('노트 관련 캐시 정리 완료: $noteId');
+    } catch (e) {
+      debugPrint('캐시 정리 중 오류 발생: $e');
     }
   }
 }
