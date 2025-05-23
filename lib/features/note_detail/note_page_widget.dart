@@ -83,6 +83,14 @@ class NotePageWidget extends StatelessWidget {
   
   // 상태에 따른 콘텐츠 위젯 반환
   Widget _buildContentBasedOnState(BuildContext context, TextViewState state) {
+    if (kDebugMode) {
+      print('NotePageWidget - 상태 확인: isReady=${state.isReady}, isLoading=${textViewModel.isLoading}, hasError=${state.hasError}');
+      print('ProcessedText: ${textViewModel.processedText != null ? "있음" : "없음"}');
+      if (textViewModel.processedText != null) {
+        print('ProcessedText 내용: 원문=${textViewModel.processedText!.fullOriginalText.length}자, 번역=${textViewModel.processedText!.fullTranslatedText.length}자');
+      }
+    }
+    
     if (state.isReady) {
       return _buildProcessedTextWidget(context);
     } else if (textViewModel.isLoading) {

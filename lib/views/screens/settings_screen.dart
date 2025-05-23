@@ -736,7 +736,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: TypographyTokens.body2,
               ),
               subtitle: Text(
-                '문단 단위로 번역하여 전체적인 맥락을 유지합니다.',
+                '문단 단위로 번역해 문맥에 맞는 번역을 제공합니다.',
                 style: TypographyTokens.caption.copyWith(
                   color: ColorTokens.textTertiary,
                 ),

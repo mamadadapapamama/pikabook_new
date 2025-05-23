@@ -73,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final UserPreferencesService _userPreferences = UserPreferencesService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   final MarketingCampaignService _marketingService = MarketingCampaignService();
+  HomeViewModel _viewModel = HomeViewModel(); // final 제거
   String _noteSpaceName = '';
   
   // 사용량 관련 상태 변수
@@ -91,8 +92,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // 화면 초기화 실패를 추적하는 변수
   bool _initializationFailed = false;
   String? _initFailReason;
-  
-  HomeViewModel? _viewModel;
 
   @override
   void initState() {
@@ -161,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     try {
     // 리스너 제거
-    _viewModel?.removeListener(_onViewModelChanged);
+    _viewModel.removeListener(_onViewModelChanged);
     
     // WidgetsBinding 옵저버 제거
     WidgetsBinding.instance.removeObserver(this);
@@ -229,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           if (kDebugMode) {
             debugPrint('[HomeScreen] HomeViewModel 인스턴스 생성');
           }
-          return HomeViewModel();
+          return _viewModel;
         },
       child: Builder(
         builder: (context) {

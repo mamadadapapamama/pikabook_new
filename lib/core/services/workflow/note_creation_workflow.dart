@@ -15,16 +15,20 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../text_processing/enhanced_ocr_service.dart';
 
 /// 노트 생성 워크플로우 클래스
 /// 이미지 선택부터 노트 생성, 화면 이동까지의 전체 프로세스를 관리합니다.
 class NoteCreationWorkflow {
   final NoteService _noteService = NoteService();
   final ImageService _imageService = ImageService();
-  final PageService _pageService = PageService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final EnhancedOcrService _ocrService = EnhancedOcrService();
+  
+  // PageService에 접근하기 위한 게터 추가
+  PageService get _pageService => _noteService.pageService;
   
   // 싱글톤 패턴
   static final NoteCreationWorkflow _instance = NoteCreationWorkflow._internal();
@@ -130,16 +134,47 @@ class NoteCreationWorkflow {
         
         // 이미지 처리는 ImageService에 위임
         for (int i = 0; i < validImageFiles.length; i++) {
-          // 이미지 업로드 시작 - ImageService.uploadImage는 파일을 받아서 경로를 반환
-          final String imagePath = await _imageService.uploadImage(validImageFiles[i]);
-          
-          // 페이지 생성 - 추출 텍스트는 빈 값으로 시작하고 백그라운드에서 처리
-          await _pageService.createPage(
-            noteId: noteId,
-            extractedText: '', // 빈 텍스트로 시작 (추후 백그라운드에서 처리)
-            pageNumber: i,
-            imageUrl: imagePath,
-          );
+          try {
+            // 1. 이미지 업로드 시작 - ImageService.uploadImage는 파일을 받아서 경로를 반환
+            final String imagePath = await _imageService.uploadImage(validImageFiles[i]);
+            
+            // 2. OCR로 텍스트 추출 (중국어 감지)
+            if (kDebugMode) {
+              debugPrint('OCR 텍스트 추출 시작: 이미지 ${i+1}/${validImageFiles.length}');
+            }
+            
+            String extractedText = '';
+            try {
+              // OCR 서비스로 텍스트 추출
+              extractedText = await _ocrService.recognizeText(validImageFiles[i]);
+              if (kDebugMode) {
+                debugPrint('OCR 텍스트 추출 완료: ${extractedText.length} 자');
+                if (extractedText.isNotEmpty) {
+                  debugPrint('추출된 텍스트 샘플: ${extractedText.substring(0, extractedText.length > 30 ? 30 : extractedText.length)}...');
+                } else {
+                  debugPrint('추출된 텍스트가 없습니다.');
+                }
+              }
+            } catch (ocrError) {
+              if (kDebugMode) {
+                debugPrint('OCR 처리 중 오류 발생 (계속 진행): $ocrError');
+              }
+            }
+            
+            // 3. 페이지 생성 - 추출된 텍스트와 함께 페이지 생성
+            await _pageService.createPage(
+              noteId: noteId,
+              extractedText: extractedText, // 추출된 텍스트 사용
+              pageNumber: i,
+              imageUrl: imagePath,
+            );
+          } catch (pageError) {
+            if (kDebugMode) {
+              debugPrint('페이지 ${i+1} 처리 중 오류 발생: $pageError');
+            }
+            // 한 페이지 처리 실패해도 계속 진행
+            continue;
+          }
         }
       }
       

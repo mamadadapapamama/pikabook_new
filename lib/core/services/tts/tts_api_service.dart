@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
@@ -72,16 +73,47 @@ class TtsApiService {
         await _loadApiKey();
       }
 
+      // 언어 확인 - 중국어만 지원
+      if (_currentLanguage != 'zh-CN') {
+        if (kDebugMode) {
+          debugPrint('TTS: 중국어만 지원합니다. 현재 설정된 언어: $_currentLanguage');
+        }
+        throw Exception('TTS는 중국어(zh-CN)만 지원합니다');
+      }
+
+      // 텍스트가 비어있는지 확인
+      if (text.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('TTS: 텍스트가 비어있어 합성을 건너뜁니다.');
+        }
+        throw Exception('텍스트가 비어있습니다');
+      }
+
+      // 텍스트 길이 제한 (ElevenLabs는 5000자 제한이 있음)
+      final String truncatedText = text.length > 4000 
+          ? text.substring(0, 4000) 
+          : text;
+
+      if (kDebugMode) {
+        debugPrint('TTS 요청: ${truncatedText.length}자');
+        debugPrint('TTS 요청 텍스트(일부): ${truncatedText.substring(0, min(30, truncatedText.length))}...');
+      }
+
+      // James 음성 사용 (중국어 네이티브)
+      // voiceId는 음성/화자의 ID, model_id는 음성 합성 모델/엔진의 ID
+      final String voiceId = 'pNInz6obpgDQGcFmaJgB'; // 중국어 남성 음성 ID
+      final String modelId = '4VZIsMPtgggwNg7OXbPY'; // James 모델 ID
+
       final response = await http.post(
-        Uri.parse('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM'),
+        Uri.parse('https://api.elevenlabs.io/v1/text-to-speech/$voiceId'),
         headers: {
           'Accept': 'audio/mpeg',
           'Content-Type': 'application/json',
           'xi-api-key': _apiKey!,
         },
         body: json.encode({
-          'text': text,
-          'model_id': 'eleven_monolingual_v1',
+          'text': truncatedText,
+          'model_id': modelId,
           'voice_settings': {
             'stability': 0.5,
             'similarity_boost': 0.5,
@@ -90,8 +122,15 @@ class TtsApiService {
       );
 
       if (response.statusCode == 200) {
+        if (kDebugMode) {
+          debugPrint('TTS API 응답 성공: ${response.bodyBytes.length} 바이트');
+        }
         return response.bodyBytes;
       } else {
+        if (kDebugMode) {
+          debugPrint('TTS API 응답 실패: ${response.statusCode}');
+          debugPrint('응답 내용: ${response.body}');
+        }
         throw Exception('음성 합성 실패: ${response.statusCode}');
       }
     } catch (e) {

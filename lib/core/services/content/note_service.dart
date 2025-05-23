@@ -21,16 +21,23 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// 노트 서비스: 노트 메타데이터 관리만 담당합니다. (Note CRUD)
+
 class NoteService {
   // 서비스 인스턴스
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final PageService _pageService = PageService();
+  PageService? _pageService; // 지연 초기화를 위해 nullable로 변경
   final ImageService _imageService = ImageService();
   final LLMTextProcessing _textProcessingService = LLMTextProcessing();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   final NoteCacheService _cacheService = NoteCacheService();
+
+  // PageService의 게터 사용 - 지연 초기화
+  PageService get pageService {
+    _pageService ??= PageService();
+    return _pageService!;
+  }
 
   // 컬렉션 참조
   CollectionReference get _notesCollection => _firestore.collection('notes');

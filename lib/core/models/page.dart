@@ -11,6 +11,10 @@ class Page {
   final DateTime? updatedAt;
   final String sourceLanguage;
   final String targetLanguage;
+  final String? originalText;      // 원본 텍스트
+  final String? translatedText;    // 번역된 텍스트
+  final String? pinyin;            // 병음
+  final Map<String, dynamic>? processedText; // 처리된 텍스트 전체 데이터
 
   Page({
     required this.id,
@@ -21,6 +25,10 @@ class Page {
     this.updatedAt,
     String? sourceLanguage,
     String? targetLanguage,
+    this.originalText,
+    this.translatedText,
+    this.pinyin,
+    this.processedText,
   })  : this.createdAt = createdAt ?? DateTime.now(),
         this.sourceLanguage = sourceLanguage ?? SourceLanguage.DEFAULT,
         this.targetLanguage = targetLanguage ?? TargetLanguage.DEFAULT;
@@ -28,15 +36,30 @@ class Page {
   /// Firestore 문서에서 Page 객체 생성
   factory Page.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    
+    // 날짜 필드 변환 로직 (Timestamp 또는 String 처리)
+    DateTime? parseDate(dynamic value) {
+      if (value == null) return null;
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.parse(value);
+      return null;
+    }
+    
     return Page(
       id: doc.id,
       noteId: data['noteId'] as String,
       pageNumber: data['pageNumber'] as int,
       imageUrl: data['imageUrl'] as String?,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      createdAt: parseDate(data['createdAt']) ?? DateTime.now(),
+      updatedAt: parseDate(data['updatedAt']),
       sourceLanguage: data['sourceLanguage'] ?? SourceLanguage.DEFAULT,
       targetLanguage: data['targetLanguage'] ?? TargetLanguage.DEFAULT,
+      originalText: data['originalText'] as String?,
+      translatedText: data['translatedText'] as String?,
+      pinyin: data['pinyin'] as String?,
+      processedText: data['processedText'] != null 
+          ? Map<String, dynamic>.from(data['processedText'] as Map<String, dynamic>) 
+          : null,
     );
   }
 
@@ -51,12 +74,18 @@ class Page {
       updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt'] as String) : null,
       sourceLanguage: json['sourceLanguage'] ?? SourceLanguage.DEFAULT,
       targetLanguage: json['targetLanguage'] ?? TargetLanguage.DEFAULT,
+      originalText: json['originalText'] as String?,
+      translatedText: json['translatedText'] as String?,
+      pinyin: json['pinyin'] as String?,
+      processedText: json['processedText'] != null 
+          ? Map<String, dynamic>.from(json['processedText'] as Map<String, dynamic>) 
+          : null,
     );
   }
 
   /// Page 객체를 JSON으로 변환
   Map<String, dynamic> toJson() {
-    return {
+    final Map<String, dynamic> data = {
       'id': id,
       'noteId': noteId,
       'pageNumber': pageNumber,
@@ -66,6 +95,14 @@ class Page {
       'sourceLanguage': sourceLanguage,
       'targetLanguage': targetLanguage,
     };
+    
+    // 선택적 필드 추가
+    if (originalText != null) data['originalText'] = originalText;
+    if (translatedText != null) data['translatedText'] = translatedText;
+    if (pinyin != null) data['pinyin'] = pinyin;
+    if (processedText != null) data['processedText'] = processedText;
+    
+    return data;
   }
 
   /// Page 객체 복사
@@ -78,6 +115,10 @@ class Page {
     DateTime? updatedAt,
     String? sourceLanguage,
     String? targetLanguage,
+    String? originalText,
+    String? translatedText,
+    String? pinyin,
+    Map<String, dynamic>? processedText,
   }) {
     return Page(
       id: id ?? this.id,
@@ -88,6 +129,10 @@ class Page {
       updatedAt: updatedAt ?? this.updatedAt,
       sourceLanguage: sourceLanguage ?? this.sourceLanguage,
       targetLanguage: targetLanguage ?? this.targetLanguage,
+      originalText: originalText ?? this.originalText,
+      translatedText: translatedText ?? this.translatedText,
+      pinyin: pinyin ?? this.pinyin,
+      processedText: processedText ?? this.processedText,
     );
   }
 }

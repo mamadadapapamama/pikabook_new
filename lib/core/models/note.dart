@@ -25,6 +25,15 @@ class Note {
   /// Firestore 문서에서 Note 객체 생성
   factory Note.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    
+    // 날짜 필드 변환 로직 (Timestamp 또는 String 처리)
+    DateTime? parseDate(dynamic value) {
+      if (value == null) return null;
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.parse(value);
+      return null;
+    }
+    
     return Note(
       id: doc.id,
       userId: data['userId'] as String,
@@ -32,8 +41,8 @@ class Note {
       description: data['description'] as String?,
       isFavorite: data['isFavorite'] as bool? ?? false,
       flashcardCount: data['flashcardCount'] as int? ?? 0,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      createdAt: parseDate(data['createdAt']),
+      updatedAt: parseDate(data['updatedAt']),
     );
   }
 

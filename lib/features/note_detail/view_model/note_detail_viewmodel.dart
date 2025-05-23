@@ -18,8 +18,10 @@ class NoteDetailViewModelNew extends ChangeNotifier {
   // 서비스 인스턴스
   final NoteService _noteService = NoteService();
   final FlashCardService _flashCardService = FlashCardService();
-  final PageService _pageService = PageService();
   final ImageService _imageService = ImageService();
+  
+  // PageService에 접근하기 위한 게터 추가
+  PageService get _pageService => _noteService.pageService;
   
   // 매니저 인스턴스
   final NoteOptionsManager noteOptionsManager = NoteOptionsManager();

@@ -4,12 +4,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../models/page.dart' as page_model;
 import '../text_processing/llm_text_processing.dart';
+import '../tts/tts_api_service.dart';
 
 /// 페이지 서비스: 페이지 CRUD 작업만 담당합니다.
 class PageService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final LLMTextProcessing _llmProcessor = LLMTextProcessing();
+  final TtsApiService _ttsService = TtsApiService();
 
   // 생성자 로그 추가
   PageService() {
@@ -47,16 +49,80 @@ class PageService {
 
       await pageRef.set(page.toJson());
 
-      // 2. LLM 처리 (번역 + 병음)
-      final processed = await _llmProcessor.processText(
-        extractedText,
-        sourceLanguage: 'zh-CN',
-        targetLanguage: 'ko',
-        needPinyin: true,
-      );
+      if (extractedText.isNotEmpty) {
+        if (kDebugMode) {
+          debugPrint('페이지 텍스트 처리 시작: ${extractedText.length}자');
+        }
+        
+        try {
+          // 2. LLM 처리 (번역 + 병음)
+          final processed = await _llmProcessor.processText(
+            extractedText,
+            sourceLanguage: 'zh-CN',
+            targetLanguage: 'ko',
+            needPinyin: true,
+          );
+          
+          if (kDebugMode) {
+            debugPrint('LLM 처리 완료: ${processed.fullTranslatedText.length}자 번역됨');
+          }
+          
+          // 처리된 텍스트 정보를 페이지 문서에 업데이트
+          final Map<String, dynamic> processedData = {
+            'originalText': extractedText,
+            'translatedText': processed.fullTranslatedText,
+            'processedAt': FieldValue.serverTimestamp(),
+          };
+          
+          // Pinyin 정보가 있으면 추가
+          if (processed.units.isNotEmpty) {
+            final pinyin = processed.units[0].pinyin;
+            if (pinyin != null && pinyin.isNotEmpty) {
+              processedData['pinyin'] = pinyin;
+            }
+          }
+          
+          // 전체 처리된 객체도 저장
+          processedData['processedText'] = {
+            'fullOriginalText': processed.fullOriginalText,
+            'fullTranslatedText': processed.fullTranslatedText,
+            'sourceLanguage': processed.sourceLanguage,
+            'targetLanguage': processed.targetLanguage,
+            'mode': processed.mode.toString(),
+            'displayMode': processed.displayMode.toString(),
+          };
+          
+          // Firestore에 처리된 데이터 업데이트
+          await _pagesCollection.doc(pageRef.id).update(processedData);
+          
+          if (kDebugMode) {
+            debugPrint('페이지 텍스트 처리 결과 저장 완료: ${pageRef.id}');
+          }
+        } catch (llmError) {
+          if (kDebugMode) {
+            debugPrint('LLM 처리 중 오류 발생: $llmError');
+          }
+          
+          // LLM 처리 실패해도 원본 텍스트는 저장
+          await _pagesCollection.doc(pageRef.id).update({
+            'originalText': extractedText,
+            'processError': llmError.toString(),
+          });
+        }
+      } else {
+        if (kDebugMode) {
+          debugPrint('추출된 텍스트가 없어 LLM 처리 건너뜀');
+        }
+      }
 
-      // 3. TTS 생성
-      final ttsPath = await _llmProcessor.generateTTS(extractedText, 'zh-CN');
+      // 3. TTS 생성 - TtsApiService 사용
+      try {
+        await _ttsService.initialize(); // TTS 서비스 초기화 확인
+        // 실제 TTS 처리는 페이지 상세화면에서 진행
+      } catch (ttsError) {
+        debugPrint('TTS 초기화 또는 생성 중 오류 (무시됨): $ttsError');
+        // TTS 실패는 무시하고 계속 진행
+      }
 
       return page;
     } catch (e) {

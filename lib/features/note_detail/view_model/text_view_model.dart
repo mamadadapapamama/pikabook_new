@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'dart:io';
+import 'dart:math';
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/text_unit.dart';
 import '../../../core/services/cache/unified_cache_service.dart';
@@ -7,6 +8,8 @@ import '../../../core/services/text_processing/llm_text_processing.dart';
 import '../../../core/services/text_processing/enhanced_ocr_service.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/flash_card.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/authentication/user_preferences_service.dart';
 
 /// TextViewModel 상태를 나타내는 클래스
 /// 복잡한 내부 상태를 외부에 간단히 노출하기 위한 데이터 구조
@@ -61,6 +64,7 @@ class TextViewModel extends ChangeNotifier {
   final LLMTextProcessing _textProcessingService = LLMTextProcessing();
   final EnhancedOcrService _ocrService = EnhancedOcrService();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
+  final UserPreferencesService _preferencesService = UserPreferencesService();
 
   // 상태 변수
   bool _isLoading = false;
@@ -83,7 +87,7 @@ class TextViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get hasError => _error != null;
-  bool get isReady => _processedText != null && !_isLoading;
+  bool get isReady => _processedText != null;
   bool get isFullTextMode => _isFullTextMode;
   ProcessedText? get processedText => _processedText;
   List<TextUnit> get segments => _processedText?.units ?? [];
@@ -128,6 +132,14 @@ class TextViewModel extends ChangeNotifier {
     
     if (pageId.isNotEmpty) {
       await loadProcessedText(pageId);
+      
+      // 추가 알림 - 데이터 로드 후 확실하게 UI 갱신
+      if (_processedText != null) {
+        if (kDebugMode) {
+          print('텍스트 로드 완료 후 추가 알림 발생');
+        }
+        notifyListeners();
+      }
     }
   }
   
@@ -142,7 +154,7 @@ class TextViewModel extends ChangeNotifier {
     setError(null);
     
     try {
-      // 캐시에서 처리된 텍스트 가져오기
+      // 1. 먼저 캐시에서 처리된 텍스트 가져오기 시도
       final cachedText = await getProcessedText(pageId);
       
       if (cachedText != null) {
@@ -150,6 +162,68 @@ class TextViewModel extends ChangeNotifier {
         setLoading(false);
         notifyListeners();
         return cachedText;
+      }
+      
+      // 2. 캐시에 없으면 Firestore에서 페이지 문서 가져오기
+      final doc = await FirebaseFirestore.instance.collection('pages').doc(pageId).get();
+      
+      if (!doc.exists) {
+        setError('페이지를 찾을 수 없습니다');
+        setLoading(false);
+        return null;
+      }
+      
+      // 3. 페이지 데이터에서 처리된 텍스트 정보 추출
+      final page = page_model.Page.fromFirestore(doc);
+      
+      // 4. 저장된 번역 텍스트가 있는지 확인
+      if (page.translatedText != null && page.translatedText!.isNotEmpty) {
+        if (kDebugMode) {
+          print('Firestore에서 처리된 텍스트 로드 성공: ${page.translatedText!.length}자');
+          print('원본 텍스트: ${page.originalText?.substring(0, min(50, page.originalText?.length ?? 0))}...');
+          print('번역 텍스트: ${page.translatedText?.substring(0, min(50, page.translatedText?.length ?? 0))}...');
+          print('병음: ${page.pinyin ?? "없음"}');
+        }
+        
+        // 사용자 설정에서 텍스트 처리 모드 가져오기
+        final userPrefs = await _preferencesService.getPreferences();
+        final segmentMode = userPrefs.useSegmentMode;
+        
+        if (kDebugMode) {
+          print('사용자 설정 텍스트 처리 모드: ${segmentMode ? "세그먼트" : "전체 텍스트"}');
+        }
+        
+        // 5. ProcessedText 객체 생성 - 사용자 설정에 따라 모드 적용
+        final processedText = ProcessedText(
+          mode: segmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph,
+          displayMode: TextDisplayMode.full,
+          fullOriginalText: page.originalText ?? '',
+          fullTranslatedText: page.translatedText ?? '',
+          units: [
+            TextUnit(
+              originalText: page.originalText ?? '',
+              translatedText: page.translatedText ?? '',
+              pinyin: page.pinyin ?? '',
+              sourceLanguage: page.sourceLanguage,
+              targetLanguage: page.targetLanguage,
+            ),
+          ],
+          sourceLanguage: page.sourceLanguage,
+          targetLanguage: page.targetLanguage,
+        );
+        
+        if (kDebugMode) {
+          print('ProcessedText 객체 생성 완료: 원본=${processedText.fullOriginalText.length}자, 번역=${processedText.fullTranslatedText.length}자');
+          print('ProcessedText 모드: ${processedText.mode}, 표시 모드: ${processedText.displayMode}');
+        }
+        
+        // 캐시에 저장 (다음 로드를 위해)
+        await setProcessedText(pageId, processedText);
+        
+        _processedText = processedText;
+        setLoading(false);
+        notifyListeners();
+        return processedText;
       }
       
       setLoading(false);
