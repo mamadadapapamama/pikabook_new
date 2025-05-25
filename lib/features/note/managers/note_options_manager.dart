@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/note.dart';
-import '../../../core/services/content/note_service.dart';
+import '../services/note_service.dart';
 import '../../../core/services/cache/unified_cache_service.dart';
 import '../../../core/widgets/edit_title_dialog.dart';
 import '../../../core/widgets/delete_note_dialog.dart';

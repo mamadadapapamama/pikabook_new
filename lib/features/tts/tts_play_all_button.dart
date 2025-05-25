@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
-import '../../../core/widgets/tts_button.dart';
+import 'tts_button.dart';
 
 /// 전체 텍스트 TTS 재생 버튼 위젯
 class TtsPlayAllButton extends StatelessWidget {

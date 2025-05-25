@@ -4,7 +4,7 @@ import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/ui_tokens.dart';
-import '../flashcard/flashcard_screen.dart';
+import 'flashcard_screen.dart';
 import '../sample/sample_flashcard_screen.dart';
 
 /// 노트에 연결된 플래시카드 개수를 보여주는 배지 위젯

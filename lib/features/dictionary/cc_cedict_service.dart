@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import '../../../core/models/dictionary.dart';
+import '../../core/models/dictionary.dart';
 
 /// CC-CEDICT 사전 서비스
 /// CC-CEDICT 사전 데이터를 사용하여 중국어 단어를 검색합니다.

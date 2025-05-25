@@ -65,8 +65,17 @@ class TextCleanerService {
       return _cleanTextCache[text]!;
     }
 
+    if (kDebugMode) {
+      debugPrint('🧹 텍스트 정리 시작: "$text"');
+      debugPrint('🧹 중국어 포함 여부: ${containsChinese(text)}');
+    }
+
     // 핀인 줄 제거
+    final originalText = text;
     text = removePinyinLines(text);
+    if (kDebugMode && text != originalText) {
+      debugPrint('🧹 핀인 줄 제거 후: "$text"');
+    }
 
     // 줄 단위로 분리
     final lines = text.split('\n');
@@ -76,47 +85,80 @@ class TextCleanerService {
       final trimmedLine = line.trim();
 
       // 빈 줄 건너뛰기
-      if (trimmedLine.isEmpty) continue;
+      if (trimmedLine.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('🧹 빈 줄 건너뛰기: "$line"');
+        }
+        continue;
+      }
 
       // 숫자만 있는 줄 건너뛰기 (페이지 번호 등)
       if (_isOnlyNumbers(trimmedLine)) {
+        if (kDebugMode) {
+          debugPrint('🧹 숫자만 있는 줄 건너뛰기: "$trimmedLine"');
+        }
         continue;
       }
 
       // 페이지 번호 건너뛰기
       if (_isPageNumber(trimmedLine)) {
+        if (kDebugMode) {
+          debugPrint('🧹 페이지 번호 건너뛰기: "$trimmedLine"');
+        }
         continue;
       }
 
       // 섹션 제목 건너뛰기
       if (_isSectionTitle(trimmedLine)) {
+        if (kDebugMode) {
+          debugPrint('🧹 섹션 제목 건너뛰기: "$trimmedLine"');
+        }
         continue;
       }
 
       // 저작권 및 특수 문자만 있는 줄 건너뛰기
       if (_isCopyrightOrSpecialChars(trimmedLine)) {
+        if (kDebugMode) {
+          debugPrint('🧹 저작권/특수문자 건너뛰기: "$trimmedLine"');
+        }
         continue;
       }
 
       // 중복된 제목/지시사항 건너뛰기
       if (_isDuplicateHeadingOrInstruction(trimmedLine)) {
+        if (kDebugMode) {
+          debugPrint('🧹 중복 제목/지시사항 건너뛰기: "$trimmedLine"');
+        }
         continue;
       }
 
       // 문장부호만 있는 줄 건너뛰기
       if (_isOnlyPunctuation(trimmedLine)) {
+        if (kDebugMode) {
+          debugPrint('🧹 문장부호만 있는 줄 건너뛰기: "$trimmedLine"');
+        }
         continue;
       }
 
-      // 너무 짧은 줄 건너뛰기 (1-2글자이면서 중국어가 아닌 경우)
+      // 너무 짧은 줄 건너뛰기 (10글자 이내이면서 중국어가 아닌 경우)
       if (_isTooShort(trimmedLine)) {
+        if (kDebugMode) {
+          debugPrint('🧹 너무 짧은 줄 건너뛰기: "$trimmedLine" (길이: ${trimmedLine.length}, 중국어포함: ${containsChinese(trimmedLine)})');
+        }
         continue;
       }
 
+      if (kDebugMode) {
+        debugPrint('🧹 ✅ 줄 유지: "$trimmedLine"');
+      }
       cleanedLines.add(trimmedLine);
     }
 
     final result = cleanedLines.join('\n');
+
+    if (kDebugMode) {
+      debugPrint('🧹 텍스트 정리 완료: "${text}" → "$result"');
+    }
 
     // 캐시에 저장 (캐시 크기 제한)
     if (_cleanTextCache.length >= _maxCacheSize) {

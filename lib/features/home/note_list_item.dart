@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import '../../../core/models/note.dart';
+import '../../core/models/note.dart';
 import '../../../core/utils/date_formatter.dart';
 import '../flashcard/flashcard_counter_badge.dart';
 import '../../../core/theme/tokens/color_tokens.dart';

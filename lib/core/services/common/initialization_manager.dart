@@ -7,6 +7,7 @@ import '../authentication/user_preferences_service.dart';
 import '../authentication/auth_service.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
+import '../../../features/note/managers/note_creation_ui_manager.dart';
 
 /// 앱 초기화 단계를 정의합니다.
 enum InitializationStep {
@@ -253,6 +254,15 @@ class InitializationManager {
       
       // LLM 처리 서비스 초기화
       await _textProcessingService.ensureInitialized();
+      
+      // 후처리 작업 복구 (앱 시작시)
+      try {
+        final noteCreationManager = NoteCreationUIManager();
+        await noteCreationManager.initializeOnAppStart();
+        debugPrint('✅ 후처리 작업 복구 완료');
+      } catch (e) {
+        debugPrint('⚠️ 후처리 작업 복구 실패: $e');
+      }
       
       // 사용자 설정 모드 디버깅 (세그먼트 모드 상태 확인)
       if (kDebugMode) {

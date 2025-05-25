@@ -4,14 +4,14 @@ import 'package:flutter/scheduler.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:math';  // min 함수를 위한 import 추가
-import '../../../core/services/common/usage_limit_service.dart';
-import '../../../core/theme/tokens/color_tokens.dart';
-import '../../../core/theme/tokens/typography_tokens.dart';
-import '../../../core/widgets/pika_button.dart';
+import '../../core/services/common/usage_limit_service.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import 'pika_button.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../core/managers/note_creation_ui_manager.dart';
-import '../../../core/services/media/image_service.dart';
-import '../../../core/widgets/loading_dialog_experience.dart';
+import '../../features/note/managers/note_creation_ui_manager.dart';
+import '../../core/services/media/image_service.dart';
+import 'loading_dialog_experience.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import '../../../core/theme/tokens/color_tokens.dart';
-import '../../../core/theme/tokens/typography_tokens.dart';
-import '../../../core/theme/tokens/spacing_tokens.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import '../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
-import '../../../core/widgets/pika_button.dart';
+import '../../core/widgets/pika_button.dart';
 import '../../core/models/note.dart';
 import '../home/note_list_item.dart';
 import 'sample_notes_service.dart';

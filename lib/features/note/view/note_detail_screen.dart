@@ -63,16 +63,12 @@ class NoteDetailScreenMVVM extends StatefulWidget {
 }
 
 class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
-  // Service 인스턴스들
-  final ImageService _imageService = ImageService();
-  final FlashCardService _flashCardService = FlashCardService();
-  final TTSService _ttsService = TTSService();
-  
-  // 이미지 캐시
-  final Map<String, File> _imageFileCache = {};
-  
-  // 플래시카드 캐시
+  late FlashCardService _flashCardService;
+  late TTSService _ttsService;
   List<FlashCard> _flashcards = [];
+  bool _isPageCallbackSet = false; // 페이지 콜백 설정 여부 플래그
+
+  // Service 인스턴스들 - ImageService 제거
   
   @override
   void initState() {
@@ -109,6 +105,11 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   /// 서비스 초기화
   Future<void> _initializeServices() async {
     try {
+      // 서비스 인스턴스 생성
+      _flashCardService = FlashCardService();
+      _ttsService = TTSService();
+      
+      // TTS 서비스 초기화
       await _ttsService.init();
     } catch (e) {
       if (kDebugMode) {
@@ -128,30 +129,6 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       if (kDebugMode) {
         print('플래시카드 로드 실패: $e');
       }
-    }
-  }
-  
-  /// 현재 페이지 이미지 파일 가져오기
-  Future<File?> _getCurrentPageImageFile(page_model.Page? page) async {
-    if (page?.imageUrl == null) return null;
-    
-    // 캐시 확인
-    if (_imageFileCache.containsKey(page!.imageUrl)) {
-      return _imageFileCache[page.imageUrl];
-    }
-    
-    // 이미지 로드
-    try {
-      final imageFile = await _imageService.getImageFile(page.imageUrl);
-      if (imageFile != null) {
-        _imageFileCache[page.imageUrl!] = imageFile;
-      }
-      return imageFile;
-    } catch (e) {
-      if (kDebugMode) {
-        print('이미지 로드 실패: $e');
-      }
-      return null;
     }
   }
   
@@ -255,12 +232,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
           itemBuilder: (context, index) {
             final page = viewModel.pages![index];
             
-            // 특수 처리 마커가 있는지 확인
-            if (viewModel.isPageProcessing(page)) {
-              return _buildProcessingPage();
-            }
-            
-            // 페이지 콘텐츠 위젯 반환
+            // 페이지 콘텐츠 위젯 반환 (NotePageWidget에서 자체적으로 처리 상태 관리)
             return _buildPageContent(context, viewModel, page);
           },
         ),
@@ -268,39 +240,20 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     );
   }
   
-  // 처리 중인 페이지 UI - 단순화하여 일관성 확보
-  Widget _buildProcessingPage() {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 32.0),
-        child: DotLoadingIndicator(message: '텍스트를 처리하고 있습니다'),
-      ),
-    );
-  }
-  
   // 페이지 콘텐츠 위젯
   Widget _buildPageContent(BuildContext context, NoteDetailViewModel viewModel, page_model.Page page) {
-    // 현재 페이지의 텍스트 데이터 로드 (필요시)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      viewModel.loadCurrentPageText();
-    });
-    
     return RepaintBoundary(
-      child: FutureBuilder<File?>(
-        future: _getCurrentPageImageFile(page),
-        builder: (context, snapshot) {
-          return NotePageWidget(
-            key: ValueKey('page_content_${page.id}'),
-            page: page,
-            imageFile: snapshot.data,
-            noteId: viewModel.noteId,
-            onCreateFlashCard: (front, back, {pinyin}) => 
-                _handleCreateFlashCard(context, viewModel, front, back, pinyin: pinyin),
-            flashCards: _flashcards,
-            onDeleteSegment: (segmentIndex) => _handleDeleteSegment(context, viewModel, segmentIndex),
-            onPlayTts: (text, {segmentIndex}) => _handlePlayTts(text, segmentIndex: segmentIndex),
-          );
-        },
+      child: NotePageWidget(
+        key: ValueKey('page_content_${page.id}'),
+        page: page,
+        imageFile: null, // PageImageWidget이 직접 이미지를 처리하도록 null 전달
+        noteId: viewModel.noteId,
+        // 콜백 함수들만 전달
+        onCreateFlashCard: (front, back, {pinyin}) => 
+            _handleCreateFlashCard(context, viewModel, front, back, pinyin: pinyin),
+        flashCards: _flashcards,
+        onDeleteSegment: (segmentIndex) => _handleDeleteSegment(context, viewModel, segmentIndex),
+        onPlayTts: (text, {segmentIndex}) => _handlePlayTts(text, segmentIndex: segmentIndex),
       ),
     );
   }
@@ -446,20 +399,13 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     // 페이지 처리 완료 콜백 설정 (한 번만 설정)
     _setupPageProcessedCallback(context, viewModel);
     
-    // 페이지 처리 상태 가져오기 - Consumer 안에서 호출하면 UI가 자동으로 업데이트됨
+    // 페이지 처리 상태 가져오기
     final processedPages = viewModel.getProcessedPagesStatus();
     
-    if (kDebugMode) {
-      // 처리된 페이지 수와 총 페이지 수 계산
-      final completedPages = processedPages.where((status) => status).length;
-      final totalPages = processedPages.length;
-      print("🔄 바텀바 리빌드: 처리된 페이지 $completedPages/$totalPages");
-    }
+    // 현재 페이지의 TTS 텍스트 가져오기
+    final currentProcessedText = viewModel.currentProcessedText;
+    final ttsText = currentProcessedText?.fullOriginalText ?? '';
     
-    // TTS 재생 서비스 생성
-    final ttsPlaybackService = TtsPlaybackService();
-    
-    // 임시 TTS 콜백 - 나중에 수정 필요
     return NoteDetailBottomBar(
       currentPage: viewModel.currentPage,
       currentPageIndex: viewModel.currentPageIndex,
@@ -468,9 +414,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         // 네비게이션 버튼 클릭 시 PageController를 사용하여 페이지 이동
         viewModel.navigateToPage(index);
       },
-      // 임시로 null 전달 - 타입 불일치 해결 위해
-      contentManager: null,
-      ttsPlaybackService: ttsPlaybackService,
+      // TTS 관련 데이터만 전달
+      ttsText: ttsText,
       isProcessing: false,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),
       onTtsPlay: () {
@@ -479,13 +424,11 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
           _ttsService.stop();
         } else {
           // 현재 페이지 텍스트 읽기
-          final currentText = viewModel.currentProcessedText?.fullOriginalText ?? '';
-          if (currentText.isNotEmpty) {
-            _ttsService.speak(currentText);
+          if (ttsText.isNotEmpty) {
+            _ttsService.speak(ttsText);
           }
         }
       },
-      isMinimalUI: false,
       processedPages: processedPages,
     );
   }
@@ -494,6 +437,10 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   void _setupPageProcessedCallback(BuildContext context, NoteDetailViewModel viewModel) {
     // 이미 콜백이 설정되어 있는지 검사하는 로직이 필요할 수 있음
     // 일단 매번 새로 설정하도록 구현
+    
+    if (_isPageCallbackSet) return;
+    
+    _isPageCallbackSet = true;
     
     viewModel.setPageProcessedCallback((pageIndex) {
       // 현재 화면이 살아있는지 확인

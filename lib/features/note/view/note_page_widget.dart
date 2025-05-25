@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
-import '../../../core/models/text_unit.dart';
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/processing_status.dart';
 import '../view_model/note_detail_viewmodel.dart';
@@ -10,7 +9,6 @@ import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/flash_card.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
-import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../flashcard/flashcard_view_model.dart';
 import 'page_image_widget.dart';
@@ -40,24 +38,21 @@ class NotePageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Consumer를 사용하여 ViewModel에 직접 접근
     return Consumer<NoteDetailViewModel>(
       builder: (context, viewModel, child) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            return _buildPageContent(context, constraints, viewModel);
-          },
-        );
+        return _buildPageContent(context, viewModel);
       },
     );
   }
   
-  Widget _buildPageContent(BuildContext context, BoxConstraints constraints, NoteDetailViewModel viewModel) {
-    // 현재 페이지의 텍스트 데이터 가져오기
-    final textData = viewModel.getTextViewModel(page.id);
-    final processedText = textData['processedText'] as ProcessedText?;
-    final isLoading = textData['isLoading'] as bool? ?? false;
-    final error = textData['error'] as String?;
-    final status = textData['status'] as ProcessingStatus? ?? ProcessingStatus.created;
+  Widget _buildPageContent(BuildContext context, NoteDetailViewModel viewModel) {
+    // 현재 페이지의 텍스트 데이터 로드 (필요시) - mounted 체크 추가
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        viewModel.loadCurrentPageText();
+      }
+    });
     
     // 스크롤 가능한 컨테이너
     return SingleChildScrollView(
@@ -74,75 +69,63 @@ class NotePageWidget extends StatelessWidget {
             imageFile: imageFile,
             imageUrl: page.imageUrl,
             page: page,
-            style: ImageContainerStyle.noteDetail,
-            isLoading: isLoading,
+            isLoading: viewModel.isLoading,
             enableFullScreen: true,
           ),
           
           SizedBox(height: SpacingTokens.md),
           
-          // 텍스트 로딩 상태에 따른 콘텐츠 위젯
-          _buildContentBasedOnState(context, processedText, isLoading, error, status),
+          // 텍스트 콘텐츠 위젯
+          _buildTextContent(context, viewModel),
         ],
       ),
     );
   }
   
-  // 상태에 따른 콘텐츠 위젯 반환
-  Widget _buildContentBasedOnState(BuildContext context, ProcessedText? processedText, bool isLoading, String? error, ProcessingStatus status) {
-    if (kDebugMode) {
-      print('NotePageWidget - 상태 확인: processedText=${processedText != null ? "있음" : "없음"}, isLoading=$isLoading, error=$error, status=$status');
-      if (processedText != null) {
-        print('ProcessedText 내용: 원문=${processedText.fullOriginalText.length}자, 번역=${processedText.fullTranslatedText.length}자');
-      }
-    }
+  // 텍스트 콘텐츠 위젯 (상태에 따라 다른 위젯 반환)
+  Widget _buildTextContent(BuildContext context, NoteDetailViewModel viewModel) {
+    // 현재 페이지의 텍스트 데이터 가져오기
+    final textViewModel = viewModel.getTextViewModel(page.id);
+    final processedText = textViewModel['processedText'] as ProcessedText?;
+    final isLoading = textViewModel['isLoading'] as bool? ?? false;
+    final error = textViewModel['error'] as String?;
     
     if (processedText != null) {
-      return _buildProcessedTextWidget(context, processedText);
-    } else if (isLoading || status.isProcessing) {
+      return _buildProcessedTextWidget(context, processedText, viewModel);
+    } else if (isLoading) {
       return _buildLoadingIndicator();
     } else if (error != null) {
       return _buildErrorWidget(error);
     } else {
-      return _buildEmptyStateWidget();
+      return _buildLoadingIndicator(); // 빈 상태도 로딩 인디케이터로 통일
     }
   }
   
   // 처리된 텍스트 위젯
-  Widget _buildProcessedTextWidget(BuildContext context, ProcessedText processedText) {
+  Widget _buildProcessedTextWidget(BuildContext context, ProcessedText processedText, NoteDetailViewModel viewModel) {
     // FlashCardViewModel 생성 (기존 flashCards 리스트로 초기화)
     final flashCardViewModel = FlashCardViewModel(
       noteId: noteId,
       initialFlashcards: flashCards,
     );
     
-    return Consumer<NoteDetailViewModel>(
-      builder: (context, viewModel, child) {
-        final textData = viewModel.getTextViewModel(page.id);
-        final playingSegmentIndex = textData['playingSegmentIndex'] as int?;
-        
-        return ProcessedTextWidget(
-          processedText: processedText,
-          onDictionaryLookup: (word) => _handleDictionaryLookup(context, word),
-          onCreateFlashCard: onCreateFlashCard,
-          flashCardViewModel: flashCardViewModel,
-          onDeleteSegment: onDeleteSegment,
-          onPlayTts: onPlayTts,
-          playingSegmentIndex: playingSegmentIndex,
-          originalTextStyle: TypographyTokens.body1Cn,
-          pinyinTextStyle: TypographyTokens.caption.copyWith(color: Colors.grey[600]),
-          translatedTextStyle: TypographyTokens.body2.copyWith(color: Colors.grey[800]),
-        );
-      },
+    return ProcessedTextWidget(
+      processedText: processedText,
+      onDictionaryLookup: (word) => _handleDictionaryLookup(context, word),
+      onCreateFlashCard: onCreateFlashCard,
+      flashCardViewModel: flashCardViewModel,
+      onDeleteSegment: onDeleteSegment,
+      onPlayTts: onPlayTts,
+      playingSegmentIndex: null, // TTS 재생 인덱스는 별도 관리 필요
     );
   }
   
-  // 로딩 인디케이터
+  // 로딩 인디케이터 (처리 중 상태 공통 사용)
   Widget _buildLoadingIndicator() {
     return const Center(
       child: Padding(
         padding: EdgeInsets.symmetric(vertical: 32.0),
-        child: DotLoadingIndicator(message: '텍스트 처리 중...'),
+        child: DotLoadingIndicator(message: '텍스트를 처리하고 있습니다'),
       ),
     );
   }
@@ -164,16 +147,6 @@ class NotePageWidget extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-  
-  // 빈 상태 위젯 - 로딩 인디케이터와 통일
-  Widget _buildEmptyStateWidget() {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 32.0),
-        child: DotLoadingIndicator(message: '텍스트를 처리하고 있습니다'),
       ),
     );
   }

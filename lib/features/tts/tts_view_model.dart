@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/services/tts/tts_service.dart';
-import '../../../core/models/processed_text.dart';
-import '../../../core/models/text_unit.dart';
+import '../../core/models/processed_text.dart';
+import '../../core/models/text_unit.dart';
 
 class TtsViewModel extends ChangeNotifier {
   final TTSService _ttsService;

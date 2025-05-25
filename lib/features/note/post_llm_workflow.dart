@@ -3,8 +3,8 @@ import 'dart:collection';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../core/services/content/page_service.dart';
-import '../../../core/services/content/note_service.dart';
+import 'services/page_service.dart';
+import 'services/note_service.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
 import '../../core/models/processed_text.dart';
 import '../../core/models/text_unit.dart';
@@ -201,19 +201,15 @@ class PostLLMWorkflow {
       final translatedText = results.map((unit) => unit.translatedText ?? '').join(' ');
       final pinyinText = results.map((unit) => unit.pinyin ?? '').join(' ');
 
-      // 페이지 업데이트
+      // 페이지 업데이트 - processedText.units 구조로 저장
       await _pageService.updatePage(pageData.pageId, {
         'translatedText': translatedText,
         'pinyin': pinyinText,
         'processedAt': FieldValue.serverTimestamp(),
         'status': ProcessingStatus.completed.toString(),
-        'processedUnits': results.map((unit) => {
-          'originalText': unit.originalText,
-          'translatedText': unit.translatedText,
-          'pinyin': unit.pinyin,
-          'sourceLanguage': unit.sourceLanguage,
-          'targetLanguage': unit.targetLanguage,
-        }).toList(),
+        'processedText': {
+          'units': results.map((unit) => unit.toJson()).toList(),
+        },
       });
 
     } catch (e) {

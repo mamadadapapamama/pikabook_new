@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import '../../../core/models/dictionary.dart';
+import '../../core/models/dictionary.dart';
 
 /// 내부 중국어 사전 데이터를 로드 관리하는 서비스
 /// JSON 파일에서 단어를 검색하고 결과를 저장하는 기능 제공

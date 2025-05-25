@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import '../../core/models/processed_text.dart';
+import '../../../core/models/processed_text.dart';
 import '../../../core/utils/context_menu_manager.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/utils/segment_utils.dart';
-import '../../../core/widgets/tts_button.dart';
+import '../../tts/tts_button.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
-import '../flashcard/flashcard_view_model.dart';
+import '../../flashcard/flashcard_view_model.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -45,6 +46,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   // 선택된 텍스트 상태 관리를 위한 ValueNotifier
   final ValueNotifier<String> _selectedTextNotifier = ValueNotifier<String>('');
+
+  // 기본 스타일 정의 (내부에서 관리)
+  TextStyle get _defaultOriginalTextStyle => widget.originalTextStyle ?? TypographyTokens.body1Cn;
+  TextStyle get _defaultPinyinTextStyle => widget.pinyinTextStyle ?? TypographyTokens.caption.copyWith(color: Colors.grey[600]);
+  TextStyle get _defaultTranslatedTextStyle => widget.translatedTextStyle ?? TypographyTokens.body2.copyWith(color: Colors.grey[800]);
 
   @override
   void initState() {
@@ -96,7 +102,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         // 원문 텍스트 표시
         SelectableText(
           widget.processedText.fullOriginalText,
-          style: widget.originalTextStyle,
+          style: _defaultOriginalTextStyle,
         ),
         const SizedBox(height: 16),
         
@@ -107,7 +113,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             padding: const EdgeInsets.only(top: 8, bottom: 16),
             child: Text(
               widget.processedText.fullTranslatedText!,
-              style: widget.translatedTextStyle,
+              style: _defaultTranslatedTextStyle,
             ),
           ),
       ],
@@ -153,7 +159,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               Expanded(
                 child: ContextMenuManager.buildSelectableText(
                   unit.originalText,
-                  style: widget.originalTextStyle,
+                  style: _defaultOriginalTextStyle,
                   isOriginal: true,
                   flashcardWords: flashcardWords,
                   selectedText: _selectedText,
@@ -186,7 +192,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
               child: Text(
                 unit.pinyin!,
-                style: widget.pinyinTextStyle,
+                style: _defaultPinyinTextStyle,
               ),
             ),
 
@@ -197,7 +203,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                 padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
                 child: Text(
                   unit.translatedText!,
-                  style: widget.translatedTextStyle,
+                  style: _defaultTranslatedTextStyle,
                 ),
               ),
         ],

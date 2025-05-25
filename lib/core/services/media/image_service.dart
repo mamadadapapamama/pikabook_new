@@ -83,20 +83,45 @@ class ImageService {
   Future<File?> getImageFile(String? imagePath) async {
     if (imagePath == null || imagePath.isEmpty) return null;
 
-    // 1. 로컬 파일 확인
-    final file = File(imagePath);
+    // 1. 절대 경로인 경우 직접 확인
+    File file = File(imagePath);
     if (await file.exists()) return file;
 
-    // 2. Firebase Storage에서 다운로드
+    // 2. 상대 경로인 경우 (images/로 시작) 절대 경로로 변환
+    if (imagePath.startsWith('images/')) {
+      final appDir = await getApplicationDocumentsDirectory();
+      final absolutePath = '${appDir.path}/$imagePath';
+      file = File(absolutePath);
+      
+      if (kDebugMode) {
+        debugPrint('🖼️ 상대 경로를 절대 경로로 변환: $imagePath → $absolutePath');
+      }
+      
+      if (await file.exists()) {
+        if (kDebugMode) {
+          debugPrint('🖼️ 로컬 파일 발견: $absolutePath');
+        }
+        return file;
+      } else {
+        if (kDebugMode) {
+          debugPrint('🖼️ 로컬 파일 없음: $absolutePath');
+        }
+      }
+    }
+
+    // 3. Firebase Storage에서 다운로드
     if (imagePath.startsWith('gs://')) {
       return _downloadWithRetry(imagePath, _downloadFromFirebase);
     }
 
-    // 3. URL에서 다운로드
+    // 4. URL에서 다운로드
     if (imagePath.startsWith('http')) {
       return _downloadWithRetry(imagePath, _downloadFromUrl);
     }
 
+    if (kDebugMode) {
+      debugPrint('🖼️ 이미지 파일을 찾을 수 없음: $imagePath');
+    }
     return null;
   }
 

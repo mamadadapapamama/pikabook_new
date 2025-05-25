@@ -25,6 +25,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   // 매니저 인스턴스
   final NoteOptionsManager noteOptionsManager = NoteOptionsManager();
   
+  // dispose 상태 추적
+  bool _disposed = false;
+  
   // === UI 상태 변수들 ===
   Note? _note;
   bool _isLoading = true;
@@ -161,7 +164,7 @@ class NoteDetailViewModel extends ChangeNotifier {
 
   /// 현재 페이지의 텍스트 데이터 로드 (Service Layer 사용)
   Future<void> loadCurrentPageText() async {
-    if (currentPage == null) return;
+    if (_disposed || currentPage == null) return;
     
     final pageId = currentPage!.id;
     if (pageId.isEmpty) return;
@@ -171,32 +174,37 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     _textLoadingStates[pageId] = true;
     _textErrors[pageId] = null;
-    notifyListeners();
+    if (!_disposed) notifyListeners();
+    
+    // 항상 실시간 리스너 설정 (후처리 완료 시 즉시 업데이트 받기 위해)
+    _setupPageListener(pageId);
     
     try {
       // TextProcessingService 사용
       final processedText = await _textProcessingService.getProcessedText(pageId);
       
+      if (_disposed) return; // dispose 체크
+      
       if (processedText != null) {
         _processedTexts[pageId] = processedText;
         _pageStatuses[pageId] = ProcessingStatus.completed;
-        
-        // 실시간 리스너 설정
-        _setupPageListener(pageId);
       } else {
         // 처리된 텍스트가 없으면 상태 확인
         final status = await _textProcessingService.getProcessingStatus(pageId);
+        if (_disposed) return; // dispose 체크
         _pageStatuses[pageId] = status;
       }
       
       _textLoadingStates[pageId] = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
       
     } catch (e) {
+      if (_disposed) return; // dispose 체크
+      
       _textLoadingStates[pageId] = false;
       _textErrors[pageId] = '텍스트 로드 중 오류: $e';
       _pageStatuses[pageId] = ProcessingStatus.failed;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
       
       if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 텍스트 로드 중 오류: $e");
@@ -206,6 +214,8 @@ class NoteDetailViewModel extends ChangeNotifier {
 
   /// 페이지 실시간 리스너 설정
   void _setupPageListener(String pageId) {
+    if (_disposed) return;
+    
     // 기존 리스너 정리
     _pageListeners[pageId]?.cancel();
     
@@ -213,10 +223,12 @@ class NoteDetailViewModel extends ChangeNotifier {
     final listener = _textProcessingService.listenToPageChanges(
       pageId,
       (processedText) {
+        if (_disposed) return; // dispose 체크
+        
         if (processedText != null) {
           _processedTexts[pageId] = processedText;
           _pageStatuses[pageId] = ProcessingStatus.completed;
-          notifyListeners();
+          if (!_disposed) notifyListeners();
           
           if (flutter_foundation.kDebugMode) {
             debugPrint("🔔 페이지 텍스트 업데이트: $pageId");
@@ -350,6 +362,8 @@ class NoteDetailViewModel extends ChangeNotifier {
   /// 리소스 정리
   @override
   void dispose() {
+    _disposed = true; // dispose 상태 설정
+    
     pageController.dispose();
     
     // 페이지 리스너 정리

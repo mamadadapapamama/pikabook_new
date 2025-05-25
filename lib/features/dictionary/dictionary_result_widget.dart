@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../../core/models/dictionary.dart';
+import '../../core/models/dictionary.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
-import '../../../core/widgets/tts_button.dart';
-import '../../../core/services/dictionary/dictionary_service.dart';
+import '../tts/tts_button.dart';
+import 'dictionary_service.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
 class DictionaryResultWidget extends StatelessWidget {

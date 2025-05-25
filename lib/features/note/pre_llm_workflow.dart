@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../../../core/services/content/note_service.dart';
+import 'services/note_service.dart';
 import '../../../core/services/media/image_service.dart';
-import '../../../core/services/content/page_service.dart';
+import 'services/page_service.dart';
 import '../../../core/services/text_processing/ocr_service.dart';
 import '../../core/services/text_processing/text_cleaner_service.dart';
 import '../../core/services/text_processing/text_mode_seperation_service.dart';
@@ -177,14 +177,25 @@ class PreLLMWorkflow {
         noteId: noteId,
         pageNumber: pageNumber,
         imageUrl: imageUrl,
-        originalText: cleanedText,
+        originalText: cleanedText.isNotEmpty ? cleanedText : extractedText,
       );
       
-      // 6. 후처리용 데이터 생성
+      // 6. 후처리용 데이터 생성 (텍스트 분리도 원본 기준으로)
+      List<String> finalTextSegments = textSegments;
+      if (textSegments.isEmpty && extractedText.isNotEmpty) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 정리된 텍스트가 비어있어 원본 텍스트로 분리 재시도');
+        }
+        finalTextSegments = _textSeparationService.separateByMode(extractedText, mode);
+        if (kDebugMode) {
+          debugPrint('✅ 원본 텍스트 분리 완료: ${finalTextSegments.length}개 조각');
+        }
+      }
+      
       final pageData = PageProcessingData(
         pageId: pageId,
         imageUrl: imageUrl,
-        textSegments: textSegments,
+        textSegments: finalTextSegments,
         mode: mode,
         sourceLanguage: userPrefs.sourceLanguage,
         targetLanguage: userPrefs.targetLanguage,
@@ -196,6 +207,7 @@ class PreLLMWorkflow {
         debugPrint('   텍스트 세그먼트: ${pageData.textSegments.length}개');
         debugPrint('   모드: ${pageData.mode}');
         debugPrint('   언어: ${pageData.sourceLanguage} → ${pageData.targetLanguage}');
+        debugPrint('   사용된 텍스트: ${cleanedText.isNotEmpty ? "정리된 텍스트" : "원본 텍스트"}');
       }
       
       return pageData;

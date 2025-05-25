@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import '../../../core/models/dictionary.dart';
-import '../../../core/services/dictionary/dictionary_service.dart';
+import '../../core/models/dictionary.dart';
+import 'dictionary_service.dart';
 
 /// 사전 검색 기능을 담당하는 ViewModel
 class DictionaryViewModel extends ChangeNotifier {
