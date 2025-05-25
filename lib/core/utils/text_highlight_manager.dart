@@ -21,6 +21,9 @@ class TextHighlightManager {
   static final RegExp _punctuationRegex =
       RegExp(r'[，。！？：；""' '（）【】《》、,.!?:;\'"()[\]{}]');
 
+  // 중복 사전 검색 방지를 위한 변수 (static으로 관리)
+  static bool _isProcessingDictionaryLookup = false;
+
   /// 중국어 문자 포함 여부 확인
   static bool containsChineseCharacters(String text) {
     return _chineseRegex.hasMatch(text);
@@ -34,6 +37,28 @@ class TextHighlightManager {
   /// 구두점 확인
   static bool isPunctuation(String char) {
     return _punctuationRegex.hasMatch(char);
+  }
+
+  /// 하이라이트된 단어 탭 처리
+  static void handleHighlightedWordTap(String word, Function(String)? onDictionaryLookup) {
+    if (_isProcessingDictionaryLookup) return;
+
+    if (kDebugMode) {
+      debugPrint('하이라이트된 단어 탭 처리: $word');
+    }
+
+    // 중복 호출 방지
+    _isProcessingDictionaryLookup = true;
+
+    // 사전 검색 콜백 호출
+    if (onDictionaryLookup != null) {
+      onDictionaryLookup(word);
+    }
+
+    // 일정 시간 후 플래그 초기화 (중복 호출 방지)
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _isProcessingDictionaryLookup = false;
+    });
   }
 
   /// 단어 경계 확인

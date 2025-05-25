@@ -5,8 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../authentication/user_preferences_service.dart';
 import '../authentication/auth_service.dart';
-import '../media/image_service.dart';
-import '../text_processing/llm_text_processing.dart';
+import '../../core/services/media/image_service.dart';
+import '../../core/services/text_processing/llm_text_processing.dart';
 
 /// 앱 초기화 단계를 정의합니다.
 enum InitializationStep {
@@ -248,7 +248,21 @@ class InitializationManager {
   // 앱 설정 로드
   Future<void> _loadAppSettings() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      // 일반 앱 설정 로드
+      debugPrint('앱 설정 로드 중...');
+      
+      // LLM 처리 서비스 초기화
+      await _textProcessingService.ensureInitialized();
+      
+      // 사용자 설정 모드 디버깅 (세그먼트 모드 상태 확인)
+      if (kDebugMode) {
+        final userPrefs = await _prefsService.getPreferences();
+        debugPrint('🔍 초기화 중 사용자 설정 디버깅:');
+        debugPrint('  세그먼트 모드: ${userPrefs.useSegmentMode}');
+        debugPrint('  소스 언어: ${userPrefs.sourceLanguage}');
+        debugPrint('  타겟 언어: ${userPrefs.targetLanguage}');
+      }
+      
       debugPrint('앱 설정 로드 완료');
     } catch (e) {
       debugPrint('앱 설정 로드 중 오류: $e');

@@ -10,6 +10,7 @@ class Note {
   final int flashcardCount;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String? firstImageUrl;
 
   Note({
     required this.id,
@@ -20,6 +21,7 @@ class Note {
     this.flashcardCount = 0,
     this.createdAt,
     this.updatedAt,
+    this.firstImageUrl,
   });
 
   /// Firestore 문서에서 Note 객체 생성
@@ -43,6 +45,7 @@ class Note {
       flashcardCount: data['flashcardCount'] as int? ?? 0,
       createdAt: parseDate(data['createdAt']),
       updatedAt: parseDate(data['updatedAt']),
+      firstImageUrl: data['firstImageUrl'] as String?,
     );
   }
 
@@ -57,6 +60,7 @@ class Note {
       flashcardCount: json['flashcardCount'] as int? ?? 0,
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : null,
       updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt'] as String) : null,
+      firstImageUrl: json['firstImageUrl'] as String?,
     );
   }
 
@@ -71,6 +75,7 @@ class Note {
       'flashcardCount': flashcardCount,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      'firstImageUrl': firstImageUrl,
     };
   }
 
@@ -84,6 +89,7 @@ class Note {
     int? flashcardCount,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? firstImageUrl,
   }) {
     return Note(
       id: id ?? this.id,
@@ -94,6 +100,7 @@ class Note {
       flashcardCount: flashcardCount ?? this.flashcardCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      firstImageUrl: firstImageUrl ?? this.firstImageUrl,
     );
   }
 }

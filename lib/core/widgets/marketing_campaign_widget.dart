@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/marketing_campaign.dart';
-import '../theme/tokens/color_tokens.dart';
-import '../theme/tokens/typography_tokens.dart';
-import '../theme/tokens/spacing_tokens.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import '../../core/theme/tokens/spacing_tokens.dart';
 import '../services/marketing/marketing_campaign_service.dart';
 
 /// 마케팅 캠페인을 표시하는 위젯

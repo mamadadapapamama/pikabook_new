@@ -274,4 +274,22 @@ class UserPreferencesService {
       }
     }
   }
+
+  /// 세그먼트 모드 반전 (디버깅 테스트용)
+  Future<bool> toggleSegmentMode() async {
+    try {
+      final prefs = await getPreferences();
+      final newValue = !prefs.useSegmentMode;
+      
+      if (kDebugMode) {
+        debugPrint('🔄 세그먼트 모드 반전: ${prefs.useSegmentMode} → $newValue');
+      }
+      
+      await savePreferences(prefs.copyWith(useSegmentMode: newValue));
+      return newValue;
+    } catch (e) {
+      debugPrint('⚠️ 세그먼트 모드 반전 실패: $e');
+      return false;
+    }
+  }
 } 

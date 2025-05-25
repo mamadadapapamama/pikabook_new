@@ -5,8 +5,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:collection/collection.dart';
-import '../../models/flash_card.dart';
-import '../../models/processed_text.dart';
+import '../../../core/models/flash_card.dart';
+import '../../../core/models/processed_text.dart';
 
 /// 통합 캐시 서비스
 /// 앱 전체에서 사용되는 캐시를 관리합니다.

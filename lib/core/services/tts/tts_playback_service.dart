@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import '../cache/unified_cache_service.dart';
-import '../../models/text_unit.dart';
+import '../../../core/models/text_unit.dart';
 
 /// TTS 상태
 enum TtsState { playing, stopped, paused, continued }

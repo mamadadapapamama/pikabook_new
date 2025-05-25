@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/color_tokens.dart';
 
 /// 텍스트 세그먼트 관련 유틸리티를 제공하는 클래스
 class SegmentUtils {

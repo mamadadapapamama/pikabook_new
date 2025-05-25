@@ -4,9 +4,9 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/models/flash_card.dart';
-import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/theme/tokens/typography_tokens.dart';
-import '../../core/theme/tokens/spacing_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/typography_tokens.dart';
+import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 
 /// 샘플 모드의 플래시카드 화면 (플래시카드 UI 로드, app bar, bottom controls)

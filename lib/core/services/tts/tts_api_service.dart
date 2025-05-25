@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
-import '../common/usage_limit_service.dart';
+import '../../core/services/common/usage_limit_service.dart';
 import '../common/plan_service.dart';
 import '../../utils/language_constants.dart';
 
@@ -100,9 +100,8 @@ class TtsApiService {
       }
 
       // James 음성 사용 (중국어 네이티브)
-      // voiceId는 음성/화자의 ID, model_id는 음성 합성 모델/엔진의 ID
-      final String voiceId = 'pNInz6obpgDQGcFmaJgB'; // 중국어 남성 음성 ID
-      final String modelId = '4VZIsMPtgggwNg7OXbPY'; // James 모델 ID
+      // voiceId는 음성/화자의 ID
+      final String voiceId = '4VZIsMPtgggwNg7OXbPY'; // 중국어 남성 음성 ID
 
       final response = await http.post(
         Uri.parse('https://api.elevenlabs.io/v1/text-to-speech/$voiceId'),
@@ -113,7 +112,6 @@ class TtsApiService {
         },
         body: json.encode({
           'text': truncatedText,
-          'model_id': modelId,
           'voice_settings': {
             'stability': 0.5,
             'similarity_boost': 0.5,

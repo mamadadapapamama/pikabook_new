@@ -3,20 +3,20 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import '../../features/home/home_viewmodel.dart';
-import '../../widgets/note_list_item.dart';
-import '../../core/services/content/note_service.dart';
+import '../home/note_list_item.dart';
+import '../note/services/note_service.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
-import '../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/common/usage_limit_service.dart';
 import '../../core/services/marketing/marketing_campaign_service.dart';  // 마케팅 캠페인 서비스 추가
-import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/theme/tokens/typography_tokens.dart';
-import '../../core/theme/tokens/spacing_tokens.dart';
-import '../../core/theme/tokens/ui_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/typography_tokens.dart';
+import '../../../core/theme/tokens/spacing_tokens.dart';
+import '../../../core/theme/tokens/ui_tokens.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../widgets/image_picker_bottom_sheet.dart';
-import '../../core/widgets/dot_loading_indicator.dart';
+import '../../core/widgets/image_picker_bottom_sheet.dart';
+import '../../../core/widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/widgets/pika_button.dart';
+import '../../../core/widgets/pika_button.dart';
 import '../../core/widgets/marketing_campaign_widget.dart';  // 마케팅 캠페인 위젯 추가
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
@@ -28,7 +28,7 @@ import '../../app.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/debug_utils.dart';
 import '../../core/models/note.dart';
-import '../note_detail/note_detail_screen.dart';
+import '../note/view/note_detail_screen.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용 위해 추가
 
@@ -111,6 +111,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     // 마케팅 캠페인 서비스 초기화
     _initializeMarketingService();
+    
+    // 모든 노트의 썸네일 업데이트 (앱 시작 시 한 번)
+    _updateAllNoteThumbnails();
     
     // Route 변경 감지를 위한 리스너 추가
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -887,5 +890,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('LLM 테스트 기능이 제거되었습니다.')),
       );
+  }
+
+  // 모든 노트의 썸네일 업데이트
+  Future<void> _updateAllNoteThumbnails() async {
+    try {
+      final noteService = NoteService();
+      final int updatedCount = await noteService.updateAllNoteThumbnails();
+      
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 노트 썸네일 일괄 업데이트 완료: $updatedCount개');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 노트 썸네일 업데이트 중 오류: $e');
+      }
+      // 오류가 발생해도 앱 진행에 영향을 주지 않음
+    }
   }
 } 

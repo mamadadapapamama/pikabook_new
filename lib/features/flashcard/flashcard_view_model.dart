@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../core/models/flash_card.dart';
-import '../../core/services/tts/tts_service.dart';
-import '../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/tts/tts_service.dart';
+import '../../../core/services/common/usage_limit_service.dart';
 import 'flashcard_repository.dart';
 
 /// 플래시카드 UI 상태 관리 및 비즈니스 로직을 담당하는 ViewModel
@@ -22,6 +22,9 @@ class FlashCardViewModel extends ChangeNotifier {
   int _currentCardIndex = 0;     // 현재 플래시카드 인덱스
   bool _isCardFlipped = false;   // 카드 뒤집힘 상태
   
+  // 플래시카드 단어 목록 (캐시)
+  Set<String> _flashcardWords = {};
+  
   // Getters
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -31,6 +34,7 @@ class FlashCardViewModel extends ChangeNotifier {
   bool get isSpeaking => _isSpeaking;
   int get currentCardIndex => _currentCardIndex;
   bool get isCardFlipped => _isCardFlipped;
+  Set<String> get flashcardWords => _flashcardWords;
   
   // 노트 ID 설정 (초기화 시 필요)
   FlashCardViewModel({
@@ -84,6 +88,7 @@ class FlashCardViewModel extends ChangeNotifier {
     
     try {
       _flashCards = await _repository.loadFlashCards(_noteId);
+      extractFlashcardWords(); // 단어 목록 업데이트
       setLoading(false);
       notifyListeners();
     } catch (e) {
@@ -99,6 +104,7 @@ class FlashCardViewModel extends ChangeNotifier {
     
     try {
       _flashCards = await _repository.loadAllFlashCards();
+      extractFlashcardWords(); // 단어 목록 업데이트
       setLoading(false);
       notifyListeners();
     } catch (e) {
@@ -137,6 +143,7 @@ class FlashCardViewModel extends ChangeNotifier {
         _flashCards.add(createdCard);
       }
       
+      extractFlashcardWords(); // 단어 목록 업데이트
       setLoading(false);
       notifyListeners();
       return true;
@@ -162,6 +169,7 @@ class FlashCardViewModel extends ChangeNotifier {
       
       // 로컬 상태 업데이트
       _flashCards.removeWhere((card) => card.id == cardId);
+      extractFlashcardWords(); // 단어 목록 업데이트
       setLoading(false);
       notifyListeners();
       return true;
@@ -393,6 +401,57 @@ class FlashCardViewModel extends ChangeNotifier {
     // 뷰모델의 기존 TTS 메서드 호출
     await speakCurrentCardText();
     return {'success': true, 'limitReached': false};
+  }
+  
+  /// 플래시카드 단어 목록 추출
+  void extractFlashcardWords() {
+    final Set<String> newFlashcardWords = {};
+
+    if (kDebugMode) {
+      debugPrint('FlashCardViewModel: extractFlashcardWords 호출');
+    }
+
+    if (_flashCards.isNotEmpty) {
+      if (kDebugMode) {
+        debugPrint('FlashCardViewModel: 플래시카드 목록 수: ${_flashCards.length}개');
+      }
+
+      for (final card in _flashCards) {
+        if (card.front.isNotEmpty) {
+          newFlashcardWords.add(card.front);
+        }
+      }
+
+      if (_flashCards.isNotEmpty && kDebugMode) {
+        debugPrint(
+            'FlashCardViewModel: 첫 5개 플래시카드: ${_flashCards.take(5).map((card) => card.front).join(', ')}');
+      }
+    } else if (kDebugMode) {
+      debugPrint('FlashCardViewModel: 플래시카드 목록이 비어있음');
+    }
+
+    // 변경 사항이 있는 경우에만 업데이트
+    if (_flashcardWords.length != newFlashcardWords.length ||
+        !_flashcardWords.containsAll(newFlashcardWords) ||
+        !newFlashcardWords.containsAll(_flashcardWords)) {
+      if (kDebugMode) {
+        debugPrint('FlashCardViewModel: 플래시카드 단어 목록 변경 감지:');
+        debugPrint('  이전: ${_flashcardWords.length}개');
+        debugPrint('  새로운: ${newFlashcardWords.length}개');
+      }
+
+      _flashcardWords = newFlashcardWords;
+      notifyListeners();
+
+      if (kDebugMode) {
+        debugPrint('FlashCardViewModel: 플래시카드 단어 목록 업데이트 완료: ${_flashcardWords.length}개');
+        if (_flashcardWords.isNotEmpty) {
+          debugPrint('FlashCardViewModel: 첫 5개 단어: ${_flashcardWords.take(5).join(', ')}');
+        }
+      }
+    } else if (kDebugMode) {
+      debugPrint('FlashCardViewModel: 플래시카드 단어 목록 변경 없음: ${_flashcardWords.length}개');
+    }
   }
   
   @override

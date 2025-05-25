@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
-import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/theme/tokens/typography_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/typography_tokens.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/theme/tokens/spacing_tokens.dart';
-import '../../core/widgets/pika_button.dart';
+import '../../../core/theme/tokens/spacing_tokens.dart';
+import '../../../core/widgets/pika_button.dart';
 import 'package:flutter/services.dart';
 
 class OnboardingScreen extends StatefulWidget {

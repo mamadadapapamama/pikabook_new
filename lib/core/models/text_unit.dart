@@ -10,7 +10,7 @@ class TextUnit {
   /// 핀인 (또는 다른 발음 표기, 없을 수 있음)
   final String? pinyin;
 
-  /// 번역 텍스트 (없을 수 있음)
+  /// 번역 텍스트 
   final String? translatedText;
   
   /// 언어 관련 필드

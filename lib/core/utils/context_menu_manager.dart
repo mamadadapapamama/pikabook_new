@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'context_menu_helper.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import 'text_highlight_manager.dart';
 
 /// 텍스트 컨텍스트 메뉴 관련 기능을 제공하는 유틸리티 클래스
 /// 텍스트 선택 시 표시되는 컨텍스트 메뉴를 관리합니다.
@@ -258,6 +260,133 @@ class ContextMenuManager {
     return AdaptiveTextSelectionToolbar.buttonItems(
       anchors: editableTextState.contextMenuAnchors,
       buttonItems: buttonItems,
+    );
+  }
+
+  /// 선택 가능한 텍스트 위젯 생성
+  static Widget buildSelectableText(
+    String text, {
+    TextStyle? style,
+    bool isOriginal = false,
+    required Set<String> flashcardWords,
+    required String selectedText,
+    required ValueNotifier<String> selectedTextNotifier,
+    required Function(String) onSelectionChanged,
+    required Function(String)? onDictionaryLookup,
+    required Function(String, String, {String? pinyin})? onCreateFlashCard,
+  }) {
+    // 텍스트가 비어있으면 빈 컨테이너 반환
+    if (text.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    if (kDebugMode) {
+      debugPrint('buildSelectableText 호출: 텍스트 길이=${text.length}');
+    }
+    
+    // 스타일이 제공되지 않은 경우 경고
+    if (style == null) {
+      debugPrint('경고: ContextMenuManager에 스타일이 제공되지 않았습니다.');
+    }
+    
+    // 항상 제공된 스타일 사용
+    final effectiveStyle = style;
+    
+    // 하이라이트된 텍스트 스팬 생성
+    final textSpans = TextHighlightManager.buildHighlightedText(
+      text: text,
+      flashcardWords: flashcardWords,
+      onTap: (word) {
+        // 텍스트가 선택되어 있지 않을 때만 하이라이트된 단어 탭 처리
+        if (selectedText.isEmpty) {
+          TextHighlightManager.handleHighlightedWordTap(word, onDictionaryLookup);
+        } else if (kDebugMode) {
+          debugPrint('텍스트 선택 중에는 하이라이트된 단어 탭 무시: $word');
+        }
+      },
+      normalStyle: effectiveStyle,
+    );
+
+    // ValueNotifier 업데이트
+    selectedTextNotifier.value = selectedText;
+
+    return ValueListenableBuilder<String>(
+      valueListenable: selectedTextNotifier,
+      builder: (context, currentSelectedText, child) {
+        return TextSelectionTheme(
+          data: TextSelectionThemeData(
+            selectionColor: ColorTokens.primary.withOpacity(0.2),
+            cursorColor: ColorTokens.primary,
+            selectionHandleColor: ColorTokens.primary,
+          ),
+          child: SelectableText.rich(
+            TextSpan(
+              children: textSpans,
+              style: effectiveStyle,
+            ),
+            contextMenuBuilder: (context, editableTextState) {
+              return buildContextMenu(
+                context: context,
+                editableTextState: editableTextState,
+                flashcardWords: flashcardWords,
+                selectedText: currentSelectedText,
+                onSelectionChanged: (text) {
+                  // 상태 변경을 ValueNotifier를 통해 처리하고, 빌드 후에 콜백 호출
+                  selectedTextNotifier.value = text;
+                  Future.microtask(() {
+                    onSelectionChanged(text);
+                  });
+                },
+                onDictionaryLookup: onDictionaryLookup,
+                onCreateFlashCard: onCreateFlashCard,
+              );
+            },
+            enableInteractiveSelection: true,
+            showCursor: true,
+            cursorWidth: 2.0,
+            cursorColor: ColorTokens.primary,
+            onSelectionChanged: (selection, cause) {
+              // 선택 변경 시 로깅
+              if (kDebugMode) {
+                debugPrint(
+                    '선택 변경: ${selection.start}-${selection.end}, 원인: $cause');
+              }
+
+              // 선택이 취소된 경우 (빈 선택)
+              if (selection.isCollapsed) {
+                if (kDebugMode) {
+                  debugPrint('선택 취소됨 (빈 선택)');
+                }
+                // 선택된 텍스트 초기화
+                selectedTextNotifier.value = '';
+                Future.microtask(() {
+                  onSelectionChanged('');
+                });
+              } else {
+                // 텍스트가 선택된 경우, 선택된 텍스트 추출
+                try {
+                  final newSelectedText =
+                      text.substring(selection.start, selection.end);
+                  if (newSelectedText.isNotEmpty && newSelectedText != currentSelectedText) {
+                    if (kDebugMode) {
+                      debugPrint('새로운 텍스트 선택됨: "$newSelectedText"');
+                    }
+                    // 선택된 텍스트 업데이트
+                    selectedTextNotifier.value = newSelectedText;
+                    Future.microtask(() {
+                      onSelectionChanged(newSelectedText);
+                    });
+                  }
+                } catch (e) {
+                  if (kDebugMode) {
+                    debugPrint('텍스트 선택 오류: $e');
+                  }
+                }
+              }
+            },
+          ),
+        );
+      },
     );
   }
 }

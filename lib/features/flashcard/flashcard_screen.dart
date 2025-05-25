@@ -3,12 +3,11 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flip_card/flip_card.dart';
 import 'package:provider/provider.dart';
 import '../../core/models/flash_card.dart';
-import 'flashcard_service.dart' hide debugPrint;
 import 'flashcard_view_model.dart';
 import 'flashcard_ui.dart';
-import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/theme/tokens/typography_tokens.dart';
-import '../../core/theme/tokens/spacing_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/typography_tokens.dart';
+import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
 

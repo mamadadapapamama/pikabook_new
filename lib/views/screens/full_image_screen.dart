@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
-import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/theme/tokens/typography_tokens.dart';
-import '../../core/theme/tokens/spacing_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/typography_tokens.dart';
+import '../../../core/theme/tokens/spacing_tokens.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// 이미지를 전체 화면으로 표시하는 화면

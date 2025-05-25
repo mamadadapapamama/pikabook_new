@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../models/note.dart';
+import '../../../core/models/note.dart';
 
 /// 노트 캐싱을 담당하는 서비스
 /// 노트 목록을 로컬에 캐싱하고 관리합니다.

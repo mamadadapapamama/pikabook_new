@@ -7,14 +7,14 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart' show rootBundle;
-import '../../models/processed_text.dart';
+import '../../../core/models/processed_text.dart';
 import '../../utils/language_constants.dart';
-import '../common/usage_limit_service.dart';
+import '../../core/services/common/usage_limit_service.dart';
 import '../common/plan_service.dart';
 import 'dart:async';
 import 'package:path/path.dart' as path;
 import '../cache/unified_cache_service.dart';
-import '../../models/text_unit.dart';
+import '../../../core/models/text_unit.dart';
 import 'tts_api_service.dart';
 import 'tts_playback_service.dart';
 

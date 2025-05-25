@@ -15,7 +15,7 @@ import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
 import 'core/services/common/usage_limit_service.dart';
 import 'core/widgets/usage_dialog.dart';
-import 'widgets/loading_screen.dart';
+import 'views/screens/loading_screen.dart';
 import 'core/services/marketing/marketing_campaign_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';

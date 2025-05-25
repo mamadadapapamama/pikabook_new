@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart' show timeDilation;
 import 'dart:async';
-import '../theme/tokens/color_tokens.dart';
-import '../theme/tokens/typography_tokens.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
 import 'dot_loading_indicator.dart';
 
 /// 다이얼로그 형태의 로딩 경험을 제공하는 클래스들(현재는 노트 생성 전용)
