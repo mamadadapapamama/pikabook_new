@@ -10,7 +10,7 @@ import '../../../core/models/text_unit.dart';
 import 'text_cleaner_service.dart';
 import 'text_mode_seperation_service.dart';
 import '../authentication/user_preferences_service.dart';
-import '../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/common/usage_limit_service.dart';
 
 /// OCR 서비스
 /// 이미지에서 '중국어' 우선추출

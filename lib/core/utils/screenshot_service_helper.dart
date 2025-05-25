@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/media/screenshot_service.dart';
-import '../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
 
 class ScreenshotServiceHelper {
   final ScreenshotService _screenshotService = ScreenshotService();

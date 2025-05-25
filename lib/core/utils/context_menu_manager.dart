@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'context_menu_helper.dart';
-import '../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
 import 'text_highlight_manager.dart';
 
 /// 텍스트 컨텍스트 메뉴 관련 기능을 제공하는 유틸리티 클래스

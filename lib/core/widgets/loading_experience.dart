@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
-import '../../core/theme/tokens/typography_tokens.dart';
+import '../../../core/theme/tokens/typography_tokens.dart';
 import 'dot_loading_indicator.dart';
 
 /// 로딩 경험을 중앙 관리하는 클래스와 위젯들

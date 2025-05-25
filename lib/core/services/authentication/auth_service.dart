@@ -8,8 +8,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
-import '../../core/services/media/image_service.dart';
-import '../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/media/image_service.dart';
+import '../../../core/services/common/usage_limit_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;

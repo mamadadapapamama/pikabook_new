@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
 import 'debug_utils.dart';
 
 // 툴팁 스타일 정의

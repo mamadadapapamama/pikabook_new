@@ -54,7 +54,11 @@ def fix_imports():
         "../../core/theme/tokens/ui_tokens.dart": "../../../core/theme/tokens/ui_tokens.dart",
         "../theme/tokens/ui_tokens.dart": "../../core/theme/tokens/ui_tokens.dart",
         
-        # Services
+        # Services - 더 정확한 매핑
+        "../../core/services/media/image_service.dart": "../media/image_service.dart",
+        "../../core/services/common/usage_limit_service.dart": "../common/usage_limit_service.dart",
+        "../../core/services/text_processing/llm_text_processing.dart": "../text_processing/llm_text_processing.dart",
+        
         "../core/services/content/note_service.dart": "../../../core/services/content/note_service.dart",
         "../../core/services/content/note_service.dart": "../../../core/services/content/note_service.dart",
         "../services/content/note_service.dart": "../../core/services/content/note_service.dart",
@@ -197,6 +201,9 @@ def fix_imports():
         
         "../../features/flashcard/flashcard_view_model.dart": "../flashcard/flashcard_view_model.dart",
         "../../../features/flashcard/flashcard_view_model.dart": "../flashcard/flashcard_view_model.dart",
+        
+        # App specific paths
+        "widgets/loading_screen.dart": "views/screens/loading_screen.dart",
     }
     
     # lib 폴더의 모든 .dart 파일 찾기

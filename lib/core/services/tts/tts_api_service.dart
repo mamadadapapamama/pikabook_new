@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
-import '../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/common/usage_limit_service.dart';
 import '../common/plan_service.dart';
 import '../../utils/language_constants.dart';
 

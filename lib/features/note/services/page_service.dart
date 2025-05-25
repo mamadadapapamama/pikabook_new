@@ -4,8 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/processing_status.dart';
-import '../../core/services/text_processing/llm_text_processing.dart';
-import '../../core/services/tts/tts_api_service.dart';
+import '../../../core/services/text_processing/llm_text_processing.dart';
+import '../../../core/services/tts/tts_api_service.dart';
 
 /// 페이지 서비스: 페이지 CRUD 작업만 담당합니다.
 class PageService {

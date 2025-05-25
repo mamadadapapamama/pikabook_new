@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/tokens/color_tokens.dart';
-import '../../core/theme/tokens/typography_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/typography_tokens.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:math';
 

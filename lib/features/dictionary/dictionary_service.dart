@@ -4,7 +4,7 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/models/dictionary.dart';
 import 'internal_cn_dictionary_service.dart';
-import '../../core/services/text_processing/llm_text_processing.dart';
+import '../../../core/services/text_processing/llm_text_processing.dart';
 import 'cc_cedict_service.dart';
 
 /// 범용 사전 서비스
