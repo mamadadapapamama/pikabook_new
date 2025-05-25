@@ -246,7 +246,7 @@ class LLMTextProcessing {
             {
               'role': 'system',
               'content': needPinyin
-                  ? '당신은 중국어를 가르치는 선생님입니다. 중국어 텍스트를 한국어로 번역해주고 병음도 제공합니다. 응답 형식:\n\n첫 번째 줄: Pinyin with tone marks (e.g. xuéxiào)\n두 번째 줄: 한국어 번역'
+                  ? '당신은 중국어를 가르치는 선생님입니다. 중국어 텍스트를 한국어로 번역해주고 병음도 제공합니다. 응답 형식은 JSON array 형식:\n\n첫 번째 줄: Pinyin with tone marks (e.g. xuéxiào)\n두 번째 줄: 한국어 번역'
                   : '당신은 중국어를 가르치는 선생님입니다. 중국어 텍스트를 한국어로 정확하게 번역합니다.',
             },
             {

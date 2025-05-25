@@ -30,18 +30,8 @@ class TextCleanerService {
   // 페이지 번호 패턴 (e.g. "page 12", "12", "第12页")
   static final RegExp pageNumberPattern = RegExp(r'^(?:page\s*)?[0-9]+(?:\s*页)?$', caseSensitive: false);
   
-  // 섹션 제목 패턴 (e.g. "Lesson 1", "练习", "Chapter 2")
-  static final RegExp sectionTitlePattern = RegExp(
-    r'^(?:Lesson|Chapter|Unit|练习|第[一二三四五六七八九十百千万]+[课章])\s*[0-9一二三四五六七八九十百千万]*$',
-    caseSensitive: false
-  );
-  
   // 저작권 및 특수 문자 패턴
   static final RegExp copyrightPattern = RegExp(r'^[^a-zA-Z\u4e00-\u9fff]*[©®™@#$%^&*]+[^a-zA-Z\u4e00-\u9fff]*$');
-  
-  // 중복된 제목/지시사항 체크를 위한 세션 저장소
-  final Set<String> _seenHeadings = {};
-  final Set<String> _seenInstructions = {};
 
   // 텍스트 정리 결과 캐싱 (FIFO 방식으로 자동 관리)
   final Map<String, String> _cleanTextCache = {};
@@ -51,11 +41,9 @@ class TextCleanerService {
   /// - 핀인 줄 제거
   /// - 숫자만 단독으로 있는 문장 제거
   /// - 페이지 번호 제거
-  /// - 섹션 제목 제거
   /// - 저작권 및 특수 문자만 있는 줄 제거
-  /// - 중복된 제목/지시사항 제거
   /// - 문장부호만 있는 문장 제거
-  /// - 너무 짧은 줄 제거 (중국어가 아닌 경우)
+  /// - 중국어가 아닌 단어만 있을 경우 제거 (영어만 등)
 
   String cleanText(String text) {
     if (text.isEmpty) return text;
@@ -108,26 +96,10 @@ class TextCleanerService {
         continue;
       }
 
-      // 섹션 제목 건너뛰기
-      if (_isSectionTitle(trimmedLine)) {
-        if (kDebugMode) {
-          debugPrint('🧹 섹션 제목 건너뛰기: "$trimmedLine"');
-        }
-        continue;
-      }
-
       // 저작권 및 특수 문자만 있는 줄 건너뛰기
       if (_isCopyrightOrSpecialChars(trimmedLine)) {
         if (kDebugMode) {
           debugPrint('🧹 저작권/특수문자 건너뛰기: "$trimmedLine"');
-        }
-        continue;
-      }
-
-      // 중복된 제목/지시사항 건너뛰기
-      if (_isDuplicateHeadingOrInstruction(trimmedLine)) {
-        if (kDebugMode) {
-          debugPrint('🧹 중복 제목/지시사항 건너뛰기: "$trimmedLine"');
         }
         continue;
       }
@@ -140,10 +112,10 @@ class TextCleanerService {
         continue;
       }
 
-      // 너무 짧은 줄 건너뛰기 (10글자 이내이면서 중국어가 아닌 경우)
-      if (_isTooShort(trimmedLine)) {
+      // 중국어가 아닌 단어만 있을 경우 제거 (영어만 등)
+      if (_isNonChineseOnly(trimmedLine)) {
         if (kDebugMode) {
-          debugPrint('🧹 너무 짧은 줄 건너뛰기: "$trimmedLine" (길이: ${trimmedLine.length}, 중국어포함: ${containsChinese(trimmedLine)})');
+          debugPrint('🧹 중국어가 아닌 텍스트만 있는 줄 건너뛰기: "$trimmedLine"');
         }
         continue;
       }
@@ -242,35 +214,9 @@ class TextCleanerService {
     return pageNumberPattern.hasMatch(text);
   }
 
-  /// 섹션 제목인지 확인
-  bool _isSectionTitle(String text) {
-    return sectionTitlePattern.hasMatch(text);
-  }
-
   /// 저작권 및 특수 문자만 있는지 확인
   bool _isCopyrightOrSpecialChars(String text) {
     return copyrightPattern.hasMatch(text) && !containsChinese(text);
-  }
-
-  /// 중복된 제목/지시사항인지 확인
-  bool _isDuplicateHeadingOrInstruction(String text) {
-    // 제목 패턴 (짧고 끝에 문장부호가 없는 경우)
-    if (text.length < 50 && !text.endsWith(RegExp(r'[.!?。！？]').pattern)) {
-      if (_seenHeadings.contains(text)) {
-        return true;
-      }
-      _seenHeadings.add(text);
-    }
-    
-    // 지시사항 패턴 (시작이 특정 단어로 시작하는 경우)
-    if (text.toLowerCase().startsWith(RegExp(r'^(note|注意|提示|说明|练习|作业)').pattern)) {
-      if (_seenInstructions.contains(text)) {
-        return true;
-      }
-      _seenInstructions.add(text);
-    }
-    
-    return false;
   }
 
   /// 문장부호만 있는지 확인
@@ -278,8 +224,15 @@ class TextCleanerService {
     return onlyPunctuationPattern.hasMatch(text);
   }
 
-  /// 너무 짧은 줄인지 확인 (10글자 이내이면서 중국어가 아닌 경우)
-  bool _isTooShort(String text) {
-    return text.length <= 10 && !containsChinese(text);
+  /// 중국어가 아닌 단어만 있을 경우 확인
+  bool _isNonChineseOnly(String text) {
+    // 중국어가 포함되어 있으면 유지
+    if (containsChinese(text)) {
+      return false;
+    }
+    
+    // 중국어가 없고, 영어나 기타 알파벳만 있는 경우 제거
+    final hasAlphabets = RegExp(r'[a-zA-Z]').hasMatch(text);
+    return hasAlphabets;
   }
 }
