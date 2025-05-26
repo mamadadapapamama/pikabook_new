@@ -5,8 +5,8 @@ import '../../../core/utils/context_menu_manager.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/utils/segment_utils.dart';
-import '../../tts/tts_button.dart';
-import '../../../core/widgets/dot_loading_indicator.dart';
+import '../../../core/services/tts/tts_playback_service.dart';
+import '../../../core/services/tts/tts_service.dart';
 import '../../flashcard/flashcard_view_model.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
@@ -47,14 +47,45 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   // 선택된 텍스트 상태 관리를 위한 ValueNotifier
   final ValueNotifier<String> _selectedTextNotifier = ValueNotifier<String>('');
 
+  // TTS 서비스
+  final TTSService _ttsService = TTSService();
+  
   // 기본 스타일 정의 (내부에서 관리)
-  TextStyle get _defaultOriginalTextStyle => widget.originalTextStyle ?? TypographyTokens.body1Cn;
-  TextStyle get _defaultPinyinTextStyle => widget.pinyinTextStyle ?? TypographyTokens.caption.copyWith(color: Colors.grey[600]);
-  TextStyle get _defaultTranslatedTextStyle => widget.translatedTextStyle ?? TypographyTokens.body2.copyWith(color: Colors.grey[800]);
-
+  TextStyle get _defaultOriginalTextStyle => widget.originalTextStyle ?? TypographyTokens.headline3Cn.copyWith (color:ColorTokens.textPrimary);
+  TextStyle get _defaultPinyinTextStyle => widget.pinyinTextStyle ?? TypographyTokens.caption.copyWith(color: Colors.grey[800]);
+  TextStyle get _defaultTranslatedTextStyle => widget.translatedTextStyle ?? TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary);
+  
   @override
   void initState() {
     super.initState();
+    _initTts();
+  }
+
+  /// TTS 초기화
+  Future<void> _initTts() async {
+    try {
+      await _ttsService.init();
+      
+      // TTS 상태 변경 리스너 설정
+      _ttsService.setOnPlayingStateChanged((segmentIndex) {
+        if (mounted) {
+          setState(() {
+            // 상태 업데이트는 widget.playingSegmentIndex를 통해 부모에서 관리
+          });
+        }
+      });
+      
+      // TTS 재생 완료 리스너 설정
+      _ttsService.setOnPlayingCompleted(() {
+        if (mounted) {
+          setState(() {
+            // 재생 완료 시 상태 리셋
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint('TTS 초기화 실패: $e');
+    }
   }
 
   @override
@@ -92,6 +123,60 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         _selectedText = text;
       });
     }
+  }
+
+  /// TTS 재생 토글
+  Future<void> _toggleTts(String text, int segmentIndex) async {
+    try {
+      // 현재 재생 중인 세그먼트인지 확인
+      final bool isCurrentlyPlaying = widget.playingSegmentIndex == segmentIndex;
+      
+      if (isCurrentlyPlaying) {
+        // 재생 중이면 중지
+        await _ttsService.stop();
+        if (widget.onPlayTts != null) {
+          widget.onPlayTts!('', segmentIndex: null);
+        }
+      } else {
+        // 재생 시작
+        await _ttsService.speakSegment(text, segmentIndex);
+        if (widget.onPlayTts != null) {
+          widget.onPlayTts!(text, segmentIndex: segmentIndex);
+        }
+      }
+    } catch (e) {
+      debugPrint('TTS 재생 중 오류: $e');
+    }
+  }
+
+  /// TTS 버튼 위젯 생성
+  Widget _buildTtsButton(String text, int segmentIndex) {
+    final bool isPlaying = widget.playingSegmentIndex == segmentIndex;
+    
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: isPlaying 
+            ? ColorTokens.primary.withOpacity(0.2)
+            : Colors.transparent,
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        icon: Icon(
+          isPlaying ? Icons.stop : Icons.volume_up,
+          color: ColorTokens.textSecondary,
+          size: 16,
+        ),
+        onPressed: () => _toggleTts(text, segmentIndex),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(
+          minWidth: 32,
+          minHeight: 32,
+        ),
+        splashRadius: 16,
+      ),
+    );
   }
 
   /// **전체 텍스트 표시** → **문단별 텍스트 표시**
@@ -173,13 +258,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               // TTS 재생 버튼 - 세그먼트 스타일로 통일
               Padding(
                 padding: const EdgeInsets.only(left: 8.0, top: 2.0),
-                child: TtsButton(
-                  text: unit.originalText,
-                  segmentIndex: i,
-                  size: TtsButton.sizeMedium, // 중간 크기로 통일
-                  tooltip: '무료 TTS 사용량을 모두 사용했습니다.',
-                  activeBackgroundColor: ColorTokens.primary.withOpacity(0.2), // 더 뚜렷한 활성화 색상
-                ),
+                child: _buildTtsButton(unit.originalText, i),
               ),
             ],
           ),
