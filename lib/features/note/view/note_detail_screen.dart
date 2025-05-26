@@ -252,7 +252,6 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         onCreateFlashCard: (front, back, {pinyin}) => 
             _handleCreateFlashCard(context, viewModel, front, back, pinyin: pinyin),
         flashCards: _flashcards,
-        onDeleteSegment: (segmentIndex) => _handleDeleteSegment(context, viewModel, segmentIndex),
         onPlayTts: (text, {segmentIndex}) => _handlePlayTts(text, segmentIndex: segmentIndex),
       ),
     );
@@ -267,14 +266,6 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         print('TTS 재생 실패: $e');
       }
     }
-  }
-  
-  // 세그먼트 삭제 처리 (임시로 비활성화)
-  void _handleDeleteSegment(BuildContext context, NoteDetailViewModel viewModel, int segmentIndex) async {
-    // TODO: TextProcessingService를 통해 세그먼트 삭제 구현
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('세그먼트 삭제 기능은 준비 중입니다')),
-    );
   }
   
   // 더보기 옵션 표시

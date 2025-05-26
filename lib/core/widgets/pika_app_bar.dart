@@ -248,40 +248,43 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   Widget _buildHomeAppBar(BuildContext context) {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      automaticallyImplyLeading: false,
-      titleSpacing: 0,
-      systemOverlayStyle: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark, // 안드로이드용 (검정 아이콘)
-        statusBarBrightness: Brightness.light, // iOS용 (밝은 배경 = 검정 아이콘)
-      ),
-      title: Padding(
-        padding: EdgeInsets.only(left: SpacingTokens.lg),
-        child: FutureBuilder<Map<String, dynamic>>(
-          future: _loadHomeAppBarData(),
-          builder: (context, snapshot) {
-            final data = snapshot.data ?? {};
-            final noteSpaceName = data['noteSpaceName'] as String? ?? '로딩 중...';
-            final isPlanFree = data['isPlanFree'] as bool? ?? true;
-            
-            return _buildLogoTitle(noteSpaceName);
-          },
+    return Container(
+      height: 124, // 명시적으로 높이 설정
+      child: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
+        toolbarHeight: 124, // AppBar의 툴바 높이도 124로 설정
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark, // 안드로이드용 (검정 아이콘)
+          statusBarBrightness: Brightness.light, // iOS용 (밝은 배경 = 검정 아이콘)
         ),
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(
-            Icons.settings_outlined,
-            color: ColorTokens.textPrimary,
-            size: SpacingTokens.iconSizeMedium,
+        title: Padding(
+          padding: EdgeInsets.only(left: SpacingTokens.lg),
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: _loadHomeAppBarData(),
+            builder: (context, snapshot) {
+              final data = snapshot.data ?? {};
+              final noteSpaceName = data['noteSpaceName'] as String? ?? '로딩 중...';
+              final isPlanFree = data['isPlanFree'] as bool? ?? true;
+              
+              return _buildLogoTitle(noteSpaceName);
+            },
           ),
-          onPressed: () => _navigateToSettings(context),
         ),
-        SizedBox(width: SpacingTokens.md),
-      ],
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.settings_outlined,
+              color: ColorTokens.textPrimary,
+              size: SpacingTokens.iconSizeMedium,
+            ),
+            onPressed: () => _navigateToSettings(context),
+          ),
+        ],
+      ),
     );
   }
 

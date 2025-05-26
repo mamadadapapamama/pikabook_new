@@ -27,7 +27,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/debug_utils.dart';
 import '../../core/models/note.dart';
 import '../note/view/note_detail_screen.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용 위해 추가
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
@@ -334,17 +333,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 await viewModel.refreshNotes();
               },
               child: ListView.builder(
-                padding: const EdgeInsets.only(top: 20, bottom: 16),
+                padding: const EdgeInsets.only(top: 20),
                 itemCount: viewModel.notes.length,
-                itemExtent: 120.0, // 높이를 16 증가 (100 -> 116)
-                cacheExtent: 500.0, // 캐시 범위 설정
-                addAutomaticKeepAlives: false, // 자동 KeepAlive 비활성화 (메모리 최적화)
-                addRepaintBoundaries: false, // 불필요한 RepaintBoundary 제거
+                itemExtent: 120.0,
+                cacheExtent: 500.0,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: false,
                 itemBuilder: (context, index) {
                   final note = viewModel.notes[index];
                   
                   return Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                     child: NoteListItem(
                       note: note,
                       onNoteTapped: (note) => _navigateToNoteDetail(context, note),

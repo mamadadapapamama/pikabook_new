@@ -4,7 +4,6 @@ import '../../../core/models/processed_text.dart';
 import '../../../core/utils/context_menu_manager.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
-import '../../../core/utils/segment_utils.dart';
 import '../../../core/services/tts/tts_playback_service.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../flashcard/flashcard_view_model.dart';
@@ -16,7 +15,6 @@ class ProcessedTextWidget extends StatefulWidget {
   final Function(String)? onDictionaryLookup;
   final Function(String, String, {String? pinyin})? onCreateFlashCard;
   final FlashCardViewModel? flashCardViewModel;
-  final Function(int)? onDeleteSegment;
   final Function(String, {int? segmentIndex})? onPlayTts;
   final int? playingSegmentIndex;
   final TextStyle? originalTextStyle;
@@ -29,7 +27,6 @@ class ProcessedTextWidget extends StatefulWidget {
     this.onDictionaryLookup,
     this.onCreateFlashCard,
     this.flashCardViewModel,
-    this.onDeleteSegment,
     this.onPlayTts,
     this.playingSegmentIndex,
     this.originalTextStyle,
@@ -295,16 +292,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         ),
         child: segmentContainer,
       );
-      
-      // 삭제 가능 조건: 문장별 모드(mode=segment)이고 onDeleteSegment 콜백이 있을 때만
-      if (widget.onDeleteSegment != null && widget.processedText.mode == TextProcessingMode.segment) {
-        final int unitIndex = i;
-        wrappedSegmentContainer = SegmentUtils.buildDismissibleSegment(
-          key: ValueKey('segment_$i'),
-          child: wrappedSegmentContainer,
-          onDelete: () => widget.onDeleteSegment!(unitIndex),
-        );
-      }
       
       unitWidgets.add(wrappedSegmentContainer);
       

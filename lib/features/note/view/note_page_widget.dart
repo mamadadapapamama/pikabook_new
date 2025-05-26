@@ -22,7 +22,6 @@ class NotePageWidget extends StatelessWidget {
   final String noteId;
   final List<FlashCard> flashCards;
   final Function(String, String, {String? pinyin})? onCreateFlashCard;
-  final Function(int)? onDeleteSegment;
   final Function(String, {int? segmentIndex})? onPlayTts;
   
   const NotePageWidget({
@@ -32,7 +31,6 @@ class NotePageWidget extends StatelessWidget {
     required this.noteId,
     this.flashCards = const [],
     this.onCreateFlashCard,
-    this.onDeleteSegment,
     this.onPlayTts,
   }) : super(key: key);
 
@@ -114,7 +112,6 @@ class NotePageWidget extends StatelessWidget {
       onDictionaryLookup: (word) => _handleDictionaryLookup(context, word),
       onCreateFlashCard: onCreateFlashCard,
       flashCardViewModel: flashCardViewModel,
-      onDeleteSegment: onDeleteSegment,
       onPlayTts: onPlayTts,
       playingSegmentIndex: null, // TTS 재생 인덱스는 별도 관리 필요
     );
