@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/processing_status.dart';
+import '../../../core/models/processed_text.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
 import '../../../core/services/tts/tts_api_service.dart';
 
@@ -110,10 +111,11 @@ class PageService {
         
         try {
           // 2. LLM 처리 (번역 + 병음)
-          final processed = await _llmProcessor.processText(
-            extractedText,
+          final processed = await _llmProcessor.processTextSegments(
+            [extractedText], // 단일 텍스트를 리스트로 감싸서 전달
             sourceLanguage: 'zh-CN',
             targetLanguage: 'ko',
+            mode: TextProcessingMode.segment, // 기본 모드 지정
             needPinyin: true,
           );
           

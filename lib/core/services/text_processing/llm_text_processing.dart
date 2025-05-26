@@ -1,12 +1,9 @@
-import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 import '../../../core/models/text_unit.dart';
 import '../../../core/models/processed_text.dart';
-import '../cache/unified_cache_service.dart';
 
 /// LLM 서비스: 분리된 텍스트 조각들을 받아 번역과 필요한경우 병음 제공
 /// (모드별 분리는 TextModeSeparationService에서 이미 처리됨)
@@ -18,9 +15,6 @@ class LLMTextProcessing {
   // API 키 및 엔드포인트 설정
   String? _apiKey;
   final String _defaultModel = 'gpt-3.5-turbo';
-  
-  // 캐시 서비스
-  final UnifiedCacheService _cacheService = UnifiedCacheService();
   
   Future<void>? _initFuture;
   
@@ -59,72 +53,8 @@ class LLMTextProcessing {
     }
   }
 
-  /// 이미 분리된 텍스트 조각들을 ProcessedText로 처리
-  /// (번역 + 병음만 담당, 분리/병합은 하지 않음)
-  Future<ProcessedText> processText(
-    String text, {
-    required String sourceLanguage,
-    required String targetLanguage,
-    bool needPinyin = false,
-  }) async {
-    await ensureInitialized();
-    
-    if (kDebugMode) {
-      debugPrint('🔄 LLM processText 호출: ${text.length}자');
-      debugPrint('언어: $sourceLanguage → $targetLanguage, 병음: $needPinyin');
-    }
-    
-    // 빈 텍스트 검사
-    if (text.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('⚠️ 빈 텍스트로 빈 ProcessedText 반환');
-      }
-      return ProcessedText(
-        mode: TextProcessingMode.segment,
-        displayMode: TextDisplayMode.full,
-        fullOriginalText: '',
-        fullTranslatedText: '',
-        units: [],
-        sourceLanguage: sourceLanguage,
-        targetLanguage: targetLanguage,
-      );
-    }
-    
-    // API 키 확인
-    if (_apiKey == null || _apiKey!.isEmpty) {
-      throw Exception('API 키가 설정되지 않았습니다.');
-    }
-
-    // 단일 텍스트 조각에 대해 번역+병음 처리
-    final result = await _translateText(text, sourceLanguage, targetLanguage, needPinyin);
-    
-    // ProcessedText 객체 생성
-    final processedText = ProcessedText(
-      mode: TextProcessingMode.segment, // 기본값으로 설정 (실제 모드는 외부에서 설정)
-      displayMode: TextDisplayMode.full,
-      fullOriginalText: text,
-      fullTranslatedText: result['translation'] ?? '',
-      units: [
-        TextUnit(
-          originalText: text,
-          translatedText: result['translation'] ?? '',
-          pinyin: result['pinyin'] ?? '',
-          sourceLanguage: sourceLanguage,
-          targetLanguage: targetLanguage,
-        ),
-      ],
-      sourceLanguage: sourceLanguage,
-      targetLanguage: targetLanguage,
-    );
-
-    if (kDebugMode) {
-      debugPrint('✅ LLM 처리 완료: 번역=${result['translation']?.length ?? 0}자, 병음=${result['pinyin']?.length ?? 0}자');
-    }
-
-    return processedText;
-  }
-
-  /// 분리된 텍스트 조각들을 일괄 처리
+  /// 텍스트 조각들을 번역+병음 처리
+  /// 단일 텍스트인 경우에도 리스트로 전달하여 사용
   Future<ProcessedText> processTextSegments(
     List<String> textSegments, {
     required String sourceLanguage, 
@@ -135,7 +65,7 @@ class LLMTextProcessing {
     await ensureInitialized();
 
     if (kDebugMode) {
-      debugPrint('🔄 LLM 일괄 처리: ${textSegments.length}개 조각');
+      debugPrint('🔄 LLM 텍스트 처리: ${textSegments.length}개 조각');
     }
 
     if (textSegments.isEmpty) {
@@ -150,10 +80,8 @@ class LLMTextProcessing {
       );
     }
 
-    // API 키 확인
-    if (_apiKey == null || _apiKey!.isEmpty) {
-      throw Exception('API 키가 설정되지 않았습니다.');
-    }
+    // API 키 확인 (한 번만)
+    await _ensureApiKeyAvailable();
 
     List<TextUnit> units = [];
     String fullOriginalText = '';
@@ -218,6 +146,28 @@ class LLMTextProcessing {
     return result;
   }
 
+  /// API 키 사용 가능 여부 확인 (중복 제거)
+  Future<void> _ensureApiKeyAvailable() async {
+    if (_apiKey == null || _apiKey!.isEmpty) {
+      throw Exception('API 키가 설정되지 않았습니다.');
+    }
+  }
+
+  /// 프롬프트 생성 (중복 제거)
+  Map<String, String> _generatePrompts(String text, bool needPinyin) {
+    if (needPinyin) {
+      return {
+        'userPrompt': '다음 중국어 텍스트를 한국어로 번역하고 병음도 제공해주세요. JSON 배열 형식으로 [병음, 번역] 순서로 반환해주세요:\n\n"$text"',
+        'systemPrompt': '당신은 중국어를 가르치는 선생님입니다. 중국어 텍스트를 한국어로 번역하고 병음을 제공합니다. 응답은 반드시 JSON 배열 형식으로 [병음, 번역] 순서로 반환하세요. 예: ["Hémǎ yéyé", "하마 할아버지"]',
+      };
+    } else {
+      return {
+        'userPrompt': '다음 중국어 텍스트를 한국어로 번역해주세요. 번역 결과만 반환하고 다른 설명은 하지 마세요:\n\n"$text"',
+        'systemPrompt': '당신은 중국어를 가르치는 선생님입니다. 중국어 텍스트를 한국어로 정확하게 번역합니다.',
+      };
+    }
+  }
+
   /// 단일 텍스트 조각을 번역+병음 처리
   Future<Map<String, String>> _translateText(
     String text,
@@ -230,9 +180,7 @@ class LLMTextProcessing {
         debugPrint('🚀 LLM API 호출 시작: "${text.substring(0, text.length > 30 ? 30 : text.length)}..."');
       }
 
-      final String prompt = needPinyin 
-          ? '다음 중국어 텍스트를 한국어로 번역하고 병음도 제공해주세요. 번역 결과만 반환하고 다른 설명은 하지 마세요:\n\n"$text"'
-          : '다음 중국어 텍스트를 한국어로 번역해주세요. 번역 결과만 반환하고 다른 설명은 하지 마세요:\n\n"$text"';
+      final prompts = _generatePrompts(text, needPinyin);
 
       final response = await http.post(
         Uri.parse('https://api.openai.com/v1/chat/completions'),
@@ -245,13 +193,11 @@ class LLMTextProcessing {
           'messages': [
             {
               'role': 'system',
-              'content': needPinyin
-                  ? '당신은 중국어를 가르치는 선생님입니다. 중국어 텍스트를 한국어로 번역해주고 병음도 제공합니다. 응답 형식은 JSON array 형식:\n\n첫 번째 줄: Pinyin with tone marks (e.g. xuéxiào)\n두 번째 줄: 한국어 번역'
-                  : '당신은 중국어를 가르치는 선생님입니다. 중국어 텍스트를 한국어로 정확하게 번역합니다.',
+              'content': prompts['systemPrompt'],
             },
             {
               'role': 'user',
-              'content': prompt,
+              'content': prompts['userPrompt'],
             },
           ],
           'temperature': 0.3,
@@ -292,38 +238,89 @@ class LLMTextProcessing {
 
   /// LLM 응답 파싱
   Map<String, String> _parseResponse(String content, bool needPinyin) {
-    final lines = content.split('\n')
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList();
-
     String translation = '';
     String pinyin = '';
 
-    if (lines.isEmpty) {
-      translation = content.trim();
-    } else if (needPinyin && lines.length >= 2) {
-      // 병음이 필요한 경우: 번역과 병음을 분리
-      final int separatorIndex = _findTranslationPinyinSeparator(lines);
-      
-      if (separatorIndex > 0) {
-        translation = lines.sublist(0, separatorIndex).join(' ');
-        pinyin = lines.sublist(separatorIndex).join(' ');
+    try {
+      // JSON 배열 형태인지 확인
+      if (content.trim().startsWith('[') && content.trim().endsWith(']')) {
+        final List<dynamic> jsonArray = jsonDecode(content.trim());
+        
+        if (jsonArray.isNotEmpty) {
+          if (needPinyin && jsonArray.length >= 2) {
+            // 첫 번째 요소: 병음, 두 번째 요소: 번역
+            pinyin = jsonArray[0].toString().trim();
+            translation = jsonArray[1].toString().trim();
+          } else {
+            // 병음이 필요하지 않거나 요소가 하나인 경우
+            translation = jsonArray[0].toString().trim();
+          }
+        }
       } else {
-        // 분리점을 찾지 못한 경우 첫 번째 줄은 번역, 나머지는 병음
-        translation = lines[0];
-        if (lines.length > 1) {
-          pinyin = lines.sublist(1).join(' ');
+        // 일반 텍스트 형태 파싱
+        final lines = content.split('\n')
+            .map((line) => line.trim())
+            .where((line) => line.isNotEmpty)
+            .toList();
+
+        if (lines.isEmpty) {
+          translation = content.trim();
+        } else if (needPinyin && lines.length >= 2) {
+          // 병음이 필요한 경우: 번역과 병음을 분리
+          final int separatorIndex = _findTranslationPinyinSeparator(lines);
+          
+          if (separatorIndex > 0) {
+            translation = lines.sublist(0, separatorIndex).join(' ');
+            pinyin = lines.sublist(separatorIndex).join(' ');
+          } else {
+            // 분리점을 찾지 못한 경우 첫 번째 줄은 병음, 두 번째 줄은 번역
+            pinyin = lines[0];
+            translation = lines[1];
+          }
+        } else {
+          // 병음이 필요하지 않거나 줄이 하나인 경우
+          translation = lines.join(' ');
         }
       }
-    } else {
-      // 병음이 필요하지 않거나 줄이 하나인 경우
-      translation = lines.join(' ');
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ JSON 파싱 실패, 일반 텍스트로 처리: $e');
+      }
+      
+      // JSON 파싱 실패 시 일반 텍스트로 처리
+      final lines = content.split('\n')
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty)
+          .toList();
+
+      if (lines.isEmpty) {
+        translation = content.trim();
+      } else if (needPinyin && lines.length >= 2) {
+        pinyin = lines[0];
+        translation = lines[1];
+      } else {
+        translation = lines.join(' ');
+      }
     }
 
     // 번역이 원문과 동일한 경우 오류 처리
     if (translation.isEmpty) {
       translation = '[번역 결과가 비어있습니다]';
+    }
+
+    // 따옴표 제거
+    if (translation.startsWith('"') && translation.endsWith('"')) {
+      translation = translation.substring(1, translation.length - 1);
+    }
+    if (translation.startsWith("'") && translation.endsWith("'")) {
+      translation = translation.substring(1, translation.length - 1);
+    }
+    
+    if (pinyin.startsWith('"') && pinyin.endsWith('"')) {
+      pinyin = pinyin.substring(1, pinyin.length - 1);
+    }
+    if (pinyin.startsWith("'") && pinyin.endsWith("'")) {
+      pinyin = pinyin.substring(1, pinyin.length - 1);
     }
 
     return {

@@ -123,10 +123,11 @@ class TextProcessingService {
         debugPrint('🤖 LLM 처리 시작: $pageId');
       }
       
-      final processedText = await _llmService.processText(
-        page.originalText!,
+      final processedText = await _llmService.processTextSegments(
+        [page.originalText!], // 단일 텍스트를 리스트로 감싸서 전달
         sourceLanguage: page.sourceLanguage,
         targetLanguage: page.targetLanguage,
+        mode: TextProcessingMode.segment, // 기본 모드 지정
         needPinyin: true,
       );
       
