@@ -245,7 +245,7 @@ class OcrService {
       if (!skipUsageCount) {
         try {
           debugPrint('OCR 사용량 카운트 증가 시작');
-          await _usageLimitService.incrementOcrPageCount(1, allowOverLimit: true);
+          await _usageLimitService.updateUsageAfterNoteCreation(ocrPages: 1);
           debugPrint('OCR 사용량 카운트 증가 완료');
         } catch (e) {
           debugPrint('OCR 사용량 증가 중 오류 발생: $e');

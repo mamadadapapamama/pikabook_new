@@ -10,6 +10,7 @@ import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
+import '../../../core/services/tts/tts_service.dart';
 
 /// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
 /// 플래시카드 UI interaction 담당 (swipe, flip, tts, delete )
@@ -18,11 +19,13 @@ import '../../core/widgets/usage_dialog.dart';
 class FlashCardScreen extends StatefulWidget {
   final String? noteId; // 특정 노트의 플래시카드만 표시할 때 사용
   final List<FlashCard>? initialFlashcards; // 초기 플래시카드 목록
+  final bool isTtsEnabled; // TTS 활성화 여부 (외부에서 제어)
 
   const FlashCardScreen({
     super.key, 
     this.noteId,
     this.initialFlashcards,
+    this.isTtsEnabled = true,
   });
 
   @override
@@ -33,6 +36,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   late FlashCardViewModel _viewModel;
   final CardSwiperController _cardController = CardSwiperController();
   final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
+  final TTSService _ttsService = TTSService();
 
   @override
   void initState() {
@@ -42,33 +46,53 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       noteId: widget.noteId ?? '',
       initialFlashcards: widget.initialFlashcards,
     );
+    
+    // TTS 서비스 초기화
+    _initTts();
+  }
+
+  /// TTS 초기화
+  Future<void> _initTts() async {
+    try {
+      await _ttsService.init();
+      await _ttsService.setLanguage('zh-CN');
+    } catch (e) {
+      debugPrint('TTS 초기화 실패: $e');
+    }
   }
 
   @override
   void dispose() {
     _cardController.dispose();
+    _ttsService.dispose();
     super.dispose();
   }
 
   /// 음성 재생 기능 (TTS)
   Future<void> _speakText() async {
-    await _viewModel.speakText((limitData) {
-      if (!mounted) return;
-      
-      UsageDialog.show(
-        context,
-        limitStatus: limitData['limitStatus'],
-        usagePercentages: limitData['usagePercentages'],
-        onContactSupport: () {
-          // TODO: 지원팀 문의 기능 추가
-        },
-      );
-    });
+    if (!widget.isTtsEnabled) return;
+    
+    if (_viewModel.flashCards.isEmpty || _viewModel.currentCardIndex >= _viewModel.flashCards.length) {
+      return;
+    }
+    
+    try {
+      final textToSpeak = _viewModel.flashCards[_viewModel.currentCardIndex].front;
+      if (textToSpeak.isNotEmpty) {
+        await _ttsService.speak(textToSpeak);
+      }
+    } catch (e) {
+      debugPrint('TTS 재생 중 오류: $e');
+    }
   }
 
   /// TTS 중지
   Future<void> _stopSpeaking() async {
-    await _viewModel.stopSpeaking();
+    try {
+      await _ttsService.stop();
+    } catch (e) {
+      debugPrint('TTS 중지 중 오류: $e');
+    }
   }
 
   /// 카드 스와이프 처리
@@ -130,8 +154,8 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   /// 뒤로 가기 처리
   Future<bool> _handleBackButtonPressed() async {
     // TTS 실행 중인 경우 먼저 중지
-    if (_viewModel.isSpeaking) {
-      await _viewModel.stopSpeaking();
+    if (_ttsService.state == TtsState.playing) {
+      await _stopSpeaking();
     }
     
     // 결과 반환: 플래시카드 개수와 함께 플래시카드 목록도 반환
@@ -281,125 +305,117 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                     )
                   // 플래시카드가 있으면 카드 스와이퍼 표시
                   else
-                    FutureBuilder<bool>(
-                      future: viewModel.isTtsAvailable(),
-                      builder: (context, snapshot) {
-                        final bool isTtsEnabled = snapshot.data ?? true;
-                        final String ttsTooltip = viewModel.getTtsLimitMessage();
-                        
-                        return Stack(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(SpacingTokens.md),
-                              child: CardSwiper(
-                                controller: _cardController,
-                                cardsCount: viewModel.flashCards.length,
-                                onSwipe: _onSwipe,
-                                allowedSwipeDirection: viewModel.flashCards.length == 1
-                                    ? const AllowedSwipeDirection.only(up: true)
-                                    : const AllowedSwipeDirection.symmetric(
-                                        horizontal: true,
-                                        vertical: true,
-                                      ),
-                                onSwipeDirectionChange: (_, __) {},
-                                numberOfCardsDisplayed:
-                                    viewModel.flashCards.length == 1 ? 1 : 2,
-                                padding: const EdgeInsets.all(SpacingTokens.lg),
-                                isLoop: viewModel.flashCards.length > 1,
-                                cardBuilder: (context, index, horizontalThreshold,
-                                    verticalThreshold) {
-                                  final double scale;
-                                  final double yOffset;
-
-                                  if (viewModel.flashCards.length == 1) {
-                                    scale = 1.0;
-                                    yOffset = 0.0;
-                                  } else {
-                                    final int indexDiff = (index - viewModel.currentCardIndex).abs();
-                                    scale = index == viewModel.currentCardIndex
-                                        ? 1.0
-                                        : 1.0 - (0.05 * indexDiff);
-                                    yOffset = index == viewModel.currentCardIndex
-                                        ? 0
-                                        : 20.0 * indexDiff;
-                                  }
-
-                                  return FlashCardUI.buildFlashCard(
-                                    card: viewModel.flashCards[index],
-                                    index: index,
-                                    currentIndex: viewModel.currentCardIndex,
-                                    flipCardKey: index == viewModel.currentCardIndex
-                                        ? _flipCardKey
-                                        : null,
-                                    isSpeaking: viewModel.isSpeaking,
-                                    onFlip: () {
-                                      viewModel.toggleCardFlip();
-                                    },
-                                    onSpeak: _speakText,
-                                    onStopSpeaking: _stopSpeaking,
-                                    getNextCardInfo: () => viewModel.getNextCardInfo(),
-                                    getPreviousCardInfo: () => viewModel.getPreviousCardInfo(),
-                                    onWordTap: _searchWordInDictionary,
-                                    onDelete: () => viewModel.deleteCurrentCard(),
-                                    scale: scale,
-                                    offset: Offset(0, yOffset),
-                                    isTtsEnabled: isTtsEnabled,
-                                    ttsTooltip: !isTtsEnabled ? ttsTooltip : null,
-                                  );
-                                },
-                              ),
-                            ),
-                      
-                            // 삭제 안내 텍스트 (상단)
-                            Positioned(
-                              top: SpacingTokens.xs,
-                              left: 0,
-                              right: 0,
-                              child: Material(
-                                color: ColorTokens.surface.withAlpha(0),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    // 삭제 버튼
-                                    Icon(
-                                      Icons.delete_outline,
-                                      color: ColorTokens.disabled,
-                                      size: SpacingTokens.iconSizeMedium,
-                                    ),
-                                    const SizedBox(height: SpacingTokens.xs/2),
-                                    // 스와이프 안내 텍스트
-                                    Text(
-                                      '위로 스와이프 하면 삭제 됩니다.',
-                                      style: TypographyTokens.caption.copyWith(
-                                        color: ColorTokens.disabled,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            
-                            // 이동 안내 텍스트 (하단)
-                            if (viewModel.flashCards.length > 1)
-                              Positioned(
-                                bottom: SpacingTokens.xl,
-                                left: 0,
-                                right: 0,
-                                child: Material(
-                                  color: ColorTokens.surface.withAlpha(0),
-                                  child: Text(
-                                    '좌우로 스와이프 해서 다음 카드로 이동',
-                                    style: TypographyTokens.caption.copyWith(
-                                      color: ColorTokens.disabled,
-                                    ),
-                                    textAlign: TextAlign.center,
+                    Stack(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(SpacingTokens.md),
+                          child: CardSwiper(
+                            controller: _cardController,
+                            cardsCount: viewModel.flashCards.length,
+                            onSwipe: _onSwipe,
+                            allowedSwipeDirection: viewModel.flashCards.length == 1
+                                ? const AllowedSwipeDirection.only(up: true)
+                                : const AllowedSwipeDirection.symmetric(
+                                    horizontal: true,
+                                    vertical: true,
                                   ),
+                            onSwipeDirectionChange: (_, __) {},
+                            numberOfCardsDisplayed:
+                                viewModel.flashCards.length == 1 ? 1 : 2,
+                            padding: const EdgeInsets.all(SpacingTokens.lg),
+                            isLoop: viewModel.flashCards.length > 1,
+                            cardBuilder: (context, index, horizontalThreshold,
+                                verticalThreshold) {
+                              final double scale;
+                              final double yOffset;
+
+                              if (viewModel.flashCards.length == 1) {
+                                scale = 1.0;
+                                yOffset = 0.0;
+                              } else {
+                                final int indexDiff = (index - viewModel.currentCardIndex).abs();
+                                scale = index == viewModel.currentCardIndex
+                                    ? 1.0
+                                    : 1.0 - (0.05 * indexDiff);
+                                yOffset = index == viewModel.currentCardIndex
+                                    ? 0
+                                    : 20.0 * indexDiff;
+                              }
+
+                              return FlashCardUI.buildFlashCard(
+                                card: viewModel.flashCards[index],
+                                index: index,
+                                currentIndex: viewModel.currentCardIndex,
+                                flipCardKey: index == viewModel.currentCardIndex
+                                    ? _flipCardKey
+                                    : null,
+                                isSpeaking: _ttsService.state == TtsState.playing,
+                                onFlip: () {
+                                  viewModel.toggleCardFlip();
+                                },
+                                onSpeak: _speakText,
+                                onStopSpeaking: _stopSpeaking,
+                                getNextCardInfo: () => viewModel.getNextCardInfo(),
+                                getPreviousCardInfo: () => viewModel.getPreviousCardInfo(),
+                                onWordTap: _searchWordInDictionary,
+                                onDelete: () => viewModel.deleteCurrentCard(),
+                                scale: scale,
+                                offset: Offset(0, yOffset),
+                                isTtsEnabled: widget.isTtsEnabled,
+                                ttsTooltip: !widget.isTtsEnabled ? '무료 사용량을 모두 사용했습니다.' : null,
+                              );
+                            },
+                          ),
+                        ),
+                
+                        // 삭제 안내 텍스트 (상단)
+                        Positioned(
+                          top: SpacingTokens.xs,
+                          left: 0,
+                          right: 0,
+                          child: Material(
+                            color: ColorTokens.surface.withAlpha(0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // 삭제 버튼
+                                Icon(
+                                  Icons.delete_outline,
+                                  color: ColorTokens.disabled,
+                                  size: SpacingTokens.iconSizeMedium,
                                 ),
+                                const SizedBox(height: SpacingTokens.xs/2),
+                                // 스와이프 안내 텍스트
+                                Text(
+                                  '위로 스와이프 하면 삭제 됩니다.',
+                                  style: TypographyTokens.caption.copyWith(
+                                    color: ColorTokens.disabled,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        
+                        // 이동 안내 텍스트 (하단)
+                        if (viewModel.flashCards.length > 1)
+                          Positioned(
+                            bottom: SpacingTokens.xl,
+                            left: 0,
+                            right: 0,
+                            child: Material(
+                              color: ColorTokens.surface.withAlpha(0),
+                              child: Text(
+                                '좌우로 스와이프 해서 다음 카드로 이동',
+                                style: TypographyTokens.caption.copyWith(
+                                  color: ColorTokens.disabled,
+                                ),
+                                textAlign: TextAlign.center,
                               ),
-                          ],
-                        );
-                      },
+                            ),
+                          ),
+                      ],
                     ),
                 ],
               ),

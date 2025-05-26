@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import '../../../core/services/common/usage_limit_service.dart';
-import '../common/plan_service.dart';
 import '../../utils/language_constants.dart';
 
 /// TTS API 서비스
@@ -139,67 +138,8 @@ class TtsApiService {
     }
   }
 
-  /// 사용량 제한 확인 및 증가
-  Future<bool> checkAndIncrementUsage() async {
-    return await _usageLimitService.incrementTtsCharCount(1);
-  }
-
-  /// 현재 TTS 사용 횟수 가져오기
-  Future<int> getCurrentTtsUsageCount() async {
-    try {
-      // 항상 최신 데이터 가져오기
-      _usageLimitService.invalidateCache();
-      final usage = await _usageLimitService.getUserUsage(forceRefresh: true);
-      final int currentUsage = usage['ttsRequests'] is int 
-          ? usage['ttsRequests'] as int 
-          : 0;
-      return currentUsage;
-    } catch (e) {
-      debugPrint('TTS 현재 사용량 확인 중 오류: $e');
-      return 0;
-    }
-  }
-
-  /// 남은 TTS 사용량 확인
-  Future<int> getRemainingTtsCount() async {
-    try {
-      final plan = await PlanService().getCurrentPlan();
-      final usage = await _usageLimitService.getTtsUsage();
-      return (plan['maxTtsCount'] as int) - usage;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('TTS 사용량 확인 중 오류: $e');
-      }
-      rethrow;
-    }
-  }
-
-  /// 전체 TTS 사용 한도 가져오기
-  Future<int> getTtsUsageLimit() async {
-    final limits = await _usageLimitService.getUserLimits();
-    return limits['ttsRequests'] ?? 0;
-  }
-
-  /// TTS 사용량 안내 메시지 가져오기 (현재 사용량 포함)
-  Future<String> getTtsUsageMessage() async {
-    final currentCount = await getCurrentTtsUsageCount();
-    final limit = await getTtsUsageLimit();
-    return '현재 TTS 사용량: $currentCount/$limit회';
-  }
-
-  /// TTS 제한 안내 메시지 가져오기
-  String getTtsLimitMessage() {
-    return '무료 사용량을 모두 사용했습니다. 추가 사용을 원하시면 관리자에게 문의주세요.';
-  }
-
-  /// TTS 사용 가능 여부 확인
-  Future<bool> isTtsAvailable() async {
-    try {
-      final remainingCount = await getRemainingTtsCount();
-      return remainingCount > 0;
-    } catch (e) {
-      debugPrint('TTS 사용 가능 여부 확인 중 오류: $e');
-      return false;
-    }
+  /// TTS 재생 완료 후 사용량 증가
+  Future<bool> incrementTtsUsageAfterPlayback() async {
+    return await _usageLimitService.incrementTtsUsageAfterPlayback();
   }
 }

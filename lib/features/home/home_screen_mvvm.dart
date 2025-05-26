@@ -345,7 +345,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     padding: EdgeInsets.only(
                       left: 20,
                       right: 20,
-                      bottom: index == viewModel.notes.length - 1 ? 18 : 10, // 아이템 간격 24, 마지막 아이템만 20
+                      bottom: index == viewModel.notes.length - 1 ? 18 : 16, // 아이템 간격 16으로 조정
                     ),
                     child: NoteListItem(
                       note: note,

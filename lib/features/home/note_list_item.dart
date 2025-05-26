@@ -93,7 +93,7 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
     }
     
     return Container(
-      height: 120, // 노트리스트 아이템 높이 120
+      height: 116, // 노트리스트 아이템 높이 116
       child: Dismissible(
         key: Key(widget.note.id ?? ''),
         background: Container(
@@ -186,6 +186,7 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
                 children: [
                   // 썸네일 이미지 (80x80)
                   _buildThumbnail(),
+                  const SizedBox(width: 16.0), // 썸네일과 텍스트 사이 간격
                   // 노트 정보
                   Expanded(
                     child: Column(

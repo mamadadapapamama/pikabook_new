@@ -31,6 +31,9 @@ class TtsButton extends StatefulWidget {
   /// 커스텀 모양 (원형 또는 표준)
   final bool useCircularShape;
   
+  /// TTS 활성화 여부 (외부에서 제어)
+  final bool isEnabled;
+  
   /// 버튼 크기 사전 정의값
   static const double sizeSmall = 24.0;
   static const double sizeMedium = 32.0;
@@ -47,6 +50,7 @@ class TtsButton extends StatefulWidget {
     this.onPlayStart,
     this.onPlayEnd,
     this.useCircularShape = true,
+    this.isEnabled = true,
   }) : super(key: key);
 
   @override
@@ -56,12 +60,10 @@ class TtsButton extends StatefulWidget {
 class _TtsButtonState extends State<TtsButton> {
   final TTSService _ttsService = TTSService();
   bool _isPlaying = false;
-  bool _isEnabled = true;
   
   @override
   void initState() {
     super.initState();
-    _checkTtsAvailability();
     _setupListeners();
   }
   
@@ -127,54 +129,9 @@ class _TtsButtonState extends State<TtsButton> {
     }
   }
   
-  // TTS 사용 가능 여부 확인
-  Future<void> _checkTtsAvailability() async {
-    try {
-      // 항상 최신 데이터로 확인 (forceRefresh 사용)
-      final isAvailable = await _ttsService.isTtsAvailable();
-      
-      if (mounted && _isEnabled != isAvailable) {
-        setState(() {
-          _isEnabled = isAvailable;
-        });
-        
-        // 상태 변경 로그
-        debugPrint('TTS 버튼 사용 가능 상태 변경: $_isEnabled');
-        
-        // 사용 불가로 변경된 경우 재생 중 상태도 리셋
-        if (!_isEnabled && _isPlaying) {
-          setState(() {
-            _isPlaying = false;
-          });
-          debugPrint('TTS 제한으로 인해 재생 상태 리셋');
-        }
-      }
-    } catch (e) {
-      debugPrint('TTS 버튼 사용 가능 여부 확인 중 오류: $e');
-      // 오류 발생 시 기본적으로 활성화 상태 유지
-      if (mounted) {
-        setState(() {
-          _isEnabled = true;
-        });
-      }
-    }
-  }
-  
   // TTS 재생 토글
   void _togglePlayback() async {
-    if (!_isEnabled) return;
-    
-    // 사용 가능 여부 다시 확인 (최신 데이터로)
-    final isStillEnabled = await _ttsService.isTtsAvailable();
-    if (!isStillEnabled) {
-      if (mounted) {
-        setState(() {
-          _isEnabled = false;
-        });
-        debugPrint('TTS 재생 전 확인: 사용량 제한 도달');
-      }
-      return;
-    }
+    if (!widget.isEnabled) return;
     
     if (_isPlaying) {
       // 이미 재생 중이면 중지
@@ -247,16 +204,13 @@ class _TtsButtonState extends State<TtsButton> {
           }
         }
       }
-      
-      // 사용량 확인 후 상태 업데이트
-      _checkTtsAvailability();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     // 아이콘 색상 - 활성화 상태에 따라 다르게 설정
-    final Color iconColor = _isEnabled 
+    final Color iconColor = widget.isEnabled 
         ? widget.iconColor ?? ColorTokens.textSecondary 
         : ColorTokens.textGrey.withOpacity(0.5); // 비활성화 시 연한 회색
     
@@ -284,7 +238,7 @@ class _TtsButtonState extends State<TtsButton> {
             color: iconColor,
             size: widget.size * 0.5,
           ),
-          onPressed: _isEnabled ? _togglePlayback : null,
+          onPressed: widget.isEnabled ? _togglePlayback : null,
           padding: EdgeInsets.zero,
           constraints: BoxConstraints(
             minWidth: widget.size,
@@ -306,7 +260,7 @@ class _TtsButtonState extends State<TtsButton> {
           minWidth: widget.size,
           minHeight: widget.size,
         ),
-        onPressed: _isEnabled ? _togglePlayback : null,
+        onPressed: widget.isEnabled ? _togglePlayback : null,
         splashRadius: widget.size / 2,
         // 재생 중일 때 배경색 적용
         style: IconButton.styleFrom(
@@ -316,7 +270,7 @@ class _TtsButtonState extends State<TtsButton> {
     }
     
     // 비활성화된 경우 툴팁 표시
-    if (!_isEnabled && widget.tooltip != null) {
+    if (!widget.isEnabled && widget.tooltip != null) {
       return Tooltip(
         message: widget.tooltip!,
         child: buttonWidget,

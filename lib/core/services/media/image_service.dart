@@ -305,13 +305,14 @@ class ImageService {
     }
   }
   
-  /// 스토리지 용량 제한 확인
+  /// 저장 공간 제한 확인
   Future<bool> _checkStorageLimit(File imageFile) async {
     try {
       final fileSize = await imageFile.length();
-      final currentStorageUsage = await _usageLimitService.getUserCurrentStorageSize();
-      final currentLimits = await _usageLimitService.getCurrentLimits();
-      final storageLimitBytes = currentLimits['storageBytes'] ?? (50 * 1024 * 1024);
+      // 새로운 방식: 설정 화면용 사용량 조회 사용
+      final usageInfo = await _usageLimitService.getUserUsageForSettings();
+      final currentStorageUsage = usageInfo['usage']['storageUsageBytes'] ?? 0;
+      final storageLimitBytes = usageInfo['limits']['storageBytes'] ?? (50 * 1024 * 1024);
       return true; // 현재 작업은 완료하고 다음 작업부터 제한 메시지 표시
     } catch (e) {
       debugPrint('스토리지 제한 확인 실패: $e');
@@ -360,7 +361,7 @@ class ImageService {
   Future<bool> _trackStorageUsage(File file) async {
     try {
       final actualSize = await file.length();
-      await _usageLimitService.addStorageUsage(actualSize, allowOverLimit: true);
+      await _usageLimitService.updateUsageAfterNoteCreation(storageBytes: actualSize);
       return true;
     } catch (e) {
       debugPrint('저장 공간 사용량 추적 실패: $e');

@@ -289,70 +289,6 @@ class FlashCardViewModel extends ChangeNotifier {
     notifyListeners();
   }
   
-  // TTS 기능 - 현재 카드의 텍스트 읽기
-  Future<void> speakCurrentCardText() async {
-    if (_flashCards.isEmpty || _currentCardIndex >= _flashCards.length) {
-      return;
-    }
-    
-    if (_isSpeaking) {
-      await stopSpeaking();
-      return;
-    }
-    
-    try {
-      final textToSpeak = _flashCards[_currentCardIndex].front;
-      
-      if (textToSpeak.isNotEmpty) {
-        // 중국어 설정
-        await _ttsService.setLanguage('zh-CN');
-        
-        _isSpeaking = true;
-        notifyListeners();
-        
-        // TTS 재생 완료 콜백 등록
-        _ttsService.setOnPlayingCompleted(() {
-          _isSpeaking = false;
-          notifyListeners();
-        });
-        
-        // 텍스트 읽기
-        await _ttsService.speak(textToSpeak);
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('TTS 중 오류 발생: $e');
-      }
-      _isSpeaking = false;
-      notifyListeners();
-    }
-  }
-  
-  // TTS 중지
-  Future<void> stopSpeaking() async {
-    if (!_isSpeaking) return;
-    
-    try {
-      await _ttsService.stop();
-      _isSpeaking = false;
-      notifyListeners();
-    } catch (e) {
-      if (kDebugMode) {
-        print('TTS 중지 중 오류 발생: $e');
-      }
-    }
-  }
-  
-  // TTS 사용 가능 여부 확인
-  Future<bool> isTtsAvailable() async {
-    return await _ttsService.isTtsAvailable();
-  }
-
-  // TTS 제한 안내 메시지 가져오기
-  String getTtsLimitMessage() {
-    return _ttsService.getTtsLimitMessage();
-  }
-  
   // 다음 카드 정보 가져오기
   String? getNextCardInfo() {
     if (_currentCardIndex < _flashCards.length - 1) {
@@ -382,25 +318,6 @@ class FlashCardViewModel extends ChangeNotifier {
     
     onLoadingChanged(false);
     showMessage('사전 검색 기능은 현재 개발 중입니다: $word');
-  }
-  
-  // TTS 음성 재생 기능 (사용량 제한 로직 포함)
-  Future<Map<String, dynamic>> speakText(Function(Map<String, dynamic>) showLimitDialog) async {
-    // TTS 사용량 제한 확인 로직
-    final limitStatus = await _usageLimitService.checkFreeLimits();
-    if (limitStatus['ttsLimitReached'] == true) {
-      // 제한에 도달한 경우 다이얼로그 표시 정보 전달
-      final usagePercentages = await _usageLimitService.getUsagePercentages();
-      showLimitDialog({
-        'limitStatus': limitStatus,
-        'usagePercentages': usagePercentages
-      });
-      return {'success': false, 'limitReached': true};
-    }
-
-    // 뷰모델의 기존 TTS 메서드 호출
-    await speakCurrentCardText();
-    return {'success': true, 'limitReached': false};
   }
   
   /// 플래시카드 단어 목록 추출

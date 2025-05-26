@@ -32,6 +32,7 @@ class TTSService {
   // 서비스 인스턴스
   final TtsApiService _apiService = TtsApiService();
   final TtsPlaybackService _playbackService = TtsPlaybackService();
+  final UsageLimitService _usageLimitService = UsageLimitService();
   
   // 초기화 여부
   bool _isInitialized = false;
@@ -93,14 +94,9 @@ class TTSService {
       return;
     }
 
-    // 사용량 제한 확인
+    // 새로운 TTS 요청 처리
     try {
       debugPrint('🔊 TTS 새 요청');
-      final canUseTts = await _apiService.checkAndIncrementUsage();
-      if (!canUseTts) {
-        debugPrint('⚠️ TTS 사용량 제한 초과로 재생 불가');
-        return;
-      }
       
       // 음성 합성
       final audioData = await _apiService.synthesizeSpeech(text);
@@ -111,6 +107,9 @@ class TTSService {
           // 오디오 파일 재생
           await _playbackService.playAudioFile(audioPath);
           debugPrint('🔊 TTS 재생 중: $text');
+          
+          // 재생 완료 후 사용량 증가
+          await _apiService.incrementTtsUsageAfterPlayback();
         } else {
           debugPrint('❌ TTS 캐시 저장 실패: $text');
         }
@@ -160,19 +159,6 @@ class TTSService {
       debugPrint('읽을 내용이 없습니다');
       return;
     }
-    
-    try {
-      // 남은 사용량 확인
-      final remainingCount = await _apiService.getRemainingTtsCount();
-      
-      // 남은 사용량이 부족한 경우
-      if (remainingCount < units.length) {
-        debugPrint('TTS 사용량 부족: 필요=${units.length}, 남음=$remainingCount');
-        return;
-      }
-    } catch (e) {
-      debugPrint('TTS 사용량 확인 중 오류: $e');
-    }
 
     // 모든 내용 순차 재생
     debugPrint("${units.length}개 항목 순차 재생 시작");
@@ -203,16 +189,6 @@ class TTSService {
     // 텍스트 읽기
     await speak(text);
   }
-
-  /// TTS 사용 가능 여부 확인
-  Future<bool> isTtsAvailable() async {
-    return await _apiService.isTtsAvailable();
-  }
-
-  /// TTS 제한 안내 메시지 가져오기
-  String getTtsLimitMessage() {
-    return _apiService.getTtsLimitMessage();
-  }
   
   /// 세그먼트 기반 읽기
   Future<void> speakSegments(ProcessedText text) async {
@@ -240,26 +216,6 @@ class TTSService {
   /// 캐시 비우기
   void clearCache() {
     _playbackService.clearCache();
-  }
-
-  /// 현재 TTS 사용 횟수 가져오기
-  Future<int> getCurrentTtsUsageCount() async {
-    return await _apiService.getCurrentTtsUsageCount();
-  }
-
-  /// 남은 TTS 사용량 확인
-  Future<int> getRemainingTtsCount() async {
-    return await _apiService.getRemainingTtsCount();
-  }
-
-  /// 전체 TTS 사용 한도 가져오기
-  Future<int> getTtsUsageLimit() async {
-    return await _apiService.getTtsUsageLimit();
-  }
-
-  /// TTS 사용량 안내 메시지 가져오기 (현재 사용량 포함)
-  Future<String> getTtsUsageMessage() async {
-    return await _apiService.getTtsUsageMessage();
   }
 
   /// 재생 상태 변경 콜백 설정
