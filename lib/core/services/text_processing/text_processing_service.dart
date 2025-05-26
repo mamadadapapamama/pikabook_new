@@ -192,6 +192,9 @@ class TextProcessingService {
     // 기존 리스너 정리
     _pageListeners[pageId]?.cancel();
     
+    // 이전 데이터 추적을 위한 변수
+    ProcessedText? previousProcessedText;
+    
     final listener = _firestore
         .collection('pages')
         .doc(pageId)
@@ -208,14 +211,24 @@ class TextProcessingService {
           
           // processedText가 null이 아닌 경우에만 처리
           if (processedText != null) {
-            // 캐시 업데이트
-            await _saveToCache(pageId, processedText);
-            
-            // 콜백 호출
-            onTextChanged(processedText);
-            
-            if (kDebugMode) {
-              debugPrint('🔔 페이지 텍스트 변경 감지: $pageId');
+            // 이전 데이터와 비교하여 실제 변경이 있는지 확인
+            if (_hasProcessedTextChanged(previousProcessedText, processedText)) {
+              // 캐시 업데이트
+              await _saveToCache(pageId, processedText);
+              
+              // 콜백 호출
+              onTextChanged(processedText);
+              
+              if (kDebugMode) {
+                debugPrint('🔔 페이지 텍스트 변경 감지: $pageId');
+              }
+              
+              // 현재 데이터를 이전 데이터로 저장
+              previousProcessedText = processedText;
+            } else {
+              if (kDebugMode) {
+                debugPrint('⏭️ 페이지 텍스트 변경 없음 (스킵): $pageId');
+              }
             }
           }
         }
@@ -229,6 +242,33 @@ class TextProcessingService {
     
     _pageListeners[pageId] = listener;
     return listener;
+  }
+  
+  /// ProcessedText 객체가 실제로 변경되었는지 확인
+  bool _hasProcessedTextChanged(ProcessedText? previous, ProcessedText current) {
+    if (previous == null) return true;
+    
+    // 기본 속성 비교
+    if (previous.fullOriginalText != current.fullOriginalText ||
+        previous.fullTranslatedText != current.fullTranslatedText ||
+        previous.mode != current.mode ||
+        previous.units.length != current.units.length) {
+      return true;
+    }
+    
+    // 개별 유닛 비교
+    for (int i = 0; i < previous.units.length; i++) {
+      final prevUnit = previous.units[i];
+      final currUnit = current.units[i];
+      
+      if (prevUnit.originalText != currUnit.originalText ||
+          prevUnit.translatedText != currUnit.translatedText ||
+          prevUnit.pinyin != currUnit.pinyin) {
+        return true;
+      }
+    }
+    
+    return false;
   }
   
   /// 리스너 정리

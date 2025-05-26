@@ -74,6 +74,16 @@ class UnifiedCacheService {
     try {
       final key = _getSegmentCacheKey(imageId, mode);
       
+      // 이미 캐시에 동일한 데이터가 있는지 확인
+      final existingSegments = _cache[key] as List<Map<String, String>>?;
+      if (existingSegments != null && _areSegmentsEqual(existingSegments, segments)) {
+        if (kDebugMode) {
+          debugPrint('세그먼트 캐시 스킵 (이미 동일한 데이터 존재): $key');
+        }
+        _updateLastAccessed(key);
+        return;
+      }
+      
       // 로컬 캐시에 저장
       _cache[key] = segments;
       _updateLastAccessed(key);
@@ -88,6 +98,24 @@ class UnifiedCacheService {
     } catch (e) {
       debugPrint('세그먼트 캐싱 중 오류 발생: $e');
     }
+  }
+  
+  /// 세그먼트 리스트가 동일한지 비교
+  bool _areSegmentsEqual(List<Map<String, String>> segments1, List<Map<String, String>> segments2) {
+    if (segments1.length != segments2.length) return false;
+    
+    for (int i = 0; i < segments1.length; i++) {
+      final seg1 = segments1[i];
+      final seg2 = segments2[i];
+      
+      if (seg1['original'] != seg2['original'] ||
+          seg1['translated'] != seg2['translated'] ||
+          seg1['pinyin'] != seg2['pinyin']) {
+        return false;
+      }
+    }
+    
+    return true;
   }
   
   /// 세그먼트 결과 조회
