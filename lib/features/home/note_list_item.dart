@@ -178,7 +178,7 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
           },
           borderRadius: BorderRadius.circular(8.0),
           child: Padding(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.all(16.0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -280,7 +280,7 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
   /// 간단한 placeholder 위젯 (빠른 초기 렌더링용)
   Widget _buildPlaceholder() {
     return Container(
-      height: 104.0,
+      height: 116.0,
       margin: const EdgeInsets.fromLTRB(24, 0, 24, 4),
       decoration: BoxDecoration(
         color: Colors.grey[100],

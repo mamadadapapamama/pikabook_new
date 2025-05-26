@@ -51,7 +51,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   final TTSService _ttsService = TTSService();
   
   // 기본 스타일 정의 (내부에서 관리)
-  TextStyle get _defaultOriginalTextStyle => widget.originalTextStyle ?? TypographyTokens.headline3Cn.copyWith (color:ColorTokens.textPrimary);
+  TextStyle get _defaultOriginalTextStyle => widget.originalTextStyle ?? TypographyTokens.subtitle1Cn.copyWith (color:ColorTokens.textPrimary);
   TextStyle get _defaultPinyinTextStyle => widget.pinyinTextStyle ?? TypographyTokens.caption.copyWith(color: Colors.grey[800]);
   TextStyle get _defaultTranslatedTextStyle => widget.translatedTextStyle ?? TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary);
   

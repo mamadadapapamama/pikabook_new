@@ -31,7 +31,7 @@ class TextCleanerService {
   static final RegExp pageNumberPattern = RegExp(r'^(?:page\s*)?[0-9]+(?:\s*页)?$', caseSensitive: false);
   
   // 저작권 및 특수 문자 패턴
-  static final RegExp copyrightPattern = RegExp(r'^[^a-zA-Z\u4e00-\u9fff]*[©®™@#$%^&*]+[^a-zA-Z\u4e00-\u9fff]*$');
+  static final RegExp copyrightPattern = RegExp(r'^[^a-zA-Z\u4e00-\u9fff]*[©®™@#$%^&*+-]+[^a-zA-Z\u4e00-\u9fff]*$');
 
   // 텍스트 정리 결과 캐싱 (FIFO 방식으로 자동 관리)
   final Map<String, String> _cleanTextCache = {};
@@ -41,7 +41,7 @@ class TextCleanerService {
   /// - 핀인 줄 제거
   /// - 숫자만 단독으로 있는 문장 제거
   /// - 페이지 번호 제거
-  /// - 저작권 및 특수 문자만 있는 줄 제거
+  /// - 저작권 및 특수 문자 있는 줄 제거
   /// - 문장부호만 있는 문장 제거
   /// - 중국어가 아닌 단어만 있을 경우 제거 (영어만 등)
 

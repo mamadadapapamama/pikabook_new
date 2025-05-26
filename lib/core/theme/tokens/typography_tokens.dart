@@ -80,20 +80,20 @@ class TypographyTokens {
   // 부제목 스타일 - 섹션 소개, 요약 등
   static TextStyle get subtitle1 => TextStyle(
         fontFamily: notoSansKr,
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: FontWeight.w500,
         height: 1.2,
       );
 
   static TextStyle get subtitle1En => GoogleFonts.poppins(
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: FontWeight.w500,
         height: 1.5,
       );
 
   static TextStyle get subtitle1Cn => TextStyle(
         fontFamily: notoSansHk,
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: FontWeight.w500,
         height: 1.2,
       );

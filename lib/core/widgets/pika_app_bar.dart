@@ -85,7 +85,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     return PikaAppBar(
       showLogo: true,
       backgroundColor: UITokens.screenBackground,
-      height: 108,
+      height: 124,
       isHome: true,
     );
   }
