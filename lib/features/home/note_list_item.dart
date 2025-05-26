@@ -92,139 +92,141 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
       debugPrint('노트 리스트 아이템 빌드: ${widget.note.id} - firstImageUrl: ${widget.note.firstImageUrl}');
     }
     
-    return Dismissible(
-      key: Key(widget.note.id ?? ''),
-      background: Container(
-        decoration: BoxDecoration(
-          color: ColorTokens.errorBackground,
-          borderRadius: BorderRadius.circular(8.0),
-        ),
-        child: const Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Icon(
-              Icons.delete,
-              color: Colors.white,
+    return Container(
+      height: 120, // 노트리스트 아이템 높이 120
+      child: Dismissible(
+        key: Key(widget.note.id ?? ''),
+        background: Container(
+          decoration: BoxDecoration(
+            color: ColorTokens.errorBackground,
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+          child: const Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Icon(
+                Icons.delete,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
-      ),
-      direction: DismissDirection.endToStart,
-      confirmDismiss: (direction) async {
-        return await showDialog(
-          context: context,
-          builder: (BuildContext context) {
-            return AlertDialog(
-              backgroundColor: ColorTokens.surface,
-              title: const Text('노트 삭제'),
-              content: const Text('정말로 이 노트를 삭제하시겠습니까?'),
-              actions: <Widget>[
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('취소'),
-                  style: TextButton.styleFrom(foregroundColor: ColorTokens.textPrimary),
-                ),
-                const SizedBox(width: 8),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('삭제'),
-                  style: TextButton.styleFrom(foregroundColor: ColorTokens.error),
-                ),
-              ],
-            );
-          },
-        );
-      },
-      onDismissed: (direction) {
-        widget.onDismissed();
-      },
-      child: Card(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-          side: const BorderSide(color: ColorTokens.primaryverylight, width: 1.0),
-        ),
-        color: Colors.white,
-        elevation: 0,
-        child: InkWell(
-          onTap: () {
-            try {
-              if (kDebugMode) {
-                debugPrint('노트 아이템 탭됨: id=${widget.note.id ?? "없음"}, 제목=${widget.note.title}');
-              }
-              
-              // 노트 ID가 null이거나 비어있는 경우 처리
-              if (widget.note.id == null || widget.note.id!.isEmpty) {
+        direction: DismissDirection.endToStart,
+        confirmDismiss: (direction) async {
+          return await showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                backgroundColor: ColorTokens.surface,
+                title: const Text('노트 삭제'),
+                content: const Text('정말로 이 노트를 삭제하시겠습니까?'),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('취소'),
+                    style: TextButton.styleFrom(foregroundColor: ColorTokens.textPrimary),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('삭제'),
+                    style: TextButton.styleFrom(foregroundColor: ColorTokens.error),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+        onDismissed: (direction) {
+          widget.onDismissed();
+        },
+        child: Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8.0),
+            side: const BorderSide(color: ColorTokens.primaryverylight, width: 1.0),
+          ),
+          color: Colors.white,
+          elevation: 0,
+          child: InkWell(
+            onTap: () {
+              try {
                 if (kDebugMode) {
-                  debugPrint('⚠️ 경고: 유효하지 않은 노트 ID');
+                  debugPrint('노트 아이템 탭됨: id=${widget.note.id ?? "없음"}, 제목=${widget.note.title}');
+                }
+                
+                // 노트 ID가 null이거나 비어있는 경우 처리
+                if (widget.note.id == null || widget.note.id!.isEmpty) {
+                  if (kDebugMode) {
+                    debugPrint('⚠️ 경고: 유효하지 않은 노트 ID');
+                  }
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('유효하지 않은 노트 ID입니다.')),
+                  );
+                  return;
+                }
+                
+                // 정상적인 경우 노트 객체 전체를 전달
+                widget.onNoteTapped(widget.note);
+              } catch (e, stackTrace) {
+                if (kDebugMode) {
+                  debugPrint('❌ 노트 탭 처리 중 오류 발생: $e');
+                  debugPrint('스택 트레이스: $stackTrace');
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('유효하지 않은 노트 ID입니다.')),
+                  SnackBar(content: Text('노트를 열 수 없습니다: $e')),
                 );
-                return;
               }
-              
-              // 정상적인 경우 노트 객체 전체를 전달
-              widget.onNoteTapped(widget.note);
-            } catch (e, stackTrace) {
-              if (kDebugMode) {
-                debugPrint('❌ 노트 탭 처리 중 오류 발생: $e');
-                debugPrint('스택 트레이스: $stackTrace');
-              }
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('노트를 열 수 없습니다: $e')),
-              );
-            }
-          },
-          borderRadius: BorderRadius.circular(8.0),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 썸네일 이미지 (기본 이미지 표시)
-                _buildThumbnail(),
-                const SizedBox(width: 16.0),
-                // 노트 정보
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        widget.note.title.isEmpty ? '제목 없음' : widget.note.title,
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 20.0,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF0E2823),
+            },
+            borderRadius: BorderRadius.circular(8.0),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0), // 내부 패딩 16
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 썸네일 이미지 (80x80)
+                  _buildThumbnail(),
+                  // 노트 정보
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          widget.note.title.isEmpty ? '제목 없음' : widget.note.title,
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 20.0,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF0E2823),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2.0),
-                      Text(
-                        _getFormattedDate(),
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 12.0,
-                          fontWeight: FontWeight.w400,
-                          color: Color(0xFF969696),
+                        const SizedBox(height: 2.0),
+                        Text(
+                          _getFormattedDate(),
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 12.0,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xFF969696),
+                          ),
                         ),
-                      ),
-                      if (widget.note.flashcardCount > 0) ...[
-                        const SizedBox(height: 6.0),
-                        FlashcardCounterBadge(
-                          count: widget.note.flashcardCount,
-                          noteId: widget.note.id,
-                          flashcards: null,
-                          sampleNoteTitle: null,
-                        ),
+                        if (widget.note.flashcardCount > 0) ...[
+                          const SizedBox(height: 6.0),
+                          FlashcardCounterBadge(
+                            count: widget.note.flashcardCount,
+                            noteId: widget.note.id,
+                            flashcards: null,
+                            sampleNoteTitle: null,
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -239,7 +241,7 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
           ? CachedNetworkImage(
               imageUrl: widget.note.firstImageUrl!,
               fit: BoxFit.cover,
-              width: 80,
+              width: 80, // 썸네일 크기 80x80
               height: 80,
               placeholder: (context, url) => Container(
                 width: 80,
@@ -271,7 +273,7 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
           : Image.asset(
               'assets/images/thumbnail_empty.png',
               fit: BoxFit.cover,
-              width: 80,
+              width: 80, // 썸네일 크기 80x80
               height: 80,
             ),
     );
@@ -280,7 +282,7 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
   /// 간단한 placeholder 위젯 (빠른 초기 렌더링용)
   Widget _buildPlaceholder() {
     return Container(
-      height: 116.0,
+      height: 120.0, // placeholder도 120 높이로 통일
       margin: const EdgeInsets.fromLTRB(24, 0, 24, 4),
       decoration: BoxDecoration(
         color: Colors.grey[100],

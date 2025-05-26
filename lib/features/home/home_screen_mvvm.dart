@@ -333,9 +333,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 await viewModel.refreshNotes();
               },
               child: ListView.builder(
-                padding: const EdgeInsets.only(top: 20),
+                padding: const EdgeInsets.only(top: 0), // 앱바와의 간격 0
                 itemCount: viewModel.notes.length,
-                itemExtent: 120.0,
                 cacheExtent: 500.0,
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: false,
@@ -343,7 +342,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   final note = viewModel.notes[index];
                   
                   return Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    padding: EdgeInsets.only(
+                      left: 20,
+                      right: 20,
+                      bottom: index == viewModel.notes.length - 1 ? 18 : 10, // 아이템 간격 24, 마지막 아이템만 20
+                    ),
                     child: NoteListItem(
                       note: note,
                       onNoteTapped: (note) => _navigateToNoteDetail(context, note),
