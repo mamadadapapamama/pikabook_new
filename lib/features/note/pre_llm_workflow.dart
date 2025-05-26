@@ -227,7 +227,7 @@ class PreLLMWorkflow {
     required String imageUrl,
     required String originalText,
   }) async {
-    final page = await _pageService.createBasicPage(
+    final page = await _pageService.createPage(
       noteId: noteId,
       originalText: originalText,
       pageNumber: pageNumber,

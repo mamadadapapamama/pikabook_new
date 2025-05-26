@@ -147,6 +147,71 @@ class TextProcessingService {
     }
   }
   
+  /// 페이지 생성 후 자동 텍스트 처리
+  /// PageService.createPage() 호출 후 이 메서드를 호출하여 텍스트 처리
+  Future<ProcessedText?> processNewPageText(String pageId) async {
+    if (pageId.isEmpty) return null;
+    
+    try {
+      if (kDebugMode) {
+        debugPrint('🔄 새 페이지 텍스트 처리 시작: $pageId');
+      }
+      
+      // 페이지 데이터 로드
+      final doc = await _firestore.collection('pages').doc(pageId).get();
+      if (!doc.exists) {
+        throw Exception('페이지를 찾을 수 없습니다: $pageId');
+      }
+      
+      final page = page_model.Page.fromFirestore(doc);
+      
+      // 원본 텍스트 확인
+      if (page.originalText == null || page.originalText!.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 원본 텍스트가 없어 처리 건너뜀: $pageId');
+        }
+        return null;
+      }
+      
+      // LLM 처리
+      final processedText = await _llmService.processTextSegments(
+        [page.originalText!],
+        sourceLanguage: page.sourceLanguage,
+        targetLanguage: page.targetLanguage,
+        mode: TextProcessingMode.segment,
+        needPinyin: true,
+      );
+      
+      // 결과 저장
+      await _saveProcessedText(pageId, processedText, page);
+      
+      if (kDebugMode) {
+        debugPrint('✅ 새 페이지 텍스트 처리 완료: $pageId');
+      }
+      
+      return processedText;
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 새 페이지 텍스트 처리 실패: $pageId, $e');
+      }
+      
+      // 처리 실패 시 페이지에 오류 정보 저장
+      try {
+        await _firestore.collection('pages').doc(pageId).update({
+          'processError': e.toString(),
+          'processingStatus': ProcessingStatus.failed.toString(),
+        });
+      } catch (updateError) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 오류 정보 저장 실패: $updateError');
+        }
+      }
+      
+      return null; // 오류 시 null 반환 (앱이 계속 동작하도록)
+    }
+  }
+  
   /// 텍스트 모드 변경
   Future<ProcessedText?> changeTextMode(String pageId, TextProcessingMode newMode) async {
     if (pageId.isEmpty) return null;
