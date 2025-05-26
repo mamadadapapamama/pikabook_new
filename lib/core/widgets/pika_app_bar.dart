@@ -7,6 +7,10 @@ import '../theme/tokens/spacing_tokens.dart';
 import '../theme/tokens/ui_tokens.dart';
 import '../../features/flashcard/flashcard_counter_badge.dart';
 import '../services/common/plan_service.dart';
+import '../services/authentication/user_preferences_service.dart';
+import '../../views/screens/settings_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 /// 공통 앱바 위젯
 /// 모든 스크린에서 재사용할 수 있도록 설계된 커스터마이저블 앱바
@@ -77,45 +81,12 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   }) : super(key: key);
 
   /// 홈 스크린용 앱바 팩토리 생성자
-  factory PikaAppBar.home({
-    required String noteSpaceName,
-    required VoidCallback onSettingsPressed,
-  }) {
+  factory PikaAppBar.home() {
     return PikaAppBar(
       showLogo: true,
-      noteSpaceName: noteSpaceName,
       backgroundColor: UITokens.screenBackground,
       height: 108,
-      actions: [
-        Padding(
-          padding: EdgeInsets.only(right: SpacingTokens.md),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () {
-                debugPrint('설정 버튼 클릭됨 - InkWell');
-                onSettingsPressed();
-              },
-              borderRadius: BorderRadius.circular(24),
-              child: Container(
-                width: 48,
-                height: 48,
-                padding: const EdgeInsets.all(12),
-                child: SvgPicture.asset(
-                  'assets/images/icon_profile.svg',
-                  width: SpacingTokens.profileIconSize,
-                  height: SpacingTokens.profileIconSize,
-                  placeholderBuilder: (context) => Icon(
-                    Icons.person,
-                    color: ColorTokens.secondary,
-                    size: SpacingTokens.profileIconSize,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+      isHome: true,
     );
   }
 
@@ -284,16 +255,18 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       titleSpacing: 0,
       title: Padding(
         padding: EdgeInsets.only(left: SpacingTokens.lg),
-        child: FutureBuilder<String>(
-          future: PlanService().getCurrentPlanType(),
+        child: FutureBuilder<Map<String, dynamic>>(
+          future: _loadHomeAppBarData(),
           builder: (context, snapshot) {
-            final isPlanFree = snapshot.data == PlanService.PLAN_FREE;
+            final data = snapshot.data ?? {};
+            final noteSpaceName = data['noteSpaceName'] as String? ?? '로딩 중...';
+            final isPlanFree = data['isPlanFree'] as bool? ?? true;
             
             return Row(
               children: [
                 Expanded(
                   child: Text(
-                    noteSpaceName ?? '',
+                    noteSpaceName,
                     style: TypographyTokens.headline3.copyWith(
                       color: ColorTokens.textPrimary,
                     ),
@@ -306,18 +279,77 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
-        if (onSettingsPressed != null)
-          IconButton(
-            icon: Icon(
-              Icons.settings_outlined,
-              color: ColorTokens.textPrimary,
-              size: SpacingTokens.iconSizeMedium,
-            ),
-            onPressed: onSettingsPressed,
+        IconButton(
+          icon: Icon(
+            Icons.settings_outlined,
+            color: ColorTokens.textPrimary,
+            size: SpacingTokens.iconSizeMedium,
           ),
+          onPressed: () => _navigateToSettings(context),
+        ),
         SizedBox(width: SpacingTokens.md),
       ],
     );
+  }
+
+  /// 홈 앱바 데이터 로드 (노트스페이스 이름, 플랜 정보)
+  Future<Map<String, dynamic>> _loadHomeAppBarData() async {
+    try {
+      final userPreferences = UserPreferencesService();
+      final planService = PlanService();
+      
+      final results = await Future.wait([
+        userPreferences.getDefaultNoteSpace(),
+        planService.getCurrentPlanType(),
+      ]);
+      
+      return {
+        'noteSpaceName': results[0] as String,
+        'isPlanFree': results[1] == PlanService.PLAN_FREE,
+      };
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('홈 앱바 데이터 로드 중 오류: $e');
+      }
+      return {
+        'noteSpaceName': '노트스페이스',
+        'isPlanFree': true,
+      };
+    }
+  }
+
+  /// 설정 화면으로 이동
+  void _navigateToSettings(BuildContext context) {
+    if (kDebugMode) {
+      debugPrint('설정 화면으로 이동 시도');
+    }
+    try {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => SettingsScreen(
+            onLogout: () async {
+              if (kDebugMode) {
+                debugPrint('로그아웃 콜백 호출됨');
+              }
+              // 로그아웃 처리
+              await FirebaseAuth.instance.signOut();
+              // 홈 화면으로 돌아가기
+              if (context.mounted) {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('설정 화면 이동 중 오류: $e');
+      }
+      // 오류 발생 시 사용자에게 알림
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('설정 화면 이동 중 오류가 발생했습니다: $e')),
+      );
+    }
   }
 
   Widget _buildTitleWithPlanBadge(BuildContext context) {

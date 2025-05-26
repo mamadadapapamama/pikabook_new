@@ -501,7 +501,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
            //   }
            // });
            try {
-             return const HomeScreen();
+             return const HomeScreenWrapper();
            } catch (e, stackTrace) {
              if (kDebugMode) {
                 debugPrint('⚠️ HomeScreen 인스턴스 생성 중 오류 발생: $e');

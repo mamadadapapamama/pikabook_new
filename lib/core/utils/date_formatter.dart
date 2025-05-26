@@ -23,4 +23,10 @@ class DateFormatter {
   static String formatDateTime(DateTime date) {
     return DateFormat('yyyy.MM.dd HH:mm').format(date);
   }
+
+  /// 날짜를 "Jan 01, 2024" 형식으로 포맷팅
+  static String formatDateWithMonthAbbr(DateTime date) {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${months[date.month - 1]} ${date.day.toString().padLeft(2, '0')}, ${date.year}';
+  }
 }

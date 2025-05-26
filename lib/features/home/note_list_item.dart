@@ -7,7 +7,7 @@ import '../../../core/theme/tokens/color_tokens.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 /// 홈페이지 노트리스트 화면에서 사용되는 카드 위젯
-class NoteListItem extends StatelessWidget {
+class NoteListItem extends StatefulWidget {
   final Note note;
   final Function() onDismissed;
   final Function(Note note) onNoteTapped;
@@ -21,23 +21,79 @@ class NoteListItem extends StatelessWidget {
     this.isFilteredList = false,
   });
 
-  String _getFormattedDate() {
-    final noteDate = note.createdAt;
-    if (noteDate == null) {
-      return '날짜 없음';
-    }
-    return DateFormatter.formatDate(noteDate);
+  @override
+  State<NoteListItem> createState() => _NoteListItemState();
+}
+
+class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClientMixin {
+  Note? _previousNote;
+  Widget? _cachedWidget;
+  bool _isVisible = false;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _previousNote = widget.note;
+    
+    // 초기에는 간단한 placeholder만 생성
+    _cachedWidget = _buildPlaceholder();
+    
+    // 다음 프레임에서 실제 위젯 빌드
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _isVisible = true;
+          _cachedWidget = _buildNoteCard();
+        });
+      }
+    });
   }
 
   @override
-  Widget build(BuildContext context) {
-    // 디버깅: 첫 번째 이미지 URL 확인
+  void didUpdateWidget(NoteListItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // Note 객체가 실제로 변경되었는지 확인
+    if (_hasNoteChanged(oldWidget.note, widget.note)) {
+      if (kDebugMode) {
+        debugPrint('노트 리스트 아이템 업데이트: ${widget.note.id} - 변경 감지됨');
+      }
+      _previousNote = widget.note;
+      if (_isVisible) {
+        _cachedWidget = _buildNoteCard();
+      }
+    }
+  }
+
+  /// Note 객체가 변경되었는지 확인
+  bool _hasNoteChanged(Note oldNote, Note newNote) {
+    return oldNote.id != newNote.id ||
+           oldNote.title != newNote.title ||
+           oldNote.firstImageUrl != newNote.firstImageUrl ||
+           oldNote.flashcardCount != newNote.flashcardCount ||
+           oldNote.createdAt != newNote.createdAt ||
+           oldNote.updatedAt != newNote.updatedAt;
+  }
+
+  String _getFormattedDate() {
+    final noteDate = widget.note.createdAt;
+    if (noteDate == null) {
+      return '날짜 없음';
+    }
+    return DateFormatter.formatDateWithMonthAbbr(noteDate);
+  }
+
+  Widget _buildNoteCard() {
+    // 디버깅: 첫 번째 이미지 URL 확인 (실제 빌드 시에만)
     if (kDebugMode) {
-      print('노트 리스트 아이템 빌드: ${note.id} - firstImageUrl: ${note.firstImageUrl}');
+      debugPrint('노트 리스트 아이템 빌드: ${widget.note.id} - firstImageUrl: ${widget.note.firstImageUrl}');
     }
     
     return Dismissible(
-      key: Key(note.id ?? ''),
+      key: Key(widget.note.id ?? ''),
       background: Container(
         decoration: BoxDecoration(
           color: ColorTokens.errorBackground,
@@ -81,7 +137,7 @@ class NoteListItem extends StatelessWidget {
         );
       },
       onDismissed: (direction) {
-        onDismissed();
+        widget.onDismissed();
       },
       child: Card(
         shape: RoundedRectangleBorder(
@@ -94,11 +150,11 @@ class NoteListItem extends StatelessWidget {
           onTap: () {
             try {
               if (kDebugMode) {
-                debugPrint('노트 아이템 탭됨: id=${note.id ?? "없음"}, 제목=${note.title}');
+                debugPrint('노트 아이템 탭됨: id=${widget.note.id ?? "없음"}, 제목=${widget.note.title}');
               }
               
               // 노트 ID가 null이거나 비어있는 경우 처리
-              if (note.id == null || note.id!.isEmpty) {
+              if (widget.note.id == null || widget.note.id!.isEmpty) {
                 if (kDebugMode) {
                   debugPrint('⚠️ 경고: 유효하지 않은 노트 ID');
                 }
@@ -109,7 +165,7 @@ class NoteListItem extends StatelessWidget {
               }
               
               // 정상적인 경우 노트 객체 전체를 전달
-              onNoteTapped(note);
+              widget.onNoteTapped(widget.note);
             } catch (e, stackTrace) {
               if (kDebugMode) {
                 debugPrint('❌ 노트 탭 처리 중 오류 발생: $e');
@@ -127,48 +183,7 @@ class NoteListItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 썸네일 이미지 (기본 이미지 표시)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4.0),
-                  child: note.firstImageUrl != null && note.firstImageUrl!.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: note.firstImageUrl!,
-                          fit: BoxFit.cover,
-                          width: 80,
-                          height: 80,
-                          placeholder: (context, url) => Container(
-                            width: 80,
-                            height: 80,
-                            color: Colors.grey[200],
-                            child: const Center(
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: ColorTokens.primary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          errorWidget: (context, url, error) {
-                            if (kDebugMode) {
-                              print('이미지 로드 오류 ($url): $error');
-                            }
-                            return Image.asset(
-                              'assets/images/thumbnail_empty.png',
-                              fit: BoxFit.cover,
-                              width: 80,
-                              height: 80,
-                            );
-                          },
-                        )
-                      : Image.asset(
-                          'assets/images/thumbnail_empty.png',
-                          fit: BoxFit.cover,
-                          width: 80,
-                          height: 80,
-                        ),
-                ),
+                _buildThumbnail(),
                 const SizedBox(width: 16.0),
                 // 노트 정보
                 Expanded(
@@ -176,7 +191,7 @@ class NoteListItem extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        note.title.isEmpty ? '제목 없음' : note.title,
+                        widget.note.title.isEmpty ? '제목 없음' : widget.note.title,
                         style: const TextStyle(
                           fontFamily: 'Poppins',
                           fontSize: 20.0,
@@ -201,10 +216,10 @@ class NoteListItem extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 8.0),
-                      if (note.flashcardCount > 0)
+                      if (widget.note.flashcardCount > 0)
                         FlashcardCounterBadge(
-                          count: note.flashcardCount,
-                          noteId: note.id,
+                          count: widget.note.flashcardCount,
+                          noteId: widget.note.id,
                           flashcards: null,
                           sampleNoteTitle: null,
                         ),
@@ -217,5 +232,86 @@ class NoteListItem extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildThumbnail() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4.0),
+      child: widget.note.firstImageUrl != null && widget.note.firstImageUrl!.isNotEmpty
+          ? CachedNetworkImage(
+              imageUrl: widget.note.firstImageUrl!,
+              fit: BoxFit.cover,
+              width: 80,
+              height: 80,
+              placeholder: (context, url) => Container(
+                width: 80,
+                height: 80,
+                color: Colors.grey[200],
+                child: const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: ColorTokens.primary,
+                    ),
+                  ),
+                ),
+              ),
+              errorWidget: (context, url, error) {
+                if (kDebugMode) {
+                  debugPrint('이미지 로드 오류 ($url): $error');
+                }
+                return Image.asset(
+                  'assets/images/thumbnail_empty.png',
+                  fit: BoxFit.cover,
+                  width: 80,
+                  height: 80,
+                );
+              },
+            )
+          : Image.asset(
+              'assets/images/thumbnail_empty.png',
+              fit: BoxFit.cover,
+              width: 80,
+              height: 80,
+            ),
+    );
+  }
+
+  /// 간단한 placeholder 위젯 (빠른 초기 렌더링용)
+  Widget _buildPlaceholder() {
+    return Container(
+      height: 104.0,
+      margin: const EdgeInsets.fromLTRB(24, 0, 24, 4),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(8.0),
+        border: Border.all(color: ColorTokens.primaryverylight, width: 1.0),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: ColorTokens.primary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin 필수
+    
+    // 가시성에 따라 적절한 위젯 반환
+    if (!_isVisible) {
+      return _buildPlaceholder();
+    }
+    
+    // 캐시된 위젯 반환
+    return _cachedWidget ?? _buildNoteCard();
   }
 }

@@ -64,7 +64,7 @@ class HomeViewModel extends ChangeNotifier {
     _error = null;
 
     // 이미 로드된 캐시가 있는 경우 로딩 상태 표시하지 않음
-    if (_notes.isEmpty) {
+    if (_notes.isEmpty && !_isLoading) {
       _isLoading = true;
       notifyListeners();
     }
@@ -79,30 +79,87 @@ class HomeViewModel extends ChangeNotifier {
       _notesSubscription = _noteService.getNotes().listen(
         (notesList) {
           debugPrint('[HomeViewModel] 노트 데이터 수신: ${notesList.length}개');
+          
+          // 상태가 실제로 변경되었을 때만 notifyListeners 호출
+          bool hasChanged = false;
+          
+          if (_notes.length != notesList.length) {
+            hasChanged = true;
+          } else {
+            // 노트 내용이 변경되었는지 확인
+            for (int i = 0; i < notesList.length; i++) {
+              if (i >= _notes.length || _notes[i].id != notesList[i].id || 
+                  _notes[i].title != notesList[i].title ||
+                  _notes[i].updatedAt != notesList[i].updatedAt) {
+                hasChanged = true;
+                break;
+              }
+            }
+          }
+          
           _notes = notesList;
-          _isLoading = false;
-          _error = null;
-          notifyListeners();
+          
+          if (_isLoading) {
+            _isLoading = false;
+            hasChanged = true;
+          }
+          
+          if (_error != null) {
+            _error = null;
+            hasChanged = true;
+          }
+          
+          if (hasChanged) {
+            notifyListeners();
+          }
         },
         onError: (e, stackTrace) {
           debugPrint('[HomeViewModel] 노트 스트림 구독 중 오류: $e');
           debugPrint('[HomeViewModel] 스택 트레이스: $stackTrace');
+          
           // 캐시된 데이터가 있으면 오류 표시하지 않음
           if (_notes.isEmpty) {
-            _isLoading = false;
-            _error = '노트 목록을 불러오는 중 오류가 발생했습니다: $e';
-            notifyListeners();
+            bool hasChanged = false;
+            
+            if (_isLoading) {
+              _isLoading = false;
+              hasChanged = true;
+            }
+            
+            final errorMessage = '노트 목록을 불러오는 중 오류가 발생했습니다: $e';
+            if (_error != errorMessage) {
+              _error = errorMessage;
+              hasChanged = true;
+            }
+            
+            if (hasChanged) {
+              notifyListeners();
+            }
           }
         },
       );
     } catch (e, stackTrace) {
       debugPrint('[HomeViewModel] _loadNotes에서 예외 발생: $e');
       debugPrint('[HomeViewModel] 스택 트레이스: $stackTrace');
+      
       // 캐시된 데이터가 있으면 오류 표시하지 않음
       if (_notes.isEmpty) {
-        _isLoading = false;
-        _error = '노트 목록을 불러오는 중 오류가 발생했습니다: $e';
-        notifyListeners();
+        bool hasChanged = false;
+        
+        if (_isLoading) {
+          _isLoading = false;
+          hasChanged = true;
+        }
+        
+        final errorMessage = '노트 목록을 불러오는 중 오류가 발생했습니다: $e';
+        if (_error != errorMessage) {
+          _error = errorMessage;
+          hasChanged = true;
+        }
+        
+        if (hasChanged) {
+          notifyListeners();
+        }
       }
     }
   }
@@ -133,19 +190,31 @@ class HomeViewModel extends ChangeNotifier {
       // 로컬 상태 먼저 업데이트 (UI 즉시 반영)
       final index = _notes.indexWhere((note) => note.id == noteId);
       if (index >= 0) {
+        final deletedNote = _notes[index];
         _notes.removeAt(index);
         notifyListeners();
-      }
 
-      // 서버에서 삭제
-      await _noteService.deleteNote(noteId);
+        try {
+          // 서버에서 삭제
+          await _noteService.deleteNote(noteId);
+          debugPrint('[HomeViewModel] 노트 삭제 완료: $noteId');
+        } catch (e) {
+          // 서버 삭제 실패 시 로컬 상태 복원
+          _notes.insert(index, deletedNote);
+          _error = '노트 삭제 중 오류가 발생했습니다: $e';
+          notifyListeners();
+          debugPrint('[HomeViewModel] 노트 삭제 실패, 상태 복원: $e');
+          
+          // 삭제 실패 시 노트 목록 다시 로드
+          refreshNotes();
+        }
+      } else {
+        debugPrint('[HomeViewModel] 삭제할 노트를 찾을 수 없음: $noteId');
+      }
     } catch (e) {
-      debugPrint('노트 삭제 오류: $e');
+      debugPrint('[HomeViewModel] 노트 삭제 중 예외 발생: $e');
       _error = '노트 삭제 중 오류가 발생했습니다: $e';
       notifyListeners();
-
-      // 삭제 실패 시 노트 목록 다시 로드
-      refreshNotes();
     }
   }
 

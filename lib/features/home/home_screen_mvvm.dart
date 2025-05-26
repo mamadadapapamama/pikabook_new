@@ -5,7 +5,6 @@ import 'dart:io';
 import '../../features/home/home_viewmodel.dart';
 import '../home/note_list_item.dart';
 import '../note/services/note_service.dart';
-import '../../core/services/authentication/user_preferences_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../core/services/marketing/marketing_campaign_service.dart';  // 마케팅 캠페인 서비스 추가
 import '../../../core/theme/tokens/color_tokens.dart';
@@ -23,7 +22,6 @@ import '../../core/widgets/usage_dialog.dart';
 import '../flashcard/flashcard_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../views/screens/settings_screen.dart';
 import '../../app.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/debug_utils.dart';
@@ -69,12 +67,27 @@ class HomeScreen extends StatefulWidget {
   }
 }
 
+// HomeScreen을 ChangeNotifierProvider로 감싸는 래퍼 위젯
+class HomeScreenWrapper extends StatelessWidget {
+  const HomeScreenWrapper({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) {
+        if (kDebugMode) {
+          debugPrint('[HomeScreen] HomeViewModel 인스턴스 생성');
+        }
+        return HomeViewModel();
+      },
+      child: const HomeScreen(),
+    );
+  }
+}
+
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  final UserPreferencesService _userPreferences = UserPreferencesService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   final MarketingCampaignService _marketingService = MarketingCampaignService();
-  HomeViewModel _viewModel = HomeViewModel(); // final 제거
-  String _noteSpaceName = '';
   
   // 사용량 관련 상태 변수
   bool _hasCheckedUsage = false;
@@ -100,34 +113,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     
     try {
-    super.initState();
-    
-    // WidgetsBinding 옵저버 등록
-    WidgetsBinding.instance.addObserver(this);
-    
-    // 화면 구성하는 동안 필요한 데이터 즉시 로드
-    _loadNoteSpaceName();
-    _checkUsageAndButtonStatus();
-    
-    // 마케팅 캠페인 서비스 초기화
-    _initializeMarketingService();
-    
-    // 모든 노트의 썸네일 업데이트 (앱 시작 시 한 번)
-    _updateAllNoteThumbnails();
-    
-    // Route 변경 감지를 위한 리스너 추가
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 현재 라우트 감지를 위한 observer 등록
-      final navigator = Navigator.of(context);
-      // 페이지 리로드를 위한 포커스 리스너 추가
-      if (ModalRoute.of(context) != null) {
-        ModalRoute.of(context)!.addScopedWillPopCallback(() async {
-          // 화면으로 돌아올 때마다 노트스페이스 이름을 다시 로드
-          await _loadNoteSpaceName();
-          return false; // false를 반환하여 pop을 방해하지 않음
-        });
-      }
-    });
+      super.initState();
+      
+      // WidgetsBinding 옵저버 등록
+      WidgetsBinding.instance.addObserver(this);
+      
+      // 비동기 작업들을 병렬로 실행하여 성능 최적화
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initializeAsyncTasks();
+      });
+      
     } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('[HomeScreen] initState 초기화 중 오류 발생: $e');
@@ -140,6 +135,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       // 중요: 에러가 발생해도 WidgetsBinding 옵저버는 등록해야 함
       WidgetsBinding.instance.addObserver(this);
+    }
+  }
+
+  /// 비동기 초기화 작업들을 병렬로 실행
+  Future<void> _initializeAsyncTasks() async {
+    try {
+      // 병렬로 실행할 작업들
+      await Future.wait([
+        _checkUsageAndButtonStatus(),
+        _initializeMarketingService(),
+      ]);
+      
+      // Route 변경 감지를 위한 리스너 추가
+      if (ModalRoute.of(context) != null) {
+        ModalRoute.of(context)!.addScopedWillPopCallback(() async {
+          // 화면으로 돌아올 때마다 노트스페이스 이름을 다시 로드
+          await _checkUsageAndButtonStatus();
+          return false; // false를 반환하여 pop을 방해하지 않음
+        });
+      }
+      
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 비동기 초기화 중 오류 발생: $e');
+        debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+      }
+      // 비동기 초기화 실패는 앱 진행에 영향을 주지 않음
     }
   }
   
@@ -163,9 +185,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     try {
     // 리스너 제거
-    _viewModel.removeListener(_onViewModelChanged);
-    
-    // WidgetsBinding 옵저버 제거
     WidgetsBinding.instance.removeObserver(this);
     
     super.dispose();
@@ -225,156 +244,52 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     
     try {
-    // ChangeNotifierProvider로 HomeViewModel 제공
-    return ChangeNotifierProvider(
-        create: (_) {
-          if (kDebugMode) {
-            debugPrint('[HomeScreen] HomeViewModel 인스턴스 생성');
-          }
-          return _viewModel;
-        },
-      child: Builder(
-        builder: (context) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFFFF9F1), // Figma 디자인의 #FFF9F1 배경색 적용
+        appBar: PikaAppBar.home(),
+        body: Consumer<HomeViewModel>(
+          builder: (context, viewModel, _) {
             if (kDebugMode) {
-              debugPrint('[HomeScreen] Builder 시작');
+              debugPrint('[HomeScreen] Consumer<HomeViewModel> 빌드');
             }
             
-          // 각 Consumer에서 viewModel 참조를 설정하므로 여기서는 필요 없음
-          return Scaffold(
-            backgroundColor: const Color(0xFFFFF9F1), // Figma 디자인의 #FFF9F1 배경색 적용
-            appBar: PikaAppBar.home(
-              noteSpaceName: _noteSpaceName.isNotEmpty ? _noteSpaceName : '로딩 중...',
-              onSettingsPressed: () => _navigateToSettings(context),
-            ),
-            body: Consumer<HomeViewModel>(
-              builder: (context, viewModel, _) {
-                  if (kDebugMode) {
-                    debugPrint('[HomeScreen] Consumer<HomeViewModel> 빌드');
-                  }
-                _viewModel = viewModel;
-                
-                  try {
-                if (viewModel.isLoading) {
-                  return const Center(
-                    child: DotLoadingIndicator(),
-                  );
-                } else if (viewModel.notes.isEmpty) {
-                  return _buildZeroState(context);
-                }
-                
-                return SafeArea(
-                  child: Stack(
-                    children: [
-                      // 리스트 뷰
-                      Column(
-                        children: [
-                          // 노트 목록
-                          Expanded(
-                            child: RefreshIndicator(
-                              color: ColorTokens.primary,
-                              backgroundColor: Colors.white,
-                              onRefresh: () async {
-                                await viewModel.refreshNotes();
-                              },
-                              child: ListView.builder(
-                                padding: const EdgeInsets.only(top: 4, bottom: 16),
-                                itemCount: viewModel.notes.length,
-                                itemBuilder: (context, index) {
-                                  final note = viewModel.notes[index];
-                                  
-                                  return Padding(
-                                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
-                                    child: GestureDetector(
-                                      onTap: () => _navigateToNoteDetail(context, note),
-                                      child: NoteListItem(
-                                        note: note,
-                                        onNoteTapped: (note) => _navigateToNoteDetail(context, note),
-                                        onDismissed: () {
-                                          if (note.id != null) {
-                                            viewModel.deleteNote(note.id!);
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // 스마트 노트 만들기 버튼 - 노트가 있을 때만 표시
-                                Consumer<HomeViewModel>(
-                                  builder: (context, viewModel, _) {
-                                    // 노트가 있을 때만 버튼 표시
-                                    if (viewModel.hasNotes) {
-                                      return Column(
-                                        children: [
-                                          _isButtonDisabled()
-                                            ? Tooltip(
-                                                message: '사용량 한도 초과로 비활성화되었습니다',
-                                                child: PikaButton(
-                                                  text: '스마트 노트 만들기',
-                                                  variant: PikaButtonVariant.primary,
-                                                  isFullWidth: false,
-                                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                                      onPressed: () => _showUsageLimitInfo(context),
-                                                ),
-                                              )
-                                            : PikaButton(
-                                                text: '스마트 노트 만들기',
-                                                variant: PikaButtonVariant.primary,
-                                                isFullWidth: false,
-                                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                                onPressed: () => _showImagePickerBottomSheet(context),
-                                              ),
-                                          const SizedBox(height: 16),
-                                        ],
-                                      );
-                                    }
-                                    return const SizedBox.shrink(); // 노트가 없으면 버튼 숨김
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                        ],
-                      ),
-                    );
-                  } catch (e, stackTrace) {
-                    if (kDebugMode) {
-                      debugPrint('[HomeScreen] Consumer 내부에서 오류 발생: $e');
-                      debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
-                    }
-                    
-                    // 간단한 에러 복구 UI
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text('화면 로딩 중 문제가 발생했습니다.'),
-                          const SizedBox(height: 20),
-                          ElevatedButton(
-                            onPressed: () {
-                              viewModel.refreshNotes();
-                            },
-                            child: const Text('새로고침'),
-                      ),
-                    ],
-                  ),
+            try {
+              if (viewModel.isLoading) {
+                return const Center(
+                  child: DotLoadingIndicator(),
                 );
-                  }
-                },
-              ),
-            );
-              },
-            ),
-          );
+              } else if (viewModel.notes.isEmpty) {
+                return _buildZeroState(context);
+              }
+              
+              // 리스트가 실제로 보일 때만 빌드
+              return _buildNotesList(context, viewModel);
+            } catch (e, stackTrace) {
+              if (kDebugMode) {
+                debugPrint('[HomeScreen] Consumer 내부에서 오류 발생: $e');
+                debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
+              }
+              
+              // 간단한 에러 복구 UI
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('화면 로딩 중 문제가 발생했습니다.'),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      onPressed: () {
+                        viewModel.refreshNotes();
+                      },
+                      child: const Text('새로고침'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          },
+        ),
+      );
     } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('[HomeScreen] 전체 빌드 과정에서 오류 발생: $e');
@@ -396,19 +311,86 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         body: Center(
           child: Text('화면을 표시할 수 없습니다: $e'),
-      ),
-    );
+        ),
+      );
     }
   }
 
-  // 날짜 포맷팅 함수
-  String _formatDate(DateTime date) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${months[date.month - 1]} ${date.day.toString().padLeft(2, '0')}, ${date.year}';
+  /// 노트 리스트 빌드 (실제로 보일 때만)
+  Widget _buildNotesList(BuildContext context, HomeViewModel viewModel) {
+    if (kDebugMode) {
+      debugPrint('[HomeScreen] 노트 리스트 빌드: ${viewModel.notes.length}개');
+    }
+    
+    return SafeArea(
+      child: Column(
+        children: [
+          // 노트 목록
+          Expanded(
+            child: RefreshIndicator(
+              color: ColorTokens.primary,
+              backgroundColor: Colors.white,
+              onRefresh: () async {
+                await viewModel.refreshNotes();
+              },
+              child: ListView.builder(
+                padding: const EdgeInsets.only(top: 4, bottom: 16),
+                itemCount: viewModel.notes.length,
+                itemExtent: 104.0, // 고정 높이 설정 (성능 최적화)
+                cacheExtent: 500.0, // 캐시 범위 설정
+                addAutomaticKeepAlives: false, // 자동 KeepAlive 비활성화 (메모리 최적화)
+                addRepaintBoundaries: false, // 불필요한 RepaintBoundary 제거
+                itemBuilder: (context, index) {
+                  final note = viewModel.notes[index];
+                  
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
+                    child: NoteListItem(
+                      note: note,
+                      onNoteTapped: (note) => _navigateToNoteDetail(context, note),
+                      onDismissed: () {
+                        if (note.id != null) {
+                          viewModel.deleteNote(note.id!);
+                          // 노트 삭제 후 사용량 재확인
+                          _onNoteEvent();
+                        }
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          // 하단 버튼 영역
+          if (viewModel.hasNotes)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              child: _isButtonDisabled()
+                ? Tooltip(
+                    message: '사용량 한도 초과로 비활성화되었습니다',
+                    child: PikaButton(
+                      text: '스마트 노트 만들기',
+                      variant: PikaButtonVariant.primary,
+                      isFullWidth: false,
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      onPressed: () => _showUsageLimitInfo(context),
+                    ),
+                  )
+                : PikaButton(
+                    text: '스마트 노트 만들기',
+                    variant: PikaButtonVariant.primary,
+                    isFullWidth: false,
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    onPressed: () => _showImagePickerBottomSheet(context),
+                  ),
+            ),
+        ],
+      ),
+    );
   }
 
-  // 사용량 확인 - 제한 초과 시 버튼 비활성화
-  Future<void> _checkUsageAndButtonStatus() async {
+  // 사용량 확인 - 이벤트 기반으로 변경 (노트 삭제/생성 시에만)
+  Future<void> _checkUsageAndButtonStatus({bool forceCheck = false}) async {
     // 이미 확인 중이면 중복 호출 방지
     if (_isCheckingUsage) {
       if (kDebugMode) {
@@ -417,31 +399,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return;
     }
     
-    // 캐시 적용 (30초) - 너무 자주 호출되지 않도록
-    final now = DateTime.now();
-    if (_lastUsageCheckTime != null && now.difference(_lastUsageCheckTime!).inSeconds < 30) {
+    // 강제 체크가 아니고 이미 확인했다면 스킵
+    if (!forceCheck && _hasCheckedUsage) {
       if (kDebugMode) {
-        debugPrint('사용량 최근에 확인함 (${now.difference(_lastUsageCheckTime!).inSeconds}초 전) - 캐시 사용');
-      }
-      
-      // 버튼 비활성화 상태 확인 - 한번만 디버그 메시지 출력
-      if (kDebugMode) {
-        debugPrint('버튼 비활성화 확인: _noteExceed=$_noteExceed, limitStatus=$_limitStatus');
+        debugPrint('사용량 이미 확인됨 - 스킵');
       }
       return;
     }
     
     if (kDebugMode) {
-      debugPrint('사용량 확인 필요 - 확인 중...');
+      debugPrint('사용량 확인 시작... (forceCheck: $forceCheck)');
     }
     
     _isCheckingUsage = true;
     
     try {
-      if (kDebugMode) {
-        debugPrint('사용량 확인 시작...');
-      }
-
       // 사용량 제한 체크 (모든 확인을 한 번에 처리)
       final usageInfo = await _usageLimitService.getUsageInfo(withBuffer: false);
       final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
@@ -459,30 +431,42 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         debugPrint('Home 화면: 번역 제한=${limitStatus['translationLimitReached']}, 저장소 제한=${limitStatus['storageLimitReached']}');
       }
       
-      // 명시적으로 로컬 변수를 설정하고 setState를 호출하여 UI 업데이트 강제
+      // 상태가 실제로 변경되었을 때만 setState 호출
       final bool shouldDisableButton = ocrLimitReached || translationLimitReached || storageLimitReached || noteExceed;
       
-      if (mounted) {
-      setState(() {
-        _limitStatus = limitStatus;
-        _usagePercentages = usagePercentages;
-          _noteExceed = shouldDisableButton; // 버튼 비활성화 플래그 설정
-        _hasCheckedUsage = true;
-          _lastUsageCheckTime = now;
+      if (mounted && (_noteExceed != shouldDisableButton || !_hasCheckedUsage)) {
+        setState(() {
+          _limitStatus = limitStatus;
+          _usagePercentages = usagePercentages;
+          _noteExceed = shouldDisableButton;
+          _hasCheckedUsage = true;
+          _lastUsageCheckTime = DateTime.now();
         });
-      }
-      
-      if (kDebugMode) {
-        debugPrint('사용량 확인 완료: 노트 생성 제한=$_noteExceed, 버튼 비활성화=$shouldDisableButton');
+        
+        if (kDebugMode) {
+          debugPrint('사용량 상태 업데이트: 노트 생성 제한=$_noteExceed, 버튼 비활성화=$shouldDisableButton');
+        }
+      } else {
+        // 상태는 변경되지 않았지만 시간은 업데이트
+        _lastUsageCheckTime = DateTime.now();
+        
+        if (kDebugMode) {
+          debugPrint('사용량 확인 완료 (상태 변경 없음): 노트 생성 제한=$_noteExceed');
+        }
       }
     } catch (e) {
       if (kDebugMode) {
-      DebugUtils.error('사용량 확인 중 오류 발생: $e');
+        debugPrint('사용량 확인 중 오류 발생: $e');
       }
     } finally {
       // 확인 중 상태 해제
       _isCheckingUsage = false;
     }
+  }
+  
+  /// 노트 관련 이벤트 발생 시 사용량 재확인
+  void _onNoteEvent() {
+    _checkUsageAndButtonStatus(forceCheck: true);
   }
   
   // 지원팀 문의하기 처리
@@ -578,6 +562,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           setState(() {
             _isImagePickerShowing = false;
           });
+          // 노트 생성 가능성이 있으므로 사용량 재확인
+          _onNoteEvent();
         }
       }
     } catch (e) {
@@ -763,7 +749,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // HomeViewModel 변경 시 호출될 메서드
   void _onViewModelChanged() {
     // 필요시 상태 업데이트
-    if (!mounted || _viewModel == null) return;
+    if (!mounted) return;
   }
 
   // 노트스페이스 옵션 표시
@@ -773,69 +759,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     print('노트스페이스 옵션 메뉴 표시 예정');
     }
     // TODO: 노트스페이스 선택 또는 관리 메뉴 표시 구현
-  }
-
-  /// 노트스페이스 이름 로드
-  Future<void> _loadNoteSpaceName() async {
-    try {
-      // 노트스페이스 이름 변경 이벤트를 확인
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      final String? lastChangedName = prefs.getString('last_changed_notespace_name');
-      
-      // 일반적인 방법으로 노트스페이스 이름 로드
-      final noteSpaceName = await _userPreferences.getDefaultNoteSpace();
-      
-      if (mounted) {
-        setState(() {
-          // 마지막으로 변경된 이름이 있으면 해당 이름 사용, 없으면 일반 로드 값 사용
-          _noteSpaceName = lastChangedName ?? noteSpaceName;
-          
-          // 디버그 정보 출력
-          DebugUtils.log('노트스페이스 이름 로드: $_noteSpaceName (변경된 이름: $lastChangedName)');
-        });
-      }
-    } catch (e) {
-      // 오류 발생 시 기본값 사용
-      if (mounted) {
-        setState(() {
-          _noteSpaceName = '학습 노트';
-        });
-      }
-    }
-  }
-
-  // 설정 화면으로 이동
-  void _navigateToSettings(BuildContext context) {
-    if (kDebugMode) {
-      debugPrint('설정 화면으로 이동 시도');
-    }
-    try {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => SettingsScreen(
-            onLogout: () async {
-              if (kDebugMode) {
-                debugPrint('로그아웃 콜백 호출됨');
-              }
-              // 로그아웃 처리
-              await FirebaseAuth.instance.signOut();
-              // 홈 화면으로 돌아가기
-              if (mounted) {
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              }
-            },
-          ),
-        ),
-      );
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('설정 화면 이동 중 오류: $e');
-      }
-      // 오류 발생 시 사용자에게 알림
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('설정 화면 이동 중 오류가 발생했습니다: $e')),
-      );
-    }
   }
 
   // 사용량 제한 정보 다이얼로그 표시 메서드 추가
@@ -849,63 +772,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       usagePercentages: _usagePercentages,
       onContactSupport: _handleContactSupport,
     );
-    
-    // 스낵바 방식 (주석 처리하여 비활성화)
-    /*
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text(
-          '사용량 한도에 도달하여 노트 생성이 제한됩니다. 설정에서 사용량을 확인해 보세요.',
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: ColorTokens.secondary,
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: '자세히',
-          textColor: Colors.white,
-          onPressed: () {
-            // 스낵바 닫기
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            // 상세 사용량 다이얼로그 표시
-            UsageDialog.show(
-              context,
-              title: '사용량 제한에 도달했습니다',
-              message: '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.',
-              limitStatus: _limitStatus,
-              usagePercentages: _usagePercentages,
-              onContactSupport: _handleContactSupport,
-            );
-          },
-        ),
-      ),
-    );
-    */
-  }
-
-  // LLM 테스트 화면으로 이동
-  void _navigateToLLMTest(BuildContext context) {
-    if (kDebugMode) {
-      debugPrint('LLM 테스트 기능이 제거되었습니다');
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('LLM 테스트 기능이 제거되었습니다.')),
-      );
-  }
-
-  // 모든 노트의 썸네일 업데이트
-  Future<void> _updateAllNoteThumbnails() async {
-    try {
-      final noteService = NoteService();
-      final int updatedCount = await noteService.updateAllNoteThumbnails();
-      
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 노트 썸네일 일괄 업데이트 완료: $updatedCount개');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 노트 썸네일 업데이트 중 오류: $e');
-      }
-      // 오류가 발생해도 앱 진행에 영향을 주지 않음
-    }
+  
   }
 } 
