@@ -598,12 +598,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 네비게이션 직전 로그 추가
       print("🚀 [HOME] Navigator.push 호출 직전. Note ID: ${note.id}");
 
-      Navigator.of(context).push(
+      final result = await Navigator.of(context).push(
         NoteDetailScreenMVVM.route(note: note), // MVVM 패턴 적용한 화면으로 변경
-      ).then((_) {
-        print("[HOME] 노트 상세화면에서 돌아왔습니다.");
+      );
+      
+      print("[HOME] 노트 상세화면에서 돌아왔습니다.");
+      
+      // 실제 변경이 있었을 때만 새로고침
+      if (result != null && result is Map && result['needsRefresh'] == true) {
+        if (kDebugMode) {
+          debugPrint('[HOME] 노트 변경 감지 - 새로고침 실행');
+        }
         Provider.of<HomeViewModel>(context, listen: false).refreshNotes();
-      });
+      } else {
+        if (kDebugMode) {
+          debugPrint('[HOME] 노트 변경 없음 - 새로고침 스킵');
+        }
+      }
     } catch (e, stackTrace) {
       print("[HOME] 노트 상세화면 이동 중 오류 발생: $e");
       print("[HOME] 스택 트레이스: $stackTrace");

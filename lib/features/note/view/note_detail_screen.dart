@@ -186,7 +186,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       flashcardCount: viewModel.flashcardCount,
       onMorePressed: () => _showMoreOptions(context, viewModel),
       onFlashcardTap: () => _navigateToFlashcards(context, viewModel),
-      onBackPressed: () => Navigator.of(context).pop(),
+      onBackPressed: () => Navigator.of(context).pop({'needsRefresh': false}),
       backgroundColor: UITokens.screenBackground, 
       noteId: viewModel.noteId,
     );
@@ -291,8 +291,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         viewModel.loadNote();
       },
       onNoteDeleted: () {
-        // 노트 삭제 후 이전 화면으로 이동
-        Navigator.of(context).pop();
+        // 노트 삭제 후 이전 화면으로 이동 (새로고침 필요)
+        Navigator.of(context).pop({'needsRefresh': true});
       }
     );
   }
