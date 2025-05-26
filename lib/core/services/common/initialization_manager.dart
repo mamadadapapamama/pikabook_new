@@ -8,6 +8,7 @@ import '../authentication/auth_service.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
 import '../../../features/note/managers/note_creation_ui_manager.dart';
+import 'usage_limit_service.dart';
 
 /// 앱 초기화 단계를 정의합니다.
 enum InitializationStep {
@@ -15,6 +16,7 @@ enum InitializationStep {
   firebase,      // Firebase 초기화
   auth,          // 인증 상태 확인
   userData,      // 사용자 데이터 로드
+  usageCheck,    // 사용량 확인
   settings,      // 설정 로드
   cache,         // 캐시 준비
   finalizing,    // 마무리
@@ -41,6 +43,7 @@ class InitializationManager {
   final UserPreferencesService _prefsService = UserPreferencesService();
   final AuthService _authService = AuthService();
   final LLMTextProcessing _textProcessingService = LLMTextProcessing();
+  final UsageLimitService _usageLimitService = UsageLimitService();
   
   // 초기화 상태 관리
   InitializationStep _currentStep = InitializationStep.preparing;
@@ -150,7 +153,31 @@ class InitializationManager {
       final bool hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
       final bool isFirstEntry = !hasShownTooltip;
       
-      // 3. 사용자 데이터 로드 (필수 정보만)
+      // 3. 사용량 확인 (로그인된 사용자만)
+      Map<String, bool> usageLimitStatus = {};
+      if (isLoggedIn) {
+        _updateProgress(
+          InitializationStep.usageCheck,
+          0.5,
+          '사용량 확인 중...',
+        );
+        
+        try {
+          usageLimitStatus = await _usageLimitService.checkInitialLimitStatus();
+          debugPrint('초기화 중 사용량 확인 완료: $usageLimitStatus');
+        } catch (e) {
+          debugPrint('초기화 중 사용량 확인 실패: $e');
+          // 사용량 확인 실패 시 기본값 설정
+          usageLimitStatus = {
+            'ocrLimitReached': false,
+            'ttsLimitReached': false,
+            'translationLimitReached': false,
+            'storageLimitReached': false,
+          };
+        }
+      }
+      
+      // 4. 사용자 데이터 로드 (필수 정보만)
       _updateProgress(
         InitializationStep.userData,
         0.6,
@@ -163,6 +190,7 @@ class InitializationManager {
         'hasLoginHistory': hasLoginHistory,
         'isOnboardingCompleted': isOnboardingCompleted,
         'isFirstEntry': isFirstEntry,
+        'usageLimitStatus': usageLimitStatus, // 사용량 상태 추가
         'error': null,
       };
       
@@ -191,6 +219,7 @@ class InitializationManager {
         'hasLoginHistory': false,
         'isOnboardingCompleted': false,
         'isFirstEntry': true,
+        'usageLimitStatus': {},
         'error': _error,
       };
       
@@ -212,7 +241,7 @@ class InitializationManager {
   // 백그라운드에서 추가 초기화 작업 수행
   Future<void> _continueInitializationInBackground(bool isLoggedIn, User? currentUser) async {
     try {
-      // 4. 앱 설정 로드
+      // 5. 앱 설정 로드
       _updateProgress(
         InitializationStep.settings,
         0.7,
@@ -221,7 +250,7 @@ class InitializationManager {
       
       await _loadAppSettings();
       
-      // 5. 마무리 작업 (정리, 최적화 등)
+      // 6. 마무리 작업 (정리, 최적화 등)
       _updateProgress(
         InitializationStep.finalizing,
         0.95,
@@ -232,7 +261,7 @@ class InitializationManager {
       final imageService = ImageService();
       await imageService.cleanupTempFiles();
       
-      // 6. 완료
+      // 7. 완료
       _updateProgress(
         InitializationStep.completed,
         1.0,

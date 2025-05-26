@@ -6,18 +6,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'services/page_service.dart';
 import 'services/note_service.dart';
 import '../../../core/services/text_processing/llm_text_processing.dart';
+import '../../../core/services/common/usage_limit_service.dart';
 import '../../core/models/processed_text.dart';
 import '../../core/models/text_unit.dart';
 import '../../core/models/processing_status.dart';
 import 'pre_llm_workflow.dart';
 
 /// 후처리 워크플로우: 백그라운드 LLM 처리
-/// 배치 번역 → 병음 생성 → 페이지 업데이트 → 실시간 알림
+/// 배치 번역 → 병음 생성 → 페이지 업데이트 → 사용량 업데이트 → 실시간 알림
 class PostLLMWorkflow {
   // 서비스 인스턴스
   final PageService _pageService = PageService();
   final NoteService _noteService = NoteService();
   final LLMTextProcessing _llmService = LLMTextProcessing();
+  final UsageLimitService _usageLimitService = UsageLimitService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // 처리 큐 (메모리 기반)
@@ -178,7 +180,10 @@ class PostLLMWorkflow {
       // 5. 노트 완료 상태 업데이트
       await _updateNoteStatus(job.noteId, ProcessingStatus.completed);
       
-      // 6. 완료 알림
+      // 6. 사용량 업데이트 (백그라운드에서 처리)
+      await _updateUsageAfterProcessing(job);
+      
+      // 7. 완료 알림
       await _sendCompletionNotification(job.noteId);
 
       if (kDebugMode) {
@@ -358,6 +363,56 @@ class PostLLMWorkflow {
       if (kDebugMode) {
         debugPrint('❌ 미완료 작업 복구 실패: $e');
       }
+    }
+  }
+
+  /// 사용량 업데이트 (백그라운드에서 처리)
+  Future<void> _updateUsageAfterProcessing(PostProcessingJob job) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('📊 백그라운드 사용량 업데이트 시작: ${job.noteId}');
+      }
+      
+      // 실제 처리된 데이터를 기반으로 사용량 계산
+      int totalOcrPages = 0;
+      int totalStorageBytes = 0;
+      int totalTranslatedChars = 0;
+      
+      for (final pageData in job.pages) {
+        // OCR 성공한 페이지 수
+        if (pageData.ocrSuccess) {
+          totalOcrPages++;
+        }
+        
+        // 스토리지 사용량
+        totalStorageBytes += pageData.imageFileSize;
+        
+        // 번역된 문자 수 (텍스트 세그먼트 길이 합계)
+        for (final segment in pageData.textSegments) {
+          totalTranslatedChars += segment.length;
+        }
+      }
+      
+      // 사용량 업데이트
+      final limitStatus = await _usageLimitService.updateUsageAfterNoteCreation(
+        ocrPages: totalOcrPages,
+        storageBytes: totalStorageBytes,
+        translatedChars: totalTranslatedChars,
+      );
+      
+      if (kDebugMode) {
+        debugPrint('📊 백그라운드 사용량 업데이트 완료:');
+        debugPrint('   OCR 페이지: $totalOcrPages개');
+        debugPrint('   스토리지: ${(totalStorageBytes / 1024 / 1024).toStringAsFixed(2)}MB');
+        debugPrint('   번역 문자: $totalTranslatedChars자');
+        debugPrint('   제한 상태: $limitStatus');
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 사용량 업데이트 실패: ${job.noteId}, 오류: $e');
+      }
+      // 사용량 업데이트 실패는 전체 프로세스를 실패시키지 않음
     }
   }
 }

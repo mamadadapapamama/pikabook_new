@@ -4,7 +4,6 @@ import 'package:flutter/scheduler.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:math';  // min 함수를 위한 import 추가
-import '../../core/services/common/usage_limit_service.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import 'pika_button.dart';
@@ -21,27 +20,17 @@ class ImagePickerBottomSheet extends StatefulWidget {
 }
 
 class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
-  final UsageLimitService _usageLimitService = UsageLimitService();
   final NoteCreationUIManager _noteCreationUIManager = NoteCreationUIManager();
   final ImagePicker _picker = ImagePicker();
   final ImageService _imageService = ImageService();
-  bool _isButtonDisabled = false;
-  String _limitTooltip = '';
   
-  // 이미지 처리 중인지 추적하는 변수 추가
+  // 이미지 처리 중인지 추적하는 변수
   bool _isProcessing = false;
-  
-  // 사용량 확인 관련 변수 추가
-  bool _isCheckingLimits = false;
-  DateTime? _lastCheckTime;
   
   @override
   void initState() {
     super.initState();
-    // UI를 먼저 표시하고 사용량은 백그라운드에서 확인
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-    _checkUsageLimits();
-    });
+    // 사용량 확인 로직 제거 - InitializationManager에서 이미 처리됨
   }
   
   @override
@@ -59,58 +48,6 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       });
     } else {
       _isProcessing = false;
-    }
-  }
-  
-  // 사용량 한도 확인
-  Future<void> _checkUsageLimits() async {
-    // 이미 확인 중이면 중복 호출 방지
-    if (_isCheckingLimits) {
-      if (kDebugMode) {
-        debugPrint('사용량 확인이 이미 진행 중입니다. 중복 호출 방지');
-      }
-      return;
-    }
-    
-    // 최근 10초 이내에 확인했으면 재확인 건너뜀
-    final now = DateTime.now();
-    if (_lastCheckTime != null && now.difference(_lastCheckTime!).inSeconds < 10) {
-      if (kDebugMode) {
-        debugPrint('사용량 최근에 확인함 (${now.difference(_lastCheckTime!).inSeconds}초 전)');
-      }
-      return;
-    }
-    
-    _isCheckingLimits = true;
-    
-    try {
-      final limitStatus = await _usageLimitService.checkFreeLimits(withBuffer: true);
-      _lastCheckTime = DateTime.now();
-      
-      final bool ocrLimitReached = limitStatus['ocrLimitReached'] == true;
-      final bool translationLimitReached = limitStatus['translationLimitReached'] == true;
-      final bool storageLimitReached = limitStatus['storageLimitReached'] == true;
-      
-      if (mounted) {
-        setState(() {
-          _isButtonDisabled = ocrLimitReached || translationLimitReached || storageLimitReached;
-          
-          if (ocrLimitReached) {
-            _limitTooltip = '무료 OCR 사용량이 초과되었습니다. 다음 달까지 기다리거나 프리미엄으로 업그레이드하세요.';
-          } else if (translationLimitReached) {
-            _limitTooltip = '무료 번역 사용량이 초과되었습니다. 다음 달까지 기다리거나 프리미엄으로 업그레이드하세요.';
-          } else if (storageLimitReached) {
-            _limitTooltip = '무료 저장 공간이 가득 찼습니다. 일부 노트를 삭제하거나 프리미엄으로 업그레이드하세요.';
-          }
-        });
-      }
-    } catch (e) {
-      if (kDebugMode) {
-      debugPrint('사용량 확인 중 오류 발생: $e');
-      }
-    } finally {
-      // 확인 중 상태 해제
-      _isCheckingLimits = false;
     }
   }
 
@@ -173,18 +110,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             // 갤러리 및 카메라 옵션 버튼
             Column(
               children: [
-                _isButtonDisabled
-                ? Tooltip(
-                    message: _limitTooltip,
-                    child: PikaButton(
-                      text: '갤러리에서 선택',
-                      variant: PikaButtonVariant.outline,
-                      leadingIcon: Icon(Icons.photo_library, color: ColorTokens.disabled),
-                      onPressed: null,
-                      isFullWidth: true,
-                    ),
-                  )
-                : PikaButton(
+                PikaButton(
                     text: '갤러리에서 선택',
                     variant: PikaButtonVariant.outline,
                     leadingIcon: Icon(Icons.photo_library, color: ColorTokens.primary),
@@ -194,18 +120,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                 
                 const SizedBox(height: 16),
                 
-                _isButtonDisabled
-                ? Tooltip(
-                    message: _limitTooltip,
-                    child: PikaButton(
-                      text: '카메라로 촬영',
-                      variant: PikaButtonVariant.outline,
-                      leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.disabled),
-                      onPressed: null,
-                      isFullWidth: true,
-                    ),
-                  )
-                : PikaButton(
+                PikaButton(
                     text: '카메라로 촬영',
                     variant: PikaButtonVariant.outline,
                     leadingIcon: Icon(Icons.camera_alt, color: ColorTokens.primary),

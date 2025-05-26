@@ -379,7 +379,7 @@ class UsageLimitService {
   /// 사용량 비율 계산 (PlanService 호환성)
   Future<Map<String, double>> getUsagePercentages() async {
     final result = await getUserUsageForSettings();
-    return Map<String, double>.from(result['usagePercentages']);
+    return Map<String, double>.from(result['usagePercentages'] as Map);
   }
   
   /// 제한 상태 확인 (PlanService 호환성)

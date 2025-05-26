@@ -81,7 +81,7 @@ class _UsageDialogState extends State<UsageDialog> {
         // UsageLimitService에서 최신 데이터를 가져옴
         final usageInfo = await _usageService.getUsageInfo();
         _limitStatus = usageInfo['limitStatus'];
-        _usagePercentages = usageInfo['percentages'];
+        _usagePercentages = Map<String, double>.from(usageInfo['percentages'] as Map);
       }
       
       debugPrint('UsageDialog - 로드된 사용량 데이터: $_usagePercentages');

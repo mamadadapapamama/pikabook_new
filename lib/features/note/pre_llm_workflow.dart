@@ -8,6 +8,7 @@ import '../../core/services/text_processing/text_cleaner_service.dart';
 import '../../core/services/text_processing/text_mode_seperation_service.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/models/processed_text.dart';
+import '../../core/services/common/usage_limit_service.dart';
 import 'post_llm_workflow.dart';
 
 /// 전처리 워크플로우: 빠른 노트 생성 (3-5초 목표)
@@ -21,6 +22,7 @@ class PreLLMWorkflow {
   final TextCleanerService _textCleanerService = TextCleanerService();
   final TextModeSeparationService _textSeparationService = TextModeSeparationService();
   final UserPreferencesService _preferencesService = UserPreferencesService();
+  final UsageLimitService _usageLimitService = UsageLimitService();
   final PostLLMWorkflow _postLLMWorkflow = PostLLMWorkflow();
 
   /// 빠른 노트 생성 메인 메서드
@@ -35,7 +37,7 @@ class PreLLMWorkflow {
 
     try {
       // 1. 노트 메타데이터 생성 (빠름)
-      final noteId = await _createNoteMetadata();
+      final noteId = await _noteService.createNote();
       
       // 2. 사용자 설정 로드 (캐시됨)
       final userPrefs = await _preferencesService.getPreferences();
@@ -71,11 +73,12 @@ class PreLLMWorkflow {
         await _updateNoteThumbnail(noteId, pageDataList[0].imageUrl);
       }
       
-      // 5. 후처리 작업 스케줄링
+      // 5. 후처리 작업 스케줄링 (사용량 업데이트 포함)
       await _schedulePostProcessing(noteId, pageDataList, userPrefs);
       
       if (kDebugMode) {
         debugPrint('🎉 전처리 워크플로우 완료: $noteId (${pageDataList.length}개 페이지)');
+        debugPrint('📋 사용량 업데이트는 백그라운드에서 처리됩니다');
       }
       
       return noteId;
@@ -86,11 +89,6 @@ class PreLLMWorkflow {
       }
       rethrow;
     }
-  }
-
-  /// 노트 메타데이터 생성
-  Future<String> _createNoteMetadata() async {
-    return await _noteService.createNote();
   }
 
   /// 단일 이미지 빠른 처리
@@ -192,6 +190,16 @@ class PreLLMWorkflow {
         }
       }
       
+      // 이미지 파일 크기 계산
+      int fileSize = 0;
+      try {
+        fileSize = await imageFile.length();
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 파일 크기 계산 실패: $e');
+        }
+      }
+      
       final pageData = PageProcessingData(
         pageId: pageId,
         imageUrl: imageUrl,
@@ -199,6 +207,8 @@ class PreLLMWorkflow {
         mode: mode,
         sourceLanguage: userPrefs.sourceLanguage,
         targetLanguage: userPrefs.targetLanguage,
+        imageFileSize: fileSize,
+        ocrSuccess: extractedText.isNotEmpty,
       );
       
       if (kDebugMode) {
@@ -207,6 +217,8 @@ class PreLLMWorkflow {
         debugPrint('   텍스트 세그먼트: ${pageData.textSegments.length}개');
         debugPrint('   모드: ${pageData.mode}');
         debugPrint('   언어: ${pageData.sourceLanguage} → ${pageData.targetLanguage}');
+        debugPrint('   파일 크기: ${(pageData.imageFileSize / 1024 / 1024).toStringAsFixed(2)}MB');
+        debugPrint('   OCR 성공: ${pageData.ocrSuccess}');
         debugPrint('   사용된 텍스트: ${cleanedText.isNotEmpty ? "정리된 텍스트" : "원본 텍스트"}');
       }
       
@@ -299,6 +311,8 @@ class PageProcessingData {
   final TextProcessingMode mode;
   final String sourceLanguage;
   final String targetLanguage;
+  final int imageFileSize; // 이미지 파일 크기 (바이트)
+  final bool ocrSuccess; // OCR 성공 여부
 
   PageProcessingData({
     required this.pageId,
@@ -307,6 +321,8 @@ class PageProcessingData {
     required this.mode,
     required this.sourceLanguage,
     required this.targetLanguage,
+    required this.imageFileSize,
+    required this.ocrSuccess,
   });
 
   Map<String, dynamic> toJson() => {
@@ -316,6 +332,8 @@ class PageProcessingData {
     'mode': mode.toString(),
     'sourceLanguage': sourceLanguage,
     'targetLanguage': targetLanguage,
+    'imageFileSize': imageFileSize,
+    'ocrSuccess': ocrSuccess,
   };
 
   factory PageProcessingData.fromJson(Map<String, dynamic> json) {
@@ -328,6 +346,8 @@ class PageProcessingData {
       ),
       sourceLanguage: json['sourceLanguage'],
       targetLanguage: json['targetLanguage'],
+      imageFileSize: json['imageFileSize'] ?? 0,
+      ocrSuccess: json['ocrSuccess'] ?? false,
     );
   }
 }

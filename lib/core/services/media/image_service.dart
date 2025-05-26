@@ -308,12 +308,9 @@ class ImageService {
   /// 저장 공간 제한 확인
   Future<bool> _checkStorageLimit(File imageFile) async {
     try {
-      final fileSize = await imageFile.length();
-      // 새로운 방식: 설정 화면용 사용량 조회 사용
-      final usageInfo = await _usageLimitService.getUserUsageForSettings();
-      final currentStorageUsage = usageInfo['usage']['storageUsageBytes'] ?? 0;
-      final storageLimitBytes = usageInfo['limits']['storageBytes'] ?? (50 * 1024 * 1024);
-      return true; // 현재 작업은 완료하고 다음 작업부터 제한 메시지 표시
+      // 이미지 업로드 시에는 제한 확인을 하지 않고 항상 허용
+      // 사용량 업데이트는 _trackStorageUsage에서 처리
+      return true;
     } catch (e) {
       debugPrint('스토리지 제한 확인 실패: $e');
       return true;

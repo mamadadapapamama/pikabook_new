@@ -150,7 +150,13 @@ class NoteService {
       };
 
       final docRef = await _notesCollection.add(noteData);
-      return docRef.id;
+      final noteId = docRef.id;
+      
+      if (kDebugMode) {
+        debugPrint('노트 메타데이터 생성 완료: $noteId');
+      }
+      
+      return noteId;
     } catch (e) {
       debugPrint('노트 생성 중 오류 발생: $e');
       rethrow;
@@ -197,19 +203,6 @@ class NoteService {
     }
   }
 
-  /// 즐겨찾기 토글
-  Future<void> toggleFavorite(String noteId, bool isFavorite) async {
-    try {
-      await _notesCollection.doc(noteId).update({
-        'isFavorite': isFavorite,
-        'updatedAt': DateTime.now(),
-      });
-      debugPrint('즐겨찾기 상태 변경 완료: $noteId -> $isFavorite');
-    } catch (e) {
-      debugPrint('즐겨찾기 토글 중 오류 발생: $e');
-      rethrow;
-    }
-  }
 
   /// 노트 ID로 노트 가져오기
   Future<Note?> getNoteById(String noteId) async {

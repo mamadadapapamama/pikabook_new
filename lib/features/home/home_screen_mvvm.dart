@@ -5,7 +5,6 @@ import 'dart:io';
 import '../../features/home/home_viewmodel.dart';
 import '../home/note_list_item.dart';
 import '../note/services/note_service.dart';
-import '../../../core/services/common/usage_limit_service.dart';
 import '../../core/services/marketing/marketing_campaign_service.dart';  // 마케팅 캠페인 서비스 추가
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
@@ -85,21 +84,10 @@ class HomeScreenWrapper extends StatelessWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  final UsageLimitService _usageLimitService = UsageLimitService();
   final MarketingCampaignService _marketingService = MarketingCampaignService();
   
-  // 사용량 관련 상태 변수
-  bool _hasCheckedUsage = false;
-  Map<String, dynamic> _limitStatus = {};
-  Map<String, double> _usagePercentages = {};
-  bool _noteExceed = false; // 노트 생성 관련 제한 플래그 추가
-  
-  // 이미지 피커 상태 변수 추가
+  // 이미지 피커 상태 변수
   bool _isImagePickerShowing = false;
-  
-  // 사용량 확인 중인지 추적하는 변수 추가
-  bool _isCheckingUsage = false;
-  DateTime? _lastUsageCheckTime;
   
   // 화면 초기화 실패를 추적하는 변수
   bool _initializationFailed = false;
@@ -140,20 +128,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 비동기 초기화 작업들을 병렬로 실행
   Future<void> _initializeAsyncTasks() async {
     try {
-      // 병렬로 실행할 작업들
-      await Future.wait([
-        _checkUsageAndButtonStatus(),
-        _initializeMarketingService(),
-      ]);
-      
-      // Route 변경 감지를 위한 리스너 추가
-      if (ModalRoute.of(context) != null) {
-        ModalRoute.of(context)!.addScopedWillPopCallback(() async {
-          // 화면으로 돌아올 때마다 노트스페이스 이름을 다시 로드
-          await _checkUsageAndButtonStatus();
-          return false; // false를 반환하여 pop을 방해하지 않음
-        });
-      }
+      // 마케팅 서비스만 초기화 (사용량 확인은 InitializationManager에서 처리됨)
+      await _initializeMarketingService();
       
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -353,8 +329,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       onDismissed: () {
                         if (note.id != null) {
                           viewModel.deleteNote(note.id!);
-                          // 노트 삭제 후 사용량 재확인
-                          _onNoteEvent();
+                          // 노트 삭제 시에는 사용량 확인하지 않음
                         }
                       },
                     ),
@@ -367,110 +342,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           if (viewModel.hasNotes)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              child: _isButtonDisabled()
-                ? Tooltip(
-                    message: '사용량 한도 초과로 비활성화되었습니다',
-                    child: PikaButton(
-                      text: '스마트 노트 만들기',
-                      variant: PikaButtonVariant.primary,
-                      isFullWidth: false,
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                      onPressed: () => _showUsageLimitInfo(context),
-                    ),
-                  )
-                : PikaButton(
-                    text: '스마트 노트 만들기',
-                    variant: PikaButtonVariant.primary,
-                    isFullWidth: false,
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                    onPressed: () => _showImagePickerBottomSheet(context),
-                  ),
+              child: PikaButton(
+                text: '스마트 노트 만들기',
+                variant: PikaButtonVariant.primary,
+                isFullWidth: false,
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                onPressed: () => _showImagePickerBottomSheet(context),
+              ),
             ),
         ],
       ),
     );
   }
 
-  // 사용량 확인 - 이벤트 기반으로 변경 (노트 삭제/생성 시에만)
-  Future<void> _checkUsageAndButtonStatus({bool forceCheck = false}) async {
-    // 이미 확인 중이면 중복 호출 방지
-    if (_isCheckingUsage) {
-      if (kDebugMode) {
-        debugPrint('사용량 확인이 이미 진행 중입니다. 중복 호출 건너뜀');
-      }
-      return;
-    }
-    
-    // 강제 체크가 아니고 이미 확인했다면 스킵
-    if (!forceCheck && _hasCheckedUsage) {
-      if (kDebugMode) {
-        debugPrint('사용량 이미 확인됨 - 스킵');
-      }
-      return;
-    }
-    
-    if (kDebugMode) {
-      debugPrint('사용량 확인 시작... (forceCheck: $forceCheck)');
-    }
-    
-    _isCheckingUsage = true;
-    
-    try {
-      // 사용량 제한 체크 (모든 확인을 한 번에 처리)
-      final usageInfo = await _usageLimitService.getUsageInfo(withBuffer: false);
-      final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
-      final usagePercentages = usageInfo['percentages'] as Map<String, double>;
-      
-      // 노트 제한 확인 (반복 호출하지 않도록 로컬 변수에 저장)
-      final ocrLimitReached = limitStatus['ocrLimitReached'] == true;
-      final ttsLimitReached = limitStatus['ttsLimitReached'] == true;
-      final translationLimitReached = limitStatus['translationLimitReached'] == true;
-      final storageLimitReached = limitStatus['storageLimitReached'] == true;
-      final noteExceed = ocrLimitReached || translationLimitReached || storageLimitReached;
-      
-      if (kDebugMode) {
-        debugPrint('Home 화면: OCR 제한 도달=${limitStatus['ocrLimitReached']}, 노트 제한=$noteExceed');
-        debugPrint('Home 화면: 번역 제한=${limitStatus['translationLimitReached']}, 저장소 제한=${limitStatus['storageLimitReached']}');
-      }
-      
-      // 상태가 실제로 변경되었을 때만 setState 호출
-      final bool shouldDisableButton = ocrLimitReached || translationLimitReached || storageLimitReached || noteExceed;
-      
-      if (mounted && (_noteExceed != shouldDisableButton || !_hasCheckedUsage)) {
-        setState(() {
-          _limitStatus = limitStatus;
-          _usagePercentages = usagePercentages;
-          _noteExceed = shouldDisableButton;
-          _hasCheckedUsage = true;
-          _lastUsageCheckTime = DateTime.now();
-        });
-        
-        if (kDebugMode) {
-          debugPrint('사용량 상태 업데이트: 노트 생성 제한=$_noteExceed, 버튼 비활성화=$shouldDisableButton');
-        }
-      } else {
-        // 상태는 변경되지 않았지만 시간은 업데이트
-        _lastUsageCheckTime = DateTime.now();
-        
-        if (kDebugMode) {
-          debugPrint('사용량 확인 완료 (상태 변경 없음): 노트 생성 제한=$_noteExceed');
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('사용량 확인 중 오류 발생: $e');
-      }
-    } finally {
-      // 확인 중 상태 해제
-      _isCheckingUsage = false;
-    }
-  }
-  
-  /// 노트 관련 이벤트 발생 시 사용량 재확인
-  void _onNoteEvent() {
-    _checkUsageAndButtonStatus(forceCheck: true);
-  }
-  
   // 지원팀 문의하기 처리
   void _handleContactSupport() async {
     // 프리미엄 문의 구글 폼 URL
@@ -512,41 +396,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     
     try {
-      // 최근에 확인한 경우 다시 확인하지 않음 (10초 이내)
-      final now = DateTime.now();
-      final skipCheck = _hasCheckedUsage && _lastUsageCheckTime != null && 
-          now.difference(_lastUsageCheckTime!).inSeconds < 10;
-          
-      if (!skipCheck) {
-        if (kDebugMode) {
-          debugPrint('사용량 확인 필요 - 확인 중...');
-        }
-        await _checkUsageAndButtonStatus();
-      } else {
-        if (kDebugMode) {
-          debugPrint('최근에 사용량 이미 확인함 (캐시 사용)');
-        }
-      }
-      
-      // 제한에 도달했으면 다이얼로그 표시하고 종료
-      if (_noteExceed) {
-        UsageDialog.show(
-          context,
-          title: '사용량 한도에 도달했습니다',
-          message: '다음 달 1일부터 다시 이용하실수 있습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.',
-          limitStatus: _limitStatus,
-          usagePercentages: _usagePercentages,
-          onContactSupport: _handleContactSupport,
-        );
-        return;
-      }
-      
       // 표시 중 상태로 설정
       setState(() {
         _isImagePickerShowing = true;
       });
       
-      // 제한이 없으면 이미지 피커 바텀시트 표시
+      // 이미지 피커 바텀시트 표시
       if (mounted) {
         await showModalBottomSheet(
       context: context,
@@ -564,8 +419,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           setState(() {
             _isImagePickerShowing = false;
           });
-          // 노트 생성 가능성이 있으므로 사용량 재확인
-          _onNoteEvent();
         }
       }
     } catch (e) {
@@ -625,8 +478,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
     }
   }
-// zero state 디자인 위젯
 
+// zero state 디자인 위젯
   Widget _buildZeroState(BuildContext context) {
     return Center(
       child: Padding(
@@ -662,25 +515,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
             const SizedBox(height: 24),
-            // CTA 버튼 - 이미지 업로드하기 (사용량 초과시 비활성화)
-            _isButtonDisabled()
-              ? Tooltip(
-                  message: '사용량 한도 초과로 비활성화되었습니다',
-                  child: PikaButton(
-                    text: '이미지 올리기',
-                    variant: PikaButtonVariant.primary,
-                    isFullWidth: true,
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                    onPressed: () => _showUsageLimitInfo(context),
-                  ),
-                )
-              : PikaButton(
-                  text: '이미지 올리기',
-                  variant: PikaButtonVariant.primary,
-                  isFullWidth: true,
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  onPressed: () => _showImagePickerBottomSheet(context),
-                ),
+            // CTA 버튼 - 이미지 업로드하기
+            PikaButton(
+              text: '이미지 올리기',
+              variant: PikaButtonVariant.primary,
+              isFullWidth: true,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              onPressed: () => _showImagePickerBottomSheet(context),
+            ),
           ],
         ),
       ),
@@ -735,56 +577,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  // 버튼 비활성화 여부 확인
-  bool _isButtonDisabled() {
-    // OCR, 번역, 저장 공간 중 하나라도 한도 도달 시 버튼 비활성화
-    // _noteExceed 플래그는 이미 이러한 조건들을 종합적으로 체크함
-    if (kDebugMode) {
-      debugPrint('버튼 비활성화 확인: _noteExceed=$_noteExceed, limitStatus=$_limitStatus');
-    }
-    
-    if (_noteExceed) {
-      return true;
-    }
-    
-    // 플래그에 의존하지 않고 직접 확인 (안전장치)
-    if (_limitStatus.isNotEmpty) {
-      final bool ocrLimitReached = _limitStatus['ocrLimitReached'] == true;
-      final bool translationLimitReached = _limitStatus['translationLimitReached'] == true;
-      final bool storageLimitReached = _limitStatus['storageLimitReached'] == true;
-      
-      return ocrLimitReached || translationLimitReached || storageLimitReached;
-    }
-    
-    return false;
-  }
-
   // HomeViewModel 변경 시 호출될 메서드
   void _onViewModelChanged() {
     // 필요시 상태 업데이트
     if (!mounted) return;
-  }
-
-  // 노트스페이스 옵션 표시
-  void _showNoteSpaceOptions() {
-    // 현재는 기능 구현 없이 로그만 출력
-    if (kDebugMode) {
-    print('노트스페이스 옵션 메뉴 표시 예정');
-    }
-    // TODO: 노트스페이스 선택 또는 관리 메뉴 표시 구현
-  }
-
-  // 사용량 제한 정보 다이얼로그 표시 메서드 추가
-  void _showUsageLimitInfo(BuildContext context) {
-    // 다이얼로그 표시 (다이얼로그 방식)
-    UsageDialog.show(
-      context,
-      title: '사용량 제한에 도달했습니다',
-      message: '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 통해 요청해 주세요.',
-      limitStatus: _limitStatus,
-      usagePercentages: _usagePercentages,
-      onContactSupport: _handleContactSupport,
-    );
-  
   }
 } 
