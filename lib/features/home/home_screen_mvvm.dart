@@ -336,7 +336,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: ListView.builder(
                 padding: const EdgeInsets.only(top: 4, bottom: 16),
                 itemCount: viewModel.notes.length,
-                itemExtent: 104.0, // 고정 높이 설정 (성능 최적화)
+                itemExtent: 100.0, // FlashCard 공간을 고려하여 약간 줄임
                 cacheExtent: 500.0, // 캐시 범위 설정
                 addAutomaticKeepAlives: false, // 자동 KeepAlive 비활성화 (메모리 최적화)
                 addRepaintBoundaries: false, // 불필요한 RepaintBoundary 제거

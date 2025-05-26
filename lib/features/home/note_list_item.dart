@@ -189,6 +189,7 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         widget.note.title.isEmpty ? '제목 없음' : widget.note.title,
@@ -202,27 +203,24 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2.0),
-                      Row(
-                        children: [
-                          Text(
-                            _getFormattedDate(),
-                            style: const TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 12.0,
-                              fontWeight: FontWeight.w400,
-                              color: Color(0xFF969696),
-                            ),
-                          ),
-                        ],
+                      Text(
+                        _getFormattedDate(),
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 12.0,
+                          fontWeight: FontWeight.w400,
+                          color: Color(0xFF969696),
+                        ),
                       ),
-                      const SizedBox(height: 8.0),
-                      if (widget.note.flashcardCount > 0)
+                      if (widget.note.flashcardCount > 0) ...[
+                        const SizedBox(height: 6.0),
                         FlashcardCounterBadge(
                           count: widget.note.flashcardCount,
                           noteId: widget.note.id,
                           flashcards: null,
                           sampleNoteTitle: null,
                         ),
+                      ],
                     ],
                   ),
                 ),

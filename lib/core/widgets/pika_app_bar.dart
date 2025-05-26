@@ -253,6 +253,11 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       automaticallyImplyLeading: false,
       titleSpacing: 0,
+      systemOverlayStyle: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark, // 안드로이드용 (검정 아이콘)
+        statusBarBrightness: Brightness.light, // iOS용 (밝은 배경 = 검정 아이콘)
+      ),
       title: Padding(
         padding: EdgeInsets.only(left: SpacingTokens.lg),
         child: FutureBuilder<Map<String, dynamic>>(
@@ -262,19 +267,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
             final noteSpaceName = data['noteSpaceName'] as String? ?? '로딩 중...';
             final isPlanFree = data['isPlanFree'] as bool? ?? true;
             
-            return Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    noteSpaceName,
-                    style: TypographyTokens.headline3.copyWith(
-                      color: ColorTokens.textPrimary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            );
+            return _buildLogoTitle(noteSpaceName);
           },
         ),
       ),
