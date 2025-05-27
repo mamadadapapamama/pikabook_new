@@ -86,9 +86,6 @@ class HomeScreenWrapper extends StatelessWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final MarketingCampaignService _marketingService = MarketingCampaignService();
   
-  // 이미지 피커 상태 변수
-  bool _isImagePickerShowing = false;
-  
   // 화면 초기화 실패를 추적하는 변수
   bool _initializationFailed = false;
   String? _initFailReason;
@@ -389,20 +386,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _showImagePickerBottomSheet(BuildContext context) async {
-    // 이미 표시 중이면 중복 호출 방지
-    if (_isImagePickerShowing) {
-      if (kDebugMode) {
-        debugPrint('이미지 피커가 이미 표시 중입니다. 중복 호출 방지');
-      }
-      return;
-    }
-    
     try {
-      // 표시 중 상태로 설정
-      setState(() {
-        _isImagePickerShowing = true;
-      });
-      
       // 이미지 피커 바텀시트 표시
       if (mounted) {
         await showModalBottomSheet(
@@ -415,22 +399,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             return const ImagePickerBottomSheet();
       },
     );
-        
-        // 바텀 시트가 닫힌 후 상태 업데이트
-        if (mounted) {
-          setState(() {
-            _isImagePickerShowing = false;
-          });
-        }
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('이미지 피커 표시 중 오류: $e');
       }
       if (mounted) {
-        setState(() {
-          _isImagePickerShowing = false;
-        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('이미지 선택 화면을 열 수 없습니다')),
         );
