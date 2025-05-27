@@ -16,7 +16,6 @@ import '../../../core/widgets/pika_app_bar.dart';
 import '../../flashcard/flashcard_screen.dart';
 import 'note_detail_bottom_bar.dart';
 import '../../../core/services/tts/tts_service.dart';
-import '../../../core/services/tts/tts_playback_service.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/utils/note_tutorial.dart';
 import '../../../core/theme/tokens/ui_tokens.dart';
