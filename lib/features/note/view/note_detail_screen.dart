@@ -250,14 +250,12 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     );
   }
   
-  // TTS 재생 처리
+  // TTS 재생 처리 - 상태 업데이트만 담당 (실제 재생은 ProcessedTextWidget에서 처리)
   Future<void> _handlePlayTts(String text, {int? segmentIndex}) async {
-    try {
-      await _ttsService.speak(text);
-    } catch (e) {
-      if (kDebugMode) {
-        print('TTS 재생 실패: $e');
-      }
+    // ProcessedTextWidget에서 이미 TTS 재생을 처리하므로
+    // 여기서는 추가적인 상태 업데이트만 필요한 경우에 사용
+    if (kDebugMode) {
+      print('TTS 재생 상태 업데이트: $text (세그먼트: $segmentIndex)');
     }
   }
   
