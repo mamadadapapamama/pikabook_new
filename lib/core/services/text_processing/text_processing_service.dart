@@ -113,29 +113,36 @@ class TextProcessingService {
       
       final page = page_model.Page.fromFirestore(doc);
       
-      // 3. 원본 텍스트 확인
+      // 3. 원본 텍스트 확인 (OCR 결과)
       if (page.originalText == null || page.originalText!.isEmpty) {
         throw Exception('처리할 원본 텍스트가 없습니다');
       }
       
-      // 4. LLM 처리
+      // 4. 사용자 설정 로드
+      final userPrefs = await _preferencesService.getPreferences();
+      final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
+      
+      // 5. LLM 처리 (원문 정리 + 번역 + 병음)
       if (kDebugMode) {
         debugPrint('🤖 LLM 처리 시작: $pageId');
+        debugPrint('   입력 텍스트: "${page.originalText!.substring(0, page.originalText!.length > 50 ? 50 : page.originalText!.length)}..."');
       }
       
       final processedText = await _llmService.processTextSegments(
-        [page.originalText!], // 단일 텍스트를 리스트로 감싸서 전달
+        [page.originalText!], // OCR 원문을 그대로 전달
         sourceLanguage: page.sourceLanguage,
         targetLanguage: page.targetLanguage,
-        mode: TextProcessingMode.segment, // 기본 모드 지정
+        mode: mode,
         needPinyin: true,
       );
       
-      // 5. 결과 저장
+      // 6. 결과 저장
       await _saveProcessedText(pageId, processedText, page);
       
       if (kDebugMode) {
         debugPrint('✅ 텍스트 처리 완료: $pageId');
+        debugPrint('   정리된 원문: "${processedText.fullOriginalText.substring(0, processedText.fullOriginalText.length > 50 ? 50 : processedText.fullOriginalText.length)}..."');
+        debugPrint('   번역: "${processedText.fullTranslatedText.substring(0, processedText.fullTranslatedText.length > 50 ? 50 : processedText.fullTranslatedText.length)}..."');
       }
       
       return processedText;
@@ -165,7 +172,7 @@ class TextProcessingService {
       
       final page = page_model.Page.fromFirestore(doc);
       
-      // 원본 텍스트 확인
+      // 원본 텍스트 확인 (OCR 결과)
       if (page.originalText == null || page.originalText!.isEmpty) {
         if (kDebugMode) {
           debugPrint('⚠️ 원본 텍스트가 없어 처리 건너뜀: $pageId');
@@ -173,12 +180,20 @@ class TextProcessingService {
         return null;
       }
       
-      // LLM 처리
+      // 사용자 설정 로드
+      final userPrefs = await _preferencesService.getPreferences();
+      final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
+      
+      // LLM 처리 (원문 정리 + 번역 + 병음)
+      if (kDebugMode) {
+        debugPrint('🤖 새 페이지 LLM 처리 시작: $pageId');
+      }
+      
       final processedText = await _llmService.processTextSegments(
-        [page.originalText!],
+        [page.originalText!], // OCR 원문을 그대로 전달
         sourceLanguage: page.sourceLanguage,
         targetLanguage: page.targetLanguage,
-        mode: TextProcessingMode.segment,
+        mode: mode,
         needPinyin: true,
       );
       
@@ -462,8 +477,9 @@ class TextProcessingService {
   /// 처리된 텍스트를 Firestore와 캐시에 저장
   Future<void> _saveProcessedText(String pageId, ProcessedText processedText, page_model.Page page) async {
     try {
-      // Firestore 업데이트
+      // Firestore 업데이트 (LLM이 정리한 원문으로 업데이트)
       final updateData = {
+        'originalText': processedText.fullOriginalText, // LLM이 정리한 중국어 원문
         'translatedText': processedText.fullTranslatedText,
         'pinyin': processedText.units.map((u) => u.pinyin ?? '').join(' '),
         'processedAt': FieldValue.serverTimestamp(),
@@ -480,6 +496,8 @@ class TextProcessingService {
       
       if (kDebugMode) {
         debugPrint('✅ 처리된 텍스트 저장 완료: $pageId');
+        debugPrint('   저장된 원문: "${processedText.fullOriginalText.substring(0, processedText.fullOriginalText.length > 30 ? 30 : processedText.fullOriginalText.length)}..."');
+        debugPrint('   저장된 번역: "${processedText.fullTranslatedText.substring(0, processedText.fullTranslatedText.length > 30 ? 30 : processedText.fullTranslatedText.length)}..."');
       }
     } catch (e) {
       if (kDebugMode) {

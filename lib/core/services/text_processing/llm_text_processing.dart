@@ -7,6 +7,7 @@ import '../../../core/models/processed_text.dart';
 
 /// LLM 서비스: 분리된 텍스트 조각들을 받아 번역과 필요한경우 병음 제공
 /// (모드별 분리는 TextModeSeparationService에서 이미 처리됨)
+
 class LLMTextProcessing {
   // 싱글톤 패턴
   static final LLMTextProcessing _instance = LLMTextProcessing._internal();
@@ -100,18 +101,23 @@ class LLMTextProcessing {
         final result = await _translateText(segment, sourceLanguage, targetLanguage, needPinyin);
         
         units.add(TextUnit(
-          originalText: segment,
+          originalText: result['original'] ?? segment,
           translatedText: result['translation'] ?? '',
           pinyin: result['pinyin'] ?? '',
           sourceLanguage: sourceLanguage,
           targetLanguage: targetLanguage,
         ));
 
-        fullOriginalText += segment;
+        fullOriginalText += result['original'] ?? segment;
         fullTranslatedText += result['translation'] ?? '';
 
         if (kDebugMode) {
-          debugPrint('✅ 조각 ${i+1} 완료: "${result['translation']?.substring(0, 20) ?? ''}..."');
+          debugPrint('✅ 조각 ${i+1} 완료:');
+          debugPrint('   원문: "${result['original']?.substring(0, 20) ?? ''}..."');
+          debugPrint('   번역: "${result['translation']?.substring(0, 20) ?? ''}..."');
+          if (needPinyin && result['pinyin']?.isNotEmpty == true) {
+            debugPrint('   병음: "${result['pinyin']?.substring(0, 20) ?? ''}..."');
+          }
         }
       } catch (e) {
         if (kDebugMode) {
@@ -153,17 +159,33 @@ class LLMTextProcessing {
     }
   }
 
-  /// 프롬프트 생성 (중복 제거)
+  /// 프롬프트 생성 (원문+번역+병음 모두 요청)
   Map<String, String> _generatePrompts(String text, bool needPinyin) {
     if (needPinyin) {
       return {
-        'userPrompt': '다음 중국어 텍스트를 한국어로 번역하고 병음도 제공해주세요. JSON 배열 형식으로 [병음, 번역] 순서로 반환해주세요:\n\n"$text"',
-        'systemPrompt': '당신은 중국어를 가르치는 선생님입니다. 중국어 텍스트를 한국어로 번역하고 병음을 제공합니다. 응답은 반드시 JSON 배열 형식으로 [병음, 번역] 순서로 반환하세요. 예: ["Hémǎ yéyé", "하마 할아버지"]',
+        'userPrompt': '''다음 텍스트를 분석하여 중국어 부분만 추출하고, 한국어로 번역하며, 병음을 제공해주세요. 
+JSON 배열 형식으로 [정리된_중국어_원문, 병음, 한국어_번역] 순서로 반환해주세요:
+
+"$text"
+
+예시: ["你好世界", "Nǐ hǎo shìjiè", "안녕하세요 세계"]''',
+        'systemPrompt': '''당신은 중국어를 가르치는 선생님입니다. 
+주어진 텍스트에서 중국어 부분만 정리하여 추출하고, 한국어로 자연스럽게 번역하며, 정확한 병음을 제공합니다.
+응답은 반드시 JSON 배열 형식으로 [정리된_중국어_원문, 병음, 한국어_번역] 순서로 반환하세요.
+중국어가 아닌 부분(숫자, 영어, 기호 등)은 제거하고 순수한 중국어만 추출하세요.''',
       };
     } else {
       return {
-        'userPrompt': '다음 중국어 텍스트를 한국어로 번역해주세요. 번역 결과만 반환하고 다른 설명은 하지 마세요:\n\n"$text"',
-        'systemPrompt': '당신은 중국어를 가르치는 선생님입니다. 중국어 텍스트를 한국어로 정확하게 번역합니다.',
+        'userPrompt': '''다음 텍스트를 분석하여 중국어 부분만 추출하고, 한국어로 번역해주세요.
+JSON 배열 형식으로 [정리된_중국어_원문, 한국어_번역] 순서로 반환해주세요:
+
+"$text"
+
+예시: ["你好世界", "안녕하세요 세계"]''',
+        'systemPrompt': '''당신은 중국어를 가르치는 선생님입니다.
+주어진 텍스트에서 중국어 부분만 정리하여 추출하고, 한국어로 자연스럽게 번역합니다.
+응답은 반드시 JSON 배열 형식으로 [정리된_중국어_원문, 한국어_번역] 순서로 반환하세요.
+중국어가 아닌 부분(숫자, 영어, 기호 등)은 제거하고 순수한 중국어만 추출하세요.''',
       };
     }
   }
@@ -236,8 +258,9 @@ class LLMTextProcessing {
     }
   }
 
-  /// LLM 응답 파싱
+  /// LLM 응답 파싱 (원문+번역+병음)
   Map<String, String> _parseResponse(String content, bool needPinyin) {
+    String original = '';
     String translation = '';
     String pinyin = '';
 
@@ -247,12 +270,17 @@ class LLMTextProcessing {
         final List<dynamic> jsonArray = jsonDecode(content.trim());
         
         if (jsonArray.isNotEmpty) {
-          if (needPinyin && jsonArray.length >= 2) {
-            // 첫 번째 요소: 병음, 두 번째 요소: 번역
-            pinyin = jsonArray[0].toString().trim();
+          if (needPinyin && jsonArray.length >= 3) {
+            // [정리된_중국어_원문, 병음, 한국어_번역] 형식
+            original = jsonArray[0].toString().trim();
+            pinyin = jsonArray[1].toString().trim();
+            translation = jsonArray[2].toString().trim();
+          } else if (!needPinyin && jsonArray.length >= 2) {
+            // [정리된_중국어_원문, 한국어_번역] 형식
+            original = jsonArray[0].toString().trim();
             translation = jsonArray[1].toString().trim();
-          } else {
-            // 병음이 필요하지 않거나 요소가 하나인 경우
+          } else if (jsonArray.length >= 1) {
+            // 요소가 하나인 경우 번역으로 처리
             translation = jsonArray[0].toString().trim();
           }
         }
@@ -265,20 +293,17 @@ class LLMTextProcessing {
 
         if (lines.isEmpty) {
           translation = content.trim();
-        } else if (needPinyin && lines.length >= 2) {
-          // 병음이 필요한 경우: 번역과 병음을 분리
-          final int separatorIndex = _findTranslationPinyinSeparator(lines);
-          
-          if (separatorIndex > 0) {
-            translation = lines.sublist(0, separatorIndex).join(' ');
-            pinyin = lines.sublist(separatorIndex).join(' ');
-          } else {
-            // 분리점을 찾지 못한 경우 첫 번째 줄은 병음, 두 번째 줄은 번역
-            pinyin = lines[0];
-            translation = lines[1];
-          }
+        } else if (needPinyin && lines.length >= 3) {
+          // 3줄 형식: 원문, 병음, 번역
+          original = lines[0];
+          pinyin = lines[1];
+          translation = lines[2];
+        } else if (!needPinyin && lines.length >= 2) {
+          // 2줄 형식: 원문, 번역
+          original = lines[0];
+          translation = lines[1];
         } else {
-          // 병음이 필요하지 않거나 줄이 하나인 경우
+          // 1줄인 경우 번역으로 처리
           translation = lines.join(' ');
         }
       }
@@ -295,68 +320,46 @@ class LLMTextProcessing {
 
       if (lines.isEmpty) {
         translation = content.trim();
-      } else if (needPinyin && lines.length >= 2) {
-        pinyin = lines[0];
+      } else if (needPinyin && lines.length >= 3) {
+        original = lines[0];
+        pinyin = lines[1];
+        translation = lines[2];
+      } else if (!needPinyin && lines.length >= 2) {
+        original = lines[0];
         translation = lines[1];
       } else {
         translation = lines.join(' ');
       }
     }
 
-    // 번역이 원문과 동일한 경우 오류 처리
+    // 기본값 처리
     if (translation.isEmpty) {
       translation = '[번역 결과가 비어있습니다]';
     }
+    if (original.isEmpty && translation.isNotEmpty) {
+      original = '[원문을 추출할 수 없습니다]';
+    }
 
     // 따옴표 제거
-    if (translation.startsWith('"') && translation.endsWith('"')) {
-      translation = translation.substring(1, translation.length - 1);
-    }
-    if (translation.startsWith("'") && translation.endsWith("'")) {
-      translation = translation.substring(1, translation.length - 1);
-    }
-    
-    if (pinyin.startsWith('"') && pinyin.endsWith('"')) {
-      pinyin = pinyin.substring(1, pinyin.length - 1);
-    }
-    if (pinyin.startsWith("'") && pinyin.endsWith("'")) {
-      pinyin = pinyin.substring(1, pinyin.length - 1);
-    }
+    original = _removeQuotes(original);
+    translation = _removeQuotes(translation);
+    pinyin = _removeQuotes(pinyin);
 
     return {
+      'original': original,
       'translation': translation,
       'pinyin': pinyin,
     };
   }
 
-  /// 번역과 병음의 분리점 찾기
-  int _findTranslationPinyinSeparator(List<String> lines) {
-    for (int i = 1; i < lines.length; i++) {
-      // 병음은 주로 로마자와 숫자로 구성됨
-      if (_isPinyinLine(lines[i]) && !_isPinyinLine(lines[i-1])) {
-        return i;
-      }
+  /// 따옴표 제거 헬퍼 메서드
+  String _removeQuotes(String text) {
+    if (text.startsWith('"') && text.endsWith('"')) {
+      text = text.substring(1, text.length - 1);
     }
-    return -1; // 분리점을 찾지 못함
-  }
-
-  /// 텍스트가 병음인지 판단
-  bool _isPinyinLine(String line) {
-    if (line.trim().isEmpty) return false;
-
-    // 로마자와 숫자 비율 계산
-    final romanChars = RegExp(r'[a-zA-Z0-9\s]');
-    final romanMatches = romanChars.allMatches(line).length;
-    
-    // 한글/한자 비율 계산
-    final koreanOrChineseChars = RegExp(r'[\p{Script=Hangul}\p{Script=Han}]', unicode: true);
-    final koreanOrChineseMatches = koreanOrChineseChars.allMatches(line).length;
-    
-    final totalLength = line.length;
-    final romanRatio = romanMatches / totalLength;
-    final koreanOrChineseRatio = koreanOrChineseMatches / totalLength;
-    
-    // 로마자 비율이 높고 한글/한자 비율이 낮으면 병음으로 판단
-    return romanRatio > 0.6 && koreanOrChineseRatio < 0.3;
+    if (text.startsWith("'") && text.endsWith("'")) {
+      text = text.substring(1, text.length - 1);
+    }
+    return text;
   }
 }

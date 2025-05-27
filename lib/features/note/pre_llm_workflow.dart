@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'services/note_service.dart';
 import '../../../core/services/media/image_service.dart';
 import 'services/page_service.dart';
@@ -25,7 +26,7 @@ class PreLLMWorkflow {
   final UsageLimitService _usageLimitService = UsageLimitService();
   final PostLLMWorkflow _postLLMWorkflow = PostLLMWorkflow();
 
-  /// 빠른 노트 생성 메인 메서드
+  /// 빠른 노트 생성 메인 메서드 (이미지 업로드만 완료 후 즉시 반환)
   Future<String> createNoteQuickly(List<File> imageFiles) async {
     if (imageFiles.isEmpty) {
       throw Exception('이미지가 없습니다.');
@@ -41,84 +42,144 @@ class PreLLMWorkflow {
       
       // 2. 사용자 설정 로드 (캐시됨)
       final userPrefs = await _preferencesService.getPreferences();
-      final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
       
-      // 3. 이미지별 빠른 처리
-      final List<PageProcessingData> pageDataList = [];
+      // 3. 이미지 업로드만 빠르게 처리하고 기본 페이지 생성
+      final List<String> pageIds = [];
+      final List<String> imageUrls = [];
       
       for (int i = 0; i < imageFiles.length; i++) {
         if (kDebugMode) {
-          debugPrint('📷 이미지 ${i+1}/${imageFiles.length} 처리 시작');
+          debugPrint('📷 이미지 ${i+1}/${imageFiles.length} 업로드 시작');
         }
         
-        final pageData = await _processImageQuickly(
-          imageFile: imageFiles[i],
-          noteId: noteId,
-          pageNumber: i,
-          mode: mode,
-          userPrefs: userPrefs,
-        );
-        
-        if (pageData != null) {
-          pageDataList.add(pageData);
-        }
+        // 이미지 업로드만 수행
+        final imageUrl = await _imageService.uploadImage(imageFiles[i]);
+        imageUrls.add(imageUrl);
         
         if (kDebugMode) {
-          debugPrint('✅ 이미지 ${i+1} 빠른 처리 완료');
+          debugPrint('✅ 이미지 ${i+1} 업로드 완료: $imageUrl');
+        }
+        
+        // 기본 페이지 생성 (텍스트 없이)
+        final pageId = await _createBasicPage(
+          noteId: noteId,
+          pageNumber: i,
+          imageUrl: imageUrl,
+          originalText: '', // 빈 텍스트로 시작
+        );
+        pageIds.add(pageId);
+        
+        if (kDebugMode) {
+          debugPrint('✅ 기본 페이지 ${i+1} 생성 완료: $pageId');
         }
       }
       
       // 4. 첫 번째 이미지를 노트 썸네일로 설정
-      if (pageDataList.isNotEmpty && pageDataList[0].imageUrl.isNotEmpty) {
-        await _updateNoteThumbnail(noteId, pageDataList[0].imageUrl);
+      if (imageUrls.isNotEmpty) {
+        await _updateNoteThumbnail(noteId, imageUrls[0]);
       }
       
-      // 5. 후처리 작업 스케줄링 (사용량 업데이트 포함)
-      await _schedulePostProcessing(noteId, pageDataList, userPrefs);
+      // 5. 백그라운드 OCR 및 텍스트 처리 시작
+      _startBackgroundProcessing(noteId, imageFiles, pageIds, userPrefs);
       
       if (kDebugMode) {
-        debugPrint('🎉 전처리 워크플로우 완료: $noteId (${pageDataList.length}개 페이지)');
-        debugPrint('📋 사용량 업데이트는 백그라운드에서 처리됩니다');
+        debugPrint('🎉 빠른 노트 생성 완료: $noteId (${pageIds.length}개 페이지)');
+        debugPrint('📋 OCR 및 텍스트 처리는 백그라운드에서 진행됩니다');
       }
       
       return noteId;
       
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ 전처리 워크플로우 실패: $e');
+        debugPrint('❌ 빠른 노트 생성 실패: $e');
       }
       rethrow;
     }
   }
 
-  /// 단일 이미지 빠른 처리
-  Future<PageProcessingData?> _processImageQuickly({
+  /// 백그라운드에서 OCR 및 텍스트 처리 시작
+  void _startBackgroundProcessing(
+    String noteId,
+    List<File> imageFiles,
+    List<String> pageIds,
+    dynamic userPrefs,
+  ) {
+    // 백그라운드에서 비동기 처리
+    Future.microtask(() async {
+      try {
+        if (kDebugMode) {
+          debugPrint('🔄 백그라운드 OCR 및 텍스트 처리 시작: $noteId');
+        }
+        
+        final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
+        final List<PageProcessingData> pageDataList = [];
+        
+        // 각 이미지에 대해 OCR 및 텍스트 처리
+        for (int i = 0; i < imageFiles.length; i++) {
+          try {
+            if (kDebugMode) {
+              debugPrint('🔍 백그라운드 OCR 시작: 이미지 ${i+1}/${imageFiles.length}');
+            }
+            
+            final pageData = await _processImageWithOCR(
+              imageFile: imageFiles[i],
+              pageId: pageIds[i],
+              pageNumber: i,
+              mode: mode,
+              userPrefs: userPrefs,
+            );
+            
+            if (pageData != null) {
+              pageDataList.add(pageData);
+              
+              // 페이지별로 즉시 업데이트 (실시간 반영)
+              await _updatePageWithOCRResult(pageData);
+              
+              if (kDebugMode) {
+                debugPrint('✅ 백그라운드 OCR 완료: 페이지 ${i+1}');
+              }
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('⚠️ 백그라운드 OCR 실패: 페이지 ${i+1}, 오류: $e');
+            }
+            // 개별 페이지 실패는 전체 프로세스를 중단시키지 않음
+          }
+        }
+        
+        // 모든 OCR이 완료되면 후처리 작업 스케줄링
+        if (pageDataList.isNotEmpty) {
+          await _schedulePostProcessing(noteId, pageDataList, userPrefs);
+          
+          if (kDebugMode) {
+            debugPrint('🎉 백그라운드 처리 완료: $noteId (${pageDataList.length}개 페이지)');
+          }
+        }
+        
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('❌ 백그라운드 처리 실패: $noteId, 오류: $e');
+        }
+      }
+    });
+  }
+
+  /// 백그라운드에서 OCR 및 텍스트 처리
+  Future<PageProcessingData?> _processImageWithOCR({
     required File imageFile,
-    required String noteId,
+    required String pageId,
     required int pageNumber,
     required TextProcessingMode mode,
     required dynamic userPrefs,
   }) async {
     try {
-      String imageUrl = '';
       String extractedText = '';
       String cleanedText = '';
       List<String> textSegments = [];
       
-      // 1. 이미지 업로드 (병렬 가능하지만 현재는 순차)
+      // 1. OCR 텍스트 추출
       if (kDebugMode) {
-        debugPrint('🔼 이미지 업로드 시작');
-      }
-      
-      imageUrl = await _imageService.uploadImage(imageFile);
-      
-      if (kDebugMode) {
-        debugPrint('✅ 이미지 업로드 완료: $imageUrl');
-      }
-      
-      // 2. OCR 텍스트 추출
-      if (kDebugMode) {
-        debugPrint('🔍 OCR 텍스트 추출 시작');
+        debugPrint('🔍 OCR 텍스트 추출 시작: 페이지 $pageId');
       }
       
       extractedText = await _ocrService.recognizeText(imageFile);
@@ -132,7 +193,7 @@ class PreLLMWorkflow {
         }
       }
       
-      // 3. 텍스트 정리 (중국어만 추출)
+      // 2. 텍스트 정리 (중국어만 추출)
       if (extractedText.isNotEmpty) {
         if (kDebugMode) {
           debugPrint('🧹 텍스트 정리 시작');
@@ -145,52 +206,26 @@ class PreLLMWorkflow {
         }
       }
       
-      // 4. 모드별 텍스트 분리
+      // 3. 모드별 텍스트 분리
       if (cleanedText.isNotEmpty) {
         if (kDebugMode) {
           debugPrint('📝 텍스트 분리 시작: ${mode.toString()}');
-          debugPrint('   정리된 텍스트: "${cleanedText.length > 50 ? cleanedText.substring(0, 50) + '...' : cleanedText}"');
         }
         
         textSegments = _textSeparationService.separateByMode(cleanedText, mode);
         
         if (kDebugMode) {
           debugPrint('✅ 텍스트 분리 완료: ${textSegments.length}개 조각');
-          for (int i = 0; i < textSegments.length && i < 3; i++) {
-            final preview = textSegments[i].length > 30 ? '${textSegments[i].substring(0, 30)}...' : textSegments[i];
-            debugPrint('   조각 ${i+1}: "$preview"');
-          }
-          if (textSegments.length > 3) {
-            debugPrint('   (${textSegments.length - 3}개 조각 더...)');
-          }
         }
-      } else {
+      } else if (extractedText.isNotEmpty) {
+        // 정리된 텍스트가 없으면 원본 텍스트로 분리
+        textSegments = _textSeparationService.separateByMode(extractedText, mode);
         if (kDebugMode) {
-          debugPrint('⚠️ 정리된 텍스트가 비어있어 분리 건너뜀');
+          debugPrint('✅ 원본 텍스트 분리 완료: ${textSegments.length}개 조각');
         }
       }
       
-      // 5. 기본 페이지 생성 (번역 없이)
-      final pageId = await _createBasicPage(
-        noteId: noteId,
-        pageNumber: pageNumber,
-        imageUrl: imageUrl,
-        originalText: cleanedText.isNotEmpty ? cleanedText : extractedText,
-      );
-      
-      // 6. 후처리용 데이터 생성 (텍스트 분리도 원본 기준으로)
-      List<String> finalTextSegments = textSegments;
-      if (textSegments.isEmpty && extractedText.isNotEmpty) {
-        if (kDebugMode) {
-          debugPrint('⚠️ 정리된 텍스트가 비어있어 원본 텍스트로 분리 재시도');
-        }
-        finalTextSegments = _textSeparationService.separateByMode(extractedText, mode);
-        if (kDebugMode) {
-          debugPrint('✅ 원본 텍스트 분리 완료: ${finalTextSegments.length}개 조각');
-        }
-      }
-      
-      // 이미지 파일 크기 계산
+      // 4. 이미지 파일 크기 계산
       int fileSize = 0;
       try {
         fileSize = await imageFile.length();
@@ -200,10 +235,21 @@ class PreLLMWorkflow {
         }
       }
       
+      // 5. PageProcessingData 생성 (이미지 URL을 PageService에서 가져오기)
+      String imageUrl = '';
+      try {
+        final page = await _pageService.getPage(pageId);
+        imageUrl = page?.imageUrl ?? '';
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 페이지에서 이미지 URL 가져오기 실패: $e');
+        }
+      }
+      
       final pageData = PageProcessingData(
         pageId: pageId,
         imageUrl: imageUrl,
-        textSegments: finalTextSegments,
+        textSegments: textSegments,
         mode: mode,
         sourceLanguage: userPrefs.sourceLanguage,
         targetLanguage: userPrefs.targetLanguage,
@@ -212,23 +258,42 @@ class PreLLMWorkflow {
       );
       
       if (kDebugMode) {
-        debugPrint('📊 PageProcessingData 생성 완료:');
+        debugPrint('📊 백그라운드 PageProcessingData 생성 완료:');
         debugPrint('   페이지 ID: ${pageData.pageId}');
         debugPrint('   텍스트 세그먼트: ${pageData.textSegments.length}개');
-        debugPrint('   모드: ${pageData.mode}');
-        debugPrint('   언어: ${pageData.sourceLanguage} → ${pageData.targetLanguage}');
-        debugPrint('   파일 크기: ${(pageData.imageFileSize / 1024 / 1024).toStringAsFixed(2)}MB');
         debugPrint('   OCR 성공: ${pageData.ocrSuccess}');
-        debugPrint('   사용된 텍스트: ${cleanedText.isNotEmpty ? "정리된 텍스트" : "원본 텍스트"}');
       }
       
       return pageData;
       
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ 이미지 처리 실패: $e');
+        debugPrint('❌ 백그라운드 OCR 처리 실패: $pageId, 오류: $e');
       }
       return null;
+    }
+  }
+
+  /// OCR 결과로 페이지 업데이트
+  Future<void> _updatePageWithOCRResult(PageProcessingData pageData) async {
+    try {
+      // 추출된 텍스트를 페이지에 업데이트
+      final originalText = pageData.textSegments.join(' ');
+      
+      await _pageService.updatePage(pageData.pageId, {
+        'originalText': originalText,
+        'ocrProcessedAt': FieldValue.serverTimestamp(),
+        'ocrSuccess': pageData.ocrSuccess,
+      });
+      
+      if (kDebugMode) {
+        debugPrint('✅ 페이지 OCR 결과 업데이트 완료: ${pageData.pageId}');
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 페이지 OCR 결과 업데이트 실패: ${pageData.pageId}, 오류: $e');
+      }
     }
   }
 
