@@ -78,16 +78,10 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     
     // 화면 렌더링 완료 후 튜토리얼 체크
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // 노트 개수를 먼저 업데이트한 후 튜토리얼 체크
+      // 튜토리얼 표시 확인 (노트 개수 업데이트 없이)
       if (kDebugMode) {
-        if (kDebugMode) print('노트 상세 화면: 노트 개수 업데이트 후 튜토리얼 체크');
+        print('노트 상세 화면: 튜토리얼 체크');
       }
-      
-      // 노트 개수 즉시 업데이트 (노트 상세 화면에 들어왔으므로 최소 1개)
-      await NoteTutorial.updateNoteCount(1);
-      
-      // 잠시 딜레이를 주어 SharedPreferences에 반영될 시간 부여
-      await Future.delayed(const Duration(milliseconds: 100));
       
       // 튜토리얼 표시 확인
       NoteTutorial.checkAndShowTutorial(context);

@@ -307,8 +307,8 @@ class NoteCreationUIManager {
       // 안전 장치: 로딩 다이얼로그 완전히 닫기
       NoteCreationLoader.ensureHidden(context);
 
-      // 튜토리얼 설정
-      NoteTutorial.updateNoteCount(1);
+      // 튜토리얼 설정 - 첫 번째 노트 생성 시 튜토리얼 표시 준비
+      NoteTutorial.markFirstNoteCreated();
 
       // 화면 이동
       Navigator.of(context).push(
@@ -318,9 +318,6 @@ class NoteCreationUIManager {
           totalImageCount: totalImageCount,
         ),
       );
-
-      // 백그라운드에서 실제 노트 개수 업데이트
-      unawaited(_updateNoteCountInBackground());
 
       if (kDebugMode) {
         debugPrint('✅ 노트 상세 화면 이동 완료');
@@ -356,31 +353,6 @@ class NoteCreationUIManager {
         totalImageCount: totalImageCount,
       ),
     );
-  }
-
-  /// 백그라운드에서 노트 개수 업데이트
-  Future<void> _updateNoteCountInBackground() async {
-    try {
-      final User? currentUser = _auth.currentUser;
-      if (currentUser == null) return;
-
-      final querySnapshot = await _firestore
-          .collection('notes')
-          .where('userId', isEqualTo: currentUser.uid)
-          .count()
-          .get();
-
-      final noteCount = querySnapshot.count ?? 0;
-      await NoteTutorial.updateNoteCount(noteCount);
-
-      if (kDebugMode) {
-        debugPrint('📊 백그라운드 노트 개수 업데이트: $noteCount');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('⚠️ 노트 개수 업데이트 실패: $e');
-      }
-    }
   }
 
   /// 앱 시작시 미완료 작업 복구

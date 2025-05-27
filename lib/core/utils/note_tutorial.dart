@@ -28,8 +28,8 @@ class NoteTutorial {
   /// 튜토리얼 표시 여부 저장 키
   static const String _prefKey = 'has_seen_note_tutorial';
   
-  /// 노트 개수 저장 키
-  static const String _noteCountKey = 'note_count';
+  /// 첫 번째 노트 생성 여부 저장 키
+  static const String _firstNoteCreatedKey = 'first_note_created';
   
   /// 현재 튜토리얼 단계
   static int _currentStep = 0;
@@ -63,37 +63,15 @@ class NoteTutorial {
       return false;
     }
     
-    // 노트 개수가 1개인 경우에만 표시
-    final noteCount = prefs.getInt(_noteCountKey) ?? 0;
+    // 첫 번째 노트가 생성되었는지 확인
+    final firstNoteCreated = prefs.getBool(_firstNoteCreatedKey) ?? false;
     
     if (kDebugMode) {
-      debugPrint('NoteTutorial: 현재 노트 개수 = $noteCount, 튜토리얼 표시 여부 = ${noteCount == 1}, 이전에 봤는지 여부 = $hasSeenTutorial');
+      debugPrint('NoteTutorial: 첫 번째 노트 생성 여부 = $firstNoteCreated, 튜토리얼 표시 여부 = $firstNoteCreated');
     }
     
-    // 노트가 1개이고 이전에 튜토리얼을 보지 않은 경우에만 표시
-    return noteCount == 1 && !hasSeenTutorial;
-  }
-  
-  /// 노트 개수 업데이트
-  static Future<void> updateNoteCount(int count) async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    // 저장 전 현재 값 확인
-    final currentCount = prefs.getInt(_noteCountKey) ?? 0;
-    
-    if (kDebugMode) {
-      debugPrint('NoteTutorial: 노트 개수 업데이트 시작 - 현재=$currentCount, 새 값=$count');
-    }
-    
-    // 노트 개수 저장
-    await prefs.setInt(_noteCountKey, count);
-    
-    // 저장 후 확인
-    final savedCount = prefs.getInt(_noteCountKey) ?? 0;
-    
-    if (kDebugMode) {
-      debugPrint('NoteTutorial: 노트 개수 업데이트 완료 - 저장된 값=$savedCount');
-    }
+    // 첫 번째 노트가 생성되었고 이전에 튜토리얼을 보지 않은 경우에만 표시
+    return firstNoteCreated && !hasSeenTutorial;
   }
   
   /// 튜토리얼 표시 완료 저장
@@ -103,6 +81,16 @@ class NoteTutorial {
     
     if (kDebugMode) {
       debugPrint('NoteTutorial: 튜토리얼 표시 완료로 저장됨');
+    }
+  }
+  
+  /// 첫 번째 노트 생성 표시
+  static Future<void> markFirstNoteCreated() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_firstNoteCreatedKey, true);
+    
+    if (kDebugMode) {
+      debugPrint('NoteTutorial: 첫 번째 노트 생성 표시됨');
     }
   }
   
@@ -425,7 +413,7 @@ class NoteTutorial {
   static Future<void> resetTutorialState() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefKey);
-    await prefs.remove(_noteCountKey);
+    await prefs.remove(_firstNoteCreatedKey);
     
     if (kDebugMode) {
       debugPrint('NoteTutorial: 튜토리얼 상태 리셋됨');
