@@ -59,7 +59,7 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
     // Note 객체가 실제로 변경되었는지 확인
     if (_hasNoteChanged(oldWidget.note, widget.note)) {
       if (kDebugMode) {
-        debugPrint('노트 리스트 아이템 업데이트: ${widget.note.id} - 변경 감지됨');
+        debugPrint('노트 리스트 아이템 업데이트: ${widget.note.id} - 실제 변경 감지됨');
       }
       _previousNote = widget.note;
       if (_isVisible) {
@@ -68,14 +68,13 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
     }
   }
 
-  /// Note 객체가 변경되었는지 확인
+  /// Note 객체가 변경되었는지 확인 (최적화된 버전)
   bool _hasNoteChanged(Note oldNote, Note newNote) {
+    // 중요한 UI 표시 필드만 체크 (updatedAt, isFavorite 제외)
     return oldNote.id != newNote.id ||
            oldNote.title != newNote.title ||
            oldNote.firstImageUrl != newNote.firstImageUrl ||
-           oldNote.flashcardCount != newNote.flashcardCount ||
-           oldNote.createdAt != newNote.createdAt ||
-           oldNote.updatedAt != newNote.updatedAt;
+           oldNote.flashcardCount != newNote.flashcardCount;
   }
 
   String _getFormattedDate() {

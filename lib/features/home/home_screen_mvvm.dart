@@ -312,18 +312,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 padding: const EdgeInsets.only(top: 0), // 앱바와의 간격 0
                 itemCount: viewModel.notes.length,
                 cacheExtent: 500.0,
-                addAutomaticKeepAlives: false,
-                addRepaintBoundaries: false,
+                addAutomaticKeepAlives: true,  // 변경: true로 설정하여 스크롤 성능 향상
+                addRepaintBoundaries: true,   // 변경: true로 설정하여 리페인트 최적화
                 itemBuilder: (context, index) {
                   final note = viewModel.notes[index];
                   
                   return Padding(
+                    key: ValueKey(note.id), // 추가: 고유 키로 불필요한 리빌드 방지
                     padding: EdgeInsets.only(
                       left: 20,
                       right: 20,
                       bottom: index == viewModel.notes.length - 1 ? 18 : 16, // 아이템 간격 16으로 조정
                     ),
                     child: NoteListItem(
+                      key: ValueKey('note_${note.id}'), // 추가: NoteListItem에도 고유 키
                       note: note,
                       onNoteTapped: (note) => _navigateToNoteDetail(context, note),
                       onDismissed: () {

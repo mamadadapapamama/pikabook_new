@@ -7,11 +7,9 @@ import '../../../core/models/processing_status.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../cache/unified_cache_service.dart';
 import '../authentication/user_preferences_service.dart';
-import 'llm_text_processing.dart';
 
 /// 텍스트 처리 통합 서비스
-/// ViewModel과 기존 서비스들 사이의 중간 계층
-/// 비즈니스 로직을 담당하고 ViewModel은 UI 상태만 관리하도록 함
+/// 캐시 관리와 실시간 리스너 관리를 담당
 class TextProcessingService {
   // 싱글톤 패턴
   static final TextProcessingService _instance = TextProcessingService._internal();
@@ -19,7 +17,6 @@ class TextProcessingService {
   TextProcessingService._internal();
   
   // 기존 서비스들
-  final LLMTextProcessing _llmService = LLMTextProcessing();
   final UnifiedCacheService _cacheService = UnifiedCacheService();
   final UserPreferencesService _preferencesService = UserPreferencesService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -91,142 +88,6 @@ class TextProcessingService {
     }
   }
   
-  /// 페이지 텍스트 처리 요청
-  Future<ProcessedText?> processPageText(String pageId) async {
-    if (pageId.isEmpty) return null;
-    
-    try {
-      // 1. 이미 처리된 텍스트가 있는지 확인
-      final existing = await getProcessedText(pageId);
-      if (existing != null) {
-        if (kDebugMode) {
-          debugPrint('✅ 이미 처리된 텍스트 반환: $pageId');
-        }
-        return existing;
-      }
-      
-      // 2. 페이지 데이터 로드
-      final doc = await _firestore.collection('pages').doc(pageId).get();
-      if (!doc.exists) {
-        throw Exception('페이지를 찾을 수 없습니다: $pageId');
-      }
-      
-      final page = page_model.Page.fromFirestore(doc);
-      
-      // 3. 원본 텍스트 확인 (OCR 결과)
-      if (page.originalText == null || page.originalText!.isEmpty) {
-        throw Exception('처리할 원본 텍스트가 없습니다');
-      }
-      
-      // 4. 사용자 설정 로드
-      final userPrefs = await _preferencesService.getPreferences();
-      final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
-      
-      // 5. LLM 처리 (원문 정리 + 번역 + 병음)
-      if (kDebugMode) {
-        debugPrint('🤖 LLM 처리 시작: $pageId');
-        debugPrint('   입력 텍스트: "${page.originalText!.substring(0, page.originalText!.length > 50 ? 50 : page.originalText!.length)}..."');
-      }
-      
-      final processedText = await _llmService.processTextSegments(
-        [page.originalText!], // OCR 원문을 그대로 전달
-        sourceLanguage: page.sourceLanguage,
-        targetLanguage: page.targetLanguage,
-        mode: mode,
-        needPinyin: true,
-      );
-      
-      // 6. 결과 저장
-      await _saveProcessedText(pageId, processedText, page);
-      
-      if (kDebugMode) {
-        debugPrint('✅ 텍스트 처리 완료: $pageId');
-        debugPrint('   정리된 원문: "${processedText.fullOriginalText.substring(0, processedText.fullOriginalText.length > 50 ? 50 : processedText.fullOriginalText.length)}..."');
-        debugPrint('   번역: "${processedText.fullTranslatedText.substring(0, processedText.fullTranslatedText.length > 50 ? 50 : processedText.fullTranslatedText.length)}..."');
-      }
-      
-      return processedText;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ 텍스트 처리 실패: $pageId, $e');
-      }
-      rethrow;
-    }
-  }
-  
-  /// 페이지 생성 후 자동 텍스트 처리
-  /// PageService.createPage() 호출 후 이 메서드를 호출하여 텍스트 처리
-  Future<ProcessedText?> processNewPageText(String pageId) async {
-    if (pageId.isEmpty) return null;
-    
-    try {
-      if (kDebugMode) {
-        debugPrint('🔄 새 페이지 텍스트 처리 시작: $pageId');
-      }
-      
-      // 페이지 데이터 로드
-      final doc = await _firestore.collection('pages').doc(pageId).get();
-      if (!doc.exists) {
-        throw Exception('페이지를 찾을 수 없습니다: $pageId');
-      }
-      
-      final page = page_model.Page.fromFirestore(doc);
-      
-      // 원본 텍스트 확인 (OCR 결과)
-      if (page.originalText == null || page.originalText!.isEmpty) {
-        if (kDebugMode) {
-          debugPrint('⚠️ 원본 텍스트가 없어 처리 건너뜀: $pageId');
-        }
-        return null;
-      }
-      
-      // 사용자 설정 로드
-      final userPrefs = await _preferencesService.getPreferences();
-      final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
-      
-      // LLM 처리 (원문 정리 + 번역 + 병음)
-      if (kDebugMode) {
-        debugPrint('🤖 새 페이지 LLM 처리 시작: $pageId');
-      }
-      
-      final processedText = await _llmService.processTextSegments(
-        [page.originalText!], // OCR 원문을 그대로 전달
-        sourceLanguage: page.sourceLanguage,
-        targetLanguage: page.targetLanguage,
-        mode: mode,
-        needPinyin: true,
-      );
-      
-      // 결과 저장
-      await _saveProcessedText(pageId, processedText, page);
-      
-      if (kDebugMode) {
-        debugPrint('✅ 새 페이지 텍스트 처리 완료: $pageId');
-      }
-      
-      return processedText;
-      
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ 새 페이지 텍스트 처리 실패: $pageId, $e');
-      }
-      
-      // 처리 실패 시 페이지에 오류 정보 저장
-      try {
-        await _firestore.collection('pages').doc(pageId).update({
-          'processError': e.toString(),
-          'processingStatus': ProcessingStatus.failed.toString(),
-        });
-      } catch (updateError) {
-        if (kDebugMode) {
-          debugPrint('⚠️ 오류 정보 저장 실패: $updateError');
-        }
-      }
-      
-      return null; // 오류 시 null 반환 (앱이 계속 동작하도록)
-    }
-  }
-  
   /// 텍스트 모드 변경
   Future<ProcessedText?> changeTextMode(String pageId, TextProcessingMode newMode) async {
     if (pageId.isEmpty) return null;
@@ -235,8 +96,7 @@ class TextProcessingService {
       // 1. 기존 텍스트 로드
       final existing = await getProcessedText(pageId);
       if (existing == null) {
-        // 처리된 텍스트가 없으면 먼저 처리
-        return await processPageText(pageId);
+        return null;
       }
       
       // 2. 모드가 같으면 그대로 반환
@@ -471,39 +331,6 @@ class TextProcessingService {
       if (kDebugMode) {
         debugPrint('⚠️ 캐시 저장 실패: $pageId, $e');
       }
-    }
-  }
-  
-  /// 처리된 텍스트를 Firestore와 캐시에 저장
-  Future<void> _saveProcessedText(String pageId, ProcessedText processedText, page_model.Page page) async {
-    try {
-      // Firestore 업데이트 (LLM이 정리한 원문으로 업데이트)
-      final updateData = {
-        'originalText': processedText.fullOriginalText, // LLM이 정리한 중국어 원문
-        'translatedText': processedText.fullTranslatedText,
-        'pinyin': processedText.units.map((u) => u.pinyin ?? '').join(' '),
-        'processedAt': FieldValue.serverTimestamp(),
-        'status': ProcessingStatus.completed.toString(),
-        'processedText': {
-          'units': processedText.units.map((unit) => unit.toJson()).toList(),
-        },
-      };
-      
-      await _firestore.collection('pages').doc(pageId).update(updateData);
-      
-      // 캐시 저장
-      await _saveToCache(pageId, processedText);
-      
-      if (kDebugMode) {
-        debugPrint('✅ 처리된 텍스트 저장 완료: $pageId');
-        debugPrint('   저장된 원문: "${processedText.fullOriginalText.substring(0, processedText.fullOriginalText.length > 30 ? 30 : processedText.fullOriginalText.length)}..."');
-        debugPrint('   저장된 번역: "${processedText.fullTranslatedText.substring(0, processedText.fullTranslatedText.length > 30 ? 30 : processedText.fullTranslatedText.length)}..."');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ 처리된 텍스트 저장 실패: $pageId, $e');
-      }
-      rethrow;
     }
   }
 } 

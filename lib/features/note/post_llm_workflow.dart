@@ -5,11 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'services/page_service.dart';
 import 'services/note_service.dart';
-import '../../../core/services/text_processing/llm_text_processing.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../core/models/processed_text.dart';
 import '../../core/models/text_unit.dart';
 import '../../core/models/processing_status.dart';
+import '../../../core/services/text_processing/api_service.dart';
 import 'pre_llm_workflow.dart';
 
 /// 후처리 워크플로우: 백그라운드 LLM 처리
@@ -18,9 +18,10 @@ class PostLLMWorkflow {
   // 서비스 인스턴스
   final PageService _pageService = PageService();
   final NoteService _noteService = NoteService();
-  final LLMTextProcessing _llmService = LLMTextProcessing();
   final UsageLimitService _usageLimitService = UsageLimitService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ApiService _apiService = ApiService(); // 새로 추가
+
 
   // 처리 큐 (메모리 기반)
   static final Queue<PostProcessingJob> _processingQueue = Queue<PostProcessingJob>();
@@ -137,17 +138,28 @@ class PostLLMWorkflow {
         debugPrint('📝 배치 LLM 처리 시작: ${allSegments.length}개 세그먼트');
       }
 
-      // 3. 배치 LLM 처리
-      final processedResults = await _llmService.processTextSegments(
-        allSegments,
+      // 3. 배치 LLM 처리 (Firebase Functions 서버에서 처리)
+      final serverResult = await _apiService.translateSegments(
+        textSegments: allSegments,
         sourceLanguage: job.pages.first.sourceLanguage,
         targetLanguage: job.pages.first.targetLanguage,
-        mode: job.pages.first.mode,
         needPinyin: true,
+        noteId: job.noteId,
       );
 
       if (kDebugMode) {
-        debugPrint('✅ LLM 처리 완료: ${processedResults.units.length}개 결과');
+        debugPrint('✅ 서버 LLM 처리 완료');
+        debugPrint('   응답 타입: ${serverResult.runtimeType}');
+        if (serverResult is Map) {
+          debugPrint('   응답 키: ${(serverResult as Map).keys.toList()}');
+        }
+      }
+
+      // 서버 응답에서 TextUnit 리스트 추출
+      final processedUnits = _extractUnitsFromServerResponse(serverResult);
+
+      if (kDebugMode) {
+        debugPrint('📊 추출된 결과: ${processedUnits.length}개 TextUnit');
       }
 
       // 4. 페이지별 결과 분배 및 업데이트
@@ -159,7 +171,7 @@ class PostLLMWorkflow {
         if (segmentCount == 0) continue;
 
         // 해당 페이지의 결과 추출
-        final pageResults = processedResults.units
+        final pageResults = processedUnits
             .skip(segmentIndex)
             .take(segmentCount)
             .toList();
@@ -413,6 +425,150 @@ class PostLLMWorkflow {
         debugPrint('⚠️ 사용량 업데이트 실패: ${job.noteId}, 오류: $e');
       }
       // 사용량 업데이트 실패는 전체 프로세스를 실패시키지 않음
+    }
+  }
+
+  /// Firebase Functions 서버 응답에서 TextUnit 리스트 추출
+  /// 
+  /// 서버 응답 형식:
+  /// ```json
+  /// {
+  ///   "success": true,
+  ///   "translation": {
+  ///     "units": [
+  ///       {
+  ///         "originalText": "你好",
+  ///         "translatedText": "안녕하세요",
+  ///         "pinyin": "Nǐ hǎo",
+  ///         "sourceLanguage": "zh-CN",
+  ///         "targetLanguage": "ko"
+  ///       }
+  ///     ],
+  ///     "fullOriginalText": "你好",
+  ///     "fullTranslatedText": "안녕하세요",
+  ///     "mode": "segment",
+  ///     "sourceLanguage": "zh-CN",
+  ///     "targetLanguage": "ko"
+  ///   },
+  ///   "statistics": {
+  ///     "segmentCount": 1,
+  ///     "totalCharacters": 2,
+  ///     "processingTime": 1234
+  ///   }
+  /// }
+  /// ```
+  List<TextUnit> _extractUnitsFromServerResponse(dynamic serverResult) {
+    try {
+      if (kDebugMode) {
+        debugPrint('🔍 서버 응답 파싱 시작');
+      }
+
+      // 서버 응답이 Map인지 확인
+      if (serverResult is! Map<String, dynamic>) {
+        if (kDebugMode) {
+          debugPrint('❌ 서버 응답이 Map이 아님: ${serverResult.runtimeType}');
+        }
+        return [];
+      }
+
+      final response = serverResult as Map<String, dynamic>;
+
+      // success 필드 확인
+      if (response['success'] != true) {
+        if (kDebugMode) {
+          debugPrint('❌ 서버 처리 실패: ${response['error'] ?? '알 수 없는 오류'}');
+        }
+        return [];
+      }
+
+      // translation 객체 확인
+      final translation = response['translation'];
+      if (kDebugMode) {
+        debugPrint('🔍 translation 필드 타입: ${translation.runtimeType}');
+        debugPrint('🔍 translation 내용: $translation');
+      }
+      
+      if (translation is! Map) {
+        if (kDebugMode) {
+          debugPrint('❌ translation 필드가 없거나 Map이 아님');
+        }
+        return [];
+      }
+
+      // Map<String, dynamic>으로 변환
+      final translationMap = Map<String, dynamic>.from(translation as Map);
+
+      // units 배열 확인
+      final units = translationMap['units'];
+      if (units is! List) {
+        if (kDebugMode) {
+          debugPrint('❌ units 필드가 없거나 배열이 아님');
+          debugPrint('🔍 translationMap 키들: ${translationMap.keys.toList()}');
+        }
+        return [];
+      }
+
+      // TextUnit 객체로 변환
+      final List<TextUnit> textUnits = [];
+      for (int i = 0; i < units.length; i++) {
+        try {
+          final unitData = units[i];
+          if (kDebugMode && i < 3) {
+            debugPrint('🔍 Unit $i 원본 데이터: $unitData');
+            debugPrint('🔍 Unit $i 타입: ${unitData.runtimeType}');
+          }
+          
+          if (unitData is Map<String, dynamic>) {
+            final textUnit = TextUnit(
+              originalText: unitData['originalText']?.toString() ?? '',
+              translatedText: unitData['translatedText']?.toString() ?? '',
+              pinyin: unitData['pinyin']?.toString() ?? '',
+              sourceLanguage: unitData['sourceLanguage']?.toString() ?? 'zh-CN',
+              targetLanguage: unitData['targetLanguage']?.toString() ?? 'ko',
+            );
+            textUnits.add(textUnit);
+
+            if (kDebugMode && i < 3) {
+              debugPrint('   Unit ${i+1}: "${textUnit.originalText}" → "${textUnit.translatedText}"');
+            }
+          } else if (unitData is Map) {
+            // Map<Object?, Object?> 타입인 경우 변환
+            final convertedUnit = Map<String, dynamic>.from(unitData);
+            final textUnit = TextUnit(
+              originalText: convertedUnit['originalText']?.toString() ?? '',
+              translatedText: convertedUnit['translatedText']?.toString() ?? '',
+              pinyin: convertedUnit['pinyin']?.toString() ?? '',
+              sourceLanguage: convertedUnit['sourceLanguage']?.toString() ?? 'zh-CN',
+              targetLanguage: convertedUnit['targetLanguage']?.toString() ?? 'ko',
+            );
+            textUnits.add(textUnit);
+
+            if (kDebugMode && i < 3) {
+              debugPrint('   Unit ${i+1} (변환됨): "${textUnit.originalText}" → "${textUnit.translatedText}"');
+            }
+          } else {
+            if (kDebugMode) {
+              debugPrint('⚠️ Unit $i가 올바른 형식이 아님: ${unitData.runtimeType}');
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ Unit $i 파싱 실패: $e');
+          }
+        }
+      }
+
+      if (kDebugMode) {
+        debugPrint('✅ 서버 응답 파싱 완료: ${textUnits.length}개 TextUnit 생성');
+      }
+
+      return textUnits;
+
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 서버 응답 파싱 중 오류: $e');
+      }
+      return [];
     }
   }
 }
