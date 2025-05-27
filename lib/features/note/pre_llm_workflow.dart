@@ -108,17 +108,18 @@ class PreLLMWorkflow {
     Future.microtask(() async {
       try {
         if (kDebugMode) {
-          debugPrint('🔄 백그라운드 OCR 및 텍스트 처리 시작: $noteId');
+          debugPrint('🔄 백그라운드 텍스트 처리 시작: $noteId (${imageFiles.length}개 이미지)');
+          debugPrint('📋 처리 순서: OCR → TextCleaner → TextSeparation → LLM 스케줄링');
         }
         
         final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
         final List<PageProcessingData> pageDataList = [];
         
-        // 각 이미지에 대해 OCR 및 텍스트 처리
+        // 각 이미지에 대해 통합 텍스트 처리 (OCR → 정리 → 분리)
         for (int i = 0; i < imageFiles.length; i++) {
           try {
             if (kDebugMode) {
-              debugPrint('🔍 백그라운드 OCR 시작: 이미지 ${i+1}/${imageFiles.length}');
+              debugPrint('📄 이미지 ${i+1}/${imageFiles.length} 처리 시작');
             }
             
             final pageData = await _processImageWithOCR(
@@ -136,35 +137,45 @@ class PreLLMWorkflow {
               await _updatePageWithOCRResult(pageData);
               
               if (kDebugMode) {
-                debugPrint('✅ 백그라운드 OCR 완료: 페이지 ${i+1}');
+                debugPrint('✅ 이미지 ${i+1} 처리 완료 → 페이지 업데이트됨');
+              }
+            } else {
+              if (kDebugMode) {
+                debugPrint('⚠️ 이미지 ${i+1} 처리 실패 → 건너뜀');
               }
             }
           } catch (e) {
             if (kDebugMode) {
-              debugPrint('⚠️ 백그라운드 OCR 실패: 페이지 ${i+1}, 오류: $e');
+              debugPrint('❌ 이미지 ${i+1} 처리 실패: $e');
             }
             // 개별 페이지 실패는 전체 프로세스를 중단시키지 않음
           }
         }
         
-        // 모든 OCR이 완료되면 후처리 작업 스케줄링
+        // 모든 텍스트 처리가 완료되면 LLM 후처리 작업 스케줄링
         if (pageDataList.isNotEmpty) {
           await _schedulePostProcessing(noteId, pageDataList, userPrefs);
           
           if (kDebugMode) {
-            debugPrint('🎉 백그라운드 처리 완료: $noteId (${pageDataList.length}개 페이지)');
+            debugPrint('🎉 백그라운드 처리 완료: $noteId');
+            debugPrint('   성공한 페이지: ${pageDataList.length}/${imageFiles.length}개');
+            debugPrint('   다음 단계: LLM 번역 및 병음 처리 (PostLLMWorkflow)');
+          }
+        } else {
+          if (kDebugMode) {
+            debugPrint('⚠️ 처리된 페이지가 없어 후처리 건너뜀');
           }
         }
         
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('❌ 백그라운드 처리 실패: $noteId, 오류: $e');
+          debugPrint('❌ 백그라운드 처리 전체 실패: $noteId, 오류: $e');
         }
       }
     });
   }
 
-  /// 백그라운드에서 OCR 및 텍스트 처리
+  /// 백그라운드에서 OCR 및 텍스트 처리 (통합 orchestration)
   Future<PageProcessingData?> _processImageWithOCR({
     required File imageFile,
     required String pageId,
@@ -173,104 +184,130 @@ class PreLLMWorkflow {
     required dynamic userPrefs,
   }) async {
     try {
-      String extractedText = '';
-      String cleanedText = '';
+      if (kDebugMode) {
+        debugPrint('🔄 페이지 $pageId 텍스트 처리 시작 (통합 orchestration)');
+      }
+
+      // 1. OCR: 원본 텍스트 추출 (순수 OCR만)
+      if (kDebugMode) {
+        debugPrint('🔍 1단계: OCR 텍스트 추출 시작');
+      }
+      
+      final rawText = await _ocrService.extractText(imageFile, skipUsageCount: false);
+      
+      if (kDebugMode) {
+        debugPrint('✅ OCR 완료: ${rawText.length}자');
+        if (rawText.isNotEmpty) {
+          final preview = rawText.length > 30 ? 
+              '${rawText.substring(0, 30)}...' : rawText;
+          debugPrint('📄 OCR 원본 텍스트: "$preview"');
+        }
+      }
+
+      // OCR 결과가 비어있으면 빈 데이터 반환
+      if (rawText.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('⚠️ OCR 결과가 비어있어 처리 중단');
+        }
+        return PageProcessingData(
+          pageId: pageId,
+          imageUrl: await _getImageUrl(pageId),
+          textSegments: [],
+          mode: mode,
+          sourceLanguage: userPrefs.sourceLanguage,
+          targetLanguage: userPrefs.targetLanguage,
+          imageFileSize: await _getFileSize(imageFile),
+          ocrSuccess: false,
+        );
+      }
+
+      // 2. TextCleaner: 불필요한 텍스트 제거 및 중국어만 추출
+      if (kDebugMode) {
+        debugPrint('🧹 2단계: 텍스트 정리 시작');
+      }
+      
+      final cleanedText = _textCleanerService.cleanText(rawText);
+      
+      if (kDebugMode) {
+        debugPrint('✅ 텍스트 정리 완료: ${rawText.length}자 → ${cleanedText.length}자');
+        if (cleanedText.isNotEmpty) {
+          final preview = cleanedText.length > 30 ? 
+              '${cleanedText.substring(0, 30)}...' : cleanedText;
+          debugPrint('🧹 정리된 텍스트: "$preview"');
+        }
+      }
+
+      // 3. TextSeparation: 모드별 텍스트 분리
       List<String> textSegments = [];
-      
-      // 1. OCR 텍스트 추출
-      if (kDebugMode) {
-        debugPrint('🔍 OCR 텍스트 추출 시작: 페이지 $pageId');
-      }
-      
-      extractedText = await _ocrService.recognizeText(imageFile);
-      
-      if (kDebugMode) {
-        debugPrint('✅ OCR 완료: ${extractedText.length}자');
-        if (extractedText.isNotEmpty) {
-          final preview = extractedText.length > 30 ? 
-              '${extractedText.substring(0, 30)}...' : extractedText;
-          debugPrint('OCR 결과 미리보기: "$preview"');
-        }
-      }
-      
-      // 2. 텍스트 정리 (중국어만 추출)
-      if (extractedText.isNotEmpty) {
-        if (kDebugMode) {
-          debugPrint('🧹 텍스트 정리 시작');
-        }
-        
-        cleanedText = _textCleanerService.cleanText(extractedText);
-        
-        if (kDebugMode) {
-          debugPrint('✅ 텍스트 정리 완료: ${extractedText.length}자 → ${cleanedText.length}자');
-        }
-      }
-      
-      // 3. 모드별 텍스트 분리
       if (cleanedText.isNotEmpty) {
         if (kDebugMode) {
-          debugPrint('📝 텍스트 분리 시작: ${mode.toString()}');
+          debugPrint('📝 3단계: 텍스트 분리 시작 (모드: $mode)');
         }
         
         textSegments = _textSeparationService.separateByMode(cleanedText, mode);
         
         if (kDebugMode) {
           debugPrint('✅ 텍스트 분리 완료: ${textSegments.length}개 조각');
-        }
-      } else if (extractedText.isNotEmpty) {
-        // 정리된 텍스트가 없으면 원본 텍스트로 분리
-        textSegments = _textSeparationService.separateByMode(extractedText, mode);
-        if (kDebugMode) {
-          debugPrint('✅ 원본 텍스트 분리 완료: ${textSegments.length}개 조각');
-        }
-      }
-      
-      // 4. 이미지 파일 크기 계산
-      int fileSize = 0;
-      try {
-        fileSize = await imageFile.length();
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('⚠️ 파일 크기 계산 실패: $e');
+          for (int i = 0; i < textSegments.length && i < 3; i++) {
+            final preview = textSegments[i].length > 20 ? 
+                '${textSegments[i].substring(0, 20)}...' : textSegments[i];
+            debugPrint('   조각 ${i+1}: "$preview"');
+          }
         }
       }
       
-      // 5. PageProcessingData 생성 (이미지 URL을 PageService에서 가져오기)
-      String imageUrl = '';
-      try {
-        final page = await _pageService.getPage(pageId);
-        imageUrl = page?.imageUrl ?? '';
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('⚠️ 페이지에서 이미지 URL 가져오기 실패: $e');
-        }
-      }
-      
+      // 4. PageProcessingData 생성
       final pageData = PageProcessingData(
         pageId: pageId,
-        imageUrl: imageUrl,
+        imageUrl: await _getImageUrl(pageId),
         textSegments: textSegments,
         mode: mode,
         sourceLanguage: userPrefs.sourceLanguage,
         targetLanguage: userPrefs.targetLanguage,
-        imageFileSize: fileSize,
-        ocrSuccess: extractedText.isNotEmpty,
+        imageFileSize: await _getFileSize(imageFile),
+        ocrSuccess: rawText.isNotEmpty,
       );
       
       if (kDebugMode) {
-        debugPrint('📊 백그라운드 PageProcessingData 생성 완료:');
+        debugPrint('📊 PageProcessingData 생성 완료:');
         debugPrint('   페이지 ID: ${pageData.pageId}');
         debugPrint('   텍스트 세그먼트: ${pageData.textSegments.length}개');
         debugPrint('   OCR 성공: ${pageData.ocrSuccess}');
+        debugPrint('🎉 페이지 $pageId 텍스트 처리 완료');
       }
       
       return pageData;
       
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ 백그라운드 OCR 처리 실패: $pageId, 오류: $e');
+        debugPrint('❌ 페이지 $pageId 텍스트 처리 실패: $e');
       }
       return null;
+    }
+  }
+
+  /// 이미지 URL 가져오기 헬퍼 메서드
+  Future<String> _getImageUrl(String pageId) async {
+    try {
+      final page = await _pageService.getPage(pageId);
+      return page?.imageUrl ?? '';
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 페이지에서 이미지 URL 가져오기 실패: $e');
+      }
+      return '';
+    }
+  }
+
+  /// 파일 크기 가져오기 헬퍼 메서드
+  Future<int> _getFileSize(File imageFile) async {
+    try {
+      return await imageFile.length();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 파일 크기 계산 실패: $e');
+      }
+      return 0;
     }
   }
 
