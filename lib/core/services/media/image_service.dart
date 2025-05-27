@@ -6,7 +6,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import '../../../core/services/common/usage_limit_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import '../../../views/screens/full_image_screen.dart';
@@ -15,145 +14,104 @@ import 'image_picker_service.dart';
 import 'image_compression.dart';
 
 /// 이미지 관리 서비스
-/// 이미지 저장, 로드, 압축 등의 기능을 제공합니다.
-/// 메모리 관리와 최적화에 중점을 둠
+/// 이미지 저장, 로드, 압축 등의 핵심 기능만 제공
 class ImageService {
-  // 싱글톤 패턴 구현
+  // 싱글톤 패턴
   static final ImageService _instance = ImageService._internal();
   factory ImageService() => _instance;
+  ImageService._internal();
 
-  // Firebase Storage 경로 상수
-  static const String _storageBasePath = 'images';
-  static const String _userImagesPath = 'users';
+  // 상수
   static const int _maxRetryCount = 3;
   static const Duration _retryDelay = Duration(seconds: 2);
+  static const String _fallbackImagePath = 'images/fallback_image.jpg';
 
   // 서비스 인스턴스
-  final UsageLimitService _usageLimitService = UsageLimitService();
   final ImageCacheService _imageCacheService = ImageCacheService();
   final ImagePickerService _pickerService = ImagePickerService();
   final ImageCompression _compression = ImageCompression();
   final FirebaseStorage _storage = FirebaseStorage.instance;
   
-  // 기본값 및 상수
-  static const String _fallbackImagePath = 'images/fallback_image.jpg';
+  // 실패한 다운로드 경로 추적
+  static final Set<String> _failedDownloadPaths = <String>{};
   
-  ImageService._internal() {
-    debugPrint('🖼️ ImageService: 생성자 호출됨');
-  }
+  // 현재 보고 있는 이미지 파일
+  File? _currentImageFile;
 
-  // 현재 사용자 ID 가져오기
+  // 현재 사용자 ID
   String? get _currentUserId => FirebaseAuth.instance.currentUser?.uid;
 
-  // 클래스 내부에서 모든 메서드에서 공유할 실패한 다운로드 경로 목록
-  static final Set<String> _failedDownloadPaths = <String>{};
-
-  // Firebase Storage에 업로드된 이미지 URL 캐시
-  final Map<String, String> _fileUrlCache = {};
-
-  /// 앱 내부 저장소 경로를 반환합니다.
+  // 앱 내부 저장소 경로
   Future<String> get _localPath async {
     final appDir = await getApplicationDocumentsDirectory();
     return appDir.path;
   }
 
-  /// 이미지 선택 (갤러리)
+  /// 이미지 선택
   Future<File?> pickImage({ImageSource source = ImageSource.gallery}) async {
     return source == ImageSource.gallery 
         ? (await _pickerService.pickGalleryImages()).firstOrNull
         : await _pickerService.takeCameraPhoto();
   }
   
-  /// 이미지 선택 (갤러리 또는 카메라)
+  /// 다중 이미지 선택
   Future<List<File>> pickMultipleImages() async {
     return _pickerService.pickGalleryImages();
   }
 
-  /// Firebase Storage 경로 생성
-  String _getStoragePath(String relativePath) {
-    if (relativePath.startsWith('$_userImagesPath/')) {
-      return relativePath;
-    }
-    return _currentUserId != null 
-        ? '$_userImagesPath/$_currentUserId/$_storageBasePath/$relativePath'
-        : '$_storageBasePath/$relativePath';
-  }
-
-  /// 이미지 파일 가져오기 (재시도 로직 포함)
+  /// 이미지 파일 가져오기
   Future<File?> getImageFile(String? imagePath) async {
     if (imagePath == null || imagePath.isEmpty) return null;
 
-    // 1. 절대 경로인 경우 직접 확인
+    // 1. 절대 경로 확인
     File file = File(imagePath);
     if (await file.exists()) return file;
 
-    // 2. 상대 경로인 경우 (images/로 시작) 절대 경로로 변환
+    // 2. 상대 경로 변환
     if (imagePath.startsWith('images/')) {
       final appDir = await getApplicationDocumentsDirectory();
       final absolutePath = '${appDir.path}/$imagePath';
       file = File(absolutePath);
       
-      if (kDebugMode) {
-        debugPrint('🖼️ 상대 경로를 절대 경로로 변환: $imagePath → $absolutePath');
-      }
-      
-      if (await file.exists()) {
-        if (kDebugMode) {
-          debugPrint('🖼️ 로컬 파일 발견: $absolutePath');
-        }
-        return file;
-      } else {
-        if (kDebugMode) {
-          debugPrint('🖼️ 로컬 파일 없음: $absolutePath');
-        }
-      }
+      if (await file.exists()) return file;
     }
 
-    // 3. Firebase Storage에서 다운로드
+    // 3. Firebase Storage 다운로드
     if (imagePath.startsWith('gs://')) {
       return _downloadWithRetry(imagePath, _downloadFromFirebase);
     }
 
-    // 4. URL에서 다운로드
+    // 4. URL 다운로드
     if (imagePath.startsWith('http')) {
       return _downloadWithRetry(imagePath, _downloadFromUrl);
     }
 
-    if (kDebugMode) {
-      debugPrint('🖼️ 이미지 파일을 찾을 수 없음: $imagePath');
-    }
     return null;
   }
 
+  /// 재시도 로직이 포함된 다운로드
   Future<File?> _downloadWithRetry(
     String path,
     Future<File?> Function(String) downloadFn,
   ) async {
-    int retryCount = 0;
-    while (retryCount < _maxRetryCount) {
+    for (int i = 0; i < _maxRetryCount; i++) {
       try {
         final file = await downloadFn(path);
-        if (file != null && await file.exists()) {
-          return file;
-        }
+        if (file != null && await file.exists()) return file;
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('다운로드 실패 (${retryCount + 1}/$_maxRetryCount): $e');
+          debugPrint('다운로드 실패 (${i + 1}/$_maxRetryCount): $e');
         }
       }
 
-      retryCount++;
-      if (retryCount < _maxRetryCount) {
-        await Future.delayed(_retryDelay * retryCount);
+      if (i < _maxRetryCount - 1) {
+        await Future.delayed(_retryDelay * (i + 1));
       }
-    }
-
-    if (kDebugMode) {
-      debugPrint('다운로드 최대 재시도 횟수 초과: $path');
     }
     return null;
   }
 
+  /// Firebase Storage에서 다운로드
   Future<File?> _downloadFromFirebase(String path) async {
     try {
       final storageRef = _storage.ref().child(path);
@@ -170,13 +128,12 @@ class ImageService {
       }
       return null;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Firebase 다운로드 실패: $e');
-      }
+      if (kDebugMode) debugPrint('Firebase 다운로드 실패: $e');
       return null;
     }
   }
 
+  /// URL에서 다운로드
   Future<File?> _downloadFromUrl(String url) async {
     try {
       final response = await http.get(Uri.parse(url));
@@ -191,23 +148,21 @@ class ImageService {
       }
       return null;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('URL 다운로드 실패: $e');
-      }
+      if (kDebugMode) debugPrint('URL 다운로드 실패: $e');
       return null;
     }
   }
 
-  /// 이미지 바이트 가져오기 (메모리에 로드)
+  /// 이미지 바이트 가져오기
   Future<Uint8List?> getImageBytes(String? relativePath) async {
     if (relativePath == null || relativePath.isEmpty) return null;
     
     try {
-      // 1. 캐시 확인
+      // 캐시 확인
       final cachedBytes = _imageCacheService.getFromCache(relativePath);
       if (cachedBytes != null) return cachedBytes;
       
-      // 2. 파일에서 로드
+      // 파일에서 로드
       final file = await getImageFile(relativePath);
       if (file != null && await file.exists()) {
         final bytes = await file.readAsBytes();
@@ -223,7 +178,7 @@ class ImageService {
     }
   }
 
-  /// 이미지 업로드 (파일 경로 또는 파일 객체)
+  /// 이미지 업로드
   Future<String> uploadImage(dynamic image, {bool forThumbnail = false}) async {
     try {
       if (image == null) throw Exception('이미지가 null입니다');
@@ -250,17 +205,12 @@ class ImageService {
     }
   }
 
-  /// 이미지 저장 및 최적화 
+  /// 이미지 저장 및 최적화
   Future<String> saveAndOptimizeImage(String imagePath, {int quality = 85}) async {
     try {
       final originalFile = File(imagePath);
       if (!await originalFile.exists()) {
         throw Exception('원본 이미지 파일을 찾을 수 없습니다: $imagePath');
-      }
-      
-      final canStoreFile = await _checkStorageLimit(originalFile);
-      if (!canStoreFile) {
-        throw Exception('저장 공간 제한을 초과했습니다');
       }
 
       // 저장 경로 설정
@@ -289,14 +239,10 @@ class ImageService {
 
       // Firebase Storage에 업로드
       try {
-        await _uploadToFirebaseStorageIfNotExists(File(targetPath), relativePath);
+        await _uploadToFirebaseStorage(File(targetPath), relativePath);
       } catch (e) {
         debugPrint('Firebase 업로드 실패: $e');
       }
-      
-      // 저장 공간 사용량 추적
-      final compressedFile = File(targetPath);
-      await _trackStorageUsage(compressedFile);
 
       return relativePath;
     } catch (e) {
@@ -304,46 +250,18 @@ class ImageService {
       throw Exception('이미지 저장 실패: $e');
     }
   }
-  
-  /// 저장 공간 제한 확인
-  Future<bool> _checkStorageLimit(File imageFile) async {
-    try {
-      // 이미지 업로드 시에는 제한 확인을 하지 않고 항상 허용
-      // 사용량 업데이트는 _trackStorageUsage에서 처리
-      return true;
-    } catch (e) {
-      debugPrint('스토리지 제한 확인 실패: $e');
-      return true;
-    }
-  }
-  
-  /// 파일 크기를 포맷팅
-  String _formatSize(num bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(2)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-  }
-  
-  /// 원본 파일을 타겟 경로에 복사 (Helper)
-  Future<void> _copyOriginalToTarget(File originalFile, String targetPath) async {
-    try {
-      await originalFile.copy(targetPath);
-    } catch (e) {
-      debugPrint('원본 파일 복사 중 오류: $e');
-      throw Exception('원본 파일 복사 실패: $e');
-    }
-  }
-  
-  /// Firebase Storage에 파일 업로드 (존재하지 않는 경우에만)
-  Future<void> _uploadToFirebaseStorageIfNotExists(File file, String relativePath) async {
+
+  /// Firebase Storage에 업로드
+  Future<void> _uploadToFirebaseStorage(File file, String relativePath) async {
     if (_currentUserId == null) return;
 
     try {
       final storageRef = _storage.ref().child(relativePath);
+      
+      // 파일이 이미 존재하는지 확인
       try {
         await storageRef.getDownloadURL();
-        return;
+        return; // 이미 존재하면 업로드 스킵
       } catch (e) {
         // 파일이 존재하지 않는 경우 계속 진행
       }
@@ -353,64 +271,90 @@ class ImageService {
       throw Exception('Firebase Storage 업로드 실패: $e');
     }
   }
-  
-  /// 저장 공간 사용량 추적
-  Future<bool> _trackStorageUsage(File file) async {
+
+  /// 이미지 URL 가져오기
+  Future<String> getImageUrl(String relativePath) async {
     try {
-      final actualSize = await file.length();
-      await _usageLimitService.updateUsageAfterNoteCreation(storageBytes: actualSize);
-      return true;
+      final storageRef = _storage.ref().child(relativePath);
+      return await storageRef.getDownloadURL();
     } catch (e) {
-      debugPrint('저장 공간 사용량 추적 실패: $e');
-      return false;
+      debugPrint('이미지 URL 가져오기 실패: $e');
+      return relativePath;
     }
   }
-  
-  /// 이미지 존재 여부 확인
-  Future<bool> imageExists(String? imageUrl) async {
-    if (imageUrl == null || imageUrl.isEmpty) return false;
-    
+
+  /// 현재 이미지 파일 관리
+  File? getCurrentImageFile() {
     try {
-      if (imageUrl.contains('firebasestorage.googleapis.com')) {
-        final uri = Uri.parse(imageUrl);
-        final pathSegments = uri.pathSegments;
-        
-        if (pathSegments.length > 2 && pathSegments.contains('o')) {
-          final encodedPath = pathSegments[pathSegments.indexOf('o') + 1];
-          String relativePath = Uri.decodeComponent(encodedPath);
-          
-          if (relativePath.startsWith('/')) {
-            relativePath = relativePath.substring(1);
-          }
-          
-          return _imageExists(relativePath);
-        }
-        
-        final response = await http.head(Uri.parse(imageUrl));
-        return response.statusCode == 200;
+      if (_currentImageFile != null && !_currentImageFile!.existsSync()) {
+        _currentImageFile = null;
+      }
+      return _currentImageFile;
+    } catch (e) {
+      _currentImageFile = null;
+      return null;
+    }
+  }
+
+  void setCurrentImageFile(File? file) {
+    try {
+      if (file != null && !file.existsSync()) return;
+      _currentImageFile = file;
+    } catch (e) {
+      _currentImageFile = null;
+    }
+  }
+
+  /// 페이지 이미지 로드
+  Future<File?> loadPageImage(dynamic pageOrUrl) async {
+    try {
+      String? imageUrl;
+      
+      if (pageOrUrl is String) {
+        imageUrl = pageOrUrl;
+      } else if (pageOrUrl != null && pageOrUrl.imageUrl != null) {
+        imageUrl = pageOrUrl.imageUrl;
       }
       
-      final response = await http.head(Uri.parse(imageUrl));
-      return response.statusCode == 200;
+      if (imageUrl == null || imageUrl.isEmpty) {
+        _currentImageFile = null;
+        return null;
+      }
+      
+      if (_failedDownloadPaths.contains(imageUrl)) {
+        _currentImageFile = null;
+        return null;
+      }
+      
+      final imageFile = await getImageFile(imageUrl);
+      
+      if (imageFile != null && imageFile.existsSync() && imageFile.lengthSync() > 0) {
+        _currentImageFile = imageFile;
+        return imageFile;
+      }
+      
+      _failedDownloadPaths.add(imageUrl);
+      _currentImageFile = null;
+      return null;
     } catch (e) {
-      debugPrint('이미지 존재 확인 실패: $e');
-      return false;
+      _currentImageFile = null;
+      return null;
     }
   }
-  
-  /// 이미지 URL이 Firebase Storage에 존재하는지 확인
-  Future<bool> _imageExists(String relativePath) async {
-    try {
-      final ref = _storage.ref().child(relativePath);
-      await ref.getDownloadURL();
-      return true;
-    } catch (e) {
-      if (e is FirebaseException && e.code == 'object-not-found') return false;
-      debugPrint('이미지 존재 확인 실패: $e');
-      return false;
-    }
+
+  /// 이미지 확대 화면 표시
+  void showFullImage(BuildContext context, File imageFile, String title) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FullImageScreen(
+          imageFile: imageFile,
+          title: title,
+        ),
+      ),
+    );
   }
-  
+
   /// 노트 삭제 시 연관된 이미지들 삭제
   Future<void> deleteNoteImages(String noteId) async {
     if (noteId.isEmpty) return;
@@ -447,7 +391,7 @@ class ImageService {
     }
   }
 
-  /// 이미지 캐시 정리
+  /// 캐시 정리
   Future<void> clearImageCache() async {
     await _imageCacheService.clearImageCache();
   }
@@ -455,92 +399,5 @@ class ImageService {
   /// 임시 파일 정리
   Future<void> cleanupTempFiles() async {
     await _imageCacheService.cleanupTempFiles();
-  }
-
-  // 현재 보고 있는 이미지 파일 관리
-  File? _currentImageFile;
-  
-  // 현재 이미지 파일 가져오기 - 안전 장치 추가
-  File? getCurrentImageFile() {
-    try {
-      if (_currentImageFile != null && !_currentImageFile!.existsSync()) {
-        _currentImageFile = null;
-      }
-      return _currentImageFile;
-    } catch (e) {
-      _currentImageFile = null;
-      return null;
-    }
-  }
-  
-  // 현재 이미지 설정 - 안전 장치 추가
-  void setCurrentImageFile(File? file) {
-    try {
-      if (file != null && !file.existsSync()) return;
-      _currentImageFile = file;
-    } catch (e) {
-      _currentImageFile = null;
-    }
-  }
-  
-  // 페이지 이미지 로드 - 안전 장치 추가
-  Future<File?> loadPageImage(dynamic pageOrUrl) async {
-    try {
-      String? imageUrl;
-      
-      if (pageOrUrl is String) {
-        imageUrl = pageOrUrl;
-      } else if (pageOrUrl != null && pageOrUrl.imageUrl != null) {
-        imageUrl = pageOrUrl.imageUrl;
-      }
-      
-      if (imageUrl == null || imageUrl.isEmpty) {
-        _currentImageFile = null;
-        return null;
-      }
-      
-      if (_failedDownloadPaths.contains(imageUrl)) {
-        _currentImageFile = null;
-        return null;
-      }
-      
-      final imageFile = await getImageFile(imageUrl);
-      
-      if (imageFile != null && imageFile.existsSync() && imageFile.lengthSync() > 0) {
-        _currentImageFile = imageFile;
-        return imageFile;
-      }
-      
-      _failedDownloadPaths.add(imageUrl);
-      _currentImageFile = null;
-      return null;
-    } catch (e) {
-      _currentImageFile = null;
-      return null;
-    }
-  }
-  
-  // 이미지 확대 화면 표시
-  void showFullImage(BuildContext context, File imageFile, String title) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => FullImageScreen(
-          imageFile: imageFile,
-          title: title,
-        ),
-      ),
-    );
-  }
-
-  /// 이미지 URL 가져오기
-  Future<String> getImageUrl(String relativePath) async {
-    try {
-      final storageRef = _storage.ref().child(relativePath);
-      return await storageRef.getDownloadURL();
-    } catch (e) {
-      debugPrint('이미지 URL 가져오기 실패: $e');
-      return relativePath;
-    }
   }
 }
