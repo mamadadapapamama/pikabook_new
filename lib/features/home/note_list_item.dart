@@ -70,10 +70,9 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
 
   /// Note 객체가 변경되었는지 확인 (최적화된 버전)
   bool _hasNoteChanged(Note oldNote, Note newNote) {
-    // 중요한 UI 표시 필드만 체크 (updatedAt, isFavorite 제외)
+    // 자주 변경되는 UI 중요 필드만 체크
     return oldNote.id != newNote.id ||
            oldNote.title != newNote.title ||
-           oldNote.firstImageUrl != newNote.firstImageUrl ||
            oldNote.flashcardCount != newNote.flashcardCount;
   }
 

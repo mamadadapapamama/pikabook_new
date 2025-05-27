@@ -86,12 +86,11 @@ class HomeViewModel extends ChangeNotifier {
           if (_notes.length != notesList.length) {
             hasChanged = true;
           } else {
-            // 노트 내용이 변경되었는지 확인 (중요한 필드만)
+            // 노트 내용이 변경되었는지 확인 (자주 변경되는 필드만)
             for (int i = 0; i < notesList.length; i++) {
               if (i >= _notes.length || 
                   _notes[i].id != notesList[i].id || 
                   _notes[i].title != notesList[i].title ||
-                  _notes[i].firstImageUrl != notesList[i].firstImageUrl ||
                   _notes[i].flashcardCount != notesList[i].flashcardCount) {
                 hasChanged = true;
                 break;
