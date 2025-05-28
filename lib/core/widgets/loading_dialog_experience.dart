@@ -15,6 +15,9 @@ class NoteCreationLoader {
   static Timer? _timeoutTimer;
   static BuildContext? _lastContext;
   
+  /// 로더가 현재 표시 중인지 확인
+  static bool get isVisible => _isVisible;
+  
   /// 노트 생성 로더 표시
   static Future<void> show(
     BuildContext context, {

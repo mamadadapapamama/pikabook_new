@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../core/models/note.dart';
 import '../../features/note/services/note_service.dart';
 import '../../../core/services/cache/note_cache_service.dart';
+import '../../core/widgets/loading_dialog_experience.dart';
 
 class HomeViewModel extends ChangeNotifier {
   final NoteService _noteService = NoteService();
@@ -58,6 +59,12 @@ class HomeViewModel extends ChangeNotifier {
     return _cacheService.isCacheValid(validDuration: const Duration(minutes: 5));
   }
 
+  // 노트 생성 중인지 확인
+  bool _isNoteCreationInProgress() {
+    // NoteCreationLoader의 상태를 확인하여 노트 생성 중인지 판단
+    return NoteCreationLoader.isVisible;
+  }
+
   // 노트 목록 로드
   void _loadNotes() {
     debugPrint('[HomeViewModel] _loadNotes 시작');
@@ -79,6 +86,12 @@ class HomeViewModel extends ChangeNotifier {
       _notesSubscription = _noteService.getNotes().listen(
         (notesList) {
           debugPrint('[HomeViewModel] 노트 데이터 수신: ${notesList.length}개');
+          
+          // 노트 생성 중일 때는 리스트 업데이트 스킵
+          if (_isNoteCreationInProgress()) {
+            debugPrint('[HomeViewModel] 노트 생성 중 - 리스트 업데이트 스킵');
+            return;
+          }
           
           // 상태가 실제로 변경되었을 때만 notifyListeners 호출
           bool hasChanged = false;
