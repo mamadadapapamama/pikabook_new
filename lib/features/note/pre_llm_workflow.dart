@@ -9,8 +9,10 @@ import '../../core/services/text_processing/text_cleaner_service.dart';
 import '../../core/services/text_processing/text_mode_seperation_service.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/models/processed_text.dart';
+import '../../core/models/processing_status.dart';
 import '../../core/services/common/usage_limit_service.dart';
 import 'post_llm_workflow.dart';
+import '../../../core/services/text_processing/text_processing_service.dart';
 
 /// 전처리 워크플로우: 빠른 노트 생성 (3-5초 목표)
 /// OCR → 텍스트 정리 → 모드별 분리 → 기본 페이지 생성 → 후처리 스케줄링
@@ -25,6 +27,7 @@ class PreLLMWorkflow {
   final UserPreferencesService _preferencesService = UserPreferencesService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   final PostLLMWorkflow _postLLMWorkflow = PostLLMWorkflow();
+  final TextProcessingService _textProcessingService = TextProcessingService();
 
   /// 빠른 노트 생성 메인 메서드 (이미지 업로드만 완료 후 즉시 반환)
   Future<String> createNoteQuickly(List<File> imageFiles) async {
@@ -311,25 +314,158 @@ class PreLLMWorkflow {
     }
   }
 
-  /// OCR 결과로 페이지 업데이트
+  /// OCR 결과로 페이지 업데이트 (실시간 반영)
   Future<void> _updatePageWithOCRResult(PageProcessingData pageData) async {
     try {
-      // 추출된 텍스트를 페이지에 업데이트
-      final originalText = pageData.textSegments.join(' ');
-      
+      if (kDebugMode) {
+        debugPrint('📄 페이지 OCR 결과 업데이트: ${pageData.pageId}');
+      }
+
+      // 1. 기본 OCR 결과 업데이트
       await _pageService.updatePage(pageData.pageId, {
-        'originalText': originalText,
-        'ocrProcessedAt': FieldValue.serverTimestamp(),
-        'ocrSuccess': pageData.ocrSuccess,
+        'originalText': pageData.textSegments.join(' '),
+        'ocrCompletedAt': FieldValue.serverTimestamp(),
+        'status': ProcessingStatus.textExtracted.toString(),
+        'textSegments': pageData.textSegments,
       });
-      
+
+      // 2. 텍스트 세그먼트가 있으면 즉시 타이프라이터 효과로 원문 표시
+      if (pageData.textSegments.isNotEmpty) {
+        if (kDebugMode) {
+          debugPrint('⌨️ 페이지 ${pageData.pageId} 타이프라이터 효과 시작: ${pageData.textSegments.length}개 세그먼트');
+        }
+
+        // 즉시 원문만 있는 ProcessedText 생성하여 UI에 표시
+        final initialProcessedText = ProcessedText.withOriginalOnly(
+          mode: pageData.mode,
+          originalSegments: pageData.textSegments,
+          sourceLanguage: pageData.sourceLanguage,
+          targetLanguage: pageData.targetLanguage,
+        );
+
+        // Firestore에 타이프라이터 효과용 데이터 업데이트
+        await _updatePageWithTypewriterData(pageData.pageId, initialProcessedText);
+
+        // 백그라운드에서 번역/병음 처리 시작 (스트리밍 방식)
+        _textProcessingService.startStreamingProcessing(
+          pageId: pageData.pageId,
+          originalSegments: pageData.textSegments,
+          mode: pageData.mode,
+          sourceLanguage: pageData.sourceLanguage,
+          targetLanguage: pageData.targetLanguage,
+        ).listen(
+          (processedText) {
+            // 번역/병음이 완료된 부분만 업데이트
+            if (processedText.completedUnits > initialProcessedText.completedUnits) {
+              if (kDebugMode) {
+                debugPrint('📤 페이지 ${pageData.pageId} 번역 업데이트: ${processedText.completedUnits}/${processedText.units.length} 완료');
+              }
+              
+              _updatePageWithTranslationResult(pageData.pageId, processedText);
+            }
+          },
+          onError: (error) {
+            if (kDebugMode) {
+              debugPrint('❌ 페이지 ${pageData.pageId} 번역 처리 오류: $error');
+            }
+          },
+          onDone: () {
+            if (kDebugMode) {
+              debugPrint('✅ 페이지 ${pageData.pageId} 번역 처리 완료');
+            }
+          },
+        );
+      }
+
       if (kDebugMode) {
         debugPrint('✅ 페이지 OCR 결과 업데이트 완료: ${pageData.pageId}');
       }
-      
+
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ 페이지 OCR 결과 업데이트 실패: ${pageData.pageId}, 오류: $e');
+      }
+    }
+  }
+
+  /// 타이프라이터 효과용 원문 데이터 업데이트
+  Future<void> _updatePageWithTypewriterData(String pageId, ProcessedText processedText) async {
+    try {
+      await _pageService.updatePage(pageId, {
+        'showTypewriterEffect': true, // 타이프라이터 효과 플래그
+        'typewriterStartedAt': FieldValue.serverTimestamp(),
+        'processedText': {
+          'units': processedText.units.map((unit) => unit.toJson()).toList(),
+          'mode': processedText.mode.toString(),
+          'displayMode': processedText.displayMode.toString(),
+          'streamingStatus': processedText.streamingStatus.toString(),
+          'progress': processedText.progress,
+          'showTypewriterEffect': true,
+        },
+      });
+
+      if (kDebugMode) {
+        debugPrint('⌨️ 타이프라이터 효과 데이터 업데이트 완료: $pageId');
+      }
+
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 타이프라이터 효과 데이터 업데이트 실패: $pageId, 오류: $e');
+      }
+    }
+  }
+
+  /// 번역 결과로 페이지 업데이트 (번역/병음만)
+  Future<void> _updatePageWithTranslationResult(String pageId, ProcessedText processedText) async {
+    try {
+      // 번역과 병음 텍스트 조합
+      final translatedText = processedText.units
+          .map((unit) => unit.translatedText ?? '')
+          .where((text) => text.isNotEmpty)
+          .join(' ');
+      
+      final pinyinText = processedText.units
+          .map((unit) => unit.pinyin ?? '')
+          .where((text) => text.isNotEmpty)
+          .join(' ');
+
+      // 페이지 업데이트 데이터 준비
+      final updateData = <String, dynamic>{
+        'translationProgress': processedText.progress,
+        'completedUnits': processedText.completedUnits,
+        'lastTranslationUpdate': FieldValue.serverTimestamp(),
+        'processedText': {
+          'units': processedText.units.map((unit) => unit.toJson()).toList(),
+          'mode': processedText.mode.toString(),
+          'displayMode': processedText.displayMode.toString(),
+          'streamingStatus': processedText.streamingStatus.toString(),
+          'progress': processedText.progress,
+          'showTypewriterEffect': false, // 타이프라이터 효과는 이미 완료
+        },
+      };
+
+      // 번역이 있으면 추가
+      if (translatedText.isNotEmpty) {
+        updateData['translatedText'] = translatedText;
+      }
+
+      // 병음이 있으면 추가
+      if (pinyinText.isNotEmpty) {
+        updateData['pinyin'] = pinyinText;
+      }
+
+      // 완료 상태면 최종 상태 업데이트
+      if (processedText.isCompleted) {
+        updateData['status'] = ProcessingStatus.completed.toString();
+        updateData['processedAt'] = FieldValue.serverTimestamp();
+        updateData['showTypewriterEffect'] = false;
+      }
+
+      await _pageService.updatePage(pageId, updateData);
+
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 번역 결과 업데이트 실패: $pageId, 오류: $e');
       }
     }
   }

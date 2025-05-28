@@ -15,6 +15,7 @@ class Page {
   final String? translatedText;    // 번역된 텍스트
   final String? pinyin;            // 병음
   final Map<String, dynamic>? processedText; // 처리된 텍스트 전체 데이터
+  final bool showTypewriterEffect; // 타이프라이터 효과 플래그
 
   Page({
     required this.id,
@@ -29,6 +30,7 @@ class Page {
     this.translatedText,
     this.pinyin,
     this.processedText,
+    this.showTypewriterEffect = false,
   })  : this.createdAt = createdAt ?? DateTime.now(),
         this.sourceLanguage = sourceLanguage ?? SourceLanguage.DEFAULT,
         this.targetLanguage = targetLanguage ?? TargetLanguage.DEFAULT;
@@ -60,6 +62,7 @@ class Page {
       processedText: data['processedText'] != null 
           ? Map<String, dynamic>.from(data['processedText'] as Map<String, dynamic>) 
           : null,
+      showTypewriterEffect: data['showTypewriterEffect'] ?? false,
     );
   }
 
@@ -80,6 +83,7 @@ class Page {
       processedText: json['processedText'] != null 
           ? Map<String, dynamic>.from(json['processedText'] as Map<String, dynamic>) 
           : null,
+      showTypewriterEffect: json['showTypewriterEffect'] ?? false,
     );
   }
 
@@ -94,6 +98,7 @@ class Page {
       'updatedAt': updatedAt?.toIso8601String(),
       'sourceLanguage': sourceLanguage,
       'targetLanguage': targetLanguage,
+      'showTypewriterEffect': showTypewriterEffect,
     };
     
     // 선택적 필드 추가
@@ -119,6 +124,7 @@ class Page {
     String? translatedText,
     String? pinyin,
     Map<String, dynamic>? processedText,
+    bool? showTypewriterEffect,
   }) {
     return Page(
       id: id ?? this.id,
@@ -133,6 +139,7 @@ class Page {
       translatedText: translatedText ?? this.translatedText,
       pinyin: pinyin ?? this.pinyin,
       processedText: processedText ?? this.processedText,
+      showTypewriterEffect: showTypewriterEffect ?? this.showTypewriterEffect,
     );
   }
 }

@@ -114,6 +114,7 @@ class NotePageWidget extends StatelessWidget {
       flashCardViewModel: flashCardViewModel,
       onPlayTts: onPlayTts,
       playingSegmentIndex: null, // TTS 재생 인덱스는 별도 관리 필요
+      showTypewriterEffect: page.showTypewriterEffect,
     );
   }
   

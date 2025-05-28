@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/models/processed_text.dart';
-import '../../../core/utils/context_menu_manager.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/services/tts/tts_service.dart';
@@ -22,6 +21,7 @@ class ProcessedTextWidget extends StatefulWidget {
   final TextStyle? translatedTextStyle;
   final bool showTtsButtons;
   final bool isStreaming; // 스트리밍 모드 여부
+  final bool showTypewriterEffect; // 타이프라이터 효과 여부
 
   const ProcessedTextWidget({
     Key? key,
@@ -36,6 +36,7 @@ class ProcessedTextWidget extends StatefulWidget {
     this.translatedTextStyle,
     this.showTtsButtons = true,
     this.isStreaming = false,
+    this.showTypewriterEffect = false,
   }) : super(key: key);
 
   @override
@@ -222,23 +223,30 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           Row(
             children: [
               Expanded(
-                child: widget.isStreaming && !isCompleted
-                    ? FadeInText(
+                child: widget.showTypewriterEffect
+                    ? TypewriterText(
                         text: unit.originalText,
                         style: _defaultOriginalTextStyle,
-                        delay: Duration(milliseconds: i * 200),
+                        duration: const Duration(milliseconds: 50),
+                        delay: Duration(milliseconds: i * 300), // 세그먼트별 지연
                       )
-                    : SelectableText(
-                        unit.originalText,
-                        style: _defaultOriginalTextStyle,
-                        onSelectionChanged: (selection, cause) {
-                          final selectedText = unit.originalText.substring(
-                            selection.start,
-                            selection.end,
-                          );
-                          _handleSelectionChanged(selectedText);
-                        },
-                      ),
+                    : widget.isStreaming && !isCompleted
+                        ? FadeInText(
+                            text: unit.originalText,
+                            style: _defaultOriginalTextStyle,
+                            delay: Duration(milliseconds: i * 200),
+                          )
+                        : SelectableText(
+                            unit.originalText,
+                            style: _defaultOriginalTextStyle,
+                            onSelectionChanged: (selection, cause) {
+                              final selectedText = unit.originalText.substring(
+                                selection.start,
+                                selection.end,
+                              );
+                              _handleSelectionChanged(selectedText);
+                            },
+                          ),
               ),
               if (widget.showTtsButtons) _buildTtsButton(unit.originalText, i, isPlaying),
             ],
