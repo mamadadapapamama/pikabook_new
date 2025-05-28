@@ -14,6 +14,7 @@ import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/common/plan_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -116,6 +117,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     
     try {
+      if (kDebugMode) {
+        print('🔍 PlanService 테스트 시작');
+        
+        // 1. 현재 플랜 타입 확인
+        final currentPlanType = await _planService.getCurrentPlanType();
+        print('   현재 플랜 타입: $currentPlanType');
+        
+        // 2. 플랜 이름 확인
+        final planName = _planService.getPlanName(currentPlanType);
+        print('   플랜 이름: $planName');
+        
+        // 3. 플랜 제한 확인
+        final planLimits = await _planService.getPlanLimits(currentPlanType);
+        print('   플랜 제한: $planLimits');
+        
+        // 4. 현재 사용량 확인
+        final currentUsage = await _planService.getCurrentUsage();
+        print('   현재 사용량: $currentUsage');
+        
+        // 5. 사용량 퍼센트 확인
+        final usagePercentages = await _planService.getUsagePercentages();
+        print('   사용량 퍼센트: $usagePercentages');
+      }
+      
       final planDetails = await _planService.getPlanDetails();
       
       if (mounted) {
@@ -125,13 +150,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _planLimits = Map<String, int>.from(planDetails['planLimits'] as Map);
           _currentUsage = planDetails['currentUsage'] as Map<String, dynamic>;
           _usagePercentages = Map<String, double>.from(planDetails['usagePercentages'] as Map);
-          _isBetaPeriod = planDetails['isBetaPeriod'] as bool;
-          _remainingDays = planDetails['remainingDays'] as int;
+          _isBetaPeriod = planDetails['isBetaPeriod'] as bool? ?? false;
+          _remainingDays = planDetails['remainingDays'] as int? ?? 0;
           _isLoading = false;
         });
+        
+        if (kDebugMode) {
+          print('✅ PlanService 테스트 완료');
+          print('   UI 상태 업데이트: 플랜=$_planName, 제한=$_planLimits');
+        }
       }
     } catch (e) {
-      debugPrint('플랜 정보 로드 오류: $e');
+      debugPrint('❌ 플랜 정보 로드 오류: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;

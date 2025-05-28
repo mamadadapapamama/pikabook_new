@@ -148,6 +148,8 @@ class PlanService {
       'planLimits': planLimits,
       'currentUsage': currentUsage,
       'usagePercentages': usagePercentages,
+      'isBetaPeriod': false, // 베타 기간 여부 (현재는 false로 설정)
+      'remainingDays': 0,    // 남은 일수 (현재는 0으로 설정)
     };
   }
   
