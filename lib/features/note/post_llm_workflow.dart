@@ -217,17 +217,49 @@ class PostLLMWorkflow {
       // 번역과 병음 텍스트 조합
       final translatedText = results.map((unit) => unit.translatedText ?? '').join(' ');
       final pinyinText = results.map((unit) => unit.pinyin ?? '').join(' ');
+      final originalText = results.map((unit) => unit.originalText).join(' ');
 
-      // 페이지 업데이트 - processedText.units 구조로 저장
+      // 2차 ProcessedText 생성 (완전한 번역+병음 포함)
+      final completeProcessedText = ProcessedText(
+        mode: pageData.mode,
+        displayMode: TextDisplayMode.full,
+        fullOriginalText: originalText,
+        fullTranslatedText: translatedText,
+        units: results,
+        sourceLanguage: pageData.sourceLanguage,
+        targetLanguage: pageData.targetLanguage,
+        streamingStatus: StreamingStatus.completed,
+        completedUnits: results.length,
+        progress: 1.0,
+      );
+
+      // 페이지 업데이트 - 2차 ProcessedText로 완전히 교체
       await _pageService.updatePage(pageData.pageId, {
         'translatedText': translatedText,
         'pinyin': pinyinText,
         'processedAt': FieldValue.serverTimestamp(),
         'status': ProcessingStatus.completed.toString(),
+        'showTypewriterEffect': false, // 타이프라이터 효과 비활성화 (LLM 완료)
         'processedText': {
           'units': results.map((unit) => unit.toJson()).toList(),
+          'mode': completeProcessedText.mode.toString(),
+          'displayMode': completeProcessedText.displayMode.toString(),
+          'fullOriginalText': completeProcessedText.fullOriginalText,
+          'fullTranslatedText': completeProcessedText.fullTranslatedText,
+          'sourceLanguage': pageData.sourceLanguage,
+          'targetLanguage': pageData.targetLanguage,
+          'streamingStatus': StreamingStatus.completed.index,
+          'completedUnits': results.length,
+          'progress': 1.0,
         },
       });
+
+      if (kDebugMode) {
+        debugPrint('✅ 2차 ProcessedText 업데이트 완료: ${pageData.pageId}');
+        debugPrint('   번역 완료: ${results.length}개 유닛');
+        debugPrint('   타이프라이터 효과: 비활성화');
+        debugPrint('   최종 ProcessedText 저장 완료');
+      }
 
     } catch (e) {
       if (kDebugMode) {

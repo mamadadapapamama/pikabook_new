@@ -16,6 +16,7 @@ class Page {
   final String? pinyin;            // 병음
   final Map<String, dynamic>? processedText; // 처리된 텍스트 전체 데이터
   final bool showTypewriterEffect; // 타이프라이터 효과 플래그
+  final List<String>? textSegments; // 분리된 텍스트 세그먼트들 (Pre-LLM에서 저장)
 
   Page({
     required this.id,
@@ -31,6 +32,7 @@ class Page {
     this.pinyin,
     this.processedText,
     this.showTypewriterEffect = false,
+    this.textSegments,
   })  : this.createdAt = createdAt ?? DateTime.now(),
         this.sourceLanguage = sourceLanguage ?? SourceLanguage.DEFAULT,
         this.targetLanguage = targetLanguage ?? TargetLanguage.DEFAULT;
@@ -63,6 +65,9 @@ class Page {
           ? Map<String, dynamic>.from(data['processedText'] as Map<String, dynamic>) 
           : null,
       showTypewriterEffect: data['showTypewriterEffect'] ?? false,
+      textSegments: data['textSegments'] != null 
+          ? List<String>.from(data['textSegments'] as List<dynamic>) 
+          : null,
     );
   }
 
@@ -84,6 +89,9 @@ class Page {
           ? Map<String, dynamic>.from(json['processedText'] as Map<String, dynamic>) 
           : null,
       showTypewriterEffect: json['showTypewriterEffect'] ?? false,
+      textSegments: json['textSegments'] != null 
+          ? List<String>.from(json['textSegments'] as List<dynamic>) 
+          : null,
     );
   }
 
@@ -106,6 +114,7 @@ class Page {
     if (translatedText != null) data['translatedText'] = translatedText;
     if (pinyin != null) data['pinyin'] = pinyin;
     if (processedText != null) data['processedText'] = processedText;
+    if (textSegments != null) data['textSegments'] = textSegments;
     
     return data;
   }
@@ -125,6 +134,7 @@ class Page {
     String? pinyin,
     Map<String, dynamic>? processedText,
     bool? showTypewriterEffect,
+    List<String>? textSegments,
   }) {
     return Page(
       id: id ?? this.id,
@@ -140,6 +150,7 @@ class Page {
       pinyin: pinyin ?? this.pinyin,
       processedText: processedText ?? this.processedText,
       showTypewriterEffect: showTypewriterEffect ?? this.showTypewriterEffect,
+      textSegments: textSegments ?? this.textSegments,
     );
   }
 }

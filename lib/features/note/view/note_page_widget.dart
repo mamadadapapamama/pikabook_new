@@ -18,7 +18,7 @@ import 'processed_text_widget.dart';
 import '../../dictionary/dictionary_result_widget.dart';
 
 /// 노트 페이지 위젯: 이미지와 처리된 텍스트를 함께 표시
-class NotePageWidget extends StatelessWidget {
+class NotePageWidget extends StatefulWidget {
   final page_model.Page page;
   final File? imageFile;
   final String noteId;
@@ -37,22 +37,66 @@ class NotePageWidget extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<NotePageWidget> createState() => _NotePageWidgetState();
+}
+
+class _NotePageWidgetState extends State<NotePageWidget> {
+  bool _hasTriedLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 초기 로딩 시도
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _tryLoadTextIfNeeded();
+    });
+  }
+
+  @override
+  void didUpdateWidget(NotePageWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 페이지가 변경되면 로딩 상태 리셋
+    if (oldWidget.page.id != widget.page.id) {
+      _hasTriedLoading = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _tryLoadTextIfNeeded();
+      });
+    }
+  }
+
+  void _tryLoadTextIfNeeded() {
+    if (!mounted || _hasTriedLoading) return;
+    
+    final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
+    final textViewModel = viewModel.getTextViewModel(widget.page.id);
+    final processedText = textViewModel['processedText'] as ProcessedText?;
+    final isLoading = textViewModel['isLoading'] as bool? ?? false;
+    
+    // ProcessedText가 없고 로딩 중이 아닐 때만 로드 시도
+    if (processedText == null && !isLoading && !viewModel.isLoading) {
+      _hasTriedLoading = true;
+      viewModel.loadCurrentPageText();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Consumer를 사용하여 ViewModel에 직접 접근
     return Consumer<NoteDetailViewModel>(
       builder: (context, viewModel, child) {
-        return _buildPageContent(context, viewModel);
+        // 현재 페이지의 텍스트 데이터 미리 가져오기
+        final textViewModel = viewModel.getTextViewModel(widget.page.id);
+        final processedText = textViewModel['processedText'] as ProcessedText?;
+        final isLoading = textViewModel['isLoading'] as bool? ?? false;
+        final error = textViewModel['error'] as String?;
+        
+        return _buildPageContent(context, viewModel, processedText, isLoading, error);
       },
     );
   }
   
-  Widget _buildPageContent(BuildContext context, NoteDetailViewModel viewModel) {
-    // 현재 페이지의 텍스트 데이터 로드 (필요시) - mounted 체크 추가
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (context.mounted) {
-        viewModel.loadCurrentPageText();
-      }
-    });
+  Widget _buildPageContent(BuildContext context, NoteDetailViewModel viewModel, 
+      ProcessedText? processedText, bool isLoading, String? error) {
     
     // 스크롤 가능한 컨테이너
     return SingleChildScrollView(
@@ -66,9 +110,9 @@ class NotePageWidget extends StatelessWidget {
         children: [
           // 페이지 이미지 위젯
           PageImageWidget(
-            imageFile: imageFile,
-            imageUrl: page.imageUrl,
-            page: page,
+            imageFile: widget.imageFile,
+            imageUrl: widget.page.imageUrl,
+            page: widget.page,
             isLoading: viewModel.isLoading,
             enableFullScreen: true,
           ),
@@ -76,33 +120,39 @@ class NotePageWidget extends StatelessWidget {
           SizedBox(height: SpacingTokens.md),
           
           // 텍스트 콘텐츠 위젯
-          _buildTextContent(context, viewModel),
+          _buildTextContent(context, viewModel, processedText, isLoading, error),
         ],
       ),
     );
   }
   
   // 텍스트 콘텐츠 위젯 (상태에 따라 다른 위젯 반환)
-  Widget _buildTextContent(BuildContext context, NoteDetailViewModel viewModel) {
-    // 현재 페이지의 텍스트 데이터 가져오기
-    final textViewModel = viewModel.getTextViewModel(page.id);
-    final processedText = textViewModel['processedText'] as ProcessedText?;
-    final isLoading = textViewModel['isLoading'] as bool? ?? false;
-    final error = textViewModel['error'] as String?;
+  Widget _buildTextContent(BuildContext context, NoteDetailViewModel viewModel,
+      ProcessedText? processedText, bool isLoading, String? error) {
     
-    // 1. 완전한 번역 데이터가 있는 경우
+    if (kDebugMode) {
+      print('🎭 NotePageWidget _buildTextContent');
+      print('   processedText != null: ${processedText != null}');
+      print('   page.showTypewriterEffect: ${widget.page.showTypewriterEffect}');
+      if (processedText != null) {
+        print('   processedText.streamingStatus: ${processedText.streamingStatus}');
+        print('   processedText.fullTranslatedText.length: ${processedText.fullTranslatedText?.length ?? 0}');
+      }
+    }
+    
+    // 1차 ProcessedText (원문만, 번역 없음) - 타이프라이터 효과 적용
+    if (processedText != null && 
+        widget.page.showTypewriterEffect && 
+        (processedText.fullTranslatedText == null || processedText.fullTranslatedText!.isEmpty)) {
+      return _buildTypewriterOnlyWidget(context, processedText);
+    }
+    
+    // 2차 ProcessedText (번역 완료) - 일반 표시
     if (processedText != null) {
       return _buildProcessedTextWidget(context, processedText, viewModel);
     }
     
-    // 2. 원문만 있고 타이프라이터 효과를 보여줘야 하는 경우
-    if (page.showTypewriterEffect && 
-        page.originalText != null && 
-        page.originalText!.isNotEmpty) {
-      return _buildTypewriterOnlyWidget(context);
-    }
-    
-    // 3. 로딩 중이거나 오류가 있는 경우
+    // 로딩 중이거나 오류가 있는 경우
     if (isLoading) {
       return _buildLoadingIndicator();
     } else if (error != null) {
@@ -112,89 +162,50 @@ class NotePageWidget extends StatelessWidget {
     }
   }
   
-  // 처리된 텍스트 위젯
+  // 처리된 텍스트 위젯 (번역 완료된 상태)
   Widget _buildProcessedTextWidget(BuildContext context, ProcessedText processedText, NoteDetailViewModel viewModel) {
     // FlashCardViewModel 생성 (기존 flashCards 리스트로 초기화)
     final flashCardViewModel = FlashCardViewModel(
-      noteId: noteId,
-      initialFlashcards: flashCards,
+      noteId: widget.noteId,
+      initialFlashcards: widget.flashCards,
     );
     
     return ProcessedTextWidget(
       processedText: processedText,
       onDictionaryLookup: (word) => _handleDictionaryLookup(context, word),
-      onCreateFlashCard: onCreateFlashCard,
+      onCreateFlashCard: widget.onCreateFlashCard,
       flashCardViewModel: flashCardViewModel,
-      onPlayTts: onPlayTts,
+      onPlayTts: widget.onPlayTts,
       playingSegmentIndex: null, // TTS 재생 인덱스는 별도 관리 필요
-      showTypewriterEffect: page.showTypewriterEffect,
+      showTypewriterEffect: false, // 번역 완료된 상태에서는 타이프라이터 효과 사용안함
     );
   }
   
-  // 타이프라이터 효과만 있는 원문 위젯 (번역 대기 중)
-  Widget _buildTypewriterOnlyWidget(BuildContext context) {
-    // textSegments가 있으면 사용, 없으면 originalText를 단일 세그먼트로 처리
-    final segments = _getTextSegments();
-    
-    if (segments.isEmpty) {
-      return _buildLoadingIndicator();
+  // 타이프라이터 효과 전용 위젯 (1차 ProcessedText용)
+  Widget _buildTypewriterOnlyWidget(BuildContext context, ProcessedText processedText) {
+    if (kDebugMode) {
+      print('🎬 NotePageWidget _buildTypewriterOnlyWidget');
+      print('   units 개수: ${processedText.units.length}');
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 번역 진행 중 표시
-        Container(
-          margin: const EdgeInsets.only(bottom: 16.0),
-          padding: const EdgeInsets.all(12.0),
-          decoration: BoxDecoration(
-            color: Theme.of(context).primaryColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8.0),
-            border: Border.all(
-              color: Theme.of(context).primaryColor.withOpacity(0.3),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Theme.of(context).primaryColor,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                '번역 중... 원문을 먼저 보여드립니다',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Theme.of(context).primaryColor,
-                ),
-              ),
-            ],
-          ),
-        ),
-        
         // 세그먼트별 타이프라이터 효과
-        ...segments.asMap().entries.map((entry) {
+        ...processedText.units.asMap().entries.map((entry) {
           final index = entry.key;
-          final segment = entry.value;
+          final unit = entry.value;
           
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TypewriterText(
-                text: segment,
+                text: unit.originalText,
                 style: TypographyTokens.subtitle1Cn.copyWith(color: ColorTokens.textPrimary),
                 duration: const Duration(milliseconds: 50),
                 delay: Duration(milliseconds: index * 300), // 세그먼트별 지연
               ),
-              if (index < segments.length - 1) // 마지막이 아니면 구분선
+              if (index < processedText.units.length - 1) // 마지막이 아니면 구분선
                 const Padding(
                   padding: EdgeInsets.only(top: 16.0, bottom: 16.0),
                   child: Divider(height: 1, thickness: 1, color: ColorTokens.dividerLight),
@@ -204,16 +215,6 @@ class NotePageWidget extends StatelessWidget {
         }).toList(),
       ],
     );
-  }
-
-  // 텍스트 세그먼트 가져오기
-  List<String> _getTextSegments() {
-    // originalText를 단일 세그먼트로 처리 (나중에 필요하면 분리 로직 추가)
-    if (page.originalText != null && page.originalText!.isNotEmpty) {
-      return [page.originalText!];
-    }
-    
-    return [];
   }
   
   // 로딩 인디케이터 (처리 중 상태 공통 사용)
@@ -258,7 +259,7 @@ class NotePageWidget extends StatelessWidget {
     DictionaryResultWidget.searchAndShowDictionary(
       context: context,
       word: word,
-      onCreateFlashCard: onCreateFlashCard ?? (_, __, {pinyin}) {},
+      onCreateFlashCard: widget.onCreateFlashCard ?? (_, __, {pinyin}) {},
       onEntryFound: (entry) {
         if (kDebugMode) {
           print('사전 검색 결과: ${entry.word} - ${entry.meaning}');

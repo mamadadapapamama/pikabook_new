@@ -207,10 +207,22 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   Widget _buildSegmentView() {
     final List<Widget> unitWidgets = [];
 
+    if (kDebugMode) {
+      debugPrint('🔧 _buildSegmentView 호출');
+      debugPrint('   showTypewriterEffect: ${widget.showTypewriterEffect}');
+      debugPrint('   units 개수: ${widget.processedText.units.length}');
+    }
+
     for (int i = 0; i < widget.processedText.units.length; i++) {
       final unit = widget.processedText.units[i];
       final isPlaying = widget.playingSegmentIndex == i;
       final hasTranslation = unit.translatedText != null && unit.translatedText!.isNotEmpty;
+
+      if (kDebugMode && i < 3) {
+        debugPrint('   세그먼트 $i: "${unit.originalText.length > 20 ? unit.originalText.substring(0, 20) + "..." : unit.originalText}"');
+        debugPrint('     번역: ${hasTranslation ? "있음" : "없음"}');
+        debugPrint('     타이프라이터 적용: ${widget.showTypewriterEffect}');
+      }
 
       // 세그먼트 컨테이너
       Widget segmentContainer = Column(

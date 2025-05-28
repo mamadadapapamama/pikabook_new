@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 /// 타이프라이터 효과를 제공하는 텍스트 위젯
@@ -34,6 +35,10 @@ class _TypewriterTextState extends State<TypewriterText>
   @override
   void initState() {
     super.initState();
+    if (kDebugMode) {
+      debugPrint('🎬 TypewriterText initState: "${widget.text.length > 30 ? widget.text.substring(0, 30) + "..." : widget.text}"');
+      debugPrint('   autoStart: ${widget.autoStart}, delay: ${widget.delay.inMilliseconds}ms');
+    }
     _initializeAnimation();
     
     if (widget.autoStart) {
@@ -73,13 +78,24 @@ class _TypewriterTextState extends State<TypewriterText>
   }
 
   void _startAnimation() {
+    if (kDebugMode) {
+      debugPrint('▶️ TypewriterText _startAnimation 시작');
+      debugPrint('   delay: ${widget.delay.inMilliseconds}ms, text length: ${widget.text.length}');
+    }
+    
     if (widget.delay.inMilliseconds > 0) {
       _delayTimer = Timer(widget.delay, () {
         if (mounted) {
+          if (kDebugMode) {
+            debugPrint('⏰ TypewriterText delay 완료, 애니메이션 시작');
+          }
           _controller.forward();
         }
       });
     } else {
+      if (kDebugMode) {
+        debugPrint('🚀 TypewriterText 즉시 애니메이션 시작');
+      }
       _controller.forward();
     }
   }

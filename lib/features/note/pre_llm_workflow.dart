@@ -319,17 +319,46 @@ class PreLLMWorkflow {
         debugPrint('📄 페이지 OCR 결과 업데이트: ${pageData.pageId}');
       }
 
-      // OCR 결과 업데이트
+      // 1차 ProcessedText 생성 (원문만, 타이프라이터 효과용)
+      final initialProcessedText = ProcessedText.withOriginalOnly(
+        mode: pageData.mode,
+        originalSegments: pageData.textSegments,
+        sourceLanguage: pageData.sourceLanguage,
+        targetLanguage: pageData.targetLanguage,
+      );
+
+      // OCR 결과 및 1차 ProcessedText 업데이트
       await _pageService.updatePage(pageData.pageId, {
         'originalText': pageData.textSegments.join(' '),
         'ocrCompletedAt': FieldValue.serverTimestamp(),
         'status': ProcessingStatus.textExtracted.toString(),
-        'textSegments': pageData.textSegments,
         'showTypewriterEffect': true, // 타이프라이터 효과 플래그 설정
+        // 원문 세그먼트를 임시 저장 (LLM 처리용)
+        'textSegments': pageData.textSegments,
+        'processingMode': pageData.mode.toString(),
+        'sourceLanguage': pageData.sourceLanguage,
+        'targetLanguage': pageData.targetLanguage,
+        // 1차 ProcessedText 저장 (원문만, 타이프라이터 효과용)
+        'processedText': {
+          'units': initialProcessedText.units.map((unit) => unit.toJson()).toList(),
+          'mode': initialProcessedText.mode.toString(),
+          'displayMode': initialProcessedText.displayMode.toString(),
+          'fullOriginalText': initialProcessedText.fullOriginalText,
+          'fullTranslatedText': '', // 아직 번역 없음
+          'sourceLanguage': pageData.sourceLanguage,
+          'targetLanguage': pageData.targetLanguage,
+          'streamingStatus': initialProcessedText.streamingStatus.index,
+          'completedUnits': 0,
+          'progress': 0.0,
+        },
       });
 
       if (kDebugMode) {
-        debugPrint('✅ 페이지 OCR 결과 업데이트 완료: ${pageData.pageId}');
+        debugPrint('✅ 페이지 OCR 결과 및 1차 ProcessedText 업데이트 완료: ${pageData.pageId}');
+        debugPrint('   원문 세그먼트: ${pageData.textSegments.length}개');
+        debugPrint('   타이프라이터 효과: 활성화');
+        debugPrint('   1차 ProcessedText: 원문만 포함');
+        debugPrint('   2차 ProcessedText는 LLM 완료 후 생성됩니다');
       }
 
     } catch (e) {

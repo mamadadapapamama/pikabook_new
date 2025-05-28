@@ -146,22 +146,26 @@ class TextProcessingService {
       try {
         final page = page_model.Page.fromFirestore(snapshot);
         
-        // 번역 텍스트가 업데이트된 경우
-        if (page.translatedText != null && page.translatedText!.isNotEmpty) {
-          final processedText = await _createProcessedTextFromPage(page);
+        // processedText 필드가 있으면 ProcessedText 생성 (번역 여부와 관계없이)
+        if (page.processedText != null && page.processedText!.isNotEmpty) {
+          final processedText = await _createProcessedTextFromPageData(page);
           
           // processedText가 null이 아닌 경우에만 처리
           if (processedText != null) {
             // 이전 데이터와 비교하여 실제 변경이 있는지 확인
             if (_hasProcessedTextChanged(previousProcessedText, processedText)) {
-              // 캐시 업데이트
-              await _saveToCache(pageId, processedText);
+              // 완성된 ProcessedText만 캐싱 (1차는 캐싱하지 않음)
+              if (processedText.streamingStatus == StreamingStatus.completed) {
+                await _saveToCache(pageId, processedText);
+              }
               
               // 콜백 호출
               onTextChanged(processedText);
               
               if (kDebugMode) {
                 debugPrint('🔔 페이지 텍스트 변경 감지: $pageId');
+                debugPrint('   스트리밍 상태: ${processedText.streamingStatus}');
+                debugPrint('   번역 텍스트: ${processedText.fullTranslatedText?.isNotEmpty == true ? "있음" : "없음"}');
               }
               
               // 현재 데이터를 이전 데이터로 저장
@@ -170,6 +174,23 @@ class TextProcessingService {
               if (kDebugMode) {
                 debugPrint('⏭️ 페이지 텍스트 변경 없음 (스킵): $pageId');
               }
+            }
+          }
+        }
+        // 번역 텍스트만 있고 processedText가 없는 경우 (기존 호환성)
+        else if (page.translatedText != null && page.translatedText!.isNotEmpty) {
+          final processedText = await _createProcessedTextFromPage(page);
+          
+          if (processedText != null) {
+            if (_hasProcessedTextChanged(previousProcessedText, processedText)) {
+              await _saveToCache(pageId, processedText);
+              onTextChanged(processedText);
+              
+              if (kDebugMode) {
+                debugPrint('🔔 페이지 텍스트 변경 감지 (호환성): $pageId');
+              }
+              
+              previousProcessedText = processedText;
             }
           }
         }
@@ -315,9 +336,92 @@ class TextProcessingService {
     );
   }
   
+  /// Page의 processedText 필드에서 직접 ProcessedText 생성 (번역 여부와 관계없이)
+  Future<ProcessedText?> _createProcessedTextFromPageData(page_model.Page page) async {
+    if (page.processedText == null || page.processedText!.isEmpty) {
+      return null;
+    }
+    
+    try {
+      final processedData = page.processedText!;
+      
+      // units 배열에서 TextUnit 리스트 생성
+      List<TextUnit> units = [];
+      if (processedData['units'] != null && processedData['units'] is List) {
+        units = (processedData['units'] as List)
+            .map((unitData) => TextUnit.fromJson(Map<String, dynamic>.from(unitData)))
+            .toList();
+      }
+      
+      // 모드 파싱
+      TextProcessingMode mode = TextProcessingMode.segment;
+      if (processedData['mode'] != null) {
+        try {
+          mode = TextProcessingMode.values.firstWhere(
+            (e) => e.toString() == processedData['mode']
+          );
+        } catch (e) {
+          // 파싱 실패 시 기본값 사용
+        }
+      }
+      
+      // 표시 모드 파싱
+      TextDisplayMode displayMode = TextDisplayMode.full;
+      if (processedData['displayMode'] != null) {
+        try {
+          displayMode = TextDisplayMode.values.firstWhere(
+            (e) => e.toString() == processedData['displayMode']
+          );
+        } catch (e) {
+          // 파싱 실패 시 기본값 사용
+        }
+      }
+      
+      // 스트리밍 상태 파싱
+      StreamingStatus streamingStatus = StreamingStatus.preparing;
+      if (processedData['streamingStatus'] != null) {
+        try {
+          final statusIndex = processedData['streamingStatus'] as int;
+          if (statusIndex >= 0 && statusIndex < StreamingStatus.values.length) {
+            streamingStatus = StreamingStatus.values[statusIndex];
+          }
+        } catch (e) {
+          // 파싱 실패 시 기본값 사용
+        }
+      }
+      
+      return ProcessedText(
+        mode: mode,
+        displayMode: displayMode,
+        fullOriginalText: processedData['fullOriginalText']?.toString() ?? '',
+        fullTranslatedText: processedData['fullTranslatedText']?.toString() ?? '',
+        units: units,
+        sourceLanguage: processedData['sourceLanguage']?.toString() ?? page.sourceLanguage,
+        targetLanguage: processedData['targetLanguage']?.toString() ?? page.targetLanguage,
+        streamingStatus: streamingStatus,
+        completedUnits: processedData['completedUnits'] as int? ?? 0,
+        progress: (processedData['progress'] as num?)?.toDouble() ?? 0.0,
+      );
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ processedText 파싱 실패: $e');
+      }
+      return null;
+    }
+  }
+  
   /// 캐시에 텍스트 저장
   Future<void> _saveToCache(String pageId, ProcessedText processedText) async {
     try {
+      // 완성된 ProcessedText만 캐싱 (타이프라이터 효과용 1차 데이터는 캐싱하지 않음)
+      if (processedText.streamingStatus != StreamingStatus.completed) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 미완성 ProcessedText는 캐싱하지 않음: $pageId (상태: ${processedText.streamingStatus})');
+        }
+        return;
+      }
+
       final segments = processedText.units.map((unit) => {
         'original': unit.originalText,
         'translated': unit.translatedText ?? '',
@@ -327,6 +431,10 @@ class TextProcessingService {
       }).toList();
       
       await _cacheService.cacheSegments(pageId, processedText.mode, segments);
+      
+      if (kDebugMode) {
+        debugPrint('✅ 완성된 ProcessedText 캐싱 완료: $pageId');
+      }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('⚠️ 캐시 저장 실패: $pageId, $e');

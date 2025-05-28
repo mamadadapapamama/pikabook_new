@@ -60,6 +60,19 @@ class TextCleanerService {
     caseSensitive: false,
   );
 
+  /// 숫자와 특수문자 혼합 패턴 (시간, 점수, 비율 등)
+  /// 예: 10:30, 90/100, 3.5, 85%, 1-5, 2022.03.15, 12:00-13:00
+  static final RegExp numberSpecialCharPattern = RegExp(
+    r'^[\d\s]*[\d]+[\s]*[:/\-%.]+[\s]*[\d]+[\s]*[:/\-%.]*[\d]*[\s]*$|'  // 시간, 점수, 비율 패턴
+    r'^[\d]+[%]+$|'                                                      // 퍼센트 패턴 (85%)
+    r'^[\d]+\.[\d]+$|'                                                   // 소수점 패턴 (3.5)
+    r'^[\d]{4}\.[\d]{2}\.[\d]{2}$|'                                     // 날짜 패턴 (2022.03.15)
+    r'^[\d]{1,2}:[\d]{2}(-[\d]{1,2}:[\d]{2})?$'                        // 시간 범위 패턴 (12:00-13:00)
+  );
+
+  /// 단순 숫자 조합 패턴 (예: "1 2 3", "123 456")
+  static final RegExp simpleNumberCombinationPattern = RegExp(r'^[\d\s]+$');
+
   // ========== 캐시 시스템 ==========
   
   /// 텍스트 정리 결과 캐시 (성능 최적화)
@@ -135,6 +148,14 @@ class TextCleanerService {
       if (_isOnlyNumbers(trimmedLine)) {
         if (kDebugMode) {
           debugPrint('🧹 숫자만 있는 줄 건너뛰기: "$trimmedLine"');
+        }
+        continue;
+      }
+
+      // 숫자와 특수문자 혼합 패턴 건너뛰기 (시간, 점수 등)
+      if (_isNumberSpecialCharMix(trimmedLine)) {
+        if (kDebugMode) {
+          debugPrint('🧹 숫자+특수문자 혼합 패턴 건너뛰기: "$trimmedLine"');
         }
         continue;
       }
@@ -409,6 +430,52 @@ class TextCleanerService {
       }
     }
     return hasAlphabets;
+  }
+
+  /// 숫자와 특수문자 혼합 패턴인지 확인 (시간, 점수, 비율 등)
+  /// 
+  /// **제거되는 패턴들:**
+  /// - 시간: 10:30, 12:00-13:00
+  /// - 점수/비율: 90/100, 85%
+  /// - 소수점: 3.5, 12.8
+  /// - 날짜: 2022.03.15
+  /// - 범위: 1-5, 10-20
+  /// - 단순 숫자 조합: "1 2 3", "123 456"
+  bool _isNumberSpecialCharMix(String text) {
+    if (kDebugMode) {
+      debugPrint('🔍 숫자+특수문자 혼합 패턴 검사: "$text"');
+    }
+    
+    // 중국어가 포함되어 있으면 유지 (숫자와 함께 있어도)
+    if (containsChinese(text)) {
+      if (kDebugMode) {
+        debugPrint('✅ 중국어 포함 - 유지: "$text"');
+      }
+      return false;
+    }
+    
+    // 숫자와 특수문자 혼합 패턴 확인
+    final isNumberSpecialMix = numberSpecialCharPattern.hasMatch(text);
+    
+    // 단순 숫자 조합 패턴 확인
+    final isSimpleNumberCombo = simpleNumberCombinationPattern.hasMatch(text);
+    
+    final shouldRemove = isNumberSpecialMix || isSimpleNumberCombo;
+    
+    if (kDebugMode) {
+      if (shouldRemove) {
+        if (isNumberSpecialMix) {
+          debugPrint('❌ 숫자+특수문자 혼합 패턴 - 제거: "$text"');
+        }
+        if (isSimpleNumberCombo) {
+          debugPrint('❌ 단순 숫자 조합 패턴 - 제거: "$text"');
+        }
+      } else {
+        debugPrint('✅ 숫자+특수문자 패턴 아님 - 유지: "$text"');
+      }
+    }
+    
+    return shouldRemove;
   }
 
   // ========== 캐시 관리 ==========
