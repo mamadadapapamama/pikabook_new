@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import '../../../core/widgets/loading_dialog_experience.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
@@ -12,6 +13,7 @@ import '../view/note_detail_screen.dart';
 import '../pre_llm_workflow.dart';
 import '../post_llm_workflow.dart';
 import '../services/note_service.dart';
+import '../../home/home_viewmodel.dart';
 
 /// 노트 생성 UI 매니저
 /// UI 관련 로직만 담당: 로딩, 화면 이동, 에러 처리, 튜토리얼 등
@@ -236,6 +238,20 @@ class NoteCreationUIManager {
       isFavorite: false,
       flashcardCount: 0,
     );
+
+    // 사용량 제한 상태 새로고침 (노트 생성 후 OCR 사용량 업데이트)
+    try {
+      final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
+      await homeViewModel.refreshUsageLimits();
+      if (kDebugMode) {
+        debugPrint('✅ 사용량 제한 상태 새로고침 완료');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 사용량 제한 상태 새로고침 실패: $e');
+      }
+      // 사용량 새로고침 실패는 노트 생성 성공에 영향을 주지 않음
+    }
 
     // 로딩 다이얼로그 닫기
     if (loadingDialogShown && context.mounted) {

@@ -1,24 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import '../../core/models/note.dart';
 import '../../features/note/services/note_service.dart';
 import '../../../core/services/cache/note_cache_service.dart';
 import '../../core/widgets/loading_dialog_experience.dart';
+import '../../core/services/common/usage_limit_service.dart';
 
 class HomeViewModel extends ChangeNotifier {
   final NoteService _noteService = NoteService();
   final NoteCacheService _cacheService = NoteCacheService();
+  final UsageLimitService _usageLimitService = UsageLimitService();
 
   List<Note> _notes = [];
   bool _isLoading = true;
   String? _error;
   StreamSubscription<List<Note>>? _notesSubscription;
+  
+  // 사용량 제한 상태
+  bool _ocrLimitReached = false;
+  bool _translationLimitReached = false;
+  bool _ttsLimitReached = false;
+  bool _storageLimitReached = false;
 
   // Getter
   List<Note> get notes => _notes;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get hasNotes => _notes.isNotEmpty;
+  
+  // 사용량 제한 상태 getters
+  bool get ocrLimitReached => _ocrLimitReached;
+  bool get translationLimitReached => _translationLimitReached;
+  bool get ttsLimitReached => _ttsLimitReached;
+  bool get storageLimitReached => _storageLimitReached;
+  
+  // 스마트노트 만들기 버튼 활성화 여부
+  bool get canCreateNote => !_ocrLimitReached;
 
   // 생성자에서 노트 목록을 불러옵니다.
   HomeViewModel() {
@@ -29,6 +47,9 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> _initializeViewModel() async {
     debugPrint('[HomeViewModel] 초기화 시작');
     try {
+      // 사용량 제한 상태 확인
+      await _checkUsageLimits();
+      
       // 캐시된 데이터가 있고 유효한 경우 먼저 표시
       final cachedNotes = await _noteService.getCachedNotes();
       if (cachedNotes.isNotEmpty) {
@@ -51,6 +72,36 @@ class HomeViewModel extends ChangeNotifier {
       // 캐시 로드 실패는 무시하고 서버에서 로드 진행
       _loadNotes();
     }
+  }
+
+  /// 사용량 제한 상태 확인
+  Future<void> _checkUsageLimits() async {
+    try {
+      final limits = await _usageLimitService.checkInitialLimitStatus();
+      
+      _ocrLimitReached = limits['ocrLimitReached'] ?? false;
+      _translationLimitReached = limits['translationLimitReached'] ?? false;
+      _ttsLimitReached = limits['ttsLimitReached'] ?? false;
+      _storageLimitReached = limits['storageLimitReached'] ?? false;
+      
+      if (kDebugMode) {
+        debugPrint('[HomeViewModel] 사용량 제한 상태 확인 완료:');
+        debugPrint('   OCR 제한: $_ocrLimitReached');
+        debugPrint('   번역 제한: $_translationLimitReached');
+        debugPrint('   TTS 제한: $_ttsLimitReached');
+        debugPrint('   스토리지 제한: $_storageLimitReached');
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[HomeViewModel] 사용량 제한 확인 중 오류: $e');
+      // 오류 발생 시 기본값 유지 (제한 없음으로 가정)
+    }
+  }
+
+  /// 사용량 제한 상태 새로고침 (노트 생성 후 호출)
+  Future<void> refreshUsageLimits() async {
+    await _checkUsageLimits();
   }
 
   // 캐시 유효성 확인

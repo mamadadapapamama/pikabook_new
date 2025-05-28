@@ -342,11 +342,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
               child: PikaButton(
-                text: '스마트 노트 만들기',
+                text: viewModel.canCreateNote ? '스마트 노트 만들기' : 'OCR 사용량 초과',
                 variant: PikaButtonVariant.primary,
                 isFullWidth: false,
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                onPressed: () => _showImagePickerBottomSheet(context),
+                onPressed: viewModel.canCreateNote ? () => _showImagePickerBottomSheet(context) : null,
               ),
             ),
         ],
@@ -457,51 +457,55 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
 // zero state 디자인 위젯
   Widget _buildZeroState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset(
-              'assets/images/zeronote.png',
-              width: 214,
-              height: 160,
-              fit: BoxFit.contain,
+    return Consumer<HomeViewModel>(
+      builder: (context, viewModel, _) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/images/zeronote.png',
+                  width: 214,
+                  height: 160,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 30),
+                
+                Text(
+                  '먼저, 번역이 필요한\n이미지를 올려주세요.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF0E2823), // #0E2823
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                Text(
+                  '이미지를 기반으로 학습 노트를 만들어드립니다. \n카메라 촬영도 가능합니다.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: const Color(0xFF969696), // #969696
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // CTA 버튼 - 이미지 업로드하기
+                PikaButton(
+                  text: viewModel.canCreateNote ? '이미지 올리기' : 'OCR 사용량 초과',
+                  variant: PikaButtonVariant.primary,
+                  isFullWidth: true,
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  onPressed: viewModel.canCreateNote ? () => _showImagePickerBottomSheet(context) : null,
+                ),
+              ],
             ),
-            const SizedBox(height: 30),
-            
-            Text(
-              '먼저, 번역이 필요한\n이미지를 올려주세요.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF0E2823), // #0E2823
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            Text(
-              '이미지를 기반으로 학습 노트를 만들어드립니다. \n카메라 촬영도 가능합니다.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: const Color(0xFF969696), // #969696
-              ),
-            ),
-            const SizedBox(height: 24),
-            // CTA 버튼 - 이미지 업로드하기
-            PikaButton(
-              text: '이미지 올리기',
-              variant: PikaButtonVariant.primary,
-              isFullWidth: true,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              onPressed: () => _showImagePickerBottomSheet(context),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
