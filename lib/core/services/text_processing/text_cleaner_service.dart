@@ -53,6 +53,12 @@ class TextCleanerService {
   
   /// 저작권 및 특수 문자 패턴 (©, ®, ™, @, #, $ 등)
   static final RegExp copyrightPattern = RegExp(r'^[^a-zA-Z\u4e00-\u9fff]*[©®™@#$%^&*+-]+[^a-zA-Z\u4e00-\u9fff]*$');
+  
+  /// 저작권 관련 키워드 패턴 (영어 + 중국어)
+  static final RegExp copyrightKeywordsPattern = RegExp(
+    r'(copyright|all rights reserved|版权所有|保留所有权利|ltd\.?|inc\.?|corp\.?|company|pte\.?\s*ltd\.?|limited|international.*\(\d{4}\)|rights?\s+reserved)',
+    caseSensitive: false,
+  );
 
   // ========== 캐시 시스템 ==========
   
@@ -145,6 +151,14 @@ class TextCleanerService {
       if (_isCopyrightOrSpecialChars(trimmedLine)) {
         if (kDebugMode) {
           debugPrint('🧹 저작권/특수문자 건너뛰기: "$trimmedLine"');
+        }
+        continue;
+      }
+
+      // 저작권 키워드가 포함된 줄 건너뛰기 (중국어 포함 여부와 관계없이)
+      if (_isCopyrightKeywordLine(trimmedLine)) {
+        if (kDebugMode) {
+          debugPrint('🧹 저작권 키워드 줄 건너뛰기: "$trimmedLine"');
         }
         continue;
       }
@@ -337,6 +351,30 @@ class TextCleanerService {
     return copyrightPattern.hasMatch(text) && !containsChinese(text);
   }
 
+  /// 저작권 관련 키워드가 포함된 줄인지 확인
+  /// 중국어가 포함되어 있어도 저작권 관련 키워드가 있으면 제거
+  bool _isCopyrightKeywordLine(String text) {
+    if (kDebugMode) {
+      debugPrint('🔍 저작권 키워드 검사: "$text"');
+    }
+    
+    final hasCopyrightKeywords = copyrightKeywordsPattern.hasMatch(text);
+    
+    if (kDebugMode) {
+      if (hasCopyrightKeywords) {
+        final matches = copyrightKeywordsPattern.allMatches(text);
+        for (final match in matches) {
+          debugPrint('🎯 매칭된 저작권 키워드: "${match.group(0)}"');
+        }
+        debugPrint('❌ 저작권 키워드 포함 - 제거: "$text"');
+      } else {
+        debugPrint('✅ 저작권 키워드 없음 - 통과: "$text"');
+      }
+    }
+    
+    return hasCopyrightKeywords;
+  }
+
   /// 문장부호만 있는지 확인 (공백 + 구두점만)
   bool _isOnlyPunctuation(String text) {
     return onlyPunctuationPattern.hasMatch(text);
@@ -348,13 +386,28 @@ class TextCleanerService {
   /// - 중국어 문자가 포함되어 있으면 유지 (false 반환)
   /// - 중국어가 없고 영어나 기타 알파벳만 있으면 제거 (true 반환)
   bool _isNonChineseOnly(String text) {
+    if (kDebugMode) {
+      debugPrint('🔍 _isNonChineseOnly 검사: "$text"');
+    }
+    
     // 중국어가 포함되어 있으면 유지
     if (containsChinese(text)) {
+      if (kDebugMode) {
+        debugPrint('✅ 중국어 포함 - 유지: "$text"');
+      }
       return false;
     }
     
     // 중국어가 없고, 영어나 기타 알파벳만 있는 경우 제거
     final hasAlphabets = RegExp(r'[a-zA-Z]').hasMatch(text);
+    if (kDebugMode) {
+      debugPrint('🔍 영어 알파벳 포함: $hasAlphabets, 텍스트: "$text"');
+      if (hasAlphabets) {
+        debugPrint('❌ 영어만 있는 텍스트 - 제거: "$text"');
+      } else {
+        debugPrint('✅ 영어가 아닌 텍스트 - 유지: "$text"');
+      }
+    }
     return hasAlphabets;
   }
 
