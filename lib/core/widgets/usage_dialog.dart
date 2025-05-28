@@ -76,12 +76,31 @@ class _UsageDialogState extends State<UsageDialog> {
       // 외부에서 전달된 데이터가 있으면 사용, 없으면 서비스에서 직접 가져옴
       if (widget.limitStatus != null && widget.usagePercentages != null) {
         _limitStatus = Map<String, dynamic>.from(widget.limitStatus!);
-        _usagePercentages = Map<String, double>.from(widget.usagePercentages!);
+        
+        // 안전한 타입 변환을 위해 각 값을 double로 변환
+        _usagePercentages = {};
+        widget.usagePercentages!.forEach((key, value) {
+          if (value is num) {
+            _usagePercentages[key] = value.toDouble();
+          } else {
+            _usagePercentages[key] = 0.0;
+          }
+        });
       } else {
         // UsageLimitService에서 최신 데이터를 가져옴
         final usageInfo = await _usageService.getUsageInfo();
         _limitStatus = usageInfo['limitStatus'];
-        _usagePercentages = Map<String, double>.from(usageInfo['percentages'] as Map);
+        
+        // 안전한 타입 변환을 위해 각 값을 double로 변환
+        final percentagesMap = usageInfo['percentages'] as Map<String, dynamic>;
+        _usagePercentages = {};
+        percentagesMap.forEach((key, value) {
+          if (value is num) {
+            _usagePercentages[key] = value.toDouble();
+          } else {
+            _usagePercentages[key] = 0.0;
+          }
+        });
       }
       
       debugPrint('UsageDialog - 로드된 사용량 데이터: $_usagePercentages');

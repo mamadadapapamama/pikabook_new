@@ -156,12 +156,12 @@ class UsageLimitService {
       final usage = await _loadUsageDataFromFirebase();
       final limits = await _loadLimitsFromFirebase();
       
-      // 사용률 계산
-      final usagePercentages = {
-        'ocr': (limits['ocrPages'] ?? 0) > 0 ? ((usage['ocrPages'] ?? 0) / (limits['ocrPages'] ?? 1) * 100).clamp(0, 100) : 0.0,
-        'tts': (limits['ttsRequests'] ?? 0) > 0 ? ((usage['ttsRequests'] ?? 0) / (limits['ttsRequests'] ?? 1) * 100).clamp(0, 100) : 0.0,
-        'translation': (limits['translatedChars'] ?? 0) > 0 ? ((usage['translatedChars'] ?? 0) / (limits['translatedChars'] ?? 1) * 100).clamp(0, 100) : 0.0,
-        'storage': (limits['storageBytes'] ?? 0) > 0 ? ((usage['storageUsageBytes'] ?? 0) / (limits['storageBytes'] ?? 1) * 100).clamp(0, 100) : 0.0,
+      // 사용률 계산 (안전한 double 변환)
+      final usagePercentages = <String, double>{
+        'ocr': (limits['ocrPages'] ?? 0) > 0 ? ((usage['ocrPages'] ?? 0).toDouble() / (limits['ocrPages'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
+        'tts': (limits['ttsRequests'] ?? 0) > 0 ? ((usage['ttsRequests'] ?? 0).toDouble() / (limits['ttsRequests'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
+        'translation': (limits['translatedChars'] ?? 0) > 0 ? ((usage['translatedChars'] ?? 0).toDouble() / (limits['translatedChars'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
+        'storage': (limits['storageBytes'] ?? 0) > 0 ? ((usage['storageUsageBytes'] ?? 0).toDouble() / (limits['storageBytes'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
       };
       
       // 제한 도달 여부
@@ -346,7 +346,7 @@ class UsageLimitService {
     return {
       'usage': _getDefaultUsageData(),
       'limits': defaultLimits,
-      'usagePercentages': {
+      'usagePercentages': <String, double>{
         'ocr': 0.0,
         'tts': 0.0,
         'translation': 0.0,

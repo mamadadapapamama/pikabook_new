@@ -27,6 +27,10 @@ class TtsPlaybackService {
   // 초기화 상태
   bool _isInitialized = false;
 
+  // 스트림 구독 관리
+  StreamSubscription? _playerStateSubscription;
+  StreamSubscription? _playbackEventSubscription;
+
   /// 초기화
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -79,35 +83,6 @@ class TtsPlaybackService {
       // 파일 경로 설정
       await _audioPlayer.setFilePath(filePath);
       
-      // 재생 완료 이벤트 추가 리스너
-      final completer = Completer<void>();
-      
-      // 일회성 이벤트 리스너
-      void onComplete() {
-        if (!completer.isCompleted) {
-          completer.complete();
-          debugPrint('🎵 오디오 재생 완료됨');
-          _isSpeaking = false;
-          _ttsState = TtsState.stopped;
-        }
-      }
-      
-      // 재생 완료 시 호출될 콜백 등록
-      _audioPlayer.playerStateStream.listen((state) {
-        if (state.processingState == ProcessingState.completed) {
-          onComplete();
-        }
-      });
-      
-      // 오류 발생 시 호출될 콜백 등록
-      _audioPlayer.playbackEventStream.listen(
-        (_) {},  // 정상 이벤트는 무시
-        onError: (Object e, StackTrace stackTrace) {
-          debugPrint('❌ 오디오 재생 중 오류: $e');
-          onComplete();  // 오류 발생 시에도 완료 처리
-        },
-      );
-      
       // 실제 재생 시작
       await _audioPlayer.play();
       _isSpeaking = true;
@@ -118,7 +93,8 @@ class TtsPlaybackService {
       Future.delayed(const Duration(seconds: 10), () {
         if (_isSpeaking) {
           debugPrint('⚠️ 오디오 재생 타임아웃으로 강제 종료');
-          onComplete();
+          _isSpeaking = false;
+          _ttsState = TtsState.stopped;
         }
       });
     } catch (e) {
@@ -155,6 +131,13 @@ class TtsPlaybackService {
   /// 리소스 해제
   Future<void> dispose() async {
     _isSpeaking = false;
+    
+    // 스트림 구독 취소
+    await _playerStateSubscription?.cancel();
+    await _playbackEventSubscription?.cancel();
+    _playerStateSubscription = null;
+    _playbackEventSubscription = null;
+    
     await _audioPlayer.dispose();
     await _cacheService.clear();
     _isInitialized = false;
@@ -171,18 +154,22 @@ class TtsPlaybackService {
 
   /// 이벤트 핸들러 초기화
   Future<void> _setupEventHandlers() async {
-    // 재생 시작 이벤트
-    _audioPlayer.playbackEventStream.listen((event) {
-      if (event.processingState == ProcessingState.ready) {
-        debugPrint("TTS 재생 시작");
+    // 기존 구독이 있으면 취소
+    await _playerStateSubscription?.cancel();
+    await _playbackEventSubscription?.cancel();
+    
+    // 재생 상태 변경 이벤트
+    _playbackEventSubscription = _audioPlayer.playbackEventStream.listen((event) {
+      if (event.processingState == ProcessingState.ready && _ttsState != TtsState.playing) {
+        debugPrint("🎵 TtsPlaybackService: 오디오 준비 완료");
         _ttsState = TtsState.playing;
       }
     });
 
     // 재생 완료 이벤트
-    _audioPlayer.playerStateStream.listen((state) {
+    _playerStateSubscription = _audioPlayer.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) {
-        debugPrint("TTS 재생 완료");
+        debugPrint("🎵 TtsPlaybackService: 재생 완료");
         _ttsState = TtsState.stopped;
         _isSpeaking = false;
       }

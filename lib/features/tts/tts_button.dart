@@ -159,7 +159,7 @@ class _TtsButtonState extends State<TtsButton> {
       
       try {
         // 재생 메서드 호출 전에 디버그 로그
-        debugPrint('TTS 재생 시작: "${widget.text}", 세그먼트=${widget.segmentIndex}');
+        debugPrint('🔘 TtsButton: 재생 요청 - "${widget.text}", 세그먼트=${widget.segmentIndex}');
         
         if (widget.segmentIndex != null) {
           await _ttsService.speakSegment(widget.text, widget.segmentIndex!);
