@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
+import 'dart:async';
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/processing_status.dart';
 import '../view_model/note_detail_viewmodel.dart';
@@ -12,6 +13,7 @@ import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../../core/widgets/typewriter_text.dart';
+import '../../../core/widgets/loading_dots_widget.dart';
 import '../../flashcard/flashcard_view_model.dart';
 import 'page_image_widget.dart';
 import 'processed_text_widget.dart';
@@ -199,12 +201,32 @@ class _NotePageWidgetState extends State<NotePageWidget> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 원문 타이프라이터 효과
               TypewriterText(
                 text: unit.originalText,
                 style: TypographyTokens.subtitle1Cn.copyWith(color: ColorTokens.textPrimary),
                 duration: const Duration(milliseconds: 50),
                 delay: Duration(milliseconds: index * 300), // 세그먼트별 지연
               ),
+              
+              // 병음 준비 중 표시 (원문과 동시에 시작)
+              Padding(
+                padding: const EdgeInsets.only(top: 2.0),
+                child: LoadingDotsWidget(
+                  style: TypographyTokens.caption.copyWith(color: Colors.grey[600]),
+                  delay: Duration(milliseconds: index * 300), // 원문과 동시 시작
+                ),
+              ),
+              
+              // 번역 준비 중 표시 (원문과 동시에 시작)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+                child: LoadingDotsWidget(
+                  style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary),
+                  delay: Duration(milliseconds: index * 300), // 원문과 동시 시작
+                ),
+              ),
+              
               if (index < processedText.units.length - 1) // 마지막이 아니면 구분선
                 const Padding(
                   padding: EdgeInsets.only(top: 16.0, bottom: 16.0),
