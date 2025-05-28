@@ -177,7 +177,7 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       flashCardViewModel: flashCardViewModel,
       onPlayTts: widget.onPlayTts,
       playingSegmentIndex: null, // TTS 재생 인덱스는 별도 관리 필요
-      showTypewriterEffect: false, // 번역 완료된 상태에서는 타이프라이터 효과 사용안함
+      showTypewriterEffect: true, // 번역 완료된 상태에서도 타이프라이터 효과 적용
     );
   }
   
