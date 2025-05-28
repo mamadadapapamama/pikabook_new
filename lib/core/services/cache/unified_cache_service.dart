@@ -124,14 +124,34 @@ class UnifiedCacheService {
       final key = _getSegmentCacheKey(imageId, mode);
       
       // 1. 로컬 캐시 확인
-      var segments = _cache[key] as List<Map<String, String>>?;
-      if (segments != null) {
-        _updateLastAccessed(key);
-        return segments;
+      final cachedData = _cache[key];
+      if (cachedData != null) {
+        List<Map<String, String>>? segments;
+        
+        // 안전한 타입 변환
+        if (cachedData is List) {
+          segments = <Map<String, String>>[];
+          for (final item in cachedData) {
+            if (item is Map) {
+              final segment = <String, String>{};
+              item.forEach((key, value) {
+                if (key is String && value != null) {
+                  segment[key] = value.toString();
+                }
+              });
+              segments.add(segment);
+            }
+          }
+        }
+        
+        if (segments != null) {
+          _updateLastAccessed(key);
+          return segments;
+        }
       }
       
       // 2. 클라우드 캐시 확인
-      segments = await _getSegmentsFromCloud(key);
+      final segments = await _getSegmentsFromCloud(key);
       if (segments != null) {
         // 로컬 캐시에 저장
         _cache[key] = segments;
@@ -242,7 +262,25 @@ class UnifiedCacheService {
       final doc = await _firestore.collection(_segmentsCollection).doc(key).get();
       if (doc.exists) {
         final data = doc.data();
-        return List<Map<String, String>>.from(data?['segments'] ?? []);
+        final segmentsData = data?['segments'] as List?;
+        
+        if (segmentsData == null) return null;
+        
+        // 안전한 타입 변환
+        final segments = <Map<String, String>>[];
+        for (final item in segmentsData) {
+          if (item is Map) {
+            final segment = <String, String>{};
+            item.forEach((key, value) {
+              if (key is String && value != null) {
+                segment[key] = value.toString();
+              }
+            });
+            segments.add(segment);
+          }
+        }
+        
+        return segments;
       }
       return null;
     } catch (e) {
