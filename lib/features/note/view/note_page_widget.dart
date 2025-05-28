@@ -12,8 +12,6 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
-import '../../../core/widgets/typewriter_text.dart';
-import '../../../core/widgets/loading_dots_widget.dart';
 import '../../flashcard/flashcard_view_model.dart';
 import 'page_image_widget.dart';
 import 'processed_text_widget.dart';
@@ -142,14 +140,7 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       }
     }
     
-    // 1차 ProcessedText (원문만, 번역 없음) - 타이프라이터 효과 적용
-    if (processedText != null && 
-        widget.page.showTypewriterEffect && 
-        (processedText.fullTranslatedText == null || processedText.fullTranslatedText!.isEmpty)) {
-      return _buildTypewriterOnlyWidget(context, processedText);
-    }
-    
-    // 2차 ProcessedText (번역 완료) - 일반 표시
+    // ProcessedText가 있으면 바로 표시 (타이프라이터 효과 제거)
     if (processedText != null) {
       return _buildProcessedTextWidget(context, processedText, viewModel);
     }
@@ -179,63 +170,7 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       flashCardViewModel: flashCardViewModel,
       onPlayTts: widget.onPlayTts,
       playingSegmentIndex: null, // TTS 재생 인덱스는 별도 관리 필요
-      showTypewriterEffect: true, // 번역 완료된 상태에서도 타이프라이터 효과 적용
-    );
-  }
-  
-  // 타이프라이터 효과 전용 위젯 (1차 ProcessedText용)
-  Widget _buildTypewriterOnlyWidget(BuildContext context, ProcessedText processedText) {
-    if (kDebugMode) {
-      print('🎬 NotePageWidget _buildTypewriterOnlyWidget');
-      print('   units 개수: ${processedText.units.length}');
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 세그먼트별 타이프라이터 효과
-        ...processedText.units.asMap().entries.map((entry) {
-          final index = entry.key;
-          final unit = entry.value;
-          
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 원문 타이프라이터 효과
-              TypewriterText(
-                text: unit.originalText,
-                style: TypographyTokens.subtitle1Cn.copyWith(color: ColorTokens.textPrimary),
-                duration: const Duration(milliseconds: 50),
-                delay: Duration(milliseconds: index * 300), // 세그먼트별 지연
-              ),
-              
-              // 병음 준비 중 표시 (원문과 동시에 시작)
-              Padding(
-                padding: const EdgeInsets.only(top: 2.0),
-                child: LoadingDotsWidget(
-                  style: TypographyTokens.caption.copyWith(color: Colors.grey[600]),
-                  delay: Duration(milliseconds: index * 300), // 원문과 동시 시작
-                ),
-              ),
-              
-              // 번역 준비 중 표시 (원문과 동시에 시작)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
-                child: LoadingDotsWidget(
-                  style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary),
-                  delay: Duration(milliseconds: index * 300), // 원문과 동시 시작
-                ),
-              ),
-              
-              if (index < processedText.units.length - 1) // 마지막이 아니면 구분선
-                const Padding(
-                  padding: EdgeInsets.only(top: 16.0, bottom: 16.0),
-                  child: Divider(height: 1, thickness: 1, color: ColorTokens.dividerLight),
-                ),
-            ],
-          );
-        }).toList(),
-      ],
+      showTypewriterEffect: false, // 기존 노트는 타이프라이터 효과 없이 바로 표시
     );
   }
   

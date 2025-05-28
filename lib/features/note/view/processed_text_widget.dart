@@ -6,6 +6,7 @@ import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../flashcard/flashcard_view_model.dart';
 import '../../../core/widgets/typewriter_text.dart';
+import '../../../core/utils/context_menu_manager.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -43,21 +44,22 @@ class ProcessedTextWidget extends StatefulWidget {
 
 class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   String _selectedText = '';
-
-  // 선택된 텍스트 상태 관리를 위한 ValueNotifier
   final ValueNotifier<String> _selectedTextNotifier = ValueNotifier<String>('');
+  Set<String> _flashcardWords = {};
 
   // TTS 서비스
   final TTSService _ttsService = TTSService();
   
-  // 기본 스타일 정의 (내부에서 관리)
-  TextStyle get _defaultOriginalTextStyle => widget.originalTextStyle ?? TypographyTokens.subtitle1Cn.copyWith (color:ColorTokens.textPrimary);
-  TextStyle get _defaultPinyinTextStyle => widget.pinyinTextStyle ?? TypographyTokens.caption.copyWith(color: Colors.grey[800]);
-  TextStyle get _defaultTranslatedTextStyle => widget.translatedTextStyle ?? TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary);
+  // 기본 스타일 정의
+  late TextStyle _defaultOriginalTextStyle;
+  late TextStyle _defaultPinyinTextStyle;
+  late TextStyle _defaultTranslatedTextStyle;
   
   @override
   void initState() {
     super.initState();
+    _initializeFlashcardWords();
+    _initializeStyles();
     _initTts();
   }
 
@@ -65,6 +67,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   Future<void> _initTts() async {
     try {
       await _ttsService.init();
+      await _ttsService.setLanguage('zh-CN');
       
       // TTS 상태 변경 리스너 설정
       _ttsService.setOnPlayingStateChanged((segmentIndex) {
@@ -84,13 +87,15 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         }
       });
     } catch (e) {
-      debugPrint('TTS 초기화 실패: $e');
+      if (kDebugMode) {
+        debugPrint('TTS 초기화 실패: $e');
+      }
     }
   }
 
   @override
   void dispose() {
-    _selectedTextNotifier.dispose(); // ValueNotifier 정리
+    _selectedTextNotifier.dispose();
     super.dispose();
   }
 
@@ -114,14 +119,10 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       debugPrint('표시 모드 변경 감지: ${oldWidget.processedText.displayMode} -> ${widget.processedText.displayMode}');
       setState(() {});
     }
-  }
 
-  /// 선택된 텍스트 변경 핸들러
-  void _handleSelectionChanged(String text) {
-    if (mounted) {
-      setState(() {
-        _selectedText = text;
-      });
+    // FlashCardViewModel이 변경되면 플래시카드 단어 목록 업데이트
+    if (oldWidget.flashCardViewModel != widget.flashCardViewModel) {
+      _initializeFlashcardWords();
     }
   }
 
@@ -183,9 +184,20 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 원문 텍스트 표시
-        SelectableText(
+        ContextMenuManager.buildSelectableText(
           widget.processedText.fullOriginalText,
           style: _defaultOriginalTextStyle,
+          isOriginal: true,
+          flashcardWords: _flashcardWords,
+          selectedText: _selectedText,
+          selectedTextNotifier: _selectedTextNotifier,
+          onSelectionChanged: (selectedText) {
+            setState(() {
+              _selectedText = selectedText;
+            });
+          },
+          onDictionaryLookup: widget.onDictionaryLookup,
+          onCreateFlashCard: widget.onCreateFlashCard,
         ),
         const SizedBox(height: 16),
         
@@ -239,16 +251,20 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                         duration: const Duration(milliseconds: 50),
                         delay: Duration(milliseconds: i * 300), // 세그먼트별 지연
                       )
-                    : SelectableText(
+                    : ContextMenuManager.buildSelectableText(
                         unit.originalText,
                         style: _defaultOriginalTextStyle,
-                        onSelectionChanged: (selection, cause) {
-                          final selectedText = unit.originalText.substring(
-                            selection.start,
-                            selection.end,
-                          );
-                          _handleSelectionChanged(selectedText);
+                        isOriginal: true,
+                        flashcardWords: _flashcardWords,
+                        selectedText: _selectedText,
+                        selectedTextNotifier: _selectedTextNotifier,
+                        onSelectionChanged: (selectedText) {
+                          setState(() {
+                            _selectedText = selectedText;
+                          });
                         },
+                        onDictionaryLookup: widget.onDictionaryLookup,
+                        onCreateFlashCard: widget.onCreateFlashCard,
                       ),
               ),
               if (widget.showTtsButtons) _buildTtsButton(unit.originalText, i, isPlaying),
@@ -367,5 +383,27 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         ),
       ),
     );
+  }
+
+  /// 플래시카드 단어 목록 초기화
+  void _initializeFlashcardWords() {
+    if (widget.flashCardViewModel != null) {
+      _flashcardWords = widget.flashCardViewModel!.flashCards
+          .map((card) => card.front)
+          .toSet();
+    } else {
+      _flashcardWords = {};
+    }
+    
+    if (kDebugMode) {
+      debugPrint('플래시카드 단어 초기화: ${_flashcardWords.length}개');
+    }
+  }
+
+  /// 기본 스타일 초기화
+  void _initializeStyles() {
+    _defaultOriginalTextStyle = widget.originalTextStyle ?? TypographyTokens.subtitle1Cn.copyWith (color:ColorTokens.textPrimary);
+    _defaultPinyinTextStyle = widget.pinyinTextStyle ?? TypographyTokens.caption.copyWith(color: Colors.grey[800]);
+    _defaultTranslatedTextStyle = widget.translatedTextStyle ?? TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary);
   }
 }

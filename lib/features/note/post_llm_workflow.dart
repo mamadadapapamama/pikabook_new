@@ -239,7 +239,6 @@ class PostLLMWorkflow {
         'pinyin': pinyinText,
         'processedAt': FieldValue.serverTimestamp(),
         'status': ProcessingStatus.completed.toString(),
-        'showTypewriterEffect': false, // 타이프라이터 효과 비활성화 (LLM 완료)
         'processedText': {
           'units': results.map((unit) => unit.toJson()).toList(),
           'mode': completeProcessedText.mode.toString(),
@@ -257,7 +256,6 @@ class PostLLMWorkflow {
       if (kDebugMode) {
         debugPrint('✅ 2차 ProcessedText 업데이트 완료: ${pageData.pageId}');
         debugPrint('   번역 완료: ${results.length}개 유닛');
-        debugPrint('   타이프라이터 효과: 비활성화');
         debugPrint('   최종 ProcessedText 저장 완료');
       }
 

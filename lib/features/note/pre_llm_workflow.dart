@@ -332,7 +332,6 @@ class PreLLMWorkflow {
         'originalText': pageData.textSegments.join(' '),
         'ocrCompletedAt': FieldValue.serverTimestamp(),
         'status': ProcessingStatus.textExtracted.toString(),
-        'showTypewriterEffect': true, // 타이프라이터 효과 플래그 설정
         // 원문 세그먼트를 임시 저장 (LLM 처리용)
         'textSegments': pageData.textSegments,
         'processingMode': pageData.mode.toString(),
@@ -356,7 +355,6 @@ class PreLLMWorkflow {
       if (kDebugMode) {
         debugPrint('✅ 페이지 OCR 결과 및 1차 ProcessedText 업데이트 완료: ${pageData.pageId}');
         debugPrint('   원문 세그먼트: ${pageData.textSegments.length}개');
-        debugPrint('   타이프라이터 효과: 활성화');
         debugPrint('   1차 ProcessedText: 원문만 포함');
         debugPrint('   2차 ProcessedText는 LLM 완료 후 생성됩니다');
       }
