@@ -307,9 +307,13 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
           _flashcards.add(newFlashCard);
         });
         
+        // 노트 정보 새로고침 (플래시카드 카운터 업데이트)
+        await viewModel.loadNote();
+        
         if (kDebugMode) {
           print("✅ 새 플래시카드 추가 완료: ${newFlashCard.front}");
           print("✅ 현재 플래시카드 목록 크기: ${_flashcards.length}개");
+          print("✅ 노트 플래시카드 카운터 업데이트 완료");
         }
       }
     } catch (e) {
