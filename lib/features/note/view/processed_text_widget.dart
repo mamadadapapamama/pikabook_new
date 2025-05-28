@@ -6,6 +6,7 @@ import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../flashcard/flashcard_view_model.dart';
+import '../../../core/widgets/typewriter_text.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -19,6 +20,8 @@ class ProcessedTextWidget extends StatefulWidget {
   final TextStyle? originalTextStyle;
   final TextStyle? pinyinTextStyle;
   final TextStyle? translatedTextStyle;
+  final bool showTtsButtons;
+  final bool isStreaming; // 스트리밍 모드 여부
 
   const ProcessedTextWidget({
     Key? key,
@@ -31,6 +34,8 @@ class ProcessedTextWidget extends StatefulWidget {
     this.originalTextStyle,
     this.pinyinTextStyle,
     this.translatedTextStyle,
+    this.showTtsButtons = true,
+    this.isStreaming = false,
   }) : super(key: key);
 
   @override
@@ -146,9 +151,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   }
 
   /// TTS 버튼 위젯 생성
-  Widget _buildTtsButton(String text, int segmentIndex) {
-    final bool isPlaying = widget.playingSegmentIndex == segmentIndex;
-    
+  Widget _buildTtsButton(String text, int segmentIndex, bool isPlaying) {
     return Container(
       width: 32,
       height: 32,
@@ -201,93 +204,121 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     );
   }
 
-  /// **세그먼트별 텍스트 표시 위젯** → **문장별 텍스트 표시 위젯**
-  Widget _buildSegmentedView() {
-    // 유닛이 없으면 빈 컨테이너 반환
-    if (widget.processedText.units == null ||
-        widget.processedText.units.isEmpty) {
-      return _buildFullTextView();
-    }
-
-    // 현재 표시 상태 정보 출력
-    debugPrint('문장별 뷰 빌드 정보:');
-    debugPrint(' - 표시 모드: ${widget.processedText.displayMode}');
-    debugPrint(' - 위젯 hashCode: ${widget.hashCode}');
-    debugPrint(' - ProcessedText hashCode: ${widget.processedText.hashCode}');
-
-    List<Widget> unitWidgets = [];
-
-    // 플래시카드 단어 목록 가져오기
-    final flashcardWords = widget.flashCardViewModel?.flashcardWords ?? <String>{};
+  /// 세그먼트 단위 표시 (스트리밍 지원)
+  Widget _buildSegmentView() {
+    final List<Widget> unitWidgets = [];
 
     for (int i = 0; i < widget.processedText.units.length; i++) {
       final unit = widget.processedText.units[i];
-
-      // 원본 텍스트가 비어있으면 건너뜀
-      if (unit.originalText.isEmpty) {
-        continue;
-      }
+      final isPlaying = widget.playingSegmentIndex == i;
+      final hasTranslation = unit.translatedText != null && unit.translatedText!.isNotEmpty;
+      final isCompleted = hasTranslation;
 
       // 세그먼트 컨테이너
       Widget segmentContainer = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 원본 텍스트와 TTS 버튼을 함께 표시하는 행
+          // 원문 표시 (항상 표시)
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 원본 텍스트 (확장 가능하게)
               Expanded(
-                child: ContextMenuManager.buildSelectableText(
-                  unit.originalText,
-                  style: _defaultOriginalTextStyle,
-                  isOriginal: true,
-                  flashcardWords: flashcardWords,
-                  selectedText: _selectedText,
-                  selectedTextNotifier: _selectedTextNotifier,
-                  onSelectionChanged: _handleSelectionChanged,
-                  onDictionaryLookup: widget.onDictionaryLookup,
-                  onCreateFlashCard: widget.onCreateFlashCard,
-                ),
+                child: widget.isStreaming && !isCompleted
+                    ? FadeInText(
+                        text: unit.originalText,
+                        style: _defaultOriginalTextStyle,
+                        delay: Duration(milliseconds: i * 200),
+                      )
+                    : SelectableText(
+                        unit.originalText,
+                        style: _defaultOriginalTextStyle,
+                        onSelectionChanged: (selection, cause) {
+                          final selectedText = unit.originalText.substring(
+                            selection.start,
+                            selection.end,
+                          );
+                          _handleSelectionChanged(selectedText);
+                        },
+                      ),
               ),
-              
-              // TTS 재생 버튼 - 세그먼트 스타일로 통일
-              Padding(
-                padding: const EdgeInsets.only(left: 8.0, top: 2.0),
-                child: _buildTtsButton(unit.originalText, i),
-              ),
+              if (widget.showTtsButtons) _buildTtsButton(unit.originalText, i, isPlaying),
             ],
           ),
 
-          // 병음 표시 - displayMode에 따라 결정
-          if (unit.pinyin != null && 
-              unit.pinyin!.isNotEmpty && 
-              widget.processedText.displayMode == TextDisplayMode.full)
+          // 병음 표시 (설정에 따라)
+          if (widget.processedText.displayMode == TextDisplayMode.full &&
+              unit.pinyin != null &&
+              unit.pinyin!.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 2.0, bottom: 4.0),
-              child: Text(
-                unit.pinyin!,
-                style: _defaultPinyinTextStyle,
-              ),
+              padding: const EdgeInsets.only(top: 2.0),
+              child: widget.isStreaming && !isCompleted
+                  ? StreamingTypewriterText(
+                      text: unit.pinyin!,
+                      style: _defaultPinyinTextStyle,
+                      characterDelay: const Duration(milliseconds: 50),
+                      isComplete: isCompleted,
+                    )
+                  : Text(
+                      unit.pinyin!,
+                      style: _defaultPinyinTextStyle,
+                    ),
             ),
 
-            // 번역 표시 - 항상 표시
-            if (unit.translatedText != null &&
-                unit.translatedText!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
-                child: Text(
-                  unit.translatedText!,
-                  style: _defaultTranslatedTextStyle,
-                ),
+          // 번역 표시 (스트리밍 효과 적용)
+          if (hasTranslation)
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+              child: widget.isStreaming
+                  ? StreamingTypewriterText(
+                      text: unit.translatedText!,
+                      style: _defaultTranslatedTextStyle,
+                      characterDelay: const Duration(milliseconds: 30),
+                      isComplete: isCompleted,
+                    )
+                  : Text(
+                      unit.translatedText!,
+                      style: _defaultTranslatedTextStyle,
+                    ),
+            )
+          else if (widget.isStreaming)
+            // 번역 대기 중 표시
+            Padding(
+              padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Theme.of(context).primaryColor.withOpacity(0.6),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '번역 중...',
+                    style: _defaultTranslatedTextStyle.copyWith(
+                      color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
               ),
+            ),
         ],
       );
       
-      // 세그먼트 컨테이너 래핑
+      // 세그먼트 컨테이너 래핑 (스트리밍 상태에 따른 스타일링)
       Widget wrappedSegmentContainer = Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4.0),
+          border: widget.isStreaming && !isCompleted
+              ? Border.all(
+                  color: Theme.of(context).primaryColor.withOpacity(0.3),
+                  width: 1,
+                )
+              : null,
         ),
         child: segmentContainer,
       );
@@ -305,15 +336,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       }
     }
 
-    // 세그먼트 체크
-    if (widget.processedText.units != null && widget.processedText.units.isNotEmpty) {
-      int untranslatedUnits = 0;
-      for (final unit in widget.processedText.units) {
-        if (unit.translatedText == null || unit.translatedText!.isEmpty || unit.translatedText == unit.originalText) {
-          untranslatedUnits++;
-        }
-      }
-      debugPrint('ProcessedTextWidget: 유닛 ${widget.processedText.units.length}개 중 $untranslatedUnits개 번역 누락');
+    // 스트리밍 진행률 표시
+    if (widget.isStreaming && widget.processedText.isStreaming) {
+      unitWidgets.insert(0, _buildStreamingProgress());
     }
 
     // 세그먼트 위젯이 없으면 전체 텍스트 표시
@@ -324,6 +349,57 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: unitWidgets,
+    );
+  }
+
+  /// 스트리밍 진행률 표시
+  Widget _buildStreamingProgress() {
+    final progress = widget.processedText.progress;
+    final completedUnits = widget.processedText.completedUnits;
+    final totalUnits = widget.processedText.units.length;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16.0),
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: Theme.of(context).primaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8.0),
+        border: Border.all(
+          color: Theme.of(context).primaryColor.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.translate,
+                size: 16,
+                color: Theme.of(context).primaryColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '번역 진행 중... ($completedUnits/$totalUnits)',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).primaryColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: progress,
+            backgroundColor: Theme.of(context).primaryColor.withOpacity(0.2),
+            valueColor: AlwaysStoppedAnimation<Color>(
+              Theme.of(context).primaryColor,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -384,7 +460,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   '${widget.processedText.hashCode}'),
               child: widget.processedText.units != null &&
                   widget.processedText.mode == TextProcessingMode.segment
-                  ? _buildSegmentedView() // 문장별 표시
+                  ? _buildSegmentView() // 문장별 표시
                   : _buildFullTextView(), // 문단별 표시
             ),
           ],

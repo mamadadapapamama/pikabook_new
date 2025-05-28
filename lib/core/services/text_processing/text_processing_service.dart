@@ -24,6 +24,180 @@ class TextProcessingService {
   // 실시간 리스너 관리
   final Map<String, StreamSubscription<DocumentSnapshot>> _pageListeners = {};
   
+  // 스트리밍 컨트롤러 관리
+  final Map<String, StreamController<ProcessedText>> _streamControllers = {};
+
+  /// 스트리밍 방식으로 텍스트 처리 시작
+  /// 원문을 먼저 보여주고 번역 결과를 점진적으로 업데이트
+  Stream<ProcessedText> startStreamingProcessing({
+    required String pageId,
+    required List<String> originalSegments,
+    required TextProcessingMode mode,
+    required String sourceLanguage,
+    required String targetLanguage,
+  }) {
+    if (kDebugMode) {
+      debugPrint('🎬 스트리밍 처리 시작: $pageId (${originalSegments.length}개 세그먼트)');
+    }
+
+    // 기존 스트림 정리
+    _streamControllers[pageId]?.close();
+    
+    // 새 스트림 컨트롤러 생성
+    final controller = StreamController<ProcessedText>.broadcast();
+    _streamControllers[pageId] = controller;
+
+    // 즉시 원문만 있는 ProcessedText 전송
+    final initialProcessedText = ProcessedText.withOriginalOnly(
+      mode: mode,
+      originalSegments: originalSegments,
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
+    );
+    
+    controller.add(initialProcessedText);
+    
+    if (kDebugMode) {
+      debugPrint('📤 초기 원문 전송 완료: ${originalSegments.length}개 세그먼트');
+    }
+
+    // 백그라운드에서 번역 처리 시작
+    _processTranslationInBackground(
+      pageId: pageId,
+      processedText: initialProcessedText,
+      controller: controller,
+    );
+
+    return controller.stream;
+  }
+
+  /// 백그라운드에서 번역 처리 및 점진적 업데이트
+  Future<void> _processTranslationInBackground({
+    required String pageId,
+    required ProcessedText processedText,
+    required StreamController<ProcessedText> controller,
+  }) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🔄 백그라운드 번역 처리 시작: $pageId');
+      }
+
+      var currentProcessedText = processedText;
+
+      // 각 세그먼트를 순차적으로 처리
+      for (int i = 0; i < processedText.units.length; i++) {
+        if (controller.isClosed) break;
+
+        final unit = processedText.units[i];
+        
+        if (kDebugMode) {
+          debugPrint('🔤 세그먼트 ${i + 1}/${processedText.units.length} 번역 중: "${unit.originalText.substring(0, unit.originalText.length > 20 ? 20 : unit.originalText.length)}..."');
+        }
+
+        try {
+          // 개별 세그먼트 번역 (실제 LLM 호출)
+          final translatedUnit = await _translateSingleSegment(unit);
+          
+          // ProcessedText 업데이트
+          currentProcessedText = currentProcessedText.updateUnit(i, translatedUnit);
+          
+          // 스트림으로 업데이트된 결과 전송
+          if (!controller.isClosed) {
+            controller.add(currentProcessedText);
+            
+            if (kDebugMode) {
+              debugPrint('📤 세그먼트 ${i + 1} 번역 완료 전송: "${translatedUnit.translatedText?.substring(0, translatedUnit.translatedText!.length > 20 ? 20 : translatedUnit.translatedText!.length)}..."');
+            }
+          }
+
+          // 부드러운 애니메이션을 위한 짧은 지연
+          await Future.delayed(const Duration(milliseconds: 300));
+
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('❌ 세그먼트 ${i + 1} 번역 실패: $e');
+          }
+          
+          // 실패한 경우 원본만 유지
+          final failedUnit = unit.copyWith(
+            translatedText: '', // 빈 번역
+            pinyin: '', // 빈 병음
+          );
+          
+          currentProcessedText = currentProcessedText.updateUnit(i, failedUnit);
+          
+          if (!controller.isClosed) {
+            controller.add(currentProcessedText);
+          }
+        }
+      }
+
+      // 최종 완료 상태로 업데이트
+      final finalProcessedText = currentProcessedText.copyWith(
+        streamingStatus: StreamingStatus.completed,
+      );
+      
+      if (!controller.isClosed) {
+        controller.add(finalProcessedText);
+      }
+
+      // 캐시에 저장
+      await _saveToCache(pageId, finalProcessedText);
+
+      if (kDebugMode) {
+        debugPrint('✅ 스트리밍 처리 완료: $pageId');
+      }
+
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 백그라운드 번역 처리 실패: $pageId, $e');
+      }
+      
+      // 실패 상태로 업데이트
+      final failedProcessedText = processedText.copyWith(
+        streamingStatus: StreamingStatus.failed,
+      );
+      
+      if (!controller.isClosed) {
+        controller.add(failedProcessedText);
+      }
+    } finally {
+      // 스트림 정리
+      if (!controller.isClosed) {
+        controller.close();
+      }
+      _streamControllers.remove(pageId);
+    }
+  }
+
+  /// 단일 세그먼트 번역 (실제 LLM 호출)
+  Future<TextUnit> _translateSingleSegment(TextUnit unit) async {
+    // 여기서 실제 LLM API 호출
+    // 임시로 시뮬레이션 (실제로는 LLMTextProcessing 서비스 사용)
+    
+    await Future.delayed(Duration(milliseconds: 500 + (unit.originalText.length * 50)));
+    
+    // 실제 구현에서는 LLM API 호출
+    return unit.copyWith(
+      translatedText: '${unit.originalText}의 번역', // 임시 번역
+      pinyin: '${unit.originalText}의 병음', // 임시 병음
+    );
+  }
+
+  /// 스트림 정리
+  void cancelStreamingProcessing(String pageId) {
+    _streamControllers[pageId]?.close();
+    _streamControllers.remove(pageId);
+  }
+
+  /// 모든 스트림 정리
+  void cancelAllStreamingProcessing() {
+    for (final controller in _streamControllers.values) {
+      controller.close();
+    }
+    _streamControllers.clear();
+  }
+  
   /// 페이지의 처리된 텍스트 가져오기
   /// 캐시 → Firestore 순으로 확인
   Future<ProcessedText?> getProcessedText(String pageId) async {
@@ -224,6 +398,9 @@ class TextProcessingService {
       listener.cancel();
     }
     _pageListeners.clear();
+    
+    // 스트림도 정리
+    cancelAllStreamingProcessing();
   }
   
   // === Private Methods ===
