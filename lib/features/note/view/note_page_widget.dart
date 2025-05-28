@@ -9,7 +9,9 @@ import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/flash_card.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
+import '../../../core/widgets/typewriter_text.dart';
 import '../../flashcard/flashcard_view_model.dart';
 import 'page_image_widget.dart';
 import 'processed_text_widget.dart';
@@ -88,9 +90,20 @@ class NotePageWidget extends StatelessWidget {
     final isLoading = textViewModel['isLoading'] as bool? ?? false;
     final error = textViewModel['error'] as String?;
     
+    // 1. 완전한 번역 데이터가 있는 경우
     if (processedText != null) {
       return _buildProcessedTextWidget(context, processedText, viewModel);
-    } else if (isLoading) {
+    }
+    
+    // 2. 원문만 있고 타이프라이터 효과를 보여줘야 하는 경우
+    if (page.showTypewriterEffect && 
+        page.originalText != null && 
+        page.originalText!.isNotEmpty) {
+      return _buildTypewriterOnlyWidget(context);
+    }
+    
+    // 3. 로딩 중이거나 오류가 있는 경우
+    if (isLoading) {
       return _buildLoadingIndicator();
     } else if (error != null) {
       return _buildErrorWidget(error);
@@ -116,6 +129,91 @@ class NotePageWidget extends StatelessWidget {
       playingSegmentIndex: null, // TTS 재생 인덱스는 별도 관리 필요
       showTypewriterEffect: page.showTypewriterEffect,
     );
+  }
+  
+  // 타이프라이터 효과만 있는 원문 위젯 (번역 대기 중)
+  Widget _buildTypewriterOnlyWidget(BuildContext context) {
+    // textSegments가 있으면 사용, 없으면 originalText를 단일 세그먼트로 처리
+    final segments = _getTextSegments();
+    
+    if (segments.isEmpty) {
+      return _buildLoadingIndicator();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 번역 진행 중 표시
+        Container(
+          margin: const EdgeInsets.only(bottom: 16.0),
+          padding: const EdgeInsets.all(12.0),
+          decoration: BoxDecoration(
+            color: Theme.of(context).primaryColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8.0),
+            border: Border.all(
+              color: Theme.of(context).primaryColor.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    Theme.of(context).primaryColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '번역 중... 원문을 먼저 보여드립니다',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).primaryColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // 세그먼트별 타이프라이터 효과
+        ...segments.asMap().entries.map((entry) {
+          final index = entry.key;
+          final segment = entry.value;
+          
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TypewriterText(
+                text: segment,
+                style: TypographyTokens.subtitle1Cn.copyWith(color: ColorTokens.textPrimary),
+                duration: const Duration(milliseconds: 50),
+                delay: Duration(milliseconds: index * 300), // 세그먼트별 지연
+              ),
+              if (index < segments.length - 1) // 마지막이 아니면 구분선
+                const Padding(
+                  padding: EdgeInsets.only(top: 16.0, bottom: 16.0),
+                  child: Divider(height: 1, thickness: 1, color: ColorTokens.dividerLight),
+                ),
+            ],
+          );
+        }).toList(),
+      ],
+    );
+  }
+
+  // 텍스트 세그먼트 가져오기
+  List<String> _getTextSegments() {
+    // originalText를 단일 세그먼트로 처리 (나중에 필요하면 분리 로직 추가)
+    if (page.originalText != null && page.originalText!.isNotEmpty) {
+      return [page.originalText!];
+    }
+    
+    return [];
   }
   
   // 로딩 인디케이터 (처리 중 상태 공통 사용)
