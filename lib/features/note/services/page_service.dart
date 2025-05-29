@@ -54,6 +54,7 @@ class PageService {
         'pinyin': '',         // 빈 상태 (TextProcessingService에서 처리)
         'processingStatus': ProcessingStatus.textExtracted.toString(),
         'readyForLLM': true,  // 텍스트 처리 대상임을 표시
+        'showTypewriterEffect': true, // 새 페이지는 타이프라이터 효과 활성화
       });
 
       await pageRef.set(pageData);

@@ -163,6 +163,21 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       initialFlashcards: widget.flashCards,
     );
     
+    // 타이프라이터 효과 조건:
+    // 1. 페이지에서 타이프라이터 효과가 활성화되어 있고
+    // 2. 스트리밍 중이거나 번역이 아직 완료되지 않은 상태
+    final shouldShowTypewriter = widget.page.showTypewriterEffect && 
+                                (processedText.streamingStatus == StreamingStatus.streaming ||
+                                 processedText.fullTranslatedText?.isEmpty == true);
+    
+    if (kDebugMode) {
+      print('🎬 타이프라이터 효과 조건 확인:');
+      print('   page.showTypewriterEffect: ${widget.page.showTypewriterEffect}');
+      print('   streamingStatus: ${processedText.streamingStatus}');
+      print('   fullTranslatedText.isEmpty: ${processedText.fullTranslatedText?.isEmpty}');
+      print('   shouldShowTypewriter: $shouldShowTypewriter');
+    }
+    
     return ProcessedTextWidget(
       processedText: processedText,
       onDictionaryLookup: (word) => _handleDictionaryLookup(context, word),
@@ -170,7 +185,7 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       flashCardViewModel: flashCardViewModel,
       onPlayTts: widget.onPlayTts,
       playingSegmentIndex: null, // TTS 재생 인덱스는 별도 관리 필요
-      showTypewriterEffect: false, // 기존 노트는 타이프라이터 효과 없이 바로 표시
+      showTypewriterEffect: shouldShowTypewriter, // 새 노트 생성 시에만 타이프라이터 효과
     );
   }
   

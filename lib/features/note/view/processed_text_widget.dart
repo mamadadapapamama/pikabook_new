@@ -7,6 +7,7 @@ import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../flashcard/flashcard_view_model.dart';
 import '../../../core/widgets/typewriter_text.dart';
+import '../../../core/widgets/loading_dots_widget.dart';
 import '../../../core/utils/context_menu_manager.dart';
 import '../../../core/services/common/plan_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
@@ -296,26 +297,37 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           ),
 
           // 병음 표시 (번역이 있는 경우에만)
-          if (widget.processedText.displayMode == TextDisplayMode.full &&
-              unit.pinyin != null &&
-              unit.pinyin!.isNotEmpty)
+          if (widget.processedText.displayMode == TextDisplayMode.full)
             Padding(
               padding: const EdgeInsets.only(top: 2.0),
-              child: Text(
-                unit.pinyin!,
-                style: _defaultPinyinTextStyle,
-              ),
+              child: unit.pinyin != null && unit.pinyin!.isNotEmpty
+                  ? Text(
+                      unit.pinyin!,
+                      style: _defaultPinyinTextStyle,
+                    )
+                  : widget.showTypewriterEffect
+                      ? LoadingDotsWidget(
+                          style: _defaultPinyinTextStyle,
+                          delay: Duration(milliseconds: i * 300 + 1000), // 원문 타이프라이터 후 시작
+                        )
+                      : const SizedBox.shrink(),
             ),
 
           // 번역 표시 (번역이 있는 경우에만)
-          if (hasTranslation)
-              Padding(
-                padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
-                child: Text(
-                  unit.translatedText!,
-                  style: _defaultTranslatedTextStyle,
-                ),
-              ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+            child: hasTranslation
+                ? Text(
+                    unit.translatedText!,
+                    style: _defaultTranslatedTextStyle,
+                  )
+                : widget.showTypewriterEffect
+                    ? LoadingDotsWidget(
+                        style: _defaultTranslatedTextStyle,
+                        delay: Duration(milliseconds: i * 300 + 1500), // 병음 후 시작
+                      )
+                    : const SizedBox.shrink(),
+          ),
         ],
       );
       
