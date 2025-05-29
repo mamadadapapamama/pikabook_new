@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
+import '../common/plan_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -530,6 +531,21 @@ class AuthService {
         userData['planType'] = 'free'; // 기본 플랜 타입
         userData['deviceCount'] = 1;
         userData['deviceIds'] = [await _getDeviceId()];
+        
+        // 7일 무료 체험 시작
+        try {
+          final planService = PlanService();
+          final trialStarted = await planService.startFreeTrial(user.uid);
+          
+          if (trialStarted) {
+            debugPrint('신규 사용자 7일 무료 체험 시작: ${user.uid}');
+          } else {
+            debugPrint('무료 체험 시작 실패 (이미 사용했거나 오류): ${user.uid}');
+          }
+        } catch (e) {
+          debugPrint('무료 체험 시작 중 오류: $e');
+          // 무료 체험 시작 실패해도 회원가입은 계속 진행
+        }
       } else {
         // 기존 사용자 정보 업데이트
         final deviceId = await _getDeviceId();

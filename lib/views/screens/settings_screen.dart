@@ -124,40 +124,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final currentPlanType = await _planService.getCurrentPlanType();
         print('   현재 플랜 타입: $currentPlanType');
         
-        // 2. 플랜 이름 확인
+        // 2. 구독 상세 정보 확인
+        final subscriptionDetails = await _planService.getSubscriptionDetails();
+        print('   구독 상세 정보: $subscriptionDetails');
+        
+        // 3. 플랜 이름 확인
         final planName = _planService.getPlanName(currentPlanType);
         print('   플랜 이름: $planName');
         
-        // 3. 플랜 제한 확인
+        // 4. 플랜 제한 확인
         final planLimits = await _planService.getPlanLimits(currentPlanType);
         print('   플랜 제한: $planLimits');
         
-        // 4. 현재 사용량 확인
+        // 5. 현재 사용량 확인
         final currentUsage = await _planService.getCurrentUsage();
         print('   현재 사용량: $currentUsage');
         
-        // 5. 사용량 퍼센트 확인
+        // 6. 사용량 퍼센트 확인
         final usagePercentages = await _planService.getUsagePercentages();
         print('   사용량 퍼센트: $usagePercentages');
       }
       
       final planDetails = await _planService.getPlanDetails();
+      final subscriptionDetails = await _planService.getSubscriptionDetails();
       
       if (mounted) {
+        // 무료 체험 중인지 확인하여 플랜 이름 조정
+        final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
+        final daysRemaining = subscriptionDetails['daysRemaining'] as int? ?? 0;
+        
         setState(() {
           _planType = planDetails['planType'] as String;
-          _planName = planDetails['planName'] as String;
+          
+          if (isFreeTrial && daysRemaining > 0) {
+            _planName = '프리미엄 체험 (${daysRemaining}일 남음)';
+          } else {
+            _planName = planDetails['planName'] as String;
+          }
+          
           _planLimits = Map<String, int>.from(planDetails['planLimits'] as Map);
           _currentUsage = planDetails['currentUsage'] as Map<String, dynamic>;
           _usagePercentages = Map<String, double>.from(planDetails['usagePercentages'] as Map);
           _isBetaPeriod = planDetails['isBetaPeriod'] as bool? ?? false;
-          _remainingDays = planDetails['remainingDays'] as int? ?? 0;
+          _remainingDays = daysRemaining;
           _isLoading = false;
         });
         
         if (kDebugMode) {
           print('✅ PlanService 테스트 완료');
           print('   UI 상태 업데이트: 플랜=$_planName, 제한=$_planLimits');
+          print('   무료 체험: $isFreeTrial, 남은 일수: $daysRemaining');
         }
       }
     } catch (e) {

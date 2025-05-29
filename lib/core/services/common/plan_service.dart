@@ -20,7 +20,7 @@ class PlanService {
     PLAN_FREE: {
       'ocrPages': 30,          // 월 30페이지
       'translatedChars': 10000,  // 월 10,000자
-      'ttsRequests': 100,      // 월 100회
+      'ttsRequests': 0,      // 월 0회
       'storageBytes': 52428800, // 50MB (50 * 1024 * 1024)
     },
     PLAN_PREMIUM: {
@@ -60,11 +60,13 @@ class PlanService {
           if (planData != null) {
             final planType = planData['plan'] as String?;
             final expiryDate = planData['expiryDate'];
+            final status = planData['status'] as String?;
             
             // Premium 플랜이고 만료되지 않았으면 Premium 반환
             if (planType == PLAN_PREMIUM && expiryDate != null) {
               final expiry = (expiryDate as Timestamp).toDate();
               if (expiry.isAfter(DateTime.now())) {
+                // 체험 중이거나 정식 구독 중이면 Premium
                 return PLAN_PREMIUM;
               }
             }
@@ -148,8 +150,6 @@ class PlanService {
       'planLimits': planLimits,
       'currentUsage': currentUsage,
       'usagePercentages': usagePercentages,
-      'isBetaPeriod': false, // 베타 기간 여부 (현재는 false로 설정)
-      'remainingDays': 0,    // 남은 일수 (현재는 0으로 설정)
     };
   }
   
@@ -228,6 +228,149 @@ class PlanService {
     // Premium이 아닌 경우만 초기화
     if (planType == PLAN_FREE) {
       await _usageLimitService.resetAllUsage();
+    }
+  }
+
+  /// 신규 사용자 7일 무료 체험 시작
+  Future<bool> startFreeTrial(String userId) async {
+    try {
+      // 이미 체험을 사용했는지 확인
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .get();
+          
+      if (userDoc.exists) {
+        final userData = userDoc.data();
+        final hasUsedTrial = userData?['hasUsedFreeTrial'] as bool? ?? false;
+        
+        if (hasUsedTrial) {
+          debugPrint('이미 무료 체험을 사용한 사용자: $userId');
+          return false;
+        }
+      }
+      
+      // 7일 후 만료일 설정
+      final expiryDate = DateTime.now().add(const Duration(days: 7));
+      
+      // 무료 체험 시작
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .set({
+            'subscription': {
+              'plan': PLAN_PREMIUM,
+              'startDate': FieldValue.serverTimestamp(),
+              'expiryDate': Timestamp.fromDate(expiryDate),
+              'status': 'trial', // 체험 상태
+              'isFreeTrial': true,
+            },
+            'hasUsedFreeTrial': true, // 체험 사용 기록
+          }, SetOptions(merge: true));
+      
+      debugPrint('7일 무료 체험 시작: $userId, 만료일: $expiryDate');
+      return true;
+    } catch (e) {
+      debugPrint('무료 체험 시작 실패: $e');
+      return false;
+    }
+  }
+  
+  /// 무료 체험 사용 여부 확인
+  Future<bool> hasUsedFreeTrial(String userId) async {
+    try {
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(userId)
+          .get();
+          
+      if (userDoc.exists) {
+        final userData = userDoc.data();
+        return userData?['hasUsedFreeTrial'] as bool? ?? false;
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('무료 체험 사용 여부 확인 오류: $e');
+      return false;
+    }
+  }
+  
+  /// 현재 구독 상태 상세 정보 가져오기
+  Future<Map<String, dynamic>> getSubscriptionDetails() async {
+    try {
+      if (_currentUserId == null) {
+        return {
+          'plan': PLAN_FREE,
+          'status': 'free',
+          'isFreeTrial': false,
+          'daysRemaining': 0,
+          'expiryDate': null,
+        };
+      }
+      
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(_currentUserId)
+          .get();
+          
+      if (!userDoc.exists) {
+        return {
+          'plan': PLAN_FREE,
+          'status': 'free',
+          'isFreeTrial': false,
+          'daysRemaining': 0,
+          'expiryDate': null,
+        };
+      }
+      
+      final planData = userDoc.data()?['subscription'];
+      if (planData == null) {
+        return {
+          'plan': PLAN_FREE,
+          'status': 'free',
+          'isFreeTrial': false,
+          'daysRemaining': 0,
+          'expiryDate': null,
+        };
+      }
+      
+      final planType = planData['plan'] as String?;
+      final expiryDate = planData['expiryDate'] as Timestamp?;
+      final status = planData['status'] as String?;
+      final isFreeTrial = planData['isFreeTrial'] as bool? ?? false;
+      
+      if (expiryDate != null) {
+        final expiry = expiryDate.toDate();
+        final now = DateTime.now();
+        final daysRemaining = expiry.difference(now).inDays;
+        
+        return {
+          'plan': planType ?? PLAN_FREE,
+          'status': status ?? 'free',
+          'isFreeTrial': isFreeTrial,
+          'daysRemaining': daysRemaining > 0 ? daysRemaining : 0,
+          'expiryDate': expiry,
+          'isExpired': expiry.isBefore(now),
+        };
+      }
+      
+      return {
+        'plan': planType ?? PLAN_FREE,
+        'status': status ?? 'free',
+        'isFreeTrial': isFreeTrial,
+        'daysRemaining': 0,
+        'expiryDate': null,
+      };
+    } catch (e) {
+      debugPrint('구독 상태 조회 오류: $e');
+      return {
+        'plan': PLAN_FREE,
+        'status': 'free',
+        'isFreeTrial': false,
+        'daysRemaining': 0,
+        'expiryDate': null,
+      };
     }
   }
 } 
