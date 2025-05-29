@@ -88,11 +88,11 @@ class _UsageDialogState extends State<UsageDialog> {
         });
       } else {
         // UsageLimitService에서 최신 데이터를 가져옴
-        final usageInfo = await _usageService.getUsageInfo();
-        _limitStatus = usageInfo['limitStatus'];
+        final usageInfo = await _usageService.getUserUsageForSettings();
+        _limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
         
         // 안전한 타입 변환을 위해 각 값을 double로 변환
-        final percentagesMap = usageInfo['percentages'] as Map<String, dynamic>;
+        final percentagesMap = usageInfo['usagePercentages'] as Map<String, dynamic>;
         _usagePercentages = {};
         percentagesMap.forEach((key, value) {
           if (value is num) {

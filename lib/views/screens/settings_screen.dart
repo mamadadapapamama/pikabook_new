@@ -110,7 +110,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // 사용자 플랜 정보 로드
+  // 사용자 플랜 정보 로드 (사용량 제외)
   Future<void> _loadPlanInfo() async {
     setState(() {
       _isLoading = true;
@@ -118,35 +118,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     try {
       if (kDebugMode) {
-        print('🔍 PlanService 테스트 시작');
-        
-        // 1. 현재 플랜 타입 확인
-        final currentPlanType = await _planService.getCurrentPlanType();
-        print('   현재 플랜 타입: $currentPlanType');
-        
-        // 2. 구독 상세 정보 확인
-        final subscriptionDetails = await _planService.getSubscriptionDetails();
-        print('   구독 상세 정보: $subscriptionDetails');
-        
-        // 3. 플랜 이름 확인
-        final planName = _planService.getPlanName(currentPlanType);
-        print('   플랜 이름: $planName');
-        
-        // 4. 플랜 제한 확인
-        final planLimits = await _planService.getPlanLimits(currentPlanType);
-        print('   플랜 제한: $planLimits');
-        
-        // 5. 현재 사용량 확인
-        final currentUsage = await _planService.getCurrentUsage();
-        print('   현재 사용량: $currentUsage');
-        
-        // 6. 사용량 퍼센트 확인
-        final usagePercentages = await _planService.getUsagePercentages();
-        print('   사용량 퍼센트: $usagePercentages');
+        print('🔍 PlanService 기본 정보 로드 시작');
       }
       
-      final planDetails = await _planService.getPlanDetails();
+      // 1. 현재 플랜 타입만 확인
+      final currentPlanType = await _planService.getCurrentPlanType();
+      
+      // 2. 구독 상세 정보 확인 (사용량 제외)
       final subscriptionDetails = await _planService.getSubscriptionDetails();
+      
+      // 3. 플랜 제한 정보만 확인
+      final planLimits = await _planService.getPlanLimits(currentPlanType);
+      
+      if (kDebugMode) {
+        print('   현재 플랜 타입: $currentPlanType');
+        print('   구독 상세 정보: $subscriptionDetails');
+        print('   플랜 제한: $planLimits');
+      }
       
       if (mounted) {
         // 무료 체험 중인지 확인하여 플랜 이름 조정
@@ -154,24 +142,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final daysRemaining = subscriptionDetails['daysRemaining'] as int? ?? 0;
         
         setState(() {
-          _planType = planDetails['planType'] as String;
+          _planType = currentPlanType;
           
           if (isFreeTrial && daysRemaining > 0) {
             _planName = '프리미엄 체험 (${daysRemaining}일 남음)';
           } else {
-            _planName = planDetails['planName'] as String;
+            _planName = _planService.getPlanName(currentPlanType);
           }
           
-          _planLimits = Map<String, int>.from(planDetails['planLimits'] as Map);
-          _currentUsage = planDetails['currentUsage'] as Map<String, dynamic>;
-          _usagePercentages = Map<String, double>.from(planDetails['usagePercentages'] as Map);
-          _isBetaPeriod = planDetails['isBetaPeriod'] as bool? ?? false;
+          _planLimits = planLimits;
           _remainingDays = daysRemaining;
           _isLoading = false;
         });
         
         if (kDebugMode) {
-          print('✅ PlanService 테스트 완료');
+          print('✅ PlanService 기본 정보 로드 완료');
           print('   UI 상태 업데이트: 플랜=$_planName, 제한=$_planLimits');
           print('   무료 체험: $isFreeTrial, 남은 일수: $daysRemaining');
         }
@@ -1034,83 +1019,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
   
-  // 사용량 프로그레스 바 위젯
-  Widget _buildUsageSummary() {
-    final usageItems = [
-      {
-        'key': 'ocrPages',
-        'label': 'OCR',
-        'current': '${_currentUsage['ocrPages'] ?? 0}',
-        'limit': _planLimits['ocrPages'] ?? 1,
-        'percentage': _usagePercentages['ocr'] ?? 0.0,
-      },
-      {
-        'key': 'storageBytes',
-        'label': '저장 공간',
-        'current': _formatBytes(_currentUsage['storageUsageBytes'] ?? 0),
-        'limit': _formatBytes(_planLimits['storageBytes'] ?? 1),
-        'percentage': _usagePercentages['storage'] ?? 0.0,
-      },
-    ];
-    
-    return Column(
-      children: usageItems.map((item) {
-        final double percentage = (item['percentage'] as double).clamp(0, 100);
-        final bool isWarning = percentage > 80;
-        
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    item['label'] as String,
-                    style: TypographyTokens.caption.copyWith(
-                      color: ColorTokens.textSecondary,
-                    ),
-                  ),
-                  Text(
-                    '${item['current']} / ${item['limit']}',
-                    style: TypographyTokens.caption.copyWith(
-                      color: isWarning ? ColorTokens.error : ColorTokens.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              LinearProgressIndicator(
-                value: percentage / 100,
-                backgroundColor: ColorTokens.divider,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  percentage > 90
-                      ? ColorTokens.error
-                      : percentage > 70
-                          ? Colors.orange
-                          : ColorTokens.primary,
-                ),
-                minHeight: 4,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
-  
-  // 사용량 다이얼로그 표시
+  // 사용량 다이얼로그 표시 (이때 실제 사용량 로드)
   Future<void> _showUsageDialog() async {
+    if (kDebugMode) {
+      print('📊 사용량 확인 버튼 클릭 - 사용량 데이터 로드 시작');
+    }
+    
     // 다이얼로그를 즉시 표시하고 내부에서 데이터 로드
     if (context.mounted) {
       await UsageDialog.show(
         context,
-        // 현재 캐시된 데이터를 먼저 전달 (빠른 초기 표시용)
-        limitStatus: null,  // null로 설정하여 다이얼로그 내부에서 새로 로드하도록 함
-        usagePercentages: _usagePercentages,  // 현재 있는 데이터 전달
+        // null로 설정하여 다이얼로그 내부에서 새로 로드하도록 함
+        limitStatus: null,
+        usagePercentages: null, // 다이얼로그에서 새로 로드
         onContactSupport: _contactSupport,
       );
     }
@@ -1164,29 +1085,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     } else {
       return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-    }
-  }
-
-  // 사용량 정보 로드
-  Future<void> _loadUsageLimits() async {
-    try {
-      // 현재 플랜 타입 가져오기
-      final planType = await _planService.getCurrentPlanType();
-      
-      // 플랜 서비스를 통해 현재 사용량 및 제한 가져오기
-      final planLimits = await _planService.getPlanLimits(planType);
-      final currentUsage = await _planService.getCurrentUsage();
-      final usagePercentages = await _planService.getUsagePercentages();
-      
-      if (mounted) {
-        setState(() {
-          _planLimits = planLimits;
-          _currentUsage = currentUsage;
-          _usagePercentages = usagePercentages;
-        });
-      }
-    } catch (e) {
-      debugPrint('사용량 정보 로드 중 오류: $e');
     }
   }
 }

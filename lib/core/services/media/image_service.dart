@@ -63,29 +63,58 @@ class ImageService {
   Future<File?> getImageFile(String? imagePath) async {
     if (imagePath == null || imagePath.isEmpty) return null;
 
+    if (kDebugMode) {
+      debugPrint('🖼️ getImageFile 시작: $imagePath');
+    }
+
     // 1. 절대 경로 확인
     File file = File(imagePath);
-    if (await file.exists()) return file;
+    if (await file.exists()) {
+      if (kDebugMode) {
+        debugPrint('🖼️ ✅ 절대 경로에서 파일 발견: $imagePath');
+      }
+      return file;
+    }
 
-    // 2. 상대 경로 변환
+    // 2. 상대 경로 변환 (로컬 확인)
     if (imagePath.startsWith('images/')) {
       final appDir = await getApplicationDocumentsDirectory();
       final absolutePath = '${appDir.path}/$imagePath';
       file = File(absolutePath);
       
-      if (await file.exists()) return file;
+      if (await file.exists()) {
+        if (kDebugMode) {
+          debugPrint('🖼️ ✅ 로컬 상대 경로에서 파일 발견: $absolutePath');
+        }
+        return file;
+      }
+      
+      // 로컬에 없으면 Firebase Storage에서 다운로드 시도
+      if (kDebugMode) {
+        debugPrint('🖼️ 📥 로컬에 없음, Firebase Storage에서 다운로드 시도: $imagePath');
+      }
+      return _downloadWithRetry(imagePath, _downloadFromFirebaseRelative);
     }
 
-    // 3. Firebase Storage 다운로드
+    // 3. Firebase Storage 다운로드 (gs:// 경로)
     if (imagePath.startsWith('gs://')) {
+      if (kDebugMode) {
+        debugPrint('🖼️ 📥 Firebase Storage URL 다운로드: $imagePath');
+      }
       return _downloadWithRetry(imagePath, _downloadFromFirebase);
     }
 
     // 4. URL 다운로드
     if (imagePath.startsWith('http')) {
+      if (kDebugMode) {
+        debugPrint('🖼️ 📥 HTTP URL 다운로드: $imagePath');
+      }
       return _downloadWithRetry(imagePath, _downloadFromUrl);
     }
 
+    if (kDebugMode) {
+      debugPrint('🖼️ ❌ 지원되지 않는 경로 형식: $imagePath');
+    }
     return null;
   }
 
@@ -399,5 +428,48 @@ class ImageService {
   /// 임시 파일 정리
   Future<void> cleanupTempFiles() async {
     await _imageCacheService.cleanupTempFiles();
+  }
+
+  /// Firebase Storage에서 상대 경로로 다운로드
+  Future<File?> _downloadFromFirebaseRelative(String relativePath) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🖼️ 📥 Firebase Storage 상대 경로 다운로드 시작: $relativePath');
+      }
+      
+      final storageRef = _storage.ref().child(relativePath);
+      final appDir = await getApplicationDocumentsDirectory();
+      final localPath = '${appDir.path}/$relativePath';
+      
+      // 로컬 디렉토리 생성
+      final directory = Directory(path.dirname(localPath));
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+      
+      final file = File(localPath);
+      
+      await storageRef.writeToFile(file);
+      
+      if (await file.exists() && await file.length() > 0) {
+        final bytes = await file.readAsBytes();
+        _imageCacheService.addToCache(relativePath, bytes);
+        
+        if (kDebugMode) {
+          debugPrint('🖼️ ✅ Firebase Storage 다운로드 성공: $localPath');
+        }
+        return file;
+      }
+      
+      if (kDebugMode) {
+        debugPrint('🖼️ ❌ 다운로드된 파일이 유효하지 않음: $localPath');
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('🖼️ ❌ Firebase Storage 상대 경로 다운로드 실패: $e');
+      }
+      return null;
+    }
   }
 }

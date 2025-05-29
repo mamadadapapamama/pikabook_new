@@ -672,10 +672,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (kDebugMode) {
       debugPrint('[_showUsageLimitDialog] 호출됨 (HomeScreen 내부로 이동 권장)');
     }
-    // 사용량 정보 가져오기 (버퍼 적용)
-    final usageInfo = await _usageLimitService.getUsageInfo(withBuffer: true);
+    // 사용량 정보 가져오기
+    final usageInfo = await _usageLimitService.getUserUsageForSettings();
     final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
-    final usagePercentages = usageInfo['percentages'] as Map<String, double>;
+    final usagePercentages = usageInfo['usagePercentages'] as Map<String, double>;
     
     // 다이얼로그 표시
     if (mounted && !_hasShownUsageLimitDialog) {
