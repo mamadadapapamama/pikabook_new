@@ -144,9 +144,9 @@ class UnifiedCacheService {
           }
         }
         
-        if (segments != null) {
-          _updateLastAccessed(key);
-          return segments;
+      if (segments != null) {
+        _updateLastAccessed(key);
+        return segments;
         }
       }
       

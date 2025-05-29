@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
+import '../../core/services/common/plan_service.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -21,10 +23,12 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   final UserPreferencesService _userPreferences = UserPreferencesService();
+  final PlanService _planService = PlanService();
   
   // 상태 변수
   int _currentPage = 0;
   bool _isProcessing = false;
+  bool _isStartingFreeTrial = false;
   
   // 사용자 이름
   final TextEditingController _nameController = TextEditingController();
@@ -115,7 +119,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       }
     }
 
-    if (_currentPage < 2) {
+    if (_currentPage < 4) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -304,7 +308,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ),
                           ),
                           Text(
-                            " / 3",
+                            " / 4",
                             style: TypographyTokens.body1En.copyWith(
                               fontWeight: FontWeight.w600,
                               color: ColorTokens.secondary
@@ -350,11 +354,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       _buildNameInputPage(),
                       _buildPurposePage(),
                       _buildTranslationModePage(),
+                      _buildFreeTrialPage(),
                     ],
                   ),
                 ),
 
-                // 하단 버튼 영역
+                // 하단 버튼 영역 (4번째 페이지에서는 숨김)
+                if (_currentPage < 3)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 40.0),
                   child: Row(
@@ -378,7 +384,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       // 다음/시작 버튼
                       Expanded(
                         child: PikaButton(
-                          text: _currentPage == 2 ? '시작해요!' : '다음으로',
+                          text: _currentPage == 2 ? '다음으로' : '다음으로',
                           variant: PikaButtonVariant.primary,
                           size: PikaButtonSize.medium,
                           onPressed: _isNextButtonEnabled() ? _nextPage : null,
@@ -701,5 +707,239 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ],
       ),
     );
+  }
+
+  // 네 번째 페이지: 무료 트라이얼 페이지
+  Widget _buildFreeTrialPage() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: "Pikabook",
+                  style: TypographyTokens.subtitle2En.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: ColorTokens.primary,
+                  ),
+                ),
+                TextSpan(
+                  text: "을 무료로 체험해보세요!",
+                  style: TypographyTokens.subtitle2En.copyWith(
+                  fontWeight: FontWeight.w600,
+                 color: ColorTokens.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          
+          // 무료 체험 혜택 설명
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(SpacingTokens.lg),
+            decoration: BoxDecoration(
+              color: ColorTokens.primaryverylight,
+              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+              border: Border.all(
+                color: ColorTokens.primarylight,
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.star,
+                      color: ColorTokens.primary,
+                      size: 20,
+                    ),
+                    SizedBox(width: SpacingTokens.xs),
+                    Text(
+                      '7일 무료 체험 혜택',
+                      style: TypographyTokens.button.copyWith(
+                        color: ColorTokens.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: SpacingTokens.sm),
+                _buildBenefitItem('월 300페이지 OCR 인식'),
+                _buildBenefitItem('월 10만자 번역'),
+                _buildBenefitItem('월 1,000회 TTS 음성'),
+                _buildBenefitItem('1GB 저장 공간'),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          Text(
+            '무료 체험 후 언제든지 취소할 수 있습니다.',
+            style: TypographyTokens.caption.copyWith(
+              color: ColorTokens.textSecondary,
+            ),
+          ),
+          
+          const SizedBox(height: 20),
+          
+          // 무료 체험 시작 버튼
+          PikaButton(
+            text: _isStartingFreeTrial ? '체험 시작 중...' : '7일 무료 체험 시작',
+            variant: PikaButtonVariant.primary,
+            size: PikaButtonSize.medium,
+            onPressed: _isStartingFreeTrial ? null : _startFreeTrial,
+            isLoading: _isStartingFreeTrial,
+            isFullWidth: true,
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // 나중에 하기 버튼
+          PikaButton(
+            text: '나중에 하기',
+            variant: PikaButtonVariant.outline,
+            size: PikaButtonSize.medium,
+            onPressed: _isStartingFreeTrial ? null : () async {
+              // 무료 체험 없이 온보딩 완료
+              await _completeOnboarding();
+            },
+            isFullWidth: true,
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // 혜택 항목 위젯
+  Widget _buildBenefitItem(String text) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: SpacingTokens.xs),
+      child: Row(
+        children: [
+          Icon(
+            Icons.check_circle,
+            color: ColorTokens.success,
+            size: 16,
+          ),
+          SizedBox(width: SpacingTokens.xs),
+          Text(
+            text,
+            style: TypographyTokens.body2.copyWith(
+              color: ColorTokens.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 무료 트라이얼 시작 처리
+  void _startFreeTrial() async {
+    setState(() {
+      _isStartingFreeTrial = true;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (kDebugMode) {
+          print('❌ 사용자가 로그인되어 있지 않습니다');
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('로그인이 필요합니다')),
+        );
+        return;
+      }
+
+      if (kDebugMode) {
+        print('🎯 무료 체험 시작 요청: ${user.uid}');
+      }
+
+      // 무료 체험 시작
+      final success = await _planService.startFreeTrial(user.uid);
+      
+      if (success) {
+        if (kDebugMode) {
+          print('✅ 무료 체험 시작 성공');
+        }
+        
+        // 온보딩 완료 처리
+        await _completeOnboarding();
+        
+        // 성공 메시지 표시
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '🎉 7일 무료 체험이 시작되었습니다!',
+                style: TypographyTokens.caption.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+              backgroundColor: ColorTokens.success,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        if (kDebugMode) {
+          print('❌ 무료 체험 시작 실패 - 이미 사용했거나 오류 발생');
+        }
+        
+        // 실패 시에도 온보딩은 완료 처리
+        await _completeOnboarding();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '무료 체험을 시작할 수 없습니다. 이미 사용하셨거나 오류가 발생했습니다.',
+                style: TypographyTokens.caption.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+              backgroundColor: ColorTokens.warning,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ 무료 체험 시작 중 오류: $e');
+      }
+      
+      // 오류 발생 시에도 온보딩은 완료 처리
+      await _completeOnboarding();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '오류가 발생했습니다: $e',
+              style: TypographyTokens.caption.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: ColorTokens.error,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isStartingFreeTrial = false;
+        });
+      }
+    }
   }
 }

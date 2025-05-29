@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/common/plan_service.dart';
+import '../../core/models/plan.dart';
 import '../../core/utils/language_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -91,44 +92,31 @@ class SettingsViewModel extends ChangeNotifier {
     _setLoading(true);
     try {
       if (kDebugMode) {
-        print('🔍 PlanService 기본 정보 로드 시작');
+        print('🔍 Plan 모델을 사용한 플랜 정보 로드 시작');
       }
       
-      // 현재 플랜 타입 확인
-      final currentPlanType = await _planService.getCurrentPlanType();
-      
-      // 구독 상세 정보 확인
-      final subscriptionDetails = await _planService.getSubscriptionDetails();
-      
-      // 플랜 제한 정보 확인
-      final planLimits = await _planService.getPlanLimits(currentPlanType);
+      // Plan 모델을 사용하여 현재 플랜 정보 가져오기
+      final plan = await _planService.getCurrentPlan();
       
       if (kDebugMode) {
-        print('   현재 플랜 타입: $currentPlanType');
-        print('   구독 상세 정보: $subscriptionDetails');
-        print('   플랜 제한: $planLimits');
+        print('   Plan 객체: $plan');
+        print('   플랜 타입: ${plan.type}');
+        print('   플랜 이름: ${plan.name}');
+        print('   무료 체험 중: ${plan.isFreeTrial}');
+        print('   남은 일수: ${plan.daysRemaining}');
+        print('   무료 체험 사용 여부: ${plan.hasUsedFreeTrial}');
       }
       
-      // 무료 체험 중인지 확인하여 플랜 이름 조정
-      final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
-      final daysRemaining = subscriptionDetails['daysRemaining'] as int? ?? 0;
-      
-      _planType = currentPlanType;
-      _planLimits = planLimits;
-      _remainingDays = daysRemaining;
-      
-      if (isFreeTrial && daysRemaining > 0) {
-        _planName = '프리미엄 체험 (${daysRemaining}일 남음)';
-      } else {
-        _planName = _planService.getPlanName(currentPlanType);
-      }
+      _planType = plan.type;
+      _planName = plan.name;
+      _remainingDays = plan.daysRemaining;
+      _planLimits = plan.limits;
       
       notifyListeners();
       
       if (kDebugMode) {
-        print('✅ PlanService 기본 정보 로드 완료');
+        print('✅ Plan 모델을 사용한 플랜 정보 로드 완료');
         print('   UI 상태 업데이트: 플랜=$_planName, 제한=$_planLimits');
-        print('   무료 체험: $isFreeTrial, 남은 일수: $daysRemaining');
       }
     } catch (e) {
       if (kDebugMode) {

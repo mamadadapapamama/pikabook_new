@@ -23,7 +23,7 @@ class TextProcessingService {
   
   // 실시간 리스너 관리
   final Map<String, StreamSubscription<DocumentSnapshot>> _pageListeners = {};
-
+  
   /// 페이지의 처리된 텍스트 가져오기
   /// 캐시 → Firestore 순으로 확인
   Future<ProcessedText?> getProcessedText(String pageId) async {
@@ -156,7 +156,7 @@ class TextProcessingService {
             if (_hasProcessedTextChanged(previousProcessedText, processedText)) {
               // 완성된 ProcessedText만 캐싱 (1차는 캐싱하지 않음)
               if (processedText.streamingStatus == StreamingStatus.completed) {
-                await _saveToCache(pageId, processedText);
+              await _saveToCache(pageId, processedText);
               }
               
               // 콜백 호출

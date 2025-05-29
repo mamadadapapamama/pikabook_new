@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'usage_limit_service.dart';
+import '../../models/plan.dart';
 
 /// 구독 플랜과 사용량 관리를 위한 서비스
 class PlanService {
@@ -158,31 +159,47 @@ class PlanService {
     return await _usageLimitService.checkFreeLimits();
   }
   
-  /// 현재 플랜 정보 가져오기
-  Future<Map<String, dynamic>> getCurrentPlan() async {
+  /// Plan 모델을 사용하여 현재 플랜 정보 가져오기
+  Future<Plan> getCurrentPlan() async {
     try {
-      final planType = await getCurrentPlanType();
-      final limits = await getPlanLimits(planType);
+      final subscriptionDetails = await getSubscriptionDetails();
+      final currentPlan = subscriptionDetails['currentPlan'] as String;
+      final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool;
+      final daysRemaining = subscriptionDetails['daysRemaining'] as int;
+      final expiryDate = subscriptionDetails['expiryDate'] as DateTime?;
+      final hasUsedFreeTrial = subscriptionDetails['hasUsedFreeTrial'] as bool;
       
-      return {
-        'type': planType,
-        'name': getPlanName(planType),
-        'maxOcrPages': limits['ocrPages'] ?? 30,
-        'maxTtsCount': limits['ttsRequests'] ?? 100,
-        'maxTranslationChars': limits['translatedChars'] ?? 10000,
-        'maxStorageBytes': limits['storageBytes'] ?? 52428800,
-      };
+      final limits = await getPlanLimits(currentPlan);
+      
+      if (currentPlan == PLAN_PREMIUM && isFreeTrial && daysRemaining > 0) {
+        // 프리미엄 체험 중
+        return Plan.premiumTrial(
+          daysRemaining: daysRemaining,
+          expiryDate: expiryDate,
+          limits: limits,
+        ).copyWith(hasUsedFreeTrial: hasUsedFreeTrial);
+      } else if (currentPlan == PLAN_PREMIUM) {
+        // 정식 프리미엄
+        return Plan.premium(limits: limits).copyWith(
+          hasUsedFreeTrial: hasUsedFreeTrial,
+          expiryDate: expiryDate,
+        );
+      } else {
+        // 무료 플랜
+        return Plan.free(limits: limits).copyWith(
+          hasUsedFreeTrial: hasUsedFreeTrial,
+        );
+      }
     } catch (e) {
       debugPrint('현재 플랜 정보 가져오기 중 오류: $e');
-      return {
-        'type': PLAN_FREE,
-        'name': getPlanName(PLAN_FREE),
-        'maxOcrPages': 30,
-        'maxTtsCount': 100,
-        'maxTranslationChars': 10000,
-        'maxStorageBytes': 52428800,
-      };
+      return Plan.free();
     }
+  }
+  
+  /// Plan 모델을 사용하여 플랜 이름 가져오기
+  Future<String> getPlanDisplayName() async {
+    final plan = await getCurrentPlan();
+    return plan.name;
   }
   
   /// 문의하기 기능
@@ -327,11 +344,14 @@ class PlanService {
 
       final data = userDoc.data() as Map<String, dynamic>;
       final subscriptionData = data['subscription'] as Map<String, dynamic>?;
+      
+      // hasUsedFreeTrial은 사용자 문서의 루트 레벨에서 가져오기
+      final hasUsedFreeTrial = data['hasUsedFreeTrial'] as bool? ?? false;
 
       if (subscriptionData == null) {
         return {
           'currentPlan': PLAN_FREE,
-          'hasUsedFreeTrial': false,
+          'hasUsedFreeTrial': hasUsedFreeTrial,
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
@@ -342,7 +362,6 @@ class PlanService {
       final status = subscriptionData['status'] as String?;
       final isFreeTrial = subscriptionData['isFreeTrial'] as bool? ?? false;
       final expiryDate = subscriptionData['expiryDate'] as Timestamp?;
-      final hasUsedFreeTrial = subscriptionData['hasUsedFreeTrial'] as bool? ?? false;
 
       int daysRemaining = 0;
       String currentPlan = PLAN_FREE;
@@ -357,6 +376,17 @@ class PlanService {
         } else {
           currentPlan = PLAN_FREE; // 만료되었으면 무료 플랜
         }
+      }
+
+      if (kDebugMode) {
+        print('🔍 구독 상세 정보 조회 결과:');
+        print('   사용자 ID: $userId');
+        print('   현재 플랜: $currentPlan');
+        print('   무료 체험 사용 여부: $hasUsedFreeTrial');
+        print('   현재 무료 체험 중: $isFreeTrial');
+        print('   남은 일수: $daysRemaining');
+        print('   만료일: ${expiryDate?.toDate()}');
+        print('   상태: $status');
       }
 
       return {

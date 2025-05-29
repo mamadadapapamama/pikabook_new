@@ -53,7 +53,7 @@ class TextCleanerService {
   
   /// 저작권 및 특수 문자 패턴 (©, ®, ™, @, #, $ 등)
   static final RegExp copyrightPattern = RegExp(r'^[^a-zA-Z\u4e00-\u9fff]*[©®™@#$%^&*+-]+[^a-zA-Z\u4e00-\u9fff]*$');
-  
+
   /// 저작권 관련 키워드 패턴 (영어 + 중국어)
   static final RegExp copyrightKeywordsPattern = RegExp(
     r'(copyright|all rights reserved|版权所有|保留所有权利|ltd\.?|inc\.?|corp\.?|company|pte\.?\s*ltd\.?|limited|international.*\(\d{4}\)|rights?\s+reserved)',

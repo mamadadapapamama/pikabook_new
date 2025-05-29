@@ -7,7 +7,6 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/ui_tokens.dart';
 
 /// 노트의 페이지 개수를 보여주는 배지 위젯
-/// 
 /// FlashcardCounterBadge와 유사하지만 페이지 수를 표시합니다.
 /// 서버에서 실시간으로 페이지 수를 가져와 표시합니다.
 class PageCountBadge extends StatefulWidget {

@@ -351,14 +351,14 @@ class PreLLMWorkflow {
           'progress': 0.0,
         },
       });
-
+      
       if (kDebugMode) {
         debugPrint('✅ 페이지 OCR 결과 및 1차 ProcessedText 업데이트 완료: ${pageData.pageId}');
         debugPrint('   원문 세그먼트: ${pageData.textSegments.length}개');
         debugPrint('   1차 ProcessedText: 원문만 포함');
         debugPrint('   2차 ProcessedText는 LLM 완료 후 생성됩니다');
       }
-
+      
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ 페이지 OCR 결과 업데이트 실패: ${pageData.pageId}, 오류: $e');

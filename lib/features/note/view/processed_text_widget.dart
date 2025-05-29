@@ -92,7 +92,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       });
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('TTS 초기화 실패: $e');
+      debugPrint('TTS 초기화 실패: $e');
       }
     }
   }
@@ -276,20 +276,20 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                         delay: Duration(milliseconds: i * 300), // 세그먼트별 지연
                       )
                     : ContextMenuManager.buildSelectableText(
-                        unit.originalText,
-                        style: _defaultOriginalTextStyle,
-                        isOriginal: true,
+                  unit.originalText,
+                  style: _defaultOriginalTextStyle,
+                  isOriginal: true,
                         flashcardWords: _flashcardWords,
-                        selectedText: _selectedText,
-                        selectedTextNotifier: _selectedTextNotifier,
+                  selectedText: _selectedText,
+                  selectedTextNotifier: _selectedTextNotifier,
                         onSelectionChanged: (selectedText) {
                           setState(() {
                             _selectedText = selectedText;
                           });
                         },
-                        onDictionaryLookup: widget.onDictionaryLookup,
-                        onCreateFlashCard: widget.onCreateFlashCard,
-                      ),
+                  onDictionaryLookup: widget.onDictionaryLookup,
+                  onCreateFlashCard: widget.onCreateFlashCard,
+                ),
               ),
               if (widget.showTtsButtons) _buildTtsButton(unit.originalText, i, isPlaying),
             ],
@@ -309,13 +309,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
           // 번역 표시 (번역이 있는 경우에만)
           if (hasTranslation)
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
-              child: Text(
-                unit.translatedText!,
-                style: _defaultTranslatedTextStyle,
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+                child: Text(
+                  unit.translatedText!,
+                  style: _defaultTranslatedTextStyle,
+                ),
               ),
-            ),
         ],
       );
       
