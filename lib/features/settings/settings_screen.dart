@@ -1,19 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
-import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/utils/language_constants.dart';
 import '../../core/widgets/loading_experience.dart';
 import '../../../core/widgets/pika_button.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
-import '../../core/services/authentication/auth_service.dart';
-import '../../core/services/common/plan_service.dart';
-import '../../../core/services/common/usage_limit_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -29,145 +24,25 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _isLoading = false;
-  User? _currentUser;
-  
-  // 사용자 설정 서비스
-  final UserPreferencesService _userPreferences = UserPreferencesService();
-  // 플랜 서비스 추가
-  final PlanService _planService = PlanService();
-  
-  // 설정 관련 상태 변수
-  String _userName = '';
-  String _noteSpaceName = '';
-  String _sourceLanguage = SourceLanguage.DEFAULT;
-  String _targetLanguage = TargetLanguage.DEFAULT;
-  bool _useSegmentMode = false;  // 추가: 세그먼트 모드 상태
-  
-  // 플랜 정보 상태
-  String _planType = PlanService.PLAN_FREE;
-  String _planName = '무료';
-  bool _isBetaPeriod = false;
-  int _remainingDays = 0;
-  
-  // 사용량 정보
-  Map<String, int> _planLimits = {};
-  Map<String, dynamic> _currentUsage = {};
-  Map<String, double> _usagePercentages = {};
-  
+  late SettingsViewModel _viewModel;
+
   @override
   void initState() {
     super.initState();
-    _loadUserData();
-    _loadUserPreferences();
-    _loadPlanInfo();
+    _viewModel = SettingsViewModel();
+    _viewModel.addListener(_onViewModelChanged);
   }
 
-  Future<void> _loadUserData() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      _currentUser = FirebaseAuth.instance.currentUser;
-    } catch (e) {
-      debugPrint('사용자 정보 로드 오류: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-  
-  // 사용자 설정 로드
-  Future<void> _loadUserPreferences() async {
-    setState(() {
-      _isLoading = true;
-    });
-    
-    try {
-      final preferences = await _userPreferences.getPreferences();
-      
-      if (mounted) {
-        setState(() {
-          _userName = preferences.userName ?? '사용자';
-          _noteSpaceName = preferences.defaultNoteSpace;
-          _sourceLanguage = preferences.sourceLanguage;
-          _targetLanguage = preferences.targetLanguage;
-          _useSegmentMode = preferences.useSegmentMode;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('사용자 설정 로드 오류: $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
+  @override
+  void dispose() {
+    _viewModel.removeListener(_onViewModelChanged);
+    _viewModel.dispose();
+    super.dispose();
   }
 
-  // 사용자 플랜 정보 로드 (사용량 제외)
-  Future<void> _loadPlanInfo() async {
-    setState(() {
-      _isLoading = true;
-    });
-    
-    try {
-      if (kDebugMode) {
-        print('🔍 PlanService 기본 정보 로드 시작');
-      }
-      
-      // 1. 현재 플랜 타입만 확인
-      final currentPlanType = await _planService.getCurrentPlanType();
-      
-      // 2. 구독 상세 정보 확인 (사용량 제외)
-      final subscriptionDetails = await _planService.getSubscriptionDetails();
-      
-      // 3. 플랜 제한 정보만 확인
-      final planLimits = await _planService.getPlanLimits(currentPlanType);
-      
-      if (kDebugMode) {
-        print('   현재 플랜 타입: $currentPlanType');
-        print('   구독 상세 정보: $subscriptionDetails');
-        print('   플랜 제한: $planLimits');
-      }
-      
-      if (mounted) {
-        // 무료 체험 중인지 확인하여 플랜 이름 조정
-        final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
-        final daysRemaining = subscriptionDetails['daysRemaining'] as int? ?? 0;
-        
-        setState(() {
-          _planType = currentPlanType;
-          
-          if (isFreeTrial && daysRemaining > 0) {
-            _planName = '프리미엄 체험 (${daysRemaining}일 남음)';
-          } else {
-            _planName = _planService.getPlanName(currentPlanType);
-          }
-          
-          _planLimits = planLimits;
-          _remainingDays = daysRemaining;
-          _isLoading = false;
-        });
-        
-        if (kDebugMode) {
-          print('✅ PlanService 기본 정보 로드 완료');
-          print('   UI 상태 업데이트: 플랜=$_planName, 제한=$_planLimits');
-          print('   무료 체험: $isFreeTrial, 남은 일수: $daysRemaining');
-        }
-      }
-    } catch (e) {
-      debugPrint('❌ 플랜 정보 로드 오류: $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+  void _onViewModelChanged() {
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -181,11 +56,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: LoadingExperience(
         loadingMessage: '설정 로딩 중...',
         loadData: () async {
-          if (!_isLoading) {
-            await _loadUserData();
-            await _loadUserPreferences();
-            await _loadPlanInfo();
-          }
+          await _viewModel.initialize();
         },
         contentBuilder: (context) => _buildProfileContent(),
       ),
@@ -193,10 +64,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildProfileContent() {
-    // 익명 사용자 체크 제거 (더 이상 익명 로그인 사용하지 않음)
-    final String displayName = _currentUser?.displayName ?? '사용자';
-    final String email = _currentUser?.email ?? '이메일 없음';
-    final String? photoUrl = _currentUser?.photoURL;
+    final String displayName = _viewModel.currentUser?.displayName ?? '사용자';
+    final String email = _viewModel.currentUser?.email ?? '이메일 없음';
+    final String? photoUrl = _viewModel.currentUser?.photoURL;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -212,7 +82,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           const SizedBox(height: 16),
           
-          // 로그아웃 버튼 - 전체 너비 버튼으로 변경
+          // 로그아웃 버튼
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
             child: PikaButton(
@@ -228,7 +98,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           const SizedBox(height: 32),
           
-          // 현재 사용 중인 플랜 정보 섹션 추가
+          // 현재 사용 중인 플랜 정보 섹션
           _buildSectionTitle('내 플랜'),
           const SizedBox(height: 12),
           _buildPlanInfoCard(),
@@ -242,7 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // 학습자 이름 설정
           _buildSettingItem(
             title: '학습자 이름',
-            value: _userName,
+            value: _viewModel.userName,
             onTap: _showUserNameDialog,
           ),
           
@@ -251,7 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // 노트 스페이스 이름 설정
           _buildSettingItem(
             title: '노트스페이스 이름',
-            value: _noteSpaceName,
+            value: _viewModel.noteSpaceName,
             onTap: _showNoteSpaceNameDialog,
           ),
           
@@ -260,7 +130,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // 원문 언어 설정
           _buildSettingItem(
             title: '원문 언어',
-            value: SourceLanguage.getName(_sourceLanguage),
+            value: SourceLanguage.getName(_viewModel.sourceLanguage),
             onTap: _showSourceLanguageDialog,
           ),
           
@@ -269,16 +139,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // 번역 언어 설정
           _buildSettingItem(
             title: '번역 언어',
-            value: TargetLanguage.getName(_targetLanguage),
+            value: TargetLanguage.getName(_viewModel.targetLanguage),
             onTap: _showTargetLanguageDialog,
           ),
           
           const SizedBox(height: 8),
           
-          // 텍스트 처리 모드 설정 추가
+          // 텍스트 처리 모드 설정
           _buildSettingItem(
             title: '텍스트 처리 모드',
-            value: _useSegmentMode ? '문장 단위' : '문단 단위',
+            value: _viewModel.useSegmentMode ? '문장 단위' : '문단 단위',
             onTap: _showTextProcessingModeDialog,
           ),
           
@@ -288,7 +158,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSectionTitle('계정관리'),
           const SizedBox(height: 12),
           
-          // 회원 탈퇴 버튼 (빨간색 텍스트)
+          // 회원 탈퇴 버튼
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
             child: PikaButton(
@@ -304,7 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-  
+
   // 프로필 카드 위젯
   Widget _buildProfileCard(String displayName, String email, String? photoUrl) {
     return Container(
@@ -420,9 +290,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
   
+  // 플랜 정보 카드 위젯
+  Widget _buildPlanInfoCard() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // 플랜 이름
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _viewModel.planName,
+                style: TypographyTokens.body2.copyWith(
+                  color: ColorTokens.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          
+          // 사용량 확인 버튼
+          GestureDetector(
+            onTap: _showUsageDialog,
+            child: Row(
+              children: [
+                Text(
+                  '사용량 확인',
+                  style: TypographyTokens.body2.copyWith(
+                    color: ColorTokens.textPrimary,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
+                SizedBox(width: SpacingTokens.md),
+                SvgPicture.asset(
+                  'assets/images/icon_arrow_right.svg',
+                  width: 20,
+                  height: 20,
+                  colorFilter: const ColorFilter.mode(
+                    ColorTokens.secondary,
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // 사용량 다이얼로그 표시
+  Future<void> _showUsageDialog() async {
+    if (kDebugMode) {
+      print('📊 사용량 확인 버튼 클릭 - 사용량 데이터 로드 시작');
+    }
+    
+    if (context.mounted) {
+      await UsageDialog.show(
+        context,
+        limitStatus: null,
+        usagePercentages: null,
+        onContactSupport: _contactSupport,
+      );
+    }
+  }
+  
+  // 문의하기 기능 (향후 인앱 구매로 전환 예정)
+  void _contactSupport() async {
+    final success = await _viewModel.contactSupport();
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('문의가 등록되었습니다.'),
+            backgroundColor: ColorTokens.success,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('문의 등록 중 오류가 발생했습니다.'),
+            backgroundColor: ColorTokens.error,
+          ),
+        );
+      }
+    }
+  }
+  
   // 학습자 이름 설정 다이얼로그
   Future<void> _showUserNameDialog() async {
-    final TextEditingController controller = TextEditingController(text: _userName);
+    final TextEditingController controller = TextEditingController(text: _viewModel.userName);
     
     final result = await showDialog<String>(
       context: context,
@@ -473,20 +436,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (result != null && result.isNotEmpty) {
-      final preferences = await _userPreferences.getPreferences();
-      await _userPreferences.savePreferences(
-        preferences.copyWith(
-          userName: result,
-          defaultNoteSpace: "${result}의 학습 노트"
-        )
-      );
-      _loadUserPreferences();
+      await _viewModel.updateUserName(result);
     }
   }
   
   // 노트 스페이스 이름 변경 다이얼로그
   Future<void> _showNoteSpaceNameDialog() async {
-    final TextEditingController controller = TextEditingController(text: _noteSpaceName);
+    final TextEditingController controller = TextEditingController(text: _viewModel.noteSpaceName);
     
     final result = await showDialog<String>(
       context: context,
@@ -536,32 +492,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (result != null && result.isNotEmpty) {
-      try {
-        final preferences = await _userPreferences.getPreferences();
-        final noteSpaces = List<String>.from(preferences.noteSpaces);
-        
-        // 노트 스페이스 이름 변경
-        if (noteSpaces.contains(_noteSpaceName)) {
-          final index = noteSpaces.indexOf(_noteSpaceName);
-          noteSpaces[index] = result;
-        } else if (!noteSpaces.contains(result)) {
-          noteSpaces.add(result);
-        }
-        
-        await _userPreferences.savePreferences(
-          preferences.copyWith(
-            defaultNoteSpace: result,
-            noteSpaces: noteSpaces
-          )
-        );
-        
-        // UI 다시 로드
-        await _loadUserPreferences();
-        
-        // 전역 상태를 통해 변경 사실을 알림
-        await _notifyNoteSpaceNameChanged(result);
-        
-        if (mounted) {
+      final success = await _viewModel.updateNoteSpaceName(result);
+      if (mounted) {
+        if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -572,13 +505,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           );
-        }
-      } catch (e) {
-        if (mounted) {
+        } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                '노트 스페이스 이름 변경 중 오류가 발생했습니다: $e',
+                '노트 스페이스 이름 변경 중 오류가 발생했습니다.',
                 style: TypographyTokens.caption.copyWith(
                   color: ColorTokens.textLight,
                 ),
@@ -589,16 +520,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
     }
-  }
-  
-  // 노트스페이스 이름 변경 알림 메서드
-  Future<void> _notifyNoteSpaceNameChanged(String newName) async {
-    // 1. SharedPreferences에 마지막 변경 시간 기록 (타임스탬프)
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('last_notespace_change', DateTime.now().millisecondsSinceEpoch);
-    
-    // 2. 앱 내 다른 화면을 강제로 갱신하기 위한 특수 플래그 설정
-    await prefs.setString('last_changed_notespace_name', newName);
   }
   
   // 원문 언어 설정 다이얼로그
@@ -634,7 +555,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       )
                     : null,
                 value: language,
-                groupValue: _sourceLanguage,
+                groupValue: _viewModel.sourceLanguage,
                 activeColor: ColorTokens.primary,
                 onChanged: isFutureSupported 
                     ? null 
@@ -660,11 +581,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (result != null) {
-      final preferences = await _userPreferences.getPreferences();
-      await _userPreferences.savePreferences(
-        preferences.copyWith(sourceLanguage: result)
-      );
-      _loadUserPreferences();
+      await _viewModel.updateSourceLanguage(result);
     }
   }
   
@@ -701,7 +618,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       )
                     : null,
                 value: language,
-                groupValue: _targetLanguage,
+                groupValue: _viewModel.targetLanguage,
                 activeColor: ColorTokens.primary,
                 onChanged: isFutureSupported 
                     ? null 
@@ -727,11 +644,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (result != null) {
-      final preferences = await _userPreferences.getPreferences();
-      await _userPreferences.savePreferences(
-        preferences.copyWith(targetLanguage: result)
-      );
-      _loadUserPreferences();
+      await _viewModel.updateTargetLanguage(result);
     }
   }
   
@@ -757,7 +670,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               value: true,
-              groupValue: _useSegmentMode,
+              groupValue: _viewModel.useSegmentMode,
               activeColor: ColorTokens.primary,
               onChanged: (value) => Navigator.pop(context, value),
             ),
@@ -773,7 +686,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               value: false,
-              groupValue: _useSegmentMode,
+              groupValue: _viewModel.useSegmentMode,
               activeColor: ColorTokens.primary,
               onChanged: (value) => Navigator.pop(context, value),
             ),
@@ -794,14 +707,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     
     if (result != null) {
-      final preferences = await _userPreferences.getPreferences();
-      await _userPreferences.savePreferences(
-        preferences.copyWith(useSegmentMode: result)
-      );
-      _loadUserPreferences();
-      
-      // 설정 변경 알림
-      if (mounted) {
+      final success = await _viewModel.updateTextProcessingMode(result);
+      if (mounted && success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -818,7 +725,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   
   // 계정 탈퇴 기능 구현
   Future<void> _handleAccountDeletion(BuildContext context) async {
-    // 확인 다이얼로그 표시
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -878,213 +784,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     if (confirm != true) return;
     
-    // 로딩 표시
-    setState(() {
-      _isLoading = true;
-    });
+    final success = await _viewModel.deleteAccount();
     
-    try {
-      // 회원 탈퇴 처리
-      await _deleteAccount();
-      
-      // 로딩 종료
-      setState(() {
-        _isLoading = false;
-      });
-      
-      // 성공 메시지 표시
-      if (mounted) {
+    if (mounted) {
+      if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('계정이 성공적으로 삭제되었습니다.')),
         );
         
-        // 로그인 화면으로 이동
         Navigator.pushNamedAndRemoveUntil(
           context, 
           '/', 
           (route) => false
         );
         
-        // 로그아웃 콜백 호출 (UI 상태 변경)
+        widget.onLogout();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('계정 삭제 중 오류가 발생했습니다.'),
+          ),
+        );
+        
         widget.onLogout();
       }
-    } catch (e) {
-      // 오류 처리
-      setState(() {
-        _isLoading = false;
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('계정 삭제 중 오류가 발생했습니다: $e'),
-          ),
-        );
-      }
-    }
-  }
-
-  // 회원 탈퇴 처리
-  Future<void> _deleteAccount() async {
-    setState(() {
-      _isLoading = true;
-    });
-    
-    try {
-      // 현재 사용자 가져오기
-      final user = FirebaseAuth.instance.currentUser;
-      
-      if (user == null) {
-        throw '로그인된 사용자 정보를 찾을 수 없습니다.';
-      }
-      
-      // AuthService의 deleteAccount 메서드 사용
-      // Firebase Auth 계정 삭제 + Firestore 데이터 삭제 + 로컬 데이터 삭제 모두 포함
-      final authService = AuthService();
-      await authService.deleteAccount();
-      
-      // 로딩 종료
-      setState(() {
-        _isLoading = false;
-      });
-      
-      // 로그아웃 콜백 호출
-      widget.onLogout();
-      
-    } catch (e) {
-      debugPrint('계정 삭제 오류: $e');
-      
-      // 오류가 발생해도 사용자에게는 성공적으로 처리된 것처럼 보여줌
-      setState(() {
-        _isLoading = false;
-      });
-      
-      // 로그아웃 콜백 호출 - 오류가 발생해도 로그아웃 처리
-      widget.onLogout();
-    }
-  }
-
-  // 플랜 정보 카드 위젯
-  Widget _buildPlanInfoCard() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // 플랜 이름
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _planName,
-                style: TypographyTokens.body2.copyWith(
-                  color: ColorTokens.textPrimary,
-                ),
-              ),
-            ],
-          ),
-          
-          // 사용량 확인 버튼
-          GestureDetector(
-            onTap: _showUsageDialog,
-            child: Row(
-              children: [
-                Text(
-                  '사용량 확인',
-                  style: TypographyTokens.body2.copyWith(
-                    color: ColorTokens.textPrimary,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-                SizedBox(width: SpacingTokens.md),
-                SvgPicture.asset(
-                  'assets/images/icon_arrow_right.svg',
-                  width: 20,
-                  height: 20,
-                  colorFilter: const ColorFilter.mode(
-                    ColorTokens.secondary,
-                    BlendMode.srcIn,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  // 사용량 다이얼로그 표시 (이때 실제 사용량 로드)
-  Future<void> _showUsageDialog() async {
-    if (kDebugMode) {
-      print('📊 사용량 확인 버튼 클릭 - 사용량 데이터 로드 시작');
-    }
-    
-    // 다이얼로그를 즉시 표시하고 내부에서 데이터 로드
-    if (context.mounted) {
-      await UsageDialog.show(
-        context,
-        // null로 설정하여 다이얼로그 내부에서 새로 로드하도록 함
-        limitStatus: null,
-        usagePercentages: null, // 다이얼로그에서 새로 로드
-        onContactSupport: _contactSupport,
-      );
-    }
-  }
-  
-  // 문의하기 기능
-  void _contactSupport() async {
-    try {
-      // 현재 사용량 및 플랜 정보를 포함한 문의 내용 생성
-      final planName = _planName;
-      final ocrUsage = _currentUsage['ocrPages'] ?? 0;
-      final storageUsage = _formatBytes(_currentUsage['storageUsageBytes'] ?? 0);
-      
-      final subject = '[피카북] 사용량 문의';
-      final body = '플랜: $planName\n'
-                 'OCR 사용량: $ocrUsage\n'
-                 '저장 공간: $storageUsage\n'
-                 '사용자 ID: ${_currentUser?.uid ?? '알 수 없음'}\n';
-      
-      // PlanService의 문의하기 기능 호출
-      await _planService.contactSupport(subject: subject, body: body);
-      
-      // 성공 메시지 표시
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('문의가 등록되었습니다.'),
-            backgroundColor: ColorTokens.success,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('문의 등록 중 오류가 발생했습니다: $e'),
-            backgroundColor: ColorTokens.error,
-          ),
-        );
-      }
-    }
-  }
-  
-  // 바이트 크기 포맷팅
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    } else if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    } else if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    } else {
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
     }
   }
 }
