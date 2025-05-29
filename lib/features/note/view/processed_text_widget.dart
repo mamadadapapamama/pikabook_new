@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/models/processed_text.dart';
+import '../../../core/models/text_unit.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../flashcard/flashcard_view_model.dart';
 import '../../../core/widgets/typewriter_text.dart';
 import '../../../core/utils/context_menu_manager.dart';
+import '../../../core/services/common/plan_service.dart';
+import '../../../core/services/common/usage_limit_service.dart';
+import '../../../core/widgets/upgrade_modal.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -129,17 +133,37 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   /// TTS 재생 토글
   Future<void> _toggleTts(String text, int segmentIndex) async {
     try {
-      // 현재 재생 중인 세그먼트인지 확인
-      final bool isCurrentlyPlaying = widget.playingSegmentIndex == segmentIndex;
+      // 플랜 체크 먼저 수행
+      final planService = PlanService();
+      final planType = await planService.getCurrentPlanType();
       
-      if (isCurrentlyPlaying) {
-        // 재생 중이면 중지
+      // 무료 플랜인 경우 업그레이드 모달 표시
+      if (planType == PlanService.PLAN_FREE) {
+        if (mounted) {
+          await UpgradePromptHelper.showTtsUpgradePrompt(context);
+        }
+        return;
+      }
+      
+      // 프리미엄 플랜이지만 TTS 제한에 도달한 경우 체크
+      final usageService = UsageLimitService();
+      final limitStatus = await usageService.checkInitialLimitStatus();
+      
+      if (limitStatus['ttsLimitReached'] == true) {
+        if (mounted) {
+          await UpgradePromptHelper.showTtsUpgradePrompt(context);
+        }
+        return;
+      }
+
+      // 현재 재생 중인 세그먼트와 같으면 중지
+      if (widget.playingSegmentIndex == segmentIndex && _ttsService.state == TtsState.playing) {
         await _ttsService.stop();
         if (widget.onPlayTts != null) {
           widget.onPlayTts!('', segmentIndex: null);
         }
       } else {
-        // 재생 시작
+        // 새로운 세그먼트 재생
         await _ttsService.speakSegment(text, segmentIndex);
         if (widget.onPlayTts != null) {
           widget.onPlayTts!(text, segmentIndex: segmentIndex);
@@ -388,22 +412,30 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   /// 플래시카드 단어 목록 초기화
   void _initializeFlashcardWords() {
     if (widget.flashCardViewModel != null) {
-      _flashcardWords = widget.flashCardViewModel!.flashCards
-          .map((card) => card.front)
-          .toSet();
-    } else {
-      _flashcardWords = {};
-    }
-    
-    if (kDebugMode) {
-      debugPrint('플래시카드 단어 초기화: ${_flashcardWords.length}개');
+      _flashcardWords = Set<String>.from(
+        widget.flashCardViewModel!.flashCards.map((card) => card.front)
+      );
     }
   }
 
-  /// 기본 스타일 초기화
+  /// 스타일 초기화
   void _initializeStyles() {
-    _defaultOriginalTextStyle = widget.originalTextStyle ?? TypographyTokens.subtitle1Cn.copyWith (color:ColorTokens.textPrimary);
-    _defaultPinyinTextStyle = widget.pinyinTextStyle ?? TypographyTokens.caption.copyWith(color: Colors.grey[800]);
-    _defaultTranslatedTextStyle = widget.translatedTextStyle ?? TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary);
+    _defaultOriginalTextStyle = TypographyTokens.body1.copyWith(
+      color: ColorTokens.textPrimary,
+      height: 1.6,
+      fontSize: 16,
+    );
+
+    _defaultPinyinTextStyle = TypographyTokens.caption.copyWith(
+      color: ColorTokens.textSecondary,
+      height: 1.4,
+      fontSize: 12,
+    );
+
+    _defaultTranslatedTextStyle = TypographyTokens.body2.copyWith(
+      color: ColorTokens.textSecondary,
+      height: 1.5,
+      fontSize: 14,
+    );
   }
 }

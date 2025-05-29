@@ -27,6 +27,8 @@ import '../../core/utils/debug_utils.dart';
 import '../../core/models/note.dart';
 import '../note/view/note_detail_screen.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용 위해 추가
+import '../../core/services/common/plan_service.dart';
+import '../../core/widgets/upgrade_modal.dart';
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -128,6 +130,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 마케팅 서비스만 초기화 (사용량 확인은 InitializationManager에서 처리됨)
       await _initializeMarketingService();
       
+      // 7일 체험 만료 체크
+      await _checkTrialExpiration();
+      
     } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('[HomeScreen] 비동기 초기화 중 오류 발생: $e');
@@ -146,6 +151,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         debugPrint('[HomeScreen] 마케팅 서비스 초기화 중 오류: $e');
       }
       // 마케팅 서비스 초기화 실패는 무시하고 계속 진행
+    }
+  }
+  
+  /// 7일 체험 만료 체크 및 업그레이드 모달 표시
+  Future<void> _checkTrialExpiration() async {
+    try {
+      final planService = PlanService();
+      final subscriptionDetails = await planService.getSubscriptionDetails();
+      
+      // 무료 체험이 만료되고 현재 무료 플랜인 경우
+      if (subscriptionDetails['hasUsedFreeTrial'] == true && 
+          subscriptionDetails['currentPlan'] == PlanService.PLAN_FREE) {
+        
+        // 하루에 한 번만 표시하도록 체크
+        final prefs = await SharedPreferences.getInstance();
+        final lastShownDate = prefs.getString('last_upgrade_prompt_date');
+        final today = DateTime.now().toIso8601String().substring(0, 10);
+        
+        if (lastShownDate != today && mounted) {
+          // 잠시 대기 후 모달 표시 (화면이 완전히 로드된 후)
+          await Future.delayed(const Duration(milliseconds: 1500));
+          
+          if (mounted) {
+            await UpgradePromptHelper.showTrialExpiredPrompt(context);
+            // 오늘 날짜 저장
+            await prefs.setString('last_upgrade_prompt_date', today);
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 체험 만료 체크 중 오류: $e');
+      }
+      // 체험 만료 체크 실패는 무시하고 계속 진행
     }
   }
   

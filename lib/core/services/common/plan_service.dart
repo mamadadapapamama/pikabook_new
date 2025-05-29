@@ -296,77 +296,82 @@ class PlanService {
     }
   }
   
-  /// 현재 구독 상태 상세 정보 가져오기
+  /// 구독 상세 정보 조회
   Future<Map<String, dynamic>> getSubscriptionDetails() async {
     try {
-      if (_currentUserId == null) {
+      final userId = _currentUserId;
+      if (userId == null) {
         return {
-          'plan': PLAN_FREE,
-          'status': 'free',
+          'currentPlan': PLAN_FREE,
+          'hasUsedFreeTrial': false,
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
         };
       }
-      
+
       final userDoc = await _firestore
           .collection('users')
-          .doc(_currentUserId)
+          .doc(userId)
           .get();
-          
+
       if (!userDoc.exists) {
         return {
-          'plan': PLAN_FREE,
-          'status': 'free',
+          'currentPlan': PLAN_FREE,
+          'hasUsedFreeTrial': false,
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
         };
       }
-      
-      final planData = userDoc.data()?['subscription'];
-      if (planData == null) {
+
+      final data = userDoc.data() as Map<String, dynamic>;
+      final subscriptionData = data['subscription'] as Map<String, dynamic>?;
+
+      if (subscriptionData == null) {
         return {
-          'plan': PLAN_FREE,
-          'status': 'free',
+          'currentPlan': PLAN_FREE,
+          'hasUsedFreeTrial': false,
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
         };
       }
-      
-      final planType = planData['plan'] as String?;
-      final expiryDate = planData['expiryDate'] as Timestamp?;
-      final status = planData['status'] as String?;
-      final isFreeTrial = planData['isFreeTrial'] as bool? ?? false;
-      
+
+      final plan = subscriptionData['plan'] as String? ?? PLAN_FREE;
+      final status = subscriptionData['status'] as String?;
+      final isFreeTrial = subscriptionData['isFreeTrial'] as bool? ?? false;
+      final expiryDate = subscriptionData['expiryDate'] as Timestamp?;
+      final hasUsedFreeTrial = subscriptionData['hasUsedFreeTrial'] as bool? ?? false;
+
+      int daysRemaining = 0;
+      String currentPlan = PLAN_FREE;
+
       if (expiryDate != null) {
         final expiry = expiryDate.toDate();
         final now = DateTime.now();
-        final daysRemaining = expiry.difference(now).inDays;
         
-        return {
-          'plan': planType ?? PLAN_FREE,
-          'status': status ?? 'free',
-          'isFreeTrial': isFreeTrial,
-          'daysRemaining': daysRemaining > 0 ? daysRemaining : 0,
-          'expiryDate': expiry,
-          'isExpired': expiry.isBefore(now),
-        };
+        if (expiry.isAfter(now)) {
+          daysRemaining = expiry.difference(now).inDays;
+          currentPlan = plan; // 만료되지 않았으면 원래 플랜
+        } else {
+          currentPlan = PLAN_FREE; // 만료되었으면 무료 플랜
+        }
       }
-      
+
       return {
-        'plan': planType ?? PLAN_FREE,
-        'status': status ?? 'free',
+        'currentPlan': currentPlan,
+        'hasUsedFreeTrial': hasUsedFreeTrial,
         'isFreeTrial': isFreeTrial,
-        'daysRemaining': 0,
-        'expiryDate': null,
+        'daysRemaining': daysRemaining,
+        'expiryDate': expiryDate?.toDate(),
+        'status': status,
       };
     } catch (e) {
-      debugPrint('구독 상태 조회 오류: $e');
+      debugPrint('구독 상세 정보 조회 중 오류: $e');
       return {
-        'plan': PLAN_FREE,
-        'status': 'free',
+        'currentPlan': PLAN_FREE,
+        'hasUsedFreeTrial': false,
         'isFreeTrial': false,
         'daysRemaining': 0,
         'expiryDate': null,
