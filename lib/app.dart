@@ -14,6 +14,7 @@ import 'core/services/common/initialization_manager.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
 import 'core/services/common/usage_limit_service.dart';
+import 'core/services/payment/in_app_purchase_service.dart';
 import 'core/widgets/usage_dialog.dart';
 import 'views/screens/loading_screen.dart';
 import 'core/services/marketing/marketing_campaign_service.dart';
@@ -65,6 +66,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   String? _error;
   final MarketingCampaignService _marketingService = MarketingCampaignService();
   final PlanService _planService = PlanService();
+  final InAppPurchaseService _purchaseService = InAppPurchaseService();
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   
   bool _ttsExceed = false;
@@ -106,6 +108,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   @override
   void dispose() {
     _authStateSubscription?.cancel();
+    _purchaseService.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -144,6 +147,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       
       // 마케팅 캠페인 서비스 초기화 (필요 시에만)
       await _marketingService.initialize();
+      
+      // In-App Purchase 서비스 초기화
+      await _purchaseService.initialize();
       
       // 초기화 결과에서 로그인 정보 가져오기
       final isLoggedIn = initResult['isLoggedIn'] as bool;

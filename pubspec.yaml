@@ -65,6 +65,9 @@ dependencies:
   uuid: ^4.3.3
   path: ^1.9.0
   
+  # In-App Purchase
+  in_app_purchase: ^3.2.0
+  
   # Chinese
   pinyin: ^3.3.0
   shared_preferences: ^2.2.2

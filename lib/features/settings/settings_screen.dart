@@ -8,6 +8,7 @@ import '../../core/widgets/loading_experience.dart';
 import '../../../core/widgets/pika_button.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
+import '../subscription/subscription_screen.dart';
 import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
 
@@ -299,47 +300,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(4),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
         children: [
-          // 플랜 이름
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                _viewModel.planName,
-                style: TypographyTokens.body2.copyWith(
-                  color: ColorTokens.textPrimary,
+              // 플랜 이름
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _viewModel.planName,
+                    style: TypographyTokens.body2.copyWith(
+                      color: ColorTokens.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              
+              // 사용량 확인 버튼
+              GestureDetector(
+                onTap: _showUsageDialog,
+                child: Row(
+                  children: [
+                    Text(
+                      '사용량 확인',
+                      style: TypographyTokens.body2.copyWith(
+                        color: ColorTokens.textPrimary,
+                        fontWeight: FontWeight.normal,
+                      ),
+                    ),
+                    SizedBox(width: SpacingTokens.md),
+                    SvgPicture.asset(
+                      'assets/images/icon_arrow_right.svg',
+                      width: 20,
+                      height: 20,
+                      colorFilter: const ColorFilter.mode(
+                        ColorTokens.secondary,
+                        BlendMode.srcIn,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
           
-          // 사용량 확인 버튼
-          GestureDetector(
-            onTap: _showUsageDialog,
-            child: Row(
-              children: [
-                Text(
-                  '사용량 확인',
-                  style: TypographyTokens.body2.copyWith(
-                    color: ColorTokens.textPrimary,
-                    fontWeight: FontWeight.normal,
-                  ),
-                ),
-                SizedBox(width: SpacingTokens.md),
-                SvgPicture.asset(
-                  'assets/images/icon_arrow_right.svg',
-                  width: 20,
-                  height: 20,
-                  colorFilter: const ColorFilter.mode(
-                    ColorTokens.secondary,
-                    BlendMode.srcIn,
-                  ),
-                ),
-              ],
+          // 무료 플랜인 경우 업그레이드 버튼 표시
+          if (_viewModel.planType == 'free') ...[
+            SizedBox(height: SpacingTokens.md),
+            PikaButton(
+              text: 'Premium으로 업그레이드',
+              variant: PikaButtonVariant.primary,
+              size: PikaButtonSize.small,
+              onPressed: _navigateToSubscription,
+              isFullWidth: true,
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -809,5 +826,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         widget.onLogout();
       }
     }
+  }
+
+  void _navigateToSubscription() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => SubscriptionScreen()),
+    );
   }
 }
