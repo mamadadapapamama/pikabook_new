@@ -288,7 +288,7 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
   Widget _buildPlaceholder() {
     return Container(
       height: 120.0, // placeholder도 120 높이로 통일
-      margin: const EdgeInsets.fromLTRB(24, 0, 16, 4),
+      margin: const EdgeInsets.fromLTRB(24, 0, 16, 0),
       decoration: BoxDecoration(
         color: Colors.grey[100],
         borderRadius: BorderRadius.circular(8.0),

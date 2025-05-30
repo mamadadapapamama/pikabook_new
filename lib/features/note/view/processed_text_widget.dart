@@ -432,22 +432,18 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   /// 스타일 초기화
   void _initializeStyles() {
-    _defaultOriginalTextStyle = TypographyTokens.body1.copyWith(
+    _defaultOriginalTextStyle = TypographyTokens.subtitle1Cn.copyWith(
       color: ColorTokens.textPrimary,
-      height: 1.6,
-      fontSize: 16,
     );
 
     _defaultPinyinTextStyle = TypographyTokens.caption.copyWith(
-      color: ColorTokens.textSecondary,
-      height: 1.4,
-      fontSize: 12,
+      color: ColorTokens.textGrey,
+      height: 1.2,
     );
 
     _defaultTranslatedTextStyle = TypographyTokens.body2.copyWith(
       color: ColorTokens.textSecondary,
       height: 1.5,
-      fontSize: 14,
     );
   }
 }
