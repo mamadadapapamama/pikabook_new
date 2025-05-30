@@ -568,30 +568,5 @@ class UsageLimitService {
     }
   }
   
-  // ========== TTS 관련 기존 호환성을 위한 메서드들 (향후 제거 예정) ==========
   
-  /// 기존 코드 호환성을 위한 메서드 (deprecated)
-  /// TODO: TtsApiService에서 사용 중 - incrementTtsUsageAfterPlayback()로 교체 후 제거 예정
-  @deprecated
-  Future<bool> incrementTtsCharCount(int count) async {
-    debugPrint('⚠️ incrementTtsCharCount는 deprecated입니다. incrementTtsUsageAfterPlayback()를 사용하세요.');
-    return await incrementTtsUsageAfterPlayback();
-  }
-  
-  /// 기존 코드 호환성을 위한 메서드 (deprecated)
-  /// TODO: TtsApiService에서 사용 중 - getCurrentTtsUsage()로 교체 후 제거 예정
-  @deprecated
-  Future<int> getTtsUsage() async {
-    debugPrint('⚠️ getTtsUsage는 deprecated입니다. getCurrentTtsUsage()를 사용하세요.');
-    final usage = await _loadUsageDataFromFirebase();
-    return usage['ttsRequests'] ?? 0;
-  }
-  
-  /// 기존 코드 호환성을 위한 메서드 (deprecated)
-  /// TODO: 캐시 시스템 제거로 인해 더 이상 필요 없음
-  @deprecated
-  void invalidateCache() {
-    debugPrint('⚠️ invalidateCache는 deprecated입니다. 캐시 시스템이 제거되었습니다.');
-    // 아무것도 하지 않음 - 캐시가 없으므로
-  }
 } 

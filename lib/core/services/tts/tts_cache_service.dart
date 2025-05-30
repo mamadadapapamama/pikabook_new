@@ -18,11 +18,11 @@ class TTSCacheService {
     if (_isInitialized) return;
 
     try {
-      await _cacheManager.initialize();
+      // CacheManager는 App.dart에서 이미 초기화됨
       _isInitialized = true;
 
       if (kDebugMode) {
-        debugPrint('🔊 TTSCacheService 초기화 완료');
+        debugPrint('🔊 TTSCacheService 초기화 완료 (CacheManager는 App.dart에서 초기화됨)');
       }
     } catch (e) {
       if (kDebugMode) {

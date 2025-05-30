@@ -47,6 +47,9 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> _initializeViewModel() async {
     debugPrint('[HomeViewModel] 초기화 시작');
     try {
+      // CacheManager는 App.dart에서 이미 초기화됨
+      debugPrint('[HomeViewModel] CacheManager 초기화 스킵 (App.dart에서 이미 초기화됨)');
+      
       // 사용량 제한 상태 확인
       await _checkUsageLimits();
       

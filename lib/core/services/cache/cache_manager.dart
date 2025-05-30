@@ -27,7 +27,14 @@ class CacheManager {
     if (_isInitialized) return;
 
     try {
+      if (kDebugMode) {
+        debugPrint('🏗️ CacheManager 초기화 시작');
+      }
+
       // Note Contents 캐시 (100MB)
+      if (kDebugMode) {
+        debugPrint('📝 Note Contents 캐시 생성 중...');
+      }
       _noteContentsCache = LocalCacheStorage<Map<String, dynamic>>(
         namespace: 'note_contents',
         maxSize: 100 * 1024 * 1024, // 100MB
@@ -37,6 +44,9 @@ class CacheManager {
       );
 
       // Note Metadata 캐시 (10MB)
+      if (kDebugMode) {
+        debugPrint('📋 Note Metadata 캐시 생성 중...');
+      }
       _noteMetadataCache = LocalCacheStorage<Map<String, dynamic>>(
         namespace: 'note_metadata',
         maxSize: 10 * 1024 * 1024, // 10MB
@@ -46,6 +56,9 @@ class CacheManager {
       );
 
       // Flashcard 캐시 (10MB)
+      if (kDebugMode) {
+        debugPrint('🃏 Flashcard 캐시 생성 중...');
+      }
       _flashcardCache = LocalCacheStorage<Map<String, dynamic>>(
         namespace: 'flashcards',
         maxSize: 10 * 1024 * 1024, // 10MB
@@ -55,6 +68,9 @@ class CacheManager {
       );
 
       // Image 캐시 (300MB)
+      if (kDebugMode) {
+        debugPrint('🖼️ Image 캐시 생성 중...');
+      }
       _imageCache = LocalCacheStorage<Uint8List>(
         namespace: 'images',
         maxSize: 300 * 1024 * 1024, // 300MB
@@ -62,20 +78,44 @@ class CacheManager {
       );
 
       // TTS 캐시 (200MB)
+      if (kDebugMode) {
+        debugPrint('🔊 TTS 캐시 생성 중...');
+      }
       _ttsCache = LocalCacheStorage<Uint8List>(
         namespace: 'tts',
         maxSize: 200 * 1024 * 1024, // 200MB
         maxItems: 1000,
       );
 
-      // 모든 캐시 초기화
-      await Future.wait([
-        _noteContentsCache!.initialize(),
-        _noteMetadataCache!.initialize(),
-        _flashcardCache!.initialize(),
-        _imageCache!.initialize(),
-        _ttsCache!.initialize(),
-      ]);
+      if (kDebugMode) {
+        debugPrint('⚙️ 모든 캐시 저장소 생성 완료, 초기화 시작...');
+      }
+
+      // 모든 캐시 초기화 - 개별적으로 실행하여 문제 지점 파악
+      if (kDebugMode) {
+        debugPrint('📝 Note Contents 캐시 초기화 중...');
+      }
+      await _noteContentsCache!.initialize();
+      
+      if (kDebugMode) {
+        debugPrint('📋 Note Metadata 캐시 초기화 중...');
+      }
+      await _noteMetadataCache!.initialize();
+      
+      if (kDebugMode) {
+        debugPrint('🃏 Flashcard 캐시 초기화 중...');
+      }
+      await _flashcardCache!.initialize();
+      
+      if (kDebugMode) {
+        debugPrint('🖼️ Image 캐시 초기화 중...');
+      }
+      await _imageCache!.initialize();
+      
+      if (kDebugMode) {
+        debugPrint('🔊 TTS 캐시 초기화 중...');
+      }
+      await _ttsCache!.initialize();
 
       _isInitialized = true;
 

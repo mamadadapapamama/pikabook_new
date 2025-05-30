@@ -147,12 +147,17 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 공통 서비스 초기화 (Firebase 포함)
       final initResult = await _initializationManager.initialize();
       
-      // 캐시 매니저 초기화 (백그라운드에서 실행)
-      _cacheManager.initialize().catchError((e) {
+      // 캐시 매니저 초기화 (동기적으로 실행)
+      try {
+        await _cacheManager.initialize();
+        if (kDebugMode) {
+          debugPrint('✅ CacheManager 초기화 완료');
+        }
+      } catch (e) {
         if (kDebugMode) {
           debugPrint('❌ CacheManager 초기화 실패: $e');
         }
-      });
+      }
       
       // 마케팅 캠페인 서비스 초기화 (필요 시에만)
       await _marketingService.initialize();
