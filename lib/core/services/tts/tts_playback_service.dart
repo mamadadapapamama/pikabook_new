@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import '../cache/unified_cache_service.dart';
+import '../cache/cache_manager.dart';
 
 /// TTS 상태
 enum TtsState { playing, stopped, paused }
@@ -22,7 +22,7 @@ class TtsPlaybackService {
   bool _isSpeaking = false;
 
   // 캐시 서비스
-  final UnifiedCacheService _cacheService = UnifiedCacheService();
+  final CacheManager _cacheManager = CacheManager();
 
   // 초기화 상태
   bool _isInitialized = false;
@@ -36,7 +36,7 @@ class TtsPlaybackService {
     if (_isInitialized) return;
 
     try {
-      await _cacheService.initialize();
+      await _cacheManager.initialize();
       await _setupEventHandlers();
       _isInitialized = true;
       if (kDebugMode) {
@@ -58,12 +58,27 @@ class TtsPlaybackService {
 
   /// 캐시에서 파일 경로 가져오기
   Future<String?> getCachedFilePath(String text) async {
-    return await _cacheService.getTtsPath(text);
+    // 텍스트를 기반으로 임시 ID 생성
+    final textHash = text.hashCode.toString();
+    return await _cacheManager.getTTSPath(
+      noteId: 'temp',
+      pageId: 'temp',
+      segmentId: textHash,
+      voiceId: 'default',
+    );
   }
 
   /// 오디오 데이터를 캐시에 저장
   Future<String?> cacheAudioData(String text, Uint8List audioData) async {
-    return await _cacheService.cacheTts(text, audioData);
+    // 텍스트를 기반으로 임시 ID 생성
+    final textHash = text.hashCode.toString();
+    return await _cacheManager.cacheTTS(
+      noteId: 'temp',
+      pageId: 'temp',
+      segmentId: textHash,
+      voiceId: 'default',
+      audioData: audioData,
+    );
   }
 
   /// 오디오 파일 재생
@@ -139,7 +154,7 @@ class TtsPlaybackService {
     _playbackEventSubscription = null;
     
     await _audioPlayer.dispose();
-    await _cacheService.clear();
+    await _cacheManager.clearCache();
     _isInitialized = false;
     if (kDebugMode) {
       debugPrint('TTS 재생 서비스 리소스 해제 완료');
@@ -148,7 +163,7 @@ class TtsPlaybackService {
 
   /// 캐시 비우기
   void clearCache() {
-    _cacheService.clear();
+    _cacheManager.clearCache();
     debugPrint('TTS 캐시 비움');
   }
 

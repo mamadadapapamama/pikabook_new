@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/note.dart';
+import '../../../core/models/flash_card.dart';
 import 'cache_storage.dart';
 import 'local_cache_storage.dart';
 
@@ -15,6 +16,7 @@ class CacheManager {
   // 캐시 저장소들
   late final LocalCacheStorage<Map<String, dynamic>> _noteContentsCache;
   late final LocalCacheStorage<Map<String, dynamic>> _noteMetadataCache;
+  late final LocalCacheStorage<Map<String, dynamic>> _flashcardCache;
   late final LocalCacheStorage<Uint8List> _imageCache;
   late final LocalCacheStorage<Uint8List> _ttsCache;
 
@@ -38,16 +40,25 @@ class CacheManager {
       _noteMetadataCache = LocalCacheStorage<Map<String, dynamic>>(
         namespace: 'note_metadata',
         maxSize: 10 * 1024 * 1024, // 10MB
+        maxItems: 500,
+        fromJson: (json) => json,
+        toJson: (data) => data,
+      );
+
+      // Flashcard 캐시 (10MB)
+      _flashcardCache = LocalCacheStorage<Map<String, dynamic>>(
+        namespace: 'flashcards',
+        maxSize: 10 * 1024 * 1024, // 10MB
         maxItems: 1000,
         fromJson: (json) => json,
         toJson: (data) => data,
       );
 
-      // Image 캐시 (500MB)
+      // Image 캐시 (300MB)
       _imageCache = LocalCacheStorage<Uint8List>(
         namespace: 'images',
-        maxSize: 500 * 1024 * 1024, // 500MB
-        maxItems: 2000,
+        maxSize: 300 * 1024 * 1024, // 300MB
+        maxItems: 1000,
       );
 
       // TTS 캐시 (200MB)
@@ -61,6 +72,7 @@ class CacheManager {
       await Future.wait([
         _noteContentsCache.initialize(),
         _noteMetadataCache.initialize(),
+        _flashcardCache.initialize(),
         _imageCache.initialize(),
         _ttsCache.initialize(),
       ]);
@@ -438,7 +450,239 @@ class CacheManager {
     }
   }
 
+  // === Flashcard 캐시 ===
+
+  /// 플래시카드 캐시 키 생성
+  /// 형식: "flashcard:{noteId}:cards"
+  String _generateFlashcardKey(String noteId) {
+    return 'flashcard:$noteId:cards';
+  }
+
+  /// 플래시카드 저장
+  Future<void> cacheFlashcards(String noteId, List<FlashCard> flashcards) async {
+    await _ensureInitialized();
+
+    try {
+      final key = _generateFlashcardKey(noteId);
+      final data = {
+        'flashcards': flashcards.map((card) => card.toJson()).toList(),
+        'cachedAt': DateTime.now().toIso8601String(),
+        'count': flashcards.length,
+      };
+
+      await _flashcardCache.set(key, data);
+
+      if (kDebugMode) {
+        debugPrint('🃏 플래시카드 캐시 저장: $noteId (${flashcards.length}개)');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 플래시카드 캐시 저장 실패: $e');
+      }
+    }
+  }
+
+  /// 플래시카드 조회
+  Future<List<FlashCard>?> getFlashcards(String noteId) async {
+    await _ensureInitialized();
+
+    try {
+      final key = _generateFlashcardKey(noteId);
+      final data = await _flashcardCache.get(key);
+      
+      if (data != null && data['flashcards'] != null) {
+        final flashcardList = data['flashcards'] as List;
+        return flashcardList
+            .map((cardData) => FlashCard.fromJson(cardData as Map<String, dynamic>))
+            .toList();
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 플래시카드 캐시 조회 실패: $e');
+      }
+      return null;
+    }
+  }
+
+  /// 개별 플래시카드 저장
+  Future<void> cacheFlashcard(String noteId, FlashCard flashcard) async {
+    await _ensureInitialized();
+
+    try {
+      // 기존 플래시카드 목록 가져오기
+      final existingCards = await getFlashcards(noteId) ?? [];
+      
+      // 기존 카드 중 같은 ID가 있으면 업데이트, 없으면 추가
+      final existingIndex = existingCards.indexWhere((card) => card.id == flashcard.id);
+      if (existingIndex >= 0) {
+        existingCards[existingIndex] = flashcard;
+      } else {
+        existingCards.add(flashcard);
+      }
+
+      // 업데이트된 목록 저장
+      await cacheFlashcards(noteId, existingCards);
+
+      if (kDebugMode) {
+        debugPrint('🃏 개별 플래시카드 캐시 저장: ${flashcard.id}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 개별 플래시카드 캐시 저장 실패: $e');
+      }
+    }
+  }
+
+  /// 플래시카드 삭제
+  Future<void> removeFlashcard(String noteId, String flashcardId) async {
+    await _ensureInitialized();
+
+    try {
+      // 기존 플래시카드 목록 가져오기
+      final existingCards = await getFlashcards(noteId) ?? [];
+      
+      // 해당 ID의 카드 제거
+      existingCards.removeWhere((card) => card.id == flashcardId);
+
+      // 업데이트된 목록 저장
+      await cacheFlashcards(noteId, existingCards);
+
+      if (kDebugMode) {
+        debugPrint('🃏 플래시카드 캐시에서 삭제: $flashcardId');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 플래시카드 캐시 삭제 실패: $e');
+      }
+    }
+  }
+
+  /// 노트의 모든 플래시카드 캐시 삭제
+  Future<void> clearFlashcardCache(String noteId) async {
+    await _ensureInitialized();
+
+    try {
+      final key = _generateFlashcardKey(noteId);
+      await _flashcardCache.delete(key);
+
+      if (kDebugMode) {
+        debugPrint('🃏 플래시카드 캐시 삭제: $noteId');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 플래시카드 캐시 삭제 실패: $e');
+      }
+    }
+  }
+
+  /// 플래시카드 캐시 유효성 확인
+  Future<bool> isFlashcardCacheValid(String noteId, {Duration validDuration = const Duration(hours: 24)}) async {
+    await _ensureInitialized();
+
+    try {
+      final key = _generateFlashcardKey(noteId);
+      final data = await _flashcardCache.get(key);
+      
+      if (data == null || data['cachedAt'] == null) return false;
+      
+      final cachedAt = DateTime.parse(data['cachedAt'] as String);
+      final now = DateTime.now();
+      final difference = now.difference(cachedAt);
+      
+      return difference < validDuration;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 플래시카드 캐시 유효성 확인 실패: $e');
+      }
+      return false;
+    }
+  }
+
   // === 통합 관리 ===
+
+  /// 노트 목록 캐싱
+  Future<void> cacheNotes(List<Note> notes) async {
+    await _ensureInitialized();
+
+    try {
+      // 각 노트를 개별적으로 캐시
+      for (final note in notes) {
+        await cacheNoteMetadata(note.id, note);
+      }
+
+      // 마지막 캐시 시간 저장
+      await _saveLastCacheTime(DateTime.now());
+
+      if (kDebugMode) {
+        debugPrint('📋 노트 목록 캐싱 완료: ${notes.length}개');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 노트 목록 캐싱 실패: $e');
+      }
+    }
+  }
+
+  /// 캐시된 노트 목록 조회
+  Future<List<Note>> getCachedNotes() async {
+    return await getAllNoteMetadata();
+  }
+
+  /// 마지막 캐시 시간 저장
+  Future<void> _saveLastCacheTime(DateTime time) async {
+    await _ensureInitialized();
+
+    try {
+      await _noteMetadataCache.set('_last_cache_time', {
+        'timestamp': time.toIso8601String(),
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 마지막 캐시 시간 저장 실패: $e');
+      }
+    }
+  }
+
+  /// 마지막 캐시 시간 조회
+  Future<DateTime?> getLastCacheTime() async {
+    await _ensureInitialized();
+
+    try {
+      final data = await _noteMetadataCache.get('_last_cache_time');
+      if (data != null && data['timestamp'] != null) {
+        return DateTime.parse(data['timestamp'] as String);
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 마지막 캐시 시간 조회 실패: $e');
+      }
+      return null;
+    }
+  }
+
+  /// 마지막 캐시 시간 로컬 메모리 캐싱
+  DateTime? _lastCacheTime;
+
+  Future<DateTime?> updateLastCacheTimeCache() async {
+    _lastCacheTime = await getLastCacheTime();
+    return _lastCacheTime;
+  }
+
+  /// 캐시 유효성 확인
+  bool isCacheValid({Duration validDuration = const Duration(minutes: 5)}) {
+    if (_lastCacheTime == null) return false;
+    
+    final now = DateTime.now();
+    final difference = now.difference(_lastCacheTime!);
+    return difference < validDuration;
+  }
+
+  /// 전체 캐시 삭제
+  Future<void> clearCache() async {
+    await clearAllCache();
+  }
 
   /// 특정 노트의 모든 캐시 삭제
   Future<void> clearNoteCache(String noteId) async {
@@ -448,6 +692,7 @@ class CacheManager {
       await Future.wait([
         clearNoteContents(noteId),
         clearNoteMetadata(noteId),
+        clearFlashcardCache(noteId),
         clearNoteImages(noteId),
         clearNoteTTS(noteId),
       ]);
@@ -470,6 +715,7 @@ class CacheManager {
       await Future.wait([
         _noteContentsCache.clear(),
         _noteMetadataCache.clear(),
+        _flashcardCache.clear(),
         _imageCache.clear(),
         _ttsCache.clear(),
       ]);
@@ -492,6 +738,7 @@ class CacheManager {
       await Future.wait([
         _noteContentsCache.cleanupExpired(),
         _noteMetadataCache.cleanupExpired(),
+        _flashcardCache.cleanupExpired(),
         _imageCache.cleanupExpired(),
         _ttsCache.cleanupExpired(),
       ]);
@@ -514,6 +761,7 @@ class CacheManager {
       final stats = await Future.wait([
         _noteContentsCache.getStats(),
         _noteMetadataCache.getStats(),
+        _flashcardCache.getStats(),
         _imageCache.getStats(),
         _ttsCache.getStats(),
       ]);
@@ -525,12 +773,13 @@ class CacheManager {
         'totalSize': totalSize,
         'totalSizeMB': totalSize / (1024 * 1024),
         'totalItems': totalItems,
-        'maxSizeMB': 810, // 500 + 200 + 100 + 10
-        'usagePercent': totalSize > 0 ? (totalSize / (810 * 1024 * 1024) * 100).round() : 0,
+        'maxSizeMB': 860, // 500(이미지) + 200(TTS) + 100(노트컨텐츠) + 50(플래시카드) + 10(메타데이터)
+        'usagePercent': totalSize > 0 ? (totalSize / (860 * 1024 * 1024) * 100).round() : 0,
         'noteContents': stats[0],
         'noteMetadata': stats[1],
-        'images': stats[2],
-        'tts': stats[3],
+        'flashcards': stats[2],
+        'images': stats[3],
+        'tts': stats[4],
       };
     } catch (e) {
       if (kDebugMode) {

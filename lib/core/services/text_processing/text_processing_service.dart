@@ -5,7 +5,7 @@ import '../../../core/models/processed_text.dart';
 import '../../../core/models/text_unit.dart';
 import '../../../core/models/processing_status.dart';
 import '../../../core/models/page.dart' as page_model;
-import '../cache/unified_cache_service.dart';
+import '../cache/cache_manager.dart';
 import '../authentication/user_preferences_service.dart';
 
 /// 텍스트 처리 통합 서비스
@@ -17,7 +17,7 @@ class TextProcessingService {
   TextProcessingService._internal();
   
   // 기존 서비스들
-  final UnifiedCacheService _cacheService = UnifiedCacheService();
+  final CacheManager _cacheManager = CacheManager();
   final UserPreferencesService _preferencesService = UserPreferencesService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
@@ -252,8 +252,25 @@ class TextProcessingService {
   /// 캐시에서 텍스트 가져오기
   Future<ProcessedText?> _getFromCache(String pageId) async {
     try {
-      final segments = await _cacheService.getSegments(pageId, TextProcessingMode.segment);
-      if (segments == null || segments.isEmpty) return null;
+      // 페이지 정보에서 noteId 추출 필요
+      final pageDoc = await _firestore.collection('pages').doc(pageId).get();
+      if (!pageDoc.exists) return null;
+      
+      final noteId = pageDoc.data()?['noteId'] as String?;
+      if (noteId == null) return null;
+      
+      // 캐시에서 세그먼트 데이터 조회
+      final cachedData = await _cacheManager.getNoteContent(
+        noteId: noteId,
+        pageId: pageId,
+        dataMode: 'segment',
+        type: 'processed_text',
+      );
+      
+      if (cachedData == null || cachedData['segments'] == null) return null;
+      
+      final segments = cachedData['segments'] as List;
+      if (segments.isEmpty) return null;
       
       final units = segments.map((segment) => TextUnit(
         originalText: segment['original'] ?? '',
@@ -276,6 +293,9 @@ class TextProcessingService {
         targetLanguage: 'ko',
       );
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 캐시에서 텍스트 로드 실패: $pageId, $e');
+      }
       return null;
     }
   }
@@ -422,6 +442,13 @@ class TextProcessingService {
         return;
       }
 
+      // 페이지 정보에서 noteId 추출
+      final pageDoc = await _firestore.collection('pages').doc(pageId).get();
+      if (!pageDoc.exists) return;
+      
+      final noteId = pageDoc.data()?['noteId'] as String?;
+      if (noteId == null) return;
+
       final segments = processedText.units.map((unit) => {
         'original': unit.originalText,
         'translated': unit.translatedText ?? '',
@@ -430,7 +457,21 @@ class TextProcessingService {
         'targetLanguage': unit.targetLanguage,
       }).toList();
       
-      await _cacheService.cacheSegments(pageId, processedText.mode, segments);
+      // CacheManager의 cacheNoteContent 사용
+      await _cacheManager.cacheNoteContent(
+        noteId: noteId,
+        pageId: pageId,
+        dataMode: 'segment',
+        type: 'processed_text',
+        content: {
+          'segments': segments,
+          'mode': processedText.mode.toString(),
+          'fullOriginalText': processedText.fullOriginalText,
+          'fullTranslatedText': processedText.fullTranslatedText,
+          'sourceLanguage': processedText.sourceLanguage,
+          'targetLanguage': processedText.targetLanguage,
+        },
+      );
       
       if (kDebugMode) {
         debugPrint('✅ 완성된 ProcessedText 캐싱 완료: $pageId');

@@ -1,22 +1,22 @@
 import 'package:flutter/foundation.dart';
 import '../../core/models/flash_card.dart';
 import 'flashcard_service.dart';
-import '../../core/services/cache/unified_cache_service.dart';
+import '../../core/services/cache/cache_manager.dart';
 
 /// 플래시카드 데이터 관리를 담당하는 Repository
 /// 기본적인 CRUD 작업만 수행하고 비즈니스 로직은 담당하지 않음
 class FlashCardRepository {
   // 서비스 인스턴스
   final FlashCardService _flashCardService;
-  final UnifiedCacheService _cacheService;
+  final CacheManager _cacheManager;
   
   // 의존성 주입을 통한 생성자
   FlashCardRepository({
     FlashCardService? flashCardService,
-    UnifiedCacheService? cacheService
+    CacheManager? cacheManager
   }) : 
     _flashCardService = flashCardService ?? FlashCardService(),
-    _cacheService = cacheService ?? UnifiedCacheService();
+    _cacheManager = cacheManager ?? CacheManager();
     
   /// 공통 유효성 검사 메서드
   void _validateNoteId(String noteId) {
@@ -46,11 +46,13 @@ class FlashCardRepository {
       final cards = await _flashCardService.getFlashCardsForNote(noteId);
       
       if (cards.isNotEmpty) {
+        // Firestore에서 가져온 카드를 캐시에 저장
+        await _cacheManager.cacheFlashcards(noteId, cards);
         return cards;
       }
       
       // Firestore에서 찾지 못한 경우, 캐시 확인
-      final cachedCards = await _cacheService.getFlashcards(noteId);
+      final cachedCards = await _cacheManager.getFlashcards(noteId);
       if (cachedCards != null && cachedCards.isNotEmpty) {
         // 캐시에서 가져온 카드를 Firestore에 동기화
         for (var card in cachedCards) {
@@ -92,12 +94,17 @@ class FlashCardRepository {
     _validateFlashCardContent(front, back);
     
     try {
-      return await _flashCardService.createFlashCard(
+      final newCard = await _flashCardService.createFlashCard(
         front: front,
         back: back,
         noteId: noteId,
         pinyin: pinyin,
       );
+      
+      // 새로 생성된 카드를 캐시에 추가
+      await _cacheManager.cacheFlashcard(noteId, newCard);
+      
+      return newCard;
     } catch (e) {
       if (kDebugMode) {
         print('플래시카드 생성 실패: $e');
@@ -111,7 +118,14 @@ class FlashCardRepository {
     _validateCardId(card.id);
     
     try {
-      return await _flashCardService.updateFlashCard(card);
+      final updatedCard = await _flashCardService.updateFlashCard(card);
+      
+      // 업데이트된 카드를 캐시에 반영
+      if (card.noteId != null) {
+        await _cacheManager.cacheFlashcard(card.noteId!, updatedCard);
+      }
+      
+      return updatedCard;
     } catch (e) {
       if (kDebugMode) {
         print('플래시카드 업데이트 실패: $e');
@@ -126,6 +140,12 @@ class FlashCardRepository {
     
     try {
       await _flashCardService.deleteFlashCard(cardId, noteId: noteId);
+      
+      // 캐시에서도 삭제
+      if (noteId != null) {
+        await _cacheManager.removeFlashcard(noteId, cardId);
+      }
+      
       return true;
     } catch (e) {
       if (kDebugMode) {
@@ -149,7 +169,7 @@ class FlashCardRepository {
   /// 플래시카드 캐싱
   Future<void> cacheFlashcards(String noteId, List<FlashCard> flashCards) async {
     if (noteId.isNotEmpty && flashCards.isNotEmpty) {
-      await _cacheService.cacheFlashcards(noteId, flashCards);
+      await _cacheManager.cacheFlashcards(noteId, flashCards);
     }
   }
 }

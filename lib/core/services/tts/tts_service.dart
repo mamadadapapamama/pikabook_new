@@ -13,10 +13,10 @@ import '../../../core/services/common/usage_limit_service.dart';
 import '../common/plan_service.dart';
 import 'dart:async';
 import 'package:path/path.dart' as path;
-import '../cache/unified_cache_service.dart';
 import '../../../core/models/text_unit.dart';
 import 'tts_api_service.dart';
 import 'tts_playback_service.dart';
+import 'tts_cache_service.dart';
 
 // TtsPlaybackService에서 TtsState 열거형 export
 export 'tts_playback_service.dart' show TtsState;
@@ -30,6 +30,7 @@ class TTSService {
   // 서비스 인스턴스
   final TtsApiService _apiService = TtsApiService();
   final TtsPlaybackService _playbackService = TtsPlaybackService();
+  final TTSCacheService _cacheService = TTSCacheService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   
   // 세그먼트 관리
@@ -55,6 +56,7 @@ class TTSService {
       // 하위 서비스 초기화
       await _apiService.initialize();
       await _playbackService.initialize();
+      await _cacheService.initialize();
       
       // 언어 설정
       await setLanguage(SourceLanguage.DEFAULT);
@@ -154,6 +156,7 @@ class TTSService {
     _segmentStreamController = null;
     _segmentStream = null;
     await _playbackService.dispose();
+    await _cacheService.dispose();
     _isInitialized = false;
   }
 
@@ -295,6 +298,7 @@ class TTSService {
   /// 캐시 비우기
   void clearCache() {
     _playbackService.clearCache();
+    _cacheService.clearAllTTSCache();
   }
 
   /// 재생 상태 변경 콜백 설정

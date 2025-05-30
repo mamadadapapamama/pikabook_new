@@ -10,7 +10,7 @@ import 'package:firebase_core/firebase_core.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/flash_card.dart';
-import '../../../core/services/cache/note_cache_service.dart';
+import '../../../core/services/cache/cache_manager.dart';
 import 'page_service.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/services/text_processing/ocr_service.dart';
@@ -31,7 +31,7 @@ class NoteService {
   final LLMTextProcessing _textProcessingService = LLMTextProcessing();
   final OcrService _ocrService = OcrService();
   final UsageLimitService _usageLimitService = UsageLimitService();
-  final NoteCacheService _cacheService = NoteCacheService();
+  final CacheManager _cacheService = CacheManager();
 
   // PageService의 게터 사용 - 지연 초기화
   PageService get pageService {
@@ -109,7 +109,7 @@ class NoteService {
         
         debugPrint('[NoteService] 노트 ${notes.length}개 로드됨');
         
-        // 스트림에서 로드된 노트를 자동으로 캐시 (NoteCacheService 사용)
+        // 스트림에서 로드된 노트를 자동으로 캐시
         _cacheService.cacheNotes(notes);
         
         return notes;
@@ -331,12 +331,12 @@ class NoteService {
     }
   }
   
-  /// 캐시된 노트 목록 가져오기 (NoteCacheService로 위임)
+  /// 캐시된 노트 목록 가져오기
   Future<List<Note>> getCachedNotes() async {
     return _cacheService.getCachedNotes();
   }
   
-  /// 마지막 캐시 시간 조회 (NoteCacheService로 위임)
+  /// 마지막 캐시 시간 조회
   Future<DateTime?> getLastCacheTime() async {
     return _cacheService.getLastCacheTime();
   }

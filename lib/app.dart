@@ -15,6 +15,7 @@ import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
 import 'core/services/common/usage_limit_service.dart';
 import 'core/services/payment/in_app_purchase_service.dart';
+import 'core/services/cache/cache_manager.dart';
 import 'core/widgets/usage_dialog.dart';
 import 'views/screens/loading_screen.dart';
 import 'core/services/marketing/marketing_campaign_service.dart';
@@ -67,6 +68,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   final MarketingCampaignService _marketingService = MarketingCampaignService();
   final PlanService _planService = PlanService();
   final InAppPurchaseService _purchaseService = InAppPurchaseService();
+  final CacheManager _cacheManager = CacheManager();
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   
   bool _ttsExceed = false;
@@ -144,6 +146,13 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       
       // 공통 서비스 초기화 (Firebase 포함)
       final initResult = await _initializationManager.initialize();
+      
+      // 캐시 매니저 초기화 (백그라운드에서 실행)
+      _cacheManager.initialize().catchError((e) {
+        if (kDebugMode) {
+          debugPrint('❌ CacheManager 초기화 실패: $e');
+        }
+      });
       
       // 마케팅 캠페인 서비스 초기화 (필요 시에만)
       await _marketingService.initialize();

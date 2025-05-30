@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/models/flash_card.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
+import '../../core/services/cache/cache_manager.dart';
 import 'flashcard_repository.dart';
 
 /// 플래시카드 UI 상태 관리 및 비즈니스 로직을 담당하는 ViewModel
@@ -10,6 +11,7 @@ class FlashCardViewModel extends ChangeNotifier {
   final FlashCardRepository _repository;
   final TTSService _ttsService;
   final UsageLimitService _usageLimitService;
+  final CacheManager _cacheManager;
   
   // 상태 변수
   bool _isLoading = false;
@@ -42,23 +44,27 @@ class FlashCardViewModel extends ChangeNotifier {
     List<FlashCard>? initialFlashcards,
     FlashCardRepository? repository,
     TTSService? ttsService,
-    UsageLimitService? usageLimitService
+    UsageLimitService? usageLimitService,
+    CacheManager? cacheManager
   }) : 
-    _repository = repository ?? FlashCardRepository(),
+    _noteId = noteId,
+    _repository = repository ?? FlashCardRepository(cacheManager: cacheManager ?? CacheManager()),
     _ttsService = ttsService ?? TTSService(),
-    _usageLimitService = usageLimitService ?? UsageLimitService() {
+    _usageLimitService = usageLimitService ?? UsageLimitService(),
+    _cacheManager = cacheManager ?? CacheManager() {
     
-    if (initialFlashcards != null && initialFlashcards.isNotEmpty) {
+    // 초기 플래시카드가 제공된 경우 설정
+    if (initialFlashcards != null) {
       _flashCards = initialFlashcards;
-      _isLoading = false;
-    }
-    
-    if (noteId.isNotEmpty) {
-      _noteId = noteId;
-      loadFlashCards();
+      extractFlashcardWords();
     }
     
     _initTts();
+    
+    // 노트 ID가 설정된 경우 플래시카드 로드
+    if (noteId.isNotEmpty) {
+      loadFlashCards();
+    }
   }
   
   // TTS 초기화
@@ -378,7 +384,7 @@ class FlashCardViewModel extends ChangeNotifier {
     
     // 앱 종료 전 플래시카드 저장
     if (_noteId.isNotEmpty && _flashCards.isNotEmpty) {
-      _repository.cacheFlashcards(_noteId, _flashCards);
+      _cacheManager.cacheFlashcards(_noteId, _flashCards);
     }
     
     super.dispose();

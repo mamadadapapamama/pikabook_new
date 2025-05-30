@@ -3,13 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'dart:async';
 import '../../core/models/note.dart';
 import '../../features/note/services/note_service.dart';
-import '../../../core/services/cache/note_cache_service.dart';
+import '../../core/services/cache/cache_manager.dart';
 import '../../core/widgets/loading_dialog_experience.dart';
 import '../../core/services/common/usage_limit_service.dart';
 
 class HomeViewModel extends ChangeNotifier {
   final NoteService _noteService = NoteService();
-  final NoteCacheService _cacheService = NoteCacheService();
+  final CacheManager _cacheManager = CacheManager();
   final UsageLimitService _usageLimitService = UsageLimitService();
 
   List<Note> _notes = [];
@@ -51,7 +51,7 @@ class HomeViewModel extends ChangeNotifier {
       await _checkUsageLimits();
       
       // 캐시된 데이터가 있고 유효한 경우 먼저 표시
-      final cachedNotes = await _noteService.getCachedNotes();
+      final cachedNotes = await _cacheManager.getCachedNotes();
       if (cachedNotes.isNotEmpty) {
         debugPrint('[HomeViewModel] 캐시된 노트 ${cachedNotes.length}개 로드됨');
         _notes = cachedNotes;
@@ -59,7 +59,7 @@ class HomeViewModel extends ChangeNotifier {
         notifyListeners();
 
         // 캐시 시간 확인을 위해 로컬 메모리에도 캐싱
-        await _cacheService.updateLastCacheTimeCache();
+        await _cacheManager.updateLastCacheTimeCache();
       } else {
         debugPrint('[HomeViewModel] 캐시된 노트 없음');
       }
@@ -106,8 +106,8 @@ class HomeViewModel extends ChangeNotifier {
 
   // 캐시 유효성 확인
   bool _isCacheValid() {
-    // NoteCacheService의 메서드 사용
-    return _cacheService.isCacheValid(validDuration: const Duration(minutes: 5));
+    // CacheManager의 메서드 사용
+    return _cacheManager.isCacheValid(validDuration: const Duration(minutes: 5));
   }
 
   // 노트 생성 중인지 확인
@@ -237,7 +237,7 @@ class HomeViewModel extends ChangeNotifier {
     _cancelSubscription();
     _notes = [];
     // 캐시도 삭제하여 완전히 새로운 데이터 가져오기
-    await _cacheService.clearCache();
+    await _cacheManager.clearCache();
     _loadNotes();
     return Future.value(); // RefreshIndicator를 위해 Future 반환
   }
