@@ -73,7 +73,8 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
     // 자주 변경되는 UI 중요 필드만 체크
     return oldNote.id != newNote.id ||
            oldNote.title != newNote.title ||
-           oldNote.flashcardCount != newNote.flashcardCount;
+           oldNote.flashcardCount != newNote.flashcardCount ||
+           oldNote.pageCount != newNote.pageCount;
   }
 
   String _getFormattedDate() {
@@ -81,7 +82,12 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
     if (noteDate == null) {
       return '날짜 없음';
     }
-    return DateFormatter.formatDateWithMonthAbbr(noteDate);
+    
+    final dateStr = DateFormatter.formatDateWithMonthAbbr(noteDate);
+    final pageCount = widget.note.pageCount;
+    final pageText = pageCount == 1 ? 'page' : 'pages';
+    
+    return '$dateStr | $pageCount $pageText';
   }
 
   Widget _buildNoteCard() {

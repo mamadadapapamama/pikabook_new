@@ -8,6 +8,7 @@ class Note {
   final String? description;
   final bool isFavorite;
   final int flashcardCount;
+  final int pageCount;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final String? firstImageUrl;
@@ -19,6 +20,7 @@ class Note {
     this.description,
     this.isFavorite = false,
     this.flashcardCount = 0,
+    this.pageCount = 0,
     this.createdAt,
     this.updatedAt,
     this.firstImageUrl,
@@ -43,6 +45,7 @@ class Note {
       description: data['description'] as String?,
       isFavorite: data['isFavorite'] as bool? ?? false,
       flashcardCount: data['flashcardCount'] as int? ?? 0,
+      pageCount: data['pageCount'] as int? ?? 0,
       createdAt: parseDate(data['createdAt']),
       updatedAt: parseDate(data['updatedAt']),
       firstImageUrl: data['firstImageUrl'] as String?,
@@ -58,6 +61,7 @@ class Note {
       description: json['description'] as String?,
       isFavorite: json['isFavorite'] as bool? ?? false,
       flashcardCount: json['flashcardCount'] as int? ?? 0,
+      pageCount: json['pageCount'] as int? ?? 0,
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : null,
       updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt'] as String) : null,
       firstImageUrl: json['firstImageUrl'] as String?,
@@ -73,6 +77,7 @@ class Note {
       'description': description,
       'isFavorite': isFavorite,
       'flashcardCount': flashcardCount,
+      'pageCount': pageCount,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
       'firstImageUrl': firstImageUrl,
@@ -87,6 +92,7 @@ class Note {
     String? description,
     bool? isFavorite,
     int? flashcardCount,
+    int? pageCount,
     DateTime? createdAt,
     DateTime? updatedAt,
     String? firstImageUrl,
@@ -98,6 +104,7 @@ class Note {
       description: description ?? this.description,
       isFavorite: isFavorite ?? this.isFavorite,
       flashcardCount: flashcardCount ?? this.flashcardCount,
+      pageCount: pageCount ?? this.pageCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       firstImageUrl: firstImageUrl ?? this.firstImageUrl,

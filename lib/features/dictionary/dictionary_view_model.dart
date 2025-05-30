@@ -33,7 +33,8 @@ class DictionaryViewModel extends ChangeNotifier {
     setError(null);
     
     try {
-      // 내부 사전에서 검색
+      // DictionaryService.lookupWord()가 이미 모든 검색 단계를 처리함:
+      // 1. 내부 사전 → 2. CC-CEDICT → 3. Google ML Kit Translation
       final result = await _dictionaryService.lookupWord(word);
       
       if (result['success'] == true && result['entry'] != null) {
@@ -45,20 +46,9 @@ class DictionaryViewModel extends ChangeNotifier {
         return entry;
       }
       
-      // 내부 사전에서 찾지 못한 경우, 외부 API로 검색
-      final externalResult = await _dictionaryService.lookupExternalDictionary(word);
-      
-      if (externalResult['success'] == true && externalResult['entry'] != null) {
-        final entry = externalResult['entry'] as DictionaryEntry;
-        _currentEntry = entry;
-        _addToRecentSearches(word);
-        setLoading(false);
-        notifyListeners();
-        return entry;
-      }
-      
-      // 모든 검색에서 실패한 경우
-      setError('단어를 찾을 수 없습니다: $word');
+      // 모든 검색 방법에서 실패한 경우
+      final errorMessage = result['message'] ?? '단어를 찾을 수 없습니다: $word';
+      setError(errorMessage);
       setLoading(false);
       return null;
     } catch (e) {

@@ -24,7 +24,7 @@ class CcCedictService {
     
     try {
       // CC-CEDICT 데이터 로드
-      final String jsonString = await rootBundle.loadString('assets/dictionary/cc_cedict.json');
+      final String jsonString = await rootBundle.loadString('assets/data/CC-Cedict.json');
       final Map<String, dynamic> jsonData = json.decode(jsonString);
       
       // 캐시에 데이터 추가

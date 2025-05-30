@@ -1,10 +1,10 @@
 // 이 서비스는 향후 다국어 지원을 위해 확장될 예정입니다.
-// 현재는 중국어만 지원합니다.
+// 현재는 중국어->한국어 (CC Cedict 은 영어 결과) 지원합니다.
 
 import 'package:flutter/foundation.dart';
+import 'package:translator/translator.dart';
 import '../../core/models/dictionary.dart';
 import 'internal_cn_dictionary_service.dart';
-import '../../core/services/text_processing/llm_text_processing.dart';
 import 'cc_cedict_service.dart';
 
 /// 범용 사전 서비스
@@ -22,8 +22,8 @@ class DictionaryService {
   
   // 서비스 인스턴스
   final InternalCnDictionaryService _chineseDictionaryService = InternalCnDictionaryService();
-  final LLMTextProcessing _llmService = LLMTextProcessing();
   final CcCedictService _ccCedictService = CcCedictService();
+  final GoogleTranslator _translator = GoogleTranslator();
   
   // 사전 업데이트 리스너 목록
   late final List<Function()> _dictionaryUpdateListeners;
@@ -94,70 +94,45 @@ class DictionaryService {
     }
   }
 
-  // 외부 사전 검색 (추가 기능)
-  Future<Map<String, dynamic>> lookupExternalDictionary(String word) async {
+  // Google Cloud Translate를 사용한 단어 번역
+  Future<DictionaryEntry?> _translateWithGoogle(String word) async {
     try {
-      await _ensureInitialized();
+      debugPrint('Google Cloud Translate로 단어 번역 시도: $word');
       
-      // CC-CEDICT에서 검색
-      try {
-        final ccCedictEntry = await _ccCedictService.lookup(word);
-        if (ccCedictEntry != null) {
-          final newEntry = DictionaryEntry(
-            word: word,
-            pinyin: ccCedictEntry.pinyin,
-            meaning: ccCedictEntry.meaning,
-            source: 'cc_cedict'
-          );
-          // 내부 사전에 추가
-          _chineseDictionaryService.addEntry(newEntry);
-          _notifyDictionaryUpdated();
-          return {
-            'entry': newEntry,
-            'success': true,
-            'source': 'cc_cedict',
-          };
-        }
-      } catch (e) {
-        debugPrint('CC-CEDICT 검색 실패: $e');
+      // 중국어 → 한국어 번역
+      final translation = await _translator.translate(word, from: 'zh', to: 'ko');
+      
+      if (translation.text.isNotEmpty && translation.text != word) {
+        final entry = DictionaryEntry(
+          word: word,
+          pinyin: '', // Google Cloud Translate는 병음을 제공하지 않음
+          meaning: translation.text,
+          source: 'google_translate'
+        );
+        
+        // 내부 사전에 추가
+        _chineseDictionaryService.addEntry(entry);
+        _notifyDictionaryUpdated();
+        
+        debugPrint('Google Cloud Translate 번역 성공: $word → ${translation.text}');
+        return entry;
       }
       
-      return {
-        'success': false,
-        'message': '외부 사전에서 단어를 찾을 수 없습니다: $word'
-      };
+      return null;
     } catch (e) {
-      return {
-        'success': false,
-        'message': '외부 사전 검색 중 오류 발생: $e'
-      };
+      debugPrint('Google Cloud Translate 번역 실패: $e');
+      return null;
     }
   }
 
-  // 단어 검색 - LLM 캐시 -> 내부 사전 -> CC-CEDICT 순서
+  // 단어 검색 : 내부 사전 → CC-CEDICT → Google Cloud Translate 순서
   Future<Map<String, dynamic>> lookupWord(String word) async {
     try {
       await _ensureInitialized();
       
       switch (_currentLanguage) {
         case 'zh-CN':
-          // 1. LLM 캐시에서 검색
-          final llmCacheData = await _llmService.getWordCacheData(word);
-          if (llmCacheData != null) {
-            debugPrint('LLM 캐시에서 단어 찾음: $word');
-            return {
-              'entry': DictionaryEntry(
-                word: llmCacheData['chinese'] ?? word,
-                pinyin: llmCacheData['pinyin'] ?? '',
-                meaning: llmCacheData['korean'] ?? '',
-                source: 'llm_cache'
-              ),
-              'success': true,
-              'source': 'llm_cache',
-            };
-          }
-          
-          // 2. 내부 사전에서 검색
+          // 1. 내부 사전에서 검색
           final internalEntry = await _chineseDictionaryService.lookupAsync(word);
           if (internalEntry != null) {
             debugPrint('내부 사전에서 단어 찾음: $word');
@@ -168,7 +143,7 @@ class DictionaryService {
             };
           }
           
-          // 3. CC-CEDICT에서 검색
+          // 2. CC-CEDICT에서 검색
           try {
             final ccCedictEntry = await _ccCedictService.lookup(word);
             if (ccCedictEntry != null) {
@@ -181,6 +156,7 @@ class DictionaryService {
               // 내부 사전에 추가
               _chineseDictionaryService.addEntry(newEntry);
               _notifyDictionaryUpdated();
+              debugPrint('CC-CEDICT에서 단어 찾음: $word');
               return {
                 'entry': newEntry,
                 'success': true,
@@ -189,6 +165,20 @@ class DictionaryService {
             }
           } catch (e) {
             debugPrint('CC-CEDICT 검색 실패: $e');
+          }
+          
+          // 3. Google Cloud Translate로 번역 시도
+          try {
+            final googleEntry = await _translateWithGoogle(word);
+            if (googleEntry != null) {
+              return {
+                'entry': googleEntry,
+                'success': true,
+                'source': 'google_translate',
+              };
+            }
+          } catch (e) {
+            debugPrint('Google Cloud Translate 검색 실패: $e');
           }
           
           // 모든 방법 실패
