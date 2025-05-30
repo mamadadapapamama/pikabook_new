@@ -439,7 +439,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         // 스낵바로 페이지 처리 완료 메시지 표시
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$pageNum번째 페이지가 처리 완료되었습니다.'),
+            content: Text('$pageNum번째 페이지가 번역 완료되었습니다.'),
             duration: const Duration(seconds: 2),
           ),
         );

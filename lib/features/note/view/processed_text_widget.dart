@@ -307,7 +307,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                     )
                   : widget.showTypewriterEffect
                       ? LoadingDotsWidget(
-                          style: _defaultPinyinTextStyle,
+                          usePinyinStyle: true, // 병음 스타일로 고정
                           delay: Duration(milliseconds: i * 300 + 1000), // 원문 타이프라이터 후 시작
                         )
                       : const SizedBox.shrink(),
@@ -323,8 +323,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   )
                 : widget.showTypewriterEffect
                     ? LoadingDotsWidget(
-                        style: _defaultTranslatedTextStyle,
-                        delay: Duration(milliseconds: i * 300 + 1500), // 병음 후 시작
+                        usePinyinStyle: true, // 병음 스타일로 고정 (번역도 동일한 로딩 스타일)
+                        delay: Duration(milliseconds: i * 300 + 1000), // 병음과 동시에 시작
                       )
                     : const SizedBox.shrink(),
           ),

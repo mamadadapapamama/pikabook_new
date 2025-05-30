@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import '../theme/tokens/typography_tokens.dart';
+import '../theme/tokens/color_tokens.dart';
 
 /// ... 애니메이션을 보여주는 위젯 (번역/병음 준비 중 표시용)
 class LoadingDotsWidget extends StatefulWidget {
   final TextStyle? style;
   final Duration delay;
+  final bool usePinyinStyle; // 병음 스타일 강제 사용 여부
 
   const LoadingDotsWidget({
     Key? key,
     this.style,
     this.delay = Duration.zero,
+    this.usePinyinStyle = true, // 기본값을 true로 설정
   }) : super(key: key);
 
   @override
@@ -90,9 +94,26 @@ class _LoadingDotsWidgetState extends State<LoadingDotsWidget>
 
   @override
   Widget build(BuildContext context) {
+    // 병음 스타일 강제 사용 또는 전달받은 스타일 사용
+    TextStyle effectiveStyle;
+    
+    if (widget.usePinyinStyle) {
+      // 병음 스타일로 고정 (로딩 애니메이션 일관성을 위해)
+      effectiveStyle = TypographyTokens.caption.copyWith(
+        color: ColorTokens.textGrey,
+        height: 1.2,
+      );
+    } else {
+      // 전달받은 스타일 사용
+      effectiveStyle = widget.style ?? TypographyTokens.caption.copyWith(
+        color: ColorTokens.textGrey,
+        height: 1.2,
+      );
+    }
+
     return Text(
       _displayText,
-      style: widget.style,
+      style: effectiveStyle,
     );
   }
 } 

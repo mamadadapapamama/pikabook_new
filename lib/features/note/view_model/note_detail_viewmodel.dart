@@ -288,6 +288,7 @@ class NoteDetailViewModel extends ChangeNotifier {
         if (_disposed) return; // dispose 체크
         
         if (processedText != null) {
+          final previousStatus = _pageStatuses[pageId];
           _processedTexts[pageId] = processedText;
           _pageStatuses[pageId] = ProcessingStatus.completed;
           
@@ -302,7 +303,10 @@ class NoteDetailViewModel extends ChangeNotifier {
           if (!_disposed) notifyListeners();
           
           if (flutter_foundation.kDebugMode) {
-            debugPrint("🔔 페이지 텍스트 업데이트: $pageId");
+            debugPrint("🔔 페이지 상태 변경: $pageId");
+            debugPrint("   이전 상태: ${previousStatus?.displayName ?? '없음'}");
+            debugPrint("   현재 상태: ${ProcessingStatus.completed.displayName}");
+            debugPrint("   UI 업데이트 완료");
           }
         }
       },
