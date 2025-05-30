@@ -40,8 +40,8 @@ class CcCedictService {
       _isInitialized = true;
       debugPrint('CC-CEDICT 서비스 초기화 완료');
     } catch (e) {
-      debugPrint('CC-CEDICT 서비스 초기화 중 오류 발생: $e');
-      rethrow;
+      debugPrint('⚠️ CC-CEDICT 파일을 찾을 수 없습니다. 내부 사전만 사용합니다: $e');
+      _isInitialized = true; // 오류가 있어도 초기화 완료로 처리
     }
   }
 

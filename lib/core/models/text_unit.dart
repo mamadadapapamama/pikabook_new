@@ -30,7 +30,7 @@ class TextUnit {
   /// JSON에서 생성
   factory TextUnit.fromJson(Map<String, dynamic> json) {
     return TextUnit(
-      originalText: json['originalText'] as String,
+      originalText: (json['originalText'] as String?) ?? '',
       pinyin: json['pinyin'] as String?,
       translatedText: json['translatedText'] as String?,
       sourceLanguage: json['sourceLanguage'] as String? ?? SourceLanguage.DEFAULT,

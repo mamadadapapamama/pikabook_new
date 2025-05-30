@@ -185,9 +185,7 @@ class TextHighlightManager {
     }
 
     if (flashcardWords.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('플래시카드 단어가 없어 일반 텍스트만 반환');
-      }
+    
       spans.add(TextSpan(text: text, style: normalStyle));
       return spans;
     }

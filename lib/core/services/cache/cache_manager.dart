@@ -190,13 +190,26 @@ class CacheManager {
         dataMode: dataMode,
         type: type,
       );
-
       return await _noteContentsCache!.get(key);
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ 노트 컨텐츠 캐시 조회 실패: $e');
+        debugPrint('❌ 노트 컨텐츠 조회 실패: $e');
       }
       return null;
+    }
+  }
+
+  /// 모든 노트 컨텐츠 캐시 키 조회
+  Future<List<String>> getAllNoteContentKeys() async {
+    await _ensureInitialized();
+    
+    try {
+      return await _noteContentsCache!.getKeys();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 노트 컨텐츠 키 조회 실패: $e');
+      }
+      return [];
     }
   }
 

@@ -141,9 +141,8 @@ class DictionaryService {
       
       switch (_currentLanguage) {
         case 'zh-CN':
-          // 1. LLM 캐시에서 검색 (현재 비활성화 - getWordCacheData 메서드 구현 필요)
-          /*
-          final llmCacheData = _llmService.getWordCacheData(word);
+          // 1. LLM 캐시에서 검색
+          final llmCacheData = await _llmService.getWordCacheData(word);
           if (llmCacheData != null) {
             debugPrint('LLM 캐시에서 단어 찾음: $word');
             return {
@@ -157,7 +156,6 @@ class DictionaryService {
               'source': 'llm_cache',
             };
           }
-          */
           
           // 2. 내부 사전에서 검색
           final internalEntry = await _chineseDictionaryService.lookupAsync(word);
