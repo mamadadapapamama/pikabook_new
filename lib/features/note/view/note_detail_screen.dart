@@ -387,6 +387,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     
     // 페이지 처리 상태 가져오기
     final processedPages = viewModel.getProcessedPagesStatus();
+    final processingPages = viewModel.getProcessingPagesStatus();
     
     // 현재 페이지의 TTS 텍스트 가져오기
     final currentProcessedText = viewModel.currentProcessedText;
@@ -416,6 +417,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         }
       },
       processedPages: processedPages,
+      processingPages: processingPages,
     );
   }
   

@@ -147,6 +147,9 @@ class NoteDetailViewModel extends ChangeNotifier {
       
       notifyListeners();
       
+      // 모든 페이지에 대한 실시간 리스너 설정
+      _setupAllPageListeners();
+      
       // 현재 페이지 텍스트 로드
       if (currentPage != null) {
         await loadCurrentPageText();
@@ -158,6 +161,65 @@ class NoteDetailViewModel extends ChangeNotifier {
       notifyListeners();
       if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 페이지 로드 중 오류: $e");
+      }
+    }
+  }
+
+  /// 모든 페이지에 대한 실시간 리스너 설정
+  void _setupAllPageListeners() {
+    if (_disposed || _pages == null) return;
+    
+    for (final page in _pages!) {
+      if (page.id.isNotEmpty) {
+        _setupPageListener(page.id);
+        // 각 페이지의 초기 상태도 로드
+        _loadPageInitialStatus(page.id);
+      }
+    }
+    
+    if (flutter_foundation.kDebugMode) {
+      debugPrint("🔔 모든 페이지 리스너 설정 완료: ${_pages!.length}개");
+    }
+  }
+
+  /// 페이지의 초기 처리 상태 로드
+  Future<void> _loadPageInitialStatus(String pageId) async {
+    if (_disposed) return;
+    
+    try {
+      // 이미 처리된 텍스트가 있는지 확인
+      final processedText = await _textProcessingService.getProcessedText(pageId);
+      
+      if (_disposed) return;
+      
+      if (processedText != null) {
+        _processedTexts[pageId] = processedText;
+        _pageStatuses[pageId] = ProcessingStatus.completed;
+        
+        if (flutter_foundation.kDebugMode) {
+          debugPrint("✅ 페이지 초기 상태: $pageId - 처리 완료");
+        }
+      } else {
+        // 처리된 텍스트가 없으면 상태 확인
+        final status = await _textProcessingService.getProcessingStatus(pageId);
+        if (_disposed) return;
+        _pageStatuses[pageId] = status;
+        
+        if (flutter_foundation.kDebugMode) {
+          debugPrint("📊 페이지 초기 상태: $pageId - ${status.displayName}");
+        }
+      }
+      
+      if (!_disposed) notifyListeners();
+      
+    } catch (e) {
+      if (_disposed) return;
+      
+      _pageStatuses[pageId] = ProcessingStatus.failed;
+      if (!_disposed) notifyListeners();
+      
+      if (flutter_foundation.kDebugMode) {
+        debugPrint("❌ 페이지 초기 상태 로드 실패: $pageId, 오류: $e");
       }
     }
   }
@@ -228,6 +290,15 @@ class NoteDetailViewModel extends ChangeNotifier {
         if (processedText != null) {
           _processedTexts[pageId] = processedText;
           _pageStatuses[pageId] = ProcessingStatus.completed;
+          
+          // 페이지 처리 완료 콜백 호출
+          if (_pageProcessedCallback != null && _pages != null) {
+            final pageIndex = _pages!.indexWhere((page) => page.id == pageId);
+            if (pageIndex >= 0) {
+              _pageProcessedCallback!(pageIndex);
+            }
+          }
+          
           if (!_disposed) notifyListeners();
           
           if (flutter_foundation.kDebugMode) {
@@ -339,6 +410,25 @@ class NoteDetailViewModel extends ChangeNotifier {
     }
     
     return processedStatus;
+  }
+
+  /// 페이지 처리 중 상태 확인
+  List<bool> getProcessingPagesStatus() {
+    if (_pages == null || _pages!.isEmpty) {
+      return [];
+    }
+    
+    List<bool> processingStatus = List.filled(_pages!.length, false);
+    
+    for (int i = 0; i < _pages!.length; i++) {
+      final page = _pages![i];
+      if (page.id != null) {
+        final status = _pageStatuses[page.id] ?? ProcessingStatus.created;
+        processingStatus[i] = status.isProcessing;
+      }
+    }
+    
+    return processingStatus;
   }
 
   /// 페이지 처리 완료 콜백 설정
