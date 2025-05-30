@@ -13,12 +13,12 @@ class CacheManager {
   factory CacheManager() => _instance;
   CacheManager._internal();
 
-  // 캐시 저장소들
-  late final LocalCacheStorage<Map<String, dynamic>> _noteContentsCache;
-  late final LocalCacheStorage<Map<String, dynamic>> _noteMetadataCache;
-  late final LocalCacheStorage<Map<String, dynamic>> _flashcardCache;
-  late final LocalCacheStorage<Uint8List> _imageCache;
-  late final LocalCacheStorage<Uint8List> _ttsCache;
+  // 캐시 저장소들 (nullable로 변경)
+  LocalCacheStorage<Map<String, dynamic>>? _noteContentsCache;
+  LocalCacheStorage<Map<String, dynamic>>? _noteMetadataCache;
+  LocalCacheStorage<Map<String, dynamic>>? _flashcardCache;
+  LocalCacheStorage<Uint8List>? _imageCache;
+  LocalCacheStorage<Uint8List>? _ttsCache;
 
   bool _isInitialized = false;
 
@@ -70,11 +70,11 @@ class CacheManager {
 
       // 모든 캐시 초기화
       await Future.wait([
-        _noteContentsCache.initialize(),
-        _noteMetadataCache.initialize(),
-        _flashcardCache.initialize(),
-        _imageCache.initialize(),
-        _ttsCache.initialize(),
+        _noteContentsCache!.initialize(),
+        _noteMetadataCache!.initialize(),
+        _flashcardCache!.initialize(),
+        _imageCache!.initialize(),
+        _ttsCache!.initialize(),
       ]);
 
       _isInitialized = true;
@@ -122,7 +122,7 @@ class CacheManager {
         type: type,
       );
 
-      await _noteContentsCache.set(key, content);
+      await _noteContentsCache!.set(key, content);
 
       if (kDebugMode) {
         debugPrint('📝 노트 컨텐츠 캐시 저장: $key');
@@ -151,7 +151,7 @@ class CacheManager {
         type: type,
       );
 
-      return await _noteContentsCache.get(key);
+      return await _noteContentsCache!.get(key);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ 노트 컨텐츠 캐시 조회 실패: $e');
@@ -165,7 +165,7 @@ class CacheManager {
     await _ensureInitialized();
 
     try {
-      await _noteContentsCache.deleteByPattern(r'note:' + noteId + r':.*');
+      await _noteContentsCache!.deleteByPattern(r'note:' + noteId + r':.*');
 
       if (kDebugMode) {
         debugPrint('📝 노트 컨텐츠 캐시 삭제: $noteId');
@@ -184,7 +184,7 @@ class CacheManager {
     await _ensureInitialized();
 
     try {
-      await _noteMetadataCache.set(noteId, note.toJson());
+      await _noteMetadataCache!.set(noteId, note.toJson());
 
       if (kDebugMode) {
         debugPrint('📋 노트 메타데이터 캐시 저장: $noteId');
@@ -201,7 +201,7 @@ class CacheManager {
     await _ensureInitialized();
 
     try {
-      final data = await _noteMetadataCache.get(noteId);
+      final data = await _noteMetadataCache!.get(noteId);
       if (data != null) {
         return Note.fromJson(data);
       }
@@ -219,11 +219,11 @@ class CacheManager {
     await _ensureInitialized();
 
     try {
-      final keys = await _noteMetadataCache.getKeys();
+      final keys = await _noteMetadataCache!.getKeys();
       final notes = <Note>[];
 
       for (final key in keys) {
-        final data = await _noteMetadataCache.get(key);
+        final data = await _noteMetadataCache!.get(key);
         if (data != null) {
           try {
             notes.add(Note.fromJson(data));
@@ -249,7 +249,7 @@ class CacheManager {
     await _ensureInitialized();
 
     try {
-      await _noteMetadataCache.delete(noteId);
+      await _noteMetadataCache!.delete(noteId);
 
       if (kDebugMode) {
         debugPrint('📋 노트 메타데이터 캐시 삭제: $noteId');
@@ -282,7 +282,7 @@ class CacheManager {
 
     try {
       final key = _generateImageKey(noteId: noteId, pageId: pageId);
-      return await _imageCache.setFile(key, imageData, 'jpg');
+      return await _imageCache!.setFile(key, imageData, 'jpg');
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ 이미지 캐시 저장 실패: $e');
@@ -300,7 +300,7 @@ class CacheManager {
 
     try {
       final key = _generateImageKey(noteId: noteId, pageId: pageId);
-      return await _imageCache.getBinary(key);
+      return await _imageCache!.getBinary(key);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ 이미지 캐시 조회 실패: $e');
@@ -318,7 +318,7 @@ class CacheManager {
 
     try {
       final key = _generateImageKey(noteId: noteId, pageId: pageId);
-      return await _imageCache.getFilePath(key);
+      return await _imageCache!.getFilePath(key);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ 이미지 경로 조회 실패: $e');
@@ -332,7 +332,7 @@ class CacheManager {
     await _ensureInitialized();
 
     try {
-      await _imageCache.deleteByPattern(r'image:' + noteId + r':.*');
+      await _imageCache!.deleteByPattern(r'image:' + noteId + r':.*');
 
       if (kDebugMode) {
         debugPrint('🖼️ 노트 이미지 캐시 삭제: $noteId');
@@ -374,7 +374,7 @@ class CacheManager {
         segmentId: segmentId,
         voiceId: voiceId,
       );
-      return await _ttsCache.setFile(key, audioData, 'mp3');
+      return await _ttsCache!.setFile(key, audioData, 'mp3');
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ TTS 캐시 저장 실패: $e');
@@ -399,7 +399,7 @@ class CacheManager {
         segmentId: segmentId,
         voiceId: voiceId,
       );
-      return await _ttsCache.getBinary(key);
+      return await _ttsCache!.getBinary(key);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ TTS 캐시 조회 실패: $e');
@@ -424,7 +424,7 @@ class CacheManager {
         segmentId: segmentId,
         voiceId: voiceId,
       );
-      return await _ttsCache.getFilePath(key);
+      return await _ttsCache!.getFilePath(key);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ TTS 경로 조회 실패: $e');
@@ -438,7 +438,7 @@ class CacheManager {
     await _ensureInitialized();
 
     try {
-      await _ttsCache.deleteByPattern(r'tts:' + noteId + r':.*');
+      await _ttsCache!.deleteByPattern(r'tts:' + noteId + r':.*');
 
       if (kDebugMode) {
         debugPrint('🔊 노트 TTS 캐시 삭제: $noteId');
@@ -470,7 +470,7 @@ class CacheManager {
         'count': flashcards.length,
       };
 
-      await _flashcardCache.set(key, data);
+      await _flashcardCache!.set(key, data);
 
       if (kDebugMode) {
         debugPrint('🃏 플래시카드 캐시 저장: $noteId (${flashcards.length}개)');
@@ -488,7 +488,7 @@ class CacheManager {
 
     try {
       final key = _generateFlashcardKey(noteId);
-      final data = await _flashcardCache.get(key);
+      final data = await _flashcardCache!.get(key);
       
       if (data != null && data['flashcards'] != null) {
         final flashcardList = data['flashcards'] as List;
@@ -564,7 +564,7 @@ class CacheManager {
 
     try {
       final key = _generateFlashcardKey(noteId);
-      await _flashcardCache.delete(key);
+      await _flashcardCache!.delete(key);
 
       if (kDebugMode) {
         debugPrint('🃏 플래시카드 캐시 삭제: $noteId');
@@ -582,7 +582,7 @@ class CacheManager {
 
     try {
       final key = _generateFlashcardKey(noteId);
-      final data = await _flashcardCache.get(key);
+      final data = await _flashcardCache!.get(key);
       
       if (data == null || data['cachedAt'] == null) return false;
       
@@ -634,7 +634,7 @@ class CacheManager {
     await _ensureInitialized();
 
     try {
-      await _noteMetadataCache.set('_last_cache_time', {
+      await _noteMetadataCache!.set('_last_cache_time', {
         'timestamp': time.toIso8601String(),
       });
     } catch (e) {
@@ -649,7 +649,7 @@ class CacheManager {
     await _ensureInitialized();
 
     try {
-      final data = await _noteMetadataCache.get('_last_cache_time');
+      final data = await _noteMetadataCache!.get('_last_cache_time');
       if (data != null && data['timestamp'] != null) {
         return DateTime.parse(data['timestamp'] as String);
       }
@@ -713,11 +713,11 @@ class CacheManager {
 
     try {
       await Future.wait([
-        _noteContentsCache.clear(),
-        _noteMetadataCache.clear(),
-        _flashcardCache.clear(),
-        _imageCache.clear(),
-        _ttsCache.clear(),
+        _noteContentsCache!.clear(),
+        _noteMetadataCache!.clear(),
+        _flashcardCache!.clear(),
+        _imageCache!.clear(),
+        _ttsCache!.clear(),
       ]);
 
       if (kDebugMode) {
@@ -736,11 +736,11 @@ class CacheManager {
 
     try {
       await Future.wait([
-        _noteContentsCache.cleanupExpired(),
-        _noteMetadataCache.cleanupExpired(),
-        _flashcardCache.cleanupExpired(),
-        _imageCache.cleanupExpired(),
-        _ttsCache.cleanupExpired(),
+        _noteContentsCache!.cleanupExpired(),
+        _noteMetadataCache!.cleanupExpired(),
+        _flashcardCache!.cleanupExpired(),
+        _imageCache!.cleanupExpired(),
+        _ttsCache!.cleanupExpired(),
       ]);
 
       if (kDebugMode) {
@@ -759,11 +759,11 @@ class CacheManager {
 
     try {
       final stats = await Future.wait([
-        _noteContentsCache.getStats(),
-        _noteMetadataCache.getStats(),
-        _flashcardCache.getStats(),
-        _imageCache.getStats(),
-        _ttsCache.getStats(),
+        _noteContentsCache!.getStats(),
+        _noteMetadataCache!.getStats(),
+        _flashcardCache!.getStats(),
+        _imageCache!.getStats(),
+        _ttsCache!.getStats(),
       ]);
 
       final totalSize = stats.fold<int>(0, (sum, stat) => sum + (stat['totalSize'] as int));
