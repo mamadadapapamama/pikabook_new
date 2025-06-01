@@ -3,11 +3,14 @@ import 'dart:collection';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'services/page_service.dart';
 import 'services/note_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/cache/cache_manager.dart';
 import '../../core/models/processed_text.dart';
 import '../../core/models/text_unit.dart';
+import '../../core/models/note.dart';
 import '../../core/models/processing_status.dart';
 import '../../../core/services/text_processing/api_service.dart';
 import 'pre_llm_workflow.dart';
@@ -19,7 +22,9 @@ class PostLLMWorkflow {
   final PageService _pageService = PageService();
   final NoteService _noteService = NoteService();
   final UsageLimitService _usageLimitService = UsageLimitService();
+  final CacheManager _cacheManager = CacheManager();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final ApiService _apiService = ApiService(); // 새로 추가
 
 
@@ -195,7 +200,10 @@ class PostLLMWorkflow {
       // 6. 사용량 업데이트 (백그라운드에서 처리)
       await _updateUsageAfterProcessing(job);
       
-      // 7. 완료 알림
+      // 7. 노트 목록 캐싱 제거 - 노트 생성/삭제가 아니므로 불필요
+      // await _cacheNotesAfterCompletion();
+      
+      // 8. 완료 알림
       await _sendCompletionNotification(job.noteId);
 
       if (kDebugMode) {
@@ -599,6 +607,51 @@ class PostLLMWorkflow {
         debugPrint('❌ 서버 응답 파싱 중 오류: $e');
       }
       return [];
+    }
+  }
+
+  /// 노트 목록 캐싱 (노트 생성 완료 후)
+  Future<void> _cacheNotesAfterCompletion() async {
+    try {
+      if (kDebugMode) {
+        debugPrint('📊 노트 목록 캐싱 시작');
+      }
+      
+      // 현재 사용자의 노트만 가져옴
+      final userId = _auth.currentUser?.uid;
+      if (userId == null) return;
+      
+      final snapshot = await _firestore
+          .collection('notes')
+          .where('userId', isEqualTo: userId)
+          .get();
+      
+      final notes = <Note>[];
+      for (final doc in snapshot.docs) {
+        try {
+          final note = Note.fromFirestore(doc);
+          notes.add(note);
+          
+          if (kDebugMode) {
+            debugPrint('🔄 노트 캐싱: ${note.id}');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ 노트 파싱 실패: ${doc.id}, 오류: $e');
+          }
+        }
+      }
+      
+      // 노트 목록 캐싱
+      await _cacheManager.cacheNotes(notes);
+      
+      if (kDebugMode) {
+        debugPrint('✅ 노트 목록 캐싱 완료: ${notes.length}개');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 노트 목록 캐싱 실패: $e');
+      }
     }
   }
 }

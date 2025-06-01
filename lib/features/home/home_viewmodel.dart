@@ -167,6 +167,9 @@ class HomeViewModel extends ChangeNotifier {
           
           _notes = notesList;
           
+          // 최초 앱 진입 시에만 노트 목록 캐싱 (캐시가 비어있을 때)
+          _cacheNotesIfNeeded(notesList);
+          
           if (_isLoading) {
             _isLoading = false;
             hasChanged = true;
@@ -231,6 +234,24 @@ class HomeViewModel extends ChangeNotifier {
         if (hasChanged) {
           notifyListeners();
         }
+      }
+    }
+  }
+
+  /// 필요한 경우에만 노트 목록 캐싱 (최초 앱 진입 시)
+  Future<void> _cacheNotesIfNeeded(List<Note> notesList) async {
+    try {
+      // 캐시된 노트가 없을 때만 캐싱 (최초 앱 진입)
+      final cachedNotes = await _cacheManager.getCachedNotes();
+      if (cachedNotes.isEmpty && notesList.isNotEmpty) {
+        await _cacheManager.cacheNotes(notesList);
+        if (kDebugMode) {
+          debugPrint('[HomeViewModel] 최초 앱 진입 - 노트 목록 캐싱 완료: ${notesList.length}개');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeViewModel] 노트 목록 캐싱 실패: $e');
       }
     }
   }

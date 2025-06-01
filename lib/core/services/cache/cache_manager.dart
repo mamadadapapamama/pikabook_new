@@ -677,6 +677,72 @@ class CacheManager {
     }
   }
 
+  /// 노트 목록 업데이트 (생성/삭제 시 사용)
+  Future<void> updateCachedNotes(List<Note> notes) async {
+    await _ensureInitialized();
+
+    try {
+      // 기존 캐시 완전 삭제
+      await _noteMetadataCache!.clear();
+      
+      // 새로운 노트 목록으로 캐시 재생성
+      for (final note in notes) {
+        await cacheNoteMetadata(note.id, note);
+      }
+
+      // 마지막 캐시 시간 저장
+      await _saveLastCacheTime(DateTime.now());
+
+      if (kDebugMode) {
+        debugPrint('📋 노트 목록 캐시 업데이트 완료: ${notes.length}개');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 노트 목록 캐시 업데이트 실패: $e');
+      }
+    }
+  }
+
+  /// 개별 노트 캐시 추가 (노트 생성 시 사용)
+  Future<void> addNoteToCache(Note note) async {
+    await _ensureInitialized();
+
+    try {
+      await cacheNoteMetadata(note.id, note);
+      
+      // 마지막 캐시 시간 저장
+      await _saveLastCacheTime(DateTime.now());
+
+      if (kDebugMode) {
+        debugPrint('📋 노트 캐시 추가: ${note.id}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 노트 캐시 추가 실패: $e');
+      }
+    }
+  }
+
+  /// 개별 노트 캐시 제거 (노트 삭제 시 사용)
+  Future<void> removeNoteFromCache(String noteId) async {
+    await _ensureInitialized();
+
+    try {
+      await clearNoteMetadata(noteId);
+      
+      // 마지막 캐시 시간 저장
+      await _saveLastCacheTime(DateTime.now());
+
+      if (kDebugMode) {
+        debugPrint('📋 노트 캐시 제거: $noteId');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 노트 캐시 제거 실패: $e');
+      }
+    }
+  }
+
   /// 캐시된 노트 목록 조회
   Future<List<Note>> getCachedNotes() async {
     return await getAllNoteMetadata();

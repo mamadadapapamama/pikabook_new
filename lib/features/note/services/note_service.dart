@@ -109,8 +109,8 @@ class NoteService {
         
         debugPrint('[NoteService] 노트 ${notes.length}개 로드됨');
         
-        // 스트림에서 로드된 노트를 자동으로 캐시
-        _cacheService.cacheNotes(notes);
+        // 자동 캐싱 제거 - 필요한 경우에만 수동으로 캐싱
+        // _cacheService.cacheNotes(notes);
         
         return notes;
       });
@@ -151,6 +151,18 @@ class NoteService {
 
       final docRef = await _notesCollection.add(noteData);
       final noteId = docRef.id;
+      
+      // 생성된 노트를 캐시에 추가
+      final newNote = Note(
+        id: noteId,
+        userId: user.uid,
+        title: noteTitle,
+        createdAt: now,
+        updatedAt: now,
+        isFavorite: false,
+        flashcardCount: 0,
+      );
+      await _cacheService.addNoteToCache(newNote);
       
       if (kDebugMode) {
         debugPrint('노트 메타데이터 생성 완료: $noteId');
@@ -197,12 +209,14 @@ class NoteService {
     try {
       await _notesCollection.doc(noteId).delete();
       debugPrint('노트 삭제 완료: $noteId');
+      
+      // 캐시에서 노트 제거
+      await _cacheService.removeNoteFromCache(noteId);
     } catch (e) {
       debugPrint('노트 삭제 중 오류 발생: $e');
       rethrow;
     }
   }
-
 
   /// 노트 ID로 노트 가져오기
   Future<Note?> getNoteById(String noteId) async {

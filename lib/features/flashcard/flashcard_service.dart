@@ -4,9 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/models/flash_card.dart';
 import '../../core/models/dictionary.dart';
+import '../../core/models/note.dart';
 import '../dictionary/dictionary_service.dart';
 import '../dictionary/cc_cedict_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
+import '../../core/services/cache/cache_manager.dart';
 
 /// 플래시카드 생성 및 관리 기능(CRUD)을 제공합니다
 
@@ -17,6 +19,7 @@ class FlashCardService {
   final DictionaryService _dictionaryService = DictionaryService();
   final CcCedictService _ccCedictService = CcCedictService();
   final UsageLimitService _usageLimitService = UsageLimitService();
+  final CacheManager _cacheManager = CacheManager();
   
   // 캐시 추가
   final Map<String, DictionaryEntry> _wordCache = {};
@@ -166,9 +169,38 @@ class FlashCardService {
         'flashCards': flashCards.map((card) => card.toJson()).toList(),
       });
 
+      // 캐시된 노트 메타데이터도 업데이트
+      await _updateCachedNoteMetadata(noteId, count);
+
       debugPrint('노트 $noteId의 플래시카드 카운터 업데이트: $count개');
     } catch (e) {
       debugPrint('노트 플래시카드 카운터 업데이트 중 오류 발생: $e');
+    }
+  }
+
+  /// 캐시된 노트 메타데이터의 플래시카드 카운터 업데이트
+  Future<void> _updateCachedNoteMetadata(String noteId, int newFlashcardCount) async {
+    try {
+      // 캐시에서 기존 노트 메타데이터 조회
+      final cachedNote = await _cacheManager.getNoteMetadata(noteId);
+      if (cachedNote != null) {
+        // 플래시카드 카운터만 업데이트된 새로운 노트 객체 생성
+        final updatedNote = cachedNote.copyWith(
+          flashcardCount: newFlashcardCount,
+          updatedAt: DateTime.now(),
+        );
+        
+        // 캐시에 업데이트된 노트 저장
+        await _cacheManager.cacheNoteMetadata(noteId, updatedNote);
+        
+        if (kDebugMode) {
+          debugPrint('📋 노트 캐시 메타데이터 업데이트: $noteId (플래시카드: $newFlashcardCount개)');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 노트 캐시 메타데이터 업데이트 실패: $e');
+      }
     }
   }
 
