@@ -54,3 +54,6 @@ app.*.map.json
 lib/firebase_options.dart
 ios/Runner/GoogleService-Info.plist
 android/app/google-services.json
+
+# Test files
+lib/features/translation_test/
