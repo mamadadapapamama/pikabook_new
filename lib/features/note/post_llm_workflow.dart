@@ -143,28 +143,60 @@ class PostLLMWorkflow {
         debugPrint('📝 배치 LLM 처리 시작: ${allSegments.length}개 세그먼트');
       }
 
-      // 3. 배치 LLM 처리 (Firebase Functions 서버에서 처리)
-      final serverResult = await _apiService.translateSegments(
-        textSegments: allSegments,
-        sourceLanguage: job.pages.first.sourceLanguage,
-        targetLanguage: job.pages.first.targetLanguage,
-        needPinyin: true,
-        noteId: job.noteId,
-      );
+      // 3. 클라이언트 측에서도 큰 배치를 작은 청크로 나누어 처리
+      const int CLIENT_CHUNK_SIZE = 20; // 클라이언트 청크 크기를 20으로 제한
+      final List<TextUnit> allProcessedUnits = [];
+      
+      for (int i = 0; i < allSegments.length; i += CLIENT_CHUNK_SIZE) {
+        final chunkSegments = allSegments.skip(i).take(CLIENT_CHUNK_SIZE).toList();
+        
+        if (kDebugMode) {
+          debugPrint('📦 청크 ${(i ~/ CLIENT_CHUNK_SIZE) + 1}/${((allSegments.length - 1) ~/ CLIENT_CHUNK_SIZE) + 1} 처리 중: ${chunkSegments.length}개 세그먼트');
+        }
+        
+        try {
+          // 개별 청크 처리
+          final serverResult = await _apiService.translateSegments(
+            textSegments: chunkSegments,
+            sourceLanguage: job.pages.first.sourceLanguage,
+            targetLanguage: job.pages.first.targetLanguage,
+            needPinyin: true,
+            noteId: job.noteId,
+          );
 
-      if (kDebugMode) {
-        debugPrint('✅ 서버 LLM 처리 완료');
-        debugPrint('   응답 타입: ${serverResult.runtimeType}');
-        if (serverResult is Map) {
-          debugPrint('   응답 키: ${(serverResult as Map).keys.toList()}');
+          if (kDebugMode) {
+            debugPrint('✅ 청크 처리 완료: ${chunkSegments.length}개 세그먼트');
+          }
+
+          // 서버 응답에서 TextUnit 리스트 추출
+          final chunkUnits = _extractUnitsFromServerResponse(serverResult);
+          allProcessedUnits.addAll(chunkUnits);
+
+          // 청크 간 짧은 지연
+          if (i + CLIENT_CHUNK_SIZE < allSegments.length) {
+            await Future.delayed(const Duration(milliseconds: 500));
+          }
+          
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('❌ 청크 처리 실패: $e');
+          }
+          
+          // 실패한 청크는 원본만 유지
+          for (final segment in chunkSegments) {
+            allProcessedUnits.add(TextUnit(
+              originalText: segment,
+              translatedText: '[번역 실패]',
+              pinyin: '',
+              sourceLanguage: job.pages.first.sourceLanguage,
+              targetLanguage: job.pages.first.targetLanguage,
+            ));
+          }
         }
       }
 
-      // 서버 응답에서 TextUnit 리스트 추출
-      final processedUnits = _extractUnitsFromServerResponse(serverResult);
-
       if (kDebugMode) {
-        debugPrint('📊 추출된 결과: ${processedUnits.length}개 TextUnit');
+        debugPrint('📊 전체 처리 완료: ${allProcessedUnits.length}개 TextUnit');
       }
 
       // 4. 페이지별 결과 분배 및 업데이트
@@ -176,7 +208,7 @@ class PostLLMWorkflow {
         if (segmentCount == 0) continue;
 
         // 해당 페이지의 결과 추출
-        final pageResults = processedUnits
+        final pageResults = allProcessedUnits
             .skip(segmentIndex)
             .take(segmentCount)
             .toList();

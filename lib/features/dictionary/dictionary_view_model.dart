@@ -34,7 +34,7 @@ class DictionaryViewModel extends ChangeNotifier {
     
     try {
       // DictionaryService.lookupWord()가 이미 모든 검색 단계를 처리함:
-      // 1. 내부 사전 → 2. CC-CEDICT → 3. Google ML Kit Translation
+      // 1. 내부 사전 → 2. CC-CEDICT → 3. Google Translation
       final result = await _dictionaryService.lookupWord(word);
       
       if (result['success'] == true && result['entry'] != null) {

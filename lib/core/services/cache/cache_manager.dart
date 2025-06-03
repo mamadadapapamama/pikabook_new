@@ -276,6 +276,11 @@ class CacheManager {
       final notes = <Note>[];
 
       for (final key in keys) {
+        // 시스템 키들은 건너뛰기
+        if (key.startsWith('_')) {
+          continue;
+        }
+        
         final data = await _noteMetadataCache!.get(key);
         if (data != null) {
           try {

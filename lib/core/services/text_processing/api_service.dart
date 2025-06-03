@@ -6,7 +6,7 @@ class ApiService {
   factory ApiService() => _instance;
   ApiService._internal();
 
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(region: 'asia-northeast1');
 
   /// 텍스트 세그먼트들을 서버에서 번역
   Future<Map<String, dynamic>> translateSegments({
@@ -22,7 +22,13 @@ class ApiService {
         debugPrint('🌐 API 호출: ${textSegments.length}개 세그먼트 번역');
       }
 
-      final callable = _functions.httpsCallable('translateSegments');
+      final callable = _functions.httpsCallable(
+        'translateSegments',
+        options: HttpsCallableOptions(
+          timeout: const Duration(minutes: 8), // 8분으로 증가
+        ),
+      );
+      
       final result = await callable.call({
         'textSegments': textSegments,
         'sourceLanguage': sourceLanguage,

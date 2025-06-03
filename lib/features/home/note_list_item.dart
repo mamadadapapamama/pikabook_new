@@ -91,10 +91,6 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
   }
 
   Widget _buildNoteCard() {
-    // 디버깅: 첫 번째 이미지 URL 확인 (실제 빌드 시에만)
-    if (kDebugMode) {
-      debugPrint('노트 리스트 아이템 빌드: ${widget.note.id} - firstImageUrl: ${widget.note.firstImageUrl}');
-    }
     
     return Container(
       height: 116, // 노트리스트 아이템 높이 116
