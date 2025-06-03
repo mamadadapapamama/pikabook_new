@@ -27,6 +27,8 @@ class PostLLMWorkflow {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final ApiService _apiService = ApiService(); // 새로 추가
 
+  // 클라이언트 측 청크 크기 제한
+  static const int clientChunkSize = 20;
 
   // 처리 큐 (메모리 기반)
   static final Queue<PostProcessingJob> _processingQueue = Queue<PostProcessingJob>();
@@ -99,6 +101,9 @@ class PostLLMWorkflow {
       // 2. 모든 페이지의 텍스트 세그먼트 수집
       final List<String> allSegments = [];
       final List<String> pageIds = [];
+      final Map<String, List<TextUnit>> pageResults = {};
+      final Map<String, int> pageSegmentCount = {for (final page in job.pages) page.pageId: page.textSegments.length};
+      final Set<String> completedPages = {};
       
       if (kDebugMode) {
         debugPrint('📊 페이지 데이터 분석: ${job.pages.length}개 페이지');
@@ -106,7 +111,6 @@ class PostLLMWorkflow {
       
       for (int i = 0; i < job.pages.length; i++) {
         final pageData = job.pages[i];
-        
         if (kDebugMode) {
           debugPrint('   페이지 ${i+1}: ${pageData.pageId}');
           debugPrint('   텍스트 세그먼트: ${pageData.textSegments.length}개');
@@ -118,7 +122,6 @@ class PostLLMWorkflow {
             }
           }
         }
-        
         for (final segment in pageData.textSegments) {
           if (segment.trim().isNotEmpty) {
             allSegments.add(segment);
@@ -126,34 +129,21 @@ class PostLLMWorkflow {
           }
         }
       }
-      
       if (kDebugMode) {
         debugPrint('📊 최종 수집 결과: ${allSegments.length}개 텍스트 세그먼트');
       }
 
-      if (allSegments.isEmpty) {
-        if (kDebugMode) {
-          debugPrint('⚠️ 처리할 텍스트 세그먼트가 없음: ${job.noteId}');
-        }
-        await _updateNoteStatus(job.noteId, ProcessingStatus.completed);
-        return;
-      }
-
-      if (kDebugMode) {
-        debugPrint('📝 배치 LLM 처리 시작: ${allSegments.length}개 세그먼트');
-      }
-
-      // 3. 클라이언트 측에서도 큰 배치를 작은 청크로 나누어 처리
-      const int CLIENT_CHUNK_SIZE = 20; // 클라이언트 청크 크기를 20으로 제한
-      final List<TextUnit> allProcessedUnits = [];
-      
-      for (int i = 0; i < allSegments.length; i += CLIENT_CHUNK_SIZE) {
-        final chunkSegments = allSegments.skip(i).take(CLIENT_CHUNK_SIZE).toList();
+      // 3. clientChunkSize 단위로 세그먼트 처리 (실시간 반영)
+      for (int i = 0; i < allSegments.length; i += clientChunkSize) {
+        final endIndex = math.min(i + clientChunkSize, allSegments.length);
+        final chunkSegments = allSegments.sublist(i, endIndex);
+        final chunkPageIds = pageIds.sublist(i, endIndex);
         
         if (kDebugMode) {
-          debugPrint('📦 청크 ${(i ~/ CLIENT_CHUNK_SIZE) + 1}/${((allSegments.length - 1) ~/ CLIENT_CHUNK_SIZE) + 1} 처리 중: ${chunkSegments.length}개 세그먼트');
+          debugPrint('🔄 청크 처리 시작: ${i ~/ clientChunkSize + 1}/${(allSegments.length / clientChunkSize).ceil()}');
+          debugPrint('   세그먼트 범위: ${i+1}-$endIndex (총 ${chunkSegments.length}개)');
         }
-        
+
         try {
           // 개별 청크 처리
           final serverResult = await _apiService.translateSegments(
@@ -163,67 +153,59 @@ class PostLLMWorkflow {
             needPinyin: true,
             noteId: job.noteId,
           );
-
           if (kDebugMode) {
             debugPrint('✅ 청크 처리 완료: ${chunkSegments.length}개 세그먼트');
           }
-
           // 서버 응답에서 TextUnit 리스트 추출
           final chunkUnits = _extractUnitsFromServerResponse(serverResult);
-          allProcessedUnits.addAll(chunkUnits);
-
-          // 청크 간 짧은 지연
-          if (i + CLIENT_CHUNK_SIZE < allSegments.length) {
-            await Future.delayed(const Duration(milliseconds: 500));
+          // 각 세그먼트별로 해당 페이지에 결과 누적 및 즉시 반영
+          for (int j = 0; j < chunkUnits.length; j++) {
+            final pageId = chunkPageIds[j];
+            pageResults.putIfAbsent(pageId, () => []);
+            pageResults[pageId]!.add(chunkUnits[j]);
+            // 누적된 번역 결과를 바로 페이지에 업데이트
+            final pageData = job.pages.firstWhere((p) => p.pageId == pageId);
+            await _updatePageWithResults(pageData, pageResults[pageId]!);
+            // 진행률 알림
+            final progress = pageResults[pageId]!.length / pageSegmentCount[pageId]!;
+            await _notifyPageProgress(pageId, progress);
           }
           
+          // 청크 처리 완료 후 완료된 페이지들 확인
+          _checkAndNotifyCompletedPages(pageResults, pageSegmentCount, completedPages);
+          
+          // 청크 간 짧은 지연
+          if (i + clientChunkSize < allSegments.length) {
+            await Future.delayed(const Duration(milliseconds: 500));
+          }
         } catch (e) {
           if (kDebugMode) {
             debugPrint('❌ 청크 처리 실패: $e');
           }
-          
           // 실패한 청크는 원본만 유지
-          for (final segment in chunkSegments) {
-            allProcessedUnits.add(TextUnit(
-              originalText: segment,
+          for (int j = 0; j < chunkSegments.length; j++) {
+            final pageId = chunkPageIds[j];
+            pageResults.putIfAbsent(pageId, () => []);
+            pageResults[pageId]!.add(TextUnit(
+              originalText: chunkSegments[j],
               translatedText: '[번역 실패]',
               pinyin: '',
               sourceLanguage: job.pages.first.sourceLanguage,
               targetLanguage: job.pages.first.targetLanguage,
             ));
+            // 실패도 바로 반영
+            final pageData = job.pages.firstWhere((p) => p.pageId == pageId);
+            await _updatePageWithResults(pageData, pageResults[pageId]!);
+            final progress = pageResults[pageId]!.length / pageSegmentCount[pageId]!;
+            await _notifyPageProgress(pageId, progress);
           }
+          
+          // 실패 처리 후에도 완료된 페이지들 확인
+          _checkAndNotifyCompletedPages(pageResults, pageSegmentCount, completedPages);
         }
       }
-
       if (kDebugMode) {
-        debugPrint('📊 전체 처리 완료: ${allProcessedUnits.length}개 TextUnit');
-      }
-
-      // 4. 페이지별 결과 분배 및 업데이트
-      int segmentIndex = 0;
-      for (int i = 0; i < job.pages.length; i++) {
-        final pageData = job.pages[i];
-        final segmentCount = pageData.textSegments.length;
-        
-        if (segmentCount == 0) continue;
-
-        // 해당 페이지의 결과 추출
-        final pageResults = allProcessedUnits
-            .skip(segmentIndex)
-            .take(segmentCount)
-            .toList();
-
-        // 페이지 업데이트
-        await _updatePageWithResults(pageData, pageResults);
-        
-        // 진행 상황 알림
-        await _notifyPageProgress(pageData.pageId, 1.0);
-        
-        segmentIndex += segmentCount;
-
-        if (kDebugMode) {
-          debugPrint('📄 페이지 업데이트 완료: ${pageData.pageId} (${pageResults.length}개 결과)');
-        }
+        debugPrint('📊 전체 처리 완료: 모든 페이지별로 실시간 반영됨');
       }
 
       // 5. 노트 완료 상태 업데이트
@@ -235,8 +217,8 @@ class PostLLMWorkflow {
       // 7. 노트 목록 캐싱 제거 - 노트 생성/삭제가 아니므로 불필요
       // await _cacheNotesAfterCompletion();
       
-      // 8. 완료 알림
-      await _sendCompletionNotification(job.noteId);
+      // 8. 전체 노트 완료 알림 (페이지별 알림과 구분)
+      await _sendNoteCompletionNotification(job.noteId);
 
       if (kDebugMode) {
         debugPrint('🎉 후처리 작업 완료: ${job.noteId}');
@@ -335,16 +317,53 @@ class PostLLMWorkflow {
     }
   }
 
-  /// 완료 알림 전송
-  Future<void> _sendCompletionNotification(String noteId) async {
+  /// 완료된 페이지들을 확인하고 알림 (중복 방지)
+  void _checkAndNotifyCompletedPages(
+    Map<String, List<TextUnit>> pageResults,
+    Map<String, int> pageSegmentCount,
+    Set<String> completedPages,
+  ) {
+    for (final pageId in pageResults.keys) {
+      final resultCount = pageResults[pageId]!.length;
+      final totalCount = pageSegmentCount[pageId]!;
+      
+      // 페이지가 완료되었고 아직 알림을 보내지 않은 경우에만 알림
+      if (resultCount == totalCount && !completedPages.contains(pageId)) {
+        completedPages.add(pageId);
+        // 비동기로 페이지 완료 알림 (메인 처리 흐름을 블로킹하지 않음)
+        unawaited(_sendPageCompletionNotification(pageId));
+        
+        if (kDebugMode) {
+          debugPrint('🎉 페이지 완료: $pageId ($resultCount/$totalCount 세그먼트)');
+        }
+      }
+    }
+  }
+
+  /// 페이지별 완료 알림 전송
+  Future<void> _sendPageCompletionNotification(String pageId) async {
     try {
-      // TODO: 푸시 알림 서비스 연동
+      // TODO: 페이지별 푸시 알림 서비스 연동
       if (kDebugMode) {
-        debugPrint('🔔 처리 완료 알림: $noteId');
+        debugPrint('🔔 페이지 완료 알림: $pageId');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('⚠️ 완료 알림 실패: $noteId, 오류: $e');
+        debugPrint('⚠️ 페이지 완료 알림 실패: $pageId, 오류: $e');
+      }
+    }
+  }
+
+  /// 노트 전체 완료 알림 전송
+  Future<void> _sendNoteCompletionNotification(String noteId) async {
+    try {
+      // TODO: 노트 전체 완료 푸시 알림 서비스 연동
+      if (kDebugMode) {
+        debugPrint('🔔 노트 전체 완료 알림: $noteId');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 노트 완료 알림 실패: $noteId, 오류: $e');
       }
     }
   }
