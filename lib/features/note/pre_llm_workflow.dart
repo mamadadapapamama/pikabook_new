@@ -520,7 +520,9 @@ class PostProcessingJob {
   Map<String, dynamic> toJson() => {
     'noteId': noteId,
     'pages': pages.map((p) => p.toJson()).toList(),
-    'userPrefs': userPrefs.toJson(), // UserPreferences의 toJson 필요
+    'userPrefs': userPrefs is Map<String, dynamic> 
+        ? userPrefs 
+        : (userPrefs?.toJson?.call() ?? {}),
     'createdAt': createdAt.toIso8601String(),
     'priority': priority,
     'retryCount': retryCount,
@@ -532,7 +534,7 @@ class PostProcessingJob {
       pages: (json['pages'] as List)
           .map((p) => PageProcessingData.fromJson(p))
           .toList(),
-      userPrefs: json['userPrefs'], // UserPreferences.fromJson으로 변경 필요
+      userPrefs: json['userPrefs'] ?? {}, // 안전하게 Map으로 처리
       createdAt: DateTime.parse(json['createdAt']),
       priority: json['priority'],
       retryCount: json['retryCount'] ?? 0,

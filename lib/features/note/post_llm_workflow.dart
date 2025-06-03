@@ -400,14 +400,34 @@ class PostLLMWorkflow {
   /// Firestore에 작업 백업 저장
   Future<void> _saveJobToFirestore(PostProcessingJob job) async {
     try {
+      if (kDebugMode) {
+        debugPrint('💾 작업 백업 저장 시작: ${job.noteId}');
+      }
+      
+      final jobData = job.toJson();
+      
+      if (kDebugMode) {
+        debugPrint('✅ 작업 JSON 직렬화 성공');
+      }
+      
       await _firestore.collection('processing_jobs').doc(job.noteId).set({
-        'data': job.toJson(),
+        'data': jobData,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
+      
+      if (kDebugMode) {
+        debugPrint('✅ 작업 백업 저장 완료: ${job.noteId}');
+      }
+      
+    } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('⚠️ 작업 백업 저장 실패: $e');
+        debugPrint('   스택 트레이스: $stackTrace');
+        debugPrint('   작업 ID: ${job.noteId}');
+        debugPrint('   페이지 수: ${job.pages.length}');
+        debugPrint('   userPrefs 타입: ${job.userPrefs.runtimeType}');
+        debugPrint('   userPrefs 내용: ${job.userPrefs}');
       }
     }
   }
