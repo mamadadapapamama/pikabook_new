@@ -17,6 +17,8 @@ import 'pre_llm_workflow.dart';
 
 /// 후처리 워크플로우: 백그라운드 LLM 처리
 /// 배치 번역 → 병음 생성 → 페이지 업데이트 → 사용량 업데이트 → 실시간 알림
+/// 
+/// 주의: 미완료 작업 복구 기능은 PendingJobRecoveryService로 이전됨
 class PostLLMWorkflow {
   // 서비스 인스턴스
   final PageService _pageService = PageService();
@@ -458,31 +460,6 @@ class PostLLMWorkflow {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('⚠️ 작업 백업 제거 실패: $e');
-      }
-    }
-  }
-
-  /// 앱 시작시 미완료 작업 복구
-  Future<void> recoverPendingJobs() async {
-    try {
-      final snapshot = await _firestore
-          .collection('processing_jobs')
-          .where('status', isEqualTo: 'pending')
-          .get();
-
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final job = PostProcessingJob.fromJson(data['data']);
-        
-        if (kDebugMode) {
-          debugPrint('🔄 미완료 작업 복구: ${job.noteId}');
-        }
-        
-        await enqueueJob(job);
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ 미완료 작업 복구 실패: $e');
       }
     }
   }

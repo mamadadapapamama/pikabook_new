@@ -284,14 +284,14 @@ class InitializationManager {
       // LLM 처리 서비스 초기화
       await _textProcessingService.ensureInitialized();
       
-      // 후처리 작업 복구 (앱 시작시)
-      try {
-        final noteCreationManager = NoteCreationUIManager();
-        await noteCreationManager.initializeOnAppStart();
-        debugPrint('✅ 후처리 작업 복구 완료');
-      } catch (e) {
-        debugPrint('⚠️ 후처리 작업 복구 실패: $e');
-      }
+      // 자동 후처리 작업 복구 제거 - 수동 복구로 변경됨
+      // try {
+      //   final noteCreationManager = NoteCreationUIManager();
+      //   await noteCreationManager.initializeOnAppStart();
+      //   debugPrint('✅ 후처리 작업 복구 완료');
+      // } catch (e) {
+      //   debugPrint('⚠️ 후처리 작업 복구 실패: $e');
+      // }
       
       // 사용자 설정 모드 디버깅 (세그먼트 모드 상태 확인)
       if (kDebugMode) {

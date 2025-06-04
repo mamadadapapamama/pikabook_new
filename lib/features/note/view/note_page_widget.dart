@@ -81,14 +81,33 @@ class _NotePageWidgetState extends State<NotePageWidget> {
 
   @override
   Widget build(BuildContext context) {
+    if (kDebugMode) {
+      print('🎭 [NotePageWidget] build() 호출: ${widget.page.id}');
+    }
+    
     // Consumer를 사용하여 ViewModel에 직접 접근
     return Consumer<NoteDetailViewModel>(
       builder: (context, viewModel, child) {
+        if (kDebugMode) {
+          print('🎭 [NotePageWidget] Consumer builder 호출: ${widget.page.id}');
+        }
+        
         // 현재 페이지의 텍스트 데이터 미리 가져오기
         final textViewModel = viewModel.getTextViewModel(widget.page.id);
         final processedText = textViewModel['processedText'] as ProcessedText?;
         final isLoading = textViewModel['isLoading'] as bool? ?? false;
         final error = textViewModel['error'] as String?;
+        
+        if (kDebugMode) {
+          print('🎭 [NotePageWidget] 데이터 상태 확인: ${widget.page.id}');
+          print('   processedText: ${processedText != null ? "있음 (${processedText.units.length}개 유닛)" : "없음"}');
+          print('   isLoading: $isLoading');
+          print('   error: $error');
+          if (processedText != null) {
+            print('   번역 텍스트 길이: ${processedText.fullTranslatedText?.length ?? 0}');
+            print('   스트리밍 상태: ${processedText.streamingStatus}');
+          }
+        }
         
         return _buildPageContent(context, viewModel, processedText, isLoading, error);
       },
@@ -131,26 +150,49 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       ProcessedText? processedText, bool isLoading, String? error) {
     
     if (kDebugMode) {
-      print('🎭 NotePageWidget _buildTextContent');
+      print('🎭 [NotePageWidget] _buildTextContent 호출: ${widget.page.id}');
       print('   processedText != null: ${processedText != null}');
+      print('   isLoading: $isLoading');
+      print('   error: $error');
       print('   page.showTypewriterEffect: ${widget.page.showTypewriterEffect}');
       if (processedText != null) {
         print('   processedText.streamingStatus: ${processedText.streamingStatus}');
         print('   processedText.fullTranslatedText.length: ${processedText.fullTranslatedText?.length ?? 0}');
+        print('   processedText.units.length: ${processedText.units.length}');
+        // 첫 번째 유닛 샘플 출력
+        if (processedText.units.isNotEmpty) {
+          final firstUnit = processedText.units[0];
+          print('   첫 번째 유닛 예시:');
+          print('     원문: "${firstUnit.originalText}"');
+          print('     번역: "${firstUnit.translatedText ?? ''}"');
+          print('     병음: "${firstUnit.pinyin ?? ''}"');
+        }
       }
     }
     
     // ProcessedText가 있으면 바로 표시 (타이프라이터 효과 제거)
     if (processedText != null) {
+      if (kDebugMode) {
+        print('✅ [NotePageWidget] ProcessedText 위젯 반환: ${widget.page.id}');
+      }
       return _buildProcessedTextWidget(context, processedText, viewModel);
     }
     
     // 로딩 중이거나 오류가 있는 경우
     if (isLoading) {
+      if (kDebugMode) {
+        print('⏳ [NotePageWidget] 로딩 인디케이터 반환: ${widget.page.id}');
+      }
       return _buildLoadingIndicator();
     } else if (error != null) {
+      if (kDebugMode) {
+        print('❌ [NotePageWidget] 에러 위젯 반환: ${widget.page.id} - $error');
+      }
       return _buildErrorWidget(error);
     } else {
+      if (kDebugMode) {
+        print('⏳ [NotePageWidget] 기본 로딩 인디케이터 반환: ${widget.page.id}');
+      }
       return _buildLoadingIndicator(); // 빈 상태도 로딩 인디케이터로 통일
     }
   }

@@ -26,18 +26,15 @@ class NoteService {
   // 서비스 인스턴스
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  PageService? _pageService; // 지연 초기화를 위해 nullable로 변경
+  final PageService _pageService = PageService(); // 싱글톤 사용
   final ImageService _imageService = ImageService();
   final LLMTextProcessing _textProcessingService = LLMTextProcessing();
   final OcrService _ocrService = OcrService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   final CacheManager _cacheService = CacheManager();
 
-  // PageService의 게터 사용 - 지연 초기화
-  PageService get pageService {
-    _pageService ??= PageService();
-    return _pageService!;
-  }
+  // PageService의 게터
+  PageService get pageService => _pageService;
 
   // 컬렉션 참조
   CollectionReference get _notesCollection => _firestore.collection('notes');

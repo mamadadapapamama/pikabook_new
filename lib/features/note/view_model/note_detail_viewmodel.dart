@@ -11,6 +11,8 @@ import '../services/page_service.dart';
 import '../managers/note_options_manager.dart';
 import '../services/note_service.dart';
 import '../../../core/services/text_processing/text_processing_service.dart';
+import '../post_llm_workflow.dart';
+import '../services/pending_job_recovery_service.dart';
 
 /// 단순화된 노트 상세 화면 ViewModel
 /// UI 상태만 관리하고 비즈니스 로직은 Service Layer에 위임
@@ -18,6 +20,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   // 서비스 인스턴스
   final NoteService _noteService = NoteService();
   final TextProcessingService _textProcessingService = TextProcessingService();
+  final PendingJobRecoveryService _pendingJobRecoveryService = PendingJobRecoveryService();
   
   // PageService에 접근하기 위한 게터
   PageService get _pageService => _noteService.pageService;
@@ -140,17 +143,20 @@ class NoteDetailViewModel extends ChangeNotifier {
     notifyListeners();
     
     try {
-      // 페이지 로드
+      // 1. 미완료 작업 복구 (노트 상세페이지 진입시에만)
+      await _recoverPendingJobsForThisNote();
+      
+      // 2. 페이지 로드
       final pages = await _pageService.getPagesForNote(_noteId);
       _pages = pages;
       _isLoading = false;
       
       notifyListeners();
       
-      // 모든 페이지에 대한 실시간 리스너 설정
+      // 3. 모든 페이지에 대한 실시간 리스너 설정
       _setupAllPageListeners();
       
-      // 현재 페이지 텍스트 로드
+      // 4. 현재 페이지 텍스트 로드
       if (currentPage != null) {
         await loadCurrentPageText();
       }
@@ -162,6 +168,26 @@ class NoteDetailViewModel extends ChangeNotifier {
       if (flutter_foundation.kDebugMode) {
         debugPrint("❌ 페이지 로드 중 오류: $e");
       }
+    }
+  }
+
+  /// 현재 노트의 미완료 작업 복구 (수동 복구)
+  Future<void> _recoverPendingJobsForThisNote() async {
+    try {
+      if (flutter_foundation.kDebugMode) {
+        debugPrint("🔍 노트 $_noteId 미완료 작업 확인 중...");
+      }
+      
+      final hasRecovered = await _pendingJobRecoveryService.recoverPendingJobsForNote(_noteId);
+      
+      if (hasRecovered && flutter_foundation.kDebugMode) {
+        debugPrint("✅ 노트 $_noteId 미완료 작업 복구 완료");
+      }
+    } catch (e) {
+      if (flutter_foundation.kDebugMode) {
+        debugPrint("⚠️ 노트 $_noteId 미완료 작업 복구 실패: $e");
+      }
+      // 복구 실패는 전체 페이지 로딩을 막지 않음
     }
   }
 
@@ -278,6 +304,10 @@ class NoteDetailViewModel extends ChangeNotifier {
   void _setupPageListener(String pageId) {
     if (_disposed) return;
     
+    if (flutter_foundation.kDebugMode) {
+      debugPrint("🔔 [ViewModel] 페이지 리스너 설정 시작: $pageId");
+    }
+    
     // 기존 리스너 정리
     _pageListeners[pageId]?.cancel();
     
@@ -285,28 +315,72 @@ class NoteDetailViewModel extends ChangeNotifier {
     final listener = _textProcessingService.listenToPageChanges(
       pageId,
       (processedText) {
-        if (_disposed) return; // dispose 체크
+        if (_disposed) {
+          if (flutter_foundation.kDebugMode) {
+            debugPrint("⚠️ [ViewModel] ViewModel이 dispose됨, 콜백 무시: $pageId");
+          }
+          return; // dispose 체크
+        }
+        
+        if (flutter_foundation.kDebugMode) {
+          debugPrint("📞 [ViewModel] UI 콜백 받음: $pageId");
+          debugPrint("   processedText: ${processedText != null ? "있음" : "없음"}");
+          if (processedText != null) {
+            debugPrint("   유닛 개수: ${processedText.units.length}");
+            debugPrint("   번역 텍스트 길이: ${processedText.fullTranslatedText?.length ?? 0}");
+          }
+        }
         
         if (processedText != null) {
           final previousStatus = _pageStatuses[pageId];
+          final previousUnits = _processedTexts[pageId]?.units.length ?? 0;
+          
+          // 상태 업데이트
           _processedTexts[pageId] = processedText;
           _pageStatuses[pageId] = ProcessingStatus.completed;
+          
+          if (flutter_foundation.kDebugMode) {
+            debugPrint("📊 [ViewModel] 상태 업데이트: $pageId");
+            debugPrint("   이전 상태: ${previousStatus?.displayName ?? '없음'}");
+            debugPrint("   현재 상태: ${ProcessingStatus.completed.displayName}");
+            debugPrint("   이전 유닛: $previousUnits개");
+            debugPrint("   현재 유닛: ${processedText.units.length}개");
+          }
           
           // 페이지 처리 완료 콜백 호출
           if (_pageProcessedCallback != null && _pages != null) {
             final pageIndex = _pages!.indexWhere((page) => page.id == pageId);
             if (pageIndex >= 0) {
+              if (flutter_foundation.kDebugMode) {
+                debugPrint("📞 [ViewModel] 페이지 완료 콜백 호출: 페이지 인덱스 $pageIndex");
+              }
               _pageProcessedCallback!(pageIndex);
             }
           }
           
-          if (!_disposed) notifyListeners();
-          
+          // notifyListeners 호출
+          if (!_disposed) {
+            if (flutter_foundation.kDebugMode) {
+              debugPrint("🔄 [ViewModel] notifyListeners() 호출 시작: $pageId");
+            }
+            
+            notifyListeners();
+            
+            if (flutter_foundation.kDebugMode) {
+              debugPrint("✅ [ViewModel] notifyListeners() 호출 완료: $pageId");
+              debugPrint("🔔 [ViewModel] 페이지 상태 변경 처리 완료: $pageId");
+              debugPrint("   이전 상태: ${previousStatus?.displayName ?? '없음'}");
+              debugPrint("   현재 상태: ${ProcessingStatus.completed.displayName}");
+              debugPrint("   UI 업데이트 완료");
+            }
+          } else {
+            if (flutter_foundation.kDebugMode) {
+              debugPrint("⚠️ [ViewModel] notifyListeners() 스킵 (dispose됨): $pageId");
+            }
+          }
+        } else {
           if (flutter_foundation.kDebugMode) {
-            debugPrint("🔔 페이지 상태 변경: $pageId");
-            debugPrint("   이전 상태: ${previousStatus?.displayName ?? '없음'}");
-            debugPrint("   현재 상태: ${ProcessingStatus.completed.displayName}");
-            debugPrint("   UI 업데이트 완료");
+            debugPrint("⚠️ [ViewModel] processedText가 null임: $pageId");
           }
         }
       },
@@ -314,6 +388,13 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     if (listener != null) {
       _pageListeners[pageId] = listener;
+      if (flutter_foundation.kDebugMode) {
+        debugPrint("✅ [ViewModel] 페이지 리스너 설정 완료: $pageId");
+      }
+    } else {
+      if (flutter_foundation.kDebugMode) {
+        debugPrint("❌ [ViewModel] 페이지 리스너 설정 실패: $pageId");
+      }
     }
   }
 

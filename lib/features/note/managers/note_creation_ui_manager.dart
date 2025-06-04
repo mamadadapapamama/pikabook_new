@@ -374,11 +374,13 @@ class NoteCreationUIManager {
   /// 앱 시작시 미완료 작업 복구
   Future<void> initializeOnAppStart() async {
     try {
-      // 후처리 워크플로우 미완료 작업 복구
-      await _postLLMWorkflow.recoverPendingJobs();
+      // 후처리 워크플로우 미완료 작업 복구 - 비활성화됨
+      // 이유: 새 노트 생성을 블로킹하는 문제 방지
+      // 미완료 작업 복구는 노트 상세페이지 진입시에만 수행됨
+      // await _postLLMWorkflow.recoverPendingJobs();
       
       if (kDebugMode) {
-        debugPrint('✅ 앱 시작시 초기화 완료');
+        debugPrint('✅ 앱 시작시 초기화 완료 (자동 복구 비활성화)');
       }
     } catch (e) {
       if (kDebugMode) {

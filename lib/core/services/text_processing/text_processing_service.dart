@@ -130,6 +130,10 @@ class TextProcessingService {
   ) {
     if (pageId.isEmpty) return null;
     
+    if (kDebugMode) {
+      debugPrint('🔔 실시간 리스너 설정: $pageId');
+    }
+    
     // 기존 리스너 정리
     _pageListeners[pageId]?.cancel();
     
@@ -141,28 +145,68 @@ class TextProcessingService {
         .doc(pageId)
         .snapshots()
         .listen((snapshot) async {
-      if (!snapshot.exists) return;
+      if (!snapshot.exists) {
+        if (kDebugMode) {
+          debugPrint('📄 페이지 문서가 존재하지 않음: $pageId');
+        }
+        return;
+      }
+      
+      if (kDebugMode) {
+        debugPrint('🔔 Firestore 변경 감지: $pageId');
+      }
       
       try {
         final page = page_model.Page.fromFirestore(snapshot);
         
+        if (kDebugMode) {
+          debugPrint('📊 페이지 데이터 분석: $pageId');
+          debugPrint('   processedText 필드: ${page.processedText != null ? "있음" : "없음"}');
+          debugPrint('   translatedText: ${page.translatedText?.isNotEmpty == true ? "있음 (${page.translatedText!.length}자)" : "없음"}');
+        }
+        
         // processedText 필드가 있으면 ProcessedText 생성 (번역 여부와 관계없이)
         if (page.processedText != null && page.processedText!.isNotEmpty) {
+          if (kDebugMode) {
+            debugPrint('🔍 processedText 필드에서 데이터 파싱 시작: $pageId');
+          }
+          
           final processedText = await _createProcessedTextFromPageData(page);
           
           // processedText가 null이 아닌 경우에만 처리
           if (processedText != null) {
+            if (kDebugMode) {
+              debugPrint('✅ ProcessedText 파싱 성공: $pageId');
+              debugPrint('   유닛 개수: ${processedText.units.length}');
+              debugPrint('   스트리밍 상태: ${processedText.streamingStatus}');
+              debugPrint('   번역 텍스트 길이: ${processedText.fullTranslatedText?.length ?? 0}');
+            }
+            
             // 이전 데이터와 비교하여 실제 변경이 있는지 확인
             if (_hasProcessedTextChanged(previousProcessedText, processedText)) {
+              if (kDebugMode) {
+                debugPrint('🔄 ProcessedText 변경 감지됨: $pageId');
+                debugPrint('   이전 유닛 개수: ${previousProcessedText?.units.length ?? 0}');
+                debugPrint('   현재 유닛 개수: ${processedText.units.length}');
+              }
+              
               // 완성된 ProcessedText만 캐싱 (1차는 캐싱하지 않음)
               if (processedText.streamingStatus == StreamingStatus.completed) {
-              await _saveToCache(pageId, processedText);
+                await _saveToCache(pageId, processedText);
+                if (kDebugMode) {
+                  debugPrint('💾 완성된 ProcessedText 캐싱 완료: $pageId');
+                }
               }
               
               // 콜백 호출
+              if (kDebugMode) {
+                debugPrint('📞 UI 콜백 호출 시작: $pageId');
+              }
+              
               onTextChanged(processedText);
               
               if (kDebugMode) {
+                debugPrint('✅ UI 콜백 호출 완료: $pageId');
                 debugPrint('🔔 페이지 텍스트 변경 감지: $pageId');
                 debugPrint('   스트리밍 상태: ${processedText.streamingStatus}');
                 debugPrint('   번역 텍스트: ${processedText.fullTranslatedText?.isNotEmpty == true ? "있음" : "없음"}');
@@ -175,15 +219,28 @@ class TextProcessingService {
                 debugPrint('⏭️ 페이지 텍스트 변경 없음 (스킵): $pageId');
               }
             }
+          } else {
+            if (kDebugMode) {
+              debugPrint('❌ ProcessedText 파싱 실패: $pageId');
+            }
           }
         }
         // 번역 텍스트만 있고 processedText가 없는 경우 (기존 호환성)
         else if (page.translatedText != null && page.translatedText!.isNotEmpty) {
+          if (kDebugMode) {
+            debugPrint('🔍 호환성 모드: translatedText에서 데이터 생성 시작: $pageId');
+          }
+          
           final processedText = await _createProcessedTextFromPage(page);
           
           if (processedText != null) {
             if (_hasProcessedTextChanged(previousProcessedText, processedText)) {
               await _saveToCache(pageId, processedText);
+              
+              if (kDebugMode) {
+                debugPrint('📞 호환성 모드 UI 콜백 호출: $pageId');
+              }
+              
               onTextChanged(processedText);
               
               if (kDebugMode) {
@@ -192,6 +249,10 @@ class TextProcessingService {
               
               previousProcessedText = processedText;
             }
+          }
+        } else {
+          if (kDebugMode) {
+            debugPrint('ℹ️ 처리할 텍스트 데이터 없음: $pageId');
           }
         }
       } catch (e) {
@@ -203,6 +264,11 @@ class TextProcessingService {
     });
     
     _pageListeners[pageId] = listener;
+    
+    if (kDebugMode) {
+      debugPrint('✅ 실시간 리스너 설정 완료: $pageId');
+    }
+    
     return listener;
   }
   

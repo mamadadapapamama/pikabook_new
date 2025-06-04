@@ -26,6 +26,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   
   // 이미지 처리 중인지 추적하는 변수
   bool _isProcessing = false;
+  bool _isCancelled = false; // 취소 상태 추적 변수 추가
   
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   void dispose() {
     // dispose 될 때 처리 상태 초기화
     _isProcessing = false;
+    _isCancelled = false;
     super.dispose();
   }
   
@@ -45,9 +47,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     if (mounted) {
       setState(() {
         _isProcessing = false;
+        _isCancelled = false;
       });
     } else {
       _isProcessing = false;
+      _isCancelled = false;
     }
   }
 
@@ -55,10 +59,16 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () {
-        // 뒤로가기 시 처리 상태 초기화
-        setState(() {
+        // 뒤로가기 시 취소 상태로 설정
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+            _isCancelled = true;
+          });
+        } else {
           _isProcessing = false;
-        });
+          _isCancelled = true;
+        }
         return Future.value(true);
       },
       child: Container(
@@ -91,10 +101,16 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
                 ),
                 GestureDetector(
                     onTap: () {
-                      // X 버튼 클릭시 처리 상태 초기화 후 닫기
-                      setState(() {
+                      // X 버튼 클릭시 취소 상태로 설정 후 닫기
+                      if (mounted) {
+                        setState(() {
+                          _isProcessing = false;
+                          _isCancelled = true;
+                        });
+                      } else {
                         _isProcessing = false;
-                      });
+                        _isCancelled = true;
+                      }
                       Navigator.pop(context);
                     },
                   child: const Icon(
@@ -138,10 +154,10 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
 
   /// 갤러리에서 이미지 선택
   Future<void> _selectGalleryImages() async {
-    // 이미 처리 중이면 중복 호출 방지
-    if (_isProcessing) {
+    // 이미 처리 중이거나 취소된 경우 중복 호출 방지
+    if (_isProcessing || _isCancelled) {
       if (kDebugMode) {
-        print('이미지 선택 처리가 이미 진행 중입니다. 중복 호출 방지.');
+        print('갤러리 이미지 선택 중복 호출 방지: processing=$_isProcessing, cancelled=$_isCancelled');
       }
       return;
     }
@@ -149,6 +165,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     // 처리 중 상태로 설정
     setState(() {
       _isProcessing = true;
+      _isCancelled = false;
     });
     
     // 작업 시작 - 이미지 선택 중임을 사용자에게 알립니다
@@ -169,14 +186,19 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         
       // 이미지 선택이 취소되었거나 이미지가 없는 경우
       if (selectedImages == null || selectedImages.isEmpty) {
-        if (kDebugMode) {
-          print('이미지 선택이 취소되었습니다.');
+        if (!_isCancelled && kDebugMode) {
+          print('[갤러리] 이미지 선택이 취소되었습니다.');
         }
-        // 처리 중 상태 초기화
+        
+        // 취소 상태로 설정하여 중복 처리 방지
         if (mounted) {
           setState(() {
             _isProcessing = false;
+            _isCancelled = true;
           });
+        } else {
+          _isProcessing = false;
+          _isCancelled = true;
         }
         return;
       }
@@ -258,10 +280,10 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   
   /// 카메라로 사진 촬영
   Future<void> _takeCameraPhoto() async {
-    // 이미 처리 중이면 중복 호출 방지
-    if (_isProcessing) {
+    // 이미 처리 중이거나 취소된 경우 중복 호출 방지
+    if (_isProcessing || _isCancelled) {
       if (kDebugMode) {
-        print('카메라 촬영 처리가 이미 진행 중입니다. 중복 호출 방지.');
+        print('카메라 촬영 중복 호출 방지: processing=$_isProcessing, cancelled=$_isCancelled');
       }
       return;
     }
@@ -269,6 +291,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     // 처리 중 상태로 설정
     setState(() {
       _isProcessing = true;
+      _isCancelled = false;
     });
     
     // 시뮬레이터에서 실행 중인지 확인 (iOS 시뮬레이터에서는 카메라가 작동하지 않음)

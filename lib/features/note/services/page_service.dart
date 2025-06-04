@@ -5,12 +5,16 @@ import '../../../core/models/processing_status.dart';
 
 /// 페이지 서비스: 페이지 CRUD 작업만 담당합니다.
 class PageService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  // 생성자 로그 추가
-  PageService() {
-    debugPrint('📄 PageService: 생성자 호출됨');
+  // 싱글톤 패턴
+  static final PageService _instance = PageService._internal();
+  factory PageService() => _instance;
+  PageService._internal() {
+    if (kDebugMode) {
+      debugPrint('📄 PageService: 생성자 호출됨');
+    }
   }
+  
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // 페이지 컬렉션 참조
   CollectionReference get _pagesCollection => _firestore.collection('pages');
