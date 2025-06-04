@@ -357,40 +357,41 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final buildStartTime = DateTime.now();
+    
     // 문장별 모드인지 문단별 모드인지에 따라 다른 렌더링
     final bool isParagraphMode = widget.processedText.mode == TextProcessingMode.paragraph;
 
-    // 로딩 확인용
     if (kDebugMode) {
-      print('[${DateTime.now()}] ProcessedTextWidget build 호출');
-      print('ProcessedTextWidget 모드: ${widget.processedText.mode}, 표시 모드: ${widget.processedText.displayMode}');
-      print('문단 모드: $isParagraphMode, 유닛 개수: ${widget.processedText.units.length}');
-    }
-    
-    // 번역 텍스트 체크 로그 추가
-    if (widget.processedText.fullTranslatedText != null && widget.processedText.fullTranslatedText!.isNotEmpty) {
-      final sample = widget.processedText.fullTranslatedText!.length > 50 
-          ? widget.processedText.fullTranslatedText!.substring(0, 50) + '...' 
-          : widget.processedText.fullTranslatedText!;
-      debugPrint('ProcessedTextWidget: 번역 텍스트 있음 (${widget.processedText.fullTranslatedText!.length}자)');
-      debugPrint('ProcessedTextWidget: 번역 텍스트 샘플 - "$sample"');
-    } else {
-      debugPrint('ProcessedTextWidget: 번역 텍스트 없음 (null 또는 빈 문자열)');
-    }
-    
-    // 세그먼트별 번역 체크
-    if (widget.processedText.units != null && widget.processedText.units.isNotEmpty) {
-      int untranslatedUnits = 0;
-      for (final unit in widget.processedText.units) {
-        if (unit.translatedText == null || unit.translatedText!.isEmpty || unit.translatedText == unit.originalText) {
-          untranslatedUnits++;
-        }
+      debugPrint('🎨 [UI] ProcessedTextWidget build 시작');
+      debugPrint('   모드: ${widget.processedText.mode}, 표시: ${widget.processedText.displayMode}');
+      debugPrint('   문단 모드: $isParagraphMode, 유닛 개수: ${widget.processedText.units.length}');
+      
+      // 번역 텍스트 체크
+      if (widget.processedText.fullTranslatedText != null && widget.processedText.fullTranslatedText!.isNotEmpty) {
+        final sample = widget.processedText.fullTranslatedText!.length > 50 
+            ? widget.processedText.fullTranslatedText!.substring(0, 50) + '...' 
+            : widget.processedText.fullTranslatedText!;
+        debugPrint('   번역 텍스트: 있음 (${widget.processedText.fullTranslatedText!.length}자)');
+        debugPrint('   샘플: "$sample"');
+      } else {
+        debugPrint('   번역 텍스트: 없음');
       }
-      debugPrint('ProcessedTextWidget: 유닛 ${widget.processedText.units.length}개 중 $untranslatedUnits개 번역 누락');
+      
+      // 세그먼트별 번역 체크
+      if (widget.processedText.units.isNotEmpty) {
+        int untranslatedUnits = 0;
+        for (final unit in widget.processedText.units) {
+          if (unit.translatedText == null || unit.translatedText!.isEmpty || unit.translatedText == unit.originalText) {
+            untranslatedUnits++;
+          }
+        }
+        debugPrint('   유닛 번역 상태: ${widget.processedText.units.length}개 중 $untranslatedUnits개 누락');
+      }
     }
 
     // 문장 바깥 탭 시 선택 취소를 위한 GestureDetector 추가
-    return GestureDetector(
+    final result = GestureDetector(
       onTap: () {
         // 문장 바깥을 탭하면 선택 취소
         setState(() {
@@ -410,7 +411,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
               key: ValueKey('processed_text_${widget.processedText.mode}_'
                   '${widget.processedText.displayMode}_'
                   '${widget.processedText.hashCode}'),
-              child: widget.processedText.units != null &&
+              child: widget.processedText.units.isNotEmpty &&
                   widget.processedText.mode == TextProcessingMode.segment
                   ? _buildSegmentView() // 문장별 표시
                   : _buildFullTextView(), // 문단별 표시
@@ -419,6 +420,17 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         ),
       ),
     );
+
+    if (kDebugMode) {
+      final buildEndTime = DateTime.now();
+      final buildTime = buildEndTime.difference(buildStartTime).inMilliseconds;
+      debugPrint('🎨 [UI] ProcessedTextWidget build 완료: ${buildTime}ms');
+      if (buildTime > 100) {
+        debugPrint('⚠️ [UI] 렌더링 시간이 100ms를 초과했습니다: ${buildTime}ms');
+      }
+    }
+
+    return result;
   }
 
   /// 플래시카드 단어 목록 초기화

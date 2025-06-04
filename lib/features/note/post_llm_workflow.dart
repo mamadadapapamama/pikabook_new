@@ -142,11 +142,13 @@ class PostLLMWorkflow {
         final chunkPageIds = pageIds.sublist(i, endIndex);
         
         if (kDebugMode) {
-          debugPrint('🔄 청크 처리 시작: ${i ~/ clientChunkSize + 1}/${(allSegments.length / clientChunkSize).ceil()}');
+          debugPrint('🔄 [워크플로우] 청크 처리 시작: ${i ~/ clientChunkSize + 1}/${(allSegments.length / clientChunkSize).ceil()}');
           debugPrint('   세그먼트 범위: ${i+1}-$endIndex (총 ${chunkSegments.length}개)');
         }
 
         try {
+          final chunkStartTime = DateTime.now();
+          
           // 개별 청크 처리
           final serverResult = await _apiService.translateSegments(
             textSegments: chunkSegments,
@@ -155,11 +157,30 @@ class PostLLMWorkflow {
             needPinyin: true,
             noteId: job.noteId,
           );
+          
+          final chunkEndTime = DateTime.now();
+          final chunkTotalTime = chunkEndTime.difference(chunkStartTime).inMilliseconds;
+          
           if (kDebugMode) {
-            debugPrint('✅ 청크 처리 완료: ${chunkSegments.length}개 세그먼트');
+            debugPrint('✅ [워크플로우] 청크 처리 완료: ${chunkSegments.length}개 세그먼트');
+            debugPrint('⏱️ [워크플로우] 청크 총 시간: ${chunkTotalTime}ms');
+            debugPrint('📊 [워크플로우] 세그먼트당 평균: ${(chunkTotalTime / chunkSegments.length).round()}ms');
           }
+          
+          final parsingStartTime = DateTime.now();
+          
           // 서버 응답에서 TextUnit 리스트 추출
           final chunkUnits = _extractUnitsFromServerResponse(serverResult);
+          
+          final parsingEndTime = DateTime.now();
+          final parsingTime = parsingEndTime.difference(parsingStartTime).inMilliseconds;
+          
+          if (kDebugMode) {
+            debugPrint('⚡ [워크플로우] 응답 파싱 시간: ${parsingTime}ms');
+          }
+          
+          final uiUpdateStartTime = DateTime.now();
+          
           // 각 세그먼트별로 해당 페이지에 결과 누적 및 즉시 반영
           for (int j = 0; j < chunkUnits.length; j++) {
             final pageId = chunkPageIds[j];
@@ -171,6 +192,18 @@ class PostLLMWorkflow {
             // 진행률 알림
             final progress = pageResults[pageId]!.length / pageSegmentCount[pageId]!;
             await _notifyPageProgress(pageId, progress);
+          }
+          
+          final uiUpdateEndTime = DateTime.now();
+          final uiUpdateTime = uiUpdateEndTime.difference(uiUpdateStartTime).inMilliseconds;
+          
+          if (kDebugMode) {
+            debugPrint('🎨 [워크플로우] UI 업데이트 시간: ${uiUpdateTime}ms');
+            debugPrint('📈 [워크플로우] 성능 분석:');
+            debugPrint('   - API 호출: ${chunkTotalTime - parsingTime - uiUpdateTime}ms');
+            debugPrint('   - 응답 파싱: ${parsingTime}ms');
+            debugPrint('   - UI 업데이트: ${uiUpdateTime}ms');
+            debugPrint('   - 총 시간: ${chunkTotalTime}ms');
           }
           
           // 청크 처리 완료 후 완료된 페이지들 확인
