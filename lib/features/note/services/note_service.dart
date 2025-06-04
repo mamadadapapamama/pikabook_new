@@ -75,18 +75,15 @@ class NoteService {
     }
   }
 
-  /// 모든 노트 목록 가져오기 (스트림)
+  /// 모든 노트 목록 가져오기 (간단한 Firestore 스트림)
   Stream<List<Note>> getNotes() {
-    debugPrint('[NoteService] getNotes 메서드 호출됨');
+    debugPrint('[NoteService] getNotes 호출 - Firestore 실시간 스트림');
     
     final User? currentUser = _auth.currentUser;
     if (currentUser == null) {
-      debugPrint('[NoteService] 사용자가 로그인되지 않음, 빈 노트 목록 반환');
+      debugPrint('[NoteService] 사용자가 로그인되지 않음');
       return Stream.value([]);
     }
-    
-    final String userId = currentUser.uid;
-    debugPrint('[NoteService] 사용자 ID: $userId로 노트 조회 시작');
     
     try {
       return _userNotesQuery.snapshots().map((snapshot) {
@@ -94,26 +91,50 @@ class NoteService {
           try {
             return Note.fromFirestore(doc);
           } catch (e) {
-            debugPrint('[NoteService] 노트 변환 중 오류 (docId: ${doc.id}): $e');
+            debugPrint('[NoteService] 노트 변환 오류 (${doc.id}): $e');
             return Note(
               id: doc.id,
-              userId: userId,
+              userId: currentUser.uid,
               title: '오류 발생한 노트',
               description: '오류가 발생한 노트입니다.',
             );
           }
         }).toList();
         
-        debugPrint('[NoteService] 노트 ${notes.length}개 로드됨');
+        // 오프라인 상태 감지
+        final isFromCache = snapshot.metadata.isFromCache;
+        final hasPendingWrites = snapshot.metadata.hasPendingWrites;
         
-        // 자동 캐싱 제거 - 필요한 경우에만 수동으로 캐싱
-        // _cacheService.cacheNotes(notes);
+        if (kDebugMode) {
+          debugPrint('[NoteService] 📱 노트 ${notes.length}개 로드 (${_formatDataSize(notes)})');
+          if (isFromCache) {
+            debugPrint('[NoteService] 🔌 오프라인: Firestore 캐시에서 데이터 제공');
+          } else {
+            debugPrint('[NoteService] 📡 온라인: 서버에서 최신 데이터 수신');
+          }
+          if (hasPendingWrites) {
+            debugPrint('[NoteService] ⏳ 대기 중인 쓰기 작업 있음 (오프라인 중 변경사항)');
+          }
+        }
         
         return notes;
       });
     } catch (e) {
-      debugPrint('[NoteService] getNotes 메서드에서 오류 발생: $e');
+      debugPrint('[NoteService] 스트림 오류: $e');
       return Stream.value([]);
+    }
+  }
+
+  /// 데이터 크기 포맷팅 (디버그용)
+  String _formatDataSize(List<Note> notes) {
+    // 대략적인 크기 계산 (노트당 ~200 bytes)
+    final estimatedBytes = notes.length * 200;
+    if (estimatedBytes < 1024) {
+      return '${estimatedBytes}B';
+    } else if (estimatedBytes < 1024 * 1024) {
+      return '${(estimatedBytes / 1024).toStringAsFixed(1)}KB';
+    } else {
+      return '${(estimatedBytes / (1024 * 1024)).toStringAsFixed(1)}MB';
     }
   }
 
@@ -149,7 +170,7 @@ class NoteService {
       final docRef = await _notesCollection.add(noteData);
       final noteId = docRef.id;
       
-      // 생성된 노트를 캐시에 추가
+      // 생성된 노트 객체 생성
       final newNote = Note(
         id: noteId,
         userId: user.uid,
@@ -159,10 +180,12 @@ class NoteService {
         isFavorite: false,
         flashcardCount: 0,
       );
+      
+      // 캐시에 즉시 추가 (이벤트 기반 캐시 업데이트)
       await _cacheService.addNoteToCache(newNote);
       
       if (kDebugMode) {
-        debugPrint('노트 메타데이터 생성 완료: $noteId');
+        debugPrint('노트 생성 완료 (서버 + 캐시): $noteId');
       }
       
       return noteId;
@@ -206,9 +229,6 @@ class NoteService {
     try {
       await _notesCollection.doc(noteId).delete();
       debugPrint('노트 삭제 완료: $noteId');
-      
-      // 캐시에서 노트 제거
-      await _cacheService.removeNoteFromCache(noteId);
     } catch (e) {
       debugPrint('노트 삭제 중 오류 발생: $e');
       rethrow;
@@ -340,15 +360,5 @@ class NoteService {
       debugPrint('노트 개수 조회 중 오류: $e');
         return 0;
     }
-  }
-  
-  /// 캐시된 노트 목록 가져오기
-  Future<List<Note>> getCachedNotes() async {
-    return _cacheService.getCachedNotes();
-  }
-  
-  /// 마지막 캐시 시간 조회
-  Future<DateTime?> getLastCacheTime() async {
-    return _cacheService.getLastCacheTime();
   }
 }

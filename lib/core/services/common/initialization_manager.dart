@@ -279,32 +279,33 @@ class InitializationManager {
   Future<void> _loadAppSettings() async {
     try {
       // 일반 앱 설정 로드
-      debugPrint('앱 설정 로드 중...');
-      
-      // LLM 처리 서비스 초기화
-      await _textProcessingService.ensureInitialized();
-      
-      // 자동 후처리 작업 복구 제거 - 수동 복구로 변경됨
-      // try {
-      //   final noteCreationManager = NoteCreationUIManager();
-      //   await noteCreationManager.initializeOnAppStart();
-      //   debugPrint('✅ 후처리 작업 복구 완료');
-      // } catch (e) {
-      //   debugPrint('⚠️ 후처리 작업 복구 실패: $e');
-      // }
-      
-      // 사용자 설정 모드 디버깅 (세그먼트 모드 상태 확인)
       if (kDebugMode) {
-        final userPrefs = await _prefsService.getPreferences();
-        debugPrint('🔍 초기화 중 사용자 설정 디버깅:');
-        debugPrint('  세그먼트 모드: ${userPrefs.useSegmentMode}');
-        debugPrint('  소스 언어: ${userPrefs.sourceLanguage}');
-        debugPrint('  타겟 언어: ${userPrefs.targetLanguage}');
+        debugPrint('앱 설정 로드 중...');
       }
       
-      debugPrint('앱 설정 로드 완료');
+      // LLM 처리 서비스 초기화 (백그라운드에서 수행)
+      unawaited(_textProcessingService.ensureInitialized());
+      
+      // 사용자 설정 모드 디버깅 (세그먼트 모드 상태 확인) - 릴리즈 모드에서는 스킵
+      if (kDebugMode) {
+        try {
+          final userPrefs = await _prefsService.getPreferences();
+          debugPrint('🔍 초기화 중 사용자 설정 디버깅:');
+          debugPrint('  세그먼트 모드: ${userPrefs.useSegmentMode}');
+          debugPrint('  소스 언어: ${userPrefs.sourceLanguage}');
+          debugPrint('  타겟 언어: ${userPrefs.targetLanguage}');
+        } catch (e) {
+          debugPrint('⚠️ 사용자 설정 디버깅 실패: $e');
+        }
+      }
+      
+      if (kDebugMode) {
+        debugPrint('앱 설정 로드 완료');
+      }
     } catch (e) {
-      debugPrint('앱 설정 로드 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('앱 설정 로드 중 오류: $e');
+      }
     }
   }
   
