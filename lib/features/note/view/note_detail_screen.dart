@@ -65,7 +65,6 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   late FlashCardService _flashCardService;
   late TTSService _ttsService;
   List<FlashCard> _flashcards = [];
-  bool _isPageCallbackSet = false; // 페이지 콜백 설정 여부 플래그
 
   // Service 인스턴스들 - ImageService 제거
   
@@ -85,10 +84,6 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       
       // 튜토리얼 표시 확인
       NoteTutorial.checkAndShowTutorial(context);
-      
-      // 페이지 처리 상태 표시 콜백 설정
-      final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
-      viewModel.setPageProcessedCallback(_showPageProcessedMessage);
       
       // 플래시카드 로드
       await _loadFlashcards();
@@ -125,35 +120,6 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     }
   }
   
-  // 페이지 처리 완료 시 스낵바로 알림
-  void _showPageProcessedMessage(int pageIndex) {
-    if (!mounted) return;
-    
-    final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
-    final pageNumber = pageIndex + 1;
-    final totalPages = viewModel.pages?.length ?? 0;
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$pageNumber/$totalPages 페이지 처리가 완료되었습니다.'),
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(
-          label: '확인',
-          onPressed: () {
-            // 현재 다른 페이지를 보고 있는 경우, 처리 완료된 페이지로 이동
-            if (viewModel.currentPageIndex != pageIndex) {
-              viewModel.pageController.animateToPage(
-                pageIndex,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
-            }
-          },
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     // ViewModel에 접근
@@ -382,9 +348,6 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       return const SizedBox.shrink();
     }
     
-    // 페이지 처리 완료 콜백 설정 (한 번만 설정)
-    _setupPageProcessedCallback(context, viewModel);
-    
     // 페이지 처리 상태 가져오기
     final processedPages = viewModel.getProcessedPagesStatus();
     final processingPages = viewModel.getProcessingPagesStatus();
@@ -419,31 +382,5 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       processedPages: processedPages,
       processingPages: processingPages,
     );
-  }
-  
-  // 페이지 처리 완료 콜백 설정 (스낵바 표시)
-  void _setupPageProcessedCallback(BuildContext context, NoteDetailViewModel viewModel) {
-    // 이미 콜백이 설정되어 있는지 검사하는 로직이 필요할 수 있음
-    // 일단 매번 새로 설정하도록 구현
-    
-    if (_isPageCallbackSet) return;
-    
-    _isPageCallbackSet = true;
-    
-    viewModel.setPageProcessedCallback((pageIndex) {
-      // 현재 화면이 살아있는지 확인
-      if (context.mounted) {
-        // 페이지 번호는 1부터 시작하도록 표시
-        final pageNum = pageIndex + 1;
-        
-        // 스낵바로 페이지 처리 완료 메시지 표시
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$pageNum번째 페이지가 번역 완료되었습니다.'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    });
   }
 } 

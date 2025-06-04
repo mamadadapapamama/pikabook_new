@@ -101,19 +101,18 @@ class NoteService {
           }
         }).toList();
         
-        // 오프라인 상태 감지
+        // 데이터 소스 확인
         final isFromCache = snapshot.metadata.isFromCache;
         final hasPendingWrites = snapshot.metadata.hasPendingWrites;
         
         if (kDebugMode) {
           debugPrint('[NoteService] 📱 노트 ${notes.length}개 로드 (${_formatDataSize(notes)})');
-          if (isFromCache) {
-            debugPrint('[NoteService] 🔌 오프라인: Firestore 캐시에서 데이터 제공');
+          if (isFromCache && hasPendingWrites) {
+            debugPrint('[NoteService] 🔌 오프라인: 캐시에서 데이터 제공, 대기 중인 쓰기 작업 있음');
+          } else if (isFromCache) {
+            debugPrint('[NoteService] ⚡ 빠른 로드: 캐시에서 데이터 제공 (서버 동기화 대기 중)');
           } else {
             debugPrint('[NoteService] 📡 온라인: 서버에서 최신 데이터 수신');
-          }
-          if (hasPendingWrites) {
-            debugPrint('[NoteService] ⏳ 대기 중인 쓰기 작업 있음 (오프라인 중 변경사항)');
           }
         }
         
