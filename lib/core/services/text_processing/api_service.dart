@@ -68,16 +68,16 @@ class ApiService {
         debugPrint('📈 [API] 평균 응답시간: ${_performanceStats['averageTime']}ms');
         
         // 서버에서 반환한 통계 정보도 출력
-        final data = result.data as Map<String, dynamic>;
+        final data = Map<String, dynamic>.from(result.data);
         if (data['statistics'] != null) {
-          final stats = data['statistics'] as Map<String, dynamic>;
+          final stats = Map<String, dynamic>.from(data['statistics']);
           debugPrint('🤖 [서버] 처리시간: ${stats['processingTime']}ms');
           debugPrint('📝 [서버] 세그먼트: ${stats['segmentCount']}개');
           debugPrint('📄 [서버] 문자수: ${stats['totalCharacters']}자');
         }
       }
 
-      return result.data as Map<String, dynamic>;
+      return Map<String, dynamic>.from(result.data);
     } catch (e) {
       final apiErrorTime = DateTime.now().difference(apiStartTime).inMilliseconds;
       

@@ -580,17 +580,19 @@ class PostLLMWorkflow {
     try {
       if (kDebugMode) {
         debugPrint('🔍 서버 응답 파싱 시작');
+        debugPrint('🔍 서버 응답 타입: ${serverResult.runtimeType}');
       }
 
-      // 서버 응답이 Map인지 확인
-      if (serverResult is! Map<String, dynamic>) {
+      // 서버 응답이 Map인지 확인 (다양한 Map 타입 허용)
+      if (serverResult is! Map) {
         if (kDebugMode) {
           debugPrint('❌ 서버 응답이 Map이 아님: ${serverResult.runtimeType}');
         }
         return [];
       }
 
-      final response = serverResult as Map<String, dynamic>;
+      // 안전한 Map 변환
+      final response = Map<String, dynamic>.from(serverResult);
 
       // success 필드 확인
       if (response['success'] != true) {
