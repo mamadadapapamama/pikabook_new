@@ -111,9 +111,27 @@ class _LoadingDotsWidgetState extends State<LoadingDotsWidget>
       );
     }
 
-    return Text(
-      _displayText,
-      style: effectiveStyle,
+    // 고정 폭을 제공하여 UI 흔들림 방지
+    return SizedBox(
+      width: _calculateFixedWidth(effectiveStyle),
+      height: effectiveStyle.fontSize != null 
+          ? effectiveStyle.fontSize! * (effectiveStyle.height ?? 1.2)
+          : 16.0, // 기본 높이
+      child: Text(
+        _displayText,
+        style: effectiveStyle,
+        textAlign: TextAlign.left, // 왼쪽 정렬로 점들이 왼쪽부터 나타나도록
+      ),
     );
+  }
+
+  /// 최대 텍스트("...")의 폭을 기반으로 고정 폭 계산
+  double _calculateFixedWidth(TextStyle style) {
+    final textPainter = TextPainter(
+      text: TextSpan(text: '...', style: style),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    return textPainter.width + 2.0; // 약간의 여백 추가
   }
 } 
