@@ -239,21 +239,27 @@ class NoteCreationUIManager {
       flashcardCount: 0,
     );
 
-    // 사용량 제한 상태 새로고침 (노트 생성 후 OCR 사용량 업데이트)
+    // HomeViewModel에 새 노트 즉시 추가 (UI 응답성 향상)
     try {
       if (context.mounted) {
         final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
+        
+        // 새 노트를 즉시 리스트에 추가
+        homeViewModel.addNoteToList(tempNote);
+        
+        // 사용량 제한 상태 새로고침 (노트 생성 후 OCR 사용량 업데이트)
         await homeViewModel.refreshUsageLimits();
+        
         if (kDebugMode) {
-          debugPrint('✅ 사용량 제한 상태 새로고침 완료');
+          debugPrint('✅ 새 노트 즉시 추가 및 사용량 상태 새로고침 완료');
         }
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('⚠️ 사용량 제한 상태 새로고침 실패: $e');
+        debugPrint('⚠️ HomeViewModel 업데이트 실패: $e');
       }
       // Provider를 찾을 수 없거나 context가 유효하지 않은 경우
-      // 사용량 새로고침 실패는 노트 생성 성공에 영향을 주지 않음
+      // 업데이트 실패는 노트 생성 성공에 영향을 주지 않음
     }
 
     // 로딩 다이얼로그 닫기

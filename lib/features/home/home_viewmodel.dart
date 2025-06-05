@@ -56,14 +56,52 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  /// NoteService 데이터 구독 (간단한 Firestore 스트림)
+  /// NoteService 데이터 구독 (최적화된 업데이트)
   void _subscribeToNoteService() {
     _notesSubscription = _noteService.getNotes().listen(
       (notesList) {
-        debugPrint('[HomeViewModel] 📱 노트 ${notesList.length}개 수신');
+        // 새로 받은 노트 수와 기존 노트 수 비교
+        final newCount = notesList.length;
+        final oldCount = _notes.length;
         
-        // UI 상태만 관리
-        _notes = notesList;
+        if (kDebugMode) {
+          debugPrint('[HomeViewModel] 📱 노트 데이터 수신: $newCount개 (이전: $oldCount개)');
+        }
+        
+        // 노트가 새로 추가된 경우 (1개 증가)
+        if (newCount > oldCount && newCount == oldCount + 1) {
+          // 새로운 노트 찾기 (가장 최근 생성된 노트)
+          final newNotes = notesList.where((note) => 
+            !_notes.any((existingNote) => existingNote.id == note.id)
+          ).toList();
+          
+          if (newNotes.isNotEmpty) {
+            // 새로운 노트를 리스트 맨 앞에 추가 (최신순 정렬 유지)
+            _notes.insert(0, newNotes.first);
+            if (kDebugMode) {
+              debugPrint('[HomeViewModel] ✅ 새 노트 추가됨: ${newNotes.first.title}');
+            }
+          } else {
+            // 새로운 노트를 찾지 못한 경우 전체 교체
+            _notes = notesList;
+            if (kDebugMode) {
+              debugPrint('[HomeViewModel] 📱 전체 리스트 업데이트 (새 노트 미발견)');
+            }
+          }
+        } else {
+          // 기타 경우 (삭제, 수정, 초기 로드 등)는 전체 교체
+          _notes = notesList;
+          if (kDebugMode) {
+            if (newCount < oldCount) {
+              debugPrint('[HomeViewModel] 🗑️ 노트 삭제됨 (전체 리스트 업데이트)');
+            } else if (newCount == oldCount) {
+              debugPrint('[HomeViewModel] ✏️ 노트 수정됨 (전체 리스트 업데이트)');
+            } else {
+              debugPrint('[HomeViewModel] 📱 초기 로드 또는 대량 변경 (전체 리스트 업데이트)');
+            }
+          }
+        }
+        
         _isLoading = false;
         _error = null;
         notifyListeners();
@@ -110,6 +148,26 @@ class HomeViewModel extends ChangeNotifier {
   /// 사용량 제한 상태 새로고침 (노트 생성 후 호출)
   Future<void> refreshUsageLimits() async {
     await _checkUsageLimits();
+  }
+
+  /// 새로운 노트를 로컬 리스트에 즉시 추가 (UI 응답성 향상)
+  void addNoteToList(Note newNote) {
+    // 이미 존재하는 노트인지 확인
+    if (_notes.any((note) => note.id == newNote.id)) {
+      if (kDebugMode) {
+        debugPrint('[HomeViewModel] 노트가 이미 존재함: ${newNote.id}');
+      }
+      return;
+    }
+
+    // 새로운 노트를 리스트 맨 앞에 추가 (최신순)
+    _notes.insert(0, newNote);
+    
+    if (kDebugMode) {
+      debugPrint('[HomeViewModel] ⚡ 새 노트 즉시 추가: ${newNote.title} (총 ${_notes.length}개)');
+    }
+    
+    notifyListeners();
   }
 
   // 노트 삭제 메서드
