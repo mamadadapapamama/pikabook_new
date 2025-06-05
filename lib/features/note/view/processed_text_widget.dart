@@ -272,29 +272,22 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       Widget segmentContainer = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 원문 표시 (타이프라이터 효과 또는 일반 텍스트)
+          // 원문 표시 (일반 텍스트로 바로 표시)
           Row(
             children: [
               Expanded(
-                child: widget.showTypewriterEffect
-                    ? TypewriterText(
-                        text: unit.originalText,
-                        style: _defaultOriginalTextStyle,
-                        duration: const Duration(milliseconds: 50),
-                        delay: Duration(milliseconds: i * 300), // 세그먼트별 지연
-                      )
-                    : ContextMenuManager.buildSelectableText(
+                child: ContextMenuManager.buildSelectableText(
                   unit.originalText,
                   style: _defaultOriginalTextStyle,
                   isOriginal: true,
-                        flashcardWords: _flashcardWords,
+                  flashcardWords: _flashcardWords,
                   selectedText: _selectedText,
                   selectedTextNotifier: _selectedTextNotifier,
-                        onSelectionChanged: (selectedText) {
-                          setState(() {
-                            _selectedText = selectedText;
-                          });
-                        },
+                  onSelectionChanged: (selectedText) {
+                    setState(() {
+                      _selectedText = selectedText;
+                    });
+                  },
                   onDictionaryLookup: widget.onDictionaryLookup,
                   onCreateFlashCard: widget.onCreateFlashCard,
                 ),
@@ -312,12 +305,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                       unit.pinyin!,
                       style: _defaultPinyinTextStyle,
                     )
-                  : widget.showTypewriterEffect
-                      ? LoadingDotsWidget(
-                          usePinyinStyle: true, // 병음 스타일로 고정
-                          delay: Duration(milliseconds: i * 300 + 1000), // 원문 타이프라이터 후 시작
-                        )
-                      : const SizedBox.shrink(),
+                  : const SizedBox.shrink(),
             ),
 
           // 번역 표시 (번역이 있는 경우에만)
@@ -328,12 +316,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                     unit.translatedText!,
                     style: _defaultTranslatedTextStyle,
                   )
-                : widget.showTypewriterEffect
-                    ? LoadingDotsWidget(
-                        usePinyinStyle: true, // 병음 스타일로 고정 (번역도 동일한 로딩 스타일)
-                        delay: Duration(milliseconds: i * 300 + 1000), // 병음과 동시에 시작
-                      )
-                    : const SizedBox.shrink(),
+                : const SizedBox.shrink(),
           ),
         ],
       );

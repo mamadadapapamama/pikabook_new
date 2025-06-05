@@ -5,9 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../authentication/user_preferences_service.dart';
 import '../authentication/auth_service.dart';
-import '../../../core/services/media/image_service.dart';
-import '../../../core/services/text_processing/llm_text_processing.dart';
-import '../../../features/note/managers/note_creation_ui_manager.dart';
+import '../media/image_service.dart';
 import 'usage_limit_service.dart';
 
 /// 앱 초기화 단계를 정의합니다.
@@ -42,7 +40,6 @@ class InitializationManager {
   // 서비스 참조
   final UserPreferencesService _prefsService = UserPreferencesService();
   final AuthService _authService = AuthService();
-  final LLMTextProcessing _textProcessingService = LLMTextProcessing();
   final UsageLimitService _usageLimitService = UsageLimitService();
   
   // 초기화 상태 관리
@@ -282,9 +279,6 @@ class InitializationManager {
       if (kDebugMode) {
         debugPrint('앱 설정 로드 중...');
       }
-      
-      // LLM 처리 서비스 초기화 (백그라운드에서 수행)
-      unawaited(_textProcessingService.ensureInitialized());
       
       // 사용자 설정 모드 디버깅 (세그먼트 모드 상태 확인) - 릴리즈 모드에서는 스킵
       if (kDebugMode) {
