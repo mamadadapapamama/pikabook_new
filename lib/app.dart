@@ -445,6 +445,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               textColor: Colors.white,
               onPressed: () {
                 _scaffoldMessengerKey.currentState?.hideCurrentSnackBar();
+                // 상태 강제 새로고침으로 블랙스크린 방지
+                if (mounted) {
+                  setState(() {
+                    // 현재 상태를 유지하면서 UI 재빌드 강제
+                  });
+                }
               },
             ),
           ),

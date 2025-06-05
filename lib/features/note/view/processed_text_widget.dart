@@ -233,16 +233,22 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         ),
         const SizedBox(height: 16),
         
-        // 번역 텍스트 표시 - 래퍼 제거하고 직접 표시
-        if (widget.processedText.fullTranslatedText != null &&
-            widget.processedText.fullTranslatedText!.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8, bottom: 16),
-            child: Text(
-              widget.processedText.fullTranslatedText!,
-              style: _defaultTranslatedTextStyle,
-            ),
-          ),
+        // 번역 텍스트 표시 (스트리밍 상태 고려)
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 16),
+          child: widget.processedText.fullTranslatedText != null &&
+                  widget.processedText.fullTranslatedText!.isNotEmpty
+              ? Text(
+                  widget.processedText.fullTranslatedText!,
+                  style: _defaultTranslatedTextStyle,
+                )
+              : widget.processedText.isStreaming
+                  ? LoadingDotsWidget(
+                      style: _defaultTranslatedTextStyle,
+                      usePinyinStyle: false,
+                    )
+                  : const SizedBox.shrink(),
+        ),
       ],
     );
   }
@@ -296,7 +302,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
             ],
           ),
 
-          // 병음 표시 (번역이 있는 경우에만)
+          // 병음 표시 (스트리밍 상태 고려)
           if (widget.processedText.displayMode == TextDisplayMode.full)
             Padding(
               padding: const EdgeInsets.only(top: 2.0),
@@ -305,10 +311,15 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                       unit.pinyin!,
                       style: _defaultPinyinTextStyle,
                     )
-                  : const SizedBox.shrink(),
+                  : widget.processedText.isStreaming
+                      ? LoadingDotsWidget(
+                          style: _defaultPinyinTextStyle,
+                          usePinyinStyle: true,
+                        )
+                      : const SizedBox.shrink(),
             ),
 
-          // 번역 표시 (번역이 있는 경우에만)
+          // 번역 표시 (스트리밍 상태 고려)
           Padding(
             padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
             child: hasTranslation
@@ -316,7 +327,12 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                     unit.translatedText!,
                     style: _defaultTranslatedTextStyle,
                   )
-                : const SizedBox.shrink(),
+                : widget.processedText.isStreaming
+                    ? LoadingDotsWidget(
+                        style: _defaultTranslatedTextStyle,
+                        usePinyinStyle: false,
+                      )
+                    : const SizedBox.shrink(),
           ),
         ],
       );
