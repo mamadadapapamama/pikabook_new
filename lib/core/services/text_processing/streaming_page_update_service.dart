@@ -26,12 +26,17 @@ class StreamingPageUpdateService {
       // OCR 원본 세그먼트 가져오기
       final ocrSegments = pageData.textSegments;
       
-      // LLM 결과와 OCR 결과를 혼합한 최종 유닛 생성
-      final mixedUnits = _createMixedUnits(llmResults, ocrSegments, pageData);
-      
       // 진행률 계산 (LLM 처리된 세그먼트 비율)
-      final progress = _calculateProgress(llmResults.length, ocrSegments.length);
-      final isCompleted = llmResults.length >= ocrSegments.length;
+      final progress = _calculateProgress(llmResults.length, totalExpectedUnits);
+      final isCompleted = llmResults.length >= totalExpectedUnits;
+      
+      // LLM 결과와 OCR 결과를 혼합한 최종 유닛 생성 (완료 상태 전달)
+      final mixedUnits = _createMixedUnits(
+        llmResults, 
+        ocrSegments, 
+        pageData,
+        isStreamingComplete: isCompleted,
+      );
       
       // 스트리밍 상태 결정
       final streamingStatus = isCompleted ? StreamingStatus.completed : StreamingStatus.streaming;
@@ -81,40 +86,57 @@ class StreamingPageUpdateService {
   /// **새로운 로직:**
   /// 1. OCR 세그먼트를 순서대로 보여줌
   /// 2. LLM 결과가 들어오면 순차적으로 overwrite (3개씩)
-  /// 3. LLM 처리된 개수를 초과하는 OCR 세그먼트는 제거
+  /// 3. 스트리밍 완료 시: 미번역 OCR 세그먼트 제거
+  /// 4. 스트리밍 진행 중: 남은 OCR 세그먼트는 [병음 필요, 번역 필요] 상태로 유지
   List<TextUnit> _createMixedUnits(
     List<TextUnit> llmResults,
     List<String> ocrSegments,
-    PageProcessingData pageData,
-  ) {
+    PageProcessingData pageData, {
+    bool isStreamingComplete = false,
+  }) {
     final mixedUnits = <TextUnit>[];
     
     // 1. LLM 결과를 순서대로 추가 (순차적 overwrite)
     mixedUnits.addAll(llmResults);
     
-    // 2. 남은 OCR 세그먼트 추가 (LLM이 아직 처리하지 않은 부분)
-    final remainingOcrCount = ocrSegments.length - llmResults.length;
-    
-    if (remainingOcrCount > 0) {
-      // LLM이 처리하지 않은 나머지 OCR 세그먼트들
-      final remainingOcrSegments = ocrSegments.skip(llmResults.length).take(remainingOcrCount);
+    // 2. 스트리밍 완료 여부에 따른 처리
+    if (isStreamingComplete) {
+      // ✅ 스트리밍 완료: 미번역 OCR 세그먼트 제거
+      if (kDebugMode) {
+        final removedCount = ocrSegments.length - llmResults.length;
+        if (removedCount > 0) {
+          debugPrint('🗑️ 스트리밍 완료: 미번역 OCR 세그먼트 ${removedCount}개 제거');
+        }
+      }
+      // LLM 결과만 유지, 남은 OCR 세그먼트는 추가하지 않음
+    } else {
+      // 🔄 스트리밍 진행 중: 남은 OCR 세그먼트 추가 (로딩 상태)
+      final remainingOcrCount = ocrSegments.length - llmResults.length;
       
-      for (final ocrSegment in remainingOcrSegments) {
-        mixedUnits.add(TextUnit(
-          originalText: ocrSegment,
-          translatedText: null, // 아직 번역되지 않음
-          pinyin: null, // 아직 병음 없음
-          sourceLanguage: pageData.sourceLanguage,
-          targetLanguage: pageData.targetLanguage,
-        ));
+      if (remainingOcrCount > 0) {
+        // LLM이 처리하지 않은 나머지 OCR 세그먼트들
+        final remainingOcrSegments = ocrSegments.skip(llmResults.length).take(remainingOcrCount);
+        
+        for (final ocrSegment in remainingOcrSegments) {
+          mixedUnits.add(TextUnit(
+            originalText: ocrSegment,
+            translatedText: null, // 아직 번역되지 않음
+            pinyin: null, // 아직 병음 없음
+            sourceLanguage: pageData.sourceLanguage,
+            targetLanguage: pageData.targetLanguage,
+          ));
+        }
       }
     }
     
     if (kDebugMode) {
-      debugPrint('🔄 순차적 overwrite:');
+      debugPrint('🔄 순차적 overwrite (완료: $isStreamingComplete):');
       debugPrint('   LLM 처리됨: ${llmResults.length}개');
       debugPrint('   OCR 원본: ${ocrSegments.length}개');
-      debugPrint('   남은 OCR: ${remainingOcrCount > 0 ? remainingOcrCount : 0}개');
+      if (!isStreamingComplete) {
+        final remainingOcrCount = ocrSegments.length - llmResults.length;
+        debugPrint('   남은 OCR: ${remainingOcrCount > 0 ? remainingOcrCount : 0}개');
+      }
       debugPrint('   최종 유닛: ${mixedUnits.length}개');
     }
     

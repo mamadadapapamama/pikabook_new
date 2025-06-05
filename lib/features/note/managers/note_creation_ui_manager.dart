@@ -239,28 +239,8 @@ class NoteCreationUIManager {
       flashcardCount: 0,
     );
 
-    // HomeViewModel에 새 노트 즉시 추가 (UI 응답성 향상)
-    try {
-      if (context.mounted) {
-        final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
-        
-        // 새 노트를 즉시 리스트에 추가
-        homeViewModel.addNoteToList(tempNote);
-        
-        // 사용량 제한 상태 새로고침 (노트 생성 후 OCR 사용량 업데이트)
-        await homeViewModel.refreshUsageLimits();
-        
-        if (kDebugMode) {
-          debugPrint('✅ 새 노트 즉시 추가 및 사용량 상태 새로고침 완료');
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('⚠️ HomeViewModel 업데이트 실패: $e');
-      }
-      // Provider를 찾을 수 없거나 context가 유효하지 않은 경우
-      // 업데이트 실패는 노트 생성 성공에 영향을 주지 않음
-    }
+    // HomeViewModel 업데이트 제거 - Provider 스코프 문제 해결
+    // 대신 노트 상세 화면에서 돌아올 때 새로고침하도록 수정
 
     // 로딩 다이얼로그 닫기
     if (loadingDialogShown && context.mounted) {
@@ -335,14 +315,31 @@ class NoteCreationUIManager {
       // 튜토리얼 설정 - 첫 번째 노트 생성 시 튜토리얼 표시 준비
       NoteTutorial.markFirstNoteCreated();
 
-      // 화면 이동
-      Navigator.of(context).push(
+      // 화면 이동 (결과를 받아서 홈 화면 새로고침)
+      final result = await Navigator.of(context).push(
         NoteDetailScreenMVVM.route(
           note: note,
           isProcessingBackground: true,
           totalImageCount: totalImageCount,
         ),
       );
+      
+      // 노트 상세 화면에서 돌아왔을 때 홈 화면 새로고침
+      if (context.mounted) {
+        try {
+          final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
+          await homeViewModel.refreshNotes();
+          await homeViewModel.refreshUsageLimits();
+          
+          if (kDebugMode) {
+            debugPrint('✅ 노트 생성 후 홈 화면 새로고침 완료');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ 홈 화면 새로고침 실패 (무시됨): $e');
+          }
+        }
+      }
 
       if (kDebugMode) {
         debugPrint('✅ 노트 상세 화면 이동 완료');
