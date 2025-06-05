@@ -275,6 +275,19 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
             },
           ),
         ),
+        actions: [
+          // 설정 버튼
+          IconButton(
+            icon: SvgPicture.asset(
+              'assets/images/icon_profile.svg',
+              width: SpacingTokens.profileIconSize,
+              height: SpacingTokens.profileIconSize,
+            ),
+            onPressed: () => _navigateToSettings(context),
+            tooltip: '설정',
+          ),
+          SizedBox(width: SpacingTokens.md),
+        ],
       ),
     );
   }
