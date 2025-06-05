@@ -208,11 +208,17 @@ class FlashCardViewModel extends ChangeNotifier {
       // 로컬 상태 업데이트
       _flashCards.removeWhere((card) => card.id == cardId);
       
-      // 인덱스 조정이 필요한지 확인
-      if (cardIndex >= _flashCards.length && _flashCards.isNotEmpty) {
+      // 🔧 수정: 인덱스 조정 로직 개선
+      if (_flashCards.isEmpty) {
+        // 모든 카드가 삭제된 경우
+        _currentCardIndex = 0;
+      } else if (_currentCardIndex >= _flashCards.length) {
+        // 마지막 카드를 삭제한 경우, 이전 카드로 이동
         _currentCardIndex = _flashCards.length - 1;
       }
+      // 중간 카드를 삭제한 경우는 현재 인덱스 유지 (다음 카드가 자동으로 현재 위치로 이동)
       
+      extractFlashcardWords(); // 단어 목록 업데이트
       setLoading(false);
       notifyListeners();
       return true;

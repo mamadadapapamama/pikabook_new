@@ -275,27 +275,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
             },
           ),
         ),
-        actions: [
-          // 디버그 모드에서만 번역 테스트 버튼 표시
-          if (kDebugMode)
-            IconButton(
-              icon: Icon(
-                Icons.translate,
-                color: ColorTokens.textSecondary,
-                size: SpacingTokens.iconSizeMedium,
-              ),
-              onPressed: () => _navigateToTranslationTest(context),
-              tooltip: '번역 품질 테스트',
-            ),
-          IconButton(
-            icon: Icon(
-              Icons.settings_outlined,
-              color: ColorTokens.textPrimary,
-              size: SpacingTokens.iconSizeMedium,
-            ),
-            onPressed: () => _navigateToSettings(context),
-          ),
-        ],
       ),
     );
   }

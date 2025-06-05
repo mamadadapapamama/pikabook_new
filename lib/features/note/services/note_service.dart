@@ -1,24 +1,12 @@
-import 'dart:io';
-import 'dart:convert';
 import 'dart:async';
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_core/firebase_core.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
-import '../../../core/models/flash_card.dart';
 import '../../../core/services/cache/cache_manager.dart';
 import 'page_service.dart';
 import '../../../core/services/media/image_service.dart';
-import '../../../core/services/text_processing/ocr_service.dart';
-import '../../../core/services/common/usage_limit_service.dart';
-import '../../../core/services/text_processing/llm_text_processing.dart';
-import 'package:uuid/uuid.dart';
-import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 
 /// 노트 서비스: 노트 메타데이터 관리만 담당합니다. (Note CRUD)
 
@@ -28,9 +16,6 @@ class NoteService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final PageService _pageService = PageService(); // 싱글톤 사용
   final ImageService _imageService = ImageService();
-  final LLMTextProcessing _textProcessingService = LLMTextProcessing();
-  final OcrService _ocrService = OcrService();
-  final UsageLimitService _usageLimitService = UsageLimitService();
   final CacheManager _cacheService = CacheManager();
 
   // PageService의 게터
@@ -358,6 +343,58 @@ class NoteService {
     } catch (e) {
       debugPrint('노트 개수 조회 중 오류: $e');
         return 0;
+    }
+  }
+
+  /// 노트 메타데이터 업데이트 (썸네일 + 페이지 수)
+  Future<bool> updateNoteMetadata({
+    required String noteId,
+    String? thumbnailUrl,
+    int? pageCount,
+  }) async {
+    try {
+      final updateData = <String, dynamic>{
+        'updatedAt': DateTime.now(),
+      };
+      
+      if (thumbnailUrl != null) {
+        updateData['firstImageUrl'] = thumbnailUrl;
+      }
+      
+      if (pageCount != null) {
+        updateData['pageCount'] = pageCount;
+      }
+      
+      await _notesCollection.doc(noteId).update(updateData);
+      
+      if (kDebugMode) {
+        debugPrint('노트 메타데이터 업데이트 완료: $noteId');
+        if (thumbnailUrl != null) debugPrint('  썸네일: $thumbnailUrl');
+        if (pageCount != null) debugPrint('  페이지 수: $pageCount');
+      }
+      
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('노트 메타데이터 업데이트 실패: $e');
+      }
+      return false;
+    }
+  }
+
+  /// 노트의 실제 페이지 수를 기반으로 메타데이터 동기화
+  Future<bool> syncNotePageCount(String noteId) async {
+    try {
+      final actualPageCount = await _pageService.getPageCountForNote(noteId);
+      return await updateNoteMetadata(
+        noteId: noteId,
+        pageCount: actualPageCount,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('노트 페이지 수 동기화 실패: $e');
+      }
+      return false;
     }
   }
 }

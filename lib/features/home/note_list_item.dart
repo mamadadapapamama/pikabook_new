@@ -5,6 +5,8 @@ import '../../../core/utils/date_formatter.dart';
 import '../flashcard/flashcard_counter_badge.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../core/services/media/image_service.dart';
+import 'dart:io';
 
 /// 홈페이지 노트리스트 화면에서 사용되는 카드 위젯
 class NoteListItem extends StatefulWidget {
@@ -239,29 +241,49 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
     return ClipRRect(
       borderRadius: BorderRadius.circular(4.0),
       child: widget.note.firstImageUrl != null && widget.note.firstImageUrl!.isNotEmpty
-          ? CachedNetworkImage(
-              imageUrl: widget.note.firstImageUrl!,
+          ? _buildImageWidget(widget.note.firstImageUrl!)
+          : Image.asset(
+              'assets/images/thumbnail_empty.png',
               fit: BoxFit.cover,
               width: 80, // 썸네일 크기 80x80
               height: 80,
-              placeholder: (context, url) => Container(
-                width: 80,
-                height: 80,
-                color: Colors.grey[200],
-                child: const Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: ColorTokens.primary,
-                    ),
+            ),
+    );
+  }
+
+  Widget _buildImageWidget(String imageUrl) {
+    // 상대 경로인 경우 (images/로 시작)
+    if (imageUrl.startsWith('images/')) {
+      return FutureBuilder<File?>(
+        future: ImageService().getImageFile(imageUrl),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Container(
+              width: 80,
+              height: 80,
+              color: Colors.grey[200],
+              child: const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: ColorTokens.primary,
                   ),
                 ),
               ),
-              errorWidget: (context, url, error) {
+            );
+          }
+          
+          if (snapshot.hasData && snapshot.data != null) {
+            return Image.file(
+              snapshot.data!,
+              fit: BoxFit.cover,
+              width: 80,
+              height: 80,
+              errorBuilder: (context, error, stackTrace) {
                 if (kDebugMode) {
-                  debugPrint('이미지 로드 오류 ($url): $error');
+                  debugPrint('로컬 이미지 파일 로드 오류 ($imageUrl): $error');
                 }
                 return Image.asset(
                   'assets/images/thumbnail_empty.png',
@@ -270,13 +292,52 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
                   height: 80,
                 );
               },
-            )
-          : Image.asset(
-              'assets/images/thumbnail_empty.png',
-              fit: BoxFit.cover,
-              width: 80, // 썸네일 크기 80x80
-              height: 80,
+            );
+          }
+          
+          // 실패한 경우 기본 이미지
+          return Image.asset(
+            'assets/images/thumbnail_empty.png',
+            fit: BoxFit.cover,
+            width: 80,
+            height: 80,
+          );
+        },
+      );
+    }
+    
+    // HTTP URL인 경우 CachedNetworkImage 사용
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      fit: BoxFit.cover,
+      width: 80, // 썸네일 크기 80x80
+      height: 80,
+      placeholder: (context, url) => Container(
+        width: 80,
+        height: 80,
+        color: Colors.grey[200],
+        child: const Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: ColorTokens.primary,
             ),
+          ),
+        ),
+      ),
+      errorWidget: (context, url, error) {
+        if (kDebugMode) {
+          debugPrint('네트워크 이미지 로드 오류 ($url): $error');
+        }
+        return Image.asset(
+          'assets/images/thumbnail_empty.png',
+          fit: BoxFit.cover,
+          width: 80,
+          height: 80,
+        );
+      },
     );
   }
 

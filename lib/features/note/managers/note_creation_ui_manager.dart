@@ -241,15 +241,18 @@ class NoteCreationUIManager {
 
     // 사용량 제한 상태 새로고침 (노트 생성 후 OCR 사용량 업데이트)
     try {
-      final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
-      await homeViewModel.refreshUsageLimits();
-      if (kDebugMode) {
-        debugPrint('✅ 사용량 제한 상태 새로고침 완료');
+      if (context.mounted) {
+        final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
+        await homeViewModel.refreshUsageLimits();
+        if (kDebugMode) {
+          debugPrint('✅ 사용량 제한 상태 새로고침 완료');
+        }
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('⚠️ 사용량 제한 상태 새로고침 실패: $e');
       }
+      // Provider를 찾을 수 없거나 context가 유효하지 않은 경우
       // 사용량 새로고침 실패는 노트 생성 성공에 영향을 주지 않음
     }
 

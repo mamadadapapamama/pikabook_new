@@ -167,61 +167,52 @@ class TextProcessingService {
         
         // processedText 필드가 있으면 ProcessedText 생성 (번역 여부와 관계없이)
         if (page.processedText != null && page.processedText!.isNotEmpty) {
-          if (kDebugMode) {
-            debugPrint('🔍 processedText 필드에서 데이터 파싱 시작: $pageId');
-          }
+          // 이미 파싱된 ProcessedText인지 확인
+          final processedData = page.processedText!;
           
-          final processedText = await _createProcessedTextFromPageData(page);
+          // 서버에서 완전히 처리된 데이터인지 확인 (units와 번역이 모두 있는 경우)
+          final hasCompleteData = processedData['units'] != null && 
+                                  processedData['units'] is List &&
+                                  (processedData['units'] as List).isNotEmpty &&
+                                  processedData['fullTranslatedText'] != null &&
+                                  processedData['fullTranslatedText'].toString().isNotEmpty;
           
-          // processedText가 null이 아닌 경우에만 처리
-          if (processedText != null) {
+          if (hasCompleteData) {
             if (kDebugMode) {
-              debugPrint('✅ ProcessedText 파싱 성공: $pageId');
-              debugPrint('   유닛 개수: ${processedText.units.length}');
-              debugPrint('   스트리밍 상태: ${processedText.streamingStatus}');
-              debugPrint('   번역 텍스트 길이: ${processedText.fullTranslatedText?.length ?? 0}');
+              debugPrint('✅ 서버에서 완전히 처리된 데이터 감지: $pageId (중복 파싱 스킵)');
             }
             
-            // 이전 데이터와 비교하여 실제 변경이 있는지 확인
-            if (_hasProcessedTextChanged(previousProcessedText, processedText)) {
+            final processedText = await _createProcessedTextFromPageData(page);
+            
+            if (processedText != null && _hasProcessedTextChanged(previousProcessedText, processedText)) {
               if (kDebugMode) {
-                debugPrint('🔄 ProcessedText 변경 감지됨: $pageId');
-                debugPrint('   이전 유닛 개수: ${previousProcessedText?.units.length ?? 0}');
-                debugPrint('   현재 유닛 개수: ${processedText.units.length}');
+                debugPrint('🔄 완전한 ProcessedText 변경 감지됨: $pageId');
+                debugPrint('   유닛 개수: ${processedText.units.length}');
+                debugPrint('   번역 완료: ${processedText.fullTranslatedText.isNotEmpty}');
               }
               
-              // 완성된 ProcessedText만 캐싱 (1차는 캐싱하지 않음)
-              if (processedText.streamingStatus == StreamingStatus.completed) {
-                await _saveToCache(pageId, processedText);
-                if (kDebugMode) {
-                  debugPrint('💾 완성된 ProcessedText 캐싱 완료: $pageId');
-                }
-              }
-              
-              // 콜백 호출
-              if (kDebugMode) {
-                debugPrint('📞 UI 콜백 호출 시작: $pageId');
-              }
-              
+              await _saveToCache(pageId, processedText);
               onTextChanged(processedText);
-              
-              if (kDebugMode) {
-                debugPrint('✅ UI 콜백 호출 완료: $pageId');
-                debugPrint('🔔 페이지 텍스트 변경 감지: $pageId');
-                debugPrint('   스트리밍 상태: ${processedText.streamingStatus}');
-                debugPrint('   번역 텍스트: ${processedText.fullTranslatedText?.isNotEmpty == true ? "있음" : "없음"}');
-              }
-              
-              // 현재 데이터를 이전 데이터로 저장
               previousProcessedText = processedText;
-            } else {
-              if (kDebugMode) {
-                debugPrint('⏭️ 페이지 텍스트 변경 없음 (스킵): $pageId');
-              }
             }
           } else {
+            // 1차 처리된 데이터 (원문만 있는 경우)
             if (kDebugMode) {
-              debugPrint('❌ ProcessedText 파싱 실패: $pageId');
+              debugPrint('🔍 1차 처리된 데이터 파싱 시작: $pageId');
+            }
+            
+            final processedText = await _createProcessedTextFromPageData(page);
+            
+            if (processedText != null && _hasProcessedTextChanged(previousProcessedText, processedText)) {
+              if (kDebugMode) {
+                debugPrint('✅ 1차 ProcessedText 파싱 성공: $pageId');
+                debugPrint('   유닛 개수: ${processedText.units.length}');
+                debugPrint('   스트리밍 상태: ${processedText.streamingStatus}');
+              }
+              
+              // 1차 데이터는 캐싱하지 않음 (스트리밍 진행 중)
+              onTextChanged(processedText);
+              previousProcessedText = processedText;
             }
           }
         }

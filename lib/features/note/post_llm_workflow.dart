@@ -606,7 +606,16 @@ class PostLLMWorkflow {
       final translation = response['translation'];
       if (kDebugMode) {
         debugPrint('🔍 translation 필드 타입: ${translation.runtimeType}');
-        debugPrint('🔍 translation 내용: $translation');
+        
+        // 🔧 품질 리포트 로깅 (서버의 구조 통제 결과)
+        if (translation is Map && translation['qualityReport'] != null) {
+          final qualityReport = translation['qualityReport'];
+          debugPrint('📊 서버 품질 리포트:');
+          debugPrint('   총 유닛: ${qualityReport['totalUnits']}개');
+          debugPrint('   유효 유닛: ${qualityReport['validUnits']}개');
+          debugPrint('   품질 점수: ${qualityReport['qualityScore']}%');
+          debugPrint('   Fallback 사용: ${qualityReport['fallbackUnits']}개');
+        }
       }
       
       if (translation is! Map) {
@@ -623,23 +632,20 @@ class PostLLMWorkflow {
       final units = translationMap['units'];
       if (units is! List) {
         if (kDebugMode) {
-          debugPrint('❌ units 필드가 없거나 배열이 아님');
-          debugPrint('🔍 translationMap 키들: ${translationMap.keys.toList()}');
+          debugPrint('❌ units 필드가 없거나 List가 아님');
         }
         return [];
       }
 
-      // TextUnit 객체로 변환
       final List<TextUnit> textUnits = [];
-      for (int i = 0; i < units.length; i++) {
+
+      // 🔧 표준화된 서버 응답 구조 처리
+      for (int i = 0; i < (units as List).length; i++) {
         try {
           final unitData = units[i];
-          if (kDebugMode && i < 3) {
-            debugPrint('🔍 Unit $i 원본 데이터: $unitData');
-            debugPrint('🔍 Unit $i 타입: ${unitData.runtimeType}');
-          }
           
           if (unitData is Map<String, dynamic>) {
+            // 새로운 표준화된 구조 파싱
             final textUnit = TextUnit(
               originalText: unitData['originalText']?.toString() ?? '',
               translatedText: unitData['translatedText']?.toString() ?? '',
@@ -649,11 +655,24 @@ class PostLLMWorkflow {
             );
             textUnits.add(textUnit);
 
+            // 🔧 서버 품질 지표 활용 (디버깅용)
             if (kDebugMode && i < 3) {
+              final metadata = unitData['metadata'] as Map<String, dynamic>?;
+              final qualityMetrics = unitData['qualityMetrics'] as Map<String, dynamic>?;
+              
               debugPrint('   Unit ${i+1}: "${textUnit.originalText}" → "${textUnit.translatedText}"');
+              
+              if (metadata != null) {
+                debugPrint('     유효성: ${metadata['isValid']} | Fallback: ${metadata['isFallback']}');
+              }
+              
+              if (qualityMetrics != null) {
+                debugPrint('     품질: 원문${qualityMetrics['originalLength']}자, 번역${qualityMetrics['translationLength']}자');
+                debugPrint('     언어: 중국어${qualityMetrics['hasChineseChars']}, 한국어${qualityMetrics['hasKoreanChars']}');
+              }
             }
           } else if (unitData is Map) {
-            // Map<Object?, Object?> 타입인 경우 변환
+            // 기존 구조 호환성 (Map<Object?, Object?> 타입인 경우)
             final convertedUnit = Map<String, dynamic>.from(unitData);
             final textUnit = TextUnit(
               originalText: convertedUnit['originalText']?.toString() ?? '',
@@ -665,7 +684,7 @@ class PostLLMWorkflow {
             textUnits.add(textUnit);
 
             if (kDebugMode && i < 3) {
-              debugPrint('   Unit ${i+1} (변환됨): "${textUnit.originalText}" → "${textUnit.translatedText}"');
+              debugPrint('   Unit ${i+1} (호환모드): "${textUnit.originalText}" → "${textUnit.translatedText}"');
             }
           } else {
             if (kDebugMode) {
@@ -681,6 +700,15 @@ class PostLLMWorkflow {
 
       if (kDebugMode) {
         debugPrint('✅ 서버 응답 파싱 완료: ${textUnits.length}개 TextUnit 생성');
+        
+        // 🔧 클라이언트 품질 검증
+        final validUnits = textUnits.where((unit) => 
+          unit.originalText.isNotEmpty && 
+          unit.translatedText?.isNotEmpty == true &&
+          !(unit.translatedText?.startsWith('[번역 필요') == true)
+        ).length;
+        
+        debugPrint('📊 클라이언트 품질 체크: ${validUnits}/${textUnits.length} 유효');
       }
 
       return textUnits;

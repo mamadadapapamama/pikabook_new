@@ -127,4 +127,15 @@ class PageService {
       return [];
     }
   }
+
+  /// 노트의 페이지 수 가져오기
+  Future<int> getPageCountForNote(String noteId) async {
+    try {
+      final querySnapshot = await getPagesForNoteQuery(noteId).get();
+      return querySnapshot.docs.length;
+    } catch (e) {
+      debugPrint('노트의 페이지 수 조회 중 오류 발생: $e');
+      return 0;
+    }
+  }
 }

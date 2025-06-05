@@ -405,7 +405,7 @@ class TextCleanerService {
   /// 
   /// **판단 기준:**
   /// - 중국어 문자가 포함되어 있으면 유지 (false 반환)
-  /// - 중국어가 없고 영어나 기타 알파벳만 있으면 제거 (true 반환)
+  /// - 중국어가 없고 영어, 한국어, 일본어만 있으면 제거 (true 반환)
   bool _isNonChineseOnly(String text) {
     if (kDebugMode) {
       debugPrint('🔍 _isNonChineseOnly 검사: "$text"');
@@ -419,17 +419,32 @@ class TextCleanerService {
       return false;
     }
     
-    // 중국어가 없고, 영어나 기타 알파벳만 있는 경우 제거
-    final hasAlphabets = RegExp(r'[a-zA-Z]').hasMatch(text);
+    // 중국어가 없는 상태에서 다른 언어만 있는지 확인
+    final hasEnglish = RegExp(r'[a-zA-Z]').hasMatch(text);
+    final hasKorean = RegExp(r'[가-힣ㄱ-ㅎㅏ-ㅣ]').hasMatch(text);
+    final hasJapanese = RegExp(r'[\u3040-\u309F\u30A0-\u30FF]').hasMatch(text);
+    
+    final hasOtherLanguages = hasEnglish || hasKorean || hasJapanese;
+    
     if (kDebugMode) {
-      debugPrint('🔍 영어 알파벳 포함: $hasAlphabets, 텍스트: "$text"');
-      if (hasAlphabets) {
-        debugPrint('❌ 영어만 있는 텍스트 - 제거: "$text"');
+      debugPrint('🔍 언어 분석:');
+      debugPrint('   영어: $hasEnglish');
+      debugPrint('   한국어: $hasKorean');
+      debugPrint('   일본어: $hasJapanese');
+      debugPrint('   다른 언어 포함: $hasOtherLanguages');
+      
+      if (hasOtherLanguages) {
+        final languages = <String>[];
+        if (hasEnglish) languages.add('영어');
+        if (hasKorean) languages.add('한국어');
+        if (hasJapanese) languages.add('일본어');
+        debugPrint('❌ ${languages.join(', ')}만 있는 텍스트 - 제거: "$text"');
       } else {
-        debugPrint('✅ 영어가 아닌 텍스트 - 유지: "$text"');
+        debugPrint('✅ 중국어 학습 관련 텍스트 - 유지: "$text"');
       }
     }
-    return hasAlphabets;
+    
+    return hasOtherLanguages;
   }
 
   /// 숫자와 특수문자 혼합 패턴인지 확인 (시간, 점수, 비율 등)

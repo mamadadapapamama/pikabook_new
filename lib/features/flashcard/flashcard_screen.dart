@@ -113,23 +113,26 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       return false; // 스와이프 취소
     }
 
-    // 플래시카드가 2개 이상일 때 일반 처리
-    // CardSwiper가 자동으로 인덱스를 업데이트하므로, 현재 인덱스를 사용
-    if (currentIndex != null) {
-      _viewModel.setCurrentCardIndex(currentIndex);
-    }
-
+    // 🔧 수정: 플래시카드가 2개 이상일 때의 처리
     // 위로 스와이프: 카드 삭제
     if (direction == CardSwiperDirection.top) {
       _viewModel.deleteCurrentCard();
+      return true;
+    }
+    
+    // 좌우 스와이프: 카드 이동
+    if (direction == CardSwiperDirection.left || direction == CardSwiperDirection.right) {
+      // CardSwiper가 자동으로 인덱스를 업데이트하므로, 현재 인덱스를 사용
+      if (currentIndex != null && currentIndex < _viewModel.flashCards.length) {
+        _viewModel.setCurrentCardIndex(currentIndex);
+        
+        // 현재 카드의 복습 횟수 업데이트
+        _viewModel.updateReviewCount(_viewModel.flashCards[currentIndex].id);
+      }
+      return true;
     }
 
-    // 현재 카드의 복습 횟수 업데이트
-    if (_viewModel.hasFlashcards && currentIndex != null && currentIndex < _viewModel.flashCards.length) {
-      _viewModel.updateReviewCount(_viewModel.flashCards[currentIndex].id);
-    }
-
-    return true;
+    return false;
   }
 
   /// 단어를 사전에서 검색
@@ -321,9 +324,13 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                                   ),
                             onSwipeDirectionChange: (_, __) {},
                             numberOfCardsDisplayed:
-                                viewModel.flashCards.length == 1 ? 1 : 2,
+                                viewModel.flashCards.length == 1 ? 1 : 3,
                             padding: const EdgeInsets.all(SpacingTokens.lg),
                             isLoop: viewModel.flashCards.length > 1,
+                            threshold: 50,
+                            maxAngle: 30,
+                            duration: const Duration(milliseconds: 200),
+                            initialIndex: viewModel.currentCardIndex,
                             cardBuilder: (context, index, horizontalThreshold,
                                 verticalThreshold) {
                               final double scale;
@@ -333,13 +340,20 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                                 scale = 1.0;
                                 yOffset = 0.0;
                               } else {
-                                final int indexDiff = (index - viewModel.currentCardIndex).abs();
-                                scale = index == viewModel.currentCardIndex
-                                    ? 1.0
-                                    : 1.0 - (0.05 * indexDiff);
-                                yOffset = index == viewModel.currentCardIndex
-                                    ? 0
-                                    : 20.0 * indexDiff;
+                                // 🔧 수정: 현재 카드는 가장 크고 뒤의 카드들은 작게
+                                final bool isCurrentCard = index == viewModel.currentCardIndex;
+                                final bool isNextCard = (index == (viewModel.currentCardIndex + 1) % viewModel.flashCards.length);
+                                
+                                if (isCurrentCard) {
+                                  scale = 1.0;
+                                  yOffset = 0.0;
+                                } else if (isNextCard) {
+                                  scale = 0.95;  // 두 번째 카드는 5% 작게
+                                  yOffset = 20.0; // 아래로 20px 이동
+                                } else {
+                                  scale = 0.9;   // 나머지 카드들은 10% 작게
+                                  yOffset = 40.0; // 아래로 40px 이동
+                                }
                               }
 
                               return FlashCardUI.buildFlashCard(

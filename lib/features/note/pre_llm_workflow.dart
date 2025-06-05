@@ -62,22 +62,26 @@ class PreLLMWorkflow {
         }
         
         // 기본 페이지 생성 (텍스트 없이)
-        final pageId = await _createBasicPage(
+        final pageId = await _pageService.createPage(
           noteId: noteId,
-          pageNumber: i,
-          imageUrl: imageUrl,
           originalText: '', // 빈 텍스트로 시작
+          pageNumber: i + 1,
+          imageUrl: imageUrl,
         );
-        pageIds.add(pageId);
+        pageIds.add(pageId.id);
         
         if (kDebugMode) {
-          debugPrint('✅ 기본 페이지 ${i+1} 생성 완료: $pageId');
+          debugPrint('✅ 기본 페이지 ${i+1} 생성 완료: ${pageId.id}');
         }
       }
       
-      // 4. 첫 번째 이미지를 노트 썸네일로 설정
+      // 4. 노트 메타데이터 업데이트 (썸네일 + 페이지 수)
       if (imageUrls.isNotEmpty) {
-        await _updateNoteThumbnail(noteId, imageUrls[0]);
+        await _noteService.updateNoteMetadata(
+          noteId: noteId,
+          thumbnailUrl: imageUrls[0],
+          pageCount: imageFiles.length,
+        );
       }
       
       // 5. 백그라운드 OCR 및 텍스트 처리 시작
@@ -156,6 +160,14 @@ class PreLLMWorkflow {
         // 모든 텍스트 처리가 완료되면 LLM 후처리 작업 스케줄링
         if (pageDataList.isNotEmpty) {
           await _schedulePostProcessing(noteId, pageDataList, userPrefs);
+          
+          // 실제 처리된 페이지 수로 메타데이터 동기화
+          if (pageDataList.length != imageFiles.length) {
+            if (kDebugMode) {
+              debugPrint('📊 페이지 수 불일치 감지: 예상 ${imageFiles.length}개 → 실제 ${pageDataList.length}개');
+            }
+            await _noteService.syncNotePageCount(noteId);
+          }
           
           if (kDebugMode) {
             debugPrint('🎉 백그라운드 처리 완료: $noteId');
@@ -362,34 +374,6 @@ class PreLLMWorkflow {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ 페이지 OCR 결과 업데이트 실패: ${pageData.pageId}, 오류: $e');
-      }
-    }
-  }
-
-  /// 기본 페이지 생성 (번역 없이)
-  Future<String> _createBasicPage({
-    required String noteId,
-    required int pageNumber,
-    required String imageUrl,
-    required String originalText,
-  }) async {
-    final page = await _pageService.createPage(
-      noteId: noteId,
-      originalText: originalText,
-      pageNumber: pageNumber,
-      imageUrl: imageUrl,
-    );
-    
-    return page.id;
-  }
-
-  /// 노트 썸네일 업데이트
-  Future<void> _updateNoteThumbnail(String noteId, String imageUrl) async {
-    try {
-      await _noteService.updateNoteThumbnail(noteId);
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('⚠️ 썸네일 업데이트 실패 (무시): $e');
       }
     }
   }

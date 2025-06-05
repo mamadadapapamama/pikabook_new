@@ -433,42 +433,27 @@ class ImageService {
   /// Firebase Storage에서 상대 경로로 다운로드
   Future<File?> _downloadFromFirebaseRelative(String relativePath) async {
     try {
-      if (kDebugMode) {
-        debugPrint('🖼️ 📥 Firebase Storage 상대 경로 다운로드 시작: $relativePath');
-      }
-      
       final storageRef = _storage.ref().child(relativePath);
       final appDir = await getApplicationDocumentsDirectory();
-      final localPath = '${appDir.path}/$relativePath';
+      final absolutePath = '${appDir.path}/$relativePath';
       
-      // 로컬 디렉토리 생성
-      final directory = Directory(path.dirname(localPath));
+      // 디렉토리 생성
+      final directory = Directory(path.dirname(absolutePath));
       if (!await directory.exists()) {
         await directory.create(recursive: true);
       }
       
-      final file = File(localPath);
-      
+      final file = File(absolutePath);
       await storageRef.writeToFile(file);
       
       if (await file.exists() && await file.length() > 0) {
         final bytes = await file.readAsBytes();
         _imageCacheService.addToCache(relativePath, bytes);
-        
-        if (kDebugMode) {
-          debugPrint('🖼️ ✅ Firebase Storage 다운로드 성공: $localPath');
-        }
         return file;
-      }
-      
-      if (kDebugMode) {
-        debugPrint('🖼️ ❌ 다운로드된 파일이 유효하지 않음: $localPath');
       }
       return null;
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('🖼️ ❌ Firebase Storage 상대 경로 다운로드 실패: $e');
-      }
+      if (kDebugMode) debugPrint('Firebase 상대 경로 다운로드 실패: $e');
       return null;
     }
   }
