@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../../models/text_unit.dart';
 import '../../../features/note/pre_llm_workflow.dart';
@@ -16,7 +15,7 @@ class StreamingReceiveService {
   final ApiService _apiService = ApiService();
 
   /// 스트리밍 번역 실행 및 결과 분배
-  Stream<StreamingTranslationResult> processStreamingTranslation({
+  Stream<StreamingReceiveResult> processStreamingTranslation({
     required List<String> textSegments,
     required List<PageProcessingData> pages,
     required String sourceLanguage,
@@ -47,10 +46,10 @@ class StreamingReceiveService {
 
         // 오류 청크 처리
         if (chunkData['isError'] == true) {
-          yield StreamingTranslationResult.error(
-            chunkIndex: chunkData['chunkIndex'] as int,
-            error: chunkData['error']?.toString() ?? '알 수 없는 오류',
-          );
+                  yield StreamingReceiveResult.error(
+          chunkIndex: chunkData['chunkIndex'] as int,
+          error: chunkData['error']?.toString() ?? '알 수 없는 오류',
+        );
           continue;
         }
 
@@ -73,7 +72,7 @@ class StreamingReceiveService {
         processedChunks++;
         
         // 스트리밍 결과 반환
-        yield StreamingTranslationResult.success(
+        yield StreamingReceiveResult.success(
           chunkIndex: chunkIndex,
           chunkUnits: chunkUnits,
           pageResults: Map.from(pageResults),
@@ -100,7 +99,12 @@ class StreamingReceiveService {
     }
   }
 
-  /// LLM 결과를 페이지별로 분배 (OCR 세그먼트와 독립적)
+  /// LLM 결과를 페이지별로 순차적으로 분배
+  /// 
+  /// **새로운 로직:**
+  /// - 텍스트 유사도 비교 제거
+  /// - 순서대로 페이지별 누적
+  /// - LLM이 재배치/병합한 결과를 그대로 반영
   Future<void> _distributeUnitsToPages(
     List<TextUnit> chunkUnits,
     List<PageProcessingData> pages,
@@ -110,68 +114,30 @@ class StreamingReceiveService {
     if (chunkUnits.isEmpty || pages.isEmpty) return;
     
     if (pages.length == 1) {
-      // 단일 페이지: LLM 결과를 점진적으로 추가
+      // 단일 페이지: LLM 결과를 순차적으로 누적
       final pageId = pages.first.pageId;
       pageResults.putIfAbsent(pageId, () => []);
       pageResults[pageId]!.addAll(chunkUnits);
       
       if (kDebugMode) {
-        debugPrint('✅ LLM 청크 누적: ${pageId} (+${chunkUnits.length}개, 총 ${pageResults[pageId]!.length}개)');
+        debugPrint('✅ 단일 페이지 순차 누적: ${pageId} (+${chunkUnits.length}개, 총 ${pageResults[pageId]!.length}개)');
       }
     } else {
-      // 다중 페이지: 텍스트 유사도 기반 최적 매칭
-      for (final unit in chunkUnits) {
-        final bestPageId = _findBestMatchingPage(unit, pages);
-        pageResults.putIfAbsent(bestPageId, () => []);
-        pageResults[bestPageId]!.add(unit);
-        
-        if (kDebugMode) {
-          debugPrint('🎯 유닛 매칭: "${unit.originalText.substring(0, math.min(30, unit.originalText.length))}..." → ${bestPageId}');
-        }
-      }
+      // 다중 페이지: 간단한 분배 (텍스트 비교 없이)
+      // TODO: 다중 페이지 처리 로직 개선 필요
+      // 현재는 첫 번째 페이지에 모든 결과 누적
+      final primaryPageId = pages.first.pageId;
+      pageResults.putIfAbsent(primaryPageId, () => []);
+      pageResults[primaryPageId]!.addAll(chunkUnits);
       
       if (kDebugMode) {
-        debugPrint('🔀 다중 페이지 분배 완료: ${chunkUnits.length}개 유닛을 ${pages.length}개 페이지에 분배');
+        debugPrint('⚠️ 다중 페이지 임시 처리: ${primaryPageId}에 ${chunkUnits.length}개 유닛 추가');
+        debugPrint('   TODO: 다중 페이지 순차 분배 로직 구현 필요');
       }
     }
   }
 
-  /// 유닛과 가장 유사한 페이지 찾기 (텍스트 매칭 기반)
-  String _findBestMatchingPage(TextUnit unit, List<PageProcessingData> pages) {
-    if (pages.length == 1) return pages.first.pageId;
-    
-    String bestPageId = pages.first.pageId;
-    double highestSimilarity = 0.0;
-    
-    for (final page in pages) {
-      final pageText = page.textSegments.join(' ');
-      final similarity = _calculateTextSimilarity(unit.originalText, pageText);
-      
-      if (similarity > highestSimilarity) {
-        highestSimilarity = similarity;
-        bestPageId = page.pageId;
-      }
-    }
-    
-    return bestPageId;
-  }
 
-  /// 간단한 텍스트 유사도 계산 (공통 문자 비율)
-  double _calculateTextSimilarity(String text1, String text2) {
-    if (text1.isEmpty || text2.isEmpty) return 0.0;
-    
-    int commonChars = 0;
-    final chars1 = text1.split('');
-    final chars2 = text2.split('');
-    
-    for (final char in chars1) {
-      if (chars2.contains(char)) {
-        commonChars++;
-      }
-    }
-    
-    return commonChars / math.max(text1.length, text2.length);
-  }
 
   /// 스트리밍 청크 데이터에서 TextUnit 리스트 추출
   List<TextUnit> _extractUnitsFromChunkData(Map<String, dynamic> chunkData) {
@@ -199,7 +165,7 @@ class StreamingReceiveService {
   }
 
   /// 스트리밍 실패 시 폴백 결과 생성
-  Stream<StreamingTranslationResult> _createFallbackResults(
+  Stream<StreamingReceiveResult> _createFallbackResults(
     List<String> textSegments,
     List<PageProcessingData> pages,
     String sourceLanguage,
@@ -221,7 +187,7 @@ class StreamingReceiveService {
       ));
     }
     
-    yield StreamingTranslationResult.success(
+    yield StreamingReceiveResult.success(
       chunkIndex: 0,
       chunkUnits: pageResults.values.expand((units) => units).toList(),
       pageResults: pageResults,
@@ -231,8 +197,8 @@ class StreamingReceiveService {
   }
 }
 
-/// 스트리밍 번역 결과
-class StreamingTranslationResult {
+/// 스트리밍 수신 결과
+class StreamingReceiveResult {
   final bool isSuccess;
   final int chunkIndex;
   final List<TextUnit> chunkUnits;
@@ -241,7 +207,7 @@ class StreamingTranslationResult {
   final int processedChunks;
   final String? error;
 
-  StreamingTranslationResult._({
+  StreamingReceiveResult._({
     required this.isSuccess,
     required this.chunkIndex,
     required this.chunkUnits,
@@ -251,14 +217,14 @@ class StreamingTranslationResult {
     this.error,
   });
 
-  factory StreamingTranslationResult.success({
+  factory StreamingReceiveResult.success({
     required int chunkIndex,
     required List<TextUnit> chunkUnits,
     required Map<String, List<TextUnit>> pageResults,
     required bool isComplete,
     required int processedChunks,
   }) {
-    return StreamingTranslationResult._(
+    return StreamingReceiveResult._(
       isSuccess: true,
       chunkIndex: chunkIndex,
       chunkUnits: chunkUnits,
@@ -268,11 +234,11 @@ class StreamingTranslationResult {
     );
   }
 
-  factory StreamingTranslationResult.error({
+  factory StreamingReceiveResult.error({
     required int chunkIndex,
     required String error,
   }) {
-    return StreamingTranslationResult._(
+    return StreamingReceiveResult._(
       isSuccess: false,
       chunkIndex: chunkIndex,
       chunkUnits: [],

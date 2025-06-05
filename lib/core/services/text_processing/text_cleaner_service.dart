@@ -60,6 +60,8 @@ class TextCleanerService {
     caseSensitive: false,
   );
 
+
+
   /// 숫자와 특수문자 혼합 패턴 (시간, 점수, 비율 등)
   /// 예: 10:30, 90/100, 3.5, 85%, 1-5, 2022.03.15, 12:00-13:00
   static final RegExp numberSpecialCharPattern = RegExp(
@@ -188,6 +190,14 @@ class TextCleanerService {
       if (_isOnlyPunctuation(trimmedLine)) {
         if (kDebugMode) {
           debugPrint('🧹 문장부호만 있는 줄 건너뛰기: "$trimmedLine"');
+        }
+        continue;
+      }
+
+      // 의미없는 혼재 문장 제거 (OCR 오류 등)
+      if (_isMeaninglessMixedText(trimmedLine)) {
+        if (kDebugMode) {
+          debugPrint('🧹 의미없는 혼재 문장 건너뛰기: "$trimmedLine"');
         }
         continue;
       }
@@ -461,12 +471,20 @@ class TextCleanerService {
       debugPrint('🔍 숫자+특수문자 혼합 패턴 검사: "$text"');
     }
     
-    // 중국어가 포함되어 있으면 유지 (숫자와 함께 있어도)
+    // 중국어가 포함되어 있으면 혼재 문장 검사는 다른 함수에서 처리
+    // 순수한 중국어 문장은 여기서 유지
     if (containsChinese(text)) {
-      if (kDebugMode) {
-        debugPrint('✅ 중국어 포함 - 유지: "$text"');
+      // 중국어만 있거나 중국어가 주를 이루는 경우는 유지
+      final chineseCharCount = chineseCharPattern.allMatches(text).length;
+      final totalLength = text.replaceAll(RegExp(r'\s+'), '').length;
+      
+      // 중국어 비율이 50% 이상이면 유지 (혼재 문장은 다른 함수에서 처리)
+      if (chineseCharCount / totalLength >= 0.5) {
+        if (kDebugMode) {
+          debugPrint('✅ 중국어 주도 문장 - 유지: "$text"');
+        }
+        return false;
       }
-      return false;
     }
     
     // 숫자와 특수문자 혼합 패턴 확인
@@ -491,6 +509,54 @@ class TextCleanerService {
     }
     
     return shouldRemove;
+  }
+
+  /// 의미없는 혼재 문장인지 확인 (OCR 오류 등)
+  /// 
+  /// **제거 조건:**
+  /// - 15자 이하에서 중국어 + 영어 + 숫자가 동시에 있는 경우
+  /// - 중국어 1-2자 + 영어가 더 많은 경우 (OCR 오류)
+  /// - 예: "让tol translate 8", "学a1", "好test 2"
+  bool _isMeaninglessMixedText(String text) {
+    if (kDebugMode) {
+      debugPrint('🔍 의미없는 혼재 문장 검사: "$text"');
+    }
+    
+    // 중국어가 없으면 다른 규칙에서 처리
+    if (!containsChinese(text)) {
+      return false;
+    }
+    
+    // 공백 제외한 총 문자 수
+    final cleanText = text.replaceAll(RegExp(r'\s+'), '');
+    final totalChars = cleanText.length;
+    
+    // 문자 분석
+    final chineseCharCount = chineseCharPattern.allMatches(text).length;
+    final englishCharCount = RegExp(r'[a-zA-Z]').allMatches(text).length;
+    final hasDigits = RegExp(r'[0-9]').hasMatch(text);
+    
+    // 패턴 1: 15자 이하 + 중국어 + 영어 + 숫자 모두 존재
+    if (totalChars <= 15 && chineseCharCount >= 1 && englishCharCount >= 1 && hasDigits) {
+      if (kDebugMode) {
+        debugPrint('❌ 패턴1 - 짧은 혼재 문장 제거: "$text" (길이: $totalChars, 중: ${chineseCharCount}개, 영: ${englishCharCount}개, 숫자: $hasDigits)');
+      }
+      return true;
+    }
+    
+    // 패턴 2: 중국어 1-2자 + 영어가 중국어의 2배 이상
+    if (chineseCharCount <= 2 && englishCharCount >= chineseCharCount * 2) {
+      if (kDebugMode) {
+        debugPrint('❌ 패턴2 - OCR 오류 문장 제거: "$text" (중: ${chineseCharCount}개, 영: ${englishCharCount}개)');
+      }
+      return true;
+    }
+    
+    if (kDebugMode) {
+      debugPrint('✅ 정상 문장 - 유지: "$text" (중: ${chineseCharCount}개, 영: ${englishCharCount}개, 숫자: $hasDigits)');
+    }
+    
+    return false;
   }
 
   // ========== 캐시 관리 ==========

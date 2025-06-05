@@ -6,8 +6,12 @@ import '../../models/processed_text.dart';
 import '../../../features/note/pre_llm_workflow.dart';
 import '../../../features/note/services/page_service.dart';
 
-/// 스트리밍 페이지 업데이트 전담 서비스
-/// OCR 결과 보존하면서 LLM 결과로 점진적 업데이트
+/// **스트리밍 데이터 혼합 & UI 업데이트 서비스**  
+/// LLM 스트리밍 결과와 OCR 원본을 혼합하여 UI 업데이트하는 역할
+/// - OCR 세그먼트 보존 (번역 전 상태 유지)
+/// - LLM 결과와 OCR 데이터 혼합
+/// - 진행률 계산 및 스트리밍 상태 관리
+/// - Firestore 페이지 실시간 업데이트
 class StreamingPageUpdateService {
   final PageService _pageService = PageService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -72,7 +76,12 @@ class StreamingPageUpdateService {
     }
   }
 
-  /// LLM 결과와 OCR 결과를 혼합한 유닛 생성
+  /// LLM 결과로 OCR 세그먼트를 순차적으로 overwrite
+  /// 
+  /// **새로운 로직:**
+  /// 1. OCR 세그먼트를 순서대로 보여줌
+  /// 2. LLM 결과가 들어오면 순차적으로 overwrite (3개씩)
+  /// 3. LLM 처리된 개수를 초과하는 OCR 세그먼트는 제거
   List<TextUnit> _createMixedUnits(
     List<TextUnit> llmResults,
     List<String> ocrSegments,
@@ -80,15 +89,17 @@ class StreamingPageUpdateService {
   ) {
     final mixedUnits = <TextUnit>[];
     
-    // 1. LLM 처리된 부분 추가
+    // 1. LLM 결과를 순서대로 추가 (순차적 overwrite)
     mixedUnits.addAll(llmResults);
     
-    // 2. 아직 처리되지 않은 OCR 세그먼트를 추가
-    final processedOriginalTexts = llmResults.map((unit) => unit.originalText).toSet();
+    // 2. 남은 OCR 세그먼트 추가 (LLM이 아직 처리하지 않은 부분)
+    final remainingOcrCount = ocrSegments.length - llmResults.length;
     
-    for (final ocrSegment in ocrSegments) {
-      // OCR 세그먼트가 LLM 결과에 포함되지 않은 경우에만 추가
-      if (!processedOriginalTexts.contains(ocrSegment.trim())) {
+    if (remainingOcrCount > 0) {
+      // LLM이 처리하지 않은 나머지 OCR 세그먼트들
+      final remainingOcrSegments = ocrSegments.skip(llmResults.length).take(remainingOcrCount);
+      
+      for (final ocrSegment in remainingOcrSegments) {
         mixedUnits.add(TextUnit(
           originalText: ocrSegment,
           translatedText: null, // 아직 번역되지 않음
@@ -97,6 +108,14 @@ class StreamingPageUpdateService {
           targetLanguage: pageData.targetLanguage,
         ));
       }
+    }
+    
+    if (kDebugMode) {
+      debugPrint('🔄 순차적 overwrite:');
+      debugPrint('   LLM 처리됨: ${llmResults.length}개');
+      debugPrint('   OCR 원본: ${ocrSegments.length}개');
+      debugPrint('   남은 OCR: ${remainingOcrCount > 0 ? remainingOcrCount : 0}개');
+      debugPrint('   최종 유닛: ${mixedUnits.length}개');
     }
     
     return mixedUnits;

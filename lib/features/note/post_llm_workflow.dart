@@ -12,7 +12,7 @@ import '../../core/models/processed_text.dart';
 import '../../core/models/text_unit.dart';
 import '../../core/models/note.dart';
 import '../../core/models/processing_status.dart';
-import '../../../core/services/text_processing/streaming_translation_service.dart';
+import '../../../core/services/text_processing/streaming_receive_service.dart';
 import '../../../core/services/text_processing/streaming_page_update_service.dart';
 import 'pre_llm_workflow.dart';
 
@@ -34,7 +34,7 @@ class PostLLMWorkflow {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
   // 새로운 전담 서비스들
-  final StreamingTranslationService _streamingService = StreamingTranslationService();
+  final StreamingReceiveService _streamingService = StreamingReceiveService();
   final StreamingPageUpdateService _pageUpdateService = StreamingPageUpdateService();
 
   // 처리 큐 (메모리 기반)
@@ -121,8 +121,8 @@ class PostLLMWorkflow {
         debugPrint('📊 [워크플로우] 수집된 세그먼트: ${allSegments.length}개');
       }
 
-      // 3. 스트리밍 번역 처리 (StreamingTranslationService)
-      await for (final result in _streamingService.processStreamingTranslation(
+              // 3. 스트리밍 수신 처리 (StreamingReceiveService)
+              await for (final result in _streamingService.processStreamingTranslation(
         textSegments: allSegments,
         pages: job.pages,
         sourceLanguage: job.pages.first.sourceLanguage,

@@ -89,7 +89,7 @@ class FlashCardService {
 
       // Firestore에 저장
       await _flashCardsCollection.doc(id).set({
-        ...flashCard.toJson(),
+        ...flashCard.toFirestoreJson(),
         'userId': _userId,
       });
 
@@ -166,7 +166,7 @@ class FlashCardService {
       // 노트 문서 업데이트
       await _firestore.collection('notes').doc(noteId).update({
         'flashcardCount': count,
-        'flashCards': flashCards.map((card) => card.toJson()).toList(),
+        'flashCards': flashCards.map((card) => card.toFirestoreJson()).toList(),
       });
 
       // 캐시된 노트 메타데이터도 업데이트
@@ -274,7 +274,7 @@ class FlashCardService {
       // Firestore 업데이트
       await _flashCardsCollection
           .doc(flashCard.id)
-          .update(updatedFlashCard.toJson());
+          .update(updatedFlashCard.toFirestoreJson());
 
       return updatedFlashCard;
     } catch (e) {

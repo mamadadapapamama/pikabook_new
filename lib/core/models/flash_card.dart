@@ -63,6 +63,23 @@ class FlashCard {
       'front': front,
       'back': back,
       'pinyin': pinyin,
+      'createdAt': createdAt.toIso8601String(), // 캐시에는 ISO 문자열로 저장
+      'lastReviewedAt': lastReviewedAt?.toIso8601String(),
+      'reviewCount': reviewCount,
+      'noteId': noteId,
+      // 언어 관련 필드
+      'sourceLanguage': sourceLanguage,
+      'targetLanguage': targetLanguage,
+    };
+  }
+
+  /// Firestore 저장용 toJson (Timestamp 사용)
+  Map<String, dynamic> toFirestoreJson() {
+    return {
+      'id': id,
+      'front': front,
+      'back': back,
+      'pinyin': pinyin,
       'createdAt': Timestamp.fromDate(createdAt),
       'lastReviewedAt':
           lastReviewedAt != null ? Timestamp.fromDate(lastReviewedAt!) : null,

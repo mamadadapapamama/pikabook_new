@@ -323,8 +323,9 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                                     vertical: true,
                                   ),
                             onSwipeDirectionChange: (_, __) {},
-                            numberOfCardsDisplayed:
-                                viewModel.flashCards.length == 1 ? 1 : 3,
+                            numberOfCardsDisplayed: viewModel.flashCards.length == 1 
+                                ? 1 
+                                : (viewModel.flashCards.length >= 3 ? 3 : viewModel.flashCards.length),
                             padding: const EdgeInsets.all(SpacingTokens.lg),
                             isLoop: viewModel.flashCards.length > 1,
                             threshold: 50,
@@ -340,9 +341,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                                 scale = 1.0;
                                 yOffset = 0.0;
                               } else {
-                                // 🔧 수정: 현재 카드는 가장 크고 뒤의 카드들은 작게
-                                final bool isCurrentCard = index == viewModel.currentCardIndex;
-                                final bool isNextCard = (index == (viewModel.currentCardIndex + 1) % viewModel.flashCards.length);
+                                // 🔧 수정: 안전한 인덱스 계산으로 stack overflow 방지
+                                final int cardCount = viewModel.flashCards.length;
+                                final int currentIdx = viewModel.currentCardIndex.clamp(0, cardCount - 1);
+                                
+                                final bool isCurrentCard = index == currentIdx;
+                                final bool isNextCard = cardCount > 1 && index == ((currentIdx + 1) % cardCount);
                                 
                                 if (isCurrentCard) {
                                   scale = 1.0;
@@ -360,7 +364,9 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                                 card: viewModel.flashCards[index],
                                 index: index,
                                 currentIndex: viewModel.currentCardIndex,
-                                flipCardKey: index == viewModel.currentCardIndex
+                                flipCardKey: (index >= 0 && 
+                                  index < viewModel.flashCards.length && 
+                                  index == viewModel.currentCardIndex.clamp(0, viewModel.flashCards.length - 1))
                                     ? _flipCardKey
                                     : null,
                                 isSpeaking: _ttsService.state == TtsState.playing,

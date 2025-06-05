@@ -286,12 +286,15 @@ class FlashCardViewModel extends ChangeNotifier {
     notifyListeners();
   }
   
-  // 현재 카드 인덱스 설정
+  // 현재 카드 인덱스 설정 (안전한 범위 보장)
   void setCurrentCardIndex(int index) {
-    if (index >= 0 && index < _flashCards.length) {
-      _currentCardIndex = index;
+    if (_flashCards.isNotEmpty) {
+      _currentCardIndex = index.clamp(0, _flashCards.length - 1);
       _isCardFlipped = false;
       notifyListeners();
+    } else {
+      _currentCardIndex = 0;
+      _isCardFlipped = false;
     }
   }
   
