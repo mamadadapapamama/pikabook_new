@@ -168,34 +168,43 @@ class PostLLMWorkflow {
           final chunkUnits = _extractUnitsFromChunkData(chunkData);
           final chunkIndex = chunkData['chunkIndex'] as int;
           
-          // 해당 청크의 세그먼트들이 어느 페이지에 속하는지 매핑
-          final chunkSize = 3; // 서버의 CHUNK_SIZE와 일치
-          final startIndex = chunkIndex * chunkSize;
+          if (kDebugMode) {
+            debugPrint('📦 청크 ${chunkIndex} 처리: ${chunkUnits.length}개 유닛');
+            for (int i = 0; i < chunkUnits.length; i++) {
+              debugPrint('   유닛 ${i+1}: "${chunkUnits[i].originalText}" → "${chunkUnits[i].translatedText}"');
+            }
+          }
           
-          for (int j = 0; j < chunkUnits.length; j++) {
-            final segmentIndex = startIndex + j;
-            if (segmentIndex < pageIds.length) {
-              final pageId = pageIds[segmentIndex];
-              pageResults.putIfAbsent(pageId, () => []);
-              pageResults[pageId]!.add(chunkUnits[j]);
+          // LLM 결과를 직접 페이지별로 분배 (OCR 세그먼트와 독립적)
+          await _distributeUnitsToPages(
+            chunkUnits, 
+            job.pages, 
+            pageResults,
+            isFirstChunk: chunkIndex == 0, // 첫 번째 청크인지 확인
+          );
+          
+          // 모든 페이지 실시간 업데이트
+          for (final pageData in job.pages) {
+            if (pageResults.containsKey(pageData.pageId)) {
+              await _updatePageWithStreamingUnit(
+                pageData, 
+                pageResults[pageData.pageId]!, 
+                pageResults[pageData.pageId]!.length, // LLM 결과를 기준으로 함
+              );
               
-              // 개별 세그먼트 즉시 스트리밍 업데이트
-              final pageData = job.pages.firstWhere((p) => p.pageId == pageId);
-              await _updatePageWithStreamingUnit(pageData, pageResults[pageId]!, pageSegmentCount[pageId]!);
-              
-              // 진행률 알림
-              final progress = pageResults[pageId]!.length / pageSegmentCount[pageId]!;
-              await _notifyPageProgress(pageId, progress);
+              // 진행률 알림 (LLM 기준)
+              final progress = pageResults[pageData.pageId]!.length > 0 ? 1.0 : 0.0;
+              await _notifyPageProgress(pageData.pageId, progress);
               
               if (kDebugMode) {
-                debugPrint('🔄 실시간 스트리밍: ${pageId} (${pageResults[pageId]!.length}/${pageSegmentCount[pageId]!})');
-                debugPrint('   새 유닛: "${chunkUnits[j].originalText}" → "${chunkUnits[j].translatedText}"');
+                debugPrint('🔄 실시간 스트리밍: ${pageData.pageId} (${pageResults[pageData.pageId]!.length}개 LLM 유닛)');
               }
             }
           }
           
           processedChunks++;
-          _checkAndNotifyCompletedPages(pageResults, pageSegmentCount, completedPages);
+          // LLM 결과 기준으로 완료 확인 (OCR 세그먼트 개수와 무관)
+          _checkAndNotifyCompletedPagesLLM(pageResults, completedPages);
           
           // 완료 확인
           if (chunkData['isComplete'] == true) {
@@ -256,7 +265,7 @@ class PostLLMWorkflow {
     }
   }
 
-  /// 실시간 스트리밍: 개별 유닛 단위로 페이지 업데이트
+  /// 실시간 스트리밍: 개별 유닛 단위로 페이지 업데이트 (타이프라이터 효과 포함)
   Future<void> _updatePageWithStreamingUnit(
     PageProcessingData pageData,
     List<TextUnit> currentResults,
@@ -272,19 +281,19 @@ class PostLLMWorkflow {
       final progress = currentResults.length / totalExpectedUnits;
       final isCompleted = currentResults.length >= totalExpectedUnits;
       
-      // 스트리밍 상태 결정
+      // 스트리밍 상태 결정 (타이프라이터 효과용)
       final streamingStatus = isCompleted ? StreamingStatus.completed : StreamingStatus.streaming;
 
-      // 스트리밍 ProcessedText 생성
+      // 타이프라이터 효과를 위한 ProcessedText 생성
       final streamingProcessedText = ProcessedText(
         mode: pageData.mode,
-        displayMode: TextDisplayMode.full,
+        displayMode: TextDisplayMode.full, // 전체 표시 모드
         fullOriginalText: originalText,
         fullTranslatedText: translatedText,
         units: currentResults,
         sourceLanguage: pageData.sourceLanguage,
         targetLanguage: pageData.targetLanguage,
-        streamingStatus: streamingStatus,
+        streamingStatus: isCompleted ? StreamingStatus.completed : StreamingStatus.streaming,
         completedUnits: currentResults.length,
         progress: progress,
       );
@@ -301,10 +310,12 @@ class PostLLMWorkflow {
           'fullTranslatedText': streamingProcessedText.fullTranslatedText,
           'sourceLanguage': pageData.sourceLanguage,
           'targetLanguage': pageData.targetLanguage,
-          'streamingStatus': streamingStatus.index,
+          'streamingStatus': streamingProcessedText.streamingStatus.index,
           'completedUnits': currentResults.length,
           'progress': progress,
         },
+        // 타이프라이터 효과 트리거 (타임스탬프로 변화 감지)
+        'typewriterTrigger': FieldValue.serverTimestamp(),
         // 완료된 경우에만 최종 상태 업데이트
         if (isCompleted) ...{
           'processedAt': FieldValue.serverTimestamp(),
@@ -415,7 +426,29 @@ class PostLLMWorkflow {
     }
   }
 
-  /// 완료된 페이지들을 확인하고 알림 (중복 방지)
+  /// LLM 결과 기준으로 완료된 페이지들 확인 (OCR 세그먼트 개수와 무관)
+  void _checkAndNotifyCompletedPagesLLM(
+    Map<String, List<TextUnit>> pageResults,
+    Set<String> completedPages,
+  ) {
+    for (final pageId in pageResults.keys) {
+      final results = pageResults[pageId]!;
+      
+      // LLM 결과가 있고 아직 알림을 보내지 않은 경우에만 알림
+      if (results.isNotEmpty && !completedPages.contains(pageId)) {
+        completedPages.add(pageId);
+        // 비동기로 페이지 완료 알림 (메인 처리 흐름을 블로킹하지 않음)
+        unawaited(_sendPageCompletionNotification(pageId));
+        
+        if (kDebugMode) {
+          debugPrint('🎉 페이지 완료 (LLM 기준): $pageId (${results.length}개 정제된 유닛)');
+          debugPrint('   LLM이 문맥을 고려해 재구성한 최종 결과');
+        }
+      }
+    }
+  }
+
+  /// 완료된 페이지들을 확인하고 알림 (중복 방지) - 기존 메서드 (호환성 유지)
   void _checkAndNotifyCompletedPages(
     Map<String, List<TextUnit>> pageResults,
     Map<String, int> pageSegmentCount,
@@ -608,6 +641,103 @@ class PostLLMWorkflow {
       }
       // 사용량 업데이트 실패는 전체 프로세스를 실패시키지 않음
     }
+  }
+
+  /// LLM 결과를 페이지별로 분배 (OCR 세그먼트와 독립적)
+  /// 핵심: LLM이 문맥을 고려해 재배치/결합한 결과를 우선하여 OCR 결과를 덮어씀
+  Future<void> _distributeUnitsToPages(
+    List<TextUnit> chunkUnits,
+    List<PageProcessingData> pages,
+    Map<String, List<TextUnit>> pageResults, {
+    bool isFirstChunk = false, // 첫 번째 청크 여부
+  }) async {
+    if (chunkUnits.isEmpty || pages.isEmpty) return;
+    
+    if (pages.length == 1) {
+      // 단일 페이지: LLM 결과를 누적 추가
+      final pageId = pages.first.pageId;
+      
+      // 첫 번째 청크에서만 OCR 결과 초기화
+      if (isFirstChunk) {
+        pageResults[pageId] = []; // OCR 결과 완전 교체
+        if (kDebugMode) {
+          debugPrint('🔄 첫 번째 LLM 청크: OCR 결과 초기화');
+        }
+      } else {
+        pageResults.putIfAbsent(pageId, () => []);
+      }
+      
+      // LLM 청크 결과를 누적 추가
+      pageResults[pageId]!.addAll(chunkUnits);
+      
+      if (kDebugMode) {
+        final action = isFirstChunk ? "첫 청크 교체" : "누적 추가";
+        debugPrint('✅ LLM ${action}: ${pageId} (+${chunkUnits.length}개, 총 ${pageResults[pageId]!.length}개)');
+      }
+    } else {
+      // 다중 페이지: 텍스트 유사도 기반 최적 매칭
+      for (final unit in chunkUnits) {
+        final bestPageId = _findBestMatchingPage(unit, pages);
+        
+        // 해당 페이지의 기존 결과에 추가 (순차적 덮어쓰기)
+        pageResults.putIfAbsent(bestPageId, () => []);
+        pageResults[bestPageId]!.add(unit);
+        
+        if (kDebugMode) {
+          debugPrint('🎯 유닛 매칭: "${unit.originalText.substring(0, math.min(30, unit.originalText.length))}..." → ${bestPageId}');
+        }
+      }
+      
+      if (kDebugMode) {
+        debugPrint('🔀 다중 페이지 분배 완료: ${chunkUnits.length}개 유닛을 ${pages.length}개 페이지에 분배');
+        for (final page in pages) {
+          final count = pageResults[page.pageId]?.length ?? 0;
+          debugPrint('   ${page.pageId}: ${count}개 유닛');
+        }
+      }
+    }
+  }
+
+  /// 유닛과 가장 유사한 페이지 찾기 (텍스트 매칭 기반)
+  String _findBestMatchingPage(TextUnit unit, List<PageProcessingData> pages) {
+    if (pages.length == 1) return pages.first.pageId;
+    
+    String bestPageId = pages.first.pageId;
+    double highestSimilarity = 0.0;
+    
+    for (final page in pages) {
+      final pageText = page.textSegments.join(' ');
+      final similarity = _calculateTextSimilarity(unit.originalText, pageText);
+      
+      if (similarity > highestSimilarity) {
+        highestSimilarity = similarity;
+        bestPageId = page.pageId;
+      }
+    }
+    
+    if (kDebugMode && highestSimilarity > 0.3) {
+      debugPrint('📊 텍스트 매칭: 유사도 ${(highestSimilarity * 100).toInt()}% → ${bestPageId}');
+    }
+    
+    return bestPageId;
+  }
+
+  /// 간단한 텍스트 유사도 계산 (공통 문자 비율)
+  double _calculateTextSimilarity(String text1, String text2) {
+    if (text1.isEmpty || text2.isEmpty) return 0.0;
+    
+    // 공통 문자 개수 계산
+    int commonChars = 0;
+    final chars1 = text1.split('');
+    final chars2 = text2.split('');
+    
+    for (final char in chars1) {
+      if (chars2.contains(char)) {
+        commonChars++;
+      }
+    }
+    
+    return commonChars / math.max(text1.length, text2.length);
   }
 
   /// 스트리밍 청크 데이터에서 TextUnit 리스트 추출
