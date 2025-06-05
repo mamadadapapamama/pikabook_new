@@ -1,5 +1,9 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -19,7 +23,7 @@ class ApiService {
 
   Map<String, int> get performanceStats => Map.from(_performanceStats);
 
-  /// 텍스트 세그먼트들을 서버에서 번역
+  /// 텍스트 세그먼트들을 서버에서 번역 (기존 배치 방식)
   Future<Map<String, dynamic>> translateSegments({
     required List<String> textSegments,
     String sourceLanguage = 'zh-CN',
@@ -86,6 +90,97 @@ class ApiService {
         debugPrint('⏱️ [API] 실패까지 소요시간: ${apiErrorTime}ms');
       }
       rethrow;
+    }
+  }
+
+  /// 텍스트 세그먼트들을 서버에서 실시간 스트리밍 번역
+  Stream<Map<String, dynamic>> translateSegmentsStream({
+    required List<String> textSegments,
+    String sourceLanguage = 'zh-CN',
+    String targetLanguage = 'ko',
+    bool needPinyin = true,
+    String? pageId,
+    String? noteId,
+  }) async* {
+    if (kDebugMode) {
+      debugPrint('🌐 [API] 스트리밍 번역 시작: ${textSegments.length}개 세그먼트');
+    }
+
+    try {
+      // Firebase Functions URL 직접 호출 (HTTP 스트리밍)
+      final url = 'https://asia-southeast1-mylingowith.cloudfunctions.net/translateSegmentsStream';
+      
+      final authToken = await _getAuthToken();
+      
+      final request = http.Request('POST', Uri.parse(url));
+      request.headers.addAll({
+        'Content-Type': 'application/json',
+        if (authToken != null) 'Authorization': 'Bearer $authToken',
+      });
+      request.body = jsonEncode({
+        'textSegments': textSegments,
+        'sourceLanguage': sourceLanguage,
+        'targetLanguage': targetLanguage,
+        'needPinyin': needPinyin,
+        'pageId': pageId,
+        'noteId': noteId,
+      });
+
+      final client = http.Client();
+      final response = await client.send(request);
+
+      if (response.statusCode == 200) {
+        // 실시간 스트리밍 응답 처리
+        await for (final chunk in response.stream.transform(utf8.decoder).transform(const LineSplitter())) {
+          if (chunk.startsWith('data: ')) {
+            final jsonStr = chunk.substring(6); // 'data: ' 제거
+            if (jsonStr.trim().isNotEmpty) {
+              try {
+                final chunkData = jsonDecode(jsonStr);
+                
+                if (kDebugMode) {
+                  debugPrint('📦 [API] 실시간 청크 수신: ${chunkData['chunkIndex'] + 1}/${chunkData['totalChunks']}');
+                }
+                
+                yield chunkData;
+                
+                // 완료 신호 확인
+                if (chunkData['isComplete'] == true) {
+                  break;
+                }
+                
+              } catch (e) {
+                if (kDebugMode) {
+                  debugPrint('❌ [API] 청크 파싱 실패: $e');
+                }
+              }
+            }
+          }
+        }
+        client.close();
+      } else {
+        client.close();
+        throw Exception('스트리밍 요청 실패: ${response.statusCode}');
+      }
+
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [API] 스트리밍 오류: $e');
+      }
+      rethrow;
+    }
+  }
+
+  /// Firebase Auth 토큰 가져오기
+  Future<String?> _getAuthToken() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      return await user?.getIdToken();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ Auth 토큰 가져오기 실패: $e');
+      }
+      return null;
     }
   }
 

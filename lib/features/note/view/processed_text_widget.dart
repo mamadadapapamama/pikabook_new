@@ -108,24 +108,31 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   void didUpdateWidget(ProcessedTextWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // ProcessedText 변경 감지
-    if (oldWidget.processedText != widget.processedText) {
-      debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
-      
-      // 선택된 텍스트 초기화
+    // 텍스트 내용 변경 확인
+    final bool hasContentChanged = oldWidget.processedText.fullOriginalText != widget.processedText.fullOriginalText ||
+        oldWidget.processedText.fullTranslatedText != widget.processedText.fullTranslatedText ||
+        oldWidget.processedText.units.length != widget.processedText.units.length;
+
+    // 표시 모드 변경 확인  
+    final bool hasModeChanged = oldWidget.processedText.displayMode != widget.processedText.displayMode ||
+        oldWidget.processedText.mode != widget.processedText.mode;
+
+    // 내용이 변경된 경우 선택 상태 초기화
+    if (hasContentChanged) {
+      if (kDebugMode) {
+        debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
+      }
       setState(() {
         _selectedText = '';
         _selectedTextNotifier.value = '';
       });
     }
-    
-    // 표시 설정 변경 감지 - 개별 속성 확인
-    if (oldWidget.processedText.displayMode != widget.processedText.displayMode) {
-      debugPrint('표시 모드 변경 감지: ${oldWidget.processedText.displayMode} -> ${widget.processedText.displayMode}');
+    // 모드만 변경된 경우 리빌드
+    else if (hasModeChanged) {
       setState(() {});
     }
 
-    // FlashCardViewModel이 변경되면 플래시카드 단어 목록 업데이트
+    // FlashCardViewModel 변경 시 단어 목록 업데이트
     if (oldWidget.flashCardViewModel != widget.flashCardViewModel) {
       _initializeFlashcardWords();
     }

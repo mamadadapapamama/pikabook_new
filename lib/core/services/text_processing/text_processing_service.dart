@@ -267,15 +267,24 @@ class TextProcessingService {
   bool _hasProcessedTextChanged(ProcessedText? previous, ProcessedText current) {
     if (previous == null) return true;
     
-    // 기본 속성 비교
+    // StreamingStatus와 진행률 포함한 상세 비교
     if (previous.fullOriginalText != current.fullOriginalText ||
         previous.fullTranslatedText != current.fullTranslatedText ||
         previous.mode != current.mode ||
-        previous.units.length != current.units.length) {
+        previous.displayMode != current.displayMode ||
+        previous.units.length != current.units.length ||
+        previous.streamingStatus != current.streamingStatus) {
+      if (kDebugMode) {
+        debugPrint('📝 ProcessedText 변경 감지:');
+        debugPrint('   원문 길이: ${previous.fullOriginalText.length} → ${current.fullOriginalText.length}');
+        debugPrint('   번역 길이: ${previous.fullTranslatedText.length} → ${current.fullTranslatedText.length}');
+        debugPrint('   유닛 수: ${previous.units.length} → ${current.units.length}');
+        debugPrint('   스트리밍 상태: ${previous.streamingStatus} → ${current.streamingStatus}');
+      }
       return true;
     }
     
-    // 개별 유닛 비교
+    // 개별 유닛 비교 (번역 완료 상태 포함)
     for (int i = 0; i < previous.units.length; i++) {
       final prevUnit = previous.units[i];
       final currUnit = current.units[i];
@@ -283,10 +292,19 @@ class TextProcessingService {
       if (prevUnit.originalText != currUnit.originalText ||
           prevUnit.translatedText != currUnit.translatedText ||
           prevUnit.pinyin != currUnit.pinyin) {
+        if (kDebugMode) {
+          debugPrint('📝 유닛 $i 변경 감지:');
+          debugPrint('   원문: "${prevUnit.originalText}" → "${currUnit.originalText}"');
+          debugPrint('   번역: "${prevUnit.translatedText}" → "${currUnit.translatedText}"');
+          debugPrint('   병음: "${prevUnit.pinyin}" → "${currUnit.pinyin}"');
+        }
         return true;
       }
     }
     
+    if (kDebugMode) {
+      debugPrint('✅ ProcessedText 변경 없음 (동일한 데이터)');
+    }
     return false;
   }
   

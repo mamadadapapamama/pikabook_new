@@ -11,7 +11,6 @@ import '../services/page_service.dart';
 import '../managers/note_options_manager.dart';
 import '../services/note_service.dart';
 import '../../../core/services/text_processing/text_processing_service.dart';
-import '../post_llm_workflow.dart';
 import '../services/pending_job_recovery_service.dart';
 
 /// 단순화된 노트 상세 화면 ViewModel
@@ -333,18 +332,43 @@ class NoteDetailViewModel extends ChangeNotifier {
         
         if (processedText != null) {
           final previousStatus = _pageStatuses[pageId];
-          final previousUnits = _processedTexts[pageId]?.units.length ?? 0;
+          final previousProcessedText = _processedTexts[pageId];
+          final previousUnits = previousProcessedText?.units.length ?? 0;
           
-          // 상태 업데이트
-          _processedTexts[pageId] = processedText;
-          _pageStatuses[pageId] = ProcessingStatus.completed;
+          // 실제로 변경된 경우에만 상태 업데이트
+          bool hasActualChange = false;
           
-          if (flutter_foundation.kDebugMode) {
-            debugPrint("📊 [ViewModel] 상태 업데이트: $pageId");
-            debugPrint("   이전 상태: ${previousStatus?.displayName ?? '없음'}");
-            debugPrint("   현재 상태: ${ProcessingStatus.completed.displayName}");
-            debugPrint("   이전 유닛: $previousUnits개");
-            debugPrint("   현재 유닛: ${processedText.units.length}개");
+          // ProcessedText 변경 여부 확인
+          if (previousProcessedText == null) {
+            hasActualChange = true;
+          } else {
+            // 유닛 수나 번역 내용 변경 확인
+            if (previousProcessedText.units.length != processedText.units.length ||
+                previousProcessedText.fullTranslatedText != processedText.fullTranslatedText) {
+              hasActualChange = true;
+            }
+          }
+          
+          // 변경된 경우에만 상태 업데이트
+          if (hasActualChange) {
+            _processedTexts[pageId] = processedText;
+            _pageStatuses[pageId] = ProcessingStatus.completed;
+            
+            if (flutter_foundation.kDebugMode) {
+              debugPrint("📊 [ViewModel] 실제 변경 감지로 상태 업데이트: $pageId");
+              debugPrint("   이전 상태: ${previousStatus?.displayName ?? '없음'}");
+              debugPrint("   현재 상태: ${ProcessingStatus.completed.displayName}");
+              debugPrint("   이전 유닛: $previousUnits개");
+              debugPrint("   현재 유닛: ${processedText.units.length}개");
+              debugPrint("   번역 텍스트 변경: ${previousProcessedText?.fullTranslatedText != processedText.fullTranslatedText}");
+            }
+          } else {
+            if (flutter_foundation.kDebugMode) {
+              debugPrint("✅ [ViewModel] 동일한 데이터로 UI 업데이트 스킵: $pageId");
+              debugPrint("   유닛 수: ${processedText.units.length}개 (변경 없음)");
+              debugPrint("   번역 텍스트: ${processedText.fullTranslatedText.length}자 (변경 없음)");
+            }
+            return; // 변경이 없으면 notifyListeners() 호출하지 않음
           }
           
           // 페이지 처리 완료 콜백 호출

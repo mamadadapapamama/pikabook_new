@@ -30,7 +30,7 @@ class PostLLMWorkflow {
   final ApiService _apiService = ApiService(); // 새로 추가
 
   // 클라이언트 측 청크 크기 제한
-  static const int clientChunkSize = 20;
+  static const int clientChunkSize = 5;
 
   // 처리 큐 (메모리 기반)
   static final Queue<PostProcessingJob> _processingQueue = Queue<PostProcessingJob>();
@@ -135,108 +135,99 @@ class PostLLMWorkflow {
         debugPrint('📊 최종 수집 결과: ${allSegments.length}개 텍스트 세그먼트');
       }
 
-      // 3. clientChunkSize 단위로 세그먼트 처리 (실시간 반영)
-      for (int i = 0; i < allSegments.length; i += clientChunkSize) {
-        final endIndex = math.min(i + clientChunkSize, allSegments.length);
-        final chunkSegments = allSegments.sublist(i, endIndex);
-        final chunkPageIds = pageIds.sublist(i, endIndex);
-        
-        if (kDebugMode) {
-          debugPrint('🔄 [워크플로우] 청크 처리 시작: ${i ~/ clientChunkSize + 1}/${(allSegments.length / clientChunkSize).ceil()}');
-          debugPrint('   세그먼트 범위: ${i+1}-$endIndex (총 ${chunkSegments.length}개)');
-        }
+      // 3. HTTP 스트리밍으로 실시간 번역 처리
+      if (kDebugMode) {
+        debugPrint('🌊 [워크플로우] HTTP 스트리밍 번역 시작: ${allSegments.length}개 세그먼트');
+      }
 
-        try {
-          final chunkStartTime = DateTime.now();
+      try {
+        final streamStartTime = DateTime.now();
+        int processedChunks = 0;
+        
+        // 스트리밍 번역 시작
+        await for (final chunkData in _apiService.translateSegmentsStream(
+          textSegments: allSegments,
+          sourceLanguage: job.pages.first.sourceLanguage,
+          targetLanguage: job.pages.first.targetLanguage,
+          needPinyin: true,
+          noteId: job.noteId,
+        )) {
+          if (kDebugMode) {
+            debugPrint('📦 [워크플로우] 청크 수신: ${chunkData['chunkIndex'] + 1}/${chunkData['totalChunks']}');
+          }
+
+          if (chunkData['isError'] == true) {
+            // 오류 청크 처리
+            if (kDebugMode) {
+              debugPrint('❌ 청크 ${chunkData['chunkIndex']} 오류: ${chunkData['error']}');
+            }
+            continue;
+          }
+
+          // 정상 청크 처리
+          final chunkUnits = _extractUnitsFromChunkData(chunkData);
+          final chunkIndex = chunkData['chunkIndex'] as int;
           
-          // 개별 청크 처리
-          final serverResult = await _apiService.translateSegments(
-            textSegments: chunkSegments,
+          // 해당 청크의 세그먼트들이 어느 페이지에 속하는지 매핑
+          final chunkSize = 3; // 서버의 CHUNK_SIZE와 일치
+          final startIndex = chunkIndex * chunkSize;
+          
+          for (int j = 0; j < chunkUnits.length; j++) {
+            final segmentIndex = startIndex + j;
+            if (segmentIndex < pageIds.length) {
+              final pageId = pageIds[segmentIndex];
+              pageResults.putIfAbsent(pageId, () => []);
+              pageResults[pageId]!.add(chunkUnits[j]);
+              
+              // 개별 세그먼트 즉시 스트리밍 업데이트
+              final pageData = job.pages.firstWhere((p) => p.pageId == pageId);
+              await _updatePageWithStreamingUnit(pageData, pageResults[pageId]!, pageSegmentCount[pageId]!);
+              
+              // 진행률 알림
+              final progress = pageResults[pageId]!.length / pageSegmentCount[pageId]!;
+              await _notifyPageProgress(pageId, progress);
+              
+              if (kDebugMode) {
+                debugPrint('🔄 실시간 스트리밍: ${pageId} (${pageResults[pageId]!.length}/${pageSegmentCount[pageId]!})');
+                debugPrint('   새 유닛: "${chunkUnits[j].originalText}" → "${chunkUnits[j].translatedText}"');
+              }
+            }
+          }
+          
+          processedChunks++;
+          _checkAndNotifyCompletedPages(pageResults, pageSegmentCount, completedPages);
+          
+          // 완료 확인
+          if (chunkData['isComplete'] == true) {
+            final streamEndTime = DateTime.now();
+            final totalTime = streamEndTime.difference(streamStartTime).inMilliseconds;
+            
+            if (kDebugMode) {
+              debugPrint('✅ [워크플로우] 스트리밍 완료: ${processedChunks}개 청크, ${totalTime}ms');
+            }
+            break;
+          }
+        }
+        
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('❌ [워크플로우] 스트리밍 실패: $e');
+        }
+        
+        // 스트리밍 실패 시 폴백 처리
+        for (int i = 0; i < allSegments.length; i++) {
+          final pageId = pageIds[i];
+          pageResults.putIfAbsent(pageId, () => []);
+          pageResults[pageId]!.add(TextUnit(
+            originalText: allSegments[i],
+            translatedText: '[스트리밍 실패]',
+            pinyin: '',
             sourceLanguage: job.pages.first.sourceLanguage,
             targetLanguage: job.pages.first.targetLanguage,
-            needPinyin: true,
-            noteId: job.noteId,
-          );
+          ));
           
-          final chunkEndTime = DateTime.now();
-          final chunkTotalTime = chunkEndTime.difference(chunkStartTime).inMilliseconds;
-          
-          if (kDebugMode) {
-            debugPrint('✅ [워크플로우] 청크 처리 완료: ${chunkSegments.length}개 세그먼트');
-            debugPrint('⏱️ [워크플로우] 청크 총 시간: ${chunkTotalTime}ms');
-            debugPrint('📊 [워크플로우] 세그먼트당 평균: ${(chunkTotalTime / chunkSegments.length).round()}ms');
-          }
-          
-          final parsingStartTime = DateTime.now();
-          
-          // 서버 응답에서 TextUnit 리스트 추출
-          final chunkUnits = _extractUnitsFromServerResponse(serverResult);
-          
-          final parsingEndTime = DateTime.now();
-          final parsingTime = parsingEndTime.difference(parsingStartTime).inMilliseconds;
-          
-          if (kDebugMode) {
-            debugPrint('⚡ [워크플로우] 응답 파싱 시간: ${parsingTime}ms');
-          }
-          
-          final uiUpdateStartTime = DateTime.now();
-          
-          // 각 세그먼트별로 해당 페이지에 결과 누적 및 즉시 반영
-          for (int j = 0; j < chunkUnits.length; j++) {
-            final pageId = chunkPageIds[j];
-            pageResults.putIfAbsent(pageId, () => []);
-            pageResults[pageId]!.add(chunkUnits[j]);
-            // 누적된 번역 결과를 바로 페이지에 업데이트
-            final pageData = job.pages.firstWhere((p) => p.pageId == pageId);
-            await _updatePageWithResults(pageData, pageResults[pageId]!);
-            // 진행률 알림
-            final progress = pageResults[pageId]!.length / pageSegmentCount[pageId]!;
-            await _notifyPageProgress(pageId, progress);
-          }
-          
-          final uiUpdateEndTime = DateTime.now();
-          final uiUpdateTime = uiUpdateEndTime.difference(uiUpdateStartTime).inMilliseconds;
-          
-          if (kDebugMode) {
-            debugPrint('🎨 [워크플로우] UI 업데이트 시간: ${uiUpdateTime}ms');
-            debugPrint('📈 [워크플로우] 성능 분석:');
-            debugPrint('   - API 호출: ${chunkTotalTime - parsingTime - uiUpdateTime}ms');
-            debugPrint('   - 응답 파싱: ${parsingTime}ms');
-            debugPrint('   - UI 업데이트: ${uiUpdateTime}ms');
-            debugPrint('   - 총 시간: ${chunkTotalTime}ms');
-          }
-          
-          // 청크 처리 완료 후 완료된 페이지들 확인
-          _checkAndNotifyCompletedPages(pageResults, pageSegmentCount, completedPages);
-          
-          // 청크 간 짧은 지연
-          if (i + clientChunkSize < allSegments.length) {
-            await Future.delayed(const Duration(milliseconds: 500));
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('❌ 청크 처리 실패: $e');
-          }
-          // 실패한 청크는 원본만 유지
-          for (int j = 0; j < chunkSegments.length; j++) {
-            final pageId = chunkPageIds[j];
-            pageResults.putIfAbsent(pageId, () => []);
-            pageResults[pageId]!.add(TextUnit(
-              originalText: chunkSegments[j],
-              translatedText: '[번역 실패]',
-              pinyin: '',
-              sourceLanguage: job.pages.first.sourceLanguage,
-              targetLanguage: job.pages.first.targetLanguage,
-            ));
-            // 실패도 바로 반영
-            final pageData = job.pages.firstWhere((p) => p.pageId == pageId);
-            await _updatePageWithResults(pageData, pageResults[pageId]!);
-            final progress = pageResults[pageId]!.length / pageSegmentCount[pageId]!;
-            await _notifyPageProgress(pageId, progress);
-          }
-          
-          // 실패 처리 후에도 완료된 페이지들 확인
-          _checkAndNotifyCompletedPages(pageResults, pageSegmentCount, completedPages);
+          final pageData = job.pages.firstWhere((p) => p.pageId == pageId);
+          await _updatePageWithStreamingUnit(pageData, pageResults[pageId]!, pageSegmentCount[pageId]!);
         }
       }
       if (kDebugMode) {
@@ -265,7 +256,79 @@ class PostLLMWorkflow {
     }
   }
 
-  /// 페이지에 LLM 결과 업데이트
+  /// 실시간 스트리밍: 개별 유닛 단위로 페이지 업데이트
+  Future<void> _updatePageWithStreamingUnit(
+    PageProcessingData pageData,
+    List<TextUnit> currentResults,
+    int totalExpectedUnits,
+  ) async {
+    try {
+      // 현재까지의 번역과 병음 텍스트 조합
+      final translatedText = currentResults.map((unit) => unit.translatedText ?? '').join(' ');
+      final pinyinText = currentResults.map((unit) => unit.pinyin ?? '').join(' ');
+      final originalText = currentResults.map((unit) => unit.originalText).join(' ');
+      
+      // 진행률 계산
+      final progress = currentResults.length / totalExpectedUnits;
+      final isCompleted = currentResults.length >= totalExpectedUnits;
+      
+      // 스트리밍 상태 결정
+      final streamingStatus = isCompleted ? StreamingStatus.completed : StreamingStatus.streaming;
+
+      // 스트리밍 ProcessedText 생성
+      final streamingProcessedText = ProcessedText(
+        mode: pageData.mode,
+        displayMode: TextDisplayMode.full,
+        fullOriginalText: originalText,
+        fullTranslatedText: translatedText,
+        units: currentResults,
+        sourceLanguage: pageData.sourceLanguage,
+        targetLanguage: pageData.targetLanguage,
+        streamingStatus: streamingStatus,
+        completedUnits: currentResults.length,
+        progress: progress,
+      );
+
+      // 페이지 실시간 업데이트
+      await _pageService.updatePage(pageData.pageId, {
+        'translatedText': translatedText,
+        'pinyin': pinyinText,
+        'processedText': {
+          'units': currentResults.map((unit) => unit.toJson()).toList(),
+          'mode': streamingProcessedText.mode.toString(),
+          'displayMode': streamingProcessedText.displayMode.toString(),
+          'fullOriginalText': streamingProcessedText.fullOriginalText,
+          'fullTranslatedText': streamingProcessedText.fullTranslatedText,
+          'sourceLanguage': pageData.sourceLanguage,
+          'targetLanguage': pageData.targetLanguage,
+          'streamingStatus': streamingStatus.index,
+          'completedUnits': currentResults.length,
+          'progress': progress,
+        },
+        // 완료된 경우에만 최종 상태 업데이트
+        if (isCompleted) ...{
+          'processedAt': FieldValue.serverTimestamp(),
+          'status': ProcessingStatus.completed.toString(),
+        } else ...{
+          'status': ProcessingStatus.translating.toString(),
+        }
+      });
+
+      if (kDebugMode && currentResults.length % 5 == 0) { // 5개마다 로그
+        debugPrint('🔄 스트리밍 업데이트: ${pageData.pageId}');
+        debugPrint('   진행률: ${(progress * 100).toInt()}% (${currentResults.length}/$totalExpectedUnits)');
+        debugPrint('   상태: ${streamingStatus.name}');
+      }
+
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 스트리밍 업데이트 실패: ${pageData.pageId}, 오류: $e');
+      }
+      rethrow;
+    }
+  }
+
+  /// 페이지에 LLM 결과 업데이트 (최종 완료용)
   Future<void> _updatePageWithResults(
     PageProcessingData pageData,
     List<TextUnit> results,
@@ -547,35 +610,36 @@ class PostLLMWorkflow {
     }
   }
 
-  /// Firebase Functions 서버 응답에서 TextUnit 리스트 추출
-  /// 
-  /// 서버 응답 형식:
-  /// ```json
-  /// {
-  ///   "success": true,
-  ///   "translation": {
-  ///     "units": [
-  ///       {
-  ///         "originalText": "你好",
-  ///         "translatedText": "안녕하세요",
-  ///         "pinyin": "Nǐ hǎo",
-  ///         "sourceLanguage": "zh-CN",
-  ///         "targetLanguage": "ko"
-  ///       }
-  ///     ],
-  ///     "fullOriginalText": "你好",
-  ///     "fullTranslatedText": "안녕하세요",
-  ///     "mode": "segment",
-  ///     "sourceLanguage": "zh-CN",
-  ///     "targetLanguage": "ko"
-  ///   },
-  ///   "statistics": {
-  ///     "segmentCount": 1,
-  ///     "totalCharacters": 2,
-  ///     "processingTime": 1234
-  ///   }
-  /// }
-  /// ```
+  /// 스트리밍 청크 데이터에서 TextUnit 리스트 추출
+  List<TextUnit> _extractUnitsFromChunkData(Map<String, dynamic> chunkData) {
+    try {
+      if (chunkData['units'] == null) {
+        if (kDebugMode) {
+          debugPrint('❌ 청크 데이터에 units 필드가 없음');
+        }
+        return [];
+      }
+
+      final units = chunkData['units'] as List;
+      return units.map((unitData) {
+        final unit = Map<String, dynamic>.from(unitData);
+        return TextUnit(
+          originalText: unit['originalText'] ?? '',
+          translatedText: unit['translatedText'] ?? '',
+          pinyin: unit['pinyin'] ?? '',
+          sourceLanguage: unit['sourceLanguage'] ?? 'zh-CN',
+          targetLanguage: unit['targetLanguage'] ?? 'ko',
+        );
+      }).toList();
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 청크 데이터 파싱 실패: $e');
+      }
+      return [];
+    }
+  }
+
   List<TextUnit> _extractUnitsFromServerResponse(dynamic serverResult) {
     try {
       if (kDebugMode) {
