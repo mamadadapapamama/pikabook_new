@@ -351,11 +351,15 @@ class NoteService {
     required String noteId,
     String? thumbnailUrl,
     int? pageCount,
+    bool updateTimestamp = true, // OCR 처리 중에는 false로 설정하여 불필요한 리빌드 방지
   }) async {
     try {
-      final updateData = <String, dynamic>{
-        'updatedAt': DateTime.now(),
-      };
+      final updateData = <String, dynamic>{};
+      
+      // 타임스탬프 업데이트 여부 결정
+      if (updateTimestamp) {
+        updateData['updatedAt'] = DateTime.now();
+      }
       
       if (thumbnailUrl != null) {
         updateData['firstImageUrl'] = thumbnailUrl;
@@ -365,10 +369,13 @@ class NoteService {
         updateData['pageCount'] = pageCount;
       }
       
-      await _notesCollection.doc(noteId).update(updateData);
+      // 업데이트할 데이터가 있을 때만 실행
+      if (updateData.isNotEmpty) {
+        await _notesCollection.doc(noteId).update(updateData);
+      }
       
       if (kDebugMode) {
-        debugPrint('노트 메타데이터 업데이트 완료: $noteId');
+        debugPrint('노트 메타데이터 업데이트 완료: $noteId (timestamp: $updateTimestamp)');
         if (thumbnailUrl != null) debugPrint('  썸네일: $thumbnailUrl');
         if (pageCount != null) debugPrint('  페이지 수: $pageCount');
       }

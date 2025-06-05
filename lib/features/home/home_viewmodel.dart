@@ -68,39 +68,66 @@ class HomeViewModel extends ChangeNotifier {
           debugPrint('[HomeViewModel] 📱 노트 데이터 수신: $newCount개 (이전: $oldCount개)');
         }
         
-        // 노트가 새로 추가된 경우 (1개 증가)
-        if (newCount > oldCount && newCount == oldCount + 1) {
-          // 새로운 노트 찾기 (가장 최근 생성된 노트)
-          final newNotes = notesList.where((note) => 
-            !_notes.any((existingNote) => existingNote.id == note.id)
-          ).toList();
-          
-          if (newNotes.isNotEmpty) {
-            // 새로운 노트를 리스트 맨 앞에 추가 (최신순 정렬 유지)
-            _notes.insert(0, newNotes.first);
-            if (kDebugMode) {
-              debugPrint('[HomeViewModel] ✅ 새 노트 추가됨: ${newNotes.first.title}');
-            }
-          } else {
-            // 새로운 노트를 찾지 못한 경우 전체 교체
-            _notes = notesList;
-            if (kDebugMode) {
-              debugPrint('[HomeViewModel] 📱 전체 리스트 업데이트 (새 노트 미발견)');
-            }
-          }
-        } else {
-          // 기타 경우 (삭제, 수정, 초기 로드 등)는 전체 교체
-          _notes = notesList;
-          if (kDebugMode) {
-            if (newCount < oldCount) {
-              debugPrint('[HomeViewModel] 🗑️ 노트 삭제됨 (전체 리스트 업데이트)');
-            } else if (newCount == oldCount) {
-              debugPrint('[HomeViewModel] ✏️ 노트 수정됨 (전체 리스트 업데이트)');
-            } else {
-              debugPrint('[HomeViewModel] 📱 초기 로드 또는 대량 변경 (전체 리스트 업데이트)');
-            }
-          }
-        }
+                 // 노트가 새로 추가된 경우 (1개 증가)
+         if (newCount > oldCount && newCount == oldCount + 1) {
+           // 새로운 노트 찾기 (가장 최근 생성된 노트)
+           final newNotes = notesList.where((note) => 
+             !_notes.any((existingNote) => existingNote.id == note.id)
+           ).toList();
+           
+           if (newNotes.isNotEmpty) {
+             // 새로운 노트를 리스트 맨 앞에 추가 (최신순 정렬 유지)
+             _notes.insert(0, newNotes.first);
+             if (kDebugMode) {
+               debugPrint('[HomeViewModel] ✅ 새 노트 추가됨: ${newNotes.first.title}');
+             }
+           } else {
+             // 새로운 노트를 찾지 못한 경우 전체 교체
+             _notes = notesList;
+             if (kDebugMode) {
+               debugPrint('[HomeViewModel] 📱 전체 리스트 업데이트 (새 노트 미발견)');
+             }
+           }
+         } else if (newCount == oldCount) {
+           // 같은 수의 노트: 메타데이터 업데이트만 발생 (OCR 처리 등)
+           // 전체 리빌드를 피하고 변경된 노트만 업데이트
+           bool hasChanges = false;
+           
+           for (int i = 0; i < notesList.length && i < _notes.length; i++) {
+             final newNote = notesList[i];
+             final oldNote = _notes[i];
+             
+             // 같은 ID의 노트에서 메타데이터가 변경된 경우
+             if (newNote.id == oldNote.id && 
+                 (newNote.updatedAt != oldNote.updatedAt || 
+                  newNote.pageCount != oldNote.pageCount ||
+                  newNote.firstImageUrl != oldNote.firstImageUrl)) {
+               _notes[i] = newNote;
+               hasChanges = true;
+               if (kDebugMode) {
+                 debugPrint('[HomeViewModel] 📝 노트 메타데이터 업데이트: ${newNote.title}');
+               }
+             }
+           }
+           
+           // 변경사항이 없으면 전체 교체 (안전장치)
+           if (!hasChanges) {
+             _notes = notesList;
+             if (kDebugMode) {
+               debugPrint('[HomeViewModel] 📱 전체 리스트 업데이트 (변경사항 미감지)');
+             }
+           }
+         } else {
+           // 기타 경우 (삭제, 대량 변경, 초기 로드 등)는 전체 교체
+           _notes = notesList;
+           if (kDebugMode) {
+             if (newCount < oldCount) {
+               debugPrint('[HomeViewModel] 🗑️ 노트 삭제됨 (전체 리스트 업데이트)');
+             } else {
+               debugPrint('[HomeViewModel] 📱 초기 로드 또는 대량 변경 (전체 리스트 업데이트)');
+             }
+           }
+         }
         
         _isLoading = false;
         _error = null;

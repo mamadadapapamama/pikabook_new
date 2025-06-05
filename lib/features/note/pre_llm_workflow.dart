@@ -76,11 +76,13 @@ class PreLLMWorkflow {
       }
       
       // 4. 노트 메타데이터 업데이트 (썸네일 + 페이지 수)
+      // OCR 처리 중이므로 updatedAt을 업데이트하지 않아 불필요한 HomeViewModel 리빌드 방지
       if (imageUrls.isNotEmpty) {
         await _noteService.updateNoteMetadata(
           noteId: noteId,
           thumbnailUrl: imageUrls[0],
           pageCount: imageFiles.length,
+          updateTimestamp: false, // OCR 처리 중에는 타임스탬프 업데이트 안함
         );
       }
       
@@ -166,7 +168,12 @@ class PreLLMWorkflow {
             if (kDebugMode) {
               debugPrint('📊 페이지 수 불일치 감지: 예상 ${imageFiles.length}개 → 실제 ${pageDataList.length}개');
             }
-            await _noteService.syncNotePageCount(noteId);
+            // OCR 처리 중이므로 타임스탬프를 업데이트하지 않음
+            await _noteService.updateNoteMetadata(
+              noteId: noteId,
+              pageCount: pageDataList.length,
+              updateTimestamp: false,
+            );
           }
           
           if (kDebugMode) {
