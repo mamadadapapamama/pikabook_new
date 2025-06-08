@@ -96,6 +96,7 @@ class ApiService {
   /// 텍스트 세그먼트들을 서버에서 실시간 스트리밍 번역
   Stream<Map<String, dynamic>> translateSegmentsStream({
     required List<String> textSegments,
+    List<Map<String, dynamic>>? pageSegments, // 페이지별 세그먼트 정보 추가
     String sourceLanguage = 'zh-CN',
     String targetLanguage = 'ko',
     bool needPinyin = true,
@@ -117,14 +118,24 @@ class ApiService {
         'Content-Type': 'application/json',
         if (authToken != null) 'Authorization': 'Bearer $authToken',
       });
-      request.body = jsonEncode({
+      final requestBody = {
         'textSegments': textSegments,
         'sourceLanguage': sourceLanguage,
         'targetLanguage': targetLanguage,
         'needPinyin': needPinyin,
         'pageId': pageId,
         'noteId': noteId,
-      });
+      };
+      
+      // 페이지별 세그먼트 정보가 있으면 추가
+      if (pageSegments != null && pageSegments.isNotEmpty) {
+        requestBody['pageSegments'] = pageSegments;
+        if (kDebugMode) {
+          debugPrint('📄 [API] 페이지별 처리: ${pageSegments.length}개 페이지');
+        }
+      }
+      
+      request.body = jsonEncode(requestBody);
 
       final client = http.Client();
       final response = await client.send(request);

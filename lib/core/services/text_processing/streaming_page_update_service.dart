@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/text_unit.dart';
 import '../../models/processed_text.dart';
-import '../../../features/note/pre_llm_workflow.dart';
+import '../../models/page_processing_data.dart';
 import '../../../features/note/services/page_service.dart';
 
 /// **스트리밍 데이터 혼합 & UI 업데이트 서비스**  

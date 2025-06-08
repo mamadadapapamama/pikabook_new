@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../../models/text_unit.dart';
-import '../../../features/note/pre_llm_workflow.dart';
+import '../../models/page_processing_data.dart';
 import 'api_service.dart';
 
 /// **스트리밍 수신 & 분배 서비스**
@@ -29,7 +29,6 @@ class StreamingReceiveService {
     }
 
     final Map<String, List<TextUnit>> pageResults = {};
-    final Set<String> completedPages = {};
     int processedChunks = 0;
 
     try {

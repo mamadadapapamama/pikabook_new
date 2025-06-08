@@ -8,12 +8,11 @@ import 'services/page_service.dart';
 import 'services/note_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../../core/services/cache/cache_manager.dart';
-import '../../core/models/processed_text.dart';
 import '../../core/models/text_unit.dart';
-import '../../core/models/note.dart';
 import '../../core/models/processing_status.dart';
 import '../../../core/services/text_processing/streaming_receive_service.dart';
 import '../../../core/services/text_processing/streaming_page_update_service.dart';
+import '../../core/models/page_processing_data.dart';
 import 'pre_llm_workflow.dart';
 
 /// 후처리 워크플로우: 백그라운드 LLM 처리
@@ -335,7 +334,7 @@ class PostLLMWorkflow {
         }
         
         // 스토리지 사용량
-        totalStorageBytes += pageData.imageFileSize;
+        totalStorageBytes += pageData.imageFileSize.toInt();
         
         // 번역된 문자 수 (텍스트 세그먼트 길이 합계)
         for (final segment in pageData.textSegments) {

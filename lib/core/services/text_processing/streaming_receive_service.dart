@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../../models/text_unit.dart';
-import '../../../features/note/pre_llm_workflow.dart';
+import '../../models/page_processing_data.dart';
 import 'api_service.dart';
 
 /// **스트리밍 수신 & 분배 서비스**
@@ -29,13 +29,16 @@ class StreamingReceiveService {
     }
 
     final Map<String, List<TextUnit>> pageResults = {};
-    final Set<String> completedPages = {};
     int processedChunks = 0;
 
     try {
+      // 페이지별 세그먼트 정보 생성
+      final pageSegments = _createPageSegments(pages);
+      
       // HTTP 스트리밍 시작
       await for (final chunkData in _apiService.translateSegmentsStream(
         textSegments: textSegments,
+        pageSegments: pageSegments,
         sourceLanguage: sourceLanguage,
         targetLanguage: targetLanguage,
         needPinyin: needPinyin,
@@ -62,13 +65,24 @@ class StreamingReceiveService {
           debugPrint('📦 청크 ${chunkIndex} 처리: ${chunkUnits.length}개 유닛');
         }
         
-        // LLM 결과를 페이지별로 분배
-        await _distributeUnitsToPages(
-          chunkUnits, 
-          pages, 
-          pageResults,
-          isFirstChunk: chunkIndex == 0,
-        );
+        // 페이지 ID 기반 분배 (서버에서 제공)
+        if (chunkData.containsKey('pageId')) {
+          final pageId = chunkData['pageId'] as String;
+          pageResults.putIfAbsent(pageId, () => []);
+          pageResults[pageId]!.addAll(chunkUnits);
+          
+          if (kDebugMode) {
+            debugPrint('📄 서버 지정 페이지: $pageId (+${chunkUnits.length}개)');
+          }
+        } else {
+          // 기존 방식 (페이지 ID 없는 경우)
+          await _distributeUnitsToPages(
+            chunkUnits, 
+            pages, 
+            pageResults,
+            isFirstChunk: chunkIndex == 0,
+          );
+        }
         
         processedChunks++;
         
@@ -230,6 +244,19 @@ class StreamingReceiveService {
     }
     
     return matchCount / shorter.length;
+  }
+  
+  /// 페이지별 세그먼트 정보 생성 (서버 전송용)
+  List<Map<String, dynamic>>? _createPageSegments(List<PageProcessingData> pages) {
+    if (pages.length <= 1) {
+      // 단일 페이지인 경우 null 반환 (기존 방식 사용)
+      return null;
+    }
+    
+    return pages.map((page) => {
+      'pageId': page.pageId,
+      'segments': page.textSegments,
+    }).toList();
   }
 
 
