@@ -31,7 +31,7 @@ class PostLLMWorkflow {
   final CacheManager _cacheManager = CacheManager();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  
+
   // 새로운 전담 서비스들
   final StreamingReceiveService _streamingService = StreamingReceiveService();
   final StreamingPageUpdateService _pageUpdateService = StreamingPageUpdateService();
@@ -124,10 +124,10 @@ class PostLLMWorkflow {
               await for (final result in _streamingService.processStreamingTranslation(
         textSegments: allSegments,
         pages: job.pages,
-        sourceLanguage: job.pages.first.sourceLanguage,
-        targetLanguage: job.pages.first.targetLanguage,
+            sourceLanguage: job.pages.first.sourceLanguage,
+            targetLanguage: job.pages.first.targetLanguage,
         noteId: job.noteId,
-        needPinyin: true,
+            needPinyin: true,
       )) {
         if (!result.isSuccess) {
           if (kDebugMode) {
@@ -146,8 +146,8 @@ class PostLLMWorkflow {
               totalExpectedUnits: pageData.textSegments.length,
             );
           }
-        }
-        
+          }
+          
         // 5. 완료 확인
         _checkAndNotifyCompletedPagesOCR(result.pageResults, completedPages, job.pages);
         
@@ -190,13 +190,13 @@ class PostLLMWorkflow {
       
       final llmUnits = pageResults[pageId] ?? [];
       final ocrSegmentCount = page.textSegments.length;
-      
+
       // OCR 세그먼트 개수 기준으로 완료 판단
       if (llmUnits.length >= ocrSegmentCount && ocrSegmentCount > 0) {
         completedPages.add(pageId);
-        if (kDebugMode) {
+      if (kDebugMode) {
           debugPrint('🎉 [워크플로우] 페이지 완료 (OCR 기준): $pageId (LLM: ${llmUnits.length}개, OCR: ${ocrSegmentCount}개)');
-        }
+      }
       }
     }
   }

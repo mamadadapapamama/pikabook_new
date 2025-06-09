@@ -43,6 +43,7 @@ class StreamingReceiveService {
         targetLanguage: targetLanguage,
         needPinyin: needPinyin,
         noteId: noteId,
+        processingMode: pages.isNotEmpty ? pages.first.mode.toString() : null,
       )) {
         if (kDebugMode) {
           debugPrint('📦 [스트리밍] 청크 수신: ${chunkData['chunkIndex'] + 1}/${chunkData['totalChunks']}');
@@ -51,9 +52,9 @@ class StreamingReceiveService {
         // 오류 청크 처리
         if (chunkData['isError'] == true) {
                   yield StreamingReceiveResult.error(
-          chunkIndex: chunkData['chunkIndex'] as int,
-          error: chunkData['error']?.toString() ?? '알 수 없는 오류',
-        );
+            chunkIndex: chunkData['chunkIndex'] as int,
+            error: chunkData['error']?.toString() ?? '알 수 없는 오류',
+          );
           continue;
         }
 
@@ -76,12 +77,12 @@ class StreamingReceiveService {
           }
         } else {
           // 기존 방식 (페이지 ID 없는 경우)
-          await _distributeUnitsToPages(
-            chunkUnits, 
-            pages, 
-            pageResults,
-            isFirstChunk: chunkIndex == 0,
-          );
+        await _distributeUnitsToPages(
+          chunkUnits, 
+          pages, 
+          pageResults,
+          isFirstChunk: chunkIndex == 0,
+        );
         }
         
         processedChunks++;
@@ -171,7 +172,7 @@ class StreamingReceiveService {
     }
     
     // LLM 유닛을 기준점 비교로 페이지별 분배
-    for (final unit in chunkUnits) {
+      for (final unit in chunkUnits) {
       final assignedPageId = _findMatchingPage(unit, pageMarkers.values.toList());
       
       if (assignedPageId != null) {
@@ -186,17 +187,17 @@ class StreamingReceiveService {
         if (kDebugMode) {
           debugPrint('⚠️ 매칭 실패, 폴백 할당: "${unit.originalText}" → ${fallbackPageId}');
         }
+        }
       }
-    }
-    
-    if (kDebugMode) {
+      
+      if (kDebugMode) {
       debugPrint('✅ 다중 페이지 분배 완료:');
       for (final entry in pageResults.entries) {
         debugPrint('   📄 ${entry.key}: ${entry.value.length}개 유닛');
       }
     }
   }
-  
+
   /// LLM 유닛이 어느 페이지에 속하는지 찾기
   String? _findMatchingPage(TextUnit unit, List<PageMarker> pageMarkers) {
     final unitText = unit.originalText.trim();
@@ -228,7 +229,7 @@ class StreamingReceiveService {
     
     return bestMatchPageId;
   }
-  
+
   /// 간단한 문자열 유사도 계산 (공통 문자 비율)
   double _calculateSimilarity(String text1, String text2) {
     if (text1.isEmpty || text2.isEmpty) return 0.0;
@@ -259,8 +260,6 @@ class StreamingReceiveService {
     }).toList();
   }
 
-
-
   /// 스트리밍 청크 데이터에서 TextUnit 리스트 추출
   List<TextUnit> _extractUnitsFromChunkData(Map<String, dynamic> chunkData) {
     try {
@@ -275,6 +274,7 @@ class StreamingReceiveService {
           pinyin: unit['pinyin'] ?? '',
           sourceLanguage: unit['sourceLanguage'] ?? 'zh-CN',
           targetLanguage: unit['targetLanguage'] ?? 'ko',
+          segmentType: _parseSegmentType(unit['type'] ?? unit['segmentType']),
         );
       }).toList();
       
@@ -316,6 +316,19 @@ class StreamingReceiveService {
       isComplete: true,
       processedChunks: 1,
     );
+  }
+
+  /// 문자열에서 SegmentType 파싱
+  SegmentType _parseSegmentType(String? typeString) {
+    if (typeString == null) return SegmentType.unknown;
+    
+    try {
+      return SegmentType.values.firstWhere(
+        (e) => e.name == typeString.toLowerCase()
+      );
+    } catch (e) {
+      return SegmentType.unknown;
+    }
   }
 }
 

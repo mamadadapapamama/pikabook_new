@@ -1,8 +1,13 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/models/processed_text.dart';
 
-/// 텍스트 모드별 분리 서비스
-/// 사용자 설정에 따라 텍스트를 문장 단위 또는 문단 단위로 분리
+/// 텍스트 모드별 분리 서비스 (클라이언트 측 처리)
+/// 
+/// 사용 시나리오:
+/// 1. 노트 생성 시: segment 모드만 클라이언트에서 처리 (paragraph는 LLM에서 처리)
+/// 2. 설정 변경 후: 사용자가 텍스트 모드를 변경한 후 기존 노트를 새로운 모드로 재처리할 때
+/// 
+/// 주의: 일반적인 노트 로딩에서는 이미 처리된 캐시 데이터를 사용하므로 이 서비스를 사용하지 않음
 /// 
 class TextModeSeparationService {
   // 싱글톤 패턴
@@ -10,8 +15,12 @@ class TextModeSeparationService {
   factory TextModeSeparationService() => _instance;
   TextModeSeparationService._internal();
 
-  /// 모드에 따라 텍스트 분리
-  List<String> separateByMode(String text, TextProcessingMode mode) {
+  /// 모드에 따라 텍스트 분리 (클라이언트 측)
+  /// 
+  /// [context] 사용 컨텍스트:
+  /// - 'creation': 노트 생성 시 (segment 모드만 사용)
+  /// - 'settings': 설정 변경 후 재처리 시 (모든 모드 사용)
+  List<String> separateByMode(String text, TextProcessingMode mode, {String context = 'loading'}) {
     if (text.isEmpty) {
       if (kDebugMode) {
         debugPrint('TextModeSeparationService: 빈 텍스트 입력');
@@ -20,7 +29,7 @@ class TextModeSeparationService {
     }
 
     if (kDebugMode) {
-      debugPrint('TextModeSeparationService: 텍스트 분리 시작 - 모드: $mode, 길이: ${text.length}자');
+      debugPrint('TextModeSeparationService: 텍스트 분리 시작 - 모드: $mode, 컨텍스트: $context, 길이: ${text.length}자');
     }
 
     List<String> result = [];
@@ -33,9 +42,17 @@ class TextModeSeparationService {
         }
         break;
       case TextProcessingMode.paragraph:
-        result = splitIntoParagraphs(text);
-        if (kDebugMode) {
-          debugPrint('📄 문단 단위 분리 완료: ${result.length}개 문단');
+        // 노트 생성 시에는 서버에서 처리하므로 경고 표시
+        if (context == 'creation') {
+          if (kDebugMode) {
+            debugPrint('⚠️ 노트 생성 시 paragraph 모드는 서버에서 처리됩니다. 클라이언트 처리를 건너뜁니다.');
+          }
+          result = [text]; // 전체 텍스트를 그대로 반환
+        } else {
+          result = splitIntoParagraphs(text);
+          if (kDebugMode) {
+            debugPrint('📄 문단 단위 분리 완료: ${result.length}개 문단 (설정 변경 후 재처리)');
+          }
         }
         break;
     }
@@ -110,17 +127,21 @@ class TextModeSeparationService {
         .where((sentence) => sentence.trim().isNotEmpty)
         .toList();
 
+    // 제목 재배치 수행
+    final reorderedSentences = _reorderTitlesToTop(filteredSentences);
+
     if (kDebugMode) {
-      debugPrint('문장 분리 결과: ${filteredSentences.length}개 문장');
-      for (int i = 0; i < filteredSentences.length; i++) {
-        final preview = filteredSentences[i].length > 30 
-            ? '${filteredSentences[i].substring(0, 30)}...' 
-            : filteredSentences[i];
-        debugPrint('  문장 ${i+1}: "$preview"');
+      debugPrint('문장 분리 및 제목 재배치 결과: ${reorderedSentences.length}개 문장');
+      for (int i = 0; i < reorderedSentences.length; i++) {
+        final preview = reorderedSentences[i].length > 30 
+            ? '${reorderedSentences[i].substring(0, 30)}...' 
+            : reorderedSentences[i];
+        final isTitle = _isTitle(reorderedSentences[i]) || _isUnitOrLessonTitle(reorderedSentences[i]);
+        debugPrint('  ${isTitle ? "📋" : "📝"} ${i+1}: "$preview"');
       }
     }
 
-    return filteredSentences;
+    return reorderedSentences;
   }
 
   /// 단원/과 제목인지 확인
@@ -138,14 +159,32 @@ class TextModeSeparationService {
     return unitPatterns.any((pattern) => pattern.hasMatch(line));
   }
 
-  /// 제목인지 확인 (휴리스틱 방법)
+  /// 제목인지 확인 (개선된 휴리스틱 방법)
   bool _isTitle(String line) {
     // 제목 판단 기준:
-    // 1. 길이가 적당히 짧음 (1-15자)
+    // 1. 길이가 적당히 짧음 (1-20자) - 범위 확장
     // 2. 문장 구분자가 없음
     // 3. 숫자나 특수문자로만 이루어지지 않음
+    // 4. 중국어 문자 포함
+    // 5. 특별한 괄호나 기호로 둘러싸인 경우 (<<>>, <>, [], 등)
     
-    if (line.length > 15 || line.length < 2) return false;
+    if (line.length > 20 || line.length < 2) return false;
+    
+    // 특별한 제목 패턴 감지 (우선순위 높음)
+    if (_hasSpecialTitleMarkers(line)) {
+      if (kDebugMode) {
+        debugPrint('📋 특별 제목 마커 감지: "$line"');
+      }
+      return true;
+    }
+    
+    // 폰트 변화를 암시하는 패턴 (대문자, 반복 문자 등)
+    if (_hasFontStyleIndicators(line)) {
+      if (kDebugMode) {
+        debugPrint('🔤 폰트 스타일 인디케이터 감지: "$line"');
+      }
+      return true;
+    }
     
     // 문장 구분자가 있으면 제목이 아님
     if (RegExp(r'[。？！.!?，,]').hasMatch(line)) return false;
@@ -158,26 +197,249 @@ class TextModeSeparationService {
     
     return true;
   }
+  
+  /// 제목들을 적절한 위치로 재배치
+  List<String> _reorderTitlesToTop(List<String> sentences) {
+    if (sentences.isEmpty) return sentences;
+    
+    final List<String> result = [];
+    final List<String> currentSection = [];
+    String? currentTitle;
+    
+    if (kDebugMode) {
+      debugPrint('🔄 제목 재배치 시작: ${sentences.length}개 문장');
+    }
+    
+    for (int i = 0; i < sentences.length; i++) {
+      final sentence = sentences[i];
+      final isTitle = _isTitle(sentence) || _isUnitOrLessonTitle(sentence);
+      
+      if (isTitle) {
+        // 이전 섹션이 있으면 결과에 추가
+        if (currentTitle != null || currentSection.isNotEmpty) {
+          _addSectionToResult(result, currentTitle, currentSection);
+        }
+        
+        // 새로운 제목 설정
+        currentTitle = sentence;
+        currentSection.clear();
+        
+        if (kDebugMode) {
+          debugPrint('📋 새 제목 감지: "$sentence"');
+        }
+      } else {
+        // 일반 문장을 현재 섹션에 추가
+        currentSection.add(sentence);
+      }
+    }
+    
+    // 마지막 섹션 추가
+    if (currentTitle != null || currentSection.isNotEmpty) {
+      _addSectionToResult(result, currentTitle, currentSection);
+    }
+    
+    if (kDebugMode) {
+      debugPrint('✅ 제목 재배치 완료: ${result.length}개 문장');
+    }
+    
+    return result;
+  }
+  
+  /// 섹션을 결과에 추가 (제목을 맨 위로)
+  void _addSectionToResult(List<String> result, String? title, List<String> content) {
+    // 제목이 있으면 먼저 추가
+    if (title != null) {
+      result.add(title);
+      if (kDebugMode) {
+        debugPrint('📋 제목 추가: "$title"');
+      }
+    }
+    
+    // 내용 추가
+    for (final sentence in content) {
+      result.add(sentence);
+      if (kDebugMode) {
+        final preview = sentence.length > 20 ? '${sentence.substring(0, 20)}...' : sentence;
+        debugPrint('📝 내용 추가: "$preview"');
+      }
+    }
+    
+    // 섹션 구분을 위한 로그
+    if (title != null && content.isNotEmpty) {
+      if (kDebugMode) {
+        debugPrint('📦 섹션 완료: "$title" (${content.length}개 문장)');
+      }
+    }
+  }
 
-  /// 한 줄을 문장으로 분리
+  /// 특별한 제목 마커가 있는지 확인
+  bool _hasSpecialTitleMarkers(String line) {
+    // <<내용>>, <내용>, [내용], 【내용】, 《내용》 등의 패턴
+    final titleMarkerPatterns = [
+      RegExp(r'^<<.*>>$'),           // <<제목>>
+      RegExp(r'^<.*>$'),             // <제목>
+      RegExp(r'^\[.*\]$'),           // [제목]
+      RegExp(r'^【.*】$'),            // 【제목】
+      RegExp(r'^《.*》$'),            // 《제목》
+      RegExp(r'^〈.*〉$'),            // 〈제목〉
+      RegExp(r'^\*.*\*$'),           // *제목*
+      RegExp(r'^=.*=$'),             // =제목=
+    ];
+    
+    return titleMarkerPatterns.any((pattern) => pattern.hasMatch(line.trim()));
+  }
+  
+  /// 폰트 스타일 인디케이터가 있는지 확인
+  bool _hasFontStyleIndicators(String line) {
+    final trimmed = line.trim();
+    
+    // 전체가 대문자인 경우 (영어)
+    if (RegExp(r'^[A-Z\s\d]+$').hasMatch(trimmed) && trimmed.length > 2) {
+      return true;
+    }
+    
+    // 동일한 문자의 반복 (예: ======, -------)
+    if (RegExp(r'^(.)\1{3,}$').hasMatch(trimmed)) {
+      return true;
+    }
+    
+    // 숫자와 점으로 시작하는 제목 (예: 1. 제목, 第一章. 등)
+    if (RegExp(r'^[\d一二三四五六七八九十]+[.．、]\s*[\u4e00-\u9fff]').hasMatch(trimmed)) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /// 한 줄을 문장으로 분리 (정교한 분리 로직)
   List<String> _splitLineIntoSentences(String line) {
     if (line.isEmpty) return [];
     
-    final List<String> sentences = [];
+    // OCR 줄바꿈 제거 (연속된 공백과 줄바꿈을 하나의 공백으로 처리)
+    line = line.replaceAll(RegExp(r'\s+'), ' ').trim();
     
-    // 긴 문장에서 쉼표로 분리 (배열문 처리)
-    if (_shouldSplitByComma(line)) {
-      final commaSplit = _splitByFirstComma(line);
-      sentences.addAll(commaSplit);
-    } else {
-      // 일반적인 문장 구분자로 분리
-      sentences.addAll(_splitBySentenceDelimiters(line));
+    if (kDebugMode) {
+      debugPrint('🔍 문장 분리 대상: "$line"');
     }
     
-    return sentences;
+    final List<String> sentences = [];
+    
+    // 정교한 문장부호 분리 적용
+    sentences.addAll(_splitByPunctuationMarks(line));
+    
+    // 빈 문장 제거
+    final filteredSentences = sentences
+        .where((s) => s.trim().isNotEmpty)
+        .toList();
+    
+    if (kDebugMode) {
+      debugPrint('📝 분리된 문장들: ${filteredSentences.length}개');
+      for (int i = 0; i < filteredSentences.length; i++) {
+        debugPrint('  ${i+1}: "${filteredSentences[i]}"');
+      }
+    }
+    
+    return filteredSentences;
   }
 
-  /// 쉼표로 분리해야 하는지 판단
+  /// 정교한 문장부호 기반 분리 (새로운 로직)
+  List<String> _splitByPunctuationMarks(String text) {
+    if (text.isEmpty) return [];
+    
+    // 문장부호 패턴: 마침표, 쉼표, 중국어 쉼표, 중국어 마침표, 인용부호들
+    final punctuationPattern = RegExp(r'[。．.？！?!，,""''""''「」『』【】《》〈〉]');
+    
+    final List<String> segments = [];
+    int startIndex = 0;
+    
+    final matches = punctuationPattern.allMatches(text).toList();
+    
+    for (int i = 0; i < matches.length; i++) {
+      final match = matches[i];
+      final punctuation = match.group(0)!;
+      final endIndex = match.end;
+      
+      // 현재 세그먼트 추출
+      final segment = text.substring(startIndex, endIndex).trim();
+      
+      if (segment.isNotEmpty) {
+        // 쉼표인 경우 8글자 미만이면 분리하지 않음
+        if ((punctuation == ',' || punctuation == '，') && segment.length < 8) {
+          // 다음 문장부호까지 계속 연결
+          continue;
+        }
+        
+        // 인용부호는 특별 처리 (짝을 맞춰서)
+        if (_isQuotationMark(punctuation)) {
+          final quotePair = _findQuotePairEnd(text, match.start, punctuation);
+          if (quotePair != null) {
+            final quoteSegment = text.substring(startIndex, quotePair).trim();
+            if (quoteSegment.isNotEmpty) {
+              segments.add(quoteSegment);
+            }
+            startIndex = quotePair;
+            // 인용부호 처리한 부분은 건너뛰기
+            final skipMatches = matches.where((m) => m.start < quotePair).length;
+            i = skipMatches - 1; // for 루프에서 i++되므로 -1
+            continue;
+          }
+        }
+        
+        segments.add(segment);
+      }
+      
+      startIndex = endIndex;
+    }
+    
+    // 남은 텍스트 처리
+    if (startIndex < text.length) {
+      final remaining = text.substring(startIndex).trim();
+      if (remaining.isNotEmpty) {
+        // 마지막 세그먼트가 너무 짧으면 이전 세그먼트와 합치기
+        if (remaining.length < 8 && segments.isNotEmpty) {
+          segments[segments.length - 1] = '${segments.last} $remaining';
+        } else {
+          segments.add(remaining);
+        }
+      }
+    }
+    
+    return segments;
+  }
+  
+  /// 인용부호인지 확인
+  bool _isQuotationMark(String char) {
+    return RegExp(r'[""''""''「」『』【】《》〈〉]').hasMatch(char);
+  }
+  
+  /// 인용부호 짝 찾기
+  int? _findQuotePairEnd(String text, int startPos, String openQuote) {
+    // 인용부호 짝 찾기 - 간단한 조건문 사용
+    String? closeQuote;
+    
+    if (openQuote == '"') {
+      closeQuote = '"';
+    } else if (openQuote == '「') {
+      closeQuote = '」';
+    } else if (openQuote == '『') {
+      closeQuote = '』';
+    } else if (openQuote == '【') {
+      closeQuote = '】';
+    } else if (openQuote == '《') {
+      closeQuote = '》';
+    } else if (openQuote == '〈') {
+      closeQuote = '〉';
+    } else {
+      // 기본 인용부호들은 동일한 문자로 닫기
+      closeQuote = openQuote;
+    }
+    
+    // 닫는 인용부호 찾기
+    final closeIndex = text.indexOf(closeQuote, startPos + 1);
+    return closeIndex != -1 ? closeIndex + 1 : null;
+  }
+
+  /// 쉼표로 분리해야 하는지 판단 (기존 로직 - 호환성 유지)
   bool _shouldSplitByComma(String line) {
     // 조건:
     // 1. 쉼표가 2개 이상 있음
@@ -265,7 +527,10 @@ class TextModeSeparationService {
     return sentences;
   }
 
-  /// 문단 단위로 텍스트 분리
+  /// 문단 단위로 텍스트 분리 (설정 변경 후 재처리 시 사용)
+  /// 
+  /// 노트 생성 시에는 LLM에서 의미 단위로 분리하므로 이 메서드는 사용하지 않음
+  /// 사용자가 설정에서 텍스트 모드를 변경한 후 기존 노트를 재처리할 때만 사용
   List<String> splitIntoParagraphs(String text) {
     if (text.isEmpty) return [];
 
@@ -314,6 +579,23 @@ class TextModeSeparationService {
     }
 
     return paragraphs;
+  }
+
+  /// 노트 생성 시 사용 (segment 모드만)
+  List<String> separateForCreation(String text, TextProcessingMode mode) {
+    if (mode == TextProcessingMode.paragraph) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 노트 생성 시 paragraph 모드는 서버에서 처리됩니다.');
+      }
+      return [text]; // 서버에서 처리할 전체 텍스트 반환
+    }
+    
+    return separateByMode(text, mode, context: 'creation');
+  }
+  
+  /// 설정 변경 후 재처리 시 사용 (모든 모드)
+  List<String> separateForSettingsChange(String text, TextProcessingMode mode) {
+    return separateByMode(text, mode, context: 'settings');
   }
 
   /// 텍스트 분리 미리보기 (디버깅용)

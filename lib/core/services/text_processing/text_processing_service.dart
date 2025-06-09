@@ -44,8 +44,8 @@ class TextProcessingService {
       if (firestoreText != null) {
         // 완성된 데이터만 캐시에 저장
         if (firestoreText.streamingStatus == StreamingStatus.completed) {
-          await _saveToCache(pageId, firestoreText);
-          if (kDebugMode) {
+        await _saveToCache(pageId, firestoreText);
+        if (kDebugMode) {
             debugPrint('✅ [Firestore → 캐시] ProcessedText 로드: $pageId');
           }
         } else {
@@ -132,7 +132,7 @@ class TextProcessingService {
       
       // 완성된 데이터만 캐시 업데이트
       if (updatedText.streamingStatus == StreamingStatus.completed) {
-        await _saveToCache(pageId, updatedText);
+      await _saveToCache(pageId, updatedText);
       }
       
       if (kDebugMode) {
@@ -197,23 +197,23 @@ class TextProcessingService {
         } else if (page.translatedText != null && page.translatedText!.isNotEmpty) {
           processedText = await _createProcessedTextFromPage(page);
           
-          if (kDebugMode) {
+            if (kDebugMode) {
             debugPrint('🔄 [리스너] 호환성 모드 처리: $pageId');
           }
-        }
-        
+            }
+            
         // 변경사항 확인 후 콜백 호출
-        if (processedText != null && _hasProcessedTextChanged(previousProcessedText, processedText)) {
+            if (processedText != null && _hasProcessedTextChanged(previousProcessedText, processedText)) {
           // 완성된 데이터만 캐시에 저장
           if (processedText.streamingStatus == StreamingStatus.completed) {
-            await _saveToCache(pageId, processedText);
+              await _saveToCache(pageId, processedText);
             if (kDebugMode) {
               debugPrint('💾 [리스너 → 캐시] 완성된 데이터 저장: $pageId');
-            }
           }
-          
-          onTextChanged(processedText);
-          previousProcessedText = processedText;
+              }
+              
+              onTextChanged(processedText);
+              previousProcessedText = processedText;
           
           if (kDebugMode) {
             debugPrint('📞 [리스너] UI 콜백 호출: $pageId');
@@ -245,7 +245,7 @@ class TextProcessingService {
       
       final noteId = pageDoc.data()?['noteId'] as String?;
       if (noteId == null) return;
-      
+    
       // 노트 전체 컨텐츠 캐시 삭제
       await _cacheManager.clearNoteContents(noteId);
       
@@ -327,24 +327,24 @@ class TextProcessingService {
   
   /// 캐시 데이터에서 ProcessedText 구성
   ProcessedText _buildProcessedTextFromCache(Map<String, dynamic> cachedData) {
-    final segments = cachedData['segments'] as List;
-    final units = segments.map((segment) => TextUnit(
-      originalText: segment['original'] ?? '',
-      translatedText: segment['translated'] ?? '',
-      pinyin: segment['pinyin'] ?? '',
-      sourceLanguage: segment['sourceLanguage'] ?? 'zh-CN',
-      targetLanguage: segment['targetLanguage'] ?? 'ko',
-    )).toList();
-    
+      final segments = cachedData['segments'] as List;
+      final units = segments.map((segment) => TextUnit(
+        originalText: segment['original'] ?? '',
+        translatedText: segment['translated'] ?? '',
+        pinyin: segment['pinyin'] ?? '',
+        sourceLanguage: segment['sourceLanguage'] ?? 'zh-CN',
+        targetLanguage: segment['targetLanguage'] ?? 'ko',
+      )).toList();
+      
     final fullOriginalText = units.map((u) => u.originalText).join(' ');
     final fullTranslatedText = units.map((u) => u.translatedText ?? '').join(' ');
-    
-    return ProcessedText(
+      
+      return ProcessedText(
       mode: _parseTextModeFromString(cachedData['mode']),
-      displayMode: TextDisplayMode.full,
-      fullOriginalText: fullOriginalText,
-      fullTranslatedText: fullTranslatedText,
-      units: units,
+        displayMode: TextDisplayMode.full,
+        fullOriginalText: fullOriginalText,
+        fullTranslatedText: fullTranslatedText,
+        units: units,
       sourceLanguage: cachedData['sourceLanguage'] ?? 'zh-CN',
       targetLanguage: cachedData['targetLanguage'] ?? 'ko',
       streamingStatus: StreamingStatus.completed, // 캐시된 데이터는 완성된 상태
@@ -418,7 +418,7 @@ class TextProcessingService {
       
       // 호환성 모드
       if (page.translatedText != null && page.translatedText!.isNotEmpty) {
-        return await _createProcessedTextFromPage(page);
+      return await _createProcessedTextFromPage(page);
       }
       
       return null;
@@ -549,7 +549,7 @@ class TextProcessingService {
     }
     
     return false;
-  }
+          }
   
   /// 문자열에서 TextProcessingMode 파싱
   TextProcessingMode _parseTextModeFromString(dynamic modeString) {

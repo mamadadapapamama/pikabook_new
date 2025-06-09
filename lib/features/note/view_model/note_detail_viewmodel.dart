@@ -351,15 +351,15 @@ class NoteDetailViewModel extends ChangeNotifier {
           
           // 변경된 경우에만 상태 업데이트
           if (hasActualChange) {
-            _processedTexts[pageId] = processedText;
-            _pageStatuses[pageId] = ProcessingStatus.completed;
-            
-            if (flutter_foundation.kDebugMode) {
+          _processedTexts[pageId] = processedText;
+          _pageStatuses[pageId] = ProcessingStatus.completed;
+          
+          if (flutter_foundation.kDebugMode) {
               debugPrint("📊 [ViewModel] 실제 변경 감지로 상태 업데이트: $pageId");
-              debugPrint("   이전 상태: ${previousStatus?.displayName ?? '없음'}");
-              debugPrint("   현재 상태: ${ProcessingStatus.completed.displayName}");
-              debugPrint("   이전 유닛: $previousUnits개");
-              debugPrint("   현재 유닛: ${processedText.units.length}개");
+            debugPrint("   이전 상태: ${previousStatus?.displayName ?? '없음'}");
+            debugPrint("   현재 상태: ${ProcessingStatus.completed.displayName}");
+            debugPrint("   이전 유닛: $previousUnits개");
+            debugPrint("   현재 유닛: ${processedText.units.length}개");
               debugPrint("   번역 텍스트 변경: ${previousProcessedText?.fullTranslatedText != processedText.fullTranslatedText}");
             }
           } else {

@@ -103,12 +103,13 @@ class NoteCreationUIManager {
     );
   }
 
-  /// 로딩 다이얼로그 표시
+  /// 로딩 다이얼로그 표시 (중복 방지)
   Future<void> _showLoadingDialog(BuildContext context) async {
     if (kDebugMode) {
       debugPrint('📱 로딩 다이얼로그 표시 시작');
     }
 
+    // NoteCreationLoader에 내장된 중복 방지 기능 활용
     await NoteCreationLoader.show(
       context,
       message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!',

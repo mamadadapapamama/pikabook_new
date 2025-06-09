@@ -371,7 +371,7 @@ class NoteService {
       
       // 업데이트할 데이터가 있을 때만 실행
       if (updateData.isNotEmpty) {
-        await _notesCollection.doc(noteId).update(updateData);
+      await _notesCollection.doc(noteId).update(updateData);
       }
       
       if (kDebugMode) {

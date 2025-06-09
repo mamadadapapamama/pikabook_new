@@ -102,9 +102,13 @@ class ApiService {
     bool needPinyin = true,
     String? pageId,
     String? noteId,
+    String? processingMode, // 처리 모드 추가
   }) async* {
     if (kDebugMode) {
       debugPrint('🌐 [API] 스트리밍 번역 시작: ${textSegments.length}개 세그먼트');
+      if (processingMode != null) {
+        debugPrint('📝 [API] 처리 모드: $processingMode');
+      }
     }
 
     try {
@@ -126,6 +130,14 @@ class ApiService {
         'pageId': pageId,
         'noteId': noteId,
       };
+      
+      // 처리 모드 정보 추가
+      if (processingMode != null) {
+        requestBody['processingMode'] = processingMode;
+        if (kDebugMode) {
+          debugPrint('📄 [API] 처리 모드 전달: $processingMode');
+        }
+      }
       
       // 페이지별 세그먼트 정보가 있으면 추가
       if (pageSegments != null && pageSegments.isNotEmpty) {

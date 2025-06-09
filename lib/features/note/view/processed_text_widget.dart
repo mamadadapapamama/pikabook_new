@@ -120,7 +120,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     // 내용이 변경된 경우 선택 상태 초기화
     if (hasContentChanged) {
       if (kDebugMode) {
-        debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
+      debugPrint('처리된 텍스트 변경 감지: didUpdateWidget');
       }
       setState(() {
         _selectedText = '';
@@ -234,13 +234,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         const SizedBox(height: 16),
         
         // 번역 텍스트 표시 (스트리밍 상태 고려)
-        Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 16),
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 16),
           child: widget.processedText.fullTranslatedText != null &&
                   widget.processedText.fullTranslatedText!.isNotEmpty
               ? Text(
-                  widget.processedText.fullTranslatedText!,
-                  style: _defaultTranslatedTextStyle,
+              widget.processedText.fullTranslatedText!,
+              style: _defaultTranslatedTextStyle,
                 )
               : widget.processedText.isStreaming
                   ? LoadingDotsWidget(
@@ -248,7 +248,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                       usePinyinStyle: false,
                     )
                   : const SizedBox.shrink(),
-        ),
+          ),
       ],
     );
   }
@@ -286,14 +286,14 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   unit.originalText,
                   style: _defaultOriginalTextStyle,
                   isOriginal: true,
-                  flashcardWords: _flashcardWords,
+                        flashcardWords: _flashcardWords,
                   selectedText: _selectedText,
                   selectedTextNotifier: _selectedTextNotifier,
-                  onSelectionChanged: (selectedText) {
-                    setState(() {
-                      _selectedText = selectedText;
-                    });
-                  },
+                        onSelectionChanged: (selectedText) {
+                          setState(() {
+                            _selectedText = selectedText;
+                          });
+                        },
                   onDictionaryLookup: widget.onDictionaryLookup,
                   onCreateFlashCard: widget.onCreateFlashCard,
                 ),

@@ -15,9 +15,15 @@ import '../../../features/note/services/page_service.dart';
 /// 
 /// **처리 순서:**
 /// 1. OCR: 이미지에서 텍스트 추출
-/// 2. PostOCR: 텍스트 정리 및 제목 감지
-/// 3. TextSeparation: 모드별 텍스트 분리
+/// 2. 모드별 처리:
+///    - Segment 모드: PostOCR 처리(정리+제목감지) + 텍스트 분리
+///    - Paragraph 모드: 텍스트 정제만 (LLM에서 지능적 분리)
+/// 3. PageProcessingData: 처리 결과 데이터 생성
 /// 4. PageUpdate: 페이지 데이터 업데이트
+/// 
+/// **모드별 차이점:**
+/// - **Segment 모드**: 로컬에서 문장별 분리 → LLM 번역
+/// - **Paragraph 모드**: 전체 텍스트 → LLM 분리+번역 (제목, 소제목, 문제, 보기 등)
 /// 
 /// **사용 예시:**
 /// ```dart
@@ -25,7 +31,7 @@ import '../../../features/note/services/page_service.dart';
 /// final result = await orchestrator.processImageText(
 ///   imageFile: imageFile,
 ///   pageId: pageId,
-///   mode: TextProcessingMode.segment,
+///   mode: TextProcessingMode.segment, // 또는 paragraph
 ///   sourceLanguage: 'zh-CN',
 ///   targetLanguage: 'ko',
 /// );
@@ -75,24 +81,65 @@ class TextProcessingOrchestrator {
         return _createEmptyPageData(pageId, mode, sourceLanguage, targetLanguage, imageFile);
       }
 
-      // 2단계: OCR 후처리 (정리 + 제목 감지)
-      final ocrResult = await _processOcrText(rawText);
+      // 2단계: 모드별 처리
+      String processedText;
+      List<String> textSegments;
+      List<String> detectedTitles = [];
+      String originalText = rawText;
+      String cleanedText = rawText;
+      String reorderedText = rawText;
 
-      // 3단계: 텍스트 분리
-      final textSegments = await _separateTextByMode(ocrResult.reorderedText, mode);
+      if (mode == TextProcessingMode.segment) {
+        // Segment 모드: PostOCR 처리 + 텍스트 분리
+        if (kDebugMode) {
+          debugPrint('📝 Segment 모드: PostOCR 처리 + 텍스트 분리');
+        }
+        
+        final ocrResult = await _processOcrText(rawText);
+        processedText = ocrResult.reorderedText;
+        
+        // 텍스트 분리
+        textSegments = _textSeparationService.separateByMode(processedText, mode);
+        
+        // OCR 결과 저장
+        detectedTitles = ocrResult.titleCandidates.map((t) => t.text).toList();
+        originalText = ocrResult.originalText;
+        cleanedText = ocrResult.cleanedText;
+        reorderedText = ocrResult.reorderedText;
+        
+        if (kDebugMode) {
+          debugPrint('✅ Segment 모드 처리 완료: ${textSegments.length}개 문장');
+        }
+      } else {
+        // Paragraph 모드: 텍스트 정제만
+        if (kDebugMode) {
+          debugPrint('📄 Paragraph 모드: 텍스트 정제만 수행');
+        }
+        
+        // 간단한 텍스트 정제 (공백, 줄바꿈 정리)
+        processedText = rawText.trim().replaceAll(RegExp(r'\s+'), ' ');
+        textSegments = [processedText]; // 전체 텍스트를 하나의 세그먼트로
+        
+        if (kDebugMode) {
+          debugPrint('✅ Paragraph 모드 처리 완료: 전체 텍스트 길이 ${processedText.length}자');
+        }
+      }
 
-      // 4단계: PageProcessingData 생성
+      // 3단계: PageProcessingData 생성
       final pageData = await _createPageProcessingData(
         pageId: pageId,
         imageFile: imageFile,
-        ocrResult: ocrResult,
         textSegments: textSegments,
         mode: mode,
         sourceLanguage: sourceLanguage,
         targetLanguage: targetLanguage,
+        detectedTitles: detectedTitles,
+        originalText: originalText,
+        cleanedText: cleanedText,
+        reorderedText: reorderedText,
       );
 
-      // 5단계: 페이지 업데이트
+      // 4단계: 페이지 업데이트
       await _updatePageWithProcessingResult(pageData);
 
       if (kDebugMode) {
@@ -167,42 +214,21 @@ class TextProcessingOrchestrator {
     return ocrResult;
   }
 
-  /// 3단계: 텍스트 분리
-  Future<List<String>> _separateTextByMode(String cleanedText, TextProcessingMode mode) async {
-    List<String> textSegments = [];
-    
-    if (cleanedText.isNotEmpty) {
-      if (kDebugMode) {
-        debugPrint('📝 3단계: 텍스트 분리 시작 (모드: $mode)');
-      }
-      
-      textSegments = _textSeparationService.separateByMode(cleanedText, mode);
-      
-      if (kDebugMode) {
-        debugPrint('✅ 텍스트 분리 완료: ${textSegments.length}개 조각');
-        for (int i = 0; i < textSegments.length && i < 3; i++) {
-          final preview = textSegments[i].length > 20 ? 
-              '${textSegments[i].substring(0, 20)}...' : textSegments[i];
-          debugPrint('   조각 ${i+1}: "$preview"');
-        }
-      }
-    }
-
-    return textSegments;
-  }
-
-  /// 4단계: PageProcessingData 생성
+  /// 3단계: PageProcessingData 생성
   Future<PageProcessingData> _createPageProcessingData({
     required String pageId,
     required File imageFile,
-    required OcrProcessingResult ocrResult,
     required List<String> textSegments,
     required TextProcessingMode mode,
     required String sourceLanguage,
     required String targetLanguage,
+    required List<String> detectedTitles,
+    required String originalText,
+    required String cleanedText,
+    required String reorderedText,
   }) async {
     if (kDebugMode) {
-      debugPrint('📊 4단계: PageProcessingData 생성 시작');
+      debugPrint('📊 3단계: PageProcessingData 생성 시작');
     }
 
     final pageData = PageProcessingData(
@@ -213,11 +239,11 @@ class TextProcessingOrchestrator {
       sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
       imageFileSize: await _getFileSize(imageFile),
-      ocrSuccess: ocrResult.originalText.isNotEmpty,
-      detectedTitles: ocrResult.titleCandidates.map((t) => t.text).toList(),
-      originalText: ocrResult.originalText,
-      cleanedText: ocrResult.cleanedText,
-      reorderedText: ocrResult.reorderedText,
+      ocrSuccess: originalText.isNotEmpty,
+      detectedTitles: detectedTitles,
+      originalText: originalText,
+      cleanedText: cleanedText,
+      reorderedText: reorderedText,
     );
 
     if (kDebugMode) {
@@ -236,10 +262,10 @@ class TextProcessingOrchestrator {
     return pageData;
   }
 
-  /// 5단계: 페이지 업데이트
+  /// 4단계: 페이지 업데이트
   Future<void> _updatePageWithProcessingResult(PageProcessingData pageData) async {
     if (kDebugMode) {
-      debugPrint('📄 5단계: 페이지 데이터 업데이트 시작');
+      debugPrint('📄 4단계: 페이지 데이터 업데이트 시작');
     }
 
     // 1차 ProcessedText 생성 (원문만, 타이프라이터 효과용)

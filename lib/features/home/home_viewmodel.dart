@@ -96,7 +96,7 @@ class HomeViewModel extends ChangeNotifier {
            for (int i = 0; i < notesList.length && i < _notes.length; i++) {
              final newNote = notesList[i];
              final oldNote = _notes[i];
-             
+        
              // 같은 ID의 노트에서 메타데이터가 변경된 경우
              if (newNote.id == oldNote.id && 
                  (newNote.updatedAt != oldNote.updatedAt || 
@@ -119,7 +119,7 @@ class HomeViewModel extends ChangeNotifier {
            }
          } else {
            // 기타 경우 (삭제, 대량 변경, 초기 로드 등)는 전체 교체
-           _notes = notesList;
+        _notes = notesList;
            if (kDebugMode) {
              if (newCount < oldCount) {
                debugPrint('[HomeViewModel] 🗑️ 노트 삭제됨 (전체 리스트 업데이트)');

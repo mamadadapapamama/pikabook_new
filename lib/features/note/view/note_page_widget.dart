@@ -224,12 +224,12 @@ class _NotePageWidgetState extends State<NotePageWidget> {
     );
   }
   
-  // 로딩 인디케이터 (처리 중 상태 공통 사용)
+  // 로딩 인디케이터 (텍스트 처리 중 상태)
   Widget _buildLoadingIndicator() {
     return const Center(
       child: Padding(
         padding: EdgeInsets.symmetric(vertical: 32.0),
-        child: DotLoadingIndicator(message: '텍스트를 처리하고 있습니다'),
+        child: DotLoadingIndicator(message: '텍스트를 번역하고 있어요.\n잠시만 기다려 주세요!'),
       ),
     );
   }
