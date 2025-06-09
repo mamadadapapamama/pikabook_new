@@ -457,8 +457,12 @@ class TextProcessingService {
         }
       }
       
+      // 사용자 설정에 따른 모드 적용 (기존 저장된 모드 무시)
+      final userPrefs = await _preferencesService.getPreferences();
+      final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
+      
       return ProcessedText(
-        mode: _parseTextModeFromString(processedData['mode']),
+        mode: mode, // 현재 사용자 설정 모드 사용
         displayMode: _parseDisplayModeFromString(processedData['displayMode']),
         fullOriginalText: processedData['fullOriginalText']?.toString() ?? '',
         fullTranslatedText: processedData['fullTranslatedText']?.toString() ?? '',
