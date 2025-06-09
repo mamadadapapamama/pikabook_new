@@ -342,101 +342,149 @@ class TextModeSeparationService {
     return filteredSentences;
   }
 
-  /// 정교한 문장부호 기반 분리 (새로운 로직)
+  /// 정교한 문장부호 기반 분리 (수정된 로직)
   List<String> _splitByPunctuationMarks(String text) {
     if (text.isEmpty) return [];
     
-    // 문장부호 패턴: 마침표, 쉼표, 중국어 쉼표, 중국어 마침표, 인용부호들
-    final punctuationPattern = RegExp(r'[。．.？！?!，,""''""''「」『』【】《》〈〉]');
+    if (kDebugMode) {
+      debugPrint('🔪 문장부호 분리 시작: "$text"');
+    }
     
     final List<String> segments = [];
-    int startIndex = 0;
+    int currentStart = 0;
     
-    final matches = punctuationPattern.allMatches(text).toList();
-    
-    for (int i = 0; i < matches.length; i++) {
-      final match = matches[i];
-      final punctuation = match.group(0)!;
-      final endIndex = match.end;
+    // 문장부호별로 순차 처리
+    for (int i = 0; i < text.length; i++) {
+      final char = text[i];
       
-      // 현재 세그먼트 추출
-      final segment = text.substring(startIndex, endIndex).trim();
-      
-      if (segment.isNotEmpty) {
-        // 쉼표인 경우 8글자 미만이면 분리하지 않음
-        if ((punctuation == ',' || punctuation == '，') && segment.length < 8) {
-          // 다음 문장부호까지 계속 연결
-          continue;
-        }
-        
-        // 인용부호는 특별 처리 (짝을 맞춰서)
-        if (_isQuotationMark(punctuation)) {
-          final quotePair = _findQuotePairEnd(text, match.start, punctuation);
-          if (quotePair != null) {
-            final quoteSegment = text.substring(startIndex, quotePair).trim();
-            if (quoteSegment.isNotEmpty) {
-              segments.add(quoteSegment);
-            }
-            startIndex = quotePair;
-            // 인용부호 처리한 부분은 건너뛰기
-            final skipMatches = matches.where((m) => m.start < quotePair).length;
-            i = skipMatches - 1; // for 루프에서 i++되므로 -1
-            continue;
+      // 문장 끝 부호 (무조건 분리)
+      if (RegExp(r'[。．.？！?!]').hasMatch(char)) {
+        final segment = text.substring(currentStart, i + 1).trim();
+        if (segment.isNotEmpty) {
+          segments.add(segment);
+          if (kDebugMode) {
+            debugPrint('✂️ 문장끝 분리: "$segment"');
           }
         }
-        
-        segments.add(segment);
+        currentStart = i + 1;
       }
-      
-      startIndex = endIndex;
+      // 쉼표 (조건부 분리)
+      else if (RegExp(r'[，,]').hasMatch(char)) {
+        final segment = text.substring(currentStart, i + 1).trim();
+        
+        // 쉼표 분리 조건: 5글자 이상이거나 다음에 공백이 있는 경우
+        final hasSpaceAfter = i + 1 < text.length && text[i + 1] == ' ';
+        final isLongEnough = segment.length >= 5;
+        
+        if (segment.isNotEmpty && (isLongEnough || hasSpaceAfter)) {
+          segments.add(segment);
+          if (kDebugMode) {
+            debugPrint('🔪 쉼표 분리: "$segment" (길이: ${segment.length}, 공백: $hasSpaceAfter)');
+          }
+          currentStart = i + 1;
+        }
+      }
+      // 인용부호 시작 (짝 찾아서 처리)
+      else if (RegExp(r'[""''「『【《〈]').hasMatch(char)) {
+        final quoteEnd = _findMatchingQuote(text, i, char);
+        if (quoteEnd != -1) {
+          // 인용부호 앞부분이 있으면 먼저 추가
+          if (i > currentStart) {
+            final beforeQuote = text.substring(currentStart, i).trim();
+            if (beforeQuote.isNotEmpty) {
+              segments.add(beforeQuote);
+              if (kDebugMode) {
+                debugPrint('📝 인용부호 앞: "$beforeQuote"');
+              }
+            }
+          }
+          
+          // 인용부호 포함 부분 추가
+          final quoteSegment = text.substring(i, quoteEnd + 1).trim();
+          if (quoteSegment.isNotEmpty) {
+            segments.add(quoteSegment);
+            if (kDebugMode) {
+              debugPrint('💬 인용부호: "$quoteSegment"');
+            }
+          }
+          
+          currentStart = quoteEnd + 1;
+          i = quoteEnd; // for 루프에서 i++되므로
+        }
+      }
     }
     
     // 남은 텍스트 처리
-    if (startIndex < text.length) {
-      final remaining = text.substring(startIndex).trim();
+    if (currentStart < text.length) {
+      final remaining = text.substring(currentStart).trim();
       if (remaining.isNotEmpty) {
-        // 마지막 세그먼트가 너무 짧으면 이전 세그먼트와 합치기
-        if (remaining.length < 8 && segments.isNotEmpty) {
-          segments[segments.length - 1] = '${segments.last} $remaining';
+        // 마지막 세그먼트가 너무 짧으면 이전과 합치기
+        if (remaining.length <= 3 && segments.isNotEmpty) {
+          segments[segments.length - 1] = '${segments.last}$remaining';
+          if (kDebugMode) {
+            debugPrint('🔗 마지막 세그먼트 합치기: "${segments.last}"');
+          }
         } else {
           segments.add(remaining);
+          if (kDebugMode) {
+            debugPrint('📝 마지막 세그먼트: "$remaining"');
+          }
         }
       }
+    }
+    
+    if (kDebugMode) {
+      debugPrint('✅ 문장부호 분리 완료: ${segments.length}개 세그먼트');
     }
     
     return segments;
   }
   
-  /// 인용부호인지 확인
-  bool _isQuotationMark(String char) {
-    return RegExp(r'[""''""''「」『』【】《》〈〉]').hasMatch(char);
-  }
-  
-  /// 인용부호 짝 찾기
-  int? _findQuotePairEnd(String text, int startPos, String openQuote) {
-    // 인용부호 짝 찾기 - 간단한 조건문 사용
-    String? closeQuote;
+  /// 인용부호 짝 찾기 (간단한 로직)
+  int _findMatchingQuote(String text, int startPos, String openQuote) {
+    // 닫는 인용부호 결정
+    String closeQuote;
     
-    if (openQuote == '"') {
-      closeQuote = '"';
-    } else if (openQuote == '「') {
-      closeQuote = '」';
-    } else if (openQuote == '『') {
-      closeQuote = '』';
-    } else if (openQuote == '【') {
-      closeQuote = '】';
-    } else if (openQuote == '《') {
-      closeQuote = '》';
-    } else if (openQuote == '〈') {
-      closeQuote = '〉';
-    } else {
-      // 기본 인용부호들은 동일한 문자로 닫기
-      closeQuote = openQuote;
+    switch (openQuote) {
+      case '"':
+        closeQuote = '"';
+        break;
+      case '「':
+        closeQuote = '」';
+        break;
+      case '『':
+        closeQuote = '』';
+        break;
+      case '【':
+        closeQuote = '】';
+        break;
+      case '《':
+        closeQuote = '》';
+        break;
+      case '〈':
+        closeQuote = '〉';
+        break;
+      default:
+        // 기본적으로 동일한 문자로 닫기 (예: ' → ')
+        closeQuote = openQuote;
+        break;
     }
     
     // 닫는 인용부호 찾기
-    final closeIndex = text.indexOf(closeQuote, startPos + 1);
-    return closeIndex != -1 ? closeIndex + 1 : null;
+    for (int i = startPos + 1; i < text.length; i++) {
+      if (text[i] == closeQuote) {
+        if (kDebugMode) {
+          debugPrint('💬 인용부호 짝 찾음: $openQuote → $closeQuote (${startPos} → ${i})');
+        }
+        return i;
+      }
+    }
+    
+    // 짝을 찾지 못한 경우 문장 끝까지
+    if (kDebugMode) {
+      debugPrint('⚠️ 인용부호 짝 없음: $openQuote, 문장 끝까지 처리');
+    }
+    return text.length - 1;
   }
 
   /// 쉼표로 분리해야 하는지 판단 (기존 로직 - 호환성 유지)
