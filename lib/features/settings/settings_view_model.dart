@@ -5,6 +5,7 @@ import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/common/plan_service.dart';
 import '../../core/models/plan.dart';
 import '../../core/utils/language_constants.dart';
+import '../../core/services/text_processing/text_processing_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsViewModel extends ChangeNotifier {
@@ -224,7 +225,17 @@ class SettingsViewModel extends ChangeNotifier {
       await _userPreferences.savePreferences(
         preferences.copyWith(useSegmentMode: useSegmentMode)
       );
+      
+      // 텍스트 처리 모드 변경 시 모든 캐시된 텍스트 처리 결과 무효화
+      final textProcessingService = TextProcessingService();
+      await textProcessingService.invalidateAllProcessedTextCache();
+      
       await loadUserPreferences();
+      
+      if (kDebugMode) {
+        print('✅ 텍스트 처리 모드 변경 및 캐시 무효화 완료: useSegmentMode=$useSegmentMode');
+      }
+      
       return true;
     } catch (e) {
       if (kDebugMode) {

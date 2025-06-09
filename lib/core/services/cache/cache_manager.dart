@@ -221,6 +221,23 @@ class CacheManager {
     }
   }
 
+  /// 모든 노트의 processed_text 캐시 무효화 (설정 변경 시)
+  Future<void> clearAllProcessedTextCache() async {
+    await _ensureInitialized();
+
+    try {
+      await _noteContentsCache!.deleteByPattern(r'.*:type:processed_text$');
+
+      if (kDebugMode) {
+        debugPrint('📝 전체 텍스트 처리 캐시 삭제 완료');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 전체 텍스트 처리 캐시 삭제 실패: $e');
+      }
+    }
+  }
+
   // === Note Metadata 캐시 ===
 
   /// 노트 메타데이터 저장

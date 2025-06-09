@@ -239,13 +239,37 @@ class TextProcessingService {
   /// 5. 캐시 무효화
   Future<void> invalidateCache(String pageId) async {
     try {
-      // TODO: CacheManager에 removeCachedContent 메서드 추가 필요
+      // 페이지의 noteId 조회
+      final pageDoc = await _firestore.collection('pages').doc(pageId).get();
+      if (!pageDoc.exists) return;
+      
+      final noteId = pageDoc.data()?['noteId'] as String?;
+      if (noteId == null) return;
+      
+      // 노트 전체 컨텐츠 캐시 삭제
+      await _cacheManager.clearNoteContents(noteId);
+      
       if (kDebugMode) {
-        debugPrint('🗑️ [캐시] 무효화 기능 준비 중: $pageId');
+        debugPrint('🗑️ [캐시] 페이지 캐시 무효화 완료: $pageId');
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('⚠️ 캐시 무효화 실패: $pageId, $e');
+      }
+    }
+  }
+  
+  /// 모든 processed_text 캐시 무효화 (설정 변경 시)
+  Future<void> invalidateAllProcessedTextCache() async {
+    try {
+      await _cacheManager.clearAllProcessedTextCache();
+      
+      if (kDebugMode) {
+        debugPrint('🗑️ [캐시] 전체 텍스트 처리 캐시 무효화 완료');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 전체 캐시 무효화 실패: $e');
       }
     }
   }
