@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../../models/text_unit.dart';
 import '../../models/page_processing_data.dart';
+import '../../models/processed_text.dart';
 import 'api_service.dart';
 
 /// **스트리밍 수신 & 분배 서비스**
@@ -31,6 +32,14 @@ class StreamingReceiveService {
     final Map<String, List<TextUnit>> pageResults = {};
     int processedChunks = 0;
 
+    // Differential Update를 위한 OCR 세그먼트 준비
+    final ocrSegments = textSegments; // 기존 OCR 세그먼트 저장
+    final processingMode = pages.isNotEmpty ? pages.first.mode : TextProcessingMode.segment;
+    
+    if (kDebugMode && processingMode == TextProcessingMode.segment) {
+      debugPrint('🔄 [Differential Update] 활성화: ${ocrSegments.length}개 세그먼트');
+    }
+
     try {
       // 페이지별 세그먼트 정보 생성
       final pageSegments = _createPageSegments(pages);
@@ -51,15 +60,18 @@ class StreamingReceiveService {
 
         // 오류 청크 처리
         if (chunkData['isError'] == true) {
-                  yield StreamingReceiveResult.error(
+          yield StreamingReceiveResult.error(
             chunkIndex: chunkData['chunkIndex'] as int,
             error: chunkData['error']?.toString() ?? '알 수 없는 오류',
           );
           continue;
         }
 
-        // 정상 청크 처리
-        final chunkUnits = _extractUnitsFromChunkData(chunkData);
+        // 정상 청크 처리 (Differential Update 적용)
+        final chunkUnits = _extractUnitsFromChunkData(
+          chunkData,
+          originalSegments: processingMode == TextProcessingMode.segment ? ocrSegments : null,
+        );
         final chunkIndex = chunkData['chunkIndex'] as int;
         
         if (kDebugMode) {
@@ -77,12 +89,12 @@ class StreamingReceiveService {
           }
         } else {
           // 기존 방식 (페이지 ID 없는 경우)
-        await _distributeUnitsToPages(
-          chunkUnits, 
-          pages, 
-          pageResults,
-          isFirstChunk: chunkIndex == 0,
-        );
+          await _distributeUnitsToPages(
+            chunkUnits, 
+            pages, 
+            pageResults,
+            isFirstChunk: chunkIndex == 0,
+          );
         }
         
         processedChunks++;
@@ -260,34 +272,23 @@ class StreamingReceiveService {
     }).toList();
   }
 
-  /// 스트리밍 청크 데이터에서 차분 업데이트 추출 (Segment 모드 최적화)
-  List<TextUnit> _extractUnitsFromChunkData(Map<String, dynamic> chunkData) {
+  /// 스트리밍 청크 데이터에서 TextUnit 리스트 추출 (Differential Update 최적화)
+  List<TextUnit> _extractUnitsFromChunkData(
+    Map<String, dynamic> chunkData, {
+    List<String>? originalSegments, // OCR 원본 세그먼트 (differential update용)
+  }) {
     try {
       if (chunkData['units'] == null) return [];
 
       final units = chunkData['units'] as List;
       
-      // Segment 모드 최적화: 인덱스 기반 차분 업데이트
-      if (chunkData['mode'] == 'segment' && chunkData['segmentUpdates'] != null) {
-        return _processSegmentUpdates(chunkData['segmentUpdates'] as List);
+      // Differential Update 방식: 인덱스 기반 매핑
+      if (originalSegments != null && _isDifferentialUpdate(units)) {
+        return _buildUnitsFromDifferentialUpdate(units, originalSegments);
       }
       
-      // 기존 방식 (Paragraph 모드 또는 호환성)
-      return units.map<TextUnit>((unitData) {
-        // 서버 응답 필드명 매핑 (original, translation, pinyin)
-        final original = unitData['original'] ?? unitData['originalText'] ?? '';
-        final translation = unitData['translation'] ?? unitData['translatedText'] ?? '';
-        final pinyin = unitData['pinyin'] ?? '';
-        
-        return TextUnit(
-          originalText: original,
-          translatedText: translation,
-          pinyin: pinyin,
-          sourceLanguage: unitData['sourceLanguage'] ?? 'zh-CN',
-          targetLanguage: unitData['targetLanguage'] ?? 'ko',
-          segmentType: _parseSegmentType(unitData['type'] ?? unitData['segmentType']),
-        );
-      }).toList();
+      // 기존 방식: 서버에서 모든 데이터 포함 (호환성)
+      return _buildUnitsFromFullData(units);
       
     } catch (e) {
       if (kDebugMode) {
@@ -298,34 +299,81 @@ class StreamingReceiveService {
     }
   }
 
-  /// Segment 모드 인덱스 기반 차분 업데이트 처리
-  List<TextUnit> _processSegmentUpdates(List<dynamic> segmentUpdates) {
-    final List<TextUnit> units = [];
+  /// Differential Update 방식인지 확인
+  bool _isDifferentialUpdate(List units) {
+    if (units.isEmpty) return false;
     
-    for (final update in segmentUpdates) {
-      final index = update['index'] as int?;
-      final translation = update['translation'] as String?;
-      final pinyin = update['pinyin'] as String?;
-      
-      if (index != null && (translation != null || pinyin != null)) {
-        // 인덱스 기반 차분 업데이트 (원문은 클라이언트에서 매핑)
-        units.add(TextUnit(
-          originalText: '', // 원문은 클라이언트에서 인덱스로 매핑
-          translatedText: translation ?? '',
-          pinyin: pinyin ?? '',
-          sourceLanguage: update['sourceLanguage'] ?? 'zh-CN',
-          targetLanguage: update['targetLanguage'] ?? 'ko',
-          segmentType: _parseSegmentType(update['type']),
-          // 인덱스 정보 임시 저장 (TextUnit 확장 필요시)
-        ));
-        
-        if (kDebugMode) {
-          debugPrint('📦 차분 업데이트: 인덱스 $index → 번역: "$translation", 병음: "$pinyin"');
-        }
-      }
+    final firstUnit = units.first;
+    // 인덱스가 있고 원문이 없으면 differential update
+    return firstUnit['index'] != null && 
+           (firstUnit['original'] == null && firstUnit['originalText'] == null);
+  }
+
+  /// Differential Update 방식으로 TextUnit 생성
+  List<TextUnit> _buildUnitsFromDifferentialUpdate(
+    List units, 
+    List<String> originalSegments,
+  ) {
+    final textUnits = <TextUnit>[];
+    
+    if (kDebugMode) {
+      debugPrint('🔄 [Differential Update] 인덱스 기반 매핑 시작');
+      debugPrint('   서버 업데이트: ${units.length}개');
+      debugPrint('   OCR 세그먼트: ${originalSegments.length}개');
     }
     
-    return units;
+    for (final unitData in units) {
+      final index = unitData['index'] as int?;
+      
+      if (index == null || index < 0 || index >= originalSegments.length) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 잘못된 인덱스: $index (범위: 0-${originalSegments.length - 1})');
+        }
+        continue;
+      }
+      
+      // OCR 원본 세그먼트 + 서버 번역/병음
+      final textUnit = TextUnit(
+        originalText: originalSegments[index], // ✅ 기존 OCR 데이터 사용
+        translatedText: unitData['translation'] ?? unitData['translatedText'] ?? '',
+        pinyin: unitData['pinyin'] ?? '',
+        sourceLanguage: unitData['sourceLanguage'] ?? 'zh-CN',
+        targetLanguage: unitData['targetLanguage'] ?? 'ko',
+        segmentType: _parseSegmentType(unitData['type'] ?? unitData['segmentType']),
+      );
+      
+      textUnits.add(textUnit);
+    }
+    
+    if (kDebugMode) {
+      debugPrint('✅ [Differential Update] 완료: ${textUnits.length}개 유닛 생성');
+      debugPrint('   대역폭 절약: 원문 ${originalSegments.join('').length}자 전송 생략');
+    }
+    
+    return textUnits;
+  }
+
+  /// 기존 방식으로 TextUnit 생성 (호환성)
+  List<TextUnit> _buildUnitsFromFullData(List units) {
+    if (kDebugMode) {
+      debugPrint('🔄 [기존 방식] 전체 데이터 파싱');
+    }
+    
+    return units.map<TextUnit>((unitData) {
+      // 서버 응답 필드명 그대로 사용 (original, translation, pinyin)
+      final original = unitData['original'] ?? unitData['originalText'] ?? '';
+      final translation = unitData['translation'] ?? unitData['translatedText'] ?? '';
+      final pinyin = unitData['pinyin'] ?? '';
+      
+      return TextUnit(
+        originalText: original,
+        translatedText: translation,
+        pinyin: pinyin,
+        sourceLanguage: unitData['sourceLanguage'] ?? 'zh-CN',
+        targetLanguage: unitData['targetLanguage'] ?? 'ko',
+        segmentType: _parseSegmentType(unitData['type'] ?? unitData['segmentType']),
+      );
+    }).toList();
   }
 
   /// 스트리밍 실패 시 폴백 결과 생성

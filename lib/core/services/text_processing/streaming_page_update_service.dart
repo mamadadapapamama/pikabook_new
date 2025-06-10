@@ -93,14 +93,14 @@ class StreamingPageUpdateService {
     }
   }
 
-  /// LLM 결과로 OCR 세그먼트를 순차적으로 overwrite
+  /// LLM 결과로 OCR 세그먼트를 순차적으로 overwrite (Differential Update 최적화)
   /// 
-  /// **처리 모드별 로직:**
-  /// - **Segment 모드**: OCR 세그먼트 순차 overwrite (기존 로직)
+  /// **Differential Update 방식:**
+  /// - **Segment 모드**: LLM 결과가 이미 OCR 원문과 매핑되어 있음 → 직접 사용
   /// - **Paragraph 모드**: LLM 결과만 사용 (OCR 세그먼트 무시)
   /// 
-  /// **공통 로직:**
-  /// 1. LLM 결과를 순서대로 추가 (순차적 overwrite)
+  /// **최적화된 로직:**
+  /// 1. LLM 결과를 순서대로 추가 (이미 원문이 포함됨)
   /// 2. 스트리밍 완료 시: 미번역 OCR 세그먼트 제거 (Segment 모드만)
   /// 3. 스트리밍 진행 중: 남은 OCR 세그먼트는 [병음 필요, 번역 필요] 상태로 유지 (Segment 모드만)
   List<TextUnit> _createMixedUnits(
@@ -111,57 +111,62 @@ class StreamingPageUpdateService {
   }) {
     final mixedUnits = <TextUnit>[];
     
-    // 1. LLM 결과를 순서대로 추가 (순차적 overwrite)
-    mixedUnits.addAll(llmResults);
-    
-    // 2. 모드별 처리
     if (pageData.mode == TextProcessingMode.paragraph) {
       // Paragraph 모드: LLM 결과만 사용 (OCR 세그먼트 무시)
+      mixedUnits.addAll(llmResults);
+      
       if (kDebugMode) {
-        debugPrint('📄 Paragraph 모드: LLM 결과만 사용');
-        debugPrint('   LLM 처리됨: ${llmResults.length}개');
-        debugPrint('   최종 유닛: ${mixedUnits.length}개');
+        debugPrint('📄 [Paragraph] LLM 결과만 사용: ${llmResults.length}개');
       }
+      
     } else {
-      // Segment 모드: 기존 OCR 세그먼트 혼합 로직
+      // Segment 모드: Differential Update 최적화된 처리
+      
+      if (kDebugMode) {
+        debugPrint('🔄 [Segment - Differential Update] 처리 시작');
+        debugPrint('   LLM 결과: ${llmResults.length}개 (이미 원문 포함)');
+        debugPrint('   OCR 세그먼트: ${ocrSegments.length}개');
+        debugPrint('   스트리밍 완료: $isStreamingComplete');
+      }
+      
+      // 1. LLM 결과를 순서대로 추가 (이미 OCR 원문과 매핑됨)
+      mixedUnits.addAll(llmResults);
+      
       if (isStreamingComplete) {
-        // ✅ 스트리밍 완료: 미번역 OCR 세그먼트 제거
+        // ✅ 스트리밍 완료: LLM 결과만 유지
         if (kDebugMode) {
-          final removedCount = ocrSegments.length - llmResults.length;
-          if (removedCount > 0) {
-            debugPrint('🗑️ 스트리밍 완료: 미번역 OCR 세그먼트 ${removedCount}개 제거');
+          final skippedCount = ocrSegments.length - llmResults.length;
+          if (skippedCount > 0) {
+            debugPrint('🗑️ 미번역 OCR 세그먼트 ${skippedCount}개 생략');
           }
+          debugPrint('✅ 최종 유닛: ${mixedUnits.length}개 (완료)');
         }
-        // LLM 결과만 유지, 남은 OCR 세그먼트는 추가하지 않음
       } else {
-        // 🔄 스트리밍 진행 중: 남은 OCR 세그먼트 추가 (로딩 상태)
-        final remainingOcrCount = ocrSegments.length - llmResults.length;
+        // 🔄 스트리밍 진행 중: 남은 OCR 세그먼트 추가 (대기 상태)
+        final remainingCount = ocrSegments.length - llmResults.length;
         
-        if (remainingOcrCount > 0) {
-          // LLM이 처리하지 않은 나머지 OCR 세그먼트들
-          final remainingOcrSegments = ocrSegments.skip(llmResults.length).take(remainingOcrCount);
+        if (remainingCount > 0) {
+          // 아직 번역되지 않은 OCR 세그먼트들을 대기 상태로 추가
+          final remainingSegments = ocrSegments.skip(llmResults.length);
           
-          for (final ocrSegment in remainingOcrSegments) {
+          for (final segment in remainingSegments) {
             mixedUnits.add(TextUnit(
-              originalText: ocrSegment,
-              translatedText: null, // 아직 번역되지 않음
-              pinyin: null, // 아직 병음 없음
+              originalText: segment,
+              translatedText: null, // 번역 대기
+              pinyin: null,         // 병음 대기
               sourceLanguage: pageData.sourceLanguage,
               targetLanguage: pageData.targetLanguage,
             ));
           }
+          
+          if (kDebugMode) {
+            debugPrint('⏳ 대기 중인 OCR 세그먼트: ${remainingCount}개 추가');
+          }
         }
-      }
-      
-      if (kDebugMode) {
-        debugPrint('🔄 Segment 모드 순차적 overwrite (완료: $isStreamingComplete):');
-        debugPrint('   LLM 처리됨: ${llmResults.length}개');
-        debugPrint('   OCR 원본: ${ocrSegments.length}개');
-        if (!isStreamingComplete) {
-          final remainingOcrCount = ocrSegments.length - llmResults.length;
-          debugPrint('   남은 OCR: ${remainingOcrCount > 0 ? remainingOcrCount : 0}개');
+        
+        if (kDebugMode) {
+          debugPrint('🔄 중간 유닛: ${mixedUnits.length}개 (진행 중)');
         }
-        debugPrint('   최종 유닛: ${mixedUnits.length}개');
       }
     }
     
