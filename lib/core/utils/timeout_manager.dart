@@ -99,20 +99,21 @@ class TimeoutManager {
 
   /// 현재 단계에 맞는 메시지 반환
   String getCurrentMessage(String baseMessage) {
-    // 테스트용: 2초/3초/5초로 단축 (원래는 10초/20초/30초)
+    // 테스트용: 2초/3초로 단축 (원래는 10초/20초)
+    // 마지막 단계(5초/30초)에서는 메시지 업데이트 하지 않음 (스낵바에서 처리)
     if (_elapsedSeconds >= 2 && _elapsedSeconds < 3) {
       return '처리 시간이 평소보다 오래 걸리고 있어요. (약 ${_elapsedSeconds}초 경과)';
     } else if (_elapsedSeconds >= 3 && _elapsedSeconds < 5) {
       return '다시 시도 중입니다…';
-    } else if (_elapsedSeconds >= 5) {
-      return '문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.';
     }
+    // 5초 이상일 때는 기본 메시지 유지 (타임아웃시 모달 닫고 스낵바에서 에러 표시)
     return baseMessage;
   }
 
   /// 단계별 메시지 업데이트가 필요한 시점인지 확인
   bool shouldUpdateMessage() {
-    // 테스트용: 2초/3초/5초로 단축 (원래는 10초/20초/30초)
-    return _elapsedSeconds == 2 || _elapsedSeconds == 3 || _elapsedSeconds == 5;
+    // 테스트용: 2초/3초에서만 업데이트 (5초에서는 업데이트 하지 않음)
+    // 마지막 단계에서는 메시지 업데이트 하지 않고 타임아웃 콜백에서 스낵바 처리
+    return _elapsedSeconds == 2 || _elapsedSeconds == 3;
   }
 } 

@@ -23,9 +23,17 @@ class CcCedictService {
     if (_isInitialized) return;
     
     try {
+      if (kDebugMode) {
+        debugPrint('📖 [CC-CEDICT] 초기화 시작');
+      }
+      
       // CC-CEDICT 데이터 로드
       final String jsonString = await rootBundle.loadString('assets/data/CC-Cedict.json');
       final Map<String, dynamic> jsonData = json.decode(jsonString);
+      
+      if (kDebugMode) {
+        debugPrint('📖 [CC-CEDICT] JSON 데이터 로드 완료: ${jsonData.length}개 항목');
+      }
       
       // 캐시에 데이터 추가
       jsonData.forEach((word, data) {
@@ -38,9 +46,13 @@ class CcCedictService {
       });
       
       _isInitialized = true;
-      debugPrint('CC-CEDICT 서비스 초기화 완료');
+      if (kDebugMode) {
+        debugPrint('✅ [CC-CEDICT] 초기화 완료: ${_cache.length}개 항목 캐시됨');
+      }
     } catch (e) {
-      debugPrint('⚠️ CC-CEDICT 파일을 찾을 수 없습니다. 내부 사전만 사용합니다: $e');
+      if (kDebugMode) {
+        debugPrint('⚠️ [CC-CEDICT] 파일을 찾을 수 없습니다. 내부 사전만 사용합니다: $e');
+      }
       _isInitialized = true; // 오류가 있어도 초기화 완료로 처리
     }
   }
@@ -57,10 +69,29 @@ class CcCedictService {
     try {
       await _ensureInitialized();
       
+      if (kDebugMode) {
+        debugPrint('📖 [CC-CEDICT] 단어 검색: "$word"');
+        debugPrint('📖 [CC-CEDICT] 캐시 크기: ${_cache.length}개');
+      }
+      
       // 캐시에서 검색
-      return _cache[word];
+      final result = _cache[word];
+      
+      if (kDebugMode) {
+        if (result != null) {
+          debugPrint('✅ [CC-CEDICT] 단어 찾음: "$word"');
+          debugPrint('   병음: ${result.pinyin}');
+          debugPrint('   의미: ${result.meaning}');
+        } else {
+          debugPrint('❌ [CC-CEDICT] 단어 찾지 못함: "$word"');
+        }
+      }
+      
+      return result;
     } catch (e) {
-      debugPrint('CC-CEDICT 단어 검색 중 오류 발생: $e');
+      if (kDebugMode) {
+        debugPrint('💥 [CC-CEDICT] 단어 검색 중 오류 발생: $e');
+      }
       return null;
     }
   }

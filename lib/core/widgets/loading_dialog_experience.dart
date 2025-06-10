@@ -79,9 +79,35 @@ class NoteCreationLoader {
         }
         
         if (_lastContext != null && _lastContext!.mounted) {
+          // 모달 닫기
           hide(_lastContext!);
           
-          // 타임아웃 콜백 호출 (에러 처리)
+          // 스낵바로 타임아웃 에러 메시지 표시
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (_lastContext!.mounted) {
+              ScaffoldMessenger.of(_lastContext!).showSnackBar(
+                SnackBar(
+                  content: const Text('문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.'),
+                  backgroundColor: Colors.red[600],
+                  duration: const Duration(seconds: 4),
+                  behavior: SnackBarBehavior.floating,
+                  action: SnackBarAction(
+                    label: '확인',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      ScaffoldMessenger.of(_lastContext!).hideCurrentSnackBar();
+                    },
+                  ),
+                ),
+              );
+              
+              if (kDebugMode) {
+                debugPrint('📢 [NoteCreationLoader] 타임아웃 스낵바 메시지 표시');
+              }
+            }
+          });
+          
+          // 기존 타임아웃 콜백 호출 (추가 에러 처리가 필요한 경우)
           _onTimeoutCallback?.call();
         }
       },

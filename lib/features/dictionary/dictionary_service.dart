@@ -97,10 +97,20 @@ class DictionaryService {
   // Google Cloud Translate를 사용한 단어 번역
   Future<DictionaryEntry?> _translateWithGoogle(String word) async {
     try {
-      debugPrint('Google Cloud Translate로 단어 번역 시도: $word');
+      if (kDebugMode) {
+        debugPrint('🌐 [Google Translate] 번역 시작: "$word"');
+        debugPrint('   설정: zh (중국어) → ko (한국어)');
+      }
       
       // 중국어 → 한국어 번역
       final translation = await _translator.translate(word, from: 'zh', to: 'ko');
+      
+      if (kDebugMode) {
+        debugPrint('🌐 [Google Translate] 원본: "$word"');
+        debugPrint('🌐 [Google Translate] 번역 결과: "${translation.text}"');
+        debugPrint('🌐 [Google Translate] 번역 결과 길이: ${translation.text.length}');
+        debugPrint('🌐 [Google Translate] 원본과 같은지: ${translation.text == word}');
+      }
       
       if (translation.text.isNotEmpty && translation.text != word) {
         final entry = DictionaryEntry(
@@ -110,17 +120,35 @@ class DictionaryService {
           source: 'google_translate'
         );
         
+        if (kDebugMode) {
+          debugPrint('✅ [Google Translate] 사전 항목 생성 완료');
+          debugPrint('   단어: ${entry.word}');
+          debugPrint('   의미: ${entry.meaning}');
+          debugPrint('   소스: ${entry.source}');
+        }
+        
         // 내부 사전에 추가
         _chineseDictionaryService.addEntry(entry);
         _notifyDictionaryUpdated();
         
-        debugPrint('Google Cloud Translate 번역 성공: $word → ${translation.text}');
+        if (kDebugMode) {
+          debugPrint('✅ [Google Translate] 내부 사전에 추가 완료');
+        }
+        
         return entry;
+      } else {
+        if (kDebugMode) {
+          debugPrint('❌ [Google Translate] 유효한 번역 결과 없음');
+          debugPrint('   이유: ${translation.text.isEmpty ? "빈 결과" : "원본과 동일"}');
+        }
       }
       
       return null;
     } catch (e) {
-      debugPrint('Google Cloud Translate 번역 실패: $e');
+      if (kDebugMode) {
+        debugPrint('💥 [Google Translate] 번역 실패: $e');
+        debugPrint('   오류 타입: ${e.runtimeType}');
+      }
       return null;
     }
   }
@@ -130,23 +158,43 @@ class DictionaryService {
     try {
       await _ensureInitialized();
       
+      if (kDebugMode) {
+        debugPrint('🔍 [사전검색] 시작: "$word" (언어: $_currentLanguage)');
+      }
+      
       switch (_currentLanguage) {
         case 'zh-CN':
           // 1. 내부 사전에서 검색
+          if (kDebugMode) {
+            debugPrint('🔍 [1단계] 내부 사전 검색 중...');
+          }
           final internalEntry = await _chineseDictionaryService.lookupAsync(word);
           if (internalEntry != null) {
-            debugPrint('내부 사전에서 단어 찾음: $word');
+            if (kDebugMode) {
+              debugPrint('✅ [1단계] 내부 사전에서 단어 찾음: $word');
+            }
             return {
               'entry': internalEntry,
               'success': true,
               'source': 'internal',
             };
           }
+          if (kDebugMode) {
+            debugPrint('❌ [1단계] 내부 사전에서 찾지 못함');
+          }
           
           // 2. CC-CEDICT에서 검색
+          if (kDebugMode) {
+            debugPrint('🔍 [2단계] CC-CEDICT 검색 중...');
+          }
           try {
             final ccCedictEntry = await _ccCedictService.lookup(word);
             if (ccCedictEntry != null) {
+              if (kDebugMode) {
+                debugPrint('✅ [2단계] CC-CEDICT에서 단어 찾음: $word');
+                debugPrint('   병음: ${ccCedictEntry.pinyin}');
+                debugPrint('   의미: ${ccCedictEntry.meaning}');
+              }
               final newEntry = DictionaryEntry(
                 word: word,
                 pinyin: ccCedictEntry.pinyin,
@@ -156,35 +204,53 @@ class DictionaryService {
               // 내부 사전에 추가
               _chineseDictionaryService.addEntry(newEntry);
               _notifyDictionaryUpdated();
-              debugPrint('CC-CEDICT에서 단어 찾음: $word');
               return {
                 'entry': newEntry,
                 'success': true,
                 'source': 'cc_cedict',
               };
             }
+            if (kDebugMode) {
+              debugPrint('❌ [2단계] CC-CEDICT에서 찾지 못함');
+            }
           } catch (e) {
-            debugPrint('CC-CEDICT 검색 실패: $e');
+            if (kDebugMode) {
+              debugPrint('❌ [2단계] CC-CEDICT 검색 실패: $e');
+            }
           }
           
-          // 3. Google Cloud Translate로 번역 시도
+          // 3. Google Translate로 번역 시도
+          if (kDebugMode) {
+            debugPrint('🔍 [3단계] Google Translate 시도 중...');
+          }
           try {
             final googleEntry = await _translateWithGoogle(word);
             if (googleEntry != null) {
+              if (kDebugMode) {
+                debugPrint('✅ [3단계] Google Translate 성공');
+              }
               return {
                 'entry': googleEntry,
                 'success': true,
                 'source': 'google_translate',
               };
             }
+            if (kDebugMode) {
+              debugPrint('❌ [3단계] Google Translate에서 결과 없음');
+            }
           } catch (e) {
-            debugPrint('Google Cloud Translate 검색 실패: $e');
+            if (kDebugMode) {
+              debugPrint('❌ [3단계] Google Translate 검색 실패: $e');
+            }
           }
           
           // 모든 방법 실패
+          if (kDebugMode) {
+            debugPrint('💥 [사전검색] 모든 방법 실패: $word');
+          }
           return {
             'success': false,
-            'message': '단어를 찾을 수 없습니다: $word',
+            'message': '사전 검색 결과가 없습니다. 모든 소스(내부 사전, CC-CEDICT, Google Translate)에서 "$word"를 찾을 수 없습니다.',
           };
         
         default:
@@ -194,7 +260,9 @@ class DictionaryService {
           };
       }
     } catch (e) {
-      debugPrint('단어 검색 중 오류 발생: $e');
+      if (kDebugMode) {
+        debugPrint('💥 [사전검색] 전체 오류 발생: $e');
+      }
       return {
         'success': false,
         'message': '단어 검색 중 오류가 발생했습니다: $e',

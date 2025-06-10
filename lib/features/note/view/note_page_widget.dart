@@ -104,13 +104,34 @@ class _NotePageWidgetState extends State<NotePageWidget> {
     _ocrTimeoutManager = TimeoutManager();
     
     _ocrTimeoutManager!.start(
-      timeoutSeconds: 5, // 테스트용: 30 -> 5초로 변경
+      timeoutSeconds: 30,
       onProgress: (elapsedSeconds) {
         if (!mounted) return;
         // 진행 메시지는 loading indicator에서 자동 처리됨
       },
       onTimeout: () {
         if (mounted) {
+          // 스낵바로 타임아웃 에러 메시지 표시
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.'),
+              backgroundColor: Colors.red[600],
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+              action: SnackBarAction(
+                label: '확인',
+                textColor: Colors.white,
+                onPressed: () {
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                },
+              ),
+            ),
+          );
+          
+          if (kDebugMode) {
+            print('📢 [OCR 타임아웃] 스낵바 메시지 표시');
+          }
+          
           setState(() {
             // 타임아웃 상태로 변경하여 재시도 버튼 표시
           });
@@ -134,138 +155,6 @@ class _NotePageWidgetState extends State<NotePageWidget> {
     _tryLoadTextIfNeeded();
     
     setState(() {
-      _isRetrying = false;
-    });
-  }
-
-  /// 디버그 테스트 버튼들 (디버그 모드에서만 표시)
-  Widget _buildDebugTestButtons(BuildContext context, NoteDetailViewModel viewModel) {
-    return Container(
-      padding: EdgeInsets.all(SpacingTokens.md),
-      margin: EdgeInsets.symmetric(horizontal: SpacingTokens.md),
-      decoration: BoxDecoration(
-        color: Colors.yellow[50],
-        border: Border.all(color: Colors.orange),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '🧪 테스트 버튼들 (디버그 모드)',
-            style: TypographyTokens.body2.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Colors.orange[800],
-            ),
-          ),
-          SizedBox(height: SpacingTokens.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              // OCR 타임아웃 강제 발생
-              Expanded(
-                child: PikaButton(
-                  text: 'OCR 타임아웃',
-                  variant: PikaButtonVariant.outline,
-                  size: PikaButtonSize.small,
-                  onPressed: () {
-                    _simulateOcrTimeout();
-                  },
-                ),
-              ),
-              SizedBox(width: SpacingTokens.sm),
-              // 네트워크 에러 강제 발생  
-              Expanded(
-                child: PikaButton(
-                  text: '네트워크 에러',
-                  variant: PikaButtonVariant.outline,
-                  size: PikaButtonSize.small,
-                  onPressed: () {
-                    _simulateNetworkError();
-                  },
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: SpacingTokens.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              // LLM 타임아웃 강제 발생
-              Expanded(
-                child: PikaButton(
-                  text: 'LLM 타임아웃',
-                  variant: PikaButtonVariant.outline,
-                  size: PikaButtonSize.small,
-                  onPressed: () {
-                    _simulateLlmTimeout(viewModel);
-                  },
-                ),
-              ),
-              SizedBox(width: SpacingTokens.sm),
-              // 모든 테스트 상태 리셋
-              Expanded(
-                child: PikaButton(
-                  text: '상태 리셋',
-                  variant: PikaButtonVariant.text,
-                  size: PikaButtonSize.small,
-                  onPressed: () {
-                    _resetTestStates(viewModel);
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// OCR 타임아웃 시뮬레이션
-  void _simulateOcrTimeout() {
-    if (kDebugMode) {
-      print('🧪 [테스트] OCR 타임아웃 시뮬레이션');
-    }
-    _ocrTimeoutManager?.dispose();
-    setState(() {
-      // 타임아웃 상태로 즉시 변경
-    });
-  }
-
-  /// 네트워크 에러 시뮬레이션
-  void _simulateNetworkError() {
-    if (kDebugMode) {
-      print('🧪 [테스트] 네트워크 에러 시뮬레이션');
-    }
-    final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
-    // 강제로 네트워크 에러 상태로 설정
-    // viewModel에서 이 페이지의 에러를 설정하는 방법이 있다면 사용
-  }
-
-  /// LLM 타임아웃 시뮬레이션
-  void _simulateLlmTimeout(NoteDetailViewModel viewModel) {
-    if (kDebugMode) {
-      print('🧪 [테스트] LLM 타임아웃 시뮬레이션');
-    }
-    // LLM 타임아웃 상태 강제 설정
-    viewModel.updateLlmTimeoutStatus(true, true);
-  }
-
-  /// 테스트 상태들 리셋
-  void _resetTestStates(NoteDetailViewModel viewModel) {
-    if (kDebugMode) {
-      print('🧪 [테스트] 모든 테스트 상태 리셋');
-    }
-    
-    // OCR 타임아웃 매니저 리셋
-    _disposeTimeoutManager();
-    
-    // LLM 타임아웃 상태 리셋
-    viewModel.updateLlmTimeoutStatus(false, false);
-    
-    // 로딩 상태 리셋
-    setState(() {
-      _hasTriedLoading = false;
       _isRetrying = false;
     });
   }
@@ -331,12 +220,6 @@ class _NotePageWidgetState extends State<NotePageWidget> {
           
           // 텍스트 콘텐츠 위젯
           _buildTextContent(context, viewModel, processedText, isLoading, error),
-          
-          // 디버그 모드에서만 표시되는 테스트 버튼들
-          if (kDebugMode) ...[
-            SizedBox(height: SpacingTokens.lg),
-            _buildDebugTestButtons(context, viewModel),
-          ],
         ],
       ),
     );
@@ -477,7 +360,7 @@ class _NotePageWidgetState extends State<NotePageWidget> {
     if (word.isEmpty) return;
     
     if (kDebugMode) {
-      print('사전 검색: $word');
+      print('🔍 [사전검색] 시작: "$word"');
     }
     
     DictionaryResultWidget.searchAndShowDictionary(
@@ -486,12 +369,12 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       onCreateFlashCard: widget.onCreateFlashCard ?? (_, __, {pinyin}) {},
       onEntryFound: (entry) {
         if (kDebugMode) {
-          print('사전 검색 결과: ${entry.word} - ${entry.meaning}');
+          print('✅ [사전검색] 성공: ${entry.word} - ${entry.meaning} (출처: ${entry.source})');
         }
       },
       onNotFound: () {
         if (kDebugMode) {
-          print('사전 검색 결과 없음: $word');
+          print('❌ [사전검색] 실패: "$word" - 모든 소스에서 찾을 수 없음');
         }
       },
     );
