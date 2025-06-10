@@ -9,6 +9,7 @@ class TimeoutManager {
   VoidCallback? _onTimeout;
   Function(int)? _onProgress;
   Function? _onComplete;
+  String? _identifier; // 디버깅용 구분자
 
   /// 현재 경과 시간 (초)
   int get elapsedSeconds => _elapsedSeconds;
@@ -21,11 +22,13 @@ class TimeoutManager {
   /// [onProgress]: 매초마다 호출되는 콜백 (경과 시간 전달)
   /// [onTimeout]: 타임아웃 발생시 호출되는 콜백
   /// [onComplete]: 정상 완료시 호출되는 콜백
+  /// [identifier]: 디버깅용 구분자
   void start({
     int timeoutSeconds = 30,
     Function(int)? onProgress,
     VoidCallback? onTimeout,
     VoidCallback? onComplete,
+    String? identifier,
   }) {
     if (_isActive) {
       if (kDebugMode) {
@@ -39,16 +42,17 @@ class TimeoutManager {
     _onProgress = onProgress;
     _onTimeout = onTimeout;
     _onComplete = onComplete;
+    _identifier = identifier;
 
     if (kDebugMode) {
-      debugPrint('⏱️ [TimeoutManager] 타임아웃 시작: ${timeoutSeconds}초');
+      debugPrint('⏱️ [TimeoutManager${_identifier != null ? '-$_identifier' : ''}] 타임아웃 시작: ${timeoutSeconds}초');
     }
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _elapsedSeconds++;
       
       if (kDebugMode) {
-        debugPrint('⏱️ [TimeoutManager] 경과시간: ${_elapsedSeconds}초');
+        debugPrint('⏱️ [TimeoutManager${_identifier != null ? '-$_identifier' : ''}] 경과시간: ${_elapsedSeconds}초');
       }
 
       // 진행상황 콜백 호출
@@ -57,7 +61,7 @@ class TimeoutManager {
       // 타임아웃 체크
       if (_elapsedSeconds >= timeoutSeconds) {
         if (kDebugMode) {
-          debugPrint('⏰ [TimeoutManager] 타임아웃 발생: ${_elapsedSeconds}초');
+          debugPrint('⏰ [TimeoutManager${_identifier != null ? '-$_identifier' : ''}] 타임아웃 발생: ${_elapsedSeconds}초');
         }
         
         _onTimeout?.call();
@@ -71,7 +75,7 @@ class TimeoutManager {
     if (!_isActive) return;
 
     if (kDebugMode) {
-      debugPrint('✅ [TimeoutManager] 정상 완료: ${_elapsedSeconds}초 경과');
+      debugPrint('✅ [TimeoutManager${_identifier != null ? '-$_identifier' : ''}] 정상 완료: ${_elapsedSeconds}초 경과');
     }
 
     _onComplete?.call();
@@ -85,7 +89,7 @@ class TimeoutManager {
     _isActive = false;
     
     if (kDebugMode) {
-      debugPrint('🛑 [TimeoutManager] 타임아웃 중지');
+      debugPrint('🛑 [TimeoutManager${_identifier != null ? '-$_identifier' : ''}] 타임아웃 중지');
     }
   }
 
@@ -95,6 +99,7 @@ class TimeoutManager {
     _onProgress = null;
     _onTimeout = null;
     _onComplete = null;
+    _identifier = null;
   }
 
   /// 현재 단계에 맞는 메시지 반환

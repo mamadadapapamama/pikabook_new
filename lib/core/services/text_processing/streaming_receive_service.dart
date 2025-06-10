@@ -282,10 +282,10 @@ class StreamingReceiveService {
 
       final units = chunkData['units'] as List;
       
-      // Differential Update 방식: 인덱스 기반 매핑
-      if (originalSegments != null && _isDifferentialUpdate(units)) {
-        return _buildUnitsFromDifferentialUpdate(units, originalSegments);
-      }
+              // Differential Update 방식인지 확인 (서버 응답 기반)
+        if (originalSegments != null && _isDifferentialUpdate(units, chunkData)) {
+          return _buildUnitsFromDifferentialUpdate(units, originalSegments);
+        }
       
       // 기존 방식: 서버에서 모든 데이터 포함 (호환성)
       return _buildUnitsFromFullData(units);
@@ -299,14 +299,38 @@ class StreamingReceiveService {
     }
   }
 
-  /// Differential Update 방식인지 확인
-  bool _isDifferentialUpdate(List units) {
+  /// Differential Update 방식인지 확인 (서버 응답 기반)
+  bool _isDifferentialUpdate(List units, Map<String, dynamic> chunkData) {
     if (units.isEmpty) return false;
     
+    // 1. 서버에서 명시적으로 모드를 알려주는 경우
+    final serverMode = chunkData['mode'] as String?;
+    if (serverMode == 'differential') {
+      if (kDebugMode) {
+        debugPrint('🔄 [서버 지정] Differential Update 모드');
+      }
+      return true;
+    }
+    if (serverMode == 'full') {
+      if (kDebugMode) {
+        debugPrint('🔄 [서버 지정] Full Data 모드');
+      }
+      return false;
+    }
+    
+    // 2. 클라이언트에서 추론 (기존 로직)
     final firstUnit = units.first;
-    // 인덱스가 있고 원문이 없으면 differential update
-    return firstUnit['index'] != null && 
-           (firstUnit['original'] == null && firstUnit['originalText'] == null);
+    final hasIndex = firstUnit['index'] != null;
+    final hasOriginal = firstUnit['original'] != null || firstUnit['originalText'] != null;
+    
+    final isDifferential = hasIndex && !hasOriginal;
+    
+    if (kDebugMode) {
+      debugPrint('🔍 [클라이언트 추론] Differential Update: $isDifferential');
+      debugPrint('   인덱스 존재: $hasIndex, 원문 존재: $hasOriginal');
+    }
+    
+    return isDifferential;
   }
 
   /// Differential Update 방식으로 TextUnit 생성

@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import 'package:in_app_purchase_android/billing_client_wrappers.dart';
-import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:in_app_purchase_storekit/store_kit_wrappers.dart';
 import '../common/plan_service.dart';
@@ -70,11 +68,12 @@ class InAppPurchaseService {
       // 상품 정보 로드
       await _loadProducts();
 
-      // 미완료 구매 복원
-      await _restorePurchases();
+      // 미완료 구매 복원 (Apple ID 다이얼로그 방지를 위해 비활성화)
+      // 구매 복원은 사용자가 명시적으로 요청할 때만 실행
+      // await _restorePurchases();
 
       if (kDebugMode) {
-        print('✅ In-App Purchase 서비스 초기화 완료');
+        print('✅ In-App Purchase 서비스 초기화 완료 (자동 구매 복원 비활성화)');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -266,8 +265,8 @@ class InAppPurchaseService {
     }
   }
 
-  /// 구매 복원
-  Future<void> _restorePurchases() async {
+  /// 구매 복원 (사용자 요청시 호출)
+  Future<void> restorePurchases() async {
     try {
       if (kDebugMode) {
         print('🔄 구매 복원 시작');

@@ -102,6 +102,7 @@ Future<void> _preventAutoSignIn() async {
       if (kDebugMode) {
         debugPrint('✅ 일반 사용자 - Apple ID 다이얼로그 우려 없음');
       }
+
     }
   } catch (e) {
     if (kDebugMode) {

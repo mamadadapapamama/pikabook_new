@@ -105,6 +105,7 @@ class _NotePageWidgetState extends State<NotePageWidget> {
     
     _ocrTimeoutManager!.start(
       timeoutSeconds: 30,
+      identifier: 'OCR-${widget.page.id}',
       onProgress: (elapsedSeconds) {
         if (!mounted) return;
         // 진행 메시지는 loading indicator에서 자동 처리됨
@@ -114,7 +115,7 @@ class _NotePageWidgetState extends State<NotePageWidget> {
           // 스낵바로 타임아웃 에러 메시지 표시
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.'),
+              content: const Text('문제가 지속되고 있습니다. 잠시 뒤에 다시 시도해 주세요.'),
               backgroundColor: Colors.red[600],
               duration: const Duration(seconds: 4),
               behavior: SnackBarBehavior.floating,
@@ -252,6 +253,15 @@ class _NotePageWidgetState extends State<NotePageWidget> {
     
     // ProcessedText가 있으면 바로 표시 (타이프라이터 효과 제거)
     if (processedText != null) {
+      // OCR 처리 완료 - 타임아웃 매니저 정상 완료 처리
+      if (_ocrTimeoutManager != null && _ocrTimeoutManager!.isActive) {
+        if (kDebugMode) {
+          print('✅ [NotePageWidget] OCR 완료 - 타임아웃 매니저 정상 완료: ${widget.page.id}');
+        }
+        _ocrTimeoutManager!.complete();
+        _ocrTimeoutManager = null;
+      }
+      
       if (kDebugMode) {
         print('✅ [NotePageWidget] ProcessedText 위젯 반환: ${widget.page.id}');
       }

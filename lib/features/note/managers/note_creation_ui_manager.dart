@@ -290,6 +290,7 @@ class NoteCreationUIManager {
       
       _navigationTimeoutManager!.start(
         timeoutSeconds: 30,
+        identifier: 'Navigation',
         onProgress: (elapsedSeconds) {
           if (context.mounted && !navigationCompleted) {
             // 단계별 메시지 업데이트
@@ -322,37 +323,27 @@ class NoteCreationUIManager {
       // 튜토리얼 설정 - 첫 번째 노트 생성 시 튜토리얼 표시 준비
       NoteTutorial.markFirstNoteCreated();
 
-      // 화면 이동 (결과를 받아서 홈 화면 새로고침)
-      final result = await Navigator.of(context).push(
+      // 화면 이동
+      Navigator.of(context).push(
         NoteDetailScreenMVVM.route(
           note: note,
           isProcessingBackground: true,
           totalImageCount: totalImageCount,
         ),
-      );
+             ).then((result) async {
+         // 화면에서 돌아왔을 때의 처리
+         if (kDebugMode) {
+           debugPrint('✅ 노트 상세 화면에서 돌아옴');
+         }
+         // 홈 화면은 자동으로 새로고침되므로 별도 처리 불필요
+       });
       
+      // 화면 이동이 시작되면 즉시 네비게이션 완료 처리
       navigationCompleted = true;
       _navigationTimeoutManager?.complete();
       
-      // 노트 상세 화면에서 돌아왔을 때 홈 화면 새로고침
-      if (context.mounted) {
-        try {
-          final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
-          await homeViewModel.refreshNotes();
-          await homeViewModel.refreshUsageLimits();
-          
-          if (kDebugMode) {
-            debugPrint('✅ 노트 생성 후 홈 화면 새로고침 완료');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('⚠️ 홈 화면 새로고침 실패 (무시됨): $e');
-          }
-        }
-      }
-
       if (kDebugMode) {
-        debugPrint('✅ 노트 상세 화면 이동 완료');
+        debugPrint('✅ 노트 상세 화면 네비게이션 시작 완료');
       }
     } catch (e) {
       _navigationTimeoutManager?.dispose();

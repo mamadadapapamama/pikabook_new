@@ -61,6 +61,7 @@ class NoteCreationLoader {
     
     _timeoutManager!.start(
       timeoutSeconds: timeoutSeconds,
+      identifier: 'LoadingDialog',
       onProgress: (elapsedSeconds) {
         // 단계별 메시지 업데이트
         if (_timeoutManager!.shouldUpdateMessage()) {

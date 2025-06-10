@@ -140,10 +140,14 @@ class PostLLMWorkflow {
         noteId: job.noteId,
         needPinyin: true,
       )) {
-        // 스트리밍 시작 시 타임아웃 중지
-        if (!streamingStarted && result.isSuccess) {
+        if (kDebugMode) {
+          debugPrint('🌊 [워크플로우] 스트리밍 결과 수신 - success: ${result.isSuccess}, chunk: ${result.chunkIndex}, started: $streamingStarted');
+        }
+        
+        // 첫 번째 결과를 받으면 즉시 타임아웃 중지 (성공/실패 무관)
+        if (!streamingStarted) {
           if (kDebugMode) {
-            debugPrint('🌊 [워크플로우] 스트리밍 시작 감지 - 타임아웃 중지: ${job.noteId}');
+            debugPrint('🌊 [워크플로우] 첫 번째 스트리밍 응답 수신 - 타임아웃 중지: ${job.noteId}');
           }
           _stopLlmTimeout(job.noteId);
           streamingStarted = true;
@@ -413,15 +417,20 @@ class PostLLMWorkflow {
   void _startLlmTimeout(String noteId) {
     _stopLlmTimeout(noteId); // 기존 타이머 정리
     
+    if (kDebugMode) {
+      debugPrint('⏱️ [워크플로우] LLM 타임아웃 시작: $noteId (활성 타이머: ${_llmTimeoutManagers.length}개)');
+    }
+    
     final timeoutManager = TimeoutManager();
     _llmTimeoutManagers[noteId] = timeoutManager;
     _retryStates[noteId] = false;
     
     timeoutManager.start(
       timeoutSeconds: 30, // 운영용: 30초
+      identifier: 'LLM-$noteId',
       onProgress: (elapsedSeconds) {
         if (kDebugMode) {
-          debugPrint('⏱️ [워크플로우] LLM 처리 경과: ${noteId} - ${elapsedSeconds}초');
+          debugPrint('⏱️ [워크플로우] LLM 처리 경과: ${noteId} - ${elapsedSeconds}초 (활성: ${_llmTimeoutManagers.length}개)');
         }
       },
       onTimeout: () {
@@ -444,8 +453,20 @@ class PostLLMWorkflow {
   /// LLM 처리 타임아웃 중지
   void _stopLlmTimeout(String noteId) {
     final timeoutManager = _llmTimeoutManagers[noteId];
-    timeoutManager?.dispose();
-    _llmTimeoutManagers.remove(noteId);
+    if (timeoutManager != null) {
+      if (kDebugMode) {
+        debugPrint('🛑 [워크플로우] LLM 타임아웃 중지: $noteId (중지 전 활성: ${_llmTimeoutManagers.length}개)');
+      }
+      timeoutManager.dispose();
+      _llmTimeoutManagers.remove(noteId);
+      if (kDebugMode) {
+        debugPrint('🛑 [워크플로우] LLM 타임아웃 정리 완료: $noteId (남은 활성: ${_llmTimeoutManagers.length}개)');
+      }
+    } else {
+      if (kDebugMode) {
+        debugPrint('⚠️ [워크플로우] 중지할 타임아웃 없음: $noteId (현재 활성: ${_llmTimeoutManagers.length}개)');
+      }
+    }
   }
 
   /// LLM 타임아웃 알림

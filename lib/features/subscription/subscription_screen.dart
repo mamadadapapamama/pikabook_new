@@ -445,11 +445,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   Future<void> _restorePurchases() async {
     try {
-      // 구매 복원은 InAppPurchaseService에서 자동으로 처리됨
+      // 사용자가 명시적으로 요청한 구매 복원 실행
+      await _purchaseService.restorePurchases();
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('구매 복원을 시도했습니다.'),
+            content: Text('구매 복원을 완료했습니다.'),
             backgroundColor: ColorTokens.success,
           ),
         );
