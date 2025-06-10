@@ -21,6 +21,12 @@ import '../../../features/note/services/page_service.dart';
 class StreamingPageUpdateService {
   final PageService _pageService = PageService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // 배치 업데이트를 위한 버퍼
+  final Map<String, Map<String, dynamic>> _updateBuffer = {};
+  Timer? _batchUpdateTimer;
+  
+  static const Duration _batchUpdateInterval = Duration(milliseconds: 500); // 0.5초마다 배치 업데이트
 
   /// 스트리밍 단위로 페이지 업데이트 (OCR 결과 보존)
   Future<void> updatePageWithStreamingResult({
@@ -205,13 +211,13 @@ class StreamingPageUpdateService {
     required double progress,
   }) {
     final translatedText = mixedUnits
-        .map((unit) => unit.translatedText ?? '')
-        .where((text) => text.isNotEmpty)
+        .where((unit) => unit.translatedText?.isNotEmpty == true)
+        .map((unit) => unit.translatedText!)
         .join(' ');
     
     final pinyinText = mixedUnits
-        .map((unit) => unit.pinyin ?? '')
-        .where((text) => text.isNotEmpty)
+        .where((unit) => unit.pinyin?.isNotEmpty == true)
+        .map((unit) => unit.pinyin!)
         .join(' ');
 
     final updateData = <String, dynamic>{
@@ -227,9 +233,14 @@ class StreamingPageUpdateService {
         'targetLanguage': processedText.targetLanguage,
         'streamingStatus': processedText.streamingStatus.index,
         'completedUnits': processedText.completedUnits,
-        'progress': progress,
       },
     };
+
+    // 진행률은 디버그 모드에서만 저장
+    if (kDebugMode) {
+      updateData['processedText']['progress'] = progress;
+      updateData['processingProgress'] = progress;
+    }
 
     // 완료된 경우에만 최종 상태 업데이트
     if (isCompleted) {
@@ -244,8 +255,10 @@ class StreamingPageUpdateService {
     return updateData;
   }
 
-  /// 페이지 진행 상황 알림
+  /// 페이지 진행 상황 알림 (디버그 모드에서만 사용)
   Future<void> _notifyPageProgress(String pageId, double progress) async {
+    if (!kDebugMode) return; // 프로덕션에서는 진행률 업데이트 생략
+    
     try {
       await _firestore.collection('pages').doc(pageId).update({
         'processingProgress': progress,
@@ -313,6 +326,48 @@ class StreamingPageUpdateService {
         debugPrint('❌ 최종 페이지 업데이트 실패: ${pageData.pageId}, 오류: $e');
       }
       rethrow;
+    }
+  }
+
+  /// 배치 업데이트에 데이터 추가 (디버그 모드에서만 사용)
+  void _addToBatchUpdate(String pageId, Map<String, dynamic> updateData) {
+    if (!kDebugMode) return; // 프로덕션에서는 배치 처리 비활성화
+    
+    _updateBuffer[pageId] = updateData;
+    
+    // 타이머가 없으면 새로 시작
+    if (_batchUpdateTimer == null || !_batchUpdateTimer!.isActive) {
+      _batchUpdateTimer = Timer(_batchUpdateInterval, _flushBatchUpdates);
+    }
+  }
+
+  /// 배치 업데이트 실행 (디버그 모드에서만 사용)
+  Future<void> _flushBatchUpdates() async {
+    if (!kDebugMode || _updateBuffer.isEmpty) return;
+    
+    try {
+      final batch = _firestore.batch();
+      final updateCount = _updateBuffer.length;
+      
+      for (final entry in _updateBuffer.entries) {
+        final pageId = entry.key;
+        final updateData = entry.value;
+        final pageRef = _firestore.collection('pages').doc(pageId);
+        batch.update(pageRef, updateData);
+      }
+      
+      await batch.commit();
+      _updateBuffer.clear();
+      
+      if (kDebugMode) {
+        debugPrint('🔄 [배치 업데이트] 완료: ${updateCount}개 페이지');
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [배치 업데이트] 실패: $e');
+      }
+      // 버퍼는 유지하여 다음 시도에서 재처리
     }
   }
 } 

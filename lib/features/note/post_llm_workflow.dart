@@ -106,6 +106,8 @@ class PostLLMWorkflow {
       debugPrint('🤖 [워크플로우] 작업 시작: ${job.noteId}');
     }
 
+    bool streamingStarted = false;
+
     try {
       // 1. 노트 상태를 처리 중으로 업데이트
       await _updateNoteStatus(job.noteId, ProcessingStatus.translating);
@@ -138,6 +140,15 @@ class PostLLMWorkflow {
         noteId: job.noteId,
         needPinyin: true,
       )) {
+        // 스트리밍 시작 시 타임아웃 중지
+        if (!streamingStarted && result.isSuccess) {
+          if (kDebugMode) {
+            debugPrint('🌊 [워크플로우] 스트리밍 시작 감지 - 타임아웃 중지: ${job.noteId}');
+          }
+          _stopLlmTimeout(job.noteId);
+          streamingStarted = true;
+        }
+        
         if (!result.isSuccess) {
           if (kDebugMode) {
             debugPrint('❌ [워크플로우] 스트리밍 오류: ${result.error}');
@@ -169,7 +180,14 @@ class PostLLMWorkflow {
       }
 
       // 7. LLM 처리 완료 - 타임아웃 매니저 정리
-      _completeLlmTimeout(job.noteId);
+      if (!streamingStarted) {
+        // 스트리밍이 시작되지 않았다면 정상 완료 처리
+        _completeLlmTimeout(job.noteId);
+      } else {
+        // 스트리밍이 시작되었다면 이미 타임아웃이 중지되었으므로 정리만
+        _llmTimeoutManagers.remove(job.noteId);
+        _retryStates.remove(job.noteId);
+      }
 
       // 8. 노트 완료 상태 업데이트
       await _updateNoteStatus(job.noteId, ProcessingStatus.completed);
@@ -185,11 +203,15 @@ class PostLLMWorkflow {
       }
 
     } catch (e) {
-      _stopLlmTimeout(job.noteId);
+      // 스트리밍이 시작되지 않았다면 타임아웃 중지
+      if (!streamingStarted) {
+        _stopLlmTimeout(job.noteId);
+      }
       
       // 타임아웃 에러인지 확인
       final errorType = ErrorHandler.analyzeError(e);
-      if (errorType == ErrorType.timeout) {
+      if (errorType == ErrorType.timeout && !streamingStarted) {
+        // 스트리밍이 시작되기 전의 타임아웃만 처리
         await _updateNoteStatus(job.noteId, ProcessingStatus.retrying);
         await _notifyLlmTimeout(job.noteId);
       } else {
@@ -396,7 +418,7 @@ class PostLLMWorkflow {
     _retryStates[noteId] = false;
     
     timeoutManager.start(
-      timeoutSeconds: 5, // 테스트용: 30 -> 5초로 변경
+      timeoutSeconds: 30, // 운영용: 30초
       onProgress: (elapsedSeconds) {
         if (kDebugMode) {
           debugPrint('⏱️ [워크플로우] LLM 처리 경과: ${noteId} - ${elapsedSeconds}초');

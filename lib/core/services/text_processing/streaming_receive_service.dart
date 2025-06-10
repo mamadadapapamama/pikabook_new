@@ -260,30 +260,72 @@ class StreamingReceiveService {
     }).toList();
   }
 
-  /// 스트리밍 청크 데이터에서 TextUnit 리스트 추출
+  /// 스트리밍 청크 데이터에서 차분 업데이트 추출 (Segment 모드 최적화)
   List<TextUnit> _extractUnitsFromChunkData(Map<String, dynamic> chunkData) {
     try {
       if (chunkData['units'] == null) return [];
 
       final units = chunkData['units'] as List;
-      return units.map((unitData) {
-        final unit = Map<String, dynamic>.from(unitData);
+      
+      // Segment 모드 최적화: 인덱스 기반 차분 업데이트
+      if (chunkData['mode'] == 'segment' && chunkData['segmentUpdates'] != null) {
+        return _processSegmentUpdates(chunkData['segmentUpdates'] as List);
+      }
+      
+      // 기존 방식 (Paragraph 모드 또는 호환성)
+      return units.map<TextUnit>((unitData) {
+        // 서버 응답 필드명 매핑 (original, translation, pinyin)
+        final original = unitData['original'] ?? unitData['originalText'] ?? '';
+        final translation = unitData['translation'] ?? unitData['translatedText'] ?? '';
+        final pinyin = unitData['pinyin'] ?? '';
+        
         return TextUnit(
-          originalText: unit['originalText'] ?? '',
-          translatedText: unit['translatedText'] ?? '',
-          pinyin: unit['pinyin'] ?? '',
-          sourceLanguage: unit['sourceLanguage'] ?? 'zh-CN',
-          targetLanguage: unit['targetLanguage'] ?? 'ko',
-          segmentType: _parseSegmentType(unit['type'] ?? unit['segmentType']),
+          originalText: original,
+          translatedText: translation,
+          pinyin: pinyin,
+          sourceLanguage: unitData['sourceLanguage'] ?? 'zh-CN',
+          targetLanguage: unitData['targetLanguage'] ?? 'ko',
+          segmentType: _parseSegmentType(unitData['type'] ?? unitData['segmentType']),
         );
       }).toList();
       
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ 청크 데이터 파싱 실패: $e');
+        debugPrint('   청크 구조: ${chunkData.keys}');
       }
       return [];
     }
+  }
+
+  /// Segment 모드 인덱스 기반 차분 업데이트 처리
+  List<TextUnit> _processSegmentUpdates(List<dynamic> segmentUpdates) {
+    final List<TextUnit> units = [];
+    
+    for (final update in segmentUpdates) {
+      final index = update['index'] as int?;
+      final translation = update['translation'] as String?;
+      final pinyin = update['pinyin'] as String?;
+      
+      if (index != null && (translation != null || pinyin != null)) {
+        // 인덱스 기반 차분 업데이트 (원문은 클라이언트에서 매핑)
+        units.add(TextUnit(
+          originalText: '', // 원문은 클라이언트에서 인덱스로 매핑
+          translatedText: translation ?? '',
+          pinyin: pinyin ?? '',
+          sourceLanguage: update['sourceLanguage'] ?? 'zh-CN',
+          targetLanguage: update['targetLanguage'] ?? 'ko',
+          segmentType: _parseSegmentType(update['type']),
+          // 인덱스 정보 임시 저장 (TextUnit 확장 필요시)
+        ));
+        
+        if (kDebugMode) {
+          debugPrint('📦 차분 업데이트: 인덱스 $index → 번역: "$translation", 병음: "$pinyin"');
+        }
+      }
+    }
+    
+    return units;
   }
 
   /// 스트리밍 실패 시 폴백 결과 생성

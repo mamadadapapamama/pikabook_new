@@ -4,6 +4,7 @@ import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
+import '../../../core/utils/error_handler.dart';
 import '../tts/tts_button.dart';
 import 'dictionary_service.dart';
 
@@ -110,13 +111,8 @@ class DictionaryResultWidget extends StatelessWidget {
     );
     Navigator.pop(context);
 
-    // 추가 완료 메시지
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('플래시카드에 추가되었습니다'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    // 성공 메시지 표시
+    ErrorHandler.showSuccessSnackBar(context, '플래시카드에 추가되었습니다');
   }
 
   /// 사전 결과 바텀 시트 표시 헬퍼 메서드
@@ -155,9 +151,7 @@ class DictionaryResultWidget extends StatelessWidget {
     Function()? onNotFound,
   }) async {
     if (word.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('검색할 단어를 입력하세요')),
-      );
+      ErrorHandler.showInfoSnackBar(context, '검색할 단어를 입력하세요');
       return;
     }
     
@@ -194,9 +188,9 @@ class DictionaryResultWidget extends StatelessWidget {
         }
       } else {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(result['message'] ?? '단어를 찾을 수 없습니다: $word')),
-          );
+          // 사전 검색 결과 없음 메시지 표시
+          final errorMessage = result['message'] ?? '단어를 찾을 수 없습니다: $word';
+          ErrorHandler.showInfoSnackBar(context, errorMessage);
         }
         
         // 결과 없음 콜백
@@ -208,9 +202,7 @@ class DictionaryResultWidget extends StatelessWidget {
       // 오류 발생 시 로딩 다이얼로그 닫기
       if (context.mounted) {
         Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('사전 검색 중 오류가 발생했습니다: $e')),
-        );
+        ErrorHandler.showErrorSnackBar(context, e, ErrorContext.dictionary);
       }
       
       // 결과 없음 콜백
@@ -235,7 +227,7 @@ class DictionaryResultWidget extends StatelessWidget {
       // 단어 검색
       return await _dictionaryService.lookupWord(word);
     } catch (e) {
-      return {'success': false, 'message': '사전 검색 중 오류가 발생했습니다: $e'};
+      return {'success': false, 'message': ErrorHandler.getMessageFromError(e, ErrorContext.dictionary)};
     }
   }
   

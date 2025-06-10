@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/note.dart';
+import '../../../core/utils/error_handler.dart';
 import '../services/note_service.dart';
 import '../../../core/services/cache/cache_manager.dart';
 import '../../../core/widgets/edit_title_dialog.dart';
@@ -45,7 +46,10 @@ class NoteOptionsManager {
         onTitleUpdated: (newTitle) {
           updateNoteTitle(note.id, newTitle).then((success) {
             if (success) {
+              ErrorHandler.showSuccessSnackBar(context, '노트 제목이 변경되었습니다');
               onTitleEditing();
+            } else {
+              ErrorHandler.showErrorSnackBar(context, '제목 변경에 실패했습니다', ErrorContext.noteEdit);
             }
           });
         },
@@ -95,15 +99,11 @@ class NoteOptionsManager {
       // 노트 삭제
       await _noteService.deleteNote(noteId);
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('노트가 삭제되었습니다.')),
-      );
+      ErrorHandler.showSuccessSnackBar(context, '노트가 삭제되었습니다');
       return true;
     } catch (e) {
       debugPrint('노트 삭제 중 오류 발생: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('노트 삭제 중 오류가 발생했습니다: $e')),
-      );
+      ErrorHandler.showErrorSnackBar(context, e, ErrorContext.noteDelete);
       return false;
     }
   }

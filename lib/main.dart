@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'app.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'firebase_options.dart';
@@ -37,6 +38,9 @@ void main() async {
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
     
+    // Firebase Auth 자동 복원 방지 - Apple ID 다이얼로그 방지
+    await _preventAutoSignIn();
+    
     debugPrint('Firebase 초기화 완료');
   } catch (e) {
     debugPrint('Firebase 초기화 실패: $e');
@@ -49,6 +53,62 @@ void main() async {
   
   // 일반적인 앱 실행
   runApp(const App());
+}
+
+/// Apple ID 자동 로그인 방지 (Apple ID 다이얼로그 방지)
+Future<void> _preventAutoSignIn() async {
+  try {
+    if (kDebugMode) {
+      debugPrint('🔒 Apple ID 자동 로그인 방지 처리 시작');
+    }
+    
+    // Firebase Auth 현재 사용자 확인
+    final currentUser = FirebaseAuth.instance.currentUser;
+    
+    if (currentUser == null) {
+      if (kDebugMode) {
+        debugPrint('✅ 로그인된 사용자 없음 - Apple ID 다이얼로그 방지 완료');
+      }
+      return;
+    }
+    
+    // Apple 로그인 사용자인지 확인
+    final isAppleUser = currentUser.providerData.any(
+      (provider) => provider.providerId == 'apple.com'
+    );
+    
+    if (isAppleUser) {
+      if (kDebugMode) {
+        debugPrint('🍎 Apple 로그인 사용자 감지 - 자동 갱신 방지 처리');
+      }
+      
+      try {
+        // 토큰 유효성을 갱신 없이 확인만 (forceRefresh: false)
+        await currentUser.getIdToken(false);
+        if (kDebugMode) {
+          debugPrint('✅ Apple 토큰 유효함 - 정상 유지');
+        }
+      } catch (e) {
+        // 토큰이 만료되었거나 유효하지 않은 경우 자동 로그아웃
+        if (kDebugMode) {
+          debugPrint('⚠️ Apple 토큰 만료/무효 - 자동 로그아웃 처리: $e');
+        }
+        await FirebaseAuth.instance.signOut();
+        if (kDebugMode) {
+          debugPrint('✅ 자동 로그아웃 완료 - Apple ID 다이얼로그 방지됨');
+        }
+      }
+    } else {
+      if (kDebugMode) {
+        debugPrint('✅ 일반 사용자 - Apple ID 다이얼로그 우려 없음');
+      }
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      debugPrint('❌ 자동 로그인 방지 처리 중 오류: $e');
+    }
+    // 오류 발생 시에도 안전하게 진행
+  }
 }
 
 /// 앱 시작 시 캐시 및 임시 데이터 정리
