@@ -41,10 +41,11 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   @override
   void initState() {
     super.initState();
-    // 뷰모델 초기화
+    // 뷰모델 초기화 (플래시카드 화면은 노트 생성 중이 아님)
     _viewModel = FlashCardViewModel(
       noteId: widget.noteId ?? '',
       initialFlashcards: widget.initialFlashcards,
+      isNoteCreation: false, // 플래시카드 화면은 항상 기존 노트
     );
     
     // TTS 서비스 초기화

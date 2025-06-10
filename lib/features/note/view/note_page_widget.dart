@@ -199,10 +199,12 @@ class _NotePageWidgetState extends State<NotePageWidget> {
   
   // 처리된 텍스트 위젯 (번역 완료된 상태)
   Widget _buildProcessedTextWidget(BuildContext context, ProcessedText processedText, NoteDetailViewModel viewModel) {
-    // FlashCardViewModel 생성 (기존 flashCards 리스트로 초기화)
+    // FlashCardViewModel 생성 (플래시카드가 없으면 노트 생성 중으로 간주)
+    final isNoteCreation = widget.flashCards.isEmpty;
     final flashCardViewModel = FlashCardViewModel(
       noteId: widget.noteId,
       initialFlashcards: widget.flashCards,
+      isNoteCreation: isNoteCreation, // 노트 생성 중 플래그 전달
     );
     
     // 타이프라이터 효과 완전 비활성화

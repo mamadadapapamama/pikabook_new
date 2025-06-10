@@ -45,7 +45,8 @@ class FlashCardViewModel extends ChangeNotifier {
     FlashCardRepository? repository,
     TTSService? ttsService,
     UsageLimitService? usageLimitService,
-    CacheManager? cacheManager
+    CacheManager? cacheManager,
+    bool isNoteCreation = false,  // 노트 생성 중인지 여부
   }) : 
     _noteId = noteId,
     _repository = repository ?? FlashCardRepository(cacheManager: cacheManager ?? CacheManager()),
@@ -61,9 +62,14 @@ class FlashCardViewModel extends ChangeNotifier {
     
     _initTts();
     
-    // 노트 ID가 설정된 경우 플래시카드 로드
-    if (noteId.isNotEmpty) {
+    // 노트 생성 중이 아니고 노트 ID가 설정된 경우에만 플래시카드 로드
+    if (noteId.isNotEmpty && !isNoteCreation) {
+      if (kDebugMode) {
+        debugPrint('FlashCardViewModel: 기존 노트 플래시카드 로드 시작');
+      }
       loadFlashCards();
+    } else if (isNoteCreation && kDebugMode) {
+      debugPrint('FlashCardViewModel: 노트 생성 중 - 플래시카드 로드 건너뜀');
     }
   }
   

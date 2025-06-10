@@ -15,6 +15,15 @@ class TextModeSeparationService {
   factory TextModeSeparationService() => _instance;
   TextModeSeparationService._internal();
 
+  // 상수 정의
+  static const _sentenceDelimitersPattern = r'[。？！.!?]';
+  static const _commaPattern = r'[，,]';
+  static const _quotationPattern = r'[""]';
+  
+  static final _sentenceDelimiters = RegExp(_sentenceDelimitersPattern);
+  static final _commaRegex = RegExp(_commaPattern);
+  static final _quotationRegex = RegExp(_quotationPattern);
+
   /// 모드에 따라 텍스트 분리 (클라이언트 측)
   /// 
   /// [context] 사용 컨텍스트:
@@ -78,70 +87,86 @@ class TextModeSeparationService {
     return result;
   }
 
-  /// 문장 단위로 텍스트 분리
+  /// 문장 단위로 텍스트 분리 (순차적 4단계 처리)
   List<String> splitIntoSentences(String text) {
     if (text.isEmpty) return [];
 
     if (kDebugMode) {
-      debugPrint('문장 단위 분리 시작: ${text.length}자');
+      debugPrint('📋 문장 단위 분리 시작: ${text.length}자');
     }
 
-    // 1단계: 줄바꿈으로 먼저 분리 (단원, 제목 등을 개별 처리하기 위해)
+    // 줄바꿈으로 먼저 분리
     final lines = text.split('\n')
         .map((line) => line.trim())
         .where((line) => line.isNotEmpty)
         .toList();
 
-    final List<String> sentences = [];
-    
-    for (final line in lines) {
-      if (kDebugMode) {
-        debugPrint('🔍 줄 처리: "$line"');
-      }
-      
-      // 단원/과 표시 패턴 감지 (예: "小一预备 第二课", "第一课", "Unit 1" 등)
-      if (_isUnitOrLessonTitle(line)) {
-        sentences.add(line);
-        if (kDebugMode) {
-          debugPrint('📚 단원/과 제목으로 분리: "$line"');
-        }
-        continue;
-      }
-      
-      // 제목 패턴 감지 (짧고 구두점이 없는 줄)
-      if (_isTitle(line)) {
-        sentences.add(line);
-        if (kDebugMode) {
-          debugPrint('📝 제목으로 분리: "$line"');
-        }
-        continue;
-      }
-      
-      // 일반 문장 처리
-      final lineSentences = _splitLineIntoSentences(line);
-      sentences.addAll(lineSentences);
+    if (kDebugMode) {
+      debugPrint('📄 총 ${lines.length}개 줄 감지');
     }
 
-    // 빈 문장들 제거
-    final filteredSentences = sentences
-        .where((sentence) => sentence.trim().isNotEmpty)
-        .toList();
+    // === 1단계: 첫 3줄 분석 후 제목 확정 ===
+    final titleLines = <String>[];
+    final contentLines = <String>[];
+    
+    for (int i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      
+      if (i < 3 && (_isUnitOrLessonTitle(line) || _isTitle(line))) {
+        titleLines.add(line);
+        if (kDebugMode) {
+          debugPrint('📋 1단계 제목 확정: "$line"');
+        }
+      } else {
+        contentLines.add(line);
+      }
+    }
 
-    // 제목 재배치 수행
-    final reorderedSentences = _reorderTitlesToTop(filteredSentences);
+    // === 2단계: 나머지 줄 분석 - 문장 부호로 분리 ===
+    final rawSegments = <String>[];
+    
+    for (final line in contentLines) {
+      if (kDebugMode) {
+        debugPrint('🔍 2단계 줄 처리: "$line"');
+      }
+      
+      final lineSegments = _splitLineIntoSentences(line);
+      rawSegments.addAll(lineSegments);
+    }
 
     if (kDebugMode) {
-      debugPrint('문장 분리 및 제목 재배치 결과: ${reorderedSentences.length}개 문장');
-      for (int i = 0; i < reorderedSentences.length; i++) {
-        final preview = reorderedSentences[i].length > 30 
-            ? '${reorderedSentences[i].substring(0, 30)}...' 
-            : reorderedSentences[i];
-        final isTitle = _isTitle(reorderedSentences[i]) || _isUnitOrLessonTitle(reorderedSentences[i]);
+      debugPrint('📝 2단계 완료: ${rawSegments.length}개 원시 세그먼트');
+    }
+
+    // === 3단계: 4자 미만 세그먼트를 뒷 문장과 조합 후 재분리 ===
+    final mergedSegments = _mergeShortSegmentsAndResplit(rawSegments);
+
+    if (kDebugMode) {
+      debugPrint('🔗 3단계 완료: ${mergedSegments.length}개 병합 세그먼트');
+    }
+
+    // === 4단계: 세그먼트 리스팅 (제목 + 내용) ===
+    final finalSegments = <String>[];
+    finalSegments.addAll(titleLines);
+    finalSegments.addAll(mergedSegments);
+
+    // 빈 문장들 제거
+    final filteredSegments = finalSegments
+        .where((segment) => segment.trim().isNotEmpty)
+        .toList();
+
+    if (kDebugMode) {
+      debugPrint('✅ 4단계 최종 완료: ${filteredSegments.length}개 세그먼트');
+      for (int i = 0; i < filteredSegments.length; i++) {
+        final preview = filteredSegments[i].length > 30 
+            ? '${filteredSegments[i].substring(0, 30)}...' 
+            : filteredSegments[i];
+        final isTitle = titleLines.contains(filteredSegments[i]);
         debugPrint('  ${isTitle ? "📋" : "📝"} ${i+1}: "$preview"');
       }
     }
 
-    return reorderedSentences;
+    return filteredSegments;
   }
 
   /// 단원/과 제목인지 확인
@@ -159,16 +184,16 @@ class TextModeSeparationService {
     return unitPatterns.any((pattern) => pattern.hasMatch(line));
   }
 
-  /// 제목인지 확인 (개선된 휴리스틱 방법)
+  /// 제목인지 확인 (엄격한 기준 적용)
   bool _isTitle(String line) {
-    // 제목 판단 기준:
-    // 1. 길이가 적당히 짧음 (1-20자) - 범위 확장
-    // 2. 문장 구분자가 없음
+    // 제목 판단 기준 (더 엄격하게):
+    // 1. 길이가 짧음 (2-8자로 제한) - 긴 문장은 제목이 아님
+    // 2. 문장 구분자가 전혀 없음 (쉼표, 마침표 등)
     // 3. 숫자나 특수문자로만 이루어지지 않음
     // 4. 중국어 문자 포함
-    // 5. 특별한 괄호나 기호로 둘러싸인 경우 (<<>>, <>, [], 등)
+    // 5. 특별한 괄호나 기호로 둘러싸인 경우
     
-    if (line.length > 20 || line.length < 2) return false;
+    if (line.length > 8 || line.length < 2) return false;
     
     // 특별한 제목 패턴 감지 (우선순위 높음)
     if (_hasSpecialTitleMarkers(line)) {
@@ -186,8 +211,8 @@ class TextModeSeparationService {
       return true;
     }
     
-    // 문장 구분자가 있으면 제목이 아님
-    if (RegExp(r'[。？！.!?，,]').hasMatch(line)) return false;
+    // 문장 구분자가 있으면 제목이 아님 (엄격하게)
+    if (RegExp(r'[。？！.!?，,、；;：:]').hasMatch(line)) return false;
     
     // 숫자나 특수문자만 있으면 제목이 아님
     if (RegExp(r'^[\d\s\p{P}]+$', unicode: true).hasMatch(line)) return false;
@@ -198,17 +223,135 @@ class TextModeSeparationService {
     return true;
   }
   
+  /// 3단계: 4자 미만 세그먼트를 뒷 문장과 조합 후 재분리
+  List<String> _mergeShortSegmentsAndResplit(List<String> segments) {
+    if (segments.isEmpty) return segments;
+
+    if (kDebugMode) {
+      debugPrint('🔗 3단계 시작: 짧은 세그먼트 병합 및 재분리');
+    }
+
+    final result = <String>[];
+    
+    for (int i = 0; i < segments.length; i++) {
+      final current = segments[i];
+      
+      // 현재 세그먼트가 6자 미만이고 다음 세그먼트가 있는 경우
+      if (current.length < 6 && i + 1 < segments.length) {
+        final next = segments[i + 1];
+        final combined = '$current$next';
+        
+        if (kDebugMode) {
+          debugPrint('🔗 짧은 세그먼트 병합: "$current" (${current.length}자) + "$next" = "$combined"');
+        }
+        
+        // 병합된 문장을 다시 문장부호로 분리
+        final resplitSegments = _splitByPunctuationMarks(combined);
+        result.addAll(resplitSegments);
+        
+        if (kDebugMode) {
+          debugPrint('🔪 재분리 결과: ${resplitSegments.length}개 세그먼트');
+          for (int j = 0; j < resplitSegments.length; j++) {
+            debugPrint('    ${j+1}: "${resplitSegments[j]}"');
+          }
+        }
+        
+        // 다음 세그먼트는 이미 처리했으므로 건너뛰기
+        i++;
+      } else {
+        // 4자 이상이거나 마지막 세그먼트인 경우 그대로 추가
+        result.add(current);
+        if (kDebugMode) {
+          debugPrint('📝 정상 길이 세그먼트 유지: "$current" (${current.length}자)');
+        }
+      }
+    }
+
+    if (kDebugMode) {
+      debugPrint('✅ 3단계 완료: ${result.length}개 최종 세그먼트');
+    }
+
+    return result;
+  }
+
+  /// 끊어진 문장 재구성 (쉼표 뒤 짧은 세그먼트를 다음 줄과 합치기)
+  List<String> _reconstructBrokenSentences(List<String> sentences) {
+    if (sentences.isEmpty) return sentences;
+    
+    final List<String> result = [];
+    
+    if (kDebugMode) {
+      debugPrint('🔧 끊어진 문장 재구성 시작: ${sentences.length}개 문장');
+    }
+    
+    for (int i = 0; i < sentences.length; i++) {
+      final current = sentences[i];
+      
+      // 쉼표로 끝나고 다음 문장이 있는 경우
+      if (current.endsWith(',') || current.endsWith('，')) {
+        result.add(current);
+        if (kDebugMode) {
+          debugPrint('✅ 쉼표로 끝나는 완성 문장: "$current"');
+        }
+      }
+      // 쉼표 뒤의 짧은 세그먼트 (5글자 이하)이고 다음 문장이 있는 경우
+      // 단, 제목인 경우는 합치지 않음
+      else if (current.length <= 5 && i + 1 < sentences.length && 
+               !_isTitle(current) && !_isUnitOrLessonTitle(current)) {
+        final next = sentences[i + 1];
+        final combined = '$current$next';
+        result.add(combined);
+        
+        if (kDebugMode) {
+          debugPrint('🔗 짧은 세그먼트를 다음과 합치기: "$current" + "$next" = "$combined"');
+        }
+        
+        // 다음 문장은 건너뛰기
+        i++;
+      }
+      // 일반 문장 (또는 제목이어서 합치지 않은 짧은 세그먼트)
+      else {
+        result.add(current);
+        if (kDebugMode) {
+          if (current.length <= 5 && (_isTitle(current) || _isUnitOrLessonTitle(current))) {
+            debugPrint('📋 제목이므로 합치지 않음: "$current"');
+          } else {
+            debugPrint('📝 일반 문장 유지: "$current"');
+          }
+        }
+      }
+    }
+    
+    if (kDebugMode) {
+      debugPrint('✅ 문장 재구성 완료: ${result.length}개 문장');
+    }
+    
+    return result;
+  }
+
   /// 제목들을 적절한 위치로 재배치
   List<String> _reorderTitlesToTop(List<String> sentences) {
     if (sentences.isEmpty) return sentences;
     
-    final List<String> result = [];
-    final List<String> currentSection = [];
-    String? currentTitle;
+    // 첫 3개 세그먼트에서 제목이 있는지 확인
+    final hasEarlyTitle = _hasEarlyTitle(sentences);
     
     if (kDebugMode) {
       debugPrint('🔄 제목 재배치 시작: ${sentences.length}개 문장');
+      debugPrint('📋 첫 3개 세그먼트에 제목 존재: $hasEarlyTitle');
     }
+    
+    // 제목이 없으면 모든 문장을 본문으로 처리
+    if (!hasEarlyTitle) {
+      if (kDebugMode) {
+        debugPrint('📄 제목 없는 본문으로 처리');
+      }
+      return sentences;
+    }
+    
+    final List<String> result = [];
+    final List<String> currentSection = [];
+    String? currentTitle;
     
     for (int i = 0; i < sentences.length; i++) {
       final sentence = sentences[i];
@@ -243,6 +386,26 @@ class TextModeSeparationService {
     }
     
     return result;
+  }
+  
+  /// 첫 3개 세그먼트에 제목이 있는지 확인
+  bool _hasEarlyTitle(List<String> sentences) {
+    final checkCount = sentences.length < 3 ? sentences.length : 3;
+    
+    for (int i = 0; i < checkCount; i++) {
+      final sentence = sentences[i];
+      if (_isTitle(sentence) || _isUnitOrLessonTitle(sentence)) {
+        if (kDebugMode) {
+          debugPrint('📋 첫 3개 세그먼트에서 제목 발견: "$sentence" (위치: ${i+1})');
+        }
+        return true;
+      }
+    }
+    
+    if (kDebugMode) {
+      debugPrint('📄 첫 3개 세그먼트에 제목 없음 - 본문 전용으로 판단');
+    }
+    return false;
   }
   
   /// 섹션을 결과에 추가 (제목을 맨 위로)
@@ -358,7 +521,7 @@ class TextModeSeparationService {
       final char = text[i];
       
       // 문장 끝 부호 (무조건 분리)
-      if (RegExp(r'[。．.？！?!]').hasMatch(char)) {
+      if (_sentenceDelimiters.hasMatch(char)) {
         final segment = text.substring(currentStart, i + 1).trim();
         if (segment.isNotEmpty) {
           segments.add(segment);
@@ -368,67 +531,55 @@ class TextModeSeparationService {
         }
         currentStart = i + 1;
       }
-      // 쉼표 (조건부 분리)
-      else if (RegExp(r'[，,]').hasMatch(char)) {
-        final segment = text.substring(currentStart, i + 1).trim();
-        
-        // 쉼표 분리 조건: 5글자 이상이거나 다음에 공백이 있는 경우
-        final hasSpaceAfter = i + 1 < text.length && text[i + 1] == ' ';
-        final isLongEnough = segment.length >= 5;
-        
-        if (segment.isNotEmpty && (isLongEnough || hasSpaceAfter)) {
-          segments.add(segment);
-          if (kDebugMode) {
-            debugPrint('🔪 쉼표 분리: "$segment" (길이: ${segment.length}, 공백: $hasSpaceAfter)');
-          }
-          currentStart = i + 1;
-        }
-      }
-      // 인용부호 시작 (짝 찾아서 처리)
-      else if (RegExp(r'[""''「『【《〈]').hasMatch(char)) {
-        final quoteEnd = _findMatchingQuote(text, i, char);
-        if (quoteEnd != -1) {
-          // 인용부호 앞부분이 있으면 먼저 추가
-          if (i > currentStart) {
-            final beforeQuote = text.substring(currentStart, i).trim();
-            if (beforeQuote.isNotEmpty) {
-              segments.add(beforeQuote);
-              if (kDebugMode) {
-                debugPrint('📝 인용부호 앞: "$beforeQuote"');
-              }
-            }
-          }
-          
-          // 인용부호 포함 부분 추가
-          final quoteSegment = text.substring(i, quoteEnd + 1).trim();
-          if (quoteSegment.isNotEmpty) {
-            segments.add(quoteSegment);
-            if (kDebugMode) {
-              debugPrint('💬 인용부호: "$quoteSegment"');
-            }
-          }
-          
-          currentStart = quoteEnd + 1;
-          i = quoteEnd; // for 루프에서 i++되므로
-        }
-      }
+             // 쉼표 (간단한 분리)
+       else if (_commaRegex.hasMatch(char)) {
+         final segment = text.substring(currentStart, i + 1).trim();
+         
+         // 쉼표 분리 조건: 3글자 이상이면 분리 (중국어는 대부분 짧은 구문)
+         if (segment.isNotEmpty && segment.length >= 3) {
+           segments.add(segment);
+           if (kDebugMode) {
+             debugPrint('🔪 쉼표 분리: "$segment" (길이: ${segment.length})');
+           }
+           currentStart = i + 1;
+         }
+       }
+             // 인용부호 시작 (간단한 처리)
+       else if (_quotationRegex.hasMatch(char)) {
+         // 현재까지의 부분이 있으면 먼저 추가
+         if (i > currentStart) {
+           final beforeQuote = text.substring(currentStart, i).trim();
+           if (beforeQuote.isNotEmpty) {
+             segments.add(beforeQuote);
+             if (kDebugMode) {
+               debugPrint('📝 인용부호 앞: "$beforeQuote"');
+             }
+           }
+         }
+         
+         // 인용부호 닫기 찾기 (가장 가까운 닫는 인용부호)
+         final quoteEnd = _findClosingQuote(text, i);
+         final quoteSegment = text.substring(i, quoteEnd + 1).trim();
+         
+         if (quoteSegment.isNotEmpty) {
+           segments.add(quoteSegment);
+           if (kDebugMode) {
+             debugPrint('💬 인용부호: "$quoteSegment"');
+           }
+         }
+         
+         currentStart = quoteEnd + 1;
+         i = quoteEnd; // for 루프에서 i++되므로
+       }
     }
     
-    // 남은 텍스트 처리
+    // 남은 텍스트 처리 (중국어는 짧은 세그먼트도 의미가 있으므로 합치지 않음)
     if (currentStart < text.length) {
       final remaining = text.substring(currentStart).trim();
       if (remaining.isNotEmpty) {
-        // 마지막 세그먼트가 너무 짧으면 이전과 합치기
-        if (remaining.length <= 3 && segments.isNotEmpty) {
-          segments[segments.length - 1] = '${segments.last}$remaining';
-          if (kDebugMode) {
-            debugPrint('🔗 마지막 세그먼트 합치기: "${segments.last}"');
-          }
-        } else {
-          segments.add(remaining);
-          if (kDebugMode) {
-            debugPrint('📝 마지막 세그먼트: "$remaining"');
-          }
+        segments.add(remaining);
+        if (kDebugMode) {
+          debugPrint('📝 마지막 세그먼트: "$remaining"');
         }
       }
     }
@@ -440,41 +591,16 @@ class TextModeSeparationService {
     return segments;
   }
   
-  /// 인용부호 짝 찾기 (간단한 로직)
-  int _findMatchingQuote(String text, int startPos, String openQuote) {
-    // 닫는 인용부호 결정
-    String closeQuote;
+  /// 닫는 인용부호 찾기 (간단한 로직)
+  int _findClosingQuote(String text, int startPos) {
+    final char = text[startPos];
     
-    switch (openQuote) {
-      case '"':
-        closeQuote = '"';
-        break;
-      case '「':
-        closeQuote = '」';
-        break;
-      case '『':
-        closeQuote = '』';
-        break;
-      case '【':
-        closeQuote = '】';
-        break;
-      case '《':
-        closeQuote = '》';
-        break;
-      case '〈':
-        closeQuote = '〉';
-        break;
-      default:
-        // 기본적으로 동일한 문자로 닫기 (예: ' → ')
-        closeQuote = openQuote;
-        break;
-    }
-    
-    // 닫는 인용부호 찾기
+    // 닫는 인용부호 찾기 (가장 가까운 것)
     for (int i = startPos + 1; i < text.length; i++) {
-      if (text[i] == closeQuote) {
+      // 모든 종류의 닫는 인용부호를 찾기
+      if (RegExp(r'[""'']').hasMatch(text[i])) {
         if (kDebugMode) {
-          debugPrint('💬 인용부호 짝 찾음: $openQuote → $closeQuote (${startPos} → ${i})');
+          debugPrint('💬 인용부호 짝 찾음: $char → ${text[i]} (${startPos} → ${i})');
         }
         return i;
       }
@@ -482,98 +608,12 @@ class TextModeSeparationService {
     
     // 짝을 찾지 못한 경우 문장 끝까지
     if (kDebugMode) {
-      debugPrint('⚠️ 인용부호 짝 없음: $openQuote, 문장 끝까지 처리');
+      debugPrint('⚠️ 인용부호 짝 없음: $char, 문장 끝까지 처리');
     }
     return text.length - 1;
   }
 
-  /// 쉼표로 분리해야 하는지 판단 (기존 로직 - 호환성 유지)
-  bool _shouldSplitByComma(String line) {
-    // 조건:
-    // 1. 쉼표가 2개 이상 있음
-    // 2. 문장이 충분히 길음 (20자 이상)
-    // 3. 문장 구분자가 마지막에만 있거나 없음
-    
-    final commaCount = ',，'.split('').map((c) => line.split(c).length - 1).reduce((a, b) => a + b);
-    
-    if (commaCount < 2 || line.length < 20) return false;
-    
-    // 문장 구분자가 중간에 있으면 쉼표 분리 안함
-    final sentenceDelimiters = RegExp(r'[。？！.!?]');
-    final matches = sentenceDelimiters.allMatches(line).toList();
-    
-    // 문장 구분자가 마지막 3글자 안에만 있어야 함
-    if (matches.isNotEmpty) {
-      final lastMatch = matches.last;
-      if (lastMatch.start < line.length - 3) return false;
-    }
-    
-    return true;
-  }
 
-  /// 첫 번째 쉼표에서 분리
-  List<String> _splitByFirstComma(String line) {
-    final commaPattern = RegExp(r'[,，]');
-    final match = commaPattern.firstMatch(line);
-    
-    if (match == null) return [line];
-    
-    final firstPart = line.substring(0, match.end).trim();
-    final secondPart = line.substring(match.end).trim();
-    
-    final List<String> result = [];
-    
-    if (firstPart.isNotEmpty) {
-      result.add(firstPart);
-      if (kDebugMode) {
-        debugPrint('🔪 쉼표 분리 1: "$firstPart"');
-      }
-    }
-    
-    if (secondPart.isNotEmpty) {
-      // 두 번째 부분도 재귀적으로 처리
-      final secondPartSentences = _splitBySentenceDelimiters(secondPart);
-      result.addAll(secondPartSentences);
-      if (kDebugMode) {
-        debugPrint('🔪 쉼표 분리 2: "$secondPart"');
-      }
-    }
-    
-    return result;
-  }
-
-  /// 문장 구분자로 분리
-  List<String> _splitBySentenceDelimiters(String text) {
-    // 중국어 문장 구분자 (마침표, 물음표, 느낌표 등)
-    final sentenceDelimiters = RegExp(r'[。？！.!?]');
-    
-    final List<String> sentences = [];
-    int startIndex = 0;
-    
-    // 구분자로 분리
-    for (int i = 0; i < text.length; i++) {
-      if (i == text.length - 1 || sentenceDelimiters.hasMatch(text[i])) {
-        final endIndex = i + 1;
-        if (endIndex > startIndex) {
-          final sentence = text.substring(startIndex, endIndex).trim();
-          if (sentence.isNotEmpty) {
-            sentences.add(sentence);
-          }
-          startIndex = endIndex;
-        }
-      }
-    }
-    
-    // 남은 부분이 있으면 추가
-    if (startIndex < text.length) {
-      final remaining = text.substring(startIndex).trim();
-      if (remaining.isNotEmpty) {
-        sentences.add(remaining);
-      }
-    }
-    
-    return sentences;
-  }
 
   /// 문단 단위로 텍스트 분리 (설정 변경 후 재처리 시 사용)
   /// 
