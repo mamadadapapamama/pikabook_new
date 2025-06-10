@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../core/utils/timeout_manager.dart';
+import '../../../core/utils/error_handler.dart';
 import 'services/page_service.dart';
 import 'services/note_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
@@ -39,6 +41,10 @@ class PostLLMWorkflow {
   // 처리 큐 (메모리 기반)
   static final Queue<PostProcessingJob> _processingQueue = Queue<PostProcessingJob>();
   static bool _isProcessing = false;
+  
+  // 타임아웃 관리
+  final Map<String, TimeoutManager> _llmTimeoutManagers = {};
+  final Map<String, bool> _retryStates = {};
 
   /// 후처리 작업을 큐에 추가
   Future<void> enqueueJob(PostProcessingJob job) async {
@@ -104,7 +110,10 @@ class PostLLMWorkflow {
       // 1. 노트 상태를 처리 중으로 업데이트
       await _updateNoteStatus(job.noteId, ProcessingStatus.translating);
 
-      // 2. 텍스트 세그먼트 수집
+      // 2. LLM 처리 타임아웃 시작
+      _startLlmTimeout(job.noteId);
+
+      // 3. 텍스트 세그먼트 수집
       final allSegments = <String>[];
       final Set<String> completedPages = {};
       
@@ -120,14 +129,14 @@ class PostLLMWorkflow {
         debugPrint('📊 [워크플로우] 수집된 세그먼트: ${allSegments.length}개');
       }
 
-              // 3. 스트리밍 수신 처리 (StreamingReceiveService)
-              await for (final result in _streamingService.processStreamingTranslation(
+      // 4. 스트리밍 수신 처리 (StreamingReceiveService)
+      await for (final result in _streamingService.processStreamingTranslation(
         textSegments: allSegments,
         pages: job.pages,
-            sourceLanguage: job.pages.first.sourceLanguage,
-            targetLanguage: job.pages.first.targetLanguage,
+        sourceLanguage: job.pages.first.sourceLanguage,
+        targetLanguage: job.pages.first.targetLanguage,
         noteId: job.noteId,
-            needPinyin: true,
+        needPinyin: true,
       )) {
         if (!result.isSuccess) {
           if (kDebugMode) {
@@ -136,7 +145,7 @@ class PostLLMWorkflow {
           continue;
         }
 
-        // 4. 페이지별 업데이트 (StreamingPageUpdateService)
+        // 5. 페이지별 업데이트 (StreamingPageUpdateService)
         for (final pageData in job.pages) {
           final pageResults = result.pageResults[pageData.pageId] ?? [];
           if (pageResults.isNotEmpty) {
@@ -146,9 +155,9 @@ class PostLLMWorkflow {
               totalExpectedUnits: pageData.textSegments.length,
             );
           }
-          }
-          
-        // 5. 완료 확인
+        }
+        
+        // 6. 완료 확인
         _checkAndNotifyCompletedPagesOCR(result.pageResults, completedPages, job.pages);
         
         if (result.isComplete) {
@@ -159,13 +168,16 @@ class PostLLMWorkflow {
         }
       }
 
-      // 6. 노트 완료 상태 업데이트
+      // 7. LLM 처리 완료 - 타임아웃 매니저 정리
+      _completeLlmTimeout(job.noteId);
+
+      // 8. 노트 완료 상태 업데이트
       await _updateNoteStatus(job.noteId, ProcessingStatus.completed);
       
-      // 7. 사용량 업데이트 (UsageLimitService)
+      // 9. 사용량 업데이트 (UsageLimitService)
       await _updateUsageAfterProcessing(job);
       
-      // 8. 전체 노트 완료 알림
+      // 10. 전체 노트 완료 알림
       await _sendNoteCompletionNotification(job.noteId);
 
       if (kDebugMode) {
@@ -173,7 +185,17 @@ class PostLLMWorkflow {
       }
 
     } catch (e) {
-      await _updateNoteStatus(job.noteId, ProcessingStatus.failed);
+      _stopLlmTimeout(job.noteId);
+      
+      // 타임아웃 에러인지 확인
+      final errorType = ErrorHandler.analyzeError(e);
+      if (errorType == ErrorType.timeout) {
+        await _updateNoteStatus(job.noteId, ProcessingStatus.retrying);
+        await _notifyLlmTimeout(job.noteId);
+      } else {
+        await _updateNoteStatus(job.noteId, ProcessingStatus.failed);
+      }
+      
       rethrow;
     }
   }
@@ -362,6 +384,100 @@ class PostLLMWorkflow {
         debugPrint('⚠️ 사용량 업데이트 실패: ${job.noteId}, 오류: $e');
       }
       // 사용량 업데이트 실패는 전체 프로세스를 실패시키지 않음
+    }
+  }
+
+  /// LLM 처리 타임아웃 시작
+  void _startLlmTimeout(String noteId) {
+    _stopLlmTimeout(noteId); // 기존 타이머 정리
+    
+    final timeoutManager = TimeoutManager();
+    _llmTimeoutManagers[noteId] = timeoutManager;
+    _retryStates[noteId] = false;
+    
+    timeoutManager.start(
+      timeoutSeconds: 5, // 테스트용: 30 -> 5초로 변경
+      onProgress: (elapsedSeconds) {
+        if (kDebugMode) {
+          debugPrint('⏱️ [워크플로우] LLM 처리 경과: ${noteId} - ${elapsedSeconds}초');
+        }
+      },
+      onTimeout: () {
+        if (kDebugMode) {
+          debugPrint('⏰ [워크플로우] LLM 타임아웃 발생: $noteId');
+        }
+        _handleLlmTimeout(noteId);
+      },
+    );
+  }
+
+  /// LLM 처리 정상 완료
+  void _completeLlmTimeout(String noteId) {
+    final timeoutManager = _llmTimeoutManagers[noteId];
+    timeoutManager?.complete();
+    _llmTimeoutManagers.remove(noteId);
+    _retryStates.remove(noteId);
+  }
+
+  /// LLM 처리 타임아웃 중지
+  void _stopLlmTimeout(String noteId) {
+    final timeoutManager = _llmTimeoutManagers[noteId];
+    timeoutManager?.dispose();
+    _llmTimeoutManagers.remove(noteId);
+  }
+
+  /// LLM 타임아웃 알림
+  Future<void> _notifyLlmTimeout(String noteId) async {
+    try {
+      await _firestore.collection('notes').doc(noteId).update({
+        'llmTimeout': true,
+        'timeoutNotifiedAt': FieldValue.serverTimestamp(),
+        'retryAvailable': true,
+      });
+      
+      if (kDebugMode) {
+        debugPrint('🔔 [워크플로우] LLM 타임아웃 알림: $noteId');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ LLM 타임아웃 알림 실패: $noteId, 오류: $e');
+      }
+    }
+  }
+
+  /// LLM 타임아웃 처리
+  void _handleLlmTimeout(String noteId) {
+    // 현재 작업 중지 시그널 (실제 구현은 StreamingReceiveService에서 처리)
+    _retryStates[noteId] = true;
+  }
+
+  /// LLM 처리 재시도
+  Future<void> retryLlmProcessing(String noteId) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🔄 [워크플로우] LLM 재시도 시작: $noteId');
+      }
+
+      // 재시도 상태 업데이트
+      await _updateNoteStatus(noteId, ProcessingStatus.translating);
+      await _firestore.collection('notes').doc(noteId).update({
+        'llmTimeout': false,
+        'retryAvailable': false,
+        'retryStartedAt': FieldValue.serverTimestamp(),
+      });
+
+      // 기존 작업 찾기 (실제로는 큐에서 재실행하거나 새로운 작업 생성)
+      // TODO: 실제 재시도 로직 구현
+      
+      if (kDebugMode) {
+        debugPrint('✅ [워크플로우] LLM 재시도 완료: $noteId');
+      }
+
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [워크플로우] LLM 재시도 실패: $noteId, 오류: $e');
+      }
+      await _updateNoteStatus(noteId, ProcessingStatus.failed);
     }
   }
 }

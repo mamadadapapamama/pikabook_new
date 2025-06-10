@@ -7,6 +7,7 @@ import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/text_unit.dart';
 import '../../../core/models/processing_status.dart';
+import '../post_llm_workflow.dart';
 import '../services/page_service.dart';
 import '../managers/note_options_manager.dart';
 import '../services/note_service.dart';
@@ -20,6 +21,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   final NoteService _noteService = NoteService();
   final TextProcessingService _textProcessingService = TextProcessingService();
   final PendingJobRecoveryService _pendingJobRecoveryService = PendingJobRecoveryService();
+  final PostLLMWorkflow _postLLMWorkflow = PostLLMWorkflow();
   
   // PageService에 접근하기 위한 게터
   PageService get _pageService => _noteService.pageService;
@@ -59,6 +61,11 @@ class NoteDetailViewModel extends ChangeNotifier {
   // 실시간 리스너들
   final Map<String, StreamSubscription<DocumentSnapshot>> _pageListeners = {};
   
+  // LLM 재시도 관련 상태
+  bool _llmTimeoutOccurred = false;
+  bool _llmRetryAvailable = false;
+  bool _isRetryingLlm = false;
+  
   // Getters
   String get noteId => _noteId;
   List<page_model.Page>? get pages => _pages;
@@ -67,6 +74,11 @@ class NoteDetailViewModel extends ChangeNotifier {
   Note? get note => _note;
   int get currentPageIndex => _currentPageIndex;
   int get flashcardCount => _note?.flashcardCount ?? 0;
+  
+  // LLM 재시도 관련 getters
+  bool get llmTimeoutOccurred => _llmTimeoutOccurred;
+  bool get llmRetryAvailable => _llmRetryAvailable;
+  bool get isRetryingLlm => _isRetryingLlm;
   
   // 현재 페이지 getter
   page_model.Page? get currentPage {
@@ -152,10 +164,13 @@ class NoteDetailViewModel extends ChangeNotifier {
       
       notifyListeners();
       
-      // 3. 모든 페이지에 대한 실시간 리스너 설정
+      // 3. LLM 타임아웃 상태 확인
+      await checkLlmTimeoutStatus();
+      
+      // 4. 모든 페이지에 대한 실시간 리스너 설정
       _setupAllPageListeners();
       
-      // 4. 현재 페이지 텍스트 로드
+      // 5. 현재 페이지 텍스트 로드
       if (currentPage != null) {
         await loadCurrentPageText();
       }
@@ -556,6 +571,82 @@ class NoteDetailViewModel extends ChangeNotifier {
   /// 노트 정보 다시 로드
   Future<void> loadNote() async {
     await _loadNoteInfo();
+  }
+
+  /// LLM 타임아웃 상태 업데이트
+  void updateLlmTimeoutStatus(bool timeoutOccurred, bool retryAvailable) {
+    if (_disposed) return;
+    
+    _llmTimeoutOccurred = timeoutOccurred;
+    _llmRetryAvailable = retryAvailable;
+    notifyListeners();
+    
+    if (flutter_foundation.kDebugMode) {
+      debugPrint('🔄 [ViewModel] LLM 타임아웃 상태 업데이트: timeout=$timeoutOccurred, retry=$retryAvailable');
+    }
+  }
+
+  /// LLM 처리 재시도
+  Future<void> retryLlmProcessing() async {
+    if (_disposed || _isRetryingLlm || !_llmRetryAvailable) return;
+    
+    try {
+      _isRetryingLlm = true;
+      _llmTimeoutOccurred = false;
+      _llmRetryAvailable = false;
+      notifyListeners();
+      
+      if (flutter_foundation.kDebugMode) {
+        debugPrint('🔄 [ViewModel] LLM 재시도 시작: $_noteId');
+      }
+      
+      // PostLLMWorkflow를 통해 재시도 실행
+      await _postLLMWorkflow.retryLlmProcessing(_noteId);
+      
+      if (flutter_foundation.kDebugMode) {
+        debugPrint('✅ [ViewModel] LLM 재시도 완료: $_noteId');
+      }
+      
+    } catch (e) {
+      if (flutter_foundation.kDebugMode) {
+        debugPrint('❌ [ViewModel] LLM 재시도 실패: $_noteId, 오류: $e');
+      }
+      
+      // 재시도 실패시 다시 재시도 가능 상태로 복원
+      _llmTimeoutOccurred = true;
+      _llmRetryAvailable = true;
+      
+    } finally {
+      _isRetryingLlm = false;
+      if (!_disposed) {
+        notifyListeners();
+      }
+    }
+  }
+
+  /// 노트의 LLM 타임아웃 상태 확인 (Firestore에서)
+  Future<void> checkLlmTimeoutStatus() async {
+    if (_disposed) return;
+    
+    try {
+      final noteDoc = await FirebaseFirestore.instance
+          .collection('notes')
+          .doc(_noteId)
+          .get();
+      
+      if (noteDoc.exists) {
+        final data = noteDoc.data() as Map<String, dynamic>;
+        final timeoutOccurred = data['llmTimeout'] as bool? ?? false;
+        final retryAvailable = data['retryAvailable'] as bool? ?? false;
+        
+        updateLlmTimeoutStatus(timeoutOccurred, retryAvailable);
+      }
+      
+    } catch (e) {
+      if (flutter_foundation.kDebugMode) {
+        debugPrint('⚠️ [ViewModel] LLM 타임아웃 상태 확인 실패: $_noteId, 오류: $e');
+      }
+    }
   }
 
   /// 리소스 정리

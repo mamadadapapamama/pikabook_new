@@ -4,6 +4,8 @@ import 'package:flutter/scheduler.dart' show timeDilation;
 import 'dart:async';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
+import '../utils/timeout_manager.dart';
+import '../utils/error_handler.dart';
 import 'dot_loading_indicator.dart';
 
 /// 다이얼로그 형태의 로딩 경험을 제공하는 클래스들(현재는 노트 생성 전용)
@@ -12,37 +14,38 @@ import 'dot_loading_indicator.dart';
 /// Pikabook 스타일의 로딩 UI를 제공합니다.
 class NoteCreationLoader {
   static bool _isVisible = false;
-  static Timer? _timeoutTimer;
   static BuildContext? _lastContext;
+  static TimeoutManager? _timeoutManager;
+  static String _currentMessage = '';
+  static VoidCallback? _onTimeoutCallback;
+  static ValueNotifier<String> _messageNotifier = ValueNotifier<String>('');
   
   /// 로더가 현재 표시 중인지 확인
   static bool get isVisible => _isVisible;
   
-  /// 노트 생성 로더 표시
+  /// 노트 생성 로더 표시 (향상된 타임아웃 처리)
   static Future<void> show(
     BuildContext context, {
-    String message = '스마트한 학습 노트를 만들고 있어요.\n잠시만 기다려 주세요! 조금 시간이 걸릴수 있어요.',
-    int timeoutSeconds = 20, // 타임아웃 시간 (초 단위)
+    String message = '스마트한 학습 노트를 만들고 있어요.\n잠시만 기다려 주세요!',
+    int timeoutSeconds = 30,
+    VoidCallback? onTimeout,
   }) async {
-    // 이미 로더가 표시 중인지 확인 (중복 표시 방지)
     if (_isVisible) {
       if (kDebugMode) {
-        debugPrint('로딩 다이얼로그가 이미 표시 중입니다. 중복 표시 방지');
+        debugPrint('로딩 다이얼로그가 이미 표시 중입니다.');
       }
-      
-      // 컨텍스트 갱신 (새 컨텍스트가 유효한 경우)
       if (context.mounted) {
         _lastContext = context;
       }
-      
-      return; // 이미 표시 중이면 추가 표시 방지
+      return;
     }
     
-    // 현재 컨텍스트 저장
     _lastContext = context;
     _isVisible = true;
+    _currentMessage = message;
+    _onTimeoutCallback = onTimeout;
+    _messageNotifier.value = message;
     
-    // 성능 오버레이 및 디버그 타이머 비활성화
     timeDilation = 1.0;
     
     if (!context.mounted) {
@@ -51,26 +54,40 @@ class NoteCreationLoader {
       }
       return;
     }
+
+    // 타임아웃 매니저 설정
+    _timeoutManager?.dispose();
+    _timeoutManager = TimeoutManager();
     
-    // 타임아웃 설정 - 지정된 시간 후 자동으로 닫힘
-    _timeoutTimer?.cancel();
-    if (timeoutSeconds > 0) {
-      _timeoutTimer = Timer(Duration(seconds: timeoutSeconds), () {
-        // 타임아웃 시 안전하게 제거
-        if (_isVisible && _lastContext != null && _lastContext!.mounted) {
+    _timeoutManager!.start(
+      timeoutSeconds: timeoutSeconds,
+      onProgress: (elapsedSeconds) {
+        // 단계별 메시지 업데이트
+        if (_timeoutManager!.shouldUpdateMessage()) {
+          final newMessage = _timeoutManager!.getCurrentMessage(_currentMessage);
+          _messageNotifier.value = newMessage;
+          
           if (kDebugMode) {
-            debugPrint('로더가 타임아웃으로 자동 종료됨');
+            debugPrint('📝 [NoteCreationLoader] 메시지 업데이트: $newMessage');
           }
-          hide(_lastContext!);
-        } else {
-          _forceResetState();
         }
-      });
-    }
-    
+      },
+      onTimeout: () {
+        // 타임아웃 발생시 처리
+        if (kDebugMode) {
+          debugPrint('⏰ [NoteCreationLoader] 타임아웃 발생');
+        }
+        
+        if (_lastContext != null && _lastContext!.mounted) {
+          hide(_lastContext!);
+          
+          // 타임아웃 콜백 호출 (에러 처리)
+          _onTimeoutCallback?.call();
+        }
+      },
+    );
+
     try {
-      // WidgetsBinding을 사용하여 다음 프레임에서 다이얼로그 표시
-      // (애니메이션 중첩 방지)
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!context.mounted || !_isVisible) return;
         
@@ -81,72 +98,72 @@ class NoteCreationLoader {
             barrierColor: Colors.black.withOpacity(0.4),
             useSafeArea: true,
             builder: (dialogContext) => WillPopScope(
-              onWillPop: () async => false, // 뒤로 가기 방지
+              onWillPop: () async => false,
               child: Theme(
-                // 성능 오버레이 비활성화를 위한 명시적 테마 설정
                 data: ThemeData(
                   scaffoldBackgroundColor: Colors.white,
                   colorScheme: Theme.of(context).colorScheme,
                   brightness: Theme.of(context).brightness,
                 ),
-              child: Material(
-                type: MaterialType.transparency,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-                    width: 300,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 도트 로딩 인디케이터
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // 도트 애니메이션
-                            const DotLoadingIndicator(),
-                            
-                            const SizedBox(width: 12),
-                            
-                            // 피카북 새 캐릭터 (고정된 상태)
-                            Image.asset(
-                              'assets/images/pikabook_bird.png',
-                              width: 40,
-                              height: 40,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: ColorTokens.primary.withOpacity(0.2),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.auto_awesome,
-                                    color: ColorTokens.primary,
-                                    size: 24,
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        
-                        const SizedBox(height: 24),
-                        
-                        // 텍스트 섹션
-                        Text(
-                          message,
-                          style: TypographyTokens.body1.copyWith(
-                            height: 1.4,
-                            color: ColorTokens.textPrimary,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+                      width: 300,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 도트 로딩 인디케이터
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const DotLoadingIndicator(),
+                              const SizedBox(width: 12),
+                              Image.asset(
+                                'assets/images/pikabook_bird.png',
+                                width: 40,
+                                height: 40,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: BoxDecoration(
+                                      color: ColorTokens.primary.withOpacity(0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.auto_awesome,
+                                      color: ColorTokens.primary,
+                                      size: 24,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                          
+                          const SizedBox(height: 24),
+                          
+                          // 동적 메시지 표시
+                          ValueListenableBuilder<String>(
+                            valueListenable: _messageNotifier,
+                            builder: (context, message, child) {
+                              return Text(
+                                message,
+                                style: TypographyTokens.body1.copyWith(
+                                  height: 1.4,
+                                  color: ColorTokens.textPrimary,
+                                ),
+                                textAlign: TextAlign.center,
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -154,9 +171,7 @@ class NoteCreationLoader {
               ),
             ),
           ).then((_) {
-            // 다이얼로그가 닫힐 때 상태 초기화
-            _timeoutTimer?.cancel();
-            _isVisible = false;
+            _forceResetState();
           });
         } catch (dialogError) {
           if (kDebugMode) {
@@ -173,6 +188,16 @@ class NoteCreationLoader {
     }
   }
 
+  /// 메시지 업데이트 (진행 중에도 가능)
+  static void updateMessage(String newMessage) {
+    if (_isVisible) {
+      _messageNotifier.value = newMessage;
+      if (kDebugMode) {
+        debugPrint('📝 [NoteCreationLoader] 실시간 메시지 업데이트: $newMessage');
+      }
+    }
+  }
+
   /// 노트 생성 로더 숨기기
   static void hide(BuildContext context) {
     if (!context.mounted) {
@@ -181,7 +206,6 @@ class NoteCreationLoader {
     }
     
     try {
-      // 안전하게 다이얼로그 닫기
       if (Navigator.of(context, rootNavigator: true).canPop()) {
         Navigator.of(context, rootNavigator: true).pop();
       } else {
@@ -197,25 +221,43 @@ class NoteCreationLoader {
       _forceResetState();
     }
   }
-  
-  /// 상태 강제 초기화 (타이머 해제 및 플래그 리셋)
-  static void _forceResetState() {
-    _timeoutTimer?.cancel();
-    _timeoutTimer = null;
-    _isVisible = false;
+
+  /// 에러 발생시 로딩 다이얼로그 닫고 스낵바 표시
+  static void hideWithError(BuildContext context, dynamic error) {
+    if (!context.mounted) {
+      _forceResetState();
+      return;
+    }
+
+    // 로딩 다이얼로그 닫기
+    hide(context);
+    
+    // 에러 타입에 따른 스낵바 표시
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (context.mounted) {
+        ErrorHandler.showErrorSnackBar(context, error);
+      }
+    });
   }
   
-  /// 로더가 표시 중인지 확인하고 표시 중이면 강제로 닫음
-  /// 어떤 상황에서든 로딩 다이얼로그가 화면에 남아있지 않도록 보장
+  /// 상태 강제 초기화
+  static void _forceResetState() {
+    _timeoutManager?.dispose();
+    _timeoutManager = null;
+    _isVisible = false;
+    _currentMessage = '';
+    _onTimeoutCallback = null;
+    _messageNotifier.value = '';
+  }
+  
+  /// 로더 강제 종료
   static void ensureHidden(BuildContext context) {
-    // 로더가 표시 중인지 확인
     if (_isVisible) {
       if (kDebugMode) {
-        debugPrint('로딩 다이얼로그가 표시 중이므로 강제로 닫습니다');
+        debugPrint('로딩 다이얼로그 강제 종료');
       }
       
       try {
-        // 안전하게 다이얼로그 닫기 시도
         if (Navigator.of(context, rootNavigator: true).canPop()) {
           Navigator.of(context, rootNavigator: true).pop();
         }
@@ -224,25 +266,18 @@ class NoteCreationLoader {
           debugPrint('강제 다이얼로그 종료 중 오류: $e');
         }
       } finally {
-        // 상태 초기화
         _forceResetState();
-      }
-    } else {
-      if (kDebugMode) {
-        debugPrint('로딩 다이얼로그가 이미 닫혀 있습니다');
       }
     }
   }
   
-  /// 애플리케이션 종료 전 리소스 정리
+  /// 리소스 정리
   static void dispose() {
-    _timeoutTimer?.cancel();
-    _timeoutTimer = null;
-    _isVisible = false;
+    _forceResetState();
     _lastContext = null;
   }
   
-  /// 로더가 표시 중인지 확인
+  /// 현재 표시 상태 확인
   static bool isShowing() {
     return _isVisible;
   }

@@ -9,6 +9,8 @@ import '../../../core/widgets/loading_dialog_experience.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/utils/note_tutorial.dart';
+import '../../../core/utils/error_handler.dart';
+import '../../../core/utils/timeout_manager.dart';
 import '../view/note_detail_screen.dart';
 import '../pre_llm_workflow.dart';
 import '../post_llm_workflow.dart';
@@ -23,6 +25,9 @@ class NoteCreationUIManager {
   final NoteService _noteService = NoteService();
   final PreLLMWorkflow _preLLMWorkflow = PreLLMWorkflow();
   final PostLLMWorkflow _postLLMWorkflow = PostLLMWorkflow();
+  
+  // 타임아웃 관리
+  TimeoutManager? _navigationTimeoutManager;
 
   // 싱글톤 패턴
   static final NoteCreationUIManager _instance = NoteCreationUIManager._internal();
@@ -57,9 +62,9 @@ class NoteCreationUIManager {
     bool isSuccess = false;
 
     try {
-      // 1. 로딩 다이얼로그 표시
+      // 1. 로딩 다이얼로그 표시 (향상된 타임아웃 처리)
       if (showLoadingDialog) {
-        await _showLoadingDialog(rootContext);
+        await _showLoadingDialogWithTimeout(rootContext);
         loadingDialogShown = true;
       }
 
@@ -82,8 +87,8 @@ class NoteCreationUIManager {
           debugPrint('✅ 빠른 노트 생성 완료: $createdNoteId');
         }
 
-        // 4. 첫 페이지 기본 정보 확인 (이미지만)
-        await _waitForFirstPageReady(createdNoteId);
+        // 4. 첫 페이지 기본 정보 확인 (이미지만) - 타임아웃 처리 추가
+        await _waitForFirstPageReadyWithTimeout(createdNoteId);
       }
 
     } catch (e) {
@@ -91,57 +96,80 @@ class NoteCreationUIManager {
         debugPrint('❌ 노트 생성 실패: $e');
       }
       isSuccess = false;
+      
+      // 에러 처리
+      if (loadingDialogShown && rootContext.mounted) {
+        NoteCreationLoader.hideWithError(rootContext, e);
+        loadingDialogShown = false;
+      }
     }
 
     // 5. 결과 처리
-    await _handleCreationResult(
-      context: rootContext,
-      isSuccess: isSuccess,
-      noteId: createdNoteId,
-      totalImageCount: imageFiles.length,
-      loadingDialogShown: loadingDialogShown,
-    );
+    if (isSuccess) {
+      await _handleCreationResult(
+        context: rootContext,
+        isSuccess: isSuccess,
+        noteId: createdNoteId,
+        totalImageCount: imageFiles.length,
+        loadingDialogShown: loadingDialogShown,
+      );
+    }
   }
 
-  /// 로딩 다이얼로그 표시 (중복 방지)
-  Future<void> _showLoadingDialog(BuildContext context) async {
+  /// 강화된 로딩 다이얼로그 표시 (타임아웃 처리)
+  Future<void> _showLoadingDialogWithTimeout(BuildContext context) async {
     if (kDebugMode) {
-      debugPrint('📱 로딩 다이얼로그 표시 시작');
+      debugPrint('📱 향상된 로딩 다이얼로그 표시');
     }
 
-    // NoteCreationLoader에 내장된 중복 방지 기능 활용
     await NoteCreationLoader.show(
       context,
       message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!',
+      timeoutSeconds: 30,
+      onTimeout: () {
+        // 30초 타임아웃 시 에러 처리
+        if (context.mounted) {
+          if (kDebugMode) {
+            debugPrint('⏰ 노트 생성 타임아웃 발생');
+          }
+          
+          ErrorHandler.showErrorSnackBar(
+            context, 
+            '문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.'
+          );
+        }
+      },
     );
   }
 
   /// 바텀 시트 닫기
   Future<void> _closeBottomSheet(BuildContext context) async {
-    if (!Navigator.canPop(context)) return;
-
-    try {
+    if (Navigator.canPop(context)) {
       Navigator.of(context).pop();
-      await Future.delayed(const Duration(milliseconds: 50));
-      
-      if (kDebugMode) {
-        debugPrint('📱 바텀 시트 닫기 완료');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('⚠️ 바텀 시트 닫기 중 오류: $e');
-      }
+      await Future.delayed(const Duration(milliseconds: 300));
     }
   }
 
-  /// 첫 페이지 기본 정보 준비 대기 (이미지만)
-  Future<void> _waitForFirstPageReady(String noteId) async {
+  /// 첫 페이지 준비 대기 (향상된 타임아웃 처리)
+  Future<void> _waitForFirstPageReadyWithTimeout(String noteId) async {
     if (kDebugMode) {
       debugPrint('⏳ 첫 페이지 기본 정보 준비 대기: $noteId');
     }
 
     final completer = Completer<void>();
     StreamSubscription? subscription;
+    Timer? timeoutTimer;
+
+    // 10초 후 타임아웃
+    timeoutTimer = Timer(const Duration(seconds: 10), () {
+      if (!completer.isCompleted) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 페이지 준비 대기 타임아웃 - 계속 진행');
+        }
+        subscription?.cancel();
+        completer.complete();
+      }
+    });
 
     subscription = _firestore
         .collection('pages')
@@ -161,6 +189,7 @@ class NoteCreationUIManager {
           debugPrint('✅ 첫 페이지 이미지 준비 완료: ${page.id}');
         }
         subscription?.cancel();
+        timeoutTimer?.cancel();
         if (!completer.isCompleted) {
           completer.complete();
         }
@@ -170,18 +199,8 @@ class NoteCreationUIManager {
         debugPrint('⚠️ 페이지 준비 확인 중 오류: $error');
       }
       subscription?.cancel();
+      timeoutTimer?.cancel();
       if (!completer.isCompleted) {
-        completer.complete();
-      }
-    });
-
-    // 타임아웃 설정 (10초)
-    Timer(const Duration(seconds: 10), () {
-      if (!completer.isCompleted) {
-        if (kDebugMode) {
-          debugPrint('⚠️ 페이지 준비 대기 타임아웃 - 계속 진행');
-        }
-        subscription?.cancel();
         completer.complete();
       }
     });
@@ -214,7 +233,7 @@ class NoteCreationUIManager {
     }
   }
 
-  /// 성공 시 처리
+  /// 성공 시 처리 (향상된 네비게이션 타임아웃)
   Future<void> _handleSuccess({
     required BuildContext context,
     required String noteId,
@@ -240,18 +259,111 @@ class NoteCreationUIManager {
       flashcardCount: 0,
     );
 
-    // HomeViewModel 업데이트 제거 - Provider 스코프 문제 해결
-    // 대신 노트 상세 화면에서 돌아올 때 새로고침하도록 수정
-
     // 로딩 다이얼로그 닫기
     if (loadingDialogShown && context.mounted) {
       NoteCreationLoader.hide(context);
       await Future.delayed(const Duration(milliseconds: 300));
     }
 
-    // 노트 상세 화면으로 이동
+    // 노트 상세 화면으로 이동 (타임아웃 처리)
     if (context.mounted) {
-      await _navigateToNoteDetail(context, tempNote, totalImageCount);
+      await _navigateToNoteDetailWithTimeout(context, tempNote, totalImageCount);
+    }
+  }
+
+  /// 향상된 노트 상세 화면 이동 (타임아웃 처리)
+  Future<void> _navigateToNoteDetailWithTimeout(
+    BuildContext context,
+    Note note,
+    int totalImageCount,
+  ) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('📱 노트 상세 화면으로 이동 시작 (타임아웃 30초)');
+      }
+
+      // 네비게이션 타임아웃 매니저 설정
+      _navigationTimeoutManager?.dispose();
+      _navigationTimeoutManager = TimeoutManager();
+      
+      bool navigationCompleted = false;
+      
+      _navigationTimeoutManager!.start(
+        timeoutSeconds: 30,
+        onProgress: (elapsedSeconds) {
+          if (context.mounted && !navigationCompleted) {
+            // 단계별 메시지 업데이트
+            if (_navigationTimeoutManager!.shouldUpdateMessage()) {
+              final message = _navigationTimeoutManager!.getCurrentMessage(
+                '노트 페이지로 이동하고 있어요...'
+              );
+              NoteCreationLoader.updateMessage(message);
+            }
+          }
+        },
+        onTimeout: () {
+          if (context.mounted && !navigationCompleted) {
+            if (kDebugMode) {
+              debugPrint('⏰ 노트 상세 화면 이동 타임아웃');
+            }
+            
+            NoteCreationLoader.hide(context);
+            ErrorHandler.showErrorSnackBar(
+              context,
+              '문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.'
+            );
+          }
+        },
+      );
+
+      // 안전 장치: 로딩 다이얼로그 완전히 닫기
+      NoteCreationLoader.ensureHidden(context);
+
+      // 튜토리얼 설정 - 첫 번째 노트 생성 시 튜토리얼 표시 준비
+      NoteTutorial.markFirstNoteCreated();
+
+      // 화면 이동 (결과를 받아서 홈 화면 새로고침)
+      final result = await Navigator.of(context).push(
+        NoteDetailScreenMVVM.route(
+          note: note,
+          isProcessingBackground: true,
+          totalImageCount: totalImageCount,
+        ),
+      );
+      
+      navigationCompleted = true;
+      _navigationTimeoutManager?.complete();
+      
+      // 노트 상세 화면에서 돌아왔을 때 홈 화면 새로고침
+      if (context.mounted) {
+        try {
+          final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
+          await homeViewModel.refreshNotes();
+          await homeViewModel.refreshUsageLimits();
+          
+          if (kDebugMode) {
+            debugPrint('✅ 노트 생성 후 홈 화면 새로고침 완료');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ 홈 화면 새로고침 실패 (무시됨): $e');
+          }
+        }
+      }
+
+      if (kDebugMode) {
+        debugPrint('✅ 노트 상세 화면 이동 완료');
+      }
+    } catch (e) {
+      _navigationTimeoutManager?.dispose();
+      
+      if (kDebugMode) {
+        debugPrint('❌ 노트 상세 화면 이동 실패: $e');
+      }
+
+      if (context.mounted) {
+        ErrorHandler.showErrorSnackBar(context, e);
+      }
     }
   }
 
@@ -268,10 +380,9 @@ class NoteCreationUIManager {
 
     // 에러 메시지 표시
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('노트 생성에 실패했습니다. 다시 시도해주세요.'),
-        ),
+      ErrorHandler.showErrorSnackBar(
+        context,
+        '노트 생성에 실패했습니다. 다시 시도해주세요.'
       );
     }
 
@@ -296,71 +407,6 @@ class NoteCreationUIManager {
         debugPrint('⚠️ 노트 정보 로드 실패: $e');
       }
       return null;
-    }
-  }
-
-  /// 노트 상세 화면으로 이동
-  Future<void> _navigateToNoteDetail(
-    BuildContext context,
-    Note note,
-    int totalImageCount,
-  ) async {
-    try {
-      if (kDebugMode) {
-        debugPrint('📱 노트 상세 화면으로 이동 시작');
-      }
-
-      // 안전 장치: 로딩 다이얼로그 완전히 닫기
-      NoteCreationLoader.ensureHidden(context);
-
-      // 튜토리얼 설정 - 첫 번째 노트 생성 시 튜토리얼 표시 준비
-      NoteTutorial.markFirstNoteCreated();
-
-      // 화면 이동 (결과를 받아서 홈 화면 새로고침)
-      final result = await Navigator.of(context).push(
-        NoteDetailScreenMVVM.route(
-          note: note,
-          isProcessingBackground: true,
-          totalImageCount: totalImageCount,
-        ),
-      );
-      
-      // 노트 상세 화면에서 돌아왔을 때 홈 화면 새로고침
-      if (context.mounted) {
-        try {
-          final homeViewModel = Provider.of<HomeViewModel>(context, listen: false);
-          await homeViewModel.refreshNotes();
-          await homeViewModel.refreshUsageLimits();
-          
-          if (kDebugMode) {
-            debugPrint('✅ 노트 생성 후 홈 화면 새로고침 완료');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('⚠️ 홈 화면 새로고침 실패 (무시됨): $e');
-          }
-        }
-      }
-
-      if (kDebugMode) {
-        debugPrint('✅ 노트 상세 화면 이동 완료');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ 노트 상세 화면 이동 실패: $e');
-      }
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('화면 이동에 실패했습니다.'),
-            action: SnackBarAction(
-              label: '다시 시도',
-              onPressed: () => _retryNavigation(context, note, totalImageCount),
-            ),
-          ),
-        );
-      }
     }
   }
 
@@ -394,5 +440,11 @@ class NoteCreationUIManager {
         debugPrint('⚠️ 앱 시작시 초기화 실패: $e');
       }
     }
+  }
+
+  /// 리소스 정리
+  void dispose() {
+    _navigationTimeoutManager?.dispose();
+    _navigationTimeoutManager = null;
   }
 } 

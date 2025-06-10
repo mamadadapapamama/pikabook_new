@@ -9,6 +9,7 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
+import '../../../core/widgets/pika_button.dart';
 import '../view_model/note_detail_viewmodel.dart';
 import '../../flashcard/flashcard_view_model.dart';
 import 'note_page_widget.dart';
@@ -179,6 +180,11 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       );
     }
 
+    // LLM 타임아웃 발생시 재시도 버튼 표시
+    if (viewModel.llmTimeoutOccurred && viewModel.llmRetryAvailable) {
+      return _buildLlmRetryWidget(context, viewModel);
+    }
+
     // 페이지 뷰 구성 - PageController 연결
     return SafeArea(
       child: Container(
@@ -194,6 +200,50 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
             // 페이지 콘텐츠 위젯 반환 (NotePageWidget에서 자체적으로 처리 상태 관리)
             return _buildPageContent(context, viewModel, page);
           },
+        ),
+      ),
+    );
+  }
+  
+  // LLM 재시도 위젯
+  Widget _buildLlmRetryWidget(BuildContext context, NoteDetailViewModel viewModel) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.access_time,
+              color: Colors.orange,
+              size: 64,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'LLM 처리 시간이 초과되었습니다',
+              style: TypographyTokens.headline3.copyWith(
+                color: Colors.orange[800],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '번역 및 병음 처리에 예상보다 시간이 오래 걸리고 있어요.\n다시 시도해 주세요.',
+              style: TypographyTokens.body2.copyWith(
+                color: Colors.grey[700],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            PikaButton(
+              text: '다시 시도',
+              variant: PikaButtonVariant.text,
+              onPressed: viewModel.isRetryingLlm ? null : () async {
+                await viewModel.retryLlmProcessing();
+              },
+              isLoading: viewModel.isRetryingLlm,
+            ),
+          ],
         ),
       ),
     );

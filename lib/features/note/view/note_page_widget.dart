@@ -5,6 +5,9 @@ import 'dart:io';
 import 'dart:async';
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/processing_status.dart';
+import '../../../core/utils/timeout_manager.dart';
+import '../../../core/utils/error_handler.dart';
+import '../../../core/widgets/pika_button.dart';
 import '../view_model/note_detail_viewmodel.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/flash_card.dart';
@@ -42,6 +45,8 @@ class NotePageWidget extends StatefulWidget {
 
 class _NotePageWidgetState extends State<NotePageWidget> {
   bool _hasTriedLoading = false;
+  TimeoutManager? _ocrTimeoutManager;
+  bool _isRetrying = false;
 
   @override
   void initState() {
@@ -58,10 +63,23 @@ class _NotePageWidgetState extends State<NotePageWidget> {
     // 페이지가 변경되면 로딩 상태 리셋
     if (oldWidget.page.id != widget.page.id) {
       _hasTriedLoading = false;
+      _isRetrying = false;
+      _disposeTimeoutManager();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _tryLoadTextIfNeeded();
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _disposeTimeoutManager();
+    super.dispose();
+  }
+
+  void _disposeTimeoutManager() {
+    _ocrTimeoutManager?.dispose();
+    _ocrTimeoutManager = null;
   }
 
   void _tryLoadTextIfNeeded() {
@@ -75,8 +93,181 @@ class _NotePageWidgetState extends State<NotePageWidget> {
     // ProcessedText가 없고 로딩 중이 아닐 때만 로드 시도
     if (processedText == null && !isLoading && !viewModel.isLoading) {
       _hasTriedLoading = true;
+      _startOcrTimeout();
       viewModel.loadCurrentPageText();
     }
+  }
+
+  /// OCR 처리 타임아웃 시작
+  void _startOcrTimeout() {
+    _disposeTimeoutManager();
+    _ocrTimeoutManager = TimeoutManager();
+    
+    _ocrTimeoutManager!.start(
+      timeoutSeconds: 5, // 테스트용: 30 -> 5초로 변경
+      onProgress: (elapsedSeconds) {
+        if (!mounted) return;
+        // 진행 메시지는 loading indicator에서 자동 처리됨
+      },
+      onTimeout: () {
+        if (mounted) {
+          setState(() {
+            // 타임아웃 상태로 변경하여 재시도 버튼 표시
+          });
+        }
+      },
+    );
+  }
+
+  /// OCR 재시도 실행
+  void _retryOcrProcessing() {
+    if (!mounted || _isRetrying) return;
+    
+    setState(() {
+      _isRetrying = true;
+      _hasTriedLoading = false;
+    });
+    
+    final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
+    
+    // 재시도 실행
+    _tryLoadTextIfNeeded();
+    
+    setState(() {
+      _isRetrying = false;
+    });
+  }
+
+  /// 디버그 테스트 버튼들 (디버그 모드에서만 표시)
+  Widget _buildDebugTestButtons(BuildContext context, NoteDetailViewModel viewModel) {
+    return Container(
+      padding: EdgeInsets.all(SpacingTokens.md),
+      margin: EdgeInsets.symmetric(horizontal: SpacingTokens.md),
+      decoration: BoxDecoration(
+        color: Colors.yellow[50],
+        border: Border.all(color: Colors.orange),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '🧪 테스트 버튼들 (디버그 모드)',
+            style: TypographyTokens.body2.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Colors.orange[800],
+            ),
+          ),
+          SizedBox(height: SpacingTokens.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // OCR 타임아웃 강제 발생
+              Expanded(
+                child: PikaButton(
+                  text: 'OCR 타임아웃',
+                  variant: PikaButtonVariant.outline,
+                  size: PikaButtonSize.small,
+                  onPressed: () {
+                    _simulateOcrTimeout();
+                  },
+                ),
+              ),
+              SizedBox(width: SpacingTokens.sm),
+              // 네트워크 에러 강제 발생  
+              Expanded(
+                child: PikaButton(
+                  text: '네트워크 에러',
+                  variant: PikaButtonVariant.outline,
+                  size: PikaButtonSize.small,
+                  onPressed: () {
+                    _simulateNetworkError();
+                  },
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: SpacingTokens.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // LLM 타임아웃 강제 발생
+              Expanded(
+                child: PikaButton(
+                  text: 'LLM 타임아웃',
+                  variant: PikaButtonVariant.outline,
+                  size: PikaButtonSize.small,
+                  onPressed: () {
+                    _simulateLlmTimeout(viewModel);
+                  },
+                ),
+              ),
+              SizedBox(width: SpacingTokens.sm),
+              // 모든 테스트 상태 리셋
+              Expanded(
+                child: PikaButton(
+                  text: '상태 리셋',
+                  variant: PikaButtonVariant.text,
+                  size: PikaButtonSize.small,
+                  onPressed: () {
+                    _resetTestStates(viewModel);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// OCR 타임아웃 시뮬레이션
+  void _simulateOcrTimeout() {
+    if (kDebugMode) {
+      print('🧪 [테스트] OCR 타임아웃 시뮬레이션');
+    }
+    _ocrTimeoutManager?.dispose();
+    setState(() {
+      // 타임아웃 상태로 즉시 변경
+    });
+  }
+
+  /// 네트워크 에러 시뮬레이션
+  void _simulateNetworkError() {
+    if (kDebugMode) {
+      print('🧪 [테스트] 네트워크 에러 시뮬레이션');
+    }
+    final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
+    // 강제로 네트워크 에러 상태로 설정
+    // viewModel에서 이 페이지의 에러를 설정하는 방법이 있다면 사용
+  }
+
+  /// LLM 타임아웃 시뮬레이션
+  void _simulateLlmTimeout(NoteDetailViewModel viewModel) {
+    if (kDebugMode) {
+      print('🧪 [테스트] LLM 타임아웃 시뮬레이션');
+    }
+    // LLM 타임아웃 상태 강제 설정
+    viewModel.updateLlmTimeoutStatus(true, true);
+  }
+
+  /// 테스트 상태들 리셋
+  void _resetTestStates(NoteDetailViewModel viewModel) {
+    if (kDebugMode) {
+      print('🧪 [테스트] 모든 테스트 상태 리셋');
+    }
+    
+    // OCR 타임아웃 매니저 리셋
+    _disposeTimeoutManager();
+    
+    // LLM 타임아웃 상태 리셋
+    viewModel.updateLlmTimeoutStatus(false, false);
+    
+    // 로딩 상태 리셋
+    setState(() {
+      _hasTriedLoading = false;
+      _isRetrying = false;
+    });
   }
 
   @override
@@ -140,6 +331,12 @@ class _NotePageWidgetState extends State<NotePageWidget> {
           
           // 텍스트 콘텐츠 위젯
           _buildTextContent(context, viewModel, processedText, isLoading, error),
+          
+          // 디버그 모드에서만 표시되는 테스트 버튼들
+          if (kDebugMode) ...[
+            SizedBox(height: SpacingTokens.lg),
+            _buildDebugTestButtons(context, viewModel),
+          ],
         ],
       ),
     );
@@ -238,19 +435,37 @@ class _NotePageWidgetState extends State<NotePageWidget> {
   
   // 오류 위젯
   Widget _buildErrorWidget(String? errorMessage) {
+    final errorType = ErrorHandler.analyzeError(errorMessage ?? '');
+    final userFriendlyMessage = ErrorHandler.getErrorMessage(errorType);
+    final isTimeoutError = errorType == ErrorType.timeout;
+    final isNetworkError = errorType == ErrorType.network;
+    
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 32.0),
+        padding: const EdgeInsets.symmetric(vertical: 32.0, horizontal: 16.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            Icon(
+              isNetworkError ? Icons.wifi_off : Icons.error_outline,
+              color: Colors.red,
+              size: 48,
+            ),
             const SizedBox(height: 16),
             Text(
-              errorMessage ?? '텍스트 처리 중 오류가 발생했습니다.',
+              userFriendlyMessage,
               style: TypographyTokens.body2.copyWith(color: Colors.red[800]),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 24),
+            // 타임아웃이나 네트워크 에러시 재시도 버튼 표시
+            if (isTimeoutError || isNetworkError)
+              PikaButton(
+                text: '다시 시도',
+                variant: PikaButtonVariant.text,
+                onPressed: _isRetrying ? null : _retryOcrProcessing,
+                isLoading: _isRetrying,
+              ),
           ],
         ),
       ),

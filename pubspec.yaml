@@ -36,31 +36,33 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
-  # Firebase 패키지 (최신 버전 사용)
-  firebase_core: ^3.11.0
-  firebase_auth: ^5.4.2
-  firebase_firestore: ^5.6.3
-  firebase_storage: ^12.4.2
+   # Firebase 패키지 (실제 존재하는 최신 버전 사용)
+  firebase_core: ^3.13.0           # 3.11.0 → 3.13.0
+  firebase_auth: ^5.5.3            # 5.4.2 → 5.5.3
+  cloud_firestore: ^5.6.6       # 5.6.3 → 5.6.7 (존재하는 버전)
+  firebase_storage: ^12.4.5        # 12.4.2 → 12.4.5
+  cloud_functions: ^5.2.6          # Cloud Functions support
 
   # 소셜 로그인 패키지
   google_sign_in: ^6.2.1
   sign_in_with_apple: ^6.1.4
-  
+  crypto: ^3.0.6 # Apple 로그인에 필요한 nonce 생성용
+
   # Network & HTTP
   http: ^1.3.0
   url_launcher: ^6.2.5
-  connectivity_plus: ^6.0.5
   
   # Storage & Cache
-  shared_preferences: ^2.2.2
+  shared_preferences: ^2.5.3
   path_provider: ^2.1.5
   flutter_cache_manager: ^3.4.1
-  
-  # Database
-  sqflite: ^2.4.1
+  path: ^1.9.0                     # Path utilities
   
   # Image Processing & Camera
   image_picker: ^1.1.2
+  image: ^4.2.0                    # Image compression
+  flutter_image_compress: ^2.3.0   # Image compression
+  cached_network_image: ^3.3.1     # Cached network images
   
   # Audio & TTS
   just_audio: ^0.10.1
@@ -68,6 +70,27 @@ dependencies:
   # UUID & Utilities
   uuid: ^4.3.3
   intl: ^0.20.2
+  
+  # UI & Widgets
+  google_fonts: ^6.2.1             # Google Fonts
+  flutter_svg: ^2.0.10             # SVG support
+  provider: ^6.1.2                 # State management
+  
+  # Flashcard & Swiper
+  flutter_card_swiper: ^7.0.1      # Card swiper
+  flip_card: ^0.7.0                # Flip card
+  
+  # OCR & APIs
+  googleapis: ^13.1.0              # Google APIs
+  googleapis_auth: ^1.6.0          # Google Auth for APIs
+  
+  # Translation
+  translator: ^1.0.0               # Translation service
+  
+  # In-app Purchase
+  in_app_purchase: ^3.2.0          # In-app purchase
+  in_app_purchase_android: ^0.3.0+19
+  in_app_purchase_storekit: ^0.3.0+12
 
 dev_dependencies:
   flutter_test:
