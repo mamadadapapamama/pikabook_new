@@ -5,7 +5,6 @@ import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/ui_tokens.dart';
 import 'flashcard_screen.dart';
-import '../sample/sample_flashcard_screen.dart';
 
 /// 노트에 연결된 플래시카드 개수를 보여주는 배지 위젯
 class FlashcardCounterBadge extends StatelessWidget {
@@ -121,19 +120,8 @@ class FlashcardCounterBadge extends StatelessWidget {
     if (hasFlashcards) {
       return GestureDetector(
         onTap: () {
-          // 샘플 모드인 경우 (flashcards 데이터가 제공된 경우)
-          if (flashcards != null && flashcards!.isNotEmpty) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => SampleFlashCardScreen(
-                  flashcards: flashcards!.cast(),
-                  noteTitle: sampleNoteTitle ?? '플래시카드',
-                ),
-              ),
-            );
-          } 
-          // 일반 모드인 경우 (noteId를 통해 데이터를 가져오는 경우)
-          else if (noteId != null) {
+          // noteId가 있으면 일반 플래시카드 화면으로 이동
+          if (noteId != null) {
             Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (context) => FlashCardScreen(noteId: noteId!),

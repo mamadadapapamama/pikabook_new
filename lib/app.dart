@@ -23,7 +23,6 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'features/sample/sample_mode_service.dart';
-import 'features/sample/sample_home_screen.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -567,10 +566,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (kDebugMode) {
       debugPrint('App 샘플 모드 화면 표시 (로그인 안됨)');
     }
-    // MaterialApp 제거, SampleHomeScreen 직접 반환
-    return SampleHomeScreen(
-      onRequestLogin: _requestLoginScreen, 
-    );
+    // 샘플 모드에서는 일반 HomeScreen을 사용하되, 샘플 데이터가 표시됨
+    return const HomeScreenWrapper();
   }
   
   // 로그인 화면 빌드

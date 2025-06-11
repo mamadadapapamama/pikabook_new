@@ -6,7 +6,7 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
 import '../../../core/utils/error_handler.dart';
 import '../tts/tts_button.dart';
-import 'dictionary_service.dart';
+import 'unified_dictionary_service.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
 class DictionaryResultWidget extends StatelessWidget {
@@ -14,8 +14,8 @@ class DictionaryResultWidget extends StatelessWidget {
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
   final bool isExistingFlashcard;
   
-  // 정적 DictionaryService 인스턴스 (불필요한 재초기화 방지)
-  static final DictionaryService _dictionaryService = DictionaryService();
+  // 정적 UnifiedDictionaryService 인스턴스 (불필요한 재초기화 방지)
+  static final UnifiedDictionaryService _dictionaryService = UnifiedDictionaryService();
 
   const DictionaryResultWidget({
     super.key,

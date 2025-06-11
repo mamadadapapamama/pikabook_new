@@ -7,6 +7,8 @@ import 'package:pinyin/pinyin.dart';
 import '../../core/models/dictionary.dart';
 import 'internal_cn_dictionary_service.dart';
 import 'cc_cedict_service.dart';
+import '../sample/sample_mode_service.dart';
+import '../sample/sample_translation_service.dart';
 
 /// 범용 사전 서비스
 /// 여러 언어의 사전 기능을 통합 관리합니다.
@@ -25,6 +27,8 @@ class DictionaryService {
   final InternalCnDictionaryService _chineseDictionaryService = InternalCnDictionaryService();
   final CcCedictService _ccCedictService = CcCedictService();
   final GoogleTranslator _translator = GoogleTranslator();
+  final SampleModeService _sampleModeService = SampleModeService();
+  final SampleTranslationService _sampleTranslationService = SampleTranslationService();
   
   // 사전 업데이트 리스너 목록
   late final List<Function()> _dictionaryUpdateListeners;
@@ -35,6 +39,9 @@ class DictionaryService {
   
   // Google Translate 사용 가능 여부 (오류 발생시 비활성화)
   bool _googleTranslateEnabled = true;
+  
+  // 샘플 모드 여부 (초기화 시 설정)
+  bool _isSampleMode = false;
   
   DictionaryService._internal() {
     _dictionaryUpdateListeners = [];
@@ -62,10 +69,24 @@ class DictionaryService {
     if (_isInitialized) return;
     
     try {
-      await _chineseDictionaryService.loadDictionary();
-      await _ccCedictService.initialize();
+      // 샘플 모드 상태 확인 (한 번만)
+      _isSampleMode = await _sampleModeService.isSampleModeEnabled();
+      
+      if (_isSampleMode) {
+        if (kDebugMode) {
+          debugPrint('🏠 [DictionaryService] 샘플 모드로 초기화');
+        }
+        await _sampleTranslationService.initialize();
+      } else {
+        if (kDebugMode) {
+          debugPrint('🌐 [DictionaryService] 일반 모드로 초기화');
+        }
+        await _chineseDictionaryService.loadDictionary();
+        await _ccCedictService.initialize();
+      }
+      
       _isInitialized = true;
-      debugPrint('DictionaryService 초기화 완료');
+      debugPrint('DictionaryService 초기화 완료 (샘플모드: $_isSampleMode)');
     } catch (e) {
       debugPrint('DictionaryService 초기화 중 오류 발생: $e');
       rethrow;
@@ -329,13 +350,29 @@ class DictionaryService {
     }
   }
 
-  // 단어 검색 : 내부 사전 → CC-CEDICT → Google Cloud Translate 순서
+  // 단어 검색 : 샘플 모드면 로컬 데이터 → 일반 모드면 내부 사전 → CC-CEDICT → Google Cloud Translate 순서
   Future<Map<String, dynamic>> lookupWord(String word) async {
     try {
       await _ensureInitialized();
       
       if (kDebugMode) {
-        debugPrint('🔍 [사전검색] 시작: "$word" (언어: $_currentLanguage)');
+        debugPrint('🔍 [사전검색] 시작: "$word" (샘플모드: $_isSampleMode)');
+      }
+      
+      // 샘플 모드일 때는 로컬 데이터 우선 사용
+      if (_isSampleMode) {
+        if (kDebugMode) {
+          debugPrint('🏠 [샘플모드] 로컬 데이터에서 검색: "$word"');
+        }
+        final sampleResult = await _sampleTranslationService.lookupWord(word);
+        if (sampleResult['success'] == true) {
+          return sampleResult;
+        } else {
+          if (kDebugMode) {
+            debugPrint('❌ [샘플모드] 로컬 데이터에 없음, 일반 검색 진행');
+          }
+          // 샘플 데이터에 없어도 일반 검색을 진행
+        }
       }
       
       switch (_currentLanguage) {
