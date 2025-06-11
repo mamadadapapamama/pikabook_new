@@ -80,10 +80,10 @@ class InternalCnDictionaryService {
 
         for (int j = i; j < end; j++) {
           final entry = dictionary[j];
-          _entries[entry['word']] = DictionaryEntry(
+          _entries[entry['word']] = DictionaryEntry.multiLanguage(
             word: entry['word'],
             pinyin: entry['pinyin'],
-            meaning: entry['meaning'],
+            meaningKo: entry['meaning'],
           );
         }
 

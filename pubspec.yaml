@@ -86,6 +86,7 @@ dependencies:
   
   # Translation
   translator: ^1.0.0               # Translation service
+  pinyin: ^3.3.0                   # Chinese pinyin conversion
   
   # In-app Purchase
   in_app_purchase: ^3.2.0          # In-app purchase

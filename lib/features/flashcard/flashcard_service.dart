@@ -56,9 +56,9 @@ class FlashCardService {
         final dictEntry = dictResult['entry'];
         // 캐시에 추가
         _wordCache[front] = dictEntry;
-        // 뜻이 비어있으면 사전의 뜻 사용
+        // 뜻이 비어있으면 사전의 뜻 사용 (다국어 포함)
         if (meaningValue.isEmpty) {
-          meaningValue = dictEntry.meaning;
+          meaningValue = dictEntry.displayMeaning;
         }
         // 병음이 비어있으면 사전의 병음 사용
         if (pinyinValue.isEmpty && dictEntry.pinyin.isNotEmpty) {
@@ -119,10 +119,10 @@ class FlashCardService {
       String word, String meaning, String pinyin) async {
     try {
       // 캐시에 추가
-      _wordCache[word] = DictionaryEntry(
+      _wordCache[word] = DictionaryEntry.multiLanguage(
         word: word,
         pinyin: pinyin,
-        meaning: meaning,
+        meaningKo: meaning,
         source: 'flashcard',
       );
       
@@ -131,10 +131,10 @@ class FlashCardService {
 
       // 사전에 없는 단어라면 추가
       if (existingEntry == null) {
-        final newEntry = DictionaryEntry(
+        final newEntry = DictionaryEntry.multiLanguage(
           word: word,
           pinyin: pinyin,
-          meaning: meaning,
+          meaningKo: meaning,
           source: 'flashcard',
         );
 

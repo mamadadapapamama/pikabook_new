@@ -37,10 +37,10 @@ class CcCedictService {
       
       // 캐시에 데이터 추가
       jsonData.forEach((word, data) {
-        _cache[word] = DictionaryEntry(
+        _cache[word] = DictionaryEntry.multiLanguage(
           word: word,
           pinyin: data['pinyin'] ?? '',
-          meaning: data['meaning'] ?? '',
+          meaningEn: data['meaning'] ?? '',
           source: 'cc_cedict',
         );
       });

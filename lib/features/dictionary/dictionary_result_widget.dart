@@ -67,12 +67,12 @@ class DictionaryResultWidget extends StatelessWidget {
               ),
             ),
           
-          // 의미
-          if (entry.meaning.isNotEmpty)
+          // 의미 (다국어 지원)
+          if (entry.displayMeaning.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(top: SpacingTokens.sm),
               child: Text(
-                entry.meaning,
+                entry.displayMeaning,
                 style: TypographyTokens.body1.copyWith(
                   color: ColorTokens.secondary,
                 ),
@@ -106,7 +106,7 @@ class DictionaryResultWidget extends StatelessWidget {
   void _handleAddToFlashcard(BuildContext context) {
     onCreateFlashCard(
       entry.word,
-      entry.meaning,
+      entry.displayMeaning,
       pinyin: entry.pinyin,
     );
     Navigator.pop(context);
