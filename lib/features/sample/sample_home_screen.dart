@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/models/note.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
@@ -81,22 +82,13 @@ class _SampleHomeScreenState extends State<SampleHomeScreen> {
     return AppBar(
       backgroundColor: const Color(0xFFFFF9F1),
       elevation: 0,
-      leading: IconButton(
-        icon: Icon(
-          Icons.arrow_back,
-          color: ColorTokens.textPrimary,
-        ),
-        onPressed: () => Navigator.pop(context),
-      ),
+      automaticallyImplyLeading: false, // 백버튼 제거
       title: Row(
         children: [
-          // Pikabook 로고 텍스트
-          Text(
-            'Pikabook',
-            style: TypographyTokens.headline2.copyWith(
-              color: ColorTokens.primary,
-              fontWeight: FontWeight.bold,
-            ),
+          // Pikabook SVG 로고
+          SvgPicture.asset(
+            'assets/images/pikabook_textlogo_primary.svg',
+            height: 24,
           ),
         ],
       ),

@@ -271,6 +271,14 @@ class FlashCardViewModel extends ChangeNotifier {
   
   // 학습 진행 상태 업데이트
   Future<bool> updateReviewCount(String cardId) async {
+    // 로그인 체크 - 로그아웃 상태에서는 복습 횟수 업데이트 건너뜀
+    if (_authService.currentUser == null) {
+      if (kDebugMode) {
+        debugPrint('🃏 [FlashCard] 로그아웃 상태 - 복습 횟수 업데이트 건너뜀');
+      }
+      return true; // 오류 없이 성공으로 처리
+    }
+    
     final index = _flashCards.indexWhere((card) => card.id == cardId);
     if (index < 0) {
       setError('존재하지 않는 카드입니다');

@@ -111,8 +111,7 @@ class DictionaryResultWidget extends StatelessWidget {
     );
     Navigator.pop(context);
 
-    // 성공 메시지 표시
-    ErrorHandler.showSuccessSnackBar(context, '플래시카드에 추가되었습니다');
+    // 성공 메시지는 실제 플래시카드 생성을 담당하는 곳에서 표시
   }
 
   /// 사전 결과 바텀 시트 표시 헬퍼 메서드

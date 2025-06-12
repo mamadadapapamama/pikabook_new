@@ -162,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           Opacity(
                             opacity: _textFadeAnimation.value,
                             child: Text(
-                              '원서 공부,\n스마트하게',
+                              '책으로 하는 중국어 공부,\n스마트하게',
                               textAlign: TextAlign.center,
                               style: TypographyTokens.subtitle1.copyWith(
                                 color: ColorTokens.textLight,

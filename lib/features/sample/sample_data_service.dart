@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../core/models/note.dart';
 import '../../core/models/page.dart' as page_model;
 import '../../core/models/flash_card.dart';
@@ -62,6 +64,9 @@ class SampleDataService {
           (pageId, textData) => MapEntry(pageId, ProcessedText.fromJson(textData))
         );
       }
+      
+      // 샘플 이미지를 로컬 디렉토리에 복사
+      await _copySampleImages();
       
       _isLoaded = true;
       
@@ -128,4 +133,45 @@ class SampleDataService {
   
   /// 데이터 로드 상태 확인
   bool get isLoaded => _isLoaded;
+  
+  /// 샘플 이미지를 로컬 디렉토리에 복사
+  Future<void> _copySampleImages() async {
+    try {
+      // 앱 문서 디렉토리 가져오기
+      final appDir = await getApplicationDocumentsDirectory();
+      final imagesDir = Directory('${appDir.path}/images');
+      
+      // images 디렉토리 생성
+      if (!await imagesDir.exists()) {
+        await imagesDir.create(recursive: true);
+      }
+      
+      // 샘플 이미지 파일 경로
+      final localImagePath = '${appDir.path}/images/sample_page_1.png';
+      final localImageFile = File(localImagePath);
+      
+      // 이미 파일이 존재하면 복사하지 않음
+      if (await localImageFile.exists()) {
+        if (kDebugMode) {
+          debugPrint('📷 샘플 이미지가 이미 존재함: $localImagePath');
+        }
+        return;
+      }
+      
+      // assets에서 이미지 로드
+      final byteData = await rootBundle.load('assets/images/sample_page_1.png');
+      final bytes = byteData.buffer.asUint8List();
+      
+      // 로컬 파일로 저장
+      await localImageFile.writeAsBytes(bytes);
+      
+      if (kDebugMode) {
+        debugPrint('📷 샘플 이미지 복사 완료: $localImagePath');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 샘플 이미지 복사 실패: $e');
+      }
+    }
+  }
 } 

@@ -8,7 +8,7 @@ import '../../core/models/dictionary.dart';
 import 'internal_cn_dictionary_service.dart';
 import 'cc_cedict_service.dart';
 import '../../core/services/authentication/auth_service.dart';
-import '../sample/sample_translation_service.dart';
+import '../sample/sample_data_service.dart';
 
 /// 범용 사전 서비스
 /// 여러 언어의 사전 기능을 통합 관리합니다.
@@ -28,7 +28,6 @@ class DictionaryService {
   final CcCedictService _ccCedictService = CcCedictService();
   final GoogleTranslator _translator = GoogleTranslator();
   final AuthService _authService = AuthService();
-  final SampleTranslationService _sampleTranslationService = SampleTranslationService();
   
   // 사전 업데이트 리스너 목록
   late final List<Function()> _dictionaryUpdateListeners;
@@ -74,9 +73,9 @@ class DictionaryService {
       
       if (_isSampleMode) {
         if (kDebugMode) {
-          debugPrint('🏠 [DictionaryService] 샘플 모드로 초기화');
+          debugPrint('🏠 [DictionaryService] 샘플 모드로 초기화 (사전 기능 제한)');
         }
-        await _sampleTranslationService.initialize();
+        // 샘플 모드에서는 사전 기능을 제한적으로 사용
       } else {
         if (kDebugMode) {
           debugPrint('🌐 [DictionaryService] 일반 모드로 초기화');
@@ -359,20 +358,12 @@ class DictionaryService {
         debugPrint('🔍 [사전검색] 시작: "$word" (샘플모드: $_isSampleMode)');
       }
       
-      // 샘플 모드일 때는 로컬 데이터 우선 사용
+      // 샘플 모드일 때는 샘플 데이터에 있는 단어만 검색 가능
       if (_isSampleMode) {
         if (kDebugMode) {
-          debugPrint('🏠 [샘플모드] 로컬 데이터에서 검색: "$word"');
+          debugPrint('🏠 [샘플모드] 샘플 데이터에서 단어 검색: "$word"');
         }
-        final sampleResult = await _sampleTranslationService.lookupWord(word);
-        if (sampleResult['success'] == true) {
-          return sampleResult;
-        } else {
-          if (kDebugMode) {
-            debugPrint('❌ [샘플모드] 로컬 데이터에 없음, 일반 검색 진행');
-          }
-          // 샘플 데이터에 없어도 일반 검색을 진행
-        }
+        return await _lookupInSampleMode(word);
       }
       
       switch (_currentLanguage) {
@@ -554,8 +545,61 @@ class DictionaryService {
         'message': '단어 검색 중 오류가 발생했습니다: $e',
       };
     }
-  }
+    }
 
+  /// 샘플 모드에서 단어 검색
+  Future<Map<String, dynamic>> _lookupInSampleMode(String word) async {
+    try {
+      final sampleDataService = SampleDataService();
+      await sampleDataService.loadSampleData();
+      
+      // 샘플 플래시카드에서 해당 단어 찾기
+      final sampleFlashCards = sampleDataService.getSampleFlashCards(null);
+      final matchingCard = sampleFlashCards.where((card) => card.front == word).firstOrNull;
+      
+      if (matchingCard != null) {
+        if (kDebugMode) {
+          debugPrint('✅ [샘플모드] 샘플 데이터에서 단어 찾음: $word');
+          debugPrint('   번역: ${matchingCard.back}');
+        }
+        
+        // 샘플 데이터의 플래시카드를 사전 항목으로 변환
+        final entry = DictionaryEntry.multiLanguage(
+          word: matchingCard.front,
+          pinyin: '', // 샘플 데이터에는 병음이 없음
+          meaningKo: matchingCard.back,
+          meaningEn: null,
+          source: 'sample_data'
+        );
+        
+        return {
+          'entry': entry,
+          'success': true,
+          'source': 'sample_data',
+        };
+      } else {
+        if (kDebugMode) {
+          debugPrint('❌ [샘플모드] 샘플 데이터에서 단어를 찾지 못함: $word');
+          debugPrint('   사용 가능한 단어: ${sampleDataService.getAvailableWords().take(5).join(", ")}...');
+        }
+        
+        return {
+          'success': false,
+          'message': '샘플 모드에서는 제한된 단어만 검색할 수 있습니다.\n로그인하시면 모든 단어를 검색할 수 있습니다.',
+          'availableWords': sampleDataService.getAvailableWords(),
+        };
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [샘플모드] 단어 검색 중 오류: $e');
+      }
+      return {
+        'success': false,
+        'message': '샘플 모드에서 단어 검색 중 오류가 발생했습니다.',
+      };
+    }
+  }
+  
   // 단어 검색 (단순 인터페이스)
   Future<DictionaryEntry?> lookup(String word) async {
     try {

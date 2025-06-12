@@ -2,11 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/models/dictionary.dart';
 import 'dictionary_service.dart';
-import '../sample/sample_translation_service.dart';
 
 /// 통합 사전 서비스 (래퍼)
 /// 로그인 상태에 따라 적절한 사전 서비스를 사용합니다.
-/// - 로그인 전: SampleTranslationService (로컬 데이터)
+/// - 로그인 전: 사전 기능 제한 (프리미엄 기능)
 /// - 로그인 후: DictionaryService (완전한 기능)
 class UnifiedDictionaryService {
   // 싱글톤 패턴
@@ -16,7 +15,6 @@ class UnifiedDictionaryService {
 
   // 서비스 인스턴스들
   final DictionaryService _dictionaryService = DictionaryService();
-  final SampleTranslationService _sampleTranslationService = SampleTranslationService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // 초기화 상태
@@ -40,9 +38,9 @@ class UnifiedDictionaryService {
         await _dictionaryService.initialize();
       } else {
         if (kDebugMode) {
-          debugPrint('🏠 [UnifiedDictionary] 비로그인 상태 - SampleTranslationService 초기화');
+          debugPrint('🏠 [UnifiedDictionary] 비로그인 상태 - 사전 기능 제한');
         }
-        await _sampleTranslationService.initialize();
+        // 비로그인 상태에서는 사전 기능을 제한
       }
 
       _isInitialized = true;
@@ -73,8 +71,8 @@ class UnifiedDictionaryService {
         // 로그인 상태 - 완전한 사전 기능 사용
         return await _dictionaryService.lookupWord(word);
       } else {
-        // 비로그인 상태 - 샘플 데이터 사용
-        return await _sampleTranslationService.lookupWord(word);
+        // 비로그인 상태 - 샘플 모드에서 제한적 사전 기능 사용
+        return await _dictionaryService.lookupWord(word);
       }
     } catch (e) {
       if (kDebugMode) {
@@ -132,8 +130,6 @@ class UnifiedDictionaryService {
     try {
       if (_isLoggedIn) {
         await _dictionaryService.clearCache();
-      } else {
-        _sampleTranslationService.clearCache();
       }
       if (kDebugMode) {
         debugPrint('🧹 [UnifiedDictionary] 캐시 정리 완료');
@@ -163,11 +159,10 @@ class UnifiedDictionaryService {
   }
 
   /// 현재 사용 중인 서비스 타입 (디버깅용)
-  String get currentServiceType => _isLoggedIn ? 'DictionaryService' : 'SampleTranslationService';
+  String get currentServiceType => _isLoggedIn ? 'DictionaryService' : 'Limited';
 
-  /// 샘플 모드에서 사용 가능한 단어 목록 (비로그인 상태에서만)
+  /// 샘플 모드에서 사용 가능한 단어 목록 (비로그인 상태에서는 빈 목록)
   List<String> getSampleWords() {
-    if (_isLoggedIn) return [];
-    return _sampleTranslationService.availableWords;
+    return [];
   }
 } 

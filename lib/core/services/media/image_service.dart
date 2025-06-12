@@ -89,19 +89,33 @@ class ImageService {
         return file;
       }
       
-      // 로컬에 없으면 Firebase Storage에서 다운로드 시도
-      if (kDebugMode) {
-        debugPrint('🖼️ 📥 로컬에 없음, Firebase Storage에서 다운로드 시도: $imagePath');
+      // 로컬에 없으면 Firebase Storage에서 다운로드 시도 (로그인된 경우만)
+      if (_currentUserId != null) {
+        if (kDebugMode) {
+          debugPrint('🖼️ 📥 로컬에 없음, Firebase Storage에서 다운로드 시도: $imagePath');
+        }
+        return _downloadWithRetry(imagePath, _downloadFromFirebaseRelative);
+      } else {
+        if (kDebugMode) {
+          debugPrint('🖼️ ⚠️ 로그아웃 상태 - Firebase Storage 접근 건너뜀: $imagePath');
+        }
+        return null;
       }
-      return _downloadWithRetry(imagePath, _downloadFromFirebaseRelative);
     }
 
-    // 3. Firebase Storage 다운로드 (gs:// 경로)
+    // 3. Firebase Storage 다운로드 (gs:// 경로) - 로그인된 경우만
     if (imagePath.startsWith('gs://')) {
-      if (kDebugMode) {
-        debugPrint('🖼️ 📥 Firebase Storage URL 다운로드: $imagePath');
+      if (_currentUserId != null) {
+        if (kDebugMode) {
+          debugPrint('🖼️ 📥 Firebase Storage URL 다운로드: $imagePath');
+        }
+        return _downloadWithRetry(imagePath, _downloadFromFirebase);
+      } else {
+        if (kDebugMode) {
+          debugPrint('🖼️ ⚠️ 로그아웃 상태 - Firebase Storage URL 접근 건너뜀: $imagePath');
+        }
+        return null;
       }
-      return _downloadWithRetry(imagePath, _downloadFromFirebase);
     }
 
     // 4. URL 다운로드
