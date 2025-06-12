@@ -161,17 +161,37 @@ class TTSService {
         return;
       }
 
+      // 파일 크기 확인
+      final fileSize = await file.length();
+      debugPrint('🎵 오디오 파일 정보: ${filePath.split('/').last} (${fileSize} bytes)');
+
       // 먼저 이전 재생 중지 및 리소스 해제
       await _audioPlayer.stop();
       
+      // 볼륨 설정 (최대 볼륨)
+      await _audioPlayer.setVolume(1.0);
+      debugPrint('🔊 볼륨 설정: 1.0 (최대)');
+      
       // 파일 경로 설정
       await _audioPlayer.setFilePath(filePath);
+      debugPrint('📁 파일 경로 설정 완료');
+      
+      // 오디오 세션 설정 (iOS에서 소리가 안 들릴 때 도움)
+      await _audioPlayer.setAudioSource(
+        AudioSource.uri(Uri.file(filePath)),
+      );
+      debugPrint('🎧 오디오 소스 설정 완료');
       
       // 실제 재생 시작
       await _audioPlayer.play();
       _isSpeaking = true;
       _ttsState = TtsState.playing;
-      debugPrint('▶️ 오디오 재생 시작: $filePath');
+      debugPrint('▶️ 오디오 재생 시작: ${filePath.split('/').last}');
+      
+      // 재생 상태 모니터링
+      _audioPlayer.playerStateStream.listen((state) {
+        debugPrint('🎵 재생 상태: ${state.playing ? "재생 중" : "정지"} - ${state.processingState}');
+      });
       
       // 안전장치: 10초 후 강제 종료 (무한 재생 방지)
       Future.delayed(const Duration(seconds: 10), () {
@@ -388,6 +408,8 @@ class TTSService {
   void setOnPlayingCompleted(Function callback) {
     _onPlayingCompleted = callback;
   }
+
+
 
   /// 리소스 해제
   Future<void> dispose() async {

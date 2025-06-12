@@ -29,6 +29,7 @@ import '../note/view/note_detail_screen.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용 위해 추가
 import '../../core/services/common/plan_service.dart';
 import '../../core/widgets/upgrade_modal.dart';
+import '../../core/services/authentication/auth_service.dart';
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -558,11 +559,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 모든 플래시카드 보기 화면으로 이동
   Future<void> _navigateToAllFlashcards() async {
     try {
-      // 플래시카드 화면으로 이동
+      // 플래시카드 화면으로 이동 (TTS는 항상 활성화, 내부에서 샘플/일반 모드 구분)
       final result = await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const FlashCardScreen(),
+          builder: (context) => FlashCardScreen(
+            isTtsEnabled: true, // TTS 항상 활성화 (내부에서 샘플/일반 모드 구분)
+          ),
         ),
       );
 

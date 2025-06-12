@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/tts/tts_service.dart';
+import '../../../core/services/authentication/auth_service.dart';
+import '../../../core/widgets/upgrade_modal.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
+import '../sample/sample_tts_service.dart';
 
 /// TTS 버튼을 위한 공용 위젯
 /// 상태에 따라 적절한 스타일과 피드백을 제공합니다.
@@ -59,6 +62,8 @@ class TtsButton extends StatefulWidget {
 
 class _TtsButtonState extends State<TtsButton> {
   final TTSService _ttsService = TTSService();
+  final SampleTtsService _sampleTtsService = SampleTtsService();
+  final AuthService _authService = AuthService();
   bool _isPlaying = false;
   
   @override
@@ -133,6 +138,12 @@ class _TtsButtonState extends State<TtsButton> {
   void _togglePlayback() async {
     if (!widget.isEnabled) return;
     
+    // 샘플 모드(로그아웃 상태)에서는 SampleTtsService 사용
+    if (_authService.currentUser == null) {
+      await _handleSampleModeTts();
+      return;
+    }
+    
     if (_isPlaying) {
       // 이미 재생 중이면 중지
       _ttsService.stop();
@@ -205,8 +216,93 @@ class _TtsButtonState extends State<TtsButton> {
         }
       }
     }
-  }
+    }
 
+  /// 샘플 모드에서 TTS 처리
+  Future<void> _handleSampleModeTts() async {
+    try {
+      if (_isPlaying) {
+        // 재생 중이면 중지
+        await _sampleTtsService.stop();
+        setState(() {
+          _isPlaying = false;
+        });
+        
+        if (widget.onPlayEnd != null) {
+          widget.onPlayEnd!();
+        }
+        
+        debugPrint('샘플 TTS 재생 중지');
+      } else {
+        // 재생 시작
+        setState(() {
+          _isPlaying = true;
+        });
+        
+        if (widget.onPlayStart != null) {
+          widget.onPlayStart!();
+        }
+        
+        debugPrint('🔘 샘플 TTS 재생 시작: "${widget.text}"');
+        
+        await _sampleTtsService.speak(widget.text);
+        
+        // 재생 완료 후 상태 업데이트
+        if (mounted) {
+          setState(() {
+            _isPlaying = false;
+          });
+          
+          if (widget.onPlayEnd != null) {
+            widget.onPlayEnd!();
+          }
+        }
+      }
+    } on SampleTtsException catch (e) {
+      debugPrint('샘플 TTS 프리미엄 필요: $e');
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+        });
+        
+        if (widget.onPlayEnd != null) {
+          widget.onPlayEnd!();
+        }
+        
+        // 프리미엄 모달 표시
+        _showPremiumModal();
+      }
+    } catch (e) {
+      debugPrint('샘플 TTS 재생 중 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+        });
+        
+        if (widget.onPlayEnd != null) {
+          widget.onPlayEnd!();
+        }
+      }
+    }
+  }
+  
+  /// 프리미엄 구독 모달 표시
+  void _showPremiumModal() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('프리미엄 구독 필요'),
+        content: const Text('이 기능을 사용하려면 프리미엄 구독이 필요합니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+  
   @override
   Widget build(BuildContext context) {
     // 아이콘 색상 - 활성화 상태에 따라 다르게 설정

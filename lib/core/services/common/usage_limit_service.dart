@@ -285,6 +285,9 @@ class UsageLimitService {
       final planService = PlanService();
       final planType = await planService.getCurrentPlanType();
       
+      debugPrint('🔍 UsageLimitService에서 확인한 플랜 타입: $planType');
+      debugPrint('🔍 해당 플랜의 제한값: ${PlanService.PLAN_LIMITS[planType]}');
+      
       final limits = PlanService.PLAN_LIMITS[planType];
       if (limits != null) {
         return Map<String, int>.from(limits);

@@ -43,13 +43,29 @@ class PlanService {
   
   PlanService._internal();
   
+  // 캐시 관련 변수
+  String? _cachedPlanType;
+  String? _cachedUserId;
+  DateTime? _cacheTimestamp;
+  static const Duration _cacheValidDuration = Duration(minutes: 5); // 5분간 캐시 유효
+  
   // 현재 사용자 ID 가져오기
   String? get _currentUserId => _auth.currentUser?.uid;
   
   /// 현재 사용자의 플랜 타입 가져오기
   Future<String> getCurrentPlanType() async {
     try {
-      // Premium 확인
+      // 캐시 확인
+      if (_cachedPlanType != null && 
+          _cachedUserId == _currentUserId && 
+          _cacheTimestamp != null &&
+          DateTime.now().difference(_cacheTimestamp!).compareTo(_cacheValidDuration) < 0) {
+        if (kDebugMode) {
+          debugPrint('🚀 PlanService - 캐시된 플랜 타입 사용: $_cachedPlanType');
+        }
+        return _cachedPlanType!;
+      }
+      
       if (_currentUserId != null) {
         final userDoc = await _firestore
             .collection('users')
@@ -57,30 +73,78 @@ class PlanService {
             .get();
             
         if (userDoc.exists) {
-          final planData = userDoc.data()?['subscription'];
+          final userData = userDoc.data();
+          
+          if (kDebugMode) {
+            debugPrint('🔍 PlanService - 사용자 데이터 확인:');
+            debugPrint('   사용자 ID: $_currentUserId');
+            debugPrint('   subscription: ${userData?['subscription']}');
+            debugPrint('   planType: ${userData?['planType']}');
+          }
+          
+          // 1. 새로운 subscription 구조 확인
+          final planData = userData?['subscription'];
           if (planData != null) {
             final planType = planData['plan'] as String?;
             final expiryDate = planData['expiryDate'];
-            final status = planData['status'] as String?;
+            
+            if (kDebugMode) {
+              debugPrint('🔍 subscription 구조 발견:');
+              debugPrint('   plan: $planType');
+              debugPrint('   expiryDate: $expiryDate');
+              debugPrint('   현재 시간: ${DateTime.now()}');
+            }
             
             // Premium 플랜이고 만료되지 않았으면 Premium 반환
             if (planType == PLAN_PREMIUM && expiryDate != null) {
               final expiry = (expiryDate as Timestamp).toDate();
               if (expiry.isAfter(DateTime.now())) {
-                // 체험 중이거나 정식 구독 중이면 Premium
+                debugPrint('✅ 프리미엄 플랜 확인됨! (만료일: $expiry)');
+                _updateCache(PLAN_PREMIUM);
                 return PLAN_PREMIUM;
+              } else {
+                debugPrint('⚠️ 프리미엄 플랜이지만 만료됨 (만료일: $expiry)');
               }
+            }
+          }
+          
+          // 2. 기존 planType 필드 확인 (하위 호환성)
+          final legacyPlanType = userData?['planType'] as String?;
+          if (legacyPlanType != null) {
+            // 기존 데이터가 있으면 새 구조로 마이그레이션
+            if (legacyPlanType == 'premium') {
+              _updateCache(PLAN_PREMIUM);
+              return PLAN_PREMIUM;
+            } else if (legacyPlanType == 'free') {
+              _updateCache(PLAN_FREE);
+              return PLAN_FREE;
             }
           }
         }
       }
 
-      // Premium이 아니면 Free
+      // 기본값은 Free
+      _updateCache(PLAN_FREE);
       return PLAN_FREE;
     } catch (e) {
       debugPrint('플랜 정보 조회 오류: $e');
+      _updateCache(PLAN_FREE);
       return PLAN_FREE;
     }
+  }
+  
+  /// 캐시 업데이트
+  void _updateCache(String planType) {
+    _cachedPlanType = planType;
+    _cachedUserId = _currentUserId;
+    _cacheTimestamp = DateTime.now();
+  }
+  
+  /// 캐시 초기화 (사용자 변경 시 등)
+  void clearCache() {
+    _cachedPlanType = null;
+    _cachedUserId = null;
+    _cacheTimestamp = null;
   }
   
   /// 플랜 변경 감지

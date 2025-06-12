@@ -18,6 +18,7 @@ import '../../flashcard/flashcard_screen.dart';
 import 'note_detail_bottom_bar.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../../core/services/media/image_service.dart';
+import '../../../core/services/authentication/auth_service.dart';
 import '../../../core/utils/note_tutorial.dart';
 import '../../../core/theme/tokens/ui_tokens.dart';
 import '../../flashcard/flashcard_service.dart';
@@ -347,11 +348,12 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   
   // 플래시카드 화면으로 이동
   void _navigateToFlashcards(BuildContext context, NoteDetailViewModel viewModel) async {
-    // 플래시카드 화면으로 이동하여 결과 받아오기
+    // 플래시카드 화면으로 이동하여 결과 받아오기 (TTS는 항상 활성화, 내부에서 샘플/일반 모드 구분)
     final result = await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => FlashCardScreen(
           noteId: viewModel.noteId,
+          isTtsEnabled: true, // TTS 항상 활성화 (내부에서 샘플/일반 모드 구분)
         ),
       ),
     );

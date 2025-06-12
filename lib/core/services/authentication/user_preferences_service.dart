@@ -98,11 +98,14 @@ class UserPreferencesService {
     final key = userId != null ? '${_preferencesKey}_$userId' : _preferencesKey;
     await prefs.setString(key, jsonEncode(preferences.toJson()));
     
-    // Firestore에도 설정 저장
+    // Firestore에도 설정 저장 (기존 데이터 보존)
     if (userId != null && userId.isNotEmpty) {
       try {
-        await FirebaseFirestore.instance.collection('users').doc(userId).update(preferences.toJson());
-        debugPrint('✅ Firestore에 사용자 설정 저장 완료');
+        await FirebaseFirestore.instance.collection('users').doc(userId).set(
+          preferences.toJson(), 
+          SetOptions(merge: true) // 기존 필드들 보존
+        );
+        debugPrint('✅ Firestore에 사용자 설정 저장 완료 (merge: true)');
       } catch (e) {
         debugPrint('⚠️ Firestore 설정 저장 실패: $e');
       }
