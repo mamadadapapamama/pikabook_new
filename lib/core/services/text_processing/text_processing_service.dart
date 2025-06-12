@@ -457,9 +457,19 @@ class TextProcessingService {
         }
       }
       
-      // 사용자 설정에 따른 모드 적용 (기존 저장된 모드 무시)
-      final userPrefs = await _preferencesService.getPreferences();
-      final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
+      // 저장된 모드 사용 (LLM 처리 결과와 일치해야 함)
+      TextProcessingMode mode = TextProcessingMode.segment; // 기본값
+      if (processedData['mode'] != null) {
+        try {
+          final modeString = processedData['mode'].toString();
+          mode = TextProcessingMode.values.firstWhere(
+            (e) => e.toString() == modeString,
+            orElse: () => TextProcessingMode.segment,
+          );
+        } catch (e) {
+          // 파싱 실패 시 기본값 사용
+        }
+      }
       
       return ProcessedText(
         mode: mode, // 현재 사용자 설정 모드 사용
@@ -510,9 +520,19 @@ class TextProcessingService {
       ];
     }
     
-    // 사용자 설정에 따른 모드 적용
-    final userPrefs = await _preferencesService.getPreferences();
-    final mode = userPrefs.useSegmentMode ? TextProcessingMode.segment : TextProcessingMode.paragraph;
+    // 저장된 모드 확인 (호환성 모드에서는 기본적으로 segment 모드)
+    TextProcessingMode mode = TextProcessingMode.segment;
+    if (page.processedText != null && page.processedText!['mode'] != null) {
+      try {
+        final modeString = page.processedText!['mode'].toString();
+        mode = TextProcessingMode.values.firstWhere(
+          (e) => e.toString() == modeString,
+          orElse: () => TextProcessingMode.segment,
+        );
+      } catch (e) {
+        // 파싱 실패 시 기본값 사용
+      }
+    }
     
     return ProcessedText(
       mode: mode,

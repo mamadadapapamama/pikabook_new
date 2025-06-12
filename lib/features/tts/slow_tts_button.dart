@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import '../../../core/services/tts/tts_service.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/services/authentication/auth_service.dart';
 import '../../../core/widgets/upgrade_modal.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../sample/sample_tts_service.dart';
+import '../../core/services/tts/slow_tts_service.dart';
 
-/// TTS 버튼을 위한 공용 위젯
-/// 상태에 따라 적절한 스타일과 피드백을 제공합니다.
-class TtsButton extends StatefulWidget {
+/// 느린 TTS 버튼을 위한 위젯 (거북이 아이콘 사용)
+/// 50% 느린 속도로 재생하며 일시정지 기능을 제공합니다.
+class SlowTtsButton extends StatefulWidget {
   /// 재생할 텍스트
   final String text;
   
@@ -38,11 +39,11 @@ class TtsButton extends StatefulWidget {
   final bool isEnabled;
   
   /// 버튼 크기 사전 정의값
-  static const double sizeSmall = 24.0;
-  static const double sizeMedium = 32.0;
-  static const double sizeLarge = 40.0;
+  static const double sizeSmall = 20.0;
+  static const double sizeMedium = 24.0;
+  static const double sizeLarge = 32.0;
 
-  const TtsButton({
+  const SlowTtsButton({
     Key? key,
     required this.text,
     this.segmentIndex,
@@ -57,11 +58,11 @@ class TtsButton extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<TtsButton> createState() => _TtsButtonState();
+  State<SlowTtsButton> createState() => _SlowTtsButtonState();
 }
 
-class _TtsButtonState extends State<TtsButton> {
-  final TTSService _ttsService = TTSService();
+class _SlowTtsButtonState extends State<SlowTtsButton> {
+  final SlowTtsService _slowTtsService = SlowTtsService();
   final SampleTtsService _sampleTtsService = SampleTtsService();
   final AuthService _authService = AuthService();
   bool _isPlaying = false;
@@ -72,10 +73,10 @@ class _TtsButtonState extends State<TtsButton> {
     _setupListeners();
   }
   
-  // TTS 상태 변경 리스너 설정
+  // 느린 TTS 상태 변경 리스너 설정
   void _setupListeners() {
     // 재생 상태 변경 리스너
-    _ttsService.setOnPlayingStateChanged((segmentIndex) {
+    _slowTtsService.setOnPlayingStateChanged((segmentIndex) {
       if (mounted) {
         // 현재 재생 중인 세그먼트인지 확인
         final bool isThisSegmentPlaying = widget.segmentIndex != null && 
@@ -87,21 +88,21 @@ class _TtsButtonState extends State<TtsButton> {
             _isPlaying = isThisSegmentPlaying;
           });
           
-          debugPrint('TTS 버튼 상태 변경: _isPlaying=$_isPlaying, segmentIndex=$segmentIndex, widget.segmentIndex=${widget.segmentIndex}');
+          debugPrint('🐢 느린 TTS 버튼 상태 변경: _isPlaying=$_isPlaying, segmentIndex=$segmentIndex, widget.segmentIndex=${widget.segmentIndex}');
         }
       }
     });
     
     // 재생 완료 리스너
-    _ttsService.setOnPlayingCompleted(() {
+    _slowTtsService.setOnPlayingCompleted(() {
       if (mounted) {
         // 현재 재생 중이거나 이 버튼의 세그먼트가 재생 중이었던 경우 상태 리셋
-        if (_isPlaying || _ttsService.currentSegmentIndex == widget.segmentIndex) {
+        if (_isPlaying || _slowTtsService.currentSegmentIndex == widget.segmentIndex) {
           setState(() {
             _isPlaying = false;
           });
           
-          debugPrint('TTS 재생 완료: 버튼 상태 리셋 (segmentIndex=${widget.segmentIndex})');
+          debugPrint('🐢 느린 TTS 재생 완료: 버튼 상태 리셋 (segmentIndex=${widget.segmentIndex})');
           
           // 재생 종료 콜백 호출
           if (widget.onPlayEnd != null) {
@@ -113,13 +114,13 @@ class _TtsButtonState extends State<TtsButton> {
   }
   
   @override
-  void didUpdateWidget(TtsButton oldWidget) {
+  void didUpdateWidget(SlowTtsButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     
     // 세그먼트 인덱스가 변경된 경우
     if (oldWidget.segmentIndex != widget.segmentIndex) {
-      // TTS 서비스의 현재 재생 중인 세그먼트와 비교
-      final currentPlayingSegment = _ttsService.currentSegmentIndex;
+      // 느린 TTS 서비스의 현재 재생 중인 세그먼트와 비교
+      final currentPlayingSegment = _slowTtsService.currentSegmentIndex;
       final bool shouldBePlaying = widget.segmentIndex != null && 
                                   widget.segmentIndex == currentPlayingSegment;
       
@@ -129,24 +130,24 @@ class _TtsButtonState extends State<TtsButton> {
           _isPlaying = shouldBePlaying;
         });
         
-        debugPrint('세그먼트 인덱스 변경으로 인한 상태 업데이트: _isPlaying=$_isPlaying');
+        debugPrint('🐢 세그먼트 인덱스 변경으로 인한 상태 업데이트: _isPlaying=$_isPlaying');
       }
     }
   }
   
-  // TTS 재생 토글
+  // 느린 TTS 재생 토글
   void _togglePlayback() async {
     if (!widget.isEnabled) return;
     
     // 샘플 모드(로그아웃 상태)에서는 SampleTtsService 사용
     if (_authService.currentUser == null) {
-      await _handleSampleModeTts();
+      await _handleSampleModeSlowTts();
       return;
     }
     
     if (_isPlaying) {
       // 이미 재생 중이면 중지
-      _ttsService.stop();
+      _slowTtsService.stop();
       setState(() {
         _isPlaying = false;
       });
@@ -156,7 +157,7 @@ class _TtsButtonState extends State<TtsButton> {
         widget.onPlayEnd!();
       }
       
-      debugPrint('TTS 재생 중지 (사용자에 의해)');
+      debugPrint('🐢 느린 TTS 재생 중지 (사용자에 의해)');
     } else {
       // 재생 시작
       setState(() {
@@ -170,19 +171,18 @@ class _TtsButtonState extends State<TtsButton> {
       
       try {
         // 재생 메서드 호출 전에 디버그 로그
-        debugPrint('🔘 TtsButton: 재생 요청 - "${widget.text}", 세그먼트=${widget.segmentIndex}');
+        debugPrint('🐢 🔘 SlowTtsButton: 느린 재생 요청 - "${widget.text}", 세그먼트=${widget.segmentIndex}');
         
         if (widget.segmentIndex != null) {
-          await _ttsService.speakSegment(widget.text, widget.segmentIndex!);
+          await _slowTtsService.speakSegment(widget.text, widget.segmentIndex!);
         } else {
-          await _ttsService.speak(widget.text);
+          await _slowTtsService.speak(widget.text);
         }
         
-        // speakSegment이 비동기적으로 완료된 후에도 상태 확인
-        // 2초 후에 TTS 서비스 상태를 확인하여 현재 재생 중인지 확인 (타임아웃 시간 단축)
-        Future.delayed(const Duration(seconds: 2), () {
+        // 재생 완료 후 상태 확인 (타임아웃 시간 연장 - 느린 재생이므로)
+        Future.delayed(const Duration(seconds: 4), () {
           if (mounted) {
-            final currentSegment = _ttsService.currentSegmentIndex;
+            final currentSegment = _slowTtsService.currentSegmentIndex;
             final bool shouldStillBePlaying = widget.segmentIndex != null && 
                                              widget.segmentIndex == currentSegment;
             
@@ -192,7 +192,7 @@ class _TtsButtonState extends State<TtsButton> {
                 _isPlaying = false;
               });
               
-              debugPrint('2초 타임아웃으로 TTS 버튼 상태 리셋');
+              debugPrint('🐢 4초 타임아웃으로 느린 TTS 버튼 상태 리셋');
               
               // 재생 종료 콜백 호출
               if (widget.onPlayEnd != null) {
@@ -202,7 +202,7 @@ class _TtsButtonState extends State<TtsButton> {
           }
         });
       } catch (e) {
-        debugPrint('TTS 재생 중 오류 발생: $e');
+        debugPrint('🐢 느린 TTS 재생 중 오류 발생: $e');
         // 오류 발생 시 재생 상태 업데이트
         if (mounted) {
           setState(() {
@@ -216,10 +216,10 @@ class _TtsButtonState extends State<TtsButton> {
         }
       }
     }
-    }
+  }
 
-  /// 샘플 모드에서 TTS 처리
-  Future<void> _handleSampleModeTts() async {
+  /// 샘플 모드에서 느린 TTS 처리
+  Future<void> _handleSampleModeSlowTts() async {
     try {
       if (_isPlaying) {
         // 재생 중이면 중지
@@ -232,7 +232,7 @@ class _TtsButtonState extends State<TtsButton> {
           widget.onPlayEnd!();
         }
         
-        debugPrint('샘플 TTS 재생 중지');
+        debugPrint('🐢 샘플 느린 TTS 재생 중지');
       } else {
         // 재생 시작
         setState(() {
@@ -243,8 +243,9 @@ class _TtsButtonState extends State<TtsButton> {
           widget.onPlayStart!();
         }
         
-        debugPrint('🔘 샘플 TTS 재생 시작: "${widget.text}"');
+        debugPrint('🐢 🔘 샘플 느린 TTS 재생 시작: "${widget.text}"');
         
+        // 샘플 모드에서는 일반 TTS를 사용하되 느린 속도로 재생
         await _sampleTtsService.speak(widget.text);
         
         // 재생 완료 후 상태 업데이트
@@ -259,7 +260,7 @@ class _TtsButtonState extends State<TtsButton> {
         }
       }
     } on SampleTtsException catch (e) {
-      debugPrint('샘플 TTS 프리미엄 필요: $e');
+      debugPrint('🐢 샘플 느린 TTS 프리미엄 필요: $e');
       if (mounted) {
         setState(() {
           _isPlaying = false;
@@ -273,7 +274,7 @@ class _TtsButtonState extends State<TtsButton> {
         _showPremiumModal();
       }
     } catch (e) {
-      debugPrint('샘플 TTS 재생 중 오류: $e');
+      debugPrint('🐢 샘플 느린 TTS 재생 중 오류: $e');
       if (mounted) {
         setState(() {
           _isPlaying = false;
@@ -290,7 +291,7 @@ class _TtsButtonState extends State<TtsButton> {
   void _showPremiumModal() {
     UpgradeModal.show(
       context,
-      customMessage: 'TTS 기능은 프리미엄 전용입니다.\n구독하시면 모든 기능을 사용할 수 있습니다.',
+      customMessage: '느린 TTS 기능은 프리미엄 전용입니다.\n구독하시면 모든 기능을 사용할 수 있습니다.',
       onUpgrade: () {
         // 구독 화면으로 이동 등 처리
         debugPrint('프리미엄 구독 선택');
@@ -298,7 +299,7 @@ class _TtsButtonState extends State<TtsButton> {
     ).then((result) {
       // 모달이 닫힌 후 처리
       if (result == false) {
-        // "나중에" 또는 뒤로가기를 눌렀을 때 이전 페이지로 이동
+        // "나가기" 또는 뒤로가기를 눌렀을 때 이전 페이지로 이동
         Navigator.of(context).pop();
       }
     });
@@ -326,15 +327,21 @@ class _TtsButtonState extends State<TtsButton> {
         decoration: BoxDecoration(
           color: backgroundColor,
           shape: BoxShape.circle,
-          // 테두리 제거 (재생 상태에 관계없이 항상 테두리 없음)
           border: null,
         ),
         child: IconButton(
-          icon: Icon(
-            _isPlaying ? Icons.stop : Icons.volume_up,
-            color: iconColor,
-            size: widget.size * 0.5,
-          ),
+          icon: _isPlaying 
+              ? Icon(
+                  Icons.stop,
+                  color: iconColor,
+                  size: widget.size * 0.5,
+                )
+              : SvgPicture.asset(
+                  'assets/images/icon_turtle.svg',
+                  width: widget.size * 0.5,
+                  height: widget.size * 0.5,
+                  colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+                ),
           onPressed: widget.isEnabled ? _togglePlayback : null,
           padding: EdgeInsets.zero,
           constraints: BoxConstraints(
@@ -347,10 +354,17 @@ class _TtsButtonState extends State<TtsButton> {
     } else {
       // 기본 IconButton 스타일
       buttonWidget = IconButton(
-        icon: Icon(
-          _isPlaying ? Icons.stop : Icons.volume_up,
-          color: iconColor,
-        ),
+        icon: _isPlaying 
+            ? Icon(
+                Icons.stop,
+                color: iconColor,
+              )
+            : SvgPicture.asset(
+                'assets/images/icon_turtle.svg',
+                width: widget.size * 0.6,
+                height: widget.size * 0.6,
+                colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+              ),
         iconSize: widget.size * 0.6,
         padding: EdgeInsets.all(widget.size * 0.2),
         constraints: BoxConstraints(
@@ -381,11 +395,11 @@ class _TtsButtonState extends State<TtsButton> {
   void dispose() {
     // 상태 정리를 위해 현재 재생 중인 경우 중지
     if (_isPlaying) {
-      debugPrint('TtsButton dispose: 재생 중인 TTS 정리');
+      debugPrint('🐢 SlowTtsButton dispose: 재생 중인 느린 TTS 정리');
       // 동기 작업이 UI를 차단하지 않도록 별도 작업으로 분리
       _isPlaying = false; // 먼저 상태 업데이트
       Future.microtask(() {
-        _ttsService.stop();
+        _slowTtsService.stop();
       });
     }
     super.dispose();

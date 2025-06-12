@@ -63,10 +63,6 @@ class ImageService {
   Future<File?> getImageFile(String? imagePath) async {
     if (imagePath == null || imagePath.isEmpty) return null;
 
-    if (kDebugMode) {
-      debugPrint('🖼️ getImageFile 시작: $imagePath');
-    }
-
     // 1. 절대 경로 확인
     File file = File(imagePath);
     if (await file.exists()) {

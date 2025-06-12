@@ -171,7 +171,7 @@ class UpgradeModal extends StatelessWidget {
             onCancel?.call();
           },
           child: Text(
-            '나중에',
+            '나가기',
             style: TypographyTokens.button.copyWith(
               color: ColorTokens.textTertiary,
             ),

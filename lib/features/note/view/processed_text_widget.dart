@@ -12,6 +12,8 @@ import '../../../core/utils/context_menu_manager.dart';
 import '../../../core/services/common/plan_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../../core/widgets/upgrade_modal.dart';
+import '../../tts/slow_tts_button.dart';
+import 'paragraph_mode_widget.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -210,8 +212,42 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     );
   }
 
-  /// **전체 텍스트 표시** → **문단별 텍스트 표시**
+  /// 느린 TTS 버튼 위젯 생성
+  Widget _buildSlowTtsButton(String text, int segmentIndex, bool isPlaying) {
+    return SlowTtsButton(
+      text: text,
+      segmentIndex: segmentIndex,
+      size: 24.0,
+      isEnabled: true,
+      useCircularShape: true,
+      iconColor: ColorTokens.textSecondary,
+      activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
+    );
+  }
+
+  /// **문단별 텍스트 표시** (문단 모드 전용 위젯 사용)
   Widget _buildFullTextView() {
+    // 문단 모드인 경우 전용 위젯 사용
+    if (widget.processedText.mode == TextProcessingMode.paragraph) {
+      return ParagraphModeWidget(
+        processedText: widget.processedText,
+        flashcardWords: _flashcardWords,
+        selectedText: _selectedText,
+        selectedTextNotifier: _selectedTextNotifier,
+        onSelectionChanged: (selectedText) {
+          setState(() {
+            _selectedText = selectedText;
+          });
+        },
+        onDictionaryLookup: widget.onDictionaryLookup,
+        onCreateFlashCard: widget.onCreateFlashCard,
+        showTtsButtons: widget.showTtsButtons,
+        playingSegmentIndex: widget.playingSegmentIndex,
+        onPlayTts: widget.onPlayTts,
+      );
+    }
+    
+    // 기존 전체 텍스트 표시 (fallback)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -298,7 +334,11 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
                   onCreateFlashCard: widget.onCreateFlashCard,
                 ),
               ),
-              if (widget.showTtsButtons) _buildTtsButton(unit.originalText, i, isPlaying),
+              if (widget.showTtsButtons) ...[
+                _buildTtsButton(unit.originalText, i, isPlaying),
+                const SizedBox(width: 4),
+                _buildSlowTtsButton(unit.originalText, i, isPlaying),
+              ],
             ],
           ),
 

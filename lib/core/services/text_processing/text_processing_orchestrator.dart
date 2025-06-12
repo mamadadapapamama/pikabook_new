@@ -111,17 +111,17 @@ class TextProcessingOrchestrator {
           debugPrint('✅ Segment 모드 처리 완료: ${textSegments.length}개 문장');
         }
       } else {
-        // Paragraph 모드: 텍스트 정제만
+        // Paragraph 모드: LLM에서 전체 처리 (OCR 세그먼트 생성하지 않음)
         if (kDebugMode) {
-          debugPrint('📄 Paragraph 모드: 텍스트 정제만 수행');
+          debugPrint('📄 Paragraph 모드: LLM 전체 처리 대기');
         }
         
-        // 간단한 텍스트 정제 (공백, 줄바꿈 정리)
+        // 간단한 텍스트 정제 (LLM 전송용)
         processedText = rawText.trim().replaceAll(RegExp(r'\s+'), ' ');
-        textSegments = [processedText]; // 전체 텍스트를 하나의 세그먼트로
+        textSegments = []; // 빈 배열 (LLM에서 블록 타입별로 재구성)
         
         if (kDebugMode) {
-          debugPrint('✅ Paragraph 모드 처리 완료: 전체 텍스트 길이 ${processedText.length}자');
+          debugPrint('✅ Paragraph 모드 처리 완료: LLM 처리 대기 (세그먼트 없음)');
         }
       }
 
@@ -268,17 +268,46 @@ class TextProcessingOrchestrator {
       debugPrint('📄 4단계: 페이지 데이터 업데이트 시작');
     }
 
-    // 1차 ProcessedText 생성 (원문만, 타이프라이터 효과용)
-    final initialProcessedText = ProcessedText.withOriginalOnly(
-      mode: pageData.mode,
-      originalSegments: pageData.textSegments,
-      sourceLanguage: pageData.sourceLanguage,
-      targetLanguage: pageData.targetLanguage,
-    );
+    // 1차 ProcessedText 생성
+    ProcessedText initialProcessedText;
+    
+    if (pageData.mode == TextProcessingMode.paragraph) {
+      // 문단 모드: 빈 상태로 시작 (LLM 응답만 기다림)
+      initialProcessedText = ProcessedText(
+        mode: pageData.mode,
+        displayMode: TextDisplayMode.full,
+        fullOriginalText: '',
+        fullTranslatedText: '',
+        units: [],
+        sourceLanguage: pageData.sourceLanguage,
+        targetLanguage: pageData.targetLanguage,
+        streamingStatus: StreamingStatus.preparing,
+        completedUnits: 0,
+        progress: 0.0,
+      );
+      
+      if (kDebugMode) {
+        debugPrint('📄 문단 모드: 빈 ProcessedText 생성 (LLM 응답 대기)');
+      }
+    } else {
+      // 문장 모드: 원문만 포함 (타이프라이터 효과용)
+      initialProcessedText = ProcessedText.withOriginalOnly(
+        mode: pageData.mode,
+        originalSegments: pageData.textSegments,
+        sourceLanguage: pageData.sourceLanguage,
+        targetLanguage: pageData.targetLanguage,
+      );
+      
+      if (kDebugMode) {
+        debugPrint('📝 문장 모드: 원문 포함 ProcessedText 생성');
+      }
+    }
 
     // OCR 결과 및 1차 ProcessedText 업데이트 (제목 정보 포함)
     await _pageService.updatePage(pageData.pageId, {
-      'originalText': pageData.textSegments.join(' '),
+      'originalText': pageData.mode == TextProcessingMode.paragraph 
+          ? pageData.reorderedText  // 문단 모드: 정제된 전체 텍스트
+          : pageData.textSegments.join(' '), // 문장 모드: 세그먼트 조합
       'ocrCompletedAt': FieldValue.serverTimestamp(),
       'status': ProcessingStatus.textExtracted.toString(),
       // 원문 세그먼트를 임시 저장 (LLM 처리용)
@@ -311,8 +340,14 @@ class TextProcessingOrchestrator {
       debugPrint('   원문 세그먼트: ${pageData.textSegments.length}개');
       debugPrint('   감지된 제목: ${pageData.detectedTitles.length}개');
       debugPrint('   OCR 후처리 결과: 원본→정리→재배열 텍스트 저장됨');
-      debugPrint('   1차 ProcessedText: 원문만 포함');
-      debugPrint('   2차 ProcessedText는 LLM 완료 후 생성됩니다');
+      
+      if (pageData.mode == TextProcessingMode.paragraph) {
+        debugPrint('   1차 ProcessedText: 빈 상태 (LLM 응답 대기)');
+        debugPrint('   LLM에서 블록 타입별 재구성 후 표시됩니다');
+      } else {
+        debugPrint('   1차 ProcessedText: 원문만 포함');
+        debugPrint('   2차 ProcessedText는 LLM 완료 후 생성됩니다');
+      }
     }
   }
 

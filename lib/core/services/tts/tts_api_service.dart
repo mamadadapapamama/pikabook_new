@@ -62,7 +62,7 @@ class TtsApiService {
   String get currentLanguage => _currentLanguage;
 
   /// ElevenLabs TTS API를 사용하여 음성 합성
-  Future<Uint8List?> synthesizeSpeech(String text) async {
+  Future<Uint8List?> synthesizeSpeech(String text, {String? voiceId, double? speed}) async {
     if (!_isInitialized) {
       await initialize();
     }
@@ -93,17 +93,17 @@ class TtsApiService {
           ? text.substring(0, 4000) 
           : text;
 
+      // Voice ID 설정 (기본값: James 음성, 느린 TTS용: 새로운 음성)
+      final String selectedVoiceId = voiceId ?? '4VZIsMPtgggwNg7OXbPY'; // 기본 중국어 남성 음성
+      final double selectedSpeed = speed ?? 0.9; // 기본 속도
+
       if (kDebugMode) {
-        debugPrint('TTS 요청: ${truncatedText.length}자');
+        debugPrint('TTS 요청: ${truncatedText.length}자, Voice: $selectedVoiceId, Speed: $selectedSpeed');
         debugPrint('TTS 요청 텍스트(일부): ${truncatedText.substring(0, min(30, truncatedText.length))}...');
       }
 
-      // James 음성 사용 (중국어 네이티브)
-      // voiceId는 음성/화자의 ID
-      final String voiceId = '4VZIsMPtgggwNg7OXbPY'; // 중국어 남성 음성 ID
-
       final response = await http.post(
-        Uri.parse('https://api.elevenlabs.io/v1/text-to-speech/$voiceId'),
+        Uri.parse('https://api.elevenlabs.io/v1/text-to-speech/$selectedVoiceId'),
         headers: {
           'Accept': 'audio/mpeg',
           'Content-Type': 'application/json',
@@ -112,9 +112,9 @@ class TtsApiService {
         body: json.encode({
           'text': truncatedText,
           'voice_settings': {
-            'stability': 0.5,
-            'similarity_boost': 0.5,
-            'speed': 0.8,
+            'stability': 1.0,
+            'similarity_boost': 1.0,
+            'speed': selectedSpeed,
           },
         }),
       );
