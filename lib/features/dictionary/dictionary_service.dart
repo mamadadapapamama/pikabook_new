@@ -7,7 +7,7 @@ import 'package:pinyin/pinyin.dart';
 import '../../core/models/dictionary.dart';
 import 'internal_cn_dictionary_service.dart';
 import 'cc_cedict_service.dart';
-import '../sample/sample_mode_service.dart';
+import '../../core/services/authentication/auth_service.dart';
 import '../sample/sample_translation_service.dart';
 
 /// 범용 사전 서비스
@@ -27,7 +27,7 @@ class DictionaryService {
   final InternalCnDictionaryService _chineseDictionaryService = InternalCnDictionaryService();
   final CcCedictService _ccCedictService = CcCedictService();
   final GoogleTranslator _translator = GoogleTranslator();
-  final SampleModeService _sampleModeService = SampleModeService();
+  final AuthService _authService = AuthService();
   final SampleTranslationService _sampleTranslationService = SampleTranslationService();
   
   // 사전 업데이트 리스너 목록
@@ -69,8 +69,8 @@ class DictionaryService {
     if (_isInitialized) return;
     
     try {
-      // 샘플 모드 상태 확인 (한 번만)
-      _isSampleMode = await _sampleModeService.isSampleModeEnabled();
+      // 로그인 상태 확인 (샘플 모드 여부 결정)
+      _isSampleMode = _authService.currentUser == null;
       
       if (_isSampleMode) {
         if (kDebugMode) {

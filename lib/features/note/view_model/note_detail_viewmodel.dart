@@ -13,6 +13,8 @@ import '../managers/note_options_manager.dart';
 import '../services/note_service.dart';
 import '../../../core/services/text_processing/text_processing_service.dart';
 import '../services/pending_job_recovery_service.dart';
+import '../../sample/sample_data_service.dart';
+import '../../../core/services/authentication/auth_service.dart';
 
 /// 단순화된 노트 상세 화면 ViewModel
 /// UI 상태만 관리하고 비즈니스 로직은 Service Layer에 위임
@@ -22,6 +24,11 @@ class NoteDetailViewModel extends ChangeNotifier {
   final TextProcessingService _textProcessingService = TextProcessingService();
   final PendingJobRecoveryService _pendingJobRecoveryService = PendingJobRecoveryService();
   final PostLLMWorkflow _postLLMWorkflow = PostLLMWorkflow();
+  final SampleDataService _sampleDataService = SampleDataService();
+  final AuthService _authService = AuthService();
+  
+  // 로그인 상태 (샘플 모드 여부 결정)
+  bool _isLoggedIn = false;
   
   // PageService에 접근하기 위한 게터
   PageService get _pageService => _noteService.pageService;
@@ -108,15 +115,85 @@ class NoteDetailViewModel extends ChangeNotifier {
     // 상태 초기화
     _note = initialNote;
     
-    // 초기 노트 정보 로드
-    if (initialNote == null && noteId.isNotEmpty) {
-      _loadNoteInfo();
+          // 초기 데이터 로드 (비동기)
+      Future.microtask(() async {
+        // 로그인 상태 확인
+        await _checkLoginStatus();
+        
+        if (!_isLoggedIn) {
+          // 로그아웃 상태 = 샘플 데이터 사용
+          await _loadSampleData();
+        } else {
+          // 로그인 상태 = 실제 데이터 사용
+          if (initialNote == null && noteId.isNotEmpty) {
+            await _loadNoteInfo();
+          }
+          await loadInitialPages();
+        }
+      });
+  }
+
+  /// 로그인 상태 확인
+  Future<void> _checkLoginStatus() async {
+    try {
+      _isLoggedIn = _authService.currentUser != null;
+      if (flutter_foundation.kDebugMode) {
+        debugPrint("👤 로그인 상태: $_isLoggedIn");
+      }
+    } catch (e) {
+      _isLoggedIn = false;
+      if (flutter_foundation.kDebugMode) {
+        debugPrint("❌ 로그인 상태 확인 중 오류: $e");
+      }
+    }
+  }
+
+  /// 샘플 데이터 로드
+  Future<void> _loadSampleData() async {
+    if (flutter_foundation.kDebugMode) {
+      debugPrint("📦 샘플 데이터 로드 시작");
     }
     
-    // 초기 데이터 로드 (비동기)
-    Future.microtask(() async {
-      await loadInitialPages();
-    });
+    _isLoading = true;
+    notifyListeners();
+    
+    try {
+      // 샘플 데이터 로드
+      await _sampleDataService.loadSampleData();
+      
+      // 샘플 노트 설정
+      _note = _sampleDataService.getSampleNote();
+      
+      // 샘플 페이지 설정
+      _pages = _sampleDataService.getSamplePages(_noteId);
+      
+      // 샘플 처리된 텍스트 설정
+      if (_pages != null && _pages!.isNotEmpty) {
+        for (final page in _pages!) {
+          final processedText = _sampleDataService.getProcessedText(page.id);
+          if (processedText != null) {
+            _processedTexts[page.id] = processedText;
+          }
+        }
+      }
+      
+      _isLoading = false;
+      notifyListeners();
+      
+      if (flutter_foundation.kDebugMode) {
+        debugPrint("✅ 샘플 데이터 로드 완료");
+        debugPrint("   노트: ${_note?.title}");
+        debugPrint("   페이지: ${_pages?.length}개");
+        debugPrint("   처리된 텍스트: ${_processedTexts.length}개");
+      }
+    } catch (e) {
+      _isLoading = false;
+      _error = "샘플 데이터 로드 중 오류가 발생했습니다: $e";
+      notifyListeners();
+      if (flutter_foundation.kDebugMode) {
+        debugPrint("❌ 샘플 데이터 로드 중 오류: $e");
+      }
+    }
   }
 
   /// 노트 정보 로드
@@ -146,6 +223,9 @@ class NoteDetailViewModel extends ChangeNotifier {
 
   /// 초기 페이지 로드
   Future<void> loadInitialPages() async {
+    // 로그아웃 상태(샘플 모드)에서는 실행하지 않음
+    if (!_isLoggedIn) return;
+    
     if (flutter_foundation.kDebugMode) {
       debugPrint("🔄 페이지 로드 시작");
     }
@@ -207,7 +287,7 @@ class NoteDetailViewModel extends ChangeNotifier {
 
   /// 모든 페이지에 대한 실시간 리스너 설정
   void _setupAllPageListeners() {
-    if (_disposed || _pages == null) return;
+    if (_disposed || _pages == null || !_isLoggedIn) return;
     
     for (final page in _pages!) {
       if (page.id.isNotEmpty) {
@@ -266,7 +346,7 @@ class NoteDetailViewModel extends ChangeNotifier {
 
   /// 현재 페이지의 텍스트 데이터 로드 (Service Layer 사용)
   Future<void> loadCurrentPageText() async {
-    if (_disposed || currentPage == null) return;
+    if (_disposed || currentPage == null || !_isLoggedIn) return;
     
     final pageId = currentPage!.id;
     if (pageId.isEmpty) return;

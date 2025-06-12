@@ -22,7 +22,7 @@ import 'core/services/marketing/marketing_campaign_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'features/sample/sample_mode_service.dart';
+import 'features/sample/sample_home_screen.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -62,7 +62,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   late InitializationManager _initializationManager;
   late UserPreferencesService _preferencesService;
   final UsageLimitService _usageLimitService = UsageLimitService();
-  final SampleModeService _sampleModeService = SampleModeService();
+
   String? _error;
   final MarketingCampaignService _marketingService = MarketingCampaignService();
   final PlanService _planService = PlanService();
@@ -169,7 +169,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       final isOnboardingCompleted = initResult['isOnboardingCompleted'] as bool;
       
       // 샘플 모드 상태 확인 (앱 특화 로직)
-      await _checkSampleMode();
+      _checkSampleMode();
       
       // 인증 상태 관찰 설정
       _setupAuthStateListener();
@@ -196,51 +196,27 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
-  /// 샘플 모드 확인
-  Future<void> _checkSampleMode() async {
-    try {
-      // 로그인한 사용자가 있으면 샘플 모드 강제 비활성화
-      if (_user != null) {
-        if (kDebugMode) {
-          debugPrint('[checkSampleMode] 로그인 사용자 감지, 샘플 모드 강제 비활성화');
-        }
-        await _sampleModeService.disableSampleMode();
-        if (mounted) {
-          setState(() {
-            _isSampleMode = false;
-          });
-        }
-        return;
-      }
-      
-      final isSampleMode = await _sampleModeService.isSampleModeEnabled();
-      if (kDebugMode) {
-        debugPrint('[checkSampleMode] 샘플 모드 상태: $isSampleMode');
-      }
-      
-      if (mounted) {
-        setState(() {
-          _isSampleMode = isSampleMode;
-          // 샘플 모드이면 로딩 상태 해제
-          if (isSampleMode) {
-            if (kDebugMode) {
-              debugPrint('[checkSampleMode] 샘플 모드 활성화 확인, 로딩 상태 해제');
-            }
-            _isLoading = false;
-            _isLoadingUserData = false;
+  /// 로그인 상태 확인 (샘플 모드 여부 결정)
+  void _checkSampleMode() {
+    // 로그인 상태에 따라 샘플 모드 결정
+    final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+    
+    if (kDebugMode) {
+      debugPrint('[checkSampleMode] 로그인 상태: $isLoggedIn');
+    }
+    
+    if (mounted) {
+      setState(() {
+        _isSampleMode = !isLoggedIn; // 로그아웃 상태 = 샘플 모드
+        // 샘플 모드이면 로딩 상태 해제
+        if (_isSampleMode) {
+          if (kDebugMode) {
+            debugPrint('[checkSampleMode] 샘플 모드 활성화, 로딩 상태 해제');
           }
-        });
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[checkSampleMode] 샘플 모드 확인 중 오류: $e');
-      }
-      // 오류 발생 시 샘플 모드 비활성화 상태로 설정
-      if (mounted) {
-        setState(() {
-          _isSampleMode = false;
-        });
-      }
+          _isLoading = false;
+          _isLoadingUserData = false;
+        }
+      });
     }
   }
   
@@ -263,10 +239,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           // 사용자 로그인/로그아웃 처리
           if (user != null) {
             // 로그인 처리
-            if (_isSampleMode) {
-              await _sampleModeService.disableSampleMode();
-              _isSampleMode = false;
-            }
+            _isSampleMode = false;
             
             setState(() {
               _user = user;
@@ -279,7 +252,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             await _loadUserPreferences();
           } else {
             // 로그아웃 처리
-            await _checkSampleMode();
             
             setState(() {
               _user = null;
@@ -287,6 +259,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               _isOnboardingCompleted = false;
               _isLoading = false;
               _isLoadingUserData = false;
+              _isSampleMode = false; // 로그아웃 시 샘플 모드 비활성화
             });
           }
         },
@@ -334,11 +307,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         return;
       }
       
-      // 샘플 모드 비활성화 확인
-      if (_isSampleMode) {
-        await _sampleModeService.disableSampleMode();
-        _isSampleMode = false;
-      }
+      // 로그인 상태이므로 샘플 모드 비활성화
+      _isSampleMode = false;
       
       // 사용자 데이터 로드
       await _preferencesService.setCurrentUserId(_userId!);
@@ -472,13 +442,11 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   }
   
   /// 샘플 모드 화면으로 전환 요청 (LoginScreen에서 호출)
-  void _requestSampleModeScreen() async {
+  void _requestSampleModeScreen() {
     if (mounted) {
       if (kDebugMode) {
         debugPrint('[App] 샘플 모드 화면 요청: 샘플 모드 활성화');
       }
-      // 샘플 모드 활성화 (서비스 호출)
-      await _sampleModeService.enableSampleMode();
       // 상태 업데이트하여 App 위젯이 SampleHomeScreen을 빌드하도록 유도
       setState(() {
         _isSampleMode = true;
@@ -566,8 +534,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (kDebugMode) {
       debugPrint('App 샘플 모드 화면 표시 (로그인 안됨)');
     }
-    // 샘플 모드에서는 일반 HomeScreen을 사용하되, 샘플 데이터가 표시됨
-    return const HomeScreenWrapper();
+    // 샘플 모드에서는 전용 샘플 홈 화면을 사용
+    return SampleHomeScreen(
+      onRequestLogin: _requestLoginScreen,
+    );
   }
   
   // 로그인 화면 빌드

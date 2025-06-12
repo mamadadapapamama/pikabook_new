@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import '../../core/models/dictionary.dart';
 
 /// 샘플 모드에서 사용할 로컬 번역 데이터 서비스
@@ -10,45 +8,91 @@ class SampleTranslationService {
   factory SampleTranslationService() => _instance;
   SampleTranslationService._internal();
 
-  // 번역 데이터 캐시
-  final Map<String, DictionaryEntry> _translations = {};
+  // 하드코딩된 번역 데이터 (JSON 파일 대신)
+  final Map<String, DictionaryEntry> _translations = {
+    '学校': DictionaryEntry.multiLanguage(
+      word: '学校',
+      pinyin: 'xuéxiào',
+      meaningKo: '학교',
+      meaningEn: 'school',
+      source: 'sample_local',
+    ),
+    '教室': DictionaryEntry.multiLanguage(
+      word: '教室',
+      pinyin: 'jiàoshì',
+      meaningKo: '교실',
+      meaningEn: 'classroom',
+      source: 'sample_local',
+    ),
+    '老师': DictionaryEntry.multiLanguage(
+      word: '老师',
+      pinyin: 'lǎoshī',
+      meaningKo: '선생님',
+      meaningEn: 'teacher',
+      source: 'sample_local',
+    ),
+    '黑板': DictionaryEntry.multiLanguage(
+      word: '黑板',
+      pinyin: 'hēibǎn',
+      meaningKo: '칠판',
+      meaningEn: 'blackboard',
+      source: 'sample_local',
+    ),
+    '操场': DictionaryEntry.multiLanguage(
+      word: '操场',
+      pinyin: 'cāochǎng',
+      meaningKo: '운동장',
+      meaningEn: 'playground',
+      source: 'sample_local',
+    ),
+    '我们': DictionaryEntry.multiLanguage(
+      word: '我们',
+      pinyin: 'wǒmen',
+      meaningKo: '우리',
+      meaningEn: 'we',
+      source: 'sample_local',
+    ),
+    '早上': DictionaryEntry.multiLanguage(
+      word: '早上',
+      pinyin: 'zǎoshang',
+      meaningKo: '아침',
+      meaningEn: 'morning',
+      source: 'sample_local',
+    ),
+    '八点': DictionaryEntry.multiLanguage(
+      word: '八点',
+      pinyin: 'bādiǎn',
+      meaningKo: '8시',
+      meaningEn: '8 o\'clock',
+      source: 'sample_local',
+    ),
+    '桌子': DictionaryEntry.multiLanguage(
+      word: '桌子',
+      pinyin: 'zhuōzi',
+      meaningKo: '책상',
+      meaningEn: 'desk',
+      source: 'sample_local',
+    ),
+    '椅子': DictionaryEntry.multiLanguage(
+      word: '椅子',
+      pinyin: 'yǐzi',
+      meaningKo: '의자',
+      meaningEn: 'chair',
+      source: 'sample_local',
+    ),
+  };
+
   bool _isLoaded = false;
 
   /// 초기화 (샘플 번역 데이터 로드)
   Future<void> initialize() async {
     if (_isLoaded) return;
 
-    try {
-      if (kDebugMode) {
-        debugPrint('🏠 [샘플 번역] 로컬 데이터 로드 시작');
-      }
-
-      final String jsonString = await rootBundle.loadString('assets/data/sample_translations.json');
-      final Map<String, dynamic> jsonData = json.decode(jsonString);
-
-      // 번역 데이터를 DictionaryEntry로 변환
-      jsonData.forEach((word, data) {
-        final Map<String, dynamic> wordData = data as Map<String, dynamic>;
-        _translations[word] = DictionaryEntry.multiLanguage(
-          word: word,
-          pinyin: wordData['pinyin'] ?? '',
-          meaningKo: wordData['ko'],
-          meaningEn: wordData['en'],
-          source: 'sample_local',
-        );
-      });
-
-      _isLoaded = true;
-
-      if (kDebugMode) {
-        debugPrint('✅ [샘플 번역] 로컬 데이터 로드 완료: ${_translations.length}개 단어');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [샘플 번역] 로컬 데이터 로드 실패: $e');
-      }
-      _isLoaded = true; // 오류가 있어도 초기화 완료로 처리
+    if (kDebugMode) {
+      debugPrint('✅ [샘플 번역] 로컬 데이터 로드 완료: ${_translations.length}개 단어');
     }
+    
+    _isLoaded = true;
   }
 
   /// 단어 검색 (샘플 모드용)
@@ -102,7 +146,6 @@ class SampleTranslationService {
 
   /// 캐시 정리
   void clearCache() {
-    _translations.clear();
     _isLoaded = false;
     if (kDebugMode) {
       debugPrint('🧹 [샘플 번역] 캐시 정리 완료');
