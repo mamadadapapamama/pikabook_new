@@ -180,6 +180,16 @@ class TextProcessingService {
       
       if (kDebugMode) {
         debugPrint('🔔 [리스너] Firestore 변경 감지: $pageId');
+        debugPrint('   문서 존재: ${snapshot.exists}');
+        if (snapshot.exists) {
+          final data = snapshot.data() as Map<String, dynamic>?;
+          debugPrint('   processedText 필드: ${data?['processedText'] != null ? "있음" : "없음"}');
+          if (data?['processedText'] != null) {
+            final processedData = data!['processedText'] as Map<String, dynamic>;
+            debugPrint('   streamingStatus: ${processedData['streamingStatus']}');
+            debugPrint('   units 개수: ${(processedData['units'] as List?)?.length ?? 0}');
+          }
+        }
       }
       
       try {

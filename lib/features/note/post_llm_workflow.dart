@@ -12,6 +12,7 @@ import '../../../core/services/common/usage_limit_service.dart';
 import '../../../core/services/cache/cache_manager.dart';
 import '../../core/models/text_unit.dart';
 import '../../core/models/processing_status.dart';
+import '../../core/models/processed_text.dart';
 import '../../../core/services/text_processing/streaming_receive_service.dart';
 import '../../../core/services/text_processing/streaming_page_update_service.dart';
 import '../../core/models/page_processing_data.dart';
@@ -120,15 +121,29 @@ class PostLLMWorkflow {
       final Set<String> completedPages = {};
       
       for (final pageData in job.pages) {
-        for (final segment in pageData.textSegments) {
-          if (segment.trim().isNotEmpty) {
-            allSegments.add(segment);
+        if (pageData.mode == TextProcessingMode.paragraph) {
+          // 문단 모드: 전체 텍스트를 하나의 세그먼트로 전송
+          if (pageData.reorderedText.trim().isNotEmpty) {
+            allSegments.add(pageData.reorderedText.trim());
+            if (kDebugMode) {
+              debugPrint('📄 [워크플로우] 문단 모드 전체 텍스트 추가: ${pageData.reorderedText.length}자');
+            }
+          }
+        } else {
+          // 문장 모드: 기존 세그먼트 사용
+          for (final segment in pageData.textSegments) {
+            if (segment.trim().isNotEmpty) {
+              allSegments.add(segment);
+            }
           }
         }
       }
       
       if (kDebugMode) {
         debugPrint('📊 [워크플로우] 수집된 세그먼트: ${allSegments.length}개');
+        if (job.pages.isNotEmpty && job.pages.first.mode == TextProcessingMode.paragraph) {
+          debugPrint('📄 [워크플로우] 문단 모드: 전체 텍스트 LLM 처리');
+        }
       }
 
       // 4. 스트리밍 수신 처리 (StreamingReceiveService)
@@ -144,13 +159,13 @@ class PostLLMWorkflow {
           debugPrint('🌊 [워크플로우] 스트리밍 결과 수신 - success: ${result.isSuccess}, chunk: ${result.chunkIndex}, started: $streamingStarted');
         }
         
-        // 첫 번째 결과를 받으면 즉시 타임아웃 중지 (성공/실패 무관)
+        // 첫 번째 결과를 받으면 스트리밍 시작으로 표시 (타임아웃은 유지)
         if (!streamingStarted) {
           if (kDebugMode) {
-            debugPrint('🌊 [워크플로우] 첫 번째 스트리밍 응답 수신 - 타임아웃 중지: ${job.noteId}');
+            debugPrint('🌊 [워크플로우] 첫 번째 스트리밍 응답 수신 - 스트리밍 시작: ${job.noteId}');
           }
-          _stopLlmTimeout(job.noteId);
           streamingStarted = true;
+          // 타임아웃은 스트리밍 완료까지 유지
         }
         
         if (!result.isSuccess) {
@@ -179,6 +194,8 @@ class PostLLMWorkflow {
           if (kDebugMode) {
             debugPrint('✅ [워크플로우] 스트리밍 완료: ${result.processedChunks}개 청크');
           }
+          // 스트리밍 완료 시 타임아웃 중지
+          _stopLlmTimeout(job.noteId);
           break;
         }
       }
@@ -188,8 +205,7 @@ class PostLLMWorkflow {
         // 스트리밍이 시작되지 않았다면 정상 완료 처리
         _completeLlmTimeout(job.noteId);
       } else {
-        // 스트리밍이 시작되었다면 이미 타임아웃이 중지되었으므로 정리만
-        _llmTimeoutManagers.remove(job.noteId);
+        // 스트리밍이 완료되었으므로 타임아웃 정리 (이미 _stopLlmTimeout 호출됨)
         _retryStates.remove(job.noteId);
       }
 
@@ -426,7 +442,7 @@ class PostLLMWorkflow {
     _retryStates[noteId] = false;
     
     timeoutManager.start(
-      timeoutSeconds: 30, // 운영용: 30초
+      timeoutSeconds: 60, // 문단 모드 고려: 60초
       identifier: 'LLM-$noteId',
       onProgress: (elapsedSeconds) {
         if (kDebugMode) {

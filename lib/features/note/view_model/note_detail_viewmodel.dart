@@ -136,14 +136,17 @@ class NoteDetailViewModel extends ChangeNotifier {
   /// 로그인 상태 확인
   Future<void> _checkLoginStatus() async {
     try {
-      _isLoggedIn = _authService.currentUser != null;
+      final currentUser = _authService.currentUser;
+      _isLoggedIn = currentUser != null;
       if (flutter_foundation.kDebugMode) {
-        debugPrint("👤 로그인 상태: $_isLoggedIn");
+        debugPrint("👤 [ViewModel] 로그인 상태 확인:");
+        debugPrint("   currentUser: ${currentUser?.uid ?? 'null'}");
+        debugPrint("   _isLoggedIn: $_isLoggedIn");
       }
     } catch (e) {
       _isLoggedIn = false;
       if (flutter_foundation.kDebugMode) {
-        debugPrint("❌ 로그인 상태 확인 중 오류: $e");
+        debugPrint("❌ [ViewModel] 로그인 상태 확인 중 오류: $e");
       }
     }
   }
@@ -287,7 +290,19 @@ class NoteDetailViewModel extends ChangeNotifier {
 
   /// 모든 페이지에 대한 실시간 리스너 설정
   void _setupAllPageListeners() {
-    if (_disposed || _pages == null || !_isLoggedIn) return;
+    if (flutter_foundation.kDebugMode) {
+      debugPrint("🔔 [ViewModel] 페이지 리스너 설정 시도:");
+      debugPrint("   _disposed: $_disposed");
+      debugPrint("   _pages: ${_pages?.length ?? 'null'}");
+      debugPrint("   _isLoggedIn: $_isLoggedIn");
+    }
+    
+    if (_disposed || _pages == null || !_isLoggedIn) {
+      if (flutter_foundation.kDebugMode) {
+        debugPrint("⚠️ [ViewModel] 페이지 리스너 설정 건너뜀 (조건 불만족)");
+      }
+      return;
+    }
     
     for (final page in _pages!) {
       if (page.id.isNotEmpty) {
@@ -298,7 +313,7 @@ class NoteDetailViewModel extends ChangeNotifier {
     }
     
     if (flutter_foundation.kDebugMode) {
-      debugPrint("🔔 모든 페이지 리스너 설정 완료: ${_pages!.length}개");
+      debugPrint("🔔 [ViewModel] 모든 페이지 리스너 설정 완료: ${_pages!.length}개");
     }
   }
 
