@@ -3,6 +3,8 @@ import '../../core/models/flash_card.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../core/services/cache/cache_manager.dart';
+import '../../core/services/authentication/auth_service.dart';
+import '../sample/sample_data_service.dart';
 import 'flashcard_repository.dart';
 
 /// 플래시카드 UI 상태 관리 및 비즈니스 로직을 담당하는 ViewModel
@@ -12,6 +14,8 @@ class FlashCardViewModel extends ChangeNotifier {
   final TTSService _ttsService;
   final UsageLimitService _usageLimitService;
   final CacheManager _cacheManager;
+  final AuthService _authService;
+  final SampleDataService _sampleDataService;
   
   // 상태 변수
   bool _isLoading = false;
@@ -52,7 +56,9 @@ class FlashCardViewModel extends ChangeNotifier {
     _repository = repository ?? FlashCardRepository(cacheManager: cacheManager ?? CacheManager()),
     _ttsService = ttsService ?? TTSService(),
     _usageLimitService = usageLimitService ?? UsageLimitService(),
-    _cacheManager = cacheManager ?? CacheManager() {
+    _cacheManager = cacheManager ?? CacheManager(),
+    _authService = AuthService(),
+    _sampleDataService = SampleDataService() {
     
     // 초기 플래시카드가 제공된 경우 설정
     if (initialFlashcards != null) {
@@ -99,7 +105,17 @@ class FlashCardViewModel extends ChangeNotifier {
     setError(null);
     
     try {
-      _flashCards = await _repository.loadFlashCards(_noteId);
+      // 로그아웃 상태이고 샘플 노트인 경우 샘플 플래시카드 로드
+      if (_authService.currentUser == null && _noteId == 'sample_note_1') {
+        await _sampleDataService.loadSampleData();
+        _flashCards = _sampleDataService.getSampleFlashCards(_noteId);
+        if (kDebugMode) {
+          debugPrint('🃏 [FlashCard] 샘플 플래시카드 로드됨: ${_flashCards.length}개');
+        }
+      } else {
+        _flashCards = await _repository.loadFlashCards(_noteId);
+      }
+      
       extractFlashcardWords(); // 단어 목록 업데이트
       setLoading(false);
       notifyListeners();
@@ -127,6 +143,12 @@ class FlashCardViewModel extends ChangeNotifier {
   
   // 플래시카드 추가
   Future<bool> addFlashCard(String word, String meaning, {String? pinyin}) async {
+    // 로그인 체크 - 로그아웃 상태에서는 플래시카드 생성 불가
+    if (_authService.currentUser == null) {
+      setError('플래시카드 생성은 로그인이 필요한 프리미엄 기능입니다');
+      return false;
+    }
+    
     setLoading(true);
     setError(null);
     
@@ -168,6 +190,12 @@ class FlashCardViewModel extends ChangeNotifier {
   
   // 플래시카드 삭제
   Future<bool> deleteFlashCard(String cardId) async {
+    // 로그인 체크 - 로그아웃 상태에서는 플래시카드 삭제 불가
+    if (_authService.currentUser == null) {
+      setError('플래시카드 삭제는 로그인이 필요한 기능입니다');
+      return false;
+    }
+    
     setLoading(true);
     setError(null);
     
@@ -194,6 +222,12 @@ class FlashCardViewModel extends ChangeNotifier {
   
   // 현재 카드 삭제
   Future<bool> deleteCurrentCard() async {
+    // 로그인 체크 - 로그아웃 상태에서는 플래시카드 삭제 불가
+    if (_authService.currentUser == null) {
+      setError('플래시카드 삭제는 로그인이 필요한 기능입니다');
+      return false;
+    }
+    
     if (_flashCards.isEmpty || _currentCardIndex >= _flashCards.length) {
       setError('삭제할 카드가 없습니다');
       return false;
