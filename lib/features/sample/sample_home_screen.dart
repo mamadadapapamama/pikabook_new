@@ -97,7 +97,7 @@ class _SampleHomeScreenState extends State<SampleHomeScreen> {
         TextButton(
           onPressed: widget.onRequestLogin,
           child: Text(
-            '로그인',
+            '나가기',
             style: TypographyTokens.body2.copyWith(
               color: ColorTokens.primary,
               fontWeight: FontWeight.w600,

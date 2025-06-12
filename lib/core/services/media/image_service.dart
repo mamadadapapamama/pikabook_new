@@ -83,9 +83,6 @@ class ImageService {
       file = File(absolutePath);
       
       if (await file.exists()) {
-        if (kDebugMode) {
-          debugPrint('🖼️ ✅ 로컬 상대 경로에서 파일 발견: $absolutePath');
-        }
         return file;
       }
       

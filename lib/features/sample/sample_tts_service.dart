@@ -32,9 +32,9 @@ class SampleTtsService {
     '老师': 'assets/audio/sample/laoshi.mp3',
     '黑板': 'assets/audio/sample/heiban.mp3',
     
-    // 샘플 문장들
+    // 샘플 문장들 (첫 두 문장)
     '我们早上八点去学校。': 'assets/audio/sample/sentence_1.mp3',
-    '老师在黑板上写字。': 'assets/audio/sample/sentence_2.mp3',
+    '教室里有很多桌子和椅子。': 'assets/audio/sample/sentence_2.mp3',
   };
 
   /// 텍스트 음성 재생
