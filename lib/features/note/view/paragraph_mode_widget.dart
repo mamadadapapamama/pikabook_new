@@ -179,6 +179,18 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
 
   /// 블록 타입별 UI 렌더링
   Widget _buildBlockView() {
+    if (kDebugMode) {
+      debugPrint('🎨 [문단모드] 블록 뷰 렌더링 시작');
+      debugPrint('   총 블록 수: ${widget.processedText.units.length}');
+      
+      // 각 블록의 타입 요약
+      final typeCounts = <SegmentType, int>{};
+      for (final unit in widget.processedText.units) {
+        typeCounts[unit.segmentType] = (typeCounts[unit.segmentType] ?? 0) + 1;
+      }
+      debugPrint('   블록 타입 분포: $typeCounts');
+    }
+    
     final List<Widget> blockWidgets = [];
 
     for (int i = 0; i < widget.processedText.units.length; i++) {
@@ -193,6 +205,10 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
       blockWidgets.add(_buildBlockWidget(unit, i));
     }
 
+    if (kDebugMode) {
+      debugPrint('🎨 [문단모드] 블록 뷰 렌더링 완료: ${blockWidgets.length}개 위젯');
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: blockWidgets,
@@ -201,12 +217,26 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
 
   /// 블록 타입별 위젯 생성
   Widget _buildBlockWidget(TextUnit unit, int index) {
+    if (kDebugMode) {
+      debugPrint('🎨 [문단모드] 블록 $index 생성:');
+      debugPrint('   타입: ${unit.segmentType}');
+      debugPrint('   원문: "${unit.originalText}"');
+      debugPrint('   번역: "${unit.translatedText ?? '없음'}"');
+      debugPrint('   병음: "${unit.pinyin ?? '없음'}"');
+    }
+    
     switch (unit.segmentType) {
       case SegmentType.title:
       case SegmentType.question:
+        if (kDebugMode) {
+          debugPrint('   → Bold 텍스트 블록으로 렌더링 (${unit.segmentType})');
+        }
         return _buildBoldTextBlock(unit, index);
       
       case SegmentType.choices:
+        if (kDebugMode) {
+          debugPrint('   → 선택지 블록으로 렌더링');
+        }
         return _buildChoicesBlock(unit, index);
       
       case SegmentType.instruction:
@@ -218,63 +248,55 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
       case SegmentType.explanation:
       case SegmentType.unknown:
       default:
+        if (kDebugMode) {
+          debugPrint('   → 일반 텍스트 블록으로 렌더링 (${unit.segmentType})');
+        }
         return _buildNormalTextBlock(unit, index);
     }
   }
 
   /// Bold 텍스트 블록 (title, question)
   Widget _buildBoldTextBlock(TextUnit unit, int index) {
-    final isPlaying = widget.playingSegmentIndex == index;
     final hasTranslation = unit.translatedText != null && unit.translatedText!.isNotEmpty;
+    
+    if (kDebugMode) {
+      debugPrint('🎨 [Bold블록] 렌더링:');
+      debugPrint('   타입: ${unit.segmentType}');
+      debugPrint('   제목 스타일 적용: ${unit.segmentType == SegmentType.title}');
+      debugPrint('   번역 있음: $hasTranslation');
+      debugPrint('   Bold 적용: true');
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 원문 (Bold)
-        Row(
-          children: [
-            Expanded(
-              child: ContextMenuManager.buildSelectableText(
-                unit.originalText,
-                style: unit.segmentType == SegmentType.title 
-                    ? TypographyTokens.headline3Cn.copyWith(
-                        color: ColorTokens.textPrimary,
-                        fontWeight: FontWeight.bold,
-                      )
-                    : _defaultOriginalTextStyle.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                isOriginal: true,
-                flashcardWords: widget.flashcardWords,
-                selectedText: widget.selectedText,
-                selectedTextNotifier: widget.selectedTextNotifier,
-                onSelectionChanged: widget.onSelectionChanged,
-                onDictionaryLookup: widget.onDictionaryLookup,
-                onCreateFlashCard: widget.onCreateFlashCard,
-              ),
-            ),
-            if (widget.showTtsButtons) ...[
-              _buildTtsButton(unit.originalText, index, isPlaying),
-              const SizedBox(width: 4),
-              _buildSlowTtsButton(unit.originalText, index, isPlaying),
-            ],
-          ],
+        // 원문 (Bold, TTS 버튼 없음)
+        ContextMenuManager.buildSelectableText(
+          unit.originalText,
+          style: unit.segmentType == SegmentType.title 
+              ? TypographyTokens.headline3Cn.copyWith(
+                  color: ColorTokens.textPrimary,
+                  fontWeight: FontWeight.bold,
+                )
+              : _defaultOriginalTextStyle.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          isOriginal: true,
+          flashcardWords: widget.flashcardWords,
+          selectedText: widget.selectedText,
+          selectedTextNotifier: widget.selectedTextNotifier,
+          onSelectionChanged: widget.onSelectionChanged,
+          onDictionaryLookup: widget.onDictionaryLookup,
+          onCreateFlashCard: widget.onCreateFlashCard,
         ),
 
-        // 번역 (Bold)
+        // 번역 (일반 스타일로 통일)
         if (hasTranslation)
           Padding(
             padding: const EdgeInsets.only(top: 4.0),
             child: Text(
               unit.translatedText!,
-              style: unit.segmentType == SegmentType.title 
-                  ? TypographyTokens.headline3.copyWith(
-                      color: ColorTokens.textSecondary,
-                      fontWeight: FontWeight.bold,
-                    )
-                  : _defaultTranslatedTextStyle.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+              style: _defaultTranslatedTextStyle,
             ),
           )
         else if (widget.processedText.isStreaming)
@@ -291,34 +313,29 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
 
   /// 선택지 블록 (choices) - 한줄로 표시
   Widget _buildChoicesBlock(TextUnit unit, int index) {
-    final isPlaying = widget.playingSegmentIndex == index;
     final hasTranslation = unit.translatedText != null && unit.translatedText!.isNotEmpty;
+    
+    if (kDebugMode) {
+      debugPrint('🎨 [선택지블록] 렌더링:');
+      debugPrint('   원문: "${unit.originalText}"');
+      debugPrint('   번역 있음: $hasTranslation');
+      debugPrint('   한줄 표시: true');
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 원문 (한줄로 표시)
-        Row(
-          children: [
-            Expanded(
-              child: ContextMenuManager.buildSelectableText(
-                unit.originalText,
-                style: _defaultOriginalTextStyle,
-                isOriginal: true,
-                flashcardWords: widget.flashcardWords,
-                selectedText: widget.selectedText,
-                selectedTextNotifier: widget.selectedTextNotifier,
-                onSelectionChanged: widget.onSelectionChanged,
-                onDictionaryLookup: widget.onDictionaryLookup,
-                onCreateFlashCard: widget.onCreateFlashCard,
-              ),
-            ),
-            if (widget.showTtsButtons) ...[
-              _buildTtsButton(unit.originalText, index, isPlaying),
-              const SizedBox(width: 4),
-              _buildSlowTtsButton(unit.originalText, index, isPlaying),
-            ],
-          ],
+        // 원문 (한줄로 표시, TTS 버튼 없음)
+        ContextMenuManager.buildSelectableText(
+          unit.originalText,
+          style: _defaultOriginalTextStyle,
+          isOriginal: true,
+          flashcardWords: widget.flashcardWords,
+          selectedText: widget.selectedText,
+          selectedTextNotifier: widget.selectedTextNotifier,
+          onSelectionChanged: widget.onSelectionChanged,
+          onDictionaryLookup: widget.onDictionaryLookup,
+          onCreateFlashCard: widget.onCreateFlashCard,
         ),
 
         // 번역 (한줄로 표시)
@@ -344,34 +361,30 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
 
   /// 일반 텍스트 블록 (나머지 타입들)
   Widget _buildNormalTextBlock(TextUnit unit, int index) {
-    final isPlaying = widget.playingSegmentIndex == index;
     final hasTranslation = unit.translatedText != null && unit.translatedText!.isNotEmpty;
+    
+    if (kDebugMode) {
+      debugPrint('🎨 [일반블록] 렌더링:');
+      debugPrint('   타입: ${unit.segmentType}');
+      debugPrint('   원문: "${unit.originalText}"');
+      debugPrint('   번역 있음: $hasTranslation');
+      debugPrint('   Bold 적용: false');
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 원문
-        Row(
-          children: [
-            Expanded(
-              child: ContextMenuManager.buildSelectableText(
-                unit.originalText,
-                style: _defaultOriginalTextStyle,
-                isOriginal: true,
-                flashcardWords: widget.flashcardWords,
-                selectedText: widget.selectedText,
-                selectedTextNotifier: widget.selectedTextNotifier,
-                onSelectionChanged: widget.onSelectionChanged,
-                onDictionaryLookup: widget.onDictionaryLookup,
-                onCreateFlashCard: widget.onCreateFlashCard,
-              ),
-            ),
-            if (widget.showTtsButtons) ...[
-              _buildTtsButton(unit.originalText, index, isPlaying),
-              const SizedBox(width: 4),
-              _buildSlowTtsButton(unit.originalText, index, isPlaying),
-            ],
-          ],
+        // 원문 (TTS 버튼 없음)
+        ContextMenuManager.buildSelectableText(
+          unit.originalText,
+          style: _defaultOriginalTextStyle,
+          isOriginal: true,
+          flashcardWords: widget.flashcardWords,
+          selectedText: widget.selectedText,
+          selectedTextNotifier: widget.selectedTextNotifier,
+          onSelectionChanged: widget.onSelectionChanged,
+          onDictionaryLookup: widget.onDictionaryLookup,
+          onCreateFlashCard: widget.onCreateFlashCard,
         ),
 
         // 번역
