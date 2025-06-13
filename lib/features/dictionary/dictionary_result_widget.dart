@@ -114,32 +114,7 @@ class DictionaryResultWidget extends StatelessWidget {
     // 성공 메시지는 실제 플래시카드 생성을 담당하는 곳에서 표시
   }
 
-  /// 사전 결과 바텀 시트 표시 헬퍼 메서드
-  static void showDictionaryBottomSheet({
-    required BuildContext context,
-    required DictionaryEntry entry,
-    required Function(String, String, {String? pinyin}) onCreateFlashCard,
-    bool isExistingFlashcard = false,
-  }) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: ColorTokens.surface,
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(SpacingTokens.lg),
-          ),
-        ),
-        child: DictionaryResultWidget(
-          entry: entry,
-          onCreateFlashCard: onCreateFlashCard,
-          isExistingFlashcard: isExistingFlashcard,
-        ),
-      ),
-    );
-  }
+
   
   /// 단어 검색 및 결과 표시 메서드
   static Future<void> searchAndShowDictionary({
@@ -177,12 +152,24 @@ class DictionaryResultWidget extends StatelessWidget {
         // 콜백 호출
         onEntryFound(entry);
         
-        // 바텀 시트 표시
+        // 바텀 시트 표시 (투명 배경으로 컨텍스트 보이게)
         if (context.mounted) {
-          showDictionaryBottomSheet(
+          showModalBottomSheet(
             context: context,
-            entry: entry,
-            onCreateFlashCard: onCreateFlashCard,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => Container(
+              decoration: BoxDecoration(
+                color: ColorTokens.surface,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(SpacingTokens.lg),
+                ),
+              ),
+              child: DictionaryResultWidget(
+                entry: entry,
+                onCreateFlashCard: onCreateFlashCard,
+              ),
+            ),
           );
         }
       } else {

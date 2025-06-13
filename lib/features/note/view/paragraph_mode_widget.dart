@@ -209,6 +209,32 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
       debugPrint('🎨 [문단모드] 블록 뷰 렌더링 완료: ${blockWidgets.length}개 위젯');
     }
 
+    // 스트리밍 중이면 맨 아래에 로딩 점 추가
+    if (kDebugMode) {
+      debugPrint('🎨 [문단모드] 스트리밍 상태 확인:');
+      debugPrint('   streamingStatus: ${widget.processedText.streamingStatus}');
+      debugPrint('   isStreaming: ${widget.processedText.isStreaming}');
+      debugPrint('   units 개수: ${widget.processedText.units.length}');
+    }
+    
+    if (widget.processedText.isStreaming) {
+      if (kDebugMode) {
+        debugPrint('🎨 [문단모드] 로딩 점 추가');
+      }
+      blockWidgets.add(const SizedBox(height: 16));
+      blockWidgets.add(LoadingDotsWidget(
+        style: _defaultTranslatedTextStyle.copyWith(
+          color: ColorTokens.textGrey,
+          fontSize: 16,
+        ),
+        usePinyinStyle: false,
+      ));
+    } else {
+      if (kDebugMode) {
+        debugPrint('🎨 [문단모드] 스트리밍 완료 - 로딩 점 없음');
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: blockWidgets,
@@ -298,14 +324,6 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
               unit.translatedText!,
               style: _defaultTranslatedTextStyle,
             ),
-          )
-        else if (widget.processedText.isStreaming)
-          Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: LoadingDotsWidget(
-              style: _defaultTranslatedTextStyle,
-              usePinyinStyle: false,
-            ),
           ),
       ],
     );
@@ -345,14 +363,6 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
             child: Text(
               unit.translatedText!,
               style: _defaultTranslatedTextStyle,
-            ),
-          )
-        else if (widget.processedText.isStreaming)
-          Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: LoadingDotsWidget(
-              style: _defaultTranslatedTextStyle,
-              usePinyinStyle: false,
             ),
           ),
       ],
@@ -394,14 +404,6 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
             child: Text(
               unit.translatedText!,
               style: _defaultTranslatedTextStyle,
-            ),
-          )
-        else if (widget.processedText.isStreaming)
-          Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: LoadingDotsWidget(
-              style: _defaultTranslatedTextStyle,
-              usePinyinStyle: false,
             ),
           ),
       ],
