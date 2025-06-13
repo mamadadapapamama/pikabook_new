@@ -40,9 +40,15 @@ class StreamingReceiveService {
       debugPrint('🔄 [Differential Update] 활성화: ${ocrSegments.length}개 세그먼트');
     }
 
+    bool hasReceivedAnyChunk = false;
+    
     try {
       // 페이지별 세그먼트 정보 생성
       final pageSegments = _createPageSegments(pages);
+      
+      if (kDebugMode) {
+        debugPrint('🚀 [스트리밍] API 스트림 시작 - 첫 번째 청크 대기 중...');
+      }
       
       // HTTP 스트리밍 시작
       await for (final chunkData in _apiService.translateSegmentsStream(
@@ -54,6 +60,13 @@ class StreamingReceiveService {
         noteId: noteId,
         processingMode: pages.isNotEmpty ? pages.first.mode.toString() : null,
       )) {
+        if (!hasReceivedAnyChunk) {
+          hasReceivedAnyChunk = true;
+          if (kDebugMode) {
+            debugPrint('🎉 [스트리밍] 첫 번째 청크 수신 성공!');
+          }
+        }
+        
         if (kDebugMode) {
           debugPrint('📦 [스트리밍] 청크 수신: ${chunkData['chunkIndex'] + 1}/${chunkData['totalChunks']}');
         }
@@ -99,27 +112,50 @@ class StreamingReceiveService {
         
         processedChunks++;
         
+        // 완료 상태 확인
+        final isComplete = chunkData['isComplete'] == true;
+        
+        if (kDebugMode) {
+          debugPrint('📊 [스트리밍] 청크 상태: ${chunkIndex + 1}/${chunkData['totalChunks']}, 완료: $isComplete');
+          debugPrint('📄 [스트리밍] 현재 페이지 결과: ${pageResults.keys.toList()}');
+          for (final entry in pageResults.entries) {
+            debugPrint('   - ${entry.key}: ${entry.value.length}개 유닛');
+          }
+        }
+        
         // 스트리밍 결과 반환
         yield StreamingReceiveResult.success(
           chunkIndex: chunkIndex,
           chunkUnits: chunkUnits,
           pageResults: Map.from(pageResults),
-          isComplete: chunkData['isComplete'] == true,
+          isComplete: isComplete,
           processedChunks: processedChunks,
         );
         
         // 완료 확인
-        if (chunkData['isComplete'] == true) {
+        if (isComplete) {
           if (kDebugMode) {
-            debugPrint('✅ [스트리밍] 완료: ${processedChunks}개 청크');
+            debugPrint('✅ [스트리밍] 완료 신호 수신: ${processedChunks}개 청크');
+            debugPrint('📊 [스트리밍] 최종 페이지 결과:');
+            for (final entry in pageResults.entries) {
+              debugPrint('   - ${entry.key}: ${entry.value.length}개 유닛');
+            }
           }
           break;
+        }
+      }
+      
+      // 스트리밍이 전혀 시작되지 않은 경우 감지
+      if (!hasReceivedAnyChunk) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [스트리밍] 청크를 전혀 받지 못함 - 연결 문제 의심');
         }
       }
       
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [스트리밍] 실패: $e');
+        debugPrint('📊 [스트리밍] 수신된 청크 수: ${hasReceivedAnyChunk ? "1개 이상" : "0개"}');
       }
       
       // 폴백 처리

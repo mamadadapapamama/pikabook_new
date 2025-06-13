@@ -4,6 +4,7 @@ import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
+import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../../core/utils/error_handler.dart';
 import '../tts/tts_button.dart';
 import 'unified_dictionary_service.dart';
@@ -129,72 +130,21 @@ class DictionaryResultWidget extends StatelessWidget {
       return;
     }
     
-    // 로딩 표시
-    final loadingDialog = _showLoadingDialog(context);
-    
-    try {
-      // 사전 초기화 확인 및 검색
-      if (!_dictionaryService.isInitialized) {
-        await _dictionaryService.initialize();
-      }
-      
-      // 단어 검색
-      final result = await _dictionaryService.lookupWord(word);
-      
-      // 로딩 다이얼로그 닫기
-      if (context.mounted) {
-        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
-      }
-      
-      if (result['success'] == true && result['entry'] != null) {
-        final entry = result['entry'] as DictionaryEntry;
-        
-        // 콜백 호출
-        onEntryFound(entry);
-        
-        // 바텀 시트 표시 (투명 배경으로 컨텍스트 보이게)
-        if (context.mounted) {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (context) => Container(
-              decoration: BoxDecoration(
-                color: ColorTokens.surface,
-                borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(SpacingTokens.lg),
-                ),
-              ),
-              child: DictionaryResultWidget(
-                entry: entry,
-                onCreateFlashCard: onCreateFlashCard,
-              ),
-            ),
-          );
-        }
-      } else {
-        if (context.mounted) {
-          // 사전 검색 결과 없음 메시지 표시
-          final errorMessage = result['message'] ?? '단어를 찾을 수 없습니다: $word';
-          ErrorHandler.showInfoSnackBar(context, errorMessage);
-        }
-        
-        // 결과 없음 콜백
-        if (onNotFound != null) {
-          onNotFound();
-        }
-      }
-    } catch (e) {
-      // 오류 발생 시 로딩 다이얼로그 닫기
-      if (context.mounted) {
-        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
-        ErrorHandler.showErrorSnackBar(context, e, ErrorContext.dictionary);
-      }
-      
-      // 결과 없음 콜백
-      if (onNotFound != null) {
-        onNotFound();
-      }
+    // 바텀시트를 먼저 열고 그 안에서 로딩 표시
+    if (context.mounted) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.transparent,
+        isDismissible: true,
+        builder: (bottomSheetContext) => _DictionaryBottomSheet(
+          word: word,
+          onCreateFlashCard: onCreateFlashCard,
+          onEntryFound: onEntryFound,
+          onNotFound: onNotFound,
+        ),
+      );
     }
   }
   
@@ -217,22 +167,309 @@ class DictionaryResultWidget extends StatelessWidget {
     }
   }
   
-  // 로딩 다이얼로그 표시
-  static Future<void> _showLoadingDialog(BuildContext context) {
-    return showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          content: Row(
+}
+
+/// 사전 검색 바텀시트 (로딩 + 결과 통합)
+class _DictionaryBottomSheet extends StatefulWidget {
+  final String word;
+  final Function(String, String, {String? pinyin}) onCreateFlashCard;
+  final Function(DictionaryEntry) onEntryFound;
+  final Function()? onNotFound;
+
+  const _DictionaryBottomSheet({
+    required this.word,
+    required this.onCreateFlashCard,
+    required this.onEntryFound,
+    this.onNotFound,
+  });
+
+  @override
+  State<_DictionaryBottomSheet> createState() => _DictionaryBottomSheetState();
+}
+
+class _DictionaryBottomSheetState extends State<_DictionaryBottomSheet> {
+  bool _isLoading = true;
+  DictionaryEntry? _entry;
+  String? _errorMessage;
+  
+  static final UnifiedDictionaryService _dictionaryService = UnifiedDictionaryService();
+
+  @override
+  void initState() {
+    super.initState();
+    _searchWord();
+  }
+
+  Future<void> _searchWord() async {
+    try {
+      // 사전 초기화 확인 및 검색
+      if (!_dictionaryService.isInitialized) {
+        await _dictionaryService.initialize();
+      }
+      
+      // 단어 검색
+      final result = await _dictionaryService.lookupWord(widget.word);
+      
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (result['success'] == true && result['entry'] != null) {
+            _entry = result['entry'] as DictionaryEntry;
+            widget.onEntryFound(_entry!);
+          } else {
+            _errorMessage = result['message'] ?? '단어를 찾을 수 없습니다: ${widget.word}';
+            if (widget.onNotFound != null) {
+              widget.onNotFound!();
+            }
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = ErrorHandler.getMessageFromError(e, ErrorContext.dictionary);
+          if (widget.onNotFound != null) {
+            widget.onNotFound!();
+          }
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: ColorTokens.surface,
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(SpacingTokens.lg),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(SpacingTokens.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 핸들 바
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: ColorTokens.textGrey.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            SizedBox(height: SpacingTokens.lg),
+            
+            // 로딩 중이면 로딩 표시, 아니면 결과 표시
+            if (_isLoading) ...[
+              // 단어 영역 (로딩 중)
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.word,
+                      style: TypographyTokens.headline2Cn.copyWith(
+                        color: ColorTokens.textPrimary,
+                      ),
+                    ),
+                  ),
+                  // TTS 버튼 자리 (로딩 중에는 비활성화)
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: ColorTokens.textGrey.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: SpacingTokens.sm),
+              
+              // 핀인 영역 (로딩 중)
+              Container(
+                height: 16,
+                width: 80,
+                decoration: BoxDecoration(
+                  color: ColorTokens.textGrey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              SizedBox(height: SpacingTokens.sm),
+              
+              // 의미 영역 (로딩 중)
+              Container(
+                height: 20,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: ColorTokens.textGrey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              SizedBox(height: SpacingTokens.lg),
+              
+              // 로딩 애니메이션
+              Center(
+                child: DotLoadingIndicator(
+                  dotColor: ColorTokens.primary,
+                  dotSize: 8.0,
+                  spacing: 6.0,
+                ),
+              ),
+              SizedBox(height: SpacingTokens.lg),
+              
+              // 버튼 영역 (로딩 중)
+              Container(
+                height: 48,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: ColorTokens.textGrey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ] else if (_entry != null) ...[
+              // 실제 사전 결과 표시
+              _buildDictionaryContent(),
+            ] else ...[
+              // 오류 표시
+              _buildErrorContent(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 사전 결과 콘텐츠
+  Widget _buildDictionaryContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 단어와 TTS 버튼
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _entry!.word,
+                style: TypographyTokens.headline2Cn.copyWith(
+                  color: ColorTokens.textPrimary,
+                ),
+              ),
+            ),
+            // TtsButton 위젯 사용
+            TtsButton(
+              text: _entry!.word,
+              size: TtsButton.sizeMedium,
+              iconColor: ColorTokens.secondary,
+              activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
+              tooltip: '단어 발음 듣기',
+            ),
+          ],
+        ),
+        
+        // 핀인
+        if (_entry!.pinyin.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(top: SpacingTokens.sm),
+            child: Text(
+              _entry!.pinyin,
+              style: TypographyTokens.caption.copyWith(
+                color: ColorTokens.textGrey,
+                fontFamily: TypographyTokens.poppins,
+              ),
+            ),
+          ),
+        
+        // 의미 (다국어 지원)
+        if (_entry!.displayMeaning.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(top: SpacingTokens.sm),
+            child: Text(
+              _entry!.displayMeaning,
+              style: TypographyTokens.body1.copyWith(
+                color: ColorTokens.secondary,
+              ),
+            ),
+          ),
+        
+        SizedBox(height: SpacingTokens.lg),
+        
+        // 플래시카드 추가 버튼
+        PikaButton(
+          text: '플래시카드 추가',
+          variant: PikaButtonVariant.primary,
+          leadingIcon: Image.asset(
+            'assets/images/icon_flashcard_dic.png',
+            width: 24,
+            height: 24,
+          ),
+          onPressed: () => _handleAddToFlashcard(),
+          isFullWidth: true,
+        ),
+      ],
+    );
+  }
+
+  /// 플래시카드 추가 처리
+  void _handleAddToFlashcard() {
+    if (_entry != null) {
+      widget.onCreateFlashCard(
+        _entry!.word,
+        _entry!.displayMeaning,
+        pinyin: _entry!.pinyin,
+      );
+      Navigator.pop(context);
+    }
+  }
+
+  /// 오류 콘텐츠
+  Widget _buildErrorContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 검색한 단어 표시
+        Text(
+          widget.word,
+          style: TypographyTokens.headline2Cn.copyWith(
+            color: ColorTokens.textPrimary,
+          ),
+        ),
+        SizedBox(height: SpacingTokens.lg),
+        
+        // 오류 메시지
+        Center(
+          child: Column(
             children: [
-              const CircularProgressIndicator(),
-              const SizedBox(width: 20),
-              const Text('단어 검색 중...'),
+              Icon(
+                Icons.search_off,
+                size: 32,
+                color: ColorTokens.textGrey,
+              ),
+              SizedBox(height: SpacingTokens.sm),
+              Text(
+                _errorMessage ?? '검색 결과가 없습니다',
+                style: TypographyTokens.body1.copyWith(
+                  color: ColorTokens.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
-        );
-      },
+        ),
+        SizedBox(height: SpacingTokens.lg),
+      ],
     );
   }
 }

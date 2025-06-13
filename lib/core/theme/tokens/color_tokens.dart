@@ -11,6 +11,7 @@ class ColorTokens {
   static const Color primaryverylight = Color(0xFFFFF0E8); // 메인 브랜드 컬러 아주 연하게
   static const Color secondary = Color(0xFF226357); // 보조 브랜드 컬러
   static const Color secondaryLight = Color(0xFFD3E0DD); // 보조 브랜드 컬러
+  static const Color secondaryVeryLight = Color(0xFFF1F3F3); // 보조 브랜드 컬러 아주 연하게
   static const Color tertiary = Color(0xFFFFD53C); // 강조 브랜드 컬러
   
   // 중립 컬러

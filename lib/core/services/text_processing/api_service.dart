@@ -153,22 +153,43 @@ class ApiService {
       final response = await client.send(request);
 
       if (response.statusCode == 200) {
+        if (kDebugMode) {
+          debugPrint('✅ [API] HTTP 200 응답 수신 - 스트리밍 시작');
+        }
+        
         // 실시간 스트리밍 응답 처리
         await for (final chunk in response.stream.transform(utf8.decoder).transform(const LineSplitter())) {
+          if (kDebugMode) {
+            debugPrint('📡 [API] 원시 청크 수신: "$chunk"');
+          }
+          
           if (chunk.startsWith('data: ')) {
             final jsonStr = chunk.substring(6); // 'data: ' 제거
             if (jsonStr.trim().isNotEmpty) {
+              if (kDebugMode) {
+                debugPrint('📦 [API] JSON 데이터 파싱 시도: "$jsonStr"');
+              }
               try {
                 final chunkData = jsonDecode(jsonStr);
                 
                 if (kDebugMode) {
-                  debugPrint('📦 [API] 실시간 청크 수신: ${chunkData['chunkIndex'] + 1}/${chunkData['totalChunks']}');
+                  final chunkIndex = chunkData['chunkIndex'] + 1;
+                  final totalChunks = chunkData['totalChunks'];
+                  final isComplete = chunkData['isComplete'] == true;
+                  debugPrint('📦 [API] 실시간 청크 수신: ${chunkIndex}/${totalChunks}, 완료: $isComplete');
+                  
+                  if (chunkData.containsKey('pageId')) {
+                    debugPrint('📄 [API] 페이지 ID: ${chunkData['pageId']}');
+                  }
                 }
                 
                 yield chunkData;
                 
                 // 완료 신호 확인
                 if (chunkData['isComplete'] == true) {
+                  if (kDebugMode) {
+                    debugPrint('✅ [API] 스트리밍 완료 신호 확인 - 루프 종료');
+                  }
                   break;
                 }
                 
@@ -180,8 +201,16 @@ class ApiService {
             }
           }
         }
+        
+        if (kDebugMode) {
+          debugPrint('🔚 [API] 스트리밍 루프 종료 - 연결 닫기');
+        }
         client.close();
       } else {
+        if (kDebugMode) {
+          debugPrint('❌ [API] HTTP 오류: ${response.statusCode}');
+          debugPrint('📄 [API] 응답 헤더: ${response.headers}');
+        }
         client.close();
         throw Exception('스트리밍 요청 실패: ${response.statusCode}');
       }

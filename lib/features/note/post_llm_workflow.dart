@@ -156,7 +156,8 @@ class PostLLMWorkflow {
         needPinyin: true,
       )) {
         if (kDebugMode) {
-          debugPrint('🌊 [워크플로우] 스트리밍 결과 수신 - success: ${result.isSuccess}, chunk: ${result.chunkIndex}, started: $streamingStarted');
+          debugPrint('🌊 [워크플로우] 스트리밍 결과 수신 - success: ${result.isSuccess}, chunk: ${result.chunkIndex}, complete: ${result.isComplete}, started: $streamingStarted');
+          debugPrint('📊 [워크플로우] 페이지 결과 수: ${result.pageResults.length}개');
         }
         
         // 첫 번째 결과를 받으면 스트리밍 시작으로 표시 (타임아웃은 유지)
@@ -192,7 +193,12 @@ class PostLLMWorkflow {
         
         if (result.isComplete) {
           if (kDebugMode) {
-            debugPrint('✅ [워크플로우] 스트리밍 완료: ${result.processedChunks}개 청크');
+            debugPrint('✅ [워크플로우] 스트리밍 완료 신호 수신: ${result.processedChunks}개 청크');
+            debugPrint('📊 [워크플로우] 완료된 페이지: ${completedPages.length}/${job.pages.length}개');
+            debugPrint('📄 [워크플로우] 최종 페이지 결과:');
+            for (final entry in result.pageResults.entries) {
+              debugPrint('   - ${entry.key}: ${entry.value.length}개 유닛');
+            }
           }
           // 스트리밍 완료 시 타임아웃 중지
           _stopLlmTimeout(job.noteId);
