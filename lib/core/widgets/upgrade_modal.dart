@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
@@ -22,6 +23,7 @@ class UpgradeModal extends StatelessWidget {
   static Future<bool?> show(
     BuildContext context, {
     VoidCallback? onUpgrade,
+    VoidCallback? onCancel,
     String? customMessage,
   }) {
     return showDialog<bool>(
@@ -29,7 +31,7 @@ class UpgradeModal extends StatelessWidget {
       barrierDismissible: false, // 배경 터치로 닫기 방지
       builder: (context) => UpgradeModal(
         onUpgrade: onUpgrade,
-        onCancel: () => Navigator.of(context).pop(false),
+        onCancel: onCancel ?? () => Navigator.of(context).pop(false),
         customMessage: customMessage,
       ),
     );
@@ -167,8 +169,15 @@ class UpgradeModal extends StatelessWidget {
         // 취소 버튼
         TextButton(
           onPressed: () {
-            Navigator.of(context).pop(false);
+            if (kDebugMode) {
+              debugPrint('🚪 [UpgradeModal] 나가기 버튼 클릭');
+              debugPrint('📍 [UpgradeModal] 현재 라우트: ${ModalRoute.of(context)?.settings.name}');
+            }
             onCancel?.call();
+            if (kDebugMode) {
+              debugPrint('🔙 [UpgradeModal] Navigator.pop 호출');
+            }
+            Navigator.of(context).pop(false);
           },
           child: Text(
             '나가기',
@@ -185,19 +194,27 @@ class UpgradeModal extends StatelessWidget {
 /// 업그레이드 유도 관련 유틸리티 클래스
 class UpgradePromptHelper {
   /// TTS 기능 제한 시 표시할 모달
-  static Future<bool?> showTtsUpgradePrompt(BuildContext context) {
+  static Future<bool?> showTtsUpgradePrompt(
+    BuildContext context, {
+    VoidCallback? onCancel,
+  }) {
     return UpgradeModal.show(
       context,
       customMessage: 'TTS 기능은 프리미엄 전용입니다.\n월 \$9.99에 모든 기능을 사용해보세요.',
       onUpgrade: () => _handleUpgrade(context),
+      onCancel: onCancel,
     );
   }
 
   /// 체험 만료 시 표시할 모달
-  static Future<bool?> showTrialExpiredPrompt(BuildContext context) {
+  static Future<bool?> showTrialExpiredPrompt(
+    BuildContext context, {
+    VoidCallback? onCancel,
+  }) {
     return UpgradeModal.show(
       context,
       onUpgrade: () => _handleUpgrade(context),
+      onCancel: onCancel,
     );
   }
 

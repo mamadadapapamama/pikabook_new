@@ -24,6 +24,7 @@ class ColorTokens {
   static const Color textTertiary = Color(0xFF90B1AB); // 보조 텍스트 색상
   static const Color textLight = Color(0xFFFFFFFF); // 밝은 배경에서 텍스트
   static const Color textGrey = Color(0xFF969696); // 밝은 배경에서 중요하지 않은 텍스트
+  static const Color textDarkGrey = Color(0xFF585858); // 회색인데 조금 더 가독성이 있는 텍스트 
   // 상태 컬러
   static const Color success = Color(0xFF34A853); // 성공 상태
   static const Color successLight = Color(0xFFE7F7E9); // 성공 상태 배경색 (연한 녹색)
@@ -40,7 +41,7 @@ class ColorTokens {
   static const Color black = Color(0xFF000000); // 블랙
 
   // 추가적인 UI 컬러
-  static const Color pinyinText = Color(0x969696); // 핀인 텍스트 색상
+  static const Color pinyinText = Color(0xFF969696); // 핀인 텍스트 색상
   static const Color dividerLight = Color(0xFFEEEEEE); // 연한 구분선
   static const Color greyLight = Color(0xFFF0F0F0); // 연한 회색 배경
   static const Color greyMedium = Color(0xFFD3D3D3); // 중간 회색

@@ -241,9 +241,6 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         },
         onDictionaryLookup: widget.onDictionaryLookup,
         onCreateFlashCard: widget.onCreateFlashCard,
-        showTtsButtons: widget.showTtsButtons,
-        playingSegmentIndex: widget.playingSegmentIndex,
-        onPlayTts: widget.onPlayTts,
       );
     }
     

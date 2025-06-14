@@ -17,9 +17,6 @@ class ParagraphModeWidget extends StatefulWidget {
   final Function(String) onSelectionChanged;
   final Function(String)? onDictionaryLookup;
   final Function(String, String, {String? pinyin})? onCreateFlashCard;
-  final bool showTtsButtons;
-  final int? playingSegmentIndex;
-  final Function(String, {int? segmentIndex})? onPlayTts;
 
   const ParagraphModeWidget({
     Key? key,
@@ -30,9 +27,6 @@ class ParagraphModeWidget extends StatefulWidget {
     required this.onSelectionChanged,
     this.onDictionaryLookup,
     this.onCreateFlashCard,
-    this.showTtsButtons = true,
-    this.playingSegmentIndex,
-    this.onPlayTts,
   }) : super(key: key);
 
   @override
@@ -50,24 +44,17 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
     _initializeStyles();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
   /// 스타일 초기화
   void _initializeStyles() {
-    _defaultOriginalTextStyle = TypographyTokens.subtitle1Cn.copyWith(
-      color: ColorTokens.textPrimary,
+    _defaultOriginalTextStyle = TypographyTokens.subtitle2Cn.copyWith(
+      color: ColorTokens.black,
     );
 
     _defaultTranslatedTextStyle = TypographyTokens.caption.copyWith(
-      color: ColorTokens.textGrey,
+      color: ColorTokens.textDarkGrey,
       height: 1.5,
     );
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -83,17 +70,33 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
   /// 블록 타입별 UI 렌더링
   Widget _buildBlockView() {
     final List<Widget> blockWidgets = [];
+    final units = widget.processedText.units;
 
-    for (int i = 0; i < widget.processedText.units.length; i++) {
-      final unit = widget.processedText.units[i];
+    for (int i = 0; i < units.length; i++) {
+      final unit = units[i];
       
-      // 각 블록 타입마다 한줄 띄어쓰기 (첫 번째 블록 제외)
-      if (i > 0) {
-        blockWidgets.add(const SizedBox(height: 16));
+      // 배경색이 필요한 블록인지 확인
+      if (_needsBackground(unit.segmentType)) {
+        // 연속된 배경 블록들을 그룹화
+        final groupedUnits = _getConsecutiveBackgroundUnits(units, i);
+        
+        // 각 블록 그룹마다 한줄 띄어쓰기 (첫 번째 블록 제외)
+        if (blockWidgets.isNotEmpty) {
+          blockWidgets.add(const SizedBox(height: 16));
+        }
+        
+        // 그룹화된 배경 블록 생성
+        blockWidgets.add(_buildGroupedBackgroundBlock(groupedUnits));
+        
+        // 인덱스를 그룹 크기만큼 건너뛰기
+        i = i + groupedUnits.length - 1;
+      } else {
+        // 일반 블록 처리
+        if (blockWidgets.isNotEmpty) {
+          blockWidgets.add(const SizedBox(height: 16));
+        }
+        blockWidgets.add(_buildBlockWidget(unit));
       }
-      
-      // 블록 타입별 위젯 생성
-      blockWidgets.add(_buildBlockWidget(unit, i));
     }
 
     // 스트리밍 중이거나 준비 중일 때 로딩 점 표시
@@ -104,7 +107,7 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
       blockWidgets.add(const SizedBox(height: 16));
       blockWidgets.add(LoadingDotsWidget(
         style: _defaultTranslatedTextStyle.copyWith(
-          color: ColorTokens.textGrey,
+          color: ColorTokens.textDarkGrey,
           fontSize: 16,
         ),
         usePinyinStyle: false,
@@ -117,19 +120,76 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
     );
   }
 
+  /// 배경색이 필요한 블록 타입인지 확인
+  bool _needsBackground(SegmentType segmentType) {
+    return segmentType == SegmentType.instruction ||
+           segmentType == SegmentType.passage ||
+           segmentType == SegmentType.title;
+  }
+
+  /// 연속된 배경 블록들을 그룹화
+  List<TextUnit> _getConsecutiveBackgroundUnits(List<TextUnit> units, int startIndex) {
+    final List<TextUnit> groupedUnits = [];
+    
+    for (int i = startIndex; i < units.length; i++) {
+      if (_needsBackground(units[i].segmentType)) {
+        groupedUnits.add(units[i]);
+      } else {
+        break;
+      }
+    }
+    
+    return groupedUnits;
+  }
+
+  /// 그룹화된 배경 블록 생성
+  Widget _buildGroupedBackgroundBlock(List<TextUnit> units) {
+    return _buildBackgroundContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: units.asMap().entries.map((entry) {
+          final index = entry.key;
+          final unit = entry.value;
+          
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 유닛 간 간격 (첫 번째 제외)
+              if (index > 0) const SizedBox(height: 12),
+              
+              // 원문 (타입에 따라 스타일 다르게)
+              _buildSelectableOriginalText(
+                unit,
+                style: unit.segmentType == SegmentType.title 
+                    ? TypographyTokens.subtitle2Cn.copyWith(
+                        color: ColorTokens.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      )
+                    : _defaultOriginalTextStyle,
+              ),
+
+              // 번역
+              _buildTranslationText(unit),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   /// 블록 타입별 위젯 생성
-  Widget _buildBlockWidget(TextUnit unit, int index) {
+  Widget _buildBlockWidget(TextUnit unit) {
     switch (unit.segmentType) {
       case SegmentType.title:
       case SegmentType.question:
-        return _buildBoldTextBlock(unit, index);
+        return _buildBoldTextBlock(unit);
       
       case SegmentType.choices:
-        return _buildChoicesBlock(unit, index);
+        return _buildChoicesBlock(unit);
       
       case SegmentType.instruction:
       case SegmentType.passage:
-        return _buildBackgroundBlock(unit, index);
+        return _buildBackgroundBlock(unit);
       
       case SegmentType.vocabulary:
       case SegmentType.answer:
@@ -138,153 +198,106 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
       case SegmentType.explanation:
       case SegmentType.unknown:
       default:
-        return _buildNormalTextBlock(unit, index);
+        return _buildNormalTextBlock(unit);
     }
   }
 
   /// Bold 텍스트 블록 (title, question)
-  Widget _buildBoldTextBlock(TextUnit unit, int index) {
-    final hasTranslation = unit.translatedText != null && unit.translatedText!.isNotEmpty;
-
+  Widget _buildBoldTextBlock(TextUnit unit) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 원문 (Bold, TTS 버튼 없음)
-        ContextMenuManager.buildSelectableText(
-          unit.originalText,
+        // 원문 (title만 bold)
+        _buildSelectableOriginalText(
+          unit,
           style: unit.segmentType == SegmentType.title 
-              ? TypographyTokens.headline3Cn.copyWith(
+              ? TypographyTokens.subtitle1Cn.copyWith(
                   color: ColorTokens.textPrimary,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                 )
-              : _defaultOriginalTextStyle.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          isOriginal: true,
-          flashcardWords: widget.flashcardWords,
-          selectedText: widget.selectedText,
-          selectedTextNotifier: widget.selectedTextNotifier,
-          onSelectionChanged: widget.onSelectionChanged,
-          onDictionaryLookup: widget.onDictionaryLookup,
-          onCreateFlashCard: widget.onCreateFlashCard,
+              : _defaultOriginalTextStyle,
         ),
 
-        // 번역 (일반 스타일로 통일)
-        if (hasTranslation)
-          Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Text(
-              unit.translatedText!,
-              style: _defaultTranslatedTextStyle,
-            ),
-          ),
+        // 번역
+        _buildTranslationText(unit),
       ],
     );
   }
 
-  /// 선택지 블록 (choices) - 한줄로 표시
-  Widget _buildChoicesBlock(TextUnit unit, int index) {
-    final hasTranslation = unit.translatedText != null && unit.translatedText!.isNotEmpty;
-
+  /// 선택지 블록 (choices)
+  Widget _buildChoicesBlock(TextUnit unit) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 원문 (한줄로 표시, TTS 버튼 없음)
-        ContextMenuManager.buildSelectableText(
-          unit.originalText,
-          style: _defaultOriginalTextStyle,
-          isOriginal: true,
-          flashcardWords: widget.flashcardWords,
-          selectedText: widget.selectedText,
-          selectedTextNotifier: widget.selectedTextNotifier,
-          onSelectionChanged: widget.onSelectionChanged,
-          onDictionaryLookup: widget.onDictionaryLookup,
-          onCreateFlashCard: widget.onCreateFlashCard,
-        ),
-
-        // 번역 (한줄로 표시)
-        if (hasTranslation)
-          Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Text(
-              unit.translatedText!,
-              style: _defaultTranslatedTextStyle,
-            ),
-          ),
+        _buildSelectableOriginalText(unit),
+        _buildTranslationText(unit),
       ],
     );
   }
 
   /// 배경색이 있는 블록 (instruction, passage)
-  Widget _buildBackgroundBlock(TextUnit unit, int index) {
-    final hasTranslation = unit.translatedText != null && unit.translatedText!.isNotEmpty;
-
-    return Container(
-      padding: const EdgeInsets.all(12.0),
-      decoration: BoxDecoration(
-        color: ColorTokens.secondaryVeryLight,
-        borderRadius: BorderRadius.circular(8.0),
-      ),
+  Widget _buildBackgroundBlock(TextUnit unit) {
+    return _buildBackgroundContainer(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 원문
-          ContextMenuManager.buildSelectableText(
-            unit.originalText,
-            style: _defaultOriginalTextStyle,
-            isOriginal: true,
-            flashcardWords: widget.flashcardWords,
-            selectedText: widget.selectedText,
-            selectedTextNotifier: widget.selectedTextNotifier,
-            onSelectionChanged: widget.onSelectionChanged,
-            onDictionaryLookup: widget.onDictionaryLookup,
-            onCreateFlashCard: widget.onCreateFlashCard,
-          ),
-
-          // 번역
-          if (hasTranslation)
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Text(
-                unit.translatedText!,
-                style: _defaultTranslatedTextStyle,
-              ),
-            ),
+          _buildSelectableOriginalText(unit),
+          _buildTranslationText(unit),
         ],
       ),
     );
   }
 
   /// 일반 텍스트 블록 (나머지 타입들)
-  Widget _buildNormalTextBlock(TextUnit unit, int index) {
-    final hasTranslation = unit.translatedText != null && unit.translatedText!.isNotEmpty;
-
+  Widget _buildNormalTextBlock(TextUnit unit) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 원문 (TTS 버튼 없음)
-        ContextMenuManager.buildSelectableText(
-          unit.originalText,
-          style: _defaultOriginalTextStyle,
-          isOriginal: true,
-          flashcardWords: widget.flashcardWords,
-          selectedText: widget.selectedText,
-          selectedTextNotifier: widget.selectedTextNotifier,
-          onSelectionChanged: widget.onSelectionChanged,
-          onDictionaryLookup: widget.onDictionaryLookup,
-          onCreateFlashCard: widget.onCreateFlashCard,
-        ),
-
-        // 번역
-        if (hasTranslation)
-          Padding(
-            padding: const EdgeInsets.only(top: 4.0),
-            child: Text(
-              unit.translatedText!,
-              style: _defaultTranslatedTextStyle,
-            ),
-          ),
+        _buildSelectableOriginalText(unit),
+        _buildTranslationText(unit),
       ],
+    );
+  }
+
+  /// 공통 - 선택 가능한 원문 텍스트 생성
+  Widget _buildSelectableOriginalText(TextUnit unit, {TextStyle? style}) {
+    return ContextMenuManager.buildSelectableText(
+      unit.originalText,
+      style: style ?? _defaultOriginalTextStyle,
+      isOriginal: true,
+      flashcardWords: widget.flashcardWords,
+      selectedText: widget.selectedText,
+      selectedTextNotifier: widget.selectedTextNotifier,
+      onSelectionChanged: widget.onSelectionChanged,
+      onDictionaryLookup: widget.onDictionaryLookup,
+      onCreateFlashCard: widget.onCreateFlashCard,
+    );
+  }
+
+  /// 공통 - 번역 텍스트 생성
+  Widget _buildTranslationText(TextUnit unit) {
+    final hasTranslation = unit.translatedText != null && unit.translatedText!.isNotEmpty;
+    
+    if (!hasTranslation) return const SizedBox.shrink();
+    
+    return Padding(
+      padding: const EdgeInsets.only(top: 4.0),
+      child: Text(
+        unit.translatedText!,
+        style: _defaultTranslatedTextStyle,
+      ),
+    );
+  }
+
+  /// 공통 - 배경 컨테이너 생성
+  Widget _buildBackgroundContainer({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: ColorTokens.secondaryVeryLight,
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      child: child,
     );
   }
 
@@ -297,6 +310,4 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
       ),
     );
   }
-
-
 } 
