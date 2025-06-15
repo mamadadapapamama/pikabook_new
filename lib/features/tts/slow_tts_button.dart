@@ -6,6 +6,8 @@ import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../sample/sample_tts_service.dart';
 import '../../core/services/tts/slow_tts_service.dart';
+import '../../core/services/common/plan_service.dart';
+import '../../core/services/common/usage_limit_service.dart';
 
 /// 느린 TTS 버튼을 위한 위젯 (거북이 아이콘 사용)
 /// 50% 느린 속도로 재생하며 일시정지 기능을 제공합니다.
@@ -142,6 +144,29 @@ class _SlowTtsButtonState extends State<SlowTtsButton> {
     // 샘플 모드(로그아웃 상태)에서는 SampleTtsService 사용
     if (_authService.currentUser == null) {
       await _handleSampleModeSlowTts();
+      return;
+    }
+    
+    // 프리미엄 기능 체크 - 느린 TTS는 프리미엄 전용 기능
+    final planService = PlanService();
+    final planType = await planService.getCurrentPlanType();
+    
+    // 무료 플랜인 경우 업그레이드 모달 표시
+    if (planType == PlanService.PLAN_FREE) {
+      if (mounted) {
+        await UpgradePromptHelper.showTtsUpgradePrompt(context);
+      }
+      return;
+    }
+    
+    // 프리미엄 플랜이지만 TTS 제한에 도달한 경우 체크
+    final usageService = UsageLimitService();
+    final limitStatus = await usageService.checkInitialLimitStatus();
+    
+    if (limitStatus['ttsLimitReached'] == true) {
+      if (mounted) {
+        await UpgradePromptHelper.showTtsUpgradePrompt(context);
+      }
       return;
     }
     
