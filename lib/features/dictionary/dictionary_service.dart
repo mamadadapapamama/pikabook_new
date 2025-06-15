@@ -127,10 +127,21 @@ class DictionaryService {
       }
       
       // 한국어와 영어 번역을 동시에 요청 (중국어 명시)
-      final futures = await Future.wait([
-        _translator.translate(word, from: 'zh-CN', to: 'ko'),
-        _translator.translate(word, from: 'zh-CN', to: 'en'),
-      ]);
+      List<Translation> futures;
+      try {
+        futures = await Future.wait([
+          _translator.translate(word, from: 'zh-CN', to: 'ko'),
+          _translator.translate(word, from: 'zh-CN', to: 'en'),
+        ]);
+      } catch (langError) {
+        if (kDebugMode) {
+          debugPrint('🔄 [Google Translate-Multi] zh-CN 실패, zh로 재시도: $langError');
+        }
+        futures = await Future.wait([
+          _translator.translate(word, from: 'zh', to: 'ko'),
+          _translator.translate(word, from: 'zh', to: 'en'),
+        ]);
+      }
       
       final koTranslation = futures[0];
       final enTranslation = futures[1];
@@ -211,7 +222,15 @@ class DictionaryService {
       }
       
       // 중국어 명시 → 한국어 번역
-      final translation = await _translator.translate(word, from: 'zh-CN', to: 'ko');
+      Translation translation;
+      try {
+        translation = await _translator.translate(word, from: 'zh-CN', to: 'ko');
+      } catch (langError) {
+        if (kDebugMode) {
+          debugPrint('🔄 [Google Translate] zh-CN 실패, zh로 재시도: $langError');
+        }
+        translation = await _translator.translate(word, from: 'zh', to: 'ko');
+      }
       
       if (kDebugMode) {
         debugPrint('🌐 [Google Translate] 원본: "$word"');
@@ -440,7 +459,17 @@ class DictionaryService {
                   debugPrint('🔍 [2단계-보완] Google Translate로 한국어 번역 검색 중...');
                 }
                 try {
-                  final translation = await _translator.translate(word, from: 'zh-CN', to: 'ko');
+                  // 먼저 zh-CN으로 시도, 실패하면 zh로 재시도
+                  Translation? translation;
+                  try {
+                    translation = await _translator.translate(word, from: 'zh-CN', to: 'ko');
+                  } catch (langError) {
+                    if (kDebugMode) {
+                      debugPrint('🔄 [2단계-보완] zh-CN 실패, zh로 재시도: $langError');
+                    }
+                    translation = await _translator.translate(word, from: 'zh', to: 'ko');
+                  }
+                  
                   if (translation.text.isNotEmpty && translation.text != word) {
                     koreanMeaning = translation.text;
                     if (kDebugMode) {
