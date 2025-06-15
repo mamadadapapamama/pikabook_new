@@ -173,9 +173,14 @@ class UpgradeModal extends StatelessWidget {
               debugPrint('🚪 [UpgradeModal] 나가기 버튼 클릭');
               debugPrint('📍 [UpgradeModal] 현재 라우트: ${ModalRoute.of(context)?.settings.name}');
             }
-            onCancel?.call();
+            
+            // onCancel이 있는 경우에만 호출
+            if (onCancel != null) {
+              onCancel!();
+            }
+            
             if (kDebugMode) {
-              debugPrint('🔙 [UpgradeModal] Navigator.pop 호출');
+              debugPrint('🔙 [UpgradeModal] Navigator.pop 호출 (모달만 닫기)');
             }
             Navigator.of(context).pop(false);
           },
@@ -202,7 +207,7 @@ class UpgradePromptHelper {
       context,
       customMessage: 'TTS 기능은 프리미엄 전용입니다.\n월 \$9.99에 모든 기능을 사용해보세요.',
       onUpgrade: () => _handleUpgrade(context),
-      onCancel: onCancel,
+      onCancel: null,
     );
   }
 
@@ -214,7 +219,7 @@ class UpgradePromptHelper {
     return UpgradeModal.show(
       context,
       onUpgrade: () => _handleUpgrade(context),
-      onCancel: onCancel,
+      onCancel: null,
     );
   }
 

@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/models/processed_text.dart';
-import '../../../core/models/text_unit.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../flashcard/flashcard_view_model.dart';
-import '../../../core/widgets/typewriter_text.dart';
 import '../../../core/widgets/loading_dots_widget.dart';
 import '../../../core/utils/context_menu_manager.dart';
 import '../../../core/services/common/plan_service.dart';
@@ -14,6 +12,8 @@ import '../../../core/services/common/usage_limit_service.dart';
 import '../../../core/widgets/upgrade_modal.dart';
 import '../../tts/slow_tts_button.dart';
 import 'paragraph_mode_widget.dart';
+import '../../../core/services/authentication/auth_service.dart';
+import '../../sample/sample_tts_service.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -56,6 +56,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   // TTS 서비스
   final TTSService _ttsService = TTSService();
+  final AuthService _authService = AuthService();
+  final SampleTtsService _sampleTtsService = SampleTtsService();
   
   // 기본 스타일 정의
   late TextStyle _defaultOriginalTextStyle;
@@ -140,22 +142,16 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     }
   }
 
-  /// TTS 재생 토글
-  Future<void> _toggleTts(String text, int segmentIndex) async {
+  /// TTS 재생 처리
+  Future<void> _handleTtsPlay(String text, int segmentIndex) async {
     try {
-      // 플랜 체크 먼저 수행
-      final planService = PlanService();
-      final planType = await planService.getCurrentPlanType();
-      
-      // 무료 플랜인 경우 업그레이드 모달 표시
-      if (planType == PlanService.PLAN_FREE) {
-        if (mounted) {
-          await UpgradePromptHelper.showTtsUpgradePrompt(context);
-        }
+      // 샘플 모드(로그아웃 상태)에서는 SampleTtsService 사용
+      if (_authService.currentUser == null) {
+        await _handleSampleModeTts(text, segmentIndex);
         return;
       }
-      
-      // 프리미엄 플랜이지만 TTS 제한에 도달한 경우 체크
+
+      // TTS 사용량 제한 체크
       final usageService = UsageLimitService();
       final limitStatus = await usageService.checkInitialLimitStatus();
       
@@ -184,6 +180,27 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     }
   }
 
+  /// 샘플 모드에서 TTS 처리
+  Future<void> _handleSampleModeTts(String text, int segmentIndex) async {
+    try {
+      // 현재 재생 중인 세그먼트와 같으면 중지
+      if (widget.playingSegmentIndex == segmentIndex) {
+        await _sampleTtsService.stop();
+        if (widget.onPlayTts != null) {
+          widget.onPlayTts!('', segmentIndex: null);
+        }
+      } else {
+        // 새로운 세그먼트 재생
+        await _sampleTtsService.speak(text);
+        if (widget.onPlayTts != null) {
+          widget.onPlayTts!(text, segmentIndex: segmentIndex);
+        }
+      }
+    } catch (e) {
+      debugPrint('샘플 모드 TTS 재생 중 오류: $e');
+    }
+  }
+
   /// TTS 버튼 위젯 생성
   Widget _buildTtsButton(String text, int segmentIndex, bool isPlaying) {
     return Container(
@@ -201,7 +218,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           color: ColorTokens.textSecondary,
           size: 16,
         ),
-        onPressed: () => _toggleTts(text, segmentIndex),
+        onPressed: () => _handleTtsPlay(text, segmentIndex),
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(
           minWidth: 32,

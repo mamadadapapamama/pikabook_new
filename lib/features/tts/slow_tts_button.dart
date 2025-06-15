@@ -147,19 +147,7 @@ class _SlowTtsButtonState extends State<SlowTtsButton> {
       return;
     }
     
-    // 프리미엄 기능 체크 - 느린 TTS는 프리미엄 전용 기능
-    final planService = PlanService();
-    final planType = await planService.getCurrentPlanType();
-    
-    // 무료 플랜인 경우 업그레이드 모달 표시
-    if (planType == PlanService.PLAN_FREE) {
-      if (mounted) {
-        await UpgradePromptHelper.showTtsUpgradePrompt(context);
-      }
-      return;
-    }
-    
-    // 프리미엄 플랜이지만 TTS 제한에 도달한 경우 체크
+    // TTS 사용량 제한 체크
     final usageService = UsageLimitService();
     final limitStatus = await usageService.checkInitialLimitStatus();
     
@@ -194,47 +182,34 @@ class _SlowTtsButtonState extends State<SlowTtsButton> {
         widget.onPlayStart!();
       }
       
+      debugPrint('🐢 🔊 느린 TTS 재생 시작: "${widget.text}"');
+      
       try {
-        // 재생 메서드 호출 전에 디버그 로그
-        debugPrint('🐢 🔘 SlowTtsButton: 느린 재생 요청 - "${widget.text}", 세그먼트=${widget.segmentIndex}');
-        
         if (widget.segmentIndex != null) {
+          // 세그먼트 재생
           await _slowTtsService.speakSegment(widget.text, widget.segmentIndex!);
         } else {
+          // 일반 재생
           await _slowTtsService.speak(widget.text);
         }
         
-        // 재생 완료 후 상태 확인 (타임아웃 시간 연장 - 느린 재생이므로)
-        Future.delayed(const Duration(seconds: 4), () {
-          if (mounted) {
-            final currentSegment = _slowTtsService.currentSegmentIndex;
-            final bool shouldStillBePlaying = widget.segmentIndex != null && 
-                                             widget.segmentIndex == currentSegment;
-            
-            // 상태가 불일치하는 경우 강제 업데이트
-            if (_isPlaying && !shouldStillBePlaying) {
-              setState(() {
-                _isPlaying = false;
-              });
-              
-              debugPrint('🐢 4초 타임아웃으로 느린 TTS 버튼 상태 리셋');
-              
-              // 재생 종료 콜백 호출
-              if (widget.onPlayEnd != null) {
-                widget.onPlayEnd!();
-              }
-            }
-          }
-        });
-      } catch (e) {
-        debugPrint('🐢 느린 TTS 재생 중 오류 발생: $e');
-        // 오류 발생 시 재생 상태 업데이트
+        // 재생 완료 후 상태 업데이트
         if (mounted) {
           setState(() {
             _isPlaying = false;
           });
           
-          // 재생 종료 콜백 호출
+          if (widget.onPlayEnd != null) {
+            widget.onPlayEnd!();
+          }
+        }
+      } catch (e) {
+        debugPrint('🐢 느린 TTS 재생 중 오류: $e');
+        if (mounted) {
+          setState(() {
+            _isPlaying = false;
+          });
+          
           if (widget.onPlayEnd != null) {
             widget.onPlayEnd!();
           }

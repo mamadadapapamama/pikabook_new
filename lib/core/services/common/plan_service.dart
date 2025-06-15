@@ -19,16 +19,12 @@ class PlanService {
   // 플랜별 제한
   static const Map<String, Map<String, int>> PLAN_LIMITS = {
     PLAN_FREE: {
-      'ocrPages': 30,          // 월 30페이지
-      'translatedChars': 10000,  // 월 10,000자
-      'ttsRequests': 0,      // 월 0회
-      'storageBytes': 52428800, // 50MB (50 * 1024 * 1024)
+      'ocrPages': 10,          // 월 10장 (업로드 이미지 수)
+      'ttsRequests': 30,       // 월 30회 (듣기 기능)
     },
     PLAN_PREMIUM: {
-      'ocrPages': 300,          // 월 300페이지
-      'translatedChars': 100000, // 월 10만자
-      'ttsRequests': 1000,      // 월 1,000회
-      'storageBytes': 1073741824, // 1GB (1024 * 1024 * 1024)
+      'ocrPages': 300,         // 월 300장 (업로드 이미지 수)
+      'ttsRequests': 1000,     // 월 1,000회 (듣기 기능)
     },
   };
   

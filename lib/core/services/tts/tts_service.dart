@@ -137,7 +137,7 @@ class TTSService {
           await _playAudioFile(audioPath);
           debugPrint('🔊 TTS 재생 중: $text');
           
-          // 재생 완료 후 사용량 증가
+          // 새로운 TTS 요청 시에만 사용량 증가
           await _apiService.incrementTtsUsageAfterPlayback();
         } else {
           debugPrint('❌ TTS 캐시 저장 실패: $text');
@@ -408,8 +408,6 @@ class TTSService {
   void setOnPlayingCompleted(Function callback) {
     _onPlayingCompleted = callback;
   }
-
-
 
   /// 리소스 해제
   Future<void> dispose() async {

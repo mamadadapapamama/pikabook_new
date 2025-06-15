@@ -42,8 +42,6 @@ class UsageLimitService {
         return {
           'ocrLimitReached': false,
           'ttsLimitReached': false,
-          'translationLimitReached': false,
-          'storageLimitReached': false,
         };
       }
       
@@ -55,8 +53,6 @@ class UsageLimitService {
       final limitStatus = {
         'ocrLimitReached': (usage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
         'ttsLimitReached': (usage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0),
-        'translationLimitReached': (usage['translatedChars'] ?? 0) >= (limits['translatedChars'] ?? 0),
-        'storageLimitReached': (usage['storageUsageBytes'] ?? 0) >= (limits['storageBytes'] ?? 0),
       };
       
       debugPrint('앱 시작시 제한 확인 결과: $limitStatus');
@@ -67,8 +63,6 @@ class UsageLimitService {
       return {
         'ocrLimitReached': false,
         'ttsLimitReached': false,
-        'translationLimitReached': false,
-        'storageLimitReached': false,
       };
     }
   }
@@ -78,8 +72,6 @@ class UsageLimitService {
   Future<Map<String, bool>> updateUsageAfterNoteCreation({
     int ocrPages = 0,
     int ttsRequests = 0,
-    int translatedChars = 0,
-    int storageBytes = 0,
   }) async {
     try {
       debugPrint('노트 생성 후 사용량 업데이트 시작');
@@ -90,8 +82,6 @@ class UsageLimitService {
         return {
           'ocrLimitReached': false,
           'ttsLimitReached': false,
-          'translationLimitReached': false,
-          'storageLimitReached': false,
         };
       }
       
@@ -102,16 +92,12 @@ class UsageLimitService {
       final newUsage = {
         'ocrPages': (currentUsage['ocrPages'] ?? 0) + ocrPages,
         'ttsRequests': (currentUsage['ttsRequests'] ?? 0) + ttsRequests,
-        'translatedChars': (currentUsage['translatedChars'] ?? 0) + translatedChars,
-        'storageUsageBytes': (currentUsage['storageUsageBytes'] ?? 0) + storageBytes,
       };
       
       // Firebase에 업데이트
       await _firestore.collection('users').doc(userId).update({
         'usage.ocrPages': newUsage['ocrPages'],
         'usage.ttsRequests': newUsage['ttsRequests'],
-        'usage.translatedChars': newUsage['translatedChars'],
-        'usage.storageUsageBytes': newUsage['storageUsageBytes'],
         'usage.lastUpdated': FieldValue.serverTimestamp(),
       });
       
@@ -122,8 +108,6 @@ class UsageLimitService {
       final limitStatus = {
         'ocrLimitReached': (newUsage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
         'ttsLimitReached': (newUsage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0),
-        'translationLimitReached': (newUsage['translatedChars'] ?? 0) >= (limits['translatedChars'] ?? 0),
-        'storageLimitReached': (newUsage['storageUsageBytes'] ?? 0) >= (limits['storageBytes'] ?? 0),
       };
       
       debugPrint('노트 생성 후 제한 확인 결과: $limitStatus');
@@ -134,8 +118,6 @@ class UsageLimitService {
       return {
         'ocrLimitReached': false,
         'ttsLimitReached': false,
-        'translationLimitReached': false,
-        'storageLimitReached': false,
       };
     }
   }
@@ -156,30 +138,21 @@ class UsageLimitService {
       final usage = await _loadUsageDataFromFirebase();
       final limits = await _loadLimitsFromFirebase();
       
-      // 사용률 계산 (안전한 double 변환)
-      final usagePercentages = <String, double>{
-        'ocr': (limits['ocrPages'] ?? 0) > 0 ? ((usage['ocrPages'] ?? 0).toDouble() / (limits['ocrPages'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
-        'tts': (limits['ttsRequests'] ?? 0) > 0 ? ((usage['ttsRequests'] ?? 0).toDouble() / (limits['ttsRequests'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
-        'translation': (limits['translatedChars'] ?? 0) > 0 ? ((usage['translatedChars'] ?? 0).toDouble() / (limits['translatedChars'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
-        'storage': (limits['storageBytes'] ?? 0) > 0 ? ((usage['storageUsageBytes'] ?? 0).toDouble() / (limits['storageBytes'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
-      };
-      
       // 제한 도달 여부
       final limitStatus = {
         'ocrLimitReached': (usage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
         'ttsLimitReached': (usage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0),
-        'translationLimitReached': (usage['translatedChars'] ?? 0) >= (limits['translatedChars'] ?? 0),
-        'storageLimitReached': (usage['storageUsageBytes'] ?? 0) >= (limits['storageBytes'] ?? 0),
         'ocrLimit': limits['ocrPages'] ?? 0,
         'ttsLimit': limits['ttsRequests'] ?? 0,
-        'translationLimit': limits['translatedChars'] ?? 0,
-        'storageLimit': limits['storageBytes'] ?? 0,
       };
       
       final result = {
         'usage': usage,
         'limits': limits,
-        'usagePercentages': usagePercentages,
+        'usagePercentages': <String, double>{
+          'ocr': (limits['ocrPages'] ?? 0) > 0 ? ((usage['ocrPages'] ?? 0).toDouble() / (limits['ocrPages'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
+          'tts': (limits['ttsRequests'] ?? 0) > 0 ? ((usage['ttsRequests'] ?? 0).toDouble() / (limits['ttsRequests'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
+        },
         'limitStatus': limitStatus,
       };
       
@@ -247,16 +220,12 @@ class UsageLimitService {
         usageData = {
           'ocrPages': _parseIntSafely(usage['ocrPages']),
           'ttsRequests': _parseIntSafely(usage['ttsRequests']),
-          'translatedChars': _parseIntSafely(usage['translatedChars']),
-          'storageUsageBytes': _parseIntSafely(usage['storageUsageBytes']),
         };
       } else {
         // 최상위 필드에서 확인
         usageData = {
           'ocrPages': _parseIntSafely(data['ocrPages']),
           'ttsRequests': _parseIntSafely(data['ttsRequests']),
-          'translatedChars': _parseIntSafely(data['translatedChars']),
-          'storageUsageBytes': _parseIntSafely(data['storageUsageBytes']),
         };
       }
       
@@ -318,8 +287,6 @@ class UsageLimitService {
       
       if (data.containsKey('ocrPages')) limits['ocrPages'] = _parseIntSafely(data['ocrPages']);
       if (data.containsKey('ttsRequests')) limits['ttsRequests'] = _parseIntSafely(data['ttsRequests']);
-      if (data.containsKey('translatedChars')) limits['translatedChars'] = _parseIntSafely(data['translatedChars']);
-      if (data.containsKey('storageBytes')) limits['storageBytes'] = _parseIntSafely(data['storageBytes']);
       
       return limits;
     } catch (e) {
@@ -333,8 +300,6 @@ class UsageLimitService {
     return {
       'ocrPages': 0,
       'ttsRequests': 0,
-      'translatedChars': 0,
-      'storageUsageBytes': 0,
     };
   }
   
@@ -352,18 +317,12 @@ class UsageLimitService {
       'usagePercentages': <String, double>{
         'ocr': 0.0,
         'tts': 0.0,
-        'translation': 0.0,
-        'storage': 0.0,
       },
       'limitStatus': {
         'ocrLimitReached': false,
         'ttsLimitReached': false,
-        'translationLimitReached': false,
-        'storageLimitReached': false,
-        'ocrLimit': defaultLimits['ocrPages'] ?? 30,
-        'ttsLimit': defaultLimits['ttsRequests'] ?? 100,
-        'translationLimit': defaultLimits['translatedChars'] ?? 10000,
-        'storageLimit': defaultLimits['storageBytes'] ?? 52428800,
+        'ocrLimit': defaultLimits['ocrPages'] ?? 10,
+        'ttsLimit': defaultLimits['ttsRequests'] ?? 30,
       },
     };
   }
@@ -430,8 +389,6 @@ class UsageLimitService {
     await updateUsageAfterNoteCreation(
       ocrPages: updates['ocrPages'] ?? 0,
       ttsRequests: updates['ttsRequests'] ?? 0,
-      translatedChars: updates['translatedChars'] ?? 0,
-      storageBytes: updates['storageUsageBytes'] ?? 0,
     );
     
     return true;
@@ -445,10 +402,7 @@ class UsageLimitService {
     final limitStatus = await checkInitialLimitStatus();
     
     final ttsExceed = limitStatus['ttsLimitReached'] ?? false;
-    final noteExceed = 
-        (limitStatus['ocrLimitReached'] ?? false) ||
-        (limitStatus['translationLimitReached'] ?? false) ||
-        (limitStatus['storageLimitReached'] ?? false);
+    final noteExceed = limitStatus['ocrLimitReached'] ?? false;
     
     return {
       'ttsExceed': ttsExceed,

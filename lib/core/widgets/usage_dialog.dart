@@ -111,18 +111,12 @@ class _UsageDialogState extends State<UsageDialog> {
       _limitStatus = {
         'ocrLimitReached': false,
         'ttsLimitReached': false,
-        'translationLimitReached': false,
-        'storageLimitReached': false,
-        'ocrLimit': 30,
-        'ttsLimit': 100,
-        'translationLimit': 3000,
-        'storageLimit': 104857600, // 100MB
+        'ocrLimit': 10,
+        'ttsLimit': 30,
       };
       _usagePercentages = {
         'ocr': 0.0,
         'tts': 0.0,
-        'translation': 0.0,
-        'storage': 0.0,
       };
     } finally {
       if (mounted) {
@@ -221,10 +215,7 @@ class _UsageDialogState extends State<UsageDialog> {
   // 어떤 한도든 초과했는지 확인
   bool _hasReachedAnyLimit() {
     return _limitStatus['ocrLimitReached'] == true ||
-           _limitStatus['ttsLimitReached'] == true ||
-           _limitStatus['translationLimitReached'] == true ||
-           _limitStatus['storageLimitReached'] == true ||
-           _limitStatus['betaEnded'] == true;
+           _limitStatus['ttsLimitReached'] == true;
   }
   
   // 베타 기간 정보를 표시할지 여부
@@ -262,12 +253,10 @@ class _UsageDialogState extends State<UsageDialog> {
     debugPrint('UsageDialog - 표시할 사용량 데이터: $_usagePercentages');
     debugPrint('UsageDialog - 표시할 제한 상태: $_limitStatus');
 
-    // 항상 4가지 주요 사용량을 표시 (ocr, tts, translation, storage)
+    // 단순화된 2가지 주요 사용량만 표시 (ocr, tts)
     final List<MapEntry<String, double>> entries = [
       MapEntry('ocr', _usagePercentages['ocr'] ?? 0.0),
       MapEntry('tts', _usagePercentages['tts'] ?? 0.0),
-      MapEntry('translation', _usagePercentages['translation'] ?? 0.0),
-      MapEntry('storage', _usagePercentages['storage'] ?? 0.0),
     ];
     
     return Column(
@@ -334,19 +323,15 @@ class _UsageDialogState extends State<UsageDialog> {
   String _getUsageLabel(String key) {
     switch (key) {
       case 'ocr':
-        return '글자 추출 (${_limitStatus['ocrLimit'] ?? 30}장)';
+        return '업로드 이미지 수 (${_limitStatus['ocrLimit'] ?? 10}장)';
       case 'tts':
-        return '음성 읽기 (${_limitStatus['ttsLimit'] ?? 100}회)';
-      case 'translation':
-        return '번역 (${_limitStatus['translationLimit'] ?? 3000}자)';
-      case 'storage':
-        return '저장 공간 (${_formatStorageSize(_limitStatus['storageLimit'] ?? 104857600)})';
+        return '듣기 기능 (${_limitStatus['ttsLimit'] ?? 30}회)';
       default:
         return key;
     }
   }
   
-  // 저장 공간 크기 포맷팅
+  // 저장 공간 크기 포맷팅 (더 이상 사용하지 않지만 호환성을 위해 유지)
   String _formatStorageSize(int bytes) {
     if (bytes >= 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(0)}MB';
