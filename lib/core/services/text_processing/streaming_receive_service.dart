@@ -32,12 +32,20 @@ class StreamingReceiveService {
     final Map<String, List<TextUnit>> pageResults = {};
     int processedChunks = 0;
 
-    // Differential Update를 위한 OCR 세그먼트 준비
-    final ocrSegments = textSegments; // 기존 OCR 세그먼트 저장
+    // Differential Update를 위한 페이지별 OCR 세그먼트 준비
+    final Map<String, List<String>> pageOcrSegments = {};
     final processingMode = pages.isNotEmpty ? pages.first.mode : TextProcessingMode.segment;
     
+    // 페이지별 OCR 세그먼트 분리 저장
+    for (final page in pages) {
+      pageOcrSegments[page.pageId] = List.from(page.textSegments);
+    }
+    
     if (kDebugMode && processingMode == TextProcessingMode.segment) {
-      debugPrint('🔄 [Differential Update] 활성화: ${ocrSegments.length}개 세그먼트');
+      debugPrint('🔄 [Differential Update] 활성화: 페이지별 OCR 세그먼트');
+      for (final entry in pageOcrSegments.entries) {
+        debugPrint('   📄 ${entry.key}: ${entry.value.length}개 세그먼트');
+      }
     }
 
     bool hasReceivedAnyChunk = false;
@@ -81,9 +89,14 @@ class StreamingReceiveService {
         }
 
         // 정상 청크 처리 (Differential Update 적용)
+        final pageId = chunkData['pageId'] as String?;
+        final pageSpecificSegments = pageId != null && pageOcrSegments.containsKey(pageId) 
+            ? pageOcrSegments[pageId] 
+            : null;
+            
         final chunkUnits = _extractUnitsFromChunkData(
           chunkData,
-          originalSegments: processingMode == TextProcessingMode.segment ? ocrSegments : null,
+          originalSegments: processingMode == TextProcessingMode.segment ? pageSpecificSegments : null,
         );
         final chunkIndex = chunkData['chunkIndex'] as int;
         
@@ -92,8 +105,7 @@ class StreamingReceiveService {
         }
         
         // 페이지 ID 기반 분배 (서버에서 제공)
-        if (chunkData.containsKey('pageId')) {
-          final pageId = chunkData['pageId'] as String;
+        if (pageId != null) {
           pageResults.putIfAbsent(pageId, () => []);
           pageResults[pageId]!.addAll(chunkUnits);
           
@@ -159,7 +171,7 @@ class StreamingReceiveService {
       }
       
       // 폴백 처리
-      yield* _createFallbackResults(textSegments, pages, sourceLanguage, targetLanguage);
+      yield* _createFallbackResults(pageOcrSegments, pages, sourceLanguage, targetLanguage);
     }
   }
 
@@ -438,7 +450,7 @@ class StreamingReceiveService {
 
   /// 스트리밍 실패 시 폴백 결과 생성
   Stream<StreamingReceiveResult> _createFallbackResults(
-    List<String> textSegments,
+    Map<String, List<String>> pageOcrSegments,
     List<PageProcessingData> pages,
     String sourceLanguage,
     String targetLanguage,
@@ -446,17 +458,18 @@ class StreamingReceiveService {
     final Map<String, List<TextUnit>> pageResults = {};
     
     // 폴백 텍스트 유닛 생성
-    for (int i = 0; i < textSegments.length; i++) {
-      final pageId = pages.isNotEmpty ? pages.first.pageId : 'unknown';
+    for (final pageId in pageOcrSegments.keys) {
       pageResults.putIfAbsent(pageId, () => []);
       
-      pageResults[pageId]!.add(TextUnit(
-        originalText: textSegments[i],
-        translatedText: '[스트리밍 실패]',
-        pinyin: '',
-        sourceLanguage: sourceLanguage,
-        targetLanguage: targetLanguage,
-      ));
+      for (final text in pageOcrSegments[pageId]!) {
+        pageResults[pageId]!.add(TextUnit(
+          originalText: text,
+          translatedText: '[스트리밍 실패]',
+          pinyin: '',
+          sourceLanguage: sourceLanguage,
+          targetLanguage: targetLanguage,
+        ));
+      }
     }
     
     yield StreamingReceiveResult.success(
@@ -464,7 +477,7 @@ class StreamingReceiveService {
       chunkUnits: pageResults.values.expand((units) => units).toList(),
       pageResults: pageResults,
       isComplete: true,
-      processedChunks: 1,
+      processedChunks: pageOcrSegments.length,
     );
   }
 
