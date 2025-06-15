@@ -334,9 +334,10 @@ class PostLLMWorkflow {
       await _firestore.collection('notes').doc(noteId).update({
         'processingError': errorMessage,
         'errorNotifiedAt': FieldValue.serverTimestamp(),
+        'showFailureMessage': true, // UI에서 실패 메시지 표시 플래그
+        'userFriendlyError': '처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.',
       });
       
-      // TODO: 사용자에게 실패 알림 전송
       if (kDebugMode) {
         debugPrint('💀 [워크플로우] 사용자 실패 알림: $noteId');
       }

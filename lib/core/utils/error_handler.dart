@@ -29,8 +29,182 @@ enum ErrorContext {
   general,         // 일반적인 기능
 }
 
+/// 에러 상태 클래스
+class ErrorState {
+  final String id;
+  final String message;
+  final ErrorType type;
+  final DateTime timestamp;
+  final Color? messageColor;
+  final IconData? icon;
+  final Color? iconColor;
+  final String? retryButtonText;
+
+  ErrorState({
+    required this.id,
+    required this.message,
+    required this.type,
+    required this.timestamp,
+    this.messageColor,
+    this.icon,
+    this.iconColor,
+    this.retryButtonText,
+  });
+}
+
 /// 에러 처리 유틸리티 클래스
 class ErrorHandler {
+  // 상태 관리 (새로 추가)
+  static final Map<String, ErrorState> _errorStates = {};
+  static final Map<String, VoidCallback?> _retryCallbacks = {};
+  
+  /// 에러 상태 등록
+  static void registerError({
+    required String id,
+    required dynamic error,
+    ErrorContext? context,
+    VoidCallback? onRetry,
+    Color? messageColor,
+    IconData? icon,
+    Color? iconColor,
+    String? retryButtonText,
+  }) {
+    final errorType = analyzeError(error);
+    final message = getErrorMessage(errorType, context);
+    
+    // 에러 타입별 기본 UI 설정
+    Color? defaultMessageColor;
+    IconData? defaultIcon;
+    Color? defaultIconColor;
+    
+    switch (errorType) {
+      case ErrorType.timeout:
+        defaultMessageColor = Colors.red[800];
+        defaultIcon = Icons.error_outline;
+        defaultIconColor = Colors.red;
+        break;
+      case ErrorType.network:
+        defaultMessageColor = Colors.red[800];
+        defaultIcon = Icons.wifi_off;
+        defaultIconColor = Colors.red;
+        break;
+      default:
+        defaultMessageColor = Colors.red[800];
+        defaultIcon = Icons.error_outline;
+        defaultIconColor = Colors.red;
+    }
+    
+    _errorStates[id] = ErrorState(
+      id: id,
+      message: message,
+      type: errorType,
+      timestamp: DateTime.now(),
+      messageColor: messageColor ?? defaultMessageColor,
+      icon: icon ?? defaultIcon,
+      iconColor: iconColor ?? defaultIconColor,
+      retryButtonText: retryButtonText,
+    );
+    
+    _retryCallbacks[id] = onRetry;
+    
+    if (kDebugMode) {
+      debugPrint('🚨 [ErrorHandler] 에러 등록: $id - $message');
+    }
+  }
+
+  /// 타임아웃 에러 등록 (특별 처리)
+  static void registerTimeoutError({
+    required String id,
+    required VoidCallback onRetry,
+  }) {
+    registerError(
+      id: id,
+      error: 'timeout',
+      context: ErrorContext.ocr,
+      onRetry: onRetry,
+      messageColor: Colors.red[800],
+      icon: Icons.error_outline,
+      iconColor: Colors.red,
+      retryButtonText: '다시 시도',
+    );
+  }
+
+  /// 중국어 감지 실패 에러 등록
+  static void registerChineseDetectionError({
+    required String id,
+    required VoidCallback onConfirm,
+  }) {
+    _errorStates[id] = ErrorState(
+      id: id,
+      message: '공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.',
+      type: ErrorType.general,
+      timestamp: DateTime.now(),
+      messageColor: Colors.orange[800],
+      icon: Icons.translate_outlined,
+      iconColor: Colors.orange,
+      retryButtonText: '확인',
+    );
+    
+    _retryCallbacks[id] = onConfirm;
+    
+    if (kDebugMode) {
+      debugPrint('🚨 [ErrorHandler] 중국어 감지 실패 에러 등록: $id');
+    }
+  }
+
+  /// 에러 상태 해제
+  static void clearError(String id) {
+    _errorStates.remove(id);
+    _retryCallbacks.remove(id);
+    
+    if (kDebugMode) {
+      debugPrint('✅ [ErrorHandler] 에러 해제: $id');
+    }
+  }
+
+  /// 모든 에러 해제
+  static void clearAllErrors() {
+    _errorStates.clear();
+    _retryCallbacks.clear();
+  }
+
+  /// 특정 에러 상태 조회
+  static ErrorState? getError(String id) => _errorStates[id];
+
+  /// 에러 존재 여부 확인
+  static bool hasError(String id) => _errorStates.containsKey(id);
+
+  /// 재시도 콜백 존재 여부 확인
+  static bool hasRetryCallback(String id) => _retryCallbacks.containsKey(id) && _retryCallbacks[id] != null;
+
+  /// 재시도 실행
+  static void retry(String id) {
+    final callback = _retryCallbacks[id];
+    if (callback != null) {
+      clearError(id);
+      callback();
+      
+      if (kDebugMode) {
+        debugPrint('🔄 [ErrorHandler] 재시도 실행: $id');
+      }
+    }
+  }
+
+  /// 예외로부터 에러 등록
+  static void registerErrorFromException({
+    required String id,
+    required dynamic error,
+    ErrorContext? context,
+    VoidCallback? onRetry,
+  }) {
+    registerError(
+      id: id,
+      error: error,
+      context: context,
+      onRetry: onRetry,
+    );
+  }
+
   /// 에러 객체나 메시지를 분석하여 적절한 에러 유형 반환
   static ErrorType analyzeError(dynamic error) {
     final errorString = error.toString().toLowerCase();

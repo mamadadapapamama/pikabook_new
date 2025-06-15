@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'dart:async';
 import 'views/screens/login_screen.dart';
@@ -16,6 +17,7 @@ import 'core/services/common/plan_service.dart';
 import 'core/services/common/usage_limit_service.dart';
 import 'core/services/payment/in_app_purchase_service.dart';
 import 'core/services/cache/cache_manager.dart';
+
 import 'core/widgets/usage_dialog.dart';
 import 'views/screens/loading_screen.dart';
 import 'core/services/marketing/marketing_campaign_service.dart';
@@ -202,16 +204,30 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     final isLoggedIn = FirebaseAuth.instance.currentUser != null;
     
     if (kDebugMode) {
-      debugPrint('[checkSampleMode] 로그인 상태: $isLoggedIn');
+      debugPrint('[checkSampleMode] 로그인 상태: $isLoggedIn, 현재 샘플모드: $_isSampleMode');
     }
     
     if (mounted) {
       setState(() {
-        _isSampleMode = !isLoggedIn; // 로그아웃 상태 = 샘플 모드
+        // 로그인된 경우에만 샘플 모드 비활성화
+        // 로그아웃 상태라고 해서 자동으로 샘플 모드로 전환하지 않음
+        if (isLoggedIn) {
+          _isSampleMode = false;
+          if (kDebugMode) {
+            debugPrint('[checkSampleMode] 로그인 감지, 샘플 모드 비활성화');
+          }
+        } else {
+          // 로그아웃 상태에서는 현재 샘플 모드 상태를 유지
+          // 샘플 모드는 명시적으로 "로그인 없이 사용하기"를 선택했을 때만 활성화
+          if (kDebugMode) {
+            debugPrint('[checkSampleMode] 로그아웃 상태, 샘플 모드 상태 유지: $_isSampleMode');
+          }
+        }
+        
         // 샘플 모드이면 로딩 상태 해제
         if (_isSampleMode) {
           if (kDebugMode) {
-            debugPrint('[checkSampleMode] 샘플 모드 활성화, 로딩 상태 해제');
+            debugPrint('[checkSampleMode] 샘플 모드 활성화됨, 로딩 상태 해제');
           }
           _isLoading = false;
           _isLoadingUserData = false;
@@ -239,19 +255,21 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           // 사용자 로그인/로그아웃 처리
           if (user != null) {
             // 로그인 처리
-            _isSampleMode = false;
-            
             setState(() {
               _user = user;
               _userId = user.uid;
               _isLoading = false;
               _isLoadingUserData = true;
+              _isSampleMode = false; // 로그인 시 샘플 모드 비활성화
             });
             
             // 사용자 데이터 로드
             await _loadUserPreferences();
           } else {
             // 로그아웃 처리
+            if (kDebugMode) {
+              debugPrint('앱: 로그아웃 처리, 샘플 모드 상태 유지: $_isSampleMode');
+            }
             
             setState(() {
               _user = null;
@@ -259,7 +277,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               _isOnboardingCompleted = false;
               _isLoading = false;
               _isLoadingUserData = false;
-              _isSampleMode = false; // 로그아웃 시 샘플 모드 비활성화
+              // 로그아웃 시 샘플 모드 상태를 유지 (자동으로 비활성화하지 않음)
+              // _isSampleMode는 명시적으로 "로그인 없이 사용하기"를 선택했을 때만 true가 됨
             });
           }
         },
@@ -460,11 +479,11 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       debugPrint('App build 호출: isInitialized=$_isInitialized, isLoading=$_isLoading, isLoadingUserData=$_isLoadingUserData, user=${_user?.uid}, isOnboardingCompleted=$_isOnboardingCompleted, isSampleMode=$_isSampleMode');
     }
     
-    // 단일 MaterialApp 반환
-      return MaterialApp(
-        debugShowCheckedModeBanner: false,
+    // MaterialApp 반환
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-        scrollBehavior: const CustomScrollBehavior(),
+      scrollBehavior: const CustomScrollBehavior(),
       scaffoldMessengerKey: _scaffoldMessengerKey, // ScaffoldMessenger 키 설정
       home: _buildCurrentScreen(), // 상태에 따라 적절한 화면 위젯 반환
     );
@@ -472,12 +491,19 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   // 현재 상태에 맞는 화면 위젯을 반환하는 헬퍼 메서드
   Widget _buildCurrentScreen() {
+    if (kDebugMode) {
+      debugPrint('_buildCurrentScreen 호출: user=${_user?.uid}, isSampleMode=$_isSampleMode, isLoading=$_isLoading, isLoadingUserData=$_isLoadingUserData');
+    }
+    
     // 상태에 따른 화면 표시
     if (!_isInitialized && _error != null) {
       return _buildErrorScreen(_error!); // Scaffold 반환
     } else if (_isLoading || (_isLoadingUserData && _user != null)) {
       return _buildLoadingScreen(); // LoadingScreen 위젯 반환
     } else if (_user == null) {
+      if (kDebugMode) {
+        debugPrint('사용자 로그아웃 상태: isSampleMode=$_isSampleMode -> ${_isSampleMode ? "SampleHomeScreen" : "LoginScreen"} 표시');
+      }
       return _isSampleMode ? _buildSampleModeScreen() : _buildLoginScreen(); // SampleHomeScreen 또는 LoginScreen 위젯 반환
     } else if (!_isOnboardingCompleted) {
       return _buildOnboardingScreen(); // OnboardingScreen 위젯 반환

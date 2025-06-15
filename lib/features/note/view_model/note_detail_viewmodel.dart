@@ -73,6 +73,10 @@ class NoteDetailViewModel extends ChangeNotifier {
   bool _llmRetryAvailable = false;
   bool _isRetryingLlm = false;
   
+  // 최종 실패 관련 상태
+  bool _showFailureMessage = false;
+  String? _userFriendlyError;
+  
   // Getters
   String get noteId => _noteId;
   List<page_model.Page>? get pages => _pages;
@@ -86,6 +90,10 @@ class NoteDetailViewModel extends ChangeNotifier {
   bool get llmTimeoutOccurred => _llmTimeoutOccurred;
   bool get llmRetryAvailable => _llmRetryAvailable;
   bool get isRetryingLlm => _isRetryingLlm;
+  
+  // 최종 실패 관련 getters
+  bool get showFailureMessage => _showFailureMessage;
+  String? get userFriendlyError => _userFriendlyError;
   
   // 현재 페이지 getter
   page_model.Page? get currentPage {
@@ -377,6 +385,36 @@ class NoteDetailViewModel extends ChangeNotifier {
     _setupPageListener(pageId);
     
     try {
+      // 먼저 페이지 문서에서 에러 상태 확인
+      final pageDoc = await FirebaseFirestore.instance
+          .collection('pages')
+          .doc(pageId)
+          .get();
+      
+      if (pageDoc.exists) {
+        final pageData = pageDoc.data() as Map<String, dynamic>;
+        final status = pageData['status'] as String?;
+        final errorMessage = pageData['errorMessage'] as String?;
+        final errorType = pageData['errorType'] as String?;
+        
+        // 실패 상태이고 에러 메시지가 있는 경우
+        if (status == ProcessingStatus.failed.toString() && errorMessage != null) {
+          if (_disposed) return;
+          
+          _textLoadingStates[pageId] = false;
+          _textErrors[pageId] = errorMessage;
+          _pageStatuses[pageId] = ProcessingStatus.failed;
+          if (!_disposed) notifyListeners();
+          
+          if (flutter_foundation.kDebugMode) {
+            debugPrint("❌ 페이지 에러 상태 감지: $pageId");
+            debugPrint("   에러 메시지: $errorMessage");
+            debugPrint("   에러 타입: $errorType");
+          }
+          return;
+        }
+      }
+      
       // TextProcessingService 사용
       final processedText = await _textProcessingService.getProcessedText(pageId);
       
@@ -719,7 +757,7 @@ class NoteDetailViewModel extends ChangeNotifier {
     }
   }
 
-  /// 노트의 LLM 타임아웃 상태 확인 (Firestore에서)
+  /// 노트의 LLM 타임아웃 및 실패 상태 확인 (Firestore에서)
   Future<void> checkLlmTimeoutStatus() async {
     if (_disposed) return;
     
@@ -731,15 +769,61 @@ class NoteDetailViewModel extends ChangeNotifier {
       
       if (noteDoc.exists) {
         final data = noteDoc.data() as Map<String, dynamic>;
+        
+        // LLM 타임아웃 상태 확인
         final timeoutOccurred = data['llmTimeout'] as bool? ?? false;
         final retryAvailable = data['retryAvailable'] as bool? ?? false;
-        
         updateLlmTimeoutStatus(timeoutOccurred, retryAvailable);
+        
+        // 최종 실패 상태 확인
+        final showFailure = data['showFailureMessage'] as bool? ?? false;
+        final userError = data['userFriendlyError'] as String?;
+        updateFailureStatus(showFailure, userError);
       }
       
     } catch (e) {
       if (flutter_foundation.kDebugMode) {
-        debugPrint('⚠️ [ViewModel] LLM 타임아웃 상태 확인 실패: $_noteId, 오류: $e');
+        debugPrint('⚠️ [ViewModel] 노트 상태 확인 실패: $_noteId, 오류: $e');
+      }
+    }
+  }
+
+  /// 최종 실패 상태 업데이트
+  void updateFailureStatus(bool showFailure, String? userError) {
+    if (_disposed) return;
+    
+    _showFailureMessage = showFailure;
+    _userFriendlyError = userError;
+    notifyListeners();
+    
+    if (flutter_foundation.kDebugMode) {
+      debugPrint('💀 [ViewModel] 실패 상태 업데이트: show=$showFailure, error=$userError');
+    }
+  }
+
+  /// 실패 메시지 확인 완료 (사용자가 확인한 후 호출)
+  Future<void> dismissFailureMessage() async {
+    if (_disposed) return;
+    
+    try {
+      await FirebaseFirestore.instance
+          .collection('notes')
+          .doc(_noteId)
+          .update({
+        'showFailureMessage': false,
+        'messageDismissedAt': FieldValue.serverTimestamp(),
+      });
+      
+      _showFailureMessage = false;
+      notifyListeners();
+      
+      if (flutter_foundation.kDebugMode) {
+        debugPrint('✅ [ViewModel] 실패 메시지 확인 완료: $_noteId');
+      }
+      
+    } catch (e) {
+      if (flutter_foundation.kDebugMode) {
+        debugPrint('⚠️ [ViewModel] 실패 메시지 확인 처리 실패: $_noteId, 오류: $e');
       }
     }
   }

@@ -98,6 +98,14 @@ class TextProcessingOrchestrator {
         final ocrResult = await _processOcrText(rawText);
         processedText = ocrResult.reorderedText;
         
+        // OCR 후처리 결과가 비어있으면 중국어 감지 실패
+        if (processedText.isEmpty) {
+          if (kDebugMode) {
+            debugPrint('❌ OCR 후처리 결과가 비어있음 - 중국어 감지 실패');
+          }
+          throw Exception('공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.');
+        }
+        
         // 텍스트 분리
         textSegments = _textSeparationService.separateByMode(processedText, mode);
         
@@ -118,6 +126,15 @@ class TextProcessingOrchestrator {
         
         // 간단한 텍스트 정제 (LLM 전송용)
         processedText = rawText.trim().replaceAll(RegExp(r'\s+'), ' ');
+        
+        // 중국어 포함 여부 확인 (Paragraph 모드에서는 간단 체크)
+        if (!_postOcrProcessor.containsChinese(processedText)) {
+          if (kDebugMode) {
+            debugPrint('❌ Paragraph 모드: 중국어 감지 실패');
+          }
+          throw Exception('공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.');
+        }
+        
         textSegments = []; // 빈 배열 (LLM에서 블록 타입별로 재구성)
         
         if (kDebugMode) {

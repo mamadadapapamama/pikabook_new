@@ -181,6 +181,11 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       );
     }
 
+    // 최종 실패 메시지 표시 (우선순위 높음)
+    if (viewModel.showFailureMessage) {
+      return _buildFailureMessageWidget(context, viewModel);
+    }
+
     // LLM 타임아웃 발생시 재시도 버튼 표시
     if (viewModel.llmTimeoutOccurred && viewModel.llmRetryAvailable) {
       return _buildLlmRetryWidget(context, viewModel);
@@ -243,6 +248,49 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
                 await viewModel.retryLlmProcessing();
               },
               isLoading: viewModel.isRetryingLlm,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 최종 실패 메시지 위젯
+  Widget _buildFailureMessageWidget(BuildContext context, NoteDetailViewModel viewModel) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 64,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              '처리 실패',
+              style: TypographyTokens.headline3.copyWith(
+                color: Colors.red[800],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              viewModel.userFriendlyError ?? '처리 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.',
+              style: TypographyTokens.body2.copyWith(
+                color: Colors.grey[700],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            PikaButton(
+              text: '확인',
+              variant: PikaButtonVariant.text,
+              onPressed: () async {
+                await viewModel.dismissFailureMessage();
+              },
             ),
           ],
         ),

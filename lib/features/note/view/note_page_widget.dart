@@ -2,19 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
-import 'dart:async';
-import '../../../core/models/processed_text.dart';
-import '../../../core/models/processing_status.dart';
-import '../../../core/utils/timeout_manager.dart';
-import '../../../core/utils/error_handler.dart';
-import '../../../core/widgets/pika_button.dart';
-import '../view_model/note_detail_viewmodel.dart';
 import '../../../core/models/page.dart' as page_model;
+import '../../../core/models/processed_text.dart';
+import '../../../core/models/text_unit.dart';
 import '../../../core/models/flash_card.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
-import '../../../core/theme/tokens/color_tokens.dart';
+import '../../../core/utils/timeout_manager.dart';
+import '../../../core/utils/error_handler.dart';
+import '../../../core/widgets/error_display_widget.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
+import '../../../core/widgets/pika_button.dart';
+import '../view_model/note_detail_viewmodel.dart';
 import '../../flashcard/flashcard_view_model.dart';
 import 'page_image_widget.dart';
 import 'processed_text_widget.dart';
@@ -47,10 +46,14 @@ class _NotePageWidgetState extends State<NotePageWidget> {
   bool _hasTriedLoading = false;
   TimeoutManager? _ocrTimeoutManager;
   bool _isRetrying = false;
+  bool _hasTimedOut = false;
+  String _currentMessage = '텍스트를 번역하고 있어요.\n잠시만 기다려 주세요!';
+  String get _errorId => 'page_${widget.page.id}';
 
   @override
   void initState() {
     super.initState();
+    
     // 초기 로딩 시도
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _tryLoadTextIfNeeded();
@@ -64,7 +67,10 @@ class _NotePageWidgetState extends State<NotePageWidget> {
     if (oldWidget.page.id != widget.page.id) {
       _hasTriedLoading = false;
       _isRetrying = false;
+      _hasTimedOut = false;
+      _currentMessage = '텍스트를 번역하고 있어요.\n잠시만 기다려 주세요!';
       _disposeTimeoutManager();
+      ErrorHandler.clearError(_errorId);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _tryLoadTextIfNeeded();
       });
@@ -108,34 +114,19 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       identifier: 'OCR-${widget.page.id}',
       onProgress: (elapsedSeconds) {
         if (!mounted) return;
-        // 진행 메시지는 loading indicator에서 자동 처리됨
+        // 진행 상황은 ErrorDisplayWidget에서 자동 처리
       },
       onTimeout: () {
         if (mounted) {
-          // 스낵바로 타임아웃 에러 메시지 표시
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('문제가 지속되고 있습니다. 잠시 뒤에 다시 시도해 주세요.'),
-              backgroundColor: Colors.red[600],
-              duration: const Duration(seconds: 4),
-              behavior: SnackBarBehavior.floating,
-              action: SnackBarAction(
-                label: '확인',
-                textColor: Colors.white,
-                onPressed: () {
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                },
-              ),
-            ),
-          );
+                     // ErrorHandler를 통해 타임아웃 에러 등록
+           ErrorHandler.registerTimeoutError(
+             id: _errorId,
+             onRetry: _retryOcrProcessing,
+           );
           
           if (kDebugMode) {
-            print('📢 [OCR 타임아웃] 스낵바 메시지 표시');
+            print('⏰ [NotePageWidget] 타임아웃 발생 - ErrorHandler 등록');
           }
-          
-          setState(() {
-            // 타임아웃 상태로 변경하여 재시도 버튼 표시
-          });
         }
       },
     );
@@ -143,21 +134,17 @@ class _NotePageWidgetState extends State<NotePageWidget> {
 
   /// OCR 재시도 실행
   void _retryOcrProcessing() {
-    if (!mounted || _isRetrying) return;
-    
-    setState(() {
-      _isRetrying = true;
-      _hasTriedLoading = false;
-    });
-    
-    final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
-    
-    // 재시도 실행
-    _tryLoadTextIfNeeded();
-    
-    setState(() {
-      _isRetrying = false;
-    });
+    if (mounted) {
+      setState(() {
+        _hasTimedOut = false;
+        _currentMessage = '텍스트를 번역하고 있어요.\n잠시만 기다려 주세요!';
+        _disposeTimeoutManager();
+        ErrorHandler.clearError(_errorId);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _tryLoadTextIfNeeded();
+        });
+      });
+    }
   }
 
   @override
@@ -268,23 +255,31 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       return _buildProcessedTextWidget(context, processedText, viewModel);
     }
     
-    // 로딩 중이거나 오류가 있는 경우
-    if (isLoading) {
-      if (kDebugMode) {
-        print('⏳ [NotePageWidget] 로딩 인디케이터 반환: ${widget.page.id}');
-      }
-      return _buildLoadingIndicator();
-    } else if (error != null) {
-      if (kDebugMode) {
-        print('❌ [NotePageWidget] 에러 위젯 반환: ${widget.page.id} - $error');
-      }
-      return _buildErrorWidget(error);
-    } else {
-      if (kDebugMode) {
-        print('⏳ [NotePageWidget] 기본 로딩 인디케이터 반환: ${widget.page.id}');
-      }
-      return _buildLoadingIndicator(); // 빈 상태도 로딩 인디케이터로 통일
+    // 기존 에러가 있는 경우 ErrorHandler에 등록
+    if (error != null) {
+      final isChineseDetectionError = error.contains('중국어가 없습니다');
+      
+              if (isChineseDetectionError) {
+          ErrorHandler.registerChineseDetectionError(
+            id: _errorId,
+            onConfirm: () => Navigator.of(context).pop(),
+          );
+        } else {
+          ErrorHandler.registerErrorFromException(
+            id: _errorId,
+            error: error,
+            context: ErrorContext.ocr,
+            onRetry: _retryOcrProcessing,
+          );
+        }
     }
+    
+    // ErrorDisplayWidget 사용
+    return ErrorDisplayWidget(
+      errorId: _errorId,
+      loadingMessage: '텍스트를 번역하고 있어요.\n잠시만 기다려 주세요!',
+      showLoadingByDefault: isLoading || error == null,
+    );
   }
   
   // 처리된 텍스트 위젯 (번역 완료된 상태)
@@ -318,50 +313,111 @@ class _NotePageWidgetState extends State<NotePageWidget> {
   
   // 로딩 인디케이터 (텍스트 처리 중 상태)
   Widget _buildLoadingIndicator() {
-    return const Center(
+    // 타임아웃 발생한 경우 에러 상태로 표시
+    if (_hasTimedOut) {
+      return _buildDynamicStatusIndicator(
+        message: _currentMessage,
+        showLoading: false,
+        messageColor: Colors.red[800],
+        icon: Icons.error_outline,
+        iconColor: Colors.red,
+        onRetry: _retryOcrProcessing,
+        retryButtonText: '다시 시도',
+      );
+    }
+    
+    // 일반 로딩 상태
+    return Center(
       child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 32.0),
-        child: DotLoadingIndicator(message: '텍스트를 번역하고 있어요.\n잠시만 기다려 주세요!'),
+        padding: const EdgeInsets.symmetric(vertical: 32.0),
+        child: DotLoadingIndicator(message: _currentMessage),
       ),
     );
   }
   
-  // 오류 위젯
-  Widget _buildErrorWidget(String? errorMessage) {
-    final errorType = ErrorHandler.analyzeError(errorMessage ?? '');
-    final userFriendlyMessage = ErrorHandler.getErrorMessage(errorType);
-    final isTimeoutError = errorType == ErrorType.timeout;
-    final isNetworkError = errorType == ErrorType.network;
-    
+  // 동적 로딩/에러 인디케이터
+  Widget _buildDynamicStatusIndicator({
+    required String message,
+    bool showLoading = true,
+    Color? messageColor,
+    IconData? icon,
+    Color? iconColor,
+    VoidCallback? onRetry,
+    String? retryButtonText,
+  }) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 32.0, horizontal: 16.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isNetworkError ? Icons.wifi_off : Icons.error_outline,
-              color: Colors.red,
-              size: 48,
-            ),
-            const SizedBox(height: 16),
+            if (showLoading) ...[
+              const DotLoadingIndicator(message: ''),
+              const SizedBox(height: 16),
+            ] else if (icon != null) ...[
+              Icon(
+                icon,
+                color: iconColor ?? Colors.grey,
+                size: 48,
+              ),
+              const SizedBox(height: 16),
+            ],
             Text(
-              userFriendlyMessage,
-              style: TypographyTokens.body2.copyWith(color: Colors.red[800]),
+              message,
+              style: TypographyTokens.body2.copyWith(
+                color: messageColor ?? Colors.grey[700],
+              ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
-            // 타임아웃이나 네트워크 에러시 재시도 버튼 표시
-            if (isTimeoutError || isNetworkError)
+            if (onRetry != null) ...[
+              const SizedBox(height: 24),
               PikaButton(
-                text: '다시 시도',
+                text: retryButtonText ?? '다시 시도',
                 variant: PikaButtonVariant.text,
-                onPressed: _isRetrying ? null : _retryOcrProcessing,
+                onPressed: _isRetrying ? null : onRetry,
                 isLoading: _isRetrying,
               ),
+            ],
           ],
         ),
       ),
+    );
+  }
+  
+  // 오류 위젯
+  Widget _buildErrorWidget(String? errorMessage) {
+    // 중국어 감지 실패 에러 특별 처리
+    final isChineseDetectionError = errorMessage?.contains('중국어가 없습니다') == true;
+    
+    if (isChineseDetectionError) {
+      return _buildDynamicStatusIndicator(
+        message: '공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.',
+        showLoading: false,
+        messageColor: Colors.orange[800],
+        icon: Icons.translate_outlined,
+        iconColor: Colors.orange,
+        onRetry: () {
+          // 페이지를 뒤로 가거나 홈으로 이동
+          Navigator.of(context).pop();
+        },
+        retryButtonText: '확인',
+      );
+    }
+    
+    // 일반 에러 처리
+    final errorType = ErrorHandler.analyzeError(errorMessage ?? '');
+    final userFriendlyMessage = ErrorHandler.getErrorMessage(errorType);
+    final isTimeoutError = errorType == ErrorType.timeout;
+    final isNetworkError = errorType == ErrorType.network;
+    
+    return _buildDynamicStatusIndicator(
+      message: userFriendlyMessage,
+      showLoading: false,
+      messageColor: Colors.red[800],
+      icon: isNetworkError ? Icons.wifi_off : Icons.error_outline,
+      iconColor: Colors.red,
+      onRetry: (isTimeoutError || isNetworkError) ? _retryOcrProcessing : null,
+      retryButtonText: '다시 시도',
     );
   }
   

@@ -1,4 +1,5 @@
 import '../utils/language_constants.dart';
+import 'package:flutter/foundation.dart';
 
 /// 세그먼트 타입 (Paragraph 모드용)
 enum SegmentType {
@@ -54,7 +55,7 @@ class TextUnit {
       translatedText: json['translatedText'] as String?,
       sourceLanguage: json['sourceLanguage'] as String? ?? SourceLanguage.DEFAULT,
       targetLanguage: json['targetLanguage'] as String? ?? TargetLanguage.DEFAULT,
-      segmentType: _parseSegmentType(json['segmentType'] as String?),
+      segmentType: _parseSegmentType(json['type'] as String? ?? json['segmentType'] as String?),
     );
   }
 
@@ -91,13 +92,44 @@ class TextUnit {
 
   /// 문자열에서 SegmentType 파싱
   static SegmentType _parseSegmentType(String? typeString) {
-    if (typeString == null) return SegmentType.unknown;
+    if (typeString == null) {
+      if (kDebugMode) {
+        debugPrint('⚠️ segmentType이 null입니다');
+      }
+      return SegmentType.unknown;
+    }
     
     try {
-      return SegmentType.values.firstWhere(
-        (e) => e.name == typeString.toLowerCase()
-      );
+      // 먼저 정확한 이름으로 찾기 시도
+      for (final type in SegmentType.values) {
+        if (type.name == typeString) {
+          if (kDebugMode) {
+            debugPrint('✅ segmentType 파싱 성공 (정확한 매치): "$typeString" -> ${type.name}');
+          }
+          return type;
+        }
+      }
+      
+      // 대소문자 무시하고 찾기 시도
+      for (final type in SegmentType.values) {
+        if (type.name.toLowerCase() == typeString.toLowerCase()) {
+          if (kDebugMode) {
+            debugPrint('✅ segmentType 파싱 성공 (대소문자 무시): "$typeString" -> ${type.name}');
+          }
+          return type;
+        }
+      }
+      
+      // 찾지 못한 경우
+      if (kDebugMode) {
+        debugPrint('❌ segmentType 파싱 실패: "$typeString" -> unknown (매치되는 타입 없음)');
+        debugPrint('   사용 가능한 타입들: ${SegmentType.values.map((e) => e.name).join(', ')}');
+      }
+      return SegmentType.unknown;
     } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ segmentType 파싱 중 예외 발생: "$typeString" -> unknown (오류: $e)');
+      }
       return SegmentType.unknown;
     }
   }

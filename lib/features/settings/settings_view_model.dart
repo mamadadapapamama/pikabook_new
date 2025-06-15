@@ -35,15 +35,17 @@ class SettingsViewModel extends ChangeNotifier {
   bool get useSegmentMode => _useSegmentMode;
 
   // 플랜 정보
-  String _planType = PlanService.PLAN_FREE;
-  String _planName = '무료';
+  String? _planType;
+  String? _planName;
   int _remainingDays = 0;
   Map<String, int> _planLimits = {};
+  bool _isPlanLoaded = false;
 
-  String get planType => _planType;
-  String get planName => _planName;
+  String get planType => _planType ?? PlanService.PLAN_FREE;
+  String get planName => _planName ?? '로딩 중...';
   int get remainingDays => _remainingDays;
   Map<String, int> get planLimits => _planLimits;
+  bool get isPlanLoaded => _isPlanLoaded;
 
   /// 초기 데이터 로드
   Future<void> initialize() async {
@@ -112,6 +114,7 @@ class SettingsViewModel extends ChangeNotifier {
       _planName = plan.name;
       _remainingDays = plan.daysRemaining;
       _planLimits = plan.limits;
+      _isPlanLoaded = true;
       
       notifyListeners();
       

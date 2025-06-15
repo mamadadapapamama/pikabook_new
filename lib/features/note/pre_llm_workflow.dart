@@ -149,6 +149,27 @@ class PreLLMWorkflow {
             if (kDebugMode) {
               debugPrint('❌ 이미지 ${i+1} 처리 실패: $e');
             }
+            
+            // 중국어 감지 실패의 경우 페이지에 에러 상태 저장
+            if (e.toString().contains('중국어가 없습니다')) {
+              try {
+                await _pageService.updatePage(pageIds[i], {
+                  'status': ProcessingStatus.failed.toString(),
+                  'errorMessage': e.toString(),
+                  'errorType': 'NO_CHINESE_DETECTED',
+                  'ocrCompletedAt': FieldValue.serverTimestamp(),
+                });
+                
+                if (kDebugMode) {
+                  debugPrint('📝 중국어 감지 실패 상태 저장: ${pageIds[i]}');
+                }
+              } catch (updateError) {
+                if (kDebugMode) {
+                  debugPrint('⚠️ 에러 상태 저장 실패: $updateError');
+                }
+              }
+            }
+            
             // 개별 페이지 실패는 전체 프로세스를 중단시키지 않음
           }
         }

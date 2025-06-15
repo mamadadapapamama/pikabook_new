@@ -196,6 +196,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             _isProcessing = false;
             _isCancelled = true;
           });
+          
+          // 갤러리 취소 시 bottom sheet 닫기
+          if (Navigator.canPop(context)) {
+            Navigator.of(context).pop();
+          }
         } else {
           _isProcessing = false;
           _isCancelled = true;
@@ -427,6 +432,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
         }
         
         _resetProcessingState();
+        
+        // 카메라 취소 시 bottom sheet 닫기
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.of(context).pop();
+        }
         return;
       }
       
@@ -453,6 +463,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             }
             // 취소는 오류가 아님
             _resetProcessingState();
+            
+            // 카메라 취소 시 bottom sheet 닫기
+            if (mounted && Navigator.canPop(context)) {
+              Navigator.of(context).pop();
+            }
             return;
           }
         } catch (e) {
@@ -470,6 +485,11 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
               print('두 번째 시도에서 사용자가 취소했습니다.');
             }
             _resetProcessingState();
+            
+            // 카메라 취소 시 bottom sheet 닫기
+            if (mounted && Navigator.canPop(context)) {
+              Navigator.of(context).pop();
+            }
             return;
           }
           

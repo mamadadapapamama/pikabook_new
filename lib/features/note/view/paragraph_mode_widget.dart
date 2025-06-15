@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/text_unit.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
@@ -48,6 +49,7 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
   void _initializeStyles() {
     _defaultOriginalTextStyle = TypographyTokens.subtitle2Cn.copyWith(
       color: ColorTokens.black,
+      fontWeight: FontWeight.w200,
     );
 
     _defaultTranslatedTextStyle = TypographyTokens.caption.copyWith(
@@ -72,11 +74,23 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
     final List<Widget> blockWidgets = [];
     final units = widget.processedText.units;
 
+    if (kDebugMode) {
+      debugPrint('🔍 ParagraphModeWidget: ${units.length}개 유닛 렌더링');
+      for (int i = 0; i < units.length && i < 5; i++) {
+        final unit = units[i];
+        final preview = unit.originalText.length > 20 
+            ? '${unit.originalText.substring(0, 20)}...' 
+            : unit.originalText;
+        debugPrint('  유닛 $i: segmentType=${unit.segmentType.name}, text="$preview"');
+      }
+    }
+
     for (int i = 0; i < units.length; i++) {
       final unit = units[i];
       
-      // 배경색이 필요한 블록인지 확인
-      if (_needsBackground(unit.segmentType)) {
+      // 배경색이 필요한 블록인지 확인 (타입 추론 포함)
+      final inferredType = _inferSegmentType(unit);
+      if (_needsBackground(inferredType)) {
         // 연속된 배경 블록들을 그룹화
         final groupedUnits = _getConsecutiveBackgroundUnits(units, i);
         
@@ -127,12 +141,50 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
            segmentType == SegmentType.title;
   }
 
+  /// segmentType이 unknown인 경우 텍스트 내용으로 타입 추론
+  SegmentType _inferSegmentType(TextUnit unit) {
+    if (unit.segmentType != SegmentType.unknown) {
+      return unit.segmentType;
+    }
+
+    final text = unit.originalText.trim();
+    
+    // 제목 패턴 감지
+    if (text.length <= 15 && !text.contains('。') && !text.contains('？') && !text.contains('！')) {
+      if (kDebugMode) {
+        debugPrint('🔍 제목으로 추론: "$text"');
+      }
+      return SegmentType.title;
+    }
+    
+    // 지시사항 패턴 감지
+    if (text.contains('请') || text.contains('阅读') || text.contains('听') || text.contains('看') || 
+        text.contains('根据') || text.contains('按照') || text.contains('完成')) {
+      if (kDebugMode) {
+        debugPrint('🔍 지시사항으로 추론: "$text"');
+      }
+      return SegmentType.instruction;
+    }
+    
+    // 본문 패턴 감지 (긴 텍스트)
+    if (text.length > 30) {
+      if (kDebugMode) {
+        debugPrint('🔍 본문으로 추론: "$text"');
+      }
+      return SegmentType.passage;
+    }
+    
+    // 기본값은 unknown 유지
+    return SegmentType.unknown;
+  }
+
   /// 연속된 배경 블록들을 그룹화
   List<TextUnit> _getConsecutiveBackgroundUnits(List<TextUnit> units, int startIndex) {
     final List<TextUnit> groupedUnits = [];
     
     for (int i = startIndex; i < units.length; i++) {
-      if (_needsBackground(units[i].segmentType)) {
+      final inferredType = _inferSegmentType(units[i]);
+      if (_needsBackground(inferredType)) {
         groupedUnits.add(units[i]);
       } else {
         break;
@@ -161,9 +213,9 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
               _buildSelectableOriginalText(
                 unit,
                 style: unit.segmentType == SegmentType.title 
-                    ? TypographyTokens.subtitle2Cn.copyWith(
+                    ? TypographyTokens.subtitle1Cn.copyWith(
                         color: ColorTokens.textPrimary,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w400,
                       )
                     : _defaultOriginalTextStyle,
               ),
@@ -213,7 +265,7 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
           style: unit.segmentType == SegmentType.title 
               ? TypographyTokens.subtitle1Cn.copyWith(
                   color: ColorTokens.textPrimary,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w400,
                 )
               : _defaultOriginalTextStyle,
         ),
