@@ -130,13 +130,13 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
         onTap: _togglePlayback,
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: _isPlaying ? ColorTokens.primary : ColorTokens.secondary,
-              width: 1.5,
+              width: 1,
             ),
             color: _isPlaying ? ColorTokens.primary.withOpacity(0.1) : Colors.transparent,
           ),
@@ -146,14 +146,14 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
               Icon(
                 _isPlaying ? Icons.stop : Icons.volume_up,
                 color: _isPlaying ? ColorTokens.primary : ColorTokens.secondary,
-                size: 18,
+                size: 12,
               ),
               const SizedBox(width: 6),
               Text(
                 '본문 전체 듣기',
                 style: TypographyTokens.caption.copyWith(
                   color: _isPlaying ? ColorTokens.primary : ColorTokens.secondary,
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
               ),
