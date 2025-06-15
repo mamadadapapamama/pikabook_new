@@ -4,6 +4,9 @@ import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../../core/services/authentication/auth_service.dart';
 import '../sample/sample_tts_service.dart';
+import '../../core/services/common/plan_service.dart';
+import '../../core/services/common/usage_limit_service.dart';
+import '../../../core/widgets/upgrade_modal.dart';
 
 /// 전체 텍스트 TTS 재생 버튼 위젯 (Pill 모양 Outline 버튼)
 class TtsPlayAllButton extends StatefulWidget {
@@ -58,6 +61,29 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
     // 샘플 모드(로그아웃 상태)에서는 SampleTtsService 사용
     if (_authService.currentUser == null) {
       await _handleSampleModeTts();
+      return;
+    }
+
+    // 프리미엄 기능 체크 - 본문 전체 듣기는 프리미엄 전용 기능
+    final planService = PlanService();
+    final planType = await planService.getCurrentPlanType();
+    
+    // 무료 플랜인 경우 업그레이드 모달 표시
+    if (planType == PlanService.PLAN_FREE) {
+      if (mounted) {
+        await UpgradePromptHelper.showTtsUpgradePrompt(context);
+      }
+      return;
+    }
+    
+    // 프리미엄 플랜이지만 TTS 제한에 도달한 경우 체크
+    final usageService = UsageLimitService();
+    final limitStatus = await usageService.checkInitialLimitStatus();
+    
+    if (limitStatus['ttsLimitReached'] == true) {
+      if (mounted) {
+        await UpgradePromptHelper.showTtsUpgradePrompt(context);
+      }
       return;
     }
 
