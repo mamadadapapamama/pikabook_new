@@ -530,6 +530,11 @@ class DictionaryService {
     try {
       await _ensureInitialized();
       
+      // 샘플 모드에서는 내부 사전 검색 불가
+      if (_isSampleMode) {
+        return null;
+      }
+      
       switch (_currentLanguage) {
         case 'zh-CN':
           return _chineseDictionaryService.lookup(word);

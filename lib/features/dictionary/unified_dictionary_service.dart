@@ -117,14 +117,6 @@ class UnifiedDictionaryService {
     }
   }
 
-  /// 최근 검색어 목록 (로그인 상태에서만)
-  Future<List<String>> getRecentSearches() async {
-    if (!_isLoggedIn) return [];
-    
-    await _ensureInitialized();
-    return await _dictionaryService.getRecentSearches();
-  }
-
   /// 캐시 정리
   Future<void> clearCache() async {
     try {

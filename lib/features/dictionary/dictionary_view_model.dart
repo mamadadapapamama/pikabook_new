@@ -80,15 +80,8 @@ class DictionaryViewModel extends ChangeNotifier {
   
   // 단어 검색 기록 가져오기
   Future<void> loadRecentSearches() async {
-    try {
-      final searches = await _dictionaryService.getRecentSearches();
-      _recentSearches = searches;
-      notifyListeners();
-    } catch (e) {
-      if (kDebugMode) {
-        print('최근 검색어 로드 중 오류: $e');
-      }
-    }
+    // TODO: 최근 검색어 기능이 필요하면 구현
+    // 현재는 빈 구현
   }
   
   // 로딩 상태 변경
