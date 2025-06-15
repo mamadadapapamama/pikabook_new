@@ -118,11 +118,11 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       },
       onTimeout: () {
         if (mounted) {
-                     // ErrorHandler를 통해 타임아웃 에러 등록
-           ErrorHandler.registerTimeoutError(
-             id: _errorId,
-             onRetry: _retryOcrProcessing,
-           );
+          // ErrorHandler를 통해 타임아웃 에러 등록
+          ErrorHandler.registerTimeoutError(
+            id: _errorId,
+            onRetry: _retryOcrProcessing,
+          );
           
           if (kDebugMode) {
             print('⏰ [NotePageWidget] 타임아웃 발생 - ErrorHandler 등록');
@@ -138,8 +138,18 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       setState(() {
         _hasTimedOut = false;
         _currentMessage = '텍스트를 번역하고 있어요.\n잠시만 기다려 주세요!';
+        
+        // 타임아웃 매니저 정리
         _disposeTimeoutManager();
-        ErrorHandler.clearError(_errorId);
+        
+        // ViewModel의 에러 상태 초기화
+        final viewModel = Provider.of<NoteDetailViewModel>(context, listen: false);
+        viewModel.clearPageError(widget.page.id);
+        
+        if (kDebugMode) {
+          print('🔄 [NotePageWidget] 재시도 시작 - 에러 상태 초기화: ${widget.page.id}');
+        }
+        
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _tryLoadTextIfNeeded();
         });
@@ -255,30 +265,54 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       return _buildProcessedTextWidget(context, processedText, viewModel);
     }
     
-    // 기존 에러가 있는 경우 ErrorHandler에 등록
+    // 기존 에러가 있는 경우 ErrorHandler에 등록하고 즉시 에러 표시
     if (error != null) {
+      // 에러 발생 시 즉시 타임아웃 매니저 중단
+      if (_ocrTimeoutManager != null && _ocrTimeoutManager!.isActive) {
+        if (kDebugMode) {
+          print('🛑 [NotePageWidget] 에러 발생으로 타임아웃 매니저 중단: ${widget.page.id}');
+        }
+        _ocrTimeoutManager!.stop();
+        _ocrTimeoutManager = null;
+      }
+      
       final isChineseDetectionError = error.contains('중국어가 없습니다');
       
-              if (isChineseDetectionError) {
-          ErrorHandler.registerChineseDetectionError(
-            id: _errorId,
-            onConfirm: () => Navigator.of(context).pop(),
-          );
-        } else {
-          ErrorHandler.registerErrorFromException(
-            id: _errorId,
-            error: error,
-            context: ErrorContext.ocr,
-            onRetry: _retryOcrProcessing,
-          );
-        }
+      if (isChineseDetectionError) {
+        // 중국어 감지 실패 시 직접 에러 UI 표시
+        return _buildDynamicStatusIndicator(
+          message: '공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.',
+          showLoading: false,
+          messageColor: Colors.orange[800],
+          icon: Icons.translate_outlined,
+          iconColor: Colors.orange,
+          onRetry: () => Navigator.of(context).pop(),
+          retryButtonText: '확인',
+        );
+      } else {
+        // 기타 에러 처리
+        final errorType = ErrorHandler.analyzeError(error);
+        final userFriendlyMessage = ErrorHandler.getErrorMessage(errorType);
+        final isTimeoutError = errorType == ErrorType.timeout;
+        final isNetworkError = errorType == ErrorType.network;
+        
+        return _buildDynamicStatusIndicator(
+          message: userFriendlyMessage,
+          showLoading: false,
+          messageColor: Colors.red[800],
+          icon: isNetworkError ? Icons.wifi_off : Icons.error_outline,
+          iconColor: Colors.red,
+          onRetry: (isTimeoutError || isNetworkError) ? _retryOcrProcessing : null,
+          retryButtonText: '다시 시도',
+        );
+      }
     }
     
-    // ErrorDisplayWidget 사용
+    // 에러가 없는 경우 로딩 또는 기본 상태 표시
     return ErrorDisplayWidget(
       errorId: _errorId,
-      loadingMessage: '텍스트를 번역하고 있어요.\n잠시만 기다려 주세요!',
-      showLoadingByDefault: isLoading || error == null,
+      loadingMessage: _currentMessage,
+      showLoadingByDefault: isLoading,
     );
   }
   
@@ -381,43 +415,6 @@ class _NotePageWidgetState extends State<NotePageWidget> {
           ],
         ),
       ),
-    );
-  }
-  
-  // 오류 위젯
-  Widget _buildErrorWidget(String? errorMessage) {
-    // 중국어 감지 실패 에러 특별 처리
-    final isChineseDetectionError = errorMessage?.contains('중국어가 없습니다') == true;
-    
-    if (isChineseDetectionError) {
-      return _buildDynamicStatusIndicator(
-        message: '공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.',
-        showLoading: false,
-        messageColor: Colors.orange[800],
-        icon: Icons.translate_outlined,
-        iconColor: Colors.orange,
-        onRetry: () {
-          // 페이지를 뒤로 가거나 홈으로 이동
-          Navigator.of(context).pop();
-        },
-        retryButtonText: '확인',
-      );
-    }
-    
-    // 일반 에러 처리
-    final errorType = ErrorHandler.analyzeError(errorMessage ?? '');
-    final userFriendlyMessage = ErrorHandler.getErrorMessage(errorType);
-    final isTimeoutError = errorType == ErrorType.timeout;
-    final isNetworkError = errorType == ErrorType.network;
-    
-    return _buildDynamicStatusIndicator(
-      message: userFriendlyMessage,
-      showLoading: false,
-      messageColor: Colors.red[800],
-      icon: isNetworkError ? Icons.wifi_off : Icons.error_outline,
-      iconColor: Colors.red,
-      onRetry: (isTimeoutError || isNetworkError) ? _retryOcrProcessing : null,
-      retryButtonText: '다시 시도',
     );
   }
   

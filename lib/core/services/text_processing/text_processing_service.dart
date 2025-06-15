@@ -196,6 +196,21 @@ class TextProcessingService {
         final page = page_model.Page.fromFirestore(snapshot);
         ProcessedText? processedText;
         
+        // 먼저 에러 상태 확인
+        final data = snapshot.data() as Map<String, dynamic>?;
+        final status = data?['status'] as String?;
+        final errorMessage = data?['errorMessage'] as String?;
+        
+        // 실패 상태이고 에러 메시지가 있는 경우 null 반환하여 에러 상태 전달
+        if (status == 'failed' && errorMessage != null) {
+          if (kDebugMode) {
+            debugPrint('❌ [리스너] 페이지 에러 상태 감지: $pageId');
+            debugPrint('   에러 메시지: $errorMessage');
+          }
+          onTextChanged(null);
+          return;
+        }
+        
         // 우선순위: processedText 필드 → 호환성 모드
         if (page.processedText != null && page.processedText!.isNotEmpty) {
           processedText = await _createProcessedTextFromPageData(page);

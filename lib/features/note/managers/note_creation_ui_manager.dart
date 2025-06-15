@@ -110,7 +110,6 @@ class NoteCreationUIManager {
         context: rootContext,
         isSuccess: isSuccess,
         noteId: createdNoteId,
-        totalImageCount: imageFiles.length,
         loadingDialogShown: loadingDialogShown,
       );
     }
@@ -213,7 +212,6 @@ class NoteCreationUIManager {
     required BuildContext context,
     required bool isSuccess,
     required String? noteId,
-    required int totalImageCount,
     required bool loadingDialogShown,
   }) async {
     if (isSuccess && noteId != null && context.mounted) {
@@ -221,7 +219,6 @@ class NoteCreationUIManager {
       await _handleSuccess(
         context: context,
         noteId: noteId,
-        totalImageCount: totalImageCount,
         loadingDialogShown: loadingDialogShown,
       );
     } else if (context.mounted) {
@@ -237,7 +234,6 @@ class NoteCreationUIManager {
   Future<void> _handleSuccess({
     required BuildContext context,
     required String noteId,
-    required int totalImageCount,
     required bool loadingDialogShown,
   }) async {
     if (kDebugMode) {
@@ -267,7 +263,7 @@ class NoteCreationUIManager {
 
     // 노트 상세 화면으로 이동 (타임아웃 처리)
     if (context.mounted) {
-      await _navigateToNoteDetailWithTimeout(context, tempNote, totalImageCount);
+      await _navigateToNoteDetailWithTimeout(context, tempNote);
     }
   }
 
@@ -275,7 +271,6 @@ class NoteCreationUIManager {
   Future<void> _navigateToNoteDetailWithTimeout(
     BuildContext context,
     Note note,
-    int totalImageCount,
   ) async {
     try {
       if (kDebugMode) {
@@ -328,7 +323,6 @@ class NoteCreationUIManager {
         NoteDetailScreenMVVM.route(
           note: note,
           isProcessingBackground: true,
-          totalImageCount: totalImageCount,
         ),
              ).then((result) async {
          // 화면에서 돌아왔을 때의 처리
@@ -402,7 +396,7 @@ class NoteCreationUIManager {
   }
 
   /// 화면 이동 재시도
-  void _retryNavigation(BuildContext context, Note note, int totalImageCount) {
+  void _retryNavigation(BuildContext context, Note note) {
     if (!context.mounted) return;
 
     NoteCreationLoader.ensureHidden(context);
@@ -410,7 +404,6 @@ class NoteCreationUIManager {
       NoteDetailScreenMVVM.route(
         note: note,
         isProcessingBackground: true,
-        totalImageCount: totalImageCount,
       ),
     );
   }

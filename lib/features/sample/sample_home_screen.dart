@@ -274,7 +274,6 @@ class _SampleHomeScreenState extends State<SampleHomeScreen> {
       NoteDetailScreenMVVM.route(
         note: note,
         isProcessingBackground: false,
-        totalImageCount: 1,
       ),
     );
   }

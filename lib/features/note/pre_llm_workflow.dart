@@ -150,23 +150,45 @@ class PreLLMWorkflow {
               debugPrint('❌ 이미지 ${i+1} 처리 실패: $e');
             }
             
-            // 중국어 감지 실패의 경우 페이지에 에러 상태 저장
+            // 중국어 감지 실패의 경우 전체 노트 생성 중단
             if (e.toString().contains('중국어가 없습니다')) {
+              if (kDebugMode) {
+                debugPrint('🛑 중국어 감지 실패로 전체 노트 생성 중단');
+              }
+              
+              // 노트 상태를 실패로 업데이트 (Firestore 직접 업데이트)
               try {
-                await _pageService.updatePage(pageIds[i], {
-                  'status': ProcessingStatus.failed.toString(),
+                await FirebaseFirestore.instance.collection('notes').doc(noteId).update({
+                  'processingStatus': ProcessingStatus.failed.toString(),
                   'errorMessage': e.toString(),
                   'errorType': 'NO_CHINESE_DETECTED',
-                  'ocrCompletedAt': FieldValue.serverTimestamp(),
+                  'failedAt': FieldValue.serverTimestamp(),
                 });
-                
-                if (kDebugMode) {
-                  debugPrint('📝 중국어 감지 실패 상태 저장: ${pageIds[i]}');
-                }
               } catch (updateError) {
                 if (kDebugMode) {
-                  debugPrint('⚠️ 에러 상태 저장 실패: $updateError');
+                  debugPrint('⚠️ 노트 실패 상태 저장 실패: $updateError');
                 }
+              }
+              
+              // 전체 워크플로우 중단
+              rethrow;
+            }
+            
+            // 기타 에러의 경우 페이지별 실패 처리 (기존 로직 유지)
+            try {
+              await _pageService.updatePage(pageIds[i], {
+                'status': ProcessingStatus.failed.toString(),
+                'errorMessage': e.toString(),
+                'errorType': 'PROCESSING_ERROR',
+                'ocrCompletedAt': FieldValue.serverTimestamp(),
+              });
+              
+              if (kDebugMode) {
+                debugPrint('📝 페이지 에러 상태 저장: ${pageIds[i]}');
+              }
+            } catch (updateError) {
+              if (kDebugMode) {
+                debugPrint('⚠️ 페이지 에러 상태 저장 실패: $updateError');
               }
             }
             
