@@ -382,11 +382,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
               child: PikaButton(
-                text: viewModel.canCreateNote ? '스마트 노트 만들기' : 'OCR 사용량 초과',
+                text: viewModel.canCreateNote ? '스마트 노트 만들기' : '프리미엄으로 업그레이드',
                 variant: PikaButtonVariant.primary,
                 isFullWidth: false,
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                onPressed: viewModel.canCreateNote ? () => _showImagePickerBottomSheet(context) : null,
+                onPressed: viewModel.canCreateNote 
+                    ? () => _showImagePickerBottomSheet(context) 
+                    : () => _showUpgradeModal(),
               ),
             ),
         ],
@@ -450,6 +452,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         );
       }
     }
+  }
+
+  /// 프리미엄 업그레이드 모달 표시
+  void _showUpgradeModal() {
+    if (!mounted) return;
+    
+    UpgradeModal.show(
+      context,
+      customMessage: '무료 제공 한도에 도달했어요.\n프리미엄으로 업그레이드하여 더 많은 기능을 이용해보세요!',
+      onUpgrade: () {
+        if (kDebugMode) {
+          debugPrint('🎯 [HomeScreen] 프리미엄 업그레이드 선택');
+        }
+        // TODO: 구독 화면으로 이동 또는 인앱 구매 처리
+      },
+    );
   }
 
   void _navigateToNoteDetail(BuildContext context, Note note) async {
@@ -535,11 +553,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 const SizedBox(height: 24),
                 // CTA 버튼 - 이미지 업로드하기
                 PikaButton(
-                  text: viewModel.canCreateNote ? '이미지 올리기' : 'OCR 사용량 초과',
+                  text: viewModel.canCreateNote ? '이미지 올리기' : '프리미엄으로 업그레이드',
                   variant: PikaButtonVariant.primary,
                   isFullWidth: true,
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  onPressed: viewModel.canCreateNote ? () => _showImagePickerBottomSheet(context) : null,
+                  onPressed: viewModel.canCreateNote 
+                      ? () => _showImagePickerBottomSheet(context) 
+                      : () => _showUpgradeModal(),
                 ),
               ],
             ),

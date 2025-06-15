@@ -118,6 +118,56 @@ class DictionaryService {
     }
   }
 
+  /// Google Translate 공통 번역 메서드 (언어 코드 fallback 포함)
+  Future<Translation> _translateWithFallback(String text, {
+    required String to,
+    String from = 'zh-CN',
+    String? context,
+  }) async {
+    try {
+      return await _translator.translate(text, from: from, to: to);
+    } catch (langError) {
+      if (kDebugMode) {
+        debugPrint('🔄 [Google Translate${context != null ? '-$context' : ''}] $from 실패, zh로 재시도: $langError');
+      }
+      return await _translator.translate(text, from: 'zh', to: to);
+    }
+  }
+
+  /// 병음 생성 공통 메서드
+  String _generatePinyin(String word) {
+    try {
+      // 성조 표시가 있는 병음 생성 (nǐ hǎo 형태)
+      String pinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITH_TONE_MARK);
+      
+      // 빈 결과인 경우 성조 번호 형태로 재시도 (ni3 hao3 형태)
+      if (pinyinText.isEmpty) {
+        pinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITH_TONE_NUMBER);
+      }
+      
+      // 여전히 빈 결과인 경우 성조 없는 형태로 재시도 (ni hao 형태)
+      if (pinyinText.isEmpty) {
+        pinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITHOUT_TONE);
+      }
+      
+      if (kDebugMode && pinyinText.isNotEmpty) {
+        debugPrint('🎵 [Pinyin] 생성 완료: "$word" → "$pinyinText"');
+      }
+      
+      return pinyinText;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [Pinyin] 생성 실패: $e');
+      }
+      return '';
+    }
+  }
+
+  /// 번역 결과가 유효한지 확인
+  bool _isValidTranslation(String original, String translated) {
+    return translated.isNotEmpty && translated != original;
+  }
+
   // Google Cloud Translate를 사용한 다국어 번역 (한국어 + 영어)
   Future<DictionaryEntry?> _translateWithGoogleMultiLanguage(String word) async {
     try {
@@ -126,22 +176,11 @@ class DictionaryService {
         debugPrint('   설정: zh-CN → ko, en');
       }
       
-      // 한국어와 영어 번역을 동시에 요청 (중국어 명시)
-      List<Translation> futures;
-      try {
-        futures = await Future.wait([
-          _translator.translate(word, from: 'zh-CN', to: 'ko'),
-          _translator.translate(word, from: 'zh-CN', to: 'en'),
-        ]);
-      } catch (langError) {
-        if (kDebugMode) {
-          debugPrint('🔄 [Google Translate-Multi] zh-CN 실패, zh로 재시도: $langError');
-        }
-        futures = await Future.wait([
-          _translator.translate(word, from: 'zh', to: 'ko'),
-          _translator.translate(word, from: 'zh', to: 'en'),
-        ]);
-      }
+      // 한국어와 영어 번역을 동시에 요청
+      final futures = await Future.wait([
+        _translateWithFallback(word, to: 'ko', context: 'Multi'),
+        _translateWithFallback(word, to: 'en', context: 'Multi'),
+      ]);
       
       final koTranslation = futures[0];
       final enTranslation = futures[1];
@@ -153,28 +192,11 @@ class DictionaryService {
       }
       
       // 적어도 하나의 번역이 유효해야 함
-      final hasValidKo = koTranslation.text.isNotEmpty && koTranslation.text != word;
-      final hasValidEn = enTranslation.text.isNotEmpty && enTranslation.text != word;
+      final hasValidKo = _isValidTranslation(word, koTranslation.text);
+      final hasValidEn = _isValidTranslation(word, enTranslation.text);
       
       if (hasValidKo || hasValidEn) {
-        // 병음 생성
-        String pinyinText = '';
-        try {
-          pinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITH_TONE_MARK);
-          if (pinyinText.isEmpty) {
-            pinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITH_TONE_NUMBER);
-          }
-          if (pinyinText.isEmpty) {
-            pinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITHOUT_TONE);
-          }
-          if (kDebugMode) {
-            debugPrint('🎵 [Pinyin-Multi] 생성 완료: "$word" → "$pinyinText"');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('❌ [Pinyin-Multi] 생성 실패: $e');
-          }
-        }
+        final pinyinText = _generatePinyin(word);
 
         final entry = DictionaryEntry.multiLanguage(
           word: word,
@@ -213,156 +235,25 @@ class DictionaryService {
     }
   }
 
-  // Google Cloud Translate를 사용한 단어 번역 (기존 한국어만)
-  Future<DictionaryEntry?> _translateWithGoogle(String word) async {
-    try {
-      if (kDebugMode) {
-        debugPrint('🌐 [Google Translate] 번역 시작: "$word"');
-        debugPrint('   설정: zh-CN → ko (한국어)');
-      }
-      
-      // 중국어 명시 → 한국어 번역
-      Translation translation;
-      try {
-        translation = await _translator.translate(word, from: 'zh-CN', to: 'ko');
-      } catch (langError) {
-        if (kDebugMode) {
-          debugPrint('🔄 [Google Translate] zh-CN 실패, zh로 재시도: $langError');
-        }
-        translation = await _translator.translate(word, from: 'zh', to: 'ko');
-      }
-      
-      if (kDebugMode) {
-        debugPrint('🌐 [Google Translate] 원본: "$word"');
-        debugPrint('🌐 [Google Translate] 번역 결과: "${translation.text}"');
-        debugPrint('🌐 [Google Translate] 번역 결과 길이: ${translation.text.length}');
-        debugPrint('🌐 [Google Translate] 원본과 같은지: ${translation.text == word}');
-      }
-      
-      if (translation.text.isNotEmpty && translation.text != word) {
-        // 중국어 텍스트에서 병음 생성
-        String pinyinText = '';
-        try {
-          // 성조 표시가 있는 병음 생성 (nǐ hǎo 형태)
-          pinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITH_TONE_MARK);
-          
-          // 빈 결과인 경우 성조 번호 형태로 재시도 (ni3 hao3 형태)
-          if (pinyinText.isEmpty) {
-            pinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITH_TONE_NUMBER);
-          }
-          
-          // 여전히 빈 결과인 경우 성조 없는 형태로 재시도 (ni hao 형태)
-          if (pinyinText.isEmpty) {
-            pinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITHOUT_TONE);
-          }
-          
-          if (kDebugMode) {
-            debugPrint('🎵 [Pinyin] 생성 완료: "$word" → "$pinyinText"');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('❌ [Pinyin] 생성 실패: $e');
-          }
-          pinyinText = '';
-        }
 
-        final entry = DictionaryEntry.korean(
-          word: word,
-          pinyin: pinyinText, // 자동 생성된 병음
-          meaning: translation.text,
-          source: 'google_translate'
-        );
-        
-        if (kDebugMode) {
-          debugPrint('✅ [Google Translate] 사전 항목 생성 완료');
-          debugPrint('   단어: ${entry.word}');
-          debugPrint('   의미: ${entry.meaning}');
-          debugPrint('   소스: ${entry.source}');
-        }
-        
-        // 내부 사전에 추가
-        _chineseDictionaryService.addEntry(entry);
-        _notifyDictionaryUpdated();
-        
-        if (kDebugMode) {
-          debugPrint('✅ [Google Translate] 내부 사전에 추가 완료');
-        }
-        
-        return entry;
-      } else {
-        if (kDebugMode) {
-          debugPrint('❌ [Google Translate] 유효한 번역 결과 없음');
-          debugPrint('   이유: ${translation.text.isEmpty ? "빈 결과" : "원본과 동일"}');
-        }
-      }
+
+  /// 한국어 번역 수행 헬퍼 메서드
+  Future<String?> _translateToKorean(String word, {String context = '보완'}) async {
+    if (!_googleTranslateEnabled) return null;
+    
+    try {
+      final translation = await _translateWithFallback(word, to: 'ko', context: context);
       
+      if (_isValidTranslation(word, translation.text)) {
+        if (kDebugMode) {
+          debugPrint('✅ [Google Translate-$context] 한국어 번역 찾음: ${translation.text}');
+        }
+        return translation.text;
+      }
       return null;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('💥 [Google Translate] 번역 실패: $e');
-        debugPrint('   오류 타입: ${e.runtimeType}');
-        debugPrint('   단어: "$word"');
-        debugPrint('   언어 설정: auto → ko');
-        
-        // 언어 코드 지원 문제인 경우 대안 시도
-        if (e.toString().contains('LanguageNotSupportedException') || 
-            e.toString().contains('language') ||
-            e.toString().contains('not supported')) {
-          debugPrint('🔄 [Google Translate] 언어 코드 문제 감지, 대안 시도...');
-          
-          try {
-            // 대안 1: zh 사용
-            debugPrint('🔄 [Google Translate] 대안 1: zh → ko');
-            final altTranslation = await _translator.translate(word, from: 'zh', to: 'ko');
-            
-            if (altTranslation.text.isNotEmpty && altTranslation.text != word) {
-              // 대안 방법에서도 병음 생성
-              String altPinyinText = '';
-              try {
-                // 성조 표시가 있는 병음 생성 (nǐ hǎo 형태)
-                altPinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITH_TONE_MARK);
-                
-                // 빈 결과인 경우 성조 번호 형태로 재시도 (ni3 hao3 형태)
-                if (altPinyinText.isEmpty) {
-                  altPinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITH_TONE_NUMBER);
-                }
-                
-                // 여전히 빈 결과인 경우 성조 없는 형태로 재시도 (ni hao 형태)
-                if (altPinyinText.isEmpty) {
-                  altPinyinText = PinyinHelper.getPinyinE(word, defPinyin: '', format: PinyinFormat.WITHOUT_TONE);
-                }
-                
-                if (kDebugMode) {
-                  debugPrint('🎵 [Pinyin-대안] 생성 완료: "$word" → "$altPinyinText"');
-                }
-              } catch (e) {
-                if (kDebugMode) {
-                  debugPrint('❌ [Pinyin-대안] 생성 실패: $e');
-                }
-                altPinyinText = '';
-              }
-
-              final entry = DictionaryEntry.korean(
-                word: word,
-                pinyin: altPinyinText,
-                meaning: altTranslation.text,
-                source: 'google_translate'
-              );
-              
-              if (kDebugMode) {
-                debugPrint('✅ [Google Translate] 대안으로 성공: "${altTranslation.text}"');
-              }
-              
-              _chineseDictionaryService.addEntry(entry);
-              _notifyDictionaryUpdated();
-              return entry;
-            }
-          } catch (altError) {
-            if (kDebugMode) {
-              debugPrint('❌ [Google Translate] 대안도 실패: $altError');
-            }
-          }
-        }
+        debugPrint('❌ [Google Translate-$context] 한국어 번역 실패: $e');
       }
       return null;
     }
@@ -453,35 +344,10 @@ class DictionaryService {
               }
               
               // 영어 번역은 있지만 한국어가 없는 경우 Google Translate로 한국어 번역 보완
-              String? koreanMeaning;
-              if (_googleTranslateEnabled) {
-                if (kDebugMode) {
-                  debugPrint('🔍 [2단계-보완] Google Translate로 한국어 번역 검색 중...');
-                }
-                try {
-                  // 먼저 zh-CN으로 시도, 실패하면 zh로 재시도
-                  Translation? translation;
-                  try {
-                    translation = await _translator.translate(word, from: 'zh-CN', to: 'ko');
-                  } catch (langError) {
-                    if (kDebugMode) {
-                      debugPrint('🔄 [2단계-보완] zh-CN 실패, zh로 재시도: $langError');
-                    }
-                    translation = await _translator.translate(word, from: 'zh', to: 'ko');
-                  }
-                  
-                  if (translation.text.isNotEmpty && translation.text != word) {
-                    koreanMeaning = translation.text;
-                    if (kDebugMode) {
-                      debugPrint('✅ [2단계-보완] Google Translate로 한국어 번역 찾음: $koreanMeaning');
-                    }
-                  }
-                } catch (e) {
-                  if (kDebugMode) {
-                    debugPrint('❌ [2단계-보완] Google Translate 한국어 번역 실패: $e');
-                  }
-                }
+              if (kDebugMode) {
+                debugPrint('🔍 [2단계-보완] Google Translate로 한국어 번역 검색 중...');
               }
+              final koreanMeaning = await _translateToKorean(word);
               
               final newEntry = DictionaryEntry.multiLanguage(
                 word: word,
