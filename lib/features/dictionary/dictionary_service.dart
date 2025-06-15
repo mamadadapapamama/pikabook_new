@@ -123,13 +123,13 @@ class DictionaryService {
     try {
       if (kDebugMode) {
         debugPrint('🌐 [Google Translate-Multi] 다국어 번역 시작: "$word"');
-        debugPrint('   설정: auto → ko, en');
+        debugPrint('   설정: zh-CN → ko, en');
       }
       
-      // 한국어와 영어 번역을 동시에 요청
+      // 한국어와 영어 번역을 동시에 요청 (중국어 명시)
       final futures = await Future.wait([
-        _translator.translate(word, from: 'auto', to: 'ko'),
-        _translator.translate(word, from: 'auto', to: 'en'),
+        _translator.translate(word, from: 'zh-CN', to: 'ko'),
+        _translator.translate(word, from: 'zh-CN', to: 'en'),
       ]);
       
       final koTranslation = futures[0];
@@ -207,11 +207,11 @@ class DictionaryService {
     try {
       if (kDebugMode) {
         debugPrint('🌐 [Google Translate] 번역 시작: "$word"');
-        debugPrint('   설정: auto (자동 감지) → ko (한국어)');
+        debugPrint('   설정: zh-CN → ko (한국어)');
       }
       
-      // 자동 언어 감지 → 한국어 번역 (더 안정적)
-      final translation = await _translator.translate(word, from: 'auto', to: 'ko');
+      // 중국어 명시 → 한국어 번역
+      final translation = await _translator.translate(word, from: 'zh-CN', to: 'ko');
       
       if (kDebugMode) {
         debugPrint('🌐 [Google Translate] 원본: "$word"');
@@ -440,7 +440,7 @@ class DictionaryService {
                   debugPrint('🔍 [2단계-보완] Google Translate로 한국어 번역 검색 중...');
                 }
                 try {
-                  final translation = await _translator.translate(word, from: 'auto', to: 'ko');
+                  final translation = await _translator.translate(word, from: 'zh-CN', to: 'ko');
                   if (translation.text.isNotEmpty && translation.text != word) {
                     koreanMeaning = translation.text;
                     if (kDebugMode) {

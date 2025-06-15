@@ -6,6 +6,7 @@ import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/widgets/loading_dots_widget.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
+import '../../../core/widgets/inline_error_widget.dart';
 import '../../../core/utils/context_menu_manager.dart';
 
 /// 문단 모드 전용 위젯
@@ -355,10 +356,14 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
 
   /// LLM 응답 대기 중 로딩 표시
   Widget _buildLoadingView() {
-    return Center(
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: 32.0),
-        child: DotLoadingIndicator(message: '🧐 텍스트를 분석하고 있습니다...'),
+    return InlineLoadingErrorWidget(
+      loadingMessage: '🧐 텍스트를 분석하고 있습니다...',
+      error: null,
+      loadingWidget: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 32.0),
+          child: DotLoadingIndicator(message: '🧐 텍스트를 분석하고 있습니다...'),
+        ),
       ),
     );
   }

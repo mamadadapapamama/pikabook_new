@@ -103,9 +103,6 @@ class TextUnit {
       // 먼저 정확한 이름으로 찾기 시도
       for (final type in SegmentType.values) {
         if (type.name == typeString) {
-          if (kDebugMode) {
-            debugPrint('✅ segmentType 파싱 성공 (정확한 매치): "$typeString" -> ${type.name}');
-          }
           return type;
         }
       }
@@ -113,9 +110,6 @@ class TextUnit {
       // 대소문자 무시하고 찾기 시도
       for (final type in SegmentType.values) {
         if (type.name.toLowerCase() == typeString.toLowerCase()) {
-          if (kDebugMode) {
-            debugPrint('✅ segmentType 파싱 성공 (대소문자 무시): "$typeString" -> ${type.name}');
-          }
           return type;
         }
       }

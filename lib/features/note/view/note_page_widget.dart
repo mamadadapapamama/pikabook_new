@@ -6,11 +6,13 @@ import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/processed_text.dart';
 import '../../../core/models/text_unit.dart';
 import '../../../core/models/flash_card.dart';
+import '../../../core/models/processing_status.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/utils/timeout_manager.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/widgets/error_display_widget.dart';
+import '../../../core/widgets/inline_error_widget.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../../core/widgets/pika_button.dart';
 import '../view_model/note_detail_viewmodel.dart';
@@ -175,25 +177,27 @@ class _NotePageWidgetState extends State<NotePageWidget> {
         final processedText = textViewModel['processedText'] as ProcessedText?;
         final isLoading = textViewModel['isLoading'] as bool? ?? false;
         final error = textViewModel['error'] as String?;
+        final status = textViewModel['status'] as ProcessingStatus? ?? ProcessingStatus.created;
         
         if (kDebugMode) {
           print('🎭 [NotePageWidget] 데이터 상태 확인: ${widget.page.id}');
           print('   processedText: ${processedText != null ? "있음 (${processedText.units.length}개 유닛)" : "없음"}');
           print('   isLoading: $isLoading');
           print('   error: $error');
+          print('   status: $status');
           if (processedText != null) {
             print('   번역 텍스트 길이: ${processedText.fullTranslatedText?.length ?? 0}');
             print('   스트리밍 상태: ${processedText.streamingStatus}');
           }
         }
         
-        return _buildPageContent(context, viewModel, processedText, isLoading, error);
+        return _buildPageContent(context, viewModel, processedText, isLoading, error, status);
       },
     );
   }
   
   Widget _buildPageContent(BuildContext context, NoteDetailViewModel viewModel, 
-      ProcessedText? processedText, bool isLoading, String? error) {
+      ProcessedText? processedText, bool isLoading, String? error, ProcessingStatus status) {
     
     // 스크롤 가능한 컨테이너
     return SingleChildScrollView(
@@ -217,7 +221,7 @@ class _NotePageWidgetState extends State<NotePageWidget> {
           SizedBox(height: SpacingTokens.md),
           
           // 텍스트 콘텐츠 위젯
-          _buildTextContent(context, viewModel, processedText, isLoading, error),
+          _buildTextContent(context, viewModel, processedText, isLoading, error, status),
         ],
       ),
     );
@@ -225,13 +229,14 @@ class _NotePageWidgetState extends State<NotePageWidget> {
   
   // 텍스트 콘텐츠 위젯 (상태에 따라 다른 위젯 반환)
   Widget _buildTextContent(BuildContext context, NoteDetailViewModel viewModel,
-      ProcessedText? processedText, bool isLoading, String? error) {
+      ProcessedText? processedText, bool isLoading, String? error, ProcessingStatus status) {
     
     if (kDebugMode) {
       print('🎭 [NotePageWidget] _buildTextContent 호출: ${widget.page.id}');
       print('   processedText != null: ${processedText != null}');
       print('   isLoading: $isLoading');
       print('   error: $error');
+      print('   status: $status');
       print('   page.showTypewriterEffect: ${widget.page.showTypewriterEffect}');
       if (processedText != null) {
         print('   processedText.streamingStatus: ${processedText.streamingStatus}');
@@ -265,7 +270,7 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       return _buildProcessedTextWidget(context, processedText, viewModel);
     }
     
-    // 기존 에러가 있는 경우 ErrorHandler에 등록하고 즉시 에러 표시
+    // 기존 에러가 있는 경우 인라인 에러 위젯으로 표시
     if (error != null) {
       // 에러 발생 시 즉시 타임아웃 매니저 중단
       if (_ocrTimeoutManager != null && _ocrTimeoutManager!.isActive) {
@@ -279,41 +284,61 @@ class _NotePageWidgetState extends State<NotePageWidget> {
       final isChineseDetectionError = error.contains('중국어가 없습니다');
       
       if (isChineseDetectionError) {
-        // 중국어 감지 실패 시 직접 에러 UI 표시
-        return _buildDynamicStatusIndicator(
-          message: '공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.',
-          showLoading: false,
-          messageColor: Colors.orange[800],
-          icon: Icons.translate_outlined,
-          iconColor: Colors.orange,
-          onRetry: () => Navigator.of(context).pop(),
-          retryButtonText: '확인',
+        // 중국어 감지 실패 시 인라인 에러 위젯 표시
+        return InlineErrorWidget.chineseDetectionFailed(
+          onExit: () => Navigator.of(context).pop(),
         );
       } else {
         // 기타 에러 처리
         final errorType = ErrorHandler.analyzeError(error);
-        final userFriendlyMessage = ErrorHandler.getErrorMessage(errorType);
         final isTimeoutError = errorType == ErrorType.timeout;
         final isNetworkError = errorType == ErrorType.network;
         
-        return _buildDynamicStatusIndicator(
-          message: userFriendlyMessage,
-          showLoading: false,
-          messageColor: Colors.red[800],
-          icon: isNetworkError ? Icons.wifi_off : Icons.error_outline,
-          iconColor: Colors.red,
-          onRetry: (isTimeoutError || isNetworkError) ? _retryOcrProcessing : null,
-          retryButtonText: '다시 시도',
-        );
+        if (isTimeoutError) {
+          return InlineErrorWidget.timeout(
+            onRetry: _retryOcrProcessing,
+          );
+        } else if (isNetworkError) {
+          return InlineErrorWidget.network(
+            onRetry: _retryOcrProcessing,
+          );
+        } else {
+          return InlineErrorWidget.general(
+            message: ErrorHandler.getErrorMessage(errorType),
+            onRetry: _retryOcrProcessing,
+          );
+        }
       }
     }
     
-    // 에러가 없는 경우 로딩 또는 기본 상태 표시
-    return ErrorDisplayWidget(
-      errorId: _errorId,
-      loadingMessage: _currentMessage,
-      showLoadingByDefault: isLoading,
-    );
+    // processedText가 null이고 error도 null인 경우
+    // 1. 로딩 중이거나 처리가 아직 완료되지 않은 경우: 로딩 표시
+    // 2. 처리가 완료되었지만 텍스트가 없는 경우: "텍스트가 없습니다" 에러 표시
+    if (isLoading || !status.isCompleted) {
+      // 로딩 중이거나 처리 중인 경우
+      return InlineLoadingErrorWidget(
+        loadingMessage: _currentMessage,
+        error: null,
+        onRetry: _retryOcrProcessing,
+        loadingWidget: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32.0),
+            child: DotLoadingIndicator(message: _currentMessage),
+          ),
+        ),
+      );
+    } else if (status.isCompleted) {
+      // 처리가 완료되었지만 텍스트가 없는 경우 (실제로는 발생하지 않아야 함)
+      return InlineErrorWidget.noText(
+        onExit: () => Navigator.of(context).pop(),
+      );
+    } else {
+      // 기타 상태 (failed 등)에서는 일반 에러 표시
+      return InlineErrorWidget.general(
+        message: '텍스트 처리 중 문제가 발생했습니다.',
+        onRetry: _retryOcrProcessing,
+      );
+    }
   }
   
   // 처리된 텍스트 위젯 (번역 완료된 상태)

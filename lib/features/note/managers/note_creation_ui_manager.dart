@@ -97,14 +97,33 @@ class NoteCreationUIManager {
       }
       isSuccess = false;
       
-      // 에러 처리
+      // 중국어 감지 실패의 경우 특별 처리
+      if (e.toString().contains('중국어가 없습니다')) {
+        // 로딩 다이얼로그가 표시되지 않은 경우에도 처리
+        if (rootContext.mounted) {
+          // 로딩 다이얼로그가 표시된 경우 닫기
+          if (loadingDialogShown || NoteCreationLoader.isVisible) {
+            NoteCreationLoader.hide(rootContext);
+            await Future.delayed(const Duration(milliseconds: 300));
+          }
+          
+          // 중국어 감지 실패 전용 에러 메시지
+          ErrorHandler.showErrorSnackBar(
+            rootContext,
+            '공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.',
+          );
+        }
+        return; // 중국어 감지 실패 시 바로 종료
+      }
+      
+      // 기타 에러 처리
       if (loadingDialogShown && rootContext.mounted) {
         NoteCreationLoader.hideWithError(rootContext, e);
         loadingDialogShown = false;
       }
     }
 
-    // 5. 결과 처리
+    // 5. 결과 처리 (성공한 경우만)
     if (isSuccess) {
       await _handleCreationResult(
         context: rootContext,

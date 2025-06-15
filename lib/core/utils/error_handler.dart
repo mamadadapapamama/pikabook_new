@@ -13,6 +13,8 @@ enum ErrorType {
   rateLimited,      // 요청 제한 (429)
   storage,          // 저장공간 부족
   permission,       // 권한 문제
+  noText,           // 텍스트 없음 (OCR 결과 없음)
+  chineseDetectionFailed, // 중국어 감지 실패
 }
 
 /// 기능별 에러 컨텍스트
@@ -142,13 +144,36 @@ class ErrorHandler {
       messageColor: Colors.orange[800],
       icon: Icons.translate_outlined,
       iconColor: Colors.orange,
-      retryButtonText: '확인',
+      retryButtonText: '나가기',
     );
     
     _retryCallbacks[id] = onConfirm;
     
     if (kDebugMode) {
       debugPrint('🚨 [ErrorHandler] 중국어 감지 실패 에러 등록: $id');
+    }
+  }
+
+  /// 텍스트 없음 에러 등록
+  static void registerNoTextError({
+    required String id,
+    required VoidCallback onRetry,
+  }) {
+    _errorStates[id] = ErrorState(
+      id: id,
+      message: '이미지에 번역할 텍스트가 없습니다.',
+      type: ErrorType.noText,
+      timestamp: DateTime.now(),
+      messageColor: Colors.orange[800],
+      icon: Icons.text_fields_outlined,
+      iconColor: Colors.orange,
+      retryButtonText: '다시 시도',
+    );
+    
+    _retryCallbacks[id] = onRetry;
+    
+    if (kDebugMode) {
+      debugPrint('🚨 [ErrorHandler] 텍스트 없음 에러 등록: $id');
     }
   }
 
@@ -311,6 +336,10 @@ class ErrorHandler {
         return '저장 공간이 부족해요. 공간을 확보한 후 다시 시도해주세요.';
       case ErrorType.permission:
         return '필요한 권한이 없어요. 설정에서 권한을 허용해주세요.';
+      case ErrorType.noText:
+        return '이미지에 번역할 텍스트가 없습니다. 다른 이미지를 선택해 주세요.';
+      case ErrorType.chineseDetectionFailed:
+        return '공유해주신 이미지에 중국어가 없습니다.\n다른 이미지를 업로드해 주세요.';
       case ErrorType.general:
         return context == ErrorContext.dictionary 
             ? '사전 검색 중 오류가 발생했어요. 다시 시도해주세요.'
