@@ -395,36 +395,22 @@ class PostLLMWorkflow {
       
       // 실제 처리된 데이터를 기반으로 사용량 계산
       int totalOcrPages = 0;
-      int totalStorageBytes = 0;
-      int totalTranslatedChars = 0;
       
       for (final pageData in job.pages) {
-        // OCR 성공한 페이지 수
+        // OCR 성공한 페이지 수 (업로드 이미지 수)
         if (pageData.ocrSuccess) {
           totalOcrPages++;
         }
-        
-        // 스토리지 사용량
-        totalStorageBytes += pageData.imageFileSize.toInt();
-        
-        // 번역된 문자 수 (텍스트 세그먼트 길이 합계)
-        for (final segment in pageData.textSegments) {
-          totalTranslatedChars += segment.length;
-        }
       }
       
-      // UsageLimitService 활용
+      // UsageLimitService 활용 (단순화된 시스템)
       final limitStatus = await _usageLimitService.updateUsageAfterNoteCreation(
         ocrPages: totalOcrPages,
-        storageBytes: totalStorageBytes,
-        translatedChars: totalTranslatedChars,
       );
       
       if (kDebugMode) {
         debugPrint('📊 [워크플로우] 사용량 업데이트 완료:');
-        debugPrint('   OCR 페이지: $totalOcrPages개');
-        debugPrint('   스토리지: ${(totalStorageBytes / 1024 / 1024).toStringAsFixed(2)}MB');
-        debugPrint('   번역 문자: $totalTranslatedChars자');
+        debugPrint('   업로드 이미지 수: $totalOcrPages개');
         debugPrint('   제한 상태: $limitStatus');
       }
       

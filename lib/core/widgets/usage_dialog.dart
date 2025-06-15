@@ -134,11 +134,11 @@ class _UsageDialogState extends State<UsageDialog> {
     
     // 상태에 따른 제목과 메시지 설정
     final String effectiveTitle = widget.title ?? (hasReachedLimit 
-        ? '사용량 제한에 도달했습니다' 
+        ? '학습 한도에 도달했어요.' 
         : '현재까지의 사용량');
         
     final String effectiveMessage = widget.message ?? (hasReachedLimit 
-        ? '사용하시는 기능이 한도에 도달했습니다. \n더 많은 기능이 필요하시다면 문의하기를 눌러 요청해 주세요.' 
+        ? '무료 제공 한도에 도달했어요.\n프리미엄으로 업그레이드하여 더 많은 기능을 이용해보세요!' 
         : '');
 
     return AlertDialog(
@@ -189,10 +189,10 @@ class _UsageDialogState extends State<UsageDialog> {
       actions: [
     
     
-        // 1:1 문의하기 버튼
+        // 프리미엄으로 업그레이드 버튼
         if (widget.onContactSupport != null)
           PikaButton(
-            text: '문의하기',
+            text: '프리미엄으로 업그레이드',
             variant: PikaButtonVariant.outline,
             size: PikaButtonSize.small,
             onPressed: () {

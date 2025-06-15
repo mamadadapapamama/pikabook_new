@@ -137,7 +137,7 @@ class UpgradeModal extends StatelessWidget {
   /// 메시지
   Widget _buildMessage() {
     final message = customMessage ?? 
-        '무료체험 7일이 끝났어요.\n월 \$9.99에 프리미엄 기능을 사용해보세요.';
+        '무료체험 7일이 끝났어요.\n월 \$5.99에 프리미엄 기능을 사용해보세요.';
     
     return Text(
       message,
@@ -205,7 +205,7 @@ class UpgradePromptHelper {
   }) {
     return UpgradeModal.show(
       context,
-      customMessage: 'TTS 기능은 프리미엄 전용입니다.\n월 \$9.99에 모든 기능을 사용해보세요.',
+      customMessage: '사용량 제한에 도달했습닌다.\n월 \$5.99에 모든 기능을 사용해보세요.',
       onUpgrade: () => _handleUpgrade(context),
       onCancel: null,
     );
