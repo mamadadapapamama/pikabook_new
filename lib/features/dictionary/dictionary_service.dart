@@ -29,6 +29,9 @@ class DictionaryService {
   final GoogleTranslator _translator = GoogleTranslator();
   final AuthService _authService = AuthService();
   
+  // 샘플 데이터 서비스 (샘플 모드에서만 사용)
+  SampleDataService? _sampleDataService;
+  
   // 사전 업데이트 리스너 목록
   late final List<Function()> _dictionaryUpdateListeners;
   
@@ -75,7 +78,8 @@ class DictionaryService {
         if (kDebugMode) {
           debugPrint('🏠 [DictionaryService] 샘플 모드로 초기화 (사전 기능 제한)');
         }
-        // 샘플 모드에서는 사전 기능을 제한적으로 사용
+        // 샘플 모드에서는 샘플 데이터 서비스 초기화
+        await _initializeSampleMode();
       } else {
         if (kDebugMode) {
           debugPrint('🌐 [DictionaryService] 일반 모드로 초기화');
@@ -88,6 +92,22 @@ class DictionaryService {
       debugPrint('DictionaryService 초기화 완료 (샘플모드: $_isSampleMode)');
     } catch (e) {
       debugPrint('DictionaryService 초기화 중 오류 발생: $e');
+      rethrow;
+    }
+  }
+
+  /// 샘플 모드 초기화
+  Future<void> _initializeSampleMode() async {
+    try {
+      _sampleDataService = SampleDataService();
+      await _sampleDataService!.loadSampleData();
+      if (kDebugMode) {
+        debugPrint('✅ [DictionaryService] 샘플 데이터 로드 완료');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [DictionaryService] 샘플 데이터 로드 실패: $e');
+      }
       rethrow;
     }
   }
@@ -445,11 +465,13 @@ class DictionaryService {
   /// 샘플 모드에서 단어 검색
   Future<Map<String, dynamic>> _lookupInSampleMode(String word) async {
     try {
-      final sampleDataService = SampleDataService();
-      await sampleDataService.loadSampleData();
+      // 샘플 데이터 서비스가 초기화되지 않은 경우 초기화
+      if (_sampleDataService == null) {
+        await _initializeSampleMode();
+      }
       
       // 샘플 플래시카드에서 해당 단어 찾기
-      final sampleFlashCards = sampleDataService.getSampleFlashCards(null);
+      final sampleFlashCards = _sampleDataService!.getSampleFlashCards(null);
       final matchingCard = sampleFlashCards.where((card) => card.front == word).firstOrNull;
       
       if (matchingCard != null) {
@@ -473,16 +495,7 @@ class DictionaryService {
           'source': 'sample_data',
         };
       } else {
-        if (kDebugMode) {
-          debugPrint('❌ [샘플모드] 샘플 데이터에서 단어를 찾지 못함: $word');
-          debugPrint('   사용 가능한 단어: ${sampleDataService.getAvailableWords().take(5).join(", ")}...');
-        }
-        
-        return {
-          'success': false,
-          'message': '샘플 모드에서는 제한된 단어만 검색할 수 있습니다.\n로그인하시면 모든 단어를 검색할 수 있습니다.',
-          'availableWords': sampleDataService.getAvailableWords(),
-        };
+        return _createSampleModeFailureResponse(word);
       }
     } catch (e) {
       if (kDebugMode) {
@@ -494,8 +507,25 @@ class DictionaryService {
       };
     }
   }
+
+  /// 샘플 모드 실패 응답 생성
+  Map<String, dynamic> _createSampleModeFailureResponse(String word) {
+    if (kDebugMode) {
+      debugPrint('❌ [샘플모드] 샘플 데이터에서 단어를 찾지 못함: $word');
+      if (_sampleDataService != null) {
+        final availableWords = _sampleDataService!.getAvailableWords();
+        debugPrint('   사용 가능한 단어: ${availableWords.take(5).join(", ")}...');
+      }
+    }
+    
+    return {
+      'success': false,
+      'message': '샘플 모드에서는 제한된 단어만 검색할 수 있습니다.\n로그인하시면 모든 단어를 검색할 수 있습니다.',
+      'availableWords': _sampleDataService?.getAvailableWords() ?? [],
+    };
+  }
   
-  // 단어 검색 (단순 인터페이스)
+  // 단어 검색 (단순 인터페이스 - flashcard에서 사용)
   Future<DictionaryEntry?> lookup(String word) async {
     try {
       await _ensureInitialized();
@@ -512,7 +542,7 @@ class DictionaryService {
     }
   }
   
-  // 사전에 단어 추가
+  // 사전에 단어 추가 (내부사전에 추가))
   Future<void> addEntry(DictionaryEntry entry) async {
     try {
       await _ensureInitialized();
@@ -529,12 +559,6 @@ class DictionaryService {
     } catch (e) {
       debugPrint('단어 추가 중 오류 발생: $e');
     }
-  }
-  
-  // 최근 검색어 목록 가져오기
-  Future<List<String>> getRecentSearches() async {
-    // 임시로 빈 목록 반환
-    return [];
   }
   
   // 사전 캐시 정리
