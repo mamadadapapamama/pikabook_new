@@ -11,12 +11,18 @@ class UpgradeModal extends StatelessWidget {
   final VoidCallback? onUpgrade;
   final VoidCallback? onCancel;
   final String? customMessage;
+  final String? customTitle;
+  final String? upgradeButtonText;
+  final String? cancelButtonText;
 
   const UpgradeModal({
     Key? key,
     this.onUpgrade,
     this.onCancel,
     this.customMessage,
+    this.customTitle,
+    this.upgradeButtonText,
+    this.cancelButtonText,
   }) : super(key: key);
 
   /// 모달 표시 헬퍼 메서드
@@ -25,6 +31,9 @@ class UpgradeModal extends StatelessWidget {
     VoidCallback? onUpgrade,
     VoidCallback? onCancel,
     String? customMessage,
+    String? customTitle,
+    String? upgradeButtonText,
+    String? cancelButtonText,
   }) {
     return showDialog<bool>(
       context: context,
@@ -33,6 +42,9 @@ class UpgradeModal extends StatelessWidget {
         onUpgrade: onUpgrade,
         onCancel: onCancel ?? () => Navigator.of(context).pop(false),
         customMessage: customMessage,
+        customTitle: customTitle,
+        upgradeButtonText: upgradeButtonText,
+        cancelButtonText: cancelButtonText,
       ),
     );
   }
@@ -125,7 +137,7 @@ class UpgradeModal extends StatelessWidget {
   /// 제목
   Widget _buildTitle() {
     return Text(
-      '프리미엄 구독이 필요합니다!',
+      customTitle ?? '프리미엄 구독이 필요합니다!',
       style: TypographyTokens.headline2.copyWith(
         color: ColorTokens.textPrimary,
         fontWeight: FontWeight.bold,
@@ -155,7 +167,7 @@ class UpgradeModal extends StatelessWidget {
       children: [
         // 업그레이드 버튼
         PikaButton(
-          text: '프리미엄 구독하기',
+          text: upgradeButtonText ?? '프리미엄 구독하기',
           onPressed: () {
             Navigator.of(context).pop(true);
             onUpgrade?.call();
@@ -185,7 +197,7 @@ class UpgradeModal extends StatelessWidget {
             Navigator.of(context).pop(false);
           },
           child: Text(
-            '나가기',
+            cancelButtonText ?? '나가기',
             style: TypographyTokens.button.copyWith(
               color: ColorTokens.textTertiary,
             ),

@@ -296,13 +296,7 @@ class _SlowTtsButtonState extends State<SlowTtsButton> {
         // 구독 화면으로 이동 등 처리
         debugPrint('프리미엄 구독 선택');
       },
-    ).then((result) {
-      // 모달이 닫힌 후 처리
-      if (result == false) {
-        // "나가기" 또는 뒤로가기를 눌렀을 때 이전 페이지로 이동
-        Navigator.of(context).pop();
-      }
-    });
+    );
   }
   
   @override

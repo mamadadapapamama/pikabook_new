@@ -10,6 +10,7 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import '../../../core/widgets/upgrade_modal.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -43,7 +44,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     {
       'level': '초급',
       'title': '처음이에요',
-      'description': '기본 단어, 간단한 문장을 공부할 예정이에요',
+      'description': '기본 단어, 간단한 문장을 공부할 예정이에요.',
     },
     {
       'level': '중급',
@@ -249,8 +250,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await _userPreferences.setOnboardingCompleted(true);
       await _userPreferences.setHasOnboarded(true);
       
-      // 온보딩 완료 콜백 호출
-      widget.onComplete();
+      // 인앱 구매 유도 모달 표시
+      await _showWelcomeUpgradeModal();
       
     } catch (e) {
       debugPrint('온보딩 완료 처리 중 오류 발생: $e');
@@ -259,6 +260,128 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _isProcessing = false;
       });
       return;
+    }
+  }
+
+  /// 온보딩 완료 후 환영 및 업그레이드 모달 표시
+  Future<void> _showWelcomeUpgradeModal() async {
+    if (!mounted) return;
+    
+    try {
+      final result = await UpgradeModal.show(
+        context,
+        customTitle: 'Pikabook에 오신 것을 환영합니다! 🎉',
+        customMessage: '7일 무료 체험으로 모든 프리미엄 기능을 경험해보세요.\n\n• 월 300페이지 OCR 인식\n• 월 10만자 번역\n• 월 1,000회 TTS 음성\n• 1GB 저장 공간',
+        upgradeButtonText: '7일 무료 체험 시작',
+        cancelButtonText: '나중에 하기',
+        onUpgrade: () async {
+          if (kDebugMode) {
+            debugPrint('🎯 [OnboardingScreen] 7일 무료 체험 시작 선택');
+          }
+          
+          // 무료 체험 시작
+          await _startFreeTrial();
+        },
+        onCancel: () {
+          if (kDebugMode) {
+            debugPrint('🚪 [OnboardingScreen] 나중에 하기 선택');
+          }
+          // 모달만 닫고 홈으로 이동
+          Navigator.of(context).pop(false);
+        },
+      );
+      
+      // 모달이 닫힌 후 홈 화면으로 이동
+      if (mounted) {
+        widget.onComplete();
+      }
+      
+    } catch (e) {
+      debugPrint('환영 모달 표시 중 오류: $e');
+      // 오류 발생 시에도 홈으로 이동
+      if (mounted) {
+        widget.onComplete();
+      }
+    }
+  }
+
+  /// 무료 체험 시작 처리
+  Future<void> _startFreeTrial() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (kDebugMode) {
+          debugPrint('❌ 사용자가 로그인되어 있지 않습니다');
+        }
+        return;
+      }
+
+      if (kDebugMode) {
+        debugPrint('🎯 무료 체험 시작 요청: ${user.uid}');
+      }
+
+      // 무료 체험 시작
+      final success = await _planService.startFreeTrial(user.uid);
+      
+      if (success) {
+        if (kDebugMode) {
+          debugPrint('✅ 무료 체험 시작 성공');
+        }
+        
+        // 성공 메시지 표시
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '🎉 7일 무료 체험이 시작되었습니다!',
+                style: TypographyTokens.caption.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+              backgroundColor: ColorTokens.success,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } else {
+        if (kDebugMode) {
+          debugPrint('❌ 무료 체험 시작 실패 - 이미 사용했거나 오류 발생');
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '무료 체험을 시작할 수 없습니다. 이미 사용하셨거나 오류가 발생했습니다.',
+                style: TypographyTokens.caption.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+              backgroundColor: ColorTokens.warning,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ 무료 체험 시작 중 오류: $e');
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '오류가 발생했습니다: $e',
+              style: TypographyTokens.caption.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: ColorTokens.error,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
