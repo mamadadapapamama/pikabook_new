@@ -786,7 +786,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '텍스트 처리 모드가 변경되었습니다. 새로 열리는 노트에 적용됩니다.',
+              '텍스트 처리 모드가 변경되었습니다. 새로 만드는 노트에 적용됩니다.',
               style: TypographyTokens.caption.copyWith(
                 color: ColorTokens.textLight,
               ),

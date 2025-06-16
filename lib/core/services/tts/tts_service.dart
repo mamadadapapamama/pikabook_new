@@ -95,7 +95,7 @@ class TTSService {
       debugPrint('⏹️ 이미 재생 중이므로 중지 후 새로 시작');
       await stop();
       // 상태 초기화가 확실히 반영되도록 잠시 대기
-      await Future.delayed(Duration(milliseconds: 300));
+      await Future.delayed(Duration(milliseconds: 150));
     }
 
     if (text.isEmpty) return;
@@ -165,64 +165,73 @@ class TTSService {
       final fileSize = await file.length();
       debugPrint('🎵 오디오 파일 정보: ${filePath.split('/').last} (${fileSize} bytes)');
 
-      // 먼저 이전 재생 중지 및 리소스 해제
-      await _audioPlayer.stop();
+      // 완전한 상태 초기화
+      await _resetAudioPlayer();
       
       // 볼륨 설정 (최대 볼륨)
       await _audioPlayer.setVolume(1.0);
       debugPrint('🔊 볼륨 설정: 1.0 (최대)');
       
-      // 파일 경로 설정
-      await _audioPlayer.setFilePath(filePath);
-      debugPrint('📁 파일 경로 설정 완료');
-      
-      // 오디오 세션 설정 (iOS에서 소리가 안 들릴 때 도움)
+      // 오디오 소스 설정 (setFilePath 대신 setAudioSource만 사용)
       await _audioPlayer.setAudioSource(
         AudioSource.uri(Uri.file(filePath)),
       );
       debugPrint('🎧 오디오 소스 설정 완료');
       
-      // 실제 재생 시작
-      await _audioPlayer.play();
+      // 상태 업데이트
       _isSpeaking = true;
       _ttsState = TtsState.playing;
-      debugPrint('▶️ 오디오 재생 시작: ${filePath.split('/').last}');
       
-      // 재생 상태 모니터링
-      _audioPlayer.playerStateStream.listen((state) {
-        debugPrint('🎵 재생 상태: ${state.playing ? "재생 중" : "정지"} - ${state.processingState}');
-      });
+      // 실제 재생 시작
+      await _audioPlayer.play();
+      debugPrint('▶️ 오디오 재생 시작: ${filePath.split('/').last}');
       
       // 안전장치: 10초 후 강제 종료 (무한 재생 방지)
       Future.delayed(const Duration(seconds: 10), () {
         if (_isSpeaking) {
           debugPrint('⚠️ 오디오 재생 타임아웃으로 강제 종료');
-          _isSpeaking = false;
-          _ttsState = TtsState.stopped;
+          _resetState();
         }
       });
     } catch (e) {
       debugPrint('❌ 오디오 파일 재생 중 오류: $e');
-      _isSpeaking = false;
-      _ttsState = TtsState.stopped;
+      _resetState();
     }
+  }
+
+  /// 오디오 플레이어 완전 초기화
+  Future<void> _resetAudioPlayer() async {
+    try {
+      // 재생 중지
+      await _audioPlayer.stop();
+      
+      // 잠시 대기하여 상태 안정화
+      await Future.delayed(Duration(milliseconds: 100));
+      
+      debugPrint('🔄 오디오 플레이어 초기화 완료');
+    } catch (e) {
+      debugPrint('⚠️ 오디오 플레이어 초기화 중 오류: $e');
+    }
+  }
+
+  /// 상태 초기화
+  void _resetState() {
+    _isSpeaking = false;
+    _ttsState = TtsState.stopped;
+    _updateCurrentSegment(null);
   }
 
   /// 재생 중지
   Future<void> stop() async {
     try {
       debugPrint('⏹️ TTS 재생 중지 요청');
-      await _audioPlayer.stop();
-      _ttsState = TtsState.stopped;
-      _isSpeaking = false;
-      _updateCurrentSegment(null);
+      await _resetAudioPlayer();
+      _resetState();
       debugPrint('✅ TTS 재생 중지 완료');
     } catch (e) {
       debugPrint('❌ TTS 중지 중 오류: $e');
       // 오류가 발생해도 상태는 초기화
-      _ttsState = TtsState.stopped;
-      _isSpeaking = false;
-      _updateCurrentSegment(null);
+      _resetState();
     }
   }
 

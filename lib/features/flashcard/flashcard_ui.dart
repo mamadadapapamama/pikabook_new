@@ -220,7 +220,7 @@ class FlashCardUI {
             // 단어/의미 텍스트
             Text(
               text,
-              style: TypographyTokens.headline2Cn.copyWith(
+              style: TypographyTokens.headline1Cn.copyWith(
                 color: ColorTokens.textPrimary,
               ),
               textAlign: TextAlign.center,
