@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'dart:io';
 import '../../features/home/home_viewmodel.dart';
 import '../home/note_list_item.dart';
 import '../note/services/note_service.dart';
@@ -15,21 +13,16 @@ import '../../core/widgets/image_picker_bottom_sheet.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/widgets/pika_button.dart';
-import '../../core/widgets/marketing_campaign_widget.dart';  // 마케팅 캠페인 위젯 추가
 import '../../core/widgets/pika_app_bar.dart';
-import '../../core/widgets/usage_dialog.dart';
 import '../flashcard/flashcard_screen.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../../app.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../core/utils/debug_utils.dart';
 import '../../core/models/note.dart';
 import '../note/view/note_detail_screen.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용 위해 추가
 import '../../core/services/common/plan_service.dart';
 import '../../core/widgets/upgrade_modal.dart';
-import '../../core/services/authentication/auth_service.dart';
+import '../../core/services/permissions/permission_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -59,10 +52,6 @@ class HomeScreen extends StatefulWidget {
       }
       return _HomeScreenState();
     } catch (e, stackTrace) {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] createState 중 오류 발생: $e');
-        debugPrint('[HomeScreen] 스택 트레이스: $stackTrace');
-      }
       rethrow; // 오류 전파 (상위 위젯에서 처리)
     }
   }
@@ -429,18 +418,44 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _showImagePickerBottomSheet(BuildContext context) async {
     try {
-      // 이미지 피커 바텀시트 표시
+      print('🔥 이미지 업로드 버튼 클릭 - 권한 요청 시작');
+      
+      // 1. 먼저 권한 요청
+      final permissionService = PermissionService();
+      final results = await permissionService.requestImagePermissions(context);
+      
+      print('🔥 권한 요청 결과: $results');
+      
+      // 2. 권한 결과 확인
+      final hasAnyPermission = results['camera'] == true || results['gallery'] == true;
+      
+      if (!hasAnyPermission) {
+        // 권한이 모두 거부된 경우
+        print('❌ 모든 권한이 거부됨 - 설정 안내');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('카메라와 갤러리 권한이 필요합니다.\n설정 > 개인정보 보호 및 보안 > 사진에서 Pikabook 권한을 허용해주세요.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+        return;
+      }
+      
+      // 3. 권한이 허용된 경우에만 바텀시트 표시
+      print('✅ 권한 허용됨 - 바텀시트 표시');
       if (mounted) {
         await showModalBottomSheet(
-      context: context,
+          context: context,
           isScrollControlled: true,
           isDismissible: true,
           enableDrag: true,
           backgroundColor: Colors.transparent,
-      builder: (BuildContext context) {
+          builder: (BuildContext context) {
             return const ImagePickerBottomSheet();
-      },
-    );
+          },
+        );
       }
     } catch (e) {
       if (kDebugMode) {

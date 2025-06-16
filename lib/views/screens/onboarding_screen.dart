@@ -273,7 +273,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         customTitle: 'Pikabook에 오신 것을 환영합니다! 🎉',
         customMessage: '7일 무료 체험으로 모든 프리미엄 기능을 경험해보세요.\n\n• 월 300페이지 OCR 인식\n• 월 10만자 번역\n• 월 1,000회 TTS 음성\n• 1GB 저장 공간',
         upgradeButtonText: '7일 무료 체험 시작',
-        cancelButtonText: '나중에 하기',
+        cancelButtonText: '무료 플랜으로 시작',
         onUpgrade: () async {
           if (kDebugMode) {
             debugPrint('🎯 [OnboardingScreen] 7일 무료 체험 시작 선택');
@@ -284,21 +284,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         },
         onCancel: () {
           if (kDebugMode) {
-            debugPrint('🚪 [OnboardingScreen] 나중에 하기 선택');
+            debugPrint('🚪 [OnboardingScreen] 무료 플랜으로 시작 선택');
           }
-          // Navigator.pop 제거 - UpgradeModal에서 이미 처리함
+          // 무료 플랜으로 시작 - 별도 처리 없이 홈으로 이동
         },
       );
       
       // 모달이 닫힌 후 홈 화면으로 이동
-      if (mounted) {
+      if (mounted && widget.onComplete != null) {
+        if (kDebugMode) {
+          debugPrint('🏠 [OnboardingScreen] 홈 화면으로 이동');
+        }
         widget.onComplete();
       }
       
     } catch (e) {
       debugPrint('환영 모달 표시 중 오류: $e');
       // 오류 발생 시에도 홈으로 이동
-      if (mounted) {
+      if (mounted && widget.onComplete != null) {
+        if (kDebugMode) {
+          debugPrint('🏠 [OnboardingScreen] 오류 발생 - 홈 화면으로 이동');
+        }
         widget.onComplete();
       }
     }

@@ -186,14 +186,15 @@ class UpgradeModal extends StatelessWidget {
               debugPrint('📍 [UpgradeModal] 현재 라우트: ${ModalRoute.of(context)?.settings.name}');
             }
             
-            // onCancel이 있는 경우 호출하고, 없으면 기본 동작 수행
+            // 모달 닫기
+            Navigator.of(context).pop(false);
+            
+            // onCancel 콜백 호출 (모달이 닫힌 후)
             if (onCancel != null) {
-              onCancel!();
-            } else {
               if (kDebugMode) {
-                debugPrint('🔙 [UpgradeModal] Navigator.pop 호출 (모달만 닫기)');
+                debugPrint('🔄 [UpgradeModal] onCancel 콜백 호출');
               }
-              Navigator.of(context).pop(false);
+              onCancel!();
             }
           },
           child: Text(
