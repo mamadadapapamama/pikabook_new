@@ -7,18 +7,19 @@ import 'page_navigation_button.dart';
 import '../../tts/tts_play_all_button.dart';
 
 /// 노트 상세 화면 하단 내비게이션 바
-/// 페이지 탐색, 본문 전체 듣기, 진행률 바 제공
+/// 페이지 탐색, 진행률 바 제공 (세그먼트 모드에서는 전체 텍스트 재생 포함)
 
 class NoteDetailBottomBar extends StatefulWidget {
   final page_model.Page? currentPage;
   final int currentPageIndex;
   final int totalPages;
   final Function(int) onPageChanged;
-  final String ttsText; // TTS 재생할 텍스트
+  final String ttsText; // TTS 재생할 텍스트 (세그먼트 모드에서만 사용)
   final bool isProcessing; // 현재 페이지가 처리 중인지 여부
   final double progressValue;
-  final VoidCallback? onTtsPlay;
+  final VoidCallback? onTtsPlay; // TTS 재생 콜백 (세그먼트 모드에서만 사용)
   final bool isMinimalUI;
+  final bool useSegmentMode; // 세그먼트 모드 여부
   final List<bool> processedPages; // 각 페이지의 처리 상태 추적 배열 추가
   final List<bool> processingPages; // 각 페이지의 처리 중 상태 추적 배열 추가
 
@@ -33,6 +34,7 @@ class NoteDetailBottomBar extends StatefulWidget {
     this.progressValue = 0.0,
     this.onTtsPlay,
     this.isMinimalUI = false,
+    this.useSegmentMode = false, // 기본값은 문단 모드
     this.processedPages = const [], // 기본값은 빈 배열
     this.processingPages = const [], // 기본값은 빈 배열
   });
@@ -110,12 +112,17 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                         ),
                       ),
                       
-                      // 중앙 - TTS 버튼
-                      if (widget.currentPage != null && !widget.isMinimalUI && widget.ttsText.isNotEmpty)
-                      TtsPlayAllButton(
-                        text: widget.ttsText,
-                        onPlayStart: widget.onTtsPlay,
-                      ),
+                      // 중앙 - TTS 버튼 (세그먼트 모드에서만 표시)
+                      if (widget.useSegmentMode && 
+                          widget.currentPage != null && 
+                          !widget.isMinimalUI && 
+                          widget.ttsText.isNotEmpty)
+                        TtsPlayAllButton(
+                          text: widget.ttsText,
+                          onPlayStart: widget.onTtsPlay,
+                        )
+                      else
+                        const SizedBox.shrink(),
                       
                       // 오른쪽 영역 (페이지 번호 + 다음 페이지 버튼)
                       Row(

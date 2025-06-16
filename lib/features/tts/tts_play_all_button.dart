@@ -163,23 +163,23 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
             color: _isPlaying ? ColorTokens.primary.withOpacity(0.1) : Colors.transparent,
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+      mainAxisSize: MainAxisSize.min,
+      children: [
               Icon(
                 _isPlaying ? Icons.stop : Icons.volume_up,
                 color: _isPlaying ? ColorTokens.primary : ColorTokens.secondary,
                 size: 12,
-              ),
+        ),
               const SizedBox(width: 6),
-              Text(
-                '본문 전체 듣기',
-                style: TypographyTokens.caption.copyWith(
+        Text(
+          '본문 전체 듣기',
+          style: TypographyTokens.caption.copyWith(
                   color: _isPlaying ? ColorTokens.primary : ColorTokens.secondary,
-                  fontSize: 12,
+            fontSize: 12,
                   fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+          ),
+        ),
+      ],
           ),
         ),
       ),

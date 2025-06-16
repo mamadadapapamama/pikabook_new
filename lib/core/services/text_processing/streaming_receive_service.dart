@@ -49,7 +49,7 @@ class StreamingReceiveService {
     }
 
     bool hasReceivedAnyChunk = false;
-    
+
     try {
       // 페이지별 세그먼트 정보 생성
       final pageSegments = _createPageSegments(pages);
@@ -81,7 +81,7 @@ class StreamingReceiveService {
 
         // 오류 청크 처리
         if (chunkData['isError'] == true) {
-          yield StreamingReceiveResult.error(
+                  yield StreamingReceiveResult.error(
             chunkIndex: chunkData['chunkIndex'] as int,
             error: chunkData['error']?.toString() ?? '알 수 없는 오류',
           );
@@ -140,12 +140,12 @@ class StreamingReceiveService {
           }
         } else {
           // 기존 방식 (페이지 ID 없는 경우)
-          await _distributeUnitsToPages(
-            chunkUnits, 
-            pages, 
-            pageResults,
-            isFirstChunk: chunkIndex == 0,
-          );
+        await _distributeUnitsToPages(
+          chunkUnits, 
+          pages, 
+          pageResults,
+          isFirstChunk: chunkIndex == 0,
+        );
         }
         
         processedChunks++;
@@ -550,13 +550,13 @@ class StreamingReceiveService {
       pageResults.putIfAbsent(pageId, () => []);
       
       for (final text in pageOcrSegments[pageId]!) {
-        pageResults[pageId]!.add(TextUnit(
+      pageResults[pageId]!.add(TextUnit(
           originalText: text,
-          translatedText: '[스트리밍 실패]',
-          pinyin: '',
-          sourceLanguage: sourceLanguage,
-          targetLanguage: targetLanguage,
-        ));
+        translatedText: '[스트리밍 실패]',
+        pinyin: '',
+        sourceLanguage: sourceLanguage,
+        targetLanguage: targetLanguage,
+      ));
       }
     }
     

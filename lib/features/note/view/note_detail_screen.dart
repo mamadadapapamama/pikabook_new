@@ -3,22 +3,22 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
-import '../../../core/models/flash_card.dart';
-import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
+import '../../../core/theme/tokens/ui_tokens.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../../core/widgets/pika_button.dart';
+import '../../../core/widgets/pika_app_bar.dart';
 import '../view_model/note_detail_viewmodel.dart';
 import '../../flashcard/flashcard_view_model.dart';
-import 'note_page_widget.dart';
-import '../../../core/widgets/pika_app_bar.dart';
 import '../../flashcard/flashcard_screen.dart';
 import 'note_detail_bottom_bar.dart';
+import 'note_page_widget.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../../core/utils/note_tutorial.dart';
-import '../../../core/theme/tokens/ui_tokens.dart';
 import '../../flashcard/flashcard_service.dart';
+import '../../../core/services/authentication/user_preferences_service.dart';
+import '../../../core/models/flash_card.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatefulWidget {
@@ -26,10 +26,10 @@ class NoteDetailScreenMVVM extends StatefulWidget {
   final Note? initialNote;
 
   const NoteDetailScreenMVVM({
-    Key? key,
+    super.key,
     required this.noteId,
     this.initialNote,
-  }) : super(key: key);
+  });
 
   // 라우트 생성 메서드
   static Route<dynamic> route({
@@ -43,11 +43,11 @@ class NoteDetailScreenMVVM extends StatefulWidget {
       settings: const RouteSettings(name: '/note_detail'),
       builder: (context) => ChangeNotifierProvider(
         create: (context) => NoteDetailViewModel(
-          noteId: note.id!,
+          noteId: note.id,
           initialNote: note,
         ),
         child: NoteDetailScreenMVVM(
-          noteId: note.id!,
+          noteId: note.id,
           initialNote: note,
         ),
       ),
@@ -61,14 +61,15 @@ class NoteDetailScreenMVVM extends StatefulWidget {
 class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   late FlashCardService _flashCardService;
   late TTSService _ttsService;
+  late UserPreferencesService _userPreferencesService;
   List<FlashCard> _flashcards = [];
+  bool _useSegmentMode = false; // 세그먼트 모드 여부
   
   @override
   void initState() {
     super.initState();
-    
-    // 초기화
     _initializeServices();
+    _loadUserPreferences(); // 사용자 설정 로드
     
     // 화면 렌더링 완료 후 튜토리얼 체크
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -89,10 +90,25 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     try {
       _flashCardService = FlashCardService();
       _ttsService = TTSService();
+      _userPreferencesService = UserPreferencesService();
       await _ttsService.init();
     } catch (e) {
       if (kDebugMode) {
-        print('서비스 초기화 실패: $e');
+        print('서비스 초기화 중 오류: $e');
+      }
+    }
+  }
+  
+  /// 사용자 설정 로드
+  Future<void> _loadUserPreferences() async {
+    try {
+      final userPrefs = await _userPreferencesService.getPreferences();
+      setState(() {
+        _useSegmentMode = userPrefs.useSegmentMode;
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('사용자 설정 로드 중 오류: $e');
       }
     }
   }
@@ -314,9 +330,9 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       return const SizedBox.shrink();
     }
     
-    // 현재 페이지의 TTS 텍스트 가져오기
+    // 현재 페이지의 TTS 텍스트 가져오기 (세그먼트 모드에서만)
     final currentProcessedText = viewModel.currentProcessedText;
-    final ttsText = currentProcessedText?.fullOriginalText ?? '';
+    final ttsText = _useSegmentMode ? (currentProcessedText?.fullOriginalText ?? '') : '';
     
     return NoteDetailBottomBar(
       currentPage: viewModel.currentPage,
@@ -328,7 +344,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       ttsText: ttsText,
       isProcessing: false,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),
-      onTtsPlay: () {
+      onTtsPlay: _useSegmentMode ? () {
         if (_ttsService.state == TtsState.playing) {
           _ttsService.stop();
         } else {
@@ -336,7 +352,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
             _ttsService.speak(ttsText);
           }
         }
-      },
+      } : null,
+      useSegmentMode: _useSegmentMode,
       processedPages: [], // 간소화된 ViewModel에서는 빈 리스트
       processingPages: [], // 간소화된 ViewModel에서는 빈 리스트
     );

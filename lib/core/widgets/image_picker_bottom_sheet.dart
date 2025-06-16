@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../features/note/managers/note_creation_ui_manager.dart';
 import '../../core/services/media/image_service.dart';
 import 'loading_dialog_experience.dart';
+import '../../core/services/permissions/permission_service.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
   const ImagePickerBottomSheet({Key? key}) : super(key: key);
@@ -23,6 +24,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   final NoteCreationUIManager _noteCreationUIManager = NoteCreationUIManager();
   final ImagePicker _picker = ImagePicker();
   final ImageService _imageService = ImageService();
+  final PermissionService _permissionService = PermissionService();
   
   // 이미지 처리 중인지 추적하는 변수
   bool _isProcessing = false;
@@ -31,7 +33,6 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   @override
   void initState() {
     super.initState();
-    // 사용량 확인 로직 제거 - InitializationManager에서 이미 처리됨
   }
   
   @override
@@ -152,7 +153,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     );
   }
 
-  /// 갤러리에서 이미지 선택
+  /// 갤러리에서 이미지 선택 (PermissionService 사용)
   Future<void> _selectGalleryImages() async {
     // 이미 처리 중이거나 취소된 경우 중복 호출 방지
     if (_isProcessing || _isCancelled) {
@@ -168,122 +169,64 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       _isCancelled = false;
     });
     
-    // 작업 시작 - 이미지 선택 중임을 사용자에게 알립니다
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('이미지를 선택하는 중...'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-    
-    List<XFile>? selectedImages;
-    
     try {
-      // 압축 문제를 피하기 위해 imageQuality 파라미터를 제거하고 원본 품질 사용
-      selectedImages = await _picker.pickMultiImage(
-        requestFullMetadata: false, // 불필요한 메타데이터 요청 안함
-      );
+      // 갤러리 권한 확인 및 요청
+      final hasPermission = await _permissionService.requestGalleryPermission(context);
+      if (!hasPermission) {
+        _resetProcessingState();
+        return;
+      }
+      
+      if (kDebugMode) {
+        print('📱 갤러리 이미지 선택 시작 (권한 확인 완료)');
+      }
+      
+      // 기존 ImageService를 통한 갤러리 이미지 선택
+      final List<File> imageFiles = await _imageService.pickMultipleImages();
         
       // 이미지 선택이 취소되었거나 이미지가 없는 경우
-      if (selectedImages == null || selectedImages.isEmpty) {
-        if (!_isCancelled && kDebugMode) {
-          print('[갤러리] 이미지 선택이 취소되었습니다.');
+      if (imageFiles.isEmpty) {
+        if (kDebugMode) {
+          print('📱 갤러리 이미지 선택 취소됨');
         }
+        _resetProcessingState();
         
-        // 취소 상태로 설정하여 중복 처리 방지
-        if (mounted) {
-          setState(() {
-            _isProcessing = false;
-            _isCancelled = true;
-          });
-          
-          // 갤러리 취소 시 bottom sheet 닫기
-          if (Navigator.canPop(context)) {
-            Navigator.of(context).pop();
-          }
-        } else {
-          _isProcessing = false;
-          _isCancelled = true;
+        // 취소 시 바텀시트 닫기
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.of(context).pop();
         }
         return;
       }
+      
+      if (kDebugMode) {
+        print('📱 갤러리 이미지 선택 성공: ${imageFiles.length}개');
+      }
+      
+      // 성공적으로 선택된 경우 노트 생성 진행
+      await _processSelectedImages(imageFiles);
+      
     } catch (e) {
       if (kDebugMode) {
-        print('Error picking images: $e');
+        print('📱 갤러리 이미지 선택 오류: $e');
       }
+      
+      _resetProcessingState();
+      
+      // 오류 메시지 표시
+      String errorMessage;
+      if (e.toString().contains('permission') || e.toString().contains('denied')) {
+        errorMessage = '갤러리 접근 권한이 필요합니다. 설정에서 사진 권한을 허용해주세요.';
+      } else {
+        errorMessage = '이미지를 선택할 수 없습니다. 다시 시도해주세요.';
+      }
+      
       if (mounted) {
-        // 처리 중 상태 초기화
-        setState(() {
-          _isProcessing = false;
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('이미지 선택 중 오류: ${kDebugMode ? e.toString() : "이미지를 선택할 수 없습니다. 다시 시도해주세요."}')),
-        );
+        _showSingleAlert('갤러리 오류', errorMessage);
       }
-      return;
-    }
-    
-    // 이미지를 선택한 후에 바텀시트를 닫습니다 (강력한 방식 적용)
-    if (mounted) {
-      // 루트 컨텍스트 가져오기
-      final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
-      
-      // 바텀 시트 닫기 (물리적 뒤로가기 제스처 동작과 동일하게)
-      if (Navigator.canPop(context)) {
-        Navigator.of(context).pop();
-        
-        // 안정성을 위해 약간의 딜레이 추가
-        await Future.delayed(const Duration(milliseconds: 50));
-      }
-      
-      // 로딩 화면 표시
-      if (rootContext.mounted) {
-        await NoteCreationLoader.show(
-          rootContext, 
-          message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
-        );
-      }
-      
-      // 메인 UI 스레드에서 작업을 분리하기 위해 마이크로태스크 큐에 작업 예약
-      Future.microtask(() async {
-        try {
-          // XFile에서 File로 변환
-          final List<File> imageFiles = selectedImages!
-              .map((xFile) => File(xFile.path))
-              .toList();
-          
-          // 이미지가 유효한 경우 노트 생성 시작
-          // 이미 로딩 화면이 표시되었으므로 showLoadingDialog=false
-          await _noteCreationUIManager.createNoteWithImages(
-            rootContext, 
-            imageFiles,
-            closeBottomSheet: false, // 이미 바텀시트를 닫았으므로 false로 설정
-            showLoadingDialog: false  // 이미 로딩 화면이 표시되었으므로 false로 설정
-          );
-        } catch (e) {
-          if (kDebugMode) {
-            print('이미지 처리 중 오류: $e');
-          }
-          
-          // 오류 발생 시 로딩 화면 닫기
-          if (rootContext.mounted) {
-            NoteCreationLoader.hide(rootContext);
-            
-            // 사용자에게 오류 알림
-            ScaffoldMessenger.of(rootContext).showSnackBar(
-              SnackBar(content: Text(kDebugMode ? '노트 생성 중 오류가 발생했습니다: $e' : '노트 생성 중 오류가 발생했습니다. 다시 시도해주세요.')),
-            );
-          }
-        } finally {
-          // 처리 완료 후 상태 초기화 (추가)
-          _isProcessing = false;
-        }
-      });
     }
   }
   
-  /// 카메라로 사진 촬영
+  /// 카메라로 사진 촬영 (PermissionService 사용)
   Future<void> _takeCameraPhoto() async {
     // 이미 처리 중이거나 취소된 경우 중복 호출 방지
     if (_isProcessing || _isCancelled) {
@@ -299,300 +242,107 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       _isCancelled = false;
     });
     
-    // 시뮬레이터에서 실행 중인지 확인 (iOS 시뮬레이터에서는 카메라가 작동하지 않음)
-    bool isSimulator = false;
-    if (Platform.isIOS) {
-      try {
-        // 간단한 시뮬레이터 확인 방법 - 실제 디바이스에는 '/Applications' 경로가 없음
-        isSimulator = await File('/Applications').exists();
-      } catch (e) {
-        // 확인 실패 시 기본적으로 시뮬레이터가 아니라고 가정
-        isSimulator = false;
-      }
-    }
-    
-    if (isSimulator) {
-      if (kDebugMode) {
-        print('iOS 시뮬레이터에서는 카메라를 사용할 수 없습니다.');
-      }
-      
-      _resetProcessingState();
-      
-      // 시뮬레이터용 얼럿 표시 (스낵바 대신 얼럿 사용)
-      _showSingleAlert(
-        '카메라 사용 불가',
-        'iOS 시뮬레이터에서는 카메라 기능을 사용할 수 없습니다. 실제 기기에서 테스트해주세요.'
-      );
-      return;
-    }
-    
     try {
-      // 카메라 실행
-      await _executeCameraPickerWithErrorHandling();
-    } catch (e) {
-      if (kDebugMode) {
-        print('카메라 실행 메인 함수에서 예외 발생: $e');
-      }
-      _resetProcessingState();
-    }
-  }
-  
-  // 카메라 실행 및 오류 처리를 담당하는 별도 메서드 (중복 코드 방지)
-  Future<void> _executeCameraPickerWithErrorHandling() async {
-    if (!mounted) {
-      _resetProcessingState();
-      return;
-    }
-    
-    // 작업 시작 - 카메라 준비 중임을 사용자에게 알립니다
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('카메라를 준비하는 중...'),
-        duration: Duration(seconds: 1),
-      ),
-    );
-    
-    File? imageFile;
-    String? errorMessage;
-    bool userCancelled = false;
-    
-    try {
-      if (kDebugMode) {
-        print('이미지 선택 시작: ImageSource.camera');
+      // 카메라 권한 확인 및 요청
+      final hasPermission = await _permissionService.requestCameraPermission(context);
+      if (!hasPermission) {
+        _resetProcessingState();
+        return;
       }
       
-      // iOS에서 권장되는 최신 방식으로 먼저 시도
-      if (Platform.isIOS) {
-    try {
-        final XFile? photo = await _picker.pickImage(
-          source: ImageSource.camera,
-            requestFullMetadata: false,
-            maxWidth: 1920,
-            maxHeight: 1080,
-            imageQuality: 80,
-        );
-        
-          if (photo != null) {
-            imageFile = File(photo.path);
-            // 성공 시 두 번째 시도가 필요 없음을 표시
-            if (kDebugMode) {
-              print('첫 번째 카메라 시도 성공, 두 번째 시도 건너뜀');
-            }
-          } else {
-            if (kDebugMode) {
-              print('iOS 카메라 선택이 취소되었거나 실패했습니다.');
-            }
-            // 사용자가 취소한 것으로 표시
-            userCancelled = true;
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print('iOS 카메라 접근 중 오류 발생: $e');
-          }
-          
-          // 취소로 간주할 수 있는 에러 유형
-          if (e.toString().contains('multiple_request') || 
-              e.toString().contains('Cancelled') ||
-              e.toString().contains('cancelled') ||
-              e.toString().contains('denied') ||
-              e.toString().contains('permission')) {
-            userCancelled = true;
-          } else {
-            errorMessage = '카메라 접근 중 오류가 발생했습니다.';
-          }
-        }
-      } else {
-        // 안드로이드나 다른 플랫폼용 기본 방식
-        try {
-          imageFile = await _imageService.pickImage(source: ImageSource.camera);
-          if (imageFile == null) {
-            // 안드로이드에서 null 반환은 사용자 취소로 간주
-            userCancelled = true;
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print('안드로이드 카메라 접근 중 오류: $e');
-          }
-          
-          // 안드로이드에서도 취소 유형 확인
-          if (e.toString().contains('cancelled') || 
-              e.toString().contains('denied') ||
-              e.toString().contains('permission')) {
-            userCancelled = true;
-          } else {
-            errorMessage = '카메라 접근 중 오류가 발생했습니다.';
-          }
-        }
+      if (kDebugMode) {
+        print('📷 카메라 촬영 시작 (권한 확인 완료)');
       }
       
-      // 사용자가 취소한 경우 처리
-      if (userCancelled) {
+      // 기존 ImageService를 통한 카메라 촬영
+      final File? imageFile = await _imageService.pickImage(source: ImageSource.camera);
+      
+      if (imageFile == null) {
+        // 사용자가 취소한 경우
         if (kDebugMode) {
-          print('사용자가 카메라를 취소했습니다. 상태 초기화');
+          print('📷 카메라 촬영 취소됨');
         }
-        
         _resetProcessingState();
         
-        // 카메라 취소 시 bottom sheet 닫기
+        // 취소 시 바텀시트 닫기
         if (mounted && Navigator.canPop(context)) {
           Navigator.of(context).pop();
         }
         return;
       }
       
-      // 이전 방법이 실패했고 아직 오류 메시지가 없고 사용자가 취소하지 않은 경우만 두 번째 시도
-      if (imageFile == null && errorMessage == null && !userCancelled) {
-        if (kDebugMode) {
-          print('첫 번째 방법 실패, 대체 방법 시도');
-        }
-        
-        try {
-          // 다른 설정으로 시도
-          final XFile? photo = await _picker.pickImage(
-            source: ImageSource.camera,
-            requestFullMetadata: false,
-            maxWidth: 1280,  // 해상도 낮춤
-            maxHeight: 720,
-          );
-        
-          if (photo != null) {
-            imageFile = File(photo.path);
-          } else {
-            if (kDebugMode) {
-              print('두 번째 카메라 시도에서 사용자가 취소했습니다.');
-            }
-            // 취소는 오류가 아님
-            _resetProcessingState();
-            
-            // 카메라 취소 시 bottom sheet 닫기
-            if (mounted && Navigator.canPop(context)) {
-              Navigator.of(context).pop();
-            }
-            return;
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print('두 번째 시도 중 오류: $e');
-          }
-          
-          // 취소 관련 오류인지 확인
-          if (e.toString().contains('cancelled') || 
-              e.toString().contains('Cancelled') ||
-              e.toString().contains('multiple_request') ||
-              e.toString().contains('denied') ||
-              e.toString().contains('permission')) {
-            if (kDebugMode) {
-              print('두 번째 시도에서 사용자가 취소했습니다.');
-            }
-            _resetProcessingState();
-            
-            // 카메라 취소 시 bottom sheet 닫기
-            if (mounted && Navigator.canPop(context)) {
-              Navigator.of(context).pop();
-            }
-            return;
-          }
-          
-          errorMessage = '카메라를 열 수 없습니다.';
-        }
+      // 파일 유효성 검사
+      if (!await imageFile.exists() || await imageFile.length() == 0) {
+        throw Exception('촬영된 이미지 파일이 유효하지 않습니다.');
       }
       
-      // 이미지 파일을 얻었으면 성공
-      if (imageFile != null) {
-        // 이미지를 선택한 후에 바텀시트를 닫습니다
-          if (mounted) {
-          // 루트 컨텍스트 가져오기
-          final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
-          
-          // 바텀 시트 닫기
-          if (Navigator.canPop(context)) {
-            Navigator.of(context).pop();
-            
-            // 안정성을 위해 약간의 딜레이 추가 
-            await Future.delayed(const Duration(milliseconds: 50));
-          }
-          
-          // 로딩 화면 표시
-          if (rootContext.mounted) {
-            await NoteCreationLoader.show(
-              rootContext, 
-              message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!'
-            );
-          }
-          
-          // 메인 UI 스레드에서 작업을 분리하기 위해 마이크로태스크 큐에 작업 예약
-          Future.microtask(() async {
-            try {
-              // 이미지가 유효한 경우 노트 생성 시작
-              await _noteCreationUIManager.createNoteWithImages(
-                rootContext, 
-                [imageFile!], // null이 아님을 확신하므로 !로 강제 변환
-                closeBottomSheet: false,
-                showLoadingDialog: false
-              );
-            } catch (e) {
-              if (kDebugMode) {
-                print('이미지 처리 중 오류: $e');
-              }
-              
-              // 오류 발생 시 로딩 화면 닫기
-              if (rootContext.mounted) {
-                NoteCreationLoader.hide(rootContext);
-                
-                // 사용자에게 오류 알림
-                _showSingleAlert(
-                  '처리 오류',
-                  kDebugMode 
-                    ? '노트 생성 중 오류가 발생했습니다: $e' 
-                    : '노트 생성 중 오류가 발생했습니다. 다시 시도해주세요.',
-                  context: rootContext
-                );
-              }
-            } finally {
-              // 처리 완료 후 상태 초기화
-              _resetProcessingState();
-            }
-          });
-        } else {
-          _resetProcessingState();
-        }
-      } 
-      // 이미지 파일을 얻지 못했고 오류 메시지가 있는 경우
-      else if (errorMessage != null) {
-        if (mounted) {
-          _resetProcessingState();
-          
-          // iOS 18.4 버전에 맞는 메시지
-          final String message = Platform.isIOS 
-            ? 'iOS 18.4 버전에서는 카메라 접근에 제한이 있을 수 있습니다. 갤러리에서 이미지를 선택해주세요.'
-            : '카메라를 열 수 없습니다. 갤러리에서 이미지를 선택해주세요.';
-          
-          _showSingleAlert('카메라 사용 불가', message);
-        } else {
-          _resetProcessingState();
-        }
-      } 
-      // 이미지 파일도 없고 오류 메시지도 없는 경우 (사용자가 취소한 경우)
-      else {
-        _resetProcessingState();
+      if (kDebugMode) {
+        print('📷 카메라 촬영 성공: ${imageFile.path}');
       }
+      
+      // 성공적으로 촬영된 경우 노트 생성 진행
+      await _processSelectedImages([imageFile]);
+      
     } catch (e) {
       if (kDebugMode) {
-        print('카메라 처리 중 예상치 못한 오류: $e');
+        print('📷 카메라 촬영 오류: $e');
+      }
+      
+      _resetProcessingState();
+      
+      // 오류 메시지 표시
+      String errorMessage;
+      if (e.toString().contains('permission') || e.toString().contains('denied')) {
+        errorMessage = '카메라 권한이 필요합니다. 설정에서 카메라 권한을 허용해주세요.';
+      } else if (Platform.isIOS && e.toString().contains('simulator')) {
+        errorMessage = 'iOS 시뮬레이터에서는 카메라를 사용할 수 없습니다. 실제 기기에서 테스트해주세요.';
+      } else {
+        errorMessage = '카메라를 사용할 수 없습니다. 갤러리에서 이미지를 선택해주세요.';
       }
       
       if (mounted) {
-        _resetProcessingState();
-        
-        _showSingleAlert(
-          '카메라 오류',
-          kDebugMode 
-            ? '카메라 사용 중 오류가 발생했습니다: ${e.toString().substring(0, min(e.toString().length, 100))}' 
-            : '카메라를 사용할 수 없습니다. 갤러리에서 이미지를 선택해주세요.'
-        );
-      } else {
-        _resetProcessingState();
+        _showSingleAlert('카메라 오류', errorMessage);
       }
+    }
+  }
+  
+  /// 선택된 이미지들을 처리하는 공통 메서드 (단순화)
+  Future<void> _processSelectedImages(List<File> imageFiles) async {
+    if (!mounted) return;
+    
+    try {
+      // 바텀 시트 닫기
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+        
+        // 안정성을 위해 약간의 딜레이 추가
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+      
+      // NoteCreationUIManager가 로딩 다이얼로그와 모든 처리를 담당
+      await _noteCreationUIManager.createNoteWithImages(
+        context, 
+        imageFiles,
+        closeBottomSheet: false, // 이미 닫았으므로 false
+        showLoadingDialog: true  // NoteCreationUIManager가 로딩 처리
+      );
+      
+    } catch (e) {
+      if (kDebugMode) {
+        print('이미지 처리 중 오류: $e');
+      }
+      
+      if (mounted) {
+        _showSingleAlert(
+          '처리 오류',
+          kDebugMode 
+            ? '노트 생성 중 오류가 발생했습니다: $e' 
+            : '노트 생성 중 오류가 발생했습니다. 다시 시도해주세요.'
+        );
+      }
+    } finally {
+      // 처리 완료 후 상태 초기화
+      _resetProcessingState();
     }
   }
   

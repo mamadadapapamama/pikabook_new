@@ -63,6 +63,7 @@ dependencies:
   image: ^4.2.0                    # Image compression
   flutter_image_compress: ^2.3.0   # Image compression
   cached_network_image: ^3.3.1     # Cached network images
+  permission_handler: ^11.3.1      # Permission handling
   
   # Audio & TTS
   just_audio: ^0.10.1

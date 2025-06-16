@@ -115,7 +115,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return;
       }
       _finishOnboarding();
-      return;
+        return;
     }
 
     if (_currentPage < 2) {
@@ -528,11 +528,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           const SizedBox(height: 8),
           Text(
             "Pikabook은 책으로 하는 중국어 학습을\n도와주는 앱입니다.",
-            style: TypographyTokens.subtitle2En.copyWith(
-              fontWeight: FontWeight.w600,
-              color: ColorTokens.textPrimary,
-            ),
-          ),
+                  style: TypographyTokens.subtitle2En.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: ColorTokens.textPrimary,
+                  ),
+                ),
           const SizedBox(height: 20),
           
           // 향후 이미지 제공 예정 영역
@@ -565,8 +565,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               color: ColorTokens.textPrimary,
             ),
           ),
-        ],
-      ),
+              ],
+            ),
     );
   }
 
@@ -675,8 +675,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           _selectedLevel = option['level'];
         });
         
-        // 다른 옵션 선택 시 키보드 숨기기
-        FocusScope.of(context).unfocus();
+          // 다른 옵션 선택 시 키보드 숨기기
+          FocusScope.of(context).unfocus();
       },
       child: Container(
         width: double.infinity, // 전체 너비 사용
@@ -693,25 +693,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             width: 2,
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
               option['title']!,
               style: TypographyTokens.body1.copyWith(
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                color: ColorTokens.textPrimary,
-              ),
-            ),
+                 color: ColorTokens.textPrimary,
+                  ),
+          ),
             const SizedBox(height: 4),
-            Text(
+                    Text(
               option['description']!,
-              style: TypographyTokens.caption.copyWith(
-                color: ColorTokens.textSecondary,
-              ),
+            style: TypographyTokens.caption.copyWith(
+              color: ColorTokens.textSecondary,
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
       ),
     );
   }
