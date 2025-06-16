@@ -14,9 +14,6 @@ class DictionaryResultWidget extends StatelessWidget {
   final DictionaryEntry entry;
   final Function(String, String, {String? pinyin}) onCreateFlashCard;
   final bool isExistingFlashcard;
-  
-  // 정적 UnifiedDictionaryService 인스턴스 (불필요한 재초기화 방지)
-  static final UnifiedDictionaryService _dictionaryService = UnifiedDictionaryService();
 
   const DictionaryResultWidget({
     super.key,
@@ -155,13 +152,16 @@ class DictionaryResultWidget extends StatelessWidget {
     }
     
     try {
+      // Singleton 인스턴스 사용
+      final dictionaryService = UnifiedDictionaryService();
+      
       // 사전 초기화 확인
-      if (!_dictionaryService.isInitialized) {
-        await _dictionaryService.initialize();
+      if (!dictionaryService.isInitialized) {
+        await dictionaryService.initialize();
       }
       
       // 단어 검색
-      return await _dictionaryService.lookupWord(word);
+      return await dictionaryService.lookupWord(word);
     } catch (e) {
       return {'success': false, 'message': ErrorHandler.getMessageFromError(e, ErrorContext.dictionary)};
     }
@@ -192,8 +192,6 @@ class _DictionaryBottomSheetState extends State<_DictionaryBottomSheet> {
   DictionaryEntry? _entry;
   String? _errorMessage;
   
-  static final UnifiedDictionaryService _dictionaryService = UnifiedDictionaryService();
-
   @override
   void initState() {
     super.initState();
@@ -202,13 +200,11 @@ class _DictionaryBottomSheetState extends State<_DictionaryBottomSheet> {
 
   Future<void> _searchWord() async {
     try {
-      // 사전 초기화 확인 및 검색
-      if (!_dictionaryService.isInitialized) {
-        await _dictionaryService.initialize();
-      }
+      // Singleton 인스턴스 사용
+      final dictionaryService = UnifiedDictionaryService();
       
       // 단어 검색
-      final result = await _dictionaryService.lookupWord(widget.word);
+      final result = await dictionaryService.lookupWord(widget.word);
       
       if (mounted) {
         setState(() {

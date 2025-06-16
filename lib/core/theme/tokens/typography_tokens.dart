@@ -50,7 +50,7 @@ class TypographyTokens {
       );
 
   static TextStyle get headline2Cn => TextStyle(
-        fontFamily: notoSansHk,
+        fontFamily: 'ZhuqueFangsong',
         fontSize: 28,
         fontWeight: FontWeight.bold,
         letterSpacing: -0.5,
@@ -71,7 +71,7 @@ class TypographyTokens {
       );
 
   static TextStyle get headline3Cn => TextStyle(
-        fontFamily: notoSansHk,
+        fontFamily: 'ZhuqueFangsong',
         fontSize: 24,
         fontWeight: FontWeight.w700,
         height: 1.2,

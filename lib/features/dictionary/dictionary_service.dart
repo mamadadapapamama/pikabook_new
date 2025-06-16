@@ -50,10 +50,10 @@ class DictionaryService {
   }
 
   // 현재 지원하는 언어 목록
-  static const List<String> supportedLanguages = ['zh-CN'];
+  static const List<String> supportedLanguages = ['zh-cn'];
   
   // 현재 활성화된 언어
-  String _currentLanguage = 'zh-CN';
+  String _currentLanguage = 'zh-cn';
 
   // 현재 언어 설정
   String get currentLanguage => _currentLanguage;
@@ -61,8 +61,8 @@ class DictionaryService {
     if (supportedLanguages.contains(language)) {
       _currentLanguage = language;
     } else {
-      debugPrint('지원하지 않는 언어: $language, 기본 언어(zh-CN)로 설정됩니다.');
-      _currentLanguage = 'zh-CN';
+      debugPrint('지원하지 않는 언어: $language, 기본 언어(zh-cn)로 설정됩니다.');
+      _currentLanguage = 'zh-cn';
     }
   }
 
@@ -141,7 +141,7 @@ class DictionaryService {
   /// Google Translate 공통 번역 메서드 (언어 코드 fallback 포함)
   Future<Translation> _translateWithFallback(String text, {
     required String to,
-    String from = 'zh-CN',
+    String from = 'zh-cn',
     String? context,
   }) async {
     try {
@@ -193,7 +193,7 @@ class DictionaryService {
     try {
       if (kDebugMode) {
         debugPrint('🌐 [Google Translate-Multi] 다국어 번역 시작: "$word"');
-        debugPrint('   설정: zh-CN → ko, en');
+        debugPrint('   설정: zh-cn → ko, en');
       }
       
       // 한국어와 영어 번역을 동시에 요청
@@ -297,7 +297,7 @@ class DictionaryService {
       }
       
       switch (_currentLanguage) {
-        case 'zh-CN':
+        case 'zh-cn':
           // 1. 내부 사전에서 검색
           if (kDebugMode) {
             debugPrint('🔍 [1단계] 내부 사전 검색 중...');
@@ -536,7 +536,7 @@ class DictionaryService {
       }
       
       switch (_currentLanguage) {
-        case 'zh-CN':
+        case 'zh-cn':
           return _chineseDictionaryService.lookup(word);
         default:
           return null;
@@ -553,7 +553,7 @@ class DictionaryService {
       await _ensureInitialized();
       
       switch (_currentLanguage) {
-        case 'zh-CN':
+        case 'zh-cn':
           _chineseDictionaryService.addEntry(entry);
           break;
         default:
