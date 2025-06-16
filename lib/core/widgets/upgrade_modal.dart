@@ -40,7 +40,7 @@ class UpgradeModal extends StatelessWidget {
       barrierDismissible: false, // 배경 터치로 닫기 방지
       builder: (context) => UpgradeModal(
         onUpgrade: onUpgrade,
-        onCancel: onCancel ?? () => Navigator.of(context).pop(false),
+        onCancel: onCancel, // 기본 콜백 제거 - 나가기 버튼에서 처리
         customMessage: customMessage,
         customTitle: customTitle,
         upgradeButtonText: upgradeButtonText,
@@ -186,15 +186,15 @@ class UpgradeModal extends StatelessWidget {
               debugPrint('📍 [UpgradeModal] 현재 라우트: ${ModalRoute.of(context)?.settings.name}');
             }
             
-            // onCancel이 있는 경우에만 호출
+            // onCancel이 있는 경우 호출하고, 없으면 기본 동작 수행
             if (onCancel != null) {
               onCancel!();
+            } else {
+              if (kDebugMode) {
+                debugPrint('🔙 [UpgradeModal] Navigator.pop 호출 (모달만 닫기)');
+              }
+              Navigator.of(context).pop(false);
             }
-            
-            if (kDebugMode) {
-              debugPrint('🔙 [UpgradeModal] Navigator.pop 호출 (모달만 닫기)');
-            }
-            Navigator.of(context).pop(false);
           },
           child: Text(
             cancelButtonText ?? '나가기',

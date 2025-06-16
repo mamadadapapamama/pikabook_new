@@ -94,9 +94,35 @@ class StreamingReceiveService {
             ? pageOcrSegments[pageId] 
             : null;
             
+        // 세그먼트 모드에서 pageId가 없을 때 폴백 처리
+        List<String>? finalOriginalSegments;
+        if (processingMode == TextProcessingMode.segment) {
+          if (pageSpecificSegments != null) {
+            finalOriginalSegments = pageSpecificSegments;
+          } else if (pageOcrSegments.isNotEmpty) {
+            // 첫 번째 페이지의 세그먼트 사용 (폴백)
+            finalOriginalSegments = pageOcrSegments.values.first;
+            if (kDebugMode) {
+              debugPrint('⚠️ [폴백] pageId 없음, 첫 번째 페이지 세그먼트 사용');
+            }
+          }
+        }
+            
+        if (kDebugMode) {
+          debugPrint('🔍 [OCR 세그먼트 전달] 분석:');
+          debugPrint('   처리 모드: $processingMode');
+          debugPrint('   서버 pageId: $pageId');
+          debugPrint('   pageOcrSegments 키: ${pageOcrSegments.keys.toList()}');
+          debugPrint('   pageSpecificSegments: ${pageSpecificSegments?.length ?? 0}개');
+          debugPrint('   finalOriginalSegments: ${finalOriginalSegments?.length ?? 0}개');
+          if (finalOriginalSegments != null) {
+            debugPrint('   finalOriginalSegments 내용: ${finalOriginalSegments.map((s) => '"$s"').join(', ')}');
+          }
+        }
+            
         final chunkUnits = _extractUnitsFromChunkData(
           chunkData,
-          originalSegments: processingMode == TextProcessingMode.segment ? pageSpecificSegments : null,
+          originalSegments: finalOriginalSegments,
         );
         final chunkIndex = chunkData['chunkIndex'] as int;
         
@@ -330,12 +356,27 @@ class StreamingReceiveService {
 
       final units = chunkData['units'] as List;
       
-              // Differential Update 방식인지 확인 (서버 응답 기반)
-        if (originalSegments != null && _isDifferentialUpdate(units, chunkData)) {
-          return _buildUnitsFromDifferentialUpdate(units, originalSegments);
+      if (kDebugMode) {
+        debugPrint('📦 [청크 데이터 추출] 시작');
+        debugPrint('   유닛 개수: ${units.length}');
+        debugPrint('   OCR 세그먼트: ${originalSegments?.length ?? 0}개');
+        if (originalSegments != null && originalSegments.isNotEmpty) {
+          debugPrint('   OCR 세그먼트 샘플: "${originalSegments.first}"');
         }
+      }
+      
+      // Differential Update 방식인지 확인 (서버 응답 기반)
+      if (originalSegments != null && _isDifferentialUpdate(units, chunkData)) {
+        if (kDebugMode) {
+          debugPrint('✅ [Differential Update] 모드 선택됨');
+        }
+        return _buildUnitsFromDifferentialUpdate(units, originalSegments);
+      }
       
       // 기존 방식: 서버에서 모든 데이터 포함 (호환성)
+      if (kDebugMode) {
+        debugPrint('✅ [기존 방식] 모드 선택됨');
+      }
       return _buildUnitsFromFullData(units);
       
     } catch (e) {
@@ -351,8 +392,18 @@ class StreamingReceiveService {
   bool _isDifferentialUpdate(List units, Map<String, dynamic> chunkData) {
     if (units.isEmpty) return false;
     
+    if (kDebugMode) {
+      debugPrint('🔍 [Differential Update 감지] 시작');
+      debugPrint('   청크 데이터 키: ${chunkData.keys.toList()}');
+      debugPrint('   첫 번째 유닛 키: ${units.first.keys.toList()}');
+    }
+    
     // 1. 서버에서 명시적으로 모드를 알려주는 경우
     final serverMode = chunkData['mode'] as String?;
+    if (kDebugMode) {
+      debugPrint('   서버 모드: $serverMode');
+    }
+    
     if (serverMode == 'differential') {
       if (kDebugMode) {
         debugPrint('🔄 [서버 지정] Differential Update 모드');
@@ -370,6 +421,16 @@ class StreamingReceiveService {
     final firstUnit = units.first;
     final hasIndex = firstUnit['index'] != null;
     final hasOriginal = firstUnit['original'] != null || firstUnit['originalText'] != null;
+    
+    if (kDebugMode) {
+      debugPrint('   첫 번째 유닛 분석:');
+      debugPrint('     index: ${firstUnit['index']}');
+      debugPrint('     original: ${firstUnit['original']}');
+      debugPrint('     originalText: ${firstUnit['originalText']}');
+      debugPrint('     translation: ${firstUnit['translation']}');
+      debugPrint('     hasIndex: $hasIndex');
+      debugPrint('     hasOriginal: $hasOriginal');
+    }
     
     final isDifferential = hasIndex && !hasOriginal;
     
@@ -392,10 +453,19 @@ class StreamingReceiveService {
       debugPrint('🔄 [Differential Update] 인덱스 기반 매핑 시작');
       debugPrint('   서버 업데이트: ${units.length}개');
       debugPrint('   OCR 세그먼트: ${originalSegments.length}개');
+      debugPrint('   OCR 세그먼트 전체: ${originalSegments.map((s) => '"$s"').join(', ')}');
     }
     
-    for (final unitData in units) {
+    for (int i = 0; i < units.length; i++) {
+      final unitData = units[i];
       final index = unitData['index'] as int?;
+      
+      if (kDebugMode) {
+        debugPrint('📦 [매핑 $i] 처리 중:');
+        debugPrint('   LLM 인덱스: $index');
+        debugPrint('   LLM 번역: "${unitData['translation']}"');
+        debugPrint('   LLM 병음: "${unitData['pinyin']}"');
+      }
       
       if (index == null || index < 0 || index >= originalSegments.length) {
         if (kDebugMode) {
@@ -404,9 +474,15 @@ class StreamingReceiveService {
         continue;
       }
       
+      final originalText = originalSegments[index];
+      
+      if (kDebugMode) {
+        debugPrint('   OCR 원문[${index}]: "$originalText"');
+      }
+      
       // OCR 원본 세그먼트 + 서버 번역/병음
       final textUnit = TextUnit(
-        originalText: originalSegments[index], // ✅ 기존 OCR 데이터 사용
+        originalText: originalText, // ✅ 기존 OCR 데이터 사용
         translatedText: unitData['translation'] ?? unitData['translatedText'] ?? '',
         pinyin: unitData['pinyin'] ?? '',
         sourceLanguage: unitData['sourceLanguage'] ?? 'zh-CN',
@@ -414,12 +490,24 @@ class StreamingReceiveService {
         segmentType: _parseSegmentType(unitData['type'] ?? unitData['segmentType']),
       );
       
+      if (kDebugMode) {
+        debugPrint('✅ [매핑 완료] TextUnit 생성:');
+        debugPrint('   원문: "${textUnit.originalText}"');
+        debugPrint('   번역: "${textUnit.translatedText}"');
+        debugPrint('   병음: "${textUnit.pinyin}"');
+      }
+      
       textUnits.add(textUnit);
     }
     
     if (kDebugMode) {
       debugPrint('✅ [Differential Update] 완료: ${textUnits.length}개 유닛 생성');
       debugPrint('   대역폭 절약: 원문 ${originalSegments.join('').length}자 전송 생략');
+      debugPrint('   최종 결과 요약:');
+      for (int i = 0; i < textUnits.length; i++) {
+        final unit = textUnits[i];
+        debugPrint('     [$i] "${unit.originalText}" → "${unit.translatedText}"');
+      }
     }
     
     return textUnits;

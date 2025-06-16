@@ -54,7 +54,7 @@ class NoteCreationLoader {
       }
       return;
     }
-
+    
     // 타임아웃 매니저 설정
     _timeoutManager?.dispose();
     _timeoutManager = TimeoutManager();
@@ -77,7 +77,7 @@ class NoteCreationLoader {
         // 타임아웃 발생시 처리
         if (kDebugMode) {
           debugPrint('⏰ [NoteCreationLoader] 타임아웃 발생');
-        }
+          }
         
         if (_lastContext != null && _lastContext!.mounted) {
           // 모달 닫기
@@ -132,65 +132,65 @@ class NoteCreationLoader {
                   colorScheme: Theme.of(context).colorScheme,
                   brightness: Theme.of(context).brightness,
                 ),
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-                      width: 300,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 도트 로딩 인디케이터
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const DotLoadingIndicator(),
-                              const SizedBox(width: 12),
-                              Image.asset(
-                                'assets/images/pikabook_bird.png',
-                                width: 40,
-                                height: 40,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: ColorTokens.primary.withOpacity(0.2),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.auto_awesome,
-                                      color: ColorTokens.primary,
-                                      size: 24,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                          
-                          const SizedBox(height: 24),
-                          
+              child: Material(
+                type: MaterialType.transparency,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+                    width: 300,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 도트 로딩 인디케이터
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const DotLoadingIndicator(),
+                            const SizedBox(width: 12),
+                            Image.asset(
+                              'assets/images/pikabook_bird.png',
+                              width: 40,
+                              height: 40,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: ColorTokens.primary.withOpacity(0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.auto_awesome,
+                                    color: ColorTokens.primary,
+                                    size: 24,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 24),
+                        
                           // 동적 메시지 표시
                           ValueListenableBuilder<String>(
                             valueListenable: _messageNotifier,
                             builder: (context, message, child) {
                               return Text(
-                                message,
-                                style: TypographyTokens.body1.copyWith(
-                                  height: 1.4,
-                                  color: ColorTokens.textPrimary,
-                                ),
-                                textAlign: TextAlign.center,
+                          message,
+                          style: TypographyTokens.body1.copyWith(
+                            height: 1.4,
+                            color: ColorTokens.textPrimary,
+                          ),
+                          textAlign: TextAlign.center,
                               );
                             },
-                          ),
-                        ],
+                        ),
+                      ],
                       ),
                     ),
                   ),
@@ -248,7 +248,7 @@ class NoteCreationLoader {
       _forceResetState();
     }
   }
-
+  
   /// 에러 발생시 로딩 다이얼로그 닫고 스낵바 표시
   static void hideWithError(BuildContext context, dynamic error) {
     if (!context.mounted) {
