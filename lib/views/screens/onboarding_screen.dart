@@ -185,8 +185,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await _userPreferences.setOnboardingCompleted(true);
       await _userPreferences.setHasOnboarded(true);
       
-      // 온보딩 완료 콜백 호출
-      widget.onComplete();
+      // 건너뛰기를 해도 무료체험 유도 모달 표시
+      await _showWelcomeUpgradeModal();
       
     } catch (e) {
       debugPrint('온보딩 건너뛰기 처리 중 오류 발생: $e');
@@ -286,8 +286,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           if (kDebugMode) {
             debugPrint('🚪 [OnboardingScreen] 나중에 하기 선택');
           }
-          // 모달만 닫고 홈으로 이동
-          Navigator.of(context).pop(false);
+          // Navigator.pop 제거 - UpgradeModal에서 이미 처리함
         },
       );
       
