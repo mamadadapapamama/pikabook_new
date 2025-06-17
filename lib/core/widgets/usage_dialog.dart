@@ -5,6 +5,8 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import 'pika_button.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/common/plan_service.dart';
+import '../../../core/widgets/upgrade_modal.dart';
 
 /// 사용량 확인 다이얼로그
 /// 사용량 정보 및 제한 상태를 확인할 수 있습니다.
@@ -57,9 +59,12 @@ class UsageDialog extends StatefulWidget {
 
 class _UsageDialogState extends State<UsageDialog> {
   final UsageLimitService _usageService = UsageLimitService();
+  final PlanService _planService = PlanService();
   Map<String, dynamic> _limitStatus = {};
   Map<String, double> _usagePercentages = {};
   bool _isLoading = true;
+  String _currentPlan = 'free'; // 현재 플랜 상태
+  bool _isFreeTrial = false; // 무료 체험 여부
 
   @override
   void initState() {
@@ -73,6 +78,11 @@ class _UsageDialogState extends State<UsageDialog> {
     });
 
     try {
+      // 현재 플랜 정보 가져오기
+      final subscriptionDetails = await _planService.getSubscriptionDetails();
+      _currentPlan = subscriptionDetails['currentPlan'] ?? 'free';
+      _isFreeTrial = subscriptionDetails['isFreeTrial'] ?? false;
+      
       // 외부에서 전달된 데이터가 있으면 사용, 없으면 서비스에서 직접 가져옴
       if (widget.limitStatus != null && widget.usagePercentages != null) {
         _limitStatus = Map<String, dynamic>.from(widget.limitStatus!);
@@ -105,6 +115,8 @@ class _UsageDialogState extends State<UsageDialog> {
       
       debugPrint('UsageDialog - 로드된 사용량 데이터: $_usagePercentages');
       debugPrint('UsageDialog - 로드된 제한 상태: $_limitStatus');
+      debugPrint('UsageDialog - 현재 플랜: $_currentPlan');
+      debugPrint('UsageDialog - 무료 체험 여부: $_isFreeTrial');
     } catch (e) {
       debugPrint('UsageDialog - 사용량 데이터 로드 중 오류: $e');
       // 기본값 설정
@@ -187,19 +199,9 @@ class _UsageDialogState extends State<UsageDialog> {
             ),
       actionsPadding: EdgeInsets.all(SpacingTokens.md),
       actions: [
-    
-    
-        // 프리미엄으로 업그레이드 버튼
+        // 플랜 상태에 따른 버튼 표시
         if (widget.onContactSupport != null)
-          PikaButton(
-            text: '프리미엄으로 업그레이드',
-            variant: PikaButtonVariant.outline,
-            size: PikaButtonSize.small,
-            onPressed: () {
-              Navigator.of(context).pop();
-              launchUrl(Uri.parse('https://forms.gle/YaeznYjGLiMdHmBD9'));
-            },
-          ),
+          _buildActionButton(),
           
         // 확인 버튼
         PikaButton(
@@ -339,5 +341,42 @@ class _UsageDialogState extends State<UsageDialog> {
       return '${(bytes / 1024).toStringAsFixed(0)}KB';
     }
     return '${bytes}B';
+  }
+
+  /// 플랜 상태에 따른 액션 버튼 빌드
+  Widget _buildActionButton() {
+    // 프리미엄 플랜이면서 체험판이 아닌 경우에만 "문의하기" 표시
+    final bool isPremiumPaid = _currentPlan == PlanService.PLAN_PREMIUM && !_isFreeTrial;
+    
+    return PikaButton(
+      text: isPremiumPaid ? '문의하기' : '프리미엄으로 업그레이드',
+      variant: PikaButtonVariant.outline,
+      size: PikaButtonSize.small,
+      onPressed: () async {
+        Navigator.of(context).pop(); // 다이얼로그 먼저 닫기
+        
+        if (isPremiumPaid) {
+          // 유료 프리미엄 플랜 - 프리미엄 사용자용 모달 표시
+          if (mounted) {
+            UpgradeModal.show(
+              context,
+              reason: UpgradeReason.premiumUser,
+            );
+          }
+        } else {
+          // 무료 플랜 / 체험 플랜 - 프리미엄 모달 열기
+          if (mounted) {
+            UpgradeModal.show(
+              context,
+              reason: _isFreeTrial ? UpgradeReason.trialExpired : UpgradeReason.limitReached,
+              onUpgrade: () {
+                debugPrint('🎯 [UsageDialog] 프리미엄 업그레이드 선택');
+                // TODO: 인앱 구매 처리
+              },
+            );
+          }
+        }
+      },
+    );
   }
 } 

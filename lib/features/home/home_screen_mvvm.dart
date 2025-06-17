@@ -475,12 +475,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     UpgradeModal.show(
       context,
-      customMessage: '무료 제공 한도에 도달했어요.\n프리미엄으로 업그레이드하여 더 많은 기능을 이용해보세요!',
+      reason: UpgradeReason.limitReached,
       onUpgrade: () {
         if (kDebugMode) {
           debugPrint('🎯 [HomeScreen] 프리미엄 업그레이드 선택');
         }
-        // TODO: 구독 화면으로 이동 또는 인앱 구매 처리
+        // TODO: 인앱 구매 처리
       },
     );
   }

@@ -8,7 +8,7 @@ import '../../core/widgets/loading_experience.dart';
 import '../../../core/widgets/pika_button.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
-import '../subscription/subscription_screen.dart';
+import '../../core/widgets/upgrade_modal.dart';
 import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
 
@@ -410,7 +410,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               text: 'Premium으로 업그레이드',
               variant: PikaButtonVariant.primary,
               size: PikaButtonSize.small,
-              onPressed: _navigateToSubscription,
+              onPressed: _showUpgradeModal,
               isFullWidth: true,
             ),
           ],
@@ -885,10 +885,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _navigateToSubscription() {
-    Navigator.push(
+  void _showUpgradeModal() {
+    UpgradeModal.show(
       context,
-      MaterialPageRoute(builder: (context) => SubscriptionScreen()),
+      reason: UpgradeReason.settings,
+      onUpgrade: () {
+        debugPrint('🎯 [Settings] 프리미엄 업그레이드 선택');
+        // TODO: 인앱 구매 처리
+      },
     );
   }
 }

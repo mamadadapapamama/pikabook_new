@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'app.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -17,6 +18,17 @@ import 'core/services/media/image_service.dart';
 /// 모든 로직은 App 클래스에 위임합니다.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 성능 최적화 설정
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    // iOS 텍스트 렌더링 성능 최적화
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness: Brightness.dark,
+      ),
+    );
+  }
   
   // 릴리즈 모드에서 디버그 출력 억제 (타이머 등 출력 방지)
   if (kReleaseMode) {
