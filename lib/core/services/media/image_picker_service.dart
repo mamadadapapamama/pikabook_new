@@ -78,6 +78,8 @@ class ImagePickerService {
         maxWidth: 1920,
         maxHeight: 1080,
         imageQuality: 80,
+        // iOS에서 카메라 방향/비디오 문제 방지
+        preferredCameraDevice: CameraDevice.rear,
       );
 
       if (photo != null) {
