@@ -9,7 +9,7 @@ import '../../../core/widgets/pika_button.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
 import '../../core/widgets/upgrade_modal.dart';
-import '../../core/widgets/edit_title_dialog.dart';
+import '../../core/widgets/edit_dialog.dart';
 import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
 
@@ -462,12 +462,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _showUserNameDialog() async {
     showDialog<void>(
       context: context,
-      builder: (context) => EditTextDialog(
-        title: '학습자 이름 설정',
-        currentValue: _viewModel.userName,
-        labelText: '이름',
-        hintText: '학습자 이름을 입력하세요',
-        onValueUpdated: (newName) async {
+      builder: (context) => EditDialog.forUserName(
+        currentName: _viewModel.userName,
+        onNameUpdated: (newName) async {
           if (newName.isNotEmpty) {
             await _viewModel.updateUserName(newName);
           }
@@ -480,14 +477,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _showNoteSpaceNameDialog() async {
     showDialog<void>(
       context: context,
-      builder: (context) => EditTextDialog(
-        title: '노트 스페이스 이름 변경',
-        currentValue: _viewModel.noteSpaceName,
-        labelText: '이름',
-        hintText: '노트 스페이스 이름을 입력하세요',
-        helperText: '노트 스페이스는 노트를 분류하는 폴더입니다.',
-        maxLength: 30,
-        onValueUpdated: (newName) async {
+      builder: (context) => EditDialog.forNoteSpace(
+        currentName: _viewModel.noteSpaceName,
+        onNameUpdated: (newName) async {
           if (newName.isNotEmpty) {
             final success = await _viewModel.updateNoteSpaceName(newName);
             if (mounted) {

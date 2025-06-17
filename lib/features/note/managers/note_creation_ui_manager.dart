@@ -274,13 +274,21 @@ class NoteCreationUIManager {
       flashcardCount: 0,
     );
 
-    // 로딩 다이얼로그 닫기
-    if (loadingDialogShown && context.mounted) {
-      NoteCreationLoader.hide(context);
+    // 로딩 다이얼로그 강제 닫기 (중요: 성공 시에도 반드시 닫아야 함)
+    if (context.mounted) {
+      if (kDebugMode) {
+        debugPrint('📱 성공 처리: 로딩 다이얼로그 닫기 시작');
+      }
+      
+      NoteCreationLoader.ensureHidden(context);
       await Future.delayed(const Duration(milliseconds: 300));
+      
+      if (kDebugMode) {
+        debugPrint('📱 성공 처리: 로딩 다이얼로그 닫기 완료');
+      }
     }
 
-    // 노트 상세 화면으로 이동 (타임아웃 처리)
+    // 노트 상세 화면으로 이동
     if (context.mounted) {
       await _navigateToNoteDetailWithTimeout(context, tempNote);
     }
@@ -293,43 +301,8 @@ class NoteCreationUIManager {
   ) async {
     try {
       if (kDebugMode) {
-        debugPrint('📱 노트 상세 화면으로 이동 시작 (타임아웃 30초)');
+        debugPrint('📱 노트 상세 화면으로 이동 시작');
       }
-
-      // 네비게이션 타임아웃 매니저 설정
-      _navigationTimeoutManager?.dispose();
-      _navigationTimeoutManager = TimeoutManager();
-      
-      bool navigationCompleted = false;
-      
-      _navigationTimeoutManager!.start(
-        timeoutSeconds: 30,
-        identifier: 'Navigation',
-        onProgress: (elapsedSeconds) {
-          if (context.mounted && !navigationCompleted) {
-            // 단계별 메시지 업데이트
-            if (_navigationTimeoutManager!.shouldUpdateMessage()) {
-              final message = _navigationTimeoutManager!.getCurrentMessage(
-                '노트 페이지로 이동하고 있어요...'
-              );
-              NoteCreationLoader.updateMessage(message);
-            }
-          }
-        },
-        onTimeout: () {
-          if (context.mounted && !navigationCompleted) {
-            if (kDebugMode) {
-              debugPrint('⏰ 노트 상세 화면 이동 타임아웃');
-            }
-            
-            NoteCreationLoader.hide(context);
-            ErrorHandler.showErrorSnackBar(
-              context,
-              '문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.'
-            );
-          }
-        },
-      );
 
       // 안전 장치: 로딩 다이얼로그 완전히 닫기
       NoteCreationLoader.ensureHidden(context);
@@ -337,30 +310,26 @@ class NoteCreationUIManager {
       // 튜토리얼 설정 - 첫 번째 노트 생성 시 튜토리얼 표시 준비
       NoteTutorial.markFirstNoteCreated();
 
-      // 화면 이동
-      Navigator.of(context).push(
-        NoteDetailScreenMVVM.route(
-          note: note,
-          isProcessingBackground: true,
-        ),
-             ).then((result) async {
-         // 화면에서 돌아왔을 때의 처리
-         if (kDebugMode) {
-           debugPrint('✅ 노트 상세 화면에서 돌아옴');
-         }
-         // 홈 화면은 자동으로 새로고침되므로 별도 처리 불필요
-       });
-      
-      // 화면 이동이 시작되면 즉시 네비게이션 완료 처리
-      navigationCompleted = true;
-      _navigationTimeoutManager?.complete();
-      
-      if (kDebugMode) {
-        debugPrint('✅ 노트 상세 화면 네비게이션 시작 완료');
+      // 화면 이동 (간소화 - 타임아웃 매니저 제거)
+      if (context.mounted) {
+        Navigator.of(context).push(
+          NoteDetailScreenMVVM.route(
+            note: note,
+            isProcessingBackground: true,
+          ),
+        ).then((result) async {
+          // 화면에서 돌아왔을 때의 처리
+          if (kDebugMode) {
+            debugPrint('✅ 노트 상세 화면에서 돌아옴');
+          }
+          // 홈 화면은 자동으로 새로고침되므로 별도 처리 불필요
+        });
+        
+        if (kDebugMode) {
+          debugPrint('✅ 노트 상세 화면 네비게이션 시작 완료');
+        }
       }
     } catch (e) {
-      _navigationTimeoutManager?.dispose();
-      
       if (kDebugMode) {
         debugPrint('❌ 노트 상세 화면 이동 실패: $e');
       }

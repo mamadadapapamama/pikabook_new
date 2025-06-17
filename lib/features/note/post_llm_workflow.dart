@@ -499,8 +499,34 @@ class PostLLMWorkflow {
 
   /// LLM 타임아웃 처리
   void _handleLlmTimeout(String noteId) {
-    // 현재 작업 중지 시그널 (실제 구현은 StreamingReceiveService에서 처리)
+    if (kDebugMode) {
+      debugPrint('⏰ [워크플로우] LLM 타임아웃 처리 시작: $noteId');
+    }
+    
+    // 현재 작업 중지 시그널
     _retryStates[noteId] = true;
+    
+    // UI에 타임아웃 에러 전달
+    _notifyLlmTimeoutToUI(noteId);
+  }
+
+  /// UI에 LLM 타임아웃 에러 전달
+  void _notifyLlmTimeoutToUI(String noteId) {
+    try {
+      // ErrorHandler를 통해 타임아웃 에러 등록
+      ErrorHandler.registerTimeoutError(
+        id: 'llm_timeout_$noteId',
+        onRetry: () => retryLlmProcessing(noteId),
+      );
+      
+      if (kDebugMode) {
+        debugPrint('🚨 [워크플로우] UI에 LLM 타임아웃 에러 등록: $noteId');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ UI 타임아웃 에러 등록 실패: $e');
+      }
+    }
   }
 
   /// LLM 처리 재시도

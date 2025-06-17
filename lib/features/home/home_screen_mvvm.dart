@@ -418,33 +418,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   void _showImagePickerBottomSheet(BuildContext context) async {
     try {
-      print('🔥 이미지 업로드 버튼 클릭 - 권한 요청 시작');
+      print('🔥 이미지 업로드 버튼 클릭 - 바텀시트 표시');
       
-      // 1. 먼저 권한 요청
-      final permissionService = PermissionService();
-      final results = await permissionService.requestImagePermissions(context);
-      
-      print('🔥 권한 요청 결과: $results');
-      
-      // 2. 권한 결과 확인
-      final hasAnyPermission = results['camera'] == true || results['gallery'] == true;
-      
-      if (!hasAnyPermission) {
-        // 권한이 모두 거부된 경우
-        print('❌ 모든 권한이 거부됨 - 설정 안내');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('카메라와 갤러리 권한이 필요합니다.\n설정 > 개인정보 보호 및 보안 > 사진에서 Pikabook 권한을 허용해주세요.'),
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
-        return;
-      }
-      
-      // 3. 권한이 허용된 경우에만 바텀시트 표시
-      print('✅ 권한 허용됨 - 바텀시트 표시');
       if (mounted) {
         await showModalBottomSheet(
           context: context,
@@ -458,6 +433,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         );
       }
     } catch (e) {
+      print('❌ _showImagePickerBottomSheet 오류: $e');
       if (kDebugMode) {
         debugPrint('이미지 피커 표시 중 오류: $e');
       }

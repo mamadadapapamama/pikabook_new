@@ -26,42 +26,24 @@ class PermissionService {
       // 2. 권한 요청 결과 저장
       Map<String, bool> results = {};
       
-      // 3. 카메라 권한 처리
-      if (cameraStatus == PermissionStatus.granted) {
-        results['camera'] = true;
-        print('✅ 카메라 권한 이미 허용됨');
-      } else if (cameraStatus == PermissionStatus.permanentlyDenied) {
-        results['camera'] = false;
-        print('❌ 카메라 권한 영구 거부됨');
+      // 3. 카메라 권한 처리 - 테스트를 위해 항상 요청
+      print('📸 카메라 권한 요청 시작...');
+      final cameraResult = await Permission.camera.request();
+      results['camera'] = cameraResult == PermissionStatus.granted;
+      print('📸 카메라 권한 요청 결과: $cameraResult');
+      
+      if (cameraResult == PermissionStatus.permanentlyDenied) {
         _showSettingsDialog(context, '카메라');
-      } else {
-        // 권한 요청
-        final cameraResult = await Permission.camera.request();
-        results['camera'] = cameraResult == PermissionStatus.granted;
-        print('📸 카메라 권한 요청 결과: $cameraResult');
-        
-        if (cameraResult == PermissionStatus.permanentlyDenied) {
-          _showSettingsDialog(context, '카메라');
-        }
       }
       
-      // 4. 갤러리 권한 처리
-      if (photosStatus == PermissionStatus.granted) {
-        results['gallery'] = true;
-        print('✅ 갤러리 권한 이미 허용됨');
-      } else if (photosStatus == PermissionStatus.permanentlyDenied) {
-        results['gallery'] = false;
-        print('❌ 갤러리 권한 영구 거부됨');
+      // 4. 갤러리 권한 처리 - 테스트를 위해 항상 요청
+      print('🖼️ 갤러리 권한 요청 시작...');
+      final photosResult = await Permission.photos.request();
+      results['gallery'] = photosResult == PermissionStatus.granted;
+      print('🖼️ 갤러리 권한 요청 결과: $photosResult');
+      
+      if (photosResult == PermissionStatus.permanentlyDenied) {
         _showSettingsDialog(context, '갤러리');
-      } else {
-        // 권한 요청
-        final photosResult = await Permission.photos.request();
-        results['gallery'] = photosResult == PermissionStatus.granted;
-        print('🖼️ 갤러리 권한 요청 결과: $photosResult');
-        
-        if (photosResult == PermissionStatus.permanentlyDenied) {
-          _showSettingsDialog(context, '갤러리');
-        }
       }
       
       print('🎯 최종 권한 결과: $results');
@@ -70,6 +52,76 @@ class PermissionService {
     } catch (e) {
       print('❌ 권한 요청 중 오류: $e');
       return {'camera': false, 'gallery': false};
+    }
+  }
+
+  /// 카메라 권한만 요청
+  Future<bool> requestCameraPermission(BuildContext context) async {
+    try {
+      print('📸 카메라 권한 요청 시작...');
+      
+      final status = await Permission.camera.status;
+      print('📸 현재 카메라 권한 상태: $status');
+      
+      if (status == PermissionStatus.granted) {
+        print('✅ 카메라 권한 이미 허용됨');
+        return true;
+      }
+      
+      if (status == PermissionStatus.permanentlyDenied) {
+        print('❌ 카메라 권한 영구 거부됨');
+        _showSettingsDialog(context, '카메라');
+        return false;
+      }
+      
+      final result = await Permission.camera.request();
+      print('📸 카메라 권한 요청 결과: $result');
+      
+      if (result == PermissionStatus.permanentlyDenied) {
+        _showSettingsDialog(context, '카메라');
+        return false;
+      }
+      
+      return result == PermissionStatus.granted;
+      
+    } catch (e) {
+      print('❌ 카메라 권한 요청 중 오류: $e');
+      return false;
+    }
+  }
+
+  /// 갤러리 권한만 요청
+  Future<bool> requestGalleryPermission(BuildContext context) async {
+    try {
+      print('🖼️ 갤러리 권한 요청 시작...');
+      
+      final status = await Permission.photos.status;
+      print('🖼️ 현재 갤러리 권한 상태: $status');
+      
+      if (status == PermissionStatus.granted) {
+        print('✅ 갤러리 권한 이미 허용됨');
+        return true;
+      }
+      
+      if (status == PermissionStatus.permanentlyDenied) {
+        print('❌ 갤러리 권한 영구 거부됨');
+        _showSettingsDialog(context, '갤러리');
+        return false;
+      }
+      
+      final result = await Permission.photos.request();
+      print('🖼️ 갤러리 권한 요청 결과: $result');
+      
+      if (result == PermissionStatus.permanentlyDenied) {
+        _showSettingsDialog(context, '갤러리');
+        return false;
+      }
+      
+      return result == PermissionStatus.granted;
+      
+    } catch (e) {
+      print('❌ 갤러리 권한 요청 중 오류: $e');
+      return false;
     }
   }
 

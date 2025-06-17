@@ -9,6 +9,7 @@ import 'pika_button.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../features/note/managers/note_creation_ui_manager.dart';
 import '../../core/services/media/image_service.dart';
+import '../../core/services/permissions/permission_service.dart';
 import 'loading_dialog_experience.dart';
 
 class ImagePickerBottomSheet extends StatefulWidget {
@@ -22,8 +23,23 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
   final NoteCreationUIManager _noteCreationUIManager = NoteCreationUIManager();
   final ImagePicker _picker = ImagePicker();
   final ImageService _imageService = ImageService();
+  final PermissionService _permissionService = PermissionService();
   
   bool _isProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kDebugMode) {
+      _checkCurrentPermissions();
+    }
+  }
+
+  /// 디버그용: 현재 권한 상태 확인
+  Future<void> _checkCurrentPermissions() async {
+    final status = await _permissionService.checkPermissionStatus();
+    print('🔍 바텀시트 초기화 시 권한 상태: $status');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,6 +117,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     try {
       print('📱 갤러리 이미지 선택 시작');
       
+      // image_picker가 자체적으로 권한을 처리하도록 함
       final List<File> imageFiles = await _imageService.pickMultipleImages();
       
       if (imageFiles.isEmpty) {
@@ -135,6 +152,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
     try {
       print('📷 카메라 촬영 시작');
       
+      // image_picker가 자체적으로 권한을 처리하도록 함
       final File? imageFile = await _imageService.pickImage(source: ImageSource.camera);
       
       if (imageFile == null) {

@@ -3,7 +3,7 @@ import '../../../core/models/note.dart';
 import '../../../core/utils/error_handler.dart';
 import '../services/note_service.dart';
 import '../../../core/services/cache/cache_manager.dart';
-import '../../../core/widgets/edit_title_dialog.dart';
+import '../../../core/widgets/edit_dialog.dart';
 import '../../../core/widgets/delete_note_dialog.dart';
 import '../view/note_action_bottom_sheet.dart';
 
@@ -41,17 +41,17 @@ class NoteOptionsManager {
   void _showEditTitleDialog(BuildContext context, Note note, Function onTitleEditing) {
     showDialog(
       context: context,
-      builder: (context) => EditTitleDialog(
+      builder: (context) => EditDialog.forNoteTitle(
         currentTitle: note.title,
-        onTitleUpdated: (newTitle) {
-          updateNoteTitle(note.id, newTitle).then((success) {
-            if (success) {
-              ErrorHandler.showSuccessSnackBar(context, '노트 제목이 변경되었습니다');
-              onTitleEditing();
-            } else {
-              ErrorHandler.showErrorSnackBar(context, '제목 변경에 실패했습니다', ErrorContext.noteEdit);
-            }
-          });
+        onTitleUpdated: (newTitle) async {
+          onTitleEditing();
+          
+          try {
+            final updatedNote = note.copyWith(title: newTitle);
+            await _noteService.updateNote(note.id!, updatedNote);
+          } catch (e) {
+            print('노트 제목 업데이트 오류: $e');
+          }
         },
       ),
     );
