@@ -9,6 +9,7 @@ import '../../../core/widgets/pika_button.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
 import '../../core/widgets/upgrade_modal.dart';
+import '../../core/widgets/edit_title_dialog.dart';
 import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
 
@@ -459,141 +460,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
   
   // 학습자 이름 설정 다이얼로그
   Future<void> _showUserNameDialog() async {
-    final TextEditingController controller = TextEditingController(text: _viewModel.userName);
-    
-    final result = await showDialog<String>(
+    showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ColorTokens.surface,
-        title: Text('학습자 이름 설정', style: TypographyTokens.subtitle2),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            labelText: '이름',
-            hintText: '학습자 이름을 입력하세요',
-            labelStyle: TypographyTokens.caption.copyWith(
-              color: ColorTokens.textSecondary,
-            ),
-            hintStyle: TypographyTokens.caption.copyWith(
-              color: ColorTokens.textTertiary,
-            ),
-            border: const OutlineInputBorder(),
-            focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: ColorTokens.primary, width: 2),
-              borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-            ),
-          ),
-          autofocus: true,
-          style: TypographyTokens.body1,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              '취소',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textTertiary,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: Text(
-              '저장',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.primary,
-              ),
-            ),
-          ),
-        ],
+      builder: (context) => EditTextDialog(
+        title: '학습자 이름 설정',
+        currentValue: _viewModel.userName,
+        labelText: '이름',
+        hintText: '학습자 이름을 입력하세요',
+        onValueUpdated: (newName) async {
+          if (newName.isNotEmpty) {
+            await _viewModel.updateUserName(newName);
+          }
+        },
       ),
     );
-    
-    if (result != null && result.isNotEmpty) {
-      await _viewModel.updateUserName(result);
-    }
   }
   
   // 노트 스페이스 이름 변경 다이얼로그
   Future<void> _showNoteSpaceNameDialog() async {
-    final TextEditingController controller = TextEditingController(text: _viewModel.noteSpaceName);
-    
-    final result = await showDialog<String>(
+    showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ColorTokens.surface,
-        title: Text('노트 스페이스 이름 변경', style: TypographyTokens.subtitle2),
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(
-            labelText: '이름',
-            hintText: '노트 스페이스 이름을 입력하세요',
-            labelStyle: TypographyTokens.caption.copyWith(
-              color: ColorTokens.textSecondary,
-            ),
-            hintStyle: TypographyTokens.caption.copyWith(
-              color: ColorTokens.textTertiary,
-            ),
-            border: const OutlineInputBorder(),
-            focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: ColorTokens.primary, width: 2),
-            ),
-          ),
-          autofocus: true,
-          style: TypographyTokens.body1,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              '취소',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textTertiary,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: Text(
-              '저장',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.primary,
-              ),
-            ),
-          ),
-        ],
+      builder: (context) => EditTextDialog(
+        title: '노트 스페이스 이름 변경',
+        currentValue: _viewModel.noteSpaceName,
+        labelText: '이름',
+        hintText: '노트 스페이스 이름을 입력하세요',
+        helperText: '노트 스페이스는 노트를 분류하는 폴더입니다.',
+        maxLength: 30,
+        onValueUpdated: (newName) async {
+          if (newName.isNotEmpty) {
+            final success = await _viewModel.updateNoteSpaceName(newName);
+            if (mounted) {
+              if (success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '노트 스페이스 이름이 변경되었습니다.',
+                      style: TypographyTokens.caption.copyWith(
+                        color: ColorTokens.textLight,
+                      ),
+                    ),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '노트 스페이스 이름 변경 중 오류가 발생했습니다.',
+                      style: TypographyTokens.caption.copyWith(
+                        color: ColorTokens.textLight,
+                      ),
+                    ),
+                    backgroundColor: ColorTokens.error,
+                  ),
+                );
+              }
+            }
+          }
+        },
       ),
     );
-    
-    if (result != null && result.isNotEmpty) {
-      final success = await _viewModel.updateNoteSpaceName(result);
-      if (mounted) {
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '노트 스페이스 이름이 변경되었습니다.',
-                style: TypographyTokens.caption.copyWith(
-                  color: ColorTokens.textLight,
-                ),
-              ),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '노트 스페이스 이름 변경 중 오류가 발생했습니다.',
-                style: TypographyTokens.caption.copyWith(
-                  color: ColorTokens.textLight,
-                ),
-              ),
-              backgroundColor: ColorTokens.error,
-            ),
-          );
-        }
-      }
-    }
   }
   
   // 원문 언어 설정 다이얼로그
@@ -891,7 +817,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       reason: UpgradeReason.settings,
       onUpgrade: () {
         debugPrint('🎯 [Settings] 프리미엄 업그레이드 선택');
-        // TODO: 인앱 구매 처리
       },
     );
   }

@@ -286,14 +286,14 @@ class UpgradeModal extends StatelessWidget {
           ),
           // 스마트 노트 작성량
           _buildTableRow(
-            '스마트 노트 작성량*¹',
+            '스마트 노트\n작성량*¹',
             '월 10페이지',
             '월 300페이지',
             true,
           ),
           // 듣기 기능 사용량
           _buildTableRow(
-            '듣기 기능 사용량*²',
+            '듣기 기능\n사용량*²',
             '월 30회',
             '월 1,000회',
             false,

@@ -1,146 +1,126 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../theme/tokens/typography_tokens.dart';
-import '../../theme/tokens/color_tokens.dart';
+import 'dart:io';
 
-/// 권한 관리 서비스
+/// 이미지 권한 관리 서비스
 class PermissionService {
+  // 싱글톤 패턴
   static final PermissionService _instance = PermissionService._internal();
   factory PermissionService() => _instance;
   PermissionService._internal();
 
-  /// 권한 상태 확인 및 요청
+  /// 이미지 관련 권한 요청 (카메라 + 갤러리)
+  /// 반환값: {'camera': bool, 'gallery': bool}
   Future<Map<String, bool>> requestImagePermissions(BuildContext context) async {
-    print('🔐 권한 요청 시작');
-
-    // 1. 현재 권한 상태 확인
-    final cameraStatus = await Permission.camera.status;
-    final photosStatus = await Permission.photos.status;
-    
-    print('📷 현재 카메라 권한 상태: $cameraStatus');
-    print('📱 현재 갤러리 권한 상태: $photosStatus');
-
-    // 2. 권한이 이미 허용된 경우
-    if (cameraStatus.isGranted && photosStatus.isGranted) {
-      print('✅ 모든 권한이 이미 허용됨');
-      return {'camera': true, 'gallery': true};
+    try {
+      print('🔍 권한 요청 시작...');
+      
+      // 1. 현재 권한 상태 확인
+      final cameraStatus = await Permission.camera.status;
+      final photosStatus = await Permission.photos.status;
+      
+      print('📱 현재 권한 상태:');
+      print('   카메라: $cameraStatus');
+      print('   갤러리: $photosStatus');
+      
+      // 2. 권한 요청 결과 저장
+      Map<String, bool> results = {};
+      
+      // 3. 카메라 권한 처리
+      if (cameraStatus == PermissionStatus.granted) {
+        results['camera'] = true;
+        print('✅ 카메라 권한 이미 허용됨');
+      } else if (cameraStatus == PermissionStatus.permanentlyDenied) {
+        results['camera'] = false;
+        print('❌ 카메라 권한 영구 거부됨');
+        _showSettingsDialog(context, '카메라');
+      } else {
+        // 권한 요청
+        final cameraResult = await Permission.camera.request();
+        results['camera'] = cameraResult == PermissionStatus.granted;
+        print('📸 카메라 권한 요청 결과: $cameraResult');
+        
+        if (cameraResult == PermissionStatus.permanentlyDenied) {
+          _showSettingsDialog(context, '카메라');
+        }
+      }
+      
+      // 4. 갤러리 권한 처리
+      if (photosStatus == PermissionStatus.granted) {
+        results['gallery'] = true;
+        print('✅ 갤러리 권한 이미 허용됨');
+      } else if (photosStatus == PermissionStatus.permanentlyDenied) {
+        results['gallery'] = false;
+        print('❌ 갤러리 권한 영구 거부됨');
+        _showSettingsDialog(context, '갤러리');
+      } else {
+        // 권한 요청
+        final photosResult = await Permission.photos.request();
+        results['gallery'] = photosResult == PermissionStatus.granted;
+        print('🖼️ 갤러리 권한 요청 결과: $photosResult');
+        
+        if (photosResult == PermissionStatus.permanentlyDenied) {
+          _showSettingsDialog(context, '갤러리');
+        }
+      }
+      
+      print('🎯 최종 권한 결과: $results');
+      return results;
+      
+    } catch (e) {
+      print('❌ 권한 요청 중 오류: $e');
+      return {'camera': false, 'gallery': false};
     }
+  }
 
-    // 3. 권한 요청 가능 여부 확인
-    print('🔍 권한 요청 가능 여부 확인:');
-    print('📷 카메라 - isDenied: ${cameraStatus.isDenied}, isLimited: ${cameraStatus.isLimited}');
-    print('📱 갤러리 - isDenied: ${photosStatus.isDenied}, isLimited: ${photosStatus.isLimited}');
-    print('📷 카메라 - isPermanentlyDenied: ${cameraStatus.isPermanentlyDenied}');
-    print('📱 갤러리 - isPermanentlyDenied: ${photosStatus.isPermanentlyDenied}');
+  /// 카메라 권한만 확인
+  Future<bool> checkCameraPermission() async {
+    final status = await Permission.camera.status;
+    return status == PermissionStatus.granted;
+  }
 
-    // 4. 권한 요청 시도
-    PermissionStatus cameraResult = cameraStatus;
-    PermissionStatus galleryResult = photosStatus;
+  /// 갤러리 권한만 확인
+  Future<bool> checkGalleryPermission() async {
+    final status = await Permission.photos.status;
+    return status == PermissionStatus.granted;
+  }
 
-    // 카메라 권한 요청
-    if (!cameraStatus.isGranted && !cameraStatus.isPermanentlyDenied) {
-      print('📷 카메라 권한 요청 중...');
-      cameraResult = await Permission.camera.request();
-      print('📷 카메라 권한 요청 결과: $cameraResult');
-    } else if (cameraStatus.isPermanentlyDenied) {
-      print('📷 카메라 권한이 영구적으로 거부됨 - 요청 스킵');
-    }
-
-    // 갤러리 권한 요청
-    if (!photosStatus.isGranted && !photosStatus.isPermanentlyDenied) {
-      print('📱 갤러리 권한 요청 중...');
-      galleryResult = await Permission.photos.request();
-      print('📱 갤러리 권한 요청 결과: $galleryResult');
-    } else if (photosStatus.isPermanentlyDenied) {
-      print('📱 갤러리 권한이 영구적으로 거부됨 - 요청 스킵');
-    }
-
-    final results = {
-      'camera': cameraResult.isGranted,
-      'gallery': galleryResult.isGranted,
+  /// 권한 상태 확인 (요청 없이)
+  Future<Map<String, PermissionStatus>> checkPermissionStatus() async {
+    return {
+      'camera': await Permission.camera.status,
+      'gallery': await Permission.photos.status,
     };
-
-    print('🔐 최종 결과: $results');
-    return results;
   }
 
-  /// 공통 권한 요청 메서드
-  Future<bool> _requestPermission({
-    required BuildContext context,
-    required Permission permission,
-    required String permissionName,
-    required String debugIcon,
-    required String deniedMessage,
-  }) async {
-    final status = await permission.status;
+  /// 설정 화면으로 안내하는 다이얼로그
+  void _showSettingsDialog(BuildContext context, String permissionType) {
+    if (!context.mounted) return;
     
-    if (kDebugMode) {
-      print('$debugIcon $permissionName 권한 상태: $status');
-    }
-    
-    // 이미 허용된 경우
-    if (status.isGranted) {
-      return true;
-    }
-    
-    // 영구적으로 거부된 경우 설정 안내
-    if (status.isPermanentlyDenied) {
-      _showPermissionDeniedDialog(
-        context,
-        '$permissionName 권한이 필요합니다',
-        deniedMessage,
-      );
-      return false;
-    }
-    
-    // 바로 시스템 권한 요청 (커스텀 다이얼로그 없이)
-    final newStatus = await permission.request();
-    
-    // 권한이 허용되면 성공
-    if (newStatus.isGranted) {
-      return true;
-    }
-    
-    // 영구적으로 거부된 경우에만 설정 안내 다이얼로그 표시
-    if (newStatus.isPermanentlyDenied) {
-      _showPermissionDeniedDialog(
-        context,
-        '$permissionName 권한이 필요합니다',
-        deniedMessage,
-      );
-    }
-    
-    // 일반 거부의 경우 조용히 실패 (추가 다이얼로그 없음)
-    return false;
-  }
-
-  /// 권한 거부 시 설정 안내 다이얼로그
-  void _showPermissionDeniedDialog(
-    BuildContext context,
-    String title,
-    String content,
-  ) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소'),
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('$permissionType 권한 필요'),
+          content: Text(
+            '$permissionType 권한이 거부되어 있습니다.\n'
+            '설정 > 개인정보 보호 및 보안 > $permissionType에서 Pikabook 권한을 허용해주세요.'
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              openAppSettings();
-            },
-            child: const Text('설정으로 이동'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('취소'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                openAppSettings();
+              },
+              child: Text('설정으로 이동'),
+            ),
+          ],
+        );
+      },
     );
   }
-} 
+}
