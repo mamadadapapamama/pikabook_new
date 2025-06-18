@@ -390,13 +390,26 @@ class ImageService {
     }
   }
 
-  /// 이미지 확대 화면 표시
+  /// 이미지 확대 화면 표시 (파일)
   void showFullImage(BuildContext context, File imageFile, String title) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => FullImageScreen(
           imageFile: imageFile,
+          title: title,
+        ),
+      ),
+    );
+  }
+
+  /// 이미지 확대 화면 표시 (URL)
+  void showFullImageFromUrl(BuildContext context, String imageUrl, String title) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FullImageScreen(
+          imageUrl: imageUrl,
           title: title,
         ),
       ),

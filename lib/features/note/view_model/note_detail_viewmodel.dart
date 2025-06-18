@@ -32,6 +32,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   List<page_model.Page>? _pages;
   int _currentPageIndex = 0;
   
+  // 백그라운드 처리 상태
+  bool _isProcessingBackground = false;
+  
   // 텍스트 관련 상태 (페이지별)
   final Map<String, ProcessedText> _processedTexts = {};
   final Map<String, bool> _textLoadingStates = {};
@@ -54,6 +57,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   String? get error => _error;
   Note? get note => _note;
   int get currentPageIndex => _currentPageIndex;
+  bool get isProcessingBackground => _isProcessingBackground;
   
   // 현재 페이지
   page_model.Page? get currentPage {
@@ -69,11 +73,34 @@ class NoteDetailViewModel extends ChangeNotifier {
     return _processedTexts[currentPage!.id];
   }
 
+  // 전체 페이지 수 (업로드된 페이지 수)
+  int get totalPages => _pages?.length ?? 0;
+
+  // 페이지별 처리 상태 배열 생성
+  List<bool> get processedPages {
+    if (_pages == null) return [];
+    return _pages!.map((page) {
+      final status = _pageStatuses[page.id] ?? ProcessingStatus.created;
+      return status == ProcessingStatus.completed;
+    }).toList();
+  }
+  
+  // 페이지별 처리 중 상태 배열 생성
+  List<bool> get processingPages {
+    if (_pages == null) return [];
+    return _pages!.map((page) {
+      final status = _pageStatuses[page.id] ?? ProcessingStatus.created;
+      final isLoading = _textLoadingStates[page.id] ?? false;
+      return status.isProcessing || isLoading;
+    }).toList();
+  }
+
   /// 생성자
   NoteDetailViewModel({
     required String noteId,
     Note? initialNote,
-  }) : _noteId = noteId {
+    bool isProcessingBackground = false,
+  }) : _noteId = noteId, _isProcessingBackground = isProcessingBackground {
     _note = initialNote;
     
     // 초기 데이터 로드

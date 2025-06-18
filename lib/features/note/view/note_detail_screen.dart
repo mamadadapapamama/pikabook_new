@@ -142,7 +142,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   // 앱바 구성
   PreferredSizeWidget _buildAppBar(BuildContext context, NoteDetailViewModel viewModel) {
     final currentPageNum = viewModel.currentPageIndex + 1;
-    final totalPages = viewModel.pages?.length ?? 0;
+    final totalPages = viewModel.totalPages;
     
     return PikaAppBar.noteDetail(
       title: viewModel.note?.title ?? '노트 로딩 중...',
@@ -337,7 +337,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     return NoteDetailBottomBar(
       currentPage: viewModel.currentPage,
       currentPageIndex: viewModel.currentPageIndex,
-      totalPages: viewModel.pages?.length ?? 0,
+      totalPages: viewModel.totalPages,
       onPageChanged: (index) {
         viewModel.navigateToPage(index);
       },

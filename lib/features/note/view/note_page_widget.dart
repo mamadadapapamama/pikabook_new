@@ -330,24 +330,15 @@ class _NotePageWidgetState extends State<NotePageWidget> {
 
   // 전체 화면 이미지 뷰어 열기
   void _openFullScreenImage(BuildContext context) {
-    File? imageFile;
+    final imageService = ImageService();
     
     if (widget.imageFile != null) {
-      imageFile = widget.imageFile;
+      // 파일이 있는 경우
+      imageService.showFullImage(context, widget.imageFile!, '이미지 보기');
     } else if (widget.page.imageUrl != null && widget.page.imageUrl!.isNotEmpty) {
-      // URL에서 로컬 파일을 가져와야 하는 경우
-      // ImageService를 통해 처리할 수 있지만, 여기서는 간단히 스킵
-      if (kDebugMode) {
-        debugPrint('🖼️ URL 이미지의 전체화면 보기는 현재 지원되지 않습니다: ${widget.page.imageUrl}');
-      }
-      return;
+      // URL이 있는 경우
+      imageService.showFullImageFromUrl(context, widget.page.imageUrl!, '이미지 보기');
     }
-    
-    if (imageFile == null) return;
-    
-    // ImageService를 통한 전체화면 보기
-    final imageService = ImageService();
-    imageService.showFullImage(context, imageFile, '이미지 보기');
   }
   
   // 텍스트 콘텐츠 위젯 (상태에 따라 다른 위젯 반환)
