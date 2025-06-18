@@ -222,9 +222,17 @@ class InAppPurchaseService {
   /// 구매 시작
   Future<bool> buyProduct(String productId) async {
     try {
+      if (kDebugMode) {
+        print('🧪 [SANDBOX] 구매 테스트 시작');
+        print('🧪 [SANDBOX] 상품 ID: $productId');
+        print('🧪 [SANDBOX] 서비스 사용 가능: $_isAvailable');
+        print('🧪 [SANDBOX] 로드된 상품 수: ${_products.length}');
+      }
+
       if (!_isAvailable) {
         if (kDebugMode) {
-          print('❌ In-App Purchase를 사용할 수 없습니다');
+          print('❌ [SANDBOX] In-App Purchase를 사용할 수 없습니다');
+          print('❌ [SANDBOX] Simulator에서는 인앱구매가 지원되지 않습니다. 실제 기기를 사용해주세요.');
         }
         return false;
       }
@@ -235,13 +243,17 @@ class InAppPurchaseService {
 
       if (productDetails == null) {
         if (kDebugMode) {
-          print('❌ 상품을 찾을 수 없습니다: $productId');
+          print('❌ [SANDBOX] 상품을 찾을 수 없습니다: $productId');
+          print('❌ [SANDBOX] App Store Connect에서 상품이 등록되었는지 확인하세요');
+          print('❌ [SANDBOX] 사용 가능한 상품들: ${_products.map((p) => p.id).join(', ')}');
         }
         return false;
       }
 
       if (kDebugMode) {
-        print('🛒 구매 시작: ${productDetails.title}');
+        print('🛒 [SANDBOX] 구매 시작: ${productDetails.title}');
+        print('🛒 [SANDBOX] 가격: ${productDetails.price}');
+        print('🛒 [SANDBOX] 설명: ${productDetails.description}');
       }
 
       final PurchaseParam purchaseParam = PurchaseParam(
@@ -253,13 +265,19 @@ class InAppPurchaseService {
       );
 
       if (kDebugMode) {
-        print('🛒 구매 요청 결과: $success');
+        print('🛒 [SANDBOX] 구매 요청 결과: $success');
+        if (success) {
+          print('✅ [SANDBOX] 구매 다이얼로그가 표시됩니다');
+        } else {
+          print('❌ [SANDBOX] 구매 요청 실패');
+        }
       }
 
       return success;
     } catch (e) {
       if (kDebugMode) {
-        print('❌ 구매 시작 중 오류: $e');
+        print('❌ [SANDBOX] 구매 시작 중 오류: $e');
+        print('❌ [SANDBOX] 오류 타입: ${e.runtimeType}');
       }
       return false;
     }

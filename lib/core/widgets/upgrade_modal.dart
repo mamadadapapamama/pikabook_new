@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
+import '../services/payment/in_app_purchase_service.dart';
 import 'pika_button.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -444,11 +445,11 @@ class UpgradeModal extends StatelessWidget {
               Padding(
                 padding: EdgeInsets.all(SpacingTokens.sm),
                 child: PikaButton(
-                  text: '연간 구독 \$34.99',
-                  onPressed: () {
+                  text: '연간 구독 \$34.99 USD',
+                  onPressed: () async {
                     Navigator.of(context).pop(true);
+                    await _handlePurchase(context, InAppPurchaseService.premiumYearlyId);
                     onUpgrade?.call();
-                    // TODO: 연간 구독 처리
                   },
                   isFullWidth: true,
                   variant: PikaButtonVariant.primary,
@@ -462,11 +463,11 @@ class UpgradeModal extends StatelessWidget {
         
         // 월간 구독 버튼
         PikaButton(
-          text: '월간 구독 \$3.99',
-          onPressed: () {
+          text: '월간 구독 \$3.99 USD',
+          onPressed: () async {
             Navigator.of(context).pop(true);
+            await _handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
             onUpgrade?.call();
-            // TODO: 월간 구독 처리
           },
           isFullWidth: true,
           variant: PikaButtonVariant.outline,
@@ -503,6 +504,61 @@ class UpgradeModal extends StatelessWidget {
       ],
     );
   }
+
+  /// 인앱 구매 처리
+  static Future<void> _handlePurchase(BuildContext context, String productId) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🛒 [UpgradeModal] 인앱 구매 시작: $productId');
+      }
+
+      final purchaseService = InAppPurchaseService();
+      
+      // 인앱 구매 서비스가 초기화되지 않았으면 초기화
+      if (!purchaseService.isAvailable) {
+        await purchaseService.initialize();
+      }
+
+      // 구매 시작
+      final success = await purchaseService.buyProduct(productId);
+      
+      if (success) {
+        if (kDebugMode) {
+          debugPrint('✅ [UpgradeModal] 구매 요청 성공');
+        }
+      } else {
+        if (kDebugMode) {
+          debugPrint('❌ [UpgradeModal] 구매 요청 실패');
+        }
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('구매 요청 중 오류가 발생했습니다. 다시 시도해주세요.'),
+              backgroundColor: Colors.red[600],
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [UpgradeModal] 구매 처리 중 오류: $e');
+      }
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('구매 처리 중 오류가 발생했습니다: $e'),
+            backgroundColor: Colors.red[600],
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
 }
 
 /// 업그레이드 유도 관련 유틸리티 클래스
@@ -535,13 +591,7 @@ class UpgradePromptHelper {
 
   /// 업그레이드 처리 (인앱 구매 연동)
   static void _handleUpgrade(BuildContext context) {
-    // TODO: 인앱 구매 연동
-    // 현재는 스낵바로 대체
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('곧 인앱 구매 화면으로 이동합니다.'),
-        backgroundColor: ColorTokens.primary,
-      ),
-    );
+    // 기본적으로 월간 구독으로 연결
+    UpgradeModal._handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
   }
 } 

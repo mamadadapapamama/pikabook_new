@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/theme/tokens/typography_tokens.dart';
@@ -19,6 +20,7 @@ import '../../../core/utils/note_tutorial.dart';
 import '../../flashcard/flashcard_service.dart';
 import '../../../core/services/authentication/user_preferences_service.dart';
 import '../../../core/models/flash_card.dart';
+import '../../sample/sample_data_service.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatefulWidget {
@@ -61,8 +63,11 @@ class NoteDetailScreenMVVM extends StatefulWidget {
 class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   late FlashCardService _flashCardService;
   late TTSService _ttsService;
+  late SampleDataService _sampleDataService;
   List<FlashCard> _flashcards = [];
 
+  // 샘플 모드 여부 확인
+  bool get _isSampleMode => FirebaseAuth.instance.currentUser == null && widget.noteId == 'sample_note_1';
   
   @override
   void initState() {
@@ -88,6 +93,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     try {
       _flashCardService = FlashCardService();
       _ttsService = TTSService();
+      _sampleDataService = SampleDataService();
       await _ttsService.init();
     } catch (e) {
       if (kDebugMode) {
@@ -101,7 +107,20 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   /// 플래시카드 로드
   Future<void> _loadFlashcards() async {
     try {
-      final cards = await _flashCardService.getFlashCardsForNote(widget.noteId);
+      List<FlashCard> cards;
+      
+      if (_isSampleMode) {
+        // 샘플 모드: SampleDataService 사용
+        await _sampleDataService.loadSampleData();
+        cards = _sampleDataService.getSampleFlashCards(widget.noteId);
+        if (kDebugMode) {
+          print('🃏 샘플 플래시카드 로드됨: ${cards.length}개');
+        }
+      } else {
+        // 일반 모드: FlashCardService 사용
+        cards = await _flashCardService.getFlashCardsForNote(widget.noteId);
+      }
+      
       setState(() {
         _flashcards = cards;
       });

@@ -155,6 +155,9 @@ class SampleDataService {
         if (kDebugMode) {
           debugPrint('📷 샘플 이미지가 이미 존재함: $localImagePath');
         }
+        
+        // 페이지 데이터의 imageUrl을 절대 경로로 업데이트
+        _updateImagePaths(localImagePath);
         return;
       }
       
@@ -168,10 +171,54 @@ class SampleDataService {
       if (kDebugMode) {
         debugPrint('📷 샘플 이미지 복사 완료: $localImagePath');
       }
+      
+      // 페이지 데이터의 imageUrl을 절대 경로로 업데이트
+      _updateImagePaths(localImagePath);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ 샘플 이미지 복사 실패: $e');
       }
+    }
+  }
+  
+  /// 페이지 데이터의 이미지 경로를 절대 경로로 업데이트
+  void _updateImagePaths(String absolutePath) {
+    for (var page in _samplePages) {
+      if (page.imageUrl == 'images/sample_page_1.png') {
+        // 새로운 Page 객체를 생성하여 imageUrl 업데이트
+        final updatedPage = page_model.Page(
+          id: page.id,
+          noteId: page.noteId,
+          pageNumber: page.pageNumber,
+          imageUrl: absolutePath, // 절대 경로로 변경
+          originalText: page.originalText,
+          createdAt: page.createdAt,
+          updatedAt: page.updatedAt,
+          sourceLanguage: page.sourceLanguage,
+          targetLanguage: page.targetLanguage,
+          showTypewriterEffect: page.showTypewriterEffect,
+        );
+        
+        // 리스트에서 해당 페이지 교체
+        final index = _samplePages.indexOf(page);
+        _samplePages[index] = updatedPage;
+      }
+    }
+    
+    // 노트의 firstImageUrl도 업데이트
+    if (_sampleNote != null && _sampleNote!.firstImageUrl == 'images/sample_page_1.png') {
+      _sampleNote = Note(
+        id: _sampleNote!.id,
+        title: _sampleNote!.title,
+        userId: _sampleNote!.userId,
+        description: _sampleNote!.description,
+        isFavorite: _sampleNote!.isFavorite,
+        flashcardCount: _sampleNote!.flashcardCount,
+        pageCount: _sampleNote!.pageCount,
+        createdAt: _sampleNote!.createdAt,
+        updatedAt: _sampleNote!.updatedAt,
+        firstImageUrl: absolutePath, // 절대 경로로 변경
+      );
     }
   }
 } 

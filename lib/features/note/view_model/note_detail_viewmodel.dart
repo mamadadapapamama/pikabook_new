@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/models/processed_text.dart';
@@ -11,6 +12,7 @@ import '../services/page_service.dart';
 import '../managers/note_options_manager.dart';
 import '../services/note_service.dart';
 import '../../../core/services/text_processing/text_processing_service.dart';
+import '../../sample/sample_data_service.dart';
 
 /// 노트 상세 화면 ViewModel - 핵심 기능만 관리
 class NoteDetailViewModel extends ChangeNotifier {
@@ -18,6 +20,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   final NoteService _noteService = NoteService();
   final TextProcessingService _textProcessingService = TextProcessingService();
   final NoteOptionsManager noteOptionsManager = NoteOptionsManager();
+  final SampleDataService _sampleDataService = SampleDataService();
   
   // PageService 접근
   PageService get _pageService => _noteService.pageService;
@@ -49,6 +52,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   
   // 실시간 리스너들
   final Map<String, StreamSubscription<DocumentSnapshot>> _pageListeners = {};
+  
+  // 샘플 모드 여부 확인
+  bool get _isSampleMode => FirebaseAuth.instance.currentUser == null && _noteId == 'sample_note_1';
   
   // === Getters ===
   String get noteId => _noteId;
@@ -194,8 +200,20 @@ class NoteDetailViewModel extends ChangeNotifier {
     notifyListeners();
     
     try {
-      // 페이지 로드
-      final pages = await _pageService.getPagesForNote(_noteId);
+      List<page_model.Page> pages;
+      
+      if (_isSampleMode) {
+        // 샘플 모드: SampleDataService 사용
+        await _sampleDataService.loadSampleData();
+        pages = _sampleDataService.getSamplePages(_noteId);
+        if (kDebugMode) {
+          debugPrint('📄 샘플 페이지 로드됨: ${pages.length}개');
+        }
+      } else {
+        // 일반 모드: PageService 사용
+        pages = await _pageService.getPagesForNote(_noteId);
+      }
+      
       _pages = pages;
       _isLoading = false;
       notifyListeners();
@@ -263,7 +281,15 @@ class NoteDetailViewModel extends ChangeNotifier {
     if (_disposed) return null;
     
     try {
-      final processedText = await _textProcessingService.getProcessedText(pageId);
+      ProcessedText? processedText;
+      
+      if (_isSampleMode) {
+        // 샘플 모드: SampleDataService 사용
+        processedText = _sampleDataService.getProcessedText(pageId);
+      } else {
+        // 일반 모드: TextProcessingService 사용
+        processedText = await _textProcessingService.getProcessedText(pageId);
+      }
       
       if (_disposed) return null;
       
@@ -273,7 +299,14 @@ class NoteDetailViewModel extends ChangeNotifier {
           'status': ProcessingStatus.completed,
         };
       } else {
-        final status = await _textProcessingService.getProcessingStatus(pageId);
+        ProcessingStatus status;
+        if (_isSampleMode) {
+          // 샘플 모드에서는 텍스트가 없으면 실패로 간주
+          status = ProcessingStatus.failed;
+        } else {
+          status = await _textProcessingService.getProcessingStatus(pageId);
+        }
+        
         if (_disposed) return null;
         
         return {
@@ -302,44 +335,66 @@ class NoteDetailViewModel extends ChangeNotifier {
     _textErrors[pageId] = null;
     if (!_disposed) notifyListeners();
     
-    _setupPageListener(pageId);
+    // 샘플 모드가 아닌 경우에만 리스너 설정
+    if (!_isSampleMode) {
+      _setupPageListener(pageId);
+    }
     
     try {
-      // 페이지 에러 상태 확인
-      final pageDoc = await FirebaseFirestore.instance
-          .collection('pages')
-          .doc(pageId)
-          .get();
+      ProcessedText? processedText;
       
-      if (pageDoc.exists) {
-        final pageData = pageDoc.data() as Map<String, dynamic>;
-        final status = pageData['status'] as String?;
-        final errorMessage = pageData['errorMessage'] as String?;
+      if (_isSampleMode) {
+        // 샘플 모드: SampleDataService 사용
+        processedText = _sampleDataService.getProcessedText(pageId);
         
-        if (status == ProcessingStatus.failed.toString() && errorMessage != null) {
-          if (_disposed) return;
-          
-          _textLoadingStates[pageId] = false;
-          _textErrors[pageId] = errorMessage;
+        if (processedText != null) {
+          _processedTexts[pageId] = processedText;
+          _pageStatuses[pageId] = ProcessingStatus.completed;
+          if (kDebugMode) {
+            debugPrint('📝 샘플 텍스트 로드됨: $pageId');
+          }
+        } else {
           _pageStatuses[pageId] = ProcessingStatus.failed;
-          
-          if (!_disposed) notifyListeners();
-          return;
+          _textErrors[pageId] = '샘플 텍스트를 찾을 수 없습니다';
         }
-      }
-      
-      // 텍스트 처리 서비스 사용
-      final processedText = await _textProcessingService.getProcessedText(pageId);
-      
-      if (_disposed) return;
-      
-      if (processedText != null) {
-        _processedTexts[pageId] = processedText;
-        _pageStatuses[pageId] = ProcessingStatus.completed;
       } else {
-        final status = await _textProcessingService.getProcessingStatus(pageId);
+        // 일반 모드: Firebase 및 TextProcessingService 사용
+        // 페이지 에러 상태 확인
+        final pageDoc = await FirebaseFirestore.instance
+            .collection('pages')
+            .doc(pageId)
+            .get();
+        
+        if (pageDoc.exists) {
+          final pageData = pageDoc.data() as Map<String, dynamic>;
+          final status = pageData['status'] as String?;
+          final errorMessage = pageData['errorMessage'] as String?;
+          
+          if (status == ProcessingStatus.failed.toString() && errorMessage != null) {
+            if (_disposed) return;
+            
+            _textLoadingStates[pageId] = false;
+            _textErrors[pageId] = errorMessage;
+            _pageStatuses[pageId] = ProcessingStatus.failed;
+            
+            if (!_disposed) notifyListeners();
+            return;
+          }
+        }
+        
+        // 텍스트 처리 서비스 사용
+        processedText = await _textProcessingService.getProcessedText(pageId);
+        
         if (_disposed) return;
-        _pageStatuses[pageId] = status;
+        
+        if (processedText != null) {
+          _processedTexts[pageId] = processedText;
+          _pageStatuses[pageId] = ProcessingStatus.completed;
+        } else {
+          final status = await _textProcessingService.getProcessingStatus(pageId);
+          if (_disposed) return;
+          _pageStatuses[pageId] = status;
+        }
       }
       
       _textLoadingStates[pageId] = false;

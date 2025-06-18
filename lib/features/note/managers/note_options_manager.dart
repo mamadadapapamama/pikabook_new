@@ -99,11 +99,36 @@ class NoteOptionsManager {
       // 노트 삭제
       await _noteService.deleteNote(noteId);
       
-      ErrorHandler.showSuccessSnackBar(context, '노트가 삭제되었습니다');
+       if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('노트가 삭제되었습니다'),
+            backgroundColor: Colors.green[600],
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
       return true;
     } catch (e) {
       debugPrint('노트 삭제 중 오류 발생: $e');
-      ErrorHandler.showErrorSnackBar(context, e, ErrorContext.noteDelete);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('노트 삭제 중 오류가 발생했어요. 다시 시도해주세요.'),
+            backgroundColor: Colors.red[600],
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: '확인',
+              textColor: Colors.white,
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ),
+          ),
+        );
+      }
       return false;
     }
   }

@@ -21,7 +21,7 @@ import '../view_model/note_detail_viewmodel.dart';
 import '../../flashcard/flashcard_view_model.dart';
 import 'processed_text_widget.dart';
 import '../../dictionary/dictionary_result_widget.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'note_page_image_widget.dart';
 
 /// 노트 페이지 위젯: 이미지와 처리된 텍스트를 함께 표시
 class NotePageWidget extends StatefulWidget {
@@ -274,57 +274,13 @@ class _NotePageWidgetState extends State<NotePageWidget> {
 
   // 이미지 콘텐츠 위젯
   Widget _buildImageContent() {
-    // 1. 로컬 파일이 있는 경우 (새로 선택된 이미지)
-    if (widget.imageFile != null) {
-      return Image.file(
-        widget.imageFile!,
-        width: double.infinity,
-        height: double.infinity,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return _buildEmptyImageWidget();
-        },
-      );
-    }
-    
-    // 2. URL이 있는 경우 (기존 저장된 이미지)
-    if (widget.page.imageUrl != null && widget.page.imageUrl!.isNotEmpty) {
-      return CachedNetworkImage(
-        imageUrl: widget.page.imageUrl!,
-        width: double.infinity,
-        height: double.infinity,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => Center(
-          child: DotLoadingIndicator(
-            message: '이미지 로딩 중...',
-            dotColor: ColorTokens.primary,
-          ),
-        ),
-        errorWidget: (context, url, error) {
-          if (kDebugMode) {
-            debugPrint('🖼️ 이미지 로드 오류: $error');
-          }
-          return _buildEmptyImageWidget();
-        },
-      );
-    }
-    
-    // 3. 이미지가 없는 경우
-    return _buildEmptyImageWidget();
-  }
-
-  // 빈 이미지 위젯
-  Widget _buildEmptyImageWidget() {
-    return Container(
+    return NotePageImageWidget(
+      imageFile: widget.imageFile,
+      imageUrl: widget.page.imageUrl,
+      onTap: () => _openFullScreenImage(context),
+      fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-      ),
-      child: Image.asset(
-        'assets/images/image_empty.png',
-        fit: BoxFit.cover,
-      ),
     );
   }
 
