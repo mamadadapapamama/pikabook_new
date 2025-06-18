@@ -76,6 +76,23 @@ class NoteDetailViewModel extends ChangeNotifier {
   // 전체 페이지 수 (업로드된 이미지 수)
   int get totalPages => _note?.pageCount ?? 0;
 
+  // 현재 노트의 실제 텍스트 처리 모드 (첫 번째 페이지 기준)
+  TextProcessingMode? get currentNoteMode {
+    if (_processedTexts.isEmpty) return null;
+    
+    // 첫 번째 완료된 페이지의 모드를 반환
+    for (final processedText in _processedTexts.values) {
+      if (processedText != null) {
+        return processedText.mode;
+      }
+    }
+    
+    return null;
+  }
+
+  // 현재 노트가 세그먼트 모드인지 확인
+  bool get isCurrentNoteSegmentMode => currentNoteMode == TextProcessingMode.segment;
+
   // 페이지별 처리 상태 배열 생성 (totalPages 크기에 맞춤)
   List<bool> get processedPages {
     final total = totalPages;
@@ -204,38 +221,73 @@ class NoteDetailViewModel extends ChangeNotifier {
   void _setupAllPageListeners() {
     if (_disposed || _pages == null) return;
     
+    // 모든 페이지의 초기 상태를 배치로 로드 (UI 리빌드 최소화)
+    _loadAllPagesInitialStatus();
+    
     for (final page in _pages!) {
       if (page.id.isNotEmpty) {
         _setupPageListener(page.id);
-        _loadPageInitialStatus(page.id);
       }
     }
   }
 
-  /// 페이지 초기 상태 로드
-  Future<void> _loadPageInitialStatus(String pageId) async {
-    if (_disposed) return;
+  /// 모든 페이지 초기 상태 배치 로드 (UI 리빌드 최소화)
+  Future<void> _loadAllPagesInitialStatus() async {
+    if (_disposed || _pages == null) return;
+    
+    bool hasAnyUpdate = false;
+    
+    // 모든 페이지의 상태를 병렬로 로드
+    final futures = _pages!.map((page) => _loadSinglePageInitialStatus(page.id)).toList();
+    final results = await Future.wait(futures);
+    
+    // 결과를 한 번에 적용
+    for (int i = 0; i < results.length; i++) {
+      final result = results[i];
+      if (result != null) {
+        final pageId = _pages![i].id;
+        _processedTexts[pageId] = result['processedText'];
+        _pageStatuses[pageId] = result['status'];
+        hasAnyUpdate = true;
+      }
+    }
+    
+    // 한 번만 UI 업데이트
+    if (hasAnyUpdate && !_disposed) {
+      notifyListeners();
+    }
+  }
+
+  /// 단일 페이지 초기 상태 로드 (UI 업데이트 없음)
+  Future<Map<String, dynamic>?> _loadSinglePageInitialStatus(String pageId) async {
+    if (_disposed) return null;
     
     try {
       final processedText = await _textProcessingService.getProcessedText(pageId);
       
-      if (_disposed) return;
+      if (_disposed) return null;
       
       if (processedText != null) {
-        _processedTexts[pageId] = processedText;
-        _pageStatuses[pageId] = ProcessingStatus.completed;
+        return {
+          'processedText': processedText,
+          'status': ProcessingStatus.completed,
+        };
       } else {
         final status = await _textProcessingService.getProcessingStatus(pageId);
-        if (_disposed) return;
-        _pageStatuses[pageId] = status;
+        if (_disposed) return null;
+        
+        return {
+          'processedText': null,
+          'status': status,
+        };
       }
-      
-      if (!_disposed) notifyListeners();
-      
     } catch (e) {
-      if (_disposed) return;
-      _pageStatuses[pageId] = ProcessingStatus.failed;
-      if (!_disposed) notifyListeners();
+      if (_disposed) return null;
+      
+      return {
+        'processedText': null,
+        'status': ProcessingStatus.failed,
+      };
     }
   }
 

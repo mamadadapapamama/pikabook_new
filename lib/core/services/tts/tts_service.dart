@@ -88,65 +88,73 @@ class TTSService {
 
   /// 텍스트 읽기
   Future<void> speak(String text) async {
-    if (!_isInitialized) await init();
-    
-    // 이미 재생 중이면 중지하고 상태 초기화
-    if (_isSpeaking) {
-      debugPrint('⏹️ 이미 재생 중이므로 중지 후 새로 시작');
-      await stop();
-      // 상태 초기화가 확실히 반영되도록 잠시 대기
-      await Future.delayed(Duration(milliseconds: 150));
-    }
-
-    if (text.isEmpty) return;
-
-    // 캐시된 TTS 확인 (TTSCacheService 사용)
-    final textHash = text.hashCode.toString();
-    final cachedPath = await _cacheService.getTTSPath(
-      noteId: 'temp',
-      pageId: 'temp',
-      segmentId: textHash,
-      voiceId: 'default',
-    );
-    
-    if (cachedPath != null) {
-      // 캐시된 오디오 파일 재생
-      await _playAudioFile(cachedPath);
-      debugPrint('💾 캐시된 TTS 재생: $text');
-      return;
-    }
-
-    // 새로운 TTS 요청 처리
     try {
-      debugPrint('🔊 TTS 새 요청');
+      if (!_isInitialized) await init();
       
-      // 음성 합성
-      final audioData = await _apiService.synthesizeSpeech(text);
-      if (audioData != null) {
-        // 오디오 데이터를 캐시에 저장 (TTSCacheService 사용)
-        final audioPath = await _cacheService.cacheTTSAudio(
-          noteId: 'temp',
-          pageId: 'temp',
-          segmentId: textHash,
-          voiceId: 'default',
-          audioData: audioData,
-        );
+      // 이미 재생 중이면 중지하고 상태 초기화
+      if (_isSpeaking) {
+        debugPrint('⏹️ 이미 재생 중이므로 중지 후 새로 시작');
+        await stop();
+        // 상태 초기화가 확실히 반영되도록 잠시 대기
+        await Future.delayed(Duration(milliseconds: 150));
+      }
+
+      if (text.isEmpty) return;
+
+      // 캐시된 TTS 확인 (TTSCacheService 사용)
+      final textHash = text.hashCode.toString();
+      final cachedPath = await _cacheService.getTTSPath(
+        noteId: 'temp',
+        pageId: 'temp',
+        segmentId: textHash,
+        voiceId: 'default',
+      );
+      
+      if (cachedPath != null) {
+        // 캐시된 오디오 파일 재생
+        await _playAudioFile(cachedPath);
+        debugPrint('💾 캐시된 TTS 재생: $text');
+        return;
+      }
+
+      // 새로운 TTS 요청 처리
+      try {
+        debugPrint('🔊 TTS 새 요청');
         
-        if (audioPath != null) {
-          // 오디오 파일 재생
-          await _playAudioFile(audioPath);
-          debugPrint('🔊 TTS 재생 중: $text');
+        // 음성 합성
+        final audioData = await _apiService.synthesizeSpeech(text);
+        if (audioData != null) {
+          // 오디오 데이터를 캐시에 저장 (TTSCacheService 사용)
+          final audioPath = await _cacheService.cacheTTSAudio(
+            noteId: 'temp',
+            pageId: 'temp',
+            segmentId: textHash,
+            voiceId: 'default',
+            audioData: audioData,
+          );
           
-          // 새로운 TTS 요청 시에만 사용량 증가
-          await _apiService.incrementTtsUsageAfterPlayback();
+          if (audioPath != null) {
+            // 오디오 파일 재생
+            await _playAudioFile(audioPath);
+            debugPrint('🔊 TTS 재생 중: $text');
+            
+            // 새로운 TTS 요청 시에만 사용량 증가
+            await _apiService.incrementTtsUsageAfterPlayback();
+          } else {
+            debugPrint('❌ TTS 캐시 저장 실패: $text');
+            await _handleTtsError('캐시 저장 실패');
+          }
         } else {
-          debugPrint('❌ TTS 캐시 저장 실패: $text');
+          debugPrint('❌ TTS API 응답 없음: $text');
+          await _handleTtsError('API 응답 없음');
         }
-      } else {
-        debugPrint('❌ TTS API 응답 없음: $text');
+      } catch (e) {
+        debugPrint('❌ TTS 처리 중 오류: $e');
+        await _handleTtsError('TTS 처리 오류: $e');
       }
     } catch (e) {
-      debugPrint('❌ TTS 처리 중 오류: $e');
+      debugPrint('❌ TTS speak() 전체 오류: $e');
+      await _handleTtsError('전체 TTS 오류: $e');
     }
   }
 
@@ -195,7 +203,7 @@ class TTSService {
       });
     } catch (e) {
       debugPrint('❌ 오디오 파일 재생 중 오류: $e');
-      _resetState();
+      await _handleTtsError('오디오 파일 재생 오류: $e');
     }
   }
 
@@ -205,12 +213,33 @@ class TTSService {
       // 재생 중지
       await _audioPlayer.stop();
       
+      // 오디오 소스 해제
+      try {
+        await _audioPlayer.setAudioSource(AudioSource.uri(Uri.parse('about:blank')));
+      } catch (e) {
+        debugPrint('⚠️ 오디오 소스 해제 중 오류 (무시): $e');
+      }
+      
       // 잠시 대기하여 상태 안정화
       await Future.delayed(Duration(milliseconds: 100));
       
       debugPrint('🔄 오디오 플레이어 초기화 완료');
     } catch (e) {
       debugPrint('⚠️ 오디오 플레이어 초기화 중 오류: $e');
+      
+      // 최후의 수단: 플레이어 재생성 시도
+      try {
+        // 기존 이벤트 리스너 해제
+        await _playerStateSubscription?.cancel();
+        await _playbackEventSubscription?.cancel();
+        
+        // 새로운 이벤트 핸들러 설정
+        await _setupEventHandlers();
+        
+        debugPrint('🔄 오디오 플레이어 이벤트 핸들러 재설정 완료');
+      } catch (setupError) {
+        debugPrint('❌ 오디오 플레이어 이벤트 핸들러 재설정 실패: $setupError');
+      }
     }
   }
 
@@ -219,6 +248,38 @@ class TTSService {
     _isSpeaking = false;
     _ttsState = TtsState.stopped;
     _updateCurrentSegment(null);
+  }
+
+  /// TTS 에러 처리 및 완전 초기화
+  Future<void> _handleTtsError(String errorMessage) async {
+    debugPrint('🔄 TTS 에러 처리 시작: $errorMessage');
+    
+    try {
+      // 1. 오디오 플레이어 완전 정지 및 초기화
+      await _resetAudioPlayer();
+      
+      // 2. 상태 초기화
+      _resetState();
+      
+      // 3. 이벤트 핸들러 재설정
+      await _setupEventHandlers();
+      
+      // 4. 잠시 대기하여 상태 안정화
+      await Future.delayed(Duration(milliseconds: 200));
+      
+      debugPrint('✅ TTS 에러 처리 완료 - 서비스 재초기화됨');
+    } catch (e) {
+      debugPrint('❌ TTS 에러 처리 중 추가 오류: $e');
+      
+      // 최후의 수단: 서비스 완전 재초기화
+      try {
+        _isInitialized = false;
+        await init();
+        debugPrint('🔄 TTS 서비스 완전 재초기화 완료');
+      } catch (reinitError) {
+        debugPrint('❌ TTS 서비스 재초기화도 실패: $reinitError');
+      }
+    }
   }
 
   /// 재생 중지
@@ -230,8 +291,8 @@ class TTSService {
       debugPrint('✅ TTS 재생 중지 완료');
     } catch (e) {
       debugPrint('❌ TTS 중지 중 오류: $e');
-      // 오류가 발생해도 상태는 초기화
-      _resetState();
+      // 오류가 발생하면 완전한 에러 처리 수행
+      await _handleTtsError('TTS 중지 오류: $e');
     }
   }
 

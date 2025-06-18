@@ -61,15 +61,13 @@ class NoteDetailScreenMVVM extends StatefulWidget {
 class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
   late FlashCardService _flashCardService;
   late TTSService _ttsService;
-  late UserPreferencesService _userPreferencesService;
   List<FlashCard> _flashcards = [];
-  bool _useSegmentMode = false; // 세그먼트 모드 여부
+
   
   @override
   void initState() {
     super.initState();
     _initializeServices();
-    _loadUserPreferences(); // 사용자 설정 로드
     
     // 화면 렌더링 완료 후 튜토리얼 체크
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -90,7 +88,6 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     try {
       _flashCardService = FlashCardService();
       _ttsService = TTSService();
-      _userPreferencesService = UserPreferencesService();
       await _ttsService.init();
     } catch (e) {
       if (kDebugMode) {
@@ -99,19 +96,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     }
   }
   
-  /// 사용자 설정 로드
-  Future<void> _loadUserPreferences() async {
-    try {
-      final userPrefs = await _userPreferencesService.getPreferences();
-      setState(() {
-        _useSegmentMode = userPrefs.useSegmentMode;
-      });
-    } catch (e) {
-      if (kDebugMode) {
-        print('사용자 설정 로드 중 오류: $e');
-      }
-    }
-  }
+
   
   /// 플래시카드 로드
   Future<void> _loadFlashcards() async {
@@ -357,9 +342,12 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       return const SizedBox.shrink();
     }
     
+    // 현재 노트의 실제 모드 사용 (설정값 대신)
+    final isNoteSegmentMode = viewModel.isCurrentNoteSegmentMode;
+    
     // 현재 페이지의 TTS 텍스트 가져오기 (세그먼트 모드에서만)
     final currentProcessedText = viewModel.currentProcessedText;
-    final ttsText = _useSegmentMode ? (currentProcessedText?.fullOriginalText ?? '') : '';
+    final ttsText = isNoteSegmentMode ? (currentProcessedText?.fullOriginalText ?? '') : '';
     
     return NoteDetailBottomBar(
       currentPage: viewModel.currentPage,
@@ -371,7 +359,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       ttsText: ttsText,
       isProcessing: false,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),
-      onTtsPlay: _useSegmentMode ? () {
+      onTtsPlay: isNoteSegmentMode ? () {
         if (_ttsService.state == TtsState.playing) {
           _ttsService.stop();
         } else {
@@ -380,7 +368,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
           }
         }
       } : null,
-      useSegmentMode: _useSegmentMode,
+      useSegmentMode: isNoteSegmentMode,
       processedPages: [], // 간소화된 ViewModel에서는 빈 리스트
       processingPages: [], // 간소화된 ViewModel에서는 빈 리스트
     );
