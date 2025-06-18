@@ -56,11 +56,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     // 하단 safe area 영역 고려
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
     
-    // 이전/다음 페이지 처리 상태
-    final bool prevPageProcessed = _isPrevPageProcessed();
-    final bool nextPageProcessed = _isNextPageProcessed();
-    final bool prevPageProcessing = _isPrevPageProcessing();
-    final bool nextPageProcessing = _isNextPageProcessing();
+
     
     return Container(
       decoration: BoxDecoration(
@@ -97,18 +93,16 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // 이전 페이지 버튼 - 분리된 위젯 사용
+                      // 이전 페이지 버튼 - 항상 활성화
                       SizedBox(
                         width: 32,
                         child: PageNavigationButton(
                           icon: Icons.arrow_back_ios_rounded,
-                          onTap: (widget.currentPageIndex > 0 && prevPageProcessed && !prevPageProcessing) 
+                          onTap: widget.currentPageIndex > 0 
                               ? () => widget.onPageChanged(widget.currentPageIndex - 1) 
-                              : widget.currentPageIndex > 0 
-                                  ? () => _showPageProcessingMessage(context, widget.currentPageIndex - 1)
-                                  : null,
-                          isDisabled: widget.currentPageIndex > 0 && !prevPageProcessed && !prevPageProcessing,
-                          isProcessing: prevPageProcessing,
+                              : null,
+                          isDisabled: false,
+                          isProcessing: false,
                         ),
                       ),
                       
@@ -132,16 +126,14 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                           PageIndicator(currentIndex: widget.currentPageIndex, totalPages: widget.totalPages),
                           const SizedBox(width: 4),
                           
-                          // 다음 페이지 버튼 - 분리된 위젯 사용
+                          // 다음 페이지 버튼 - 항상 활성화
                           PageNavigationButton(
                             icon: Icons.arrow_forward_ios_rounded,
-                            onTap: (widget.currentPageIndex < widget.totalPages - 1 && nextPageProcessed && !nextPageProcessing)
+                            onTap: widget.currentPageIndex < widget.totalPages - 1
                                 ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
-                                : widget.currentPageIndex < widget.totalPages - 1
-                                    ? () => _showPageProcessingMessage(context, widget.currentPageIndex + 1)
-                                    : null,
-                            isDisabled: widget.currentPageIndex < widget.totalPages - 1 && !nextPageProcessed && !nextPageProcessing,
-                            isProcessing: nextPageProcessing,
+                                : null,
+                            isDisabled: false,
+                            isProcessing: false,
                           ),
                         ],
                       ),
@@ -156,99 +148,5 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     );
   }
 
-  // 이전 페이지가 처리되었는지 확인
-  bool _isPrevPageProcessed() {
-    final prevPageIndex = widget.currentPageIndex - 1;
-    if (prevPageIndex < 0) return true; // 첫 페이지면 항상 true
-    
-    // processedPages 배열이 있고, 해당 인덱스가 유효하면 해당 값 반환
-    if (widget.processedPages.isNotEmpty && prevPageIndex < widget.processedPages.length) {
-      return widget.processedPages[prevPageIndex];
-    }
-    
-    // 페이지 처리 상태 정보가 없으면 처리된 것으로 간주
-    return true;
-  }
-  
-  // 다음 페이지가 처리되었는지 확인
-  bool _isNextPageProcessed() {
-    final nextPageIndex = widget.currentPageIndex + 1;
-    if (nextPageIndex >= widget.totalPages) return true; // 마지막 페이지면 항상 true
-    
-    // processedPages 배열이 있고, 해당 인덱스가 유효하면 해당 값 반환
-    if (widget.processedPages.isNotEmpty && nextPageIndex < widget.processedPages.length) {
-      return widget.processedPages[nextPageIndex];
-    }
-    
-    // 페이지 처리 상태 정보가 없으면 기본적으로 처리된 것으로 간주
-    return true;
-  }
-  
-  // 처리되지 않은 페이지로 이동하려 할 때 메시지 표시
-  void _showPageProcessingMessage(BuildContext context, int pageIndex) {
-    final pageNum = pageIndex + 1;
-    final int progress = (pageIndex + 1);
-    final int total = widget.totalPages;
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            // 로딩 인디케이터
-            Container(
-              width: 16,
-              height: 16,
-              margin: const EdgeInsets.only(right: 12),
-              child: const CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            ),
-            // 텍스트 메시지
-            Expanded(
-              child: Text(
-                '$pageNum번째 페이지($progress/$total)가 아직 처리 중입니다.\n잠시 후 이동할 수 있습니다.',
-              ),
-            ),
-          ],
-        ),
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: '닫기',
-          textColor: Colors.white,
-          onPressed: () {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          },
-        ),
-      ),
-    );
-  }
 
-  // 이전 페이지가 처리 중인지 확인
-  bool _isPrevPageProcessing() {
-    final prevPageIndex = widget.currentPageIndex - 1;
-    if (prevPageIndex < 0) return false; // 첫 페이지면 항상 false
-    
-    // processingPages 배열이 있고, 해당 인덱스가 유효하면 해당 값 반환
-    if (widget.processingPages.isNotEmpty && prevPageIndex < widget.processingPages.length) {
-      return widget.processingPages[prevPageIndex];
-    }
-    
-    // 페이지 처리 상태 정보가 없으면 처리된 것으로 간주
-    return false;
-  }
-  
-  // 다음 페이지가 처리 중인지 확인
-  bool _isNextPageProcessing() {
-    final nextPageIndex = widget.currentPageIndex + 1;
-    if (nextPageIndex >= widget.totalPages) return false; // 마지막 페이지면 항상 false
-    
-    // processingPages 배열이 있고, 해당 인덱스가 유효하면 해당 값 반환
-    if (widget.processingPages.isNotEmpty && nextPageIndex < widget.processingPages.length) {
-      return widget.processingPages[nextPageIndex];
-    }
-    
-    // 페이지 처리 상태 정보가 없으면 기본적으로 처리된 것으로 간주
-    return false;
-  }
 } 

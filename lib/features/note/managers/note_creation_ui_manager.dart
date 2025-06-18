@@ -61,7 +61,7 @@ class NoteCreationUIManager {
       if (showLoadingDialog) {
         NoteCreationLoader.show(
           rootContext,
-          message: '스마트 노트를 만들고 있어요.\n첫 번째 이미지를 업로드하고 있어요!',
+          message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요.',
           timeoutSeconds: 60, // 첫 이미지 업로드까지 기다리므로 시간 증가
           onTimeout: () {
             if (rootContext.mounted) {

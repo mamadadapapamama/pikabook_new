@@ -24,6 +24,9 @@ class TextProcessingService {
   // 실시간 리스너 관리
   final Map<String, StreamSubscription<DocumentSnapshot>> _pageListeners = {};
   
+  // 페이지별 이전 데이터 추적 (중복 처리 방지)
+  final Map<String, ProcessedText> _previousProcessedTexts = {};
+  
   /// 1. 캐시 우선 ProcessedText 조회
   /// 캐시 → Firestore 순으로 확인
   Future<ProcessedText?> getProcessedText(String pageId) async {
@@ -162,9 +165,6 @@ class TextProcessingService {
     // 기존 리스너 정리
     _pageListeners[pageId]?.cancel();
     
-    // 이전 데이터 추적
-    ProcessedText? previousProcessedText;
-    
     final listener = _firestore
         .collection('pages')
         .doc(pageId)
@@ -228,17 +228,17 @@ class TextProcessingService {
             }
             
         // 변경사항 확인 후 콜백 호출
-            if (processedText != null && _hasProcessedTextChanged(previousProcessedText, processedText)) {
+        if (processedText != null && _hasProcessedTextChanged(_previousProcessedTexts[pageId], processedText)) {
           // 완성된 데이터만 캐시에 저장
           if (processedText.streamingStatus == StreamingStatus.completed) {
-              await _saveToCache(pageId, processedText);
+            await _saveToCache(pageId, processedText);
             if (kDebugMode) {
               debugPrint('💾 [리스너 → 캐시] 완성된 데이터 저장: $pageId');
+            }
           }
-              }
-              
-              onTextChanged(processedText);
-              previousProcessedText = processedText;
+          
+          onTextChanged(processedText);
+          _previousProcessedTexts[pageId] = processedText;
           
           if (kDebugMode) {
             debugPrint('📞 [리스너] UI 콜백 호출: $pageId');
@@ -303,6 +303,7 @@ class TextProcessingService {
   void cancelPageListener(String pageId) {
     _pageListeners[pageId]?.cancel();
     _pageListeners.remove(pageId);
+    _previousProcessedTexts.remove(pageId);  // 이전 데이터도 정리
     
     if (kDebugMode) {
       debugPrint('🔇 [리스너] 해제: $pageId');
@@ -315,6 +316,7 @@ class TextProcessingService {
       listener.cancel();
     }
     _pageListeners.clear();
+    _previousProcessedTexts.clear();  // 모든 이전 데이터 정리
     
     if (kDebugMode) {
       debugPrint('🔇 [리스너] 모든 리스너 해제');

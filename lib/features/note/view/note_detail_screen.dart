@@ -176,7 +176,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       );
     }
 
-    if (viewModel.pages == null || viewModel.pages!.isEmpty) {
+    if (viewModel.totalPages == 0) {
       return Center(
         child: Text(
           '표시할 페이지가 없습니다.',
@@ -185,18 +185,23 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       );
     }
 
-    // 페이지 뷰 구성
+    // 페이지 뷰 구성 (totalPages 기준)
     return SafeArea(
       child: Container(
         color: Colors.white,
         padding: EdgeInsets.zero,
         child: PageView.builder(
           controller: viewModel.pageController,
-          itemCount: viewModel.pages!.length,
+          itemCount: viewModel.totalPages,
           onPageChanged: viewModel.onPageChanged,
           itemBuilder: (context, index) {
-            final page = viewModel.pages![index];
-            return _buildPageContent(context, viewModel, page);
+            // 실제 페이지가 로드되어 있으면 페이지 콘텐츠, 아니면 로딩 화면
+            if (viewModel.pages != null && index < viewModel.pages!.length) {
+              final page = viewModel.pages![index];
+              return _buildPageContent(context, viewModel, page);
+            } else {
+              return _buildPageLoadingContent(context, index + 1);
+            }
           },
         ),
       ),
@@ -218,6 +223,28 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       ),
     );
   }
+
+  // 페이지 로딩 콘텐츠 위젯
+  Widget _buildPageLoadingContent(BuildContext context, int pageNumber) {
+    return Container(
+      color: Colors.white,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const DotLoadingIndicator(message: '페이지 준비 중...'),
+            const SizedBox(height: 16),
+            Text(
+              '$pageNumber번째 페이지를 준비하고 있어요',
+              style: TypographyTokens.body2.copyWith(
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   
   // TTS 재생 처리
   Future<void> _handlePlayTts(String text, {int? segmentIndex}) async {
@@ -234,9 +261,9 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     viewModel.noteOptionsManager.showMoreOptions(
       context, 
       note,
-      onTitleEditing: () {
-        // 제목 수정 후 새로고침
-        setState(() {});
+      onTitleEditing: () async {
+        // 제목 수정 후 ViewModel의 노트 정보 새로고침
+        await viewModel.refreshNoteInfo();
       },
       onNoteDeleted: () {
         Navigator.of(context).pop({'needsRefresh': true});
@@ -326,7 +353,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
 
   // 바텀 네비게이션 바 구성
   Widget _buildBottomBar(BuildContext context, NoteDetailViewModel viewModel) {
-    if (viewModel.pages == null || viewModel.pages!.isEmpty) {
+    if (viewModel.totalPages == 0) {
       return const SizedBox.shrink();
     }
     

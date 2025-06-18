@@ -59,7 +59,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   int get currentPageIndex => _currentPageIndex;
   bool get isProcessingBackground => _isProcessingBackground;
   
-  // 현재 페이지
+  // 현재 페이지 (실제 로드된 페이지만 반환, 아직 로드되지 않은 페이지는 null)
   page_model.Page? get currentPage {
     if (_pages == null || _pages!.isEmpty || _currentPageIndex >= _pages!.length) {
       return null;
@@ -73,26 +73,48 @@ class NoteDetailViewModel extends ChangeNotifier {
     return _processedTexts[currentPage!.id];
   }
 
-  // 전체 페이지 수 (업로드된 페이지 수)
-  int get totalPages => _pages?.length ?? 0;
+  // 전체 페이지 수 (업로드된 이미지 수)
+  int get totalPages => _note?.pageCount ?? 0;
 
-  // 페이지별 처리 상태 배열 생성
+  // 페이지별 처리 상태 배열 생성 (totalPages 크기에 맞춤)
   List<bool> get processedPages {
-    if (_pages == null) return [];
-    return _pages!.map((page) {
-      final status = _pageStatuses[page.id] ?? ProcessingStatus.created;
-      return status == ProcessingStatus.completed;
-    }).toList();
+    final total = totalPages;
+    final result = <bool>[];
+    
+    for (int i = 0; i < total; i++) {
+      if (i < (_pages?.length ?? 0)) {
+        // 실제 로드된 페이지
+        final page = _pages![i];
+        final status = _pageStatuses[page.id] ?? ProcessingStatus.created;
+        result.add(status == ProcessingStatus.completed);
+      } else {
+        // 아직 로드되지 않은 페이지 (처리 중으로 간주)
+        result.add(false);
+      }
+    }
+    
+    return result;
   }
   
-  // 페이지별 처리 중 상태 배열 생성
+  // 페이지별 처리 중 상태 배열 생성 (totalPages 크기에 맞춤)
   List<bool> get processingPages {
-    if (_pages == null) return [];
-    return _pages!.map((page) {
-      final status = _pageStatuses[page.id] ?? ProcessingStatus.created;
-      final isLoading = _textLoadingStates[page.id] ?? false;
-      return status.isProcessing || isLoading;
-    }).toList();
+    final total = totalPages;
+    final result = <bool>[];
+    
+    for (int i = 0; i < total; i++) {
+      if (i < (_pages?.length ?? 0)) {
+        // 실제 로드된 페이지
+        final page = _pages![i];
+        final status = _pageStatuses[page.id] ?? ProcessingStatus.created;
+        final isLoading = _textLoadingStates[page.id] ?? false;
+        result.add(status.isProcessing || isLoading);
+      } else {
+        // 아직 로드되지 않은 페이지 (처리 중으로 간주)
+        result.add(true);
+      }
+    }
+    
+    return result;
   }
 
   /// 생성자
@@ -134,6 +156,21 @@ class NoteDetailViewModel extends ChangeNotifier {
     }
   }
 
+  /// 노트 정보 새로고침 (제목 변경 등 후 호출)
+  Future<void> refreshNoteInfo() async {
+    try {
+      final loadedNote = await _noteService.getNoteById(_noteId);
+      if (loadedNote != null) {
+        _note = loadedNote;
+        notifyListeners();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('노트 정보 새로고침 실패: $e');
+      }
+    }
+  }
+
   /// 초기 페이지 로드
   Future<void> loadInitialPages() async {
     _isLoading = true;
@@ -160,6 +197,8 @@ class NoteDetailViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+
 
   /// 모든 페이지 리스너 설정
   void _setupAllPageListeners() {
@@ -306,20 +345,22 @@ class NoteDetailViewModel extends ChangeNotifier {
 
   /// 페이지 변경 이벤트
   void onPageChanged(int index) {
-    if (_pages == null || index < 0 || index >= _pages!.length || _currentPageIndex == index) return;
+    if (index < 0 || index >= totalPages || _currentPageIndex == index) return;
     
     _currentPageIndex = index;
     notifyListeners();
     
-    Future.microtask(() async {
-      await loadCurrentPageText();
-    });
+    // 실제 페이지가 로드되어 있으면 텍스트 로드 시도
+    if (_pages != null && index < _pages!.length) {
+      Future.microtask(() async {
+        await loadCurrentPageText();
+      });
+    }
   }
 
   /// 프로그램적 페이지 이동
   void navigateToPage(int index) {
-    if (_pages == null || _pages!.isEmpty) return;
-    if (index < 0 || index >= _pages!.length) return;
+    if (index < 0 || index >= totalPages) return;
     if (_currentPageIndex == index) return;
     
     pageController.animateToPage(
