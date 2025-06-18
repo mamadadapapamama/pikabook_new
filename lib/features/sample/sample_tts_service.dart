@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../core/services/authentication/auth_service.dart';
+import '../../core/utils/error_handler.dart';
 
 /// 샘플 TTS 예외 클래스
 class SampleTtsException implements Exception {
@@ -38,7 +40,7 @@ class SampleTtsService {
   };
 
   /// 텍스트 음성 재생
-  Future<void> speak(String text) async {
+  Future<void> speak(String text, {BuildContext? context}) async {
     try {
       if (kDebugMode) {
         debugPrint('🔊 [SampleTTS] 음성 재생 요청: "$text"');
@@ -50,12 +52,19 @@ class SampleTtsService {
         return;
       }
 
-      // 2. Firebase Storage에서 다운로드 후 재생
-      await _playFromFirebase(text);
+      // 2. 샘플 모드에서 지원하지 않는 오디오 파일인 경우 스낵바 표시
+      if (context != null) {
+        _showSampleLimitationSnackBar(context);
+      }
       
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [SampleTTS] 음성 재생 실패: $e');
+      }
+      
+      // assets 파일이 없을 때도 스낵바 표시
+      if (context != null) {
+        _showSampleLimitationSnackBar(context);
       }
     }
   }
@@ -78,16 +87,18 @@ class SampleTtsService {
     }
   }
 
-  /// Firebase Storage에서 다운로드 후 재생 (샘플 모드에서는 프리미엄 모달 표시)
-  Future<void> _playFromFirebase(String text) async {
-    // 샘플 모드에서는 로컬 assets에 없는 텍스트는 프리미엄 모달 표시
-    if (kDebugMode) {
-      debugPrint('🚫 [SampleTTS] 로컬 assets에 없는 텍스트: "$text" - 프리미엄 모달 표시 필요');
-    }
+  /// 샘플 모드 제한 안내 스낵바 표시
+  void _showSampleLimitationSnackBar(BuildContext context) {
+    if (!context.mounted) return;
     
-    // 프리미엄 모달 표시 로직은 UI 레벨에서 처리
-    // 여기서는 예외를 던져서 상위에서 처리하도록 함
-    throw SampleTtsException('프리미엄 구독이 필요한 콘텐츠입니다.');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text("샘플 모드에서는 일부 오디오파일만 지원됩니다. 로그인해서 듣기 기능을 사용해보세요."),
+        backgroundColor: Colors.orange[600],
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   /// 중국어 텍스트를 안전한 파일명으로 변환

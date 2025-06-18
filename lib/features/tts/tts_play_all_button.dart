@@ -111,37 +111,21 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
     }
   }
 
+  /// 샘플 모드에서 전체 듣기 TTS 처리 - 스낵바 메시지만 표시
   Future<void> _handleSampleModeTts() async {
-    try {
-      if (_isPlaying) {
-        await _sampleTtsService.stop();
-        setState(() {
-          _isPlaying = false;
-        });
-      } else {
-        setState(() {
-          _isPlaying = true;
-        });
-        
-        if (widget.onPlayStart != null) {
-          widget.onPlayStart!();
-        }
-        
-        await _sampleTtsService.speak(widget.text);
-        
-        if (mounted) {
-          setState(() {
-            _isPlaying = false;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = false;
-        });
-      }
+    // 샘플 모드에서는 전체 듣기 기능을 지원하지 않음
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("샘플 모드에서는 일부 오디오파일만 지원됩니다. 로그인해서 듣기 기능을 사용해보세요."),
+          backgroundColor: Colors.orange[600],
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
+    
+    debugPrint('📢 샘플 모드에서 전체 듣기 TTS 기능 제한됨');
   }
   
   @override

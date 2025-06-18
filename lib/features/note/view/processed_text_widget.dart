@@ -191,7 +191,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         }
       } else {
         // 새로운 세그먼트 재생
-        await _sampleTtsService.speak(text);
+        await _sampleTtsService.speak(text, context: context);
         if (widget.onPlayTts != null) {
           widget.onPlayTts!(text, segmentIndex: segmentIndex);
         }

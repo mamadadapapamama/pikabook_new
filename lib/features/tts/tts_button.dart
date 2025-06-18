@@ -245,7 +245,7 @@ class _TtsButtonState extends State<TtsButton> {
         
         debugPrint('🔘 샘플 TTS 재생 시작: "${widget.text}"');
         
-        await _sampleTtsService.speak(widget.text);
+        await _sampleTtsService.speak(widget.text, context: context);
         
         // 재생 완료 후 상태 업데이트
         if (mounted) {

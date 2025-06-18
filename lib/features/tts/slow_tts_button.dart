@@ -218,73 +218,21 @@ class _SlowTtsButtonState extends State<SlowTtsButton> {
     }
   }
 
-  /// 샘플 모드에서 느린 TTS 처리
+  /// 샘플 모드에서 느린 TTS 처리 - 스낵바 메시지만 표시
   Future<void> _handleSampleModeSlowTts() async {
-    try {
-      if (_isPlaying) {
-        // 재생 중이면 중지
-        await _sampleTtsService.stop();
-        setState(() {
-          _isPlaying = false;
-        });
-        
-        if (widget.onPlayEnd != null) {
-          widget.onPlayEnd!();
-        }
-        
-        debugPrint('🐢 샘플 느린 TTS 재생 중지');
-      } else {
-        // 재생 시작
-        setState(() {
-          _isPlaying = true;
-        });
-        
-        if (widget.onPlayStart != null) {
-          widget.onPlayStart!();
-        }
-        
-        debugPrint('🐢 🔘 샘플 느린 TTS 재생 시작: "${widget.text}"');
-        
-        // 샘플 모드에서는 일반 TTS를 사용하되 느린 속도로 재생
-        await _sampleTtsService.speak(widget.text);
-        
-        // 재생 완료 후 상태 업데이트
-        if (mounted) {
-          setState(() {
-            _isPlaying = false;
-          });
-          
-          if (widget.onPlayEnd != null) {
-            widget.onPlayEnd!();
-          }
-        }
-      }
-    } on SampleTtsException catch (e) {
-      debugPrint('🐢 샘플 느린 TTS 프리미엄 필요: $e');
-      if (mounted) {
-        setState(() {
-          _isPlaying = false;
-        });
-        
-        if (widget.onPlayEnd != null) {
-          widget.onPlayEnd!();
-        }
-        
-        // 프리미엄 모달 표시
-        _showPremiumModal();
-      }
-    } catch (e) {
-      debugPrint('🐢 샘플 느린 TTS 재생 중 오류: $e');
-      if (mounted) {
-        setState(() {
-          _isPlaying = false;
-        });
-        
-        if (widget.onPlayEnd != null) {
-          widget.onPlayEnd!();
-        }
-      }
+    // 샘플 모드에서는 느린 TTS 기능을 지원하지 않음
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("샘플 모드에서는 일부 오디오파일만 지원됩니다. 로그인해서 듣기 기능을 사용해보세요."),
+          backgroundColor: Colors.orange[600],
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
+    
+    debugPrint('🐢 샘플 모드에서 느린 TTS 기능 제한됨');
   }
   
   /// 프리미엄 구독 모달 표시
