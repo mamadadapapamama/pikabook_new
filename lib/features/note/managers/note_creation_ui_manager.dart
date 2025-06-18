@@ -43,8 +43,8 @@ class NoteCreationUIManager {
       return;
     }
 
-    // 컨텍스트 유효성 확인
-    final BuildContext rootContext = context;
+    // root context 확보 (바텀시트 context가 dispose되는 문제 방지)
+    final BuildContext rootContext = Navigator.of(context, rootNavigator: true).context;
     if (!rootContext.mounted) {
       if (kDebugMode) {
         debugPrint('컨텍스트가 더 이상 유효하지 않습니다');
@@ -61,8 +61,8 @@ class NoteCreationUIManager {
       if (showLoadingDialog) {
         NoteCreationLoader.show(
           rootContext,
-          message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!',
-          timeoutSeconds: 45,
+          message: '스마트 노트를 만들고 있어요.\n첫 번째 이미지를 업로드하고 있어요!',
+          timeoutSeconds: 60, // 첫 이미지 업로드까지 기다리므로 시간 증가
           onTimeout: () {
             if (rootContext.mounted) {
               if (kDebugMode) {
@@ -83,21 +83,22 @@ class NoteCreationUIManager {
         await _closeBottomSheet(context);
       }
 
-      // 3. 빠른 노트 생성 (비즈니스 로직)
+      // 3. 첫 번째 이미지 업로드 및 첫 페이지 생성까지 완료 (기존보다 시간 더 걸림)
       if (kDebugMode) {
         debugPrint('🚀 빠른 노트 생성 시작: ${imageFiles.length}개 이미지');
       }
 
+      // 기존 메서드 사용 (이제 첫 페이지까지 생성 후 반환)
       createdNoteId = await _preLLMWorkflow.createNoteQuickly(imageFiles);
       
       if (createdNoteId.isNotEmpty) {
         isSuccess = true;
         
         if (kDebugMode) {
-          debugPrint('✅ 빠른 노트 생성 완료: $createdNoteId');
+          debugPrint('✅ 빠른 노트 생성 완료: $createdNoteId (첫 페이지 준비됨)');
         }
 
-        // 첫 페이지 대기 없이 즉시 결과 처리로 이동
+        // 첫 페이지가 준비된 상태에서 즉시 결과 처리로 이동
       }
 
     } catch (e) {
@@ -134,12 +135,24 @@ class NoteCreationUIManager {
 
     // 5. 결과 처리 (성공한 경우만)
     if (isSuccess) {
+      if (kDebugMode) {
+        debugPrint('🎯 _handleCreationResult 호출 시작: noteId=$createdNoteId, loadingShown=$loadingDialogShown');
+      }
+      
       await _handleCreationResult(
         context: rootContext,
         isSuccess: isSuccess,
         noteId: createdNoteId,
         loadingDialogShown: loadingDialogShown,
       );
+      
+      if (kDebugMode) {
+        debugPrint('✅ _handleCreationResult 호출 완료');
+      }
+    } else {
+      if (kDebugMode) {
+        debugPrint('❌ 노트 생성 실패로 _handleCreationResult 건너뜀: isSuccess=$isSuccess');
+      }
     }
   }
 
@@ -158,7 +171,14 @@ class NoteCreationUIManager {
     required String? noteId,
     required bool loadingDialogShown,
   }) async {
+    if (kDebugMode) {
+      debugPrint('🔄 _handleCreationResult 진입: isSuccess=$isSuccess, noteId=$noteId, context.mounted=${context.mounted}');
+    }
+    
     if (isSuccess && noteId != null && context.mounted) {
+      if (kDebugMode) {
+        debugPrint('✅ 성공 처리 시작: _handleSuccess 호출');
+      }
       // 성공 시 처리
       await _handleSuccess(
         context: context,
@@ -166,11 +186,22 @@ class NoteCreationUIManager {
         loadingDialogShown: loadingDialogShown,
       );
     } else if (context.mounted) {
+      if (kDebugMode) {
+        debugPrint('❌ 실패 처리 시작: _handleFailure 호출');
+      }
       // 실패 시 처리
       await _handleFailure(
         context: context,
         loadingDialogShown: loadingDialogShown,
       );
+    } else {
+      if (kDebugMode) {
+        debugPrint('⚠️ 컨텍스트가 마운트되지 않아 결과 처리 건너뜀');
+      }
+    }
+    
+    if (kDebugMode) {
+      debugPrint('🏁 _handleCreationResult 완료');
     }
   }
 

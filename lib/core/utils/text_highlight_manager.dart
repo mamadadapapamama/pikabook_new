@@ -164,14 +164,6 @@ class TextHighlightManager {
     TextStyle? normalStyle,
     TextStyle? highlightStyle,
   }) {
-    // 디버그 로깅
-    if (kDebugMode) {
-      debugPrint(
-          'buildHighlightedText 호출: 텍스트 길이=${text.length}, 플래시카드 단어 수=${flashcardWords.length}');
-      if (flashcardWords.isNotEmpty) {
-        debugPrint('플래시카드 단어 목록: ${flashcardWords.take(5).join(', ')}');
-      }
-    }
 
     // 결과 목록 미리 할당 (메모리 최적화)
     final List<TextSpan> spans = [];

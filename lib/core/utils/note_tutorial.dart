@@ -42,8 +42,8 @@ class NoteTutorial {
       imagePath: 'assets/images/note_help_1.png',
     ),
     const TutorialStep(
-      title: '불필요한 문장은 지워요',
-      description: '잘못 인식된 문장은 왼쪽으로 스와이프 하면 지울수 있어요.',
+      title: '듣고 싶은 부분을 들어요',
+      description: '원하는 부분이나 전체 문장을 보통 속도 또는 느린 속도로 들을 수 있어요.',
       imagePath: 'assets/images/note_help_3.png',
     ),
   ];

@@ -24,7 +24,7 @@ class PreLLMWorkflow {
   final UsageLimitService _usageLimitService = UsageLimitService();
   final PostLLMWorkflow _postLLMWorkflow = PostLLMWorkflow();
 
-  /// 빠른 노트 생성 메인 메서드 (이미지 업로드만 완료 후 즉시 반환)
+  /// 빠른 노트 생성 메인 메서드 (첫 번째 이미지 업로드 및 첫 페이지 생성 후 반환)
   Future<String> createNoteQuickly(List<File> imageFiles) async {
     if (imageFiles.isEmpty) {
       throw Exception('이미지가 없습니다.');
@@ -35,60 +35,58 @@ class PreLLMWorkflow {
     }
 
     try {
-      // 1. 노트 메타데이터 생성 (빠름)
+      // 1. 노트 메타데이터 생성 (빠름, 1-2초)
       final noteId = await _noteService.createNote();
+      
+      if (kDebugMode) {
+        debugPrint('✅ 노트 메타데이터 생성 완료: $noteId');
+      }
       
       // 2. 사용자 설정 로드 (캐시됨)
       final userPrefs = await _preferencesService.getPreferences();
       
-      // 3. 이미지 업로드만 빠르게 처리하고 기본 페이지 생성
-      final List<String> pageIds = [];
-      final List<String> imageUrls = [];
-      
-      for (int i = 0; i < imageFiles.length; i++) {
-        if (kDebugMode) {
-          debugPrint('📷 이미지 ${i+1}/${imageFiles.length} 업로드 시작');
-        }
-        
-        // 이미지 업로드만 수행
-        final imageUrl = await _imageService.uploadImage(imageFiles[i]);
-        imageUrls.add(imageUrl);
-        
-        if (kDebugMode) {
-          debugPrint('✅ 이미지 ${i+1} 업로드 완료: $imageUrl');
-        }
-        
-        // 기본 페이지 생성 (텍스트 없이)
-        final pageId = await _pageService.createPage(
-          noteId: noteId,
-          originalText: '', // 빈 텍스트로 시작
-          pageNumber: i + 1,
-          imageUrl: imageUrl,
-        );
-        pageIds.add(pageId.id);
-        
-        if (kDebugMode) {
-          debugPrint('✅ 기본 페이지 ${i+1} 생성 완료: ${pageId.id}');
-        }
+      // 3. 첫 번째 이미지 업로드 및 첫 페이지 생성 (await로 완료 대기)
+      if (kDebugMode) {
+        debugPrint('📷 첫 번째 이미지 업로드 시작 (상세페이지 이동 전 필수)');
       }
       
-      // 4. 노트 메타데이터 업데이트 (썸네일 + 페이지 수)
-      // OCR 처리 중이므로 updatedAt을 업데이트하지 않아 불필요한 HomeViewModel 리빌드 방지
-      if (imageUrls.isNotEmpty) {
-        await _noteService.updateNoteMetadata(
-          noteId: noteId,
-          thumbnailUrl: imageUrls[0],
-          pageCount: imageFiles.length,
-          updateTimestamp: false, // OCR 처리 중에는 타임스탬프 업데이트 안함
-        );
-      }
-      
-      // 5. 백그라운드 텍스트 처리 시작
-      _startBackgroundProcessing(noteId, imageFiles, pageIds, userPrefs);
+      // 첫 번째 이미지 업로드
+      final firstImageUrl = await _imageService.uploadImage(imageFiles[0]);
       
       if (kDebugMode) {
-        debugPrint('🎉 빠른 노트 생성 완료: $noteId (${pageIds.length}개 페이지)');
-        debugPrint('📋 텍스트 처리는 백그라운드에서 진행됩니다');
+        debugPrint('✅ 첫 번째 이미지 업로드 완료: $firstImageUrl');
+      }
+      
+      // 첫 번째 페이지 생성
+      final firstPageId = await _pageService.createPage(
+        noteId: noteId,
+        originalText: '', // 빈 텍스트로 시작
+        pageNumber: 1,
+        imageUrl: firstImageUrl,
+      );
+      
+      if (kDebugMode) {
+        debugPrint('✅ 첫 번째 페이지 생성 완료: ${firstPageId.id}');
+      }
+      
+      // 4. 노트 메타데이터 업데이트 (썸네일)
+      await _noteService.updateNoteMetadata(
+        noteId: noteId,
+        thumbnailUrl: firstImageUrl,
+        pageCount: imageFiles.length,
+        updateTimestamp: false, // OCR 처리 중에는 타임스탬프 업데이트 안함
+      );
+      
+      // 5. 나머지 이미지들은 백그라운드에서 처리
+      if (imageFiles.length > 1) {
+        _startRemainingImagesProcessing(noteId, imageFiles, userPrefs, firstPageId.id);
+      } else {
+        // 이미지가 1개뿐이면 바로 텍스트 처리 시작 (첫 번째 이미지 포함)
+        _startBackgroundProcessing(noteId, [imageFiles[0]], [firstPageId.id], userPrefs);
+      }
+      
+      if (kDebugMode) {
+        debugPrint('🎉 빠른 노트 생성 완료: $noteId (첫 페이지 준비됨, 백그라운드 처리 시작됨)');
       }
       
       return noteId;
@@ -99,6 +97,72 @@ class PreLLMWorkflow {
       }
       rethrow;
     }
+  }
+
+  /// 나머지 이미지들 백그라운드 업로드 + 텍스트 처리
+  void _startRemainingImagesProcessing(
+    String noteId, 
+    List<File> allImageFiles, // 첫 번째 이미지 포함 모든 이미지
+    dynamic userPrefs,
+    String firstPageId,
+  ) {
+    // 백그라운드에서 비동기 처리
+    Future.microtask(() async {
+      try {
+        if (kDebugMode) {
+          debugPrint('🔄 나머지 이미지 백그라운드 업로드 시작: $noteId (${allImageFiles.length-1}개 추가 이미지)');
+        }
+        
+        final List<String> allPageIds = [firstPageId];
+        final List<File> remainingImages = allImageFiles.sublist(1); // 첫 번째 제외
+        
+        // 나머지 이미지들 업로드 + 페이지 생성
+        for (int i = 0; i < remainingImages.length; i++) {
+          if (kDebugMode) {
+            debugPrint('📷 이미지 ${i+2}/${allImageFiles.length} 업로드 시작');
+          }
+          
+          // 이미지 업로드
+          final imageUrl = await _imageService.uploadImage(remainingImages[i]);
+          
+          if (kDebugMode) {
+            debugPrint('✅ 이미지 ${i+2} 업로드 완료: $imageUrl');
+          }
+          
+          // 페이지 생성
+          final pageId = await _pageService.createPage(
+            noteId: noteId,
+            originalText: '', // 빈 텍스트로 시작
+            pageNumber: i + 2, // 첫 번째는 이미 1번이므로 2번부터
+            imageUrl: imageUrl,
+          );
+          allPageIds.add(pageId.id);
+          
+          if (kDebugMode) {
+            debugPrint('✅ 페이지 ${i+2} 생성 완료: ${pageId.id}');
+          }
+        }
+        
+        // 페이지 수 업데이트
+        await _noteService.updateNoteMetadata(
+          noteId: noteId,
+          pageCount: allPageIds.length,
+          updateTimestamp: false,
+        );
+        
+        // 모든 이미지에 대해 텍스트 처리 시작 (첫 번째 이미지 포함)
+        _startBackgroundProcessing(noteId, allImageFiles, allPageIds, userPrefs);
+        
+        if (kDebugMode) {
+          debugPrint('🎉 나머지 이미지 처리 완료: $noteId (${allPageIds.length}개 페이지)');
+        }
+        
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('❌ 나머지 이미지 처리 실패: $noteId, 오류: $e');
+        }
+      }
+    });
   }
 
   /// 백그라운드에서 텍스트 처리 시작

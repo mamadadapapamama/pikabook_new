@@ -273,14 +273,26 @@ class ImageService {
         throw Exception(result.error ?? '압축 실패');
       }
 
-      // Firebase Storage에 업로드
+      // Firebase Storage에 업로드 후 완전한 URL 반환
       try {
         await _uploadToFirebaseStorage(File(targetPath), relativePath);
+        
+        // Firebase Storage URL 가져오기
+        final fullUrl = await getImageUrl(relativePath);
+        
+        if (kDebugMode) {
+          debugPrint('✅ 이미지 업로드 완료: $relativePath → $fullUrl');
+        }
+        
+        return fullUrl; // 완전한 URL 반환
       } catch (e) {
-        debugPrint('Firebase 업로드 실패: $e');
+        if (kDebugMode) {
+          debugPrint('⚠️ Firebase 업로드 실패, 상대 경로 반환: $e');
+        }
+        // Firebase 업로드 실패 시 상대 경로 반환 (로컬에서는 작동)
+        return relativePath;
       }
 
-      return relativePath;
     } catch (e) {
       debugPrint('이미지 저장 실패: $e');
       throw Exception('이미지 저장 실패: $e');

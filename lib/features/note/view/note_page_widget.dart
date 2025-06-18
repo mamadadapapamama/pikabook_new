@@ -9,17 +9,19 @@ import '../../../core/models/flash_card.dart';
 import '../../../core/models/processing_status.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
+import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/utils/timeout_manager.dart';
 import '../../../core/utils/error_handler.dart';
 import '../../../core/widgets/error_display_widget.dart';
 import '../../../core/widgets/inline_error_widget.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../../core/widgets/pika_button.dart';
+import '../../../core/services/media/image_service.dart';
 import '../view_model/note_detail_viewmodel.dart';
 import '../../flashcard/flashcard_view_model.dart';
-import 'page_image_widget.dart';
 import 'processed_text_widget.dart';
 import '../../dictionary/dictionary_result_widget.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 /// 노트 페이지 위젯: 이미지와 처리된 텍스트를 함께 표시
 class NotePageWidget extends StatefulWidget {
@@ -210,13 +212,7 @@ class _NotePageWidgetState extends State<NotePageWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 페이지 이미지 위젯
-          PageImageWidget(
-            imageFile: widget.imageFile,
-            imageUrl: widget.page.imageUrl,
-            page: widget.page,
-            isLoading: viewModel.isLoading,
-            enableFullScreen: true,
-          ),
+          _buildImageWidget(context, viewModel),
           
           SizedBox(height: SpacingTokens.md),
           
@@ -225,6 +221,133 @@ class _NotePageWidgetState extends State<NotePageWidget> {
         ],
       ),
     );
+  }
+  
+  // 페이지 이미지 위젯
+  Widget _buildImageWidget(BuildContext context, NoteDetailViewModel viewModel) {
+    return Container(
+      height: 200,
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          )
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: GestureDetector(
+          onTap: () => _openFullScreenImage(context),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              _buildImageContent(),
+              // 확대 아이콘
+              Positioned(
+                right: 12,
+                bottom: 12,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withAlpha(128),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(
+                    Icons.zoom_in,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 이미지 콘텐츠 위젯
+  Widget _buildImageContent() {
+    // 1. 로컬 파일이 있는 경우 (새로 선택된 이미지)
+    if (widget.imageFile != null) {
+      return Image.file(
+        widget.imageFile!,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _buildEmptyImageWidget();
+        },
+      );
+    }
+    
+    // 2. URL이 있는 경우 (기존 저장된 이미지)
+    if (widget.page.imageUrl != null && widget.page.imageUrl!.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: widget.page.imageUrl!,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Center(
+          child: DotLoadingIndicator(
+            message: '이미지 로딩 중...',
+            dotColor: ColorTokens.primary,
+          ),
+        ),
+        errorWidget: (context, url, error) {
+          if (kDebugMode) {
+            debugPrint('🖼️ 이미지 로드 오류: $error');
+          }
+          return _buildEmptyImageWidget();
+        },
+      );
+    }
+    
+    // 3. 이미지가 없는 경우
+    return _buildEmptyImageWidget();
+  }
+
+  // 빈 이미지 위젯
+  Widget _buildEmptyImageWidget() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+      ),
+      child: Image.asset(
+        'assets/images/image_empty.png',
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
+  // 전체 화면 이미지 뷰어 열기
+  void _openFullScreenImage(BuildContext context) {
+    File? imageFile;
+    
+    if (widget.imageFile != null) {
+      imageFile = widget.imageFile;
+    } else if (widget.page.imageUrl != null && widget.page.imageUrl!.isNotEmpty) {
+      // URL에서 로컬 파일을 가져와야 하는 경우
+      // ImageService를 통해 처리할 수 있지만, 여기서는 간단히 스킵
+      if (kDebugMode) {
+        debugPrint('🖼️ URL 이미지의 전체화면 보기는 현재 지원되지 않습니다: ${widget.page.imageUrl}');
+      }
+      return;
+    }
+    
+    if (imageFile == null) return;
+    
+    // ImageService를 통한 전체화면 보기
+    final imageService = ImageService();
+    imageService.showFullImage(context, imageFile, '이미지 보기');
   }
   
   // 텍스트 콘텐츠 위젯 (상태에 따라 다른 위젯 반환)
