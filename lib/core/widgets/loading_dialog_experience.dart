@@ -27,7 +27,7 @@ class NoteCreationLoader {
   static Future<void> show(
     BuildContext context, {
     String message = '스마트한 학습 노트를 만들고 있어요.\n잠시만 기다려 주세요!',
-    int timeoutSeconds = 30,
+    int timeoutSeconds = 45,
     VoidCallback? onTimeout,
   }) async {
     if (_isVisible) {

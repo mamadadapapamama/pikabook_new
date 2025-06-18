@@ -13,18 +13,13 @@ import '../../../core/utils/error_handler.dart';
 import '../../../core/utils/timeout_manager.dart';
 import '../view/note_detail_screen.dart';
 import '../pre_llm_workflow.dart';
-import '../post_llm_workflow.dart';
-import '../services/note_service.dart';
-import '../../home/home_viewmodel.dart';
 
 /// 노트 생성 UI 매니저
 /// UI 관련 로직만 담당: 로딩, 화면 이동, 에러 처리, 튜토리얼 등
 class NoteCreationUIManager {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final NoteService _noteService = NoteService();
   final PreLLMWorkflow _preLLMWorkflow = PreLLMWorkflow();
-  final PostLLMWorkflow _postLLMWorkflow = PostLLMWorkflow();
   
   // 타임아웃 관리
   TimeoutManager? _navigationTimeoutManager;
@@ -62,9 +57,24 @@ class NoteCreationUIManager {
     bool isSuccess = false;
 
     try {
-      // 1. 로딩 다이얼로그 표시 (향상된 타임아웃 처리)
+      // 1. 로딩 다이얼로그 표시 (즉시 표시)
       if (showLoadingDialog) {
-        await _showLoadingDialogWithTimeout(rootContext);
+        NoteCreationLoader.show(
+          rootContext,
+          message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!',
+          timeoutSeconds: 45,
+          onTimeout: () {
+            if (rootContext.mounted) {
+              if (kDebugMode) {
+                debugPrint('⏰ 노트 생성 타임아웃 발생');
+              }
+              ErrorHandler.showErrorSnackBar(
+                rootContext, 
+                '문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.'
+              );
+            }
+          },
+        );
         loadingDialogShown = true;
       }
 
@@ -87,8 +97,7 @@ class NoteCreationUIManager {
           debugPrint('✅ 빠른 노트 생성 완료: $createdNoteId');
         }
 
-        // 4. 첫 페이지 기본 정보 확인 (이미지만) - 타임아웃 처리 추가
-        await _waitForFirstPageReadyWithTimeout(createdNoteId);
+        // 첫 페이지 대기 없이 즉시 결과 처리로 이동
       }
 
     } catch (e) {
@@ -97,23 +106,16 @@ class NoteCreationUIManager {
       }
       isSuccess = false;
       
-      // 에러 발생 시 반드시 로딩 다이얼로그 닫기
-      if (rootContext.mounted) {
-        if (kDebugMode) {
-          debugPrint('📱 에러 처리: 로딩 다이얼로그 강제 닫기 시작');
-        }
-        
-        NoteCreationLoader.ensureHidden(rootContext);
-        await Future.delayed(const Duration(milliseconds: 300));
-        
-        if (kDebugMode) {
-          debugPrint('📱 에러 처리: 로딩 다이얼로그 강제 닫기 완료');
-        }
-      }
-      
       // 중국어 감지 실패의 경우 특별 처리
       if (e.toString().contains('중국어가 없습니다')) {
+        // 로딩 다이얼로그가 표시되지 않은 경우에도 처리
         if (rootContext.mounted) {
+          // 로딩 다이얼로그가 표시된 경우 닫기
+          if (loadingDialogShown || NoteCreationLoader.isVisible) {
+            NoteCreationLoader.hide(rootContext);
+            await Future.delayed(const Duration(milliseconds: 300));
+          }
+          
           // 중국어 감지 실패 전용 에러 메시지
           ErrorHandler.showErrorSnackBar(
             rootContext,
@@ -124,56 +126,21 @@ class NoteCreationUIManager {
       }
       
       // 기타 에러 처리
-      if (rootContext.mounted) {
-        ErrorHandler.showErrorSnackBar(rootContext, e);
+      if (loadingDialogShown && rootContext.mounted) {
+        NoteCreationLoader.hideWithError(rootContext, e);
+        loadingDialogShown = false;
       }
     }
 
-    // 5. 결과 처리 (성공한 경우만 → 성공/실패 모두 처리)
-    await _handleCreationResult(
-      context: rootContext,
-      isSuccess: isSuccess,
-      noteId: createdNoteId,
-      loadingDialogShown: loadingDialogShown,
-    );
-  }
-
-  /// 강화된 로딩 다이얼로그 표시 (타임아웃 처리)
-  Future<void> _showLoadingDialogWithTimeout(BuildContext context) async {
-    if (kDebugMode) {
-      debugPrint('📱 향상된 로딩 다이얼로그 표시');
+    // 5. 결과 처리 (성공한 경우만)
+    if (isSuccess) {
+      await _handleCreationResult(
+        context: rootContext,
+        isSuccess: isSuccess,
+        noteId: createdNoteId,
+        loadingDialogShown: loadingDialogShown,
+      );
     }
-
-    await NoteCreationLoader.show(
-      context,
-      message: '스마트 노트를 만들고 있어요.\n잠시만 기다려 주세요!',
-      timeoutSeconds: 45,
-      onTimeout: () {
-        // 타임아웃 시 강제 처리
-        if (context.mounted) {
-          if (kDebugMode) {
-            debugPrint('⏰ 노트 생성 타임아웃 발생 - 강제 다이얼로그 닫기');
-          }
-          
-          // 강제로 다이얼로그 닫기
-          Future.delayed(const Duration(milliseconds: 100), () {
-            if (context.mounted) {
-              NoteCreationLoader.ensureHidden(context);
-              
-              // 에러 메시지 표시
-              Future.delayed(const Duration(milliseconds: 500), () {
-                if (context.mounted) {
-                  ErrorHandler.showErrorSnackBar(
-                    context, 
-                    '처리 시간이 너무 오래 걸리고 있어요. 잠시 뒤에 다시 시도해 주세요.'
-                  );
-                }
-              });
-            }
-          });
-        }
-      },
-    );
   }
 
   /// 바텀 시트 닫기
@@ -184,107 +151,194 @@ class NoteCreationUIManager {
     }
   }
 
-  /// 첫 페이지 준비 대기 (향상된 타임아웃 처리)
-  Future<void> _waitForFirstPageReadyWithTimeout(String noteId) async {
-    if (kDebugMode) {
-      debugPrint('⏳ 첫 페이지 기본 정보 준비 대기: $noteId');
-    }
-
-    final completer = Completer<void>();
-    StreamSubscription? subscription;
-    Timer? timeoutTimer;
-
-    // 10초 후 타임아웃
-    timeoutTimer = Timer(const Duration(seconds: 10), () {
-      if (!completer.isCompleted) {
-        if (kDebugMode) {
-          debugPrint('⚠️ 페이지 준비 대기 타임아웃 - 계속 진행');
-        }
-        subscription?.cancel();
-        completer.complete();
-      }
-    });
-
-    subscription = _firestore
-        .collection('pages')
-        .where('noteId', isEqualTo: noteId)
-        .orderBy('pageNumber')
-        .limit(1)
-        .snapshots()
-        .listen((snapshot) {
-      if (snapshot.docs.isEmpty) return;
-
-      final pageDoc = snapshot.docs.first;
-      final page = page_model.Page.fromFirestore(pageDoc);
-
-      // 이미지가 준비되었는지 확인
-      if (page.imageUrl != null && page.imageUrl!.isNotEmpty) {
-        if (kDebugMode) {
-          debugPrint('✅ 첫 페이지 이미지 준비 완료: ${page.id}');
-        }
-        subscription?.cancel();
-        timeoutTimer?.cancel();
-        if (!completer.isCompleted) {
-          completer.complete();
-        }
-      }
-    }, onError: (error) {
-      if (kDebugMode) {
-        debugPrint('⚠️ 페이지 준비 확인 중 오류: $error');
-      }
-      subscription?.cancel();
-      timeoutTimer?.cancel();
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    });
-
-    await completer.future;
-  }
-
   /// 노트 생성 결과 처리
   Future<void> _handleCreationResult({
     required BuildContext context,
     required bool isSuccess,
-    String? noteId,
+    required String? noteId,
+    required bool loadingDialogShown,
+  }) async {
+    if (isSuccess && noteId != null && context.mounted) {
+      // 성공 시 처리
+      await _handleSuccess(
+        context: context,
+        noteId: noteId,
+        loadingDialogShown: loadingDialogShown,
+      );
+    } else if (context.mounted) {
+      // 실패 시 처리
+      await _handleFailure(
+        context: context,
+        loadingDialogShown: loadingDialogShown,
+      );
+    }
+  }
+
+  /// 성공 시 처리 (타임아웃 처리)
+  Future<void> _handleSuccess({
+    required BuildContext context,
+    required String noteId,
     required bool loadingDialogShown,
   }) async {
     if (kDebugMode) {
-      debugPrint('📱 노트 생성 결과 처리 시작: isSuccess=$isSuccess, noteId=$noteId');
+      debugPrint('🎉 노트 생성 성공: $noteId - 화면 이동 준비');
     }
 
-    // 로딩 다이얼로그가 표시된 경우 닫기
+    // 노트 정보 로드
+    final Note? note = await _loadCompleteNote(noteId);
+    final String userId = _auth.currentUser?.uid ?? '';
+
+    // 임시 Note 객체 생성
+    final tempNote = note ?? Note(
+      id: noteId,
+      userId: userId,
+      title: '새 노트',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      isFavorite: false,
+      flashcardCount: 0,
+    );
+
+    // 로딩 다이얼로그 닫기
     if (loadingDialogShown && context.mounted) {
-      if (kDebugMode) {
-        debugPrint('📱 결과 처리: 로딩 다이얼로그 닫기 시작');
-      }
-      
-      NoteCreationLoader.ensureHidden(context);
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      if (kDebugMode) {
-        debugPrint('📱 결과 처리: 로딩 다이얼로그 닫기 완료');
-      }
+      NoteCreationLoader.hide(context);
+      await Future.delayed(const Duration(milliseconds: 300));
     }
 
-    // 성공한 경우에만 노트 상세 화면으로 이동
-    if (isSuccess && noteId != null && context.mounted) {
+    // 노트 상세 화면으로 이동 (타임아웃 처리)
+    if (context.mounted) {
+      await _navigateToNoteDetailWithTimeout(context, tempNote);
+    }
+  }
+
+  /// 향상된 노트 상세 화면 이동 (타임아웃 처리)
+  Future<void> _navigateToNoteDetailWithTimeout(
+    BuildContext context,
+    Note note,
+  ) async {
+    try {
       if (kDebugMode) {
-        debugPrint('📱 노트 생성 성공 - 상세 화면으로 이동: $noteId');
+        debugPrint('📱 노트 상세 화면으로 이동 시작 (타임아웃 30초)');
       }
+
+      // 네비게이션 타임아웃 매니저 설정
+      _navigationTimeoutManager?.dispose();
+      _navigationTimeoutManager = TimeoutManager();
       
-      await Navigator.pushNamed(
-        context,
-        '/note_detail',
-        arguments: {'noteId': noteId},
+      bool navigationCompleted = false;
+      
+      _navigationTimeoutManager!.start(
+        timeoutSeconds: 30,
+        identifier: 'Navigation',
+        onProgress: (elapsedSeconds) {
+          if (context.mounted && !navigationCompleted) {
+            // 단계별 메시지 업데이트
+            if (_navigationTimeoutManager!.shouldUpdateMessage()) {
+              final message = _navigationTimeoutManager!.getCurrentMessage(
+                '노트 페이지로 이동하고 있어요...'
+              );
+              NoteCreationLoader.updateMessage(message);
+            }
+          }
+        },
+        onTimeout: () {
+          if (context.mounted && !navigationCompleted) {
+            if (kDebugMode) {
+              debugPrint('⏰ 노트 상세 화면 이동 타임아웃');
+            }
+            
+            NoteCreationLoader.hide(context);
+            ErrorHandler.showErrorSnackBar(
+              context,
+              '문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.'
+            );
+          }
+        },
       );
-    } else if (!isSuccess) {
-      // 실패한 경우 로그만 출력 (에러는 이미 catch 블록에서 처리됨)
+
+      // 안전 장치: 로딩 다이얼로그 완전히 닫기
+      NoteCreationLoader.ensureHidden(context);
+
+      // 튜토리얼 설정 - 첫 번째 노트 생성 시 튜토리얼 표시 준비
+      NoteTutorial.markFirstNoteCreated();
+
+      // 화면 이동
+      Navigator.of(context).push(
+        NoteDetailScreenMVVM.route(
+          note: note,
+          isProcessingBackground: true,
+        ),
+             ).then((result) async {
+         // 화면에서 돌아왔을 때의 처리
+         if (kDebugMode) {
+           debugPrint('✅ 노트 상세 화면에서 돌아옴');
+         }
+         // 홈 화면은 자동으로 새로고침되므로 별도 처리 불필요
+       });
+      
+      // 화면 이동이 시작되면 즉시 네비게이션 완료 처리
+      navigationCompleted = true;
+      _navigationTimeoutManager?.complete();
+      
       if (kDebugMode) {
-        debugPrint('❌ 노트 생성 실패 - 상세 화면 이동하지 않음');
+        debugPrint('✅ 노트 상세 화면 네비게이션 시작 완료');
+      }
+    } catch (e) {
+      _navigationTimeoutManager?.dispose();
+      
+      if (kDebugMode) {
+        debugPrint('❌ 노트 상세 화면 이동 실패: $e');
+      }
+
+      if (context.mounted) {
+        ErrorHandler.showErrorSnackBar(context, e);
       }
     }
   }
+
+  /// 실패 시 처리
+  Future<void> _handleFailure({
+    required BuildContext context,
+    required bool loadingDialogShown,
+  }) async {
+    // 로딩 다이얼로그 닫기
+    if (loadingDialogShown && context.mounted) {
+      NoteCreationLoader.hide(context);
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+
+    // 에러 메시지 표시
+    if (context.mounted) {
+      ErrorHandler.showErrorSnackBar(
+        context,
+        '노트 생성에 실패했습니다. 다시 시도해주세요.'
+      );
+    }
+
+    if (kDebugMode) {
+      debugPrint('💀 노트 생성 실패 처리 완료');
+    }
+  }
+
+  /// 완전한 노트 정보 로드
+  Future<Note?> _loadCompleteNote(String noteId) async {
+    try {
+      final docSnapshot = await _firestore
+          .collection('notes')
+          .doc(noteId)
+          .get();
+
+      if (!docSnapshot.exists) return null;
+
+      return Note.fromFirestore(docSnapshot);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 노트 정보 로드 실패: $e');
+      }
+      return null;
+    }
+  }
+
 
   /// 앱 시작시 미완료 작업 복구
   Future<void> initializeOnAppStart() async {
