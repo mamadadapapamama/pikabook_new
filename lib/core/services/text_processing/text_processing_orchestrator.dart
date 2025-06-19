@@ -183,7 +183,7 @@ class TextProcessingOrchestrator {
       debugPrint('🔍 1단계: OCR 텍스트 추출 시작');
     }
 
-    final rawText = await _ocrService.extractText(imageFile, skipUsageCount: false);
+    final rawText = await _ocrService.extractText(imageFile, skipUsageCount: true);
 
     if (kDebugMode) {
       debugPrint('✅ OCR 완료: ${rawText.length}자');
