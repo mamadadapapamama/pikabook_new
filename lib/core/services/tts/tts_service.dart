@@ -460,6 +460,14 @@ class TTSService {
         debugPrint("🎵 TTSService: 재생 완료");
         _ttsState = TtsState.stopped;
         _isSpeaking = false;
+        
+        // 재생 완료 콜백 호출
+        if (_onPlayingCompleted != null) {
+          _onPlayingCompleted!();
+        }
+        
+        // 현재 세그먼트 초기화
+        _updateCurrentSegment(null);
       }
     });
   }

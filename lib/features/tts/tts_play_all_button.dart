@@ -36,21 +36,13 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
   }
 
   void _setupListeners() {
-    // TTS 상태 변경 리스너
-    _ttsService.setOnPlayingStateChanged((segmentIndex) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = _ttsService.state == TtsState.playing;
-        });
-      }
-    });
-
-    // TTS 재생 완료 리스너
+    // TTS 재생 완료 리스너만 사용 (상태 변경 리스너는 제거)
     _ttsService.setOnPlayingCompleted(() {
       if (mounted) {
         setState(() {
           _isPlaying = false;
         });
+        debugPrint('🎵 TtsPlayAllButton: 재생 완료로 상태 리셋');
       }
     });
   }
@@ -86,6 +78,7 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
       setState(() {
         _isPlaying = true;
       });
+      debugPrint('🎵 TtsPlayAllButton: 재생 시작 상태로 변경');
       
       if (widget.onPlayStart != null) {
         widget.onPlayStart!();
@@ -93,13 +86,7 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
       
       try {
         await _ttsService.speak(widget.text);
-        
-        // 재생 완료 후 상태 업데이트
-        if (mounted) {
-          setState(() {
-            _isPlaying = false;
-          });
-        }
+        // 재생 완료는 콜백에서 처리하므로 여기서는 상태 업데이트 제거
       } catch (e) {
         debugPrint('전체 TTS 재생 중 오류: $e');
         if (mounted) {
