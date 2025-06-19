@@ -79,8 +79,6 @@ class SampleTtsService {
     try {
       if (kDebugMode) {
         debugPrint('🎵 [SampleTTS] assets 오디오 재생: $assetPath');
-        // 실제 경로 값 출력
-        debugPrint('🎵 [SampleTTS] assetPath: $assetPath');
       }
       
       // 기존 재생 완전 정리
@@ -89,28 +87,20 @@ class SampleTtsService {
       // 새 플레이어 생성 및 초기화
       _samplePlayer = AudioPlayer();
       
-      // 플레이어 상태 리스너 설정
-      _samplePlayer!.playerStateStream.listen((state) {
-        if (kDebugMode) {
-          debugPrint('🎵 [SampleTTS] 플레이어 상태: [33m${state.processingState}[0m');
-        }
-      });
-      
-      // assets 파일 설정
+      // assets 파일 설정 (assets/ 접두사 제거)
       final cleanPath = assetPath.replaceFirst('assets/', '');
       if (kDebugMode) {
         debugPrint('🎵 [SampleTTS] cleanPath: $cleanPath');
       }
-      await _samplePlayer!.setAsset(assetPath);
+      
+      // 올바른 경로로 assets 파일 설정
+      await _samplePlayer!.setAsset(cleanPath);
       
       if (kDebugMode) {
         debugPrint('🎧 [SampleTTS] assets 파일 설정 완료: $cleanPath');
       }
       
-      // 짧은 지연 후 재생 (플레이어 초기화 대기)
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      // 재생 시작
+      // 재생 시작 (지연 제거)
       await _samplePlayer!.play();
       
       if (kDebugMode) {
