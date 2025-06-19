@@ -13,6 +13,10 @@ import '../managers/note_options_manager.dart';
 import '../services/note_service.dart';
 import '../../../core/services/text_processing/text_processing_service.dart';
 import '../../sample/sample_data_service.dart';
+import '../../flashcard/flashcard_service.dart' hide debugPrint;
+import '../../../core/models/flash_card.dart';
+import '../../../core/services/tts/tts_service.dart';
+import '../../sample/sample_tts_service.dart';
 
 /// 노트 상세 화면 ViewModel - 핵심 기능만 관리
 class NoteDetailViewModel extends ChangeNotifier {
@@ -21,6 +25,11 @@ class NoteDetailViewModel extends ChangeNotifier {
   final TextProcessingService _textProcessingService = TextProcessingService();
   final NoteOptionsManager noteOptionsManager = NoteOptionsManager();
   final SampleDataService _sampleDataService = SampleDataService();
+  
+  // 추가된 서비스들
+  late FlashCardService _flashCardService;
+  late TTSService _ttsService;
+  late SampleTtsService _sampleTtsService;
   
   // PageService 접근
   PageService get _pageService => _noteService.pageService;
@@ -42,7 +51,11 @@ class NoteDetailViewModel extends ChangeNotifier {
   final Map<String, ProcessedText> _processedTexts = {};
   final Map<String, bool> _textLoadingStates = {};
   final Map<String, String?> _textErrors = {};
+  // TODO: ProcessedText의 StreamingStatus로 통합 예정
   final Map<String, ProcessingStatus> _pageStatuses = {};
+  
+  // 플래시카드 상태
+  List<FlashCard> _flashcards = [];
   
   // PageController
   final PageController pageController = PageController();
@@ -64,6 +77,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   Note? get note => _note;
   int get currentPageIndex => _currentPageIndex;
   bool get isProcessingBackground => _isProcessingBackground;
+  List<FlashCard> get flashcards => _flashcards;
   
   // 현재 페이지 (실제 로드된 페이지만 반환, 아직 로드되지 않은 페이지는 null)
   page_model.Page? get currentPage {
@@ -99,19 +113,19 @@ class NoteDetailViewModel extends ChangeNotifier {
   // 현재 노트가 세그먼트 모드인지 확인
   bool get isCurrentNoteSegmentMode => currentNoteMode == TextProcessingMode.segment;
 
-  // 페이지별 처리 상태 배열 생성 (totalPages 크기에 맞춤)
+  // 페이지별 처리 상태 배열 생성 (ProcessedText의 스트리밍 상태 활용)
   List<bool> get processedPages {
     final total = totalPages;
     final result = <bool>[];
     
     for (int i = 0; i < total; i++) {
       if (i < (_pages?.length ?? 0)) {
-        // 실제 로드된 페이지
+        // 실제 로드된 페이지 - ProcessedText의 스트리밍 상태 확인
         final page = _pages![i];
-        final status = _pageStatuses[page.id] ?? ProcessingStatus.created;
-        result.add(status == ProcessingStatus.completed);
+        final processedText = _processedTexts[page.id];
+        result.add(processedText?.isCompleted ?? false);
       } else {
-        // 아직 로드되지 않은 페이지 (처리 중으로 간주)
+        // 아직 로드되지 않은 페이지
         result.add(false);
       }
     }
@@ -119,18 +133,18 @@ class NoteDetailViewModel extends ChangeNotifier {
     return result;
   }
   
-  // 페이지별 처리 중 상태 배열 생성 (totalPages 크기에 맞춤)
+  // 페이지별 처리 중 상태 배열 생성 (ProcessedText의 스트리밍 상태 활용)
   List<bool> get processingPages {
     final total = totalPages;
     final result = <bool>[];
     
     for (int i = 0; i < total; i++) {
       if (i < (_pages?.length ?? 0)) {
-        // 실제 로드된 페이지
+        // 실제 로드된 페이지 - ProcessedText의 스트리밍 상태 확인
         final page = _pages![i];
-        final status = _pageStatuses[page.id] ?? ProcessingStatus.created;
+        final processedText = _processedTexts[page.id];
         final isLoading = _textLoadingStates[page.id] ?? false;
-        result.add(status.isProcessing || isLoading);
+        result.add(processedText?.isStreaming == true || isLoading);
       } else {
         // 아직 로드되지 않은 페이지 (처리 중으로 간주)
         result.add(true);
@@ -150,11 +164,64 @@ class NoteDetailViewModel extends ChangeNotifier {
     
     // 초기 데이터 로드
     Future.microtask(() async {
+      // 서비스 초기화
+      await _initializeServices();
+      
       if (initialNote == null && noteId.isNotEmpty) {
         await _loadNoteInfo();
       }
       await loadInitialPages();
+      
+      // 플래시카드 로드
+      await loadFlashcards();
     });
+  }
+
+  /// 서비스 초기화
+  Future<void> _initializeServices() async {
+    try {
+      _flashCardService = FlashCardService();
+      _ttsService = TTSService();
+      _sampleTtsService = SampleTtsService();
+      
+      if (!_isSampleMode) {
+        await _ttsService.init();
+      }
+      
+      if (kDebugMode) {
+        print('TTS 서비스 초기화 완료 (샘플 모드: $_isSampleMode)');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('서비스 초기화 중 오류: $e');
+      }
+    }
+  }
+
+  /// 플래시카드 로드
+  Future<void> loadFlashcards() async {
+    try {
+      List<FlashCard> cards;
+      
+      if (_isSampleMode) {
+        // 샘플 모드: SampleDataService 사용
+        await _sampleDataService.loadSampleData();
+        cards = _sampleDataService.getSampleFlashCards(_noteId);
+        if (kDebugMode) {
+          print('🃏 샘플 플래시카드 로드됨: ${cards.length}개');
+        }
+      } else {
+        // 일반 모드: FlashCardService 사용
+        cards = await _flashCardService.getFlashCardsForNote(_noteId);
+      }
+      
+      _flashcards = cards;
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) {
+        print('플래시카드 로드 실패: $e');
+      }
+    }
   }
 
   /// 노트 정보 로드
@@ -232,8 +299,6 @@ class NoteDetailViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
-
-
 
   /// 모든 페이지 리스너 설정
   void _setupAllPageListeners() {
@@ -492,32 +557,7 @@ class NoteDetailViewModel extends ChangeNotifier {
     };
   }
 
-  /// 노트 제목 업데이트
-  Future<bool> updateNoteTitle(String newTitle) async {
-    if (_note == null) return false;
-    
-    final success = await noteOptionsManager.updateNoteTitle(_note!.id, newTitle);
-    
-    if (success && _note != null) {
-      notifyListeners();
-    }
-    
-    return success;
-  }
 
-  /// 노트 삭제
-  Future<bool> deleteNote(BuildContext context) async {
-    if (_note == null) return false;
-    
-    final String id = _note!.id;
-    if (id.isEmpty) return false;
-    
-    try {
-      return await noteOptionsManager.deleteNote(context, id);
-    } catch (e) {
-      return false;
-    }
-  }
 
   /// 페이지 에러 상태 초기화
   void clearPageError(String pageId) {
@@ -527,6 +567,74 @@ class NoteDetailViewModel extends ChangeNotifier {
     _textLoadingStates[pageId] = false;
     
     if (!_disposed) notifyListeners();
+  }
+
+  /// TTS 재생 처리 (개별 세그먼트)
+  Future<void> playTts(String text, BuildContext? context, {int? segmentIndex}) async {
+    if (kDebugMode) {
+      print('TTS 재생 상태 업데이트: $text (세그먼트: $segmentIndex)');
+    }
+    
+    if (_isSampleMode) {
+      // 샘플 모드: SampleTtsService 사용
+      await _sampleTtsService.speak(text, context: context);
+    } else {
+      // 일반 모드: TTSService 사용
+      await _ttsService.speak(text);
+    }
+  }
+  
+  /// 바텀바 TTS 재생 처리 (전체 텍스트)
+  Future<void> playBottomBarTts(String ttsText, BuildContext? context) async {
+    if (ttsText.isEmpty) return;
+    
+    if (_isSampleMode) {
+      // 샘플 모드: SampleTtsService 사용
+      if (_sampleTtsService.isPlaying) {
+        await _sampleTtsService.stop();
+      } else {
+        await _sampleTtsService.speak(ttsText, context: context);
+      }
+    } else {
+      // 일반 모드: TTSService 사용
+      if (_ttsService.state == TtsState.playing) {
+        await _ttsService.stop();
+      } else {
+        await _ttsService.speak(ttsText);
+      }
+    }
+  }
+  
+  /// 플래시카드 생성 처리
+  Future<bool> createFlashCard(String front, String back, {String? pinyin}) async {
+    try {
+      final newFlashCard = await _flashCardService.createFlashCard(
+        front: front,
+        back: back,
+        noteId: _noteId,
+        pinyin: pinyin,
+      );
+      
+      _flashcards.add(newFlashCard);
+      notifyListeners();
+      
+      if (kDebugMode) {
+        print("✅ 새 플래시카드 추가 완료: ${newFlashCard.front}");
+      }
+      
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print("❌ 플래시카드 생성 중 오류: $e");
+      }
+      return false;
+    }
+  }
+  
+  /// 플래시카드 목록 업데이트 (다른 화면에서 돌아올 때)
+  void updateFlashcards(List<FlashCard> flashcards) {
+    _flashcards = flashcards;
+    notifyListeners();
   }
 
   /// 리소스 정리

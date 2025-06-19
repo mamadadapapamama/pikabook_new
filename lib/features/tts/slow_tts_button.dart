@@ -225,33 +225,21 @@ class _SlowTtsButtonState extends State<SlowTtsButton> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text("샘플 모드에서는 일부 오디오파일만 지원됩니다. 로그인해서 듣기 기능을 사용해보세요."),
-          backgroundColor: Colors.orange[600],
+          backgroundColor: ColorTokens.snackbarBg, // dark green 색상으로 변경
           duration: const Duration(seconds: 4),
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
     
-    debugPrint('🐢 샘플 모드에서 느린 TTS 기능 제한됨');
   }
   
-  /// 프리미엄 구독 모달 표시
-  void _showPremiumModal() {
-    UpgradeModal.show(
-      context,
-      customMessage: '느린 TTS 기능은 프리미엄 전용입니다.\n구독하시면 모든 기능을 사용할 수 있습니다.',
-      onUpgrade: () {
-        // 구독 화면으로 이동 등 처리
-        debugPrint('프리미엄 구독 선택');
-      },
-    );
-  }
   
   @override
   Widget build(BuildContext context) {
     // 아이콘 색상 - 활성화 상태에 따라 다르게 설정
     final Color iconColor = widget.isEnabled 
-        ? widget.iconColor ?? ColorTokens.textSecondary 
+        ? widget.iconColor ?? ColorTokens.snackbarBg 
         : ColorTokens.textGrey.withOpacity(0.5); // 비활성화 시 연한 회색
     
     // 배경색 설정

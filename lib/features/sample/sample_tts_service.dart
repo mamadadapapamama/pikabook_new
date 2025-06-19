@@ -1,12 +1,11 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../core/services/authentication/auth_service.dart';
-import '../../core/utils/error_handler.dart';
+import '../../core/theme/tokens/color_tokens.dart';
 
 /// 샘플 TTS 예외 클래스
 class SampleTtsException implements Exception {
@@ -24,19 +23,24 @@ class SampleTtsService {
   factory SampleTtsService() => _instance;
   SampleTtsService._internal();
 
-  final AudioPlayer _audioPlayer = AudioPlayer();
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final AuthService _authService = AuthService();
+  AudioPlayer? _samplePlayer; // 샘플 전용 플레이어
   
-  // 로컬 assets에 있는 샘플 음성 파일들
-  static const Map<String, String> _localAssets = {
-    // 플래시카드 단어들 (실제 파일과 매칭)
+  // 샘플 모드에서 지원하는 오디오 파일들 (하드코딩)
+  static const Map<String, String> _sampleAudioAssets = {
+    // 플래시카드 단어들
     '老师': 'assets/audio/sample/laoshi.mp3',
     '黑板': 'assets/audio/sample/heiban.mp3',
     
-    // 샘플 문장들 (첫 두 문장)
+    // 문장 세그먼트들 (샘플 데이터 순서대로)
     '我们早上八点去学校。': 'assets/audio/sample/sentence_1.mp3',
     '教室里有很多桌子和椅子。': 'assets/audio/sample/sentence_2.mp3',
+    '老师在黑板上写字。': 'assets/audio/sample/xuexiao.mp3', // xuexiao.mp3를 이 문장에 할당
+    
+    // 나머지 문장들은 오디오 파일이 없으므로 스낵바 표시
+    // '下课后，我们去操场玩。' - 오디오 없음
+    // '我喜欢我的学校。' - 오디오 없음
   };
 
   /// 텍스트 음성 재생
@@ -46,13 +50,19 @@ class SampleTtsService {
         debugPrint('🔊 [SampleTTS] 음성 재생 요청: "$text"');
       }
 
-      // 1. 로컬 assets 확인
-      if (_localAssets.containsKey(text)) {
-        await _playFromAssets(_localAssets[text]!);
+      // 1. 샘플 오디오 assets 확인
+      if (_sampleAudioAssets.containsKey(text)) {
+        if (kDebugMode) {
+          debugPrint('✅ [SampleTTS] 매핑된 오디오 파일 발견: ${_sampleAudioAssets[text]}');
+        }
+        await _playFromAssets(_sampleAudioAssets[text]!);
         return;
       }
 
       // 2. 샘플 모드에서 지원하지 않는 오디오 파일인 경우 스낵바 표시
+      if (kDebugMode) {
+        debugPrint('⚠️ [SampleTTS] 지원하지 않는 텍스트: "$text"');
+      }
       if (context != null) {
         _showSampleLimitationSnackBar(context);
       }
@@ -60,32 +70,55 @@ class SampleTtsService {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [SampleTTS] 음성 재생 실패: $e');
+        debugPrint('   실패한 텍스트: "$text"');
+        debugPrint('   매핑 상태: ${_sampleAudioAssets.containsKey(text) ? "매핑됨" : "매핑 안됨"}');
       }
       
-      // assets 파일이 없을 때도 스낵바 표시
+      // 실제 오디오 재생 실패인 경우에만 스낵바 표시
       if (context != null) {
         _showSampleLimitationSnackBar(context);
       }
     }
   }
 
-  /// 로컬 assets에서 음성 재생
+  /// assets에서 음성 재생 (샘플 전용 플레이어 사용)
   Future<void> _playFromAssets(String assetPath) async {
     try {
       if (kDebugMode) {
-        debugPrint('🎵 [SampleTTS] 로컬 assets 재생: $assetPath');
+        debugPrint('🎵 [SampleTTS] assets 오디오 재생: $assetPath');
       }
       
-      await _audioPlayer.setAsset(assetPath.replaceFirst('assets/', ''));
-      await _audioPlayer.play();
+      // 기존 재생 중지
+      if (_samplePlayer != null) {
+        try {
+          await _samplePlayer!.stop();
+          await _samplePlayer!.dispose();
+        } catch (e) {
+          // 무시
+        }
+      }
+      
+      // 새 플레이어 생성
+      _samplePlayer = AudioPlayer();
+      
+      // assets 파일 직접 재생
+      final cleanPath = assetPath.replaceFirst('assets/', '');
+      await _samplePlayer!.setAsset(cleanPath);
+      await _samplePlayer!.play();
+      
+      if (kDebugMode) {
+        debugPrint('✅ [SampleTTS] 오디오 재생 시작됨: $cleanPath');
+      }
       
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [SampleTTS] 로컬 assets 재생 실패: $e');
+        debugPrint('❌ [SampleTTS] assets 오디오 재생 실패: $e');
       }
       rethrow;
     }
   }
+  
+
 
   /// 샘플 모드 제한 안내 스낵바 표시
   void _showSampleLimitationSnackBar(BuildContext context) {
@@ -94,26 +127,23 @@ class SampleTtsService {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text("샘플 모드에서는 일부 오디오파일만 지원됩니다. 로그인해서 듣기 기능을 사용해보세요."),
-        backgroundColor: Colors.orange[600],
+        backgroundColor: ColorTokens.snackbarBg, // dark green 색상으로 변경
         duration: const Duration(seconds: 4),
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  /// 중국어 텍스트를 안전한 파일명으로 변환
-  String _generateFileName(String text) {
-    // 간단한 해시 기반 파일명 생성
-    // 실제로는 더 정교한 방식 사용 (예: 텍스트의 MD5 해시)
-    return text.hashCode.abs().toString();
-  }
+
 
   /// 음성 재생 중지
   Future<void> stop() async {
     try {
-      await _audioPlayer.stop();
-      if (kDebugMode) {
-        debugPrint('⏹️ [SampleTTS] 음성 재생 중지');
+      if (_samplePlayer != null && _samplePlayer!.playing) {
+        await _samplePlayer!.stop();
+        if (kDebugMode) {
+          debugPrint('⏹️ [SampleTTS] 음성 재생 중지');
+        }
       }
     } catch (e) {
       if (kDebugMode) {
@@ -123,11 +153,24 @@ class SampleTtsService {
   }
 
   /// 현재 재생 상태 확인
-  bool get isPlaying => _audioPlayer.playing;
+  bool get isPlaying => _samplePlayer?.playing ?? false;
 
   /// 리소스 정리
-  void dispose() {
-    _audioPlayer.dispose();
+  Future<void> dispose() async {
+    try {
+      if (_samplePlayer != null) {
+        await _samplePlayer!.stop();
+        await _samplePlayer!.dispose();
+        _samplePlayer = null;
+      }
+      if (kDebugMode) {
+        debugPrint('🧹 [SampleTTS] dispose 완료');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [SampleTTS] dispose 실패: $e');
+      }
+    }
   }
 
   /// 캐시 정리
@@ -149,13 +192,15 @@ class SampleTtsService {
     }
   }
 
-  /// 로컬 assets에 있는 텍스트인지 확인
-  bool hasLocalAsset(String text) {
-    return _localAssets.containsKey(text);
+  /// 샘플 오디오가 있는 텍스트인지 확인
+  bool hasSampleAudio(String text) {
+    return _sampleAudioAssets.containsKey(text);
   }
 
-  /// 사용 가능한 로컬 텍스트 목록
-  List<String> getLocalTexts() {
-    return _localAssets.keys.toList();
+  /// 사용 가능한 샘플 텍스트 목록
+  List<String> getSampleTexts() {
+    return _sampleAudioAssets.keys.toList();
   }
+  
+ 
 } 

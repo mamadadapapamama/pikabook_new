@@ -1,26 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/page.dart' as page_model;
 import '../../../core/theme/tokens/typography_tokens.dart';
-import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/ui_tokens.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
-import '../../../core/widgets/pika_button.dart';
 import '../../../core/widgets/pika_app_bar.dart';
 import '../view_model/note_detail_viewmodel.dart';
-import '../../flashcard/flashcard_view_model.dart';
 import '../../flashcard/flashcard_screen.dart';
 import 'note_detail_bottom_bar.dart';
 import 'note_page_widget.dart';
-import '../../../core/services/tts/tts_service.dart';
 import '../../../core/utils/note_tutorial.dart';
-import '../../flashcard/flashcard_service.dart';
-import '../../../core/services/authentication/user_preferences_service.dart';
 import '../../../core/models/flash_card.dart';
-import '../../sample/sample_data_service.dart';
 
 /// MVVM 패턴을 적용한 노트 상세 화면
 class NoteDetailScreenMVVM extends StatefulWidget {
@@ -61,18 +53,9 @@ class NoteDetailScreenMVVM extends StatefulWidget {
 }
 
 class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
-  late FlashCardService _flashCardService;
-  late TTSService _ttsService;
-  late SampleDataService _sampleDataService;
-  List<FlashCard> _flashcards = [];
-
-  // 샘플 모드 여부 확인
-  bool get _isSampleMode => FirebaseAuth.instance.currentUser == null && widget.noteId == 'sample_note_1';
-  
   @override
   void initState() {
     super.initState();
-    _initializeServices();
     
     // 화면 렌더링 완료 후 튜토리얼 체크
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -82,53 +65,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       }
       
       NoteTutorial.checkAndShowTutorial(context);
-      
-      // 플래시카드 로드
-      await _loadFlashcards();
     });
-  }
-  
-  /// 서비스 초기화
-  Future<void> _initializeServices() async {
-    try {
-      _flashCardService = FlashCardService();
-      _ttsService = TTSService();
-      _sampleDataService = SampleDataService();
-      await _ttsService.init();
-    } catch (e) {
-      if (kDebugMode) {
-        print('서비스 초기화 중 오류: $e');
-      }
-    }
-  }
-  
-
-  
-  /// 플래시카드 로드
-  Future<void> _loadFlashcards() async {
-    try {
-      List<FlashCard> cards;
-      
-      if (_isSampleMode) {
-        // 샘플 모드: SampleDataService 사용
-        await _sampleDataService.loadSampleData();
-        cards = _sampleDataService.getSampleFlashCards(widget.noteId);
-        if (kDebugMode) {
-          print('🃏 샘플 플래시카드 로드됨: ${cards.length}개');
-        }
-      } else {
-        // 일반 모드: FlashCardService 사용
-        cards = await _flashCardService.getFlashCardsForNote(widget.noteId);
-      }
-      
-      setState(() {
-        _flashcards = cards;
-      });
-    } catch (e) {
-      if (kDebugMode) {
-        print('플래시카드 로드 실패: $e');
-      }
-    }
   }
   
   @override
@@ -152,7 +89,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       title: viewModel.note?.title ?? '노트 로딩 중...',
       currentPage: currentPageNum,
       totalPages: totalPages,
-      flashcardCount: _flashcards.length, // 로컬 상태 사용
+      flashcardCount: viewModel.flashcards.length,
       onMorePressed: () => _showMoreOptions(context, viewModel),
       onFlashcardTap: () => _navigateToFlashcards(context, viewModel),
       onBackPressed: () => Navigator.of(context).pop({'needsRefresh': false}),
@@ -222,8 +159,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         noteId: viewModel.noteId,
         onCreateFlashCard: (front, back, {pinyin}) => 
             _handleCreateFlashCard(context, viewModel, front, back, pinyin: pinyin),
-        flashCards: _flashcards,
-        onPlayTts: (text, {segmentIndex}) => _handlePlayTts(text, segmentIndex: segmentIndex),
+        flashCards: viewModel.flashcards,
+        onPlayTts: (text, {segmentIndex}) => _handlePlayTts(context, viewModel, text, segmentIndex: segmentIndex),
       ),
     );
   }
@@ -250,11 +187,14 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     );
   }
   
-  // TTS 재생 처리
-  Future<void> _handlePlayTts(String text, {int? segmentIndex}) async {
-    if (kDebugMode) {
-      print('TTS 재생 상태 업데이트: $text (세그먼트: $segmentIndex)');
-    }
+  // TTS 재생 처리 (ViewModel 호출)
+  Future<void> _handlePlayTts(BuildContext context, NoteDetailViewModel viewModel, String text, {int? segmentIndex}) async {
+    await viewModel.playTts(text, context, segmentIndex: segmentIndex);
+  }
+  
+  // 바텀바 TTS 재생 처리 (ViewModel 호출)
+  Future<void> _handleBottomBarTts(BuildContext context, NoteDetailViewModel viewModel, String ttsText) async {
+    await viewModel.playBottomBarTts(ttsText, context);
   }
   
   // 더보기 옵션 표시
@@ -275,7 +215,7 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     );
   }
   
-  // 플래시카드 생성 처리
+  // 플래시카드 생성 처리 (ViewModel 호출)
   void _handleCreateFlashCard(
     BuildContext context, 
     NoteDetailViewModel viewModel,
@@ -283,35 +223,16 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     String back, 
     {String? pinyin}
   ) async {
-    try {
-      final newFlashCard = await _flashCardService.createFlashCard(
-        front: front,
-        back: back,
-        noteId: viewModel.noteId,
-        pinyin: pinyin,
-      );
-      
-      if (context.mounted) {
+    final success = await viewModel.createFlashCard(front, back, pinyin: pinyin);
+    
+    if (context.mounted) {
+      if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('플래시카드가 추가되었습니다')),
         );
-        
-        setState(() {
-          _flashcards.add(newFlashCard);
-        });
-        
-        if (kDebugMode) {
-          print("✅ 새 플래시카드 추가 완료: ${newFlashCard.front}");
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print("❌ 플래시카드 생성 중 오류: $e");
-      }
-      
-      if (context.mounted) {
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('플래시카드 추가 중 오류가 발생했습니다: $e')),
+          const SnackBar(content: Text('플래시카드 추가 중 오류가 발생했습니다')),
         );
       }
     }
@@ -348,9 +269,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
         
         flashcards = flashcards.where((card) => card.front.isNotEmpty).toList();
         
-        setState(() {
-          _flashcards = flashcards;
-        });
+        // ViewModel 업데이트
+        viewModel.updateFlashcards(flashcards);
       }
     }
   }
@@ -379,17 +299,11 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
       isProcessing: false,
       progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),
       onTtsPlay: isNoteSegmentMode ? () {
-        if (_ttsService.state == TtsState.playing) {
-          _ttsService.stop();
-        } else {
-          if (ttsText.isNotEmpty) {
-            _ttsService.speak(ttsText);
-          }
-        }
+        _handleBottomBarTts(context, viewModel, ttsText);
       } : null,
       useSegmentMode: isNoteSegmentMode,
-      processedPages: [], // 간소화된 ViewModel에서는 빈 리스트
-      processingPages: [], // 간소화된 ViewModel에서는 빈 리스트
+      processedPages: viewModel.processedPages,
+      processingPages: viewModel.processingPages,
     );
   }
 } 

@@ -252,6 +252,27 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
   }
 
   Widget _buildImageWidget(String imageUrl) {
+    // assets 경로인 경우 (assets/로 시작) - 샘플 모드
+    if (imageUrl.startsWith('assets/')) {
+      return Image.asset(
+        imageUrl,
+        fit: BoxFit.cover,
+        width: 80,
+        height: 80,
+        errorBuilder: (context, error, stackTrace) {
+          if (kDebugMode) {
+            debugPrint('Assets 이미지 로드 오류 ($imageUrl): $error');
+          }
+          return Image.asset(
+            'assets/images/thumbnail_empty.png',
+            fit: BoxFit.cover,
+            width: 80,
+            height: 80,
+          );
+        },
+      );
+    }
+    
     // 상대 경로인 경우 (images/로 시작)
     if (imageUrl.startsWith('images/')) {
       return FutureBuilder<File?>(

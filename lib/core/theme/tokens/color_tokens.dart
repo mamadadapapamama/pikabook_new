@@ -17,6 +17,8 @@ class ColorTokens {
   // 중립 컬러
   static const Color background = Color(0xFFFFF9F1); // 배경색
   static const Color surface = Color(0xFFFFFFFF); // 카드, 요소 배경색
+  static const Color snackbarBg = Color(0xFF0E2823); // 카드, 요소 배경색
+
   
   // 텍스트 컬러
   static const Color textPrimary = Color(0xFF0E2823); // 주요 텍스트 색상
