@@ -17,6 +17,7 @@ import '../../flashcard/flashcard_service.dart' hide debugPrint;
 import '../../../core/models/flash_card.dart';
 import '../../../core/services/tts/tts_service.dart';
 import '../../sample/sample_tts_service.dart';
+import '../services/dynamic_page_loader_service.dart';
 
 /// 노트 상세 화면 ViewModel - 핵심 기능만 관리
 class NoteDetailViewModel extends ChangeNotifier {
@@ -68,6 +69,9 @@ class NoteDetailViewModel extends ChangeNotifier {
   
   // 샘플 모드 여부 확인
   bool get _isSampleMode => FirebaseAuth.instance.currentUser == null && _noteId == 'sample_note_1';
+  
+  // 동적 페이지 로더 서비스
+  DynamicPageLoaderService? _dynamicPageLoaderService;
   
   // === Getters ===
   String get noteId => _noteId;
@@ -172,6 +176,14 @@ class NoteDetailViewModel extends ChangeNotifier {
       }
       await loadInitialPages();
       
+      // 동적 페이지 로더 서비스 시작 (샘플 모드 제외)
+      if (!_isSampleMode) {
+        _dynamicPageLoaderService = DynamicPageLoaderService(
+          noteId: _noteId,
+          onNewOrUpdatedPage: _onNewOrUpdatedPage,
+        );
+        await _dynamicPageLoaderService!.start();
+      }
       // 플래시카드 로드
       await loadFlashcards();
     });
@@ -300,18 +312,48 @@ class NoteDetailViewModel extends ChangeNotifier {
     }
   }
 
-  /// 모든 페이지 리스너 설정
-  void _setupAllPageListeners() {
-    if (_disposed || _pages == null) return;
-    
-    // 모든 페이지의 초기 상태를 배치로 로드 (UI 리빌드 최소화)
-    _loadAllPagesInitialStatus();
-    
-    for (final page in _pages!) {
-      if (page.id.isNotEmpty) {
-        _setupPageListener(page.id);
+  /// 동적으로 새로운 페이지가 감지되거나 변경될 때 호출되는 콜백
+  void _onNewOrUpdatedPage(page_model.Page page) {
+    if (_disposed) return;
+    final exists = _pages?.any((p) => p.id == page.id) ?? false;
+    if (!exists) {
+      // 새 페이지 추가
+      final updatedPages = List<page_model.Page>.from(_pages ?? []);
+      updatedPages.add(page);
+      updatedPages.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+      _pages = updatedPages;
+      if (kDebugMode) {
+        debugPrint('✅ [동적 로드] 페이지 목록 업데이트: \\${_pages!.length}개 페이지');
+      }
+      notifyListeners();
+    } else {
+      // 기존 페이지 정보 갱신
+      final updatedPages = List<page_model.Page>.from(_pages ?? []);
+      final idx = updatedPages.indexWhere((p) => p.id == page.id);
+      if (idx != -1) {
+        updatedPages[idx] = page;
+        _pages = updatedPages;
+        notifyListeners();
       }
     }
+  }
+
+  /// 모든 페이지 리스너 설정
+  void _setupAllPageListeners() {
+    if (_disposed) return;
+    // 모든 페이지의 초기 상태를 배치로 로드 (UI 리빌드 최소화)
+    _loadAllPagesInitialStatus();
+    if (_isSampleMode) {
+      // 샘플 모드: 로드된 페이지에만 리스너 설정
+      if (_pages != null) {
+        for (final page in _pages!) {
+          if (page.id.isNotEmpty) {
+            _setupPageListener(page.id);
+          }
+        }
+      }
+    }
+    // 일반 모드에서는 동적 페이지 로더 서비스가 리스너 관리
   }
 
   /// 모든 페이지 초기 상태 배치 로드 (UI 리빌드 최소화)
@@ -557,8 +599,6 @@ class NoteDetailViewModel extends ChangeNotifier {
     };
   }
 
-
-
   /// 페이지 에러 상태 초기화
   void clearPageError(String pageId) {
     if (_disposed) return;
@@ -653,6 +693,9 @@ class NoteDetailViewModel extends ChangeNotifier {
       listener.cancel();
     }
     _pageListeners.clear();
+    
+    // 동적 페이지 로더 서비스 정리
+    _dynamicPageLoaderService?.dispose();
     
     // TextProcessingService 리스너 정리
     _textProcessingService.cancelAllListeners();

@@ -30,7 +30,7 @@ class PageNavigationButton extends StatelessWidget {
     } else if (isDisabled) {
       // 비활성화 상태 (처리되지 않은 페이지)
       bgColor = ColorTokens.greyLight;
-      iconColor = ColorTokens.greyMedium;
+      iconColor = Colors.transparent;
     } else if (onTap != null) {
       // 활성화 상태 (처리 완료된 페이지)
       bgColor = ColorTokens.surface;
