@@ -46,8 +46,6 @@ class NoteDetailBottomBar extends StatefulWidget {
 class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
   @override
   Widget build(BuildContext context) {
-    if (widget.currentPage == null) return const SizedBox.shrink();
-    
     // 현재 페이지 진행률 계산 (0.0 ~ 1.0 사이 값)
     final double progress = widget.progressValue > 0 
         ? widget.progressValue 
@@ -55,6 +53,14 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
     
     // 하단 safe area 영역 고려
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
+    
+    // 페이지가 준비되지 않았거나 로딩 중인지 확인
+    final bool isPageReady = widget.currentPage != null;
+    final bool canUseTts = isPageReady && 
+                          widget.useSegmentMode && 
+                          !widget.isMinimalUI && 
+                          widget.ttsText.isNotEmpty &&
+                          !widget.isProcessing;
     
 
     
@@ -93,7 +99,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // 이전 페이지 버튼 - 항상 활성화
+                      // 이전 페이지 버튼
                       SizedBox(
                         width: 32,
                         child: PageNavigationButton(
@@ -101,20 +107,31 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                           onTap: widget.currentPageIndex > 0 
                               ? () => widget.onPageChanged(widget.currentPageIndex - 1) 
                               : null,
-                          isDisabled: false,
+                          isDisabled: widget.currentPageIndex <= 0,
                           isProcessing: false,
                         ),
                       ),
                       
                       // 중앙 - TTS 버튼 (세그먼트 모드에서만 표시)
-                      if (widget.useSegmentMode && 
-                          widget.currentPage != null && 
-                          !widget.isMinimalUI && 
-                          widget.ttsText.isNotEmpty)
-                        TtsPlayAllButton(
-                          text: widget.ttsText,
-                          onPlayStart: widget.onTtsPlay,
-                        )
+                      if (widget.useSegmentMode && !widget.isMinimalUI)
+                        canUseTts
+                            ? TtsPlayAllButton(
+                                text: widget.ttsText,
+                                onPlayStart: widget.onTtsPlay,
+                              )
+                            : Container(
+                                width: 40,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Icon(
+                                  Icons.volume_up,
+                                  color: Colors.grey.shade500,
+                                  size: 20,
+                                ),
+                              )
                       else
                         const SizedBox.shrink(),
                       
@@ -126,13 +143,13 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                           PageIndicator(currentIndex: widget.currentPageIndex, totalPages: widget.totalPages),
                           const SizedBox(width: 4),
                           
-                          // 다음 페이지 버튼 - 항상 활성화
+                          // 다음 페이지 버튼
                           PageNavigationButton(
                             icon: Icons.arrow_forward_ios_rounded,
                             onTap: widget.currentPageIndex < widget.totalPages - 1
                                 ? () => widget.onPageChanged(widget.currentPageIndex + 1) 
                                 : null,
-                            isDisabled: false,
+                            isDisabled: widget.currentPageIndex >= widget.totalPages - 1,
                             isProcessing: false,
                           ),
                         ],

@@ -283,10 +283,6 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
 
   // 바텀 네비게이션 바 구성
   Widget _buildBottomBar(BuildContext context, NoteDetailViewModel viewModel) {
-    if (viewModel.totalPages == 0) {
-      return const SizedBox.shrink();
-    }
-    
     // 현재 노트의 실제 모드 사용 (설정값 대신)
     final isNoteSegmentMode = viewModel.isCurrentNoteSegmentMode;
     
@@ -294,17 +290,26 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     final currentProcessedText = viewModel.currentProcessedText;
     final ttsText = isNoteSegmentMode ? (currentProcessedText?.fullOriginalText ?? '') : '';
     
+    // 페이지가 준비되지 않았거나 로딩 중인지 확인
+    final isCurrentPageReady = viewModel.pages != null && 
+                              viewModel.currentPageIndex < viewModel.pages!.length;
+    final isCurrentPageProcessing = viewModel.processingPages.length > viewModel.currentPageIndex 
+                                   ? viewModel.processingPages[viewModel.currentPageIndex] 
+                                   : true; // 페이지 정보가 없으면 처리 중으로 간주
+    
     return NoteDetailBottomBar(
-      currentPage: viewModel.currentPage,
+      currentPage: isCurrentPageReady ? viewModel.currentPage : null,
       currentPageIndex: viewModel.currentPageIndex,
-      totalPages: viewModel.totalPages,
+      totalPages: viewModel.totalPages > 0 ? viewModel.totalPages : 1, // 최소 1페이지는 표시
       onPageChanged: (index) {
         viewModel.navigateToPage(index);
       },
-      ttsText: ttsText,
-      isProcessing: false,
-      progressValue: (viewModel.currentPageIndex + 1) / (viewModel.pages?.length ?? 1),
-      onTtsPlay: isNoteSegmentMode ? () {
+      ttsText: isCurrentPageReady ? ttsText : '',
+      isProcessing: viewModel.isLoading || isCurrentPageProcessing,
+      progressValue: viewModel.totalPages > 0 
+          ? (viewModel.currentPageIndex + 1) / viewModel.totalPages 
+          : 0.0,
+      onTtsPlay: (isNoteSegmentMode && isCurrentPageReady && ttsText.isNotEmpty) ? () {
         _handleBottomBarTts(context, viewModel, ttsText);
       } : null,
       useSegmentMode: isNoteSegmentMode,
