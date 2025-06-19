@@ -162,18 +162,9 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
         return;
       }
 
-      // 현재 재생 중인 세그먼트와 같으면 중지
-      if (widget.playingSegmentIndex == segmentIndex && _ttsService.state == TtsState.playing) {
-        await _ttsService.stop();
-        if (widget.onPlayTts != null) {
-          widget.onPlayTts!('', segmentIndex: null);
-        }
-      } else {
-        // 새로운 세그먼트 재생
-        await _ttsService.speakSegment(text, segmentIndex);
-        if (widget.onPlayTts != null) {
-          widget.onPlayTts!(text, segmentIndex: segmentIndex);
-        }
+      // ViewModel을 통해 TTS 처리 (중복 호출 방지)
+      if (widget.onPlayTts != null) {
+        widget.onPlayTts!(text, segmentIndex: segmentIndex);
       }
     } catch (e) {
       debugPrint('TTS 재생 중 오류: $e');

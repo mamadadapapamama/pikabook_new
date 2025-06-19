@@ -579,8 +579,12 @@ class NoteDetailViewModel extends ChangeNotifier {
       // 샘플 모드: SampleTtsService 사용
       await _sampleTtsService.speak(text, context: context);
     } else {
-      // 일반 모드: TTSService 사용
-      await _ttsService.speak(text);
+      // 일반 모드: TTSService 사용 (세그먼트 인덱스가 있으면 speakSegment 호출)
+      if (segmentIndex != null) {
+        await _ttsService.speakSegment(text, segmentIndex);
+      } else {
+        await _ttsService.speak(text);
+      }
     }
   }
   

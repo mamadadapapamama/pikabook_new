@@ -1,10 +1,6 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:just_audio/just_audio.dart';
-import '../../core/services/authentication/auth_service.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 
 /// 샘플 TTS 예외 클래스
@@ -16,15 +12,13 @@ class SampleTtsException implements Exception {
   String toString() => 'SampleTtsException: $message';
 }
 
-/// 샘플 모드용 하이브리드 TTS 서비스
-/// 로컬 assets와 Firebase Storage를 조합하여 사용합니다.
+/// 샘플 모드용 TTS 서비스
+/// 로컬 assets만 사용합니다.
 class SampleTtsService {
   static final SampleTtsService _instance = SampleTtsService._internal();
   factory SampleTtsService() => _instance;
   SampleTtsService._internal();
 
-  final FirebaseStorage _storage = FirebaseStorage.instance;
-  final AuthService _authService = AuthService();
   AudioPlayer? _samplePlayer; // 샘플 전용 플레이어
   
   // 샘플 모드에서 지원하는 오디오 파일들 (하드코딩)
@@ -36,7 +30,6 @@ class SampleTtsService {
     // 문장 세그먼트들 (샘플 데이터 순서대로)
     '我们早上八点去学校。': 'assets/audio/sample/sentence_1.mp3',
     '教室里有很多桌子和椅子。': 'assets/audio/sample/sentence_2.mp3',
-    '老师在黑板上写字。': 'assets/audio/sample/xuexiao.mp3', // xuexiao.mp3를 이 문장에 할당
     
     // 나머지 문장들은 오디오 파일이 없으므로 스낵바 표시
     // '下课后，我们去操场玩。' - 오디오 없음
@@ -86,24 +79,38 @@ class SampleTtsService {
     try {
       if (kDebugMode) {
         debugPrint('🎵 [SampleTTS] assets 오디오 재생: $assetPath');
+        // 실제 경로 값 출력
+        debugPrint('🎵 [SampleTTS] assetPath: $assetPath');
       }
       
-      // 기존 재생 중지
-      if (_samplePlayer != null) {
-        try {
-          await _samplePlayer!.stop();
-          await _samplePlayer!.dispose();
-        } catch (e) {
-          // 무시
-        }
-      }
+      // 기존 재생 완전 정리
+      await _cleanupPlayer();
       
-      // 새 플레이어 생성
+      // 새 플레이어 생성 및 초기화
       _samplePlayer = AudioPlayer();
       
-      // assets 파일 직접 재생
+      // 플레이어 상태 리스너 설정
+      _samplePlayer!.playerStateStream.listen((state) {
+        if (kDebugMode) {
+          debugPrint('🎵 [SampleTTS] 플레이어 상태: [33m${state.processingState}[0m');
+        }
+      });
+      
+      // assets 파일 설정
       final cleanPath = assetPath.replaceFirst('assets/', '');
-      await _samplePlayer!.setAsset(cleanPath);
+      if (kDebugMode) {
+        debugPrint('🎵 [SampleTTS] cleanPath: $cleanPath');
+      }
+      await _samplePlayer!.setAsset(assetPath);
+      
+      if (kDebugMode) {
+        debugPrint('🎧 [SampleTTS] assets 파일 설정 완료: $cleanPath');
+      }
+      
+      // 짧은 지연 후 재생 (플레이어 초기화 대기)
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // 재생 시작
       await _samplePlayer!.play();
       
       if (kDebugMode) {
@@ -115,6 +122,26 @@ class SampleTtsService {
         debugPrint('❌ [SampleTTS] assets 오디오 재생 실패: $e');
       }
       rethrow;
+    }
+  }
+
+  /// 플레이어 완전 정리
+  Future<void> _cleanupPlayer() async {
+    if (_samplePlayer != null) {
+      try {
+        if (_samplePlayer!.playing) {
+          await _samplePlayer!.stop();
+        }
+        await _samplePlayer!.dispose();
+        if (kDebugMode) {
+          debugPrint('🧹 [SampleTTS] 이전 플레이어 정리 완료');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [SampleTTS] 플레이어 정리 중 오류 (무시): $e');
+        }
+      }
+      _samplePlayer = null;
     }
   }
   
@@ -157,40 +184,13 @@ class SampleTtsService {
 
   /// 리소스 정리
   Future<void> dispose() async {
-    try {
-      if (_samplePlayer != null) {
-        await _samplePlayer!.stop();
-        await _samplePlayer!.dispose();
-        _samplePlayer = null;
-      }
-      if (kDebugMode) {
-        debugPrint('🧹 [SampleTTS] dispose 완료');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [SampleTTS] dispose 실패: $e');
-      }
+    await _cleanupPlayer();
+    if (kDebugMode) {
+      debugPrint('🧹 [SampleTTS] dispose 완료');
     }
   }
 
-  /// 캐시 정리
-  Future<void> clearCache() async {
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final cacheDir = Directory('${appDir.path}/audio_cache');
-      
-      if (await cacheDir.exists()) {
-        await cacheDir.delete(recursive: true);
-        if (kDebugMode) {
-          debugPrint('🧹 [SampleTTS] 오디오 캐시 정리 완료');
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [SampleTTS] 캐시 정리 실패: $e');
-      }
-    }
-  }
+
 
   /// 샘플 오디오가 있는 텍스트인지 확인
   bool hasSampleAudio(String text) {
