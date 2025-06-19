@@ -168,29 +168,14 @@ class NoteTutorial {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // 제목 영역
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: ColorTokens.primaryverylight,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            Icons.lightbulb,
-                            color: ColorTokens.primary,
-                            size: 18,
-                          ),
+                    Expanded(
+                      child: Text(
+                        currentStep.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
                         ),
-                        const SizedBox(width: 10),
-                        Text(
-                          currentStep.title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                     
                     // 현재 단계 표시
@@ -212,149 +197,125 @@ class NoteTutorial {
                   ],
                 ),
                 
-                // 이미지 영역 (이미지가 있는 경우)
-                if (currentStep.imagePath != null) ...[
-                  const SizedBox(height: 16),
-                  Center(
-                    child: Container(
-                      width: screenWidth * 0.9,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            spreadRadius: 1,
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.asset(
-                          currentStep.imagePath!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            if (kDebugMode) {
-                              debugPrint('튜토리얼 이미지 로드 실패: ${currentStep.imagePath}, 오류: $error');
-                            }
-                            // 이미지 로드 실패 시 대체 UI
-                            return Container(
-                              height: 150,
-                              color: Colors.grey.shade200,
-                              alignment: Alignment.center,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.image_not_supported,
-                                    size: 48,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '이미지를 표시할 수 없습니다',
-                                    style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                const SizedBox(height: 20),
                 
-                // 설명 영역
-                const SizedBox(height: 16),
-                Text(
-                  currentStep.description,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.5,
-                    color: Colors.black,
-                  ),
-                ),
-                
-                // 버튼 영역
-                const SizedBox(height: 24),
+                // 컨텐츠 영역 (이미지와 설명 side by side)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 첫 번째 단계가 아닐 때만 이전 버튼 표시
-                    if (_currentStep > 0)
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context); // 바텀 시트 닫기
-                          _moveToPreviousStep(context);
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: ColorTokens.primary,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          minimumSize: const Size(80, 40),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.arrow_back_ios, size: 12, color: ColorTokens.primary),
-                            const SizedBox(width: 4),
-                            const Text(
-                              '이전',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
+                    // 이미지 영역
+                    if (currentStep.imagePath != null)
+                      Expanded(
+                        flex: 2,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                spreadRadius: 1,
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
                               ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      // 이전 버튼이 없을 때 균형을 맞추기 위한 빈 공간
-                      const SizedBox(width: 40),
-                    
-                    // 이전 버튼과 다음 버튼 사이 간격
-                    const SizedBox(width: 60),
-                    
-                    // 다음/완료 버튼 (outline 스타일)
-                    OutlinedButton(
-                      onPressed: () {
-                        Navigator.pop(context); // 바텀 시트 닫기
-                        _moveToNextStepWithBottomSheet(context);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: ColorTokens.primary,
-                        side: BorderSide(color: ColorTokens.primary),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                        minimumSize: const Size(80, 40),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _isLastStep() ? '완료' : '다음',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              currentStep.imagePath!,
+                              fit: BoxFit.contain,
+                              // 해상도에 맞는 이미지 사용 (1x, 2x, 3x)
+                              scale: MediaQuery.of(context).devicePixelRatio,
+                              errorBuilder: (context, error, stackTrace) {
+                                if (kDebugMode) {
+                                  debugPrint('튜토리얼 이미지 로드 실패: ${currentStep.imagePath}, 오류: $error');
+                                }
+                                // 이미지 로드 실패 시 대체 UI
+                                return Container(
+                                  height: 120,
+                                  color: Colors.grey.shade200,
+                                  alignment: Alignment.center,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.image_not_supported,
+                                        size: 32,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '이미지 없음',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
                           ),
-                          if (!_isLastStep()) ...[
-                            const SizedBox(width: 4),
-                            Icon(Icons.arrow_forward_ios, size: 12, color: ColorTokens.primary),
-                          ],
-                        ],
+                        ),
+                      ),
+                    
+                    // 이미지와 설명 사이 간격
+                    if (currentStep.imagePath != null) const SizedBox(width: 16),
+                    
+                    // 설명 영역
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        currentStep.description,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: Colors.black87,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                // 하단 여백 추가
-                const SizedBox(height: 16),
+                
+                // 버튼 영역
+                const SizedBox(height: 32),
+                Row(
+                  children: [
+                    // 이전 버튼 (첫 번째 단계가 아닐 때만)
+                    if (_currentStep > 0)
+                      Expanded(
+                        child: PikaButton(
+                          text: '이전',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _moveToPreviousStep(context);
+                          },
+                          variant: PikaButtonVariant.outline,
+                          isFullWidth: true,
+                        ),
+                      ),
+                    
+                    // 버튼 사이 간격
+                    if (_currentStep > 0) const SizedBox(width: 12),
+                    
+                    // 다음/완료 버튼
+                    Expanded(
+                      child: PikaButton(
+                        text: _isLastStep() ? '완료' : '다음',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _moveToNextStepWithBottomSheet(context);
+                        },
+                        variant: PikaButtonVariant.primary,
+                        isFullWidth: true,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                // 하단 여백
+                const SizedBox(height: 8),
               ],
             ),
           ),

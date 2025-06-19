@@ -94,6 +94,10 @@ dependencies:
   in_app_purchase_android: ^0.3.0+19
   in_app_purchase_storekit: ^0.3.0+12
 
+  # Local Notifications
+  flutter_local_notifications: ^19.2.1
+  flutter_timezone: ^4.1.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
