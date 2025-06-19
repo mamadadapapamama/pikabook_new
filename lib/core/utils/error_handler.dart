@@ -369,7 +369,7 @@ class ErrorHandler {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.red[600],
-        duration: const Duration(seconds: 4),
+        duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
         action: SnackBarAction(
           label: '확인',
@@ -412,7 +412,7 @@ class ErrorHandler {
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.blue[600],
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
       ),
     );

@@ -427,7 +427,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               style: TextStyle(color: Colors.white),
             ),
             backgroundColor: ColorTokens.secondary,
-            duration: const Duration(seconds: 5),
+            duration: const Duration(seconds: 2),
             action: SnackBarAction(
               label: '확인',
               textColor: Colors.white,

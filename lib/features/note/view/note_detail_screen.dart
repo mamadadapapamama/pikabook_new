@@ -228,11 +228,17 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     if (context.mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('플래시카드가 추가되었습니다')),
+          const SnackBar(
+            content: Text('플래시카드가 추가되었습니다'),
+            duration: Duration(seconds: 2),
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('플래시카드 추가 중 오류가 발생했습니다')),
+          const SnackBar(
+            content: Text('플래시카드 추가 중 오류가 발생했습니다'),
+            duration: Duration(seconds: 2),
+          ),
         );
       }
     }

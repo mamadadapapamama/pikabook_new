@@ -100,7 +100,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       final name = _nameController.text.trim();
       if (name.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('이름을 입력해주세요')),
+          const SnackBar(
+          content: Text('이름을 입력해주세요'),
+          duration: Duration(seconds: 2),
+        ),
         );
         return;
       }
@@ -110,7 +113,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_currentPage == 2) {
       if (_selectedLevel == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('학습 수준을 선택해주세요')),
+          const SnackBar(
+          content: Text('학습 수준을 선택해주세요'),
+          duration: Duration(seconds: 2),
+        ),
         );
         return;
       }
@@ -344,7 +350,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ),
               backgroundColor: ColorTokens.success,
-              duration: const Duration(seconds: 3),
+              duration: const Duration(seconds: 2),
             ),
           );
         }
@@ -363,7 +369,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ),
               backgroundColor: ColorTokens.warning,
-              duration: const Duration(seconds: 3),
+              duration: const Duration(seconds: 2),
             ),
           );
         }
@@ -383,7 +389,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
             backgroundColor: ColorTokens.error,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 2),
           ),
         );
       }

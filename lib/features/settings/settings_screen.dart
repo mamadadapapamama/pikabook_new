@@ -781,7 +781,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('계정이 성공적으로 삭제되었습니다.')),
+          const SnackBar(
+          content: Text('계정이 성공적으로 삭제되었습니다.'),
+          duration: Duration(seconds: 2),
+        ),
         );
         
         Navigator.pushNamedAndRemoveUntil(

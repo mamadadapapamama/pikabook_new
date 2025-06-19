@@ -128,7 +128,7 @@ class SampleTtsService {
       SnackBar(
         content: const Text("샘플 모드에서는 일부 오디오파일만 지원됩니다. 로그인해서 듣기 기능을 사용해보세요."),
         backgroundColor: ColorTokens.snackbarBg, // dark green 색상으로 변경
-        duration: const Duration(seconds: 4),
+        duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
       ),
     );

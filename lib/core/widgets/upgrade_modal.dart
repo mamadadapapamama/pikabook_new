@@ -536,7 +536,7 @@ class UpgradeModal extends StatelessWidget {
             SnackBar(
               content: Text('구매 요청 중 오류가 발생했습니다. 다시 시도해주세요.'),
               backgroundColor: Colors.red[600],
-              duration: const Duration(seconds: 3),
+              duration: const Duration(seconds: 2),
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -552,7 +552,7 @@ class UpgradeModal extends StatelessWidget {
           SnackBar(
             content: Text('구매 처리 중 오류가 발생했습니다: $e'),
             backgroundColor: Colors.red[600],
-            duration: const Duration(seconds: 4),
+            duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
           ),
         );

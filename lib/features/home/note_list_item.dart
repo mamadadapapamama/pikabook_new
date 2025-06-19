@@ -163,7 +163,10 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
                     debugPrint('⚠️ 경고: 유효하지 않은 노트 ID');
                   }
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('유효하지 않은 노트 ID입니다.')),
+                    const SnackBar(
+          content: Text('유효하지 않은 노트 ID입니다.'),
+          duration: Duration(seconds: 2),
+        ),
                   );
                   return;
                 }
@@ -176,7 +179,10 @@ class _NoteListItemState extends State<NoteListItem> with AutomaticKeepAliveClie
                   debugPrint('스택 트레이스: $stackTrace');
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('노트를 열 수 없습니다: $e')),
+                  SnackBar(
+          content: Text('노트를 열 수 없습니다: $e'),
+          duration: const Duration(seconds: 2),
+        ),
                 );
               }
             },

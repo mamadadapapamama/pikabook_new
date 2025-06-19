@@ -135,7 +135,10 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
       print('📱 갤러리 이미지 선택 오류: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('이미지를 선택할 수 없습니다. 다시 시도해주세요.')),
+          SnackBar(
+          content: Text('이미지를 선택할 수 없습니다. 다시 시도해주세요.'),
+          duration: const Duration(seconds: 2),
+        ),
         );
       }
     } finally {
@@ -243,7 +246,7 @@ class _ImagePickerBottomSheetState extends State<ImagePickerBottomSheet> {
             SnackBar(
               content: Text(message),
               backgroundColor: Colors.red[600],
-              duration: const Duration(seconds: 4),
+              duration: const Duration(seconds: 2),
               behavior: SnackBarBehavior.floating,
             ),
           );
