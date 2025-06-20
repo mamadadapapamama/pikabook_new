@@ -14,6 +14,7 @@ import '../../tts/slow_tts_button.dart';
 import 'paragraph_mode_widget.dart';
 import '../../../core/services/authentication/auth_service.dart';
 import '../../sample/sample_tts_service.dart';
+import '../../../core/widgets/dot_loading_indicator.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -412,33 +413,28 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     
     // 문장별 모드인지 문단별 모드인지에 따라 다른 렌더링
     final bool isParagraphMode = widget.processedText.mode == TextProcessingMode.paragraph;
+    final bool hasUnits = widget.processedText.units.isNotEmpty;
+    final bool hasTranslation = widget.processedText.fullTranslatedText.isNotEmpty;
 
     if (kDebugMode) {
       debugPrint('🎨 [UI] ProcessedTextWidget build 시작');
-      debugPrint('   모드: ${widget.processedText.mode}, 표시: ${widget.processedText.displayMode}');
-      debugPrint('   문단 모드: $isParagraphMode, 유닛 개수: ${widget.processedText.units.length}');
+      debugPrint('   모드: ${widget.processedText.mode.name}, 유닛: ${widget.processedText.units.length}개');
       
-      // 번역 텍스트 체크
-      if (widget.processedText.fullTranslatedText != null && widget.processedText.fullTranslatedText!.isNotEmpty) {
-        final sample = widget.processedText.fullTranslatedText!.length > 50 
-            ? widget.processedText.fullTranslatedText!.substring(0, 50) + '...' 
-            : widget.processedText.fullTranslatedText!;
-        debugPrint('   번역 텍스트: 있음 (${widget.processedText.fullTranslatedText!.length}자)');
-        debugPrint('   샘플: "$sample"');
+      if (isParagraphMode && !hasUnits) {
+        debugPrint('   문단모드: LLM 응답 대기 중 (빈 상태)');
+      } else if (hasTranslation) {
+        debugPrint('   번역 텍스트: ${widget.processedText.fullTranslatedText.length}자');
       } else {
         debugPrint('   번역 텍스트: 없음');
       }
-      
-      // 세그먼트별 번역 체크
-      if (widget.processedText.units.isNotEmpty) {
-        int untranslatedUnits = 0;
-        for (final unit in widget.processedText.units) {
-          if (unit.translatedText == null || unit.translatedText!.isEmpty || unit.translatedText == unit.originalText) {
-            untranslatedUnits++;
-          }
-        }
-        debugPrint('   유닛 번역 상태: ${widget.processedText.units.length}개 중 $untranslatedUnits개 누락');
+    }
+
+    // 문단모드에서 유닛이 없으면 로딩 상태 표시
+    if (isParagraphMode && !hasUnits) {
+      if (kDebugMode) {
+        debugPrint('🎨 [UI] 문단모드 로딩 상태 반환');
       }
+      return _buildLoadingState();
     }
 
     // 문장 바깥 탭 시 선택 취소를 위한 GestureDetector 추가
@@ -507,6 +503,29 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     _defaultTranslatedTextStyle = TypographyTokens.body2.copyWith(
       color: ColorTokens.textSecondary,
       height: 1.5,
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          DotLoadingIndicator(
+            dotSize: 12.0,
+            dotColor: ColorTokens.primary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '텍스트를 분석하고 있습니다',
+            style: TypographyTokens.caption.copyWith(
+              color: ColorTokens.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
     );
   }
 }

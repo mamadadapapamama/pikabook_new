@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math' as math;
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -109,6 +110,16 @@ class ApiService {
       if (processingMode != null) {
         debugPrint('📝 [API] 처리 모드: $processingMode');
       }
+      if (pageSegments != null) {
+        debugPrint('📄 [API] 페이지별 처리: ${pageSegments.length}개 페이지');
+        for (final pageSegment in pageSegments) {
+          debugPrint('   - ${pageSegment['pageId']}: ${pageSegment['mode']}');
+          if (pageSegment['mode'] == 'TextProcessingMode.paragraph') {
+            final textLength = pageSegment['reorderedText']?.toString().length ?? 0;
+            debugPrint('     → 문단모드 텍스트: ${textLength}자');
+          }
+        }
+      }
     }
 
     try {
@@ -122,32 +133,35 @@ class ApiService {
         'Content-Type': 'application/json',
         if (authToken != null) 'Authorization': 'Bearer $authToken',
       });
-      final requestBody = {
-        'textSegments': textSegments,
+      
+      final requestBody = <String, dynamic>{
         'sourceLanguage': sourceLanguage,
         'targetLanguage': targetLanguage,
         'needPinyin': needPinyin,
-        'pageId': pageId,
-        'noteId': noteId,
+        if (noteId != null) 'noteId': noteId,
+        if (processingMode != null) 'processingMode': processingMode,
       };
-      
-      // 처리 모드 정보 추가
-      if (processingMode != null) {
-        requestBody['processingMode'] = processingMode;
-        if (kDebugMode) {
-          debugPrint('📄 [API] 처리 모드 전달: $processingMode');
-        }
+
+      // 세그먼트 모드일 때만 textSegments 추가
+      if (textSegments.isNotEmpty) {
+        requestBody['textSegments'] = textSegments;
       }
-      
-      // 페이지별 세그먼트 정보가 있으면 추가
+
       if (pageSegments != null && pageSegments.isNotEmpty) {
         requestBody['pageSegments'] = pageSegments;
         if (kDebugMode) {
-          debugPrint('📄 [API] 페이지별 처리: ${pageSegments.length}개 페이지');
+          debugPrint('📄 [API] 페이지별 처리 정보 전달: ${pageSegments.length}개 페이지');
         }
       }
       
       request.body = jsonEncode(requestBody);
+
+      if (kDebugMode) {
+        debugPrint('📤 [API] 서버 요청 전송 시작');
+        debugPrint('   URL: $url');
+        final prettyJson = const JsonEncoder.withIndent('  ').convert(requestBody);
+        debugPrint('   Body: $prettyJson');
+      }
 
       final client = http.Client();
       final response = await client.send(request);
@@ -160,14 +174,14 @@ class ApiService {
         // 실시간 스트리밍 응답 처리
         await for (final chunk in response.stream.transform(utf8.decoder).transform(const LineSplitter())) {
           if (kDebugMode) {
-            debugPrint('📡 [API] 원시 청크 수신: "$chunk"');
+            debugPrint('📡 [API] 원시 청크 수신: "${chunk.substring(0, math.min(100, chunk.length))}${chunk.length > 100 ? '...' : ''}"');
           }
           
           if (chunk.startsWith('data: ')) {
             final jsonStr = chunk.substring(6); // 'data: ' 제거
             if (jsonStr.trim().isNotEmpty) {
               if (kDebugMode) {
-                debugPrint('📦 [API] JSON 데이터 파싱 시도: "$jsonStr"');
+                debugPrint('📦 [API] JSON 데이터 파싱 시도');
               }
               try {
                 final chunkData = jsonDecode(jsonStr);
@@ -196,6 +210,7 @@ class ApiService {
               } catch (e) {
                 if (kDebugMode) {
                   debugPrint('❌ [API] 청크 파싱 실패: $e');
+                  debugPrint('   원본 JSON: "$jsonStr"');
                 }
               }
             }

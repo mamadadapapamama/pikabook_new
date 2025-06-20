@@ -413,7 +413,7 @@ class PostLLMWorkflow {
     _stopLlmTimeout(noteId); // 기존 타이머 정리
     
     if (kDebugMode) {
-      debugPrint('⏱️ [워크플로우] LLM 타임아웃 시작: $noteId (활성 타이머: ${_llmTimeoutManagers.length}개)');
+      debugPrint('⏱️ [워크플로우] LLM 타임아웃 시작: $noteId');
     }
     
     final timeoutManager = TimeoutManager();
@@ -424,9 +424,7 @@ class PostLLMWorkflow {
       timeoutSeconds: 60, // 문단 모드 고려: 60초
       identifier: 'LLM-$noteId',
       onProgress: (elapsedSeconds) {
-        if (kDebugMode) {
-          debugPrint('⏱️ [워크플로우] LLM 처리 경과: ${noteId} - ${elapsedSeconds}초 (활성: ${_llmTimeoutManagers.length}개)');
-        }
+        // 진행 로그 제거 - TimeoutManager에서만 출력
       },
       onTimeout: () {
         if (kDebugMode) {
