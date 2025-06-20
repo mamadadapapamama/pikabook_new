@@ -336,13 +336,24 @@ class StreamingReceiveService {
   /// 페이지별 세그먼트 정보 생성 (서버 전송용)
   List<Map<String, dynamic>>? _createPageSegments(List<PageProcessingData> pages) {
     if (pages.length <= 1) {
-      // 단일 페이지인 경우 null 반환 (기존 방식 사용)
-      return null;
+      // 단일 페이지인 경우에도 문단모드라면 페이지 정보 전달
+      if (pages.isNotEmpty && pages.first.mode == TextProcessingMode.paragraph) {
+        return pages.map((page) => {
+          'pageId': page.pageId,
+          'segments': page.textSegments.isNotEmpty ? page.textSegments : [page.reorderedText],
+          'mode': page.mode.toString(),
+        }).toList();
+      }
+      return null; // 세그먼트 모드 단일 페이지는 기존 방식
     }
     
+    // 다중 페이지: 모드에 관계없이 페이지 정보 전달
     return pages.map((page) => {
       'pageId': page.pageId,
-      'segments': page.textSegments,
+      'segments': page.mode == TextProcessingMode.paragraph 
+          ? [page.reorderedText] // 문단모드: 전체 텍스트 1개
+          : page.textSegments,   // 세그먼트모드: 분할된 세그먼트들
+      'mode': page.mode.toString(),
     }).toList();
   }
 
@@ -412,7 +423,7 @@ class StreamingReceiveService {
     }
     if (serverMode == 'full') {
       if (kDebugMode) {
-        debugPrint('🔄 [서버 지정] Full Data 모드');
+        debugPrint('�� [서버 지정] Full Data 모드');
       }
       return false;
     }
