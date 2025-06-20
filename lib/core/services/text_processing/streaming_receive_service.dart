@@ -305,40 +305,40 @@ class StreamingReceiveService {
   /// 페이지별 세그먼트 정보 생성 (서버 전송용)
   List<Map<String, dynamic>>? _createPageSegments(List<PageProcessingData> pages) {
     if (pages.isEmpty) return null;
-    
+
     if (kDebugMode) {
-      debugPrint('📄 [스트리밍] 페이지별 세그먼트 정보 생성');
+      debugPrint('📄 [스트리밍] 페이지별 세그먼트 정보 생성 (모든 모드)');
       debugPrint('   페이지 수: ${pages.length}개');
-      for (int i = 0; i < pages.length; i++) {
-        final page = pages[i];
-        debugPrint('   페이지 ${i + 1}: ${page.pageId} (${page.mode.name} 모드)');
-        if (page.mode == TextProcessingMode.paragraph) {
-          debugPrint('     → 문단모드: reorderedText ${page.reorderedText.length}자');
-        } else {
-          debugPrint('     → 세그먼트모드: ${page.textSegments.length}개 세그먼트');
+    }
+
+    // 모든 페이지 정보를 서버의 '다중 페이지' 로직에 맞게 변환
+    final pageSegments = pages.map((page) {
+      final pageMap = <String, dynamic>{
+        'pageId': page.pageId,
+        'mode': page.mode.toString(),
+      };
+
+      if (page.mode == TextProcessingMode.paragraph) {
+        // 문단 모드: 전체 텍스트를 'segments' 배열의 단일 원소로 감싸서 전달
+        // 서버의 다중 페이지 로직이 page.segments 필드를 사용하기 때문
+        pageMap['segments'] = [page.reorderedText];
+        if (kDebugMode) {
+          debugPrint('   📄 ${page.pageId} (paragraph): reorderedText를 segments 배열로 변환');
+        }
+      } else {
+        // 문장 모드: 기존과 동일하게 segments 배열 전달
+        pageMap['segments'] = page.textSegments;
+        if (kDebugMode) {
+          debugPrint('   📄 ${page.pageId} (segment): ${page.textSegments.length}개 세그먼트');
         }
       }
-    }
-    
-    // 모든 페이지 정보를 서버에 전달 (단일/다중 페이지 공통)
-    final pageSegments = pages.map((page) => {
-      'pageId': page.pageId,
-      'mode': page.mode.toString(),
-      // 문단모드에서는 reorderedText 전달, 세그먼트모드는 textSegments 전달
-      if (page.mode == TextProcessingMode.paragraph) 
-        'reorderedText': page.reorderedText
-      else 
-        'segments': page.textSegments,
+      return pageMap;
     }).toList();
-    
+
     if (kDebugMode) {
-      debugPrint('📤 [스트리밍] 서버 전송 데이터 준비 완료');
-      debugPrint('   pageSegments: ${pageSegments.length}개');
-      for (final segment in pageSegments) {
-        debugPrint('     - ${segment['pageId']}: ${segment['mode']}');
-      }
+      debugPrint('📤 [스트리밍] 서버 전송 데이터 준비 완료: ${pageSegments.length}개 페이지');
     }
-    
+
     return pageSegments;
   }
 
