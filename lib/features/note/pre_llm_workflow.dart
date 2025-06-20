@@ -265,6 +265,21 @@ class PreLLMWorkflow {
         if (pageDataList.isNotEmpty) {
           await _schedulePostProcessing(noteId, pageDataList, userPrefs);
           
+          // OCR 사용량 업데이트 (실제 처리된 페이지 수만큼)
+          try {
+            final successfulOcrPages = pageDataList.where((page) => page.ocrSuccess).length;
+            if (successfulOcrPages > 0) {
+              await _usageLimitService.updateUsageAfterNoteCreation(ocrPages: successfulOcrPages);
+              if (kDebugMode) {
+                debugPrint('📊 [PreLLM] OCR 사용량 업데이트: $successfulOcrPages개 페이지');
+              }
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('⚠️ [PreLLM] OCR 사용량 업데이트 실패 (무시): $e');
+            }
+          }
+          
           // 실제 처리된 페이지 수로 메타데이터 동기화
           if (pageDataList.length != imageFiles.length) {
             if (kDebugMode) {

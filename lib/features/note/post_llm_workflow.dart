@@ -180,10 +180,20 @@ class PostLLMWorkflow {
         for (final pageData in job.pages) {
           final pageResults = result.pageResults[pageData.pageId] ?? [];
           if (pageResults.isNotEmpty) {
+            // 문단 모드에서는 textSegments가 비어있으므로 다른 방식으로 계산
+            int totalExpectedUnits;
+            if (pageData.mode == TextProcessingMode.paragraph) {
+              // 문단 모드: 각 페이지마다 항상 1개의 유닛만 받음
+              totalExpectedUnits = 1;
+            } else {
+              // 세그먼트 모드: 기존 방식
+              totalExpectedUnits = pageData.textSegments.length;
+            }
+            
             await _pageUpdateService.updatePageWithStreamingResult(
               pageData: pageData,
               llmResults: pageResults,
-              totalExpectedUnits: pageData.textSegments.length,
+              totalExpectedUnits: totalExpectedUnits,
             );
           }
         }
@@ -218,8 +228,8 @@ class PostLLMWorkflow {
       // 8. 노트 완료 상태 업데이트
       await _updateNoteStatus(job.noteId, ProcessingStatus.completed);
       
-      // 9. 사용량 업데이트 (UsageLimitService)
-      await _updateUsageAfterProcessing(job);
+      // 9. 사용량 업데이트는 OCR 단계에서 이미 완료됨 (중복 방지)
+      // await _updateUsageAfterProcessing(job); // 제거: 중복 카운팅 방지
       
       // 10. 전체 노트 완료 알림
       await _sendNoteCompletionNotification(job.noteId);
@@ -259,14 +269,26 @@ class PostLLMWorkflow {
       if (completedPages.contains(pageId)) continue;
       
       final llmUnits = pageResults[pageId] ?? [];
-      final ocrSegmentCount = page.textSegments.length;
-
-      // OCR 세그먼트 개수 기준으로 완료 판단
-      if (llmUnits.length >= ocrSegmentCount && ocrSegmentCount > 0) {
-        completedPages.add(pageId);
-      if (kDebugMode) {
-          debugPrint('🎉 [워크플로우] 페이지 완료 (OCR 기준): $pageId (LLM: ${llmUnits.length}개, OCR: ${ocrSegmentCount}개)');
+      
+      bool isCompleted = false;
+      if (page.mode == TextProcessingMode.paragraph) {
+        // 문단 모드: LLM 유닛이 1개 이상 있으면 완료
+        isCompleted = llmUnits.isNotEmpty;
+      } else {
+        // 세그먼트 모드: OCR 세그먼트 개수 기준으로 완료 판단
+        final ocrSegmentCount = page.textSegments.length;
+        isCompleted = llmUnits.length >= ocrSegmentCount && ocrSegmentCount > 0;
       }
+
+      if (isCompleted) {
+        completedPages.add(pageId);
+        if (kDebugMode) {
+          if (page.mode == TextProcessingMode.paragraph) {
+            debugPrint('🎉 [워크플로우] 페이지 완료 (문단 모드): $pageId (LLM: ${llmUnits.length}개)');
+          } else {
+            debugPrint('🎉 [워크플로우] 페이지 완료 (세그먼트 모드): $pageId (LLM: ${llmUnits.length}개, OCR: ${page.textSegments.length}개)');
+          }
+        }
       }
     }
   }
@@ -383,42 +405,6 @@ class PostLLMWorkflow {
       if (kDebugMode) {
         debugPrint('⚠️ 작업 백업 제거 실패: $e');
       }
-    }
-  }
-
-  /// 사용량 업데이트 (UsageLimitService 활용)
-  Future<void> _updateUsageAfterProcessing(PostProcessingJob job) async {
-    try {
-      if (kDebugMode) {
-        debugPrint('📊 [워크플로우] 사용량 업데이트 시작: ${job.noteId}');
-      }
-      
-      // 실제 처리된 데이터를 기반으로 사용량 계산
-      int totalOcrPages = 0;
-      
-      for (final pageData in job.pages) {
-        // OCR 성공한 페이지 수 (업로드 이미지 수)
-        if (pageData.ocrSuccess) {
-          totalOcrPages++;
-        }
-      }
-      
-      // UsageLimitService 활용 (단순화된 시스템)
-      final limitStatus = await _usageLimitService.updateUsageAfterNoteCreation(
-        ocrPages: totalOcrPages,
-      );
-      
-      if (kDebugMode) {
-        debugPrint('📊 [워크플로우] 사용량 업데이트 완료:');
-        debugPrint('   업로드 이미지 수: $totalOcrPages개');
-        debugPrint('   제한 상태: $limitStatus');
-      }
-      
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('⚠️ 사용량 업데이트 실패: ${job.noteId}, 오류: $e');
-      }
-      // 사용량 업데이트 실패는 전체 프로세스를 실패시키지 않음
     }
   }
 
