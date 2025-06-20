@@ -15,6 +15,7 @@ import 'paragraph_mode_widget.dart';
 import '../../../core/services/authentication/auth_service.dart';
 import '../../sample/sample_tts_service.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
+import '../../../core/utils/error_handler.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -518,7 +519,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           ),
           const SizedBox(height: 16),
           Text(
-            '텍스트를 분석하고 있습니다',
+            ErrorHandler.analyzingTextMessage,
             style: TypographyTokens.caption.copyWith(
               color: ColorTokens.textSecondary,
             ),

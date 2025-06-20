@@ -8,6 +8,7 @@ import '../../../core/widgets/loading_dots_widget.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../../core/widgets/inline_error_widget.dart';
 import '../../../core/utils/context_menu_manager.dart';
+import '../../../core/utils/error_handler.dart';
 
 /// 문단 모드 전용 위젯
 /// LLM에서 리턴하는 다양한 블록 타입과 추가 정보를 처리합니다.
@@ -357,12 +358,12 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
   /// LLM 응답 대기 중 로딩 표시
   Widget _buildLoadingView() {
     return InlineLoadingErrorWidget(
-      loadingMessage: '🧐 텍스트를 분석하고 있습니다...',
+      loadingMessage: ErrorHandler.analyzingTextMessage,
       error: null,
       loadingWidget: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 32.0),
-          child: DotLoadingIndicator(message: '🧐 텍스트를 분석하고 있습니다...'),
+          child: DotLoadingIndicator(message: ErrorHandler.analyzingTextMessage),
         ),
       ),
     );
