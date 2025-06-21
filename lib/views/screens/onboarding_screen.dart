@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/widgets/upgrade_modal.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/material.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -201,12 +202,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await _userPreferences.setOnboardingCompleted(true);
       await _userPreferences.setHasOnboarded(true);
       
-      // 건너뛰기를 해도 무료체험 유도 모달 표시
+      // Skip한 경우 바로 홈으로 이동 (환영 모달 표시하지 않음)
       if (mounted) {
-        await UpgradePromptHelper.showWelcomeTrialPrompt(
-          context,
-          onComplete: widget.onComplete,
-        );
+        widget.onComplete();
       }
       
     } catch (e) {
@@ -415,8 +413,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         ),
       ),
-      // 키보드가 화면을 밀어올리지 않도록 설정
-      resizeToAvoidBottomInset: false,
+      // 키보드가 올라올 때 화면 조정 허용
+      resizeToAvoidBottomInset: true,
     );
   }
 
@@ -618,6 +616,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             _customPurposeController.clear();
                           }
                         });
+                        
+                        // 기타 선택 시 스크롤 처리
+                        if (option['text'] == '기타') {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            Future.delayed(const Duration(milliseconds: 50), () {
+                              if (mounted && _customInputKey.currentContext != null) {
+                                Scrollable.ensureVisible(
+                                  _customInputKey.currentContext!,
+                                  duration: const Duration(milliseconds: 400),
+                                  curve: Curves.easeInOut,
+                                  alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+                                );
+                              }
+                            });
+                          });
+                        }
                       },
                     ),
                     // 기타 선택 시 입력 필드 표시
@@ -633,6 +647,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                           child: TextField(
                             controller: _customPurposeController,
+                            autofocus: true,
                             decoration: InputDecoration(
                               hintText: '구체적인 사용 목적을 입력해주세요',
                               hintStyle: TypographyTokens.body1.copyWith(
@@ -648,14 +663,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               color: ColorTokens.textPrimary,
                             ),
                             textInputAction: TextInputAction.done,
+                            onChanged: (value) {
+                              setState(() {}); // 버튼 상태 업데이트
+                            },
                             onTap: () {
                               // 입력 필드 탭 시에도 스크롤
                               WidgetsBinding.instance.addPostFrameCallback((_) {
-                                Future.delayed(const Duration(milliseconds: 300), () {
+                                Future.delayed(const Duration(milliseconds: 100), () {
                                   if (mounted && _customInputKey.currentContext != null) {
                                     Scrollable.ensureVisible(
                                       _customInputKey.currentContext!,
-                                      duration: const Duration(milliseconds: 500),
+                                      duration: const Duration(milliseconds: 400),
                                       curve: Curves.easeInOut,
                                       alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
                                     );

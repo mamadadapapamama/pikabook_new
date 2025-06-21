@@ -121,34 +121,24 @@ class UpgradeModal extends StatelessWidget {
   Widget _buildHeaderImage() {
     return Container(
       width: double.infinity,
-      height: 120,
+      height: 160,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            ColorTokens.primary.withOpacity(0.1),
-            ColorTokens.secondary.withOpacity(0.1),
-          ],
-        ),
+        color: Colors.transparent,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(SpacingTokens.radiusMedium),
           topRight: Radius.circular(SpacingTokens.radiusMedium),
         ),
       ),
-      child: Center(
-        child: Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            color: ColorTokens.primary,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(
-            Icons.star,
-            color: ColorTokens.textLight,
-            size: 30,
-          ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(SpacingTokens.radiusMedium),
+          topRight: Radius.circular(SpacingTokens.radiusMedium),
+        ),
+        child: Image.asset(
+          'assets/images/ill_premium.png',
+          width: double.infinity,
+          height: 160,
+          fit: BoxFit.contain,
         ),
       ),
     );
@@ -420,9 +410,20 @@ class UpgradeModal extends StatelessWidget {
       return Column(
         children: [
           PikaButton(
-            text: upgradeButtonText ?? '7일 무료 체험 시작',
-            onPressed: () {
+            text: upgradeButtonText ?? '프리미엄 무료체험 시작',
+            onPressed: () async {
               Navigator.of(context).pop(true);
+              // 직접 무료체험 인앱 구매 호출
+              try {
+                final purchaseService = InAppPurchaseService();
+                if (!purchaseService.isAvailable) {
+                  await purchaseService.initialize();
+                }
+                if (kDebugMode) debugPrint('🎯 Starting premium trial with in-app purchase');
+                await purchaseService.buyMonthlyTrial();
+              } catch (e) {
+                if (kDebugMode) debugPrint('❌ Trial purchase error: $e');
+              }
               onUpgrade?.call();
             },
             isFullWidth: true,
@@ -430,8 +431,18 @@ class UpgradeModal extends StatelessWidget {
           ),
           SizedBox(height: SpacingTokens.sm),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(context).pop(false);
+              // 간단한 무료체험 시작
+              try {
+                final planService = PlanService();
+                final user = FirebaseAuth.instance.currentUser;
+                if (user != null) {
+                  await planService.startFreeTrial(user.uid);
+                }
+              } catch (e) {
+                if (kDebugMode) debugPrint('❌ Simple trial error: $e');
+              }
               onCancel?.call();
             },
             child: Text(
@@ -544,7 +555,7 @@ class UpgradeModal extends StatelessWidget {
   static Future<void> _handlePurchase(BuildContext context, String productId) async {
     try {
       if (kDebugMode) {
-        debugPrint('🛒 [UpgradeModal] 인앱 구매 시작: $productId');
+        debugPrint('🎯 [UpgradeModal] 인앱 구매 시작: $productId');
       }
 
       final purchaseService = InAppPurchaseService();
@@ -609,7 +620,7 @@ class UpgradePromptHelper {
         reason: UpgradeReason.welcomeTrial,
         customTitle: 'Pikabook에 오신 것을 환영합니다! 🎉',
         customMessage: '7일 무료 체험으로 모든 프리미엄 기능을 경험해보세요.\n\n• 월 300페이지 OCR 인식\n• 월 10만자 번역\n• 월 1,000회 TTS 음성\n• 1GB 저장 공간',
-        onUpgrade: () => _handleFreeTrial(context),
+        // onUpgrade는 버튼 내에서 직접 처리
       );
     } catch (e) {
       if (kDebugMode) {
@@ -650,64 +661,5 @@ class UpgradePromptHelper {
   static void _handleUpgrade(BuildContext context) {
     // 기본적으로 월간 구독으로 연결
     UpgradeModal._handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
-  }
-
-  /// 무료 체험 시작 및 UI 피드백 처리
-  static Future<void> _handleFreeTrial(BuildContext context) async {
-    try {
-      final planService = PlanService();
-      final user = FirebaseAuth.instance.currentUser;
-
-      if (user == null) {
-        if (kDebugMode) debugPrint('❌ User is not logged in.');
-        return;
-      }
-
-      if (kDebugMode) debugPrint('🎯 Requesting free trial for user: ${user.uid}');
-      
-      final success = await planService.startFreeTrial(user.uid);
-      
-      if (!context.mounted) return;
-
-      if (success) {
-        if (kDebugMode) debugPrint('✅ Free trial started successfully.');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '🎉 7일 무료 체험이 시작되었습니다!',
-              style: TypographyTokens.caption.copyWith(color: Colors.white),
-            ),
-            backgroundColor: ColorTokens.success,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      } else {
-        if (kDebugMode) debugPrint('❌ Failed to start free trial.');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '무료 체험을 시작할 수 없습니다. 이미 사용하셨거나 오류가 발생했습니다.',
-              style: TypographyTokens.caption.copyWith(color: Colors.white),
-            ),
-            backgroundColor: ColorTokens.warning,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('❌ Error starting free trial: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '오류가 발생했습니다: $e',
-              style: TypographyTokens.caption.copyWith(color: Colors.white),
-            ),
-            backgroundColor: ColorTokens.error,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
   }
 } 

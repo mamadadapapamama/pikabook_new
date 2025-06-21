@@ -24,9 +24,15 @@ class InAppPurchaseService {
   static const String premiumMonthlyId = 'premium_monthly';
   static const String premiumYearlyId = 'premium_yearly';
   
+  // 무료체험 포함 상품 ID (앱스토어 설정 후 활성화)
+  static const String premiumMonthlyWithTrialId = 'premium_monthly_with_trial';
+  static const String premiumYearlyWithTrialId = 'premium_yearly_with_trial';
+  
   static const Set<String> _productIds = {
     premiumMonthlyId,
     premiumYearlyId,
+    premiumMonthlyWithTrialId,
+    premiumYearlyWithTrialId,
   };
 
   /// 서비스 초기화
@@ -179,9 +185,11 @@ class InAppPurchaseService {
 
       // 구독 기간 계산
       DateTime expiryDate;
-      if (purchaseDetails.productID == premiumMonthlyId) {
+      if (purchaseDetails.productID == premiumMonthlyId || 
+          purchaseDetails.productID == premiumMonthlyWithTrialId) {
         expiryDate = DateTime.now().add(const Duration(days: 30));
-      } else if (purchaseDetails.productID == premiumYearlyId) {
+      } else if (purchaseDetails.productID == premiumYearlyId || 
+                 purchaseDetails.productID == premiumYearlyWithTrialId) {
         expiryDate = DateTime.now().add(const Duration(days: 365));
       } else {
         if (kDebugMode) {
@@ -189,6 +197,10 @@ class InAppPurchaseService {
         }
         return;
       }
+
+      // 무료체험 상품인지 확인
+      final bool isTrialProduct = purchaseDetails.productID == premiumMonthlyWithTrialId || 
+                                  purchaseDetails.productID == premiumYearlyWithTrialId;
 
       // 프리미엄 플랜으로 업그레이드
       final success = await _planService.upgradeToPremium(
@@ -283,6 +295,16 @@ class InAppPurchaseService {
     }
   }
 
+  /// 무료체험 구매 시작 (월간)
+  Future<bool> buyMonthlyTrial() async {
+    return await buyProduct(premiumMonthlyWithTrialId);
+  }
+
+  /// 무료체험 구매 시작 (연간)
+  Future<bool> buyYearlyTrial() async {
+    return await buyProduct(premiumYearlyWithTrialId);
+  }
+
   /// 구매 복원 (사용자 요청시 호출)
   Future<void> restorePurchases() async {
     try {
@@ -316,5 +338,15 @@ class InAppPurchaseService {
   /// 연간 구독 상품 정보
   ProductDetails? get yearlyProduct => _products
       .where((product) => product.id == premiumYearlyId)
+      .firstOrNull;
+
+  /// 월간 무료체험 상품 정보
+  ProductDetails? get monthlyTrialProduct => _products
+      .where((product) => product.id == premiumMonthlyWithTrialId)
+      .firstOrNull;
+
+  /// 연간 무료체험 상품 정보
+  ProductDetails? get yearlyTrialProduct => _products
+      .where((product) => product.id == premiumYearlyWithTrialId)
       .firstOrNull;
 } 
