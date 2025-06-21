@@ -463,17 +463,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 60),
+          const SizedBox(height: 48),
           Text(
             "먼저, 학습하실 분의\n이름을 알려주세요.",
             textAlign: TextAlign.center,
             style: TypographyTokens.subtitle1.copyWith(
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
               color: ColorTokens.textPrimary,
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 24),
           Container(
             decoration: BoxDecoration(
               color: ColorTokens.surface,
@@ -484,14 +484,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               controller: _nameController,
               textAlign: TextAlign.center,
               decoration: InputDecoration(
-                hintText: '이름',
+                hintText: '앱에서 쓸 이름이나 별명',
                 hintStyle: TypographyTokens.body1.copyWith(
                   color: ColorTokens.textTertiary,
                 ),
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: SpacingTokens.lg,
-                  vertical: SpacingTokens.lg,
+                  vertical: SpacingTokens.md,
                 ),
               ),
               style: TypographyTokens.body1.copyWith(
@@ -736,11 +736,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                option['title']!,
-                style: TypographyTokens.body1Bold.copyWith(
-                  color: ColorTokens.textPrimary,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    option['title']!,
+                    style: TypographyTokens.body1Bold.copyWith(
+                      color: ColorTokens.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    option['description']!,
+                    style: TypographyTokens.caption.copyWith(
+                      color: ColorTokens.textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

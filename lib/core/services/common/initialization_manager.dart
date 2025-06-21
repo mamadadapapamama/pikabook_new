@@ -150,9 +150,9 @@ class InitializationManager {
       final bool hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
       final bool isFirstEntry = !hasShownTooltip;
       
-      // 3. 사용량 확인 (로그인된 사용자만)
+      // 3. 사용량 확인 (로그인된 사용자이고 온보딩 완료된 경우만)
       Map<String, bool> usageLimitStatus = {};
-      if (isLoggedIn) {
+      if (isLoggedIn && isOnboardingCompleted) {
         _updateProgress(
           InitializationStep.usageCheck,
           0.5,
@@ -172,6 +172,17 @@ class InitializationManager {
             'storageLimitReached': false,
           };
         }
+      } else {
+        // 온보딩 미완료 사용자는 사용량 확인 건너뛰기
+        if (isLoggedIn && !isOnboardingCompleted) {
+          debugPrint('온보딩 미완료 사용자 - 사용량 확인 건너뛰기');
+        }
+        usageLimitStatus = {
+          'ocrLimitReached': false,
+          'ttsLimitReached': false,
+          'translationLimitReached': false,
+          'storageLimitReached': false,
+        };
       }
       
       // 4. 사용자 데이터 로드 (필수 정보만)

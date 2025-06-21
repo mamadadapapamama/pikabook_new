@@ -394,6 +394,18 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   /// 사용량 제한 확인
   Future<void> _checkUsageLimits() async {
     try {
+      // 온보딩이 완료되지 않은 사용자는 제한 확인 불필요
+      if (!_isOnboardingCompleted) {
+        if (kDebugMode) {
+          debugPrint('온보딩 미완료 사용자 - 사용량 제한 확인 건너뛰기');
+        }
+        setState(() {
+          _ttsExceed = false;
+          _noteExceed = false;
+        });
+        return;
+      }
+      
       // 사용량 제한 플래그 확인 (버퍼 추가)
       final limitFlags = await _usageLimitService.checkUsageLimitFlags(withBuffer: true);
       final ttsExceed = limitFlags['ttsExceed'] ?? false;
