@@ -52,17 +52,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final List<Map<String, String>> _levelOptions = [
     {
       'level': '초급',
-      'title': '🌱 처음이에요',
+      'icon': '🌱',
+      'title': '처음이에요',
       'description': '기본 단어, 간단한 문장을 공부할 예정이에요. 중국어 교과과정 유치원~ 초등 저학년 과정에 적합해요.',
     },
     {
       'level': '중급',
-      'title': '🌿 중급이에요',
+      'icon': '🌿',
+      'title': '중급이에요',
       'description': '책을 읽을 수 있지만 중간 중간 모르는 단어가 있어요. HSK나 워크북 같은 문제풀이에 좋아요.',
     },
     {
       'level': '고급',
-      'title': '🌳 중국어에 익숙해요',
+      'icon': '🌳',
+      'title': '중국어에 익숙해요',
       'description': '신문 기사나 매거진, 두꺼운 책을 읽을 수 있어요',
     },
   ];
@@ -704,11 +707,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   // 레벨 선택 옵션 위젯
   Widget _buildLevelOption(Map<String, String> option) {
-    final isSelected = _selectedLevel == option['text'];
+    final isSelected = _selectedLevel == option['title'];
     return GestureDetector(
       onTap: () {
         setState(() {
-          _selectedLevel = option['text'];
+          _selectedLevel = option['title'];
         });
       },
       child: Container(
@@ -734,7 +737,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             const SizedBox(width: 16),
             Expanded(
               child: Text(
-                option['text']!,
+                option['title']!,
                 style: TypographyTokens.body1Bold.copyWith(
                   color: ColorTokens.textPrimary,
                 ),
