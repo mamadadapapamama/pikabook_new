@@ -26,6 +26,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   final UserPreferencesService _userPreferences = UserPreferencesService();
   final PlanService _planService = PlanService();
+  final GlobalKey _customInputKey = GlobalKey(); // 기타 입력 필드용 키
   
   // 상태 변수
   int _currentPage = 0;
@@ -183,7 +184,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           'onboardingCompleted': true,
           'defaultNoteSpace': defaultNoteSpace,
           'noteSpaces': [defaultNoteSpace],
-        }, SetOptions(merge: true));
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          // 기본 사용량 초기화
+          'usage': {
+            'ocrPages': 0,
+            'ttsRequests': 0,
+            'translatedChars': 0,
+            'storageUsageBytes': 0,
+            'lastUpdated': FieldValue.serverTimestamp(),
+          },
+        });
       }
       
       // 온보딩 완료 표시
@@ -210,7 +221,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _completeOnboarding() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+          });
+        }
+        return;
+      }
 
       // 사용 목적 값 결정 (기타인 경우 커스텀 입력 값 사용)
       String finalUsagePurpose = _selectedUsagePurpose!;
@@ -219,9 +237,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       }
 
       // 번역 모드 자동 설정 (초급 -> 문장 모드, 중급/고급 -> 문단 모드)
-      String translationMode = _selectedLevel == '처음이에요' ? 'sentence' : 'paragraph';
+      // 선택된 레벨에서 실제 level 값 찾기
+      String? selectedLevelValue;
+      for (final option in _levelOptions) {
+        if (option['title'] == _selectedLevel) {
+          selectedLevelValue = option['level'];
+          break;
+        }
+      }
+      String translationMode = selectedLevelValue == '초급' ? 'sentence' : 'paragraph';
 
-      // Firestore에 사용자 정보 저장
+      // Firestore에 사용자 정보 저장 (새 문서 생성)
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'name': _nameController.text,
         'usagePurpose': finalUsagePurpose,
@@ -229,7 +255,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'translationMode': translationMode,
         'onboardingCompleted': true,
         'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+        'updatedAt': FieldValue.serverTimestamp(),
+        // 기본 사용량 초기화
+        'usage': {
+          'ocrPages': 0,
+          'ttsRequests': 0,
+          'translatedChars': 0,
+          'storageUsageBytes': 0,
+          'lastUpdated': FieldValue.serverTimestamp(),
+        },
+      });
 
       // SharedPreferences에도 저장
       final prefs = await SharedPreferences.getInstance();
@@ -239,12 +274,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await prefs.setString('user_level', _selectedLevel!);
       await prefs.setString('translation_mode', translationMode);
 
-      // 홈 화면으로 이동
+      // 업그레이드 모달 표시 후 홈 화면으로 이동
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/main');
+        try {
+          await UpgradePromptHelper.showWelcomeTrialPrompt(
+            context,
+            onComplete: () {
+              if (mounted) {
+                // 온보딩 완료 콜백 호출하여 앱 상태 변경
+                widget.onComplete();
+              }
+            },
+          );
+        } catch (modalError) {
+          // 모달 에러가 발생해도 홈 화면으로 이동
+          debugPrint('업그레이드 모달 표시 중 오류: $modalError');
+          if (mounted) {
+            // 온보딩 완료 콜백 호출하여 앱 상태 변경
+            widget.onComplete();
+          }
+        }
       }
     } catch (e) {
+      debugPrint('온보딩 완료 처리 중 오류: $e');
       if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('오류가 발생했습니다: $e')),
         );
@@ -567,6 +623,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     // 기타 선택 시 입력 필드 표시
                     if (_selectedUsagePurpose == '기타' && option['text'] == '기타')
                       Padding(
+                        key: _customInputKey,
                         padding: const EdgeInsets.only(top: 12.0),
                         child: Container(
                           decoration: BoxDecoration(
@@ -591,6 +648,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               color: ColorTokens.textPrimary,
                             ),
                             textInputAction: TextInputAction.done,
+                            onTap: () {
+                              // 입력 필드 탭 시에도 스크롤
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                Future.delayed(const Duration(milliseconds: 300), () {
+                                  if (mounted && _customInputKey.currentContext != null) {
+                                    Scrollable.ensureVisible(
+                                      _customInputKey.currentContext!,
+                                      duration: const Duration(milliseconds: 500),
+                                      curve: Curves.easeInOut,
+                                      alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+                                    );
+                                  }
+                                });
+                              });
+                            },
                           ),
                         ),
                       ),
@@ -748,7 +820,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const SizedBox(height: 4),
                   Text(
                     option['description']!,
-                    style: TypographyTokens.caption.copyWith(
+                    style: TypographyTokens.body2.copyWith(
                       color: ColorTokens.textSecondary,
                     ),
                   ),

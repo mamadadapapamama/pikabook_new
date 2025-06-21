@@ -546,27 +546,33 @@ class AuthService {
           debugPrint('무료 체험 시작 중 오류: $e');
           // 무료 체험 시작 실패해도 회원가입은 계속 진행
         }
+        
+        // 신규 사용자는 항상 set 사용
+        await userRef.set(userData);
       } else {
         // 기존 사용자 정보 업데이트
         final deviceId = await _getDeviceId();
         userData['lastUpdated'] = FieldValue.serverTimestamp();
         
-        // 디바이스 ID 추가 (중복 없이)
+        // 기존 문서 확인
         final userDoc = await userRef.get();
         if (userDoc.exists) {
+          // 문서가 존재하면 update 사용
           final List<dynamic> deviceIds = userDoc.data()?['deviceIds'] ?? [];
           if (!deviceIds.contains(deviceId)) {
             userData['deviceIds'] = FieldValue.arrayUnion([deviceId]);
             userData['deviceCount'] = deviceIds.length + 1;
           }
+          await userRef.update(userData);
+        } else {
+          // 문서가 없으면 set 사용 (온보딩 미완료 사용자)
+          userData['createdAt'] = FieldValue.serverTimestamp();
+          userData['isNewUser'] = false;
+          userData['planType'] = 'free';
+          userData['deviceCount'] = 1;
+          userData['deviceIds'] = [deviceId];
+          await userRef.set(userData);
         }
-      }
-      
-      // 데이터 저장 - 새 사용자는 set, 기존 사용자는 update
-      if (isNewUser) {
-        await userRef.set(userData);
-      } else {
-        await userRef.update(userData);
       }
       
       debugPrint('사용자 정보 Firestore 저장 완료: ${user.uid}');
