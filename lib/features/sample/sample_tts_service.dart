@@ -42,13 +42,15 @@ class SampleTtsService {
       if (kDebugMode) {
         debugPrint('🔊 [SampleTTS] 음성 재생 요청: "$text"');
       }
+      
+      final trimmedText = text.trim();
 
       // 1. 샘플 오디오 assets 확인
-      if (_sampleAudioAssets.containsKey(text)) {
+      if (_sampleAudioAssets.containsKey(trimmedText)) {
         if (kDebugMode) {
-          debugPrint('✅ [SampleTTS] 매핑된 오디오 파일 발견: ${_sampleAudioAssets[text]}');
+          debugPrint('✅ [SampleTTS] 매핑된 오디오 파일 발견: ${_sampleAudioAssets[trimmedText]}');
         }
-        await _playFromAssets(_sampleAudioAssets[text]!);
+        await _playFromAssets(_sampleAudioAssets[trimmedText]!);
         return;
       }
 
@@ -64,7 +66,7 @@ class SampleTtsService {
       if (kDebugMode) {
         debugPrint('❌ [SampleTTS] 음성 재생 실패: $e');
         debugPrint('   실패한 텍스트: "$text"');
-        debugPrint('   매핑 상태: ${_sampleAudioAssets.containsKey(text) ? "매핑됨" : "매핑 안됨"}');
+        debugPrint('   매핑 상태: ${_sampleAudioAssets.containsKey(text.trim()) ? "매핑됨" : "매핑 안됨"}');
       }
       
       // 실제 오디오 재생 실패인 경우에만 스낵바 표시
@@ -184,7 +186,7 @@ class SampleTtsService {
 
   /// 샘플 오디오가 있는 텍스트인지 확인
   bool hasSampleAudio(String text) {
-    return _sampleAudioAssets.containsKey(text);
+    return _sampleAudioAssets.containsKey(text.trim());
   }
 
   /// 사용 가능한 샘플 텍스트 목록

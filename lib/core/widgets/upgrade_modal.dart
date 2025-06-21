@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/tokens/color_tokens.dart';
 import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
 import '../services/payment/in_app_purchase_service.dart';
+import '../services/common/plan_service.dart';
 import 'pika_button.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -15,6 +17,7 @@ enum UpgradeReason {
   settings,         // 설정에서 업그레이드
   general,          // 일반적인 업그레이드
   premiumUser,      // 이미 프리미엄 사용자
+  welcomeTrial,     // 온보딩 후 무료체험
 }
 
 /// 프리미엄 업그레이드 모달
@@ -162,6 +165,7 @@ class UpgradeModal extends StatelessWidget {
         case UpgradeReason.trialExpired:
         case UpgradeReason.settings:
         case UpgradeReason.general:
+        case UpgradeReason.welcomeTrial:
           title = '피카북 프리미엄';
           break;
         case UpgradeReason.premiumUser:
@@ -208,6 +212,7 @@ class UpgradeModal extends StatelessWidget {
       case UpgradeReason.trialExpired:
       case UpgradeReason.settings:
       case UpgradeReason.general:
+      case UpgradeReason.welcomeTrial:
       default:
         return Column(
           children: [
@@ -410,6 +415,36 @@ class UpgradeModal extends StatelessWidget {
       );
     }
 
+    // 온보딩 환영 모달의 경우
+    if (reason == UpgradeReason.welcomeTrial) {
+      return Column(
+        children: [
+          PikaButton(
+            text: upgradeButtonText ?? '7일 무료 체험 시작',
+            onPressed: () {
+              Navigator.of(context).pop(true);
+              onUpgrade?.call();
+            },
+            isFullWidth: true,
+            variant: PikaButtonVariant.primary,
+          ),
+          SizedBox(height: SpacingTokens.sm),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(false);
+              onCancel?.call();
+            },
+            child: Text(
+              cancelButtonText ?? '무료 플랜으로 시작',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.textTertiary,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     // 일반 사용자인 경우 구독 옵션 표시
     return Column(
       children: [
@@ -563,6 +598,28 @@ class UpgradeModal extends StatelessWidget {
 
 /// 업그레이드 유도 관련 유틸리티 클래스
 class UpgradePromptHelper {
+  /// 온보딩 완료 후 환영 모달 표시
+  static Future<void> showWelcomeTrialPrompt(
+    BuildContext context, {
+    required VoidCallback onComplete,
+  }) async {
+    try {
+      await UpgradeModal.show(
+        context,
+        reason: UpgradeReason.welcomeTrial,
+        customTitle: 'Pikabook에 오신 것을 환영합니다! 🎉',
+        customMessage: '7일 무료 체험으로 모든 프리미엄 기능을 경험해보세요.\n\n• 월 300페이지 OCR 인식\n• 월 10만자 번역\n• 월 1,000회 TTS 음성\n• 1GB 저장 공간',
+        onUpgrade: () => _handleFreeTrial(context),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(' welcoming modal display error: $e');
+      }
+    } finally {
+      onComplete();
+    }
+  }
+
   /// TTS 기능 제한 시 표시할 모달
   static Future<bool?> showTtsUpgradePrompt(
     BuildContext context, {
@@ -593,5 +650,64 @@ class UpgradePromptHelper {
   static void _handleUpgrade(BuildContext context) {
     // 기본적으로 월간 구독으로 연결
     UpgradeModal._handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
+  }
+
+  /// 무료 체험 시작 및 UI 피드백 처리
+  static Future<void> _handleFreeTrial(BuildContext context) async {
+    try {
+      final planService = PlanService();
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
+        if (kDebugMode) debugPrint('❌ User is not logged in.');
+        return;
+      }
+
+      if (kDebugMode) debugPrint('🎯 Requesting free trial for user: ${user.uid}');
+      
+      final success = await planService.startFreeTrial(user.uid);
+      
+      if (!context.mounted) return;
+
+      if (success) {
+        if (kDebugMode) debugPrint('✅ Free trial started successfully.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '🎉 7일 무료 체험이 시작되었습니다!',
+              style: TypographyTokens.caption.copyWith(color: Colors.white),
+            ),
+            backgroundColor: ColorTokens.success,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        if (kDebugMode) debugPrint('❌ Failed to start free trial.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '무료 체험을 시작할 수 없습니다. 이미 사용하셨거나 오류가 발생했습니다.',
+              style: TypographyTokens.caption.copyWith(color: Colors.white),
+            ),
+            backgroundColor: ColorTokens.warning,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('❌ Error starting free trial: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '오류가 발생했습니다: $e',
+              style: TypographyTokens.caption.copyWith(color: Colors.white),
+            ),
+            backgroundColor: ColorTokens.error,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 } 

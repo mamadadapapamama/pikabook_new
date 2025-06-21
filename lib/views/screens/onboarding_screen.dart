@@ -11,6 +11,7 @@ import '../../../core/widgets/pika_button.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/widgets/upgrade_modal.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
@@ -30,30 +31,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _currentPage = 0;
   bool _isProcessing = false;
   
-  // 사용자 이름
+  // 1단계: 사용자 이름
   final TextEditingController _nameController = TextEditingController();
   
-  // 중국어 학습 수준
+  // 2단계: 사용 목적
+  String? _selectedUsagePurpose;
+  final TextEditingController _customPurposeController = TextEditingController();
+
+  // 3단계: 중국어 학습 수준
   String? _selectedLevel;
   
-  // 번역 모드 (학습 수준에 따라 자동 설정)
-  bool _isSegmentMode = true; // true: 문장별 번역, false: 문단별 번역
+  // 2단계 사용 목적 옵션
+  final List<Map<String, String>> _usagePurposeOptions = [
+    {'icon': '📚', 'text': '직접 원서를 공부하는데 사용'},
+    {'icon': '🙂', 'text': '아이의 중국어 학습 보조'},
+    {'icon': '🚀', 'text': '기타'},
+  ];
   
-  // 학습 수준 옵션
+  // 3단계 학습 수준 옵션
   final List<Map<String, String>> _levelOptions = [
     {
       'level': '초급',
-      'title': '처음이에요',
-      'description': '기본 단어, 간단한 문장을 공부할 예정이에요.',
+      'title': '🌱 처음이에요',
+      'description': '기본 단어, 간단한 문장을 공부할 예정이에요. 중국어 교과과정 유치원~ 초등 저학년 과정에 적합해요.',
     },
     {
       'level': '중급',
-      'title': '중급이에요',
-      'description': '책을 읽을 수 있지만 중간 중간 모르는 단어가 있어요.\n페이지당 20문장 이상의 교재를 공부할 예정이에요.',
+      'title': '🌿 중급이에요',
+      'description': '책을 읽을 수 있지만 중간 중간 모르는 단어가 있어요. HSK나 워크북 같은 문제풀이에 좋아요.',
     },
     {
       'level': '고급',
-      'title': '중국어에 익숙해요',
+      'title': '🌳 중국어에 익숙해요',
       'description': '신문 기사나 매거진, 두꺼운 책을 읽을 수 있어요',
     },
   ];
@@ -61,7 +70,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void initState() {
     super.initState();
-    // 입력 변경 리스너 추가
     _nameController.addListener(_updateState);
   }
 
@@ -70,66 +78,54 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _pageController.dispose();
     _nameController.removeListener(_updateState);
     _nameController.dispose();
+    _customPurposeController.dispose();
     super.dispose();
   }
   
-  // 상태 업데이트 (UI 리프레시용)
   void _updateState() {
     setState(() {});
   }
   
-  // 현재 페이지의 버튼이 활성화되어야 하는지 확인
-  bool _isNextButtonEnabled() {
-    if (_isProcessing) return false;
-    
-    if (_currentPage == 0) {
-      return true; // 첫 번째 페이지는 항상 활성화
-    } else if (_currentPage == 1) {
-      return _nameController.text.trim().isNotEmpty;
-    } else if (_currentPage == 2) {
-      return _selectedLevel != null;
+  bool get _canProceed {
+    switch (_currentPage) {
+      case 0:
+        return _nameController.text.isNotEmpty;
+      case 1:
+        // 기타 선택 시 커스텀 입력이 필요
+        if (_selectedUsagePurpose == '기타') {
+          return _customPurposeController.text.trim().isNotEmpty;
+        }
+        return _selectedUsagePurpose != null;
+      case 2:
+        return _selectedLevel != null;
+      default:
+        return false;
     }
-    
-    return true;
   }
 
-  // 다음 페이지로 이동
   void _nextPage() {
-    // 두 번째 페이지에서 세 번째 페이지로 갈 때는 이름이 입력되었는지 확인
-    if (_currentPage == 1) {
-      final name = _nameController.text.trim();
-      if (name.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-          content: Text('이름을 입력해주세요'),
-          duration: Duration(seconds: 2),
-        ),
-        );
-        return;
-      }
+    if (_currentPage == 0 && _nameController.text.trim().isEmpty) {
+      // 이름이 비어있으면 다음으로 넘어가지 않음
+      return;
+    }
+    if (_currentPage == 1 && _selectedUsagePurpose == null) {
+      // 사용 목적이 선택되지 않았으면 넘어가지 않음
+      return;
     }
     
-    // 세 번째 페이지에서 완료할 때는 학습 수준이 선택되었는지 확인
+    // 마지막 페이지에서 '시작하기' 버튼을 누른 경우
     if (_currentPage == 2) {
-      if (_selectedLevel == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-          content: Text('학습 수준을 선택해주세요'),
-          duration: Duration(seconds: 2),
-        ),
-        );
-        return;
+      if (_selectedLevel != null) {
+        _finishOnboarding();
       }
-      _finishOnboarding();
-        return;
+      return;
     }
 
-    if (_currentPage < 2) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
+    // 다음 페이지로 이동
+    _pageController.nextPage(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
   
   // 이전 페이지로 이동
@@ -192,7 +188,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await _userPreferences.setHasOnboarded(true);
       
       // 건너뛰기를 해도 무료체험 유도 모달 표시
-      await _showWelcomeUpgradeModal();
+      if (mounted) {
+        await UpgradePromptHelper.showWelcomeTrialPrompt(
+          context,
+          onComplete: widget.onComplete,
+        );
+      }
       
     } catch (e) {
       debugPrint('온보딩 건너뛰기 처리 중 오류 발생: $e');
@@ -205,192 +206,44 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // 온보딩 데이터 저장 및 완료 처리
   Future<void> _completeOnboarding() async {
     try {
-      // 사용자 이름 저장
-      final userName = _nameController.text.trim();
-      
-      // 학습 수준에 따라 번역 모드 설정
-      if (_selectedLevel == '초급') {
-        _isSegmentMode = true; // 문장별 번역
-      } else {
-        _isSegmentMode = false; // 문단별 번역 (중급, 고급)
-      }
-          
-      // 번역 모드 저장
-      await _userPreferences.setUseSegmentMode(_isSegmentMode);
-      
-      // 이름을 기반으로 노트 스페이스 이름 설정
-      final noteSpaceName = "${userName}의 학습노트";
-      
-      // 노트 스페이스 이름을 설정
-      await _userPreferences.setDefaultNoteSpace(noteSpaceName);
-      
-      // 노트 스페이스 목록에 추가
-      await _userPreferences.addNoteSpace(noteSpaceName);
-      
-      // 사용자 이름 저장
-      await _userPreferences.setUserName(userName);
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
 
-      // 툴팁을 아직 보지 않았다고 설정
+      // 사용 목적 값 결정 (기타인 경우 커스텀 입력 값 사용)
+      String finalUsagePurpose = _selectedUsagePurpose!;
+      if (_selectedUsagePurpose == '기타' && _customPurposeController.text.trim().isNotEmpty) {
+        finalUsagePurpose = _customPurposeController.text.trim();
+      }
+
+      // 번역 모드 자동 설정 (초급 -> 문장 모드, 중급/고급 -> 문단 모드)
+      String translationMode = _selectedLevel == '처음이에요' ? 'sentence' : 'paragraph';
+
+      // Firestore에 사용자 정보 저장
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'name': _nameController.text,
+        'usagePurpose': finalUsagePurpose,
+        'level': _selectedLevel,
+        'translationMode': translationMode,
+        'onboardingCompleted': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // SharedPreferences에도 저장
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('hasShownTooltip', false);
-      
-      // Firestore에 사용자 데이터 저장
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        // 현재 사용자 ID 설정 (데이터가 올바른 사용자에게 저장되도록)
-        await _userPreferences.setCurrentUserId(user.uid);
-        
-        // Firestore에 사용자 데이터 저장
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-          'userName': userName,
-          'chineseLevel': _selectedLevel, // 중국어 학습 수준 저장
-          'translationMode': _isSegmentMode ? 'segment' : 'paragraph',
-          'hasOnboarded': true,
-          'onboardingCompleted': true,
-          'defaultNoteSpace': noteSpaceName,
-          'noteSpaces': [noteSpaceName], // 노트 스페이스 목록도 저장
-        }, SetOptions(merge: true));
-      }
-      
-      // 온보딩 완료 표시
-      await _userPreferences.setOnboardingCompleted(true);
-      await _userPreferences.setHasOnboarded(true);
-      
-      // 인앱 구매 유도 모달 표시
-      await _showWelcomeUpgradeModal();
-      
-    } catch (e) {
-      debugPrint('온보딩 완료 처리 중 오류 발생: $e');
-      // 오류 처리
-      setState(() {
-        _isProcessing = false;
-      });
-      return;
-    }
-  }
+      await prefs.setBool('onboarding_completed', true);
+      await prefs.setString('user_name', _nameController.text);
+      await prefs.setString('usage_purpose', finalUsagePurpose);
+      await prefs.setString('user_level', _selectedLevel!);
+      await prefs.setString('translation_mode', translationMode);
 
-  /// 온보딩 완료 후 환영 및 업그레이드 모달 표시
-  Future<void> _showWelcomeUpgradeModal() async {
-    if (!mounted) return;
-    
-    try {
-      final result = await UpgradeModal.show(
-        context,
-        customTitle: 'Pikabook에 오신 것을 환영합니다! 🎉',
-        customMessage: '7일 무료 체험으로 모든 프리미엄 기능을 경험해보세요.\n\n• 월 300페이지 OCR 인식\n• 월 10만자 번역\n• 월 1,000회 TTS 음성\n• 1GB 저장 공간',
-        upgradeButtonText: '7일 무료 체험 시작',
-        cancelButtonText: '무료 플랜으로 시작',
-        onUpgrade: () async {
-          if (kDebugMode) {
-            debugPrint('🎯 [OnboardingScreen] 7일 무료 체험 시작 선택');
-          }
-          
-          // 무료 체험 시작
-          await _startFreeTrial();
-        },
-        onCancel: () {
-          if (kDebugMode) {
-            debugPrint('🚪 [OnboardingScreen] 무료 플랜으로 시작 선택');
-          }
-          // 무료 플랜으로 시작 - 별도 처리 없이 홈으로 이동
-        },
-      );
-      
-      // 모달이 닫힌 후 홈 화면으로 이동
-      if (mounted && widget.onComplete != null) {
-        if (kDebugMode) {
-          debugPrint('🏠 [OnboardingScreen] 홈 화면으로 이동');
-        }
-        widget.onComplete();
-      }
-      
-    } catch (e) {
-      debugPrint('환영 모달 표시 중 오류: $e');
-      // 오류 발생 시에도 홈으로 이동
-      if (mounted && widget.onComplete != null) {
-        if (kDebugMode) {
-          debugPrint('🏠 [OnboardingScreen] 오류 발생 - 홈 화면으로 이동');
-        }
-        widget.onComplete();
-      }
-    }
-  }
-
-  /// 무료 체험 시작 처리
-  Future<void> _startFreeTrial() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        if (kDebugMode) {
-          debugPrint('❌ 사용자가 로그인되어 있지 않습니다');
-        }
-        return;
-      }
-
-      if (kDebugMode) {
-        debugPrint('🎯 무료 체험 시작 요청: ${user.uid}');
-      }
-
-      // 무료 체험 시작
-      final success = await _planService.startFreeTrial(user.uid);
-      
-      if (success) {
-        if (kDebugMode) {
-          debugPrint('✅ 무료 체험 시작 성공');
-        }
-        
-        // 성공 메시지 표시
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '🎉 7일 무료 체험이 시작되었습니다!',
-                style: TypographyTokens.caption.copyWith(
-                  color: Colors.white,
-                ),
-              ),
-              backgroundColor: ColorTokens.success,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-      } else {
-        if (kDebugMode) {
-          debugPrint('❌ 무료 체험 시작 실패 - 이미 사용했거나 오류 발생');
-        }
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '무료 체험을 시작할 수 없습니다. 이미 사용하셨거나 오류가 발생했습니다.',
-                style: TypographyTokens.caption.copyWith(
-                  color: Colors.white,
-                ),
-              ),
-              backgroundColor: ColorTokens.warning,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
+      // 홈 화면으로 이동
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/main');
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ 무료 체험 시작 중 오류: $e');
-      }
-      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '오류가 발생했습니다: $e',
-              style: TypographyTokens.caption.copyWith(
-                color: Colors.white,
-              ),
-            ),
-            backgroundColor: ColorTokens.error,
-            duration: const Duration(seconds: 2),
-          ),
+          SnackBar(content: Text('오류가 발생했습니다: $e')),
         );
       }
     }
@@ -418,52 +271,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Column(
               children: [
-                // 상단 로고 영역과 페이지 인디케이터를 같은 줄에 배치
+                // 상단 stepper 영역
                 Padding(
-                  padding: EdgeInsets.only(top: SpacingTokens.lg, bottom: SpacingTokens.md),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // 왼쪽: 페이지 인디케이터
-                      Row(
-                        children: [
-                          Text(
-                            "${_currentPage + 1}",
-                            style: TypographyTokens.body1En.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: ColorTokens.primary,
-                            ),
-                          ),
-                          Text(
-                            " / 3",
-                            style: TypographyTokens.body1En.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: ColorTokens.secondary
-                            ),
-                          ),
-                        ],
-                      ),
-                      
-                      // 오른쪽: 건너뛰기 버튼
-                      TextButton(
-                        onPressed: _isProcessing ? null : _skipOnboarding,
-                        style: TextButton.styleFrom(
-                          foregroundColor: ColorTokens.textSecondary,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 16,
-                          ),
-                        ),
-                        child: Text(
-                          'Skip',
-                          style: TypographyTokens.button.copyWith(
-                            color: ColorTokens.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  padding: EdgeInsets.only(top: SpacingTokens.lg, bottom: SpacingTokens.xl),
+                  child: _buildStepper(),
                 ),
 
                 // 온보딩 페이지
@@ -479,45 +290,64 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       FocusScope.of(context).unfocus();
                     },
                     children: [
-                      _buildIntroPage(),
                       _buildNameInputPage(),
+                      _buildUsagePurposePage(),
                       _buildLevelPage(),
                     ],
                   ),
                 ),
 
-                // 하단 버튼 영역 (3번째 페이지에서는 다른 버튼)
+                // 하단 버튼 영역
                 Padding(
                   padding: const EdgeInsets.only(bottom: 40.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Column(
                     children: [
-                      // 뒤로 버튼 (첫 페이지에서는 숨김)
-                      if (_currentPage > 0)
-                        Expanded(
-                          child: PikaButton(
-                            text: '뒤로',
-                            variant: PikaButtonVariant.outline,
-                            onPressed: _prevPage,
-                            isFullWidth: true,
+                       Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // 뒤로 버튼 (첫 페이지에서는 숨김)
+                          if (_currentPage > 0)
+                            Expanded(
+                              child: PikaButton(
+                                text: '뒤로',
+                                variant: PikaButtonVariant.outline,
+                                onPressed: _prevPage,
+                                isFullWidth: true,
+                              ),
+                            ),
+                                
+                          // 뒤로 버튼과 다음 버튼 사이 간격
+                          if (_currentPage > 0)
+                            const SizedBox(width: 16),
+                                
+                          // 다음/시작 버튼
+                          Expanded(
+                            child: PikaButton(
+                              text: _currentPage == 2 ? '시작하기' : '다음으로',
+                              variant: PikaButtonVariant.primary,
+                              size: PikaButtonSize.medium,
+                              onPressed: _canProceed ? _nextPage : null,
+                              isLoading: _isProcessing,
+                              isFullWidth: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Skip 버튼 (마지막 페이지에서는 숨김)
+                      if (_currentPage < 2)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16.0),
+                          child: TextButton(
+                            onPressed: _isProcessing ? null : _skipOnboarding,
+                            child: Text(
+                              'skip',
+                              style: TypographyTokens.button.copyWith(
+                                color: ColorTokens.textGrey,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
                           ),
                         ),
-                            
-                      // 뒤로 버튼과 다음 버튼 사이 간격
-                      if (_currentPage > 0)
-                        const SizedBox(width: 16),
-                            
-                      // 다음/시작 버튼
-                      Expanded(
-                        child: PikaButton(
-                          text: _currentPage == 2 ? '시작하기' : '다음으로',
-                          variant: PikaButtonVariant.primary,
-                          size: PikaButtonSize.medium,
-                          onPressed: _isNextButtonEnabled() ? _nextPage : null,
-                          isLoading: _isProcessing,
-                          isFullWidth: true,
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -531,101 +361,144 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // 첫 번째 페이지: 앱 소개
-  Widget _buildIntroPage() {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          Text(
-            "Pikabook은 책으로 하는 중국어 학습을\n도와주는 앱입니다.",
-                  style: TypographyTokens.subtitle2En.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: ColorTokens.textPrimary,
+  // Stepper 위젯
+  Widget _buildStepper() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // 머리 아이콘
+        SvgPicture.asset(
+          'assets/images/icon_head.svg',
+          width: 24,
+          height: 24,
+        ),
+        const SizedBox(width: 12),
+        
+        // Step indicators
+        Row(
+          children: List.generate(3, (index) {
+            final isActive = index == _currentPage;
+            final isCompleted = index < _currentPage;
+            
+            return Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isActive || isCompleted 
+                        ? ColorTokens.primary 
+                        : ColorTokens.primarylight,
+                    border: isActive 
+                        ? Border.all(color: ColorTokens.primary, width: 2)
+                        : null,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${index + 1}',
+                      style: TypographyTokens.body2.copyWith(
+                        color: isActive || isCompleted 
+                            ? Colors.white 
+                            : ColorTokens.textSecondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
-          const SizedBox(height: 20),
-          
-          // 향후 이미지 제공 예정 영역
-          Container(
-            width: double.infinity,
-            height: 200,
-            decoration: BoxDecoration(
-              color: ColorTokens.primaryverylight,
-              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-              border: Border.all(
-                color: ColorTokens.primarylight,
-                width: 1,
-              ),
-            ),
-            child: Center(
-              child: Text(
-                "앱 소개 이미지\n(향후 제공 예정)",
-                textAlign: TextAlign.center,
-                style: TypographyTokens.body2.copyWith(
-                  color: ColorTokens.textSecondary,
-                ),
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-          Text(
-            "원서 속 글자를 인식해 스마트한 학습 노트를 만들어 드리는 서비스입니다.",
-            style: TypographyTokens.body1.copyWith(
-              color: ColorTokens.textPrimary,
-            ),
-          ),
+                if (index < 2) // 마지막 step이 아닌 경우 연결선 추가
+                  Container(
+                    width: 40,
+                    height: 2,
+                    color: isCompleted 
+                        ? ColorTokens.primary 
+                        : ColorTokens.primarylight,
+                  ),
               ],
-            ),
+            );
+          }),
+        ),
+      ],
     );
   }
 
-  // 두 번째 페이지: 이름 입력
+  // 1단계: 이름 입력
   Widget _buildNameInputPage() {
     return SingleChildScrollView(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 8),
-          Text(
-            "먼저, 학습하실 분의 이름을 알려주세요.",
-            style: TypographyTokens.subtitle2En.copyWith(
-              fontWeight: FontWeight.w600,
-              color: ColorTokens.textPrimary,
+          const SizedBox(height: 48),
+          RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: "책으로 하는 중국어 학습,\n",
+                  style: TypographyTokens.headline3.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: ColorTokens.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+                TextSpan(
+                  text: "Pikabook",
+                  style: TypographyTokens.headline3.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: ColorTokens.primary,
+                    height: 1.4,
+                  ),
+                ),
+                TextSpan(
+                  text: "과 함께해요!",
+                  style: TypographyTokens.headline3.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: ColorTokens.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 60),
+          Text(
+            "먼저, 학습하실 분의\n이름을 알려주세요.",
+            textAlign: TextAlign.center,
+            style: TypographyTokens.subtitle1.copyWith(
+              fontWeight: FontWeight.w500,
+              color: ColorTokens.textPrimary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 40),
           Container(
             decoration: BoxDecoration(
               color: ColorTokens.surface,
-              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-              border: Border.all(
-                color: ColorTokens.primarylight,
-                width: 2,
-              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: ColorTokens.primarylight),
             ),
             child: TextField(
               controller: _nameController,
+              textAlign: TextAlign.center,
               decoration: InputDecoration(
-                hintText: '이름이나 별명을 알려주세요',
+                hintText: '이름',
                 hintStyle: TypographyTokens.body1.copyWith(
                   color: ColorTokens.textTertiary,
                 ),
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: SpacingTokens.lg,
-                  vertical: SpacingTokens.md,
+                  vertical: SpacingTokens.lg,
                 ),
               ),
               style: TypographyTokens.body1.copyWith(
                 color: ColorTokens.textPrimary,
               ),
               onEditingComplete: () {
-                // 입력 완료시 키보드 숨기기
                 FocusScope.of(context).unfocus();
-                _nextPage();
+                if (_nameController.text.trim().isNotEmpty) {
+                  _nextPage();
+                }
               },
               textInputAction: TextInputAction.done,
             ),
@@ -635,9 +508,147 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  // 세 번째 페이지: 학습 수준 선택
+  // 2단계: 사용 목적 선택
+  Widget _buildUsagePurposePage() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 48),
+          RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: "Pikabook",
+                  style: TypographyTokens.headline3En.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: ColorTokens.primary,
+                    height: 1.4,
+                  ),
+                ),
+                TextSpan(
+                  text: "을\n어떻게 사용하실 예정이세요?",
+                  style: TypographyTokens.headline3.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: ColorTokens.textPrimary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 48),
+          ..._usagePurposeOptions
+              .asMap()
+              .entries
+              .map((entry) {
+                final index = entry.key;
+                final option = entry.value;
+                return Column(
+                  children: [
+                    _buildOption(
+                      icon: option['icon']!,
+                      text: option['text']!,
+                      isSelected: _selectedUsagePurpose == option['text'],
+                      onTap: () {
+                        setState(() {
+                          _selectedUsagePurpose = option['text'];
+                          // 기타가 아닌 다른 옵션 선택 시 커스텀 입력 초기화
+                          if (option['text'] != '기타') {
+                            _customPurposeController.clear();
+                          }
+                        });
+                      },
+                    ),
+                    // 기타 선택 시 입력 필드 표시
+                    if (_selectedUsagePurpose == '기타' && option['text'] == '기타')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12.0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: ColorTokens.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: ColorTokens.primarylight),
+                          ),
+                          child: TextField(
+                            controller: _customPurposeController,
+                            decoration: InputDecoration(
+                              hintText: '구체적인 사용 목적을 입력해주세요',
+                              hintStyle: TypographyTokens.body1.copyWith(
+                                color: ColorTokens.textTertiary,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: SpacingTokens.lg,
+                                vertical: SpacingTokens.md,
+                              ),
+                            ),
+                            style: TypographyTokens.body1.copyWith(
+                              color: ColorTokens.textPrimary,
+                            ),
+                            textInputAction: TextInputAction.done,
+                          ),
+                        ),
+                      ),
+                    // 옵션 간 spacing (마지막 항목이 아닌 경우)
+                    if (index < _usagePurposeOptions.length - 1)
+                      const SizedBox(height: 12),
+                  ],
+                );
+              })
+              .toList(),
+        ],
+      ),
+    );
+  }
+
+  // 공용 옵션 선택 위젯
+  Widget _buildOption({
+    required String icon,
+    required String text,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(
+          horizontal: SpacingTokens.lg,
+          vertical: SpacingTokens.lg,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? ColorTokens.primaryverylight : ColorTokens.surface,
+          borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+          border: Border.all(
+            color: isSelected ? ColorTokens.primary : ColorTokens.primarylight,
+            width: 2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Text(
+              icon, 
+              style: const TextStyle(fontSize: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                text,
+                style: TypographyTokens.body1Bold.copyWith(
+                  color: ColorTokens.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 3단계: 학습 수준 선택
   Widget _buildLevelPage() {
-    // 세 번째 페이지에서는 키보드 자동으로 숨기기
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_currentPage == 2) {
         FocusScope.of(context).unfocus();
@@ -653,78 +664,86 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             text: TextSpan(
               children: [
                 TextSpan(
-                  text: "중국어 학습 수준",
-                  style: TypographyTokens.subtitle2En.copyWith(
-                    fontWeight: FontWeight.w800,
+                  text: _nameController.text.trim(),
+                  style: TypographyTokens.headline3.copyWith(
+                    fontWeight: FontWeight.w700,
                     color: ColorTokens.primary,
                   ),
                 ),
                 TextSpan(
-                  text: "을 알려주세요.",
-                  style: TypographyTokens.subtitle2En.copyWith(
-                  fontWeight: FontWeight.w600,
-                 color: ColorTokens.textPrimary,
+                  text: "님의\n중국어 학습 수준을 알려주세요.",
+                  style: TypographyTokens.headline3.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: ColorTokens.textPrimary,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
-          // 학습 수준 옵션들
-          ..._levelOptions.map((option) => _buildLevelOption(option)),
+          const SizedBox(height: 48),
+          ..._levelOptions
+              .asMap()
+              .entries
+              .map((entry) {
+                final index = entry.key;
+                final option = entry.value;
+                return Column(
+                  children: [
+                    _buildLevelOption(option),
+                    // 옵션 간 spacing (마지막 항목이 아닌 경우)
+                    if (index < _levelOptions.length - 1)
+                      const SizedBox(height: 12),
+                  ],
+                );
+              })
+              .toList(),
         ],
       ),
     );
   }
 
-  // 학습 수준 옵션 위젯
+  // 레벨 선택 옵션 위젯
   Widget _buildLevelOption(Map<String, String> option) {
-    final bool isSelected = _selectedLevel == option['level'];
-    
+    final isSelected = _selectedLevel == option['text'];
     return GestureDetector(
       onTap: () {
         setState(() {
-          _selectedLevel = option['level'];
+          _selectedLevel = option['text'];
         });
-        
-          // 다른 옵션 선택 시 키보드 숨기기
-          FocusScope.of(context).unfocus();
       },
       child: Container(
-        width: double.infinity, // 전체 너비 사용
-        margin: EdgeInsets.only(bottom: SpacingTokens.md),
+        width: double.infinity,
         padding: EdgeInsets.symmetric(
           horizontal: SpacingTokens.lg,
-          vertical: SpacingTokens.md,
+          vertical: SpacingTokens.lg,
         ),
         decoration: BoxDecoration(
-          color: ColorTokens.surface,
+          color: isSelected ? ColorTokens.primaryverylight : ColorTokens.surface,
           borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
           border: Border.all(
             color: isSelected ? ColorTokens.primary : ColorTokens.primarylight,
             width: 2,
           ),
         ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-              option['title']!,
-              style: TypographyTokens.body1.copyWith(
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                 color: ColorTokens.textPrimary,
-                  ),
-          ),
-            const SizedBox(height: 4),
-                    Text(
-              option['description']!,
-            style: TypographyTokens.caption.copyWith(
-              color: ColorTokens.textSecondary,
+        child: Row(
+          children: [
+            Text(
+              option['icon']!, 
+              style: const TextStyle(fontSize: 24),
             ),
-          ),
-        ],
-      ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                option['text']!,
+                style: TypographyTokens.body1Bold.copyWith(
+                  color: ColorTokens.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+
