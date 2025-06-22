@@ -199,73 +199,12 @@ class NoteTutorial {
                 
                 const SizedBox(height: 20),
                 
-                // 컨텐츠 영역 (이미지와 설명 side by side)
+                // 컨텐츠 영역 (텍스트와 이미지 side by side)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 이미지 영역
-                    if (currentStep.imagePath != null)
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                spreadRadius: 1,
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.asset(
-                              currentStep.imagePath!,
-                              fit: BoxFit.contain,
-                              // 해상도에 맞는 이미지 사용 (1x, 2x, 3x)
-                              scale: MediaQuery.of(context).devicePixelRatio,
-                              errorBuilder: (context, error, stackTrace) {
-                                if (kDebugMode) {
-                                  debugPrint('튜토리얼 이미지 로드 실패: ${currentStep.imagePath}, 오류: $error');
-                                }
-                                // 이미지 로드 실패 시 대체 UI
-                                return Container(
-                                  height: 120,
-                                  color: Colors.grey.shade200,
-                                  alignment: Alignment.center,
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.image_not_supported,
-                                        size: 32,
-                                        color: Colors.grey.shade400,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '이미지 없음',
-                                        style: TextStyle(
-                                          color: Colors.grey.shade600,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                    
-                    // 이미지와 설명 사이 간격
-                    if (currentStep.imagePath != null) const SizedBox(width: 16),
-                    
-                    // 설명 영역
+                    // 설명 영역 (왼쪽)
                     Expanded(
-                      flex: 3,
                       child: Text(
                         currentStep.description,
                         style: const TextStyle(
@@ -275,6 +214,66 @@ class NoteTutorial {
                         ),
                       ),
                     ),
+                    
+                    // 텍스트와 이미지 사이 간격
+                    if (currentStep.imagePath != null) const SizedBox(width: 16),
+                    
+                    // 이미지 영역 (오른쪽, 고정 너비 140)
+                    if (currentStep.imagePath != null)
+                      Container(
+                        width: 140,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              spreadRadius: 1,
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.asset(
+                            currentStep.imagePath!,
+                            width: 140,
+                            fit: BoxFit.contain,
+                            // 해상도에 맞는 이미지 사용 (1x, 2x, 3x)
+                            scale: MediaQuery.of(context).devicePixelRatio,
+                            errorBuilder: (context, error, stackTrace) {
+                              if (kDebugMode) {
+                                debugPrint('튜토리얼 이미지 로드 실패: ${currentStep.imagePath}, 오류: $error');
+                              }
+                              // 이미지 로드 실패 시 대체 UI
+                              return Container(
+                                width: 140,
+                                height: 120,
+                                color: Colors.grey.shade200,
+                                alignment: Alignment.center,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.image_not_supported,
+                                      size: 32,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '이미지 없음',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 

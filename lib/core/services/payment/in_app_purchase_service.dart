@@ -196,12 +196,16 @@ class InAppPurchaseService {
 
       // 구독 기간 계산
       DateTime expiryDate;
+      String subscriptionType;
+      
       if (purchaseDetails.productID == premiumMonthlyId || 
           purchaseDetails.productID == premiumMonthlyWithTrialId) {
         expiryDate = DateTime.now().add(const Duration(days: 30));
+        subscriptionType = 'monthly';
       } else if (purchaseDetails.productID == premiumYearlyId || 
                  purchaseDetails.productID == premiumYearlyWithTrialId) {
         expiryDate = DateTime.now().add(const Duration(days: 365));
+        subscriptionType = 'yearly';
       } else {
         if (kDebugMode) {
           print('❌ 알 수 없는 상품 ID: ${purchaseDetails.productID}');
@@ -217,6 +221,7 @@ class InAppPurchaseService {
       final success = await _planService.upgradeToPremium(
         user.uid,
         expiryDate: expiryDate,
+        subscriptionType: subscriptionType,
       );
 
       if (success) {

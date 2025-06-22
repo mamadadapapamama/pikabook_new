@@ -144,11 +144,11 @@ class PreLLMWorkflow {
         }
         
         // 페이지 수 업데이트
-        await _noteService.updateNoteMetadata(
-          noteId: noteId,
+          await _noteService.updateNoteMetadata(
+            noteId: noteId,
           pageCount: allPageIds.length,
           updateTimestamp: false,
-        );
+          );
         
         // 모든 이미지에 대해 텍스트 처리 시작 (첫 번째 이미지 포함)
         _startBackgroundProcessing(noteId, allImageFiles, allPageIds, userPrefs);

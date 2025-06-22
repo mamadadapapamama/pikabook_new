@@ -138,8 +138,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
           itemBuilder: (context, index) {
             // 실제 페이지가 로드되어 있으면 페이지 콘텐츠, 아니면 로딩 화면
             if (viewModel.pages != null && index < viewModel.pages!.length) {
-              final page = viewModel.pages![index];
-              return _buildPageContent(context, viewModel, page);
+            final page = viewModel.pages![index];
+            return _buildPageContent(context, viewModel, page);
             } else {
               return _buildPageLoadingContent(context, index + 1);
             }
@@ -224,8 +224,8 @@ class _NoteDetailScreenMVVMState extends State<NoteDetailScreenMVVM> {
     {String? pinyin}
   ) async {
     final success = await viewModel.createFlashCard(front, back, pinyin: pinyin);
-    
-    if (context.mounted) {
+      
+      if (context.mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

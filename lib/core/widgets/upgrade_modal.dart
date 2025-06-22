@@ -14,9 +14,11 @@ import 'package:url_launcher/url_launcher.dart';
 enum UpgradeReason {
   limitReached,     // 한도 도달
   trialExpired,     // 체험 만료 (온보딩 후 무료체험 포함)
+  freeTrialActive,  // 무료체험 중 (바로 구독 유도)
   settings,         // 설정에서 업그레이드
   general,          // 일반적인 업그레이드
   premiumUser,      // 이미 프리미엄 사용자
+  welcomeTrial,     // 온보딩 후 환영 모달 (7일 무료체험 유도)
 }
 
 /// 프리미엄 업그레이드 모달
@@ -76,8 +78,8 @@ class UpgradeModal extends StatelessWidget {
         width: double.infinity,
         constraints: const BoxConstraints(maxWidth: 340),
         decoration: BoxDecoration(
-          color: ColorTokens.surface,
-          borderRadius: BorderRadius.circular(SpacingTokens.radiusMedium),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
@@ -89,21 +91,21 @@ class UpgradeModal extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 상단 이미지 영역
-            _buildHeaderImage(),
+            // 상단 캐릭터 일러스트 영역
+            _buildCharacterHeader(),
             
             // 콘텐츠 영역
             Padding(
-              padding: EdgeInsets.all(SpacingTokens.lg),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  // 제목
-                  _buildTitle(),
-                  SizedBox(height: SpacingTokens.md),
+                  // 메인 메시지
+                  _buildMainMessage(),
+                  const SizedBox(height: 24),
                   
-                  // 메시지
-                  _buildMessage(),
-                  SizedBox(height: SpacingTokens.xl),
+                  // 기능 리스트
+                  _buildFeatureList(),
+                  const SizedBox(height: 32),
                   
                   // 버튼들
                   _buildButtons(context),
@@ -116,254 +118,181 @@ class UpgradeModal extends StatelessWidget {
     );
   }
 
-  /// 상단 이미지 영역
-  Widget _buildHeaderImage() {
+  /// 상단 캐릭터 일러스트 영역
+  Widget _buildCharacterHeader() {
     return Container(
       width: double.infinity,
       height: 160,
-      decoration: BoxDecoration(
-        color: Colors.transparent,
+      decoration: const BoxDecoration(
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(SpacingTokens.radiusMedium),
-          topRight: Radius.circular(SpacingTokens.radiusMedium),
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
         ),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(SpacingTokens.radiusMedium),
-          topRight: Radius.circular(SpacingTokens.radiusMedium),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
         ),
         child: Image.asset(
           'assets/images/ill_premium.png',
           width: double.infinity,
           height: 240,
           fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              height: 240,
+              color: Colors.grey.shade200,
+              child: const Icon(
+                Icons.image_not_supported,
+                size: 48,
+                color: Colors.grey,
+              ),
+            );
+          },
         ),
       ),
     );
   }
-
-  /// 제목
-  Widget _buildTitle() {
-    String title;
-    if (customTitle != null) {
-      title = customTitle!;
-    } else {
-      switch (reason) {
-        case UpgradeReason.limitReached:
-        case UpgradeReason.trialExpired:
-        case UpgradeReason.settings:
-        case UpgradeReason.general:
-          title = '피카북 프리미엄';
-          break;
-        case UpgradeReason.premiumUser:
-          title = '추가 기능 문의';
-          break;
-      }
-    }
-
-    return Text(
-      title,
-      style: TypographyTokens.headline3.copyWith(
-        color: ColorTokens.textPrimary,
-        fontWeight: FontWeight.w700,
+  
+  /// 메인 메시지
+  Widget _buildMainMessage() {
+    return const Text(
+      '월 \$3.99로, pikabook을 마음껏\n사용해 보세요!',
+      style: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.bold,
+        color: Colors.black,
+        height: 1.3,
       ),
       textAlign: TextAlign.center,
     );
   }
 
-  /// 메시지
-  Widget _buildMessage() {
-    if (customMessage != null) {
-      return Text(
-        customMessage!,
-        style: TypographyTokens.body1.copyWith(
-          color: ColorTokens.textPrimary,
-          height: 1.2,
-        ),
-        textAlign: TextAlign.left,
-      );
-    }
-
-    switch (reason) {
-      case UpgradeReason.premiumUser:
-        return Text(
-          '더 많은 기능이 필요하시다면 관리자에게 문의해주세요.',
-          style: TypographyTokens.body1.copyWith(
-            color: ColorTokens.textSecondary,
-            height: 1.5,
-          ),
-          textAlign: TextAlign.center,
-        );
-      
-      case UpgradeReason.limitReached:
-      case UpgradeReason.trialExpired:
-      case UpgradeReason.settings:
-      case UpgradeReason.general:
-      default:
-        return Column(
-          children: [
-            Text(
-              '필요한 만큼 충분히 번역하고, 원어민의 발음을 마음껏 들어보세요.',
-              style: TypographyTokens.body1.copyWith(
-                color: ColorTokens.textSecondary,
-                height: 1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: SpacingTokens.lg),
-            _buildComparisonTable(),
-            SizedBox(height: SpacingTokens.md),
-            _buildFootnotes(),
-          ],
-        );
-    }
-  }
-
-  /// 비교 테이블
-  Widget _buildComparisonTable() {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: ColorTokens.divider),
-        borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-      ),
-      child: Column(
-        children: [
-          // 헤더
-          Container(
-            padding: EdgeInsets.symmetric(
-              vertical: SpacingTokens.sm,
-              horizontal: SpacingTokens.md,
-            ),
-            decoration: BoxDecoration(
-              color: ColorTokens.primaryverylight,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(SpacingTokens.radiusXs),
-                topRight: Radius.circular(SpacingTokens.radiusXs),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    '항목',
-                    style: TypographyTokens.caption.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: ColorTokens.textPrimary,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    '무료 플랜',
-                    style: TypographyTokens.caption.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: ColorTokens.textPrimary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    '프리미엄 플랜',
-                    style: TypographyTokens.caption.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: ColorTokens.primary,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // 스마트 노트 작성량
-          _buildTableRow(
-            '스마트 노트\n작성량*¹',
-            '월 10페이지',
-            '월 300페이지',
-            true,
-          ),
-          // 듣기 기능 사용량
-          _buildTableRow(
-            '듣기 기능\n사용량*²',
-            '월 30회',
-            '월 1,000회',
-            false,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 테이블 행
-  Widget _buildTableRow(String title, String freeValue, String premiumValue, bool isFirst) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        vertical: SpacingTokens.sm,
-        horizontal: SpacingTokens.md,
-      ),
-      decoration: BoxDecoration(
-        border: Border(
-          top: isFirst ? BorderSide.none : BorderSide(color: ColorTokens.divider),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              title,
-              style: TypographyTokens.caption.copyWith(
-                color: ColorTokens.textPrimary,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              freeValue,
-              style: TypographyTokens.caption.copyWith(
-                color: ColorTokens.textSecondary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          Expanded(
-            child: Text(
-              premiumValue,
-              style: TypographyTokens.caption.copyWith(
-                color: ColorTokens.primary,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 각주
-  Widget _buildFootnotes() {
+  /// 기능 리스트
+  Widget _buildFeatureList() {
     return Column(
+      children: [
+        _buildFeatureItem(
+          '📱',
+          '이미지를 스마트 노트로(번역, 병음 제공)',
+          '무료 플랜: 월 10장 → **프리미엄: 월 300장**',
+        ),
+        const SizedBox(height: 16),
+        _buildFeatureItem(
+          '🔊',
+          '원어민 발음 듣기',
+          '무료 플랜: 월 100회 → **프리미엄: 월 1000회**',
+        ),
+        const SizedBox(height: 16),
+        _buildFeatureItem(
+          '📚',
+          '플래시카드 단어 복습',
+          '무료 플랜: 듣기 제한 → **프리미엄: 월 1000회**',
+        ),
+      ],
+    );
+  }
+
+  /// 개별 기능 아이템
+  Widget _buildFeatureItem(String emoji, String title, String description) {
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '*¹ 스마트 노트 1페이지에는 원문, 번역, 병음이 포함됩니다',
-          style: TypographyTokens.caption.copyWith(
-            color: ColorTokens.textTertiary,
-            fontSize: 10,
+        Container(
+          width: 24,
+          height: 24,
+          margin: const EdgeInsets.only(right: 12),
+          child: Text(
+            emoji,
+            style: const TextStyle(fontSize: 18),
+            textAlign: TextAlign.center,
           ),
         ),
-        SizedBox(height: 2),
-        Text(
-          '*² 새로운 문장을 들을 때만 횟수가 차감됩니다',
-          style: TypographyTokens.caption.copyWith(
-            color: ColorTokens.textTertiary,
-            fontSize: 10,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black,
+                ),
+              ),
+              const SizedBox(height: 2),
+              _buildRichDescription(description),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  /// 인라인 스타일링으로 프리미엄 정보 강조
+  Widget _buildRichDescription(String description) {
+    // ** 마크다운 스타일 볼드 처리
+    final boldPattern = RegExp(r'\*\*(.*?)\*\*');
+    final matches = boldPattern.allMatches(description);
+    
+    if (matches.isEmpty) {
+      // 볼드 처리할 텍스트가 없는 경우
+      return Text(
+        description,
+        style: const TextStyle(
+          fontSize: 12,
+          color: Colors.black,
+          height: 1.2,
+        ),
+      );
+    }
+
+    // 볼드 처리가 있는 경우 RichText로 처리
+    List<TextSpan> spans = [];
+    int lastEnd = 0;
+    
+    for (final match in matches) {
+      // 볼드 이전 텍스트 추가
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: description.substring(lastEnd, match.start),
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.black,
+            height: 1.2,
+          ),
+        ));
+      }
+      
+      // 볼드 텍스트 추가
+      spans.add(TextSpan(
+        text: match.group(1), // ** 안의 텍스트만
+        style: const TextStyle(
+          fontSize: 12,
+          color: Colors.black,
+          height: 1.2,
+          fontWeight: FontWeight.bold,
+        ),
+      ));
+      
+      lastEnd = match.end;
+    }
+    
+    // 마지막 남은 텍스트 추가
+    if (lastEnd < description.length) {
+      spans.add(TextSpan(
+        text: description.substring(lastEnd),
+        style: const TextStyle(
+          fontSize: 12,
+          color: Colors.black,
+          height: 1.2,
+        ),
+      ));
+    }
+
+    return RichText(
+      text: TextSpan(children: spans),
     );
   }
 
@@ -373,89 +302,60 @@ class UpgradeModal extends StatelessWidget {
     if (reason == UpgradeReason.premiumUser) {
       return Column(
         children: [
-          PikaButton(
-            text: '더 많은 기능이 필요해요',
-            onPressed: () async {
+          _buildPrimaryButton(
+            '더 많은 기능이 필요해요',
+            '',
+            () async {
               Navigator.of(context).pop(true);
               await launchUrl(Uri.parse('https://forms.gle/YaeznYjGLiMdHmBD9'));
               onUpgrade?.call();
             },
-            isFullWidth: true,
-            variant: PikaButtonVariant.primary,
           ),
           
-          SizedBox(height: SpacingTokens.sm),
+          const SizedBox(height: 16),
           
-          TextButton(
-            onPressed: () {
+          _buildTextButton(
+            '닫기',
+            () {
               Navigator.of(context).pop(false);
               onCancel?.call();
             },
-            child: Text(
-              '닫기',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textTertiary,
-              ),
-            ),
           ),
         ],
       );
     }
 
-    // 온보딩 환영 모달의 경우
-    if (reason == UpgradeReason.trialExpired) {
+    // 온보딩 후 환영 모달 (7일 무료체험 유도)
+    if (reason == UpgradeReason.welcomeTrial) {
       return Column(
         children: [
-          // 즉시 유료 구독 버튼 (연간)
-          PikaButton(
-            text: '연간 구독 시작 \$34.99',
-            onPressed: () async {
+          // 주황색 CTA 버튼 - 7일 무료체험
+          _buildPrimaryButton(
+            '무료로 프리미엄 체험하기',
+            '(월 \$3.99, 7일간 무료)',
+            () async {
               Navigator.of(context).pop(true);
-              // 즉시 유료 구독 (무료체험 없음)
               try {
                 final purchaseService = InAppPurchaseService();
                 if (!purchaseService.isAvailable) {
                   await purchaseService.initialize();
                 }
-                if (kDebugMode) debugPrint('🎯 Starting immediate yearly subscription');
-                await _handlePurchase(context, InAppPurchaseService.premiumYearlyId);
-              } catch (e) {
-                if (kDebugMode) debugPrint('❌ Yearly subscription error: $e');
-              }
-              onUpgrade?.call();
-            },
-            isFullWidth: true,
-            variant: PikaButtonVariant.primary,
-          ),
-          
-          SizedBox(height: SpacingTokens.md),
-          
-          // 즉시 유료 구독 버튼 (월간)
-          PikaButton(
-            text: '월간 구독 시작 \$3.99',
-            onPressed: () async {
-              Navigator.of(context).pop(true);
-              // 즉시 유료 구독 (무료체험 없음)
-              try {
-                final purchaseService = InAppPurchaseService();
-                if (!purchaseService.isAvailable) {
-                  await purchaseService.initialize();
-                }
-                if (kDebugMode) debugPrint('🎯 Starting immediate monthly subscription');
+                if (kDebugMode) debugPrint('🎯 Starting monthly subscription with trial');
                 await _handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
               } catch (e) {
-                if (kDebugMode) debugPrint('❌ Monthly subscription error: $e');
+                if (kDebugMode) debugPrint('❌ Trial subscription error: $e');
               }
               onUpgrade?.call();
             },
-            isFullWidth: true,
-            variant: PikaButtonVariant.outline,
+
           ),
           
-          SizedBox(height: SpacingTokens.md),
+          const SizedBox(height: 16),
           
-          TextButton(
-            onPressed: () async {
+          // 하단 링크 - 무료 플랜
+          _buildTextButton(
+            '무료 플랜으로 시작하기',
+            () async {
               Navigator.of(context).pop(false);
               // 간단한 무료체험 시작
               try {
@@ -469,8 +369,85 @@ class UpgradeModal extends StatelessWidget {
               }
               onCancel?.call();
             },
+          ),
+        ],
+      );
+    }
+
+    // 프리미엄 무료체험 중 (바로 구독 유도)
+    if (reason == UpgradeReason.freeTrialActive) {
+      return Column(
+        children: [
+          // 연간 구독 버튼 (할인 강조)
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: ColorTokens.primary, width: 2),
+              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+            ),
+            child: Column(
+              children: [
+                // 할인 배지
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(vertical: 4),
+                  decoration: BoxDecoration(
+                    color: ColorTokens.primary,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(SpacingTokens.radiusSmall - 2),
+                      topRight: Radius.circular(SpacingTokens.radiusSmall - 2),
+                    ),
+                  ),
+                  child: Text(
+                    '27% 할인',
+                    style: TypographyTokens.caption.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                // 연간 구독 버튼
+                Padding(
+                  padding: EdgeInsets.all(SpacingTokens.sm),
+                  child: PikaButton(
+                    text: '연간 구독 \$34.99 USD',
+                    onPressed: () async {
+                      Navigator.of(context).pop(true);
+                      await _handlePurchase(context, InAppPurchaseService.premiumYearlyId);
+                      onUpgrade?.call();
+                    },
+                    isFullWidth: true,
+                    variant: PikaButtonVariant.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          SizedBox(height: SpacingTokens.md),
+          
+          // 월간 구독 버튼
+          PikaButton(
+            text: '월간 구독 \$3.99 USD',
+            onPressed: () async {
+              Navigator.of(context).pop(true);
+              await _handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
+              onUpgrade?.call();
+            },
+            isFullWidth: true,
+            variant: PikaButtonVariant.outline,
+          ),
+          
+          SizedBox(height: SpacingTokens.sm),
+          
+          // 취소 버튼
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(false);
+              onCancel?.call();
+            },
             child: Text(
-              '무료 플랜으로 시작',
+              '나중에',
               style: TypographyTokens.button.copyWith(
                 color: ColorTokens.textTertiary,
               ),
@@ -480,7 +457,7 @@ class UpgradeModal extends StatelessWidget {
       );
     }
 
-    // 일반 사용자인 경우 구독 옵션 표시
+    // 일반 사용자인 경우 구독 옵션 표시 (기존 디자인)
     return Column(
       children: [
         // 연간 구독 버튼 (할인 강조)
@@ -548,21 +525,8 @@ class UpgradeModal extends StatelessWidget {
         // 취소 버튼
         TextButton(
           onPressed: () {
-            if (kDebugMode) {
-              debugPrint('🚪 [UpgradeModal] 나가기 버튼 클릭');
-              debugPrint('📍 [UpgradeModal] 현재 라우트: ${ModalRoute.of(context)?.settings.name}');
-            }
-            
-            // 모달 닫기
             Navigator.of(context).pop(false);
-            
-            // onCancel 콜백 호출 (모달이 닫힌 후)
-            if (onCancel != null) {
-              if (kDebugMode) {
-                debugPrint('🔄 [UpgradeModal] onCancel 콜백 호출');
-              }
-              onCancel!();
-            }
+            onCancel?.call();
           },
           child: Text(
             cancelButtonText ?? '나가기',
@@ -575,11 +539,73 @@ class UpgradeModal extends StatelessWidget {
     );
   }
 
+  /// 주요 버튼 (주황색)
+  Widget _buildPrimaryButton(String mainText, String subText, VoidCallback onPressed) {
+    return Container(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFFFF6B35),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          elevation: 0,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              mainText,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (subText.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                subText,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.normal,
+                  color: Colors.white70,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 텍스트 버튼
+  Widget _buildTextButton(String text, VoidCallback onPressed) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 14,
+          color: Color(0xFF666666),
+          decoration: TextDecoration.underline,
+        ),
+      ),
+    );
+  }
+
   /// 인앱 구매 처리
   static Future<void> _handlePurchase(BuildContext context, String productId) async {
     try {
       if (kDebugMode) {
-        debugPrint('�� [UpgradeModal] 인앱 구매 시작: $productId');
+        debugPrint('🎯 [UpgradeModal] 인앱 구매 시작: $productId');
       }
 
       final purchaseService = InAppPurchaseService();
@@ -633,7 +659,7 @@ class UpgradeModal extends StatelessWidget {
 
 /// 업그레이드 유도 관련 유틸리티 클래스
 class UpgradePromptHelper {
-  /// 온보딩 완료 후 환영 모달 표시
+  /// 온보딩 완료 후 환영 모달 표시 (7일 무료체험 유도)
   static Future<void> showWelcomeTrialPrompt(
     BuildContext context, {
     required VoidCallback onComplete,
@@ -641,18 +667,29 @@ class UpgradePromptHelper {
     try {
       await UpgradeModal.show(
         context,
-        reason: UpgradeReason.trialExpired,
-        customTitle: '월 \$3.99로 Pikabook의 모든 기능을 마음껏 사용해 보세요!',
-        customMessage: '•🈶 이미지에서 바로 번역하고 한어병음 확인\n무료 플랜: 월 10장 → 월 300장까지\n\n• 🔊 원어민 발음 듣기 (느리게/빠르게 조절 가능) \n무료 플랜: 월 100회 →  월 1000회까지 \n\n•🃏 플래시카드로 단어 복습: 무료 플랜: 듣기 제한 100회, 프리미엄 플랜: 월 1000회 까지',
+        reason: UpgradeReason.welcomeTrial,
         // onUpgrade는 버튼 내에서 직접 처리  
       );
     } catch (e) {
       if (kDebugMode) {
-        debugPrint(' welcoming modal display error: $e');
+        debugPrint('welcoming modal display error: $e');
       }
     } finally {
       onComplete();
     }
+  }
+
+  /// 프리미엄 무료체험 중 업그레이드 모달 표시 (바로 구독 유도)
+  static Future<bool?> showFreeTrialUpgradePrompt(
+    BuildContext context, {
+    VoidCallback? onCancel,
+  }) {
+    return UpgradeModal.show(
+      context,
+      reason: UpgradeReason.freeTrialActive,
+      onUpgrade: () => _handleUpgrade(context),
+      onCancel: onCancel,
+    );
   }
 
   /// TTS 기능 제한 시 표시할 모달
@@ -686,4 +723,4 @@ class UpgradePromptHelper {
     // 기본적으로 월간 구독으로 연결
     UpgradeModal._handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
   }
-} 
+}

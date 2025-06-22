@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../../core/models/processed_text.dart';
 import '../../utils/language_constants.dart';
-import '../../../core/services/common/usage_limit_service.dart';
 import 'dart:async';
 import '../../../core/models/text_unit.dart';
 import 'tts_api_service.dart';
@@ -21,7 +20,6 @@ class TTSService {
   // 서비스 인스턴스
   final TtsApiService _apiService = TtsApiService();
   final TTSCacheService _cacheService = TTSCacheService();
-  final UsageLimitService _usageLimitService = UsageLimitService();
   
   // 오디오 재생 관련 (TtsPlaybackService에서 이동)
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -35,8 +33,6 @@ class TTSService {
   // 세그먼트 관리
   int? _currentSegmentIndex;
   List<TextUnit> _currentSegments = [];
-  StreamController<int>? _segmentStreamController;
-  Stream<int>? _segmentStream;
 
   // 콜백
   Function(int?)? _onPlayingStateChanged;
@@ -165,7 +161,7 @@ class TTSService {
       final file = File(filePath);
       if (!await file.exists()) {
         debugPrint('❌ 오디오 파일이 존재하지 않음: $filePath');
-        _isSpeaking = false;
+        _resetState();
         return;
       }
 
@@ -173,14 +169,14 @@ class TTSService {
       final fileSize = await file.length();
       debugPrint('🎵 오디오 파일 정보: ${filePath.split('/').last} (${fileSize} bytes)');
 
-      // 완전한 상태 초기화
-      await _resetAudioPlayer();
+      // 재생 중지 및 상태 초기화
+      await _audioPlayer.stop();
       
       // 볼륨 설정 (최대 볼륨)
       await _audioPlayer.setVolume(1.0);
       debugPrint('🔊 볼륨 설정: 1.0 (최대)');
       
-      // 오디오 소스 설정 (setFilePath 대신 setAudioSource만 사용)
+      // 오디오 소스 설정
       await _audioPlayer.setAudioSource(
         AudioSource.uri(Uri.file(filePath)),
       );
@@ -207,42 +203,6 @@ class TTSService {
     }
   }
 
-  /// 오디오 플레이어 완전 초기화
-  Future<void> _resetAudioPlayer() async {
-    try {
-      // 재생 중지
-      await _audioPlayer.stop();
-      
-      // 오디오 소스 해제
-      try {
-        await _audioPlayer.setAudioSource(AudioSource.uri(Uri.parse('about:blank')));
-      } catch (e) {
-        debugPrint('⚠️ 오디오 소스 해제 중 오류 (무시): $e');
-      }
-      
-      // 잠시 대기하여 상태 안정화
-      await Future.delayed(Duration(milliseconds: 100));
-      
-      debugPrint('🔄 오디오 플레이어 초기화 완료');
-    } catch (e) {
-      debugPrint('⚠️ 오디오 플레이어 초기화 중 오류: $e');
-      
-      // 최후의 수단: 플레이어 재생성 시도
-      try {
-        // 기존 이벤트 리스너 해제
-        await _playerStateSubscription?.cancel();
-        await _playbackEventSubscription?.cancel();
-        
-        // 새로운 이벤트 핸들러 설정
-        await _setupEventHandlers();
-        
-        debugPrint('🔄 오디오 플레이어 이벤트 핸들러 재설정 완료');
-      } catch (setupError) {
-        debugPrint('❌ 오디오 플레이어 이벤트 핸들러 재설정 실패: $setupError');
-      }
-    }
-  }
-
   /// 상태 초기화
   void _resetState() {
     _isSpeaking = false;
@@ -252,33 +212,23 @@ class TTSService {
 
   /// TTS 에러 처리 및 완전 초기화
   Future<void> _handleTtsError(String errorMessage) async {
-    debugPrint('🔄 TTS 에러 처리 시작: $errorMessage');
+    debugPrint('🔄 TTS 에러 처리: $errorMessage');
     
     try {
-      // 1. 오디오 플레이어 완전 정지 및 초기화
-      await _resetAudioPlayer();
+      // 1. 재생 중지
+      await _audioPlayer.stop();
       
       // 2. 상태 초기화
       _resetState();
       
-      // 3. 이벤트 핸들러 재설정
-      await _setupEventHandlers();
+      // 3. 잠시 대기하여 상태 안정화
+      await Future.delayed(Duration(milliseconds: 100));
       
-      // 4. 잠시 대기하여 상태 안정화
-      await Future.delayed(Duration(milliseconds: 200));
-      
-      debugPrint('✅ TTS 에러 처리 완료 - 서비스 재초기화됨');
+      debugPrint('✅ TTS 에러 처리 완료');
     } catch (e) {
       debugPrint('❌ TTS 에러 처리 중 추가 오류: $e');
-      
-      // 최후의 수단: 서비스 완전 재초기화
-      try {
-        _isInitialized = false;
-        await init();
-        debugPrint('🔄 TTS 서비스 완전 재초기화 완료');
-      } catch (reinitError) {
-        debugPrint('❌ TTS 서비스 재초기화도 실패: $reinitError');
-      }
+      // 최후의 수단: 상태만 초기화
+      _resetState();
     }
   }
 
@@ -286,13 +236,13 @@ class TTSService {
   Future<void> stop() async {
     try {
       debugPrint('⏹️ TTS 재생 중지 요청');
-      await _resetAudioPlayer();
+      await _audioPlayer.stop();
       _resetState();
       debugPrint('✅ TTS 재생 중지 완료');
     } catch (e) {
       debugPrint('❌ TTS 중지 중 오류: $e');
-      // 오류가 발생하면 완전한 에러 처리 수행
-      await _handleTtsError('TTS 중지 오류: $e');
+      // 오류가 발생해도 상태는 초기화
+      _resetState();
     }
   }
 
@@ -300,6 +250,19 @@ class TTSService {
   Future<void> pause() async {
     await _audioPlayer.pause();
     _ttsState = TtsState.paused;
+  }
+
+  /// **단일 세그먼트 읽기**
+  Future<void> speakSegment(String text, int segmentIndex) async {
+    if (!_isInitialized) await init();
+    if (text.isEmpty) return;
+    
+    // 현재 재생 중인 세그먼트 설정
+    _currentSegmentIndex = segmentIndex;
+    _updateCurrentSegment(segmentIndex);
+    
+    // 텍스트 읽기
+    await speak(text);
   }
 
   /// 현재 재생 중인 세그먼트 인덱스
@@ -323,7 +286,7 @@ class TTSService {
     }
 
     // 세그먼트 설정
-    setSegments(units);
+    _currentSegments = units;
     
     // 모든 내용 순차 재생
     debugPrint("${units.length}개 항목 순차 재생 시작");
@@ -331,7 +294,8 @@ class TTSService {
     for (var i = 0; i < units.length; i++) {
       if (_ttsState != TtsState.playing) break;
       
-      setCurrentSegmentIndex(i);
+      _currentSegmentIndex = i;
+      _updateCurrentSegment(i);
       
       try {
         await speak(units[i].originalText);
@@ -342,101 +306,11 @@ class TTSService {
     }
   }
 
-  /// **단일 세그먼트 읽기**
-  Future<void> speakSegment(String text, int segmentIndex) async {
-    if (!_isInitialized) await init();
-    if (text.isEmpty) return;
-    
-    // 현재 재생 중인 세그먼트 설정
-    setCurrentSegmentIndex(segmentIndex);
-    
-    // 텍스트 읽기
-    await speak(text);
-  }
-
-  /// 세그먼트 설정
-  void setSegments(List<TextUnit> segments) {
-    _currentSegments = segments;
-    createSegmentStream();
-  }
-
-  /// 현재 세그먼트 인덱스 설정
-  void setCurrentSegmentIndex(int index) {
-    if (index >= 0 && index < _currentSegments.length) {
-      _currentSegmentIndex = index;
-      _updateCurrentSegment(index);
-    }
-  }
-
-  /// 다음 세그먼트로 이동
-  Future<void> nextSegment() async {
-    if (_currentSegmentIndex == null || _currentSegmentIndex! >= _currentSegments.length - 1) {
-      return;
-    }
-    
-    final nextIndex = _currentSegmentIndex! + 1;
-    final segment = _currentSegments[nextIndex];
-    
-    setCurrentSegmentIndex(nextIndex);
-    await speak(segment.originalText);
-    
-    if (kDebugMode) {
-      debugPrint('다음 세그먼트 재생: ${nextIndex + 1}/${_currentSegments.length}');
-    }
-  }
-
-  /// 이전 세그먼트로 이동
-  Future<void> previousSegment() async {
-    if (_currentSegmentIndex == null || _currentSegmentIndex! <= 0) {
-      return;
-    }
-    
-    final prevIndex = _currentSegmentIndex! - 1;
-    final segment = _currentSegments[prevIndex];
-    
-    setCurrentSegmentIndex(prevIndex);
-    await speak(segment.originalText);
-    
-    if (kDebugMode) {
-      debugPrint('이전 세그먼트 재생: ${prevIndex + 1}/${_currentSegments.length}');
-    }
-  }
-
-  /// 현재 세그먼트 다시 읽기
-  Future<void> repeatCurrentSegment() async {
-    if (_currentSegmentIndex == null || 
-        _currentSegmentIndex! < 0 || 
-        _currentSegmentIndex! >= _currentSegments.length) {
-      return;
-    }
-
-    final segment = _currentSegments[_currentSegmentIndex!];
-    await speak(segment.originalText);
-    
-    if (kDebugMode) {
-      debugPrint('현재 세그먼트 다시 읽기: ${_currentSegmentIndex! + 1}/${_currentSegments.length}');
-    }
-  }
-
-  /// 세그먼트 스트림 가져오기
-  Stream<int>? get segmentStream => _segmentStream;
-
-  /// 세그먼트 스트림 생성
-  void createSegmentStream() {
-    _segmentStreamController = StreamController<int>.broadcast();
-    _segmentStream = _segmentStreamController?.stream;
-  }
-
   /// 현재 재생 중인 세그먼트 업데이트
   void _updateCurrentSegment(int? segmentIndex) {
     _currentSegmentIndex = segmentIndex;
     if (_onPlayingStateChanged != null) {
       _onPlayingStateChanged!(_currentSegmentIndex);
-    }
-    
-    // 스트림에 알림
-    if (segmentIndex != null && _segmentStreamController != null) {
-      _segmentStreamController!.add(segmentIndex);
     }
   }
 
@@ -499,10 +373,6 @@ class TTSService {
     _playerStateSubscription = null;
     _playbackEventSubscription = null;
     
-    await _segmentStreamController?.close();
-    _segmentStreamController = null;
-    _segmentStream = null;
-    
     await _audioPlayer.dispose();
     await _cacheService.dispose();
     _isInitialized = false;
@@ -511,8 +381,4 @@ class TTSService {
       debugPrint('TTS 서비스 리소스 해제 완료');
     }
   }
-
-  // 하위 호환성을 위한 별칭 메서드들
-  Future<void> speakSegments(ProcessedText text) async => await speakAllSegments(text);
-  Future<void> speakFullText(ProcessedText text) async => await speakAllSegments(text);
 }

@@ -2,15 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
-import 'usage_limit_service.dart';
 import '../../models/plan.dart';
 
 /// 구독 플랜과 사용량 관리를 위한 서비스
 class PlanService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final UsageLimitService _usageLimitService = UsageLimitService();
   
   // 플랜 유형
   static const String PLAN_FREE = 'free';
@@ -69,66 +66,11 @@ class PlanService {
         }
       }
       
-      if (_currentUserId != null) {
-        final userDoc = await _firestore
-            .collection('users')
-            .doc(_currentUserId)
-            .get();
-            
-        if (userDoc.exists) {
-          final userData = userDoc.data();
-          
-          if (kDebugMode) {
-            debugPrint('🔍 PlanService - 사용자 데이터 확인:');
-            debugPrint('   사용자 ID: $_currentUserId');
-            debugPrint('   subscription: ${userData?['subscription']}');
-            debugPrint('   planType: ${userData?['planType']}');
-          }
-          
-          // 1. 새로운 subscription 구조 확인
-          final planData = userData?['subscription'];
-          if (planData != null) {
-            final planType = planData['plan'] as String?;
-            final expiryDate = planData['expiryDate'];
-            
-            if (kDebugMode) {
-              debugPrint('🔍 subscription 구조 발견:');
-              debugPrint('   plan: $planType');
-              debugPrint('   expiryDate: $expiryDate');
-              debugPrint('   현재 시간: ${DateTime.now()}');
-            }
-            
-            // Premium 플랜이고 만료되지 않았으면 Premium 반환
-            if (planType == PLAN_PREMIUM && expiryDate != null) {
-              final expiry = (expiryDate as Timestamp).toDate();
-              if (expiry.isAfter(DateTime.now())) {
-                debugPrint('✅ 프리미엄 플랜 확인됨! (만료일: $expiry)');
-                _updateCache(PLAN_PREMIUM);
-                return PLAN_PREMIUM;
-              } else {
-                debugPrint('⚠️ 프리미엄 플랜이지만 만료됨 (만료일: $expiry)');
-              }
-            }
-          }
-          
-          // 2. 기존 planType 필드 확인 (하위 호환성)
-          final legacyPlanType = userData?['planType'] as String?;
-          if (legacyPlanType != null) {
-            // 기존 데이터가 있으면 새 구조로 마이그레이션
-            if (legacyPlanType == 'premium') {
-              _updateCache(PLAN_PREMIUM);
-              return PLAN_PREMIUM;
-            } else if (legacyPlanType == 'free') {
-              _updateCache(PLAN_FREE);
-              return PLAN_FREE;
-            }
-          }
-        }
-      }
-
-      // 기본값은 Free
-      _updateCache(PLAN_FREE);
-      return PLAN_FREE;
+      // 직접 플랜 타입만 확인 (getSubscriptionDetails 호출하면 무한 루프)
+      final currentPlan = await _getCurrentPlanTypeFromFirestore();
+      
+      _updateCache(currentPlan);
+      return currentPlan;
     } catch (e) {
       debugPrint('플랜 정보 조회 오류: $e');
       _updateCache(PLAN_FREE);
@@ -148,6 +90,43 @@ class PlanService {
     _cachedPlanType = null;
     _cachedUserId = null;
     _cacheTimestamp = null;
+  }
+  
+  /// Firestore에서 직접 플랜 타입만 확인 (내부용)
+  Future<String> _getCurrentPlanTypeFromFirestore() async {
+    if (_currentUserId == null) return PLAN_FREE;
+    
+    final userDoc = await _firestore
+        .collection('users')
+        .doc(_currentUserId)
+        .get();
+        
+    if (!userDoc.exists) return PLAN_FREE;
+    
+    final userData = userDoc.data();
+    
+    // 1. 새로운 subscription 구조 확인
+    final planData = userData?['subscription'];
+    if (planData != null) {
+      final planType = planData['plan'] as String?;
+      final expiryDate = planData['expiryDate'];
+      
+      // Premium 플랜이고 만료되지 않았으면 Premium 반환
+      if (planType == PLAN_PREMIUM && expiryDate != null) {
+        final expiry = (expiryDate as Timestamp).toDate();
+        if (expiry.isAfter(DateTime.now())) {
+          return PLAN_PREMIUM;
+        }
+      }
+    }
+    
+    // 2. 기존 planType 필드 확인 (하위 호환성)
+    final legacyPlanType = userData?['planType'] as String?;
+    if (legacyPlanType == 'premium') {
+      return PLAN_PREMIUM;
+    }
+    
+    return PLAN_FREE;
   }
   
   /// 플랜 변경 감지
@@ -189,41 +168,10 @@ class PlanService {
     return Map<String, int>.from(PLAN_LIMITS[planType] ?? PLAN_LIMITS[PLAN_FREE]!);
   }
   
-  /// 현재 사용량 퍼센트 가져오기
-  Future<Map<String, double>> getUsagePercentages() async {
-    return await _usageLimitService.getUsagePercentages();
-  }
-  
-  /// 현재 사용량 데이터 가져오기
-  Future<Map<String, dynamic>> getCurrentUsage() async {
-    return await _usageLimitService.getUserUsage(forceRefresh: true);
-  }
-  
   /// 사용자의 구독 업그레이드 여부 확인
   Future<bool> canUpgradePlan() async {
     final currentPlan = await getCurrentPlanType();
     return currentPlan != PLAN_PREMIUM;
-  }
-  
-  /// 플랜 상세 정보 (UI 표시용)
-  Future<Map<String, dynamic>> getPlanDetails() async {
-    final planType = await getCurrentPlanType();
-    final planLimits = await getPlanLimits(planType);
-    final currentUsage = await getCurrentUsage();
-    final usagePercentages = await getUsagePercentages();
-    
-    return {
-      'planType': planType,
-      'planName': getPlanName(planType),
-      'planLimits': planLimits,
-      'currentUsage': currentUsage,
-      'usagePercentages': usagePercentages,
-    };
-  }
-  
-  /// 사용자 제한 상태 확인
-  Future<Map<String, dynamic>> checkUserLimits() async {
-    return await _usageLimitService.checkFreeLimits();
   }
   
   /// Plan 모델을 사용하여 현재 플랜 정보 가져오기
@@ -235,21 +183,34 @@ class PlanService {
       final daysRemaining = subscriptionDetails['daysRemaining'] as int;
       final expiryDate = subscriptionDetails['expiryDate'] as DateTime?;
       final hasUsedFreeTrial = subscriptionDetails['hasUsedFreeTrial'] as bool;
+      final subscriptionType = subscriptionDetails['subscriptionType'] as String?; // yearly/monthly 정보
       
       final limits = await getPlanLimits(currentPlan);
       
       if (currentPlan == PLAN_PREMIUM && isFreeTrial && daysRemaining > 0) {
         // 프리미엄 체험 중
+        String planName = '프리미엄 체험 (${daysRemaining}일 남음)';
+        if (subscriptionType != null) {
+          planName = '프리미엄 체험 ($subscriptionType, ${daysRemaining}일 남음)';
+        }
         return Plan.premiumTrial(
           daysRemaining: daysRemaining,
           expiryDate: expiryDate,
           limits: limits,
-        ).copyWith(hasUsedFreeTrial: hasUsedFreeTrial);
+        ).copyWith(
+          hasUsedFreeTrial: hasUsedFreeTrial,
+          name: planName,
+        );
       } else if (currentPlan == PLAN_PREMIUM) {
         // 정식 프리미엄
+        String planName = '프리미엄';
+        if (subscriptionType != null) {
+          planName = '프리미엄 ($subscriptionType)';
+        }
         return Plan.premium(limits: limits).copyWith(
           hasUsedFreeTrial: hasUsedFreeTrial,
           expiryDate: expiryDate,
+          name: planName,
         );
       } else {
         // 무료 플랜
@@ -284,6 +245,7 @@ class PlanService {
   /// Premium 플랜으로 업그레이드
   Future<bool> upgradeToPremium(String userId, {
     required DateTime expiryDate,
+    String? subscriptionType, // yearly 또는 monthly
   }) async {
     try {
       await _firestore
@@ -295,6 +257,7 @@ class PlanService {
               'startDate': FieldValue.serverTimestamp(),
               'expiryDate': Timestamp.fromDate(expiryDate),
               'status': 'active',
+              'subscriptionType': subscriptionType, // yearly/monthly 정보 저장
             }
           }, SetOptions(merge: true));
       
@@ -306,12 +269,14 @@ class PlanService {
   }
 
   /// 월간 사용량 초기화 (매월 1일 실행)
+  /// 참고: 실제 사용량 초기화는 UsageLimitService에서 직접 처리하세요
   Future<void> resetMonthlyUsage() async {
     final planType = await getCurrentPlanType();
     
-    // Premium이 아닌 경우만 초기화
+    // Premium이 아닌 경우만 초기화 필요
     if (planType == PLAN_FREE) {
-      await _usageLimitService.resetAllUsage();
+      debugPrint('무료 플랜 사용자 - 월간 사용량 초기화 필요');
+      // 실제 초기화는 UsageLimitService.resetAllUsage() 직접 호출
     }
   }
 
@@ -391,6 +356,7 @@ class PlanService {
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
+          'subscriptionType': null,
         };
       }
 
@@ -406,6 +372,7 @@ class PlanService {
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
+          'subscriptionType': null,
         };
       }
 
@@ -422,6 +389,7 @@ class PlanService {
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
+          'subscriptionType': null,
         };
       }
 
@@ -429,6 +397,7 @@ class PlanService {
       final status = subscriptionData['status'] as String?;
       final isFreeTrial = subscriptionData['isFreeTrial'] as bool? ?? false;
       final expiryDate = subscriptionData['expiryDate'] as Timestamp?;
+      final subscriptionType = subscriptionData['subscriptionType'] as String?; // yearly/monthly
 
       int daysRemaining = 0;
       String currentPlan = PLAN_FREE;
@@ -454,6 +423,7 @@ class PlanService {
         print('   남은 일수: $daysRemaining');
         print('   만료일: ${expiryDate?.toDate()}');
         print('   상태: $status');
+        print('   구독 유형: $subscriptionType');
       }
 
       return {
@@ -463,6 +433,7 @@ class PlanService {
         'daysRemaining': daysRemaining,
         'expiryDate': expiryDate?.toDate(),
         'status': status,
+        'subscriptionType': subscriptionType,
       };
     } catch (e) {
       debugPrint('구독 상세 정보 조회 중 오류: $e');
@@ -472,6 +443,7 @@ class PlanService {
         'isFreeTrial': false,
         'daysRemaining': 0,
         'expiryDate': null,
+        'subscriptionType': null,
       };
     }
   }

@@ -288,9 +288,9 @@ class ImageService {
       } catch (e) {
         if (kDebugMode) {
           debugPrint('⚠️ Firebase 업로드 실패, 상대 경로 반환: $e');
-        }
+      }
         // Firebase 업로드 실패 시 상대 경로 반환 (로컬에서는 작동)
-        return relativePath;
+      return relativePath;
       }
 
     } catch (e) {

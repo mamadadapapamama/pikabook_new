@@ -192,7 +192,7 @@ class FlashCardViewModel extends ChangeNotifier {
   Future<bool> deleteFlashCard(String cardId) async {
     // 로그인 체크 - 로그아웃 상태에서는 플래시카드 삭제 불가
     if (_authService.currentUser == null) {
-      setError('플래시카드 삭제는 로그인이 필요한 기능입니다');
+      setError('플래시카드 삭제는 샘플 모드에서는 지원되지 않습니다.');
       return false;
     }
     
@@ -224,7 +224,7 @@ class FlashCardViewModel extends ChangeNotifier {
   Future<bool> deleteCurrentCard() async {
     // 로그인 체크 - 로그아웃 상태에서는 플래시카드 삭제 불가
     if (_authService.currentUser == null) {
-      setError('플래시카드 삭제는 로그인이 필요한 기능입니다');
+      setError('플래시카드 삭제는 샘플 모드에서는 지원되지 않습니다.');
       return false;
     }
     
@@ -387,50 +387,25 @@ class FlashCardViewModel extends ChangeNotifier {
   void extractFlashcardWords() {
     final Set<String> newFlashcardWords = {};
 
-    if (kDebugMode) {
-      debugPrint('FlashCardViewModel: extractFlashcardWords 호출');
-    }
-
     if (_flashCards.isNotEmpty) {
-      if (kDebugMode) {
-        debugPrint('FlashCardViewModel: 플래시카드 목록 수: ${_flashCards.length}개');
-      }
-
       for (final card in _flashCards) {
         if (card.front.isNotEmpty) {
           newFlashcardWords.add(card.front);
         }
       }
-
-      if (_flashCards.isNotEmpty && kDebugMode) {
-        debugPrint(
-            'FlashCardViewModel: 첫 5개 플래시카드: ${_flashCards.take(5).map((card) => card.front).join(', ')}');
-      }
-    } else if (kDebugMode) {
-      debugPrint('FlashCardViewModel: 플래시카드 목록이 비어있음');
     }
 
     // 변경 사항이 있는 경우에만 업데이트
     if (_flashcardWords.length != newFlashcardWords.length ||
         !_flashcardWords.containsAll(newFlashcardWords) ||
         !newFlashcardWords.containsAll(_flashcardWords)) {
+      
       if (kDebugMode) {
-        debugPrint('FlashCardViewModel: 플래시카드 단어 목록 변경 감지:');
-        debugPrint('  이전: ${_flashcardWords.length}개');
-        debugPrint('  새로운: ${newFlashcardWords.length}개');
+        debugPrint('FlashCardViewModel: 플래시카드 단어 목록 업데이트: ${_flashcardWords.length} → ${newFlashcardWords.length}개');
       }
 
       _flashcardWords = newFlashcardWords;
       notifyListeners();
-
-      if (kDebugMode) {
-        debugPrint('FlashCardViewModel: 플래시카드 단어 목록 업데이트 완료: ${_flashcardWords.length}개');
-        if (_flashcardWords.isNotEmpty) {
-          debugPrint('FlashCardViewModel: 첫 5개 단어: ${_flashcardWords.take(5).join(', ')}');
-        }
-      }
-    } else if (kDebugMode) {
-      debugPrint('FlashCardViewModel: 플래시카드 단어 목록 변경 없음: ${_flashcardWords.length}개');
     }
   }
   
