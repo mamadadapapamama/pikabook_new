@@ -1,7 +1,8 @@
-import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/foundation.dart';
 
 /// 로컬 노티피케이션 서비스
 class NotificationService {
@@ -16,14 +17,21 @@ class NotificationService {
 
   /// 노티피케이션 서비스 초기화
   Future<void> initialize() async {
-    if (_isInitialized) return;
+    if (_isInitialized) {
+      if (kDebugMode) {
+        debugPrint('ℹ️ [Notification] 이미 초기화됨');
+      }
+      return;
+    }
 
     try {
-      // Android 초기화 설정
+      if (kDebugMode) {
+        debugPrint('🚀 [Notification] 서비스 초기화 시작');
+      }
+
       const AndroidInitializationSettings initializationSettingsAndroid =
           AndroidInitializationSettings('@mipmap/ic_launcher');
 
-      // iOS 초기화 설정
       const DarwinInitializationSettings initializationSettingsIOS =
           DarwinInitializationSettings(
         requestAlertPermission: true,
@@ -46,6 +54,13 @@ class NotificationService {
       
       if (kDebugMode) {
         debugPrint('✅ [Notification] 서비스 초기화 완료');
+        
+        // 권한 상태 확인
+        final hasPermission = await requestPermissions();
+        debugPrint('🔐 [Notification] 권한 상태: $hasPermission');
+        
+        // 예약된 알림 확인
+        await getPendingNotifications();
       }
     } catch (e) {
       if (kDebugMode) {
@@ -62,26 +77,41 @@ class NotificationService {
     // TODO: 노티피케이션 타입별 처리 로직 추가
   }
 
-  /// 노티피케이션 권한 요청
+  /// 권한 요청
   Future<bool> requestPermissions() async {
     try {
-      // iOS 권한 요청
-      final bool? result = await _flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<
-              IOSFlutterLocalNotificationsPlugin>()
-          ?.requestPermissions(
-            alert: true,
-            badge: true,
-            sound: true,
-          );
-
-      // Android 권한 요청 (Android 13+)
-      if (await Permission.notification.isDenied) {
-        final status = await Permission.notification.request();
-        return status.isGranted;
+      if (kDebugMode) {
+        debugPrint('🔐 [Notification] 권한 요청 시작');
       }
 
-      return result ?? true;
+      if (Platform.isIOS) {
+        final bool? result = await _flutterLocalNotificationsPlugin
+            .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin>()
+            ?.requestPermissions(
+              alert: true,
+              badge: true,
+              sound: true,
+            );
+        
+        if (kDebugMode) {
+          debugPrint('📱 [Notification] iOS 권한 결과: $result');
+        }
+        return result ?? false;
+      }
+
+      if (await Permission.notification.isDenied) {
+        final status = await Permission.notification.request();
+        if (kDebugMode) {
+          debugPrint('🤖 [Notification] Android 권한 요청 결과: $status');
+        }
+        return status == PermissionStatus.granted;
+      }
+      
+      if (kDebugMode) {
+        debugPrint('✅ [Notification] 권한이 이미 허용됨');
+      }
+      return true;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [Notification] 권한 요청 실패: $e');
@@ -90,7 +120,7 @@ class NotificationService {
     }
   }
 
-  /// 무료체험 종료 알림 스케줄링
+  /// 무료체험 종료 알림 스케줄링 (인앱구매용)
   Future<void> scheduleTrialEndNotifications(DateTime trialStartDate) async {
     if (!_isInitialized) {
       await initialize();
@@ -102,88 +132,81 @@ class NotificationService {
       // 기존 체험 관련 알림 취소
       await cancelTrialNotifications();
 
-      // 1일 전 알림 (6일 후)
+      // 🧪 DEBUG MODE: 테스트를 위해 알림을 몇 분 후로 설정
+      if (kDebugMode) {
+        final now = DateTime.now();
+        
+        // 테스트용: 2분 후에 "1일 전" 알림
+        final testOneDayBefore = now.add(const Duration(minutes: 2));
+        await _scheduleNotification(
+          id: 1001,
+          title: '🧪 [테스트] 프리미엄 무료체험 내일 종료',
+          body: '무료 체험이 곧 종료되고, 유료 구독으로 전환될 예정입니다.',
+          scheduledDate: testOneDayBefore,
+          payload: 'trial_ending_tomorrow',
+        );
+
+        // 테스트용: 4분 후에 "당일" 알림
+        final testEndDay = now.add(const Duration(minutes: 4));
+        await _scheduleNotification(
+          id: 1002,
+          title: '🧪 [테스트] 프리미엄 무료체험 오늘 종료',
+          body: '오늘 프리미엄 무료체험이 종료되고, 유료구독으로 전환됩니다.',
+          scheduledDate: testEndDay,
+          payload: 'trial_ending_today',
+        );
+
+        debugPrint('🧪 [TEST] 무료체험 알림 테스트 모드 활성화');
+        debugPrint('   2분 후: 1일 전 알림 (${testOneDayBefore.toString()})');
+        debugPrint('   4분 후: 당일 알림 (${testEndDay.toString()})');
+        return;
+      }
+
+      // 🚀 PRODUCTION MODE: 실제 오전 10시 스케줄링
+      // 1일 전 오전 10시 알림 (6일 후 오전 10시)
+      final oneDayBeforeAt10AM = DateTime(
+        trialEndDate.year,
+        trialEndDate.month,
+        trialEndDate.day - 1,
+        10, // 오전 10시
+        0,
+      );
+
       await _scheduleNotification(
         id: 1001,
-        title: '프리미엄 트라이얼 종료 안내',
-        body: '내일 프리미엄 트라이얼이 종료됩니다. 계속 학습하려면 구독해주세요!',
-        scheduledDate: trialEndDate.subtract(const Duration(days: 1)),
+        title: '프리미엄 무료체험 내일 종료',
+        body: '무료 체험이 곧 종료되고, 유료 구독으로 전환될 예정입니다.',
+        scheduledDate: oneDayBeforeAt10AM,
         payload: 'trial_ending_tomorrow',
       );
 
-      // 당일 알림 (7일 후)
+      // 당일 오전 10시 알림 (7일 후 오전 10시)
+      final endDayAt10AM = DateTime(
+        trialEndDate.year,
+        trialEndDate.month,
+        trialEndDate.day,
+        10, // 오전 10시
+        0,
+      );
+
       await _scheduleNotification(
         id: 1002,
-        title: '프리미엄 트라이얼 종료',
-        body: '오늘 프리미엄 트라이얼이 종료됩니다. 지금 구독하고 계속 학습하세요!',
-        scheduledDate: trialEndDate,
+        title: '프리미엄 무료체험 오늘 종료',
+        body: '오늘 프리미엄 무료체험이 종료되고, 유료구독으로 전환됩니다.',
+        scheduledDate: endDayAt10AM,
         payload: 'trial_ending_today',
       );
 
-      // 종료 후 1일 알림 (8일 후)
-      await _scheduleNotification(
-        id: 1003,
-        title: '프리미엄 구독 안내',
-        body: '프리미엄 구독하고 계속 학습하세요. 더 많은 기능을 이용해보세요!',
-        scheduledDate: trialEndDate.add(const Duration(days: 1)),
-        payload: 'trial_expired',
-      );
-
       if (kDebugMode) {
-        debugPrint('✅ [Notification] 무료체험 알림 스케줄링 완료');
+        debugPrint('✅ [Notification] 무료체험 알림 스케줄링 완료 (오전 10시)');
         debugPrint('   체험 시작: ${trialStartDate.toString()}');
         debugPrint('   체험 종료: ${trialEndDate.toString()}');
+        debugPrint('   1일 전 알림: ${oneDayBeforeAt10AM.toString()}');
+        debugPrint('   당일 알림: ${endDayAt10AM.toString()}');
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [Notification] 무료체험 알림 스케줄링 실패: $e');
-      }
-    }
-  }
-
-  /// 학습 리마인더 알림 설정
-  Future<void> scheduleStudyReminders() async {
-    if (!_isInitialized) {
-      await initialize();
-    }
-
-    try {
-      // 기존 학습 리마인더 취소
-      await cancelStudyReminders();
-
-      // 3일 후 미사용 알림
-      await _scheduleNotification(
-        id: 2001,
-        title: '학습을 계속해보세요!',
-        body: '3일째 학습하지 않으셨네요. 잠깐만 시간을 내어 중국어 실력을 늘려보세요!',
-        scheduledDate: DateTime.now().add(const Duration(days: 3)),
-        payload: 'study_reminder_3days',
-      );
-
-      // 주간 복습 알림 (매주 일요일 오후 7시)
-      final now = DateTime.now();
-      final nextSunday = now.add(Duration(days: 7 - now.weekday));
-      final sundayEvening = DateTime(
-        nextSunday.year,
-        nextSunday.month,
-        nextSunday.day,
-        19, // 오후 7시
-      );
-
-      await _scheduleNotification(
-        id: 2002,
-        title: '주간 복습 시간',
-        body: '이번 주 플래시카드를 복습해보세요. 꾸준한 복습이 실력 향상의 지름길입니다!',
-        scheduledDate: sundayEvening,
-        payload: 'weekly_review',
-      );
-
-      if (kDebugMode) {
-        debugPrint('✅ [Notification] 학습 리마인더 알림 설정 완료');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [Notification] 학습 리마인더 설정 실패: $e');
       }
     }
   }
@@ -197,12 +220,30 @@ class NotificationService {
     String? payload,
   }) async {
     try {
+      if (kDebugMode) {
+        debugPrint('📅 [Notification] 스케줄링 시작:');
+        debugPrint('   ID: $id');
+        debugPrint('   제목: $title');
+        debugPrint('   내용: $body');
+        debugPrint('   예약 시간: $scheduledDate');
+        debugPrint('   현재 시간: ${DateTime.now()}');
+        debugPrint('   페이로드: $payload');
+      }
+
       // 과거 시간이면 스케줄링하지 않음
       if (scheduledDate.isBefore(DateTime.now())) {
         if (kDebugMode) {
           debugPrint('⚠️ [Notification] 과거 시간으로 스케줄링 시도: $scheduledDate');
         }
         return;
+      }
+
+      // 서비스가 초기화되지 않았다면 초기화
+      if (!_isInitialized) {
+        if (kDebugMode) {
+          debugPrint('🔄 [Notification] 서비스 초기화 중...');
+        }
+        await initialize();
       }
 
       const AndroidNotificationDetails androidNotificationDetails =
@@ -227,22 +268,38 @@ class NotificationService {
         iOS: iosNotificationDetails,
       );
 
+      // 시간대 변환
+      final tzDateTime = tz.TZDateTime.from(scheduledDate, tz.local);
+      
+      if (kDebugMode) {
+        debugPrint('🌍 [Notification] 시간대 변환:');
+        debugPrint('   원본: $scheduledDate');
+        debugPrint('   TZ: $tzDateTime');
+        debugPrint('   현재 TZ: ${tz.TZDateTime.now(tz.local)}');
+      }
+
       await _flutterLocalNotificationsPlugin.zonedSchedule(
         id,
         title,
         body,
-        tz.TZDateTime.from(scheduledDate, tz.local),
+        tzDateTime,
         notificationDetails,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         payload: payload,
       );
 
       if (kDebugMode) {
-        debugPrint('📅 [Notification] 스케줄링 완료: $title ($scheduledDate)');
+        debugPrint('✅ [Notification] 스케줄링 완료: $title');
+        debugPrint('   예약 시간: $tzDateTime');
+        
+        // 스케줄링 후 예약된 알림 목록 확인
+        final pending = await _flutterLocalNotificationsPlugin.pendingNotificationRequests();
+        debugPrint('📋 [Notification] 현재 예약된 알림 수: ${pending.length}');
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [Notification] 스케줄링 실패: $e');
+        debugPrint('   스택 트레이스: ${StackTrace.current}');
       }
     }
   }
@@ -260,22 +317,6 @@ class NotificationService {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [Notification] 무료체험 알림 취소 실패: $e');
-      }
-    }
-  }
-
-  /// 학습 리마인더 알림 취소
-  Future<void> cancelStudyReminders() async {
-    try {
-      await _flutterLocalNotificationsPlugin.cancel(2001); // 3일 미사용
-      await _flutterLocalNotificationsPlugin.cancel(2002); // 주간 복습
-      
-      if (kDebugMode) {
-        debugPrint('🗑️ [Notification] 학습 리마인더 취소 완료');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [Notification] 학습 리마인더 취소 실패: $e');
       }
     }
   }
@@ -298,7 +339,20 @@ class NotificationService {
   /// 예약된 알림 목록 조회
   Future<List<PendingNotificationRequest>> getPendingNotifications() async {
     try {
-      return await _flutterLocalNotificationsPlugin.pendingNotificationRequests();
+      final pendingNotifications = await _flutterLocalNotificationsPlugin.pendingNotificationRequests();
+      
+      if (kDebugMode) {
+        debugPrint('📋 [Notification] 예약된 알림 목록 (${pendingNotifications.length}개):');
+        for (final notification in pendingNotifications) {
+          debugPrint('   ID: ${notification.id}');
+          debugPrint('   제목: ${notification.title}');
+          debugPrint('   내용: ${notification.body}');
+          debugPrint('   페이로드: ${notification.payload}');
+          debugPrint('   ---');
+        }
+      }
+      
+      return pendingNotifications;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [Notification] 예약된 알림 조회 실패: $e');

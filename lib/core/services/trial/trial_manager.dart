@@ -104,9 +104,19 @@ class TrialManager {
       final now = DateTime.now();
       _trialStartDate = now;
       
+      // 🧪 DEBUG MODE: 테스트를 위해 체험 기간을 5분으로 설정
+      if (kDebugMode) {
+        // 테스트용: 5분 후 체험 종료 (배너 테스트용)
+        _trialStartDate = now.subtract(const Duration(days: 6, hours: 23, minutes: 55));
+        debugPrint('🧪 [TEST] 무료체험 테스트 모드 - 5분 후 종료 예정');
+        debugPrint('   조정된 시작일: $_trialStartDate');
+        debugPrint('   종료 예정일: $trialEndDate');
+        debugPrint('   남은 시간: ${remainingHours}시간 ${(remainingHours * 60) % 60}분');
+      }
+      
       // SharedPreferences에 저장
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_trialStartDateKey, now.toIso8601String());
+      await prefs.setString(_trialStartDateKey, _trialStartDate!.toIso8601String());
       
       // 체험 관련 알림 설정
       await setupTrialNotifications();
@@ -116,8 +126,9 @@ class TrialManager {
       
       if (kDebugMode) {
         debugPrint('🎉 [Trial] 무료체험 시작');
-        debugPrint('   시작일: $now');
+        debugPrint('   시작일: $_trialStartDate');
         debugPrint('   종료일: $trialEndDate');
+        debugPrint('   남은 일수: $remainingDays일');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -158,9 +169,6 @@ class TrialManager {
       
       // 무료체험 종료 알림 스케줄링
       await _notificationService.scheduleTrialEndNotifications(_trialStartDate!);
-      
-      // 학습 리마인더 설정
-      await _notificationService.scheduleStudyReminders();
       
       if (kDebugMode) {
         debugPrint('✅ [Trial] 무료체험 알림 설정 완료');

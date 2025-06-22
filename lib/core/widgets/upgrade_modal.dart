@@ -331,7 +331,7 @@ class UpgradeModal extends StatelessWidget {
         children: [
           // 주황색 CTA 버튼 - 7일 무료체험
           _buildPrimaryButton(
-            '무료로 프리미엄 체험하기',
+            '프리미엄 무료체험 시작하기',
             '(월 \$3.99, 7일간 무료)',
             () async {
               Navigator.of(context).pop(true);

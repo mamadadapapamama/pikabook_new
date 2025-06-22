@@ -21,7 +21,9 @@ import '../note/view/note_detail_screen.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용 위해 추가
 import '../../core/services/common/plan_service.dart';
 import '../../core/widgets/upgrade_modal.dart';
+import '../../core/widgets/trial_expiry_banner.dart';
 import '../../core/services/permissions/permission_service.dart';
+import '../../core/services/payment/in_app_purchase_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
@@ -132,8 +134,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
   
-  // 마케팅 캠페인 서비스 초기화
+  // 마케팅 캠페인 서비스 초기화 (현재 사용 안함)
   Future<void> _initializeMarketingService() async {
+    // TODO: 마케팅 캠페인 기능 구현 시 활성화
+    /*
     try {
     await _marketingService.initialize();
     } catch (e) {
@@ -142,6 +146,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       // 마케팅 서비스 초기화 실패는 무시하고 계속 진행
     }
+    */
   }
   
   /// 7일 체험 만료 체크 및 업그레이드 모달 표시
@@ -326,6 +331,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return SafeArea(
       child: Column(
         children: [
+          // 무료체험 만료 배너
+          if (TrialExpiryManager.shouldShowExpiryBanner())
+            TrialExpiryBanner(
+              onUpgradePressed: () => _showUpgradeModal(),
+              onDismiss: () async {
+                await TrialExpiryManager.dismissBannerForToday();
+                setState(() {}); // 배너 닫기 시 화면 새로고침
+              },
+            ),
+          
           // 노트 목록
           Expanded(
             child: RefreshIndicator(
@@ -385,37 +400,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  // 지원팀 문의하기 처리
-  void _handleContactSupport() async {
-    // 프리미엄 문의 구글 폼 URL
-    const String formUrl = 'https://forms.gle/9EBEV1vaLpNbkhxD9';
-    final Uri url = Uri.parse(formUrl);
-    
-    try {
-      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-        // URL을 열 수 없는 경우 스낵바로 알림
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('문의 폼을 열 수 없습니다. 직접 브라우저에서 다음 주소를 입력해 주세요: $formUrl'),
-              duration: const Duration(seconds: 10),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      // 오류 발생 시 스낵바로 알림
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('문의 폼을 여는 중 오류가 발생했습니다. 이메일로 문의해 주세요: hello.pikabook@gmail.com'),
-            duration: const Duration(seconds: 10),
-          ),
-        );
-      }
-    }
-  }
-
+ 
   void _showImagePickerBottomSheet(BuildContext context) async {
     try {
       print('🔥 이미지 업로드 버튼 클릭 - 바텀시트 표시');
@@ -456,7 +441,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (kDebugMode) {
           debugPrint('🎯 [HomeScreen] 프리미엄 업그레이드 선택');
         }
-        // TODO: 인앱 구매 처리
+        // 인앱 구매 처리는 UpgradeModal 내부에서 처리됨
+        // (_handlePurchase 메서드를 통해 InAppPurchaseService 호출)
       },
     );
   }

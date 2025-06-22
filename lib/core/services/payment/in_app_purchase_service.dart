@@ -5,6 +5,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:in_app_purchase_storekit/store_kit_wrappers.dart';
 import '../common/plan_service.dart';
+import '../notification/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// In-App Purchase 관리 서비스
@@ -15,6 +16,7 @@ class InAppPurchaseService {
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   final PlanService _planService = PlanService();
+  final NotificationService _notificationService = NotificationService();
   
   late StreamSubscription<List<PurchaseDetails>> _subscription;
   bool _isAvailable = false;
@@ -256,6 +258,20 @@ class InAppPurchaseService {
       if (success) {
         // 구매 성공 시 플랜 캐시 무효화 (최신 정보 반영)
         _planService.clearCache();
+        
+        // 무료체험인 경우 알림 스케줄링
+        if (isTrialProduct) {
+          try {
+            await _notificationService.scheduleTrialEndNotifications(DateTime.now());
+            if (kDebugMode) {
+              print('🔔 무료체험 만료 알림 스케줄링 완료');
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              print('❌ 무료체험 알림 스케줄링 실패: $e');
+            }
+          }
+        }
         
         if (kDebugMode) {
           print('✅ 프리미엄 플랜 업그레이드 성공');
