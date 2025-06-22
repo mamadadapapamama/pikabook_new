@@ -13,7 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 /// 업그레이드 모달의 표시 상황
 enum UpgradeReason {
   limitReached,     // 한도 도달
-  trialExpired,     // 체험 만료 (온보딩 후 무료체험 포함)
+  trialExpired,     // 무료 체험 만료 (온보딩 후 무료체험 포함)
   freeTrialActive,  // 무료체험 중 (바로 구독 유도)
   settings,         // 설정에서 업그레이드
   general,          // 일반적인 업그레이드
@@ -122,7 +122,7 @@ class UpgradeModal extends StatelessWidget {
   Widget _buildCharacterHeader() {
     return Container(
       width: double.infinity,
-      height: 160,
+      height: 240,
       decoration: const BoxDecoration(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
@@ -158,7 +158,7 @@ class UpgradeModal extends StatelessWidget {
   /// 메인 메시지
   Widget _buildMainMessage() {
     return const Text(
-      '월 \$3.99로, pikabook을 마음껏\n사용해 보세요!',
+      '월 \$3.99로, Pikabook을\n마음껏 사용해 보세요!',
       style: TextStyle(
         fontSize: 20,
         fontWeight: FontWeight.bold,

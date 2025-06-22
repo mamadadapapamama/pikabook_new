@@ -39,18 +39,18 @@ class NoteTutorial {
     const TutorialStep(
       title: '첫 노트가 만들어졌어요!\n🔍 모르는 단어, 바로 검색해보세요.',
       description: '궁금한 단어를 길게 눌러 선택해 보세요. 한국어와 영어 뜻, 병음까지 함께 보여드려요.',
-      imagePath: 'assets/images/ill_note_help_1.png',
+      imagePath: 'assets/images/ill_note_help1.png',
     ),
     const TutorialStep(
       title: '📝 외우기 어려운 단어는 플래시카드로 복습',
       description: '단어를 선택한 뒤 ‘플래시카드 만들기’ 를 눌러보세요. 받아쓰기와 단어 복습에 활용할 수 있어요.',
-      imagePath: 'assets/images/ill_note_help_2.png',
+      imagePath: 'assets/images/ill_note_help2.png',
     ),
 
     const TutorialStep(
       title: '🔊 원어민 발음을 느리게도 들어보세요.',
       description: '한 번 듣고, 또 천천히 들어보세요. 거북이 버튼을 누르면 느린 속도로 들을 수 있어요.',
-      imagePath: 'assets/images/ill_note_help_3.png',
+      imagePath: 'assets/images/ill_note_help3.png',
     ),
   ];
   
@@ -222,17 +222,6 @@ class NoteTutorial {
                     if (currentStep.imagePath != null)
                       Container(
                         width: 140,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              spreadRadius: 1,
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: Image.asset(

@@ -200,11 +200,9 @@ class InAppPurchaseService {
       
       if (purchaseDetails.productID == premiumMonthlyId || 
           purchaseDetails.productID == premiumMonthlyWithTrialId) {
-        expiryDate = DateTime.now().add(const Duration(days: 30));
         subscriptionType = 'monthly';
       } else if (purchaseDetails.productID == premiumYearlyId || 
                  purchaseDetails.productID == premiumYearlyWithTrialId) {
-        expiryDate = DateTime.now().add(const Duration(days: 365));
         subscriptionType = 'yearly';
       } else {
         if (kDebugMode) {
@@ -214,14 +212,45 @@ class InAppPurchaseService {
       }
 
       // 무료체험 상품인지 확인
-      final bool isTrialProduct = purchaseDetails.productID == premiumMonthlyWithTrialId || 
-                                  purchaseDetails.productID == premiumYearlyWithTrialId;
+      // App Store Connect에서 premium_monthly에 무료체험이 설정되어 있으므로
+      // 사용자가 무료체험을 사용하지 않은 경우에만 무료체험으로 처리
+      bool isTrialProduct = purchaseDetails.productID == premiumMonthlyWithTrialId || 
+                            purchaseDetails.productID == premiumYearlyWithTrialId;
+      
+      // premium_monthly의 경우 사용자가 무료체험을 사용하지 않았다면 무료체험으로 처리
+      if (purchaseDetails.productID == premiumMonthlyId) {
+        final hasUsedTrial = await _planService.hasUsedFreeTrial(user.uid);
+        isTrialProduct = !hasUsedTrial; // 무료체험을 사용하지 않았다면 true
+        
+        if (kDebugMode) {
+          print('🔍 premium_monthly 구매 - 무료체험 사용 여부: $hasUsedTrial, 무료체험 적용: $isTrialProduct');
+        }
+      }
+
+      // 만료일 설정 (무료체험인 경우 7일, 아닌 경우 정상 기간)
+      if (isTrialProduct) {
+        expiryDate = DateTime.now().add(const Duration(days: 7)); // 무료체험 7일
+        if (kDebugMode) {
+          print('🎁 무료체험 만료일 설정: $expiryDate (7일 후)');
+        }
+      } else {
+        // 일반 구독 기간
+        if (subscriptionType == 'monthly') {
+          expiryDate = DateTime.now().add(const Duration(days: 30));
+        } else {
+          expiryDate = DateTime.now().add(const Duration(days: 365));
+        }
+        if (kDebugMode) {
+          print('💳 일반 구독 만료일 설정: $expiryDate ($subscriptionType)');
+        }
+      }
 
       // 프리미엄 플랜으로 업그레이드
       final success = await _planService.upgradeToPremium(
         user.uid,
         expiryDate: expiryDate,
         subscriptionType: subscriptionType,
+        isFreeTrial: isTrialProduct,
       );
 
       if (success) {

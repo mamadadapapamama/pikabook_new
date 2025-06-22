@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/tokens/typography_tokens.dart';
-import '../../../core/theme/tokens/color_tokens.dart';
-import '../../../core/services/tts/tts_service.dart';
-import '../../../core/services/authentication/auth_service.dart';
+import '../../core/models/processed_text.dart';
+import '../../core/models/text_unit.dart';
+import '../../core/theme/tokens/typography_tokens.dart';
+import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/services/tts/tts_service.dart';
+import '../../core/services/authentication/auth_service.dart';
 import '../sample/sample_tts_service.dart';
 import '../../core/services/common/plan_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
-import '../../../core/widgets/upgrade_modal.dart';
+import '../../core/widgets/upgrade_modal.dart';
+import '../../core/models/processed_text.dart';
 
 /// 전체 텍스트 TTS 재생 버튼 위젯 (Pill 모양 Outline 버튼)
 class TtsPlayAllButton extends StatefulWidget {
@@ -52,7 +55,7 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
 
     // 샘플 모드(로그아웃 상태)에서는 SampleTtsService 사용
     if (_authService.currentUser == null) {
-      await _handleSampleModeTts();
+      await _handleSampleModeTts();  
       return;
     }
 
@@ -85,7 +88,24 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
       }
       
       try {
-        await _ttsService.speak(widget.text);
+        // String을 ProcessedText로 변환하여 speakAllSegments 호출
+        final textUnit = TextUnit(
+          originalText: widget.text,
+          translatedText: '',
+          pinyin: '',
+          sourceLanguage: 'zh',
+          targetLanguage: 'ko',
+        );
+        final processedText = ProcessedText(
+          mode: TextProcessingMode.segment,
+          displayMode: TextDisplayMode.full,
+          fullOriginalText: widget.text,
+          fullTranslatedText: '',
+          units: [textUnit],
+          sourceLanguage: 'zh',
+          targetLanguage: 'ko',
+        );
+        await _ttsService.speakAllSegments(processedText);
         // 재생 완료는 콜백에서 처리하므로 여기서는 상태 업데이트 제거
       } catch (e) {
         debugPrint('전체 TTS 재생 중 오류: $e');

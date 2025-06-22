@@ -246,6 +246,7 @@ class PlanService {
   Future<bool> upgradeToPremium(String userId, {
     required DateTime expiryDate,
     String? subscriptionType, // yearly 또는 monthly
+    bool isFreeTrial = false, // 무료체험 여부
   }) async {
     try {
       await _firestore
@@ -256,9 +257,11 @@ class PlanService {
               'plan': PLAN_PREMIUM,
               'startDate': FieldValue.serverTimestamp(),
               'expiryDate': Timestamp.fromDate(expiryDate),
-              'status': 'active',
+              'status': isFreeTrial ? 'trial' : 'active',
               'subscriptionType': subscriptionType, // yearly/monthly 정보 저장
-            }
+              'isFreeTrial': isFreeTrial,
+            },
+            if (isFreeTrial) 'hasUsedFreeTrial': true, // 무료체험인 경우에만 사용 기록
           }, SetOptions(merge: true));
       
       return true;
