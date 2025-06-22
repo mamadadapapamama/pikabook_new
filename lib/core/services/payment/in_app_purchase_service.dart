@@ -126,7 +126,18 @@ class InAppPurchaseService {
 
   /// 구매 업데이트 처리
   void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
+    if (kDebugMode) {
+      print('🔄 [SANDBOX] 구매 업데이트 수신: ${purchaseDetailsList.length}개');
+    }
+    
     for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
+      if (kDebugMode) {
+        print('📦 [SANDBOX] 구매 상세정보:');
+        print('   상품 ID: ${purchaseDetails.productID}');
+        print('   상태: ${purchaseDetails.status}');
+        print('   구매 ID: ${purchaseDetails.purchaseID}');
+        print('   에러: ${purchaseDetails.error}');
+      }
       _handlePurchase(purchaseDetails);
     }
   }
@@ -209,8 +220,12 @@ class InAppPurchaseService {
       );
 
       if (success) {
+        // 구매 성공 시 플랜 캐시 무효화 (최신 정보 반영)
+        _planService.clearCache();
+        
         if (kDebugMode) {
           print('✅ 프리미엄 플랜 업그레이드 성공');
+          print('🔄 플랜 캐시 무효화 완료');
         }
       } else {
         if (kDebugMode) {
@@ -239,6 +254,7 @@ class InAppPurchaseService {
         print('🧪 [SANDBOX] 상품 ID: $productId');
         print('🧪 [SANDBOX] 서비스 사용 가능: $_isAvailable');
         print('🧪 [SANDBOX] 로드된 상품 수: ${_products.length}');
+        print('🧪 [SANDBOX] 현재 환경: ${kDebugMode ? "DEBUG" : "RELEASE"}');
       }
 
       if (!_isAvailable) {
@@ -266,6 +282,14 @@ class InAppPurchaseService {
         print('🛒 [SANDBOX] 구매 시작: ${productDetails.title}');
         print('🛒 [SANDBOX] 가격: ${productDetails.price}');
         print('🛒 [SANDBOX] 설명: ${productDetails.description}');
+        print('🛒 [SANDBOX] 상품 타입: ${productDetails.id}');
+        print('🛒 [SANDBOX] 현재 사용자: ${FirebaseAuth.instance.currentUser?.email ?? "익명"}');
+        
+        // Introductory Offers는 App Store Connect에서 설정되며 자동으로 적용됩니다
+        if (productId == premiumYearlyId) {
+          print('🎁 [SANDBOX] 연간 구독: App Store Connect에서 설정된 무료 체험이 자동 적용됩니다');
+          print('🎁 [SANDBOX] Sandbox 계정 확인: 설정 → App Store → Sandbox Account에서 테스터 계정 로그인 필요');
+        }
       }
 
       final PurchaseParam purchaseParam = PurchaseParam(
@@ -303,6 +327,16 @@ class InAppPurchaseService {
   /// 무료체험 구매 시작 (연간)
   Future<bool> buyYearlyTrial() async {
     return await buyProduct(premiumYearlyWithTrialId);
+  }
+
+  /// 연간 구독 구매 시작 (일반)
+  Future<bool> buyYearly() async {
+    return await buyProduct(premiumYearlyId);
+  }
+
+  /// 월간 구독 구매 시작 (일반)
+  Future<bool> buyMonthly() async {
+    return await buyProduct(premiumMonthlyId);
   }
 
   /// 구매 복원 (사용자 요청시 호출)

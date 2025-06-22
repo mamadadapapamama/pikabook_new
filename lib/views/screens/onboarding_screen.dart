@@ -179,12 +179,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         await _userPreferences.setCurrentUserId(user.uid);
         await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
           'userName': defaultName,
-          'chineseLevel': '초급', // 기본값
+          'level': '처음이에요', // 기본값 (chineseLevel → level)
+          'learningPurpose': '직접 원서 공부', // 기본값 추가
           'translationMode': 'segment',
           'hasOnboarded': true,
           'onboardingCompleted': true,
           'defaultNoteSpace': defaultNoteSpace,
           'noteSpaces': [defaultNoteSpace],
+          'sourceLanguage': 'zh-CN',  // 추가
+          'targetLanguage': 'ko',  // 추가
+          'hasLoginHistory': true,  // 추가
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
           // 기본 사용량 초기화
@@ -201,6 +205,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       // 온보딩 완료 표시
       await _userPreferences.setOnboardingCompleted(true);
       await _userPreferences.setHasOnboarded(true);
+      await _userPreferences.setLearningPurpose('직접 원서 공부');
       
       // Skip한 경우 바로 홈으로 이동 (환영 모달 표시하지 않음)
       if (mounted) {
@@ -243,15 +248,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           break;
         }
       }
-      String translationMode = selectedLevelValue == '초급' ? 'sentence' : 'paragraph';
+      String translationMode = selectedLevelValue == '초급' ? 'segment' : 'full';
 
       // Firestore에 사용자 정보 저장 (새 문서 생성)
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'name': _nameController.text,
-        'usagePurpose': finalUsagePurpose,
+        'userName': _nameController.text,  // name → userName
+        'learningPurpose': finalUsagePurpose,  // usagePurpose → learningPurpose
         'level': _selectedLevel,
         'translationMode': translationMode,
         'onboardingCompleted': true,
+        'defaultNoteSpace': '${_nameController.text}의 학습노트',  // 추가
+        'noteSpaces': ['${_nameController.text}의 학습노트'],  // 추가
+        'sourceLanguage': 'zh-CN',  // 추가
+        'targetLanguage': 'ko',  // 추가
+        'hasLoginHistory': true,  // 추가
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         // 기본 사용량 초기화
@@ -264,13 +274,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         },
       });
 
-      // SharedPreferences에도 저장
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('onboarding_completed', true);
-      await prefs.setString('user_name', _nameController.text);
-      await prefs.setString('usage_purpose', finalUsagePurpose);
-      await prefs.setString('user_level', _selectedLevel!);
-      await prefs.setString('translation_mode', translationMode);
+      // UserPreferencesService를 통해 설정 저장
+      await _userPreferences.setCurrentUserId(user.uid);
+      await _userPreferences.setOnboardingCompleted(true);
+      await _userPreferences.setUserName(_nameController.text);
+      await _userPreferences.setLearningPurpose(finalUsagePurpose);
+      await _userPreferences.setUseSegmentMode(translationMode == 'segment');
+      await _userPreferences.setDefaultNoteSpace('${_nameController.text}의 학습노트');
+      await _userPreferences.addNoteSpace('${_nameController.text}의 학습노트');
 
       // 업그레이드 모달 표시 후 홈 화면으로 이동
       if (mounted) {
@@ -356,9 +367,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
                 // 하단 버튼 영역
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 40.0),
+                  padding: const EdgeInsets.only(bottom: 24.0), // skip 아래 공간 24px
                   child: Column(
                     children: [
+                      const SizedBox(height: 24), // '다음으로' 버튼 위 24px
                        Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -393,7 +405,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       // Skip 버튼 (마지막 페이지에서는 숨김)
                       if (_currentPage < 2)
                         Padding(
-                          padding: const EdgeInsets.only(top: 16.0),
+                          padding: const EdgeInsets.only(top: 24.0), // skip과 '다음으로' 사이 24px
                           child: TextButton(
                             onPressed: _isProcessing ? null : _skipOnboarding,
                             child: Text(

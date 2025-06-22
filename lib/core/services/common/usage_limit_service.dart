@@ -134,9 +134,9 @@ class UsageLimitService {
         return _getDefaultUsageInfo();
       }
       
-      // Firebase에서 최신 데이터 가져오기
+      // Firebase에서 최신 데이터 가져오기 (설정 화면에서는 항상 최신 정보)
       final usage = await _loadUsageDataFromFirebase();
-      final limits = await _loadLimitsFromFirebase();
+      final limits = await _loadLimitsFromFirebase(forceRefresh: true);
       
       // 제한 도달 여부
       final limitStatus = {
@@ -237,7 +237,7 @@ class UsageLimitService {
   }
   
   /// Firebase에서 제한 데이터 로드 (캐시 없음)
-  Future<Map<String, int>> _loadLimitsFromFirebase() async {
+  Future<Map<String, int>> _loadLimitsFromFirebase({bool forceRefresh = false}) async {
     try {
       final userId = _currentUserId;
       if (userId == null) {
@@ -252,7 +252,7 @@ class UsageLimitService {
       
       // 2. 플랜 기반 제한 적용
       final planService = PlanService();
-      final planType = await planService.getCurrentPlanType();
+      final planType = await planService.getCurrentPlanType(forceRefresh: forceRefresh);
       
       debugPrint('🔍 UsageLimitService에서 확인한 플랜 타입: $planType');
       debugPrint('🔍 해당 플랜의 제한값: ${PlanService.PLAN_LIMITS[planType]}');

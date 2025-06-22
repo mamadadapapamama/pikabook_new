@@ -49,17 +49,24 @@ class PlanService {
   String? get _currentUserId => _auth.currentUser?.uid;
   
   /// 현재 사용자의 플랜 타입 가져오기
-  Future<String> getCurrentPlanType() async {
+  Future<String> getCurrentPlanType({bool forceRefresh = false}) async {
     try {
-      // 캐시 확인
-      if (_cachedPlanType != null && 
-          _cachedUserId == _currentUserId && 
-          _cacheTimestamp != null &&
-          DateTime.now().difference(_cacheTimestamp!).compareTo(_cacheValidDuration) < 0) {
-        if (kDebugMode) {
-          debugPrint('🚀 PlanService - 캐시된 플랜 타입 사용: $_cachedPlanType');
+      // 강제 새로고침이 요청되면 캐시 무시
+      if (!forceRefresh) {
+        // 캐시 확인
+        if (_cachedPlanType != null && 
+            _cachedUserId == _currentUserId && 
+            _cacheTimestamp != null &&
+            DateTime.now().difference(_cacheTimestamp!).compareTo(_cacheValidDuration) < 0) {
+          if (kDebugMode) {
+            debugPrint('🚀 PlanService - 캐시된 플랜 타입 사용: $_cachedPlanType');
+          }
+          return _cachedPlanType!;
         }
-        return _cachedPlanType!;
+      } else {
+        if (kDebugMode) {
+          debugPrint('🔄 PlanService - 강제 새로고침으로 캐시 무시');
+        }
       }
       
       if (_currentUserId != null) {

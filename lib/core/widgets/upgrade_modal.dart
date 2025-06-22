@@ -13,11 +13,10 @@ import 'package:url_launcher/url_launcher.dart';
 /// 업그레이드 모달의 표시 상황
 enum UpgradeReason {
   limitReached,     // 한도 도달
-  trialExpired,     // 체험 만료
+  trialExpired,     // 체험 만료 (온보딩 후 무료체험 포함)
   settings,         // 설정에서 업그레이드
   general,          // 일반적인 업그레이드
   premiumUser,      // 이미 프리미엄 사용자
-  welcomeTrial,     // 온보딩 후 무료체험
 }
 
 /// 프리미엄 업그레이드 모달
@@ -137,8 +136,8 @@ class UpgradeModal extends StatelessWidget {
         child: Image.asset(
           'assets/images/ill_premium.png',
           width: double.infinity,
-          height: 160,
-          fit: BoxFit.contain,
+          height: 240,
+          fit: BoxFit.cover,
         ),
       ),
     );
@@ -155,7 +154,6 @@ class UpgradeModal extends StatelessWidget {
         case UpgradeReason.trialExpired:
         case UpgradeReason.settings:
         case UpgradeReason.general:
-        case UpgradeReason.welcomeTrial:
           title = '피카북 프리미엄';
           break;
         case UpgradeReason.premiumUser:
@@ -166,9 +164,9 @@ class UpgradeModal extends StatelessWidget {
 
     return Text(
       title,
-      style: TypographyTokens.headline2.copyWith(
+      style: TypographyTokens.headline3.copyWith(
         color: ColorTokens.textPrimary,
-        fontWeight: FontWeight.bold,
+        fontWeight: FontWeight.w700,
       ),
       textAlign: TextAlign.center,
     );
@@ -180,10 +178,10 @@ class UpgradeModal extends StatelessWidget {
       return Text(
         customMessage!,
         style: TypographyTokens.body1.copyWith(
-          color: ColorTokens.textSecondary,
-          height: 1.5,
+          color: ColorTokens.textPrimary,
+          height: 1.2,
         ),
-        textAlign: TextAlign.center,
+        textAlign: TextAlign.left,
       );
     }
 
@@ -202,7 +200,6 @@ class UpgradeModal extends StatelessWidget {
       case UpgradeReason.trialExpired:
       case UpgradeReason.settings:
       case UpgradeReason.general:
-      case UpgradeReason.welcomeTrial:
       default:
         return Column(
           children: [
@@ -377,7 +374,7 @@ class UpgradeModal extends StatelessWidget {
       return Column(
         children: [
           PikaButton(
-            text: '문의하기',
+            text: '더 많은 기능이 필요해요',
             onPressed: () async {
               Navigator.of(context).pop(true);
               await launchUrl(Uri.parse('https://forms.gle/YaeznYjGLiMdHmBD9'));
@@ -406,30 +403,57 @@ class UpgradeModal extends StatelessWidget {
     }
 
     // 온보딩 환영 모달의 경우
-    if (reason == UpgradeReason.welcomeTrial) {
+    if (reason == UpgradeReason.trialExpired) {
       return Column(
         children: [
+          // 즉시 유료 구독 버튼 (연간)
           PikaButton(
-            text: upgradeButtonText ?? '프리미엄 무료체험 시작',
+            text: '연간 구독 시작 \$34.99',
             onPressed: () async {
               Navigator.of(context).pop(true);
-              // 직접 무료체험 인앱 구매 호출
+              // 즉시 유료 구독 (무료체험 없음)
               try {
                 final purchaseService = InAppPurchaseService();
                 if (!purchaseService.isAvailable) {
                   await purchaseService.initialize();
                 }
-                if (kDebugMode) debugPrint('🎯 Starting premium trial with in-app purchase');
-                await purchaseService.buyMonthlyTrial();
+                if (kDebugMode) debugPrint('🎯 Starting immediate yearly subscription');
+                await _handlePurchase(context, InAppPurchaseService.premiumYearlyId);
               } catch (e) {
-                if (kDebugMode) debugPrint('❌ Trial purchase error: $e');
+                if (kDebugMode) debugPrint('❌ Yearly subscription error: $e');
               }
               onUpgrade?.call();
             },
             isFullWidth: true,
             variant: PikaButtonVariant.primary,
           ),
-          SizedBox(height: SpacingTokens.sm),
+          
+          SizedBox(height: SpacingTokens.md),
+          
+          // 즉시 유료 구독 버튼 (월간)
+          PikaButton(
+            text: '월간 구독 시작 \$3.99',
+            onPressed: () async {
+              Navigator.of(context).pop(true);
+              // 즉시 유료 구독 (무료체험 없음)
+              try {
+                final purchaseService = InAppPurchaseService();
+                if (!purchaseService.isAvailable) {
+                  await purchaseService.initialize();
+                }
+                if (kDebugMode) debugPrint('🎯 Starting immediate monthly subscription');
+                await _handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
+              } catch (e) {
+                if (kDebugMode) debugPrint('❌ Monthly subscription error: $e');
+              }
+              onUpgrade?.call();
+            },
+            isFullWidth: true,
+            variant: PikaButtonVariant.outline,
+          ),
+          
+          SizedBox(height: SpacingTokens.md),
+          
           TextButton(
             onPressed: () async {
               Navigator.of(context).pop(false);
@@ -446,7 +470,7 @@ class UpgradeModal extends StatelessWidget {
               onCancel?.call();
             },
             child: Text(
-              cancelButtonText ?? '무료 플랜으로 시작',
+              '무료 플랜으로 시작',
               style: TypographyTokens.button.copyWith(
                 color: ColorTokens.textTertiary,
               ),
@@ -555,7 +579,7 @@ class UpgradeModal extends StatelessWidget {
   static Future<void> _handlePurchase(BuildContext context, String productId) async {
     try {
       if (kDebugMode) {
-        debugPrint('🎯 [UpgradeModal] 인앱 구매 시작: $productId');
+        debugPrint('�� [UpgradeModal] 인앱 구매 시작: $productId');
       }
 
       final purchaseService = InAppPurchaseService();
@@ -617,10 +641,10 @@ class UpgradePromptHelper {
     try {
       await UpgradeModal.show(
         context,
-        reason: UpgradeReason.welcomeTrial,
-        customTitle: 'Pikabook에 오신 것을 환영합니다! 🎉',
-        customMessage: '7일 무료 체험으로 모든 프리미엄 기능을 경험해보세요.\n\n• 월 300페이지 OCR 인식\n• 월 10만자 번역\n• 월 1,000회 TTS 음성\n• 1GB 저장 공간',
-        // onUpgrade는 버튼 내에서 직접 처리
+        reason: UpgradeReason.trialExpired,
+        customTitle: '월 \$3.99로 Pikabook의 모든 기능을 마음껏 사용해 보세요!',
+        customMessage: '•🈶 이미지에서 바로 번역하고 한어병음 확인\n무료 플랜: 월 10장 → 월 300장까지\n\n• 🔊 원어민 발음 듣기 (느리게/빠르게 조절 가능) \n무료 플랜: 월 100회 →  월 1000회까지 \n\n•🃏 플래시카드로 단어 복습: 무료 플랜: 듣기 제한 100회, 프리미엄 플랜: 월 1000회 까지',
+        // onUpgrade는 버튼 내에서 직접 처리  
       );
     } catch (e) {
       if (kDebugMode) {
