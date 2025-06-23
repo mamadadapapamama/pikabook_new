@@ -52,6 +52,10 @@ class _SlowTtsButtonState extends BaseTtsButtonState<SlowTtsButton> {
   final SlowTtsService _slowTtsService = SlowTtsService();
   final SampleTtsService _sampleTtsService = SampleTtsService();
   final AuthService _authService = AuthService();
+  
+  // 콜백 참조 저장 (dispose 시 제거용)
+  late Function(int?) _stateChangedCallback;
+  late Function() _completedCallback;
 
   @override
   Widget buildIcon(bool isPlaying, Color iconColor, double iconSize) {
@@ -101,8 +105,8 @@ class _SlowTtsButtonState extends BaseTtsButtonState<SlowTtsButton> {
   
   @override
   void setupListeners() {
-    // 재생 상태 변경 리스너
-    _slowTtsService.setOnPlayingStateChanged((segmentIndex) {
+    // 콜백 함수 정의 (dispose 시 제거를 위해 참조 저장)
+    _stateChangedCallback = (segmentIndex) {
       if (mounted) {
         // 현재 재생 중인 세그먼트인지 확인
         final bool isThisSegmentPlaying;
@@ -127,23 +131,37 @@ class _SlowTtsButtonState extends BaseTtsButtonState<SlowTtsButton> {
           debugPrint('🐢 느린 TTS 버튼 상태 변경: isPlaying=$isPlaying, segmentIndex=$segmentIndex, widget.segmentIndex=${widget.segmentIndex}');
         }
       }
-    });
+    };
     
-    // 재생 완료 리스너
-    _slowTtsService.setOnPlayingCompleted(() {
-      if (mounted && isPlaying) {
-        setState(() {
-          isPlaying = false;
-        });
-        
-        debugPrint('🐢 느린 TTS 재생 완료: 버튼 상태 리셋 (segmentIndex=${widget.segmentIndex})');
-        
-        // 재생 종료 콜백 호출
-        if (widget.onPlayEnd != null) {
-          widget.onPlayEnd!();
+    _completedCallback = () {
+      if (mounted) {
+        // 재생 완료 시에는 모든 버튼이 false로 변경되어야 함
+        if (isPlaying) {
+          setState(() {
+            isPlaying = false;
+          });
+          
+          debugPrint('🐢 느린 TTS 재생 완료: 버튼 상태 리셋 (segmentIndex=${widget.segmentIndex})');
+          
+          // 재생 종료 콜백 호출
+          if (widget.onPlayEnd != null) {
+            widget.onPlayEnd!();
+          }
         }
       }
-    });
+    };
+    
+    // 리스너 등록
+    _slowTtsService.setOnPlayingStateChanged(_stateChangedCallback);
+    _slowTtsService.setOnPlayingCompleted(_completedCallback);
+  }
+  
+  @override
+  void dispose() {
+    // 리스너 제거 (메모리 누수 방지)
+    _slowTtsService.removeOnPlayingStateChanged(_stateChangedCallback);
+    _slowTtsService.removeOnPlayingCompleted(_completedCallback);
+    super.dispose();
   }
 
 

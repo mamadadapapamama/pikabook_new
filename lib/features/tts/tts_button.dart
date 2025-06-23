@@ -44,6 +44,10 @@ class TtsButton extends BaseTtsButton {
 
 class _TtsButtonState extends BaseTtsButtonState<TtsButton> {
   final TTSService _ttsService = TTSService();
+  
+  // 콜백 참조 저장 (dispose 시 제거용)
+  late Function(int?) _stateChangedCallback;
+  late Function() _completedCallback;
 
   @override
   Widget buildIcon(bool isPlaying, Color iconColor, double iconSize) {
@@ -86,8 +90,8 @@ class _TtsButtonState extends BaseTtsButtonState<TtsButton> {
   
   @override
   void setupListeners() {
-    // 재생 상태 변경 리스너
-    _ttsService.setOnPlayingStateChanged((segmentIndex) {
+    // 콜백 함수 정의 (dispose 시 제거를 위해 참조 저장)
+    _stateChangedCallback = (segmentIndex) {
       if (mounted) {
         // 현재 재생 중인 세그먼트인지 확인
         final bool isThisSegmentPlaying;
@@ -112,22 +116,36 @@ class _TtsButtonState extends BaseTtsButtonState<TtsButton> {
           debugPrint('TTS 버튼 상태 변경: isPlaying=$isPlaying, segmentIndex=$segmentIndex, widget.segmentIndex=${widget.segmentIndex}');
         }
       }
-    });
+    };
     
-    // 재생 완료 리스너
-    _ttsService.setOnPlayingCompleted(() {
-      if (mounted && isPlaying) {
-        setState(() {
-          isPlaying = false;
-        });
-        
-        debugPrint('TTS 재생 완료: 버튼 상태 리셋 (segmentIndex=${widget.segmentIndex})');
-        
-        // 재생 종료 콜백 호출
-        if (widget.onPlayEnd != null) {
-          widget.onPlayEnd!();
+    _completedCallback = () {
+      if (mounted) {
+        // 재생 완료 시에는 모든 버튼이 false로 변경되어야 함
+        if (isPlaying) {
+          setState(() {
+            isPlaying = false;
+          });
+          
+          debugPrint('TTS 재생 완료: 버튼 상태 리셋 (segmentIndex=${widget.segmentIndex})');
+          
+          // 재생 종료 콜백 호출
+          if (widget.onPlayEnd != null) {
+            widget.onPlayEnd!();
+          }
         }
       }
-    });
+    };
+    
+    // 리스너 등록
+    _ttsService.setOnPlayingStateChanged(_stateChangedCallback);
+    _ttsService.setOnPlayingCompleted(_completedCallback);
+  }
+  
+  @override
+  void dispose() {
+    // 리스너 제거 (메모리 누수 방지)
+    _ttsService.removeOnPlayingStateChanged(_stateChangedCallback);
+    _ttsService.removeOnPlayingCompleted(_completedCallback);
+    super.dispose();
   }
 } 

@@ -39,8 +39,15 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
   }
 
   void _setupListeners() {
-    // 전체듣기 TTS는 자체 상태 관리 (리스너 제거)
-    // speakAllSegments 완료 후 직접 상태 업데이트
+    // 전체듣기 TTS 재생 완료 리스너 추가
+    _ttsService.setOnPlayingCompleted(() {
+      if (mounted && _isPlaying) {
+        setState(() {
+          _isPlaying = false;
+        });
+        debugPrint('🎵 TtsPlayAllButton: 재생 완료 리스너로 상태 리셋');
+      }
+    });
   }
 
   void _togglePlayback() async {
@@ -100,13 +107,8 @@ class _TtsPlayAllButtonState extends State<TtsPlayAllButton> {
         );
         await _ttsService.speakAllSegments(processedText);
         
-        // 전체 재생 완료 후 상태 업데이트
-        if (mounted) {
-          setState(() {
-            _isPlaying = false;
-          });
-          debugPrint('🎵 TtsPlayAllButton: 전체 재생 완료로 상태 리셋');
-        }
+        // 재생 완료는 리스너에서 처리하므로 여기서는 제거
+        // (리스너가 더 안정적으로 상태를 관리함)
       } catch (e) {
         debugPrint('전체 TTS 재생 중 오류: $e');
         if (mounted) {

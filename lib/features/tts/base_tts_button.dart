@@ -110,7 +110,7 @@ abstract class BaseTtsButtonState<T extends BaseTtsButton> extends State<T> {
         widget.onPlayEnd!();
       }
       
-      debugPrint('TTS 재생 중지 (사용자에 의해)');
+      debugPrint('🛑 TTS 재생 중지 (사용자에 의해, segmentIndex: ${widget.segmentIndex})');
     } else {
       // 재생 시작
       setState(() {
@@ -122,7 +122,7 @@ abstract class BaseTtsButtonState<T extends BaseTtsButton> extends State<T> {
         widget.onPlayStart!();
       }
       
-      debugPrint('TTS 재생 시작: "${widget.text}"');
+      debugPrint('🎯 TTS 재생 시작: "${widget.text}" (segmentIndex: ${widget.segmentIndex})');
       
       try {
         await playTtsInternal(widget.text, widget.segmentIndex);
