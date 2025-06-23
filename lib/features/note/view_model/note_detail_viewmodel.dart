@@ -371,8 +371,14 @@ class NoteDetailViewModel extends ChangeNotifier {
       final result = results[i];
       if (result != null) {
         final pageId = _pages![i].id;
-        _processedTexts[pageId] = result['processedText'];
-        _pageStatuses[pageId] = result['status'];
+        final processedText = result['processedText'] as ProcessedText?;
+        final status = result['status'] as ProcessingStatus;
+        
+        // processedText가 null이 아닐 때만 저장
+        if (processedText != null) {
+          _processedTexts[pageId] = processedText;
+        }
+        _pageStatuses[pageId] = status;
         hasAnyUpdate = true;
       }
     }

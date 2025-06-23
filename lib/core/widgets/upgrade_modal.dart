@@ -332,8 +332,8 @@ class UpgradeModal extends StatelessWidget {
         children: [
           // 주황색 CTA 버튼 - 7일 무료체험 (인앱결제)
           _buildPrimaryButton(
-            '프리미엄 무료체험 시작하기',
-            '(🧪 테스트: 3분간 무료)',
+            '7일간 무료로 프리미엄 시작하기',
+            '(언제든 구독 취소할수 있어요)',
             () async {
               Navigator.of(context).pop(true);
               await _handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
