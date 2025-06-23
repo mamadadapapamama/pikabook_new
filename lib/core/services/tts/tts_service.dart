@@ -21,7 +21,7 @@ class TTSService {
   final TtsApiService _apiService = TtsApiService();
   final TTSCacheService _cacheService = TTSCacheService();
   
-  // 오디오 재생 관련 (TtsPlaybackService에서 이동)
+  // 오디오 재생 관련
   final AudioPlayer _audioPlayer = AudioPlayer();
   TtsState _ttsState = TtsState.stopped;
   bool _isSpeaking = false;
@@ -41,6 +41,10 @@ class TTSService {
   // 초기화 여부
   bool _isInitialized = false;
   
+  // 타임아웃 관리
+  Timer? _timeoutTimer;
+  static const Duration _playbackTimeout = Duration(seconds: 15); // 설정 가능한 타임아웃
+  
   TTSService._internal();
 
   /// 초기화
@@ -58,11 +62,11 @@ class TTSService {
       
       _isInitialized = true;
       if (kDebugMode) {
-        debugPrint('TTS 서비스 초기화 완료 (재생 기능 통합)');
+        debugPrint('✅ TTS 서비스 초기화 완료 (재생 기능 통합)');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('TTS 서비스 초기화 실패: $e');
+        debugPrint('❌ TTS 서비스 초기화 실패: $e');
       }
       rethrow;
     }
@@ -91,13 +95,16 @@ class TTSService {
       if (_isSpeaking) {
         debugPrint('⏹️ 이미 재생 중이므로 중지 후 새로 시작');
         await stop();
-        // 상태 초기화가 확실히 반영되도록 잠시 대기
-        await Future.delayed(Duration(milliseconds: 150));
+        // 🚀 최적화: 지연 시간 단축 (150ms → 50ms)
+        await Future.delayed(const Duration(milliseconds: 50));
       }
 
-      if (text.isEmpty) return;
+      if (text.isEmpty) {
+        debugPrint('⚠️ 빈 텍스트 - 재생 중지');
+        return;
+      }
 
-      // 캐시된 TTS 확인 (TTSCacheService 사용)
+      // 캐시된 TTS 확인
       final textHash = text.hashCode.toString();
       final cachedPath = await _cacheService.getTTSPath(
         noteId: 'temp',
@@ -109,78 +116,73 @@ class TTSService {
       if (cachedPath != null) {
         // 캐시된 오디오 파일 재생
         await _playAudioFile(cachedPath);
-        debugPrint('💾 캐시된 TTS 재생: $text');
+        debugPrint('💾 캐시된 TTS 재생: ${text.length > 20 ? text.substring(0, 20) + '...' : text}');
         return;
       }
 
       // 새로운 TTS 요청 처리
-      try {
-        debugPrint('🔊 TTS 새 요청');
-        
-        // 음성 합성
-        final audioData = await _apiService.synthesizeSpeech(text);
-        if (audioData != null) {
-          // 오디오 데이터를 캐시에 저장 (TTSCacheService 사용)
-          final audioPath = await _cacheService.cacheTTSAudio(
-            noteId: 'temp',
-            pageId: 'temp',
-            segmentId: textHash,
-            voiceId: 'default',
-            audioData: audioData,
-          );
-          
-          if (audioPath != null) {
-            // 오디오 파일 재생
-            await _playAudioFile(audioPath);
-            debugPrint('🔊 TTS 재생 중: $text');
-            
-            // 새로운 TTS 요청 시에만 사용량 증가
-            await _apiService.incrementTtsUsageAfterPlayback();
-          } else {
-            debugPrint('❌ TTS 캐시 저장 실패: $text');
-            await _handleTtsError('캐시 저장 실패');
-          }
-        } else {
-          debugPrint('❌ TTS API 응답 없음: $text');
-          await _handleTtsError('API 응답 없음');
-        }
-      } catch (e) {
-        debugPrint('❌ TTS 처리 중 오류: $e');
-        await _handleTtsError('TTS 처리 오류: $e');
-      }
+      await _processNewTtsRequest(text, textHash);
+      
     } catch (e) {
       debugPrint('❌ TTS speak() 전체 오류: $e');
       await _handleTtsError('전체 TTS 오류: $e');
     }
   }
 
-  /// 오디오 파일 재생 (TtsPlaybackService에서 이동)
+  /// 🚀 최적화: 새로운 TTS 요청 처리 로직 분리
+  Future<void> _processNewTtsRequest(String text, String textHash) async {
+    try {
+      debugPrint('🔊 TTS 새 요청: ${text.length > 20 ? text.substring(0, 20) + '...' : text}');
+      
+      // 음성 합성
+      final audioData = await _apiService.synthesizeSpeech(text);
+      if (audioData != null && audioData.isNotEmpty) {
+        // 오디오 데이터를 캐시에 저장
+        final audioPath = await _cacheService.cacheTTSAudio(
+          noteId: 'temp',
+          pageId: 'temp',
+          segmentId: textHash,
+          voiceId: 'default',
+          audioData: audioData,
+        );
+        
+        if (audioPath != null) {
+          // 오디오 파일 재생
+          await _playAudioFile(audioPath);
+          debugPrint('🔊 TTS 재생 중: ${text.length > 20 ? text.substring(0, 20) + '...' : text}');
+          
+          // 새로운 TTS 요청 시에만 사용량 증가
+          await _apiService.incrementTtsUsageAfterPlayback();
+        } else {
+          throw Exception('캐시 저장 실패');
+        }
+      } else {
+        throw Exception('API 응답 없음 또는 빈 데이터');
+      }
+    } catch (e) {
+      debugPrint('❌ TTS 처리 중 오류: $e');
+      await _handleTtsError('TTS 처리 오류: $e');
+    }
+  }
+
+  /// 오디오 파일 재생
   Future<void> _playAudioFile(String filePath) async {
     try {
-      // 파일이 존재하는지 확인
+      // 파일 존재 및 크기 확인
       final file = File(filePath);
       if (!await file.exists()) {
-        debugPrint('❌ 오디오 파일이 존재하지 않음: $filePath');
-        _resetState();
-        return;
+        throw Exception('오디오 파일이 존재하지 않음: $filePath');
       }
 
-      // 파일 크기 확인
       final fileSize = await file.length();
+      if (fileSize == 0) {
+        throw Exception('오디오 파일이 비어있음: $filePath');
+      }
+
       debugPrint('🎵 오디오 파일 정보: ${filePath.split('/').last} (${fileSize} bytes)');
 
-      // 재생 중지 및 상태 초기화
-      await _audioPlayer.stop();
-      
-      // 볼륨 설정 (최대 볼륨)
-      await _audioPlayer.setVolume(1.0);
-      debugPrint('🔊 볼륨 설정: 1.0 (최대)');
-      
-      // 오디오 소스 설정
-      await _audioPlayer.setAudioSource(
-        AudioSource.uri(Uri.file(filePath)),
-      );
-      debugPrint('🎧 오디오 소스 설정 완료');
+      // 🚀 최적화: 재생 준비 최적화
+      await _prepareAudioPlayback(filePath);
       
       // 상태 업데이트
       _isSpeaking = true;
@@ -190,24 +192,62 @@ class TTSService {
       await _audioPlayer.play();
       debugPrint('▶️ 오디오 재생 시작: ${filePath.split('/').last}');
       
-      // 안전장치: 10초 후 강제 종료 (무한 재생 방지)
-      Future.delayed(const Duration(seconds: 10), () {
-        if (_isSpeaking) {
-          debugPrint('⚠️ 오디오 재생 타임아웃으로 강제 종료');
-          _resetState();
-        }
-      });
+      // 🚀 최적화: 타임아웃 관리 개선
+      _startTimeoutTimer();
+      
     } catch (e) {
       debugPrint('❌ 오디오 파일 재생 중 오류: $e');
       await _handleTtsError('오디오 파일 재생 오류: $e');
     }
   }
 
-  /// 상태 초기화
-  void _resetState() {
+  /// 🚀 최적화: 오디오 재생 준비 로직 분리
+  Future<void> _prepareAudioPlayback(String filePath) async {
+    // 재생 중지 및 상태 초기화
+    await _audioPlayer.stop();
+    
+    // 볼륨 설정 (최대 볼륨)
+    await _audioPlayer.setVolume(1.0);
+    
+    // 오디오 소스 설정
+    await _audioPlayer.setAudioSource(AudioSource.uri(Uri.file(filePath)));
+    
+    debugPrint('🎧 오디오 재생 준비 완료');
+  }
+
+  /// 🚀 최적화: 타임아웃 타이머 관리
+  void _startTimeoutTimer() {
+    _cancelTimeoutTimer();
+    _timeoutTimer = Timer(_playbackTimeout, () {
+      if (_isSpeaking) {
+        debugPrint('⚠️ 오디오 재생 타임아웃으로 강제 종료 (${_playbackTimeout.inSeconds}초)');
+        _resetState();
+      }
+    });
+  }
+
+  void _cancelTimeoutTimer() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = null;
+  }
+
+  /// 🚀 최적화: 상태 초기화 로직 통합 및 개선
+  void _resetState({bool callCompletedCallback = true}) {
     _isSpeaking = false;
     _ttsState = TtsState.stopped;
+    
+    // 타임아웃 타이머 정리
+    _cancelTimeoutTimer();
+    
+    // 현재 세그먼트 업데이트 (상태 변경 콜백 호출)
     _updateCurrentSegment(null);
+    
+    // 재생 완료 콜백 호출 (옵션)
+    if (callCompletedCallback && _onPlayingCompleted != null) {
+      _onPlayingCompleted!();
+    }
+    
+    _currentSegmentIndex = null;
   }
 
   /// TTS 에러 처리 및 완전 초기화
@@ -221,8 +261,8 @@ class TTSService {
       // 2. 상태 초기화
       _resetState();
       
-      // 3. 잠시 대기하여 상태 안정화
-      await Future.delayed(Duration(milliseconds: 100));
+      // 🚀 최적화: 에러 복구 시간 단축
+      await Future.delayed(const Duration(milliseconds: 50));
       
       debugPrint('✅ TTS 에러 처리 완료');
     } catch (e) {
@@ -232,12 +272,17 @@ class TTSService {
     }
   }
 
-  /// 재생 중지
+  /// 🚀 최적화: 재생 중지 로직 간소화
   Future<void> stop() async {
     try {
       debugPrint('⏹️ TTS 재생 중지 요청');
+      
+      // 오디오 플레이어 중지
       await _audioPlayer.stop();
+      
+      // 상태 초기화 (통합된 메서드 사용)
       _resetState();
+      
       debugPrint('✅ TTS 재생 중지 완료');
     } catch (e) {
       debugPrint('❌ TTS 중지 중 오류: $e');
@@ -248,11 +293,29 @@ class TTSService {
 
   /// 재생 일시정지
   Future<void> pause() async {
-    await _audioPlayer.pause();
-    _ttsState = TtsState.paused;
+    try {
+      await _audioPlayer.pause();
+      _ttsState = TtsState.paused;
+      _cancelTimeoutTimer(); // 일시정지 시 타임아웃 해제
+      debugPrint('⏸️ TTS 일시정지');
+    } catch (e) {
+      debugPrint('❌ TTS 일시정지 실패: $e');
+    }
   }
 
-  /// **단일 세그먼트 읽기**
+  /// 재생 재개
+  Future<void> resume() async {
+    try {
+      await _audioPlayer.play();
+      _ttsState = TtsState.playing;
+      _startTimeoutTimer(); // 재개 시 타임아웃 재시작
+      debugPrint('▶️ TTS 재개');
+    } catch (e) {
+      debugPrint('❌ TTS 재개 실패: $e');
+    }
+  }
+
+  /// 단일 세그먼트 읽기
   Future<void> speakSegment(String text, int segmentIndex) async {
     if (!_isInitialized) await init();
     if (text.isEmpty) return;
@@ -268,7 +331,7 @@ class TTSService {
   /// 현재 재생 중인 세그먼트 인덱스
   int? get currentSegmentIndex => _currentSegmentIndex;
 
-  /// **ProcessedText의 모든 세그먼트 순차적으로 읽기**
+  /// ProcessedText의 모든 세그먼트 순차적으로 읽기
   Future<void> speakAllSegments(ProcessedText processedText) async {
     if (!_isInitialized) await init();
     
@@ -281,7 +344,7 @@ class TTSService {
     // 사용 가능 여부 확인
     final units = processedText.units;
     if (units.isEmpty) {
-      debugPrint('읽을 내용이 없습니다');
+      debugPrint('⚠️ 읽을 내용이 없습니다');
       return;
     }
 
@@ -289,7 +352,7 @@ class TTSService {
     _currentSegments = units;
     
     // 모든 내용 순차 재생
-    debugPrint("${units.length}개 항목 순차 재생 시작");
+    debugPrint("🎵 ${units.length}개 항목 순차 재생 시작");
     
     for (var i = 0; i < units.length; i++) {
       if (_ttsState != TtsState.playing) break;
@@ -300,7 +363,7 @@ class TTSService {
       try {
         await speak(units[i].originalText);
       } catch (e) {
-        debugPrint('세그먼트 재생 중 오류: $e');
+        debugPrint('❌ 세그먼트 재생 중 오류: $e');
         continue;
       }
     }
@@ -314,7 +377,7 @@ class TTSService {
     }
   }
 
-  /// 이벤트 핸들러 초기화 (TtsPlaybackService에서 이동)
+  /// 이벤트 핸들러 초기화
   Future<void> _setupEventHandlers() async {
     // 기존 구독이 있으면 취소
     await _playerStateSubscription?.cancel();
@@ -332,16 +395,7 @@ class TTSService {
     _playerStateSubscription = _audioPlayer.playerStateStream.listen((state) {
       if (state.processingState == ProcessingState.completed) {
         debugPrint("🎵 TTSService: 재생 완료");
-        _ttsState = TtsState.stopped;
-        _isSpeaking = false;
-        
-        // 재생 완료 콜백 호출
-        if (_onPlayingCompleted != null) {
-          _onPlayingCompleted!();
-        }
-        
-        // 현재 세그먼트 초기화
-        _updateCurrentSegment(null);
+        _resetState(); // 통합된 상태 초기화 사용
       }
     });
   }
@@ -349,6 +403,7 @@ class TTSService {
   /// 캐시 비우기
   void clearCache() {
     _cacheService.clearAllTTSCache();
+    debugPrint('🗑️ TTS 캐시 정리 완료');
   }
 
   /// 재생 상태 변경 콜백 설정
@@ -361,11 +416,20 @@ class TTSService {
     _onPlayingCompleted = callback;
   }
 
-  /// 리소스 해제
+  /// 🚀 최적화: 리소스 해제 강화
   Future<void> dispose() async {
-    _isSpeaking = false;
-    _currentSegmentIndex = null;
-    _currentSegments = [];
+    debugPrint('🧹 TTS 서비스 리소스 해제 시작');
+    
+    // 재생 중지
+    _resetState(callCompletedCallback: false);
+    
+    // 오디오 플레이어 정리
+    try {
+      await _audioPlayer.stop();
+      await _audioPlayer.dispose();
+    } catch (e) {
+      debugPrint('⚠️ 오디오 플레이어 해제 중 오류: $e');
+    }
     
     // 스트림 구독 취소
     await _playerStateSubscription?.cancel();
@@ -373,12 +437,15 @@ class TTSService {
     _playerStateSubscription = null;
     _playbackEventSubscription = null;
     
-    await _audioPlayer.dispose();
+    // 캐시 서비스 정리
     await _cacheService.dispose();
+    
+    // 상태 초기화
+    _currentSegments.clear();
+    _onPlayingStateChanged = null;
+    _onPlayingCompleted = null;
     _isInitialized = false;
     
-    if (kDebugMode) {
-      debugPrint('TTS 서비스 리소스 해제 완료');
-    }
+    debugPrint('✅ TTS 서비스 리소스 해제 완료');
   }
 }
