@@ -55,7 +55,6 @@ dependencies:
   # Storage & Cache
   shared_preferences: ^2.5.3
   path_provider: ^2.1.5
-  flutter_cache_manager: ^3.4.1
   path: ^1.9.0                     # Path utilities
   
   # Image Processing & Camera
@@ -78,21 +77,15 @@ dependencies:
   provider: ^6.1.2                 # State management
   
   # Flashcard & Swiper
-  flutter_card_swiper: ^7.0.1      # Card swiper
-  flip_card: ^0.7.0                # Flip card
+  flutter_card_swiper: ^7.0.1      # Card swiper (플래시카드 스와이프에 필요)
+  flip_card: ^0.7.0                # Flip card (카드 뒤집기에 사용됨)
   
   # OCR & APIs
-  googleapis: ^13.1.0              # Google APIs
-  googleapis_auth: ^1.6.0          # Google Auth for APIs
-  
-  # Translation
-  translator: ^1.0.0               # Translation service
-  pinyin: ^3.3.0                   # Chinese pinyin conversion
-  
-  # In-app Purchase
+  googleapis: ^13.1.0              # Google APIs (OCR 서비스에서 사용됨)
+  googleapis_auth: ^1.6.0          # Google Auth for APIs (OCR 서비스에서 사용됨)
+  pinyin: ^3.3.0                   # Chinese pinyin conversion (한국어 병음 변환에 사용됨)
+  # In-app Purchase (iOS only)
   in_app_purchase: ^3.2.0          # In-app purchase
-  in_app_purchase_android: ^0.3.0+19
-  in_app_purchase_storekit: ^0.3.0+12
 
   # Local Notifications
   flutter_local_notifications: ^19.2.1

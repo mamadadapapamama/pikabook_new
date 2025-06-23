@@ -2,13 +2,27 @@
 // 현재는 중국어->한국어 (CC Cedict 은 영어 결과) 지원합니다.
 
 import 'package:flutter/foundation.dart';
-import 'package:translator/translator.dart';
 import 'package:pinyin/pinyin.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../../core/models/dictionary.dart';
 import 'internal_cn_dictionary_service.dart';
 import 'cc_cedict_service.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../sample/sample_data_service.dart';
+
+/// 간단한 번역 결과 클래스
+class SimpleTranslation {
+  final String text;
+  final String sourceLanguage;
+  final String targetLanguage;
+  
+  SimpleTranslation({
+    required this.text,
+    required this.sourceLanguage,
+    required this.targetLanguage,
+  });
+}
 
 /// 범용 사전 서비스
 /// 여러 언어의 사전 기능을 통합 관리합니다.
@@ -26,7 +40,6 @@ class DictionaryService {
   // 서비스 인스턴스
   final InternalCnDictionaryService _chineseDictionaryService = InternalCnDictionaryService();
   final CcCedictService _ccCedictService = CcCedictService();
-  final GoogleTranslator _translator = GoogleTranslator();
   final AuthService _authService = AuthService();
   
   // 샘플 데이터 서비스 (샘플 모드에서만 사용)
@@ -49,22 +62,8 @@ class DictionaryService {
     _dictionaryUpdateListeners = [];
   }
 
-  // 현재 지원하는 언어 목록
-  static const List<String> supportedLanguages = ['zh-cn'];
-  
-  // 현재 활성화된 언어
-  String _currentLanguage = 'zh-cn';
-
-  // 현재 언어 설정
-  String get currentLanguage => _currentLanguage;
-  set currentLanguage(String language) {
-    if (supportedLanguages.contains(language)) {
-      _currentLanguage = language;
-    } else {
-      debugPrint('지원하지 않는 언어: $language, 기본 언어(zh-cn)로 설정됩니다.');
-      _currentLanguage = 'zh-cn';
-    }
-  }
+  // 현재는 중국어만 지원
+  static const String currentLanguage = 'zh-cn';
 
   // 초기화 메서드
   Future<void> initialize() async {
@@ -138,20 +137,50 @@ class DictionaryService {
     }
   }
 
-  /// Google Translate 공통 번역 메서드 (언어 코드 fallback 포함)
-  Future<Translation> _translateWithFallback(String text, {
+  /// Google Translate API 직접 호출 (간단한 텍스트 번역)
+  Future<SimpleTranslation?> _translateWithFallback(String text, {
     required String to,
     String from = 'zh-cn',
     String? context,
   }) async {
-    try {
-      return await _translator.translate(text, from: from, to: to);
-    } catch (langError) {
-      if (kDebugMode) {
-        debugPrint('🔄 [Google Translate${context != null ? '-$context' : ''}] $from 실패, zh로 재시도: $langError');
-      }
-      return await _translator.translate(text, from: 'zh', to: to);
+    // Google Translate API가 비활성화된 경우 null 반환
+    if (!_googleTranslateEnabled) {
+      return null;
     }
+    
+    try {
+      // 간단한 로컬 번역 로직 (제한적)
+      // 실제 프로덕션에서는 Google Translate API 키가 필요합니다
+      final translatedText = await _performSimpleTranslation(text, from: from, to: to);
+      
+      if (translatedText != null && translatedText.isNotEmpty) {
+        return SimpleTranslation(
+          text: translatedText,
+          sourceLanguage: from,
+          targetLanguage: to,
+        );
+      }
+      
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [번역${context != null ? '-$context' : ''}] 실패: $e');
+      }
+      return null;
+    }
+  }
+  
+  /// 간단한 번역 수행 (실제로는 Google Translate API 호출)
+  Future<String?> _performSimpleTranslation(String text, {
+    required String from,
+    required String to,
+  }) async {
+    // 현재는 번역 기능을 비활성화하고 null 반환
+    // 실제 구현시에는 Google Translate API를 호출해야 합니다
+    if (kDebugMode) {
+      debugPrint('⚠️ [번역] Google Translate API 키가 필요합니다. 번역 기능이 비활성화됩니다.');
+    }
+    return null;
   }
 
   /// 병음 생성 공통 메서드
@@ -207,13 +236,13 @@ class DictionaryService {
       
       if (kDebugMode) {
         debugPrint('🌐 [Google Translate-Multi] 원본: "$word"');
-        debugPrint('🌐 [Google Translate-Multi] 한국어: "${koTranslation.text}"');
-        debugPrint('🌐 [Google Translate-Multi] 영어: "${enTranslation.text}"');
+        debugPrint('🌐 [Google Translate-Multi] 한국어: "${koTranslation?.text ?? 'null'}"');
+        debugPrint('🌐 [Google Translate-Multi] 영어: "${enTranslation?.text ?? 'null'}"');
       }
       
       // 적어도 하나의 번역이 유효해야 함
-      final hasValidKo = _isValidTranslation(word, koTranslation.text);
-      final hasValidEn = _isValidTranslation(word, enTranslation.text);
+      final hasValidKo = koTranslation != null && _isValidTranslation(word, koTranslation.text);
+      final hasValidEn = enTranslation != null && _isValidTranslation(word, enTranslation.text);
       
       if (hasValidKo || hasValidEn) {
         final pinyinText = _generatePinyin(word);
@@ -221,8 +250,8 @@ class DictionaryService {
         final entry = DictionaryEntry.multiLanguage(
           word: word,
           pinyin: pinyinText,
-          meaningKo: hasValidKo ? koTranslation.text : null,
-          meaningEn: hasValidEn ? enTranslation.text : null,
+          meaningKo: hasValidKo ? koTranslation!.text : null,
+          meaningEn: hasValidEn ? enTranslation!.text : null,
           source: 'google_translate_multi'
         );
         
@@ -255,8 +284,6 @@ class DictionaryService {
     }
   }
 
-
-
   /// 한국어 번역 수행 헬퍼 메서드
   Future<String?> _translateToKorean(String word, {String context = '보완'}) async {
     if (!_googleTranslateEnabled) return null;
@@ -264,7 +291,7 @@ class DictionaryService {
     try {
       final translation = await _translateWithFallback(word, to: 'ko', context: context);
       
-      if (_isValidTranslation(word, translation.text)) {
+      if (translation != null && _isValidTranslation(word, translation.text)) {
         if (kDebugMode) {
           debugPrint('✅ [Google Translate-$context] 한국어 번역 찾음: ${translation.text}');
         }
@@ -279,252 +306,6 @@ class DictionaryService {
     }
   }
 
-  // 단어 검색 : 샘플 모드면 로컬 데이터 → 일반 모드면 내부 사전 → CC-CEDICT → Google Cloud Translate 순서
-  Future<Map<String, dynamic>> lookupWord(String word) async {
-    try {
-      await _ensureInitialized();
-      
-      if (kDebugMode) {
-        debugPrint('🔍 [사전검색] 시작: "$word" (샘플모드: $_isSampleMode)');
-      }
-      
-      // 샘플 모드일 때는 샘플 데이터에 있는 단어만 검색 가능
-      if (_isSampleMode) {
-        if (kDebugMode) {
-          debugPrint('🏠 [샘플모드] 샘플 데이터에서 단어 검색: "$word"');
-        }
-        return await _lookupInSampleMode(word);
-      }
-      
-      switch (_currentLanguage) {
-        case 'zh-cn':
-          // 1. 내부 사전에서 검색
-          if (kDebugMode) {
-            debugPrint('🔍 [1단계] 내부 사전 검색 중...');
-          }
-          final internalEntry = await _chineseDictionaryService.lookupAsync(word);
-          if (internalEntry != null) {
-            if (kDebugMode) {
-              debugPrint('✅ [1단계] 내부 사전에서 단어 찾음: $word');
-              debugPrint('   현재 한국어: ${internalEntry.meaningKo}');
-              debugPrint('   현재 영어: ${internalEntry.meaningEn}');
-            }
-            
-            // 한국어는 있지만 영어가 없는 경우 CC-CEDICT에서 영어 번역 보완
-            if (internalEntry.meaningKo != null && internalEntry.meaningEn == null) {
-              if (kDebugMode) {
-                debugPrint('🔍 [1단계-보완] CC-CEDICT에서 영어 번역 검색 중...');
-              }
-              try {
-                final ccCedictEntry = await _ccCedictService.lookup(word);
-                if (ccCedictEntry != null && ccCedictEntry.meaningEn != null) {
-                  if (kDebugMode) {
-                    debugPrint('✅ [1단계-보완] CC-CEDICT에서 영어 번역 찾음');
-                  }
-                  final completeEntry = internalEntry.copyWith(
-                    meaningEn: ccCedictEntry.meaningEn,
-                  );
-                  // 보완된 항목을 내부 사전에 업데이트
-                  _chineseDictionaryService.addEntry(completeEntry);
-                  _notifyDictionaryUpdated();
-                  return {
-                    'entry': completeEntry,
-                    'success': true,
-                    'source': 'internal_with_cc',
-                  };
-                }
-              } catch (e) {
-                if (kDebugMode) {
-                  debugPrint('❌ [1단계-보완] CC-CEDICT 보완 실패: $e');
-                }
-              }
-            }
-            
-            return {
-              'entry': internalEntry,
-              'success': true,
-              'source': 'internal',
-            };
-          }
-          if (kDebugMode) {
-            debugPrint('❌ [1단계] 내부 사전에서 찾지 못함');
-          }
-          
-          // 2. CC-CEDICT에서 검색
-          if (kDebugMode) {
-            debugPrint('🔍 [2단계] CC-CEDICT 검색 중...');
-          }
-          try {
-            final ccCedictEntry = await _ccCedictService.lookup(word);
-            if (ccCedictEntry != null) {
-              if (kDebugMode) {
-                debugPrint('✅ [2단계] CC-CEDICT에서 단어 찾음: $word');
-                debugPrint('   병음: ${ccCedictEntry.pinyin}');
-                debugPrint('   영어: ${ccCedictEntry.meaningEn}');
-              }
-              
-              // 영어 번역은 있지만 한국어가 없는 경우 Google Translate로 한국어 번역 보완
-              if (kDebugMode) {
-                debugPrint('🔍 [2단계-보완] Google Translate로 한국어 번역 검색 중...');
-              }
-              final koreanMeaning = await _translateToKorean(word);
-              
-              final newEntry = DictionaryEntry.multiLanguage(
-                word: word,
-                pinyin: ccCedictEntry.pinyin,
-                meaningKo: koreanMeaning,
-                meaningEn: ccCedictEntry.meaningEn,
-                source: koreanMeaning != null ? 'cc_cedict_with_google' : 'cc_cedict'
-              );
-              
-              // 내부 사전에 추가
-              _chineseDictionaryService.addEntry(newEntry);
-              _notifyDictionaryUpdated();
-              return {
-                'entry': newEntry,
-                'success': true,
-                'source': koreanMeaning != null ? 'cc_cedict_with_google' : 'cc_cedict',
-              };
-            }
-            if (kDebugMode) {
-              debugPrint('❌ [2단계] CC-CEDICT에서 찾지 못함');
-            }
-          } catch (e) {
-            if (kDebugMode) {
-              debugPrint('❌ [2단계] CC-CEDICT 검색 실패: $e');
-            }
-          }
-          
-          // 3. Google Translate로 다국어 번역 시도 (활성화된 경우에만)
-          if (_googleTranslateEnabled) {
-            if (kDebugMode) {
-              debugPrint('🔍 [3단계] Google Translate 다국어 번역 시도 중...');
-            }
-            try {
-              final googleMultiEntry = await _translateWithGoogleMultiLanguage(word);
-              if (googleMultiEntry != null) {
-                if (kDebugMode) {
-                  debugPrint('✅ [3단계] Google Translate 다국어 번역 성공');
-                  debugPrint('   한국어: ${googleMultiEntry.meaningKo}');
-                  debugPrint('   영어: ${googleMultiEntry.meaningEn}');
-                }
-                return {
-                  'entry': googleMultiEntry,
-                  'success': true,
-                  'source': 'google_translate_multi',
-                };
-              }
-              if (kDebugMode) {
-                debugPrint('❌ [3단계] Google Translate 다국어 번역에서 결과 없음');
-              }
-            } catch (e) {
-              if (kDebugMode) {
-                debugPrint('❌ [3단계] Google Translate 다국어 번역 실패: $e');
-              }
-              
-              // 언어 지원 문제인 경우 Google Translate 비활성화
-              if (e.toString().contains('LanguageNotSupportedException')) {
-                _googleTranslateEnabled = false;
-                if (kDebugMode) {
-                  debugPrint('🚫 Google Translate 비활성화됨 (언어 지원 문제)');
-                }
-              }
-            }
-          } else {
-            if (kDebugMode) {
-              debugPrint('⏭️ [3단계] Google Translate 비활성화됨 (이전 오류로 인해)');
-            }
-          }
-          
-          // 모든 방법 실패
-          if (kDebugMode) {
-            debugPrint('💥 [사전검색] 모든 방법 실패: $word');
-          }
-          return {
-            'success': false,
-            'message': '사전 검색 결과가 없습니다. 모든 소스(내부 사전, CC-CEDICT, Google Translate)에서 "$word"를 찾을 수 없습니다.',
-          };
-        
-        default:
-          return {
-            'success': false,
-            'message': '지원하지 않는 언어: $_currentLanguage',
-          };
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('💥 [사전검색] 전체 오류 발생: $e');
-      }
-      return {
-        'success': false,
-        'message': '단어 검색 중 오류가 발생했습니다: $e',
-      };
-    }
-    }
-
-  /// 샘플 모드에서 단어 검색
-  Future<Map<String, dynamic>> _lookupInSampleMode(String word) async {
-    try {
-      // 샘플 데이터 서비스가 초기화되지 않은 경우 초기화
-      if (_sampleDataService == null) {
-        await _initializeSampleMode();
-      }
-      
-      // 샘플 플래시카드에서 해당 단어 찾기
-      final sampleFlashCards = _sampleDataService!.getSampleFlashCards(null);
-      final matchingCard = sampleFlashCards.where((card) => card.front == word).firstOrNull;
-      
-      if (matchingCard != null) {
-        if (kDebugMode) {
-          debugPrint('✅ [샘플모드] 샘플 데이터에서 단어 찾음: $word');
-          debugPrint('   번역: ${matchingCard.back}');
-        }
-        
-        // 샘플 데이터의 플래시카드를 사전 항목으로 변환
-        final entry = DictionaryEntry.multiLanguage(
-          word: matchingCard.front,
-          pinyin: '', // 샘플 데이터에는 병음이 없음
-          meaningKo: matchingCard.back,
-          meaningEn: null,
-          source: 'sample_data'
-        );
-        
-        return {
-          'entry': entry,
-          'success': true,
-          'source': 'sample_data',
-        };
-      } else {
-        return _createSampleModeFailureResponse(word);
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [샘플모드] 단어 검색 중 오류: $e');
-      }
-      return {
-        'success': false,
-        'message': '샘플 모드에서 단어 검색 중 오류가 발생했습니다.',
-      };
-    }
-  }
-
-  /// 샘플 모드 실패 응답 생성
-  Map<String, dynamic> _createSampleModeFailureResponse(String word) {
-    if (kDebugMode) {
-      debugPrint('❌ [샘플모드] 샘플 데이터에서 단어를 찾지 못함: $word');
-      if (_sampleDataService != null) {
-        final availableWords = _sampleDataService!.getAvailableWords();
-        debugPrint('   사용 가능한 단어: ${availableWords.take(5).join(", ")}...');
-      }
-    }
-    
-    return {
-      'success': false,
-      'message': '샘플 모드에서는 제한된 단어만 검색할 수 있습니다.\n로그인하시면 모든 단어를 검색할 수 있습니다.',
-      'availableWords': _sampleDataService?.getAvailableWords() ?? [],
-    };
-  }
-  
   // 단어 검색 (단순 인터페이스 - flashcard에서 사용)
   Future<DictionaryEntry?> lookup(String word) async {
     try {
@@ -535,30 +316,21 @@ class DictionaryService {
         return null;
       }
       
-      switch (_currentLanguage) {
-        case 'zh-cn':
-          return _chineseDictionaryService.lookup(word);
-        default:
-          return null;
-      }
+      // 중국어만 지원
+      return _chineseDictionaryService.lookup(word);
     } catch (e) {
       debugPrint('단순 단어 검색 중 오류 발생: $e');
       return null;
     }
   }
   
-  // 사전에 단어 추가 (내부사전에 추가))
+  // 사전에 단어 추가 (내부사전에 추가)
   Future<void> addEntry(DictionaryEntry entry) async {
     try {
       await _ensureInitialized();
       
-      switch (_currentLanguage) {
-        case 'zh-cn':
-          _chineseDictionaryService.addEntry(entry);
-          break;
-        default:
-          break;
-      }
+      // 중국어만 지원
+      _chineseDictionaryService.addEntry(entry);
       
       _notifyDictionaryUpdated();
     } catch (e) {

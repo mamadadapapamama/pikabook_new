@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -27,6 +28,12 @@ import UIKit
     })
     
     GeneratedPluginRegistrant.register(with: self)
+    
+    // 포그라운드 알림 표시를 위한 설정
+    if #available(iOS 10.0, *) {
+      UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
+    }
+    
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
   
@@ -47,5 +54,23 @@ import UIKit
       name: UIApplication.userDidTakeScreenshotNotification,
       object: nil
     )
+  }
+}
+
+// MARK: - UNUserNotificationCenterDelegate
+@available(iOS 10.0, *)
+extension AppDelegate: UNUserNotificationCenterDelegate {
+  // 앱이 포그라운드에 있을 때 알림 표시
+  func userNotificationCenter(_ center: UNUserNotificationCenter,
+                            willPresent notification: UNNotification,
+                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+    completionHandler([.alert, .sound, .badge])
+  }
+  
+  // 알림 탭 처리
+  func userNotificationCenter(_ center: UNUserNotificationCenter,
+                            didReceive response: UNNotificationResponse,
+                            withCompletionHandler completionHandler: @escaping () -> Void) {
+    completionHandler()
   }
 }

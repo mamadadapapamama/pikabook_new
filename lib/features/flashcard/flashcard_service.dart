@@ -48,12 +48,11 @@ class FlashCardService {
     }
 
     try {
-      // 1. LLM 캐시 및 내부 사전에서 단어 검색 (lookupWord가 모두 처리)
-      final dictResult = await _dictionaryService.lookupWord(front);
+      // 1. LLM 캐시 및 내부 사전에서 단어 검색
+      final dictEntry = await _dictionaryService.lookup(front);
       String pinyinValue = pinyin ?? '';
       String meaningValue = back;
-      if (dictResult['success'] == true && dictResult['entry'] != null) {
-        final dictEntry = dictResult['entry'];
+      if (dictEntry != null) {
         // 캐시에 추가
         _wordCache[front] = dictEntry;
         // 뜻이 비어있으면 사전의 뜻 사용 (다국어 포함)

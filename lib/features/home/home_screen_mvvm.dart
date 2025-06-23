@@ -25,6 +25,7 @@ import '../../core/widgets/trial_expiry_banner.dart';
 import '../../core/services/permissions/permission_service.dart';
 import '../../core/services/payment/in_app_purchase_service.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../core/services/notification/notification_service.dart';
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -295,6 +296,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             }
           },
         ),
+        // 🧪 디버그 모드에서만 알림 테스트 버튼 표시
+        floatingActionButton: kDebugMode ? FloatingActionButton(
+          onPressed: () async {
+            final notificationService = NotificationService();
+            await notificationService.showTestNotification();
+            
+            // 예약된 알림도 확인
+            await notificationService.getPendingNotifications();
+          },
+          backgroundColor: ColorTokens.primary,
+          child: const Icon(Icons.notifications, color: Colors.white),
+        ) : null,
       );
     } catch (e, stackTrace) {
       if (kDebugMode) {

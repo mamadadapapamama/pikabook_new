@@ -50,6 +50,18 @@ class NotificationService {
         onDidReceiveNotificationResponse: _onNotificationTapped,
       );
 
+      // iOS에서 포그라운드 알림 표시 설정
+      if (Platform.isIOS) {
+        await _flutterLocalNotificationsPlugin
+            .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin>()
+            ?.requestPermissions(
+              alert: true,
+              badge: true,
+              sound: true,
+            );
+      }
+
       _isInitialized = true;
       
       if (kDebugMode) {
@@ -409,6 +421,26 @@ class NotificationService {
       if (kDebugMode) {
         debugPrint('❌ [Notification] 즉시 알림 표시 실패: $e');
       }
+    }
+  }
+
+  /// 🧪 테스트용 즉시 알림 (디버그 모드에서만)
+  Future<void> showTestNotification() async {
+    if (!kDebugMode) return;
+    
+    try {
+      await initialize();
+      
+      await showImmediateNotification(
+        id: 9999,
+        title: '🧪 테스트 알림',
+        body: '알림 시스템이 정상 작동합니다!',
+        payload: 'test_notification',
+      );
+      
+      debugPrint('🧪 [TEST] 즉시 테스트 알림 발송 완료');
+    } catch (e) {
+      debugPrint('❌ [TEST] 테스트 알림 실패: $e');
     }
   }
 } 

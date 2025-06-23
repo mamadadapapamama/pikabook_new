@@ -146,9 +146,9 @@ class DictionaryResultWidget extends StatelessWidget {
   }
   
   /// 단어 검색 (사전 결과만 반환)
-  static Future<Map<String, dynamic>> searchWord(String word) async {
+  static Future<DictionaryEntry?> searchWord(String word) async {
     if (word.isEmpty) {
-      return {'success': false, 'message': '검색할 단어를 입력하세요'};
+      return null;
     }
     
     try {
@@ -161,9 +161,9 @@ class DictionaryResultWidget extends StatelessWidget {
       }
       
       // 단어 검색
-      return await dictionaryService.lookupWord(word);
+      return await dictionaryService.lookup(word);
     } catch (e) {
-      return {'success': false, 'message': ErrorHandler.getMessageFromError(e, ErrorContext.dictionary)};
+      return null;
     }
   }
   
@@ -204,16 +204,16 @@ class _DictionaryBottomSheetState extends State<_DictionaryBottomSheet> {
       final dictionaryService = UnifiedDictionaryService();
       
       // 단어 검색
-      final result = await dictionaryService.lookupWord(widget.word);
+      final entry = await dictionaryService.lookup(widget.word);
       
       if (mounted) {
         setState(() {
           _isLoading = false;
-          if (result['success'] == true && result['entry'] != null) {
-            _entry = result['entry'] as DictionaryEntry;
+          if (entry != null) {
+            _entry = entry;
             widget.onEntryFound(_entry!);
           } else {
-            _errorMessage = result['message'] ?? '단어를 찾을 수 없습니다: ${widget.word}';
+            _errorMessage = '단어를 찾을 수 없습니다: ${widget.word}';
             if (widget.onNotFound != null) {
               widget.onNotFound!();
             }

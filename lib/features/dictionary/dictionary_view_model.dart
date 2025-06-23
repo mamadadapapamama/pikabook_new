@@ -21,7 +21,7 @@ class DictionaryViewModel extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   List<String> get recentSearches => _recentSearches;
   
-  // 사전 검색
+  // 사전 검색 (간단한 버전)
   Future<DictionaryEntry?> lookupWord(String word) async {
     if (word.isEmpty) {
       setError('검색할 단어가 비어있습니다');
@@ -33,12 +33,10 @@ class DictionaryViewModel extends ChangeNotifier {
     setError(null);
     
     try {
-      // DictionaryService.lookupWord()가 이미 모든 검색 단계를 처리함:
-      // 1. 내부 사전 → 2. CC-CEDICT → 3. Google Translation
-      final result = await _dictionaryService.lookupWord(word);
+      // 간단한 사전 검색 (내부 사전에서만)
+      final entry = await _dictionaryService.lookup(word);
       
-      if (result['success'] == true && result['entry'] != null) {
-        final entry = result['entry'] as DictionaryEntry;
+      if (entry != null) {
         _currentEntry = entry;
         _addToRecentSearches(word);
         setLoading(false);
@@ -46,9 +44,8 @@ class DictionaryViewModel extends ChangeNotifier {
         return entry;
       }
       
-      // 모든 검색 방법에서 실패한 경우
-      final errorMessage = result['message'] ?? '단어를 찾을 수 없습니다: $word';
-      setError(errorMessage);
+      // 검색 실패
+      setError('단어를 찾을 수 없습니다: $word');
       setLoading(false);
       return null;
     } catch (e) {

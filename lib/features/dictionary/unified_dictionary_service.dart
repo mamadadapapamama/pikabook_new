@@ -58,8 +58,8 @@ class UnifiedDictionaryService {
   /// 로그인 상태 확인
   bool get _isLoggedIn => _auth.currentUser != null;
 
-  /// 단어 검색 (통합 인터페이스)
-  Future<Map<String, dynamic>> lookupWord(String word) async {
+  /// 단어 검색 (간단한 인터페이스)
+  Future<DictionaryEntry?> lookup(String word) async {
     await _ensureInitialized();
 
     if (kDebugMode) {
@@ -69,26 +69,17 @@ class UnifiedDictionaryService {
     try {
       if (_isLoggedIn) {
         // 로그인 상태 - 완전한 사전 기능 사용
-        return await _dictionaryService.lookupWord(word);
+        return await _dictionaryService.lookup(word);
       } else {
         // 비로그인 상태 - 샘플 모드에서 제한적 사전 기능 사용
-        return await _dictionaryService.lookupWord(word);
+        return await _dictionaryService.lookup(word);
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [UnifiedDictionary] 검색 실패: $e');
       }
-      return {
-        'success': false,
-        'message': '단어 검색 중 오류가 발생했습니다: $e',
-      };
+      return null;
     }
-  }
-
-  /// 단순 검색 인터페이스 (DictionaryEntry 반환)
-  Future<DictionaryEntry?> lookup(String word) async {
-    final result = await lookupWord(word);
-    return result['success'] == true ? result['entry'] as DictionaryEntry? : null;
   }
 
   /// 사전에 단어 추가 (로그인 상태에서만 가능)
