@@ -355,13 +355,14 @@ class TextProcessingService {
   /// 캐시 데이터에서 ProcessedText 구성
   ProcessedText _buildProcessedTextFromCache(Map<String, dynamic> cachedData) {
       final segments = cachedData['segments'] as List;
-      final units = segments.map((segment) => TextUnit(
-        originalText: segment['original'] ?? '',
-        translatedText: segment['translated'] ?? '',
-        pinyin: segment['pinyin'] ?? '',
-        sourceLanguage: segment['sourceLanguage'] ?? 'zh-CN',
-        targetLanguage: segment['targetLanguage'] ?? 'ko',
-      )).toList();
+      final units = segments.map((segment) => TextUnit.fromJson({
+        'originalText': segment['original'] ?? '',
+        'translatedText': segment['translated'] ?? '',
+        'pinyin': segment['pinyin'] ?? '',
+        'sourceLanguage': segment['sourceLanguage'] ?? 'zh-CN',
+        'targetLanguage': segment['targetLanguage'] ?? 'ko',
+        'segmentType': segment['segmentType'], // segmentType 포함
+      })).toList();
       
     final fullOriginalText = units.map((u) => u.originalText).join(' ');
     final fullTranslatedText = units.map((u) => u.translatedText ?? '').join(' ');
@@ -401,6 +402,7 @@ class TextProcessingService {
         'pinyin': unit.pinyin ?? '',
         'sourceLanguage': unit.sourceLanguage,
         'targetLanguage': unit.targetLanguage,
+        'segmentType': unit.segmentType.name, // segmentType 저장 추가
       }).toList();
       
       await _cacheManager.cacheNoteContent(

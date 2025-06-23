@@ -40,11 +40,25 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
   // 스타일 정의
   late TextStyle _defaultOriginalTextStyle;
   late TextStyle _defaultTranslatedTextStyle;
+  
+  // 추정된 타입 캐시 (UI 깜빡임 방지)
+  final Map<int, SegmentType> _inferredTypeCache = {};
 
   @override
   void initState() {
     super.initState();
     _initializeStyles();
+    _cacheInferredTypes(); // 초기화 시 한 번만 추정
+  }
+  
+  @override
+  void didUpdateWidget(ParagraphModeWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 텍스트가 변경되면 캐시 재생성
+    if (oldWidget.processedText != widget.processedText) {
+      _inferredTypeCache.clear();
+      _cacheInferredTypes();
+    }
   }
 
   /// 스타일 초기화
@@ -58,6 +72,19 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
       color: ColorTokens.textDarkGrey,
       height: 1.5,
     );
+  }
+  
+  /// 추정된 타입 캐시 생성 (한 번만 실행하여 UI 깜빡임 방지)
+  void _cacheInferredTypes() {
+    final units = widget.processedText.units;
+    for (int i = 0; i < units.length; i++) {
+      final unit = units[i];
+      _inferredTypeCache[i] = _inferSegmentType(unit);
+    }
+    
+    if (kDebugMode) {
+      debugPrint('🎯 타입 추정 캐시 생성 완료: ${_inferredTypeCache.length}개');
+    }
   }
 
   @override
@@ -90,8 +117,8 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
     for (int i = 0; i < units.length; i++) {
       final unit = units[i];
       
-      // 배경색이 필요한 블록인지 확인 (타입 추론 포함)
-      final inferredType = _inferSegmentType(unit);
+      // 배경색이 필요한 블록인지 확인 (캐시된 타입 사용)
+      final inferredType = _inferredTypeCache[i] ?? _inferSegmentType(unit);
       if (_needsBackground(inferredType)) {
         // 연속된 배경 블록들을 그룹화
         final groupedUnits = _getConsecutiveBackgroundUnits(units, i);
@@ -185,7 +212,7 @@ class _ParagraphModeWidgetState extends State<ParagraphModeWidget> {
     final List<TextUnit> groupedUnits = [];
     
     for (int i = startIndex; i < units.length; i++) {
-      final inferredType = _inferSegmentType(units[i]);
+      final inferredType = _inferredTypeCache[i] ?? _inferSegmentType(units[i]);
       if (_needsBackground(inferredType)) {
         groupedUnits.add(units[i]);
       } else {
