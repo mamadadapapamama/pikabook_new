@@ -311,8 +311,8 @@ class PlanService {
         }
       }
       
-      // 🧪 테스트: 3분 후 만료일 설정
-      final expiryDate = DateTime.now().add(const Duration(minutes: 3));
+      // 🎯 실제: 7일 후 만료일 설정
+      final expiryDate = DateTime.now().add(const Duration(days: 7));
       
       // 무료 체험 시작
       await _firestore
@@ -330,7 +330,7 @@ class PlanService {
             'hasUsedFreeTrial': true, // 체험 사용 기록
           }, SetOptions(merge: true));
       
-      debugPrint('🧪 [TEST] 3분 무료 체험 시작: $userId, 만료일: $expiryDate');
+      debugPrint('🎯 [PROD] 7일 무료 체험 시작: $userId, 만료일: $expiryDate');
       return true;
     } catch (e) {
       debugPrint('무료 체험 시작 실패: $e');

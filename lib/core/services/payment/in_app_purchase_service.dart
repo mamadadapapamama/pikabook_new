@@ -238,9 +238,9 @@ class InAppPurchaseService {
 
       // 만료일 설정 (무료체험인 경우 7일, 아닌 경우 정상 기간)
       if (isTrialProduct) {
-        expiryDate = DateTime.now().add(const Duration(minutes: 3)); // 🧪 테스트: 무료체험 3분
+        expiryDate = DateTime.now().add(const Duration(days: 7)); // 🎯 실제: 무료체험 7일
         if (kDebugMode) {
-          print('🎁 무료체험 만료일 설정: $expiryDate (3분 후)');
+          print('🎁 무료체험 만료일 설정: $expiryDate (7일 후)');
         }
       } else {
         // 일반 구독 기간
@@ -274,10 +274,7 @@ class InAppPurchaseService {
               print('🔔 무료체험 만료 알림 스케줄링 완료');
             }
             
-            // 🧪 테스트: 즉시 알림 확인
-            if (kDebugMode) {
-              await _notificationService.showTestNotification();
-            }
+            // 🧪 테스트용 즉시 알림 확인 제거됨
             
             // TrialManager를 통해 환영 메시지 표시
             final trialManager = TrialManager();

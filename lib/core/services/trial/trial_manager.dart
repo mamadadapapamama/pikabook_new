@@ -13,7 +13,7 @@ class TrialManager {
 
   static const String _trialStartDateKey = 'trial_start_date';
   static const String _welcomeNotificationShownKey = 'welcome_notification_shown';
-  static const int _trialDurationMinutes = 3; // 테스트용: 3분
+  static const int _trialDurationDays = 7; // 실제: 7일
 
   final NotificationService _notificationService = NotificationService();
   final PlanService _planService = PlanService();
@@ -35,7 +35,7 @@ class TrialManager {
   /// 무료체험 종료일
   DateTime? get trialEndDate {
     if (_trialStartDate == null) return null;
-    return _trialStartDate!.add(const Duration(minutes: _trialDurationMinutes));
+    return _trialStartDate!.add(const Duration(days: _trialDurationDays));
   }
 
   /// 무료체험 남은 일수 (Firestore 기반)
@@ -149,14 +149,11 @@ class TrialManager {
       final now = DateTime.now();
       _trialStartDate = now;
       
-      // 🧪 DEBUG MODE: 테스트를 위해 체험 기간을 2분으로 설정
       if (kDebugMode) {
-        // 테스트용: 지금부터 2분 후 체험 종료
-        _trialStartDate = now;
-        debugPrint('🧪 [TEST] 무료체험 테스트 모드 - 3분 후 종료 예정');
+        debugPrint('🎯 [PROD] 무료체험 시작 - 7일 후 종료 예정');
         debugPrint('   시작일: $_trialStartDate');
         debugPrint('   종료 예정일: $trialEndDate');
-        debugPrint('   남은 시간: ${trialEndDate!.difference(now).inMinutes}분 ${trialEndDate!.difference(now).inSeconds % 60}초');
+        debugPrint('   남은 일수: ${trialEndDate!.difference(now).inDays}일');
       }
       
       // SharedPreferences에 저장
@@ -174,10 +171,7 @@ class TrialManager {
       // 체험 관련 알림 설정
       await setupTrialNotifications();
       
-      // 🧪 테스트: 즉시 알림 확인
-      if (kDebugMode) {
-        await _notificationService.showTestNotification();
-      }
+      // 🧪 테스트용 즉시 알림 확인 제거됨
       
       // 환영 메시지 표시 (한 번만)
       await _showWelcomeNotification();

@@ -139,33 +139,12 @@ class NotificationService {
     }
 
     try {
-      final trialEndDate = trialStartDate.add(const Duration(minutes: 2));
+      final trialEndDate = trialStartDate.add(const Duration(days: 7));
       
       // 기존 체험 관련 알림 취소
       await cancelTrialNotifications();
 
-      // 🧪 DEBUG MODE: 테스트를 위해 알림을 3분 체험 기준으로 설정
-      if (kDebugMode) {
-        final now = DateTime.now();
-        
-        // 테스트용: 2분 후에 "1일 전" 푸시 알림 (1분 남음)
-        final testOneDayBefore = now.add(const Duration(minutes: 2));
-        await _scheduleNotification(
-          id: 1001,
-          title: 'Pikabook 프리미엄 무료체험 내일 종료',
-          body: '무료 체험이 곧 종료되고, 유료 구독으로 전환될 예정입니다.',
-          scheduledDate: testOneDayBefore,
-          payload: 'trial_ending_tomorrow',
-        );
-
-        debugPrint('🧪 [TEST] 무료체험 알림 테스트 모드 활성화');
-        debugPrint('   2분 후: 1일 전 푸시 알림 (${testOneDayBefore.toString()})');
-        debugPrint('   3분 후: 무료체험 종료');
-        
-        // 스케줄된 알림 확인
-        await getPendingNotifications();
-        return;
-      }
+      // 🎯 실제 프로덕션 모드로 변경됨 - 테스트 모드 제거
 
       // 🚀 PRODUCTION MODE: 실제 오전 10시 스케줄링
       // 1일 전 오전 10시 알림 (6일 후 오전 10시)
@@ -417,25 +396,6 @@ class NotificationService {
     }
   }
 
-  /// 🧪 테스트용 즉시 알림 (디버그 모드에서만)
-  Future<void> showTestNotification() async {
-    if (!kDebugMode) return;
-    
-    try {
-      await initialize();
-      
-      await showImmediateNotification(
-        id: 9999,
-        title: '🧪 테스트 알림',
-        body: '알림 시스템이 정상 작동합니다!',
-        payload: 'test_notification',
-      );
-      
-      debugPrint('🧪 [TEST] 즉시 테스트 알림 발송 완료');
-    } catch (e) {
-      debugPrint('❌ [TEST] 테스트 알림 실패: $e');
-    }
-  }
 
   /// 🎯 인앱 배너 테스트용 스케줄 알림 (디버그 모드에서만)
   Future<void> scheduleTestBannerNotification({

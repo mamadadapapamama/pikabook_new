@@ -73,14 +73,14 @@ class TrialStatusChecker {
           // 체험 종료 콜백 호출
           await _handleTrialExpiration();
         } else {
-          // 🧪 테스트: 3분 체험의 경우 분 단위로 확인
-          final minutesRemaining = expiryDate.difference(now).inMinutes;
+          // 🎯 실제: 7일 체험의 경우 일 단위로 확인
+          final daysRemaining = expiryDate.difference(now).inDays;
           if (kDebugMode) {
-            debugPrint('   남은 분수: ${minutesRemaining}분');
+            debugPrint('   남은 일수: ${daysRemaining}일');
           }
           
-          // 1분 이하 남았으면 곧 종료
-          if (minutesRemaining <= 1) {
+          // 1일 이하 남았으면 곧 종료
+          if (daysRemaining <= 1) {
             status = TrialStatus.trialEndingSoon;
           } else {
             status = TrialStatus.trialActive;
