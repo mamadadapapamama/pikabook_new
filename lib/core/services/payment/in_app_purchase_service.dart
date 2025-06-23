@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../common/plan_service.dart';
 import '../notification/notification_service.dart';
+import '../trial/trial_manager.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// In-App Purchase 관리 서비스
@@ -19,6 +20,9 @@ class InAppPurchaseService {
   late StreamSubscription<List<PurchaseDetails>> _subscription;
   bool _isAvailable = false;
   List<ProductDetails> _products = [];
+  
+  // 구매 성공 콜백
+  Function()? _onPurchaseSuccess;
   
   // 상품 ID 정의
   static const String premiumMonthlyId = 'premium_monthly';
@@ -91,6 +95,11 @@ class InAppPurchaseService {
   /// 서비스 종료
   void dispose() {
     _subscription.cancel();
+  }
+  
+  /// 구매 성공 콜백 설정
+  void setOnPurchaseSuccess(Function()? callback) {
+    _onPurchaseSuccess = callback;
   }
 
   /// 상품 정보 로드
@@ -229,9 +238,9 @@ class InAppPurchaseService {
 
       // 만료일 설정 (무료체험인 경우 7일, 아닌 경우 정상 기간)
       if (isTrialProduct) {
-        expiryDate = DateTime.now().add(const Duration(days: 7)); // 무료체험 7일
+        expiryDate = DateTime.now().add(const Duration(minutes: 3)); // 🧪 테스트: 무료체험 3분
         if (kDebugMode) {
-          print('🎁 무료체험 만료일 설정: $expiryDate (7일 후)');
+          print('🎁 무료체험 만료일 설정: $expiryDate (3분 후)');
         }
       } else {
         // 일반 구독 기간
@@ -257,16 +266,30 @@ class InAppPurchaseService {
         // 구매 성공 시 플랜 캐시 무효화 (최신 정보 반영)
         _planService.clearCache();
         
-        // 무료체험인 경우 알림 스케줄링
+        // 무료체험인 경우 알림 스케줄링 및 환영 메시지
         if (isTrialProduct) {
           try {
             await _notificationService.scheduleTrialEndNotifications(DateTime.now());
             if (kDebugMode) {
               print('🔔 무료체험 만료 알림 스케줄링 완료');
             }
+            
+            // 🧪 테스트: 즉시 알림 확인
+            if (kDebugMode) {
+              await _notificationService.showTestNotification();
+            }
+            
+            // TrialManager를 통해 환영 메시지 표시
+            final trialManager = TrialManager();
+            if (trialManager.onWelcomeMessage != null) {
+              trialManager.onWelcomeMessage!(
+                '🎉 프리미엄 무료체험이 시작되었어요!',
+                '피카북을 마음껏 사용해보세요.',
+              );
+            }
           } catch (e) {
             if (kDebugMode) {
-              print('❌ 무료체험 알림 스케줄링 실패: $e');
+              print('❌ 무료체험 후속 처리 실패: $e');
             }
           }
         }
@@ -275,6 +298,10 @@ class InAppPurchaseService {
           print('✅ 프리미엄 플랜 업그레이드 성공');
           print('🔄 플랜 캐시 무효화 완료');
         }
+        
+        // 구매 성공 콜백 호출
+        _onPurchaseSuccess?.call();
+        
       } else {
         if (kDebugMode) {
           print('❌ 프리미엄 플랜 업그레이드 실패');

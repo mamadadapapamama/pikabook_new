@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/plan.dart';
 
 /// 구독 플랜과 사용량 관리를 위한 서비스
@@ -233,9 +234,17 @@ class PlanService {
   /// 문의하기 기능
   Future<void> contactSupport({String? subject, String? body}) async {
     try {
-      // 여기에 문의하기 기능 구현 (이메일 발송 등)
-      // 나중에 확장하기 위한 공간
       debugPrint('문의하기 기능 호출됨: subject=$subject, body=$body');
+      
+      // Google Form 열기
+      final formUrl = Uri.parse('https://docs.google.com/forms/d/e/1FAIpQLSfgVL4Bd5KcTh9nhfbVZ51yApPAmJAZJZgtM4V9hNhsBpKuaA/viewform?usp=dialog');
+      
+      if (await canLaunchUrl(formUrl)) {
+        await launchUrl(formUrl, mode: LaunchMode.externalApplication);
+      } else {
+        debugPrint('Google Form을 열 수 없습니다: $formUrl');
+        throw Exception('문의 폼을 열 수 없습니다.');
+      }
     } catch (e) {
       debugPrint('문의하기 기능 오류: $e');
       rethrow;
@@ -302,8 +311,8 @@ class PlanService {
         }
       }
       
-      // 7일 후 만료일 설정
-      final expiryDate = DateTime.now().add(const Duration(days: 7));
+      // 🧪 테스트: 3분 후 만료일 설정
+      final expiryDate = DateTime.now().add(const Duration(minutes: 3));
       
       // 무료 체험 시작
       await _firestore
@@ -316,11 +325,12 @@ class PlanService {
               'expiryDate': Timestamp.fromDate(expiryDate),
               'status': 'trial', // 체험 상태
               'isFreeTrial': true,
+              'subscriptionType': 'monthly', // 무료체험은 monthly 기반
             },
             'hasUsedFreeTrial': true, // 체험 사용 기록
           }, SetOptions(merge: true));
       
-      debugPrint('7일 무료 체험 시작: $userId, 만료일: $expiryDate');
+      debugPrint('🧪 [TEST] 3분 무료 체험 시작: $userId, 만료일: $expiryDate');
       return true;
     } catch (e) {
       debugPrint('무료 체험 시작 실패: $e');
@@ -349,7 +359,11 @@ class PlanService {
   }
   
   /// 구독 상세 정보 조회
-  Future<Map<String, dynamic>> getSubscriptionDetails() async {
+  Future<Map<String, dynamic>> getSubscriptionDetails({bool forceRefresh = false}) async {
+    // 강제 새로고침 시 캐시 클리어
+    if (forceRefresh) {
+      clearCache();
+    }
     try {
       final userId = _currentUserId;
       if (userId == null) {
@@ -410,7 +424,16 @@ class PlanService {
         final now = DateTime.now();
         
         if (expiry.isAfter(now)) {
-          daysRemaining = expiry.difference(now).inDays;
+          // 🧪 테스트: 3분 체험의 경우 분 단위로 계산하되, 최소 1일로 표시
+          final minutesRemaining = expiry.difference(now).inMinutes;
+          if (minutesRemaining > 0 && minutesRemaining < 60) {
+            daysRemaining = 1; // 1시간 미만이면 1일로 표시 (테스트용)
+          } else {
+            daysRemaining = expiry.difference(now).inDays;
+            if (daysRemaining == 0 && expiry.isAfter(now)) {
+              daysRemaining = 1; // 당일 내에 만료되는 경우도 1일로 표시
+            }
+          }
           currentPlan = plan; // 만료되지 않았으면 원래 플랜
         } else {
           currentPlan = PLAN_FREE; // 만료되었으면 무료 플랜
@@ -424,6 +447,10 @@ class PlanService {
         print('   무료 체험 사용 여부: $hasUsedFreeTrial');
         print('   현재 무료 체험 중: $isFreeTrial');
         print('   남은 일수: $daysRemaining');
+        if (expiryDate != null) {
+          final minutesRemaining = expiryDate.toDate().difference(DateTime.now()).inMinutes;
+          print('   남은 분수: $minutesRemaining분');
+        }
         print('   만료일: ${expiryDate?.toDate()}');
         print('   상태: $status');
         print('   구독 유형: $subscriptionType');
@@ -448,6 +475,61 @@ class PlanService {
         'expiryDate': null,
         'subscriptionType': null,
       };
+    }
+  }
+  
+  /// 체험 종료 시 프리미엄으로 전환
+  Future<bool> convertTrialToPremium(String userId) async {
+    try {
+      // 현재 구독 정보 확인
+      final subscriptionDetails = await getSubscriptionDetails(forceRefresh: true);
+      final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
+      final currentSubscriptionType = subscriptionDetails['subscriptionType'] as String?;
+      
+      if (!isFreeTrial) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [PlanService] 체험 상태가 아닙니다 - 전환 불필요');
+        }
+        return true; // 이미 프리미엄이면 성공으로 처리
+      }
+      
+      // 기존 구독 타입에 따라 만료일 설정 (무료체험은 보통 monthly 기반)
+      final subscriptionType = currentSubscriptionType ?? 'monthly';
+      final Duration duration;
+      
+      if (subscriptionType == 'yearly') {
+        duration = const Duration(days: 365);
+      } else {
+        duration = const Duration(days: 30); // monthly
+      }
+      
+      final newExpiryDate = DateTime.now().add(duration);
+      
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .update({
+            'subscription.status': 'active',
+            'subscription.isFreeTrial': false,
+            'subscription.expiryDate': Timestamp.fromDate(newExpiryDate),
+            'subscription.subscriptionType': subscriptionType,
+          });
+      
+      // 캐시 클리어
+      clearCache();
+      
+      if (kDebugMode) {
+        debugPrint('✅ [PlanService] 체험→프리미엄 전환 완료');
+        debugPrint('   구독 타입: $subscriptionType');
+        debugPrint('   새 만료일: $newExpiryDate');
+      }
+      
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [PlanService] 체험→프리미엄 전환 실패: $e');
+      }
+      return false;
     }
   }
 } 

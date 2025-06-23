@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/common/plan_service.dart';
+import '../../core/services/trial/trial_status_checker.dart';
 import '../../core/models/plan.dart';
 import '../../core/utils/language_constants.dart';
 import '../../core/services/text_processing/text_processing_service.dart';
@@ -11,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SettingsViewModel extends ChangeNotifier {
   final UserPreferencesService _userPreferences = UserPreferencesService();
   final PlanService _planService = PlanService();
+  final TrialStatusChecker _trialStatusChecker = TrialStatusChecker();
   final AuthService _authService = AuthService();
 
   // 로딩 상태
@@ -54,6 +56,13 @@ class SettingsViewModel extends ChangeNotifier {
     await loadPlanInfo();
   }
 
+  /// 플랜 정보 새로고침 (설정 화면에서 수동 호출 가능)
+  Future<void> refreshPlanInfo() async {
+    _isPlanLoaded = false;
+    notifyListeners();
+    await loadPlanInfo();
+  }
+
   /// 사용자 데이터 로드
   Future<void> loadUserData() async {
     _setLoading(true);
@@ -90,28 +99,49 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
-  /// 플랜 정보 로드
+  /// 플랜 정보 로드 (TrialStatusChecker와 PlanService 조합)
   Future<void> loadPlanInfo() async {
     _setLoading(true);
     try {
       if (kDebugMode) {
-        print('🔍 Plan 모델을 사용한 플랜 정보 로드 시작');
+        print('🔍 [Settings] 플랜 정보 로드 시작 (TrialStatusChecker + PlanService)');
       }
       
-      // Plan 모델을 사용하여 현재 플랜 정보 가져오기
+      // 1. TrialStatusChecker로 최신 서버 상태 확인
+      final trialStatus = await _trialStatusChecker.checkTrialStatusFromServer();
+      
+      // 2. PlanService로 상세 정보 가져오기 (강제 새로고침)
+      final subscriptionDetails = await _planService.getSubscriptionDetails(forceRefresh: true);
       final plan = await _planService.getCurrentPlan();
       
       if (kDebugMode) {
+        print('   Trial Status: ${trialStatus.name} (${trialStatus.displayName})');
         print('   Plan 객체: $plan');
         print('   플랜 타입: ${plan.type}');
         print('   플랜 이름: ${plan.name}');
         print('   무료 체험 중: ${plan.isFreeTrial}');
         print('   남은 일수: ${plan.daysRemaining}');
-        print('   무료 체험 사용 여부: ${plan.hasUsedFreeTrial}');
+        print('   구독 상세: $subscriptionDetails');
+      }
+      
+      // UI에 표시할 플랜 이름 결정
+      String displayName;
+      final subscriptionType = subscriptionDetails['subscriptionType'] as String?;
+      final subscriptionSuffix = subscriptionType != null ? ' ($subscriptionType)' : '';
+      
+      if (trialStatus == TrialStatus.trialActive || trialStatus == TrialStatus.trialEndingSoon) {
+        final daysRemaining = subscriptionDetails['daysRemaining'] as int? ?? 0;
+        displayName = '프리미엄 체험 (${daysRemaining}일 남음)';
+      } else if (trialStatus == TrialStatus.premiumUser) {
+        displayName = '프리미엄$subscriptionSuffix';
+      } else if (trialStatus == TrialStatus.trialExpired) {
+        displayName = '무료 플랜 (체험 종료)';
+      } else {
+        displayName = plan.name;
       }
       
       _planType = plan.type;
-      _planName = plan.name;
+      _planName = displayName;
       _remainingDays = plan.daysRemaining;
       _planLimits = plan.limits;
       _isPlanLoaded = true;
@@ -119,13 +149,24 @@ class SettingsViewModel extends ChangeNotifier {
       notifyListeners();
       
       if (kDebugMode) {
-        print('✅ Plan 모델을 사용한 플랜 정보 로드 완료');
-        print('   UI 상태 업데이트: 플랜=$_planName, 제한=$_planLimits');
+        print('✅ [Settings] 플랜 정보 로드 완료');
+        print('   UI 표시명: $_planName');
+        print('   플랜 타입: $_planType');
+        print('   제한: $_planLimits');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('❌ 플랜 정보 로드 오류: $e');
+        print('❌ [Settings] 플랜 정보 로드 오류: $e');
       }
+      
+      // 에러 발생 시 기본값 설정
+      _planType = PlanService.PLAN_FREE;
+      _planName = '플랜 정보 로드 실패';
+      _remainingDays = 0;
+      _planLimits = {};
+      _isPlanLoaded = true; // 에러 상태도 로드 완료로 처리
+      
+      notifyListeners();
     } finally {
       _setLoading(false);
     }

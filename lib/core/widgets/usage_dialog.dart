@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
@@ -56,6 +57,8 @@ class _UsageDialogState extends State<UsageDialog> {
   bool _isLoading = true;
   String _currentPlan = 'free';
   bool _isFreeTrial = false;
+  DateTime? _expiryDate;
+  String? _subscriptionType;
 
   @override
   void initState() {
@@ -71,6 +74,8 @@ class _UsageDialogState extends State<UsageDialog> {
       final subscriptionDetails = await _planService.getSubscriptionDetails();
       _currentPlan = subscriptionDetails['currentPlan'] ?? 'free';
       _isFreeTrial = subscriptionDetails['isFreeTrial'] ?? false;
+      _expiryDate = subscriptionDetails['expiryDate'] as DateTime?;
+      _subscriptionType = subscriptionDetails['subscriptionType'] as String?;
       
       // 사용량 정보 가져오기
       final usageInfo = await _usageService.getUserUsageForSettings();
@@ -132,6 +137,11 @@ class _UsageDialogState extends State<UsageDialog> {
                     Text(effectiveMessage, style: TypographyTokens.body2),
                     SizedBox(height: SpacingTokens.md),
                   ],
+                  // 프리미엄 사용자에게 플랜 정보 표시
+                  if (_currentPlan == PlanService.PLAN_PREMIUM) ...[
+                    _buildPlanInfoSection(),
+                    SizedBox(height: SpacingTokens.lg),
+                  ],
                   _buildUsageGraph(),
                 ],
               ),
@@ -149,6 +159,100 @@ class _UsageDialogState extends State<UsageDialog> {
     );
   }
   
+  /// 플랜 정보 섹션
+  Widget _buildPlanInfoSection() {
+    final String planDisplayName = _isFreeTrial ? '프리미엄 (체험)' : '프리미엄 (${_subscriptionType ?? 'monthly'})';
+    
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(SpacingTokens.md),
+      decoration: BoxDecoration(
+        color: ColorTokens.primary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: ColorTokens.primary.withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 현재 플랜
+          Row(
+            children: [
+              Text(
+                '현재 플랜: ',
+                style: TypographyTokens.body2.copyWith(
+                  color: ColorTokens.textSecondary,
+                ),
+              ),
+              Text(
+                planDisplayName,
+                style: TypographyTokens.body2.copyWith(
+                  color: ColorTokens.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          
+          // 다음 구독 시작일 (체험이 아닌 경우만)
+          if (!_isFreeTrial && _expiryDate != null) ...[
+            SizedBox(height: SpacingTokens.xs),
+            Row(
+              children: [
+                Text(
+                  '다음 구독 시작일: ',
+                  style: TypographyTokens.body2.copyWith(
+                    color: ColorTokens.textSecondary,
+                  ),
+                ),
+                Text(
+                  _formatDate(_expiryDate!),
+                  style: TypographyTokens.body2.copyWith(
+                    color: ColorTokens.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          
+          // 체험 종료일 (체험인 경우만)
+          if (_isFreeTrial && _expiryDate != null) ...[
+            SizedBox(height: SpacingTokens.xs),
+            Row(
+              children: [
+                Text(
+                  '체험 종료일: ',
+                  style: TypographyTokens.body2.copyWith(
+                    color: ColorTokens.textSecondary,
+                  ),
+                ),
+                Text(
+                  _formatDate(_expiryDate!),
+                  style: TypographyTokens.body2.copyWith(
+                    color: ColorTokens.error,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 날짜 포맷팅
+  String _formatDate(DateTime date) {
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
   /// 사용량 그래프 위젯
   Widget _buildUsageGraph() {
     final List<MapEntry<String, double>> entries = [
@@ -209,11 +313,14 @@ class _UsageDialogState extends State<UsageDialog> {
   
   /// 사용량 라벨 변환
   String _getUsageLabel(String key) {
+    final bool isPremium = _currentPlan == PlanService.PLAN_PREMIUM;
+    final String period = isPremium ? '/month' : '';
+    
     switch (key) {
       case 'ocr':
-        return '업로드 이미지 수 (${_limitStatus['ocrLimit'] ?? 10}장)';
+        return '업로드 이미지 수 (${_limitStatus['ocrLimit'] ?? 10}장$period)';
       case 'tts':
-        return '듣기 기능 (${_limitStatus['ttsLimit'] ?? 30}회)';
+        return '듣기 기능 (${_limitStatus['ttsLimit'] ?? 30}회$period)';
       default:
         return key;
     }
@@ -222,25 +329,57 @@ class _UsageDialogState extends State<UsageDialog> {
   /// 플랜 상태에 따른 액션 버튼
   Widget _buildActionButton() {
     final bool isPremiumPaid = _currentPlan == PlanService.PLAN_PREMIUM && !_isFreeTrial;
+    final bool isPremiumTrial = _currentPlan == PlanService.PLAN_PREMIUM && _isFreeTrial;
+    
+    // 버튼 텍스트 결정
+    String buttonText;
+    if (isPremiumPaid) {
+      buttonText = '관리자에게 문의하기';
+    } else if (isPremiumTrial) {
+      buttonText = '프리미엄 체험 중';
+    } else {
+      buttonText = '프리미엄으로 업그레이드';
+    }
     
     return PikaButton(
-      text: isPremiumPaid ? '문의하기' : '프리미엄으로 업그레이드',
+      text: buttonText,
       variant: PikaButtonVariant.outline,
       size: PikaButtonSize.small,
-      onPressed: () async {
+      onPressed: isPremiumTrial ? null : () async {
         Navigator.of(context).pop();
         
         if (isPremiumPaid) {
-          // 유료 프리미엄 사용자 - 문의 모달
-          if (mounted) {
-            UpgradeModal.show(context, reason: UpgradeReason.premiumUser);
+          // 유료 프리미엄 사용자 - 바로 Google Form 열기
+          final formUrl = Uri.parse('https://docs.google.com/forms/d/e/1FAIpQLSfgVL4Bd5KcTh9nhfbVZ51yApPAmJAZJZgtM4V9hNhsBpKuaA/viewform?usp=dialog');
+          try {
+            if (await canLaunchUrl(formUrl)) {
+              await launchUrl(formUrl, mode: LaunchMode.externalApplication);
+            } else {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('문의 폼을 열 수 없습니다.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('문의 폼을 여는 중 오류가 발생했습니다: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
           }
         } else {
-          // 무료/체험 사용자 - 업그레이드 모달
+          // 무료 사용자 - 업그레이드 모달
           if (mounted) {
             UpgradeModal.show(
               context,
-              reason: _isFreeTrial ? UpgradeReason.trialExpired : UpgradeReason.limitReached,
+              reason: UpgradeReason.limitReached,
             );
           }
         }

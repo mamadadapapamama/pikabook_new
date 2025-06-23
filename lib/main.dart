@@ -8,6 +8,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'firebase_options.dart';
 import 'core/services/media/image_service.dart';
+import 'core/services/trial/trial_status_checker.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 // import 'package:shared_preferences/shared_preferences.dart';
 // import 'views/screens/home_screen_mvvm.dart';
 // import 'views/screens/note_detail_screen.dart';
@@ -18,6 +21,14 @@ import 'core/services/media/image_service.dart';
 /// 모든 로직은 App 클래스에 위임합니다.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Timezone 초기화 (스케줄된 알림을 위해 필요)
+  tz.initializeTimeZones();
+  tz.setLocalLocation(tz.getLocation('Asia/Seoul')); // 한국 시간대 설정
+  
+  if (kDebugMode) {
+    debugPrint('⏰ Timezone 초기화 완료: ${tz.local.name}');
+  }
   
   // 성능 최적화 설정
   if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -62,6 +73,10 @@ void main() async {
   // 이미지 캐시 초기화
   final imageService = ImageService();
   await imageService.cleanupTempFiles();
+  
+  // 체험 상태 체크 서비스 초기화
+  final trialStatusChecker = TrialStatusChecker();
+  await trialStatusChecker.initialize();
   
   // 일반적인 앱 실행
   runApp(const App());

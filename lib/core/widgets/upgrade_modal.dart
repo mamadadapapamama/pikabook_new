@@ -7,6 +7,7 @@ import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
 import '../services/payment/in_app_purchase_service.dart';
 import '../services/common/plan_service.dart';
+import '../services/trial/trial_manager.dart';
 import 'pika_button.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -329,25 +330,15 @@ class UpgradeModal extends StatelessWidget {
     if (reason == UpgradeReason.welcomeTrial) {
       return Column(
         children: [
-          // 주황색 CTA 버튼 - 7일 무료체험
+          // 주황색 CTA 버튼 - 7일 무료체험 (인앱결제)
           _buildPrimaryButton(
             '프리미엄 무료체험 시작하기',
-            '(월 \$3.99, 7일간 무료)',
+            '(🧪 테스트: 3분간 무료)',
             () async {
               Navigator.of(context).pop(true);
-              try {
-                final purchaseService = InAppPurchaseService();
-                if (!purchaseService.isAvailable) {
-                  await purchaseService.initialize();
-                }
-                if (kDebugMode) debugPrint('🎯 Starting monthly subscription with trial');
-                await _handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
-              } catch (e) {
-                if (kDebugMode) debugPrint('❌ Trial subscription error: $e');
-              }
+              await _handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
               onUpgrade?.call();
             },
-
           ),
           
           const SizedBox(height: 16),
@@ -355,17 +346,11 @@ class UpgradeModal extends StatelessWidget {
           // 하단 링크 - 무료 플랜
           _buildTextButton(
             '무료 플랜으로 시작하기',
-            () async {
+            () {
               Navigator.of(context).pop(false);
-              // 간단한 무료체험 시작
-              try {
-                final planService = PlanService();
-                final user = FirebaseAuth.instance.currentUser;
-                if (user != null) {
-                  await planService.startFreeTrial(user.uid);
-                }
-              } catch (e) {
-                if (kDebugMode) debugPrint('❌ Simple trial error: $e');
+              // 무료 플랜으로 시작 (인앱결제 없음)
+              if (kDebugMode) {
+                debugPrint('🎯 [UpgradeModal] 무료 플랜으로 시작');
               }
               onCancel?.call();
             },
@@ -609,6 +594,22 @@ class UpgradeModal extends StatelessWidget {
       }
 
       final purchaseService = InAppPurchaseService();
+      
+      // 구매 성공 콜백 설정
+      purchaseService.setOnPurchaseSuccess(() {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '💎 프리미엄 플랜이 시작되었어요!\n자세한 내용은 설정→플랜에서 확인하세요.',
+              ),
+              backgroundColor: Colors.green[600],
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      });
       
       // 인앱 구매 서비스가 초기화되지 않았으면 초기화
       if (!purchaseService.isAvailable) {

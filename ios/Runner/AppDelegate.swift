@@ -59,16 +59,16 @@ import UserNotifications
 
 // MARK: - UNUserNotificationCenterDelegate
 @available(iOS 10.0, *)
-extension AppDelegate: UNUserNotificationCenterDelegate {
+extension AppDelegate {
   // 앱이 포그라운드에 있을 때 알림 표시
-  func userNotificationCenter(_ center: UNUserNotificationCenter,
+  override func userNotificationCenter(_ center: UNUserNotificationCenter,
                             willPresent notification: UNNotification,
                             withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
     completionHandler([.alert, .sound, .badge])
   }
   
   // 알림 탭 처리
-  func userNotificationCenter(_ center: UNUserNotificationCenter,
+  override func userNotificationCenter(_ center: UNUserNotificationCenter,
                             didReceive response: UNNotificationResponse,
                             withCompletionHandler completionHandler: @escaping () -> Void) {
     completionHandler()

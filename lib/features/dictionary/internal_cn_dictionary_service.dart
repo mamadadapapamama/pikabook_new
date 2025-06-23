@@ -84,6 +84,8 @@ class InternalCnDictionaryService {
             word: entry['word'],
             pinyin: entry['pinyin'],
             meaningKo: entry['meaning'],
+            meaningEn: entry['english'],
+            source: 'internal_dictionary',
           );
         }
 

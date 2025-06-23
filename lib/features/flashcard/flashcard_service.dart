@@ -5,7 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/models/flash_card.dart';
 import '../../core/models/dictionary.dart';
 import '../../core/models/note.dart';
-import '../dictionary/unified_dictionary_service.dart';
+import '../dictionary/dictionary_service.dart';
 import '../dictionary/cc_cedict_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
 import '../../core/services/cache/cache_manager.dart';
@@ -16,7 +16,7 @@ class FlashCardService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
-  final UnifiedDictionaryService _dictionaryService = UnifiedDictionaryService();
+  final DictionaryService _dictionaryService = DictionaryService();
   final CcCedictService _ccCedictService = CcCedictService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   final CacheManager _cacheManager = CacheManager();

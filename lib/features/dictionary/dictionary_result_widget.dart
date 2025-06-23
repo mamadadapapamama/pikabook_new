@@ -7,7 +7,7 @@ import '../../../core/widgets/pika_button.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../../core/utils/error_handler.dart';
 import '../tts/tts_button.dart';
-import 'unified_dictionary_service.dart';
+import 'dictionary_service.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
 class DictionaryResultWidget extends StatelessWidget {
@@ -153,7 +153,7 @@ class DictionaryResultWidget extends StatelessWidget {
     
     try {
       // Singleton 인스턴스 사용
-      final dictionaryService = UnifiedDictionaryService();
+      final dictionaryService = DictionaryService();
       
       // 사전 초기화 확인
       if (!dictionaryService.isInitialized) {
@@ -201,7 +201,7 @@ class _DictionaryBottomSheetState extends State<_DictionaryBottomSheet> {
   Future<void> _searchWord() async {
     try {
       // Singleton 인스턴스 사용
-      final dictionaryService = UnifiedDictionaryService();
+      final dictionaryService = DictionaryService();
       
       // 단어 검색
       final entry = await dictionaryService.lookup(widget.word);

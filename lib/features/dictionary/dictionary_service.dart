@@ -170,17 +170,42 @@ class DictionaryService {
     }
   }
   
-  /// 간단한 번역 수행 (실제로는 Google Translate API 호출)
+  /// Google Translate API 호출
   Future<String?> _performSimpleTranslation(String text, {
     required String from,
     required String to,
   }) async {
-    // 현재는 번역 기능을 비활성화하고 null 반환
-    // 실제 구현시에는 Google Translate API를 호출해야 합니다
-    if (kDebugMode) {
-      debugPrint('⚠️ [번역] Google Translate API 키가 필요합니다. 번역 기능이 비활성화됩니다.');
+    try {
+      // Google Translate API 무료 엔드포인트 사용
+      final url = Uri.parse('https://translate.googleapis.com/translate_a/single'
+          '?client=gtx&sl=$from&tl=$to&dt=t&q=${Uri.encodeComponent(text)}');
+      
+      final response = await http.get(url);
+      
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        if (decoded is List && decoded.isNotEmpty && decoded[0] is List) {
+          final translations = decoded[0] as List;
+          if (translations.isNotEmpty && translations[0] is List) {
+            final translatedText = translations[0][0] as String?;
+            if (kDebugMode && translatedText != null) {
+              debugPrint('🌐 [Google Translate] 번역 완료: "$text" → "$translatedText"');
+            }
+            return translatedText;
+          }
+        }
+      }
+      
+      if (kDebugMode) {
+        debugPrint('❌ [Google Translate] API 응답 오류: ${response.statusCode}');
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [Google Translate] 번역 실패: $e');
+      }
+      return null;
     }
-    return null;
   }
 
   /// 병음 생성 공통 메서드
@@ -316,10 +341,59 @@ class DictionaryService {
         return null;
       }
       
-      // 중국어만 지원
-      return _chineseDictionaryService.lookup(word);
+      // 1. 로컬 내부 사전 검색
+      final localResult = _chineseDictionaryService.lookup(word);
+      if (localResult != null) {
+        if (kDebugMode) {
+          debugPrint('✅ [Dictionary] 로컬 사전에서 찾음: $word');
+        }
+        return localResult;
+      }
+      
+      // 2. CC-CEDICT 사전 검색
+      final ccCedictResult = await _ccCedictService.lookup(word);
+      if (ccCedictResult != null) {
+        if (kDebugMode) {
+          debugPrint('✅ [Dictionary] CC-CEDICT에서 찾음: $word');
+        }
+        // CC-CEDICT는 영어만 제공하므로 한국어 번역을 Google Translate로 보완
+        if (ccCedictResult.meaningKo == null || ccCedictResult.meaningKo!.isEmpty) {
+          final koreanTranslation = await _translateToKorean(word, context: 'CC-CEDICT보완');
+          if (koreanTranslation != null) {
+            // 한국어 번역이 추가된 새로운 엔트리 생성
+            final enhancedResult = DictionaryEntry.multiLanguage(
+              word: ccCedictResult.word,
+              pinyin: ccCedictResult.pinyin,
+              meaningKo: koreanTranslation,        // ← Google Translate로 한국어 추가
+              meaningEn: ccCedictResult.meaningEn, // ← CC-CEDICT의 영어 유지
+              source: '${ccCedictResult.source}+google_translate',
+            );
+            // ...
+          }
+        }
+        // 로컬 사전에 추가
+        _chineseDictionaryService.addEntry(ccCedictResult);
+        _notifyDictionaryUpdated();
+        return ccCedictResult;
+      }
+      
+      // 3. Google Translate 검색 (최후 수단)
+      final googleResult = await _translateWithGoogleMultiLanguage(word);
+      if (googleResult != null) {
+        if (kDebugMode) {
+          debugPrint('✅ [Dictionary] Google Translate에서 찾음: $word');
+        }
+        return googleResult;
+      }
+      
+      // 모든 방법으로 찾지 못함
+      if (kDebugMode) {
+        debugPrint('❌ [Dictionary] 단어를 찾을 수 없습니다: $word');
+      }
+      return null;
+      
     } catch (e) {
-      debugPrint('단순 단어 검색 중 오류 발생: $e');
+      debugPrint('단어 검색 중 오류 발생: $e');
       return null;
     }
   }

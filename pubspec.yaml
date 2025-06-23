@@ -123,7 +123,6 @@ flutter:
     - assets/data/
     - assets/audio/sample/
     - assets/credentials/
-    - assets/credentials/api_keys.json
   # assets:
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg

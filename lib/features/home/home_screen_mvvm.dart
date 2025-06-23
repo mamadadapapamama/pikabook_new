@@ -21,11 +21,13 @@ import '../note/view/note_detail_screen.dart';
 import 'package:flutter/foundation.dart'; // kDebugMode 사용 위해 추가
 import '../../core/services/common/plan_service.dart';
 import '../../core/widgets/upgrade_modal.dart';
-import '../../core/widgets/trial_expiry_banner.dart';
+// import '../../core/widgets/trial_expiry_banner.dart'; // 🔔 인앱 배너 제거됨
 import '../../core/services/permissions/permission_service.dart';
 import '../../core/services/payment/in_app_purchase_service.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../core/services/notification/notification_service.dart';
+import '../../core/services/trial/trial_manager.dart';
+import '../../core/services/trial/trial_status_checker.dart';
+
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
 class OrangeOverscrollBehavior extends ScrollBehavior {
@@ -126,6 +128,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 7일 체험 만료 체크
       await _checkTrialExpiration();
       
+      // TrialManager 환영 메시지 콜백 설정
+      _setupTrialWelcomeCallback();
+      
     } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('[HomeScreen] 비동기 초기화 중 오류 발생: $e');
@@ -133,6 +138,86 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       // 비동기 초기화 실패는 앱 진행에 영향을 주지 않음
     }
+  }
+
+  /// TrialManager 환영 메시지 콜백 설정
+  void _setupTrialWelcomeCallback() {
+    final trialManager = TrialManager();
+    final trialStatusChecker = TrialStatusChecker();
+    
+    // 환영 메시지 콜백 (TrialManager)
+    trialManager.onWelcomeMessage = (title, message) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+            backgroundColor: ColorTokens.snackbarBg,
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.fixed,
+          ),
+        );
+      }
+    };
+    
+    // 체험 종료 콜백 (TrialStatusChecker)
+    trialStatusChecker.onTrialExpired = (title, message) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+            backgroundColor: ColorTokens.snackbarBg,
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.fixed,
+          ),
+        );
+      }
+    };
+    
+    // 상태 변경 콜백 (UI 새로고침)
+    trialStatusChecker.onTrialStatusChanged = () {
+      if (mounted) {
+        setState(() {}); // 배너 상태 업데이트
+      }
+    };
+    
+    // TrialStatusChecker 초기화
+    trialStatusChecker.initialize();
   }
   
   // 마케팅 캠페인 서비스 초기화 (현재 사용 안함)
@@ -296,18 +381,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             }
           },
         ),
-        // 🧪 디버그 모드에서만 알림 테스트 버튼 표시
-        floatingActionButton: kDebugMode ? FloatingActionButton(
-          onPressed: () async {
-            final notificationService = NotificationService();
-            await notificationService.showTestNotification();
-            
-            // 예약된 알림도 확인
-            await notificationService.getPendingNotifications();
-          },
-          backgroundColor: ColorTokens.primary,
-          child: const Icon(Icons.notifications, color: Colors.white),
-        ) : null,
+        
       );
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -344,15 +418,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return SafeArea(
       child: Column(
         children: [
-          // 무료체험 만료 배너
-          if (TrialExpiryManager.shouldShowExpiryBanner())
-            TrialExpiryBanner(
-              onUpgradePressed: () => _showUpgradeModal(),
-              onDismiss: () async {
-                await TrialExpiryManager.dismissBannerForToday();
-                setState(() {}); // 배너 닫기 시 화면 새로고침
-              },
-            ),
+          // 🔔 인앱 배너 제거 - Push Notification만 사용
           
           // 노트 목록
           Expanded(

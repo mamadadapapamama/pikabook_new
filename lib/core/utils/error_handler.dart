@@ -61,8 +61,8 @@ class ErrorHandler {
   static final Map<String, VoidCallback?> _retryCallbacks = {};
   
   // UI 메시지 상수
-  static const String analyzingTextMessage = '🧐 텍스트를 분석하고 있습니다...';
-  
+  static const String analyzingTextMessage = '텍스트를 분석하고 있습니다...';
+
   /// 에러 상태 등록
   static void registerError({
     required String id,

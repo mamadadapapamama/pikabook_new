@@ -101,9 +101,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 32),
           
           // 현재 사용 중인 플랜 정보 섹션
-          _buildSectionTitle('내 플랜'),
-          const SizedBox(height: 12),
-          _viewModel.isPlanLoaded ? _buildPlanInfoCard() : _buildPlanLoadingCard(),
+                      _buildSectionTitle('내 플랜'),
+            const SizedBox(height: 12),
+            _buildPlanCard(isLoading: !_viewModel.isPlanLoaded),
           
           const SizedBox(height: 32),
           
@@ -292,130 +292,102 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
   
-  // 플랜 로딩 카드 위젯
-  Widget _buildPlanLoadingCard() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // 플랜 이름 로딩 (스켈레톤)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 80,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: ColorTokens.greyLight,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-            ],
-          ),
-          
-          // 사용량 확인 버튼 (비활성화)
-          Opacity(
-            opacity: 0.5,
-            child: Row(
+  // 플랜 카드 위젯 (로딩/정보 통합)
+  Widget _buildPlanCard({bool isLoading = false}) {
+    return GestureDetector(
+      onTap: isLoading ? null : () async {
+        // 플랜 정보 새로고침
+        await _viewModel.refreshPlanInfo();
+      },
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '사용량 확인',
-                  style: TypographyTokens.body2.copyWith(
-                    color: ColorTokens.textPrimary,
-                    fontWeight: FontWeight.normal,
+                // 플랜 이름 또는 로딩 스켈레톤
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isLoading)
+                        Container(
+                          width: 80,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: ColorTokens.greyLight,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        )
+                      else ...[
+                        Text(
+                          _viewModel.planName,
+                          style: TypographyTokens.body2.copyWith(
+                            color: ColorTokens.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '탭하여 새로고침',
+                          style: TypographyTokens.caption.copyWith(
+                            color: ColorTokens.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                SizedBox(width: SpacingTokens.md),
-                SvgPicture.asset(
-                  'assets/images/icon_arrow_right.svg',
-                  width: 20,
-                  height: 20,
-                  colorFilter: const ColorFilter.mode(
-                    ColorTokens.secondary,
-                    BlendMode.srcIn,
+                
+                // 사용량 확인 버튼
+                Opacity(
+                  opacity: isLoading ? 0.5 : 1.0,
+                  child: GestureDetector(
+                    onTap: isLoading ? null : _showUsageDialog,
+                    child: Row(
+                      children: [
+                        Text(
+                          '사용량 확인',
+                          style: TypographyTokens.body2.copyWith(
+                            color: ColorTokens.textPrimary,
+                            fontWeight: FontWeight.normal,
+                          ),
+                        ),
+                        SizedBox(width: SpacingTokens.md),
+                        SvgPicture.asset(
+                          'assets/images/icon_arrow_right.svg',
+                          width: 20,
+                          height: 20,
+                          colorFilter: const ColorFilter.mode(
+                            ColorTokens.secondary,
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 플랜 정보 카드 위젯
-  Widget _buildPlanInfoCard() {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // 플랜 이름
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _viewModel.planName,
-                    style: TypographyTokens.body2.copyWith(
-                      color: ColorTokens.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-              
-              // 사용량 확인 버튼
-              GestureDetector(
-                onTap: _showUsageDialog,
-                child: Row(
-                  children: [
-                    Text(
-                      '사용량 확인',
-                      style: TypographyTokens.body2.copyWith(
-                        color: ColorTokens.textPrimary,
-                        fontWeight: FontWeight.normal,
-                      ),
-                    ),
-                    SizedBox(width: SpacingTokens.md),
-                    SvgPicture.asset(
-                      'assets/images/icon_arrow_right.svg',
-                      width: 20,
-                      height: 20,
-                      colorFilter: const ColorFilter.mode(
-                        ColorTokens.secondary,
-                        BlendMode.srcIn,
-                      ),
-                    ),
-                  ],
-                ),
+            
+            // 무료 플랜인 경우 업그레이드 버튼 표시 (로딩 중이 아닐 때만)
+            if (!isLoading && _viewModel.planType == 'free') ...[
+              SizedBox(height: SpacingTokens.md),
+              PikaButton(
+                text: 'Premium으로 업그레이드',
+                variant: PikaButtonVariant.primary,
+                size: PikaButtonSize.small,
+                onPressed: _showUpgradeModal,
+                isFullWidth: true,
               ),
             ],
-          ),
-          
-          // 무료 플랜인 경우 업그레이드 버튼 표시
-          if (_viewModel.planType == 'free') ...[
-            SizedBox(height: SpacingTokens.md),
-            PikaButton(
-              text: 'Premium으로 업그레이드',
-              variant: PikaButtonVariant.primary,
-              size: PikaButtonSize.small,
-              onPressed: _showUpgradeModal,
-              isFullWidth: true,
-            ),
           ],
-        ],
+        ),
       ),
     );
   }

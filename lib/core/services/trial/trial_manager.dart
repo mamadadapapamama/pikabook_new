@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../notification/notification_service.dart';
+import '../common/plan_service.dart';
+import 'dart:async';
 
 /// 무료체험 관리 서비스
 class TrialManager {
@@ -11,9 +13,20 @@ class TrialManager {
 
   static const String _trialStartDateKey = 'trial_start_date';
   static const String _welcomeNotificationShownKey = 'welcome_notification_shown';
-  static const int _trialDurationDays = 7;
+  static const int _trialDurationMinutes = 3; // 테스트용: 3분
 
   final NotificationService _notificationService = NotificationService();
+  final PlanService _planService = PlanService();
+
+  // 환영 메시지 콜백
+  void Function(String title, String message)? onWelcomeMessage;
+  
+  // 체험 종료 콜백
+  void Function(String title, String message)? onTrialExpired;
+
+  // 체험 상태 확인 타이머
+  Timer? _statusCheckTimer;
+  bool _hasTrialExpiredCallbackFired = false;
 
   /// 무료체험 시작일
   DateTime? _trialStartDate;
@@ -22,35 +35,65 @@ class TrialManager {
   /// 무료체험 종료일
   DateTime? get trialEndDate {
     if (_trialStartDate == null) return null;
-    return _trialStartDate!.add(const Duration(days: _trialDurationDays));
+    return _trialStartDate!.add(const Duration(minutes: _trialDurationMinutes));
   }
 
-  /// 무료체험 남은 일수
-  int get remainingDays {
-    if (trialEndDate == null) return 0;
-    final now = DateTime.now();
-    final difference = trialEndDate!.difference(now).inDays;
-    return difference > 0 ? difference : 0;
+  /// 무료체험 남은 일수 (Firestore 기반)
+  Future<int> get remainingDays async {
+    try {
+      final subscriptionDetails = await _planService.getSubscriptionDetails();
+      return subscriptionDetails['daysRemaining'] as int? ?? 0;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [Trial] 남은 일수 확인 실패: $e');
+      }
+      return 0;
+    }
   }
 
-  /// 무료체험 남은 시간 (시간 단위)
-  int get remainingHours {
-    if (trialEndDate == null) return 0;
-    final now = DateTime.now();
-    final difference = trialEndDate!.difference(now).inHours;
-    return difference > 0 ? difference : 0;
+  /// 무료체험 남은 시간 (시간 단위, Firestore 기반)
+  Future<int> get remainingHours async {
+    try {
+      final subscriptionDetails = await _planService.getSubscriptionDetails();
+      final expiryDate = subscriptionDetails['expiryDate'] as DateTime?;
+      if (expiryDate == null) return 0;
+      final now = DateTime.now();
+      final difference = expiryDate.difference(now).inHours;
+      return difference > 0 ? difference : 0;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [Trial] 남은 시간 확인 실패: $e');
+      }
+      return 0;
+    }
   }
 
-  /// 무료체험 활성 상태
-  bool get isTrialActive {
-    if (trialEndDate == null) return false;
-    return DateTime.now().isBefore(trialEndDate!);
+  /// 무료체험 활성 상태 (Firestore 기반)
+  Future<bool> get isTrialActive async {
+    try {
+      final subscriptionDetails = await _planService.getSubscriptionDetails();
+      return subscriptionDetails['isFreeTrial'] as bool? ?? false;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [Trial] 체험 활성 상태 확인 실패: $e');
+      }
+      return false;
+    }
   }
 
-  /// 무료체험 만료 여부
-  bool get isTrialExpired {
-    if (trialEndDate == null) return false;
-    return DateTime.now().isAfter(trialEndDate!);
+  /// 무료체험 만료 여부 (Firestore 기반)
+  Future<bool> get isTrialExpired async {
+    try {
+      final subscriptionDetails = await _planService.getSubscriptionDetails();
+      final expiryDate = subscriptionDetails['expiryDate'] as DateTime?;
+      if (expiryDate == null) return false;
+      return DateTime.now().isAfter(expiryDate);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [Trial] 체험 만료 여부 확인 실패: $e');
+      }
+      return false;
+    }
   }
 
   /// 사용자가 로그인한 상태인지 확인
@@ -71,18 +114,19 @@ class TrialManager {
     try {
       await _loadTrialData();
       
-      // 로그인한 사용자이고, 체험 기간이 시작되지 않았다면 체험 시작
-      if (isUserLoggedIn && _trialStartDate == null) {
-        await startTrial();
-      }
+      // 자동으로 체험을 시작하지 않음 - 사용자가 명시적으로 선택해야 함
+      
+      // 체험 종료 여부 확인 및 콜백 호출
+      await _checkTrialExpirationAndNotify();
       
       if (kDebugMode) {
         debugPrint('✅ [Trial] 초기화 완료');
         debugPrint('   로그인 상태: $isUserLoggedIn');
         debugPrint('   체험 시작일: $_trialStartDate');
         debugPrint('   체험 종료일: $trialEndDate');
-        debugPrint('   남은 일수: $remainingDays일');
-        debugPrint('   체험 활성: $isTrialActive');
+        debugPrint('   남은 일수: ${await remainingDays}일');
+        debugPrint('   체험 활성: ${await isTrialActive}');
+        debugPrint('   상태 텍스트: ${await trialStatusText}');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -91,35 +135,49 @@ class TrialManager {
     }
   }
 
-  /// 무료체험 시작
-  Future<void> startTrial() async {
+  /// 사용자가 선택한 프리미엄 무료체험 시작
+  Future<bool> startPremiumTrial() async {
     try {
       if (!isUserLoggedIn) {
         if (kDebugMode) {
           debugPrint('⚠️ [Trial] 로그인하지 않은 사용자는 체험을 시작할 수 없습니다');
         }
-        return;
+        return false;
       }
 
+      final userId = FirebaseAuth.instance.currentUser!.uid;
       final now = DateTime.now();
       _trialStartDate = now;
       
-      // 🧪 DEBUG MODE: 테스트를 위해 체험 기간을 5분으로 설정
+      // 🧪 DEBUG MODE: 테스트를 위해 체험 기간을 2분으로 설정
       if (kDebugMode) {
-        // 테스트용: 5분 후 체험 종료 (배너 테스트용)
-        _trialStartDate = now.subtract(const Duration(days: 6, hours: 23, minutes: 55));
-        debugPrint('🧪 [TEST] 무료체험 테스트 모드 - 5분 후 종료 예정');
-        debugPrint('   조정된 시작일: $_trialStartDate');
+        // 테스트용: 지금부터 2분 후 체험 종료
+        _trialStartDate = now;
+        debugPrint('🧪 [TEST] 무료체험 테스트 모드 - 3분 후 종료 예정');
+        debugPrint('   시작일: $_trialStartDate');
         debugPrint('   종료 예정일: $trialEndDate');
-        debugPrint('   남은 시간: ${remainingHours}시간 ${(remainingHours * 60) % 60}분');
+        debugPrint('   남은 시간: ${trialEndDate!.difference(now).inMinutes}분 ${trialEndDate!.difference(now).inSeconds % 60}초');
       }
       
       // SharedPreferences에 저장
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_trialStartDateKey, _trialStartDate!.toIso8601String());
       
+      // PlanService를 통해 Firestore에 체험 시작 기록
+      final success = await _planService.startFreeTrial(userId);
+      if (!success) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [Trial] Firestore 체험 기록 실패 - 이미 사용했거나 오류 발생');
+        }
+      }
+      
       // 체험 관련 알림 설정
       await setupTrialNotifications();
+      
+      // 🧪 테스트: 즉시 알림 확인
+      if (kDebugMode) {
+        await _notificationService.showTestNotification();
+      }
       
       // 환영 메시지 표시 (한 번만)
       await _showWelcomeNotification();
@@ -129,11 +187,14 @@ class TrialManager {
         debugPrint('   시작일: $_trialStartDate');
         debugPrint('   종료일: $trialEndDate');
         debugPrint('   남은 일수: $remainingDays일');
+        debugPrint('   Firestore 기록: ${success ? '성공' : '실패'}');
       }
+      return true;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [Trial] 무료체험 시작 실패: $e');
       }
+      return false;
     }
   }
 
@@ -172,6 +233,10 @@ class TrialManager {
       
       if (kDebugMode) {
         debugPrint('✅ [Trial] 무료체험 알림 설정 완료');
+        
+        // 예약된 알림 확인
+        final pendingNotifications = await _notificationService.getPendingNotifications();
+        debugPrint('📋 [Trial] 현재 예약된 알림 수: ${pendingNotifications.length}');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -188,23 +253,62 @@ class TrialManager {
       
       if (isShown) return;
       
-      // 환영 메시지 표시
-      await _notificationService.showImmediateNotification(
-        id: 999,
-        title: 'Pikabook에 오신 것을 환영합니다! 🎉',
-        body: '7일 무료체험이 시작되었습니다. 중국어 학습을 시작해보세요!',
-        payload: 'welcome_message',
-      );
+      // 콜백을 통해 환영 메시지 표시
+      if (onWelcomeMessage != null) {
+        onWelcomeMessage!(
+          '🎉 프리미엄 무료체험이 시작되었어요!',
+          '피카북을 마음껏 사용해보세요.',
+        );
+      }
       
       // 표시됨 플래그 저장
       await prefs.setBool(_welcomeNotificationShownKey, true);
       
       if (kDebugMode) {
-        debugPrint('👋 [Trial] 환영 메시지 표시 완료');
+        debugPrint('👋 [Trial] 환영 메시지 콜백 호출 완료');
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [Trial] 환영 메시지 표시 실패: $e');
+      }
+    }
+  }
+
+  /// 체험 상태 체크 (화면 전환 시 호출 가능)
+  Future<void> checkTrialStatus() async {
+    await _checkTrialExpirationAndNotify();
+  }
+
+  /// 체험 종료 여부 확인 및 콜백 호출 (앱 실행 시마다 체크)
+  Future<void> _checkTrialExpirationAndNotify() async {
+    if (!isUserLoggedIn) return;
+    
+    try {
+      final subscriptionDetails = await _planService.getSubscriptionDetails();
+      final expiryDate = subscriptionDetails['expiryDate'] as DateTime?;
+      final wasFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
+      
+      // 체험이 있었고 현재 만료된 경우
+      if (expiryDate != null && wasFreeTrial && DateTime.now().isAfter(expiryDate)) {
+        // 이미 콜백을 호출했는지 확인 (중복 방지)
+        if (!_hasTrialExpiredCallbackFired) {
+          _hasTrialExpiredCallbackFired = true;
+          
+          if (onTrialExpired != null) {
+            onTrialExpired!(
+              '💎 프리미엄 플랜이 시작되었어요!\n자세한 내용은 설정→플랜에서 확인하세요.',
+              '',
+            );
+          }
+          
+          if (kDebugMode) {
+            debugPrint('⏰ [Trial] 체험 종료 감지 - 콜백 호출');
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [Trial] 체험 종료 확인 실패: $e');
       }
     }
   }
@@ -214,6 +318,14 @@ class TrialManager {
     try {
       // 체험 관련 알림 취소
       await _notificationService.cancelTrialNotifications();
+      
+      // 체험 종료 콜백 호출
+      if (onTrialExpired != null) {
+        onTrialExpired!(
+          '💎 프리미엄 플랜이 시작되었어요!\n자세한 내용은 설정→플랜에서 확인하세요.',
+          '',
+        );
+      }
       
       if (kDebugMode) {
         debugPrint('⏰ [Trial] 무료체험 종료 처리 완료');
@@ -263,37 +375,41 @@ class TrialManager {
     }
   }
 
-  /// 체험 상태 문자열
-  String get trialStatusText {
+  /// 체험 상태 문자열 (Firestore 기반)
+  Future<String> get trialStatusText async {
     if (!isUserLoggedIn) return '샘플 모드';
-    if (isPremiumUser) return '프리미엄 사용자';
-    if (!isTrialActive) return '체험 종료';
     
-    if (remainingDays > 0) {
-      return '무료체험 ${remainingDays}일 남음';
-    } else if (remainingHours > 0) {
-      return '무료체험 ${remainingHours}시간 남음';
-    } else {
+    try {
+      final subscriptionDetails = await _planService.getSubscriptionDetails();
+      final currentPlan = subscriptionDetails['currentPlan'] as String;
+      final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
+      final daysRemaining = subscriptionDetails['daysRemaining'] as int? ?? 0;
+      
+      if (currentPlan == 'premium' && !isFreeTrial) {
+        return '프리미엄 사용자';
+      }
+      
+      if (isFreeTrial && daysRemaining > 0) {
+        return '무료체험 ${daysRemaining}일 남음';
+      }
+      
+      if (currentPlan == 'free') {
+        return '무료 플랜';
+      }
+      
       return '체험 종료';
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [Trial] 상태 텍스트 생성 실패: $e');
+      }
+      return '상태 확인 실패';
     }
   }
 
-  /// 체험 진행률 (0.0 ~ 1.0)
-  double get trialProgress {
-    if (_trialStartDate == null || trialEndDate == null) return 0.0;
-    
-    final now = DateTime.now();
-    final totalDuration = trialEndDate!.difference(_trialStartDate!).inMilliseconds;
-    final elapsedDuration = now.difference(_trialStartDate!).inMilliseconds;
-    
-    if (elapsedDuration <= 0) return 0.0;
-    if (elapsedDuration >= totalDuration) return 1.0;
-    
-    return elapsedDuration / totalDuration;
-  }
 
-  /// 디버그 정보 출력
-  void printDebugInfo() {
+
+  /// 디버그 정보 출력 (Firestore 기반)
+  Future<void> printDebugInfo() async {
     if (!kDebugMode) return;
     
     debugPrint('=== Trial Manager Debug Info ===');
@@ -302,12 +418,11 @@ class TrialManager {
     debugPrint('샘플 모드: $isSampleMode');
     debugPrint('체험 시작일: $_trialStartDate');
     debugPrint('체험 종료일: $trialEndDate');
-    debugPrint('체험 활성: $isTrialActive');
-    debugPrint('체험 만료: $isTrialExpired');
-    debugPrint('남은 일수: $remainingDays일');
-    debugPrint('남은 시간: $remainingHours시간');
-    debugPrint('체험 진행률: ${(trialProgress * 100).toStringAsFixed(1)}%');
-    debugPrint('상태 텍스트: $trialStatusText');
+    debugPrint('체험 활성: ${await isTrialActive}');
+    debugPrint('체험 만료: ${await isTrialExpired}');
+    debugPrint('남은 일수: ${await remainingDays}일');
+    debugPrint('남은 시간: ${await remainingHours}시간');
+    debugPrint('상태 텍스트: ${await trialStatusText}');
     debugPrint('================================');
   }
 } 
