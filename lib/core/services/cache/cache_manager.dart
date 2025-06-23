@@ -36,11 +36,11 @@ class CacheManager {
         debugPrint('📦 캐시 저장소 생성 중... (초기화는 지연)');
       }
       
-      // Note Contents 캐시 (100MB)
+      // Note Contents 캐시 (50MB - 메모리 최적화)
       _noteContentsCache = LocalCacheStorage<Map<String, dynamic>>(
         namespace: 'note_contents',
-        maxSize: 100 * 1024 * 1024, // 100MB
-        maxItems: 5000,
+        maxSize: 50 * 1024 * 1024, // 100MB → 50MB (50% 절약)
+        maxItems: 2500, // 5000 → 2500 (50% 절약)
         fromJson: (json) => json,
         toJson: (data) => data,
       );
@@ -63,18 +63,18 @@ class CacheManager {
         toJson: (data) => data,
       );
 
-      // Image 캐시 (300MB)
+      // Image 캐시 (150MB - 메모리 최적화)
       _imageCache = LocalCacheStorage<Uint8List>(
         namespace: 'images',
-        maxSize: 300 * 1024 * 1024, // 300MB
-        maxItems: 1000,
+        maxSize: 150 * 1024 * 1024, // 300MB → 150MB (50% 절약)
+        maxItems: 500, // 1000 → 500 (50% 절약)
       );
 
-      // TTS 캐시 (200MB)
+      // TTS 캐시 (100MB - 메모리 최적화)
       _ttsCache = LocalCacheStorage<Uint8List>(
         namespace: 'tts',
-        maxSize: 200 * 1024 * 1024, // 200MB
-        maxItems: 1000,
+        maxSize: 100 * 1024 * 1024, // 200MB → 100MB (50% 절약)
+        maxItems: 500, // 1000 → 500 (50% 절약)
       );
 
       _isInitialized = true;

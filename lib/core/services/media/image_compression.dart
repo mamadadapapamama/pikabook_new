@@ -54,8 +54,8 @@ class ImageCompression {
   /// 4. JPG 압축 시도 후 실패하면 PNG로 저장
   Future<CompressionResult> compressAndOptimizeImage(
     String imagePath, {
-    int maxDimension = 1920,
-    int quality = 85,
+    int maxDimension = 1280,
+    int quality = 70,
     String? targetPath,
   }) async {
     try {
@@ -68,7 +68,7 @@ class ImageCompression {
       final String finalTargetPath = targetPath ?? 
           '${path.dirname(imagePath)}/compressed_${path.basename(imagePath)}';
 
-      // FlutterImageCompress로 압축 시도
+      // FlutterImageCompress로 압축 시도 (속도 최적화 설정)
       try {
         final result = await FlutterImageCompress.compressAndGetFile(
           imagePath,
@@ -76,16 +76,22 @@ class ImageCompression {
           minWidth: maxDimension,
           minHeight: maxDimension,
           quality: quality,
+          format: CompressFormat.jpeg,
         );
 
         if (result != null) {
+          if (kDebugMode) {
+            final originalSize = await getImageSize(imagePath);
+            final compressedSize = await getImageSize(result.path);
+            debugPrint('🖼️ 이미지 압축 완료: ${formatSize(originalSize)} → ${formatSize(compressedSize)}');
+          }
           return CompressionResult.success(result.path);
         }
       } catch (e) {
         debugPrint('FlutterImageCompress 압축 실패: $e');
       }
 
-      // FlutterImageCompress 실패 시 image 패키지로 시도
+      // FlutterImageCompress 실패 시 image 패키지로 시도 (간단한 처리)
       try {
         final bytes = await file.readAsBytes();
         var image = img.decodeImage(bytes);
@@ -94,7 +100,7 @@ class ImageCompression {
           return CompressionResult.failure('이미지 디코딩 실패');
         }
 
-        // 리사이징
+        // 더 적극적인 리사이징 (속도 우선)
         if (image.width > maxDimension || image.height > maxDimension) {
           double ratio = (image.width > image.height)
               ? maxDimension / image.width
@@ -103,27 +109,29 @@ class ImageCompression {
             image,
             width: (image.width * ratio).round(),
             height: (image.height * ratio).round(),
-            interpolation: img.Interpolation.average,
+            interpolation: img.Interpolation.linear,
           );
         }
 
-        // JPG로 압축 시도
-        try {
-          final jpegBytes = img.encodeJpg(image, quality: quality);
-          await File(finalTargetPath).writeAsBytes(jpegBytes);
-          return CompressionResult.success(finalTargetPath);
-        } catch (jpgError) {
-          // PNG로 시도
-          final pngBytes = img.encodePng(image);
-          await File(finalTargetPath).writeAsBytes(pngBytes);
-          return CompressionResult.success(finalTargetPath);
-        }
+        // JPG만 사용 (PNG 제거로 속도 향상)
+        final jpegBytes = img.encodeJpg(image, quality: quality);
+        await File(finalTargetPath).writeAsBytes(jpegBytes);
+        return CompressionResult.success(finalTargetPath);
       } catch (e) {
         return CompressionResult.failure('이미지 압축 실패: $e');
       }
     } catch (e) {
       return CompressionResult.failure('이미지 처리 중 오류: $e');
     }
+  }
+
+  /// 빠른 이미지 압축 (노트 생성용 - 최대 속도 우선)
+  Future<CompressionResult> compressForUpload(String imagePath) async {
+    return compressAndOptimizeImage(
+      imagePath,
+      maxDimension: 1024,
+      quality: 60,
+    );
   }
 
   /// 이미지 파일의 크기를 바이트 단위로 반환

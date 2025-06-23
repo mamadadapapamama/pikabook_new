@@ -111,10 +111,10 @@ class NoteCreationUIManager {
       if (e.toString().contains('중국어가 없습니다')) {
         // 로딩 다이얼로그가 표시되지 않은 경우에도 처리
         if (rootContext.mounted) {
-          // 로딩 다이얼로그가 표시된 경우 닫기
+          // 로딩 다이얼로그가 표시된 경우 닫기 (지연시간 최적화)
           if (loadingDialogShown || NoteCreationLoader.isVisible) {
             NoteCreationLoader.hide(rootContext);
-            await Future.delayed(const Duration(milliseconds: 300));
+            await Future.delayed(const Duration(milliseconds: 100)); // 300ms → 100ms
           }
           
           // 중국어 감지 실패 전용 에러 메시지
@@ -156,11 +156,11 @@ class NoteCreationUIManager {
     }
   }
 
-  /// 바텀 시트 닫기
+  /// 바텀 시트 닫기 (지연시간 최적화)
   Future<void> _closeBottomSheet(BuildContext context) async {
     if (Navigator.canPop(context)) {
       Navigator.of(context).pop();
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 100)); // 300ms → 100ms
     }
   }
 
@@ -230,10 +230,10 @@ class NoteCreationUIManager {
       flashcardCount: 0,
     );
 
-    // 로딩 다이얼로그 닫기
+    // 로딩 다이얼로그 닫기 (지연시간 최적화)
     if (loadingDialogShown && context.mounted) {
       NoteCreationLoader.hide(context);
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 100)); // 300ms → 100ms
     }
 
     // 노트 상세 화면으로 이동 (타임아웃 처리)
@@ -332,10 +332,10 @@ class NoteCreationUIManager {
     required BuildContext context,
     required bool loadingDialogShown,
   }) async {
-    // 로딩 다이얼로그 닫기
+    // 로딩 다이얼로그 닫기 (지연시간 최적화)
     if (loadingDialogShown && context.mounted) {
       NoteCreationLoader.hide(context);
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 100)); // 300ms → 100ms
     }
 
     // 에러 메시지 표시

@@ -14,9 +14,9 @@ class ImageCacheService {
   static final ImageCacheService _instance = ImageCacheService._internal();
   factory ImageCacheService() => _instance;
 
-  // 캐시 설정
-  static const int _maxCacheItems = 20;
-  static const int _maxCacheSize = 50 * 1024 * 1024; // 50MB
+  // 캐시 설정 (메모리 최적화)
+  static const int _maxCacheItems = 10; // 20 → 10 (50% 절약)
+  static const int _maxCacheSize = 25 * 1024 * 1024; // 50MB → 25MB (50% 절약)
 
   // 이미지 바이트 캐시 (경로 -> 이미지 바이트)
   final Map<String, Uint8List> _memoryImageCache = {};

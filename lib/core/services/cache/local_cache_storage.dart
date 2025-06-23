@@ -57,7 +57,9 @@ class LocalCacheStorage<T> implements CacheStorage<T>, BinaryCacheStorage {
       }
 
       if (kDebugMode) {
-        debugPrint('📦 LocalCacheStorage($_namespace) 캐시 디렉토리 생성 중...');
+        if (kDebugMode) {
+      debugPrint('📦 LocalCacheStorage($_namespace) 캐시 디렉토리 생성 중...');
+    }
       }
       _cacheDir = await _getCacheDirectory();
       await _cacheDir!.create(recursive: true);
@@ -180,7 +182,9 @@ class LocalCacheStorage<T> implements CacheStorage<T>, BinaryCacheStorage {
       await _saveMetadata();
       
       if (kDebugMode) {
+        if (kDebugMode) {
         debugPrint('📦 캐시 저장($_namespace): $key (${_formatSize(dataSize)})');
+      }
       }
     } catch (e) {
       if (kDebugMode) {
