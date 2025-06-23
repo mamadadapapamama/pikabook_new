@@ -39,35 +39,27 @@ class SampleTtsService {
   /// 텍스트 음성 재생
   Future<void> speak(String text, {BuildContext? context}) async {
     try {
-      if (kDebugMode) {
-        debugPrint('🔊 [SampleTTS] 음성 재생 요청: "$text"');
-      }
+      debugPrint('🔊 [SampleTTS] 음성 재생 요청: "$text"');
       
       final trimmedText = text.trim();
 
       // 1. 샘플 오디오 assets 확인
       if (_sampleAudioAssets.containsKey(trimmedText)) {
-        if (kDebugMode) {
-          debugPrint('✅ [SampleTTS] 매핑된 오디오 파일 발견: ${_sampleAudioAssets[trimmedText]}');
-        }
+        debugPrint('✅ [SampleTTS] 매핑된 오디오 파일 발견: ${_sampleAudioAssets[trimmedText]}');
         await _playFromAssets(_sampleAudioAssets[trimmedText]!);
         return;
       }
 
       // 2. 샘플 모드에서 지원하지 않는 오디오 파일인 경우 스낵바 표시
-      if (kDebugMode) {
-        debugPrint('⚠️ [SampleTTS] 지원하지 않는 텍스트: "$text"');
-      }
+      debugPrint('⚠️ [SampleTTS] 지원하지 않는 텍스트: "$text"');
       if (context != null) {
         _showSampleLimitationSnackBar(context);
       }
       
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [SampleTTS] 음성 재생 실패: $e');
-        debugPrint('   실패한 텍스트: "$text"');
-        debugPrint('   매핑 상태: ${_sampleAudioAssets.containsKey(text.trim()) ? "매핑됨" : "매핑 안됨"}');
-      }
+      debugPrint('❌ [SampleTTS] 음성 재생 실패: $e');
+      debugPrint('   실패한 텍스트: "$text"');
+      debugPrint('   매핑 상태: ${_sampleAudioAssets.containsKey(text.trim()) ? "매핑됨" : "매핑 안됨"}');
       
       // 실제 오디오 재생 실패인 경우에만 스낵바 표시
       if (context != null) {
@@ -79,9 +71,7 @@ class SampleTtsService {
   /// assets에서 음성 재생 (샘플 전용 플레이어 사용)
   Future<void> _playFromAssets(String assetPath) async {
     try {
-      if (kDebugMode) {
-        debugPrint('🎵 [SampleTTS] assets 오디오 재생: $assetPath');
-      }
+      debugPrint('🎵 [SampleTTS] assets 오디오 재생: $assetPath');
       
       // 기존 재생 완전 정리
       await _cleanupPlayer();
@@ -92,21 +82,15 @@ class SampleTtsService {
       // 올바른 경로로 assets 파일 설정
       await _samplePlayer!.setAsset(assetPath);
       
-      if (kDebugMode) {
-        debugPrint('🎧 [SampleTTS] assets 파일 설정 완료: $assetPath');
-      }
+      debugPrint('🎧 [SampleTTS] assets 파일 설정 완료: $assetPath');
       
       // 재생 시작 (지연 제거)
       await _samplePlayer!.play();
       
-      if (kDebugMode) {
-        debugPrint('✅ [SampleTTS] 오디오 재생 시작됨: $assetPath');
-      }
+      debugPrint('✅ [SampleTTS] 오디오 재생 시작됨: $assetPath');
       
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [SampleTTS] assets 오디오 재생 실패: $e');
-      }
+      debugPrint('❌ [SampleTTS] assets 오디오 재생 실패: $e');
       rethrow;
     }
   }
@@ -119,13 +103,9 @@ class SampleTtsService {
           await _samplePlayer!.stop();
         }
         await _samplePlayer!.dispose();
-        if (kDebugMode) {
-          debugPrint('🧹 [SampleTTS] 이전 플레이어 정리 완료');
-        }
+        debugPrint('🧹 [SampleTTS] 이전 플레이어 정리 완료');
       } catch (e) {
-        if (kDebugMode) {
-          debugPrint('⚠️ [SampleTTS] 플레이어 정리 중 오류 (무시): $e');
-        }
+        debugPrint('⚠️ [SampleTTS] 플레이어 정리 중 오류 (무시): $e');
       }
       _samplePlayer = null;
     }
@@ -154,14 +134,10 @@ class SampleTtsService {
     try {
       if (_samplePlayer != null && _samplePlayer!.playing) {
         await _samplePlayer!.stop();
-        if (kDebugMode) {
-          debugPrint('⏹️ [SampleTTS] 음성 재생 중지');
-        }
+        debugPrint('⏹️ [SampleTTS] 음성 재생 중지');
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [SampleTTS] 음성 중지 실패: $e');
-      }
+      debugPrint('❌ [SampleTTS] 음성 중지 실패: $e');
     }
   }
 
@@ -171,9 +147,7 @@ class SampleTtsService {
   /// 리소스 정리
   Future<void> dispose() async {
     await _cleanupPlayer();
-    if (kDebugMode) {
-      debugPrint('🧹 [SampleTTS] dispose 완료');
-    }
+    debugPrint('🧹 [SampleTTS] dispose 완료');
   }
 
 

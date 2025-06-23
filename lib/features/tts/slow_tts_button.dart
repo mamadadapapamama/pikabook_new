@@ -105,6 +105,12 @@ class _SlowTtsButtonState extends BaseTtsButtonState<SlowTtsButton> {
   
   @override
   void setupListeners() {
+    // 샘플 모드에서는 리스너 설정하지 않음
+    if (_authService.currentUser == null) {
+      debugPrint('🐢 느린 TTS 버튼: 샘플 모드이므로 리스너 설정 건너뜀');
+      return;
+    }
+    
     // 콜백 함수 정의 (dispose 시 제거를 위해 참조 저장)
     _stateChangedCallback = (segmentIndex) {
       if (mounted) {
@@ -158,9 +164,12 @@ class _SlowTtsButtonState extends BaseTtsButtonState<SlowTtsButton> {
   
   @override
   void dispose() {
-    // 리스너 제거 (메모리 누수 방지)
-    _slowTtsService.removeOnPlayingStateChanged(_stateChangedCallback);
-    _slowTtsService.removeOnPlayingCompleted(_completedCallback);
+    // 로그인 상태일 때만 리스너 제거
+    if (_authService.currentUser != null) {
+      // 리스너 제거 (메모리 누수 방지)
+      _slowTtsService.removeOnPlayingStateChanged(_stateChangedCallback);
+      _slowTtsService.removeOnPlayingCompleted(_completedCallback);
+    }
     super.dispose();
   }
 

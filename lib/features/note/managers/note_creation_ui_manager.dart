@@ -290,8 +290,8 @@ class NoteCreationUIManager {
       // 안전 장치: 로딩 다이얼로그 완전히 닫기
       NoteCreationLoader.ensureHidden(context);
 
-      // 튜토리얼 설정 - 첫 번째 노트 생성 시 튜토리얼 표시 준비
-      NoteTutorial.markFirstNoteCreated();
+      // 튜토리얼 설정 - 실제 첫 번째 노트일 때만 표시 준비
+      await _checkAndMarkFirstNote();
 
       // 화면 이동
       Navigator.of(context).push(
@@ -385,6 +385,36 @@ class NoteCreationUIManager {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('⚠️ 앱 시작시 초기화 실패: $e');
+      }
+    }
+  }
+
+  /// 첫 번째 노트인지 확인하고 튜토리얼 마킹
+  Future<void> _checkAndMarkFirstNote() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
+      
+      // 사용자의 총 노트 수 확인
+      final snapshot = await _firestore
+          .collection('notes')
+          .where('userId', isEqualTo: user.uid)
+          .get();
+      
+      // 현재 생성한 노트가 첫 번째 노트인 경우에만 튜토리얼 마킹
+      if (snapshot.docs.length == 1) {
+        await NoteTutorial.markFirstNoteCreated();
+        if (kDebugMode) {
+          debugPrint('🎯 첫 번째 노트 생성 - 튜토리얼 마킹 완료');
+        }
+      } else {
+        if (kDebugMode) {
+          debugPrint('📝 추가 노트 생성 (${snapshot.docs.length}번째) - 튜토리얼 마킹 생략');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ 첫 번째 노트 확인 실패: $e');
       }
     }
   }

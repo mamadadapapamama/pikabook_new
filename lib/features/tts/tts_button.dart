@@ -90,6 +90,12 @@ class _TtsButtonState extends BaseTtsButtonState<TtsButton> {
   
   @override
   void setupListeners() {
+    // 샘플 모드에서는 리스너 설정하지 않음
+    if (authService.currentUser == null) {
+      debugPrint('TTS 버튼: 샘플 모드이므로 리스너 설정 건너뜀');
+      return;
+    }
+    
     // 콜백 함수 정의 (dispose 시 제거를 위해 참조 저장)
     _stateChangedCallback = (segmentIndex) {
       if (mounted) {
@@ -143,9 +149,12 @@ class _TtsButtonState extends BaseTtsButtonState<TtsButton> {
   
   @override
   void dispose() {
-    // 리스너 제거 (메모리 누수 방지)
-    _ttsService.removeOnPlayingStateChanged(_stateChangedCallback);
-    _ttsService.removeOnPlayingCompleted(_completedCallback);
+    // 로그인 상태일 때만 리스너 제거
+    if (authService.currentUser != null) {
+      // 리스너 제거 (메모리 누수 방지)
+      _ttsService.removeOnPlayingStateChanged(_stateChangedCallback);
+      _ttsService.removeOnPlayingCompleted(_completedCallback);
+    }
     super.dispose();
   }
 } 
