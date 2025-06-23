@@ -33,10 +33,11 @@ class TTSService {
   // 세그먼트 관리
   int? _currentSegmentIndex;
   List<TextUnit> _currentSegments = [];
+  bool _isPlayingAll = false; // 전체 재생 모드 플래그
 
-  // 콜백
-  Function(int?)? _onPlayingStateChanged;
-  Function? _onPlayingCompleted;
+  // 콜백 (여러 리스너 지원)
+  final List<Function(int?)> _onPlayingStateChangedCallbacks = [];
+  final List<Function()> _onPlayingCompletedCallbacks = [];
   
   // 초기화 여부
   bool _isInitialized = false;
@@ -243,11 +244,19 @@ class TTSService {
     _updateCurrentSegment(null);
     
     // 재생 완료 콜백 호출 (옵션)
-    if (callCompletedCallback && _onPlayingCompleted != null) {
-      _onPlayingCompleted!();
+    if (callCompletedCallback) {
+      // 전체 재생 모드일 때만 전체 재생 완료 콜백 호출
+      if (_isPlayingAll) {
+        debugPrint('🎵 전체 재생 완료 콜백 호출');
+      }
+      
+      for (final callback in _onPlayingCompletedCallbacks) {
+        callback();
+      }
     }
     
     _currentSegmentIndex = null;
+    _isPlayingAll = false; // 전체 재생 모드 해제
   }
 
   /// TTS 에러 처리 및 완전 초기화
@@ -348,14 +357,15 @@ class TTSService {
       return;
     }
 
-    // 세그먼트 설정
+    // 전체 재생 모드 설정
+    _isPlayingAll = true;
     _currentSegments = units;
     
     // 모든 내용 순차 재생
-    debugPrint("🎵 ${units.length}개 항목 순차 재생 시작");
+    debugPrint("🎵 ${units.length}개 항목 순차 재생 시작 (전체 재생 모드)");
     
     for (var i = 0; i < units.length; i++) {
-      if (_ttsState != TtsState.playing) break;
+      if (_ttsState != TtsState.playing && !_isPlayingAll) break;
       
       _currentSegmentIndex = i;
       _updateCurrentSegment(i);
@@ -367,13 +377,17 @@ class TTSService {
         continue;
       }
     }
+    
+    // 전체 재생 완료
+    _isPlayingAll = false;
+    debugPrint("🎵 전체 재생 완료");
   }
 
   /// 현재 재생 중인 세그먼트 업데이트
   void _updateCurrentSegment(int? segmentIndex) {
     _currentSegmentIndex = segmentIndex;
-    if (_onPlayingStateChanged != null) {
-      _onPlayingStateChanged!(_currentSegmentIndex);
+    for (final callback in _onPlayingStateChangedCallbacks) {
+      callback(_currentSegmentIndex);
     }
   }
 
@@ -406,14 +420,23 @@ class TTSService {
     debugPrint('🗑️ TTS 캐시 정리 완료');
   }
 
-  /// 재생 상태 변경 콜백 설정
+  /// 재생 상태 변경 콜백 설정 (여러 리스너 지원)
   void setOnPlayingStateChanged(Function(int?) callback) {
-    _onPlayingStateChanged = callback;
+    _onPlayingStateChangedCallbacks.add(callback);
   }
 
-  /// 재생 완료 콜백 설정
-  void setOnPlayingCompleted(Function callback) {
-    _onPlayingCompleted = callback;
+  /// 재생 완료 콜백 설정 (여러 리스너 지원)
+  void setOnPlayingCompleted(Function() callback) {
+    _onPlayingCompletedCallbacks.add(callback);
+  }
+
+  /// 콜백 제거
+  void removeOnPlayingStateChanged(Function(int?) callback) {
+    _onPlayingStateChangedCallbacks.remove(callback);
+  }
+
+  void removeOnPlayingCompleted(Function() callback) {
+    _onPlayingCompletedCallbacks.remove(callback);
   }
 
   /// 🚀 최적화: 리소스 해제 강화
@@ -442,8 +465,8 @@ class TTSService {
     
     // 상태 초기화
     _currentSegments.clear();
-    _onPlayingStateChanged = null;
-    _onPlayingCompleted = null;
+    _onPlayingStateChangedCallbacks.clear();
+    _onPlayingCompletedCallbacks.clear();
     _isInitialized = false;
     
     debugPrint('✅ TTS 서비스 리소스 해제 완료');

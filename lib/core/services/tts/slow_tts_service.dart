@@ -8,6 +8,8 @@ import 'dart:async';
 import '../../../core/models/text_unit.dart';
 import 'tts_api_service.dart';
 import 'tts_cache_service.dart';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 /// 느린 TTS 상태
 enum SlowTtsState { playing, stopped, paused }
@@ -30,16 +32,16 @@ class SlowTtsService {
   bool _isSpeaking = false;
   
   // 스트림 구독 관리
-  StreamSubscription? _playerStateSubscription;
-  StreamSubscription? _playbackEventSubscription;
+  StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<PlaybackEvent>? _playbackEventSubscription;
   
   // 세그먼트 관리
   int? _currentSegmentIndex;
   List<TextUnit> _currentSegments = [];
   
-  // 콜백
-  Function(int?)? _onPlayingStateChanged;
-  Function? _onPlayingCompleted;
+  // 콜백 (여러 리스너 지원)
+  final List<Function(int?)> _onPlayingStateChangedCallbacks = [];
+  final List<Function()> _onPlayingCompletedCallbacks = [];
   
   // 초기화 여부
   bool _isInitialized = false;
@@ -97,8 +99,12 @@ class SlowTtsService {
     }
     
     // 콜백 호출
-    _onPlayingCompleted?.call();
-    _onPlayingStateChanged?.call(null);
+    for (final callback in _onPlayingCompletedCallbacks) {
+      callback();
+    }
+    for (final callback in _onPlayingStateChangedCallbacks) {
+      callback(null);
+    }
   }
 
   /// 언어 설정
@@ -205,7 +211,9 @@ class SlowTtsService {
     _currentSegmentIndex = segmentIndex;
     
     // 콜백 호출
-    _onPlayingStateChanged?.call(segmentIndex);
+    for (final callback in _onPlayingStateChangedCallbacks) {
+      callback(segmentIndex);
+    }
     
     await speak(text);
   }
@@ -252,6 +260,14 @@ class SlowTtsService {
           _isSpeaking = false;
           _ttsState = SlowTtsState.stopped;
           _currentSegmentIndex = null;
+          
+          // 타임아웃 시에도 콜백 호출
+          for (final callback in _onPlayingCompletedCallbacks) {
+            callback();
+          }
+          for (final callback in _onPlayingStateChangedCallbacks) {
+            callback(null);
+          }
         }
       });
       
@@ -260,6 +276,14 @@ class SlowTtsService {
       _isSpeaking = false;
       _ttsState = SlowTtsState.stopped;
       _currentSegmentIndex = null;
+      
+      // 에러 시에도 콜백 호출
+      for (final callback in _onPlayingCompletedCallbacks) {
+        callback();
+      }
+      for (final callback in _onPlayingStateChangedCallbacks) {
+        callback(null);
+      }
     }
   }
 
@@ -276,8 +300,12 @@ class SlowTtsService {
       }
       
       // 콜백 호출
-      _onPlayingCompleted?.call();
-      _onPlayingStateChanged?.call(null);
+      for (final callback in _onPlayingCompletedCallbacks) {
+        callback();
+      }
+      for (final callback in _onPlayingStateChangedCallbacks) {
+        callback(null);
+      }
     } catch (e) {
       debugPrint('❌ 느린 TTS 중지 실패: $e');
     }
@@ -311,14 +339,23 @@ class SlowTtsService {
     }
   }
 
-  /// 재생 상태 변경 콜백 설정
+  /// 재생 상태 변경 콜백 설정 (여러 리스너 지원)
   void setOnPlayingStateChanged(Function(int?) callback) {
-    _onPlayingStateChanged = callback;
+    _onPlayingStateChangedCallbacks.add(callback);
   }
 
-  /// 재생 완료 콜백 설정
-  void setOnPlayingCompleted(Function callback) {
-    _onPlayingCompleted = callback;
+  /// 재생 완료 콜백 설정 (여러 리스너 지원)
+  void setOnPlayingCompleted(Function() callback) {
+    _onPlayingCompletedCallbacks.add(callback);
+  }
+
+  /// 콜백 제거
+  void removeOnPlayingStateChanged(Function(int?) callback) {
+    _onPlayingStateChangedCallbacks.remove(callback);
+  }
+
+  void removeOnPlayingCompleted(Function() callback) {
+    _onPlayingCompletedCallbacks.remove(callback);
   }
 
   /// 리소스 정리

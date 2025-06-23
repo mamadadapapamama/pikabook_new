@@ -630,7 +630,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: Text(
                 '문장별로 분리하여 번역하고 발음을 제공합니다.',
                 style: TypographyTokens.caption.copyWith(
-                  color: ColorTokens.textTertiary,
+                  color: ColorTokens.textSecondary,
                 ),
               ),
               value: true,
@@ -646,7 +646,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               subtitle: Text(
                 '문단 단위로 번역해 문맥에 맞는 번역을 제공합니다.',
                 style: TypographyTokens.caption.copyWith(
-                  color: ColorTokens.textTertiary,
+                  color: ColorTokens.textSecondary,
                 ),
               ),
               value: false,
@@ -662,7 +662,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text(
               '취소',
               style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textTertiary,
+                color: ColorTokens.textSecondary,
               ),
             ),
           ),

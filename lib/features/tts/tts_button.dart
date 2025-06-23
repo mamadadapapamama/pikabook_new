@@ -90,8 +90,18 @@ class _TtsButtonState extends BaseTtsButtonState<TtsButton> {
     _ttsService.setOnPlayingStateChanged((segmentIndex) {
       if (mounted) {
         // 현재 재생 중인 세그먼트인지 확인
-        final bool isThisSegmentPlaying = segmentIndex != null && 
-                                         widget.segmentIndex == segmentIndex;
+        final bool isThisSegmentPlaying;
+        
+        if (widget.segmentIndex == null && segmentIndex == null) {
+          // 둘 다 null이면 일반 텍스트 재생
+          isThisSegmentPlaying = true;
+        } else if (widget.segmentIndex != null && segmentIndex != null) {
+          // 둘 다 값이 있으면 세그먼트 인덱스 비교
+          isThisSegmentPlaying = widget.segmentIndex == segmentIndex;
+        } else {
+          // 하나는 null, 하나는 값이 있으면 다른 버튼
+          isThisSegmentPlaying = false;
+        }
         
         // 상태가 변경된 경우에만 setState 호출
         if (isPlaying != isThisSegmentPlaying) {

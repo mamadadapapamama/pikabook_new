@@ -173,7 +173,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     }
   }
 
-  /// 샘플 모드에서 TTS 처리
+  /// 샘플 모드에서 TTS 처리 (중복 재생 방지)
   Future<void> _handleSampleModeTts(String text, int segmentIndex) async {
     try {
       // 현재 재생 중인 세그먼트와 같으면 중지
@@ -183,11 +183,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
           widget.onPlayTts!('', segmentIndex: null);
         }
       } else {
-        // 새로운 세그먼트 재생
-        await _sampleTtsService.speak(text, context: context);
+        // 먼저 상태 업데이트 (재생 시작 상태로 변경)
         if (widget.onPlayTts != null) {
           widget.onPlayTts!(text, segmentIndex: segmentIndex);
         }
+        
+        // 그 다음에 실제 TTS 재생 (중복 호출 방지)
+        await _sampleTtsService.speak(text, context: context);
       }
     } catch (e) {
       debugPrint('샘플 모드 TTS 재생 중 오류: $e');

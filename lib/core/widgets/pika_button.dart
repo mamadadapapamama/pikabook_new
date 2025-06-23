@@ -156,7 +156,8 @@ class PikaButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),
-          disabledBackgroundColor: ColorTokens.greyMedium,
+          disabledBackgroundColor: ColorTokens.greyLight,
+          disabledForegroundColor: ColorTokens.greyMedium,
         );
       
       
@@ -170,6 +171,15 @@ class PikaButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             side: BorderSide(color: ColorTokens.primary),
           ),
+          disabledBackgroundColor: Colors.white,
+          disabledForegroundColor: ColorTokens.greyMedium,
+        ).copyWith(
+          side: MaterialStateProperty.resolveWith<BorderSide?>((states) {
+            if (states.contains(MaterialState.disabled)) {
+              return BorderSide(color: ColorTokens.greyMedium);
+            }
+            return BorderSide(color: ColorTokens.primary);
+          }),
         );
       
       case PikaButtonVariant.text:
