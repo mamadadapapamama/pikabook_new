@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import '../../models/user_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../cache/event_cache_manager.dart';
 
 /// 사용자 설정을 관리하는 서비스
 /// SharedPreferences를 사용하여 로컬에 설정을 저장하고 관리합니다.
@@ -15,10 +16,8 @@ class UserPreferencesService {
   // 현재 사용자 ID
   String? _currentUserId;
   
-  // 메모리 캐시 (중복 로드 방지)
-  UserPreferences? _cachedPreferences;
-  DateTime? _lastCacheTime;
-  static const Duration _cacheValidDuration = Duration(minutes: 5); // 5분간 유효
+  // 이벤트 기반 캐시 매니저
+  final EventCacheManager _eventCache = EventCacheManager();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -74,21 +73,21 @@ class UserPreferencesService {
     return _currentUserId;
   }
 
-  /// 사용자 설정 가져오기 (캐시 활용 강화)
+  /// 사용자 설정 가져오기 (이벤트 기반 캐시)
   Future<UserPreferences> getPreferences() async {
-    // 캐시 유효성 확인
-    if (_cachedPreferences != null && _lastCacheTime != null) {
-      final now = DateTime.now();
-      if (now.difference(_lastCacheTime!) < _cacheValidDuration) {
-        if (kDebugMode) {
-          debugPrint('📦 캐시된 사용자 설정 반환 (${_cacheValidDuration.inMinutes}분 유효)');
-        }
-        return _cachedPreferences!;
+    final userId = await getCurrentUserId();
+    final cacheKey = 'user_preferences_${userId ?? 'anonymous'}';
+    
+    // 이벤트 기반 캐시 확인
+    final cachedPreferences = _eventCache.getCache<UserPreferences>(cacheKey);
+    if (cachedPreferences != null) {
+      if (kDebugMode) {
+        debugPrint('📦 [EventCache] 캐시된 사용자 설정 반환: $userId');
       }
+      return cachedPreferences;
     }
     
     final prefs = await SharedPreferences.getInstance();
-    final userId = await getCurrentUserId();
     
     // 사용자 ID별 키 생성
     final key = userId != null ? '${_preferencesKey}_$userId' : _preferencesKey;
@@ -106,18 +105,17 @@ class UserPreferencesService {
       preferences = UserPreferences.defaults();
     }
     
-    // 캐시 업데이트
-    _cachedPreferences = preferences;
-    _lastCacheTime = DateTime.now();
+    // 이벤트 기반 캐시에 저장
+    _eventCache.setCache(cacheKey, preferences);
     
     if (kDebugMode) {
-      debugPrint('✅ 사용자 설정 로드 및 캐시 업데이트 완료');
+      debugPrint('✅ 사용자 설정 로드 및 이벤트 캐시 저장 완료');
     }
     
     return preferences;
   }
 
-  /// 사용자 설정 저장 (캐시 무효화)
+  /// 사용자 설정 저장 (이벤트 기반 캐시 업데이트)
   Future<void> savePreferences(UserPreferences preferences) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = await getCurrentUserId();
@@ -126,9 +124,9 @@ class UserPreferencesService {
     final key = userId != null ? '${_preferencesKey}_$userId' : _preferencesKey;
     await prefs.setString(key, jsonEncode(preferences.toJson()));
     
-    // 캐시 업데이트 (저장 즉시 캐시 갱신)
-    _cachedPreferences = preferences;
-    _lastCacheTime = DateTime.now();
+    // 이벤트 기반 캐시 업데이트
+    final cacheKey = 'user_preferences_${userId ?? 'anonymous'}';
+    _eventCache.setCache(cacheKey, preferences);
     
     // Firestore에도 설정 저장 (기존 데이터 보존)
     if (userId != null && userId.isNotEmpty) {
@@ -143,12 +141,19 @@ class UserPreferencesService {
       }
     }
     
+    // 사용자 설정 변경 이벤트 발생
+    _eventCache.emitEvent(
+      CacheEventType.userPreferencesChanged,
+      userId: userId,
+      data: preferences.toJson(),
+    );
+    
     if (kDebugMode) {
-      debugPrint('💾 사용자 설정 저장 및 캐시 갱신 완료');
+      debugPrint('💾 사용자 설정 저장 및 이벤트 캐시 업데이트 완료');
     }
   }
 
-  /// 사용자 데이터 초기화 (캐시 무효화)
+  /// 사용자 데이터 초기화 (이벤트 기반 캐시 무효화)
   Future<void> clearUserData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -162,12 +167,12 @@ class UserPreferencesService {
       // 사용자 설정 삭제
       await prefs.remove('${_preferencesKey}_$userId');
       
-      // 캐시 무효화
-      _cachedPreferences = null;
-      _lastCacheTime = null;
+      // 이벤트 기반 캐시 무효화
+      final cacheKey = 'user_preferences_${userId}';
+      _eventCache.invalidateCache(cacheKey);
       
       debugPrint('⚠️ 사용자 설정이 초기화되었습니다: $userId');
-      debugPrint('🗑️ 캐시도 함께 무효화되었습니다');
+      debugPrint('🗑️ 이벤트 캐시도 함께 무효화되었습니다');
     } catch (e) {
       debugPrint('⚠️ 사용자 데이터 초기화 중 오류 발생: $e');
     }

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/plan.dart';
 import '../authentication/deleted_user_service.dart';
+import '../cache/event_cache_manager.dart';
 
 /// 구독 플랜과 사용량 관리를 위한 서비스
 class PlanService {
@@ -36,62 +37,117 @@ class PlanService {
   static final PlanService _instance = PlanService._internal();
   factory PlanService() => _instance;
   
-  PlanService._internal();
+  PlanService._internal() {
+    _setupEventListeners();
+  }
   
-  // 캐시 관련 변수
-  String? _cachedPlanType;
-  String? _cachedUserId;
-  DateTime? _cacheTimestamp;
-  static const Duration _cacheValidDuration = Duration(minutes: 5); // 5분간 캐시 유효
+  // 이벤트 기반 캐시 매니저
+  final EventCacheManager _eventCache = EventCacheManager();
+  
+  /// 이벤트 리스너 설정
+  void _setupEventListeners() {
+    // 플랜 변경 이벤트 수신
+    _eventCache.eventStream.listen((event) {
+      if (event.type == CacheEventType.planChanged || 
+          event.type == CacheEventType.subscriptionChanged) {
+        final userId = event.userId;
+        if (userId != null) {
+          _eventCache.invalidateCache('plan_type_$userId');
+          _eventCache.invalidateCache('subscription_$userId');
+          
+          if (kDebugMode) {
+            debugPrint('🔄 [PlanService] 이벤트로 인한 캐시 무효화: ${event.type}');
+          }
+        }
+      }
+    });
+  }
   
   // 현재 사용자 ID 가져오기
   String? get _currentUserId => _auth.currentUser?.uid;
   
-  /// 현재 사용자의 플랜 타입 가져오기
+  /// 현재 사용자의 플랜 타입 가져오기 (이벤트 기반 캐시)
   Future<String> getCurrentPlanType({bool forceRefresh = false}) async {
     try {
-      // 강제 새로고침이 요청되면 캐시 무시
+      final userId = _currentUserId;
+      if (userId == null) return PLAN_FREE;
+      
+      final cacheKey = 'plan_type_$userId';
+      
+      // 강제 새로고침이 아닌 경우 캐시 확인
       if (!forceRefresh) {
-        // 캐시 확인
-        if (_cachedPlanType != null && 
-            _cachedUserId == _currentUserId && 
-            _cacheTimestamp != null &&
-            DateTime.now().difference(_cacheTimestamp!).compareTo(_cacheValidDuration) < 0) {
+        final cachedPlanType = _eventCache.getCache<String>(cacheKey);
+        if (cachedPlanType != null) {
           if (kDebugMode) {
-            debugPrint('🚀 PlanService - 캐시된 플랜 타입 사용: $_cachedPlanType');
+            debugPrint('📦 [EventCache] 캐시된 플랜 타입 사용: $cachedPlanType');
           }
-          return _cachedPlanType!;
+          return cachedPlanType;
         }
       } else {
         if (kDebugMode) {
-          debugPrint('🔄 PlanService - 강제 새로고침으로 캐시 무시');
+          debugPrint('🔄 [PlanService] 강제 새로고침으로 캐시 무시');
         }
       }
       
       // 직접 플랜 타입만 확인 (getSubscriptionDetails 호출하면 무한 루프)
       final currentPlan = await _getCurrentPlanTypeFromFirestore();
       
-      _updateCache(currentPlan);
+      // 이벤트 캐시에 저장
+      _eventCache.setCache(cacheKey, currentPlan);
+      
       return currentPlan;
     } catch (e) {
       debugPrint('플랜 정보 조회 오류: $e');
-      _updateCache(PLAN_FREE);
       return PLAN_FREE;
     }
   }
   
-  /// 캐시 업데이트
-  void _updateCache(String planType) {
-    _cachedPlanType = planType;
-    _cachedUserId = _currentUserId;
-    _cacheTimestamp = DateTime.now();
+  /// 플랜 변경 이벤트 발생
+  void _emitPlanChangedEvent(String planType) {
+    final userId = _currentUserId;
+    if (userId != null) {
+      _eventCache.emitEvent(
+        CacheEventType.planChanged,
+        userId: userId,
+        data: {'planType': planType},
+      );
+    }
   }
   
-  /// 캐시 초기화 (사용자 변경 시 등)
-  void clearCache() {
-    _cachedPlanType = null;
-    _cachedUserId = null;
-    _cacheTimestamp = null;
+  /// 구독 변경 이벤트 발생
+  void _emitSubscriptionChangedEvent(Map<String, dynamic> subscriptionData) {
+    final userId = _currentUserId;
+    if (userId != null) {
+      _eventCache.emitEvent(
+        CacheEventType.subscriptionChanged,
+        userId: userId,
+        data: subscriptionData,
+      );
+    }
+  }
+  
+  /// 외부에서 플랜 변경 이벤트를 발생시킬 수 있는 public 메서드
+  void notifyPlanChanged(String planType, {String? userId}) {
+    final targetUserId = userId ?? _currentUserId;
+    if (targetUserId != null) {
+      _eventCache.emitEvent(
+        CacheEventType.planChanged,
+        userId: targetUserId,
+        data: {'planType': planType},
+      );
+    }
+  }
+  
+  /// 외부에서 구독 변경 이벤트를 발생시킬 수 있는 public 메서드
+  void notifySubscriptionChanged(Map<String, dynamic> subscriptionData, {String? userId}) {
+    final targetUserId = userId ?? _currentUserId;
+    if (targetUserId != null) {
+      _eventCache.emitEvent(
+        CacheEventType.subscriptionChanged,
+        userId: targetUserId,
+        data: subscriptionData,
+      );
+    }
   }
   
   /// Firestore에서 직접 플랜 타입만 확인 (내부용)
@@ -377,14 +433,29 @@ class PlanService {
     }
   }
   
-  /// 구독 상세 정보 조회
+  /// 구독 상세 정보 조회 (이벤트 기반 캐시)
   Future<Map<String, dynamic>> getSubscriptionDetails({bool forceRefresh = false}) async {
-    // 강제 새로고침 시 캐시 클리어
-    if (forceRefresh) {
-      clearCache();
+    final userId = _currentUserId;
+    
+    // 강제 새로고침 시 관련 캐시 무효화
+    if (forceRefresh && userId != null) {
+      _eventCache.invalidateCache('plan_type_$userId');
+      _eventCache.invalidateCache('subscription_$userId');
     }
+    
+    // 캐시 확인
+    if (!forceRefresh && userId != null) {
+      final cacheKey = 'subscription_$userId';
+      final cachedSubscription = _eventCache.getCache<Map<String, dynamic>>(cacheKey);
+      if (cachedSubscription != null) {
+        if (kDebugMode) {
+          debugPrint('📦 [EventCache] 캐시된 구독 정보 사용: $userId');
+        }
+        return cachedSubscription;
+      }
+    }
+    
     try {
-      final userId = _currentUserId;
       if (userId == null) {
         return {
           'currentPlan': PLAN_FREE,
@@ -475,7 +546,7 @@ class PlanService {
         print('   구독 유형: $subscriptionType');
       }
 
-      return {
+      final result = {
         'currentPlan': currentPlan,
         'hasUsedFreeTrial': hasUsedFreeTrial,
         'isFreeTrial': isFreeTrial,
@@ -484,6 +555,13 @@ class PlanService {
         'status': status,
         'subscriptionType': subscriptionType,
       };
+      
+      // 캐시에 저장
+      if (userId != null) {
+        _eventCache.setCache('subscription_$userId', result);
+      }
+      
+      return result;
     } catch (e) {
       debugPrint('구독 상세 정보 조회 중 오류: $e');
       return {
@@ -534,8 +612,14 @@ class PlanService {
             'subscription.subscriptionType': subscriptionType,
           });
       
-      // 캐시 클리어
-      clearCache();
+      // 플랜 변경 이벤트 발생
+      _emitPlanChangedEvent(PLAN_PREMIUM);
+      _emitSubscriptionChangedEvent({
+        'planType': PLAN_PREMIUM,
+        'subscriptionType': subscriptionType,
+        'expiryDate': newExpiryDate,
+        'isFreeTrial': false,
+      });
       
       if (kDebugMode) {
         debugPrint('✅ [PlanService] 체험→프리미엄 전환 완료');
