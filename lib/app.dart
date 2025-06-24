@@ -327,6 +327,21 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       
       // 사용자 데이터 로드
       await _preferencesService.setCurrentUserId(_userId!);
+      
+      // Firestore에서 사용자 문서 존재 여부 확인
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_userId!)
+          .get();
+      
+      if (!userDoc.exists) {
+        // 새로운 사용자이므로 모든 캐시 초기화
+        debugPrint('🔄 새로운 사용자 감지 - 모든 캐시 초기화');
+        await _preferencesService.clearUserData();
+        final planService = PlanService();
+        planService.clearCache();
+      }
+      
       await _preferencesService.loadUserSettingsFromFirestore();
   
       // 노트 존재 여부 확인 및 온보딩 상태 설정

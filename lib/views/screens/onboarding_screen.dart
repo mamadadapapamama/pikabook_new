@@ -90,6 +90,89 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void _updateState() {
     setState(() {});
   }
+
+  /// 탈퇴 후 재가입인지 확인
+  Future<bool> _checkIfReturningUser(String userId) async {
+    try {
+      final deletedUserDoc = await FirebaseFirestore.instance
+          .collection('deleted_users')
+          .doc(userId)
+          .get();
+      
+      return deletedUserDoc.exists;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ 탈퇴 이력 확인 중 오류: $e');
+      }
+      return false;
+    }
+  }
+
+  /// 탈퇴 후 재가입 사용자 처리
+  Future<void> _handleReturningUser() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      // 현재 구독 상태 확인
+      final subscriptionDetails = await _planService.getSubscriptionDetails(forceRefresh: true);
+      final planType = subscriptionDetails['planType'] as String? ?? 'free';
+      
+      if (kDebugMode) {
+        print('🔄 탈퇴 후 재가입 사용자 구독 상태 확인: $planType');
+      }
+
+      // 구독 상태에 따른 처리
+      if (planType == 'premium_trial') {
+        // 무료체험 중 - 복원 스낵바 표시
+        UpgradePromptHelper.showSubscriptionRestoredSnackbar(
+          context,
+          isFreeTrial: true,
+        );
+        widget.onComplete();
+      } else if (planType == 'premium') {
+        // 프리미엄 - 복원 스낵바 표시
+        UpgradePromptHelper.showSubscriptionRestoredSnackbar(
+          context,
+          isFreeTrial: false,
+        );
+        widget.onComplete();
+      } else {
+        // 무료 플랜 - 무료체험 기록 확인
+        final hasUsedFreeTrial = await _planService.hasUsedFreeTrial(user.uid);
+        
+        if (hasUsedFreeTrial) {
+          // 무료체험 기록 있음 - 프리미엄 업그레이드 모달
+          await UpgradePromptHelper.showPremiumUpgradePrompt(
+            context,
+            onComplete: () {
+              if (mounted) {
+                widget.onComplete();
+              }
+            },
+          );
+        } else {
+          // 무료체험 기록 없음 - 기존 환영 모달
+          await UpgradePromptHelper.showWelcomeTrialPrompt(
+            context,
+            onComplete: () {
+              if (mounted) {
+                widget.onComplete();
+              }
+            },
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ 탈퇴 후 재가입 사용자 처리 중 오류: $e');
+      }
+      // 오류 발생 시 기본 홈 화면으로 이동
+      if (mounted) {
+        widget.onComplete();
+      }
+    }
+  }
   
   bool get _canProceed {
     switch (_currentPage) {
@@ -233,6 +316,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return;
       }
 
+      // 탈퇴 후 재가입인지 확인
+      final isReturningUser = await _checkIfReturningUser(user.uid);
+
       // 사용 목적 값 결정 (기타인 경우 커스텀 입력 값 사용)
       String finalUsagePurpose = _selectedUsagePurpose!;
       if (_selectedUsagePurpose == '기타' && _customPurposeController.text.trim().isNotEmpty) {
@@ -283,24 +369,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await _userPreferences.setDefaultNoteSpace('${_nameController.text}의 학습노트');
       await _userPreferences.addNoteSpace('${_nameController.text}의 학습노트');
 
-      // 업그레이드 모달 표시 후 홈 화면으로 이동
+      // 탈퇴 후 재가입인지에 따른 처리
       if (mounted) {
-        try {
-          await UpgradePromptHelper.showWelcomeTrialPrompt(
-            context,
-            onComplete: () {
-              if (mounted) {
-                // 온보딩 완료 콜백 호출하여 앱 상태 변경
-                widget.onComplete();
-              }
-            },
-          );
-        } catch (modalError) {
-          // 모달 에러가 발생해도 홈 화면으로 이동
-          debugPrint('업그레이드 모달 표시 중 오류: $modalError');
-          if (mounted) {
-            // 온보딩 완료 콜백 호출하여 앱 상태 변경
-            widget.onComplete();
+        if (isReturningUser) {
+          await _handleReturningUser();
+        } else {
+          // 신규 사용자 - 기존 업그레이드 모달 표시
+          try {
+            await UpgradePromptHelper.showWelcomeTrialPrompt(
+              context,
+              onComplete: () {
+                if (mounted) {
+                  // 온보딩 완료 콜백 호출하여 앱 상태 변경
+                  widget.onComplete();
+                }
+              },
+            );
+          } catch (modalError) {
+            // 모달 에러가 발생해도 홈 화면으로 이동
+            debugPrint('업그레이드 모달 표시 중 오류: $modalError');
+            if (mounted) {
+              // 온보딩 완료 콜백 호출하여 앱 상태 변경
+              widget.onComplete();
+            }
           }
         }
       }

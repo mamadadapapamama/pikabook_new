@@ -680,6 +680,47 @@ class UpgradePromptHelper {
     }
   }
 
+  /// 탈퇴 후 재가입 시 구독 복원 스낵바 표시
+  static void showSubscriptionRestoredSnackbar(
+    BuildContext context, {
+    required bool isFreeTrial,
+  }) {
+    final message = isFreeTrial
+        ? '프리미엄 무료 체험이 복원되었습니다.\n무료 플랜으로 전환하려면 App Store > 구독 관리에서 Pikabook 구독을 먼저 취소해주세요.'
+        : '프리미엄 플랜이 복원되었습니다.\n무료 플랜으로 전환하려면 App Store > 구독 관리에서 Pikabook 구독을 먼저 취소해주세요.';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(color: Colors.white),
+        ),
+        backgroundColor: ColorTokens.snackbarBg,
+        behavior: SnackBarBehavior.fixed,
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
+  /// 무료체험 기록이 있는 사용자를 위한 프리미엄 업그레이드 모달
+  static Future<void> showPremiumUpgradePrompt(
+    BuildContext context, {
+    required VoidCallback onComplete,
+  }) async {
+    try {
+      await UpgradeModal.show(
+        context,
+        reason: UpgradeReason.general, // 일반 구독 옵션 표시
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('premium upgrade modal display error: $e');
+      }
+    } finally {
+      onComplete();
+    }
+  }
+
   /// 프리미엄 무료체험 중 업그레이드 모달 표시 (바로 구독 유도)
   static Future<bool?> showFreeTrialUpgradePrompt(
     BuildContext context, {

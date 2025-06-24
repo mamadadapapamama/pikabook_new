@@ -6,6 +6,7 @@ import '../common/plan_service.dart';
 import '../notification/notification_service.dart';
 import '../trial/trial_manager.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// In-App Purchase 관리 서비스
 class InAppPurchaseService {
@@ -23,6 +24,9 @@ class InAppPurchaseService {
   
   // 구매 성공 콜백
   Function()? _onPurchaseSuccess;
+  
+  // 처리된 구매 ID 추적 (중복 처리 방지)
+  final Set<String> _processedPurchases = <String>{};
   
   // 상품 ID 정의
   static const String premiumMonthlyId = 'premium_monthly';
@@ -95,11 +99,22 @@ class InAppPurchaseService {
   /// 서비스 종료
   void dispose() {
     _subscription.cancel();
+    _processedPurchases.clear();
   }
   
   /// 구매 성공 콜백 설정
   void setOnPurchaseSuccess(Function()? callback) {
     _onPurchaseSuccess = callback;
+  }
+
+  /// 처리된 구매 목록 정리 (메모리 관리)
+  void _cleanupProcessedPurchases() {
+    if (_processedPurchases.length > 50) {
+      _processedPurchases.clear();
+      if (kDebugMode) {
+        print('🧹 처리된 구매 목록 정리 완료');
+      }
+    }
   }
 
   /// 상품 정보 로드
@@ -187,6 +202,15 @@ class InAppPurchaseService {
   /// 성공한 구매 처리
   Future<void> _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) async {
     try {
+      // 중복 처리 방지 체크
+      final purchaseId = purchaseDetails.purchaseID ?? purchaseDetails.productID;
+      if (_processedPurchases.contains(purchaseId)) {
+        if (kDebugMode) {
+          print('⚠️ 이미 처리된 구매입니다: $purchaseId');
+        }
+        return;
+      }
+      
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         if (kDebugMode) {
@@ -274,15 +298,49 @@ class InAppPurchaseService {
               print('🔔 무료체험 만료 알림 스케줄링 완료');
             }
             
-            // 🧪 테스트용 즉시 알림 확인 제거됨
+            // 탈퇴 이력이 있는 사용자인지 확인
+            final deletedUserInfo = await _getDeletedUserInfo(user.uid);
             
-            // TrialManager를 통해 환영 메시지 표시
+            // TrialManager를 통해 적절한 메시지 표시
             final trialManager = TrialManager();
             if (trialManager.onWelcomeMessage != null) {
-              trialManager.onWelcomeMessage!(
-                '🎉 프리미엄 무료체험이 시작되었어요!',
-                '피카북을 마음껏 사용해보세요.',
-              );
+              if (deletedUserInfo != null) {
+                // 탈퇴 이력이 있는 사용자 - 이전 플랜에 따른 복원 메시지
+                final lastPlan = deletedUserInfo['lastPlan'] as Map<String, dynamic>?;
+                String title, message;
+                
+                if (lastPlan != null) {
+                  final planType = lastPlan['planType'] as String?;
+                  final wasFreeTrial = lastPlan['isFreeTrial'] as bool? ?? false;
+                  final subscriptionType = lastPlan['subscriptionType'] as String?;
+                  
+                  if (planType == 'premium' && !wasFreeTrial) {
+                    // 프리미엄 구독자였던 경우
+                    title = '💎 프리미엄 플랜이 복원되었습니다!';
+                    message = '피카북을 다시 마음껏 사용해보세요.';
+                  } else if (planType == 'premium' && wasFreeTrial) {
+                    // 무료체험 중이었던 경우
+                    title = '🎉 프리미엄 체험이 복원되었습니다!';
+                    message = '피카북을 다시 마음껏 사용해보세요.';
+                  } else {
+                    // 무료 플랜이었던 경우
+                    title = '📚 무료 플랜이 시작되었습니다!';
+                    message = '피카북을 다시 사용해보세요.';
+                  }
+                } else {
+                  // 플랜 정보가 없는 경우 기본 메시지
+                  title = '🎉 피카북에 다시 오신 것을 환영합니다!';
+                  message = '피카북을 다시 사용해보세요.';
+                }
+                
+                trialManager.onWelcomeMessage!(title, message);
+              } else {
+                // 새로운 사용자 - 무료체험 메시지
+                trialManager.onWelcomeMessage!(
+                  '🎉 프리미엄 무료 체험이 시작되었어요!',
+                  '피카북을 마음껏 사용해보세요.',
+                );
+              }
             }
           } catch (e) {
             if (kDebugMode) {
@@ -291,9 +349,14 @@ class InAppPurchaseService {
           }
         }
         
+        // 처리된 구매 ID 추가 (중복 처리 방지)
+        _processedPurchases.add(purchaseId);
+        _cleanupProcessedPurchases();
+        
         if (kDebugMode) {
           print('✅ 프리미엄 플랜 업그레이드 성공');
           print('🔄 플랜 캐시 무효화 완료');
+          print('📝 구매 처리 완료: $purchaseId');
         }
         
         // 구매 성공 콜백 호출
@@ -316,6 +379,26 @@ class InAppPurchaseService {
     // 실제 프로덕션에서는 서버에서 Apple/Google 서버와 통신하여 검증해야 함
     // 여기서는 간단한 클라이언트 검증만 수행
     return purchaseDetails.verificationData.localVerificationData.isNotEmpty;
+  }
+
+  /// 탈퇴된 사용자 정보 확인
+  Future<Map<String, dynamic>?> _getDeletedUserInfo(String userId) async {
+    try {
+      final deletedUserDoc = await FirebaseFirestore.instance
+          .collection('deleted_users')
+          .doc(userId)
+          .get();
+      
+      if (deletedUserDoc.exists) {
+        return deletedUserDoc.data();
+      }
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        print('탈퇴된 사용자 확인 중 오류: $e');
+      }
+      return null; // 오류 시 null 반환 (보수적 접근)
+    }
   }
 
   /// 구매 시작

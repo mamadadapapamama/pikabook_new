@@ -823,6 +823,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: ColorTokens.textPrimary,
               ),
             ),
+            Text(
+              '• 탈퇴 후 환불 및 결제 문의 대응을 위해, 구독 정보는 90일간 보존 후 자동 삭제됩니다.',
+              style: TypographyTokens.body2.copyWith(
+                color: ColorTokens.textPrimary,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -881,7 +887,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final success = await _viewModel.deleteAccount();
       
       if (mounted && success) {
-        // 탈퇴 성공 메시지 (Firebase 상태 변경으로 곧 사라질 예정)
+        // 탈퇴 성공 메시지
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -892,12 +898,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             backgroundColor: ColorTokens.success,
             behavior: SnackBarBehavior.fixed,
-            duration: Duration(seconds: 3),
+            duration: Duration(seconds: 2),
           ),
         );
         
-        // Firebase 인증 상태 변경으로 자동으로 로그인 화면으로 이동됨
-        // 명시적인 네비게이션은 불필요
+        // 명시적으로 로그아웃 처리 (Firebase 상태 변경만으로는 불충분)
+        await Future.delayed(Duration(milliseconds: 500));
+        if (mounted) {
+          widget.onLogout(); // 로그아웃 콜백 호출
+        }
       }
     } catch (e) {
       if (mounted) {
