@@ -141,7 +141,20 @@ class InitializationManager {
       
       // 현재 사용자 및 로그인 상태 확인
       final currentUser = FirebaseAuth.instance.currentUser;
-      final bool isLoggedIn = currentUser != null;
+      bool isLoggedIn = currentUser != null;
+      
+      // 탈퇴된 사용자인지 확인 (로그인되어 있는 경우만)
+      if (isLoggedIn && currentUser != null) {
+        final isDeletedUser = await _checkIfUserDeleted(currentUser.uid);
+        if (isDeletedUser) {
+          debugPrint('탈퇴된 사용자 감지 - 자동 로그아웃 처리: ${currentUser.uid}');
+          await FirebaseAuth.instance.signOut();
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.clear(); // 모든 로컬 데이터 삭제
+          isLoggedIn = false;
+        }
+      }
+      
       final bool hasLoginHistory = await _prefsService.hasLoginHistory();
       final bool isOnboardingCompleted = isLoggedIn ? await _prefsService.getOnboardingCompleted() : false;
       
@@ -314,6 +327,21 @@ class InitializationManager {
     }
   }
   
+  // 탈퇴된 사용자인지 확인
+  Future<bool> _checkIfUserDeleted(String userId) async {
+    try {
+      final deletedUserDoc = await FirebaseFirestore.instance
+          .collection('deleted_users')
+          .doc(userId)
+          .get();
+      
+      return deletedUserDoc.exists;
+    } catch (e) {
+      debugPrint('탈퇴된 사용자 확인 중 오류: $e');
+      return false; // 오류 시 false 반환 (보수적 접근)
+    }
+  }
+
   // 초기화 리셋 (테스트용)
   void reset() {
     _isInitializing = false;

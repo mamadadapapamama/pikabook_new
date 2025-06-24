@@ -858,32 +858,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // 실제 탈퇴 처리 실행
   Future<void> _executeAccountDeletion(BuildContext context) async {
     try {
+      // 먼저 스낵바 표시 (Firebase 인증 상태 변경 전에)
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '계정을 삭제하고 있습니다...',
+              style: TypographyTokens.caption.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: ColorTokens.snackbarBg,
+            behavior: SnackBarBehavior.fixed,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // 스낵바가 표시될 시간 확보
+      await Future.delayed(Duration(milliseconds: 500));
+      
       final success = await _viewModel.deleteAccount();
       
-      if (mounted) {
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '계정이 성공적으로 삭제되었습니다.',
-                style: TypographyTokens.caption.copyWith(
-                  color: Colors.white,
-                ),
+      if (mounted && success) {
+        // 탈퇴 성공 메시지 (Firebase 상태 변경으로 곧 사라질 예정)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '계정이 성공적으로 삭제되었습니다.',
+              style: TypographyTokens.caption.copyWith(
+                color: Colors.white,
               ),
-              backgroundColor: ColorTokens.snackbarBg,
-              behavior: SnackBarBehavior.fixed,
-              duration: Duration(seconds: 3),
             ),
-          );
-          
-          Navigator.pushNamedAndRemoveUntil(
-            context, 
-            '/', 
-            (route) => false
-          );
-          
-          widget.onLogout();
-        }
+            backgroundColor: ColorTokens.success,
+            behavior: SnackBarBehavior.fixed,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        
+        // Firebase 인증 상태 변경으로 자동으로 로그인 화면으로 이동됨
+        // 명시적인 네비게이션은 불필요
       }
     } catch (e) {
       if (mounted) {
@@ -895,7 +909,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: Colors.white,
               ),
             ),
-            backgroundColor: ColorTokens.snackbarBg,
+            backgroundColor: ColorTokens.error,
             behavior: SnackBarBehavior.fixed,
             duration: Duration(seconds: 4),
           ),

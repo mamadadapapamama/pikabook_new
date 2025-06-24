@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../common/plan_service.dart';
+import 'user_preferences_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -233,9 +234,14 @@ class AuthService {
       
       debugPrint('계정 삭제 시작: $userId');
       
-      // 1. 재인증 필수 - 실패 시 탈퇴 중단
-      await _handleReauthentication(user);
-      debugPrint('재인증 완료');
+      // 1. 재인증 필요 여부 확인 후 처리
+      final needsReauth = await isReauthenticationRequired();
+      if (needsReauth) {
+        await _handleReauthentication(user);
+        debugPrint('재인증 완료');
+      } else {
+        debugPrint('재인증 불필요 - 최근 로그인 상태로 바로 진행');
+      }
       
       // 2. 모든 데이터 삭제 작업 수행
       await _deleteAllUserData(userId, userEmail, displayName);
@@ -244,6 +250,11 @@ class AuthService {
       // 3. Firebase Auth에서 사용자 삭제
       await user.delete();
       debugPrint('계정이 성공적으로 삭제되었습니다: $userId');
+      
+      // 4. 완전한 로그아웃 처리 (혹시 남아있을 수 있는 세션 정리)
+      await _auth.signOut();
+      await _googleSignIn.signOut();
+      debugPrint('탈퇴 후 완전한 로그아웃 처리 완료');
       
     } catch (e) {
       debugPrint('계정 삭제 오류: $e');
@@ -273,11 +284,38 @@ class AuthService {
     }
   }
 
-  // 재인증 필요 여부 확인 (계정 삭제는 항상 재인증 필요)
+  // 재인증 필요 여부 확인 (최근 로그인 시간 기반)
   Future<bool> isReauthenticationRequired() async {
-    // 계정 삭제는 민감한 작업이므로 항상 재인증 요구
-    debugPrint('계정 삭제 - 보안을 위해 항상 재인증 필요');
-    return true;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        debugPrint('사용자가 로그인되어 있지 않음');
+        return false;
+      }
+      
+      // ID 토큰에서 인증 시간 확인
+      final idTokenResult = await user.getIdTokenResult();
+      final lastSignInTime = idTokenResult.authTime;
+      
+      if (lastSignInTime != null) {
+        final timeSinceLastSignIn = DateTime.now().difference(lastSignInTime);
+        // Firebase는 보통 5분 이내 로그인을 "최근"으로 간주
+        final isRecentLogin = timeSinceLastSignIn.inMinutes <= 5;
+        
+        debugPrint('마지막 로그인: ${lastSignInTime.toLocal()}');
+        debugPrint('경과 시간: ${timeSinceLastSignIn.inMinutes}분');
+        debugPrint('재인증 필요: ${!isRecentLogin}');
+        
+        return !isRecentLogin;
+      } else {
+        debugPrint('인증 시간 정보 없음 - 재인증 필요');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('재인증 필요 여부 확인 중 오류: $e');
+      // 에러 발생 시 안전하게 재인증 필요로 처리
+      return true;
+    }
   }
 
   // 재인증 필요 메시지 생성
@@ -415,6 +453,7 @@ class AuthService {
       await Future.wait([
         _clearImageFiles(),
         _clearSharedPreferences(),
+        _clearAllServiceCaches(), // 모든 서비스 캐시 초기화 추가
       ]);
       
       debugPrint('로컬 데이터 완전 삭제 완료');
@@ -565,6 +604,28 @@ class AuthService {
   Future<void> _resetDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('device_id');
+  }
+
+  // 핵심 서비스 캐시 초기화
+  Future<void> _clearAllServiceCaches() async {
+    try {
+      debugPrint('핵심 서비스 캐시 초기화 시작');
+      
+      // PlanService 캐시 초기화 (가장 중요)
+      final planService = PlanService();
+      planService.clearCache();
+      
+      // UserPreferences 초기화 (온보딩 상태 등)
+      final userPrefsService = UserPreferencesService();
+      // 모든 사용자 설정 삭제
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear(); // 이미 위에서 호출되지만 확실히 하기 위해
+      
+      debugPrint('핵심 서비스 캐시 초기화 완료');
+    } catch (e) {
+      debugPrint('서비스 캐시 초기화 중 오류: $e');
+      // 캐시 초기화 실패는 치명적이지 않으므로 계속 진행
+    }
   }
 
   // 소셜 로그인 세션 완전 정리
