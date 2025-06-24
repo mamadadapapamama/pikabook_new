@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../core/models/flash_card.dart';
-import '../../../core/services/tts/tts_service.dart';
+import '../../../core/services/tts/unified_tts_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../core/services/cache/cache_manager.dart';
 import '../../core/services/authentication/auth_service.dart';
@@ -11,7 +11,7 @@ import 'flashcard_repository.dart';
 class FlashCardViewModel extends ChangeNotifier {
   // 서비스 인스턴스
   final FlashCardRepository _repository;
-  final TTSService _ttsService;
+  final UnifiedTtsService _ttsService;
   final UsageLimitService _usageLimitService;
   final CacheManager _cacheManager;
   final AuthService _authService;
@@ -47,14 +47,14 @@ class FlashCardViewModel extends ChangeNotifier {
     String noteId = '', 
     List<FlashCard>? initialFlashcards,
     FlashCardRepository? repository,
-    TTSService? ttsService,
+    UnifiedTtsService? ttsService,
     UsageLimitService? usageLimitService,
     CacheManager? cacheManager,
     bool isNoteCreation = false,  // 노트 생성 중인지 여부
   }) : 
     _noteId = noteId,
     _repository = repository ?? FlashCardRepository(cacheManager: cacheManager ?? CacheManager()),
-    _ttsService = ttsService ?? TTSService(),
+    _ttsService = ttsService ?? UnifiedTtsService(),
     _usageLimitService = usageLimitService ?? UsageLimitService(),
     _cacheManager = cacheManager ?? CacheManager(),
     _authService = AuthService(),

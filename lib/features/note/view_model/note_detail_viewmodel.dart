@@ -15,7 +15,7 @@ import '../../../core/services/text_processing/text_processing_service.dart';
 import '../../sample/sample_data_service.dart';
 import '../../flashcard/flashcard_service.dart' hide debugPrint;
 import '../../../core/models/flash_card.dart';
-import '../../../core/services/tts/tts_service.dart';
+import '../../../core/services/tts/unified_tts_service.dart';
 import '../../sample/sample_tts_service.dart';
 import '../services/dynamic_page_loader_service.dart';
 
@@ -29,7 +29,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   
   // 추가된 서비스들
   late FlashCardService _flashCardService;
-  late TTSService _ttsService;
+  late UnifiedTtsService _ttsService;
   late SampleTtsService _sampleTtsService;
   
   // PageService 접근
@@ -193,7 +193,7 @@ class NoteDetailViewModel extends ChangeNotifier {
   Future<void> _initializeServices() async {
     try {
       _flashCardService = FlashCardService();
-      _ttsService = TTSService();
+      _ttsService = UnifiedTtsService();
       _sampleTtsService = SampleTtsService();
       
       if (!_isSampleMode) {

@@ -10,7 +10,7 @@ import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
-import '../../../core/services/tts/tts_service.dart';
+import '../../../core/services/tts/unified_tts_service.dart';
 
 /// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
 /// 플래시카드 UI interaction 담당 (swipe, flip, tts, delete )
@@ -36,7 +36,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   late FlashCardViewModel _viewModel;
   final CardSwiperController _cardController = CardSwiperController();
   final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
-  final TTSService _ttsService = TTSService();
+  final UnifiedTtsService _ttsService = UnifiedTtsService();
 
   @override
   void initState() {
@@ -80,7 +80,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
     try {
       final textToSpeak = _viewModel.flashCards[_viewModel.currentCardIndex].front;
       if (textToSpeak.isNotEmpty) {
-        await _ttsService.speak(textToSpeak);
+        await _ttsService.speak(textToSpeak, mode: TtsMode.normal);
       }
     } catch (e) {
       debugPrint('TTS 재생 중 오류: $e');
@@ -158,9 +158,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   /// 뒤로 가기 처리
   Future<bool> _handleBackButtonPressed() async {
     // TTS 실행 중인 경우 먼저 중지
-    if (_ttsService.state == TtsState.playing) {
-      await _stopSpeaking();
-    }
+    await _stopSpeaking();
     
     // 결과 반환: 플래시카드 개수와 함께 플래시카드 목록도 반환
     Navigator.of(context).pop({
