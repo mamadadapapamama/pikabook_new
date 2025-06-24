@@ -189,6 +189,99 @@ class EventCacheManager {
     }
   }
 
+  // ===============================================
+  // 편의 메서드들 (중앙화된 이벤트 발생)
+  // ===============================================
+  
+  /// 플랜 변경 이벤트 발생
+  void notifyPlanChanged(String planType, {String? userId}) {
+    emitEvent(
+      CacheEventType.planChanged,
+      userId: userId,
+      data: {'planType': planType},
+    );
+  }
+  
+  /// 구독 변경 이벤트 발생
+  void notifySubscriptionChanged(Map<String, dynamic> subscriptionData, {String? userId}) {
+    emitEvent(
+      CacheEventType.subscriptionChanged,
+      userId: userId,
+      data: subscriptionData,
+    );
+  }
+  
+  /// 사용자 설정 변경 이벤트 발생
+  void notifyUserPreferencesChanged({String? userId}) {
+    emitEvent(
+      CacheEventType.userPreferencesChanged,
+      userId: userId,
+    );
+  }
+  
+  /// 사용자 탈퇴 이벤트 발생
+  void notifyUserDeleted({String? userId}) {
+    emitEvent(
+      CacheEventType.userDeleted,
+      userId: userId,
+    );
+  }
+  
+  /// 사용자 로그인 이벤트 발생
+  void notifyUserLoggedIn({String? userId}) {
+    emitEvent(
+      CacheEventType.userLoggedIn,
+      userId: userId,
+    );
+  }
+  
+  /// 사용자 로그아웃 이벤트 발생
+  void notifyUserLoggedOut({String? userId}) {
+    emitEvent(
+      CacheEventType.userLoggedOut,
+      userId: userId,
+    );
+  }
+  
+  /// 무료체험 시작 이벤트 발생 (플랜 + 구독 변경 동시 발생)
+  void notifyFreeTrialStarted({
+    String? userId,
+    required String subscriptionType,
+    required DateTime expiryDate,
+  }) {
+    // 플랜 변경 이벤트
+    notifyPlanChanged('premium', userId: userId);
+    
+    // 구독 변경 이벤트
+    notifySubscriptionChanged({
+      'planType': 'premium',
+      'subscriptionType': subscriptionType,
+      'expiryDate': expiryDate,
+      'isFreeTrial': true,
+      'status': 'trial',
+    }, userId: userId);
+  }
+  
+  /// 프리미엄 업그레이드 이벤트 발생 (플랜 + 구독 변경 동시 발생)
+  void notifyPremiumUpgraded({
+    String? userId,
+    required String subscriptionType,
+    required DateTime expiryDate,
+    required bool isFreeTrial,
+  }) {
+    // 플랜 변경 이벤트
+    notifyPlanChanged('premium', userId: userId);
+    
+    // 구독 변경 이벤트
+    notifySubscriptionChanged({
+      'planType': 'premium',
+      'subscriptionType': subscriptionType,
+      'expiryDate': expiryDate,
+      'isFreeTrial': isFreeTrial,
+      'status': isFreeTrial ? 'trial' : 'active',
+    }, userId: userId);
+  }
+
   /// 리소스 정리
   void dispose() {
     _eventController.close();

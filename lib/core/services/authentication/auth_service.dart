@@ -13,6 +13,7 @@ import '../../../core/services/common/usage_limit_service.dart';
 import '../common/plan_service.dart';
 import 'user_preferences_service.dart';
 import 'deleted_user_service.dart';
+import '../cache/event_cache_manager.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -615,9 +616,9 @@ class AuthService {
     try {
       debugPrint('핵심 서비스 캐시 초기화 시작');
       
-      // PlanService 캐시 초기화 (가장 중요)
-      final planService = PlanService();
-      planService.clearCache();
+      // 로그아웃 이벤트 발생 (중앙화된 이벤트 시스템 사용)
+      final eventCache = EventCacheManager();
+      eventCache.notifyUserLoggedOut(); // 모든 사용자 캐시 무효화
       
       // UserPreferences 초기화 (온보딩 상태 등)
       final userPrefsService = UserPreferencesService();

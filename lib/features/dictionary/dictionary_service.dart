@@ -357,24 +357,30 @@ class DictionaryService {
           debugPrint('✅ [Dictionary] CC-CEDICT에서 찾음: $word');
         }
         // CC-CEDICT는 영어만 제공하므로 한국어 번역을 Google Translate로 보완
+        DictionaryEntry finalResult = ccCedictResult;
+        
         if (ccCedictResult.meaningKo == null || ccCedictResult.meaningKo!.isEmpty) {
           final koreanTranslation = await _translateToKorean(word, context: 'CC-CEDICT보완');
           if (koreanTranslation != null) {
+            if (kDebugMode) {
+              debugPrint('🔄 [Dictionary] CC-CEDICT 결과에 한국어 번역 추가: $koreanTranslation');
+            }
+            
             // 한국어 번역이 추가된 새로운 엔트리 생성
-            final enhancedResult = DictionaryEntry.multiLanguage(
+            finalResult = DictionaryEntry.multiLanguage(
               word: ccCedictResult.word,
               pinyin: ccCedictResult.pinyin,
               meaningKo: koreanTranslation,        // ← Google Translate로 한국어 추가
               meaningEn: ccCedictResult.meaningEn, // ← CC-CEDICT의 영어 유지
               source: '${ccCedictResult.source}+google_translate',
             );
-            // ...
           }
         }
-        // 로컬 사전에 추가
-        _chineseDictionaryService.addEntry(ccCedictResult);
+        
+        // 로컬 사전에 추가 (보완된 결과)
+        _chineseDictionaryService.addEntry(finalResult);
         _notifyDictionaryUpdated();
-        return ccCedictResult;
+        return finalResult;
       }
       
       // 3. Google Translate 검색 (최후 수단)

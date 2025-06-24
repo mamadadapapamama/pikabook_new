@@ -6,6 +6,7 @@ import '../common/plan_service.dart';
 import '../notification/notification_service.dart';
 import '../trial/trial_manager.dart';
 import '../authentication/deleted_user_service.dart';
+import '../cache/event_cache_manager.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -18,6 +19,7 @@ class InAppPurchaseService {
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   final PlanService _planService = PlanService();
   final NotificationService _notificationService = NotificationService();
+  final EventCacheManager _eventCache = EventCacheManager();
   
   late StreamSubscription<List<PurchaseDetails>> _subscription;
   bool _isAvailable = false;
@@ -288,8 +290,23 @@ class InAppPurchaseService {
       );
 
       if (success) {
-        // 구매 성공 시 플랜 캐시 무효화 (최신 정보 반영)
-        _planService.clearCache();
+        // 구매 성공 시 플랜 변경 이벤트 발생 (중앙화된 메서드 사용)
+        if (isTrialProduct) {
+          // 무료체험 시작
+          _eventCache.notifyFreeTrialStarted(
+            userId: user.uid,
+            subscriptionType: subscriptionType,
+            expiryDate: expiryDate,
+          );
+        } else {
+          // 일반 프리미엄 업그레이드
+          _eventCache.notifyPremiumUpgraded(
+            userId: user.uid,
+            subscriptionType: subscriptionType,
+            expiryDate: expiryDate,
+            isFreeTrial: false,
+          );
+        }
         
         // 무료체험인 경우 알림 스케줄링 및 환영 메시지
         if (isTrialProduct) {

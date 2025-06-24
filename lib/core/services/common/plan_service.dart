@@ -102,52 +102,16 @@ class PlanService {
     }
   }
   
-  /// 플랜 변경 이벤트 발생
-  void _emitPlanChangedEvent(String planType) {
-    final userId = _currentUserId;
-    if (userId != null) {
-      _eventCache.emitEvent(
-        CacheEventType.planChanged,
-        userId: userId,
-        data: {'planType': planType},
-      );
-    }
-  }
-  
-  /// 구독 변경 이벤트 발생
-  void _emitSubscriptionChangedEvent(Map<String, dynamic> subscriptionData) {
-    final userId = _currentUserId;
-    if (userId != null) {
-      _eventCache.emitEvent(
-        CacheEventType.subscriptionChanged,
-        userId: userId,
-        data: subscriptionData,
-      );
-    }
-  }
-  
-  /// 외부에서 플랜 변경 이벤트를 발생시킬 수 있는 public 메서드
+  /// 외부에서 플랜 변경 이벤트를 발생시킬 수 있는 public 메서드 (중앙화된 EventCache 사용)
   void notifyPlanChanged(String planType, {String? userId}) {
     final targetUserId = userId ?? _currentUserId;
-    if (targetUserId != null) {
-      _eventCache.emitEvent(
-        CacheEventType.planChanged,
-        userId: targetUserId,
-        data: {'planType': planType},
-      );
-    }
+    _eventCache.notifyPlanChanged(planType, userId: targetUserId);
   }
   
-  /// 외부에서 구독 변경 이벤트를 발생시킬 수 있는 public 메서드
+  /// 외부에서 구독 변경 이벤트를 발생시킬 수 있는 public 메서드 (중앙화된 EventCache 사용)
   void notifySubscriptionChanged(Map<String, dynamic> subscriptionData, {String? userId}) {
     final targetUserId = userId ?? _currentUserId;
-    if (targetUserId != null) {
-      _eventCache.emitEvent(
-        CacheEventType.subscriptionChanged,
-        userId: targetUserId,
-        data: subscriptionData,
-      );
-    }
+    _eventCache.notifySubscriptionChanged(subscriptionData, userId: targetUserId);
   }
   
   /// Firestore에서 직접 플랜 타입만 확인 (내부용)
@@ -330,6 +294,14 @@ class PlanService {
             if (isFreeTrial) 'hasUsedFreeTrial': true, // 무료체험인 경우에만 사용 기록
           }, SetOptions(merge: true));
       
+      // 프리미엄 업그레이드 이벤트 발생 (중앙화된 메서드 사용)
+      _eventCache.notifyPremiumUpgraded(
+        userId: userId,
+        subscriptionType: subscriptionType ?? 'monthly',
+        expiryDate: expiryDate,
+        isFreeTrial: isFreeTrial,
+      );
+      
       return true;
     } catch (e) {
       debugPrint('프리미엄 업그레이드 실패: $e');
@@ -386,6 +358,13 @@ class PlanService {
             },
             'hasUsedFreeTrial': true, // 체험 사용 기록
           }, SetOptions(merge: true));
+      
+      // 무료체험 시작 이벤트 발생 (중앙화된 메서드 사용)
+      _eventCache.notifyFreeTrialStarted(
+        userId: userId,
+        subscriptionType: 'monthly',
+        expiryDate: expiryDate,
+      );
       
       debugPrint('🎯 [PROD] 7일 무료 체험 시작: $userId, 만료일: $expiryDate');
       return true;
@@ -612,14 +591,13 @@ class PlanService {
             'subscription.subscriptionType': subscriptionType,
           });
       
-      // 플랜 변경 이벤트 발생
-      _emitPlanChangedEvent(PLAN_PREMIUM);
-      _emitSubscriptionChangedEvent({
-        'planType': PLAN_PREMIUM,
-        'subscriptionType': subscriptionType,
-        'expiryDate': newExpiryDate,
-        'isFreeTrial': false,
-      });
+      // 체험→프리미엄 전환 이벤트 발생 (중앙화된 메서드 사용)
+      _eventCache.notifyPremiumUpgraded(
+        userId: userId,
+        subscriptionType: subscriptionType,
+        expiryDate: newExpiryDate,
+        isFreeTrial: false,
+      );
       
       if (kDebugMode) {
         debugPrint('✅ [PlanService] 체험→프리미엄 전환 완료');
