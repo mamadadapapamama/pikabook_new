@@ -3,14 +3,15 @@ import 'package:flutter/foundation.dart';
 import '../../../core/models/processed_text.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
-import '../../../core/services/tts/tts_service.dart';
+
 import '../../flashcard/flashcard_view_model.dart';
 import '../../../core/widgets/loading_dots_widget.dart';
 import '../../../core/utils/context_menu_manager.dart';
-import '../../../core/services/common/plan_service.dart';
+
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../../core/widgets/upgrade_modal.dart';
-import '../../tts/slow_tts_button.dart';
+import '../../tts/unified_tts_button.dart';
+import '../../../core/services/tts/unified_tts_service.dart';
 import 'paragraph_mode_widget.dart';
 import '../../../core/services/authentication/auth_service.dart';
 import '../../sample/sample_tts_service.dart';
@@ -57,9 +58,13 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   Set<String> _flashcardWords = {};
 
   // TTS 서비스
-  final TTSService _ttsService = TTSService();
+  final UnifiedTtsService _ttsService = UnifiedTtsService();
   final AuthService _authService = AuthService();
   final SampleTtsService _sampleTtsService = SampleTtsService();
+  
+  // TTS 리스너 콜백 참조 저장 (dispose 시 제거용)
+  Function(int?)? _stateChangedCallback;
+  Function()? _completedCallback;
   
   // 기본 스타일 정의
   late TextStyle _defaultOriginalTextStyle;
@@ -80,23 +85,39 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
       await _ttsService.init();
       await _ttsService.setLanguage('zh-CN');
       
-      // TTS 상태 변경 리스너 설정
-      _ttsService.setOnPlayingStateChanged((segmentIndex) {
-        if (mounted) {
-          setState(() {
-            // 상태 업데이트는 widget.playingSegmentIndex를 통해 부모에서 관리
-          });
+      // TTS 상태 변경 리스너 설정 (콜백 참조 저장)
+      _stateChangedCallback = (segmentIndex) {
+        // 위젯이 마운트되어 있고 BuildContext가 유효한 경우에만 setState 호출
+        if (mounted && context.mounted) {
+          try {
+            setState(() {
+              // 상태 업데이트는 widget.playingSegmentIndex를 통해 부모에서 관리
+            });
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('TTS 상태 변경 중 setState 오류: $e');
+            }
+          }
         }
-      });
+      };
+      _ttsService.setOnPlayingStateChanged(_stateChangedCallback!, mode: TtsMode.normal);
       
-      // TTS 재생 완료 리스너 설정
-      _ttsService.setOnPlayingCompleted(() {
-        if (mounted) {
-          setState(() {
-            // 재생 완료 시 상태 리셋
-          });
+      // TTS 재생 완료 리스너 설정 (콜백 참조 저장)
+      _completedCallback = () {
+        // 위젯이 마운트되어 있고 BuildContext가 유효한 경우에만 setState 호출
+        if (mounted && context.mounted) {
+          try {
+            setState(() {
+              // 재생 완료 시 상태 리셋
+            });
+          } catch (e) {
+            if (kDebugMode) {
+              debugPrint('TTS 재생 완료 중 setState 오류: $e');
+            }
+          }
         }
-      });
+      };
+      _ttsService.setOnPlayingCompleted(_completedCallback!, mode: TtsMode.normal);
     } catch (e) {
       if (kDebugMode) {
       debugPrint('TTS 초기화 실패: $e');
@@ -106,6 +127,16 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
   @override
   void dispose() {
+    // TTS 리스너 제거 (메모리 누수 및 setState 오류 방지)
+    final stateCallback = _stateChangedCallback;
+    if (stateCallback != null) {
+      _ttsService.removeOnPlayingStateChanged(stateCallback, mode: TtsMode.normal);
+    }
+    final completedCallback = _completedCallback;
+    if (completedCallback != null) {
+      _ttsService.removeOnPlayingCompleted(completedCallback, mode: TtsMode.normal);
+    }
+    
     _selectedTextNotifier.dispose();
     super.dispose();
   }
@@ -196,39 +227,26 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
     }
   }
 
-  /// TTS 버튼 위젯 생성
+  /// 일반 TTS 버튼 위젯 생성
   Widget _buildTtsButton(String text, int segmentIndex, bool isPlaying) {
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        color: isPlaying 
-            ? ColorTokens.primary.withOpacity(0.2)
-            : Colors.transparent,
-        shape: BoxShape.circle,
-      ),
-      child: IconButton(
-        icon: Icon(
-          isPlaying ? Icons.stop : Icons.volume_up,
-          color: ColorTokens.textSecondary,
-          size: 16,
-        ),
-        onPressed: () => _handleTtsPlay(text, segmentIndex),
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(
-          minWidth: 32,
-          minHeight: 32,
-        ),
-        splashRadius: 16,
-      ),
+    return UnifiedTtsButton(
+      text: text,
+      segmentIndex: segmentIndex,
+      mode: TtsMode.normal,
+      size: 32.0,
+      isEnabled: true,
+      useCircularShape: true,
+      iconColor: ColorTokens.textSecondary,
+      activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
     );
   }
 
   /// 느린 TTS 버튼 위젯 생성
   Widget _buildSlowTtsButton(String text, int segmentIndex, bool isPlaying) {
-    return SlowTtsButton(
+    return UnifiedTtsButton(
       text: text,
       segmentIndex: segmentIndex,
+      mode: TtsMode.slow,
       size: 24.0,
       isEnabled: true,
       useCircularShape: true,

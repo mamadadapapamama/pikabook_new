@@ -4,7 +4,7 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import 'note_progress_bar.dart';
 import 'page_indicator.dart';
 import 'page_navigation_button.dart';
-import '../../tts/tts_play_all_button.dart';
+import '../../tts/unified_tts_play_all_button.dart';
 
 /// 노트 상세 화면 하단 내비게이션 바
 /// 페이지 탐색, 진행률 바 제공 (세그먼트 모드에서는 전체 텍스트 재생 포함)
@@ -115,7 +115,7 @@ class _NoteDetailBottomBarState extends State<NoteDetailBottomBar> {
                       // 중앙 - TTS 버튼 (세그먼트 모드에서만 표시)
                       if (widget.useSegmentMode && !widget.isMinimalUI)
                         canUseTts
-                            ? TtsPlayAllButton(
+                            ? UnifiedTtsPlayAllButton(
                                 text: widget.ttsText,
                                 onPlayStart: widget.onTtsPlay,
                               )

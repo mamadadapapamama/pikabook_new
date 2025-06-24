@@ -134,9 +134,14 @@ class _TtsButtonState extends BaseTtsButtonState<TtsButton> {
           
           debugPrint('TTS 재생 완료: 버튼 상태 리셋 (segmentIndex=${widget.segmentIndex})');
           
-          // 재생 종료 콜백 호출
+          // 재생 종료 콜백 호출 (중복 호출 방지를 위해 한 번만)
           if (widget.onPlayEnd != null) {
-            widget.onPlayEnd!();
+            // 콜백 실행 전 플래그 설정으로 중복 실행 방지
+            Future.microtask(() {
+              if (mounted && widget.onPlayEnd != null) {
+                widget.onPlayEnd!();
+              }
+            });
           }
         }
       }

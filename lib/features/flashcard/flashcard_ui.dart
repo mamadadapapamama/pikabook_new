@@ -4,8 +4,9 @@ import '../../core/models/flash_card.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
-import '../../core/services/tts/tts_service.dart';
-import '../tts/tts_button.dart';
+
+import '../tts/unified_tts_button.dart';
+import '../../core/services/tts/unified_tts_service.dart';
 
 /// 플래시카드 한 장 내의 UI와 기능
 ///
@@ -206,14 +207,15 @@ class FlashCardUI {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TTS 버튼 (단어 위에 위치)
-            TtsButton(
+            UnifiedTtsButton(
               text: text, // 실제 텍스트 전달
-              size: TtsButton.sizeMedium,
+              mode: TtsMode.normal,
+              size: UnifiedTtsButton.sizeMedium,
               tooltip: isEnabled ? null : tooltip ?? '무료 TTS 사용량을 모두 사용했습니다.',
               iconColor: ColorTokens.secondary,
               activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
               onPlayStart: () => onSpeak(),
-              onPlayEnd: onStopSpeaking,
+              // onPlayEnd 제거 - TTS 자동 완료 시 추가 처리 불필요
             ),
             SizedBox(height: SpacingTokens.sm),
             
@@ -261,14 +263,15 @@ class FlashCardUI {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // TTS 버튼 (단어 위에 위치)
-            TtsButton(
+            UnifiedTtsButton(
               text: original, // 원문 텍스트 전달
-              size: TtsButton.sizeMedium,
+              mode: TtsMode.normal,
+              size: UnifiedTtsButton.sizeMedium,
               tooltip: isEnabled ? null : tooltip ?? '무료 TTS 사용량을 모두 사용했습니다.',
               iconColor: ColorTokens.secondary,
               activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
               onPlayStart: () => onSpeak(),
-              onPlayEnd: onStopSpeaking,
+              // onPlayEnd 제거 - TTS 자동 완료 시 추가 처리 불필요
             ),
             SizedBox(height: SpacingTokens.sm),
             
@@ -317,10 +320,11 @@ class FlashCardUI {
     String? tooltip,
     String text = '',
   }) {
-    // 표준 TtsButton 위젯으로 대체
-    return TtsButton(
+    // 표준 UnifiedTtsButton 위젯으로 대체
+    return UnifiedTtsButton(
       text: text,
-      size: TtsButton.sizeMedium,
+      mode: TtsMode.normal,
+      size: UnifiedTtsButton.sizeMedium,
       tooltip: isEnabled ? null : tooltip ?? '무료 TTS 사용량을 모두 사용했습니다.',
       iconColor: iconColor,
       activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),

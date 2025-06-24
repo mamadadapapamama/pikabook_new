@@ -6,7 +6,8 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../../core/utils/error_handler.dart';
-import '../tts/tts_button.dart';
+import '../tts/unified_tts_button.dart';
+import '../../core/services/tts/unified_tts_service.dart';
 import 'dictionary_service.dart';
 
 /// 사전 검색 결과를 표시하는 바텀 시트 위젯
@@ -41,10 +42,11 @@ class DictionaryResultWidget extends StatelessWidget {
                   ),
                 ),
               ),
-              // TtsButton 위젯 사용 - 모든 상태 관리가 내부에서 자동으로 처리됨
-              TtsButton(
+              // UnifiedTtsButton 위젯 사용 - 모든 상태 관리가 내부에서 자동으로 처리됨
+              UnifiedTtsButton(
                 text: entry.word,
-                size: TtsButton.sizeMedium,
+                mode: TtsMode.normal,
+                size: UnifiedTtsButton.sizeMedium,
                 iconColor: ColorTokens.secondary,
                 activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
                 tooltip: '단어 발음 듣기',
@@ -364,10 +366,11 @@ class _DictionaryBottomSheetState extends State<_DictionaryBottomSheet> {
                 ),
               ),
             ),
-            // TtsButton 위젯 사용
-            TtsButton(
+            // UnifiedTtsButton 위젯 사용
+            UnifiedTtsButton(
               text: _entry!.word,
-              size: TtsButton.sizeMedium,
+              mode: TtsMode.normal,
+              size: UnifiedTtsButton.sizeMedium,
               iconColor: ColorTokens.secondary,
               activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
               tooltip: '단어 발음 듣기',
