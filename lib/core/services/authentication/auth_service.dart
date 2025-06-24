@@ -196,18 +196,18 @@ class AuthService {
       // 1. 현재 UID 저장
       final currentUid = _auth.currentUser?.uid;
       
-      // 2. 소셜 로그인 세션 정리
-      await _clearSocialLoginSessions();
+      // 2. 병렬 처리 가능한 작업들
+      await Future.wait([
+        _clearSocialLoginSessions(),
+        ImageService().clearImageCache(),
+      ]);
       
-      // 3. 이미지 캐시 정리
-      await ImageService().clearImageCache();
-      
-      // 4. Firebase 로그아웃
+      // 3. Firebase 로그아웃
       await _auth.signOut();
       
       debugPrint('로그아웃 완료');
       
-      // 5. 세션 종료 처리 (필요시)
+      // 4. 세션 종료 처리 (필요시)
       if (currentUid != null) {
         await _endUserSession(currentUid);
       }
@@ -273,24 +273,11 @@ class AuthService {
     }
   }
 
-  // 재인증 필요 여부 확인
+  // 재인증 필요 여부 확인 (계정 삭제는 항상 재인증 필요)
   Future<bool> isReauthenticationRequired() async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return false;
-      
-      // 토큰 갱신 시도
-      await user.getIdToken(true);
-      debugPrint('재인증 불필요 - 최근 로그인 상태');
-      return false;
-    } catch (e) {
-      debugPrint('토큰 갱신 실패, 재인증 필요: $e');
-      // requires-recent-login 에러인 경우에만 재인증 필요
-      if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
-        return true;
-      }
-      return false;
-    }
+    // 계정 삭제는 민감한 작업이므로 항상 재인증 요구
+    debugPrint('계정 삭제 - 보안을 위해 항상 재인증 필요');
+    return true;
   }
 
   // 재인증 필요 메시지 생성
@@ -298,33 +285,20 @@ class AuthService {
     return '계정 보안을 위해 재로그인이 필요합니다.\n탈퇴를 원하시면 로그아웃 후 재시도해주세요.';
   }
 
-  // 재인증 처리를 위한 별도 메서드 (토큰 상태 확인)
+  // 재인증 처리 (항상 재인증 요구하므로 단순화)
   Future<void> _handleReauthentication(User user) async {
-    try {
-      // 최근 로그인 상태 확인 - 토큰이 유효하면 재인증 불필요
-      await user.getIdToken(true);
-      debugPrint('재인증 불필요 - 최근 로그인 상태');
-      return; // 토큰이 유효하면 재인증 없이 바로 리턴
-    } catch (e) {
-      debugPrint('토큰 갱신 실패, 재인증 필요: $e');
-      
-      // FirebaseAuthException의 requires-recent-login 에러만 재인증 처리
-      if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
-        final authProvider = user.providerData.firstOrNull?.providerId;
-        debugPrint('인증 제공자: $authProvider');
-        
-        if (authProvider?.contains('google') == true) {
-          await _reauthenticateWithGoogle(user);
-        } else if (authProvider?.contains('apple') == true) {
-          await _reauthenticateWithApple(user);
-        } else {
-          throw Exception('지원되지 않는 인증 방식입니다.\n로그아웃 후 다시 로그인해주세요.');
-        }
-      } else {
-        // 다른 에러는 재인증 없이 진행
-        debugPrint('토큰 갱신 실패했지만 재인증 없이 진행: $e');
-      }
+    final authProvider = user.providerData.firstOrNull?.providerId;
+    debugPrint('계정 삭제를 위한 재인증 시작 - 인증 제공자: $authProvider');
+    
+    if (authProvider?.contains('google') == true) {
+      await _reauthenticateWithGoogle(user);
+    } else if (authProvider?.contains('apple') == true) {
+      await _reauthenticateWithApple(user);
+    } else {
+      throw Exception('지원되지 않는 인증 방식입니다.\n로그아웃 후 다시 로그인해주세요.');
     }
+    
+    debugPrint('재인증 완료');
   }
   
   // Google 재인증 (오류 메시지 개선)
@@ -466,82 +440,15 @@ class AuthService {
     }
   }
   
-  // SharedPreferences 삭제
+  // SharedPreferences 삭제 (최적화: clear()만 사용)
   Future<void> _clearSharedPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // 전체 초기화
+      // 전체 초기화 (clear()가 모든 키를 삭제하므로 개별 삭제 불필요)
       await prefs.clear();
       
-      // 중요 키 개별 삭제 (확실히 하기 위해) - 계정 삭제 시 완전 초기화
-      final criticalKeys = [
-        'current_user_id',
-        'login_history',
-        'onboarding_completed', // 온보딩 상태 초기화
-        'has_shown_tooltip',
-        'last_signin_provider',
-        'has_multiple_accounts',
-        'cache_current_user_id',
-        'note_detail_tooltip_shown',
-        'tooltip_shown_after_first_page',
-        'home_screen_tooltip_shown',
-        'first_note_created',
-        'device_id',
-        // 추가 초기화 키들
-        'hasShownTooltip',
-        'pikabook_installed', // 앱 설치 상태도 초기화
-        'user_preferences', // 사용자 설정 초기화
-        'default_note_space', // 기본 노트스페이스 초기화
-        'note_spaces', // 노트스페이스 목록 초기화
-        'trial_start_date', // 체험 관련 데이터 초기화
-        'trial_welcome_shown',
-        'trial_expired_notification_shown',
-        'last_check_date',
-        // 모든 체험 관련 키들
-        'premium_trial_start_date',
-        'premium_trial_welcome_shown',
-        'premium_trial_expired_notification_shown',
-        'premium_trial_last_check_date',
-        // 온보딩 관련 추가 키들
-        'onboarding_step',
-        'onboarding_progress',
-        'first_launch',
-        'tutorial_completed',
-        'welcome_shown',
-        // 배너 관련
-        'banner_dismissed_permanently',
-        'banner_dismissed_today',
-        // 기타 사용자 상태
-        'last_active_date',
-        'app_version_check',
-        'feature_flags',
-      ];
-      
-      for (final key in criticalKeys) {
-        await prefs.remove(key);
-      }
-      
-      // 패턴 기반 키 삭제 (더 확실한 정리)
-      final allKeys = prefs.getKeys();
-      final patternKeys = allKeys.where((key) => 
-        key.contains('trial') ||
-        key.contains('onboarding') ||
-        key.contains('tooltip') ||
-        key.contains('note_space') ||
-        key.contains('user_') ||
-        key.contains('cache_') ||
-        key.contains('apple') ||
-        key.contains('google') ||
-        key.contains('auth') ||
-        key.contains('login')
-      ).toList();
-      
-      for (final key in patternKeys) {
-        await prefs.remove(key);
-      }
-      
-      debugPrint('SharedPreferences 완전 삭제 완료 (${criticalKeys.length + patternKeys.length}개 키 삭제)');
+      debugPrint('SharedPreferences 완전 삭제 완료');
     } catch (e) {
       debugPrint('SharedPreferences 삭제 중 오류: $e');
       rethrow;
