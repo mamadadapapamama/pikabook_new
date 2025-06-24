@@ -289,6 +289,18 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
+  /// 재인증 필요 여부 확인
+  Future<bool> isReauthenticationRequired() async {
+    try {
+      return await _authService.isReauthenticationRequired();
+    } catch (e) {
+      if (kDebugMode) {
+        print('재인증 필요 여부 확인 오류: $e');
+      }
+      return false; // 에러 발생 시 재인증 불필요로 처리
+    }
+  }
+
   /// 계정 삭제
   Future<bool> deleteAccount() async {
     _setLoading(true);

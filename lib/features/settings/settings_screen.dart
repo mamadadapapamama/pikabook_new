@@ -689,7 +689,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   
   // 계정 탈퇴 기능 구현
   Future<void> _handleAccountDeletion(BuildContext context) async {
-    final confirm = await showDialog<bool>(
+    // 1. 재인증 필요 여부 확인
+    final needsReauth = await _viewModel.isReauthenticationRequired();
+    
+    if (needsReauth) {
+      // 재인증이 필요한 경우: 재인증 안내 모달
+      await _showReauthRequiredDialog(context);
+    } else {
+      // 재인증이 불필요한 경우: 경고 메시지 후 바로 탈퇴 처리
+      await _showWarningAndDelete(context);
+    }
+  }
+  
+  // 재인증 필요 안내 모달
+  Future<void> _showReauthRequiredDialog(BuildContext context) async {
+    final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: ColorTokens.surface,
@@ -703,24 +717,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '정말로 회원 탈퇴하시겠습니까?',
-              style: TypographyTokens.body2,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '• 회원 탈퇴 시 모든 노트와 데이터가 삭제됩니다.',
-              style: TypographyTokens.body2.copyWith(
-                color: ColorTokens.textPrimary,
-              ),
-            ),
-            Text(
-              '• 이 작업은 되돌릴 수 없습니다.',
-              style: TypographyTokens.body2.copyWith(
-                color: ColorTokens.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -753,12 +749,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '계정 보안을 위해 한 번 더 로그인하셔야 탈퇴할 수 있어요.',
+                    '탈퇴하시려면 보안을 위해 재인증이 필요합니다.\n로그아웃 후 다시 로그인해주세요.',
                     style: TypographyTokens.caption.copyWith(
                       color: ColorTokens.textSecondary,
                     ),
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'cancel'),
+            child: Text(
+              '취소',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'logout'),
+            child: Text(
+              '로그아웃',
+              style: TypographyTokens.button.copyWith(
+                color: ColorTokens.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    if (result == 'logout') {
+      // 로그아웃 처리
+      widget.onLogout();
+      Navigator.pop(context);
+    }
+  }
+  
+  // 경고 메시지 후 탈퇴 처리 (재인증 불필요한 경우)
+  Future<void> _showWarningAndDelete(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: ColorTokens.surface,
+        title: Text(
+          '회원 탈퇴',
+          style: TypographyTokens.subtitle2.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '정말로 회원 탈퇴하시겠습니까?',
+              style: TypographyTokens.body2,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '• 회원 탈퇴 시 모든 노트와 데이터가 삭제됩니다.',
+              style: TypographyTokens.body2.copyWith(
+                color: ColorTokens.textPrimary,
+              ),
+            ),
+            Text(
+              '• 이 작업은 되돌릴 수 없습니다.',
+              style: TypographyTokens.body2.copyWith(
+                color: ColorTokens.textPrimary,
               ),
             ),
           ],
@@ -776,7 +838,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: Text(
-              '회원 탈퇴',
+              '탈퇴하기',
               style: TypographyTokens.button.copyWith(
                 color: ColorTokens.error,
                 fontWeight: FontWeight.bold,
@@ -789,6 +851,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     if (confirm != true) return;
     
+    // 탈퇴 처리 실행
+    await _executeAccountDeletion(context);
+  }
+  
+  // 실제 탈퇴 처리 실행
+  Future<void> _executeAccountDeletion(BuildContext context) async {
     try {
       final success = await _viewModel.deleteAccount();
       

@@ -273,30 +273,56 @@ class AuthService {
     }
   }
 
+  // 재인증 필요 여부 확인
+  Future<bool> isReauthenticationRequired() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return false;
+      
+      // 토큰 갱신 시도
+      await user.getIdToken(true);
+      debugPrint('재인증 불필요 - 최근 로그인 상태');
+      return false;
+    } catch (e) {
+      debugPrint('토큰 갱신 실패, 재인증 필요: $e');
+      // requires-recent-login 에러인 경우에만 재인증 필요
+      if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+        return true;
+      }
+      return false;
+    }
+  }
+
   // 재인증 필요 메시지 생성
   String _getReauthRequiredMessage() {
     return '계정 보안을 위해 재로그인이 필요합니다.\n탈퇴를 원하시면 로그아웃 후 재시도해주세요.';
   }
 
-  // 재인증 처리를 위한 별도 메서드 (필수 재인증)
+  // 재인증 처리를 위한 별도 메서드 (토큰 상태 확인)
   Future<void> _handleReauthentication(User user) async {
     try {
-      // 최근 로그인 상태 확인
+      // 최근 로그인 상태 확인 - 토큰이 유효하면 재인증 불필요
       await user.getIdToken(true);
       debugPrint('재인증 불필요 - 최근 로그인 상태');
+      return; // 토큰이 유효하면 재인증 없이 바로 리턴
     } catch (e) {
       debugPrint('토큰 갱신 실패, 재인증 필요: $e');
       
-      // requires-recent-login이 아니어도 재인증 시도
-      final authProvider = user.providerData.firstOrNull?.providerId;
-      debugPrint('인증 제공자: $authProvider');
-      
-      if (authProvider?.contains('google') == true) {
-        await _reauthenticateWithGoogle(user);
-      } else if (authProvider?.contains('apple') == true) {
-        await _reauthenticateWithApple(user);
+      // FirebaseAuthException의 requires-recent-login 에러만 재인증 처리
+      if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
+        final authProvider = user.providerData.firstOrNull?.providerId;
+        debugPrint('인증 제공자: $authProvider');
+        
+        if (authProvider?.contains('google') == true) {
+          await _reauthenticateWithGoogle(user);
+        } else if (authProvider?.contains('apple') == true) {
+          await _reauthenticateWithApple(user);
+        } else {
+          throw Exception('지원되지 않는 인증 방식입니다.\n로그아웃 후 다시 로그인해주세요.');
+        }
       } else {
-        throw Exception('지원되지 않는 인증 방식입니다.\n로그아웃 후 다시 로그인해주세요.');
+        // 다른 에러는 재인증 없이 진행
+        debugPrint('토큰 갱신 실패했지만 재인증 없이 진행: $e');
       }
     }
   }
@@ -477,6 +503,19 @@ class AuthService {
         'premium_trial_welcome_shown',
         'premium_trial_expired_notification_shown',
         'premium_trial_last_check_date',
+        // 온보딩 관련 추가 키들
+        'onboarding_step',
+        'onboarding_progress',
+        'first_launch',
+        'tutorial_completed',
+        'welcome_shown',
+        // 배너 관련
+        'banner_dismissed_permanently',
+        'banner_dismissed_today',
+        // 기타 사용자 상태
+        'last_active_date',
+        'app_version_check',
+        'feature_flags',
       ];
       
       for (final key in criticalKeys) {
@@ -570,16 +609,34 @@ class AuthService {
     }
   }
 
-  // 탈퇴 기록 저장
+  // 탈퇴 기록 저장 (중복 방지)
   Future<void> _saveDeletedUserRecord(String userId, String? email, String? displayName) async {
     try {
-      await FirebaseFirestore.instance.collection('deleted_users').doc(userId).set({
-        'userId': userId,
-        'email': email,
-        'displayName': displayName,
-        'deletedAt': FieldValue.serverTimestamp(),
-      });
-      debugPrint('탈퇴 기록 저장 완료');
+      final docRef = FirebaseFirestore.instance.collection('deleted_users').doc(userId);
+      
+      // 기존 기록 확인
+      final existingDoc = await docRef.get();
+      
+      if (existingDoc.exists) {
+        debugPrint('탈퇴 기록이 이미 존재함: $userId');
+        // 기존 기록에 재탈퇴 시간 추가
+        await docRef.update({
+          'lastDeletedAt': FieldValue.serverTimestamp(),
+          'deleteCount': FieldValue.increment(1),
+        });
+        debugPrint('탈퇴 기록 업데이트 완료');
+      } else {
+        // 새로운 탈퇴 기록 생성
+        await docRef.set({
+          'userId': userId,
+          'email': email,
+          'displayName': displayName,
+          'deletedAt': FieldValue.serverTimestamp(),
+          'lastDeletedAt': FieldValue.serverTimestamp(),
+          'deleteCount': 1,
+        });
+        debugPrint('새 탈퇴 기록 저장 완료');
+      }
     } catch (e) {
       debugPrint('탈퇴 기록 저장 중 오류: $e');
       // 핵심 기능이 아니므로 오류를 전파하지 않음
