@@ -20,6 +20,8 @@ class AuthService {
     scopes: ['email', 'profile'],
   );
 
+// === 인증상태 관리 및 재설치 여부 판단 ===
+
   // 현재 사용자 가져오기
   User? get currentUser => _auth.currentUser;
 
@@ -47,6 +49,8 @@ class AuthService {
     
     return false; // 기존 설치
   }
+
+// === 소셜 로그인 ===
 
   // Google 로그인
   Future<User?> signInWithGoogle() async {
@@ -183,7 +187,8 @@ class AuthService {
     }
   }
 
-  // 로그아웃
+// === 로그아웃 ===
+
   Future<void> signOut() async {
     try {
       debugPrint('로그아웃 시작...');
@@ -191,15 +196,18 @@ class AuthService {
       // 1. 현재 UID 저장
       final currentUid = _auth.currentUser?.uid;
       
-      // 2. 이미지 캐시 정리
+      // 2. 소셜 로그인 세션 정리
+      await _clearSocialLoginSessions();
+      
+      // 3. 이미지 캐시 정리
       await ImageService().clearImageCache();
       
-      // 3. Firebase 로그아웃
+      // 4. Firebase 로그아웃
       await _auth.signOut();
       
       debugPrint('로그아웃 완료');
       
-      // 4. 세션 종료 처리 (필요시)
+      // 5. 세션 종료 처리 (필요시)
       if (currentUid != null) {
         await _endUserSession(currentUid);
       }
@@ -208,6 +216,8 @@ class AuthService {
       rethrow;
     }
   }
+
+// === 탈퇴 ===
 
   // 사용자 계정 삭제
   Future<void> deleteAccount() async {
@@ -221,59 +231,127 @@ class AuthService {
       final userEmail = user.email;
       final displayName = user.displayName;
       
-      // 1. 먼저 모든 데이터 삭제 작업을 수행
-      await _deleteAllUserData(userId, userEmail, displayName);
+      debugPrint('계정 삭제 시작: $userId');
       
-      try {
-        // 2. Firebase Auth에서 사용자 삭제 시도 (실패해도 진행)
-        await user.delete();
-        debugPrint('계정이 성공적으로 삭제되었습니다');
-      } catch (authError) {
-        // Auth 삭제 실패해도 계속 진행 (데이터는 이미 삭제됨)
-        debugPrint('계정 삭제 진행 중: $authError');
-        // 강제 로그아웃 처리
-        await signOut();
-        // 오류를 전파하지 않음 - 사용자 데이터는 이미 삭제되었으므로 성공으로 처리
-      }
-      // 성공적으로 처리됨 - 명시적 return으로 함수 종료
-      return;
+      // 1. 재인증 필수 - 실패 시 탈퇴 중단
+      await _handleReauthentication(user);
+      debugPrint('재인증 완료');
+      
+      // 2. 모든 데이터 삭제 작업 수행
+      await _deleteAllUserData(userId, userEmail, displayName);
+      debugPrint('사용자 데이터 삭제 완료');
+      
+      // 3. Firebase Auth에서 사용자 삭제
+      await user.delete();
+      debugPrint('계정이 성공적으로 삭제되었습니다: $userId');
+      
     } catch (e) {
-      // 내부 처리 오류만 로깅하고, 실제 사용자 데이터가 삭제되었으면 오류를 전파하지 않음
       debugPrint('계정 삭제 오류: $e');
-      // 사용자 경험을 위해 오류를 전파하지 않고 성공으로 처리
-      // rethrow 대신 return 사용
-      return;
+      
+      // 재인증 관련 오류는 구체적인 메시지 제공
+      if (e is FirebaseAuthException) {
+        if (e.code == 'requires-recent-login') {
+          throw Exception(_getReauthRequiredMessage());
+        } else if (e.code == 'user-not-found') {
+          throw Exception('사용자를 찾을 수 없습니다.');
+        } else if (e.code == 'network-request-failed') {
+          throw Exception('네트워크 연결을 확인해주세요.');
+        } else if (e.code == 'user-disabled') {
+          throw Exception('비활성화된 계정입니다.');
+        } else {
+          throw Exception('계정 삭제 중 오류가 발생했습니다: ${e.message}');
+        }
+      }
+      
+      // 재인증 취소나 실패
+      if (e.toString().contains('재인증이 취소') || e.toString().contains('재인증에 실패')) {
+        throw Exception(_getReauthRequiredMessage());
+      }
+      
+      // 기타 오류
+      rethrow;
     }
   }
 
-  // 재인증 처리를 위한 별도 메서드
+  // 재인증 필요 메시지 생성
+  String _getReauthRequiredMessage() {
+    return '계정 보안을 위해 재로그인이 필요합니다.\n탈퇴를 원하시면 로그아웃 후 재시도해주세요.';
+  }
+
+  // 재인증 처리를 위한 별도 메서드 (필수 재인증)
   Future<void> _handleReauthentication(User user) async {
     try {
+      // 최근 로그인 상태 확인
       await user.getIdToken(true);
+      debugPrint('재인증 불필요 - 최근 로그인 상태');
     } catch (e) {
-      if (e is FirebaseAuthException && e.code == 'requires-recent-login') {
-        final authProvider = user.providerData.firstOrNull?.providerId;
-        
-        if (authProvider?.contains('google') == true) {
-          final googleUser = await _googleSignIn.signIn();
-          if (googleUser != null) {
-            final googleAuth = await googleUser.authentication;
-            final credential = GoogleAuthProvider.credential(
-              accessToken: googleAuth.accessToken,
-              idToken: googleAuth.idToken,
-            );
-            await user.reauthenticateWithCredential(credential);
-          } else {
-            throw FirebaseAuthException(
-              code: 'user-cancelled',
-              message: '재인증 취소됨',
-            );
-          }
-        } else if (authProvider?.contains('apple') == true) {
-          throw Exception('Apple 로그인 재인증이 필요합니다.');
-        }
+      debugPrint('토큰 갱신 실패, 재인증 필요: $e');
+      
+      // requires-recent-login이 아니어도 재인증 시도
+      final authProvider = user.providerData.firstOrNull?.providerId;
+      debugPrint('인증 제공자: $authProvider');
+      
+      if (authProvider?.contains('google') == true) {
+        await _reauthenticateWithGoogle(user);
+      } else if (authProvider?.contains('apple') == true) {
+        await _reauthenticateWithApple(user);
       } else {
-        rethrow;
+        throw Exception('지원되지 않는 인증 방식입니다.\n로그아웃 후 다시 로그인해주세요.');
+      }
+    }
+  }
+  
+  // Google 재인증 (오류 메시지 개선)
+  Future<void> _reauthenticateWithGoogle(User user) async {
+    try {
+      debugPrint('Google 재인증 시작');
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        throw Exception('Google 재인증이 취소되었습니다.');
+      }
+      
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      
+      await user.reauthenticateWithCredential(credential);
+      debugPrint('Google 재인증 완료');
+    } catch (e) {
+      debugPrint('Google 재인증 실패: $e');
+      if (e.toString().contains('취소')) {
+        throw Exception('계정 보안을 위해 Google 재로그인이 필요합니다.\n탈퇴를 원하시면 재로그인 후 다시 시도해주세요.');
+      } else {
+        throw Exception('Google 재인증에 실패했습니다.\n네트워크를 확인하고 다시 시도해주세요.');
+      }
+    }
+  }
+  
+  // Apple 재인증 (오류 메시지 개선)
+  Future<void> _reauthenticateWithApple(User user) async {
+    try {
+      debugPrint('Apple 재인증 시작');
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
+      
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: appleCredential.identityToken,
+        accessToken: appleCredential.authorizationCode,
+      );
+      
+      await user.reauthenticateWithCredential(oauthCredential);
+      debugPrint('Apple 재인증 완료');
+    } catch (e) {
+      debugPrint('Apple 재인증 실패: $e');
+      if (e.toString().contains('취소') || e.toString().contains('cancel')) {
+        throw Exception('계정 보안을 위해 Apple 재로그인이 필요합니다.\n탈퇴를 원하시면 재로그인 후 다시 시도해주세요.');
+      } else {
+        throw Exception('Apple 재인증에 실패했습니다.\n네트워크를 확인하고 다시 시도해주세요.');
       }
     }
   }
@@ -281,33 +359,28 @@ class AuthService {
   // 모든 사용자 데이터 삭제를 처리하는 별도 메서드
   Future<void> _deleteAllUserData(String userId, String? email, String? displayName) async {
     try {
-      // 1. 로컬 데이터 삭제 (이미지 파일 포함)
-      await _clearAllLocalData();
+      debugPrint('사용자 데이터 삭제 시작: $userId');
       
-      // 2. Firestore 데이터 삭제
-      await _deleteFirestoreData(userId);
+      // 병렬로 처리 가능한 작업들
+      await Future.wait([
+        _clearAllLocalData(),
+        _deleteFirestoreData(userId),
+        _deleteFirebaseStorageData(userId),
+      ]);
       
-      // 3. Firebase Storage 이미지 데이터 삭제
-      final usageLimitService = UsageLimitService();
-      try {
-        final storageDeleted = await usageLimitService.deleteFirebaseStorageData(userId);
-        if (storageDeleted) {
-          debugPrint('Firebase Storage 데이터 삭제 완료: $userId');
-        } else {
-          debugPrint('Firebase Storage 데이터 삭제 실패 또는 데이터 없음: $userId');
-        }
-      } catch (e) {
-        debugPrint('Firebase Storage 데이터 삭제 시도 중 오류: $e');
-      }
-      
-      // 4. 소셜 로그인 연결 해제
+      // 소셜 로그인 세션 정리
       await _clearSocialLoginSessions();
       
-      // 5. 디바이스 ID 초기화
+      // 디바이스 ID 초기화
       await _resetDeviceId();
       
-      // 6. 탈퇴 기록 저장
-      await _saveDeletedUserRecord(userId, email, displayName);
+      // 탈퇴 기록 저장 (실패해도 계속 진행)
+      try {
+        await _saveDeletedUserRecord(userId, email, displayName);
+        debugPrint('탈퇴 기록 저장 완료');
+      } catch (e) {
+        debugPrint('탈퇴 기록 저장 실패 (무시): $e');
+      }
       
       debugPrint('모든 사용자 데이터 삭제 완료');
     } catch (e) {
@@ -316,41 +389,33 @@ class AuthService {
     }
   }
 
-  // 로컬 데이터 완전 삭제 (이미지 파일 포함)
+  // Firebase Storage 데이터 삭제 (분리됨)
+  Future<void> _deleteFirebaseStorageData(String userId) async {
+    try {
+      final usageLimitService = UsageLimitService();
+      final storageDeleted = await usageLimitService.deleteFirebaseStorageData(userId);
+      
+      if (storageDeleted) {
+        debugPrint('Firebase Storage 데이터 삭제 완료: $userId');
+      } else {
+        debugPrint('Firebase Storage 데이터 없음 또는 삭제 실패: $userId');
+      }
+    } catch (e) {
+      debugPrint('Firebase Storage 데이터 삭제 중 오류: $e');
+      // Storage 삭제 실패는 치명적이지 않으므로 계속 진행
+    }
+  }
+
+  // 로컬 데이터 완전 삭제 (병렬 처리 추가)
   Future<void> _clearAllLocalData() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      debugPrint('로컬 데이터 삭제 시작');
       
-      // 1. 이미지 파일 삭제
-      final appDir = await getApplicationDocumentsDirectory();
-      final imageDir = Directory('${appDir.path}/images');
-      if (await imageDir.exists()) {
-        await imageDir.delete(recursive: true);
-        debugPrint('이미지 디렉토리 삭제 완료');
-      }
-      
-      // 2. SharedPreferences 완전 초기화
-      await prefs.clear();
-      
-      // 3. 중요 키 개별 삭제 (혹시 모를 잔여 데이터 제거)
-      final keys = [
-        'current_user_id',
-        'login_history',
-        'onboarding_completed',
-        'has_shown_tooltip',
-        'last_signin_provider',
-        'has_multiple_accounts',
-        'cache_current_user_id',
-        // 툴팁 관련 설정 추가
-        'note_detail_tooltip_shown',
-        'tooltip_shown_after_first_page',
-        'home_screen_tooltip_shown',
-        'first_note_created',
-      ];
-      
-      for (final key in keys) {
-        await prefs.remove(key);
-      }
+      // 병렬로 처리 가능한 작업들
+      await Future.wait([
+        _clearImageFiles(),
+        _clearSharedPreferences(),
+      ]);
       
       debugPrint('로컬 데이터 완전 삭제 완료');
     } catch (e) {
@@ -358,60 +423,149 @@ class AuthService {
       rethrow;
     }
   }
+  
+  // 이미지 파일 삭제
+  Future<void> _clearImageFiles() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final imageDir = Directory('${appDir.path}/images');
+      
+      if (await imageDir.exists()) {
+        await imageDir.delete(recursive: true);
+        debugPrint('이미지 디렉토리 삭제 완료');
+      }
+    } catch (e) {
+      debugPrint('이미지 파일 삭제 중 오류: $e');
+      // 이미지 삭제 실패는 치명적이지 않음
+    }
+  }
+  
+  // SharedPreferences 삭제
+  Future<void> _clearSharedPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 전체 초기화
+      await prefs.clear();
+      
+      // 중요 키 개별 삭제 (확실히 하기 위해) - 계정 삭제 시 완전 초기화
+      final criticalKeys = [
+        'current_user_id',
+        'login_history',
+        'onboarding_completed', // 온보딩 상태 초기화
+        'has_shown_tooltip',
+        'last_signin_provider',
+        'has_multiple_accounts',
+        'cache_current_user_id',
+        'note_detail_tooltip_shown',
+        'tooltip_shown_after_first_page',
+        'home_screen_tooltip_shown',
+        'first_note_created',
+        'device_id',
+        // 추가 초기화 키들
+        'hasShownTooltip',
+        'pikabook_installed', // 앱 설치 상태도 초기화
+        'user_preferences', // 사용자 설정 초기화
+        'default_note_space', // 기본 노트스페이스 초기화
+        'note_spaces', // 노트스페이스 목록 초기화
+        'trial_start_date', // 체험 관련 데이터 초기화
+        'trial_welcome_shown',
+        'trial_expired_notification_shown',
+        'last_check_date',
+        // 모든 체험 관련 키들
+        'premium_trial_start_date',
+        'premium_trial_welcome_shown',
+        'premium_trial_expired_notification_shown',
+        'premium_trial_last_check_date',
+      ];
+      
+      for (final key in criticalKeys) {
+        await prefs.remove(key);
+      }
+      
+      // 패턴 기반 키 삭제 (더 확실한 정리)
+      final allKeys = prefs.getKeys();
+      final patternKeys = allKeys.where((key) => 
+        key.contains('trial') ||
+        key.contains('onboarding') ||
+        key.contains('tooltip') ||
+        key.contains('note_space') ||
+        key.contains('user_') ||
+        key.contains('cache_') ||
+        key.contains('apple') ||
+        key.contains('google') ||
+        key.contains('auth') ||
+        key.contains('login')
+      ).toList();
+      
+      for (final key in patternKeys) {
+        await prefs.remove(key);
+      }
+      
+      debugPrint('SharedPreferences 완전 삭제 완료 (${criticalKeys.length + patternKeys.length}개 키 삭제)');
+    } catch (e) {
+      debugPrint('SharedPreferences 삭제 중 오류: $e');
+      rethrow;
+    }
+  }
 
-  // Firestore 데이터 완전 삭제
+  // Firestore 데이터 완전 삭제 (배치 크기 제한 처리 추가)
   Future<void> _deleteFirestoreData(String userId) async {
     try {
-      final batch = FirebaseFirestore.instance.batch();
+      debugPrint('Firestore 데이터 삭제 시작: $userId');
+      
+      // 디바이스 ID 가져오기
+      final deviceId = await _getDeviceId();
       
       // 1. 사용자 문서 삭제
-      batch.delete(FirebaseFirestore.instance.collection('users').doc(userId));
+      await FirebaseFirestore.instance.collection('users').doc(userId).delete();
+      debugPrint('사용자 문서 삭제 완료');
       
-      // 2. 노트 삭제 (익명 노트 포함)
-      final notesQuery = await FirebaseFirestore.instance.collection('notes')
-          .where('userId', isEqualTo: userId)
-          .get();
-      for (var doc in notesQuery.docs) {
-        batch.delete(doc.reference);
-      }
+      // 2. 컬렉션별로 배치 삭제 (크기 제한 고려)
+      await _deleteBatchCollection('notes', 'userId', userId);
+      await _deleteBatchCollection('notes', 'deviceId', deviceId); // 익명 노트
+      await _deleteBatchCollection('pages', 'userId', userId);
+      await _deleteBatchCollection('flashcards', 'userId', userId);
+      // deleted_users는 삭제하지 않음 - 탈퇴 기록 보존을 위해
       
-      // 2-1. 익명 노트도 함께 삭제
-      final anonymousNotesQuery = await FirebaseFirestore.instance.collection('notes')
-          .where('deviceId', isEqualTo: await _getDeviceId())
-          .get();
-      for (var doc in anonymousNotesQuery.docs) {
-        batch.delete(doc.reference);
-      }
-      
-      // 3. 페이지 삭제
-      final pagesQuery = await FirebaseFirestore.instance.collection('pages')
-          .where('userId', isEqualTo: userId)
-          .get();
-      for (var doc in pagesQuery.docs) {
-        batch.delete(doc.reference);
-      }
-      
-      // 4. 플래시카드 삭제
-      final flashcardsQuery = await FirebaseFirestore.instance.collection('flashcards')
-          .where('userId', isEqualTo: userId)
-          .get();
-      for (var doc in flashcardsQuery.docs) {
-        batch.delete(doc.reference);
-      }
-      
-      // 5. 이전 탈퇴 기록 삭제
-      final deletedUserQuery = await FirebaseFirestore.instance.collection('deleted_users')
-          .where('userId', isEqualTo: userId)
-          .get();
-      for (var doc in deletedUserQuery.docs) {
-        batch.delete(doc.reference);
-      }
-      
-      // 배치 작업 실행
-      await batch.commit();
       debugPrint('Firestore 데이터 완전 삭제 완료');
     } catch (e) {
       debugPrint('Firestore 데이터 삭제 중 오류: $e');
+      rethrow;
+    }
+  }
+  
+  // 배치 삭제 헬퍼 메서드 (500개 제한 처리)
+  Future<void> _deleteBatchCollection(String collection, String field, String value) async {
+    try {
+      const int batchSize = 500; // Firestore 배치 제한
+      bool hasMore = true;
+      
+      while (hasMore) {
+        final query = await FirebaseFirestore.instance
+            .collection(collection)
+            .where(field, isEqualTo: value)
+            .limit(batchSize)
+            .get();
+            
+        if (query.docs.isEmpty) {
+          hasMore = false;
+          break;
+        }
+        
+        final batch = FirebaseFirestore.instance.batch();
+        for (var doc in query.docs) {
+          batch.delete(doc.reference);
+        }
+        
+        await batch.commit();
+        debugPrint('$collection 배치 삭제 완료: ${query.docs.length}개');
+        
+        // 마지막 배치인지 확인
+        hasMore = query.docs.length == batchSize;
+      }
+    } catch (e) {
+      debugPrint('$collection 배치 삭제 중 오류: $e');
       rethrow;
     }
   }
@@ -452,45 +606,58 @@ class AuthService {
   // 소셜 로그인 세션 완전 정리
   Future<void> _clearSocialLoginSessions() async {
     try {
-      // 1. Google 로그인 연결 해제 (Google 계정 연결 권한까지 철회)
-      try {
-        final googleSignIn = GoogleSignIn();
-        if (await googleSignIn.isSignedIn()) {
-          // 단순 로그아웃이 아닌 disconnect() 사용해 계정 연결 자체를 끊어야 계정 선택 화면이 나타남
-          await googleSignIn.disconnect();
-          await googleSignIn.signOut();
-          debugPrint('Google 계정 연결 완전 해제됨');
-        }
-      } catch (e) {
-        debugPrint('Google 계정 연결 해제 중 오류: $e');
-      }
+      debugPrint('소셜 로그인 세션 정리 시작');
       
-      // 2. Apple 로그인 상태 정리
-      try {
-        // Apple은 앱 수준에서 연결 해제가 제한적이라 로컬 저장소에서 관련 정보 제거
-        final prefs = await SharedPreferences.getInstance();
-        
-        // Apple 관련 모든 캐시 키 삭제
-        final keys = prefs.getKeys();
-        for (final key in keys) {
-          if (key.contains('apple') || 
-              key.contains('Apple') || 
-              key.contains('sign_in') || 
-              key.contains('oauth') ||
-              key.contains('token') ||
-              key.contains('credential')) {
-            await prefs.remove(key);
-          }
-        }
-        
-        debugPrint('Apple 로그인 관련 정보 정리 완료');
-      } catch (e) {
-        debugPrint('Apple 로그인 정보 정리 중 오류: $e');
-      }
+      // 병렬로 처리
+      await Future.wait([
+        _clearGoogleSession(),
+        _clearAppleSession(),
+      ]);
       
-      debugPrint('모든 캐시 데이터 초기화 완료');
+      debugPrint('모든 소셜 로그인 세션 정리 완료');
     } catch (e) {
       debugPrint('소셜 로그인 세션 정리 중 오류: $e');
+      // 세션 정리 실패는 치명적이지 않음
+    }
+  }
+  
+  // Google 세션 정리
+  Future<void> _clearGoogleSession() async {
+    try {
+      final googleSignIn = GoogleSignIn();
+      if (await googleSignIn.isSignedIn()) {
+        await googleSignIn.disconnect();
+        await googleSignIn.signOut();
+        debugPrint('Google 계정 연결 완전 해제됨');
+      }
+    } catch (e) {
+      debugPrint('Google 세션 정리 중 오류: $e');
+    }
+  }
+  
+  // Apple 세션 정리
+  Future<void> _clearAppleSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Apple 관련 모든 캐시 키 삭제
+      final keys = prefs.getKeys();
+      final appleKeys = keys.where((key) => 
+        key.contains('apple') || 
+        key.contains('Apple') || 
+        key.contains('sign_in') || 
+        key.contains('oauth') ||
+        key.contains('token') ||
+        key.contains('credential')
+      ).toList();
+      
+      for (final key in appleKeys) {
+        await prefs.remove(key);
+      }
+      
+      debugPrint('Apple 로그인 관련 정보 정리 완료');
+    } catch (e) {
+      debugPrint('Apple 세션 정리 중 오류: $e');
     }
   }
 

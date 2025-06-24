@@ -720,6 +720,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: ColorTokens.textPrimary,
               ),
             ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: ColorTokens.warning.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: ColorTokens.warning.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.security,
+                        size: 16,
+                        color: ColorTokens.warning,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '보안 인증 필요',
+                        style: TypographyTokens.caption.copyWith(
+                          color: ColorTokens.warning,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '계정 보안을 위해 한 번 더 로그인하셔야 탈퇴할 수 있어요.',
+                    style: TypographyTokens.caption.copyWith(
+                      color: ColorTokens.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
         actions: [
@@ -748,32 +789,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
     
     if (confirm != true) return;
     
-    final success = await _viewModel.deleteAccount();
-    
-    if (mounted) {
-      if (success) {
+    try {
+      final success = await _viewModel.deleteAccount();
+      
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '계정이 성공적으로 삭제되었습니다.',
+                style: TypographyTokens.caption.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+              backgroundColor: ColorTokens.snackbarBg,
+              behavior: SnackBarBehavior.fixed,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          
+          Navigator.pushNamedAndRemoveUntil(
+            context, 
+            '/', 
+            (route) => false
+          );
+          
+          widget.onLogout();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-          content: Text('계정이 성공적으로 삭제되었습니다.'),
-          duration: Duration(seconds: 2),
-        ),
-        );
-        
-        Navigator.pushNamedAndRemoveUntil(
-          context, 
-          '/', 
-          (route) => false
-        );
-        
-        widget.onLogout();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('계정 삭제 중 오류가 발생했습니다.'),
+          SnackBar(
+            content: Text(
+              e.toString(),
+              style: TypographyTokens.caption.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: ColorTokens.snackbarBg,
+            behavior: SnackBarBehavior.fixed,
+            duration: Duration(seconds: 4),
           ),
         );
-        
-        widget.onLogout();
       }
     }
   }

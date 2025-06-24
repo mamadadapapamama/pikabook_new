@@ -51,7 +51,7 @@ class PikaButton extends StatelessWidget {
           : ColorTokens.primary;
       
       final Color foregroundColor = onPressed == null
-          ? Colors.white
+          ? ColorTokens.textGrey
           : Colors.white;
           
       return FloatingActionButton.extended(
@@ -156,8 +156,8 @@ class PikaButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),
-          disabledBackgroundColor: ColorTokens.greyLight,
-          disabledForegroundColor: ColorTokens.greyMedium,
+          disabledBackgroundColor: ColorTokens.greyMedium,
+          disabledForegroundColor: ColorTokens.textGrey,
         );
       
       
@@ -171,8 +171,8 @@ class PikaButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             side: BorderSide(color: ColorTokens.primary),
           ),
-          disabledBackgroundColor: Colors.white,
-          disabledForegroundColor: ColorTokens.greyMedium,
+          disabledBackgroundColor: ColorTokens.greyLight,
+          disabledForegroundColor: ColorTokens.textGrey,
         ).copyWith(
           side: MaterialStateProperty.resolveWith<BorderSide?>((states) {
             if (states.contains(MaterialState.disabled)) {

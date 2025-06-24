@@ -299,7 +299,8 @@ class SettingsViewModel extends ChangeNotifier {
       if (kDebugMode) {
         print('계정 삭제 오류: $e');
       }
-      return false;
+      // 에러를 다시 던져서 UI에서 구체적인 메시지를 표시할 수 있도록 함
+      rethrow;
     } finally {
       _setLoading(false);
     }
