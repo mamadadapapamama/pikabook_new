@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import '../../core/models/processed_text.dart';
-import '../../core/models/text_unit.dart';
+
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/services/tts/unified_tts_service.dart';
