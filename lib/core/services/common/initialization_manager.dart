@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../authentication/user_preferences_service.dart';
 import '../authentication/auth_service.dart';
+import '../authentication/deleted_user_service.dart';
 import '../media/image_service.dart';
 import 'usage_limit_service.dart';
 
@@ -40,6 +41,7 @@ class InitializationManager {
   // 서비스 참조
   final UserPreferencesService _prefsService = UserPreferencesService();
   final AuthService _authService = AuthService();
+  final DeletedUserService _deletedUserService = DeletedUserService();
   final UsageLimitService _usageLimitService = UsageLimitService();
   
   // 초기화 상태 관리
@@ -330,12 +332,7 @@ class InitializationManager {
   // 탈퇴된 사용자인지 확인
   Future<bool> _checkIfUserDeleted(String userId) async {
     try {
-      final deletedUserDoc = await FirebaseFirestore.instance
-          .collection('deleted_users')
-          .doc(userId)
-          .get();
-      
-      return deletedUserDoc.exists;
+      return await _deletedUserService.isDeletedUser();
     } catch (e) {
       debugPrint('탈퇴된 사용자 확인 중 오류: $e');
       return false; // 오류 시 false 반환 (보수적 접근)

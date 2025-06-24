@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/plan.dart';
+import '../authentication/deleted_user_service.dart';
 
 /// 구독 플랜과 사용량 관리를 위한 서비스
 class PlanService {
@@ -338,9 +339,10 @@ class PlanService {
     }
   }
   
-  /// 무료 체험 사용 여부 확인
+  /// 무료 체험 사용 여부 확인 (탈퇴 이력 포함)
   Future<bool> hasUsedFreeTrial(String userId) async {
     try {
+      // 1. 현재 사용자 문서에서 확인
       final userDoc = await _firestore
           .collection('users')
           .doc(userId)
@@ -348,9 +350,26 @@ class PlanService {
           
       if (userDoc.exists) {
         final userData = userDoc.data();
-        return userData?['hasUsedFreeTrial'] as bool? ?? false;
+        final hasUsedTrial = userData?['hasUsedFreeTrial'] as bool? ?? false;
+        if (hasUsedTrial) {
+          if (kDebugMode) {
+            print('✅ [PlanService] 현재 계정에서 무료체험 사용 이력 발견');
+          }
+          return true;
+        }
       }
       
+      // 2. 중앙화된 서비스를 통해 탈퇴 이력에서 확인
+      final deletedUserService = DeletedUserService();
+      final hasUsedTrialFromHistory = await deletedUserService.hasUsedFreeTrialFromHistory();
+      
+      if (hasUsedTrialFromHistory) {
+        return true;
+      }
+      
+      if (kDebugMode) {
+        print('❌ [PlanService] 무료체험 사용 이력 없음');
+      }
       return false;
     } catch (e) {
       debugPrint('무료 체험 사용 여부 확인 오류: $e');

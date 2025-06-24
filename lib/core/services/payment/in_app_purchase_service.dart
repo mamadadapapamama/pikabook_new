@@ -5,6 +5,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import '../common/plan_service.dart';
 import '../notification/notification_service.dart';
 import '../trial/trial_manager.dart';
+import '../authentication/deleted_user_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -298,8 +299,9 @@ class InAppPurchaseService {
               print('🔔 무료체험 만료 알림 스케줄링 완료');
             }
             
-            // 탈퇴 이력이 있는 사용자인지 확인
-            final deletedUserInfo = await _getDeletedUserInfo(user.uid);
+            // 탈퇴 이력이 있는 사용자인지 확인 (중앙화된 서비스 사용)
+            final deletedUserService = DeletedUserService();
+            final deletedUserInfo = await deletedUserService.getDeletedUserInfo();
             
             // TrialManager를 통해 적절한 메시지 표시
             final trialManager = TrialManager();
@@ -381,25 +383,7 @@ class InAppPurchaseService {
     return purchaseDetails.verificationData.localVerificationData.isNotEmpty;
   }
 
-  /// 탈퇴된 사용자 정보 확인
-  Future<Map<String, dynamic>?> _getDeletedUserInfo(String userId) async {
-    try {
-      final deletedUserDoc = await FirebaseFirestore.instance
-          .collection('deleted_users')
-          .doc(userId)
-          .get();
-      
-      if (deletedUserDoc.exists) {
-        return deletedUserDoc.data();
-      }
-      return null;
-    } catch (e) {
-      if (kDebugMode) {
-        print('탈퇴된 사용자 확인 중 오류: $e');
-      }
-      return null; // 오류 시 null 반환 (보수적 접근)
-    }
-  }
+
 
   /// 구매 시작
   Future<bool> buyProduct(String productId) async {

@@ -330,14 +330,38 @@ class UpgradeModal extends StatelessWidget {
     if (reason == UpgradeReason.welcomeTrial) {
       return Column(
         children: [
-          // 주황색 CTA 버튼 - 7일 무료체험 (인앱결제)
+          // 주황색 CTA 버튼 - 7일 무료체험 (TrialManager 사용)
           _buildPrimaryButton(
             '7일간 무료로 프리미엄 시작하기',
             '(언제든 구독 취소할수 있어요)',
             () async {
               Navigator.of(context).pop(true);
-              await _handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
-              onUpgrade?.call();
+              
+              // TrialManager를 통해 무료체험 시작
+              final trialManager = TrialManager();
+              final success = await trialManager.startPremiumTrial();
+              
+              if (success) {
+                if (kDebugMode) {
+                  debugPrint('✅ [UpgradeModal] 무료체험 시작 성공');
+                }
+                onUpgrade?.call();
+              } else {
+                if (kDebugMode) {
+                  debugPrint('❌ [UpgradeModal] 무료체험 시작 실패');
+                }
+                
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('무료체험 시작에 실패했습니다. 다시 시도해주세요.'),
+                      backgroundColor: Colors.red[600],
+                      duration: const Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
             },
           ),
           
@@ -514,7 +538,7 @@ class UpgradeModal extends StatelessWidget {
             onCancel?.call();
           },
           child: Text(
-            cancelButtonText ?? '나가기',
+            cancelButtonText ?? '무료 플랜으로 시작하기',
             style: TypographyTokens.button.copyWith(
               color: ColorTokens.textTertiary,
             ),
@@ -666,14 +690,22 @@ class UpgradePromptHelper {
     required VoidCallback onComplete,
   }) async {
     try {
+      if (kDebugMode) {
+        print('🎉 [UpgradeModal] 환영 모달 표시 시작 (7일 무료체험 유도)');
+      }
+      
       await UpgradeModal.show(
         context,
         reason: UpgradeReason.welcomeTrial,
         // onUpgrade는 버튼 내에서 직접 처리  
       );
+      
+      if (kDebugMode) {
+        print('✅ [UpgradeModal] 환영 모달 완료');
+      }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('welcoming modal display error: $e');
+        debugPrint('❌ [UpgradeModal] 환영 모달 표시 오류: $e');
       }
     } finally {
       onComplete();
@@ -688,6 +720,12 @@ class UpgradePromptHelper {
     final message = isFreeTrial
         ? '프리미엄 무료 체험이 복원되었습니다.\n무료 플랜으로 전환하려면 App Store > 구독 관리에서 Pikabook 구독을 먼저 취소해주세요.'
         : '프리미엄 플랜이 복원되었습니다.\n무료 플랜으로 전환하려면 App Store > 구독 관리에서 Pikabook 구독을 먼저 취소해주세요.';
+
+    if (kDebugMode) {
+      print('📢 [UpgradeModal] 구독 복원 스낵바 표시');
+      print('   무료체험: $isFreeTrial');
+      print('   메시지: ${message.replaceAll('\n', ' ')}');
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -708,13 +746,21 @@ class UpgradePromptHelper {
     required VoidCallback onComplete,
   }) async {
     try {
+      if (kDebugMode) {
+        print('💳 [UpgradeModal] 프리미엄 업그레이드 모달 표시 시작 (일반 구독)');
+      }
+      
       await UpgradeModal.show(
         context,
         reason: UpgradeReason.general, // 일반 구독 옵션 표시
       );
+      
+      if (kDebugMode) {
+        print('✅ [UpgradeModal] 프리미엄 업그레이드 모달 완료');
+      }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('premium upgrade modal display error: $e');
+        debugPrint('❌ [UpgradeModal] 프리미엄 업그레이드 모달 표시 오류: $e');
       }
     } finally {
       onComplete();

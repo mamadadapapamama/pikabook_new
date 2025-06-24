@@ -335,11 +335,11 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           .get();
       
       if (!userDoc.exists) {
-        // 새로운 사용자이므로 모든 캐시 초기화
-        debugPrint('🔄 새로운 사용자 감지 - 모든 캐시 초기화');
+        // 새로운 사용자이므로 사용자별 데이터만 초기화
+        debugPrint('🔄 새로운 사용자 감지 - 사용자 데이터 초기화');
         await _preferencesService.clearUserData();
-        final planService = PlanService();
-        planService.clearCache();
+        // PlanService 캐시는 사용자별로 관리되므로 초기화하지 않음
+        // (다른 사용자의 프리미엄 상태에 영향을 주지 않기 위해)
       }
       
       await _preferencesService.loadUserSettingsFromFirestore();

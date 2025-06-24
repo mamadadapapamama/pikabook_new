@@ -166,6 +166,7 @@ class TrialManager {
         if (kDebugMode) {
           debugPrint('⚠️ [Trial] Firestore 체험 기록 실패 - 이미 사용했거나 오류 발생');
         }
+        return false; // 실패 시 false 반환
       }
       
       // 체험 관련 알림 설정

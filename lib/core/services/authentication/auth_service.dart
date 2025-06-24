@@ -12,6 +12,7 @@ import '../../../core/services/media/image_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../common/plan_service.dart';
 import 'user_preferences_service.dart';
+import 'deleted_user_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -399,6 +400,27 @@ class AuthService {
     try {
       debugPrint('사용자 데이터 삭제 시작: $userId');
       
+      // 🔥 중요: Firestore 데이터 삭제 전에 플랜 정보를 먼저 수집
+      Map<String, dynamic>? subscriptionDetails;
+      try {
+        final planService = PlanService();
+        subscriptionDetails = await planService.getSubscriptionDetails();
+        
+        if (kDebugMode) {
+          print('📊 [AuthService] 탈퇴 전 플랜 정보 수집 완료:');
+          print('   현재 플랜: ${subscriptionDetails['currentPlan']}');
+          print('   무료체험: ${subscriptionDetails['isFreeTrial']}');
+          print('   구독 타입: ${subscriptionDetails['subscriptionType']}');
+          print('   남은 일수: ${subscriptionDetails['daysRemaining']}');
+          print('   만료일: ${subscriptionDetails['expiryDate']}');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ [AuthService] 플랜 정보 수집 실패: $e');
+        }
+        subscriptionDetails = null;
+      }
+      
       // 병렬로 처리 가능한 작업들
       await Future.wait([
         _clearAllLocalData(),
@@ -409,16 +431,12 @@ class AuthService {
       // 소셜 로그인 세션 정리
       await _clearSocialLoginSessions();
       
-      // 디바이스 ID 초기화
-      await _resetDeviceId();
+      // 디바이스 ID는 유지 (익명 노트 관리용)
       
       // 탈퇴 기록 저장 (실패해도 계속 진행)
       try {
-        // 탈퇴 시점의 플랜 정보 수집
-        final planService = PlanService();
-        final subscriptionDetails = await planService.getSubscriptionDetails();
-        
-        await _saveDeletedUserRecord(userId, email, displayName, subscriptionDetails);
+        final deletedUserService = DeletedUserService();
+        await deletedUserService.saveDeletedUserRecord(userId, email, displayName, subscriptionDetails);
         debugPrint('탈퇴 기록 저장 완료');
       } catch (e) {
         debugPrint('탈퇴 기록 저장 실패 (무시): $e');
@@ -559,59 +577,7 @@ class AuthService {
     }
   }
 
-  // 탈퇴 기록 저장 (최소 정보 + 90일 후 자동 삭제)
-  Future<void> _saveDeletedUserRecord(String userId, String? email, String? displayName, [Map<String, dynamic>? subscriptionDetails]) async {
-    try {
-      final docRef = FirebaseFirestore.instance.collection('deleted_users').doc(userId);
-      
-      // 90일 후 자동 삭제 날짜 계산
-      final autoDeleteDate = DateTime.now().add(const Duration(days: 90));
-      
-      // 기존 기록 확인
-      final existingDoc = await docRef.get();
-      
-      if (existingDoc.exists) {
-        debugPrint('탈퇴 기록이 이미 존재함: $userId');
-        // 기존 기록에 재탈퇴 시간 추가 (자동 삭제 날짜 갱신)
-        await docRef.update({
-          'lastDeletedAt': FieldValue.serverTimestamp(),
-          'deleteCount': FieldValue.increment(1),
-          'autoDeleteAt': Timestamp.fromDate(autoDeleteDate), // 90일 후 자동 삭제
-        });
-        debugPrint('탈퇴 기록 업데이트 완료 (90일 후 자동 삭제: $autoDeleteDate)');
-      } else {
-        // 새로운 탈퇴 기록 생성 (최소 정보만)
-        final deleteRecord = {
-          'userId': userId,
-          'email': email, // 환불/결제 문의 대응용
-          'deletedAt': FieldValue.serverTimestamp(),
-          'lastDeletedAt': FieldValue.serverTimestamp(),
-          'deleteCount': 1,
-          'autoDeleteAt': Timestamp.fromDate(autoDeleteDate), // 90일 후 자동 삭제
-          'reason': 'user_requested', // 탈퇴 사유
-        };
-        
-        // 탈퇴 시점의 플랜 정보 저장 (복원 메시지용)
-        if (subscriptionDetails != null) {
-          deleteRecord['lastPlan'] = {
-            'planType': subscriptionDetails['currentPlan'],
-            'isFreeTrial': subscriptionDetails['isFreeTrial'],
-            'subscriptionType': subscriptionDetails['subscriptionType'],
-            'daysRemaining': subscriptionDetails['daysRemaining'],
-            'expiryDate': subscriptionDetails['expiryDate'] != null 
-                ? Timestamp.fromDate(subscriptionDetails['expiryDate'] as DateTime)
-                : null,
-          };
-        }
-        
-        await docRef.set(deleteRecord);
-        debugPrint('새 탈퇴 기록 저장 완료 (90일 후 자동 삭제: $autoDeleteDate)');
-      }
-    } catch (e) {
-      debugPrint('탈퇴 기록 저장 중 오류: $e');
-      // 핵심 기능이 아니므로 오류를 전파하지 않음
-    }
-  }
+
 
   // 디바이스 ID 가져오기
   Future<String> _getDeviceId() async {
@@ -624,25 +590,24 @@ class AuthService {
     return deviceId;
   }
 
-  // 디바이스 ID 초기화
-  Future<void> _resetDeviceId() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('device_id');
+
+
+  // 탈퇴된 사용자 정보 확인 (중앙화된 서비스 사용)
+  Future<Map<String, dynamic>?> getDeletedUserInfo(String userId) async {
+    final deletedUserService = DeletedUserService();
+    return await deletedUserService.getDeletedUserInfo();
   }
 
-  // 탈퇴된 사용자인지 확인
+  // 탈퇴된 사용자인지 확인 (기존 호환성 유지)
   Future<bool> _checkIfUserDeleted(String userId) async {
-    try {
-      final deletedUserDoc = await FirebaseFirestore.instance
-          .collection('deleted_users')
-          .doc(userId)
-          .get();
-      
-      return deletedUserDoc.exists;
-    } catch (e) {
-      debugPrint('탈퇴된 사용자 확인 중 오류: $e');
-      return false; // 오류 시 false 반환 (보수적 접근)
-    }
+    final deletedUserService = DeletedUserService();
+    return await deletedUserService.isDeletedUser();
+  }
+
+  // 🔧 임시: 기존 탈퇴 기록에 플랜 정보 추가 (테스트용)
+  Future<void> updateDeletedUserPlanInfo(String email, Map<String, dynamic> planInfo) async {
+    final deletedUserService = DeletedUserService();
+    await deletedUserService.updateDeletedUserPlanInfo(email, planInfo);
   }
 
   // 핵심 서비스 캐시 초기화
@@ -765,27 +730,19 @@ class AuthService {
         userData['deviceCount'] = 1;
         userData['deviceIds'] = [await _getDeviceId()];
         
-        // 탈퇴했던 사용자인지 확인 후 처리
+        // 자동 무료체험 시작 제거 - 온보딩에서 사용자 선택에 따라 결정
         try {
-          final planService = PlanService();
           final isDeletedUser = await _checkIfUserDeleted(user.uid);
           
           if (isDeletedUser) {
             debugPrint('탈퇴 이력이 있는 사용자 재가입: ${user.uid}');
-            // 탈퇴한 사용자는 무료체험 시작하지 않음 (기존 구독 복원 대기)
+            debugPrint('온보딩에서 구독 복원 처리 예정');
           } else {
-            // 완전히 새로운 사용자만 7일 무료 체험 시작
-            final trialStarted = await planService.startFreeTrial(user.uid);
-            
-            if (trialStarted) {
-              debugPrint('신규 사용자 7일 무료 체험 시작: ${user.uid}');
-            } else {
-              debugPrint('무료 체험 시작 실패 (이미 사용했거나 오류): ${user.uid}');
-            }
+            debugPrint('신규 사용자 가입: ${user.uid}');
+            debugPrint('온보딩에서 무료체험 선택 여부 결정 예정');
           }
         } catch (e) {
           debugPrint('사용자 상태 확인 중 오류: $e');
-          // 오류 발생 시 무료 체험 시작하지 않음 (보수적 접근)
         }
         
         // 신규 사용자는 항상 set 사용
