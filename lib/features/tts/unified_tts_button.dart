@@ -242,7 +242,7 @@ class _UnifiedTtsButtonState extends State<UnifiedTtsButton> {
       }
       
       try {
-        await _sampleTtsService.speak(widget.text, context: context);
+        await _sampleTtsService.speak(widget.text, context: context, mode: widget.mode);
         
         if (mounted) {
           setState(() {

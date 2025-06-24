@@ -9,8 +9,6 @@ import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
-import '../../core/widgets/usage_dialog.dart';
-import '../../../core/services/tts/unified_tts_service.dart';
 
 /// 플래시카드 화면 전체 위젯 (플래시카드 UI 로드, app bar, bottom controls)
 /// 플래시카드 UI interaction 담당 (swipe, flip, tts, delete )
@@ -36,8 +34,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
   late FlashCardViewModel _viewModel;
   final CardSwiperController _cardController = CardSwiperController();
   final GlobalKey<FlipCardState> _flipCardKey = GlobalKey<FlipCardState>();
-  final UnifiedTtsService _ttsService = UnifiedTtsService();
-
   @override
   void initState() {
     super.initState();
@@ -47,53 +43,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
       initialFlashcards: widget.initialFlashcards,
       isNoteCreation: false, // 플래시카드 화면은 항상 기존 노트
     );
-    
-    // TTS 서비스 초기화
-    _initTts();
-  }
-
-  /// TTS 초기화
-  Future<void> _initTts() async {
-    try {
-      await _ttsService.init();
-      await _ttsService.setLanguage('zh-CN');
-    } catch (e) {
-      debugPrint('TTS 초기화 실패: $e');
-    }
   }
 
   @override
   void dispose() {
     _cardController.dispose();
-    _ttsService.dispose();
     super.dispose();
-  }
-
-  /// 음성 재생 기능 (TTS)
-  Future<void> _speakText() async {
-    if (!widget.isTtsEnabled) return;
-    
-    if (_viewModel.flashCards.isEmpty || _viewModel.currentCardIndex >= _viewModel.flashCards.length) {
-      return;
-    }
-    
-    try {
-      final textToSpeak = _viewModel.flashCards[_viewModel.currentCardIndex].front;
-      if (textToSpeak.isNotEmpty) {
-        await _ttsService.speak(textToSpeak, mode: TtsMode.normal);
-      }
-    } catch (e) {
-      debugPrint('TTS 재생 중 오류: $e');
-    }
-  }
-
-  /// TTS 중지
-  Future<void> _stopSpeaking() async {
-    try {
-      await _ttsService.stop();
-    } catch (e) {
-      debugPrint('TTS 중지 중 오류: $e');
-    }
   }
 
   /// 카드 스와이프 처리
@@ -157,9 +112,6 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
 
   /// 뒤로 가기 처리
   Future<bool> _handleBackButtonPressed() async {
-    // TTS 실행 중인 경우 먼저 중지
-    await _stopSpeaking();
-    
     // 결과 반환: 플래시카드 개수와 함께 플래시카드 목록도 반환
     Navigator.of(context).pop({
       'count': _viewModel.flashCards.length,
@@ -234,7 +186,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                               ),
                             ),
                             child: Text(
-                              '다시 시도',
+                              '돌아가기',
                               style: TypographyTokens.button.copyWith(
                                 color: ColorTokens.textLight,
                               ),
@@ -368,12 +320,12 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                                   index == viewModel.currentCardIndex.clamp(0, viewModel.flashCards.length - 1))
                                     ? _flipCardKey
                                     : null,
-                                isSpeaking: _ttsService.state == TtsState.playing,
+                                isSpeaking: false, // UnifiedTtsButton이 자체 상태 관리
                                 onFlip: () {
                                   viewModel.toggleCardFlip();
                                 },
-                                onSpeak: _speakText,
-                                onStopSpeaking: _stopSpeaking,
+                                onSpeak: () {}, // 빈 함수 - UnifiedTtsButton이 자체 처리
+                                onStopSpeaking: () {}, // 빈 함수 - UnifiedTtsButton이 자체 처리
                                 getNextCardInfo: () => viewModel.getNextCardInfo(),
                                 getPreviousCardInfo: () => viewModel.getPreviousCardInfo(),
                                 onWordTap: _searchWordInDictionary,

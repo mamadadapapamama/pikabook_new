@@ -6,6 +6,7 @@ import 'package:pinyin/pinyin.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../core/models/dictionary.dart';
+import '../../core/models/flash_card.dart';
 import 'internal_cn_dictionary_service.dart';
 import 'cc_cedict_service.dart';
 import '../../core/services/authentication/auth_service.dart';
@@ -108,6 +109,57 @@ class DictionaryService {
         debugPrint('❌ [DictionaryService] 샘플 데이터 로드 실패: $e');
       }
       rethrow;
+    }
+  }
+
+  /// 샘플 데이터에서 단어 검색
+  DictionaryEntry? _lookupInSampleData(String word) {
+    if (_sampleDataService == null) {
+      if (kDebugMode) {
+        debugPrint('❌ [Sample Dictionary] 샘플 데이터 서비스가 초기화되지 않음');
+      }
+      return null;
+    }
+    
+    try {
+      // 샘플 플래시카드에서 해당 단어 찾기
+      final flashCards = _sampleDataService!.getSampleFlashCards(null);
+      FlashCard? matchingCard;
+      
+      for (final card in flashCards) {
+        if (card.front == word) {
+          matchingCard = card;
+          break;
+        }
+      }
+      
+      if (matchingCard != null) {
+        if (kDebugMode) {
+          debugPrint('✅ [Sample Dictionary] 샘플 데이터에서 찾음: $word');
+        }
+        
+        // FlashCard 데이터를 DictionaryEntry로 변환
+        return DictionaryEntry.multiLanguage(
+          word: matchingCard.front,
+          pinyin: matchingCard.pinyin,
+          meaningKo: matchingCard.back,
+          meaningEn: null, // 샘플 데이터에는 영어 번역이 없음
+          source: 'sample_data',
+        );
+      }
+      
+      if (kDebugMode) {
+        debugPrint('❌ [Sample Dictionary] 샘플 데이터에서 찾을 수 없음: $word');
+        final availableWords = _sampleDataService!.getAvailableWords();
+        debugPrint('   사용 가능한 단어: ${availableWords.join(', ')}');
+      }
+      
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [Sample Dictionary] 검색 중 오류: $e');
+      }
+      return null;
     }
   }
 
@@ -336,9 +388,9 @@ class DictionaryService {
     try {
       await _ensureInitialized();
       
-      // 샘플 모드에서는 내부 사전 검색 불가
+      // 샘플 모드에서는 샘플 데이터에서 검색
       if (_isSampleMode) {
-        return null;
+        return _lookupInSampleData(word);
       }
       
       // 1. 로컬 내부 사전 검색

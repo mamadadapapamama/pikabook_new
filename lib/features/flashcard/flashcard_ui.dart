@@ -214,8 +214,7 @@ class FlashCardUI {
               tooltip: isEnabled ? null : tooltip ?? '무료 TTS 사용량을 모두 사용했습니다.',
               iconColor: ColorTokens.secondary,
               activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
-              onPlayStart: () => onSpeak(),
-              // onPlayEnd 제거 - TTS 자동 완료 시 추가 처리 불필요
+              // onPlayStart 제거 - UnifiedTtsButton이 자체적으로 TTS 처리
             ),
             SizedBox(height: SpacingTokens.sm),
             
@@ -270,8 +269,7 @@ class FlashCardUI {
               tooltip: isEnabled ? null : tooltip ?? '무료 TTS 사용량을 모두 사용했습니다.',
               iconColor: ColorTokens.secondary,
               activeBackgroundColor: ColorTokens.primary.withOpacity(0.2),
-              onPlayStart: () => onSpeak(),
-              // onPlayEnd 제거 - TTS 자동 완료 시 추가 처리 불필요
+              // onPlayStart 제거 - UnifiedTtsButton이 자체적으로 TTS 처리
             ),
             SizedBox(height: SpacingTokens.sm),
             

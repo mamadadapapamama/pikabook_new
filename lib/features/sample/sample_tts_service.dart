@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../core/theme/tokens/color_tokens.dart';
+import '../../core/services/tts/unified_tts_service.dart';
 
 /// 샘플 TTS 예외 클래스
 class SampleTtsException implements Exception {
@@ -37,9 +38,18 @@ class SampleTtsService {
   };
 
   /// 텍스트 음성 재생
-  Future<void> speak(String text, {BuildContext? context}) async {
+  Future<void> speak(String text, {BuildContext? context, TtsMode mode = TtsMode.normal}) async {
     try {
-      debugPrint('🔊 [SampleTTS] 음성 재생 요청: "$text"');
+      debugPrint('🔊 [SampleTTS] 음성 재생 요청: "$text" (모드: ${mode == TtsMode.slow ? '느린' : '일반'})');
+      
+      // 샘플 모드에서 느린 TTS는 지원하지 않음
+      if (mode == TtsMode.slow) {
+        debugPrint('⚠️ [SampleTTS] 느린 TTS는 샘플 모드에서 지원하지 않음');
+        if (context != null) {
+          _showSlowTtsNotSupportedSnackBar(context);
+        }
+        return;
+      }
       
       final trimmedText = text.trim();
 
@@ -121,6 +131,20 @@ class SampleTtsService {
       SnackBar(
         content: const Text("샘플 모드에서는 일부 오디오파일만 지원됩니다. 로그인해서 듣기 기능을 사용해보세요."),
         backgroundColor: ColorTokens.snackbarBg, // dark green 색상으로 변경
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// 느린 TTS 미지원 안내 스낵바 표시
+  void _showSlowTtsNotSupportedSnackBar(BuildContext context) {
+    if (!context.mounted) return;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text("샘플 모드에서는 일부 오디오파일만 지원됩니다."),
+        backgroundColor: ColorTokens.snackbarBg,
         duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
       ),

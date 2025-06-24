@@ -126,33 +126,28 @@ class NoteCreationUIManager {
         return; // 중국어 감지 실패 시 바로 종료
       }
       
-      // 기타 에러 처리
+      // 기타 에러 처리 - 로딩 다이얼로그만 닫고 _handleCreationResult에서 에러 처리
       if (loadingDialogShown && rootContext.mounted) {
-        NoteCreationLoader.hideWithError(rootContext, e);
+        NoteCreationLoader.hide(rootContext);
+        await Future.delayed(const Duration(milliseconds: 100));
         loadingDialogShown = false;
       }
     }
 
-    // 5. 결과 처리 (성공한 경우만)
-    if (isSuccess) {
-      if (kDebugMode) {
-        debugPrint('🎯 _handleCreationResult 호출 시작: noteId=$createdNoteId, loadingShown=$loadingDialogShown');
-      }
-      
-      await _handleCreationResult(
-        context: rootContext,
-        isSuccess: isSuccess,
-        noteId: createdNoteId,
-        loadingDialogShown: loadingDialogShown,
-      );
-      
-      if (kDebugMode) {
-        debugPrint('✅ _handleCreationResult 호출 완료');
-      }
-    } else {
-      if (kDebugMode) {
-        debugPrint('❌ 노트 생성 실패로 _handleCreationResult 건너뜀: isSuccess=$isSuccess');
-      }
+    // 5. 결과 처리 (성공/실패 모두 처리)
+    if (kDebugMode) {
+      debugPrint('🎯 _handleCreationResult 호출 시작: isSuccess=$isSuccess, noteId=$createdNoteId, loadingShown=$loadingDialogShown');
+    }
+    
+    await _handleCreationResult(
+      context: rootContext,
+      isSuccess: isSuccess,
+      noteId: createdNoteId,
+      loadingDialogShown: loadingDialogShown,
+    );
+    
+    if (kDebugMode) {
+      debugPrint('✅ _handleCreationResult 호출 완료');
     }
   }
 
@@ -281,7 +276,7 @@ class NoteCreationUIManager {
             NoteCreationLoader.hide(context);
             ErrorHandler.showErrorSnackBar(
               context,
-              '문제가 지속되고 있어요. 잠시 뒤에 다시 시도해 주세요.'
+              '노트 생성에 실패했습니다. 홈 스크린에서 다시 시도해 주세요.'
             );
           }
         },
@@ -342,7 +337,7 @@ class NoteCreationUIManager {
     if (context.mounted) {
       ErrorHandler.showErrorSnackBar(
         context,
-        '노트 생성에 실패했습니다. 다시 시도해주세요.'
+        '노트 생성에 실패했습니다. 홈 스크린에서 다시 시도해 주세요.'
       );
     }
 
