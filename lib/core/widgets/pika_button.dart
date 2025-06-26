@@ -103,9 +103,14 @@ class PikaButton extends StatelessWidget {
                 ),
               ),
             )
-          : Text(
-              text,
-              style: _getTextStyle(),
+          : Flexible(
+              child: Text(
+                text,
+                style: _getTextStyle(),
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
             ),
     );
     

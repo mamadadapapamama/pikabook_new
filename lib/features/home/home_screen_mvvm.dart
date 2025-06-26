@@ -31,6 +31,8 @@ import '../../core/widgets/plan_state_banner.dart'; // 🎯 플랜 상태 배너
 import '../../core/services/common/premium_expired_banner_service.dart'; // 🎯 배너 서비스 추가
 import '../../core/services/common/usage_limit_banner_service.dart'; // 🎯 사용량 한도 배너 서비스 추가
 import '../../core/services/common/trial_completed_banner_service.dart'; // 🎯 체험 완료 배너 서비스 추가
+import '../../core/services/common/usage_limit_service.dart'; // 🎯 실시간 사용량 서비스 추가
+import 'dart:async'; // 🎯 StreamSubscription 사용
 
 import '../../core/services/common/initialization_manager.dart'; // 🎯 초기화 매니저 추가
 
@@ -91,6 +93,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final PremiumExpiredBannerService _premiumExpiredBannerService = PremiumExpiredBannerService(); // 🎯 프리미엄 만료 배너 서비스
   final UsageLimitBannerService _usageLimitBannerService = UsageLimitBannerService(); // 🎯 사용량 한도 배너 서비스
   final TrialCompletedBannerService _trialCompletedBannerService = TrialCompletedBannerService(); // 🎯 체험 완료 배너 서비스
+  
+  // 🎯 실시간 상태 변경 구독
+  final UsageLimitService _usageLimitService = UsageLimitService();
+  final PlanService _planService = PlanService();
+  StreamSubscription<Map<String, bool>>? _limitStatusSubscription;
+  StreamSubscription<Map<String, dynamic>>? _planChangeSubscription;
 
   
   // 화면 초기화 실패를 추적하는 변수
@@ -150,13 +158,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 🎯 InitializationManager에서 배너 상태 가져와서 설정
       await _loadBannerStatesFromInitialization();
       
-      // 🧪 테스트: 강제로 배너 표시 (임시)
-      if (kDebugMode) {
-        setState(() {
-          _shouldShowUsageLimitBanner = true; // 테스트용
-        });
-        debugPrint('🧪 [HomeScreen] 테스트: 사용량 한도 배너 강제 표시');
-      }
+      // 🎯 실시간 상태 변경 스트림 구독
+      _setupRealtimeStreams();
       
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -247,6 +250,70 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
   
+  /// 🎯 실시간 상태 변경 스트림 구독 설정
+  void _setupRealtimeStreams() {
+    // 사용량 한도 상태 변경 스트림 구독
+    _limitStatusSubscription = _usageLimitService.limitStatusStream.listen(
+      (limitStatus) {
+        if (mounted) {
+          if (kDebugMode) {
+            debugPrint('🔔 [HomeScreen] 실시간 사용량 한도 상태 변경: $limitStatus');
+          }
+          
+          // 사용량 한도 도달 시 배너 표시
+          final shouldShowUsageLimit = limitStatus['ocrLimitReached'] == true || 
+                                      limitStatus['ttsLimitReached'] == true;
+          
+          if (shouldShowUsageLimit != _shouldShowUsageLimitBanner) {
+            setState(() {
+              _shouldShowUsageLimitBanner = shouldShowUsageLimit;
+            });
+            
+                         // 배너 서비스에도 상태 업데이트
+             _usageLimitBannerService.setBannerState(shouldShowUsageLimit);
+          }
+        }
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          debugPrint('❌ [HomeScreen] 사용량 한도 스트림 오류: $error');
+        }
+      },
+    );
+    
+    // 플랜 변경 스트림 구독
+    _planChangeSubscription = _planService.planChangeStream.listen(
+      (planChangeData) {
+        if (mounted) {
+          if (kDebugMode) {
+            debugPrint('🔔 [HomeScreen] 실시간 플랜 변경: $planChangeData');
+          }
+          
+          final planType = planChangeData['planType'] as String?;
+          
+          // 플랜이 free로 변경된 경우 프리미엄 만료 배너 표시
+          if (planType == PlanService.PLAN_FREE) {
+            setState(() {
+              _shouldShowExpiredBanner = true;
+            });
+            
+                         // 배너 서비스에도 상태 업데이트
+             _premiumExpiredBannerService.setBannerState(true);
+          }
+        }
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          debugPrint('❌ [HomeScreen] 플랜 변경 스트림 오류: $error');
+        }
+      },
+    );
+    
+    if (kDebugMode) {
+      debugPrint('✅ [HomeScreen] 실시간 스트림 구독 설정 완료');
+    }
+  }
+  
   @override
   void dispose() {
     if (kDebugMode) {
@@ -254,10 +321,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     
     try {
-    // 리스너 제거
-    WidgetsBinding.instance.removeObserver(this);
-    
-    super.dispose();
+      // 🎯 실시간 스트림 구독 해제
+      _limitStatusSubscription?.cancel();
+      _planChangeSubscription?.cancel();
+      
+      // 리스너 제거
+      WidgetsBinding.instance.removeObserver(this);
+      
+      super.dispose();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[HomeScreen] dispose 중 오류 발생: $e');
@@ -708,27 +779,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         bannerStates['shouldShowTrialCompletedBanner'] ?? false
       );
       
-      // 홈 화면 상태 업데이트
-      final results = await Future.wait([
-        _premiumExpiredBannerService.shouldShowBanner(),
-        _usageLimitBannerService.shouldShowBanner(),
-        _trialCompletedBannerService.shouldShowBanner(),
-      ]);
-      
+      // 홈 화면 상태 업데이트 (InitializationManager에서 이미 결정된 상태 사용)
       if (mounted) {
         setState(() {
-          _shouldShowExpiredBanner = results[0];
-          _shouldShowUsageLimitBanner = results[1];
-          _shouldShowTrialCompletedBanner = results[2];
+          _shouldShowExpiredBanner = bannerStates['shouldShowPremiumExpiredBanner'] ?? false;
+          _shouldShowUsageLimitBanner = bannerStates['shouldShowUsageLimitBanner'] ?? false;
+          _shouldShowTrialCompletedBanner = bannerStates['shouldShowTrialCompletedBanner'] ?? false;
         });
       }
       
       if (kDebugMode) {
         debugPrint('[HomeScreen] 🎯 InitializationManager에서 배너 상태 로드 완료:');
         debugPrint('  - bannerStates 원본: $bannerStates');
-        debugPrint('  - 프리미엄 만료: ${results[0]} (설정값: ${bannerStates['shouldShowPremiumExpiredBanner']})');
-        debugPrint('  - 사용량 한도: ${results[1]} (설정값: ${bannerStates['shouldShowUsageLimitBanner']})');
-        debugPrint('  - 체험 완료: ${results[2]} (설정값: ${bannerStates['shouldShowTrialCompletedBanner']})');
+        debugPrint('  - 프리미엄 만료: ${_shouldShowExpiredBanner} (설정값: ${bannerStates['shouldShowPremiumExpiredBanner']})');
+        debugPrint('  - 사용량 한도: ${_shouldShowUsageLimitBanner} (설정값: ${bannerStates['shouldShowUsageLimitBanner']})');
+        debugPrint('  - 체험 완료: ${_shouldShowTrialCompletedBanner} (설정값: ${bannerStates['shouldShowTrialCompletedBanner']})');
       }
     } catch (e) {
       if (kDebugMode) {

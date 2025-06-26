@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import '../../models/plan.dart';
 import '../authentication/deleted_user_service.dart';
 import '../cache/event_cache_manager.dart';
@@ -43,6 +44,13 @@ class PlanService {
   
   // 이벤트 기반 캐시 매니저
   final EventCacheManager _eventCache = EventCacheManager();
+  
+  // 🎯 실시간 플랜 변경 스트림 추가
+  final StreamController<Map<String, dynamic>> _planChangeController = 
+      StreamController<Map<String, dynamic>>.broadcast();
+  
+  /// 플랜 변경 스트림
+  Stream<Map<String, dynamic>> get planChangeStream => _planChangeController.stream;
   
   /// 이벤트 리스너 설정
   void _setupEventListeners() {
@@ -106,6 +114,31 @@ class PlanService {
   void notifyPlanChanged(String planType, {String? userId}) {
     final targetUserId = userId ?? _currentUserId;
     _eventCache.notifyPlanChanged(planType, userId: targetUserId);
+    
+    // 🎯 실시간 플랜 변경 알림
+    _notifyPlanChangeStream({
+      'planType': planType,
+      'userId': targetUserId,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+  
+  /// 🎯 플랜 변경 스트림 알림
+  void _notifyPlanChangeStream(Map<String, dynamic> planChangeData) {
+    if (!_planChangeController.isClosed) {
+      _planChangeController.add(planChangeData);
+      if (kDebugMode) {
+        debugPrint('🔔 [PlanService] 실시간 플랜 변경 알림: $planChangeData');
+      }
+    }
+  }
+  
+  /// 서비스 정리 (스트림 컨트롤러 닫기)
+  void dispose() {
+    _planChangeController.close();
+    if (kDebugMode) {
+      debugPrint('🗑️ [PlanService] 서비스 정리 완료');
+    }
   }
   
   /// 외부에서 구독 변경 이벤트를 발생시킬 수 있는 public 메서드 (중앙화된 EventCache 사용)

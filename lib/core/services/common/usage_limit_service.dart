@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'plan_service.dart';
 
 /// 사용량 제한 관리 서비스 (개선된 버전)
@@ -122,7 +123,7 @@ class UsageLimitService {
     }
   }
   
-  /// 2. 노트 생성 후 사용량 업데이트 및 제한 확인
+  /// 2. 노트 생성 후 사용량 업데이트 및 제한 확인 (실시간 알림 포함)
   /// 사용량을 Firebase에 업데이트하고 제한 도달 여부를 반환
   Future<Map<String, bool>> updateUsageAfterNoteCreation({
     int ocrPages = 0,
@@ -170,6 +171,10 @@ class UsageLimitService {
       };
       
       debugPrint('노트 생성 후 제한 확인 결과: $limitStatus');
+      
+      // 🎯 실시간 상태 변경 알림
+      _notifyLimitStatusChange(limitStatus);
+      
       return limitStatus;
       
     } catch (e) {
@@ -178,6 +183,24 @@ class UsageLimitService {
         'ocrLimitReached': false,
         'ttsLimitReached': false,
       };
+    }
+  }
+  
+  /// 🎯 사용량 한도 상태 변경 알림
+  void _notifyLimitStatusChange(Map<String, bool> limitStatus) {
+    if (!_limitStatusController.isClosed) {
+      _limitStatusController.add(limitStatus);
+      if (kDebugMode) {
+        debugPrint('🔔 [UsageLimitService] 실시간 한도 상태 변경 알림: $limitStatus');
+      }
+    }
+  }
+  
+  /// 서비스 정리 (스트림 컨트롤러 닫기)
+  void dispose() {
+    _limitStatusController.close();
+    if (kDebugMode) {
+      debugPrint('🗑️ [UsageLimitService] 서비스 정리 완료');
     }
   }
   
@@ -238,7 +261,7 @@ class UsageLimitService {
     }
   }
   
-  /// 4. TTS 재생 완료 후 사용량 증가
+  /// 4. TTS 재생 완료 후 사용량 증가 (실시간 알림 포함)
   /// TTS 재생이 성공적으로 완료된 후 호출하여 사용량을 1 증가시킴
   Future<bool> incrementTtsUsageAfterPlayback() async {
     try {
@@ -265,6 +288,17 @@ class UsageLimitService {
       _lastUsageUpdate = null;
       
       debugPrint('TTS 사용량 증가 완료: $newTtsUsage');
+      
+      // 🎯 제한 확인 및 실시간 알림
+      final limits = await _loadLimitsFromFirebase();
+      final limitStatus = {
+        'ocrLimitReached': (currentUsage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
+        'ttsLimitReached': newTtsUsage >= (limits['ttsRequests'] ?? 0),
+      };
+      
+      // 실시간 상태 변경 알림
+      _notifyLimitStatusChange(limitStatus);
+      
       return true;
       
     } catch (e) {
@@ -685,5 +719,10 @@ class UsageLimitService {
     }
   }
   
+  // 🎯 실시간 상태 변경 스트림 추가
+  final StreamController<Map<String, bool>> _limitStatusController = 
+      StreamController<Map<String, bool>>.broadcast();
   
+  /// 사용량 한도 상태 변경 스트림
+  Stream<Map<String, bool>> get limitStatusStream => _limitStatusController.stream;
 } 

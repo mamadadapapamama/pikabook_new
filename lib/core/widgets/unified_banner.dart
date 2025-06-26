@@ -99,15 +99,20 @@ class UnifiedBanner extends StatelessWidget {
           // 액션 버튼들
           if (mainButtonText != null && onMainButtonPressed != null) ...[
             Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // 메인 버튼 (PikaButton Primary xs)
+                // 메인 버튼 (PikaButton Primary xs) - 더 넓게, 중앙 정렬, 패딩 줄임
                 SizedBox(
-                  width: 70,
-                  height: 28,
+                  width: 80, // 70 -> 80으로 증가
+                  height: 32, // 28 -> 32로 증가
                   child: PikaButton(
                     text: mainButtonText!,
                     variant: PikaButtonVariant.primary,
                     size: PikaButtonSize.xs,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: SpacingTokens.xs - 2, // 패딩 줄임
+                      vertical: SpacingTokens.xs - 1,
+                    ),
                     onPressed: onMainButtonPressed,
                   ),
                 ),
