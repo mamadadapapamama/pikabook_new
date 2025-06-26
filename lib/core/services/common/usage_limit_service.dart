@@ -24,30 +24,83 @@ class UsageLimitService {
   
   UsageLimitService._internal();
   
+  // 🎯 캐시 메커니즘 추가
+  Map<String, int>? _cachedUsageData;
+  Map<String, int>? _cachedLimitsData;
+  DateTime? _lastUsageUpdate;
+  DateTime? _lastLimitsUpdate;
+  String? _lastUserId;
+  
+  // 캐시 유효 시간 (5분)
+  static const Duration _cacheValidDuration = Duration(minutes: 5);
+  
   // 사용자별 커스텀 제한 설정을 위한 Firestore 컬렉션
   static const String _CUSTOM_LIMITS_COLLECTION = 'user_limits';
   
   // 현재 사용자 ID 가져오기
   String? get _currentUserId => _auth.currentUser?.uid;
   
-  /// 1. 앱 시작시 제한 확인 (캐시 없이 새로 확인)
+  /// 캐시 무효화 (사용자 변경 시 또는 명시적 호출)
+  void _invalidateCache() {
+    _cachedUsageData = null;
+    _cachedLimitsData = null;
+    _lastUsageUpdate = null;
+    _lastLimitsUpdate = null;
+    _lastUserId = null;
+    if (kDebugMode) {
+      debugPrint('🗑️ [UsageLimitService] 캐시 무효화됨');
+    }
+  }
+  
+  /// 사용자 변경 감지 및 캐시 무효화
+  void _checkUserChange() {
+    final currentUserId = _currentUserId;
+    if (currentUserId != _lastUserId) {
+      _invalidateCache();
+      _lastUserId = currentUserId;
+      if (kDebugMode) {
+        debugPrint('👤 [UsageLimitService] 사용자 변경 감지: $_lastUserId -> $currentUserId');
+      }
+    }
+  }
+  
+  /// 캐시 유효성 검사
+  bool _isUsageCacheValid() {
+    _checkUserChange();
+    return _cachedUsageData != null && 
+           _lastUsageUpdate != null && 
+           DateTime.now().difference(_lastUsageUpdate!).abs() < _cacheValidDuration;
+  }
+  
+  bool _isLimitsCacheValid() {
+    _checkUserChange();
+    return _cachedLimitsData != null && 
+           _lastLimitsUpdate != null && 
+           DateTime.now().difference(_lastLimitsUpdate!).abs() < _cacheValidDuration;
+  }
+  
+  /// 1. 앱 시작시 제한 확인 (캐시 사용으로 최적화)
   /// 제한 도달 시 UI 상태를 결정하기 위한 메서드
-  Future<Map<String, bool>> checkInitialLimitStatus() async {
+  Future<Map<String, bool>> checkInitialLimitStatus({bool forceRefresh = false}) async {
     try {
-      debugPrint('앱 시작시 제한 확인 시작 (캐시 없이 새로 확인)');
+      if (kDebugMode) {
+        debugPrint('앱 시작시 제한 확인 시작 ${forceRefresh ? "(강제 새로고침)" : "(캐시 사용)"}');
+      }
       
       final userId = _currentUserId;
       if (userId == null) {
-        debugPrint('사용자 ID가 없음 - 모든 제한 false 반환');
+        if (kDebugMode) {
+          debugPrint('사용자 ID가 없음 - 모든 제한 false 반환');
+        }
         return {
           'ocrLimitReached': false,
           'ttsLimitReached': false,
         };
       }
       
-      // Firebase에서 최신 사용량 가져오기
-      final usage = await _loadUsageDataFromFirebase();
-      final limits = await _loadLimitsFromFirebase();
+      // Firebase에서 사용량 가져오기 (캐시 사용)
+      final usage = await _loadUsageDataFromFirebase(forceRefresh: forceRefresh);
+      final limits = await _loadLimitsFromFirebase(forceRefresh: forceRefresh);
       
       // 제한 도달 여부 확인
       final limitStatus = {
@@ -55,7 +108,9 @@ class UsageLimitService {
         'ttsLimitReached': (usage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0),
       };
       
-      debugPrint('앱 시작시 제한 확인 결과: $limitStatus');
+      if (kDebugMode) {
+        debugPrint('앱 시작시 제한 확인 결과: $limitStatus');
+      }
       return limitStatus;
       
     } catch (e) {
@@ -101,6 +156,10 @@ class UsageLimitService {
         'usage.lastUpdated': FieldValue.serverTimestamp(),
       });
       
+      // 캐시 무효화 (사용량이 변경되었으므로)
+      _cachedUsageData = null;
+      _lastUsageUpdate = null;
+      
       debugPrint('사용량 업데이트 완료: $newUsage');
       
       // 제한 확인
@@ -137,7 +196,7 @@ class UsageLimitService {
       debugPrint('📊 [UsageLimitService] 사용자 ID: $userId');
       
       // Firebase에서 최신 데이터 가져오기 (설정 화면에서는 항상 최신 정보)
-      final usage = await _loadUsageDataFromFirebase();
+      final usage = await _loadUsageDataFromFirebase(forceRefresh: true);
       debugPrint('📊 [UsageLimitService] Firebase 사용량 데이터: $usage');
       
       final limits = await _loadLimitsFromFirebase(forceRefresh: true);
@@ -201,6 +260,10 @@ class UsageLimitService {
         'usage.lastUpdated': FieldValue.serverTimestamp(),
       });
       
+      // 캐시 무효화 (사용량이 변경되었으므로)
+      _cachedUsageData = null;
+      _lastUsageUpdate = null;
+      
       debugPrint('TTS 사용량 증가 완료: $newTtsUsage');
       return true;
       
@@ -210,39 +273,46 @@ class UsageLimitService {
     }
   }
   
-  /// Firebase에서 사용량 데이터 로드 (캐시 없음)
-  Future<Map<String, int>> _loadUsageDataFromFirebase() async {
+  /// Firebase에서 사용량 데이터 로드 (캐시 적용)
+  Future<Map<String, int>> _loadUsageDataFromFirebase({bool forceRefresh = false}) async {
+    // 캐시 확인
+    if (!forceRefresh && _isUsageCacheValid()) {
+      if (kDebugMode) {
+        debugPrint('📦 [UsageLimitService] 캐시된 사용량 데이터 사용: $_cachedUsageData');
+      }
+      return _cachedUsageData!;
+    }
+    
     try {
       final userId = _currentUserId;
       if (userId == null) {
-        debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: 사용자 ID 없음');
+        if (kDebugMode) {
+          debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: 사용자 ID 없음');
+        }
         return _getDefaultUsageData();
       }
-      
-      debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: 사용자 ID $userId로 Firestore 조회');
       
       final doc = await _firestore.collection('users').doc(userId).get();
       
       if (!doc.exists) {
-        debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: 사용자 문서가 존재하지 않음');
+        if (kDebugMode) {
+          debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: 사용자 문서가 존재하지 않음');
+        }
         return _getDefaultUsageData();
       }
       
       final data = doc.data() as Map<String, dynamic>;
-      debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: 원본 문서 데이터: $data');
       
       // 'usage' 필드에서 데이터 추출
       Map<String, int> usageData = {};
       
       if (data.containsKey('usage') && data['usage'] is Map) {
         final usage = data['usage'] as Map<String, dynamic>;
-        debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: usage 필드 발견: $usage');
         usageData = {
           'ocrPages': _parseIntSafely(usage['ocrPages']),
           'ttsRequests': _parseIntSafely(usage['ttsRequests']),
         };
       } else {
-        debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: usage 필드 없음, 최상위 필드에서 확인');
         // 최상위 필드에서 확인
         usageData = {
           'ocrPages': _parseIntSafely(data['ocrPages']),
@@ -250,60 +320,89 @@ class UsageLimitService {
         };
       }
       
-      debugPrint('✅ [UsageLimitService] _loadUsageDataFromFirebase: 최종 사용량 데이터: $usageData');
+      // 캐시 업데이트
+      _cachedUsageData = usageData;
+      _lastUsageUpdate = DateTime.now();
+      
+      if (kDebugMode) {
+        debugPrint('✅ [UsageLimitService] Firebase 사용량 데이터 로드 및 캐시 업데이트: $usageData');
+      }
       return usageData;
     } catch (e, stackTrace) {
       debugPrint('❌ [UsageLimitService] Firebase에서 사용량 데이터 로드 중 오류: $e');
-      debugPrint('❌ [UsageLimitService] 스택 트레이스: $stackTrace');
+      if (kDebugMode) {
+        debugPrint('❌ [UsageLimitService] 스택 트레이스: $stackTrace');
+      }
       return _getDefaultUsageData();
     }
   }
   
-  /// Firebase에서 제한 데이터 로드 (캐시 없음)
+  /// Firebase에서 제한 데이터 로드 (캐시 적용)
   Future<Map<String, int>> _loadLimitsFromFirebase({bool forceRefresh = false}) async {
+    // 캐시 확인
+    if (!forceRefresh && _isLimitsCacheValid()) {
+      if (kDebugMode) {
+        debugPrint('📦 [UsageLimitService] 캐시된 제한 데이터 사용: $_cachedLimitsData');
+      }
+      return _cachedLimitsData!;
+    }
+    
     try {
-      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase 시작');
-      
       final userId = _currentUserId;
       if (userId == null) {
-        debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 사용자 ID 없음, 기본 제한 반환');
+        if (kDebugMode) {
+          debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 사용자 ID 없음, 기본 제한 반환');
+        }
         return _getDefaultLimits();
       }
       
-      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 사용자 ID $userId');
-      
       // 1. 사용자별 커스텀 제한 확인
-      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 1단계 - 커스텀 제한 확인');
       final customLimits = await _getUserCustomLimits(userId);
-      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 커스텀 제한 결과: $customLimits');
       if (customLimits.isNotEmpty) {
-        debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 커스텀 제한 사용: $customLimits');
+        // 캐시 업데이트
+        _cachedLimitsData = customLimits;
+        _lastLimitsUpdate = DateTime.now();
+        
+        if (kDebugMode) {
+          debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 커스텀 제한 사용: $customLimits');
+        }
         return customLimits;
       }
       
       // 2. 플랜 기반 제한 적용
-      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 2단계 - 플랜 기반 제한 확인');
       final planService = PlanService();
       final planType = await planService.getCurrentPlanType(forceRefresh: forceRefresh);
-      
-      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 확인한 플랜 타입: $planType');
-      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 해당 플랜의 제한값: ${PlanService.PLAN_LIMITS[planType]}');
       
       final limits = PlanService.PLAN_LIMITS[planType];
       if (limits != null) {
         final result = Map<String, int>.from(limits);
-        debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 플랜 기반 제한 사용: $result');
+        
+        // 캐시 업데이트
+        _cachedLimitsData = result;
+        _lastLimitsUpdate = DateTime.now();
+        
+        if (kDebugMode) {
+          debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 플랜 기반 제한 사용: $planType -> $result');
+        }
         return result;
       }
       
       // 3. 기본 제한 적용
-      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 3단계 - 기본 제한 적용');
       final defaultLimits = _getDefaultLimits();
-      debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 기본 제한 사용: $defaultLimits');
+      
+      // 캐시 업데이트
+      _cachedLimitsData = defaultLimits;
+      _lastLimitsUpdate = DateTime.now();
+      
+      if (kDebugMode) {
+        debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 기본 제한 사용: $defaultLimits');
+      }
       return defaultLimits;
     } catch (e, stackTrace) {
       debugPrint('❌ [UsageLimitService] _loadLimitsFromFirebase 오류: $e');
-      debugPrint('❌ [UsageLimitService] _loadLimitsFromFirebase 스택 트레이스: $stackTrace');
+      if (kDebugMode) {
+        debugPrint('❌ [UsageLimitService] _loadLimitsFromFirebase 스택 트레이스: $stackTrace');
+      }
       final defaultLimits = _getDefaultLimits();
       debugPrint('🔄 [UsageLimitService] _loadLimitsFromFirebase: 오류로 인한 기본 제한 사용: $defaultLimits');
       return defaultLimits;
@@ -445,7 +544,7 @@ class UsageLimitService {
   /// TODO: app.dart에서 사용 중 - checkInitialLimitStatus()로 교체 후 제거 예정
   @deprecated
   Future<Map<String, bool>> checkUsageLimitFlags({bool withBuffer = false}) async {
-    debugPrint('⚠️ checkUsageLimitFlags는 deprecated입니다. checkInitialLimitStatus()를 사용하세요.');
+    // deprecated 경고 제거 (로그 스팸 방지)
     final limitStatus = await checkInitialLimitStatus();
     
     final ttsExceed = limitStatus['ttsLimitReached'] ?? false;

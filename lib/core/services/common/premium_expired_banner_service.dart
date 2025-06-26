@@ -1,120 +1,80 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'plan_service.dart';
 
-/// 프리미엄 만료 배너 상태 관리 서비스
+/// 프리미엄 만료 배너 서비스
+/// InitializationManager에서 결정된 상태를 단순히 표시/숨김 관리
 class PremiumExpiredBannerService {
+  static const String _bannerStateKey = 'premium_expired_banner_shown';
+  static const String _bannerStateKeyPrefix = 'premium_expired_banner_state_';
+  
+  // 싱글톤 패턴
   static final PremiumExpiredBannerService _instance = PremiumExpiredBannerService._internal();
   factory PremiumExpiredBannerService() => _instance;
   PremiumExpiredBannerService._internal();
-
-  final PlanService _planService = PlanService();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  /// 현재 사용자 ID
-  String? get _currentUserId => _auth.currentUser?.uid;
-
-  /// 배너 해제 상태 확인
-  Future<bool> isBannerDismissed() async {
-    final userId = _currentUserId;
-    if (userId == null) return true;
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final key = 'premium_expired_banner_dismissed_$userId';
-      return prefs.getBool(key) ?? false;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [PremiumExpiredBanner] 배너 상태 확인 실패: $e');
-      }
-      return true; // 오류 시 배너 숨김
+  
+  // 현재 배너 표시 상태 (InitializationManager에서 설정)
+  bool _shouldShow = false;
+  
+  /// InitializationManager에서 배너 상태 설정
+  void setBannerState(bool shouldShow) {
+    _shouldShow = shouldShow;
+    if (kDebugMode) {
+      debugPrint('🎯 [PremiumExpiredBanner] 상태 설정: $shouldShow');
     }
   }
-
-  /// 배너 해제 상태 설정
-  Future<void> dismissBanner() async {
-    final userId = _currentUserId;
-    if (userId == null) return;
-
+  
+  /// 배너 표시 여부 확인 (단순히 설정된 상태 반환)
+  Future<bool> shouldShowBanner() async {
     try {
+      // 사용자가 배너를 닫았는지 확인
       final prefs = await SharedPreferences.getInstance();
-      final key = 'premium_expired_banner_dismissed_$userId';
-      await prefs.setBool(key, true);
+      final hasUserDismissed = prefs.getBool(_bannerStateKey) ?? false;
+      
+      // 사용자가 닫지 않았고, InitializationManager에서 true로 설정된 경우만 표시
+      final result = _shouldShow && !hasUserDismissed;
       
       if (kDebugMode) {
-        debugPrint('✅ [PremiumExpiredBanner] 배너 영구 해제: $userId');
+        debugPrint('🎯 [PremiumExpiredBanner] 표시 여부: $result (설정=$_shouldShow, 사용자닫음=$hasUserDismissed)');
       }
+      
+      return result;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [PremiumExpiredBanner] 배너 해제 실패: $e');
-      }
-    }
-  }
-
-  /// 배너 표시 여부 확인
-  Future<bool> shouldShowBanner() async {
-    final userId = _currentUserId;
-    if (userId == null) return false;
-
-    try {
-      // 1. 이미 해제된 배너인지 확인
-      final isDismissed = await isBannerDismissed();
-      if (isDismissed) return false;
-
-      // 2. 현재 구독 상태 확인
-      final subscriptionDetails = await _planService.getSubscriptionDetails();
-      final currentPlan = subscriptionDetails['currentPlan'] as String?;
-      final status = subscriptionDetails['status'] as String?;
-      final hasUsedFreeTrial = subscriptionDetails['hasUsedFreeTrial'] as bool? ?? false;
-      final hasEverUsedTrial = subscriptionDetails['hasEverUsedTrial'] as bool? ?? false;
-
-      // 배너 표시 조건:
-      // - 현재 무료 플랜
-      // - 구독 상태가 'expired' (만료됨)
-      // - 무료체험 또는 프리미엄 사용 이력이 있음
-      final shouldShow = currentPlan == PlanService.PLAN_FREE && 
-                        status == 'expired' &&
-                        (hasUsedFreeTrial || hasEverUsedTrial);
-
-      if (kDebugMode) {
-        debugPrint('🔍 [PremiumExpiredBanner] 배너 표시 여부 확인:');
-        debugPrint('   사용자 ID: $userId');
-        debugPrint('   배너 해제됨: $isDismissed');
-        debugPrint('   현재 플랜: $currentPlan');
-        debugPrint('   구독 상태: $status');
-        debugPrint('   무료체험 사용 이력: $hasUsedFreeTrial');
-        debugPrint('   체험 사용 이력 (새): $hasEverUsedTrial');
-        debugPrint('   배너 표시: $shouldShow');
-      }
-
-      return shouldShow;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [PremiumExpiredBanner] 배너 표시 여부 확인 실패: $e');
+        debugPrint('❌ [PremiumExpiredBanner] 상태 확인 실패: $e');
       }
       return false;
     }
   }
-
-  /// 배너 상태 초기화 (테스트용)
-  Future<void> resetBannerState() async {
-    if (!kDebugMode) return;
-
-    final userId = _currentUserId;
-    if (userId == null) return;
-
+  
+  /// 배너 닫기 (사용자가 X 버튼 클릭 시)
+  Future<void> dismissBanner() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = 'premium_expired_banner_dismissed_$userId';
-      await prefs.remove(key);
+      await prefs.setBool(_bannerStateKey, true);
       
       if (kDebugMode) {
-        debugPrint('🔄 [PremiumExpiredBanner] 배너 상태 초기화: $userId');
+        debugPrint('🎯 [PremiumExpiredBanner] 사용자가 배너 닫음');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [PremiumExpiredBanner] 배너 상태 초기화 실패: $e');
+        debugPrint('❌ [PremiumExpiredBanner] 배너 닫기 실패: $e');
+      }
+    }
+  }
+  
+  /// 배너 상태 초기화 (테스트용)
+  Future<void> resetBannerState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_bannerStateKey);
+      _shouldShow = false;
+      
+      if (kDebugMode) {
+        debugPrint('🎯 [PremiumExpiredBanner] 상태 초기화');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [PremiumExpiredBanner] 상태 초기화 실패: $e');
       }
     }
   }

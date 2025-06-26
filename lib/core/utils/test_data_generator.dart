@@ -151,16 +151,16 @@ class TestDataGenerator {
         break;
 
       case 'trial_expired':
-        // 🎯 체험 완료 → 프리미엄 자동 시작 (introductory offer 완료)
+        // 🎯 체험 중 - 1분 남음 (체험 만료 플로우 테스트용)
         await _firestore.collection('users').doc(uid).update({
           'subscription': {
             'plan': 'premium',
-            'startDate': Timestamp.fromDate(now.subtract(const Duration(days: 5))), // 5일 전 프리미엄 시작
-            'expiryDate': Timestamp.fromDate(now.add(const Duration(days: 25))), // 25일 남음 (총 30일 중)
-            'status': 'active',
+            'startDate': Timestamp.fromDate(now.subtract(const Duration(days: 6, minutes: 59))), // 거의 7일 전 시작
+            'expiryDate': Timestamp.fromDate(now.add(const Duration(seconds: 30))), // 30초 후 만료
+            'status': 'trial',
             'subscriptionType': 'monthly',
-            'isFreeTrial': false, // 🎯 더 이상 체험이 아님
-            'wasIntroductoryOffer': true, // 🎯 introductory offer로 시작되었음을 표시
+            'isFreeTrial': true, // 🎯 아직 무료체험 중
+            'wasIntroductoryOffer': false, // 🎯 아직 introductory offer 완료되지 않음
           },
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,

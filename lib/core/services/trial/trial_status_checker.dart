@@ -3,7 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import '../common/plan_service.dart';
-import '../common/trial_completed_banner_service.dart';
 import '../notification/notification_service.dart';
 
 /// 체험 상태 체크 서비스 - 서버 시간 기반
@@ -14,7 +13,6 @@ class TrialStatusChecker {
 
   final PlanService _planService = PlanService();
   final NotificationService _notificationService = NotificationService();
-  final TrialCompletedBannerService _bannerService = TrialCompletedBannerService();
   
   Timer? _dailyCheckTimer;
   static const String _lastCheckDateKey = 'trial_last_check_date';
@@ -27,14 +25,14 @@ class TrialStatusChecker {
   /// 서비스 초기화 - 앱 시작 시 호출
   Future<void> initialize() async {
     try {
-      // 1. 즉시 서버 상태 체크
-      await checkTrialStatusFromServer();
+      // 1. 캐시된 상태 체크 (불필요한 서버 호출 방지)
+      await checkTrialStatusFromServer(forceRefresh: false);
       
       // 2. 하루 한번 체크 타이머 시작
       _startDailyCheckTimer();
       
       if (kDebugMode) {
-        debugPrint('✅ [TrialStatusChecker] 초기화 완료');
+        debugPrint('✅ [TrialStatusChecker] 초기화 완료 (캐시 사용)');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -44,14 +42,14 @@ class TrialStatusChecker {
   }
 
   /// 서버에서 체험 상태 체크 (앱 진입 시, 화면 전환 시 호출)
-  Future<TrialStatus> checkTrialStatusFromServer() async {
+  Future<TrialStatus> checkTrialStatusFromServer({bool forceRefresh = false}) async {
     if (!_isUserLoggedIn) {
       return TrialStatus.notLoggedIn;
     }
 
     try {
-      // 서버에서 최신 구독 정보 가져오기 (강제 새로고침)
-      final subscriptionDetails = await _planService.getSubscriptionDetails(forceRefresh: true);
+      // 캐시된 구독 정보 사용 (필요시에만 강제 새로고침)
+      final subscriptionDetails = await _planService.getSubscriptionDetails(forceRefresh: forceRefresh);
       
       final currentPlan = subscriptionDetails['currentPlan'] as String;
       final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
@@ -155,8 +153,8 @@ class TrialStatusChecker {
         return;
       }
 
-      // 서버 상태 체크
-      final status = await checkTrialStatusFromServer();
+      // 서버 상태 체크 (하루 한번은 강제 새로고침)
+      final status = await checkTrialStatusFromServer(forceRefresh: true);
       
       if (kDebugMode) {
         debugPrint('✅ [TrialStatusChecker] 자동 체크 완료: ${status.name}');
@@ -201,22 +199,20 @@ class TrialStatusChecker {
       final isAlreadyShown = prefs.getBool(_trialExpiredNotificationShownKey) ?? false;
       
       if (!isAlreadyShown) {
-        // 🎯 체험 완료 배너 트리거
-        await _bannerService.triggerBanner();
-        
         // 표시됨 플래그 저장
         await prefs.setBool(_trialExpiredNotificationShownKey, true);
         
         // 상태 변경 콜백 호출 (UI 새로고침)
+        // 🎯 배너 표시는 InitializationManager에서 결정됨
         onTrialStatusChanged?.call();
         
         if (kDebugMode) {
-          debugPrint('🎯 [TrialStatusChecker] 체험 완료 배너 트리거됨 (최초 1회)');
+          debugPrint('🎯 [TrialStatusChecker] 체험 완료 상태 변경 알림 (최초 1회)');
         }
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [TrialStatusChecker] 체험 완료 배너 트리거 실패: $e');
+        debugPrint('❌ [TrialStatusChecker] 체험 완료 상태 변경 실패: $e');
       }
     }
   }

@@ -100,44 +100,60 @@ class UnifiedBanner extends StatelessWidget {
           if (mainButtonText != null && onMainButtonPressed != null) ...[
             Column(
               children: [
-                // 메인 버튼 (PikaButton Primary)
+                // 메인 버튼 (PikaButton Primary xs)
                 SizedBox(
-                  width: 80,
-                  height: 32,
+                  width: 70,
+                  height: 28,
                   child: PikaButton(
                     text: mainButtonText!,
                     variant: PikaButtonVariant.primary,
+                    size: PikaButtonSize.xs,
                     onPressed: onMainButtonPressed,
                   ),
                 ),
                 
                 SizedBox(height: SpacingTokens.xs),
                 
-                // 닫기 버튼 (PikaButton Outline)
+                // 닫기 버튼 (텍스트 버튼)
                 SizedBox(
-                  height: 24,
-                  child: PikaButton(
-                    text: '닫기',
-                    variant: PikaButtonVariant.outline,
-                    size: PikaButtonSize.small,
+                  height: 20,
+                  child: TextButton(
                     onPressed: onDismiss,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      '닫기',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: ColorTokens.textSecondary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
           ] else ...[
-            // 메인 버튼이 없는 경우 (체험 완료 배너)
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.red, width: 1), // 🎯 디버그용 테두리
-              ),
-              child: SizedBox(
-                height: 24,
-                child: PikaButton(
-                  text: '닫기',
-                  variant: PikaButtonVariant.outline,
-                  size: PikaButtonSize.small,
-                  onPressed: onDismiss,
+            // 메인 버튼이 없는 경우 (체험 완료 배너) - 텍스트 버튼
+            SizedBox(
+              height: 20,
+              child: TextButton(
+                onPressed: onDismiss,
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  '닫기',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: ColorTokens.textSecondary,
+                    decoration: TextDecoration.underline,
+                  ),
                 ),
               ),
             ),

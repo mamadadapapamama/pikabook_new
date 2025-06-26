@@ -23,6 +23,7 @@ class InAppPurchaseService {
   
   late StreamSubscription<List<PurchaseDetails>> _subscription;
   bool _isAvailable = false;
+  bool _isInitialized = false;
   List<ProductDetails> _products = [];
   
   // 구매 성공 콜백
@@ -48,6 +49,8 @@ class InAppPurchaseService {
 
   /// 서비스 초기화
   Future<void> initialize() async {
+    if (_isInitialized) return;
+    
     try {
       if (kDebugMode) {
         print('🛒 In-App Purchase 서비스 초기화 시작');
@@ -89,6 +92,8 @@ class InAppPurchaseService {
       // 구매 복원은 사용자가 명시적으로 요청할 때만 실행
       // await _restorePurchases();
 
+      _isInitialized = true;
+      
       if (kDebugMode) {
         print('✅ In-App Purchase 서비스 초기화 완료 (자동 구매 복원 비활성화)');
       }
@@ -99,9 +104,18 @@ class InAppPurchaseService {
     }
   }
 
+  /// 지연 초기화 확인
+  Future<void> _ensureInitialized() async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+  }
+
   /// 서비스 종료
   void dispose() {
-    _subscription.cancel();
+    if (_isInitialized) {
+      _subscription.cancel();
+    }
     _processedPurchases.clear();
   }
   
@@ -404,6 +418,9 @@ class InAppPurchaseService {
 
   /// 구매 시작
   Future<bool> buyProduct(String productId) async {
+    // 실제 구매 시점에 초기화
+    await _ensureInitialized();
+    
     try {
       if (kDebugMode) {
         print('🧪 [SANDBOX] 구매 테스트 시작');
@@ -497,6 +514,9 @@ class InAppPurchaseService {
 
   /// 구매 복원 (사용자 요청시 호출)
   Future<void> restorePurchases() async {
+    // 구매 복원 시점에 초기화
+    await _ensureInitialized();
+    
     try {
       if (kDebugMode) {
         print('🔄 구매 복원 시작');

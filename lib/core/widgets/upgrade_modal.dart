@@ -538,7 +538,7 @@ class UpgradeModal extends StatelessWidget {
             onCancel?.call();
           },
           child: Text(
-            cancelButtonText ?? '무료 플랜으로 시작하기',
+            cancelButtonText ?? '나가기',
             style: TypographyTokens.button.copyWith(
               color: ColorTokens.textTertiary,
             ),
@@ -627,7 +627,7 @@ class UpgradeModal extends StatelessWidget {
               content: Text(
                 '💎 프리미엄 플랜이 시작되었어요!\n자세한 내용은 설정→플랜에서 확인하세요.',
               ),
-              backgroundColor: Colors.green[600],
+              backgroundColor: ColorTokens.secondary,
               duration: const Duration(seconds: 4),
               behavior: SnackBarBehavior.floating,
             ),
@@ -718,7 +718,7 @@ class UpgradePromptHelper {
     required bool isFreeTrial,
   }) {
     final message = isFreeTrial
-        ? '프리미엄 무료 체험이 복원되었습니다.\n무료 플랜으로 전환하려면 App Store > 구독 관리에서 Pikabook 구독을 먼저 취소해주세요.'
+        ? '프리미엄 무료 체험이 복원되었습니다.\n전환하려면 App Store > 구독 관리에서 Pikabook 구독을 먼저 취소해주세요.'
         : '프리미엄 플랜이 복원되었습니다.\n무료 플랜으로 전환하려면 App Store > 구독 관리에서 Pikabook 구독을 먼저 취소해주세요.';
 
     if (kDebugMode) {

@@ -1,111 +1,79 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'usage_limit_service.dart';
-import 'plan_service.dart';
 
-/// 사용량 한도 도달 배너 상태 관리 서비스
+/// 사용량 한도 배너 서비스
+/// InitializationManager에서 결정된 상태를 단순히 표시/숨김 관리
 class UsageLimitBannerService {
+  static const String _bannerStateKey = 'usage_limit_banner_shown';
+  
+  // 싱글톤 패턴
   static final UsageLimitBannerService _instance = UsageLimitBannerService._internal();
   factory UsageLimitBannerService() => _instance;
   UsageLimitBannerService._internal();
-
-  final UsageLimitService _usageLimitService = UsageLimitService();
-  final PlanService _planService = PlanService();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  /// 현재 사용자 ID
-  String? get _currentUserId => _auth.currentUser?.uid;
-
-  /// 배너 해제 상태 확인
-  Future<bool> isBannerDismissed() async {
-    final userId = _currentUserId;
-    if (userId == null) return true;
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final key = 'usage_limit_banner_dismissed_$userId';
-      return prefs.getBool(key) ?? false;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [UsageLimitBanner] 배너 상태 확인 실패: $e');
-      }
-      return true; // 오류 시 배너 숨김
+  
+  // 현재 배너 표시 상태 (InitializationManager에서 설정)
+  bool _shouldShow = false;
+  
+  /// InitializationManager에서 배너 상태 설정
+  void setBannerState(bool shouldShow) {
+    _shouldShow = shouldShow;
+    if (kDebugMode) {
+      debugPrint('🎯 [UsageLimitBanner] 상태 설정: $shouldShow');
     }
   }
-
-  /// 배너 해제 상태 설정
-  Future<void> dismissBanner() async {
-    final userId = _currentUserId;
-    if (userId == null) return;
-
+  
+  /// 배너 표시 여부 확인 (단순히 설정된 상태 반환)
+  Future<bool> shouldShowBanner() async {
     try {
+      // 사용자가 배너를 닫았는지 확인
       final prefs = await SharedPreferences.getInstance();
-      final key = 'usage_limit_banner_dismissed_$userId';
-      await prefs.setBool(key, true);
+      final hasUserDismissed = prefs.getBool(_bannerStateKey) ?? false;
+      
+      // 사용자가 닫지 않았고, InitializationManager에서 true로 설정된 경우만 표시
+      final result = _shouldShow && !hasUserDismissed;
       
       if (kDebugMode) {
-        debugPrint('✅ [UsageLimitBanner] 배너 임시 해제: $userId');
+        debugPrint('🎯 [UsageLimitBanner] 표시 여부: $result (설정=$_shouldShow, 사용자닫음=$hasUserDismissed)');
       }
+      
+      return result;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [UsageLimitBanner] 배너 해제 실패: $e');
-      }
-    }
-  }
-
-  /// 배너 표시 여부 확인
-  Future<bool> shouldShowBanner() async {
-    final userId = _currentUserId;
-    if (userId == null) return false;
-
-    try {
-      // 1. 이미 해제된 배너인지 확인
-      final isDismissed = await isBannerDismissed();
-      if (isDismissed) return false;
-
-      // 2. 사용량 한도 도달 여부 확인
-      final hasReachedLimit = await _usageLimitService.hasReachedAnyLimit();
-      if (!hasReachedLimit) return false;
-
-      // 3. 현재 플랜 확인 (모든 플랜에서 한도 도달 시 배너 표시)
-      final subscriptionDetails = await _planService.getSubscriptionDetails();
-      final currentPlan = subscriptionDetails['currentPlan'] as String?;
-
-      if (kDebugMode) {
-        debugPrint('🔍 [UsageLimitBanner] 배너 표시 여부 확인:');
-        debugPrint('   사용자 ID: $userId');
-        debugPrint('   배너 해제됨: $isDismissed');
-        debugPrint('   사용량 한도 도달: $hasReachedLimit');
-        debugPrint('   현재 플랜: $currentPlan');
-        debugPrint('   배너 표시: $hasReachedLimit');
-      }
-
-      return hasReachedLimit;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [UsageLimitBanner] 배너 표시 여부 확인 실패: $e');
+        debugPrint('❌ [UsageLimitBanner] 상태 확인 실패: $e');
       }
       return false;
     }
   }
-
-  /// 배너 상태 초기화 (사용량이 리셋되었을 때 호출)
-  Future<void> resetBannerState() async {
-    final userId = _currentUserId;
-    if (userId == null) return;
-
+  
+  /// 배너 닫기 (사용자가 X 버튼 클릭 시)
+  Future<void> dismissBanner() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final key = 'usage_limit_banner_dismissed_$userId';
-      await prefs.remove(key);
+      await prefs.setBool(_bannerStateKey, true);
       
       if (kDebugMode) {
-        debugPrint('🔄 [UsageLimitBanner] 배너 상태 초기화: $userId');
+        debugPrint('🎯 [UsageLimitBanner] 사용자가 배너 닫음');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [UsageLimitBanner] 배너 상태 초기화 실패: $e');
+        debugPrint('❌ [UsageLimitBanner] 배너 닫기 실패: $e');
+      }
+    }
+  }
+  
+  /// 배너 상태 초기화 (테스트용)
+  Future<void> resetBannerState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_bannerStateKey);
+      _shouldShow = false;
+      
+      if (kDebugMode) {
+        debugPrint('🎯 [UsageLimitBanner] 상태 초기화');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [UsageLimitBanner] 상태 초기화 실패: $e');
       }
     }
   }

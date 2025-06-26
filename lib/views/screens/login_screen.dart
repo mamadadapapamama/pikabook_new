@@ -420,7 +420,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                     children: [
                                       TextSpan(text: '로그인 시 '),
                                       TextSpan(
-                                        text: '개인정보처리방침',
+                                        text: '개인정보 처리방침',
                                         style: TypographyTokens.body2.copyWith(
                                           color: ColorTokens.textLight,
                                           decoration: TextDecoration.underline,
@@ -438,7 +438,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                       ),
                                       TextSpan(text: '과'),
                                       TextSpan(
-                                        text: '이용약관',
+                                        text: ' 이용약관',
                                         style: TypographyTokens.body2.copyWith(
                                           color: ColorTokens.textLight,
                                           decoration: TextDecoration.underline,

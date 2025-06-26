@@ -8,6 +8,7 @@ import '../authentication/auth_service.dart';
 import '../authentication/deleted_user_service.dart';
 import '../media/image_service.dart';
 import 'usage_limit_service.dart';
+import 'plan_service.dart';
 
 /// 앱 초기화 단계를 정의합니다.
 enum InitializationStep {
@@ -175,8 +176,9 @@ class InitializationManager {
         );
         
         try {
-          usageLimitStatus = await _usageLimitService.checkInitialLimitStatus();
-          debugPrint('초기화 중 사용량 확인 완료: $usageLimitStatus');
+          // 캐시를 사용하여 불필요한 중복 조회 방지
+          usageLimitStatus = await _usageLimitService.checkInitialLimitStatus(forceRefresh: false);
+          debugPrint('초기화 중 사용량 확인 완료 (캐시 사용): $usageLimitStatus');
         } catch (e) {
           debugPrint('초기화 중 사용량 확인 실패: $e');
           // 사용량 확인 실패 시 기본값 설정
@@ -207,6 +209,35 @@ class InitializationManager {
         '사용자 데이터 로드 중...',
       );
       
+      // 5. 배너 상태 결정 (로그인된 사용자만)
+      Map<String, bool> bannerStates = {};
+      if (isLoggedIn && isOnboardingCompleted) {
+        _updateProgress(
+          InitializationStep.finalizing,
+          0.8,
+          '배너 상태 확인 중...',
+        );
+        
+        try {
+          bannerStates = await _determineBannerStates(usageLimitStatus);
+          debugPrint('초기화 중 배너 상태 결정 완료: $bannerStates');
+        } catch (e) {
+          debugPrint('초기화 중 배너 상태 결정 실패: $e');
+          bannerStates = {
+            'shouldShowPremiumExpiredBanner': false,
+            'shouldShowUsageLimitBanner': false,
+            'shouldShowTrialCompletedBanner': false,
+            'shouldShowPlanChangedBanner': false,
+          };
+        }
+      } else {
+        bannerStates = {
+          'shouldShowPremiumExpiredBanner': false,
+          'shouldShowUsageLimitBanner': false,
+          'shouldShowTrialCompletedBanner': false,
+        };
+      }
+      
       // 기본 초기화 결과
       final initialResult = {
         'isLoggedIn': isLoggedIn,
@@ -214,6 +245,7 @@ class InitializationManager {
         'isOnboardingCompleted': isOnboardingCompleted,
         'isFirstEntry': isFirstEntry,
         'usageLimitStatus': usageLimitStatus, // 사용량 상태 추가
+        'bannerStates': bannerStates, // 배너 상태 추가
         'error': null,
       };
       
@@ -336,6 +368,62 @@ class InitializationManager {
     } catch (e) {
       debugPrint('탈퇴된 사용자 확인 중 오류: $e');
       return false; // 오류 시 false 반환 (보수적 접근)
+    }
+  }
+
+  // 배너 상태 결정 (중앙집중식)
+  Future<Map<String, bool>> _determineBannerStates(Map<String, bool> usageLimitStatus) async {
+    try {
+      final planService = PlanService();
+      final subscriptionDetails = await planService.getSubscriptionDetails();
+      
+      final currentPlan = subscriptionDetails['currentPlan'] as String?;
+      final subscriptionStatus = subscriptionDetails['subscriptionStatus'] as String?;
+      final hasUsedFreeTrial = subscriptionDetails['hasUsedFreeTrial'] as bool? ?? false;
+      final hasEverUsedTrial = subscriptionDetails['hasEverUsedTrial'] as bool? ?? false;
+      final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
+      
+      // 1. 프리미엄 만료 배너 (구독 만료 + 플랜 변경 통합)
+      final hasPlanChanged = await planService.hasPlanChangedToFree();
+      final shouldShowPremiumExpiredBanner = (currentPlan == PlanService.PLAN_FREE) &&
+          ((subscriptionStatus == 'expired') || hasPlanChanged) &&
+          (hasUsedFreeTrial || hasEverUsedTrial);
+      
+      // 2. 사용량 한도 배너
+      final ocrLimitReached = usageLimitStatus['ocrLimitReached'] ?? false;
+      final ttsLimitReached = usageLimitStatus['ttsLimitReached'] ?? false;
+      final shouldShowUsageLimitBanner = ocrLimitReached || ttsLimitReached;
+      
+      // 3. 체험 완료 배너 (체험 완료 후 프리미엄으로 전환된 상태)
+      final shouldShowTrialCompletedBanner = (currentPlan == PlanService.PLAN_PREMIUM) &&
+          (subscriptionStatus == 'active') &&
+          hasUsedFreeTrial &&
+          !isFreeTrial;
+      
+              final result = {
+          'shouldShowPremiumExpiredBanner': shouldShowPremiumExpiredBanner,
+          'shouldShowUsageLimitBanner': shouldShowUsageLimitBanner,
+          'shouldShowTrialCompletedBanner': shouldShowTrialCompletedBanner,
+        };
+      
+      if (kDebugMode) {
+        debugPrint('🎯 배너 상태 결정:');
+        debugPrint('  - 현재 플랜: $currentPlan');
+        debugPrint('  - 구독 상태: $subscriptionStatus');
+        debugPrint('  - 체험 사용 이력: $hasUsedFreeTrial');
+        debugPrint('  - 사용량 제한: OCR=$ocrLimitReached, TTS=$ttsLimitReached');
+        debugPrint('  - 플랜 변경: $hasPlanChanged');
+        debugPrint('  - 배너 결과: $result');
+      }
+      
+      return result;
+    } catch (e) {
+      debugPrint('배너 상태 결정 중 오류: $e');
+      return {
+        'shouldShowPremiumExpiredBanner': false,
+        'shouldShowUsageLimitBanner': false,
+        'shouldShowTrialCompletedBanner': false,
+      };
     }
   }
 

@@ -1,91 +1,79 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'plan_service.dart';
-import 'premium_expired_banner_service.dart';
 
-/// 체험 완료 배너 표시 관리 서비스
+/// 체험 완료 배너 서비스
+/// InitializationManager에서 결정된 상태를 단순히 표시/숨김 관리
 class TrialCompletedBannerService {
-  static const String _kTrialCompletedBannerDismissedKey = 'trial_completed_banner_dismissed';
-  final PlanService _planService = PlanService();
-  final PremiumExpiredBannerService _premiumExpiredBannerService = PremiumExpiredBannerService();
+  static const String _bannerStateKey = 'trial_completed_banner_shown';
   
-  /// 배너를 표시해야 하는지 확인
+  // 싱글톤 패턴
+  static final TrialCompletedBannerService _instance = TrialCompletedBannerService._internal();
+  factory TrialCompletedBannerService() => _instance;
+  TrialCompletedBannerService._internal();
+  
+  // 현재 배너 표시 상태 (InitializationManager에서 설정)
+  bool _shouldShow = false;
+  
+  /// InitializationManager에서 배너 상태 설정
+  void setBannerState(bool shouldShow) {
+    _shouldShow = shouldShow;
+    if (kDebugMode) {
+      debugPrint('🎯 [TrialCompletedBanner] 상태 설정: $shouldShow');
+    }
+  }
+  
+  /// 배너 표시 여부 확인 (단순히 설정된 상태 반환)
   Future<bool> shouldShowBanner() async {
     try {
+      // 사용자가 배너를 닫았는지 확인
       final prefs = await SharedPreferences.getInstance();
-      final isDismissed = prefs.getBool(_kTrialCompletedBannerDismissedKey) ?? false;
+      final hasUserDismissed = prefs.getBool(_bannerStateKey) ?? false;
       
-      // 이미 해제된 경우
-      if (isDismissed) return false;
-      
-      // 🎯 프리미엄 만료 배너가 표시되어야 하는 경우 체험 완료 배너는 숨김
-      final shouldShowPremiumExpiredBanner = await _premiumExpiredBannerService.shouldShowBanner();
-      if (shouldShowPremiumExpiredBanner) {
-        if (kDebugMode) {
-          debugPrint('🎉 [TrialCompletedBannerService] 프리미엄 만료 배너 우선 - 체험 완료 배너 숨김');
-        }
-        return false;
-      }
+      // 사용자가 닫지 않았고, InitializationManager에서 true로 설정된 경우만 표시
+      final result = _shouldShow && !hasUserDismissed;
       
       if (kDebugMode) {
-        debugPrint('🎉 [TrialCompletedBannerService] 배너 표시 여부: true');
+        debugPrint('🎯 [TrialCompletedBanner] 표시 여부: $result (설정=$_shouldShow, 사용자닫음=$hasUserDismissed)');
       }
       
-      return true;
+      return result;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [TrialCompletedBannerService] 배너 표시 여부 확인 실패: $e');
+        debugPrint('❌ [TrialCompletedBanner] 상태 확인 실패: $e');
       }
       return false;
     }
   }
   
-  /// 배너 해제 (사용자가 닫기 버튼 클릭)
+  /// 배너 닫기 (사용자가 X 버튼 클릭 시)
   Future<void> dismissBanner() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_kTrialCompletedBannerDismissedKey, true);
+      await prefs.setBool(_bannerStateKey, true);
       
       if (kDebugMode) {
-        debugPrint('🎉 [TrialCompletedBannerService] 배너 해제됨');
+        debugPrint('🎯 [TrialCompletedBanner] 사용자가 배너 닫음');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [TrialCompletedBannerService] 배너 해제 실패: $e');
-      }
-    }
-  }
-  
-  /// 배너 표시 트리거 (체험 완료 시 호출)
-  Future<void> triggerBanner() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_kTrialCompletedBannerDismissedKey, false);
-      
-      if (kDebugMode) {
-        debugPrint('🎉 [TrialCompletedBannerService] 배너 트리거됨');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [TrialCompletedBannerService] 배너 트리거 실패: $e');
+        debugPrint('❌ [TrialCompletedBanner] 배너 닫기 실패: $e');
       }
     }
   }
   
   /// 배너 상태 초기화 (테스트용)
   Future<void> resetBannerState() async {
-    if (!kDebugMode) return;
-    
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_kTrialCompletedBannerDismissedKey);
+      await prefs.remove(_bannerStateKey);
+      _shouldShow = false;
       
       if (kDebugMode) {
-        debugPrint('🎉 [TrialCompletedBannerService] 배너 상태 초기화됨');
+        debugPrint('🎯 [TrialCompletedBanner] 상태 초기화');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [TrialCompletedBannerService] 배너 상태 초기화 실패: $e');
+        debugPrint('❌ [TrialCompletedBanner] 상태 초기화 실패: $e');
       }
     }
   }

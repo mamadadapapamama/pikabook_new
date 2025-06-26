@@ -12,6 +12,7 @@ enum PikaButtonVariant {
 }
 
 enum PikaButtonSize {
+  xs,
   small,
   medium,
   large,
@@ -128,6 +129,11 @@ class PikaButton extends StatelessWidget {
 
   EdgeInsets _getButtonPadding() {
     switch (size) {
+      case PikaButtonSize.xs:
+        return EdgeInsets.symmetric(
+          horizontal: SpacingTokens.xs,
+          vertical: SpacingTokens.xs,
+        );
       case PikaButtonSize.small:
         return EdgeInsets.symmetric(
           horizontal: SpacingTokens.sm,
@@ -240,6 +246,8 @@ class PikaButton extends StatelessWidget {
     }
     
     switch (size) {
+      case PikaButtonSize.xs:
+        return baseStyle.copyWith(fontSize: 12, color: textColor);
       case PikaButtonSize.small:
         return baseStyle.copyWith(fontSize: 14, color: textColor);
       case PikaButtonSize.large:

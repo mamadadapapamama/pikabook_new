@@ -11,12 +11,8 @@ import 'views/screens/onboarding_screen.dart';
 import 'core/services/common/initialization_manager.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
-import 'core/services/common/usage_limit_service.dart';
 import 'core/services/payment/in_app_purchase_service.dart';
-import 'core/services/cache/cache_manager.dart';
-import 'core/widgets/usage_dialog.dart';
 import 'views/screens/loading_screen.dart';
-import 'core/services/marketing/marketing_campaign_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -59,20 +55,11 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   StreamSubscription<User?>? _authStateSubscription;
   late InitializationManager _initializationManager;
   late UserPreferencesService _preferencesService;
-  final UsageLimitService _usageLimitService = UsageLimitService();
-
   String? _error;
-  final MarketingCampaignService _marketingService = MarketingCampaignService();
   final PlanService _planService = PlanService();
   final InAppPurchaseService _purchaseService = InAppPurchaseService();
-  final CacheManager _cacheManager = CacheManager();
+
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
-  
-  bool _ttsExceed = false;
-  bool _noteExceed = false;
-  
-  // 사용량 한도 다이얼로그 표시 여부 추적
-  bool _hasShownUsageLimitDialog = false;
   
   @override
   void initState() {
@@ -107,7 +94,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   @override
   void dispose() {
     _authStateSubscription?.cancel();
-    _purchaseService.dispose();
+    // InAppPurchaseService는 싱글톤이므로 앱 종료 시에만 dispose
+    if (_purchaseService.isAvailable) {
+      _purchaseService.dispose();
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -144,25 +134,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 공통 서비스 초기화 (Firebase 포함)
       final initResult = await _initializationManager.initialize();
       
-      // 캐시 매니저 초기화 (동기적으로 실행)
-      try {
-        await _cacheManager.initialize();
-        if (kDebugMode) {
-          debugPrint('✅ CacheManager 초기화 완료');
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('❌ CacheManager 초기화 실패: $e');
-        }
-      }
+      // 캐시 매니저는 실제 사용 시점에 자동 초기화됨
       
-      // 마케팅 캠페인 서비스 초기화 (필요 시에만)
-      await _marketingService.initialize();
       
-      // In-App Purchase 서비스 초기화
-      await _purchaseService.initialize();
+      // In-App Purchase 서비스는 실제 구매 시점에 초기화됨
       
-      // 초기화 결과에서 로그인 정보 가져오기
+      // 초기화 결과에서 정보 가져오기
       final isLoggedIn = initResult['isLoggedIn'] as bool;
       final isOnboardingCompleted = initResult['isOnboardingCompleted'] as bool;
       
@@ -344,27 +321,17 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       
       await _preferencesService.loadUserSettingsFromFirestore();
   
-      // 노트 존재 여부 확인 및 온보딩 상태 설정
-      bool hasNotes = await _checkUserHasNotes();
-      if (hasNotes) {
-        await _preferencesService.setOnboardingCompleted(true);
-        _isOnboardingCompleted = true;
-      } else {
-        _isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
-      }
+      // 온보딩 상태 확인 (노트 생성 시 자동으로 완료 처리됨)
+      _isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
       
-      // 사용량 제한 확인
-      await _checkUsageLimits();
-      
-      // 상태 업데이트
+      // 상태 업데이트 (사용량 확인은 InitializationManager에서 처리됨)
       if (mounted) {
         setState(() {
           _isLoadingUserData = false;
           _isLoading = false;
         });
         
-        // 플랜 변경 체크
-        await _checkPlanChange();
+        // 플랜 변경은 InitializationManager에서 배너로 처리됨
       }
     } catch (e) {
       if (kDebugMode) {
@@ -380,95 +347,11 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
-  /// 사용자가 노트를 가지고 있는지 확인
-  Future<bool> _checkUserHasNotes() async {
-    try {
-      if (_userId == null) return false;
-      
-      // Firestore에서 사용자의 노트 수 확인
-      final notesSnapshot = await FirebaseFirestore.instance
-          .collection('notes')
-          .where('userId', isEqualTo: _userId)
-          .limit(1) // 하나만 확인해도 충분
-          .get();
-      
-      // 노트가 하나라도 있으면 true
-      return notesSnapshot.docs.isNotEmpty;
-    } catch (e) {
-      if (kDebugMode) {
-      debugPrint('노트 존재 여부 확인 중 오류: $e');
-      }
-      return false; // 오류 발생 시 기본값으로 false 반환
-    }
-  }
+
   
-  /// 사용량 제한 확인
-  Future<void> _checkUsageLimits() async {
-    try {
-      // 온보딩이 완료되지 않은 사용자는 제한 확인 불필요
-      if (!_isOnboardingCompleted) {
-        if (kDebugMode) {
-          debugPrint('온보딩 미완료 사용자 - 사용량 제한 확인 건너뛰기');
-        }
-        setState(() {
-          _ttsExceed = false;
-          _noteExceed = false;
-        });
-        return;
-      }
-      
-      // 사용량 제한 플래그 확인 (버퍼 추가)
-      final limitFlags = await _usageLimitService.checkUsageLimitFlags(withBuffer: true);
-      final ttsExceed = limitFlags['ttsExceed'] ?? false;
-      final noteExceed = limitFlags['noteExceed'] ?? false;
-      
-      setState(() {
-        _ttsExceed = ttsExceed;
-        _noteExceed = noteExceed;
-      });
-      
-      if (kDebugMode) {
-        debugPrint('사용자 사용량 제한 확인 (버퍼 적용): TTS 제한=$ttsExceed, 노트 제한=$noteExceed');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('사용량 제한 확인 중 오류: $e');
-      }
-    }
-  }
+
   
-  /// 플랜 변경 체크
-  Future<void> _checkPlanChange() async {
-    if (_userId != null) {
-      final hasChangedToFree = await _planService.hasPlanChangedToFree();
-      if (hasChangedToFree && mounted) {
-        // 스낵바 표시
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Free plan으로 전환 되었습니다. 자세한 설명은 설정 -> 내 플랜 을 참고하세요.',
-              style: TextStyle(color: Colors.white),
-            ),
-            backgroundColor: ColorTokens.secondary,
-            duration: const Duration(seconds: 2),
-            action: SnackBarAction(
-              label: '확인',
-              textColor: Colors.white,
-              onPressed: () {
-                _scaffoldMessengerKey.currentState?.hideCurrentSnackBar();
-                // 상태 강제 새로고침으로 블랙스크린 방지
-                if (mounted) {
-                  setState(() {
-                    // 현재 상태를 유지하면서 UI 재빌드 강제
-                  });
-                }
-              },
-            ),
-          ),
-        );
-      }
-    }
-  }
+
   
   /// 샘플 모드에서 로그인 화면으로 전환 요청
   void _requestLoginScreen() {
@@ -709,61 +592,5 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
 
-  // 사용량 제한 다이얼로그 표시 (HomeScreen 내부 등으로 이동 필요)
-  void _showUsageLimitDialog(BuildContext context) async {
-    if (kDebugMode) {
-      debugPrint('[_showUsageLimitDialog] 호출됨 (HomeScreen 내부로 이동 권장)');
-    }
-    // 사용량 정보 가져오기
-    final usageInfo = await _usageLimitService.getUserUsageForSettings();
-    final limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
-    final usagePercentages = usageInfo['usagePercentages'] as Map<String, double>;
-    
-    // 다이얼로그 표시
-    if (mounted && !_hasShownUsageLimitDialog) {
-      UsageDialog.show(
-        context,
-        title: _noteExceed ? '사용량 제한에 도달했습니다' : null,
-        message: _noteExceed 
-            ? '노트 생성 관련 기능이 제한되었습니다. 더 많은 기능이 필요하시다면 문의하기를 눌러 요청해 주세요.'
-            : null,
-        limitStatus: limitStatus,
-        usagePercentages: usagePercentages,
-        onContactSupport: _handleContactSupport,
-      );
-      // setState 호출을 여기서 하는 것은 적절하지 않음
-      // _hasShownUsageLimitDialog = true; 
-    }
-  }
-  
-  // 지원팀 문의하기 처리 (HomeScreen 내부 등으로 이동 필요)
-  void _handleContactSupport() async {
-    if (kDebugMode) {
-      debugPrint('[_handleContactSupport] 호출됨 (HomeScreen 내부로 이동 권장)');
-    }
-    // 프리미엄 문의 구글 폼 URL
-    const String formUrl = 'https://forms.gle/9EBEV1vaLpNbkhxD9';
-    final Uri url = Uri.parse(formUrl);
-    
-    try {
-      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-        // URL을 열 수 없는 경우 스낵바로 알림
-        // ScaffoldMessenger.of(context) 사용 필요 (키 또는 Builder context 사용)
-        _scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text('문의 폼을 열 수 없습니다. 직접 브라우저에서 다음 주소를 입력해 주세요: $formUrl'),
-            duration: const Duration(seconds: 10),
-          ),
-        );
-      }
-    } catch (e) {
-      // 오류 발생 시 스낵바로 알림
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text('문의 폼을 여는 중 오류가 발생했습니다. 이메일로 문의해 주세요: hello.pikabook@gmail.com'),
-          duration: const Duration(seconds: 10),
-        ),
-      );
-    }
-  }
+
 }
