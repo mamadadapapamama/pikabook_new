@@ -262,58 +262,82 @@ class UsageLimitService {
   /// Firebase에서 제한 데이터 로드 (캐시 없음)
   Future<Map<String, int>> _loadLimitsFromFirebase({bool forceRefresh = false}) async {
     try {
+      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase 시작');
+      
       final userId = _currentUserId;
       if (userId == null) {
+        debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 사용자 ID 없음, 기본 제한 반환');
         return _getDefaultLimits();
       }
       
+      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 사용자 ID $userId');
+      
       // 1. 사용자별 커스텀 제한 확인
+      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 1단계 - 커스텀 제한 확인');
       final customLimits = await _getUserCustomLimits(userId);
+      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 커스텀 제한 결과: $customLimits');
       if (customLimits.isNotEmpty) {
+        debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 커스텀 제한 사용: $customLimits');
         return customLimits;
       }
       
       // 2. 플랜 기반 제한 적용
+      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 2단계 - 플랜 기반 제한 확인');
       final planService = PlanService();
       final planType = await planService.getCurrentPlanType(forceRefresh: forceRefresh);
       
-      debugPrint('🔍 UsageLimitService에서 확인한 플랜 타입: $planType');
-      debugPrint('🔍 해당 플랜의 제한값: ${PlanService.PLAN_LIMITS[planType]}');
+      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 확인한 플랜 타입: $planType');
+      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 해당 플랜의 제한값: ${PlanService.PLAN_LIMITS[planType]}');
       
       final limits = PlanService.PLAN_LIMITS[planType];
       if (limits != null) {
-        return Map<String, int>.from(limits);
+        final result = Map<String, int>.from(limits);
+        debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 플랜 기반 제한 사용: $result');
+        return result;
       }
       
       // 3. 기본 제한 적용
-      return _getDefaultLimits();
-    } catch (e) {
-      debugPrint('Firebase에서 제한 데이터 로드 중 오류: $e');
-      return _getDefaultLimits();
+      debugPrint('🔍 [UsageLimitService] _loadLimitsFromFirebase: 3단계 - 기본 제한 적용');
+      final defaultLimits = _getDefaultLimits();
+      debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 기본 제한 사용: $defaultLimits');
+      return defaultLimits;
+    } catch (e, stackTrace) {
+      debugPrint('❌ [UsageLimitService] _loadLimitsFromFirebase 오류: $e');
+      debugPrint('❌ [UsageLimitService] _loadLimitsFromFirebase 스택 트레이스: $stackTrace');
+      final defaultLimits = _getDefaultLimits();
+      debugPrint('🔄 [UsageLimitService] _loadLimitsFromFirebase: 오류로 인한 기본 제한 사용: $defaultLimits');
+      return defaultLimits;
     }
   }
   
   /// 사용자별 커스텀 제한 가져오기
   Future<Map<String, int>> _getUserCustomLimits(String userId) async {
     try {
+      debugPrint('🔍 [UsageLimitService] _getUserCustomLimits: $userId로 user_limits 컬렉션 조회');
+      
       final doc = await _firestore
           .collection(_CUSTOM_LIMITS_COLLECTION)
           .doc(userId)
           .get();
           
       if (!doc.exists) {
+        debugPrint('🔍 [UsageLimitService] _getUserCustomLimits: user_limits 문서가 존재하지 않음');
         return {};
       }
       
       final data = doc.data() as Map<String, dynamic>;
+      debugPrint('🔍 [UsageLimitService] _getUserCustomLimits: user_limits 문서 데이터: $data');
+      
       final limits = <String, int>{};
       
       if (data.containsKey('ocrPages')) limits['ocrPages'] = _parseIntSafely(data['ocrPages']);
       if (data.containsKey('ttsRequests')) limits['ttsRequests'] = _parseIntSafely(data['ttsRequests']);
       
+      debugPrint('✅ [UsageLimitService] _getUserCustomLimits: 파싱된 커스텀 제한: $limits');
       return limits;
-    } catch (e) {
-      debugPrint('커스텀 제한 로드 오류: $e');
+    } catch (e, stackTrace) {
+      debugPrint('❌ [UsageLimitService] _getUserCustomLimits 오류: $e');
+      debugPrint('❌ [UsageLimitService] _getUserCustomLimits 스택 트레이스: $stackTrace');
       return {};
     }
   }

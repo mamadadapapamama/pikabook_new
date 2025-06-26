@@ -147,7 +147,7 @@ class TestDataGenerator {
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
         });
-        await _createUserLimits(uid, 'premium');
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         break;
 
       case 'trial_expired':
@@ -164,7 +164,7 @@ class TestDataGenerator {
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
         });
-        await _createUserLimits(uid, 'free');
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         break;
 
       case 'free_plan':
@@ -172,7 +172,7 @@ class TestDataGenerator {
         await _firestore.collection('users').doc(uid).update({
           // 기본 상태 유지 (subscription 없음)
         });
-        await _createUserLimits(uid, 'free');
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         break;
 
       case 'free_limit_reached':
@@ -180,7 +180,7 @@ class TestDataGenerator {
         await _firestore.collection('users').doc(uid).update({
           // 기본 상태 유지 (subscription 없음)
         });
-        await _createUserLimits(uid, 'free_exhausted');
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         await _createUsageData(uid, 'free_limit_reached');
         break;
 
@@ -198,7 +198,7 @@ class TestDataGenerator {
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
         });
-        await _createUserLimits(uid, 'premium');
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         break;
 
       case 'premium_limit_reached':
@@ -215,7 +215,7 @@ class TestDataGenerator {
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
         });
-        await _createUserLimits(uid, 'premium_exhausted');
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         await _createUsageData(uid, 'premium_limit_reached');
         break;
 
@@ -233,7 +233,7 @@ class TestDataGenerator {
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
         });
-        await _createUserLimits(uid, 'free');
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         break;
 
       case 'premium_trial_limit_reached':
@@ -250,7 +250,7 @@ class TestDataGenerator {
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
         });
-        await _createUserLimits(uid, 'premium_exhausted'); // 🎯 제한 도달
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         await _createUsageData(uid, 'premium_limit_reached');
         break;
 
@@ -268,7 +268,7 @@ class TestDataGenerator {
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
         });
-        await _createUserLimits(uid, 'premium');
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         break;
 
       case 'premium_yearly_limit_reached':
@@ -285,7 +285,7 @@ class TestDataGenerator {
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
         });
-        await _createUserLimits(uid, 'premium_exhausted');
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         await _createUsageData(uid, 'premium_limit_reached');
         break;
 
@@ -303,7 +303,7 @@ class TestDataGenerator {
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
         });
-        await _createUserLimits(uid, 'free');
+        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         break;
     }
   }
@@ -349,48 +349,14 @@ class TestDataGenerator {
     }
   }
 
-  /// 사용량 제한 설정
+  /// 사용량 제한 설정 (플랜 기반 제한 사용으로 더 이상 필요하지 않음)
+  /// 🎯 커스텀 제한 대신 PlanService.PLAN_LIMITS를 사용하여 정확한 제한값 적용
+  @deprecated
   static Future<void> _createUserLimits(String uid, String limitType) async {
-    Map<String, int> limits;
-    
-    switch (limitType) {
-      case 'free':
-        limits = {
-          'ocrPages': 10,
-          'storageBytes': 50000000, // 50MB
-          'translatedChars': 10000,
-          'ttsRequests': 30,
-        };
-        break;
-      case 'free_exhausted':
-        limits = {
-          'ocrPages': 0,
-          'storageBytes': 0,
-          'translatedChars': 0,
-          'ttsRequests': 0,
-        };
-        break;
-      case 'premium':
-        limits = {
-          'ocrPages': 300,
-          'storageBytes': 1000000000, // 1GB
-          'translatedChars': 100000,
-          'ttsRequests': 1000,
-        };
-        break;
-      case 'premium_exhausted':
-        limits = {
-          'ocrPages': 0,
-          'storageBytes': 0,
-          'translatedChars': 0,
-          'ttsRequests': 0,
-        };
-        break;
-      default:
-        return;
+    // 더 이상 사용하지 않음 - 플랜 기반 제한 사용
+    if (kDebugMode) {
+      debugPrint('⚠️ [TestDataGenerator] _createUserLimits는 더 이상 사용되지 않습니다. 플랜 기반 제한을 사용합니다.');
     }
-
-    await _firestore.collection('user_limits').doc(uid).set(limits);
   }
 
   /// 모든 테스트 계정 삭제 (정리용)
