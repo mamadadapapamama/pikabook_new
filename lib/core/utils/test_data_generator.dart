@@ -216,6 +216,7 @@ class TestDataGenerator {
           'hasEverUsedTrial': true,
         });
         await _createUserLimits(uid, 'premium_exhausted');
+        await _createUsageData(uid, 'premium_limit_reached');
         break;
 
       case 'premium_expired':
@@ -250,6 +251,7 @@ class TestDataGenerator {
           'hasEverUsedTrial': true,
         });
         await _createUserLimits(uid, 'premium_exhausted'); // 🎯 제한 도달
+        await _createUsageData(uid, 'premium_limit_reached');
         break;
 
       case 'premium_yearly_active':
@@ -284,6 +286,7 @@ class TestDataGenerator {
           'hasEverUsedTrial': true,
         });
         await _createUserLimits(uid, 'premium_exhausted');
+        await _createUsageData(uid, 'premium_limit_reached');
         break;
 
       case 'premium_yearly_expired':
