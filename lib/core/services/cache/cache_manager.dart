@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import '../../../core/models/processed_text.dart';
 import '../../../core/models/note.dart';
 import '../../../core/models/flash_card.dart';
 import 'cache_storage.dart';
@@ -13,7 +12,7 @@ class CacheManager {
   factory CacheManager() => _instance;
   CacheManager._internal();
 
-  // 캐시 저장소들 (nullable로 변경)
+  // 캐시 저장소들
   LocalCacheStorage<Map<String, dynamic>>? _noteContentsCache;
   LocalCacheStorage<Map<String, dynamic>>? _noteMetadataCache;
   LocalCacheStorage<Map<String, dynamic>>? _flashcardCache;
@@ -28,24 +27,18 @@ class CacheManager {
 
     try {
       if (kDebugMode) {
-        debugPrint('🏗️ CacheManager 초기화 시작 (병렬 처리)');
+        debugPrint('🏗️ CacheManager 초기화 시작');
       }
 
-      // 모든 캐시 저장소를 생성만 하고 초기화는 지연
-      if (kDebugMode) {
-        debugPrint('📦 캐시 저장소 생성 중... (초기화는 지연)');
-      }
-      
-      // Note Contents 캐시 (50MB - 메모리 최적화)
+      // 모든 캐시 저장소 생성 (실제 초기화는 지연)
       _noteContentsCache = LocalCacheStorage<Map<String, dynamic>>(
         namespace: 'note_contents',
-        maxSize: 50 * 1024 * 1024, // 100MB → 50MB (50% 절약)
-        maxItems: 2500, // 5000 → 2500 (50% 절약)
+        maxSize: 50 * 1024 * 1024, // 50MB
+        maxItems: 2500,
         fromJson: (json) => json,
         toJson: (data) => data,
       );
 
-      // Note Metadata 캐시 (10MB)
       _noteMetadataCache = LocalCacheStorage<Map<String, dynamic>>(
         namespace: 'note_metadata',
         maxSize: 10 * 1024 * 1024, // 10MB
@@ -54,7 +47,6 @@ class CacheManager {
         toJson: (data) => data,
       );
 
-      // Flashcard 캐시 (10MB)
       _flashcardCache = LocalCacheStorage<Map<String, dynamic>>(
         namespace: 'flashcards',
         maxSize: 10 * 1024 * 1024, // 10MB
@@ -63,24 +55,22 @@ class CacheManager {
         toJson: (data) => data,
       );
 
-      // Image 캐시 (150MB - 메모리 최적화)
       _imageCache = LocalCacheStorage<Uint8List>(
         namespace: 'images',
-        maxSize: 150 * 1024 * 1024, // 300MB → 150MB (50% 절약)
-        maxItems: 500, // 1000 → 500 (50% 절약)
+        maxSize: 150 * 1024 * 1024, // 150MB
+        maxItems: 500,
       );
 
-      // TTS 캐시 (100MB - 메모리 최적화)
       _ttsCache = LocalCacheStorage<Uint8List>(
         namespace: 'tts',
-        maxSize: 100 * 1024 * 1024, // 200MB → 100MB (50% 절약)
-        maxItems: 500, // 1000 → 500 (50% 절약)
+        maxSize: 100 * 1024 * 1024, // 100MB
+        maxItems: 500,
       );
 
       _isInitialized = true;
 
       if (kDebugMode) {
-        debugPrint('✅ CacheManager 초기화 완료 (지연 로딩으로 빠른 시작)');
+        debugPrint('✅ CacheManager 초기화 완료');
       }
       
       // 백그라운드에서 실제 초기화 수행
@@ -94,14 +84,13 @@ class CacheManager {
     }
   }
 
-  /// 백그라운드에서 캐시 실제 초기화 (병렬 처리)
+  /// 백그라운드에서 캐시 실제 초기화
   Future<void> _initializeCachesInBackground() async {
     try {
       if (kDebugMode) {
-        debugPrint('🔄 백그라운드에서 캐시 실제 초기화 시작 (병렬 처리)');
+        debugPrint('🔄 백그라운드 캐시 초기화 시작');
       }
 
-      // 모든 캐시를 병렬로 초기화
       await Future.wait([
         _noteContentsCache!.initialize(),
         _noteMetadataCache!.initialize(),
@@ -118,7 +107,6 @@ class CacheManager {
       if (kDebugMode) {
         debugPrint('⚠️ 백그라운드 캐시 초기화 실패: $e');
       }
-      // 백그라운드 초기화 실패는 앱 동작에 영향 주지 않음
     }
   }
 

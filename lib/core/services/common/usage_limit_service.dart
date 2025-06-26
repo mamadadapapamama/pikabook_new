@@ -56,13 +56,13 @@ class UsageLimitService {
   /// 사용자 변경 감지 및 캐시 무효화
   void _checkUserChange() {
     final currentUserId = _currentUserId;
-    if (currentUserId != _lastUserId) {
+    if (currentUserId != _lastUserId && _lastUserId != null) {
       _invalidateCache();
-      _lastUserId = currentUserId;
       if (kDebugMode) {
         debugPrint('👤 [UsageLimitService] 사용자 변경 감지: $_lastUserId -> $currentUserId');
       }
     }
+    _lastUserId = currentUserId;
   }
   
   /// 캐시 유효성 검사
@@ -110,7 +110,12 @@ class UsageLimitService {
       };
       
       if (kDebugMode) {
-        debugPrint('앱 시작시 제한 확인 결과: $limitStatus');
+        debugPrint('🔍 앱 시작시 제한 확인:');
+        debugPrint('  - 사용량: OCR=${usage['ocrPages']}, TTS=${usage['ttsRequests']}');
+        debugPrint('  - 제한: OCR=${limits['ocrPages']}, TTS=${limits['ttsRequests']}');
+        debugPrint('  - 비교: OCR(${usage['ocrPages']} >= ${limits['ocrPages']}) = ${(usage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0)}');
+        debugPrint('  - 비교: TTS(${usage['ttsRequests']} >= ${limits['ttsRequests']}) = ${(usage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0)}');
+        debugPrint('  - 🎯 최종 결과: $limitStatus');
       }
       return limitStatus;
       
@@ -363,9 +368,18 @@ class UsageLimitService {
       }
       return usageData;
     } catch (e, stackTrace) {
-      debugPrint('❌ [UsageLimitService] Firebase에서 사용량 데이터 로드 중 오류: $e');
-      if (kDebugMode) {
-        debugPrint('❌ [UsageLimitService] 스택 트레이스: $stackTrace');
+      // 네트워크 연결 오류 감지
+      final isNetworkError = e.toString().contains('Unavailable') || 
+                            e.toString().contains('Network') ||
+                            e.toString().contains('connectivity');
+      
+      if (isNetworkError) {
+        debugPrint('🌐 [UsageLimitService] 네트워크 연결 오류 - Firebase 사용량 데이터 로드 실패: $e');
+      } else {
+        debugPrint('❌ [UsageLimitService] Firebase에서 사용량 데이터 로드 중 오류: $e');
+        if (kDebugMode) {
+          debugPrint('❌ [UsageLimitService] 스택 트레이스: $stackTrace');
+        }
       }
       return _getDefaultUsageData();
     }

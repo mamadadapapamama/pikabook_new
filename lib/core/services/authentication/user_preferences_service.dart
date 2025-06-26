@@ -178,7 +178,7 @@ class UserPreferencesService {
     }
   }
 
-  /// Firestore에서 사용자 설정 로드
+  /// Firestore에서 사용자 설정 로드 (읽기 전용 - 저장하지 않음)
   Future<void> loadUserSettingsFromFirestore() async {
     final userId = await getCurrentUserId();
     if (userId == null || userId.isEmpty) {
@@ -193,10 +193,19 @@ class UserPreferencesService {
         final userData = userDoc.data();
         if (userData == null) return;
         
-        // UserPreferences 객체 생성 및 저장
+        // 🎯 읽기 전용: 캐시에만 저장하고 Firestore에 다시 저장하지 않음
         final preferences = UserPreferences.fromJson(userData);
-        await savePreferences(preferences);
-        debugPrint('✅ Firestore에서 사용자 설정 로드 완료');
+        
+        // 로컬 SharedPreferences에만 저장
+        final prefs = await SharedPreferences.getInstance();
+        final key = '${_preferencesKey}_$userId';
+        await prefs.setString(key, jsonEncode(preferences.toJson()));
+        
+        // 이벤트 기반 캐시에만 저장 (Firestore 저장 없음)
+        final cacheKey = 'user_preferences_$userId';
+        _eventCache.setCache(cacheKey, preferences);
+        
+        debugPrint('✅ Firestore에서 사용자 설정 로드 완료 (읽기 전용)');
       } else {
         debugPrint('⚠️ Firestore에 사용자 문서가 없습니다: $userId');
       }

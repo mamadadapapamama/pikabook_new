@@ -176,17 +176,17 @@ class InitializationManager {
         );
         
         try {
-          // 캐시를 사용하여 불필요한 중복 조회 방지
-          usageLimitStatus = await _usageLimitService.checkInitialLimitStatus(forceRefresh: false);
-          debugPrint('초기화 중 사용량 확인 완료 (캐시 사용): $usageLimitStatus');
+          // 🎯 로그인 직후에는 강제 새로고침으로 정확한 상태 확인 (재시도 로직 포함)
+          usageLimitStatus = await _retryFirebaseOperation(() async {
+            return await _usageLimitService.checkInitialLimitStatus(forceRefresh: true);
+          });
+          debugPrint('초기화 중 사용량 확인 완료 (강제 새로고침): $usageLimitStatus');
         } catch (e) {
-          debugPrint('초기화 중 사용량 확인 실패: $e');
+          debugPrint('초기화 중 사용량 확인 실패 (재시도 후): $e');
           // 사용량 확인 실패 시 기본값 설정
           usageLimitStatus = {
             'ocrLimitReached': false,
             'ttsLimitReached': false,
-            'translationLimitReached': false,
-            'storageLimitReached': false,
           };
         }
       } else {
@@ -197,8 +197,6 @@ class InitializationManager {
         usageLimitStatus = {
           'ocrLimitReached': false,
           'ttsLimitReached': false,
-          'translationLimitReached': false,
-          'storageLimitReached': false,
         };
       }
       
@@ -219,10 +217,12 @@ class InitializationManager {
         );
         
         try {
-          bannerStates = await _determineBannerStates(usageLimitStatus);
+          bannerStates = await _retryFirebaseOperation(() async {
+            return await _determineBannerStates(usageLimitStatus);
+          });
           debugPrint('초기화 중 배너 상태 결정 완료: $bannerStates');
         } catch (e) {
-          debugPrint('초기화 중 배너 상태 결정 실패: $e');
+          debugPrint('초기화 중 배너 상태 결정 실패 (재시도 후): $e');
           bannerStates = {
             'shouldShowPremiumExpiredBanner': false,
             'shouldShowUsageLimitBanner': false,
@@ -371,10 +371,46 @@ class InitializationManager {
     }
   }
 
-  // 배너 상태 결정 (중앙집중식)
+  /// Firebase 작업 재시도 로직
+  /// 네트워크 연결 문제로 인한 일시적 오류에 대비
+  Future<T> _retryFirebaseOperation<T>(Future<T> Function() operation, {int maxRetries = 3}) async {
+    int attempts = 0;
+    while (attempts < maxRetries) {
+      try {
+        return await operation();
+      } catch (e) {
+        attempts++;
+        final isNetworkError = e.toString().contains('Unavailable') || 
+                              e.toString().contains('Network') ||
+                              e.toString().contains('connectivity');
+        
+        if (isNetworkError && attempts < maxRetries) {
+          final delay = Duration(milliseconds: 1000 * attempts); // 1초, 2초, 3초
+          if (kDebugMode) {
+            debugPrint('🔄 Firebase 네트워크 오류 감지, ${delay.inSeconds}초 후 재시도 ($attempts/$maxRetries): $e');
+          }
+          await Future.delayed(delay);
+          continue;
+        }
+        
+        // 네트워크 오류가 아니거나 최대 재시도 횟수 도달
+        rethrow;
+      }
+    }
+    
+    throw Exception('Firebase 작업 재시도 한계 초과');
+  }
+
+  // 배너 상태 결정 (중앙집중식) - 읽기 전용
   Future<Map<String, bool>> _determineBannerStates(Map<String, bool> usageLimitStatus) async {
     try {
+      if (kDebugMode) {
+        debugPrint('🎯 배너 상태 결정 시작 (읽기 전용)');
+      }
+      
       final planService = PlanService();
+      
+      // 🎯 구독 정보 가져오기
       final subscriptionDetails = await planService.getSubscriptionDetails();
       
       final currentPlan = subscriptionDetails['currentPlan'] as String?;
@@ -389,7 +425,7 @@ class InitializationManager {
           ((subscriptionStatus == 'expired') || hasPlanChanged) &&
           (hasUsedFreeTrial || hasEverUsedTrial);
       
-      // 2. 사용량 한도 배너
+      // 2. 사용량 한도 배너 - 실제 사용량 기준으로 정확히 판단
       final ocrLimitReached = usageLimitStatus['ocrLimitReached'] ?? false;
       final ttsLimitReached = usageLimitStatus['ttsLimitReached'] ?? false;
       final shouldShowUsageLimitBanner = ocrLimitReached || ttsLimitReached;
@@ -400,25 +436,36 @@ class InitializationManager {
           hasUsedFreeTrial &&
           !isFreeTrial;
       
-              final result = {
-          'shouldShowPremiumExpiredBanner': shouldShowPremiumExpiredBanner,
-          'shouldShowUsageLimitBanner': shouldShowUsageLimitBanner,
-          'shouldShowTrialCompletedBanner': shouldShowTrialCompletedBanner,
-        };
+      final result = {
+        'shouldShowPremiumExpiredBanner': shouldShowPremiumExpiredBanner,
+        'shouldShowUsageLimitBanner': shouldShowUsageLimitBanner,
+        'shouldShowTrialCompletedBanner': shouldShowTrialCompletedBanner,
+      };
       
       if (kDebugMode) {
-        debugPrint('🎯 배너 상태 결정:');
+        debugPrint('🎯 배너 상태 결정 완료:');
         debugPrint('  - 현재 플랜: $currentPlan');
         debugPrint('  - 구독 상태: $subscriptionStatus');
-        debugPrint('  - 체험 사용 이력: $hasUsedFreeTrial');
+        debugPrint('  - 무료체험 사용: $hasUsedFreeTrial');
+        debugPrint('  - 체험 이력: $hasEverUsedTrial');
+        debugPrint('  - 현재 체험중: $isFreeTrial');
         debugPrint('  - 사용량 제한: OCR=$ocrLimitReached, TTS=$ttsLimitReached');
         debugPrint('  - 플랜 변경: $hasPlanChanged');
-        debugPrint('  - 배너 결과: $result');
+        debugPrint('  - 🎯 최종 배너 결과: $result');
+        
+        // 🔍 사용량 한도 배너 디버깅
+        if (shouldShowUsageLimitBanner) {
+          debugPrint('  ✅ 사용량 한도 배너 표시 조건 충족!');
+        } else {
+          debugPrint('  ❌ 사용량 한도 배너 표시 조건 미충족');
+          debugPrint('     - OCR 한도 도달: $ocrLimitReached');
+          debugPrint('     - TTS 한도 도달: $ttsLimitReached');
+        }
       }
       
       return result;
     } catch (e) {
-      debugPrint('배너 상태 결정 중 오류: $e');
+      debugPrint('❌ 배너 상태 결정 중 오류: $e');
       return {
         'shouldShowPremiumExpiredBanner': false,
         'shouldShowUsageLimitBanner': false,
