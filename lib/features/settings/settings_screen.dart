@@ -210,7 +210,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   displayName,
                   style: TypographyTokens.buttonEn,
                 ),
-                SizedBox(height: SpacingTokens.xs/2),
+                SizedBox(height: SpacingTokens.xsHalf),
                 Text(
                   email,
                   style: TypographyTokens.captionEn.copyWith(

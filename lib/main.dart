@@ -61,6 +61,14 @@ void main() async {
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
     
+    // Debug 모드에서 Firebase 로그 레벨 조정
+    if (kDebugMode) {
+      FirebaseAuth.instance.setSettings(
+        appVerificationDisabledForTesting: false,
+        forceRecaptchaFlow: false,
+      );
+    }
+    
     // Firebase Auth 자동 복원 방지 - Apple ID 다이얼로그 방지
     await _preventAutoSignIn();
     

@@ -4,6 +4,7 @@ import '../../core/models/flash_card.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/typography_tokens.dart';
 import '../../core/theme/tokens/spacing_tokens.dart';
+import '../../core/utils/safe_math_utils.dart';
 
 import '../tts/unified_tts_button.dart';
 import '../../core/services/tts/unified_tts_service.dart';
@@ -43,9 +44,9 @@ class FlashCardUI {
     return LayoutBuilder(
       builder: (context, constraints) {
         // 화면의 95% 크기로 카드 너비 계산 (기존 80%에서 95%로 변경)
-        final double cardWidth = constraints.maxWidth * 0.95;
+        final double cardWidth = SafeMathUtils.safeMul(constraints.maxWidth, 0.95, defaultValue: 300.0);
         // 카드 높이는 화면 높이의 90%로 설정하여 전체 화면 활용
-        final double cardHeight = constraints.maxHeight * 0.9;
+        final double cardHeight = SafeMathUtils.safeMul(constraints.maxHeight, 0.9, defaultValue: 400.0);
         
         return Stack(
           children: [

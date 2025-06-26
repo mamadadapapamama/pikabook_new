@@ -9,6 +9,9 @@ class SpacingTokens {
   static const double lg = 24.0;
   static const double xl = 32.0;
   static const double xxl = 48.0;
+  
+  // 자주 사용되는 나누기 값들을 미리 계산
+  static const double xsHalf = 2.0; // xs/2
 
   // 컴포넌트별 간격
   static const double appBarPadding = 16.0;

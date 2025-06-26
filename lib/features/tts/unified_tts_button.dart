@@ -6,6 +6,7 @@ import '../../core/services/authentication/auth_service.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/services/common/usage_limit_service.dart';
 import '../sample/sample_tts_service.dart';
+import '../../core/utils/safe_math_utils.dart';
 
 /// 통합 TTS 버튼
 /// 일반 TTS와 느린 TTS를 하나의 버튼으로 처리
@@ -315,7 +316,7 @@ class _UnifiedTtsButtonState extends State<UnifiedTtsButton> {
           shape: BoxShape.circle,
         ),
         child: IconButton(
-          icon: _buildIcon(_isPlaying, iconColor, widget.size * 0.5),
+          icon: _buildIcon(_isPlaying, iconColor, SafeMathUtils.safeMul(widget.size, 0.5, defaultValue: 12.0)),
           onPressed: widget.isEnabled ? _togglePlayback : null,
           padding: EdgeInsets.zero,
           constraints: BoxConstraints(
@@ -327,9 +328,9 @@ class _UnifiedTtsButtonState extends State<UnifiedTtsButton> {
       );
     } else {
       buttonWidget = IconButton(
-        icon: _buildIcon(_isPlaying, iconColor, widget.size * 0.6),
-        iconSize: widget.size * 0.6,
-        padding: EdgeInsets.all(widget.size * 0.2),
+        icon: _buildIcon(_isPlaying, iconColor, SafeMathUtils.safeMul(widget.size, 0.6, defaultValue: 14.4)),
+        iconSize: SafeMathUtils.safeMul(widget.size, 0.6, defaultValue: 14.4),
+        padding: EdgeInsets.all(SafeMathUtils.safeMul(widget.size, 0.2, defaultValue: 4.8)),
         constraints: BoxConstraints(
           minWidth: widget.size,
           minHeight: widget.size,

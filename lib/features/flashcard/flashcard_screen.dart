@@ -355,7 +355,7 @@ class _FlashCardScreenState extends State<FlashCardScreen> {
                                   color: ColorTokens.disabled,
                                   size: SpacingTokens.iconSizeMedium,
                                 ),
-                                const SizedBox(height: SpacingTokens.xs/2),
+                                const SizedBox(height: SpacingTokens.xsHalf),
                                 // 스와이프 안내 텍스트
                                 Text(
                                   '위로 스와이프 하면 삭제 됩니다.',

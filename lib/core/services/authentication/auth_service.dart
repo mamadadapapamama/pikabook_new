@@ -53,6 +53,60 @@ class AuthService {
     return false; // 기존 설치
   }
 
+// === 이메일 로그인 ===
+
+  // 이메일로 회원가입
+  Future<User?> signUpWithEmail(String email, String password) async {
+    try {
+      // 앱 재설치 여부 확인
+      await _checkAppInstallation();
+      
+      final UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      final User? user = userCredential.user;
+      
+      // 사용자 정보가 있다면 Firestore에 사용자 정보 저장
+      if (user != null) {
+        await _saveUserToFirestore(user, isNewUser: true);
+        debugPrint('이메일 회원가입 성공: ${user.uid}');
+      }
+      
+      return user;
+    } catch (e) {
+      debugPrint('이메일 회원가입 오류: $e');
+      rethrow;
+    }
+  }
+
+  // 이메일로 로그인
+  Future<User?> signInWithEmail(String email, String password) async {
+    try {
+      // 앱 재설치 여부 확인
+      await _checkAppInstallation();
+      
+      final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      final User? user = userCredential.user;
+      
+      // 사용자 정보가 있다면 Firestore에 사용자 정보 업데이트
+      if (user != null) {
+        await _saveUserToFirestore(user, isNewUser: false);
+        debugPrint('이메일 로그인 성공: ${user.uid}');
+      }
+      
+      return user;
+    } catch (e) {
+      debugPrint('이메일 로그인 오류: $e');
+      rethrow;
+    }
+  }
+
 // === 소셜 로그인 ===
 
   // Google 로그인
