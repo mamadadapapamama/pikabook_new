@@ -106,6 +106,25 @@ class TestDataGenerator {
       'isNewUser': false,
       'planType': 'free',
       'deviceCount': 1,
+      // 🔧 온보딩 완료 상태 추가
+      'hasOnboarded': true,
+      'onboardingCompleted': true,
+      // 기본 사용자 설정 추가
+      'userName': displayName,
+      'level': '중급',
+      'learningPurpose': '직접 원서 공부',
+      'translationMode': 'full',
+      'sourceLanguage': 'zh-CN',
+      'targetLanguage': 'ko',
+      'hasLoginHistory': true,
+      // 기본 사용량 초기화
+      'usage': {
+        'ocrPages': 0,
+        'ttsRequests': 0,
+        'translatedChars': 0,
+        'storageUsageBytes': 0,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      },
     }, SetOptions(merge: true));
   }
 
@@ -162,6 +181,7 @@ class TestDataGenerator {
           // 기본 상태 유지 (subscription 없음)
         });
         await _createUserLimits(uid, 'free_exhausted');
+        await _createUsageData(uid, 'free_limit_reached');
         break;
 
       case 'premium_active':
@@ -283,6 +303,39 @@ class TestDataGenerator {
         await _createUserLimits(uid, 'free');
         break;
     }
+  }
+
+  /// 사용량 데이터 설정
+  static Future<void> _createUsageData(String uid, String usageType) async {
+    Map<String, int> usage;
+    
+    switch (usageType) {
+      case 'free_limit_reached':
+        usage = {
+          'ocrPages': 10,        // 무료 플랜 한도 10장 모두 사용
+          'ttsRequests': 30,     // 무료 플랜 한도 30회 모두 사용
+        };
+        break;
+      case 'premium_limit_reached':
+        usage = {
+          'ocrPages': 300,       // 프리미엄 플랜 한도 300장 모두 사용
+          'ttsRequests': 1000,   // 프리미엄 플랜 한도 1000회 모두 사용
+        };
+        break;
+      case 'normal':
+      default:
+        usage = {
+          'ocrPages': 0,
+          'ttsRequests': 0,
+        };
+        break;
+    }
+
+    await _firestore.collection('users').doc(uid).update({
+      'usage.ocrPages': usage['ocrPages'],
+      'usage.ttsRequests': usage['ttsRequests'],
+      'usage.lastUpdated': FieldValue.serverTimestamp(),
+    });
   }
 
   /// 사용량 제한 설정

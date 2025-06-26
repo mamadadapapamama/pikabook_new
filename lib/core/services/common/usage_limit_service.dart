@@ -422,6 +422,20 @@ class UsageLimitService {
     };
   }
   
+  /// 사용량 한도 도달 여부 확인 (배너용)
+  Future<bool> hasReachedAnyLimit() async {
+    try {
+      final limitStatus = await checkInitialLimitStatus();
+      final ocrReached = limitStatus['ocrLimitReached'] ?? false;
+      final ttsReached = limitStatus['ttsLimitReached'] ?? false;
+      
+      return ocrReached || ttsReached;
+    } catch (e) {
+      debugPrint('사용량 한도 확인 중 오류: $e');
+      return false;
+    }
+  }
+
   /// 모든 사용량 초기화
   Future<void> resetAllUsage() async {
     try {

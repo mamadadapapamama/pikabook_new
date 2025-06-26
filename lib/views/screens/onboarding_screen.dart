@@ -431,14 +431,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return;
       }
 
-      // 탈퇴 후 재가입인지 확인 및 이전 플랜 정보 가져오기
+      // 1. 탈퇴 후 재가입인지 확인 및 이전 플랜 정보 가져오기
       final deletedUserInfo = await _getDeletedUserInfo(user.uid);
       final isReturningUser = deletedUserInfo != null;
+      
+      // 2. 현재 subscription 정보 확인
+      final subscriptionDetails = await _planService.getSubscriptionDetails(forceRefresh: true);
+      final hasExistingSubscription = subscriptionDetails['subscription'] != null;
+      final currentPlan = subscriptionDetails['currentPlan'] as String? ?? 'free';
       
       if (kDebugMode) {
         print('🔍 [온보딩] 사용자 상태 확인 완료');
         print('   사용자 ID: ${user.uid}');
         print('   탈퇴 후 재가입: $isReturningUser');
+        print('   기존 구독 정보: $hasExistingSubscription');
+        print('   현재 플랜: $currentPlan');
       }
 
       // 사용 목적 값 결정 (기타인 경우 커스텀 입력 값 사용)
@@ -511,11 +518,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             print('🔄 [온보딩] 탈퇴 후 재가입 사용자 처리 시작');
           }
           await _handleReturningUser(deletedUserInfo);
+        } else if (hasExistingSubscription) {
+          if (kDebugMode) {
+            print('📋 [온보딩] 기존 구독 정보 보유 사용자 - 현재 플랜: $currentPlan');
+          }
+          // 기존 구독 정보가 있는 사용자 처리
+          if (currentPlan == 'premium') {
+            final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
+            if (kDebugMode) {
+              print('💎 [온보딩] 현재 프리미엄 사용자 - 무료체험: $isFreeTrial');
+            }
+            // 현재 프리미엄 사용자 - 복원 스낵바 표시
+            UpgradePromptHelper.showSubscriptionRestoredSnackbar(
+              context,
+              isFreeTrial: isFreeTrial,
+            );
+          } else {
+            if (kDebugMode) {
+              print('🆓 [온보딩] 현재 무료 플랜 사용자 - 바로 홈으로 이동');
+            }
+            // 무료 플랜 사용자 - 바로 홈으로 이동
+          }
+          widget.onComplete();
         } else {
           if (kDebugMode) {
             print('🆕 [온보딩] 신규 사용자 - 환영 모달 표시');
           }
-          // 신규 사용자 - 기존 업그레이드 모달 표시
+          // 진짜 신규 사용자 - 7일 무료체험 유도 모달 표시
           try {
             await UpgradePromptHelper.showWelcomeTrialPrompt(
               context,

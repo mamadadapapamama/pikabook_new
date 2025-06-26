@@ -54,7 +54,7 @@ class PremiumExpiredBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '프리미엄 구독이 만료되었습니다',
+                  '프리미엄 플랜이 무료 플랜으로 전환되었습니다',
                   style: TypographyTokens.subtitle2.copyWith(
                     color: ColorTokens.textPrimary,
                     fontWeight: FontWeight.w600,
@@ -64,7 +64,7 @@ class PremiumExpiredBanner extends StatelessWidget {
                 SizedBox(height: SpacingTokens.xsHalf),
                 
                 Text(
-                  '무료 플랜으로 전환되어 일부 기능이 제한됩니다',
+                  '자세한 내용은 settings > 플랜에서 확인하실수 있어요',
                   style: TypographyTokens.body2.copyWith(
                     color: ColorTokens.textPrimary,
                   ),

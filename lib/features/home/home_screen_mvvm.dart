@@ -29,6 +29,8 @@ import '../../core/services/trial/trial_manager.dart';
 import '../../core/services/trial/trial_status_checker.dart';
 import '../../core/widgets/premium_expired_banner.dart'; // 🎯 프리미엄 만료 배너 추가
 import '../../core/services/common/premium_expired_banner_service.dart'; // 🎯 배너 서비스 추가
+import '../../core/widgets/usage_limit_banner.dart'; // 🎯 사용량 한도 배너 추가
+import '../../core/services/common/usage_limit_banner_service.dart'; // 🎯 사용량 한도 배너 서비스 추가
 
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
@@ -84,14 +86,16 @@ class HomeScreenWrapper extends StatelessWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final MarketingCampaignService _marketingService = MarketingCampaignService();
-  final PremiumExpiredBannerService _bannerService = PremiumExpiredBannerService(); // 🎯 배너 서비스 추가
+  final PremiumExpiredBannerService _premiumExpiredBannerService = PremiumExpiredBannerService(); // 🎯 프리미엄 만료 배너 서비스
+  final UsageLimitBannerService _usageLimitBannerService = UsageLimitBannerService(); // 🎯 사용량 한도 배너 서비스
   
   // 화면 초기화 실패를 추적하는 변수
   bool _initializationFailed = false;
   String? _initFailReason;
   
-  // 🎯 프리미엄 만료 배너 상태
+  // 🎯 배너 상태들
   bool _shouldShowExpiredBanner = false;
+  bool _shouldShowUsageLimitBanner = false;
 
   @override
   void initState() {
@@ -137,8 +141,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // TrialManager 환영 메시지 콜백 설정
       _setupTrialWelcomeCallback();
       
-      // 🎯 프리미엄 만료 배너 확인
+      // 🎯 배너들 확인
       await _checkPremiumExpiredBanner();
+      await _checkUsageLimitBanner();
       
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -434,6 +439,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               onDismiss: _dismissExpiredBanner,
             ),
           
+          // 🎯 사용량 한도 배너
+          if (_shouldShowUsageLimitBanner)
+            UsageLimitBanner(
+              onUpgrade: _handleUsageLimitUpgrade,
+              onDismiss: _dismissUsageLimitBanner,
+            ),
+          
           // 노트 목록
           Expanded(
             child: RefreshIndicator(
@@ -479,13 +491,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
               child: PikaButton(
-                text: viewModel.canCreateNote ? '스마트 노트 만들기' : '프리미엄으로 업그레이드',
+                text: _getBottomButtonText(viewModel),
                 variant: PikaButtonVariant.primary,
                 isFullWidth: false,
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                 onPressed: viewModel.canCreateNote 
                     ? () => _showImagePickerBottomSheet(context) 
-                    : () => _showUpgradeModal(),
+                    : () => _handleUsageLimitUpgrade(),
               ),
             ),
         ],
@@ -623,13 +635,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 const SizedBox(height: 24),
                 // CTA 버튼 - 이미지 업로드하기
                 PikaButton(
-                  text: viewModel.canCreateNote ? '이미지 올리기' : '프리미엄으로 업그레이드',
+                  text: viewModel.canCreateNote ? '이미지 올리기' : _getUpgradeButtonText(),
                   variant: PikaButtonVariant.primary,
                   isFullWidth: true,
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   onPressed: viewModel.canCreateNote 
                       ? () => _showImagePickerBottomSheet(context) 
-                      : () => _showUpgradeModal(),
+                      : () => _handleUsageLimitUpgrade(),
                 ),
               ],
             ),
@@ -698,7 +710,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 프리미엄 만료 배너 확인
   Future<void> _checkPremiumExpiredBanner() async {
     try {
-      final shouldShow = await _bannerService.shouldShowBanner();
+      final shouldShow = await _premiumExpiredBannerService.shouldShowBanner();
       if (mounted) {
         setState(() {
           _shouldShowExpiredBanner = shouldShow;
@@ -715,10 +727,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// 사용량 한도 배너 확인
+  Future<void> _checkUsageLimitBanner() async {
+    try {
+      final shouldShow = await _usageLimitBannerService.shouldShowBanner();
+      if (mounted) {
+        setState(() {
+          _shouldShowUsageLimitBanner = shouldShow;
+        });
+      }
+      
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 사용량 한도 배너 확인: $shouldShow');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 사용량 한도 배너 확인 실패: $e');
+      }
+    }
+  }
+
   /// 프리미엄 만료 배너 해제
   Future<void> _dismissExpiredBanner() async {
     try {
-      await _bannerService.dismissBanner();
+      await _premiumExpiredBannerService.dismissBanner();
       if (mounted) {
         setState(() {
           _shouldShowExpiredBanner = false;
@@ -735,8 +767,113 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// 사용량 한도 배너 해제
+  Future<void> _dismissUsageLimitBanner() async {
+    try {
+      await _usageLimitBannerService.dismissBanner();
+      if (mounted) {
+        setState(() {
+          _shouldShowUsageLimitBanner = false;
+        });
+      }
+      
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 사용량 한도 배너 해제됨');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 사용량 한도 배너 해제 실패: $e');
+      }
+    }
+  }
+
+  /// 하단 버튼 텍스트 결정
+  String _getBottomButtonText(HomeViewModel viewModel) {
+    if (viewModel.canCreateNote) {
+      return '스마트 노트 만들기';
+    } else {
+      return _getUpgradeButtonText();
+    }
+  }
+
+  /// 업그레이드 버튼 텍스트 결정 (공통)
+  String _getUpgradeButtonText() {
+    if (_shouldShowUsageLimitBanner) {
+      return '업그레이드가 필요합니다';
+    } else {
+      return '프리미엄으로 업그레이드';
+    }
+  }
+
+
+
   /// 프리미엄 업그레이드 (배너에서 호출)
   void _upgradeFromBanner() {
     _showUpgradeModal();
+  }
+
+  /// 사용량 한도 배너에서 업그레이드 처리
+  Future<void> _handleUsageLimitUpgrade() async {
+    try {
+      // 현재 플랜 상태 확인
+      final planService = PlanService();
+      final subscriptionDetails = await planService.getSubscriptionDetails();
+      final currentPlan = subscriptionDetails['currentPlan'] as String?;
+      final hasUsedFreeTrial = subscriptionDetails['hasUsedFreeTrial'] as bool? ?? false;
+      final hasEverUsedTrial = subscriptionDetails['hasEverUsedTrial'] as bool? ?? false;
+      
+      if (currentPlan == PlanService.PLAN_FREE) {
+        // 무료 플랜 사용자
+        if (hasUsedFreeTrial || hasEverUsedTrial) {
+          // 무료체험 사용한 적 있음 -> 프리미엄 모달
+          UpgradeModal.show(
+            context,
+            reason: UpgradeReason.limitReached,
+          );
+                 } else {
+           // 무료체험 사용한 적 없음 -> 무료체험 모달
+           UpgradeModal.show(
+             context,
+             reason: UpgradeReason.welcomeTrial,
+           );
+         }
+      } else if (currentPlan == PlanService.PLAN_PREMIUM) {
+        // 프리미엄 사용자 -> 문의하기 폼
+        final formUrl = Uri.parse('https://docs.google.com/forms/d/e/1FAIpQLSfgVL4Bd5KcTh9nhfbVZ51yApPAmJAZJZgtM4V9hNhsBpKuaA/viewform?usp=dialog');
+        try {
+          if (await canLaunchUrl(formUrl)) {
+            await launchUrl(formUrl, mode: LaunchMode.externalApplication);
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('문의 폼을 열 수 없습니다.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('문의 폼을 여는 중 오류가 발생했습니다: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+      
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 사용량 한도 업그레이드 처리: $currentPlan, 체험사용: $hasUsedFreeTrial');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 사용량 한도 업그레이드 처리 실패: $e');
+      }
+      // 기본적으로 업그레이드 모달 표시
+      _showUpgradeModal();
+    }
   }
 } 

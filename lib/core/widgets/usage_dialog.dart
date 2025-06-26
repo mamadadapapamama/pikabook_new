@@ -334,7 +334,7 @@ class _UsageDialogState extends State<UsageDialog> {
     // 버튼 텍스트 결정
     String buttonText;
     if (isPremiumPaid) {
-      buttonText = '관리자에게 문의하기';
+      buttonText = '추가 사용 문의';
     } else if (isPremiumTrial) {
       buttonText = '프리미엄 체험 중';
     } else {
