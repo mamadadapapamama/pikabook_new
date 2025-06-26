@@ -369,7 +369,7 @@ class UpgradeModal extends StatelessWidget {
           
           // 하단 링크 - 무료 플랜
           _buildTextButton(
-            '무료 플랜으로 시작하기',
+            '나가기',
             () {
               Navigator.of(context).pop(false);
               // 무료 플랜으로 시작 (인앱결제 없음)

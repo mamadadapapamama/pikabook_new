@@ -11,6 +11,7 @@ import '../../core/widgets/usage_dialog.dart';
 import '../../core/widgets/upgrade_modal.dart';
 import '../../core/widgets/edit_dialog.dart';
 import '../../core/utils/test_data_generator.dart';
+import '../../core/services/common/plan_service.dart';
 import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
 
@@ -1003,13 +1004,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showUpgradeModal() {
-    UpgradeModal.show(
-      context,
-      reason: UpgradeReason.settings,
-      onUpgrade: () {
-        debugPrint('🎯 [Settings] 프리미엄 업그레이드 선택');
-      },
-    );
+  void _showUpgradeModal() async {
+    try {
+      // 🎯 체험 이력에 따른 분기 처리
+      final planService = PlanService();
+      final subscriptionDetails = await planService.getSubscriptionDetails();
+      final hasUsedFreeTrial = subscriptionDetails['hasUsedFreeTrial'] as bool? ?? false;
+      final hasEverUsedTrial = subscriptionDetails['hasEverUsedTrial'] as bool? ?? false;
+      
+      if (kDebugMode) {
+        debugPrint('🎯 [Settings] 업그레이드 버튼 클릭 - 체험 이력: $hasUsedFreeTrial/$hasEverUsedTrial');
+      }
+      
+      if (hasUsedFreeTrial || hasEverUsedTrial) {
+        // 🎯 체험 이력 있음 -> 일반 프리미엄 모달
+        UpgradeModal.show(
+          context,
+          reason: UpgradeReason.general,
+          onUpgrade: () {
+            debugPrint('🎯 [Settings] 프리미엄 업그레이드 선택 (체험 이력 있음)');
+          },
+        );
+      } else {
+        // 🎯 체험 이력 없음 -> 무료체험 유도 모달
+        UpgradeModal.show(
+          context,
+          reason: UpgradeReason.welcomeTrial,
+          onUpgrade: () {
+            debugPrint('🎯 [Settings] 무료체험 시작 선택');
+          },
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [Settings] 업그레이드 모달 표시 실패: $e');
+      }
+      // 오류 시 기본 모달 표시
+      UpgradeModal.show(
+        context,
+        reason: UpgradeReason.settings,
+        onUpgrade: () {
+          debugPrint('🎯 [Settings] 프리미엄 업그레이드 선택 (기본)');
+        },
+      );
+    }
   }
 }

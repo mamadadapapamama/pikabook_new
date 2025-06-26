@@ -177,13 +177,17 @@ class TestDataGenerator {
         break;
 
       case 'free_limit_reached':
-        // 무료 플랜 제한 도달
+        // 🎯 무료 플랜 제한 도달 (체험 이력 없음)
         await _firestore.collection('users').doc(uid).update({
           // 기본 상태 유지 (subscription 없음)
+          'hasUsedFreeTrial': false, // 🎯 체험 사용 안 함
+          'hasEverUsedTrial': false, // 🎯 체험 이력 없음
         });
         // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         await _createUsageData(uid, 'free_limit_reached');
         break;
+
+
 
       case 'premium_active':
         // 정식 프리미엄 (한 달 남음)
@@ -306,6 +310,23 @@ class TestDataGenerator {
         });
         // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
         break;
+    }
+    
+    // 🎯 기존 커스텀 제한 데이터 삭제 (플랜 기반 제한 사용)
+    await _deleteCustomLimits(uid);
+  }
+
+  /// 기존 커스텀 제한 데이터 삭제 (플랜 기반 제한 사용을 위해)
+  static Future<void> _deleteCustomLimits(String uid) async {
+    try {
+      await _firestore.collection('user_limits').doc(uid).delete();
+      if (kDebugMode) {
+        debugPrint('🗑️ [TestDataGenerator] $uid 커스텀 제한 데이터 삭제 완료');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ [TestDataGenerator] $uid 커스텀 제한 데이터 삭제 실패 (문서가 없을 수 있음): $e');
+      }
     }
   }
 

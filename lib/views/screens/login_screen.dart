@@ -436,6 +436,24 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                             );
                                           },
                                       ),
+                                      TextSpan(text: '과'),
+                                      TextSpan(
+                                        text: '이용약관',
+                                        style: TypographyTokens.body2.copyWith(
+                                          color: ColorTokens.textLight,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                        recognizer: TapGestureRecognizer()
+                                          ..onTap = () {
+                                            if (kDebugMode) {
+                                              print('이용약관 링크 클릭됨');
+                                            }
+                                            launchUrl(
+                                              Uri.parse('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'),
+                                              mode: LaunchMode.externalApplication,
+                                            );
+                                          },
+                                      ),
                                       TextSpan(text: '에 동의합니다.'),
                                     ],
                                   ),

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import '../common/plan_service.dart';
+import '../common/trial_completed_banner_service.dart';
 import '../notification/notification_service.dart';
 
 /// 체험 상태 체크 서비스 - 서버 시간 기반
@@ -13,13 +14,14 @@ class TrialStatusChecker {
 
   final PlanService _planService = PlanService();
   final NotificationService _notificationService = NotificationService();
+  final TrialCompletedBannerService _bannerService = TrialCompletedBannerService();
   
   Timer? _dailyCheckTimer;
   static const String _lastCheckDateKey = 'trial_last_check_date';
   static const String _trialExpiredNotificationShownKey = 'trial_expired_notification_shown';
   
   // 콜백들
-  void Function(String title, String message)? onTrialExpired;
+  void Function(String title, String message)? onTrialExpired; // 🎯 레거시 - 제거 예정
   void Function()? onTrialStatusChanged;
 
   /// 서비스 초기화 - 앱 시작 시 호출
@@ -182,7 +184,6 @@ class TrialStatusChecker {
       }
       
       // 🎯 체험 종료 콜백은 _checkAndShowTrialExpiredNotification()에서 한 번만 호출
-      
       if (kDebugMode) {
         debugPrint('⏰ [TrialStatusChecker] 체험 종료 처리 완료');
       }
@@ -200,24 +201,22 @@ class TrialStatusChecker {
       final isAlreadyShown = prefs.getBool(_trialExpiredNotificationShownKey) ?? false;
       
       if (!isAlreadyShown) {
-        // 체험 종료 콜백 호출
-        if (onTrialExpired != null) {
-          onTrialExpired!(
-            '💎 프리미엄(monthly)플랜이 시작되었어요!',
-            '언제든지 구독 취소 하실수 있어요.',
-          );
-        }
+        // 🎯 체험 완료 배너 트리거
+        await _bannerService.triggerBanner();
         
         // 표시됨 플래그 저장
         await prefs.setBool(_trialExpiredNotificationShownKey, true);
         
+        // 상태 변경 콜백 호출 (UI 새로고침)
+        onTrialStatusChanged?.call();
+        
         if (kDebugMode) {
-          debugPrint('🎯 [TrialStatusChecker] 체험 종료 알림 표시 (최초 1회)');
+          debugPrint('🎯 [TrialStatusChecker] 체험 완료 배너 트리거됨 (최초 1회)');
         }
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [TrialStatusChecker] 체험 종료 알림 체크 실패: $e');
+        debugPrint('❌ [TrialStatusChecker] 체험 완료 배너 트리거 실패: $e');
       }
     }
   }

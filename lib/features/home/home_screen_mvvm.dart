@@ -27,10 +27,10 @@ import '../../core/services/payment/in_app_purchase_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../core/services/trial/trial_manager.dart';
 import '../../core/services/trial/trial_status_checker.dart';
-import '../../core/widgets/premium_expired_banner.dart'; // 🎯 프리미엄 만료 배너 추가
+import '../../core/widgets/plan_state_banner.dart'; // 🎯 플랜 상태 배너들 (통합)
 import '../../core/services/common/premium_expired_banner_service.dart'; // 🎯 배너 서비스 추가
-import '../../core/widgets/usage_limit_banner.dart'; // 🎯 사용량 한도 배너 추가
 import '../../core/services/common/usage_limit_banner_service.dart'; // 🎯 사용량 한도 배너 서비스 추가
+import '../../core/services/common/trial_completed_banner_service.dart'; // 🎯 체험 완료 배너 서비스 추가
 
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
@@ -88,6 +88,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final MarketingCampaignService _marketingService = MarketingCampaignService();
   final PremiumExpiredBannerService _premiumExpiredBannerService = PremiumExpiredBannerService(); // 🎯 프리미엄 만료 배너 서비스
   final UsageLimitBannerService _usageLimitBannerService = UsageLimitBannerService(); // 🎯 사용량 한도 배너 서비스
+  final TrialCompletedBannerService _trialCompletedBannerService = TrialCompletedBannerService(); // 🎯 체험 완료 배너 서비스
   
   // 화면 초기화 실패를 추적하는 변수
   bool _initializationFailed = false;
@@ -96,6 +97,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // 🎯 배너 상태들
   bool _shouldShowExpiredBanner = false;
   bool _shouldShowUsageLimitBanner = false;
+  bool _shouldShowTrialCompletedBanner = false;
 
   @override
   void initState() {
@@ -144,6 +146,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 🎯 배너들 확인
       await _checkPremiumExpiredBanner();
       await _checkUsageLimitBanner();
+      await _checkTrialCompletedBanner();
       
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -191,47 +194,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     };
     
-    // 체험 종료 콜백 (TrialStatusChecker)
-    trialStatusChecker.onTrialExpired = (title, message) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Colors.white,
-                  ),
-                ),
-                // 🎯 메시지가 있을 때만 표시하고 더 작은 폰트 사용
-                if (message.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    message,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13, // 🎯 더 작은 폰트 크기
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            backgroundColor: ColorTokens.snackbarBg,
-            duration: const Duration(seconds: 5),
-            behavior: SnackBarBehavior.fixed,
-          ),
-        );
-      }
-    };
+    // 🎯 체험 종료 콜백 제거 - 이제 배너로 표시
     
     // 상태 변경 콜백 (UI 새로고침)
     trialStatusChecker.onTrialStatusChanged = () {
       if (mounted) {
+        // 🎯 체험 완료 배너 상태 업데이트
+        _checkTrialCompletedBanner();
         setState(() {}); // 배너 상태 업데이트
       }
     };
@@ -413,19 +382,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return SafeArea(
       child: Column(
         children: [
+          // 🎯 체험 완료 배너
+          if (_shouldShowTrialCompletedBanner)
+            const TrialCompletedBanner(),
+          
           // 🎯 프리미엄 만료 배너
           if (_shouldShowExpiredBanner)
-            PremiumExpiredBanner(
-              onUpgrade: _upgradeFromBanner,
-              onDismiss: _dismissExpiredBanner,
-            ),
+            const PremiumExpiredBanner(),
           
           // 🎯 사용량 한도 배너
           if (_shouldShowUsageLimitBanner)
-            UsageLimitBanner(
-              onUpgrade: _handleUsageLimitUpgrade,
-              onDismiss: _dismissUsageLimitBanner,
-            ),
+            const UsageLimitBanner(),
           
           // 노트 목록
           Expanded(
@@ -582,19 +549,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       builder: (context, viewModel, _) {
         return Column(
           children: [
+            // 🎯 체험 완료 배너 (제로 스테이트에도 표시)
+            if (_shouldShowTrialCompletedBanner)
+              const TrialCompletedBanner(),
+            
             // 🎯 프리미엄 만료 배너 (제로 스테이트에도 표시)
             if (_shouldShowExpiredBanner)
-              PremiumExpiredBanner(
-                onUpgrade: _upgradeFromBanner,
-                onDismiss: _dismissExpiredBanner,
-              ),
+              const PremiumExpiredBanner(),
             
             // 🎯 사용량 한도 배너 (제로 스테이트에도 표시)
             if (_shouldShowUsageLimitBanner)
-              UsageLimitBanner(
-                onUpgrade: _handleUsageLimitUpgrade,
-                onDismiss: _dismissUsageLimitBanner,
-              ),
+              const UsageLimitBanner(),
             
             // 제로 스테이트 콘텐츠
             Expanded(
@@ -751,45 +716,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 프리미엄 만료 배너 해제
-  Future<void> _dismissExpiredBanner() async {
+  /// 체험 완료 배너 확인
+  Future<void> _checkTrialCompletedBanner() async {
     try {
-      await _premiumExpiredBannerService.dismissBanner();
+      final shouldShow = await _trialCompletedBannerService.shouldShowBanner();
       if (mounted) {
         setState(() {
-          _shouldShowExpiredBanner = false;
+          _shouldShowTrialCompletedBanner = shouldShow;
         });
       }
       
       if (kDebugMode) {
-        debugPrint('[HomeScreen] 프리미엄 만료 배너 해제됨');
+        debugPrint('[HomeScreen] 🎯 체험 완료 배너 확인: $shouldShow');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[HomeScreen] 프리미엄 만료 배너 해제 실패: $e');
+        debugPrint('[HomeScreen] ❌ 체험 완료 배너 확인 실패: $e');
       }
     }
   }
 
-  /// 사용량 한도 배너 해제
-  Future<void> _dismissUsageLimitBanner() async {
-    try {
-      await _usageLimitBannerService.dismissBanner();
-      if (mounted) {
-        setState(() {
-          _shouldShowUsageLimitBanner = false;
-        });
-      }
-      
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 사용량 한도 배너 해제됨');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 사용량 한도 배너 해제 실패: $e');
-      }
-    }
-  }
+
 
   /// 하단 버튼 텍스트 결정
   String _getBottomButtonText(HomeViewModel viewModel) {
@@ -811,10 +758,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
 
 
-  /// 프리미엄 업그레이드 (배너에서 호출)
-  void _upgradeFromBanner() {
-    _showUpgradeModal();
-  }
+
 
   /// 사용량 한도 배너에서 업그레이드 처리
   Future<void> _handleUsageLimitUpgrade() async {
