@@ -781,7 +781,6 @@ class AuthService {
       if (isNewUser) {
         userData['createdAt'] = FieldValue.serverTimestamp();
         userData['isNewUser'] = true;
-        userData['planType'] = 'free'; // 기본 플랜 타입
         userData['deviceCount'] = 1;
         userData['deviceIds'] = [await _getDeviceId()];
         
@@ -821,7 +820,6 @@ class AuthService {
           // 문서가 없으면 set 사용 (온보딩 미완료 사용자)
           userData['createdAt'] = FieldValue.serverTimestamp();
           userData['isNewUser'] = false;
-          userData['planType'] = 'free';
           userData['deviceCount'] = 1;
           userData['deviceIds'] = [deviceId];
           await userRef.set(userData);

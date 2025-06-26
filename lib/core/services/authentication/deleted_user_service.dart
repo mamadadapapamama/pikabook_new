@@ -87,18 +87,28 @@ class DeletedUserService {
     final lastPlan = await getLastPlanInfo(forceRefresh: forceRefresh);
     
     if (lastPlan != null) {
+      // 🎯 새로운 방식: hasEverUsedTrial 필드 우선 확인
+      final hasEverUsedTrial = lastPlan['hasEverUsedTrial'] as bool? ?? false;
+      if (hasEverUsedTrial) {
+        if (kDebugMode) {
+          print('✅ [DeletedUserService] 탈퇴 이력에서 무료체험 사용 이력 발견 (hasEverUsedTrial)');
+        }
+        return true;
+      }
+      
+      // 🔄 하위 호환성: 기존 방식도 유지 (기존 데이터 대응)
       final wasFreeTrial = lastPlan['isFreeTrial'] as bool? ?? false;
       final planType = lastPlan['planType'] as String?;
       
-      // 이전에 무료체험을 사용했거나 프리미엄을 사용했다면 체험 사용한 것으로 간주
-      final hasUsedTrial = wasFreeTrial || planType == 'premium';
+      // 기존 데이터에서 무료체험 사용 이력 확인
+      final hasUsedTrialLegacy = wasFreeTrial || planType == 'premium';
       
-      if (kDebugMode && hasUsedTrial) {
-        print('✅ [DeletedUserService] 탈퇴 이력에서 무료체험/프리미엄 사용 이력 발견');
+      if (kDebugMode && hasUsedTrialLegacy) {
+        print('✅ [DeletedUserService] 탈퇴 이력에서 무료체험/프리미엄 사용 이력 발견 (레거시)');
         print('   이전 플랜: $planType, 무료체험: $wasFreeTrial');
       }
       
-      return hasUsedTrial;
+      return hasUsedTrialLegacy;
     }
     
     return false;
@@ -161,6 +171,7 @@ class DeletedUserService {
             'expiryDate': subscriptionDetails['expiryDate'] != null 
                 ? Timestamp.fromDate(subscriptionDetails['expiryDate'] as DateTime)
                 : null,
+            'hasEverUsedTrial': subscriptionDetails['hasEverUsedTrial'] ?? false,
           };
           
           deleteRecord['lastPlan'] = lastPlan;

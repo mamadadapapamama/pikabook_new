@@ -142,12 +142,6 @@ class PlanService {
       }
     }
     
-    // 2. 기존 planType 필드 확인 (하위 호환성)
-    final legacyPlanType = userData?['planType'] as String?;
-    if (legacyPlanType == 'premium') {
-      return PLAN_PREMIUM;
-    }
-    
     return PLAN_FREE;
   }
   
@@ -292,6 +286,7 @@ class PlanService {
               'isFreeTrial': isFreeTrial,
             },
             if (isFreeTrial) 'hasUsedFreeTrial': true, // 무료체험인 경우에만 사용 기록
+            if (isFreeTrial) 'hasEverUsedTrial': true, // 🎯 새로운 필드: 무료체험 사용 이력
           }, SetOptions(merge: true));
       
       // 프리미엄 업그레이드 이벤트 발생 (중앙화된 메서드 사용)
@@ -357,6 +352,7 @@ class PlanService {
               'subscriptionType': 'monthly', // 무료체험은 monthly 기반
             },
             'hasUsedFreeTrial': true, // 체험 사용 기록
+            'hasEverUsedTrial': true, // 🎯 새로운 필드: 무료체험 사용 이력
           }, SetOptions(merge: true));
       
       // 무료체험 시작 이벤트 발생 (중앙화된 메서드 사용)
@@ -385,10 +381,21 @@ class PlanService {
           
       if (userDoc.exists) {
         final userData = userDoc.data();
+        
+        // 🎯 새로운 방식: hasEverUsedTrial 필드 우선 확인
+        final hasEverUsedTrial = userData?['hasEverUsedTrial'] as bool? ?? false;
+        if (hasEverUsedTrial) {
+          if (kDebugMode) {
+            print('✅ [PlanService] 현재 계정에서 무료체험 사용 이력 발견 (hasEverUsedTrial)');
+          }
+          return true;
+        }
+        
+        // 🔄 하위 호환성: 기존 hasUsedFreeTrial 필드도 확인
         final hasUsedTrial = userData?['hasUsedFreeTrial'] as bool? ?? false;
         if (hasUsedTrial) {
           if (kDebugMode) {
-            print('✅ [PlanService] 현재 계정에서 무료체험 사용 이력 발견');
+            print('✅ [PlanService] 현재 계정에서 무료체험 사용 이력 발견 (레거시)');
           }
           return true;
         }
@@ -439,6 +446,7 @@ class PlanService {
         return {
           'currentPlan': PLAN_FREE,
           'hasUsedFreeTrial': false,
+          'hasEverUsedTrial': false,
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
@@ -455,6 +463,7 @@ class PlanService {
         return {
           'currentPlan': PLAN_FREE,
           'hasUsedFreeTrial': false,
+          'hasEverUsedTrial': false,
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
@@ -467,11 +476,14 @@ class PlanService {
       
       // hasUsedFreeTrial은 사용자 문서의 루트 레벨에서 가져오기
       final hasUsedFreeTrial = data['hasUsedFreeTrial'] as bool? ?? false;
+      // 🎯 새로운 필드: hasEverUsedTrial도 가져오기
+      final hasEverUsedTrial = data['hasEverUsedTrial'] as bool? ?? false;
 
       if (subscriptionData == null) {
         return {
           'currentPlan': PLAN_FREE,
           'hasUsedFreeTrial': hasUsedFreeTrial,
+          'hasEverUsedTrial': hasEverUsedTrial,
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
@@ -528,6 +540,7 @@ class PlanService {
       final result = {
         'currentPlan': currentPlan,
         'hasUsedFreeTrial': hasUsedFreeTrial,
+        'hasEverUsedTrial': hasEverUsedTrial,
         'isFreeTrial': isFreeTrial,
         'daysRemaining': daysRemaining,
         'expiryDate': expiryDate?.toDate(),
@@ -546,6 +559,7 @@ class PlanService {
       return {
         'currentPlan': PLAN_FREE,
         'hasUsedFreeTrial': false,
+        'hasEverUsedTrial': false,
         'isFreeTrial': false,
         'daysRemaining': 0,
         'expiryDate': null,

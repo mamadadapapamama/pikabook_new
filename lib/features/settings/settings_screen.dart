@@ -10,6 +10,7 @@ import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/usage_dialog.dart';
 import '../../core/widgets/upgrade_modal.dart';
 import '../../core/widgets/edit_dialog.dart';
+import '../../core/utils/test_data_generator.dart';
 import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
 
@@ -155,6 +156,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           
           const SizedBox(height: 32),
+          
+          // 디버그 전용 섹션 (테스트 데이터 생성)
+          if (kDebugMode) ...[
+            _buildSectionTitle('🧪 개발자 도구'),
+            const SizedBox(height: 12),
+            
+            // 테스트 계정 생성 버튼
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+              child: PikaButton(
+                text: '🎯 모든 테스트 계정 생성',
+                variant: PikaButtonVariant.primary,
+                onPressed: _generateAllTestAccounts,
+                isFullWidth: true,
+              ),
+            ),
+            
+            // 테스트 계정 목록 출력 버튼
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+              child: PikaButton(
+                text: '📋 테스트 계정 목록 출력',
+                variant: PikaButtonVariant.outline,
+                onPressed: () => TestDataGenerator.printTestAccounts(),
+                isFullWidth: true,
+              ),
+            ),
+            
+            const SizedBox(height: 32),
+          ],
           
           // 3. 계정 관리 섹션
           _buildSectionTitle('계정관리'),
@@ -688,6 +719,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
   
   // 계정 탈퇴 기능 구현
+  /// 테스트 계정 생성 핸들러 (디버그 전용)
+  Future<void> _generateAllTestAccounts() async {
+    if (!kDebugMode) return;
+    
+    try {
+      // 로딩 표시
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+      
+      await TestDataGenerator.generateAllTestAccounts();
+      
+      // 로딩 닫기
+      if (mounted) Navigator.of(context).pop();
+      
+      // 성공 메시지
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎉 모든 테스트 계정이 생성되었습니다!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      
+    } catch (e) {
+      // 로딩 닫기
+      if (mounted) Navigator.of(context).pop();
+      
+      // 에러 메시지
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 테스트 계정 생성 실패: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _handleAccountDeletion(BuildContext context) async {
     // 1. 재인증 필요 여부 확인
     final needsReauth = await _viewModel.isReauthenticationRequired();

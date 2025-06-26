@@ -27,6 +27,8 @@ import '../../core/services/payment/in_app_purchase_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../core/services/trial/trial_manager.dart';
 import '../../core/services/trial/trial_status_checker.dart';
+import '../../core/widgets/premium_expired_banner.dart'; // 🎯 프리미엄 만료 배너 추가
+import '../../core/services/common/premium_expired_banner_service.dart'; // 🎯 배너 서비스 추가
 
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
@@ -82,10 +84,14 @@ class HomeScreenWrapper extends StatelessWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final MarketingCampaignService _marketingService = MarketingCampaignService();
+  final PremiumExpiredBannerService _bannerService = PremiumExpiredBannerService(); // 🎯 배너 서비스 추가
   
   // 화면 초기화 실패를 추적하는 변수
   bool _initializationFailed = false;
   String? _initFailReason;
+  
+  // 🎯 프리미엄 만료 배너 상태
+  bool _shouldShowExpiredBanner = false;
 
   @override
   void initState() {
@@ -130,6 +136,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       // TrialManager 환영 메시지 콜백 설정
       _setupTrialWelcomeCallback();
+      
+      // 🎯 프리미엄 만료 배너 확인
+      await _checkPremiumExpiredBanner();
       
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -418,7 +427,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return SafeArea(
       child: Column(
         children: [
-          // 🔔 인앱 배너 제거 - Push Notification만 사용
+          // 🎯 프리미엄 만료 배너
+          if (_shouldShowExpiredBanner)
+            PremiumExpiredBanner(
+              onUpgrade: _upgradeFromBanner,
+              onDismiss: _dismissExpiredBanner,
+            ),
           
           // 노트 목록
           Expanded(
@@ -679,5 +693,50 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _onViewModelChanged() {
     // 필요시 상태 업데이트
     if (!mounted) return;
+  }
+
+  /// 프리미엄 만료 배너 확인
+  Future<void> _checkPremiumExpiredBanner() async {
+    try {
+      final shouldShow = await _bannerService.shouldShowBanner();
+      if (mounted) {
+        setState(() {
+          _shouldShowExpiredBanner = shouldShow;
+        });
+      }
+      
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 프리미엄 만료 배너 확인: $shouldShow');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 프리미엄 만료 배너 확인 실패: $e');
+      }
+    }
+  }
+
+  /// 프리미엄 만료 배너 해제
+  Future<void> _dismissExpiredBanner() async {
+    try {
+      await _bannerService.dismissBanner();
+      if (mounted) {
+        setState(() {
+          _shouldShowExpiredBanner = false;
+        });
+      }
+      
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 프리미엄 만료 배너 해제됨');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 프리미엄 만료 배너 해제 실패: $e');
+      }
+    }
+  }
+
+  /// 프리미엄 업그레이드 (배너에서 호출)
+  void _upgradeFromBanner() {
+    _showUpgradeModal();
   }
 } 
