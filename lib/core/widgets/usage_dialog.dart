@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
@@ -70,6 +71,10 @@ class _UsageDialogState extends State<UsageDialog> {
     setState(() => _isLoading = true);
 
     try {
+      if (kDebugMode) {
+        debugPrint('📊 [UsageDialog] 사용량 데이터 로드 시작');
+      }
+      
       // 플랜 정보 가져오기
       final subscriptionDetails = await _planService.getSubscriptionDetails();
       _currentPlan = subscriptionDetails['currentPlan'] ?? 'free';
@@ -77,9 +82,18 @@ class _UsageDialogState extends State<UsageDialog> {
       _expiryDate = subscriptionDetails['expiryDate'] as DateTime?;
       _subscriptionType = subscriptionDetails['subscriptionType'] as String?;
       
+      if (kDebugMode) {
+        debugPrint('📊 [UsageDialog] 플랜 정보: $_currentPlan, 무료체험: $_isFreeTrial');
+      }
+      
       // 사용량 정보 가져오기
       final usageInfo = await _usageService.getUserUsageForSettings();
       _limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
+      
+      if (kDebugMode) {
+        debugPrint('📊 [UsageDialog] 사용량 정보 원본: $usageInfo');
+        debugPrint('📊 [UsageDialog] 제한 상태: $_limitStatus');
+      }
       
       // 사용량 퍼센트 계산
       final percentagesMap = usageInfo['usagePercentages'] as Map<String, dynamic>;
@@ -88,7 +102,16 @@ class _UsageDialogState extends State<UsageDialog> {
         _usagePercentages[key] = (value is num) ? value.toDouble() : 0.0;
       });
       
-    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('📊 [UsageDialog] 사용량 퍼센트: $_usagePercentages');
+      }
+      
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('❌ [UsageDialog] 사용량 데이터 로드 실패: $e');
+        debugPrint('❌ [UsageDialog] 스택 트레이스: $stackTrace');
+      }
+      
       // 기본값 설정
       _limitStatus = {
         'ocrLimitReached': false,
@@ -113,7 +136,7 @@ class _UsageDialogState extends State<UsageDialog> {
         (hasReachedLimit ? '학습 한도에 도달했어요.' : '현재까지의 사용량');
         
     final String effectiveMessage = widget.message ?? 
-        (hasReachedLimit ? '무료 제공 한도에 도달했어요.\n프리미엄으로 업그레이드하여 더 많은 기능을 이용해보세요!' : '');
+        (hasReachedLimit ? '사용량 한도에 도달했어요.\n 업그레이드하여 더 많은 기능을 이용해보세요!' : '');
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -341,7 +364,7 @@ class _UsageDialogState extends State<UsageDialog> {
       buttonText = '프리미엄으로 업그레이드';
     }
     
-    return PikaButton(
+    return PikaButton(  
       text: buttonText,
       variant: PikaButtonVariant.outline,
       size: PikaButtonSize.small,

@@ -126,17 +126,22 @@ class UsageLimitService {
   /// 사용자가 명시적으로 사용량을 확인할 때 사용
   Future<Map<String, dynamic>> getUserUsageForSettings() async {
     try {
-      debugPrint('설정 화면 사용량 조회 시작');
+      debugPrint('📊 [UsageLimitService] 설정 화면 사용량 조회 시작');
       
       final userId = _currentUserId;
       if (userId == null) {
-        debugPrint('사용자 ID가 없음 - 기본값 반환');
+        debugPrint('❌ [UsageLimitService] 사용자 ID가 없음 - 기본값 반환');
         return _getDefaultUsageInfo();
       }
       
+      debugPrint('📊 [UsageLimitService] 사용자 ID: $userId');
+      
       // Firebase에서 최신 데이터 가져오기 (설정 화면에서는 항상 최신 정보)
       final usage = await _loadUsageDataFromFirebase();
+      debugPrint('📊 [UsageLimitService] Firebase 사용량 데이터: $usage');
+      
       final limits = await _loadLimitsFromFirebase(forceRefresh: true);
+      debugPrint('📊 [UsageLimitService] Firebase 제한 데이터: $limits');
       
       // 제한 도달 여부
       final limitStatus = {
@@ -146,21 +151,30 @@ class UsageLimitService {
         'ttsLimit': limits['ttsRequests'] ?? 0,
       };
       
+      // 사용량 퍼센트 계산
+      final ocrPercentage = (limits['ocrPages'] ?? 0) > 0 ? 
+        ((usage['ocrPages'] ?? 0).toDouble() / (limits['ocrPages'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0;
+      final ttsPercentage = (limits['ttsRequests'] ?? 0) > 0 ? 
+        ((usage['ttsRequests'] ?? 0).toDouble() / (limits['ttsRequests'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0;
+        
+      debugPrint('📊 [UsageLimitService] 계산된 퍼센트 - OCR: $ocrPercentage%, TTS: $ttsPercentage%');
+      
       final result = {
         'usage': usage,
         'limits': limits,
         'usagePercentages': <String, double>{
-          'ocr': (limits['ocrPages'] ?? 0) > 0 ? ((usage['ocrPages'] ?? 0).toDouble() / (limits['ocrPages'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
-          'tts': (limits['ttsRequests'] ?? 0) > 0 ? ((usage['ttsRequests'] ?? 0).toDouble() / (limits['ttsRequests'] ?? 1).toDouble() * 100.0).clamp(0.0, 100.0) : 0.0,
+          'ocr': ocrPercentage,
+          'tts': ttsPercentage,
         },
         'limitStatus': limitStatus,
       };
       
-      debugPrint('설정 화면 사용량 조회 완료: $result');
+      debugPrint('✅ [UsageLimitService] 설정 화면 사용량 조회 완료: $result');
       return result;
       
-    } catch (e) {
-      debugPrint('설정 화면 사용량 조회 중 오류: $e');
+    } catch (e, stackTrace) {
+      debugPrint('❌ [UsageLimitService] 설정 화면 사용량 조회 중 오류: $e');
+      debugPrint('❌ [UsageLimitService] 스택 트레이스: $stackTrace');
       return _getDefaultUsageInfo();
     }
   }
@@ -201,27 +215,34 @@ class UsageLimitService {
     try {
       final userId = _currentUserId;
       if (userId == null) {
+        debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: 사용자 ID 없음');
         return _getDefaultUsageData();
       }
+      
+      debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: 사용자 ID $userId로 Firestore 조회');
       
       final doc = await _firestore.collection('users').doc(userId).get();
       
       if (!doc.exists) {
+        debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: 사용자 문서가 존재하지 않음');
         return _getDefaultUsageData();
       }
       
       final data = doc.data() as Map<String, dynamic>;
+      debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: 원본 문서 데이터: $data');
       
       // 'usage' 필드에서 데이터 추출
       Map<String, int> usageData = {};
       
       if (data.containsKey('usage') && data['usage'] is Map) {
         final usage = data['usage'] as Map<String, dynamic>;
+        debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: usage 필드 발견: $usage');
         usageData = {
           'ocrPages': _parseIntSafely(usage['ocrPages']),
           'ttsRequests': _parseIntSafely(usage['ttsRequests']),
         };
       } else {
+        debugPrint('🔍 [UsageLimitService] _loadUsageDataFromFirebase: usage 필드 없음, 최상위 필드에서 확인');
         // 최상위 필드에서 확인
         usageData = {
           'ocrPages': _parseIntSafely(data['ocrPages']),
@@ -229,9 +250,11 @@ class UsageLimitService {
         };
       }
       
+      debugPrint('✅ [UsageLimitService] _loadUsageDataFromFirebase: 최종 사용량 데이터: $usageData');
       return usageData;
-    } catch (e) {
-      debugPrint('Firebase에서 사용량 데이터 로드 중 오류: $e');
+    } catch (e, stackTrace) {
+      debugPrint('❌ [UsageLimitService] Firebase에서 사용량 데이터 로드 중 오류: $e');
+      debugPrint('❌ [UsageLimitService] 스택 트레이스: $stackTrace');
       return _getDefaultUsageData();
     }
   }

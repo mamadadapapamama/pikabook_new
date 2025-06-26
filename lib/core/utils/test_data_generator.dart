@@ -20,6 +20,7 @@ class TestDataGenerator {
       final testScenarios = [
         // === 기본 시나리오 ===
         {'email': 'trial@test.com', 'scenario': 'free_premium_trial'},
+        {'email': 'triallimit@test.com', 'scenario': 'premium_trial_limit_reached'},
         {'email': 'expired@test.com', 'scenario': 'trial_expired'},
         {'email': 'free@test.com', 'scenario': 'free_plan'},
         {'email': 'limit@test.com', 'scenario': 'free_limit_reached'},
@@ -27,15 +28,14 @@ class TestDataGenerator {
         // === 월간 프리미엄 ===
         {'email': 'premium@test.com', 'scenario': 'premium_active'},
         {'email': 'plimit@test.com', 'scenario': 'premium_limit_reached'},
-        {'email': 'triallimit@test.com', 'scenario': 'premium_trial_limit_reached'},
         
         // === 연간 프리미엄 ===
         {'email': 'yearly@test.com', 'scenario': 'premium_yearly_active'},
         {'email': 'yearlylimit@test.com', 'scenario': 'premium_yearly_limit_reached'},
         
-        // 🗑️ 만료된 프리미엄 제거 - 기능적으로 무료와 동일하므로 불필요
-        // {'email': 'pexpired@test.com', 'scenario': 'premium_expired'},
-        // {'email': 'yearlyexpired@test.com', 'scenario': 'premium_yearly_expired'},
+        // 🎯 프리미엄 만료 (배너 테스트용)
+        {'email': 'pexpired@test.com', 'scenario': 'premium_expired'},
+        {'email': 'yearlyexpired@test.com', 'scenario': 'premium_yearly_expired'},
       ];
 
       for (final test in testScenarios) {
@@ -334,11 +334,19 @@ class TestDataGenerator {
         break;
     }
 
+    if (kDebugMode) {
+      debugPrint('📊 [TestDataGenerator] $uid 사용량 데이터 설정: $usageType -> $usage');
+    }
+
     await _firestore.collection('users').doc(uid).update({
       'usage.ocrPages': usage['ocrPages'],
       'usage.ttsRequests': usage['ttsRequests'],
       'usage.lastUpdated': FieldValue.serverTimestamp(),
     });
+    
+    if (kDebugMode) {
+      debugPrint('✅ [TestDataGenerator] $uid 사용량 데이터 저장 완료');
+    }
   }
 
   /// 사용량 제한 설정
@@ -429,13 +437,13 @@ class TestDataGenerator {
     debugPrint('📋 테스트 계정 목록:');
     debugPrint('=== 월간 구독 (Monthly) ===');
     debugPrint('1. trial@test.com (test123456) - 무료체험 중');
-    debugPrint('2. expired@test.com (test123456) - 체험 만료');  
-    debugPrint('3. free@test.com (test123456) - 무료 플랜');
-    debugPrint('4. limit@test.com (test123456) - 무료 제한 도달');
-    debugPrint('5. premium@test.com (test123456) - 프리미엄 활성');
-    debugPrint('6. plimit@test.com (test123456) - 프리미엄 제한 도달');
-    debugPrint('7. pexpired@test.com (test123456) - 프리미엄 만료');
-    debugPrint('8. triallimit@test.com (test123456) - 🎯 프리미엄 체험 중 제한 도달');
+    debugPrint('2. triallimit@test.com (test123456) - 🎯 프리미엄 체험 중 제한 도달');
+    debugPrint('3. expired@test.com (test123456) - 체험 만료');  
+    debugPrint('4. free@test.com (test123456) - 무료 플랜');
+    debugPrint('5. limit@test.com (test123456) - 무료 제한 도달');
+    debugPrint('6. premium@test.com (test123456) - 프리미엄 활성');
+    debugPrint('7. plimit@test.com (test123456) - 프리미엄 제한 도달');
+    debugPrint('8. pexpired@test.com (test123456) - 프리미엄 만료');
     debugPrint('=== 연간 구독 (Yearly) ===');
     debugPrint('9. yearly@test.com (test123456) - 프리미엄 연간 활성');
     debugPrint('10. yearlylimit@test.com (test123456) - 프리미엄 연간 제한 도달');
