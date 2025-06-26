@@ -208,11 +208,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  message,
-                  style: const TextStyle(color: Colors.white),
-                ),
+                // 🎯 메시지가 있을 때만 표시하고 더 작은 폰트 사용
+                if (message.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13, // 🎯 더 작은 폰트 크기
+                    ),
+                  ),
+                ],
               ],
             ),
             backgroundColor: ColorTokens.snackbarBg,
@@ -249,37 +255,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     */
   }
   
-  /// 7일 체험 만료 체크 및 업그레이드 모달 표시
+  /// 🎯 체험 만료 체크 제거 - 이제 TrialStatusChecker에서 자동 처리
   Future<void> _checkTrialExpiration() async {
-    try {
-      final planService = PlanService();
-      final subscriptionDetails = await planService.getSubscriptionDetails();
-      
-      // 무료 체험이 만료되고 현재 무료 플랜인 경우
-      if (subscriptionDetails['hasUsedFreeTrial'] == true && 
-          subscriptionDetails['currentPlan'] == PlanService.PLAN_FREE) {
-        
-        // 하루에 한 번만 표시하도록 체크
-        final prefs = await SharedPreferences.getInstance();
-        final lastShownDate = prefs.getString('last_upgrade_prompt_date');
-        final today = DateTime.now().toIso8601String().substring(0, 10);
-        
-        if (lastShownDate != today && mounted) {
-          // 잠시 대기 후 모달 표시 (화면이 완전히 로드된 후)
-          await Future.delayed(const Duration(milliseconds: 1500));
-          
-          if (mounted) {
-            await UpgradePromptHelper.showTrialExpiredPrompt(context);
-            // 오늘 날짜 저장
-            await prefs.setString('last_upgrade_prompt_date', today);
-          }
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 체험 만료 체크 중 오류: $e');
-      }
-      // 체험 만료 체크 실패는 무시하고 계속 진행
+    // 🎯 체험 만료 시 프리미엄으로 자동 전환되므로 업그레이드 모달 표시하지 않음
+    // TrialStatusChecker에서 자동으로 처리하고 스낵바만 표시
+    if (kDebugMode) {
+      debugPrint('[HomeScreen] 체험 만료 체크 - TrialStatusChecker에서 자동 처리됨');
     }
   }
   

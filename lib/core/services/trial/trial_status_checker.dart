@@ -181,13 +181,7 @@ class TrialStatusChecker {
         }
       }
       
-      // 체험 종료 콜백 호출
-      if (onTrialExpired != null) {
-        onTrialExpired!(
-          '💎 프리미엄 (월)플랜이 시작되었어요!',
-          '',
-        );
-      }
+      // 🎯 체험 종료 콜백은 _checkAndShowTrialExpiredNotification()에서 한 번만 호출
       
       if (kDebugMode) {
         debugPrint('⏰ [TrialStatusChecker] 체험 종료 처리 완료');
@@ -209,8 +203,8 @@ class TrialStatusChecker {
         // 체험 종료 콜백 호출
         if (onTrialExpired != null) {
           onTrialExpired!(
-            '💎 프리미엄 (월)플랜이 시작되었어요!',
-            '',
+            '💎 프리미엄(monthly)플랜이 시작되었어요!',
+            '언제든지 구독 취소 하실수 있어요.',
           );
         }
         

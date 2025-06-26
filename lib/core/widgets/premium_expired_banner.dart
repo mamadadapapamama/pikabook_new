@@ -25,25 +25,18 @@ class PremiumExpiredBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(
-          color: ColorTokens.secondary, // dark green outline
-          width: 1.0,
+          color: ColorTokens.primary, 
+          width: 0.5,
         ),
-        borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(SpacingTokens.radiusXs)
       ),
       child: Row(
         children: [
           // 경고 아이콘
           Icon(
             Icons.info_outline,
-            color: ColorTokens.secondary,
-            size: SpacingTokens.iconSizeMedium,
+            color: ColorTokens.primary,
+            size: SpacingTokens.iconSizeSmall,
           ),
           
           SizedBox(width: SpacingTokens.sm),
@@ -55,7 +48,7 @@ class PremiumExpiredBanner extends StatelessWidget {
               children: [
                 Text(
                   '프리미엄 플랜이 무료 플랜으로 전환되었습니다',
-                  style: TypographyTokens.subtitle2.copyWith(
+                  style: TypographyTokens.body1En.copyWith(
                     color: ColorTokens.textPrimary,
                     fontWeight: FontWeight.w600,
                   ),

@@ -211,16 +211,32 @@ class PikaButton extends StatelessWidget {
     final baseStyle = TypographyTokens.button;
     Color textColor;
     
-    switch (variant) {
-      case PikaButtonVariant.primary:
-      case PikaButtonVariant.floating:
-        textColor = Colors.white;
-        break;
-      case PikaButtonVariant.warning:
-        textColor = Colors.red[800] ?? Colors.red;
-        break;
-      default:
-        textColor = ColorTokens.textPrimary;
+    // disabled 상태일 때는 disabled 색상 사용
+    if (onPressed == null) {
+      switch (variant) {
+        case PikaButtonVariant.primary:
+        case PikaButtonVariant.floating:
+        case PikaButtonVariant.outline:
+        case PikaButtonVariant.text:
+          textColor = ColorTokens.textGrey;
+          break;
+        case PikaButtonVariant.warning:
+          textColor = ColorTokens.textGrey;
+          break;
+      }
+    } else {
+      // enabled 상태일 때 기존 로직
+      switch (variant) {
+        case PikaButtonVariant.primary:
+        case PikaButtonVariant.floating:
+          textColor = Colors.white;
+          break;
+        case PikaButtonVariant.warning:
+          textColor = Colors.red[800] ?? Colors.red;
+          break;
+        default:
+          textColor = ColorTokens.textPrimary;
+      }
     }
     
     switch (size) {
