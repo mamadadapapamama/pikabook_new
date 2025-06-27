@@ -9,6 +9,8 @@ import '../authentication/deleted_user_service.dart';
 import '../media/image_service.dart';
 import 'usage_limit_service.dart';
 import 'plan_service.dart';
+import '../trial/trial_status_checker.dart';
+
 
 /// 앱 초기화 단계를 정의합니다.
 enum InitializationStep {
@@ -59,7 +61,7 @@ class InitializationManager {
   final List<InitializationProgressListener> _listeners = [];
   
   // 초기화 결과 컨트롤러
-  final Completer<Map<String, dynamic>> _resultCompleter = Completer<Map<String, dynamic>>();
+  Completer<Map<String, dynamic>> _resultCompleter = Completer<Map<String, dynamic>>();
   
   // 생성자
   InitializationManager._internal();
@@ -116,12 +118,8 @@ class InitializationManager {
     }
     
     if (_isCompleted) {
-      return {
-        'isLoggedIn': FirebaseAuth.instance.currentUser != null,
-        'hasLoginHistory': await _prefsService.hasLoginHistory(),
-        'isOnboardingCompleted': await _prefsService.getOnboardingCompleted(),
-        'error': null,
-      };
+      // 이미 완료된 경우 저장된 결과 반환
+      return result;
     }
     
     _isInitializing = true;
@@ -142,9 +140,12 @@ class InitializationManager {
         '인증 상태 확인 중...',
       );
       
-      // 현재 사용자 및 로그인 상태 확인
+      // 현재 사용자 및 로그인 상태 확인 (Firebase Auth 초기화 대기)
+      await FirebaseAuth.instance.authStateChanges().first;
       final currentUser = FirebaseAuth.instance.currentUser;
       bool isLoggedIn = currentUser != null;
+      
+      
       
       // 탈퇴된 사용자인지 확인 (로그인되어 있는 경우만)
       if (isLoggedIn && currentUser != null) {
@@ -178,7 +179,11 @@ class InitializationManager {
         try {
           // 🎯 로그인 직후에는 강제 새로고침으로 정확한 상태 확인 (재시도 로직 포함)
           usageLimitStatus = await _retryFirebaseOperation(() async {
-            return await _usageLimitService.checkInitialLimitStatus(forceRefresh: true);
+            final result = await _usageLimitService.checkInitialLimitStatus(forceRefresh: true);
+            if (kDebugMode) {
+              debugPrint('🔍 [InitializationManager] checkInitialLimitStatus 결과: $result');
+            }
+            return result;
           });
           debugPrint('초기화 중 사용량 확인 완료 (강제 새로고침): $usageLimitStatus');
         } catch (e) {
@@ -238,16 +243,33 @@ class InitializationManager {
         };
       }
       
-      // 기본 초기화 결과
+      // 기본 초기화 결과 (중복 데이터 제거)
       final initialResult = {
         'isLoggedIn': isLoggedIn,
         'hasLoginHistory': hasLoginHistory,
         'isOnboardingCompleted': isOnboardingCompleted,
         'isFirstEntry': isFirstEntry,
-        'usageLimitStatus': usageLimitStatus, // 사용량 상태 추가
-        'bannerStates': bannerStates, // 배너 상태 추가
+        'bannerStates': bannerStates, // 배너 상태에 모든 정보 포함
         'error': null,
       };
+      
+      if (kDebugMode) {
+        debugPrint('🎯 [InitializationManager] 최종 초기화 결과:');
+        debugPrint('  - isLoggedIn: $isLoggedIn');
+        debugPrint('  - isOnboardingCompleted: $isOnboardingCompleted');
+        debugPrint('  - 🔍 원본 usageLimitStatus: $usageLimitStatus');
+        debugPrint('  - 🎯 최종 bannerStates: $bannerStates');
+        
+        // 🔍 배너별 상세 디버깅
+        final shouldShowUsageLimit = bannerStates['shouldShowUsageLimitBanner'] ?? false;
+        if (shouldShowUsageLimit) {
+          debugPrint('  ✅ 사용량 한도 배너 표시 예정!');
+        } else {
+          debugPrint('  ❌ 사용량 한도 배너 표시 안됨');
+          debugPrint('     - OCR 한도: ${usageLimitStatus['ocrLimitReached']}');
+          debugPrint('     - TTS 한도: ${usageLimitStatus['ttsLimitReached']}');
+        }
+      }
       
       // 백그라운드에서 나머지 작업 계속 진행
       _continueInitializationInBackground(isLoggedIn, currentUser);
@@ -401,40 +423,184 @@ class InitializationManager {
     throw Exception('Firebase 작업 재시도 한계 초과');
   }
 
-  // 배너 상태 결정 (중앙집중식) - 읽기 전용
+  // 배너 상태 결정 (이전 플랜 히스토리 기반)
   Future<Map<String, bool>> _determineBannerStates(Map<String, bool> usageLimitStatus) async {
     try {
       if (kDebugMode) {
-        debugPrint('🎯 배너 상태 결정 시작 (읽기 전용)');
+        debugPrint('🎯 배너 상태 결정 시작 (플랜 히스토리 기반)');
       }
       
       final planService = PlanService();
       
-      // 🎯 구독 정보 가져오기
-      final subscriptionDetails = await planService.getSubscriptionDetails();
+      // 1. 현재 플랜 정보 가져오기
+      final subscriptionDetails = await planService.getSubscriptionDetails(forceRefresh: true);
+      final currentPlan = subscriptionDetails['currentPlan'] as String;
+      final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool;
+      final daysRemaining = subscriptionDetails['daysRemaining'] as int;
       
-      final currentPlan = subscriptionDetails['currentPlan'] as String?;
-      final subscriptionStatus = subscriptionDetails['subscriptionStatus'] as String?;
-      final hasUsedFreeTrial = subscriptionDetails['hasUsedFreeTrial'] as bool? ?? false;
-      final hasEverUsedTrial = subscriptionDetails['hasEverUsedTrial'] as bool? ?? false;
-      final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
+      if (kDebugMode) {
+        debugPrint('🎯 [현재 플랜 정보]');
+        debugPrint('  - 현재 플랜: $currentPlan');
+        debugPrint('  - 무료 체험 중: $isFreeTrial');
+        debugPrint('  - 남은 일수: $daysRemaining');
+      }
       
-      // 1. 프리미엄 만료 배너 (구독 만료 + 플랜 변경 통합)
-      final hasPlanChanged = await planService.hasPlanChangedToFree();
-      final shouldShowPremiumExpiredBanner = (currentPlan == PlanService.PLAN_FREE) &&
-          ((subscriptionStatus == 'expired') || hasPlanChanged) &&
-          (hasUsedFreeTrial || hasEverUsedTrial);
+      // 2. 이전 플랜 히스토리 확인 (탈퇴 이력)
+      Map<String, dynamic>? lastPlanInfo;
+      try {
+        lastPlanInfo = await _deletedUserService.getLastPlanInfo(forceRefresh: true);
+        
+        // 🧪 테스트용: 기존 테스트 계정들에 현재 사용자 문서에 이전 플랜 이력 추가
+        if (lastPlanInfo == null && kDebugMode) {
+          final currentUser = FirebaseAuth.instance.currentUser;
+          if (currentUser != null && currentUser.email != null) {
+            final email = currentUser.email!;
+            
+            // 테스트 계정들에 이전 플랜 이력 추가
+            if (email == 'expired@test.com' || email == 'pexpired@test.com' || email == 'yearlyexpired@test.com') {
+              try {
+                await _addPlanHistoryToUser(currentUser.uid, email);
+                
+                // 이전 플랜 이력 추가 후 가짜 이전 플랜 정보 생성
+                if (email == 'expired@test.com') {
+                  lastPlanInfo = {
+                    'planType': PlanService.PLAN_PREMIUM,
+                    'isFreeTrial': true,
+                    'subscriptionType': 'monthly',
+                    'hasEverUsedTrial': true,
+                  };
+                } else if (email == 'pexpired@test.com') {
+                  lastPlanInfo = {
+                    'planType': PlanService.PLAN_PREMIUM,
+                    'isFreeTrial': false,
+                    'subscriptionType': 'monthly',
+                    'hasEverUsedTrial': true,
+                    'hasEverUsedPremium': true, // 🎯 프리미엄 이력 추가
+                  };
+                } else if (email == 'yearlyexpired@test.com') {
+                  lastPlanInfo = {
+                    'planType': PlanService.PLAN_PREMIUM,
+                    'isFreeTrial': false,
+                    'subscriptionType': 'yearly',
+                    'hasEverUsedTrial': true,
+                    'hasEverUsedPremium': true, // 🎯 프리미엄 이력 추가
+                  };
+                }
+                
+                debugPrint('🧪 [테스트] $email → 이전 플랜 이력 추가 및 배너 테스트 데이터 생성');
+              } catch (e) {
+                debugPrint('⚠️ [테스트] $email 이전 플랜 이력 추가 실패: $e');
+              }
+            }
+          }
+        }
+        
+        if (kDebugMode) {
+          debugPrint('🎯 [이전 플랜 히스토리]');
+          if (lastPlanInfo != null) {
+            debugPrint('  - 이전 플랜 타입: ${lastPlanInfo['planType']}');
+            debugPrint('  - 이전 무료체험: ${lastPlanInfo['isFreeTrial']}');
+            debugPrint('  - 이전 구독 타입: ${lastPlanInfo['subscriptionType']}');
+            debugPrint('  - 체험 사용 이력: ${lastPlanInfo['hasEverUsedTrial']}');
+          } else {
+            debugPrint('  - 이전 플랜 히스토리: 없음');
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ 이전 플랜 히스토리 확인 실패: $e');
+        }
+        lastPlanInfo = null;
+      }
       
-      // 2. 사용량 한도 배너 - 실제 사용량 기준으로 정확히 판단
+      // 3. 배너 결정 로직
+      bool shouldShowPremiumExpiredBanner = false;
+      bool shouldShowTrialCompletedBanner = false;
+      
+      if (currentPlan == PlanService.PLAN_PREMIUM && isFreeTrial) {
+        // 현재 프리미엄 체험 중 → 배너 없음
+        if (kDebugMode) {
+          debugPrint('📋 현재 프리미엄 체험 중 → 배너 없음');
+        }
+      } else if (currentPlan == PlanService.PLAN_PREMIUM && !isFreeTrial) {
+        // 현재 정식 프리미엄 → 배너 없음
+        if (kDebugMode) {
+          debugPrint('📋 현재 정식 프리미엄 → 배너 없음');
+        }
+      } else if (currentPlan == PlanService.PLAN_FREE) {
+        // 현재 무료 플랜 → 이전 플랜 히스토리 + 현재 구독 정보 확인
+        
+        // 🎯 현재 구독 정보에서 체험/프리미엄 이력 확인 (트라이얼 중간 취소 케이스 대응)
+        final hasEverUsedTrial = subscriptionDetails['hasEverUsedTrial'] as bool? ?? false;
+        final hasEverUsedPremium = subscriptionDetails['hasEverUsedPremium'] as bool? ?? false;
+        
+        if (kDebugMode) {
+          debugPrint('🔍 [현재 구독 정보 체크]');
+          debugPrint('  - hasEverUsedTrial: $hasEverUsedTrial');
+          debugPrint('  - hasEverUsedPremium: $hasEverUsedPremium');
+        }
+        
+        if (lastPlanInfo != null) {
+          // 이전 플랜 히스토리가 있는 경우 (탈퇴 후 재가입)
+          final previousPlanType = lastPlanInfo['planType'] as String?;
+          final previousIsFreeTrial = lastPlanInfo['isFreeTrial'] as bool? ?? false;
+          
+          if (previousPlanType == PlanService.PLAN_PREMIUM) {
+            if (previousIsFreeTrial) {
+              // 이전에 무료 체험 → Trial Completed 배너
+              shouldShowTrialCompletedBanner = true;
+              if (kDebugMode) {
+                debugPrint('📋 현재 Free + 이전 Premium Trial (탈퇴 이력) → Trial Completed 배너');
+              }
+            } else {
+              // 이전에 정식 프리미엄 → Premium Expired 배너
+              shouldShowPremiumExpiredBanner = true;
+              if (kDebugMode) {
+                debugPrint('📋 현재 Free + 이전 Premium Paid (탈퇴 이력) → Premium Expired 배너');
+              }
+            }
+          } else {
+            // 이전에도 무료 플랜 → 배너 없음
+            if (kDebugMode) {
+              debugPrint('📋 현재 Free + 이전 Free (탈퇴 이력) → 배너 없음');
+            }
+          }
+        } else {
+          // 이전 플랜 히스토리 없음 → 현재 구독 정보의 이력 확인
+          if (hasEverUsedPremium) {
+            // 🎯 프리미엄 이력 있음 → Premium Expired 배너
+            shouldShowPremiumExpiredBanner = true;
+            if (kDebugMode) {
+              debugPrint('📋 현재 Free + 프리미엄 이력 있음 (중간 취소/만료) → Premium Expired 배너');
+            }
+          } else if (hasEverUsedTrial) {
+            // 🎯 체험 이력만 있음 → Trial Completed 배너 (트라이얼 중간 취소 케이스)
+            shouldShowTrialCompletedBanner = true;
+            if (kDebugMode) {
+              debugPrint('📋 현재 Free + 체험 이력 있음 (트라이얼 중간 취소/만료) → Trial Completed 배너');
+            }
+          } else {
+            // 아무 이력 없음 → 배너 없음
+            if (kDebugMode) {
+              debugPrint('📋 현재 Free + 이력 없음 → 배너 없음');
+            }
+          }
+        }
+      }
+      
+      // 4. 사용량 한도 배너 (기존 로직 유지)
       final ocrLimitReached = usageLimitStatus['ocrLimitReached'] ?? false;
       final ttsLimitReached = usageLimitStatus['ttsLimitReached'] ?? false;
       final shouldShowUsageLimitBanner = ocrLimitReached || ttsLimitReached;
       
-      // 3. 체험 완료 배너 (체험 완료 후 프리미엄으로 전환된 상태)
-      final shouldShowTrialCompletedBanner = (currentPlan == PlanService.PLAN_PREMIUM) &&
-          (subscriptionStatus == 'active') &&
-          hasUsedFreeTrial &&
-          !isFreeTrial;
+      // 🔍 사용량 한도 배너 상세 디버깅
+      if (kDebugMode) {
+        debugPrint('🔍 [사용량 한도 배너 디버깅]');
+        debugPrint('  - 원본 usageLimitStatus: $usageLimitStatus');
+        debugPrint('  - OCR 한도 도달: $ocrLimitReached');
+        debugPrint('  - TTS 한도 도달: $ttsLimitReached');
+        debugPrint('  - 최종 사용량 배너: $shouldShowUsageLimitBanner');
+      }
       
       final result = {
         'shouldShowPremiumExpiredBanner': shouldShowPremiumExpiredBanner,
@@ -443,24 +609,11 @@ class InitializationManager {
       };
       
       if (kDebugMode) {
-        debugPrint('🎯 배너 상태 결정 완료:');
-        debugPrint('  - 현재 플랜: $currentPlan');
-        debugPrint('  - 구독 상태: $subscriptionStatus');
-        debugPrint('  - 무료체험 사용: $hasUsedFreeTrial');
-        debugPrint('  - 체험 이력: $hasEverUsedTrial');
-        debugPrint('  - 현재 체험중: $isFreeTrial');
-        debugPrint('  - 사용량 제한: OCR=$ocrLimitReached, TTS=$ttsLimitReached');
-        debugPrint('  - 플랜 변경: $hasPlanChanged');
-        debugPrint('  - 🎯 최종 배너 결과: $result');
-        
-        // 🔍 사용량 한도 배너 디버깅
-        if (shouldShowUsageLimitBanner) {
-          debugPrint('  ✅ 사용량 한도 배너 표시 조건 충족!');
-        } else {
-          debugPrint('  ❌ 사용량 한도 배너 표시 조건 미충족');
-          debugPrint('     - OCR 한도 도달: $ocrLimitReached');
-          debugPrint('     - TTS 한도 도달: $ttsLimitReached');
-        }
+        debugPrint('🎯 최종 배너 결과 (플랜 히스토리 기반):');
+        debugPrint('  - Premium Expired: $shouldShowPremiumExpiredBanner');
+        debugPrint('  - Trial Completed: $shouldShowTrialCompletedBanner');
+        debugPrint('  - Usage Limit: $shouldShowUsageLimitBanner');
+        debugPrint('  - 🎯 전체 결과: $result');
       }
       
       return result;
@@ -474,13 +627,68 @@ class InitializationManager {
     }
   }
 
-  // 초기화 리셋 (테스트용)
+  // 초기화 상태 리셋 (재초기화용)
   void reset() {
+    if (kDebugMode) {
+      debugPrint('🔄 [InitializationManager] 초기화 상태 리셋');
+    }
+    
     _isInitializing = false;
     _isCompleted = false;
+    _error = null;
     _currentStep = InitializationStep.preparing;
     _progress = 0.0;
     _message = '준비 중...';
-    _error = null;
+    
+    // 새로운 Completer 생성
+    if (_resultCompleter.isCompleted) {
+      _resultCompleter = Completer<Map<String, dynamic>>();
+    }
+  }
+  
+  /// 🧪 테스트용: 사용자 문서에 이전 플랜 이력 추가
+  Future<void> _addPlanHistoryToUser(String userId, String email) async {
+    try {
+      final firestore = FirebaseFirestore.instance;
+      
+      // 현재 사용자 문서 확인
+      final userDoc = await firestore.collection('users').doc(userId).get();
+      if (!userDoc.exists) {
+        debugPrint('⚠️ [테스트] 사용자 문서가 존재하지 않음: $userId');
+        return;
+      }
+      
+      final userData = userDoc.data() as Map<String, dynamic>;
+      final hasEverUsedTrial = userData['hasEverUsedTrial'] as bool? ?? false;
+      final hasEverUsedPremium = userData['hasEverUsedPremium'] as bool? ?? false;
+      
+      // 이미 플랜 이력이 있으면 추가하지 않음
+      if (hasEverUsedTrial && (email == 'expired@test.com' || hasEverUsedPremium)) {
+        debugPrint('🧪 [테스트] $email 이미 플랜 이력 있음, 추가하지 않음');
+        return;
+      }
+      
+      // 플랜 이력 추가
+      Map<String, dynamic> updateData = {
+        'hasEverUsedTrial': true,
+        'hasUsedFreeTrial': true,
+      };
+      
+      // 프리미엄 이력이 필요한 계정들
+      if (email == 'pexpired@test.com' || email == 'yearlyexpired@test.com') {
+        updateData.addAll({
+          'hasEverUsedPremium': true,
+          'lastPremiumSubscriptionType': email == 'yearlyexpired@test.com' ? 'yearly' : 'monthly',
+          'lastPremiumExpiredAt': FieldValue.serverTimestamp(),
+        });
+      }
+      
+      await firestore.collection('users').doc(userId).update(updateData);
+      
+      debugPrint('🧪 [테스트] $email 플랜 이력 추가 완료: $updateData');
+    } catch (e) {
+      debugPrint('❌ [테스트] 플랜 이력 추가 실패: $e');
+      rethrow;
+    }
   }
 } 

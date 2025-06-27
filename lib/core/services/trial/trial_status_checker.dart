@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import '../common/plan_service.dart';
 import '../notification/notification_service.dart';
+import '../authentication/deleted_user_service.dart';
 
 /// 체험 상태 체크 서비스 - 서버 시간 기반
 class TrialStatusChecker {
@@ -25,14 +26,22 @@ class TrialStatusChecker {
   /// 서비스 초기화 - 앱 시작 시 호출
   Future<void> initialize() async {
     try {
+      // 🔍 로그인 상태 확인 후에만 초기화
+      if (!_isUserLoggedIn) {
+        if (kDebugMode) {
+          debugPrint('⏭️ [TrialStatusChecker] 로그아웃 상태 - 초기화 스킵');
+        }
+        return;
+      }
+      
       // 1. 캐시된 상태 체크 (불필요한 서버 호출 방지)
       await checkTrialStatusFromServer(forceRefresh: false);
       
-      // 2. 하루 한번 체크 타이머 시작
+      // 2. 하루 한번 체크 타이머 시작 (로그인된 사용자만)
       _startDailyCheckTimer();
       
       if (kDebugMode) {
-        debugPrint('✅ [TrialStatusChecker] 초기화 완료 (캐시 사용)');
+        debugPrint('✅ [TrialStatusChecker] 초기화 완료 (로그인된 사용자)');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -172,12 +181,13 @@ class TrialStatusChecker {
       // 체험 관련 알림 취소
       await _notificationService.cancelTrialNotifications();
       
-      // 🎯 체험 종료 시 프리미엄으로 전환
+      // 🎯 체험 종료 시 무료 플랜으로 전환 (탈퇴 아님!)
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        final success = await _planService.convertTrialToPremium(user.uid);
+        // 체험 만료 시 무료 플랜으로 전환하고 체험 이력 남기기
+        final success = await _planService.convertToFree(user.uid);
         if (kDebugMode) {
-          debugPrint('🔄 [TrialStatusChecker] 체험→프리미엄 전환: ${success ? '성공' : '실패'}');
+          debugPrint('🔄 [TrialStatusChecker] 체험→무료 플랜 전환: ${success ? '성공' : '실패'}');
         }
       }
       
@@ -246,8 +256,20 @@ class TrialStatusChecker {
   /// 사용자 로그인 상태 확인
   bool get _isUserLoggedIn => FirebaseAuth.instance.currentUser != null;
 
+  /// 로그아웃 시 타이머 정리
+  void onUserLoggedOut() {
+    if (kDebugMode) {
+      debugPrint('🚪 [TrialStatusChecker] 로그아웃 감지 - 타이머 정리');
+    }
+    _dailyCheckTimer?.cancel();
+    _dailyCheckTimer = null;
+  }
+
   /// 리소스 정리
   void dispose() {
+    if (kDebugMode) {
+      debugPrint('🧹 [TrialStatusChecker] dispose - 모든 리소스 정리');
+    }
     _dailyCheckTimer?.cancel();
     _dailyCheckTimer = null;
     onTrialExpired = null;

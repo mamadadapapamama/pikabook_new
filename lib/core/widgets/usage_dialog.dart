@@ -293,7 +293,9 @@ class _UsageDialogState extends State<UsageDialog> {
         SizedBox(height: SpacingTokens.sm),
         ...entries.map((entry) {
           final String label = _getUsageLabel(entry.key);
-          final double percentage = entry.value.clamp(0, 100);
+          // NaN 방지: 유효하지 않은 값은 0으로 처리
+          final double rawPercentage = entry.value.isFinite ? entry.value : 0.0;
+          final double percentage = rawPercentage.clamp(0, 100);
           
           return Padding(
             padding: EdgeInsets.only(bottom: SpacingTokens.xs),
@@ -315,7 +317,7 @@ class _UsageDialogState extends State<UsageDialog> {
                 ),
                 const SizedBox(height: 4),
                 LinearProgressIndicator(
-                  value: percentage / 100,
+                  value: percentage / 100, // percentage가 이미 0-100 범위로 clamp되어 안전
                   backgroundColor: ColorTokens.divider,
                   valueColor: AlwaysStoppedAnimation<Color>(_getUsageColor(percentage)),
                 ),

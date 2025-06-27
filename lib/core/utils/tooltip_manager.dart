@@ -205,7 +205,10 @@ class TooltipManager {
           borderColor: ColorTokens.primary,
           textColor: ColorTokens.textPrimary,
           tooltipPadding: const EdgeInsets.all(16),
-          tooltipWidth: MediaQuery.of(context).size.width - 32,
+          tooltipWidth: () {
+            final screenWidth = MediaQuery.of(context).size.width;
+            return screenWidth.isFinite && screenWidth > 32 ? screenWidth - 32 : 300.0;
+          }(),
           spacing: 8.0,
           style: HelpTextTooltipStyle.primary,
           image: Image.asset(

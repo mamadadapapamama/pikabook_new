@@ -14,6 +14,7 @@ import '../common/plan_service.dart';
 import 'user_preferences_service.dart';
 import 'deleted_user_service.dart';
 import '../cache/event_cache_manager.dart';
+import '../trial/trial_status_checker.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -22,6 +23,46 @@ class AuthService {
     signInOption: SignInOption.standard,
     scopes: ['email', 'profile'],
   );
+  
+  String? _lastUserId;
+  
+  AuthService() {
+    _initializeUserChangeDetection();
+  }
+  
+  /// 사용자 변경 감지 및 캐시 초기화
+  void _initializeUserChangeDetection() {
+    _auth.authStateChanges().listen((User? user) async {
+      final currentUserId = user?.uid;
+      
+      if (kDebugMode) {
+        debugPrint('🔍 [AuthService] 인증 상태 변경: ${_lastUserId ?? "없음"} → ${currentUserId ?? "없음"}');
+      }
+      
+      // 사용자가 변경된 경우 (로그아웃 → 로그인, 다른 사용자로 로그인)
+      if (_lastUserId != null && _lastUserId != currentUserId) {
+        if (kDebugMode) {
+          debugPrint('🔄 [AuthService] 사용자 변경 감지 - 캐시 초기화');
+        }
+        
+        // 모든 캐시 초기화
+        final eventCache = EventCacheManager();
+        eventCache.clearAllCache();
+        
+        // SharedPreferences에서 사용자별 데이터 정리
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('last_user_id');
+      }
+      
+      _lastUserId = currentUserId;
+      
+      // 새 사용자 ID 저장
+      if (currentUserId != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('last_user_id', currentUserId);
+      }
+    });
+  }
 
 // === 인증상태 관리 및 재설치 여부 판단 ===
 
@@ -253,18 +294,26 @@ class AuthService {
       // 1. 현재 UID 저장
       final currentUid = _auth.currentUser?.uid;
       
-      // 2. 병렬 처리 가능한 작업들
+      // 2. TrialStatusChecker 타이머 정리
+      try {
+        final trialStatusChecker = TrialStatusChecker();
+        trialStatusChecker.onUserLoggedOut();
+      } catch (e) {
+        debugPrint('TrialStatusChecker 정리 중 오류: $e');
+      }
+      
+      // 3. 병렬 처리 가능한 작업들
       await Future.wait([
         _clearSocialLoginSessions(),
         ImageService().clearImageCache(),
       ]);
       
-      // 3. Firebase 로그아웃
+      // 4. Firebase 로그아웃
       await _auth.signOut();
       
       debugPrint('로그아웃 완료');
       
-      // 4. 세션 종료 처리 (필요시)
+      // 5. 세션 종료 처리 (필요시)
       if (currentUid != null) {
         await _endUserSession(currentUid);
       }

@@ -97,13 +97,36 @@ class PlanService {
         }
       }
       
-      // 직접 플랜 타입만 확인 (getSubscriptionDetails 호출하면 무한 루프)
-      final currentPlan = await _getCurrentPlanTypeFromFirestore();
+      // 직접 Firestore에서 플랜 정보 조회 (캐시 없이)
+      final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
+      if (!userDoc.exists) return PLAN_FREE;
       
-      // 이벤트 캐시에 저장
-      _eventCache.setCache(cacheKey, currentPlan);
+      final data = userDoc.data() as Map<String, dynamic>;
+      final subscriptionData = data['subscription'] as Map<String, dynamic>?;
       
-      return currentPlan;
+      if (subscriptionData == null) return PLAN_FREE;
+      
+      final plan = subscriptionData['plan'] as String? ?? PLAN_FREE;
+      final expiryDate = subscriptionData['expiryDate'] as Timestamp?;
+      
+      // 만료 확인
+      if (expiryDate != null) {
+        final expiry = expiryDate.toDate();
+        final now = DateTime.now();
+        
+        if (expiry.isAfter(now)) {
+          return plan; // 만료되지 않았으면 원래 플랜
+        } else {
+          return PLAN_FREE; // 만료되었으면 무료 플랜
+        }
+      }
+      
+      return plan;
+      
+              // 이벤트 캐시에 저장
+        _eventCache.setCache(cacheKey, plan);
+        
+        return plan;
     } catch (e) {
       debugPrint('플랜 정보 조회 오류: $e');
       return PLAN_FREE;
@@ -147,36 +170,7 @@ class PlanService {
     _eventCache.notifySubscriptionChanged(subscriptionData, userId: targetUserId);
   }
   
-  /// Firestore에서 직접 플랜 타입만 확인 (내부용)
-  Future<String> _getCurrentPlanTypeFromFirestore() async {
-    if (_currentUserId == null) return PLAN_FREE;
-    
-    final userDoc = await _firestore
-        .collection('users')
-        .doc(_currentUserId)
-        .get();
-        
-    if (!userDoc.exists) return PLAN_FREE;
-    
-    final userData = userDoc.data();
-    
-    // 1. 새로운 subscription 구조 확인
-    final planData = userData?['subscription'];
-    if (planData != null) {
-      final planType = planData['plan'] as String?;
-      final expiryDate = planData['expiryDate'];
-      
-      // Premium 플랜이고 만료되지 않았으면 Premium 반환
-      if (planType == PLAN_PREMIUM && expiryDate != null) {
-        final expiry = (expiryDate as Timestamp).toDate();
-        if (expiry.isAfter(DateTime.now())) {
-          return PLAN_PREMIUM;
-        }
-      }
-    }
-    
-    return PLAN_FREE;
-  }
+
   
   /// 플랜 변경 감지
   Future<bool> hasPlanChangedToFree() async {
@@ -568,6 +562,25 @@ class PlanService {
         print('   만료일: ${expiryDate?.toDate()}');
         print('   상태: $status');
         print('   구독 유형: $subscriptionType');
+        
+        // 🔍 Firestore 원본 데이터 디버깅
+        print('🔍 [DEBUG] Firestore 원본 데이터:');
+        print('   전체 사용자 데이터: $data');
+        print('   구독 데이터: $subscriptionData');
+        print('   구독 데이터의 isFreeTrial: ${subscriptionData?['isFreeTrial']}');
+        print('   구독 데이터의 status: ${subscriptionData?['status']}');
+        print('   구독 데이터의 plan: ${subscriptionData?['plan']}');
+        
+        // 만료 날짜 상세 분석
+        if (expiryDate != null) {
+          final now = DateTime.now();
+          final expiry = expiryDate.toDate();
+          print('🔍 [DEBUG] 만료 날짜 분석:');
+          print('   현재 시간: $now');
+          print('   만료 시간: $expiry');
+          print('   만료 여부: ${expiry.isBefore(now) ? "만료됨" : "유효함"}');
+          print('   시간 차이: ${expiry.difference(now).inMinutes}분');
+        }
       }
 
       final result = {
@@ -601,7 +614,66 @@ class PlanService {
     }
   }
   
-  /// 체험 종료 시 프리미엄으로 전환
+  /// 프리미엄(체험/정식) → 무료 플랜 전환 (이력 유지)
+  Future<bool> convertToFree(String userId) async {
+    try {
+      // 현재 구독 정보 확인
+      final subscriptionDetails = await getSubscriptionDetails(forceRefresh: true);
+      final currentPlan = subscriptionDetails['currentPlan'] as String;
+      final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
+      final subscriptionType = subscriptionDetails['subscriptionType'] as String?;
+      
+      if (currentPlan != PLAN_PREMIUM) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [PlanService] 프리미엄 상태가 아닙니다 - 전환 불필요');
+        }
+        return true; // 이미 무료 플랜이면 성공으로 처리
+      }
+      
+      // 이전 플랜 이력 저장 + 구독 정보 삭제
+      Map<String, dynamic> updateData = {
+        'subscription': FieldValue.delete(), // 구독 정보 삭제
+        'hasUsedFreeTrial': true, // 체험 사용 이력 유지
+        'hasEverUsedTrial': true, // 체험 사용 이력 유지 (영구)
+      };
+      
+      // 정식 프리미엄이었다면 프리미엄 이력도 저장
+      if (!isFreeTrial) {
+        updateData.addAll({
+          'hasEverUsedPremium': true, // 🎯 프리미엄 사용 이력 추가 (영구)
+          'lastPremiumSubscriptionType': subscriptionType, // 🎯 마지막 프리미엄 구독 타입
+          'lastPremiumExpiredAt': FieldValue.serverTimestamp(), // 🎯 프리미엄 만료 시간
+        });
+      }
+      
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .update(updateData);
+      
+      // 캐시 무효화 (플랜 변경)
+      _eventCache.invalidateCache('plan_type_$userId');
+      _eventCache.invalidateCache('subscription_$userId');
+      
+      if (kDebugMode) {
+        if (isFreeTrial) {
+          debugPrint('✅ [PlanService] 체험→무료 플랜 전환 완료');
+          debugPrint('   체험 이력 유지: hasEverUsedTrial = true');
+        } else {
+          debugPrint('✅ [PlanService] 프리미엄→무료 플랜 전환 완료');
+          debugPrint('   프리미엄 이력 저장: hasEverUsedPremium = true');
+          debugPrint('   마지막 구독 타입: $subscriptionType');
+        }
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('프리미엄→무료 플랜 전환 실패: $e');
+      return false;
+    }
+  }
+
+  /// 체험 종료 시 프리미엄으로 전환 (구매 시에만 사용)
   Future<bool> convertTrialToPremium(String userId) async {
     try {
       // 현재 구독 정보 확인
@@ -636,6 +708,8 @@ class PlanService {
             'subscription.isFreeTrial': false,
             'subscription.expiryDate': Timestamp.fromDate(newExpiryDate),
             'subscription.subscriptionType': subscriptionType,
+            'hasUsedFreeTrial': true, // 체험 사용 이력 유지
+            'hasEverUsedTrial': true, // 체험 사용 이력 유지 (영구)
           });
       
       // 체험→프리미엄 전환 이벤트 발생 (중앙화된 메서드 사용)
@@ -647,9 +721,10 @@ class PlanService {
       );
       
       if (kDebugMode) {
-        debugPrint('✅ [PlanService] 체험→프리미엄 전환 완료');
+        debugPrint('✅ [PlanService] 체험→프리미엄 전환 완료 (구매)');
         debugPrint('   구독 타입: $subscriptionType');
         debugPrint('   새 만료일: $newExpiryDate');
+        debugPrint('   체험 이력 유지: hasEverUsedTrial = true');
       }
       
       return true;

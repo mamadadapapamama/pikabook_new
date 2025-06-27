@@ -3,8 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// 체험 완료 배너 서비스
 /// InitializationManager에서 결정된 상태를 단순히 표시/숨김 관리
+/// 플랜별 닫기 상태 추적으로 플랜 변경 시 배너 재표시
 class TrialCompletedBannerService {
   static const String _bannerStateKey = 'trial_completed_banner_shown';
+  static const String _bannerStateKeyPrefix = 'trial_completed_banner_dismissed_';
   
   // 싱글톤 패턴
   static final TrialCompletedBannerService _instance = TrialCompletedBannerService._internal();
@@ -14,26 +16,40 @@ class TrialCompletedBannerService {
   // 현재 배너 표시 상태 (InitializationManager에서 설정)
   bool _shouldShow = false;
   
-  /// InitializationManager에서 배너 상태 설정
-  void setBannerState(bool shouldShow) {
+  // 현재 플랜 정보 (닫기 상태 추적용)
+  String? _currentPlanId;
+  
+  /// InitializationManager에서 배너 상태 설정 (플랜 정보 포함)
+  void setBannerState(bool shouldShow, {String? planId}) {
     _shouldShow = shouldShow;
+    _currentPlanId = planId ?? 'trial_completed_${DateTime.now().millisecondsSinceEpoch}';
+    
     if (kDebugMode) {
-      debugPrint('🎯 [TrialCompletedBanner] 상태 설정: $shouldShow');
+      debugPrint('🎯 [TrialCompletedBanner] 상태 설정: $shouldShow (플랜ID: $_currentPlanId)');
     }
   }
   
-  /// 배너 표시 여부 확인 (단순히 설정된 상태 반환)
+  /// 배너 표시 여부 확인 (플랜별 닫기 상태 확인)
   Future<bool> shouldShowBanner() async {
     try {
-      // 사용자가 배너를 닫았는지 확인
-      final prefs = await SharedPreferences.getInstance();
-      final hasUserDismissed = prefs.getBool(_bannerStateKey) ?? false;
+      if (!_shouldShow || _currentPlanId == null) {
+        return false;
+      }
       
-      // 사용자가 닫지 않았고, InitializationManager에서 true로 설정된 경우만 표시
-      final result = _shouldShow && !hasUserDismissed;
+      // 현재 플랜에 대해 사용자가 배너를 닫았는지 확인
+      final prefs = await SharedPreferences.getInstance();
+      final dismissKey = '$_bannerStateKeyPrefix$_currentPlanId';
+      final hasUserDismissed = prefs.getBool(dismissKey) ?? false;
+      
+      // 사용자가 현재 플랜에 대해 닫지 않았고, InitializationManager에서 true로 설정된 경우만 표시
+      final result = !hasUserDismissed;
       
       if (kDebugMode) {
-        debugPrint('🎯 [TrialCompletedBanner] 표시 여부: $result (설정=$_shouldShow, 사용자닫음=$hasUserDismissed)');
+        debugPrint('🎯 [TrialCompletedBanner] 표시 여부: $result');
+        debugPrint('  - 설정 상태: $_shouldShow');
+        debugPrint('  - 플랜 ID: $_currentPlanId');
+        debugPrint('  - 사용자 닫음: $hasUserDismissed');
+        debugPrint('  - 닫기 키: $dismissKey');
       }
       
       return result;
@@ -48,11 +64,19 @@ class TrialCompletedBannerService {
   /// 배너 닫기 (사용자가 X 버튼 클릭 시)
   Future<void> dismissBanner() async {
     try {
+      if (_currentPlanId == null) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [TrialCompletedBanner] 플랜 ID가 없어서 닫기 처리 불가');
+        }
+        return;
+      }
+      
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_bannerStateKey, true);
+      final dismissKey = '$_bannerStateKeyPrefix$_currentPlanId';
+      await prefs.setBool(dismissKey, true);
       
       if (kDebugMode) {
-        debugPrint('🎯 [TrialCompletedBanner] 사용자가 배너 닫음');
+        debugPrint('🎯 [TrialCompletedBanner] 사용자가 배너 닫음 (플랜: $_currentPlanId)');
       }
     } catch (e) {
       if (kDebugMode) {

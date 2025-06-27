@@ -8,7 +8,6 @@ import 'dart:async';
 import 'views/screens/login_screen.dart';
 import 'features/home/home_screen_mvvm.dart'; 
 import 'views/screens/onboarding_screen.dart';
-import 'core/services/common/initialization_manager.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
 import 'core/services/payment/in_app_purchase_service.dart';
@@ -53,7 +52,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   String? _userId;
   User? _user;
   StreamSubscription<User?>? _authStateSubscription;
-  late InitializationManager _initializationManager;
   late UserPreferencesService _preferencesService;
   String? _error;
   final PlanService _planService = PlanService();
@@ -87,7 +85,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     
     // 초기화 로직 시작
     _preferencesService = UserPreferencesService();
-    _initializationManager = InitializationManager();
     _initializeApp();
   }
   
@@ -123,25 +120,21 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
-  /// 앱 초기화 로직
+  /// 앱 초기화 로직 (Firebase Auth만 확인)
   Future<void> _initializeApp() async {
     try {
-      // Firebase 초기화는 InitializationManager에서 처리하도록 변경
       if (kDebugMode) {
-        debugPrint('앱: 초기화 시작');
+        debugPrint('앱: 기본 초기화 시작 (Firebase Auth만)');
       }
       
-      // 공통 서비스 초기화 (Firebase 포함)
-      final initResult = await _initializationManager.initialize();
+      // Firebase Auth 상태만 확인
+      await FirebaseAuth.instance.authStateChanges().first;
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final isLoggedIn = currentUser != null;
       
-      // 캐시 매니저는 실제 사용 시점에 자동 초기화됨
-      
-      
-      // In-App Purchase 서비스는 실제 구매 시점에 초기화됨
-      
-      // 초기화 결과에서 정보 가져오기
-      final isLoggedIn = initResult['isLoggedIn'] as bool;
-      final isOnboardingCompleted = initResult['isOnboardingCompleted'] as bool;
+      if (kDebugMode) {
+        debugPrint('앱: Firebase Auth 상태 확인 완료 - 로그인: $isLoggedIn');
+      }
       
       // 샘플 모드 상태 확인 (앱 특화 로직)
       _checkSampleMode();
@@ -156,7 +149,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       });
       
       if (kDebugMode) {
-        debugPrint('앱: 초기화 완료 (로그인: $isLoggedIn, 온보딩 완료: $isOnboardingCompleted)');
+        debugPrint('앱: 기본 초기화 완료 (로그인: $isLoggedIn, 샘플모드: $_isSampleMode)');
+        if (isLoggedIn) {
+          debugPrint('앱: 로그인 상태 - InitializationManager는 HomeScreen에서 호출됨');
+        } else {
+          debugPrint('앱: 로그아웃 상태 - InitializationManager 호출 안함');
+        }
       }
     } catch (e) {
       // 초기화 실패 처리

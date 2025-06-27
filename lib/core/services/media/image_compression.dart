@@ -100,15 +100,34 @@ class ImageCompression {
           return CompressionResult.failure('이미지 디코딩 실패');
         }
 
-        // 더 적극적인 리사이징 (속도 우선)
+        // 더 적극적인 리사이징 (속도 우선) - NaN 방지
         if (image.width > maxDimension || image.height > maxDimension) {
+          // 이미지 크기가 유효한지 확인
+          if (image.width <= 0 || image.height <= 0) {
+            return CompressionResult.failure('유효하지 않은 이미지 크기: ${image.width}x${image.height}');
+          }
+          
           double ratio = (image.width > image.height)
               ? maxDimension / image.width
               : maxDimension / image.height;
+              
+          // ratio가 유효한지 확인 (NaN, Infinity 방지)
+          if (!ratio.isFinite || ratio <= 0) {
+            return CompressionResult.failure('유효하지 않은 리사이징 비율: $ratio');
+          }
+          
+          final newWidth = (image.width * ratio).round();
+          final newHeight = (image.height * ratio).round();
+          
+          // 최종 크기가 유효한지 확인
+          if (newWidth <= 0 || newHeight <= 0) {
+            return CompressionResult.failure('유효하지 않은 리사이징 결과: ${newWidth}x${newHeight}');
+          }
+          
           image = img.copyResize(
             image,
-            width: (image.width * ratio).round(),
-            height: (image.height * ratio).round(),
+            width: newWidth,
+            height: newHeight,
             interpolation: img.Interpolation.linear,
           );
         }

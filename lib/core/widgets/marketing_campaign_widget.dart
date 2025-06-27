@@ -72,8 +72,12 @@ class MarketingCampaignWidget extends StatelessWidget {
         break;
     }
     
+    // 화면 너비 안전 계산 (NaN 방지)
+    final screenWidth = MediaQuery.of(context).size.width;
+    final safeWidth = screenWidth.isFinite && screenWidth > 32 ? screenWidth - 32 : 300.0;
+    
     return Container(
-      width: width ?? MediaQuery.of(context).size.width - 32,
+      width: width ?? safeWidth,
       padding: EdgeInsets.all(SpacingTokens.md),
       decoration: BoxDecoration(
         color: backgroundColor,

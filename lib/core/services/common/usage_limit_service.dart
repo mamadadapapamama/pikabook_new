@@ -56,10 +56,15 @@ class UsageLimitService {
   /// 사용자 변경 감지 및 캐시 무효화
   void _checkUserChange() {
     final currentUserId = _currentUserId;
-    if (currentUserId != _lastUserId && _lastUserId != null) {
+    // null에서 실제 사용자로 변경되는 경우는 로그인이므로 캐시 무효화하지 않음
+    if (currentUserId != _lastUserId && _lastUserId != null && currentUserId != null) {
       _invalidateCache();
       if (kDebugMode) {
         debugPrint('👤 [UsageLimitService] 사용자 변경 감지: $_lastUserId -> $currentUserId');
+      }
+    } else if (_lastUserId == null && currentUserId != null) {
+      if (kDebugMode) {
+        debugPrint('👤 [UsageLimitService] 로그인 감지: null -> $currentUserId (캐시 유지)');
       }
     }
     _lastUserId = currentUserId;
@@ -85,13 +90,13 @@ class UsageLimitService {
   Future<Map<String, bool>> checkInitialLimitStatus({bool forceRefresh = false}) async {
     try {
       if (kDebugMode) {
-        debugPrint('앱 시작시 제한 확인 시작 ${forceRefresh ? "(강제 새로고침)" : "(캐시 사용)"}');
+        debugPrint('🔍 [UsageLimitService] checkInitialLimitStatus 시작 ${forceRefresh ? "(강제 새로고침)" : "(캐시 사용)"}');
       }
       
       final userId = _currentUserId;
       if (userId == null) {
         if (kDebugMode) {
-          debugPrint('사용자 ID가 없음 - 모든 제한 false 반환');
+          debugPrint('❌ [UsageLimitService] 사용자 ID가 없음 - 모든 제한 false 반환');
         }
         return {
           'ocrLimitReached': false,
@@ -99,28 +104,45 @@ class UsageLimitService {
         };
       }
       
+      if (kDebugMode) {
+        debugPrint('🔍 [UsageLimitService] 사용자 ID: $userId');
+      }
+      
       // Firebase에서 사용량 가져오기 (캐시 사용)
       final usage = await _loadUsageDataFromFirebase(forceRefresh: forceRefresh);
+      if (kDebugMode) {
+        debugPrint('🔍 [UsageLimitService] 로드된 사용량: $usage');
+      }
+      
       final limits = await _loadLimitsFromFirebase(forceRefresh: forceRefresh);
+      if (kDebugMode) {
+        debugPrint('🔍 [UsageLimitService] 로드된 제한: $limits');
+      }
       
       // 제한 도달 여부 확인
+      final ocrUsage = usage['ocrPages'] ?? 0;
+      final ocrLimit = limits['ocrPages'] ?? 0;
+      final ttsUsage = usage['ttsRequests'] ?? 0;
+      final ttsLimit = limits['ttsRequests'] ?? 0;
+      
+      final ocrLimitReached = ocrUsage >= ocrLimit;
+      final ttsLimitReached = ttsUsage >= ttsLimit;
+      
       final limitStatus = {
-        'ocrLimitReached': (usage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
-        'ttsLimitReached': (usage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0),
+        'ocrLimitReached': ocrLimitReached,
+        'ttsLimitReached': ttsLimitReached,
       };
       
       if (kDebugMode) {
-        debugPrint('🔍 앱 시작시 제한 확인:');
-        debugPrint('  - 사용량: OCR=${usage['ocrPages']}, TTS=${usage['ttsRequests']}');
-        debugPrint('  - 제한: OCR=${limits['ocrPages']}, TTS=${limits['ttsRequests']}');
-        debugPrint('  - 비교: OCR(${usage['ocrPages']} >= ${limits['ocrPages']}) = ${(usage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0)}');
-        debugPrint('  - 비교: TTS(${usage['ttsRequests']} >= ${limits['ttsRequests']}) = ${(usage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0)}');
+        debugPrint('🔍 [UsageLimitService] checkInitialLimitStatus 상세 계산:');
+        debugPrint('  - OCR: $ocrUsage >= $ocrLimit = $ocrLimitReached');
+        debugPrint('  - TTS: $ttsUsage >= $ttsLimit = $ttsLimitReached');
         debugPrint('  - 🎯 최종 결과: $limitStatus');
       }
       return limitStatus;
       
     } catch (e) {
-      debugPrint('앱 시작시 제한 확인 중 오류: $e');
+      debugPrint('❌ [UsageLimitService] checkInitialLimitStatus 오류: $e');
       return {
         'ocrLimitReached': false,
         'ttsLimitReached': false,

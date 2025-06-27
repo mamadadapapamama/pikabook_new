@@ -371,8 +371,8 @@ class LocalCacheStorage<T> implements CacheStorage<T>, BinaryCacheStorage {
       'totalSize': totalSize,
       'totalSizeMB': totalSize / (1024 * 1024),
       'maxSizeMB': _maxSize / (1024 * 1024),
-      'usagePercent': totalSize > 0 ? (totalSize / _maxSize * 100).round() : 0,
-      'memoryHitRate': _memoryCache.length > 0 ? (_memoryCache.length / itemCount * 100).round() : 0,
+      'usagePercent': totalSize > 0 && _maxSize > 0 ? (totalSize / _maxSize * 100).round() : 0,
+      'memoryHitRate': _memoryCache.length > 0 && itemCount > 0 ? (_memoryCache.length / itemCount * 100).round() : 0,
     };
   }
 

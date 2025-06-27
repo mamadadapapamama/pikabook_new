@@ -178,19 +178,7 @@ class CacheManager {
     }
   }
 
-  /// 모든 노트 컨텐츠 캐시 키 조회
-  Future<List<String>> getAllNoteContentKeys() async {
-    await _ensureInitialized();
-    
-    try {
-      return await _noteContentsCache!.getKeys();
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ 노트 컨텐츠 키 조회 실패: $e');
-      }
-      return [];
-    }
-  }
+
 
   /// 노트의 모든 컨텐츠 삭제
   Future<void> clearNoteContents(String noteId) async {
@@ -678,31 +666,7 @@ class CacheManager {
     }
   }
 
-  /// 노트 목록 업데이트 (생성/삭제 시 사용)
-  Future<void> updateCachedNotes(List<Note> notes) async {
-    await _ensureInitialized();
 
-    try {
-      // 기존 캐시 완전 삭제
-      await _noteMetadataCache!.clear();
-      
-      // 새로운 노트 목록으로 캐시 재생성
-      for (final note in notes) {
-        await cacheNoteMetadata(note.id, note);
-      }
-
-      // 마지막 캐시 시간 저장
-      await _saveLastCacheTime(DateTime.now());
-
-      if (kDebugMode) {
-        debugPrint('📋 노트 목록 캐시 업데이트 완료: ${notes.length}개');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ 노트 목록 캐시 업데이트 실패: $e');
-      }
-    }
-  }
 
   /// 개별 노트 캐시 추가 (노트 생성 시 사용)
   Future<void> addNoteToCache(Note note) async {
@@ -785,24 +749,7 @@ class CacheManager {
   /// 마지막 캐시 시간 로컬 메모리 캐싱
   DateTime? _lastCacheTime;
 
-  Future<DateTime?> updateLastCacheTimeCache() async {
-    _lastCacheTime = await getLastCacheTime();
-    return _lastCacheTime;
-  }
 
-  /// 캐시 유효성 확인
-  bool isCacheValid({Duration validDuration = const Duration(minutes: 5)}) {
-    if (_lastCacheTime == null) return false;
-    
-    final now = DateTime.now();
-    final difference = now.difference(_lastCacheTime!);
-    return difference < validDuration;
-  }
-
-  /// 전체 캐시 삭제
-  Future<void> clearCache() async {
-    await clearAllCache();
-  }
 
   /// 특정 노트의 모든 캐시 삭제
   Future<void> clearNoteCache(String noteId) async {
@@ -893,8 +840,8 @@ class CacheManager {
         'totalSize': totalSize,
         'totalSizeMB': totalSize / (1024 * 1024),
         'totalItems': totalItems,
-        'maxSizeMB': 860, // 500(이미지) + 200(TTS) + 100(노트컨텐츠) + 50(플래시카드) + 10(메타데이터)
-        'usagePercent': totalSize > 0 ? (totalSize / (860 * 1024 * 1024) * 100).round() : 0,
+        'maxSizeMB': 320, // 150(이미지) + 100(TTS) + 50(노트컨텐츠) + 10(플래시카드) + 10(메타데이터)
+        'usagePercent': totalSize > 0 ? (totalSize / (320 * 1024 * 1024) * 100).round() : 0,
         'noteContents': stats[0],
         'noteMetadata': stats[1],
         'flashcards': stats[2],

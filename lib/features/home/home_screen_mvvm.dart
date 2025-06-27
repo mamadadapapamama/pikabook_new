@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 🎯 Firebase Auth 추가
 import '../../features/home/home_viewmodel.dart';
 import '../home/note_list_item.dart';
 import '../note/services/note_service.dart';
@@ -28,13 +29,13 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/services/trial/trial_manager.dart';
 import '../../core/services/trial/trial_status_checker.dart';
 import '../../core/widgets/plan_state_banner.dart'; // 🎯 플랜 상태 배너들 (통합)
-import '../../core/services/common/premium_expired_banner_service.dart'; // 🎯 배너 서비스 추가
-import '../../core/services/common/usage_limit_banner_service.dart'; // 🎯 사용량 한도 배너 서비스 추가
-import '../../core/services/common/trial_completed_banner_service.dart'; // 🎯 체험 완료 배너 서비스 추가
 import '../../core/services/common/usage_limit_service.dart'; // 🎯 실시간 사용량 서비스 추가
-import 'dart:async'; // 🎯 StreamSubscription 사용
+import 'dart:async'; // 🎯 StreamSubscription, Timer 사용
 
 import '../../core/services/common/initialization_manager.dart'; // 🎯 초기화 매니저 추가
+import '../../core/services/common/premium_expired_banner_service.dart'; // 🎯 프리미엄 만료 배너 서비스
+import '../../core/services/common/trial_completed_banner_service.dart'; // 🎯 체험 완료 배너 서비스
+import '../../core/services/common/usage_limit_banner_service.dart'; // 🎯 사용량 한도 배너 서비스
 
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
@@ -90,15 +91,17 @@ class HomeScreenWrapper extends StatelessWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final MarketingCampaignService _marketingService = MarketingCampaignService();
-  final PremiumExpiredBannerService _premiumExpiredBannerService = PremiumExpiredBannerService(); // 🎯 프리미엄 만료 배너 서비스
-  final UsageLimitBannerService _usageLimitBannerService = UsageLimitBannerService(); // 🎯 사용량 한도 배너 서비스
-  final TrialCompletedBannerService _trialCompletedBannerService = TrialCompletedBannerService(); // 🎯 체험 완료 배너 서비스
   
   // 🎯 실시간 상태 변경 구독
   final UsageLimitService _usageLimitService = UsageLimitService();
   final PlanService _planService = PlanService();
   StreamSubscription<Map<String, bool>>? _limitStatusSubscription;
   StreamSubscription<Map<String, dynamic>>? _planChangeSubscription;
+  
+  // 🎯 배너 서비스들
+  final PremiumExpiredBannerService _premiumExpiredBannerService = PremiumExpiredBannerService();
+  final TrialCompletedBannerService _trialCompletedBannerService = TrialCompletedBannerService();
+  final UsageLimitBannerService _usageLimitBannerService = UsageLimitBannerService();
 
   
   // 화면 초기화 실패를 추적하는 변수
@@ -146,7 +149,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 비동기 초기화 작업들을 병렬로 실행
   Future<void> _initializeAsyncTasks() async {
     try {
-      // 마케팅 서비스만 초기화 (사용량 확인은 InitializationManager에서 처리됨)
+      // 🎯 로그인된 사용자만 InitializationManager 실행
+      await _initializeForLoggedInUser();
+      
+      // 마케팅 서비스 초기화
       await _initializeMarketingService();
       
       // 7일 체험 만료 체크
@@ -155,11 +161,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // TrialManager 환영 메시지 콜백 설정
       _setupTrialWelcomeCallback();
       
-      // 🎯 InitializationManager에서 배너 상태 가져와서 설정
-      await _loadBannerStatesFromInitialization();
-      
       // 🎯 실시간 상태 변경 스트림 구독
       _setupRealtimeStreams();
+      
+      // 🎯 배너 상태 정기 체크 (닫기 버튼 반영)
+      _startBannerStateMonitoring();
       
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -212,13 +218,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // 상태 변경 콜백 (UI 새로고침 - 필요시에만)
     trialStatusChecker.onTrialStatusChanged = () {
       if (mounted) {
-        // 🎯 체험 완료 배너 상태 업데이트 (비동기로 처리)
-        _checkTrialCompletedBanner().then((_) {
-          // 배너 상태가 실제로 변경된 경우에만 setState 호출
-          if (mounted) {
-            setState(() {}); // 배너 상태 업데이트
-          }
-        });
+        // 🎯 배너 상태는 InitializationManager에서 결정되므로 여기서는 단순 새로고침만
+        setState(() {}); // UI 새로고침
       }
     };
     
@@ -268,9 +269,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             setState(() {
               _shouldShowUsageLimitBanner = shouldShowUsageLimit;
             });
-            
-                         // 배너 서비스에도 상태 업데이트
-             _usageLimitBannerService.setBannerState(shouldShowUsageLimit);
           }
         }
       },
@@ -296,9 +294,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             setState(() {
               _shouldShowExpiredBanner = true;
             });
-            
-                         // 배너 서비스에도 상태 업데이트
-             _premiumExpiredBannerService.setBannerState(true);
           }
         }
       },
@@ -759,139 +754,105 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted) return;
   }
 
-  /// InitializationManager에서 배너 상태 로드 (중복 조회 방지)
-  Future<void> _loadBannerStatesFromInitialization() async {
-    try {
-      // InitializationManager에서 이미 결정된 배너 상태를 각 서비스에 설정
-      final initializationManager = InitializationManager();
-      final initResult = await initializationManager.result;
+  /// 배너 상태 정기 모니터링 시작 (닫기 버튼 반영)
+  void _startBannerStateMonitoring() {
+    // 5초마다 배너 상태 체크
+    Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       
+      _updateBannerStatesFromServices();
+    });
+  }
+
+  /// 배너 서비스에서 상태를 가져와서 UI 업데이트
+  Future<void> _updateBannerStatesFromServices() async {
+    try {
+      final shouldShowExpired = await _premiumExpiredBannerService.shouldShowBanner();
+      final shouldShowTrialCompleted = await _trialCompletedBannerService.shouldShowBanner();
+      final shouldShowUsageLimit = await _usageLimitBannerService.shouldShowBanner();
+      
+      setState(() {
+        _shouldShowExpiredBanner = shouldShowExpired;
+        _shouldShowTrialCompletedBanner = shouldShowTrialCompleted;
+        _shouldShowUsageLimitBanner = shouldShowUsageLimit;
+      });
+      
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 🎯 배너 서비스에서 상태 업데이트:');
+        debugPrint('  - 프리미엄 만료: $shouldShowExpired');
+        debugPrint('  - 체험 완료: $shouldShowTrialCompleted');
+        debugPrint('  - 사용량 한도: $shouldShowUsageLimit');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] ❌ 배너 상태 업데이트 실패: $e');
+      }
+    }
+  }
+
+  /// 로그인된 사용자를 위한 InitializationManager 실행
+  Future<void> _initializeForLoggedInUser() async {
+    try {
+      // 로그인 상태 확인
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        if (kDebugMode) {
+          debugPrint('[HomeScreen] ⏭️ 로그아웃 상태 - InitializationManager 실행 안함');
+        }
+        return;
+      }
+      
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 🚀 로그인 상태 - InitializationManager 실행 시작');
+      }
+      
+      // InitializationManager 실행
+      final initializationManager = InitializationManager();
+      final initResult = await initializationManager.initialize();
+      
+      // 배너 상태 가져와서 배너 서비스에 설정
       final bannerStates = initResult['bannerStates'] as Map<String, bool>? ?? {};
       
-      // 각 배너 서비스에 상태 설정
+      // 🎯 배너 서비스에 상태 설정 (플랜 ID 포함)
+      final currentTime = DateTime.now().millisecondsSinceEpoch;
+      final planId = 'plan_${currentTime}'; // 플랜 변경 시마다 새로운 ID 생성
+      
       _premiumExpiredBannerService.setBannerState(
-        bannerStates['shouldShowPremiumExpiredBanner'] ?? false
-      );
-      _usageLimitBannerService.setBannerState(
-        bannerStates['shouldShowUsageLimitBanner'] ?? false
+        bannerStates['shouldShowPremiumExpiredBanner'] ?? false,
+        planId: planId,
       );
       _trialCompletedBannerService.setBannerState(
-        bannerStates['shouldShowTrialCompletedBanner'] ?? false
+        bannerStates['shouldShowTrialCompletedBanner'] ?? false,
+        planId: planId,
+      );
+      _usageLimitBannerService.setBannerState(
+        bannerStates['shouldShowUsageLimitBanner'] ?? false,
       );
       
-      // 홈 화면 상태 업데이트 (InitializationManager에서 이미 결정된 상태 사용)
+      // 홈 화면 상태 업데이트 (배너 서비스에서 가져오기)
       if (mounted) {
-        setState(() {
-          _shouldShowExpiredBanner = bannerStates['shouldShowPremiumExpiredBanner'] ?? false;
-          _shouldShowUsageLimitBanner = bannerStates['shouldShowUsageLimitBanner'] ?? false;
-          _shouldShowTrialCompletedBanner = bannerStates['shouldShowTrialCompletedBanner'] ?? false;
-        });
+        _updateBannerStatesFromServices();
       }
       
       if (kDebugMode) {
-        debugPrint('[HomeScreen] 🎯 InitializationManager에서 배너 상태 로드 완료:');
-        debugPrint('  - bannerStates 원본: $bannerStates');
-        debugPrint('  - 프리미엄 만료: ${_shouldShowExpiredBanner} (설정값: ${bannerStates['shouldShowPremiumExpiredBanner']})');
-        debugPrint('  - 사용량 한도: ${_shouldShowUsageLimitBanner} (설정값: ${bannerStates['shouldShowUsageLimitBanner']})');
-        debugPrint('  - 체험 완료: ${_shouldShowTrialCompletedBanner} (설정값: ${bannerStates['shouldShowTrialCompletedBanner']})');
+        debugPrint('[HomeScreen] ✅ InitializationManager 실행 완료:');
+        debugPrint('  - bannerStates: $bannerStates');
+        debugPrint('  - 플랜 ID: $planId');
+        debugPrint('  - 프리미엄 만료: $_shouldShowExpiredBanner');
+        debugPrint('  - 사용량 한도: $_shouldShowUsageLimitBanner');
+        debugPrint('  - 체험 완료: $_shouldShowTrialCompletedBanner');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[HomeScreen] ❌ 배너 상태 로드 실패: $e');
+        debugPrint('[HomeScreen] ❌ InitializationManager 실행 실패: $e');
       }
     }
   }
 
-  /// 모든 배너 상태를 한 번에 확인 (개별 호출용 - deprecated)
-  Future<void> _checkAllBanners() async {
-    try {
-      // 병렬로 모든 배너 상태 확인
-      final results = await Future.wait([
-        _premiumExpiredBannerService.shouldShowBanner(),
-        _usageLimitBannerService.shouldShowBanner(),
-        _trialCompletedBannerService.shouldShowBanner(),
-      ]);
-      
-      if (mounted) {
-        setState(() {
-          _shouldShowExpiredBanner = results[0];
-          _shouldShowUsageLimitBanner = results[1];
-          _shouldShowTrialCompletedBanner = results[2];
-        });
-      }
-      
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 🎯 모든 배너 상태 확인 완료:');
-        debugPrint('  - 프리미엄 만료: ${results[0]}');
-        debugPrint('  - 사용량 한도: ${results[1]}');
-        debugPrint('  - 체험 완료: ${results[2]}');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] ❌ 배너 상태 확인 실패: $e');
-      }
-    }
-  }
-
-  /// 프리미엄 만료 배너 확인 (개별 호출용)
-  Future<void> _checkPremiumExpiredBanner() async {
-    try {
-      final shouldShow = await _premiumExpiredBannerService.shouldShowBanner();
-      if (mounted) {
-        setState(() {
-          _shouldShowExpiredBanner = shouldShow;
-        });
-      }
-      
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 🎯 프리미엄 만료 배너 확인: $shouldShow');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] ❌ 프리미엄 만료 배너 확인 실패: $e');
-      }
-    }
-  }
-
-  /// 사용량 한도 배너 확인 (개별 호출용)
-  Future<void> _checkUsageLimitBanner() async {
-    try {
-      final shouldShow = await _usageLimitBannerService.shouldShowBanner();
-      if (mounted) {
-        setState(() {
-          _shouldShowUsageLimitBanner = shouldShow;
-        });
-      }
-      
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 🎯 사용량 한도 배너 확인: $shouldShow');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] ❌ 사용량 한도 배너 확인 실패: $e');
-      }
-    }
-  }
-
-  /// 체험 완료 배너 확인 (개별 호출용)
-  Future<void> _checkTrialCompletedBanner() async {
-    try {
-      final shouldShow = await _trialCompletedBannerService.shouldShowBanner();
-      if (mounted) {
-        setState(() {
-          _shouldShowTrialCompletedBanner = shouldShow;
-        });
-      }
-      
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 🎯 체험 완료 배너 확인: $shouldShow');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] ❌ 체험 완료 배너 확인 실패: $e');
-      }
-    }
-  }
+  // 🎯 배너 서비스 제거됨 - InitializationManager에서 직접 상태 가져옴
 
 
 
