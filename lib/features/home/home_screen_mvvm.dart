@@ -164,8 +164,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 🎯 실시간 상태 변경 스트림 구독
       _setupRealtimeStreams();
       
-      // 🎯 배너 상태 정기 체크 (닫기 버튼 반영)
-      _startBannerStateMonitoring();
+
       
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -754,44 +753,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!mounted) return;
   }
 
-  /// 배너 상태 정기 모니터링 시작 (닫기 버튼 반영)
-  void _startBannerStateMonitoring() {
-    // 5초마다 배너 상태 체크
-    Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      
-      _updateBannerStatesFromServices();
-    });
-  }
 
-  /// 배너 서비스에서 상태를 가져와서 UI 업데이트
-  Future<void> _updateBannerStatesFromServices() async {
-    try {
-      final shouldShowExpired = await _premiumExpiredBannerService.shouldShowBanner();
-      final shouldShowTrialCompleted = await _trialCompletedBannerService.shouldShowBanner();
-      final shouldShowUsageLimit = await _usageLimitBannerService.shouldShowBanner();
-      
-      setState(() {
-        _shouldShowExpiredBanner = shouldShowExpired;
-        _shouldShowTrialCompletedBanner = shouldShowTrialCompleted;
-        _shouldShowUsageLimitBanner = shouldShowUsageLimit;
-      });
-      
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 🎯 배너 서비스에서 상태 업데이트:');
-        debugPrint('  - 프리미엄 만료: $shouldShowExpired');
-        debugPrint('  - 체험 완료: $shouldShowTrialCompleted');
-        debugPrint('  - 사용량 한도: $shouldShowUsageLimit');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] ❌ 배너 상태 업데이트 실패: $e');
-      }
-    }
-  }
 
   /// 로그인된 사용자를 위한 InitializationManager 실행
   Future<void> _initializeForLoggedInUser() async {
@@ -832,9 +794,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         bannerStates['shouldShowUsageLimitBanner'] ?? false,
       );
       
-      // 홈 화면 상태 업데이트 (배너 서비스에서 가져오기)
+      // 홈 화면 상태 직접 업데이트 (중복 호출 방지)
       if (mounted) {
-        _updateBannerStatesFromServices();
+        setState(() {
+          _shouldShowExpiredBanner = bannerStates['shouldShowPremiumExpiredBanner'] ?? false;
+          _shouldShowTrialCompletedBanner = bannerStates['shouldShowTrialCompletedBanner'] ?? false;
+          _shouldShowUsageLimitBanner = bannerStates['shouldShowUsageLimitBanner'] ?? false;
+        });
       }
       
       if (kDebugMode) {

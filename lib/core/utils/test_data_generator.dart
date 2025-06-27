@@ -21,7 +21,9 @@ class TestDataGenerator {
         // === 기본 시나리오 ===
         {'email': 'trial@test.com', 'scenario': 'free_premium_trial'},
         {'email': 'triallimit@test.com', 'scenario': 'premium_trial_limit_reached'},
-        {'email': 'expired@test.com', 'scenario': 'trial_expired'},
+        {'email': 'expired@test.com', 'scenario': 'trial_expired'}, // 🎯 체험 만료 → 배너 테스트
+        {'email': 'expiring@test.com', 'scenario': 'trial_expiring_soon'}, // 🎯 체험 만료 직전 → 실제 만료 플로우 테스트
+        {'email': 'cancelled@test.com', 'scenario': 'trial_cancelled'}, // 🎯 체험 중간 취소 → 배너 테스트
         {'email': 'free@test.com', 'scenario': 'free_plan'},
         {'email': 'limit@test.com', 'scenario': 'free_limit_reached'},
         
@@ -151,6 +153,19 @@ class TestDataGenerator {
         break;
 
       case 'trial_expired':
+        // 🎯 체험 만료 → 무료 플랜 (배너 테스트용)
+        await _firestore.collection('users').doc(uid).update({
+          // subscription 필드 삭제 (무료 플랜으로 전환)
+          'subscription': FieldValue.delete(),
+          // 체험 이력 저장
+          'hasUsedFreeTrial': true,
+          'hasEverUsedTrial': true,
+          // 🎯 프리미엄 이력은 없음 (체험만 사용)
+        });
+        debugPrint('🧪 [TestData] Trial Completed 배너 테스트 데이터 생성 완료');
+        break;
+
+      case 'trial_expiring_soon':
         // 🎯 체험 만료 직전 - 2분 남음 (실제 만료 플로우 테스트용)
         await _firestore.collection('users').doc(uid).update({
           'subscription': {
@@ -164,7 +179,20 @@ class TestDataGenerator {
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
         });
-        debugPrint('🧪 [TestData] 체험 만료 직전 상태 생성: 2분 후 만료 예정');
+        debugPrint('🧪 [TestData] 체험 만료 직전 상태 생성: 2분 후 만료 예정 (실제 만료 플로우 테스트용)');
+        break;
+
+      case 'trial_cancelled':
+        // 🎯 체험 중간 취소 → 무료 플랜 (배너 테스트용)
+        await _firestore.collection('users').doc(uid).update({
+          // subscription 필드 삭제 (무료 플랜으로 전환)
+          'subscription': FieldValue.delete(),
+          // 체험 이력 저장 (중간 취소했지만 체험은 사용함)
+          'hasUsedFreeTrial': true,
+          'hasEverUsedTrial': true,
+          // 🎯 프리미엄 이력은 없음 (체험 중간 취소)
+        });
+        debugPrint('🧪 [TestData] Trial Cancelled 배너 테스트 데이터 생성 완료 (체험 중간 취소)');
         break;
 
       case 'free_plan':
@@ -224,20 +252,18 @@ class TestDataGenerator {
         break;
 
       case 'premium_expired':
-        // 프리미엄 만료 (한 달 전 만료)
+        // 🎯 프리미엄 만료 → 무료 플랜 (배너 테스트용)
         await _firestore.collection('users').doc(uid).update({
-          'subscription': {
-            'plan': 'premium',
-            'startDate': Timestamp.fromDate(now.subtract(const Duration(days: 60))),
-            'expiryDate': Timestamp.fromDate(now.subtract(const Duration(days: 30))),
-            'status': 'expired',
-            'subscriptionType': 'monthly',
-            'isFreeTrial': false,
-          },
+          // subscription 필드 삭제 (무료 플랜으로 전환)
+          'subscription': FieldValue.delete(),
+          // 이전 플랜 이력 저장
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
+          'hasEverUsedPremium': true, // 🎯 프리미엄 사용 이력
+          'lastPremiumSubscriptionType': 'monthly', // 🎯 마지막 구독 타입
+          'lastPremiumExpiredAt': Timestamp.fromDate(now.subtract(const Duration(days: 30))), // 🎯 만료 시간
         });
-        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
+        debugPrint('🧪 [TestData] Premium Expired 배너 테스트 데이터 생성 완료');
         break;
 
       case 'premium_trial_limit_reached':
@@ -294,20 +320,18 @@ class TestDataGenerator {
         break;
 
       case 'premium_yearly_expired':
-        // 프리미엄 만료 (한 년 전 만료)
+        // 🎯 연간 프리미엄 만료 → 무료 플랜 (배너 테스트용)
         await _firestore.collection('users').doc(uid).update({
-          'subscription': {
-            'plan': 'premium',
-            'startDate': Timestamp.fromDate(now.subtract(const Duration(days: 365))),
-            'expiryDate': Timestamp.fromDate(now.subtract(const Duration(days: 365))),
-            'status': 'expired',
-            'subscriptionType': 'yearly',
-            'isFreeTrial': false,
-          },
+          // subscription 필드 삭제 (무료 플랜으로 전환)
+          'subscription': FieldValue.delete(),
+          // 이전 플랜 이력 저장
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
+          'hasEverUsedPremium': true, // 🎯 프리미엄 사용 이력
+          'lastPremiumSubscriptionType': 'yearly', // 🎯 마지막 구독 타입 (연간)
+          'lastPremiumExpiredAt': Timestamp.fromDate(now.subtract(const Duration(days: 365))), // 🎯 만료 시간
         });
-        // 🎯 커스텀 제한을 설정하지 않음 - 플랜 기반 제한 사용
+        debugPrint('🧪 [TestData] Premium Yearly Expired 배너 테스트 데이터 생성 완료');
         break;
     }
     
@@ -422,18 +446,21 @@ class TestDataGenerator {
     if (!kDebugMode) return;
     
     debugPrint('📋 테스트 계정 목록:');
-    debugPrint('=== 월간 구독 (Monthly) ===');
+    debugPrint('=== 배너 테스트 계정 ===');
+    debugPrint('🎯 expired@test.com (test123456) - Trial Completed 배너');
+    debugPrint('🎯 cancelled@test.com (test123456) - Trial Completed 배너 (중간취소)');
+    debugPrint('🎯 pexpired@test.com (test123456) - Premium Expired 배너 (월간)');
+    debugPrint('🎯 yearlyexpired@test.com (test123456) - Premium Expired 배너 (연간)');
+    debugPrint('=== 일반 테스트 계정 ===');
     debugPrint('1. trial@test.com (test123456) - 무료체험 중');
-    debugPrint('2. triallimit@test.com (test123456) - 🎯 프리미엄 체험 중 제한 도달');
-    debugPrint('3. expired@test.com (test123456) - 체험 만료');  
+    debugPrint('2. triallimit@test.com (test123456) - 프리미엄 체험 중 제한 도달');
+    debugPrint('3. expiring@test.com (test123456) - 체험 만료 직전 (2분 후)');  
     debugPrint('4. free@test.com (test123456) - 무료 플랜');
     debugPrint('5. limit@test.com (test123456) - 무료 제한 도달');
     debugPrint('6. premium@test.com (test123456) - 프리미엄 활성');
     debugPrint('7. plimit@test.com (test123456) - 프리미엄 제한 도달');
-    debugPrint('8. pexpired@test.com (test123456) - 프리미엄 만료');
     debugPrint('=== 연간 구독 (Yearly) ===');
-    debugPrint('9. yearly@test.com (test123456) - 프리미엄 연간 활성');
-    debugPrint('10. yearlylimit@test.com (test123456) - 프리미엄 연간 제한 도달');
-    debugPrint('11. yearlyexpired@test.com (test123456) - 프리미엄 연간 만료');
+    debugPrint('8. yearly@test.com (test123456) - 프리미엄 연간 활성');
+    debugPrint('9. yearlylimit@test.com (test123456) - 프리미엄 연간 제한 도달');
   }
 } 

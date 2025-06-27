@@ -160,12 +160,31 @@ class InitializationManager {
       }
       
       final bool hasLoginHistory = await _prefsService.hasLoginHistory();
-      final bool isOnboardingCompleted = isLoggedIn ? await _prefsService.getOnboardingCompleted() : false;
       
-      // 툴팁 표시 여부 확인 - SharedPreferences에서 직접 가져옴
-      final prefs = await SharedPreferences.getInstance();
-      final bool hasShownTooltip = prefs.getBool('hasShownTooltip') ?? false;
-      final bool isFirstEntry = !hasShownTooltip;
+      // Firebase에서 온보딩 상태 직접 확인
+      bool isOnboardingCompleted = false;
+      if (isLoggedIn && currentUser != null) {
+        try {
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .get();
+          
+          if (userDoc.exists) {
+            final userData = userDoc.data() as Map<String, dynamic>;
+            isOnboardingCompleted = userData['onboardingCompleted'] as bool? ?? false;
+            
+            if (kDebugMode) {
+              debugPrint('🔍 [InitializationManager] Firebase에서 온보딩 상태: $isOnboardingCompleted');
+            }
+          }
+        } catch (e) {
+          debugPrint('Firebase 온보딩 상태 확인 실패: $e');
+          isOnboardingCompleted = false;
+        }
+      }
+      
+
       
       // 3. 사용량 확인 (로그인된 사용자이고 온보딩 완료된 경우만)
       Map<String, bool> usageLimitStatus = {};
@@ -213,42 +232,25 @@ class InitializationManager {
       );
       
       // 5. 배너 상태 결정 (로그인된 사용자만)
-      Map<String, bool> bannerStates = {};
-      if (isLoggedIn && isOnboardingCompleted) {
-        _updateProgress(
-          InitializationStep.finalizing,
-          0.8,
-          '배너 상태 확인 중...',
-        );
-        
-        try {
-          bannerStates = await _retryFirebaseOperation(() async {
-            return await _determineBannerStates(usageLimitStatus);
-          });
-          debugPrint('초기화 중 배너 상태 결정 완료: $bannerStates');
-        } catch (e) {
-          debugPrint('초기화 중 배너 상태 결정 실패 (재시도 후): $e');
-          bannerStates = {
-            'shouldShowPremiumExpiredBanner': false,
-            'shouldShowUsageLimitBanner': false,
-            'shouldShowTrialCompletedBanner': false,
-            'shouldShowPlanChangedBanner': false,
-          };
-        }
-      } else {
-        bannerStates = {
-          'shouldShowPremiumExpiredBanner': false,
-          'shouldShowUsageLimitBanner': false,
-          'shouldShowTrialCompletedBanner': false,
-        };
-      }
+      _updateProgress(
+        InitializationStep.finalizing,
+        0.8,
+        '배너 상태 확인 중...',
+      );
+      
+      final bannerStates = isLoggedIn && isOnboardingCompleted 
+          ? await _determineBannerStates(usageLimitStatus)
+          : <String, bool>{
+              'shouldShowPremiumExpiredBanner': false,
+              'shouldShowUsageLimitBanner': false,
+              'shouldShowTrialCompletedBanner': false,
+            };
       
       // 기본 초기화 결과 (중복 데이터 제거)
       final initialResult = {
         'isLoggedIn': isLoggedIn,
         'hasLoginHistory': hasLoginHistory,
         'isOnboardingCompleted': isOnboardingCompleted,
-        'isFirstEntry': isFirstEntry,
         'bannerStates': bannerStates, // 배너 상태에 모든 정보 포함
         'error': null,
       };
@@ -257,6 +259,7 @@ class InitializationManager {
         debugPrint('🎯 [InitializationManager] 최종 초기화 결과:');
         debugPrint('  - isLoggedIn: $isLoggedIn');
         debugPrint('  - isOnboardingCompleted: $isOnboardingCompleted');
+        debugPrint('  - 🔍 배너 결정 조건: ${isLoggedIn && isOnboardingCompleted}');
         debugPrint('  - 🔍 원본 usageLimitStatus: $usageLimitStatus');
         debugPrint('  - 🎯 최종 bannerStates: $bannerStates');
         
@@ -295,7 +298,6 @@ class InitializationManager {
         'isLoggedIn': false,
         'hasLoginHistory': false,
         'isOnboardingCompleted': false,
-        'isFirstEntry': true,
         'usageLimitStatus': {},
         'error': _error,
       };
@@ -449,51 +451,6 @@ class InitializationManager {
       Map<String, dynamic>? lastPlanInfo;
       try {
         lastPlanInfo = await _deletedUserService.getLastPlanInfo(forceRefresh: true);
-        
-        // 🧪 테스트용: 기존 테스트 계정들에 현재 사용자 문서에 이전 플랜 이력 추가
-        if (lastPlanInfo == null && kDebugMode) {
-          final currentUser = FirebaseAuth.instance.currentUser;
-          if (currentUser != null && currentUser.email != null) {
-            final email = currentUser.email!;
-            
-            // 테스트 계정들에 이전 플랜 이력 추가
-            if (email == 'expired@test.com' || email == 'pexpired@test.com' || email == 'yearlyexpired@test.com') {
-              try {
-                await _addPlanHistoryToUser(currentUser.uid, email);
-                
-                // 이전 플랜 이력 추가 후 가짜 이전 플랜 정보 생성
-                if (email == 'expired@test.com') {
-                  lastPlanInfo = {
-                    'planType': PlanService.PLAN_PREMIUM,
-                    'isFreeTrial': true,
-                    'subscriptionType': 'monthly',
-                    'hasEverUsedTrial': true,
-                  };
-                } else if (email == 'pexpired@test.com') {
-                  lastPlanInfo = {
-                    'planType': PlanService.PLAN_PREMIUM,
-                    'isFreeTrial': false,
-                    'subscriptionType': 'monthly',
-                    'hasEverUsedTrial': true,
-                    'hasEverUsedPremium': true, // 🎯 프리미엄 이력 추가
-                  };
-                } else if (email == 'yearlyexpired@test.com') {
-                  lastPlanInfo = {
-                    'planType': PlanService.PLAN_PREMIUM,
-                    'isFreeTrial': false,
-                    'subscriptionType': 'yearly',
-                    'hasEverUsedTrial': true,
-                    'hasEverUsedPremium': true, // 🎯 프리미엄 이력 추가
-                  };
-                }
-                
-                debugPrint('🧪 [테스트] $email → 이전 플랜 이력 추가 및 배너 테스트 데이터 생성');
-              } catch (e) {
-                debugPrint('⚠️ [테스트] $email 이전 플랜 이력 추가 실패: $e');
-              }
-            }
-          }
-        }
         
         if (kDebugMode) {
           debugPrint('🎯 [이전 플랜 히스토리]');

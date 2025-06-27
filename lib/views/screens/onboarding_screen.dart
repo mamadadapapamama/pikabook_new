@@ -370,9 +370,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       );
 
-      // 툴팁 설정
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('hasShownTooltip', false);
+
       
       // Firestore에 기본 데이터 저장
       final user = FirebaseAuth.instance.currentUser;
