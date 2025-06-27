@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import '../services/common/trial_completed_banner_service.dart';
-import '../services/common/premium_expired_banner_service.dart';
-import '../services/common/usage_limit_banner_service.dart';
+import '../services/common/banner_manager.dart';
 import '../services/common/plan_service.dart';
 import '../theme/tokens/color_tokens.dart';
 import 'unified_banner.dart';
@@ -18,7 +16,7 @@ class TrialCompletedBanner extends StatefulWidget {
 }
 
 class _TrialCompletedBannerState extends State<TrialCompletedBanner> {
-  final service = TrialCompletedBannerService();
+  final _bannerManager = BannerManager();
   bool _shouldShow = false;
   bool _isLoading = true;
 
@@ -29,7 +27,7 @@ class _TrialCompletedBannerState extends State<TrialCompletedBanner> {
   }
 
   Future<void> _checkShouldShow() async {
-    final shouldShow = await service.shouldShowBanner();
+    final shouldShow = await _bannerManager.shouldShowBanner(BannerType.trialCompleted);
     if (mounted) {
       setState(() {
         _shouldShow = shouldShow;
@@ -39,7 +37,7 @@ class _TrialCompletedBannerState extends State<TrialCompletedBanner> {
   }
 
   Future<void> _dismiss() async {
-    await service.dismissBanner();
+    await _bannerManager.dismissBanner(BannerType.trialCompleted);
     if (mounted) {
       setState(() {
         _shouldShow = false;
@@ -72,7 +70,7 @@ class PremiumExpiredBanner extends StatefulWidget {
 }
 
 class _PremiumExpiredBannerState extends State<PremiumExpiredBanner> {
-  final service = PremiumExpiredBannerService();
+  final _bannerManager = BannerManager();
   bool _shouldShow = false;
   bool _isLoading = true;
 
@@ -83,7 +81,7 @@ class _PremiumExpiredBannerState extends State<PremiumExpiredBanner> {
   }
 
   Future<void> _checkShouldShow() async {
-    final shouldShow = await service.shouldShowBanner();
+    final shouldShow = await _bannerManager.shouldShowBanner(BannerType.premiumExpired);
     if (mounted) {
       setState(() {
         _shouldShow = shouldShow;
@@ -93,7 +91,7 @@ class _PremiumExpiredBannerState extends State<PremiumExpiredBanner> {
   }
 
   Future<void> _dismiss() async {
-    await service.dismissBanner();
+    await _bannerManager.dismissBanner(BannerType.premiumExpired);
     if (mounted) {
       setState(() {
         _shouldShow = false;
@@ -126,7 +124,7 @@ class UsageLimitBanner extends StatefulWidget {
 }
 
 class _UsageLimitBannerState extends State<UsageLimitBanner> {
-  final service = UsageLimitBannerService();
+  final _bannerManager = BannerManager();
   bool _shouldShow = false;
   bool _isLoading = true;
 
@@ -137,7 +135,7 @@ class _UsageLimitBannerState extends State<UsageLimitBanner> {
   }
 
   Future<void> _checkShouldShow() async {
-    final shouldShow = await service.shouldShowBanner();
+    final shouldShow = await _bannerManager.shouldShowBanner(BannerType.usageLimit);
     if (mounted) {
       setState(() {
         _shouldShow = shouldShow;
@@ -147,7 +145,7 @@ class _UsageLimitBannerState extends State<UsageLimitBanner> {
   }
 
   Future<void> _dismiss() async {
-    await service.dismissBanner();
+    await _bannerManager.dismissBanner(BannerType.usageLimit);
     if (mounted) {
       setState(() {
         _shouldShow = false;
