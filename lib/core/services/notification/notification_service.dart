@@ -395,28 +395,4 @@ class NotificationService {
       }
     }
   }
-
-
-  /// 🎯 인앱 배너 테스트용 스케줄 알림 (디버그 모드에서만)
-  Future<void> scheduleTestBannerNotification({
-    required int seconds,
-  }) async {
-    if (!kDebugMode) return;
-
-    try {
-      final scheduledTime = DateTime.now().add(Duration(seconds: seconds));
-      
-      await _scheduleNotification(
-        id: 8888,
-        title: '🎯 인앱 배너 테스트',
-        body: '앱이 포그라운드에 있을 때 이 알림이 배너로 표시됩니다!',
-        scheduledDate: scheduledTime,
-        payload: 'banner_test',
-      );
-      
-      debugPrint('🎯 [TEST] 인앱 배너 테스트 - ${seconds}초 후 알림 예약: $scheduledTime');
-    } catch (e) {
-      debugPrint('❌ [TEST] 배너 테스트 알림 실패: $e');
-    }
-  }
-} 
+}
