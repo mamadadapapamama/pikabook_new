@@ -8,7 +8,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'firebase_options.dart';
 import 'core/services/media/image_service.dart';
-import 'core/services/trial/trial_status_checker.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 // import 'package:shared_preferences/shared_preferences.dart';
@@ -82,9 +81,7 @@ void main() async {
   final imageService = ImageService();
   await imageService.cleanupTempFiles();
   
-  // 체험 상태 체크 서비스 초기화
-  final trialStatusChecker = TrialStatusChecker();
-  await trialStatusChecker.initialize();
+
   
   // 일반적인 앱 실행
   runApp(const App());

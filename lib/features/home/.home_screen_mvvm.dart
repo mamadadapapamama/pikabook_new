@@ -30,7 +30,9 @@ import '../../core/services/common/usage_limit_service.dart'; // 🎯 실시간 
 import 'dart:async'; // 🎯 StreamSubscription, Timer 사용
 
 import '../../core/services/common/initialization_manager.dart'; // 🎯 초기화 매니저 추가
-import '../../core/services/common/banner_manager.dart'; // 🎯 통합 배너 관리 서비스
+import '../../core/services/subscription/subscription_status_service.dart'; // 🎯 통합 구독 상태 서비스
+import '../../core/models/subscription_state.dart'; // 🎯 구독 상태 모델
+import '../../core/services/common/banner_manager.dart'; // 🎯 기존 배너 매니저 (임시)
 
 
 /// 오버스크롤 색상을 주황색으로 변경하는 커스텀 스크롤 비헤이비어
@@ -93,18 +95,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   StreamSubscription<Map<String, bool>>? _limitStatusSubscription;
   StreamSubscription<Map<String, dynamic>>? _planChangeSubscription;
   
-  // 🎯 통합 배너 관리자
-  final BannerManager _bannerManager = BannerManager();
-
-  
   // 화면 초기화 실패를 추적하는 변수
   bool _initializationFailed = false;
   String? _initFailReason;
   
-  // 🎯 배너 상태들
-  bool _shouldShowExpiredBanner = false;
-  bool _shouldShowUsageLimitBanner = false;
-  bool _shouldShowTrialCompletedBanner = false;
+  // 🎯 구독 상태
+  SubscriptionState _subscriptionState = SubscriptionState.defaultState();
 
 
   @override
@@ -145,8 +141,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 🎯 로그인된 사용자만 InitializationManager 실행
       await _initializeForLoggedInUser();
       
-      // 🎯 배너 결정 및 로드 (InitializationManager 대신 여기서)
-      await _loadBanners();
+      // 🎯 구독 상태 로드
+      await _loadSubscriptionStatus();
       
       // 마케팅 서비스 초기화
       await _initializeMarketingService();
@@ -174,7 +170,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// TrialManager 환영 메시지 콜백 설정
   void _setupTrialWelcomeCallback() {
     final trialManager = TrialManager();
-    final trialStatusChecker = TrialStatusChecker();
     
     // 환영 메시지 콜백 (TrialManager)
     trialManager.onWelcomeMessage = (title, message) {
@@ -207,19 +202,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         );
       }
     };
-    
-    // 🎯 체험 종료 콜백 제거 - 이제 배너로 표시
-    
-    // 상태 변경 콜백 (UI 새로고침 - 필요시에만)
-    trialStatusChecker.onTrialStatusChanged = () {
-      if (mounted) {
-        // 🎯 배너 상태는 InitializationManager에서 결정되므로 여기서는 단순 새로고침만
-        setState(() {}); // UI 새로고침
-      }
-    };
-    
-    // TrialStatusChecker 초기화 (캐시 사용)
-    trialStatusChecker.initialize();
   }
   
   // 마케팅 캠페인 서비스 초기화 (현재 사용 안함)
@@ -256,14 +238,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             debugPrint('🔔 [HomeScreen] 실시간 사용량 한도 상태 변경: $limitStatus');
           }
           
-          // 사용량 한도 도달 시 배너 표시
+          // 사용량 한도 도달 시 상태 업데이트
           final shouldShowUsageLimit = limitStatus['ocrLimitReached'] == true || 
                                       limitStatus['ttsLimitReached'] == true;
           
-          if (shouldShowUsageLimit != _shouldShowUsageLimitBanner) {
-            setState(() {
-              _shouldShowUsageLimitBanner = shouldShowUsageLimit;
-            });
+          if (shouldShowUsageLimit != _subscriptionState.hasUsageLimitReached) {
+            // 구독 상태 다시 로드
+            await _loadSubscriptionStatus();
           }
         }
       },
@@ -751,44 +732,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
 
 
-  /// 🎯 배너 로드 (BannerManager에서 직접 결정)
-  Future<void> _loadBanners() async {
+  /// 🎯 구독 상태 로드 (새로운 통합 서비스 사용)
+  Future<void> _loadSubscriptionStatus() async {
     try {
       // 로그인 상태 확인
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
         if (kDebugMode) {
-          debugPrint('[HomeScreen] ⏭️ 로그아웃 상태 - 배너 로드 안함');
+          debugPrint('[HomeScreen] ⏭️ 로그아웃 상태 - 구독 상태 로드 안함');
         }
         return;
       }
       
       if (kDebugMode) {
-        debugPrint('[HomeScreen] 🎯 배너 결정 시작');
+        debugPrint('[HomeScreen] 🎯 구독 상태 조회 시작');
       }
       
-      // BannerManager에게 "배너 결정해줘" 요청
-      final activeBanners = await _bannerManager.getActiveBanners();
+      // SubscriptionStatusService에서 통합 상태 조회
+      final subscriptionState = await SubscriptionStatusService.fetchStatus(forceRefresh: true);
       
       // 결과 받아서 UI 업데이트
       if (mounted) {
         setState(() {
-          _shouldShowExpiredBanner = activeBanners.contains(BannerType.premiumExpired);
-          _shouldShowTrialCompletedBanner = activeBanners.contains(BannerType.trialCompleted);
-          _shouldShowUsageLimitBanner = activeBanners.contains(BannerType.usageLimit);
+          _subscriptionState = subscriptionState;
         });
       }
       
       if (kDebugMode) {
-        debugPrint('[HomeScreen] ✅ 배너 로드 완료:');
-        debugPrint('  - 활성 배너: ${activeBanners.map((e) => e.name).toList()}');
-        debugPrint('  - 프리미엄 만료: $_shouldShowExpiredBanner');
-        debugPrint('  - 체험 완료: $_shouldShowTrialCompletedBanner');
-        debugPrint('  - 사용량 한도: $_shouldShowUsageLimitBanner');
+        debugPrint('[HomeScreen] ✅ 구독 상태 로드 완료: $_subscriptionState');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[HomeScreen] ❌ 배너 로드 실패: $e');
+        debugPrint('[HomeScreen] ❌ 구독 상태 로드 실패: $e');
       }
     }
   }

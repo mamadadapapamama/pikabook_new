@@ -6,7 +6,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'views/screens/login_screen.dart';
-import 'features/home/home_screen_mvvm.dart'; 
+import 'features/home/home_screen_refactored.dart'; 
 import 'views/screens/onboarding_screen.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
@@ -424,7 +424,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
            //   }
            // });
            try {
-             return const HomeScreenWrapper();
+             return const HomeScreenRefactored();
            } catch (e, stackTrace) {
              if (kDebugMode) {
                 debugPrint('⚠️ HomeScreen 인스턴스 생성 중 오류 발생: $e');

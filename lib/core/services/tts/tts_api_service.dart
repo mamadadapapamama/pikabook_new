@@ -44,8 +44,13 @@ class TtsApiService {
     try {
       final String jsonString = await rootBundle.loadString('assets/credentials/api_keys.json');
       final Map<String, dynamic> jsonData = json.decode(jsonString);
-      _apiKey = jsonData['elevenlabs_key'] as String?;
-      debugPrint('ElevenLabs API 키 로드 성공');
+      _apiKey = jsonData['elevenlabs_api_key'] as String?;
+      if (kDebugMode) {
+        debugPrint('ElevenLabs API 키 로드 성공: ${_apiKey != null ? "키 존재함" : "키 없음"}');
+        if (_apiKey != null) {
+          debugPrint('API 키 길이: ${_apiKey!.length}자');
+        }
+      }
     } catch (e) {
       debugPrint('API 키 로드 중 오류: $e');
       rethrow;
@@ -70,6 +75,11 @@ class TtsApiService {
     try {
       if (_apiKey == null) {
         await _loadApiKey();
+      }
+      
+      // API 키 검증
+      if (_apiKey == null || _apiKey!.isEmpty) {
+        throw Exception('ElevenLabs API 키가 설정되지 않았습니다');
       }
 
       // 언어 확인 - 중국어만 지원

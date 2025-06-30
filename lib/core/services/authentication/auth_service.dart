@@ -14,7 +14,7 @@ import '../common/plan_service.dart';
 import 'user_preferences_service.dart';
 import 'deleted_user_service.dart';
 import '../cache/event_cache_manager.dart';
-import '../trial/trial_status_checker.dart';
+
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -294,13 +294,7 @@ class AuthService {
       // 1. 현재 UID 저장
       final currentUid = _auth.currentUser?.uid;
       
-      // 2. TrialStatusChecker 타이머 정리
-      try {
-        final trialStatusChecker = TrialStatusChecker();
-        trialStatusChecker.onUserLoggedOut();
-      } catch (e) {
-        debugPrint('TrialStatusChecker 정리 중 오류: $e');
-      }
+      // 2. 타이머 정리 (기존 TrialStatusChecker 제거됨)
       
       // 3. 병렬 처리 가능한 작업들
       await Future.wait([

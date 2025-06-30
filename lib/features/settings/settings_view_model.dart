@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/common/plan_service.dart';
-import '../../core/services/trial/trial_status_checker.dart';
+import '../../core/services/subscription/subscription_status_service.dart';
 import '../../core/models/plan.dart';
 import '../../core/utils/language_constants.dart';
 import '../../core/services/text_processing/text_processing_service.dart';
@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SettingsViewModel extends ChangeNotifier {
   final UserPreferencesService _userPreferences = UserPreferencesService();
   final PlanService _planService = PlanService();
-  final TrialStatusChecker _trialStatusChecker = TrialStatusChecker();
+
   final AuthService _authService = AuthService();
 
   // 로딩 상태
@@ -99,46 +99,31 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
-  /// 플랜 정보 로드 (TrialStatusChecker와 PlanService 조합)
+  /// 플랜 정보 로드 (SubscriptionStatusService 사용)
   Future<void> loadPlanInfo() async {
     _setLoading(true);
     try {
       if (kDebugMode) {
-        print('🔍 [Settings] 플랜 정보 로드 시작 (TrialStatusChecker + PlanService)');
+        print('🔍 [Settings] 플랜 정보 로드 시작 (SubscriptionStatusService)');
       }
       
-      // 1. TrialStatusChecker로 최신 서버 상태 확인
-      final trialStatus = await _trialStatusChecker.checkTrialStatusFromServer();
+      // 1. 통합 구독 상태 조회
+      final subscriptionState = await SubscriptionStatusService.fetchStatus(forceRefresh: true);
       
       // 2. PlanService로 상세 정보 가져오기 (강제 새로고침)
-      final subscriptionDetails = await _planService.getSubscriptionDetails(forceRefresh: true);
       final plan = await _planService.getCurrentPlan();
       
       if (kDebugMode) {
-        print('   Trial Status: ${trialStatus.name} (${trialStatus.displayName})');
+        print('   구독 상태: $subscriptionState');
         print('   Plan 객체: $plan');
         print('   플랜 타입: ${plan.type}');
         print('   플랜 이름: ${plan.name}');
         print('   무료 체험 중: ${plan.isFreeTrial}');
         print('   남은 일수: ${plan.daysRemaining}');
-        print('   구독 상세: $subscriptionDetails');
       }
       
       // UI에 표시할 플랜 이름 결정
-      String displayName;
-      final subscriptionType = subscriptionDetails['subscriptionType'] as String?;
-      final subscriptionSuffix = subscriptionType != null ? ' ($subscriptionType)' : '';
-      
-      if (trialStatus == TrialStatus.trialActive || trialStatus == TrialStatus.trialEndingSoon) {
-        final daysRemaining = subscriptionDetails['daysRemaining'] as int? ?? 0;
-        displayName = '프리미엄 체험 (${daysRemaining}일 남음)';
-      } else if (trialStatus == TrialStatus.premiumUser) {
-        displayName = '프리미엄$subscriptionSuffix';
-      } else if (trialStatus == TrialStatus.trialExpired) {
-        displayName = '무료 플랜 (체험 종료)';
-      } else {
-        displayName = plan.name;
-      }
+      String displayName = subscriptionState.statusMessage;
       
       _planType = plan.type;
       _planName = displayName;
