@@ -58,43 +58,23 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   void _setupAnimation() {
-    // 애니메이션 컨트롤러 설정 (전체 애니메이션 지속 시간: 2.4초)
+    // 애니메이션 컨트롤러 설정 (간소화: 0.8초)
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2400),
+      duration: const Duration(milliseconds: 800),
     );
 
-    // 로고 페이드인 애니메이션 (0~0.25)
+    // 단순한 페이드인 애니메이션 (성능 최적화)
     _logoFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _animationController,
-        curve: const Interval(0.0, 0.25, curve: Curves.easeIn),
+        curve: Curves.easeOut,
       ),
     );
     
-    // 텍스트 페이드인 애니메이션 (0.25~0.5)
-    _textFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.25, 0.5, curve: Curves.easeIn),
-      ),
-    );
-    
-    // 새 로고 페이드인 애니메이션 (0.5~0.75)
-    _birdFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.5, 0.75, curve: Curves.easeIn),
-      ),
-    );
-    
-    // 버튼 페이드인 애니메이션 (0.75~1.0)
-    _buttonsFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.75, 1.0, curve: Curves.easeIn),
-      ),
-    );
+    _textFadeAnimation = _logoFadeAnimation; // 동일한 애니메이션 재사용
+    _birdFadeAnimation = _logoFadeAnimation; // 동일한 애니메이션 재사용
+    _buttonsFadeAnimation = _logoFadeAnimation; // 동일한 애니메이션 재사용
 
     // 애니메이션 시작
     _animationController.forward();
@@ -140,23 +120,20 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           SafeArea(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: SpacingTokens.xxl - SpacingTokens.sm),
-              child: AnimatedBuilder(
-                animation: _animationController,
-                builder: (context, child) {
-                  return Center(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
+              child: Center(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
                           // 상단 여백
                           SizedBox(
                             height: _getSafeScreenHeight(context) * 0.15, // 상단 여백 조정
                           ),
                           
                           // 새 로고 (bird) - 맨 위에 배치
-                          Opacity(
-                            opacity: _birdFadeAnimation.value,
+                          FadeTransition(
+                            opacity: _birdFadeAnimation,
                             child: Image.asset(
                               'assets/images/pikabook_bird.png',
                               width: SpacingTokens.iconSizeXLarge + SpacingTokens.xs,
@@ -465,9 +442,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         ],
                       ),
                     ),
-                  );
-                }
-              ),
+                  ),
             ),
           ),
         ],

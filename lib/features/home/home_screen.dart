@@ -25,21 +25,6 @@ import '../note/view/note_detail_screen.dart';                        // NoteDet
 import 'home_viewmodel.dart';                                         // HomeViewModel 사용
 import 'note_list_item.dart';
 
-// 🎨 오버스크롤 인디케이터 커스텀 동작 (기존과 동일)
-class OrangeOverscrollBehavior extends ScrollBehavior {
-  const OrangeOverscrollBehavior();
-
-  @override
-  Widget buildOverscrollIndicator(
-      BuildContext context, Widget child, ScrollableDetails details) {
-    return GlowingOverscrollIndicator(
-      axisDirection: details.direction,
-      color: ColorTokens.primary,
-      child: child,
-    );
-  }
-}
-
 /// 🏠 홈 스크린
 
 class HomeScreen extends StatefulWidget {
@@ -122,8 +107,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       
       // 🆕 SubscriptionStatusService에서 통합 상태 조회
-      // forceRefresh: true → 캐시 무시하고 최신 데이터 가져오기
-      final subscriptionState = await SubscriptionStatusService.fetchStatus(forceRefresh: true);
+      // forceRefresh: false → 캐시 활용하여 빠른 로딩
+      final subscriptionState = await SubscriptionStatusService.fetchStatus(forceRefresh: false);
       
       // 🔄 결과 받아서 UI 업데이트 (mounted 체크로 메모리 누수 방지)
       if (mounted) {
@@ -242,51 +227,48 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ScrollConfiguration(
-      behavior: const OrangeOverscrollBehavior(),
-      child: Scaffold(
-        backgroundColor: UITokens.screenBackground,
-        appBar: PikaAppBar.home(),
-        body: Consumer<HomeViewModel>(
-          builder: (context, viewModel, _) {
-            if (viewModel.isLoading && viewModel.notes.isEmpty) {
-              return _buildLoadingState();
-            }
+    return Scaffold(
+      backgroundColor: UITokens.screenBackground,
+      appBar: PikaAppBar.home(),
+      body: Consumer<HomeViewModel>(
+        builder: (context, viewModel, _) {
+          if (viewModel.isLoading && viewModel.notes.isEmpty) {
+            return _buildLoadingState();
+          }
 
-            if (viewModel.notes.isEmpty) {
-              return _buildZeroState(context);
-            }
+          if (viewModel.notes.isEmpty) {
+            return _buildZeroState(context);
+          }
 
-            return _buildNotesList(context, viewModel);
-          },
-        ),
-        floatingActionButton: Consumer<HomeViewModel>(
-          builder: (context, viewModel, _) {
-            final isDisabled = _subscriptionState.hasUsageLimitReached;
-            return Container(
-              width: 200, // width 제한
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              child: isDisabled 
-                ? Tooltip(
-                    message: '사용량 한도 초과로 비활성화되었습니다',
-                    child: PikaButton(
-                      text: _getBottomButtonText(viewModel),
-                      onPressed: null, // 비활성화
-                      variant: PikaButtonVariant.primary,
-                      isFullWidth: false, // width 제한으로 변경
-                    ),
-                  )
-                : PikaButton(
+          return _buildNotesList(context, viewModel);
+        },
+      ),
+      floatingActionButton: Consumer<HomeViewModel>(
+        builder: (context, viewModel, _) {
+          final isDisabled = _subscriptionState.hasUsageLimitReached;
+          return Container(
+            width: 200, // width 제한
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            child: isDisabled 
+              ? Tooltip(
+                  message: '사용량 한도 초과로 비활성화되었습니다',
+                  child: PikaButton(
                     text: _getBottomButtonText(viewModel),
-                    onPressed: () => _handleBottomButtonPressed(viewModel),
+                    onPressed: null, // 비활성화
                     variant: PikaButtonVariant.primary,
                     isFullWidth: false, // width 제한으로 변경
                   ),
-            );
-          },
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+                )
+              : PikaButton(
+                  text: _getBottomButtonText(viewModel),
+                  onPressed: () => _handleBottomButtonPressed(viewModel),
+                  variant: PikaButtonVariant.primary,
+                  isFullWidth: false, // width 제한으로 변경
+                ),
+          );
+        },
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 
@@ -501,7 +483,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// 📝 하단 버튼 텍스트 결정 (수정됨)
   String _getBottomButtonText(HomeViewModel viewModel) {
-    return '이미지 올리기'; // 항상 "이미지 올리기"로 통일
+    if (viewModel.notes.isEmpty) {
+      return '이미지 올리기'; // 제로 상태일 때
+    } else {
+      return '스마트 노트 만들기'; // 노트가 있을 때
+    }
   }
 
   /// 🎯 하단 버튼 눌림 처리 (기존과 동일)

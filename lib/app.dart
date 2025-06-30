@@ -15,7 +15,6 @@ import 'core/services/payment/in_app_purchase_service.dart';
 import 'views/screens/loading_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'features/sample/sample_home_screen.dart';
 import 'features/home/home_viewmodel.dart';
 
@@ -27,7 +26,7 @@ class CustomScrollBehavior extends ScrollBehavior {
   Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
     return GlowingOverscrollIndicator(
       axisDirection: details.direction,
-      color: ColorTokens.primaryverylight, // 오버스크롤 색상을 primaryverylight로 변경
+      color: ColorTokens.primary, // HomeScreen과 동일한 primary 색상으로 통일
       child: child,
     );
   }
@@ -122,15 +121,14 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
-  /// 앱 초기화 로직 (Firebase Auth만 확인)
-  Future<void> _initializeApp() async {
+  /// 앱 초기화 로직 (빠른 시작을 위해 최적화)
+  void _initializeApp() {
     try {
       if (kDebugMode) {
-        debugPrint('앱: 기본 초기화 시작 (Firebase Auth만)');
+        debugPrint('앱: 빠른 초기화 시작');
       }
       
-      // Firebase Auth 상태만 확인
-      await FirebaseAuth.instance.authStateChanges().first;
+      // Firebase Auth 상태를 동기적으로 확인 (네트워크 대기 없음)
       final currentUser = FirebaseAuth.instance.currentUser;
       final isLoggedIn = currentUser != null;
       
@@ -141,27 +139,19 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 샘플 모드 상태 확인 (앱 특화 로직)
       _checkSampleMode();
       
-      // 인증 상태 관찰 설정
+      // 인증 상태 관찰 설정 (비동기)
       _setupAuthStateListener();
       
-      // 로딩 스크린이 최소 1초는 보이도록 지연
-      await Future.delayed(const Duration(milliseconds: 1000));
-      
-      // 초기화 상태 업데이트
+      // 초기화 상태 즉시 업데이트
       if (mounted) {
         setState(() {
           _isInitialized = true;
-          _isLoading = !_isSampleMode; // 샘플 모드가 아니면 계속 로딩
+          _isLoading = false; // 즉시 로딩 해제
         });
       }
       
       if (kDebugMode) {
-        debugPrint('앱: 기본 초기화 완료 (로그인: $isLoggedIn, 샘플모드: $_isSampleMode)');
-        if (isLoggedIn) {
-          debugPrint('앱: 로그인 상태 - InitializationManager는 HomeScreen에서 호출됨');
-        } else {
-          debugPrint('앱: 로그아웃 상태 - InitializationManager 호출 안함');
-        }
+        debugPrint('앱: 빠른 초기화 완료 (로그인: $isLoggedIn, 샘플모드: $_isSampleMode)');
       }
     } catch (e) {
       // 초기화 실패 처리
@@ -466,11 +456,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       debugPrint('App 로딩 화면 표시: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData');
     }
     // MaterialApp 제거, LoadingScreen 직접 반환
-    return const LoadingScreen(
-      progress: 0.5, 
-      message: '피카북을 준비하는 중이에요...',
-      optimizeForAppReview: false, // 기본 로딩 화면 사용
-    );
+    return const LoadingScreen();
   }
     
   // 샘플 모드 화면 빌드
@@ -583,7 +569,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               onPressed: () async {
                 // 앱 재시작 또는 초기화 로직 필요
                 // TODO: 앱 재시작 로직 구현
-                await _initializeApp(); // 임시로 초기화 재시도
+                _initializeApp(); // 임시로 초기화 재시도
               },
               child: const Text('다시 시도'),
             ),
