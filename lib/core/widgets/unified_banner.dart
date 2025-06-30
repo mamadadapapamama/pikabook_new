@@ -33,7 +33,6 @@ class UnifiedBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: EdgeInsets.all(SpacingTokens.md),
       padding: EdgeInsets.all(SpacingTokens.md),
       decoration: BoxDecoration(
         color: backgroundColor ?? Colors.white,
@@ -68,8 +67,9 @@ class UnifiedBanner extends StatelessWidget {
           
           SizedBox(width: SpacingTokens.sm),
           
-          // 텍스트 영역
+          // 텍스트 영역 - 유연한 크기 조정
           Expanded(
+            flex: 3, // 텍스트 영역에 더 많은 공간 할당
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -89,34 +89,44 @@ class UnifiedBanner extends StatelessWidget {
                     color: ColorTokens.textPrimary,
                     fontSize: 13, // 🎯 더 작은 폰트 크기
                   ),
+                  maxLines: 2, // 최대 2줄로 제한
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
           
-          SizedBox(width: SpacingTokens.sm),
+          SizedBox(width: SpacingTokens.xs), // 간격 줄임
           
           // 액션 버튼들
           if (mainButtonText != null && onMainButtonPressed != null) ...[
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 메인 버튼 (PikaButton Primary xs) - 더 넓게, 중앙 정렬, 패딩 줄임
-                SizedBox(
-                  width: 80, // 70 -> 80으로 증가
-                  height: 32, // 28 -> 32로 증가
-                  child: PikaButton(
-                    text: mainButtonText!,
-                    variant: PikaButtonVariant.primary,
-                    size: PikaButtonSize.xs,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: SpacingTokens.xs - 2, // 패딩 줄임
-                      vertical: SpacingTokens.xs - 1,
-                    ),
-                    onPressed: onMainButtonPressed,
-                  ),
+                // 메인 버튼 - 텍스트 길이에 따라 자동 조정
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minWidth: 75,  // 최소 width
+                        maxWidth: 100, // 최대 width
+                        minHeight: 32,
+                        maxHeight: 32,
+                      ),
+                      child: PikaButton(
+                        text: mainButtonText!,
+                        variant: PikaButtonVariant.primary,
+                        size: PikaButtonSize.xs,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: SpacingTokens.xs - 1,
+                          vertical: SpacingTokens.xs - 1,
+                        ),
+                        onPressed: onMainButtonPressed,
+                      ),
+                    );
+                  },
                 ),
-                
+            
                 SizedBox(height: SpacingTokens.xs),
                 
                 // 닫기 버튼 (텍스트 버튼)

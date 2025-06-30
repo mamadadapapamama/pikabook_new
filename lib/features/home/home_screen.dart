@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-
 // 🎯 Core imports - 새로운 통합 구독 상태 관리 시스템
 import '../../core/models/subscription_state.dart';                    // 통합 구독 상태 모델
 import '../../core/services/subscription/subscription_status_service.dart'; // 🆕 새로운 통합 서비스 (기존 BannerManager 대체)
@@ -23,7 +22,7 @@ import '../../core/widgets/image_picker_bottom_sheet.dart';
 
 // Feature imports
 import '../note/view/note_detail_screen.dart';                        // NoteDetailScreenMVVM 사용
-import 'home_viewmodel.dart';                                         // 기존 HomeViewModel 유지
+import 'home_viewmodel.dart';                                         // HomeViewModel 사용
 import 'note_list_item.dart';
 
 // 🎨 오버스크롤 인디케이터 커스텀 동작 (기존과 동일)
@@ -41,16 +40,16 @@ class OrangeOverscrollBehavior extends ScrollBehavior {
   }
 }
 
-/// 🏠 리팩토링된 홈 스크린
+/// 🏠 홈 스크린
 
-class HomeScreenRefactored extends StatefulWidget {
-  const HomeScreenRefactored({super.key});
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<HomeScreenRefactored> createState() => _HomeScreenRefactoredState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenRefactoredState extends State<HomeScreenRefactored> {
+class _HomeScreenState extends State<HomeScreen> {
   // 🔧 서비스 인스턴스 (실시간 스트림 구독용)
   late final UsageLimitService _usageLimitService;  // 사용량 한도 실시간 감지
   late final PlanService _planService;              // 플랜 변경 실시간 감지
@@ -195,9 +194,9 @@ class _HomeScreenRefactoredState extends State<HomeScreenRefactored> {
     _limitStatusSubscription = _usageLimitService.limitStatusStream.listen(
       (limitStatus) async {
         if (mounted) {
-          if (kDebugMode) {
-            debugPrint('🔔 [HomeScreenRefactored] 실시간 사용량 한도 상태 변경: $limitStatus');
-          }
+                  if (kDebugMode) {
+          debugPrint('🔔 [HomeScreen] 실시간 사용량 한도 상태 변경: $limitStatus');
+        }
           
           // 🚨 사용량 한도 도달 시 상태 업데이트
           final shouldShowUsageLimit = limitStatus['ocrLimitReached'] == true || 
@@ -263,15 +262,26 @@ class _HomeScreenRefactoredState extends State<HomeScreenRefactored> {
         ),
         floatingActionButton: Consumer<HomeViewModel>(
           builder: (context, viewModel, _) {
+            final isDisabled = _subscriptionState.hasUsageLimitReached;
             return Container(
-              width: double.infinity,
+              width: 200, // width 제한
               margin: const EdgeInsets.symmetric(horizontal: 24),
-              child: PikaButton(
-                text: _getBottomButtonText(viewModel),
-                onPressed: () => _handleBottomButtonPressed(viewModel),
-                variant: PikaButtonVariant.primary,
-                isFullWidth: true,
-              ),
+              child: isDisabled 
+                ? Tooltip(
+                    message: '사용량 한도 초과로 비활성화되었습니다',
+                    child: PikaButton(
+                      text: _getBottomButtonText(viewModel),
+                      onPressed: null, // 비활성화
+                      variant: PikaButtonVariant.primary,
+                      isFullWidth: false, // width 제한으로 변경
+                    ),
+                  )
+                : PikaButton(
+                    text: _getBottomButtonText(viewModel),
+                    onPressed: () => _handleBottomButtonPressed(viewModel),
+                    variant: PikaButtonVariant.primary,
+                    isFullWidth: false, // width 제한으로 변경
+                  ),
             );
           },
         ),
@@ -322,21 +332,23 @@ class _HomeScreenRefactoredState extends State<HomeScreenRefactored> {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      '아직 노트가 없어요',
+                      '먼저, 번역이 필요한\n이미지를 올려주세요.',
                       style: GoogleFonts.notoSans(
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
                         color: ColorTokens.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 16),
                     Text(
-                      '첫 번째 스마트 노트를 만들어보세요!',
-                      style: GoogleFonts.notoSans(
-                        fontSize: 16,
-                        color: ColorTokens.textSecondary,
+                      '이미지를 기반으로 학습 노트를 만들어드립니다. \n카메라 촬영도 가능합니다.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: const Color(0xFF969696), // #969696
                       ),
                     ),
+                const SizedBox(height: 32), // 간격만 유지
                   ],
                 ),
               ),
@@ -383,13 +395,6 @@ class _HomeScreenRefactoredState extends State<HomeScreenRefactored> {
   }
 
   /// 🎯 활성 배너들 표시 (통합 배너 시스템)
-  /// 
-  /// 🔥 기존 방식:
-  /// - 각 배너 위젯이 개별적으로 상태 확인
-  /// - BannerManager에서 각 배너별로 표시 여부 결정
-  /// - 상태 불일치 가능성 존재
-  /// 
-  /// ✨ 새로운 방식:
   /// - SubscriptionState.activeBanners에서 중앙 집중식 관리
   /// - 모든 배너가 동일한 상태 정보 기반으로 표시
   /// - UnifiedBanner 위젯으로 일관된 UI 제공
@@ -494,13 +499,9 @@ class _HomeScreenRefactoredState extends State<HomeScreenRefactored> {
     );
   }
 
-  /// 📝 하단 버튼 텍스트 결정 (기존과 동일)
+  /// 📝 하단 버튼 텍스트 결정 (수정됨)
   String _getBottomButtonText(HomeViewModel viewModel) {
-    if (viewModel.notes.isEmpty) {
-      return '첫 번째 노트 만들기';
-    } else {
-      return '새 노트 만들기';
-    }
+    return '이미지 올리기'; // 항상 "이미지 올리기"로 통일
   }
 
   /// 🎯 하단 버튼 눌림 처리 (기존과 동일)

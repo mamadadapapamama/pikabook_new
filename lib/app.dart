@@ -4,9 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
 import 'dart:async';
 import 'views/screens/login_screen.dart';
-import 'features/home/home_screen_refactored.dart'; 
+import 'features/home/home_screen.dart'; 
 import 'views/screens/onboarding_screen.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
@@ -16,6 +17,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'features/sample/sample_home_screen.dart';
+import 'features/home/home_viewmodel.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -142,11 +144,16 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 인증 상태 관찰 설정
       _setupAuthStateListener();
       
+      // 로딩 스크린이 최소 1초는 보이도록 지연
+      await Future.delayed(const Duration(milliseconds: 1000));
+      
       // 초기화 상태 업데이트
-      setState(() {
-        _isInitialized = true;
-        _isLoading = !_isSampleMode; // 샘플 모드가 아니면 계속 로딩
-      });
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+          _isLoading = !_isSampleMode; // 샘플 모드가 아니면 계속 로딩
+        });
+      }
       
       if (kDebugMode) {
         debugPrint('앱: 기본 초기화 완료 (로그인: $isLoggedIn, 샘플모드: $_isSampleMode)');
@@ -424,7 +431,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
            //   }
            // });
            try {
-             return const HomeScreenRefactored();
+             return ChangeNotifierProvider(
+               create: (context) => HomeViewModel(),
+               child: const HomeScreen(),
+             );
            } catch (e, stackTrace) {
              if (kDebugMode) {
                 debugPrint('⚠️ HomeScreen 인스턴스 생성 중 오류 발생: $e');
@@ -456,8 +466,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       debugPrint('App 로딩 화면 표시: _isLoading=$_isLoading, _isLoadingUserData=$_isLoadingUserData');
     }
     // MaterialApp 제거, LoadingScreen 직접 반환
-    return const LoadingScreen(progress: 0.5, message: '앱을 초기화하는 중입니다...');
-    }
+    return const LoadingScreen(
+      progress: 0.5, 
+      message: '피카북을 준비하는 중이에요...',
+      optimizeForAppReview: false, // 기본 로딩 화면 사용
+    );
+  }
     
   // 샘플 모드 화면 빌드
   Widget _buildSampleModeScreen() {

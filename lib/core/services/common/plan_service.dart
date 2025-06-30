@@ -474,6 +474,7 @@ class PlanService {
           'currentPlan': PLAN_FREE,
           'hasUsedFreeTrial': false,
           'hasEverUsedTrial': false,
+          'hasEverUsedPremium': false,
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
@@ -491,6 +492,7 @@ class PlanService {
           'currentPlan': PLAN_FREE,
           'hasUsedFreeTrial': false,
           'hasEverUsedTrial': false,
+          'hasEverUsedPremium': false,
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
@@ -505,12 +507,15 @@ class PlanService {
       final hasUsedFreeTrial = data['hasUsedFreeTrial'] as bool? ?? false;
       // 🎯 새로운 필드: hasEverUsedTrial도 가져오기
       final hasEverUsedTrial = data['hasEverUsedTrial'] as bool? ?? false;
+      // 🎯 프리미엄 사용 이력도 가져오기
+      final hasEverUsedPremium = data['hasEverUsedPremium'] as bool? ?? false;
 
       if (subscriptionData == null) {
         return {
           'currentPlan': PLAN_FREE,
           'hasUsedFreeTrial': hasUsedFreeTrial,
           'hasEverUsedTrial': hasEverUsedTrial,
+          'hasEverUsedPremium': hasEverUsedPremium,
           'isFreeTrial': false,
           'daysRemaining': 0,
           'expiryDate': null,
@@ -587,6 +592,7 @@ class PlanService {
         'currentPlan': currentPlan,
         'hasUsedFreeTrial': hasUsedFreeTrial,
         'hasEverUsedTrial': hasEverUsedTrial,
+        'hasEverUsedPremium': hasEverUsedPremium,
         'isFreeTrial': isFreeTrial,
         'daysRemaining': daysRemaining,
         'expiryDate': expiryDate?.toDate(),
@@ -606,6 +612,7 @@ class PlanService {
         'currentPlan': PLAN_FREE,
         'hasUsedFreeTrial': false,
         'hasEverUsedTrial': false,
+        'hasEverUsedPremium': false,
         'isFreeTrial': false,
         'daysRemaining': 0,
         'expiryDate': null,
