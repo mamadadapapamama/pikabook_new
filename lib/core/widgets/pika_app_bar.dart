@@ -9,7 +9,6 @@ import '../../features/flashcard/flashcard_counter_badge.dart';
 import '../services/common/plan_service.dart';
 import '../services/authentication/user_preferences_service.dart';
 import '../../features/settings/settings_screen.dart';
-import '../../features/translation_test/translation_test_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
@@ -348,28 +347,6 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       // 오류 발생 시 사용자에게 알림
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('설정 화면 이동 중 오류가 발생했습니다: $e')),
-      );
-    }
-  }
-
-  /// 번역 테스트 페이지로 이동 (디버그 모드에서만)
-  void _navigateToTranslationTest(BuildContext context) {
-    if (kDebugMode) {
-      debugPrint('번역 테스트 페이지로 이동 시도');
-    }
-    try {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => const TranslationTestPage(),
-        ),
-      );
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('번역 테스트 페이지 이동 중 오류: $e');
-      }
-      // 오류 발생 시 사용자에게 알림
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('번역 테스트 페이지 이동 중 오류가 발생했습니다: $e')),
       );
     }
   }
