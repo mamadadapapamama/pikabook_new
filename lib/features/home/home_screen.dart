@@ -6,9 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 // 🎯 Core imports - 새로운 통합 구독 상태 관리 시스템
 import '../../core/models/subscription_state.dart';                    // 통합 구독 상태 모델
-import '../../core/services/subscription/subscription_status_service.dart'; // 🆕 새로운 통합 서비스 (기존 BannerManager 대체)
+import '../../core/services/subscription/app_store_subscription_service.dart'; // 🆕 App Store 기반 구독 서비스
 import '../../core/services/common/usage_limit_service.dart';          // 사용량 한도 실시간 스트림용
-import '../../core/services/common/plan_service.dart';                // 플랜 변경 실시간 스트림용
+
 import '../../core/services/trial/trial_manager.dart';                // 환영 메시지 콜백용 (기존 유지)
 
 import '../../core/theme/tokens/color_tokens.dart';
@@ -34,38 +34,49 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // 🔧 서비스 인스턴스 (실시간 스트림 구독용)
   late final UsageLimitService _usageLimitService;  // 사용량 한도 실시간 감지
-  late final PlanService _planService;              // 플랜 변경 실시간 감지
 
   // 🎯 통합 구독 상태 (단일 상태 관리)
-  // ✨ 새로운: SubscriptionState 하나로 모든 상태 통합
   SubscriptionState _subscriptionState = SubscriptionState.defaultState();
 
   // 📡 실시간 스트림 구독 (상태 변경 감지)
   StreamSubscription<Map<String, dynamic>>? _limitStatusSubscription;  // 사용량 한도 변경
-  StreamSubscription<Map<String, dynamic>>? _planChangeSubscription;   // 플랜 변경
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // 앱 생명주기 관찰
     _initializeServices();
-    _initializeAsyncTasks();  // 🎯 핵심 변경: InitializationManager 호출 제거됨
+    _initializeAsyncTasks();
   }
 
   @override
   void dispose() {
     // 📡 실시간 스트림 구독 해제 (메모리 누수 방지)
     _limitStatusSubscription?.cancel();
-    _planChangeSubscription?.cancel();
+    WidgetsBinding.instance.removeObserver(this); // 앱 생명주기 관찰 해제
     super.dispose();
+  }
+
+  /// 앱 생명주기 변경 감지 (백그라운드 → 포그라운드 복귀 시 구독 상태 확인)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    if (state == AppLifecycleState.resumed) {
+      // 앱이 포그라운드로 복귀했을 때 구독 상태 새로고침
+      if (kDebugMode) {
+        debugPrint('🔄 [HomeScreen] 앱 포그라운드 복귀 - 구독 상태 새로고침');
+      }
+      _loadSubscriptionStatus(forceRefresh: true);
+    }
   }
 
   /// 🔧 서비스 초기화 (실시간 스트림 구독용)
   void _initializeServices() {
     _usageLimitService = UsageLimitService();
-    _planService = PlanService();
   }
 
   /// 🚀 비동기 초기화 작업 (대폭 단순화됨)
@@ -94,21 +105,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 🎯 구독 상태 로드 (새로운 통합 서비스 사용)
-  /// - SubscriptionStatusService.fetchStatus() 한 번 호출로 모든 정보 획득
-  /// - 내부에서 모든 서비스를 통합 호출하여 일관성 보장
-  /// 
-  /// 💡 참고: 홈 화면 접근 = 이미 로그인 상태 (불필요한 로그인 체크 제거)
-  Future<void> _loadSubscriptionStatus() async {
+  /// 🎯 구독 상태 로드 (App Store 기반)
+  Future<void> _loadSubscriptionStatus({bool forceRefresh = false}) async {
     try {
-      
       if (kDebugMode) {
-        debugPrint('[HomeScreenRefactored] 🎯 구독 상태 조회 시작');
+        debugPrint('[HomeScreen] 🎯 App Store 기반 구독 상태 조회 시작 (forceRefresh: $forceRefresh)');
       }
       
-      // 🆕 SubscriptionStatusService에서 통합 상태 조회
-      // forceRefresh: false → 캐시 활용하여 빠른 로딩
-      final subscriptionState = await SubscriptionStatusService.fetchStatus(forceRefresh: false);
+      // 🆕 App Store에서 직접 구독 상태 조회
+      final appStoreService = AppStoreSubscriptionService();
+      final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: forceRefresh);
+      
+      // App Store 상태를 SubscriptionState로 변환
+      final subscriptionState = await _convertToSubscriptionState(appStoreStatus);
       
       // 🔄 결과 받아서 UI 업데이트 (mounted 체크로 메모리 누수 방지)
       if (mounted) {
@@ -118,13 +127,12 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       
       if (kDebugMode) {
-        debugPrint('[HomeScreenRefactored] ✅ 구독 상태 로드 완료: $_subscriptionState');
+        debugPrint('[HomeScreen] ✅ App Store 기반 구독 상태 로드 완료: $_subscriptionState');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[HomeScreenRefactored] ❌ 구독 상태 로드 실패: $e');
+        debugPrint('[HomeScreen] ❌ 구독 상태 로드 실패: $e');
       }
-      // 🛡️ 에러 발생 시에도 앱이 계속 동작하도록 함 (기본 상태 유지)
     }
   }
 
@@ -201,28 +209,60 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
     
-    // 💎 플랜 변경 스트림 구독
-    _planChangeSubscription = _planService.planChangeStream.listen(
-      (planChangeData) async {
-        if (mounted) {
-          if (kDebugMode) {
-            debugPrint('🔔 [HomeScreenRefactored] 실시간 플랜 변경: $planChangeData');
-          }
-          
-          // 🔄 플랜 변경 시 구독 상태 다시 로드 (통합 서비스 사용)
-          await _loadSubscriptionStatus();
-        }
-      },
-      onError: (error) {
-        if (kDebugMode) {
-          debugPrint('❌ [HomeScreenRefactored] 플랜 변경 스트림 오류: $error');
-        }
-      },
-    );
-    
     if (kDebugMode) {
-      debugPrint('✅ [HomeScreenRefactored] 실시간 스트림 구독 설정 완료');
+      debugPrint('✅ [HomeScreen] 실시간 스트림 구독 설정 완료 (사용량 한도만)');
     }
+  }
+
+  /// App Store 상태를 SubscriptionState로 변환 (사용량 한도 포함)
+  Future<SubscriptionState> _convertToSubscriptionState(SubscriptionStatus appStoreStatus) async {
+    // 사용량 한도는 무료 플랜일 때만 확인
+    bool hasUsageLimitReached = false;
+    if (appStoreStatus.isFree) {
+      try {
+        final usageLimitStatus = await _usageLimitService.checkInitialLimitStatus();
+        final ocrLimitReached = usageLimitStatus['ocrLimitReached'] ?? false;
+        final ttsLimitReached = usageLimitStatus['ttsLimitReached'] ?? false;
+        hasUsageLimitReached = ocrLimitReached || ttsLimitReached;
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [HomeScreen] 사용량 한도 확인 실패: $e');
+        }
+      }
+    }
+    
+    // 활성 배너 결정
+    final activeBanners = <BannerType>[];
+    if (appStoreStatus.isFree) {
+      // 사용량 한도 배너
+      if (hasUsageLimitReached) {
+        activeBanners.add(BannerType.usageLimit);
+      }
+      
+      // 무료체험 관련 배너 (로컬 저장소에서 확인)
+      try {
+        final appStoreService = AppStoreSubscriptionService();
+        final hasUsedTrial = await appStoreService.hasUsedFreeTrial();
+        if (hasUsedTrial) {
+          activeBanners.add(BannerType.trialCompleted);
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [HomeScreen] 무료체험 이력 확인 실패: $e');
+        }
+      }
+    }
+    
+    return SubscriptionState(
+      isTrial: appStoreStatus.isTrial,
+      isTrialExpiringSoon: false, // App Store에서 자동 관리
+      isPremium: appStoreStatus.isPremium,
+      isExpired: appStoreStatus.isFree,
+      hasUsageLimitReached: hasUsageLimitReached,
+      daysRemaining: 0, // App Store에서 자동 관리
+      activeBanners: activeBanners,
+      statusMessage: appStoreStatus.displayName,
+    );
   }
 
   @override
@@ -426,11 +466,11 @@ class _HomeScreenState extends State<HomeScreen> {
         };
       case BannerType.trialCompleted:
         return {
-          'icon': Icons.star_rounded,
-          'iconColor': Colors.blue,
-          'title': '무료체험 완료',
-          'subtitle': '계속 사용하려면 프리미엄으로 업그레이드하세요',
-          'buttonText': '업그레이드',
+          'icon': Icons.check_circle_rounded,
+          'iconColor': ColorTokens.secondary,
+          'title': '프리미엄으로 전환되었습니다',
+          'subtitle': '무료 체험기간이 끝나고 프리미엄(monthly)으로 전환되었습니다.\n구독 변경은 앱스토어에서 가능합니다.',
+          'buttonText': null,
         };
       case BannerType.premiumExpired:
         return {

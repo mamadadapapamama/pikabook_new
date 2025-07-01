@@ -30,7 +30,7 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   
@@ -43,46 +43,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   bool _isEmailLogin = false;
   bool _isSignUp = false;
 
-  
-  // 애니메이션 컨트롤러 및 애니메이션 변수
-  late AnimationController _animationController;
-  late Animation<double> _logoFadeAnimation;
-  late Animation<double> _textFadeAnimation;
-  late Animation<double> _birdFadeAnimation;
-  late Animation<double> _buttonsFadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _setupAnimation();
-  }
-
-  void _setupAnimation() {
-    // 애니메이션 컨트롤러 설정 (간소화: 0.8초)
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-
-    // 단순한 페이드인 애니메이션 (성능 최적화)
-    _logoFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOut,
-      ),
-    );
-    
-    _textFadeAnimation = _logoFadeAnimation; // 동일한 애니메이션 재사용
-    _birdFadeAnimation = _logoFadeAnimation; // 동일한 애니메이션 재사용
-    _buttonsFadeAnimation = _logoFadeAnimation; // 동일한 애니메이션 재사용
-
-    // 애니메이션 시작
-    _animationController.forward();
-  }
-
   @override
   void dispose() {
-    _animationController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -132,41 +94,32 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           ),
                           
                           // 새 로고 (bird) - 맨 위에 배치
-                          FadeTransition(
-                            opacity: _birdFadeAnimation,
-                            child: Image.asset(
-                              'assets/images/pikabook_bird.png',
-                              width: SpacingTokens.iconSizeXLarge + SpacingTokens.xs,
-                              height: SpacingTokens.iconSizeXLarge + SpacingTokens.xs,
-                              fit: BoxFit.contain,
-                            ),
+                          Image.asset(
+                            'assets/images/pikabook_bird.png',
+                            width: SpacingTokens.iconSizeXLarge + SpacingTokens.xs,
+                            height: SpacingTokens.iconSizeXLarge + SpacingTokens.xs,
+                            fit: BoxFit.contain,
                           ),
                           SizedBox(height: SpacingTokens.md),
                           
                           // 원서 공부, 스마트하게 텍스트 - 중간에 배치
-                          Opacity(
-                            opacity: _textFadeAnimation.value,
-                            child: Text(
-                              '책으로 하는 중국어 공부,\n스마트하게',
-                              textAlign: TextAlign.center,
-                              style: TypographyTokens.subtitle1.copyWith(
-                                color: ColorTokens.textLight,
-                                height: 1.4,
-                              ),
+                          Text(
+                            '책으로 하는 중국어 공부,\n스마트하게',
+                            textAlign: TextAlign.center,
+                            style: TypographyTokens.subtitle1.copyWith(
+                              color: ColorTokens.textLight,
+                              height: 1.4,
                             ),
                           ),
                           const SizedBox(height: 12),
                           
                           // 텍스트 로고 - 맨 아래에 배치
-                          Opacity(
-                            opacity: _logoFadeAnimation.value,
-                            child: Image.asset(
-                              'assets/images/pikabook_textlogo.png',
-                              width: SpacingTokens.appLogoWidth2x,
-                              height: SpacingTokens.appLogoHeight2x,
-                              fit: BoxFit.contain,
-                              color: ColorTokens.textLight,
-                            ),
+                          Image.asset(
+                            'assets/images/pikabook_textlogo.png',
+                            width: SpacingTokens.appLogoWidth2x,
+                            height: SpacingTokens.appLogoHeight2x,
+                            fit: BoxFit.contain,
+                            color: ColorTokens.textLight,
                           ),
                           SizedBox(height: SpacingTokens.xl),
 
@@ -199,244 +152,241 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           SizedBox(height: SpacingTokens.md),
 
                           // 이메일 로그인 또는 소셜 로그인 선택
-                          Opacity(
-                            opacity: _buttonsFadeAnimation.value,
-                            child: Column(
-                              children: [
-                                // 이메일 로그인/소셜 로그인 토글 버튼
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          _isEmailLogin = false;
-                                          _errorMessage = null;
-                                        });
-                                      },
-                                      child: Text(
-                                        '소셜 로그인',
-                                        style: TypographyTokens.button.copyWith(
-                                          color: _isEmailLogin ? ColorTokens.textLight.withOpacity(0.6) : ColorTokens.textLight,
-                                          decoration: _isEmailLogin ? null : TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(width: SpacingTokens.md),
-                                    TextButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          _isEmailLogin = true;
-                                          _errorMessage = null;
-                                        });
-                                      },
-                                      child: Text(
-                                        '이메일 로그인',
-                                        style: TypographyTokens.button.copyWith(
-                                          color: !_isEmailLogin ? ColorTokens.textLight.withOpacity(0.6) : ColorTokens.textLight,
-                                          decoration: !_isEmailLogin ? null : TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: SpacingTokens.md),
-                                
-                                // 이메일 로그인 폼 또는 소셜 로그인 버튼들
-                                if (_isEmailLogin) ...[
-                                  // 이메일 로그인 폼
-                                  Container(
-                                    width: 250,
-                                    child: Column(
-                                      children: [
-                                        // 이메일 입력 필드
-                                        TextField(
-                                          controller: _emailController,
-                                          keyboardType: TextInputType.emailAddress,
-                                          style: TypographyTokens.body1.copyWith(color: ColorTokens.textPrimary),
-                                          decoration: InputDecoration(
-                                            hintText: '이메일',
-                                            hintStyle: TypographyTokens.body1.copyWith(color: ColorTokens.textSecondary),
-                                            filled: true,
-                                            fillColor: ColorTokens.surface,
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-                                              borderSide: BorderSide.none,
-                                            ),
-                                            contentPadding: EdgeInsets.symmetric(
-                                              horizontal: SpacingTokens.sm,
-                                              vertical: SpacingTokens.sm,
-                                            ),
-                                          ),
-                                        ),
-                                        SizedBox(height: SpacingTokens.sm),
-                                        
-                                        // 패스워드 입력 필드
-                                        TextField(
-                                          controller: _passwordController,
-                                          obscureText: true,
-                                          style: TypographyTokens.body1.copyWith(color: ColorTokens.textPrimary),
-                                          decoration: InputDecoration(
-                                            hintText: '비밀번호',
-                                            hintStyle: TypographyTokens.body1.copyWith(color: ColorTokens.textSecondary),
-                                            filled: true,
-                                            fillColor: ColorTokens.surface,
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-                                              borderSide: BorderSide.none,
-                                            ),
-                                            contentPadding: EdgeInsets.symmetric(
-                                              horizontal: SpacingTokens.sm,
-                                              vertical: SpacingTokens.sm,
-                                            ),
-                                          ),
-                                        ),
-                                        SizedBox(height: SpacingTokens.sm),
-                                        
-                                        // 로그인/회원가입 버튼
-                                        ElevatedButton(
-                                          onPressed: _isLoading ? null : _handleEmailAuth,
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: ColorTokens.primary,
-                                            foregroundColor: ColorTokens.textLight,
-                                            minimumSize: Size(250, 48),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            _isSignUp ? '회원가입' : '로그인',
-                                            style: TypographyTokens.button.copyWith(color: ColorTokens.textLight),
-                                          ),
-                                        ),
-                                        SizedBox(height: SpacingTokens.xs),
-                                        
-                                        // 로그인/회원가입 모드 전환
-                                        TextButton(
-                                          onPressed: () {
-                                            setState(() {
-                                              _isSignUp = !_isSignUp;
-                                              _errorMessage = null;
-                                            });
-                                          },
-                                          child: Text(
-                                            _isSignUp ? '이미 계정이 있으신가요? 로그인' : '계정이 없으신가요? 회원가입',
-                                            style: TypographyTokens.body2.copyWith(
-                                              color: ColorTokens.textLight,
-                                              decoration: TextDecoration.underline,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ] else ...[
-                                  // 소셜 로그인 버튼들
-                                  // Google 로그인 버튼
-                                  _buildLoginButton(
-                                    text: 'Google로 로그인',
-                                    onPressed: _handleGoogleSignIn,
-                                    backgroundColor: ColorTokens.surface,
-                                    textColor: ColorTokens.textPrimary,
-                                    leadingIcon: Padding(
-                                      padding: EdgeInsets.only(right: SpacingTokens.sm),
-                                      child: Image.asset(
-                                        'assets/images/google.png',
-                                        width: SpacingTokens.iconSizeMedium,
-                                        height: SpacingTokens.iconSizeMedium,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Icon(Icons.g_translate, color: ColorTokens.textPrimary);
-                                        },
+                          Column(
+                            children: [
+                              // 이메일 로그인/소셜 로그인 토글 버튼
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _isEmailLogin = false;
+                                        _errorMessage = null;
+                                      });
+                                    },
+                                    child: Text(
+                                      '소셜 로그인',
+                                      style: TypographyTokens.button.copyWith(
+                                        color: _isEmailLogin ? ColorTokens.textLight.withOpacity(0.6) : ColorTokens.textLight,
+                                        decoration: _isEmailLogin ? null : TextDecoration.underline,
                                       ),
                                     ),
                                   ),
-                                  SizedBox(height: SpacingTokens.sm),
-
-                                  // Apple 로그인 버튼
-                                  _buildLoginButton(
-                                    text: 'Apple로 로그인',
-                                    onPressed: _handleAppleSignIn,
-                                    backgroundColor: ColorTokens.surface,
-                                    textColor: ColorTokens.black,
-                                    leadingIcon: Padding(
-                                      padding: EdgeInsets.only(right: SpacingTokens.sm, bottom: SpacingTokens.xs),
-                                      child: Image.asset(
-                                        'assets/images/apple.png',
-                                        width: SpacingTokens.iconSizeMedium,
-                                        height: SpacingTokens.iconSizeMedium,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Icon(Icons.apple, color: ColorTokens.black);
-                                        },
+                                  SizedBox(width: SpacingTokens.md),
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _isEmailLogin = true;
+                                        _errorMessage = null;
+                                      });
+                                    },
+                                    child: Text(
+                                      '이메일 로그인',
+                                      style: TypographyTokens.button.copyWith(
+                                        color: !_isEmailLogin ? ColorTokens.textLight.withOpacity(0.6) : ColorTokens.textLight,
+                                        decoration: !_isEmailLogin ? null : TextDecoration.underline,
                                       ),
                                     ),
                                   ),
                                 ],
-                                
-                                SizedBox(height: SpacingTokens.md),
-                                
-                                // 로그인 없이 둘러보기 버튼 추가
-                                TextButton(
-                                  onPressed: _isLoading ? null : _handleSkipLogin,
-                                  child: Text(
-                                    '로그인 없이 둘러보기',
-                                    style: TypographyTokens.button.copyWith(
-                                      color: ColorTokens.textLight,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                ),
-                                
-                                SizedBox(height: SpacingTokens.sm),
-                                // 로그인 안내 메시지 추가
-                                RichText(
-                                  textAlign: TextAlign.center,
-                                  text: TextSpan(
-                                    style: TypographyTokens.body2.copyWith(
-                                      color: ColorTokens.textLight,
-                                    ),
+                              ),
+                              SizedBox(height: SpacingTokens.md),
+                              
+                              // 이메일 로그인 폼 또는 소셜 로그인 버튼들
+                              if (_isEmailLogin) ...[
+                                // 이메일 로그인 폼
+                                Container(
+                                  width: 250,
+                                  child: Column(
                                     children: [
-                                      TextSpan(text: '로그인 시 '),
-                                      TextSpan(
-                                        text: '개인정보 처리방침',
-                                        style: TypographyTokens.body2.copyWith(
-                                          color: ColorTokens.textLight,
-                                          decoration: TextDecoration.underline,
+                                      // 이메일 입력 필드
+                                      TextField(
+                                        controller: _emailController,
+                                        keyboardType: TextInputType.emailAddress,
+                                        style: TypographyTokens.body1.copyWith(color: ColorTokens.textPrimary),
+                                        decoration: InputDecoration(
+                                          hintText: '이메일',
+                                          hintStyle: TypographyTokens.body1.copyWith(color: ColorTokens.textSecondary),
+                                          filled: true,
+                                          fillColor: ColorTokens.surface,
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          contentPadding: EdgeInsets.symmetric(
+                                            horizontal: SpacingTokens.sm,
+                                            vertical: SpacingTokens.sm,
+                                          ),
                                         ),
-                                        recognizer: TapGestureRecognizer()
-                                          ..onTap = () {
-                                            if (kDebugMode) {
-                                              print('개인정보처리방침 링크 클릭됨');
-                                            }
-                                            launchUrl(
-                                              Uri.parse('https://www.pikabook.co/privacy.html'),
-                                              mode: LaunchMode.externalApplication,
-                                            );
-                                          },
                                       ),
-                                      TextSpan(text: '과'),
-                                      TextSpan(
-                                        text: ' 이용약관',
-                                        style: TypographyTokens.body2.copyWith(
-                                          color: ColorTokens.textLight,
-                                          decoration: TextDecoration.underline,
+                                      SizedBox(height: SpacingTokens.sm),
+                                      
+                                      // 패스워드 입력 필드
+                                      TextField(
+                                        controller: _passwordController,
+                                        obscureText: true,
+                                        style: TypographyTokens.body1.copyWith(color: ColorTokens.textPrimary),
+                                        decoration: InputDecoration(
+                                          hintText: '비밀번호',
+                                          hintStyle: TypographyTokens.body1.copyWith(color: ColorTokens.textSecondary),
+                                          filled: true,
+                                          fillColor: ColorTokens.surface,
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          contentPadding: EdgeInsets.symmetric(
+                                            horizontal: SpacingTokens.sm,
+                                            vertical: SpacingTokens.sm,
+                                          ),
                                         ),
-                                        recognizer: TapGestureRecognizer()
-                                          ..onTap = () {
-                                            if (kDebugMode) {
-                                              print('이용약관 링크 클릭됨');
-                                            }
-                                            launchUrl(
-                                              Uri.parse('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'),
-                                              mode: LaunchMode.externalApplication,
-                                            );
-                                          },
                                       ),
-                                      TextSpan(text: '에 동의합니다.'),
+                                      SizedBox(height: SpacingTokens.sm),
+                                      
+                                      // 로그인/회원가입 버튼
+                                      ElevatedButton(
+                                        onPressed: _isLoading ? null : _handleEmailAuth,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: ColorTokens.primary,
+                                          foregroundColor: ColorTokens.textLight,
+                                          minimumSize: Size(250, 48),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          _isSignUp ? '회원가입' : '로그인',
+                                          style: TypographyTokens.button.copyWith(color: ColorTokens.textLight),
+                                        ),
+                                      ),
+                                      SizedBox(height: SpacingTokens.xs),
+                                      
+                                      // 로그인/회원가입 모드 전환
+                                      TextButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            _isSignUp = !_isSignUp;
+                                            _errorMessage = null;
+                                          });
+                                        },
+                                        child: Text(
+                                          _isSignUp ? '이미 계정이 있으신가요? 로그인' : '계정이 없으신가요? 회원가입',
+                                          style: TypographyTokens.body2.copyWith(
+                                            color: ColorTokens.textLight,
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
+                              ] else ...[
+                                // 소셜 로그인 버튼들
+                                // Google 로그인 버튼
+                                _buildLoginButton(
+                                  text: 'Google로 로그인',
+                                  onPressed: _handleGoogleSignIn,
+                                  backgroundColor: ColorTokens.surface,
+                                  textColor: ColorTokens.textPrimary,
+                                  leadingIcon: Padding(
+                                    padding: EdgeInsets.only(right: SpacingTokens.sm),
+                                    child: Image.asset(
+                                      'assets/images/google.png',
+                                      width: SpacingTokens.iconSizeMedium,
+                                      height: SpacingTokens.iconSizeMedium,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Icon(Icons.g_translate, color: ColorTokens.textPrimary);
+                                      },
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: SpacingTokens.sm),
+
+                                // Apple 로그인 버튼
+                                _buildLoginButton(
+                                  text: 'Apple로 로그인',
+                                  onPressed: _handleAppleSignIn,
+                                  backgroundColor: ColorTokens.surface,
+                                  textColor: ColorTokens.black,
+                                  leadingIcon: Padding(
+                                    padding: EdgeInsets.only(right: SpacingTokens.sm, bottom: SpacingTokens.xs),
+                                    child: Image.asset(
+                                      'assets/images/apple.png',
+                                      width: SpacingTokens.iconSizeMedium,
+                                      height: SpacingTokens.iconSizeMedium,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Icon(Icons.apple, color: ColorTokens.black);
+                                      },
+                                    ),
+                                  ),
+                                ),
                               ],
-                            ),
+                              
+                              SizedBox(height: SpacingTokens.md),
+                              
+                              // 로그인 없이 둘러보기 버튼 추가
+                              TextButton(
+                                onPressed: _isLoading ? null : _handleSkipLogin,
+                                child: Text(
+                                  '로그인 없이 둘러보기',
+                                  style: TypographyTokens.button.copyWith(
+                                    color: ColorTokens.textLight,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ),
+                              
+                              SizedBox(height: SpacingTokens.sm),
+                              // 로그인 안내 메시지 추가
+                              RichText(
+                                textAlign: TextAlign.center,
+                                text: TextSpan(
+                                  style: TypographyTokens.body2.copyWith(
+                                    color: ColorTokens.textLight,
+                                  ),
+                                  children: [
+                                    TextSpan(text: '로그인 시 '),
+                                    TextSpan(
+                                      text: '개인정보 처리방침',
+                                      style: TypographyTokens.body2.copyWith(
+                                        color: ColorTokens.textLight,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () {
+                                          if (kDebugMode) {
+                                            print('개인정보처리방침 링크 클릭됨');
+                                          }
+                                          launchUrl(
+                                            Uri.parse('https://www.pikabook.co/privacy.html'),
+                                            mode: LaunchMode.externalApplication,
+                                          );
+                                        },
+                                    ),
+                                    TextSpan(text: '과'),
+                                    TextSpan(
+                                      text: ' 이용약관',
+                                      style: TypographyTokens.body2.copyWith(
+                                        color: ColorTokens.textLight,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () {
+                                          if (kDebugMode) {
+                                            print('이용약관 링크 클릭됨');
+                                          }
+                                          launchUrl(
+                                            Uri.parse('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/'),
+                                            mode: LaunchMode.externalApplication,
+                                          );
+                                        },
+                                    ),
+                                    TextSpan(text: '에 동의합니다.'),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                           SizedBox(height: SpacingTokens.xl + SpacingTokens.sm),
                         ],

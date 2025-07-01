@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/common/plan_service.dart';
-import '../../core/services/subscription/subscription_status_service.dart';
+import '../../core/services/subscription/app_store_subscription_service.dart';
 import '../../core/models/plan.dart';
 import '../../core/utils/language_constants.dart';
 import '../../core/services/text_processing/text_processing_service.dart';
@@ -36,14 +36,14 @@ class SettingsViewModel extends ChangeNotifier {
   String get targetLanguage => _targetLanguage;
   bool get useSegmentMode => _useSegmentMode;
 
-  // 플랜 정보
+  // 플랜 정보 (App Store 기반)
   String? _planType;
   String? _planName;
   int _remainingDays = 0;
   Map<String, int> _planLimits = {};
   bool _isPlanLoaded = false;
 
-  String get planType => _planType ?? PlanService.PLAN_FREE;
+  String get planType => _planType ?? 'free';
   String get planName => _planName ?? '로딩 중...';
   int get remainingDays => _remainingDays;
   Map<String, int> get planLimits => _planLimits;
@@ -99,57 +99,73 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
-  /// 플랜 정보 로드 (SubscriptionStatusService 사용)
+  /// 플랜 정보 로드 (App Store 기반)
   Future<void> loadPlanInfo() async {
     _setLoading(true);
     try {
       if (kDebugMode) {
-        print('🔍 [Settings] 플랜 정보 로드 시작 (SubscriptionStatusService)');
+        print('🔍 [Settings] App Store 기반 플랜 정보 로드 시작');
       }
       
-      // 1. 통합 구독 상태 조회
-      final subscriptionState = await SubscriptionStatusService.fetchStatus(forceRefresh: true);
+      // App Store에서 직접 구독 상태 조회
+      final appStoreService = AppStoreSubscriptionService();
+      final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: true);
       
-      // 2. PlanService로 상세 정보 가져오기 (강제 새로고침)
-      final plan = await _planService.getCurrentPlan();
-      
-      if (kDebugMode) {
-        print('   구독 상태: $subscriptionState');
-        print('   Plan 객체: $plan');
-        print('   플랜 타입: ${plan.type}');
-        print('   플랜 이름: ${plan.name}');
-        print('   무료 체험 중: ${plan.isFreeTrial}');
-        print('   남은 일수: ${plan.daysRemaining}');
+              if (kDebugMode) {
+          print('   구독 상태: $appStoreStatus');
+          print('   상태 메시지: ${appStoreStatus.displayName}');
+          print('   프리미엄 여부: ${appStoreStatus.isPremium}');
+          print('   체험 여부: ${appStoreStatus.isTrial}');
+        }
+        
+        // UI에 표시할 정보 설정
+        if (appStoreStatus.isPremium) {
+          _planType = 'premium';
+        } else if (appStoreStatus.isTrial) {
+          _planType = 'premium'; // 체험도 프리미엄으로 분류
+        } else {
+          _planType = 'free';
+        }
+        
+        _planName = appStoreStatus.displayName;
+        _remainingDays = 0; // App Store에서 자동 관리
+        
+        // 플랜별 제한 설정 (간단화)
+        if (appStoreStatus.isPremium || appStoreStatus.isTrial) {
+        _planLimits = {
+          'ocrPages': 300,
+          'ttsRequests': 1000,
+        };
+      } else {
+        _planLimits = {
+          'ocrPages': 10,
+          'ttsRequests': 30,
+        };
       }
       
-      // UI에 표시할 플랜 이름 결정
-      String displayName = subscriptionState.statusMessage;
-      
-      _planType = plan.type;
-      _planName = displayName;
-      _remainingDays = plan.daysRemaining;
-      _planLimits = plan.limits;
       _isPlanLoaded = true;
-      
       notifyListeners();
       
       if (kDebugMode) {
-        print('✅ [Settings] 플랜 정보 로드 완료');
+        print('✅ [Settings] App Store 기반 플랜 정보 로드 완료');
         print('   UI 표시명: $_planName');
         print('   플랜 타입: $_planType');
         print('   제한: $_planLimits');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('❌ [Settings] 플랜 정보 로드 오류: $e');
+        print('❌ [Settings] App Store 기반 플랜 정보 로드 오류: $e');
       }
       
       // 에러 발생 시 기본값 설정
-      _planType = PlanService.PLAN_FREE;
-      _planName = '플랜 정보 로드 실패';
+      _planType = 'free';
+      _planName = 'App Store 연결 실패';
       _remainingDays = 0;
-      _planLimits = {};
-      _isPlanLoaded = true; // 에러 상태도 로드 완료로 처리
+      _planLimits = {
+        'ocrPages': 10,
+        'ttsRequests': 30,
+      };
+      _isPlanLoaded = true;
       
       notifyListeners();
     } finally {
