@@ -7,6 +7,7 @@ import 'dart:async';
 import '../../models/plan.dart';
 import '../authentication/deleted_user_service.dart';
 import '../cache/event_cache_manager.dart';
+import '../subscription/app_store_subscription_service.dart';
 
 /// 구독 플랜과 사용량 관리를 위한 서비스
 class PlanService {
@@ -45,6 +46,9 @@ class PlanService {
   // 이벤트 기반 캐시 매니저
   final EventCacheManager _eventCache = EventCacheManager();
   
+  // App Store 구독 서비스
+  final AppStoreSubscriptionService _appStoreService = AppStoreSubscriptionService();
+  
   // 🎯 실시간 플랜 변경 스트림 추가
   final StreamController<Map<String, dynamic>> _planChangeController = 
       StreamController<Map<String, dynamic>>.broadcast();
@@ -74,7 +78,7 @@ class PlanService {
   // 현재 사용자 ID 가져오기
   String? get _currentUserId => _auth.currentUser?.uid;
   
-  /// 현재 사용자의 플랜 타입 가져오기 (이벤트 기반 캐시)
+  /// 현재 사용자의 플랜 타입 가져오기 (실제 App Store 기반)
   Future<String> getCurrentPlanType({bool forceRefresh = false}) async {
     try {
       final userId = _currentUserId;
@@ -97,38 +101,32 @@ class PlanService {
         }
       }
       
-      // 직접 Firestore에서 플랜 정보 조회 (캐시 없이)
-      final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
-      if (!userDoc.exists) return PLAN_FREE;
+      // 🎯 실제 App Store에서 구독 상태 확인
+      final subscriptionStatus = await _appStoreService.getCurrentSubscriptionStatus(
+        forceRefresh: forceRefresh
+      );
       
-      final data = userDoc.data() as Map<String, dynamic>;
-      final subscriptionData = data['subscription'] as Map<String, dynamic>?;
-      
-      if (subscriptionData == null) return PLAN_FREE;
-      
-      final plan = subscriptionData['plan'] as String? ?? PLAN_FREE;
-      final expiryDate = subscriptionData['expiryDate'] as Timestamp?;
-      
-      // 만료 확인
-      if (expiryDate != null) {
-        final expiry = expiryDate.toDate();
-        final now = DateTime.now();
-        
-        if (expiry.isAfter(now)) {
-          return plan; // 만료되지 않았으면 원래 플랜
-        } else {
-          return PLAN_FREE; // 만료되었으면 무료 플랜
-        }
+      String planType;
+      if (subscriptionStatus.isPremium) {
+        planType = PLAN_PREMIUM;
+      } else {
+        planType = PLAN_FREE;
       }
       
-      return plan;
+      if (kDebugMode) {
+        debugPrint('🍎 [PlanService] App Store 구독 상태: ${subscriptionStatus.displayName}');
+        debugPrint('   플랜 타입: $planType');
+      }
       
-              // 이벤트 캐시에 저장
-        _eventCache.setCache(cacheKey, plan);
-        
-        return plan;
+      // 이벤트 캐시에 저장
+      _eventCache.setCache(cacheKey, planType);
+      
+      return planType;
+      
     } catch (e) {
-      debugPrint('플랜 정보 조회 오류: $e');
+      if (kDebugMode) {
+        debugPrint('❌ [PlanService] 플랜 정보 조회 오류: $e');
+      }
       return PLAN_FREE;
     }
   }
@@ -446,7 +444,7 @@ class PlanService {
     }
   }
   
-  /// 구독 상세 정보 조회 (이벤트 기반 캐시)
+  /// 구독 상세 정보 조회 (실제 App Store 기반)
   Future<Map<String, dynamic>> getSubscriptionDetails({bool forceRefresh = false}) async {
     final userId = _currentUserId;
     
@@ -482,110 +480,68 @@ class PlanService {
         };
       }
 
+      // 🎯 실제 App Store에서 구독 상태 확인
+      final subscriptionStatus = await _appStoreService.getCurrentSubscriptionStatus(
+        forceRefresh: forceRefresh
+      );
+      
+      // 🎯 Firestore에서 사용자 이력 정보만 가져오기 (hasUsedFreeTrial, hasEverUsedPremium 등)
       final userDoc = await _firestore
           .collection('users')
           .doc(userId)
           .get();
-
-      if (!userDoc.exists) {
-        return {
-          'currentPlan': PLAN_FREE,
-          'hasUsedFreeTrial': false,
-          'hasEverUsedTrial': false,
-          'hasEverUsedPremium': false,
-          'isFreeTrial': false,
-          'daysRemaining': 0,
-          'expiryDate': null,
-          'subscriptionType': null,
-        };
-      }
-
-      final data = userDoc.data() as Map<String, dynamic>;
-      final subscriptionData = data['subscription'] as Map<String, dynamic>?;
       
-      // hasUsedFreeTrial은 사용자 문서의 루트 레벨에서 가져오기
-      final hasUsedFreeTrial = data['hasUsedFreeTrial'] as bool? ?? false;
-      // 🎯 새로운 필드: hasEverUsedTrial도 가져오기
-      final hasEverUsedTrial = data['hasEverUsedTrial'] as bool? ?? false;
-      // 🎯 프리미엄 사용 이력도 가져오기
-      final hasEverUsedPremium = data['hasEverUsedPremium'] as bool? ?? false;
-
-      if (subscriptionData == null) {
-        return {
-          'currentPlan': PLAN_FREE,
-          'hasUsedFreeTrial': hasUsedFreeTrial,
-          'hasEverUsedTrial': hasEverUsedTrial,
-          'hasEverUsedPremium': hasEverUsedPremium,
-          'isFreeTrial': false,
-          'daysRemaining': 0,
-          'expiryDate': null,
-          'subscriptionType': null,
-        };
+      bool hasUsedFreeTrial = false;
+      bool hasEverUsedTrial = false;
+      bool hasEverUsedPremium = false;
+      
+      if (userDoc.exists) {
+        final data = userDoc.data() as Map<String, dynamic>;
+        hasUsedFreeTrial = data['hasUsedFreeTrial'] as bool? ?? false;
+        hasEverUsedTrial = data['hasEverUsedTrial'] as bool? ?? false;
+        hasEverUsedPremium = data['hasEverUsedPremium'] as bool? ?? false;
       }
+      
+      // 🎯 App Store 구독 상태에서 로컬 이력 정보 확인
+      final appStoreHasUsedTrial = await _appStoreService.hasUsedFreeTrial();
+      
+      // 로컬과 Firestore 이력 정보 통합
+      hasUsedFreeTrial = hasUsedFreeTrial || appStoreHasUsedTrial;
+      hasEverUsedTrial = hasEverUsedTrial || subscriptionStatus.isTrial || appStoreHasUsedTrial;
+      hasEverUsedPremium = hasEverUsedPremium || subscriptionStatus.isPremium;
 
-      final plan = subscriptionData['plan'] as String? ?? PLAN_FREE;
-      final status = subscriptionData['status'] as String?;
-      final isFreeTrial = subscriptionData['isFreeTrial'] as bool? ?? false;
-      final expiryDate = subscriptionData['expiryDate'] as Timestamp?;
-      final subscriptionType = subscriptionData['subscriptionType'] as String?; // yearly/monthly
-
+      String currentPlan = subscriptionStatus.isPremium ? PLAN_PREMIUM : PLAN_FREE;
+      bool isFreeTrial = subscriptionStatus.isTrial;
+      String? subscriptionType = subscriptionStatus.subscriptionType.isNotEmpty 
+          ? subscriptionStatus.subscriptionType 
+          : null;
+      
+      // 🎯 App Store에서는 정확한 만료일을 제공하지 않으므로 임시 처리
+      // 실제로는 App Store Receipt Validation을 통해 정확한 만료일을 가져와야 함
       int daysRemaining = 0;
-      String currentPlan = PLAN_FREE;
-
-      if (expiryDate != null) {
-        final expiry = expiryDate.toDate();
-        final now = DateTime.now();
-        
-        if (expiry.isAfter(now)) {
-          // 🧪 테스트: 3분 체험의 경우 분 단위로 계산하되, 최소 1일로 표시
-          final minutesRemaining = expiry.difference(now).inMinutes;
-          if (minutesRemaining > 0 && minutesRemaining < 60) {
-            daysRemaining = 1; // 1시간 미만이면 1일로 표시 (테스트용)
-          } else {
-            daysRemaining = expiry.difference(now).inDays;
-            if (daysRemaining == 0 && expiry.isAfter(now)) {
-              daysRemaining = 1; // 당일 내에 만료되는 경우도 1일로 표시
-            }
-          }
-          currentPlan = plan; // 만료되지 않았으면 원래 플랜
+      DateTime? expiryDate;
+      
+      if (subscriptionStatus.isPremium) {
+        // 임시: 활성 구독의 경우 30일 또는 365일로 가정
+        if (subscriptionStatus.subscriptionType == 'yearly') {
+          daysRemaining = 365;
+          expiryDate = DateTime.now().add(const Duration(days: 365));
         } else {
-          currentPlan = PLAN_FREE; // 만료되었으면 무료 플랜
+          daysRemaining = 30;
+          expiryDate = DateTime.now().add(const Duration(days: 30));
         }
       }
-
+      
       if (kDebugMode) {
-        print('🔍 구독 상세 정보 조회 결과:');
-        print('   사용자 ID: $userId');
-        print('   현재 플랜: $currentPlan');
-        print('   무료 체험 사용 여부: $hasUsedFreeTrial');
-        print('   현재 무료 체험 중: $isFreeTrial');
-        print('   남은 일수: $daysRemaining');
-        if (expiryDate != null) {
-          final minutesRemaining = expiryDate.toDate().difference(DateTime.now()).inMinutes;
-          print('   남은 분수: $minutesRemaining분');
-        }
-        print('   만료일: ${expiryDate?.toDate()}');
-        print('   상태: $status');
-        print('   구독 유형: $subscriptionType');
-        
-        // 🔍 Firestore 원본 데이터 디버깅
-        print('🔍 [DEBUG] Firestore 원본 데이터:');
-        print('   전체 사용자 데이터: $data');
-        print('   구독 데이터: $subscriptionData');
-        print('   구독 데이터의 isFreeTrial: ${subscriptionData?['isFreeTrial']}');
-        print('   구독 데이터의 status: ${subscriptionData?['status']}');
-        print('   구독 데이터의 plan: ${subscriptionData?['plan']}');
-        
-        // 만료 날짜 상세 분석
-        if (expiryDate != null) {
-          final now = DateTime.now();
-          final expiry = expiryDate.toDate();
-          print('🔍 [DEBUG] 만료 날짜 분석:');
-          print('   현재 시간: $now');
-          print('   만료 시간: $expiry');
-          print('   만료 여부: ${expiry.isBefore(now) ? "만료됨" : "유효함"}');
-          print('   시간 차이: ${expiry.difference(now).inMinutes}분');
-        }
+        debugPrint('🍎 [PlanService] App Store 기반 구독 상세 정보:');
+        debugPrint('   사용자 ID: $userId');
+        debugPrint('   현재 플랜: $currentPlan');
+        debugPrint('   구독 상태: ${subscriptionStatus.displayName}');
+        debugPrint('   무료 체험 사용 여부: $hasUsedFreeTrial');
+        debugPrint('   현재 무료 체험 중: $isFreeTrial');
+        debugPrint('   프리미엄 사용 이력: $hasEverUsedPremium');
+        debugPrint('   구독 유형: $subscriptionType');
+        debugPrint('   남은 일수: $daysRemaining (추정값)');
       }
 
       final result = {
@@ -595,8 +551,7 @@ class PlanService {
         'hasEverUsedPremium': hasEverUsedPremium,
         'isFreeTrial': isFreeTrial,
         'daysRemaining': daysRemaining,
-        'expiryDate': expiryDate?.toDate(),
-        'status': status,
+        'expiryDate': expiryDate,
         'subscriptionType': subscriptionType,
       };
       
@@ -607,7 +562,9 @@ class PlanService {
       
       return result;
     } catch (e) {
-      debugPrint('구독 상세 정보 조회 중 오류: $e');
+      if (kDebugMode) {
+        debugPrint('❌ [PlanService] 구독 상세 정보 조회 중 오류: $e');
+      }
       return {
         'currentPlan': PLAN_FREE,
         'hasUsedFreeTrial': false,

@@ -42,6 +42,10 @@ dependencies:
   cloud_firestore: ^5.6.6       # 5.6.3 → 5.6.7 (존재하는 버전)
   firebase_storage: ^12.4.5        # 12.4.2 → 12.4.5
   cloud_functions: ^5.2.6          # Cloud Functions support
+  firebase_crashlytics: ^3.4.9
+  firebase_analytics: ^10.7.4
+  firebase_messaging: ^14.7.10
+  firebase_remote_config: ^4.3.17
 
   # 소셜 로그인 패키지
   google_sign_in: ^6.2.1
@@ -90,6 +94,14 @@ dependencies:
   # Local Notifications
   flutter_local_notifications: ^19.2.1
   flutter_timezone: ^4.1.1
+
+  # New dependencies
+  share_plus: ^7.2.1
+  device_info_plus: ^9.1.1
+  package_info_plus: ^4.2.0
+  flutter_cache_manager: ^3.3.1
+  connectivity_plus: ^5.0.2
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:

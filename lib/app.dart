@@ -12,6 +12,7 @@ import 'views/screens/onboarding_screen.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
 import 'core/services/payment/in_app_purchase_service.dart';
+import 'core/services/subscription/app_store_subscription_service.dart';
 import 'views/screens/loading_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';
@@ -57,6 +58,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   String? _error;
   final PlanService _planService = PlanService();
   final InAppPurchaseService _purchaseService = InAppPurchaseService();
+  final AppStoreSubscriptionService _appStoreService = AppStoreSubscriptionService();
 
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   
@@ -96,6 +98,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (_purchaseService.isAvailable) {
       _purchaseService.dispose();
     }
+    
+    // AppStoreSubscriptionService dispose
+    _appStoreService.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -141,6 +146,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       
       // 인증 상태 관찰 설정 (비동기)
       _setupAuthStateListener();
+      
+      // App Store 구독 서비스 초기화 (비동기)
+      _appStoreService.initialize();
       
       // 초기화 상태 즉시 업데이트
       if (mounted) {
