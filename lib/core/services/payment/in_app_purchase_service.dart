@@ -7,6 +7,7 @@ import '../notification/notification_service.dart';
 import '../trial/trial_manager.dart';
 import '../authentication/deleted_user_service.dart';
 import '../cache/event_cache_manager.dart';
+import '../subscription/app_store_subscription_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -407,11 +408,37 @@ class InAppPurchaseService {
     }
   }
 
-  /// 구매 영수증 검증 (간단한 클라이언트 검증)
+  /// 구매 영수증 검증 (Firebase Functions를 통한 검증)
   Future<bool> _verifyPurchase(PurchaseDetails purchaseDetails) async {
-    // 실제 프로덕션에서는 서버에서 Apple/Google 서버와 통신하여 검증해야 함
-    // 여기서는 간단한 클라이언트 검증만 수행
-    return purchaseDetails.verificationData.localVerificationData.isNotEmpty;
+    try {
+      if (kDebugMode) {
+        print('🔍 [InAppPurchase] 구매 영수증 검증 시작');
+      }
+
+      // AppStoreSubscriptionService를 통해 Firebase Functions 검증
+      final appStoreService = AppStoreSubscriptionService();
+      
+      // 구매 완료 알림을 Firebase Functions로 전송 (서버에서 검증 수행)
+      final success = await appStoreService.notifyPurchaseComplete(
+        purchaseDetails.productID,
+        purchaseDetails.purchaseID ?? '',
+      );
+
+      if (kDebugMode) {
+        if (success) {
+          print('✅ [InAppPurchase] 구매 영수증 검증 성공');
+        } else {
+          print('❌ [InAppPurchase] 구매 영수증 검증 실패');
+        }
+      }
+
+      return success;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ [InAppPurchase] 구매 영수증 검증 중 오류: $e');
+      }
+      return false;
+    }
   }
 
 

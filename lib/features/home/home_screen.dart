@@ -109,14 +109,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _loadSubscriptionStatus({bool forceRefresh = false}) async {
     try {
       if (kDebugMode) {
-        debugPrint('[HomeScreen] 🎯 App Store 기반 구독 상태 조회 시작 (forceRefresh: $forceRefresh)');
+        debugPrint('[HomeScreen] 🎯 Firebase Functions 기반 구독 상태 조회 시작 (forceRefresh: $forceRefresh)');
       }
       
-      // 🆕 App Store에서 직접 구독 상태 조회
+      // 🆕 Firebase Functions에서 직접 구독 상태 조회
       final appStoreService = AppStoreSubscriptionService();
       final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: forceRefresh);
       
-      // App Store 상태를 SubscriptionState로 변환
+      // Firebase Functions 상태를 SubscriptionState로 변환
       final subscriptionState = await _convertToSubscriptionState(appStoreStatus);
       
       // 🔄 결과 받아서 UI 업데이트 (mounted 체크로 메모리 누수 방지)
@@ -127,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       
       if (kDebugMode) {
-        debugPrint('[HomeScreen] ✅ App Store 기반 구독 상태 로드 완료: $_subscriptionState');
+        debugPrint('[HomeScreen] ✅ Firebase Functions 기반 구독 상태 로드 완료: $_subscriptionState');
       }
     } catch (e) {
       if (kDebugMode) {

@@ -152,10 +152,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       
       // 초기화 상태 즉시 업데이트
       if (mounted) {
-        setState(() {
-          _isInitialized = true;
+      setState(() {
+        _isInitialized = true;
           _isLoading = false; // 즉시 로딩 해제
-        });
+      });
       }
       
       if (kDebugMode) {
@@ -465,7 +465,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
     // MaterialApp 제거, LoadingScreen 직접 반환
     return const LoadingScreen();
-  }
+    }
     
   // 샘플 모드 화면 빌드
   Widget _buildSampleModeScreen() {

@@ -113,20 +113,20 @@ class UnifiedBanner extends StatelessWidget {
                         minHeight: 32,
                         maxHeight: 32,
                       ),
-                      child: PikaButton(
-                        text: mainButtonText!,
-                        variant: PikaButtonVariant.primary,
-                        size: PikaButtonSize.xs,
-                        padding: EdgeInsets.symmetric(
+                  child: PikaButton(
+                    text: mainButtonText!,
+                    variant: PikaButtonVariant.primary,
+                    size: PikaButtonSize.xs,
+                    padding: EdgeInsets.symmetric(
                           horizontal: SpacingTokens.xs - 1,
-                          vertical: SpacingTokens.xs - 1,
-                        ),
-                        onPressed: onMainButtonPressed,
-                      ),
+                      vertical: SpacingTokens.xs - 1,
+                    ),
+                    onPressed: onMainButtonPressed,
+                  ),
                     );
                   },
                 ),
-            
+                
                 SizedBox(height: SpacingTokens.xs),
                 
                 // 닫기 버튼 (텍스트 버튼)

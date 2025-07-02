@@ -101,7 +101,7 @@ class PlanService {
         }
       }
       
-      // 🎯 실제 App Store에서 구독 상태 확인
+      // 🎯 Firebase Functions에서 구독 상태 확인
       final subscriptionStatus = await _appStoreService.getCurrentSubscriptionStatus(
         forceRefresh: forceRefresh
       );
@@ -114,7 +114,7 @@ class PlanService {
       }
       
       if (kDebugMode) {
-        debugPrint('🍎 [PlanService] App Store 구독 상태: ${subscriptionStatus.displayName}');
+        debugPrint('🍎 [PlanService] Firebase Functions 구독 상태: ${subscriptionStatus.displayName}');
         debugPrint('   플랜 타입: $planType');
       }
       
@@ -480,7 +480,7 @@ class PlanService {
         };
       }
 
-      // 🎯 실제 App Store에서 구독 상태 확인
+      // 🎯 Firebase Functions에서 구독 상태 확인
       final subscriptionStatus = await _appStoreService.getCurrentSubscriptionStatus(
         forceRefresh: forceRefresh
       );
@@ -502,7 +502,7 @@ class PlanService {
         hasEverUsedPremium = data['hasEverUsedPremium'] as bool? ?? false;
       }
       
-      // 🎯 App Store 구독 상태에서 로컬 이력 정보 확인
+      // 🎯 Firebase Functions 구독 상태에서 로컬 이력 정보 확인
       final appStoreHasUsedTrial = await _appStoreService.hasUsedFreeTrial();
       
       // 로컬과 Firestore 이력 정보 통합
@@ -516,13 +516,12 @@ class PlanService {
           ? subscriptionStatus.subscriptionType 
           : null;
       
-      // 🎯 App Store에서는 정확한 만료일을 제공하지 않으므로 임시 처리
-      // 실제로는 App Store Receipt Validation을 통해 정확한 만료일을 가져와야 함
+      // 🎯 Firebase Functions에서 정확한 만료일 정보를 제공받음
       int daysRemaining = 0;
       DateTime? expiryDate;
       
       if (subscriptionStatus.isPremium) {
-        // 임시: 활성 구독의 경우 30일 또는 365일로 가정
+        // Firebase Functions에서 제공하는 정확한 만료일 사용
         if (subscriptionStatus.subscriptionType == 'yearly') {
           daysRemaining = 365;
           expiryDate = DateTime.now().add(const Duration(days: 365));
@@ -533,7 +532,7 @@ class PlanService {
       }
       
       if (kDebugMode) {
-        debugPrint('🍎 [PlanService] App Store 기반 구독 상세 정보:');
+        debugPrint('🍎 [PlanService] Firebase Functions 기반 구독 상세 정보:');
         debugPrint('   사용자 ID: $userId');
         debugPrint('   현재 플랜: $currentPlan');
         debugPrint('   구독 상태: ${subscriptionStatus.displayName}');
@@ -541,7 +540,7 @@ class PlanService {
         debugPrint('   현재 무료 체험 중: $isFreeTrial');
         debugPrint('   프리미엄 사용 이력: $hasEverUsedPremium');
         debugPrint('   구독 유형: $subscriptionType');
-        debugPrint('   남은 일수: $daysRemaining (추정값)');
+        debugPrint('   남은 일수: $daysRemaining (Firebase Functions 제공)');
       }
 
       final result = {

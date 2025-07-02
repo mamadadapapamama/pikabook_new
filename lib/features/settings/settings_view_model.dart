@@ -111,13 +111,13 @@ class SettingsViewModel extends ChangeNotifier {
       final appStoreService = AppStoreSubscriptionService();
       final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: true);
       
-              if (kDebugMode) {
+      if (kDebugMode) {
           print('   구독 상태: $appStoreStatus');
           print('   상태 메시지: ${appStoreStatus.displayName}');
           print('   프리미엄 여부: ${appStoreStatus.isPremium}');
           print('   체험 여부: ${appStoreStatus.isTrial}');
-        }
-        
+      }
+      
         // UI에 표시할 정보 설정
         if (appStoreStatus.isPremium) {
           _planType = 'premium';
