@@ -101,20 +101,20 @@ class PlanService {
         }
       }
       
-      // 🎯 Firebase Functions에서 구독 상태 확인
-      final subscriptionStatus = await _appStoreService.getCurrentSubscriptionStatus(
-        forceRefresh: forceRefresh
-      );
+      // 🎯 Firebase Functions에서 구독 상태 확인 (새로운 API 사용)
+      final subscriptionStatus = await _appStoreService.checkSubscriptionStatus(forceRefresh: forceRefresh);
       
       String planType;
-      if (subscriptionStatus.isPremium) {
+      if (subscriptionStatus.canUsePremiumFeatures) {
         planType = PLAN_PREMIUM;
       } else {
         planType = PLAN_FREE;
       }
       
       if (kDebugMode) {
-        debugPrint('🍎 [PlanService] Firebase Functions 구독 상태: ${subscriptionStatus.displayName}');
+        debugPrint('🍎 [PlanService] Firebase Functions 구독 상태: ${subscriptionStatus.planType}');
+        debugPrint('   활성 상태: ${subscriptionStatus.isActive}');
+        debugPrint('   만료일: ${subscriptionStatus.expirationDate}');
         debugPrint('   플랜 타입: $planType');
       }
       

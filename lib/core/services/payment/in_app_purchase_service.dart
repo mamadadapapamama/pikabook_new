@@ -3,13 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../common/plan_service.dart';
-import '../notification/notification_service.dart';
-import '../trial/trial_manager.dart';
-import '../authentication/deleted_user_service.dart';
-import '../cache/event_cache_manager.dart';
 import '../subscription/app_store_subscription_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// In-App Purchase 관리 서비스
 class InAppPurchaseService {
@@ -19,8 +14,6 @@ class InAppPurchaseService {
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   final PlanService _planService = PlanService();
-  final NotificationService _notificationService = NotificationService();
-  final EventCacheManager _eventCache = EventCacheManager();
   
   late StreamSubscription<List<PurchaseDetails>> _subscription;
   bool _isAvailable = false;
@@ -237,207 +230,57 @@ class InAppPurchaseService {
         return;
       }
 
-      // 구매 영수증 검증 (서버에서 처리하는 것이 권장됨)
-      if (!await _verifyPurchase(purchaseDetails)) {
-        if (kDebugMode) {
-          print('❌ 구매 영수증 검증 실패');
-        }
-        return;
+      if (kDebugMode) {
+        print('🔄 Firebase Functions로 구매 완료 처리 시작: ${purchaseDetails.productID}');
       }
 
-      // 구독 기간 계산
-      DateTime expiryDate;
-      String subscriptionType;
-      
-      if (purchaseDetails.productID == premiumMonthlyId || 
-          purchaseDetails.productID == premiumMonthlyWithTrialId) {
-        subscriptionType = 'monthly';
-      } else if (purchaseDetails.productID == premiumYearlyId || 
-                 purchaseDetails.productID == premiumYearlyWithTrialId) {
-        subscriptionType = 'yearly';
-      } else {
-        if (kDebugMode) {
-          print('❌ 알 수 없는 상품 ID: ${purchaseDetails.productID}');
-        }
-        return;
-      }
-
-      // 무료체험 상품인지 확인
-      // App Store Connect에서 premium_monthly에 무료체험이 설정되어 있으므로
-      // 사용자가 무료체험을 사용하지 않은 경우에만 무료체험으로 처리
-      bool isTrialProduct = purchaseDetails.productID == premiumMonthlyWithTrialId || 
-                            purchaseDetails.productID == premiumYearlyWithTrialId;
-      
-      // premium_monthly의 경우 사용자가 무료체험을 사용하지 않았다면 무료체험으로 처리
-      if (purchaseDetails.productID == premiumMonthlyId) {
-        final hasUsedTrial = await _planService.hasUsedFreeTrial(user.uid);
-        isTrialProduct = !hasUsedTrial; // 무료체험을 사용하지 않았다면 true
-        
-        if (kDebugMode) {
-          print('🔍 premium_monthly 구매 - 무료체험 사용 여부: $hasUsedTrial, 무료체험 적용: $isTrialProduct');
-        }
-      }
-
-      // 만료일 설정 (무료체험인 경우 7일, 아닌 경우 정상 기간)
-      if (isTrialProduct) {
-        expiryDate = DateTime.now().add(const Duration(days: 7)); // 🎯 실제: 무료체험 7일
-        if (kDebugMode) {
-          print('🎁 무료체험 만료일 설정: $expiryDate (7일 후)');
-        }
-      } else {
-        // 일반 구독 기간
-        if (subscriptionType == 'monthly') {
-          expiryDate = DateTime.now().add(const Duration(days: 30));
-        } else {
-          expiryDate = DateTime.now().add(const Duration(days: 365));
-        }
-        if (kDebugMode) {
-          print('💳 일반 구독 만료일 설정: $expiryDate ($subscriptionType)');
-        }
-      }
-
-      // 프리미엄 플랜으로 업그레이드
-      final success = await _planService.upgradeToPremium(
-        user.uid,
-        expiryDate: expiryDate,
-        subscriptionType: subscriptionType,
-        isFreeTrial: isTrialProduct,
+      // Firebase Functions를 통한 구매 완료 알림
+      final appStoreService = AppStoreSubscriptionService();
+      final notifySuccess = await appStoreService.notifyPurchaseComplete(
+        transactionId: purchaseDetails.purchaseID ?? '',
+        originalTransactionId: purchaseDetails.purchaseID ?? '', // iOS에서 실제 값으로 교체 필요
+        productId: purchaseDetails.productID,
+        purchaseDate: DateTime.now().toIso8601String(),
+        // expirationDate는 App Store Connect에서 자동 계산됨
       );
 
-      if (success) {
-        // 구매 성공 시 플랜 변경 이벤트 발생 (중앙화된 메서드 사용)
-        if (isTrialProduct) {
-          // 무료체험 시작
-          _eventCache.notifyFreeTrialStarted(
-            userId: user.uid,
-            subscriptionType: subscriptionType,
-            expiryDate: expiryDate,
-          );
-        } else {
-          // 일반 프리미엄 업그레이드
-          _eventCache.notifyPremiumUpgraded(
-            userId: user.uid,
-            subscriptionType: subscriptionType,
-            expiryDate: expiryDate,
-            isFreeTrial: false,
-          );
-        }
-        
-        // 무료체험인 경우 알림 스케줄링 및 환영 메시지
-        if (isTrialProduct) {
-          try {
-            await _notificationService.scheduleTrialEndNotifications(DateTime.now());
-            if (kDebugMode) {
-              print('🔔 무료체험 만료 알림 스케줄링 완료');
-            }
-            
-            // 탈퇴 이력이 있는 사용자인지 확인 (중앙화된 서비스 사용)
-            final deletedUserService = DeletedUserService();
-            final deletedUserInfo = await deletedUserService.getDeletedUserInfo();
-            
-            // TrialManager를 통해 적절한 메시지 표시
-            final trialManager = TrialManager();
-            if (trialManager.onWelcomeMessage != null) {
-              if (deletedUserInfo != null) {
-                // 탈퇴 이력이 있는 사용자 - 이전 플랜에 따른 복원 메시지
-                final lastPlan = deletedUserInfo['lastPlan'] as Map<String, dynamic>?;
-                String title, message;
-                
-                if (lastPlan != null) {
-                  final planType = lastPlan['planType'] as String?;
-                  final wasFreeTrial = lastPlan['isFreeTrial'] as bool? ?? false;
-                  final subscriptionType = lastPlan['subscriptionType'] as String?;
-                  
-                  if (planType == 'premium' && !wasFreeTrial) {
-                    // 프리미엄 구독자였던 경우
-                    title = '💎 프리미엄 플랜이 복원되었습니다!';
-                    message = '피카북을 다시 마음껏 사용해보세요.';
-                  } else if (planType == 'premium' && wasFreeTrial) {
-                    // 무료체험 중이었던 경우
-                    title = '🎉 프리미엄 체험이 복원되었습니다!';
-                    message = '피카북을 다시 마음껏 사용해보세요.';
-                  } else {
-                    // 무료 플랜이었던 경우
-                    title = '📚 무료 플랜이 시작되었습니다!';
-                    message = '피카북을 다시 사용해보세요.';
-                  }
-                } else {
-                  // 플랜 정보가 없는 경우 기본 메시지
-                  title = '🎉 피카북에 다시 오신 것을 환영합니다!';
-                  message = '피카북을 다시 사용해보세요.';
-                }
-                
-                trialManager.onWelcomeMessage!(title, message);
-              } else {
-                // 새로운 사용자 - 무료체험 메시지
-                trialManager.onWelcomeMessage!(
-                  '🎉 프리미엄 무료 체험이 시작되었어요!',
-                  '피카북을 마음껏 사용해보세요.',
-                );
-              }
-            }
-          } catch (e) {
-            if (kDebugMode) {
-              print('❌ 무료체험 후속 처리 실패: $e');
-            }
-          }
+      if (notifySuccess) {
+        if (kDebugMode) {
+          print('✅ Firebase Functions 구매 완료 알림 성공');
         }
         
         // 처리된 구매 ID 추가 (중복 처리 방지)
         _processedPurchases.add(purchaseId);
         _cleanupProcessedPurchases();
         
-        if (kDebugMode) {
-          print('✅ 프리미엄 플랜 업그레이드 성공');
-          print('🔄 플랜 캐시 무효화 완료');
-          print('📝 구매 처리 완료: $purchaseId');
-        }
+        // 플랜 캐시 무효화 (서버에서 업데이트된 구독 상태 반영)
+        _planService.notifyPlanChanged('premium', userId: user.uid);
         
         // 구매 성공 콜백 호출
         _onPurchaseSuccess?.call();
         
+        if (kDebugMode) {
+          print('📝 구매 처리 완료: $purchaseId');
+        }
       } else {
         if (kDebugMode) {
-          print('❌ 프리미엄 플랜 업그레이드 실패');
+          print('❌ Firebase Functions 구매 완료 알림 실패');
+          print('💡 서버에서 구독 상태를 확인해주세요');
         }
+        
+        // Firebase Functions 실패 시에도 UI 업데이트는 수행
+        // (실제 구독 상태는 다음 앱 시작 시 서버에서 동기화됨)
+        _onPurchaseSuccess?.call();
       }
+      
     } catch (e) {
       if (kDebugMode) {
         print('❌ 성공한 구매 처리 중 오류: $e');
       }
-    }
-  }
-
-  /// 구매 영수증 검증 (Firebase Functions를 통한 검증)
-  Future<bool> _verifyPurchase(PurchaseDetails purchaseDetails) async {
-    try {
-      if (kDebugMode) {
-        print('🔍 [InAppPurchase] 구매 영수증 검증 시작');
-      }
-
-      // AppStoreSubscriptionService를 통해 Firebase Functions 검증
-      final appStoreService = AppStoreSubscriptionService();
       
-      // 구매 완료 알림을 Firebase Functions로 전송 (서버에서 검증 수행)
-      final success = await appStoreService.notifyPurchaseComplete(
-        purchaseDetails.productID,
-        purchaseDetails.purchaseID ?? '',
-      );
-
-      if (kDebugMode) {
-        if (success) {
-          print('✅ [InAppPurchase] 구매 영수증 검증 성공');
-        } else {
-          print('❌ [InAppPurchase] 구매 영수증 검증 실패');
-        }
-      }
-
-      return success;
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ [InAppPurchase] 구매 영수증 검증 중 오류: $e');
-      }
-      return false;
+      // 오류 발생 시에도 UI 업데이트는 수행
+      // (실제 구독 상태는 서버에서 관리됨)
+      _onPurchaseSuccess?.call();
     }
   }
 
