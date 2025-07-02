@@ -85,9 +85,7 @@ class TrialManager {
   Future<bool> get isTrialExpired async {
     try {
       final subscriptionDetails = await _planService.getSubscriptionDetails();
-      final expiryDate = subscriptionDetails['expiryDate'] as DateTime?;
-      if (expiryDate == null) return false;
-      return DateTime.now().isAfter(expiryDate);
+      return subscriptionDetails['isExpired'] as bool? ?? false;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [Trial] 체험 만료 여부 확인 실패: $e');
@@ -280,11 +278,11 @@ class TrialManager {
     
     try {
       final subscriptionDetails = await _planService.getSubscriptionDetails();
-      final expiryDate = subscriptionDetails['expiryDate'] as DateTime?;
+      final isExpired = subscriptionDetails['isExpired'] as bool? ?? false;
       final wasFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
       
       // 체험이 있었고 현재 만료된 경우
-      if (expiryDate != null && wasFreeTrial && DateTime.now().isAfter(expiryDate)) {
+      if (isExpired && wasFreeTrial) {
         // 이미 콜백을 호출했는지 확인 (중복 방지)
         if (!_hasTrialExpiredCallbackFired) {
           _hasTrialExpiredCallbackFired = true;
@@ -400,8 +398,6 @@ class TrialManager {
       return '상태 확인 실패';
     }
   }
-
-
 
   /// 디버그 정보 출력 (Firestore 기반)
   Future<void> printDebugInfo() async {

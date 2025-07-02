@@ -106,12 +106,6 @@ class Plan {
     return expiryDate!.isAfter(DateTime.now());
   }
 
-  /// 플랜이 만료되었는지 확인
-  bool get isExpired {
-    if (expiryDate == null) return false;
-    return expiryDate!.isBefore(DateTime.now());
-  }
-
   /// 플랜 복사 (일부 속성 변경)
   Plan copyWith({
     String? type,

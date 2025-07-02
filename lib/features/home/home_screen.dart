@@ -187,9 +187,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _limitStatusSubscription = _usageLimitService.limitStatusStream.listen(
       (limitStatus) async {
         if (mounted) {
-                  if (kDebugMode) {
+          if (kDebugMode) {
           debugPrint('🔔 [HomeScreen] 실시간 사용량 한도 상태 변경: $limitStatus');
-        }
+          }
           
           // 🚨 사용량 한도 도달 시 상태 업데이트
           final shouldShowUsageLimit = limitStatus['ocrLimitReached'] == true || 
@@ -209,7 +209,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       },
     );
     
-    if (kDebugMode) {
+          if (kDebugMode) {
       debugPrint('✅ [HomeScreen] 실시간 스트림 구독 설정 완료 (사용량 한도만)');
     }
   }
@@ -247,9 +247,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           activeBanners.add(BannerType.trialCompleted);
         }
       } catch (e) {
-        if (kDebugMode) {
+    if (kDebugMode) {
           debugPrint('⚠️ [HomeScreen] 무료체험 이력 확인 실패: $e');
-        }
+    }
       }
     }
     
@@ -268,31 +268,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: UITokens.screenBackground,
-      appBar: PikaAppBar.home(),
-      body: Consumer<HomeViewModel>(
-        builder: (context, viewModel, _) {
-          if (viewModel.isLoading && viewModel.notes.isEmpty) {
-            return _buildLoadingState();
-          }
+        backgroundColor: UITokens.screenBackground,
+        appBar: PikaAppBar.home(),
+        body: Consumer<HomeViewModel>(
+          builder: (context, viewModel, _) {
+            if (viewModel.isLoading && viewModel.notes.isEmpty) {
+              return _buildLoadingState();
+            }
 
-          if (viewModel.notes.isEmpty) {
-            return _buildZeroState(context);
-          }
+            if (viewModel.notes.isEmpty) {
+              return _buildZeroState(context);
+            }
 
-          return _buildNotesList(context, viewModel);
-        },
-      ),
-      floatingActionButton: Consumer<HomeViewModel>(
-        builder: (context, viewModel, _) {
+            return _buildNotesList(context, viewModel);
+          },
+        ),
+        floatingActionButton: Consumer<HomeViewModel>(
+          builder: (context, viewModel, _) {
           final isDisabled = _subscriptionState.hasUsageLimitReached;
-          return Container(
+            return Container(
             width: 200, // width 제한
-            margin: const EdgeInsets.symmetric(horizontal: 24),
+              margin: const EdgeInsets.symmetric(horizontal: 24),
             child: isDisabled 
               ? Tooltip(
                   message: '사용량 한도 초과로 비활성화되었습니다',
-                  child: PikaButton(
+              child: PikaButton(
                     text: _getBottomButtonText(viewModel),
                     onPressed: null, // 비활성화
                     variant: PikaButtonVariant.primary,
@@ -300,15 +300,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 )
               : PikaButton(
-                  text: _getBottomButtonText(viewModel),
-                  onPressed: () => _handleBottomButtonPressed(viewModel),
-                  variant: PikaButtonVariant.primary,
+                text: _getBottomButtonText(viewModel),
+                onPressed: () => _handleBottomButtonPressed(viewModel),
+                variant: PikaButtonVariant.primary,
                   isFullWidth: false, // width 제한으로 변경
-                ),
-          );
-        },
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+              ),
+            );
+          },
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 

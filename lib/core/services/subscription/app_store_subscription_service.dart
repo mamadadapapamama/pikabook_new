@@ -271,6 +271,31 @@ class AppStoreSubscriptionService {
     }
   }
 
+  /// 무료체험 사용 이력 확인
+  Future<bool> hasUsedFreeTrial() async {
+    try {
+      // Firebase Functions에서 체험 이력 확인
+      final callable = _functions.httpsCallable('sub_hasUsedFreeTrial');
+      final result = await callable.call();
+      
+      final data = result.data as Map<String, dynamic>;
+      return data['hasUsedTrial'] as bool? ?? false;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [AppStoreSubscription] 무료체험 이력 확인 중 오류: $e');
+      }
+      return false;
+    }
+  }
+
+  /// 서비스 정리
+  void dispose() {
+    invalidateCache();
+    if (kDebugMode) {
+      debugPrint('🗑️ [AppStoreSubscription] 서비스 정리 완료');
+    }
+  }
+
   /// Firebase Functions 응답 파싱
   SubscriptionStatus _parseSubscriptionStatus(Map<String, dynamic> data) {
     try {
@@ -339,10 +364,28 @@ class SubscriptionStatus {
   /// 프리미엄 기능 사용 가능 여부
   bool get canUsePremiumFeatures => isActive && planType != 'free';
 
-  /// 구독 만료 여부
-  bool get isExpired {
-    if (expirationDate == null) return false;
-    return DateTime.now().isAfter(expirationDate!);
+  /// 무료 플랜 여부
+  bool get isFree => planType == 'free' || !isActive;
+
+  /// 프리미엄 플랜 여부
+  bool get isPremium => isActive && planType == 'premium' && !isTrial;
+
+  /// 무료체험 여부
+  bool get isTrial => isActive && planType == 'trial';
+
+  /// 구독 타입 (monthly/yearly)
+  String get subscriptionType {
+    if (planType == 'premium_monthly') return 'monthly';
+    if (planType == 'premium_yearly') return 'yearly';
+    if (planType == 'trial') return 'monthly'; // 체험은 monthly 기반
+    return '';
+  }
+
+  /// 표시용 이름
+  String get displayName {
+    if (isTrial) return '무료 체험';
+    if (isPremium) return '프리미엄';
+    return '무료';
   }
 
   /// 구독 만료까지 남은 일수
