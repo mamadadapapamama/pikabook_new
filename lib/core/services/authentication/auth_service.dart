@@ -827,23 +827,12 @@ class AuthService {
         userData['deviceCount'] = 1;
         userData['deviceIds'] = [await _getDeviceId()];
         
-        // 자동 무료체험 시작 제거 - 온보딩에서 사용자 선택에 따라 결정
-        try {
-          final isDeletedUser = await _checkIfUserDeleted(user.uid);
-          
-          if (isDeletedUser) {
-            debugPrint('탈퇴 이력이 있는 사용자 재가입: ${user.uid}');
-            debugPrint('온보딩에서 구독 복원 처리 예정');
-          } else {
-            debugPrint('신규 사용자 가입: ${user.uid}');
-            debugPrint('온보딩에서 무료체험 선택 여부 결정 예정');
-          }
-        } catch (e) {
-          debugPrint('사용자 상태 확인 중 오류: $e');
-        }
-        
         // 신규 사용자는 항상 set 사용
         await userRef.set(userData);
+        
+        if (kDebugMode) {
+          debugPrint('✅ [AuthService] 신규 사용자 Firestore 저장 완료: ${user.uid}');
+        }
       } else {
         // 기존 사용자 정보 업데이트
         final deviceId = await _getDeviceId();
@@ -867,11 +856,14 @@ class AuthService {
           userData['deviceIds'] = [deviceId];
           await userRef.set(userData);
         }
+        
+        if (kDebugMode) {
+          debugPrint('✅ [AuthService] 기존 사용자 Firestore 업데이트 완료: ${user.uid}');
+        }
       }
       
-      debugPrint('사용자 정보 Firestore 저장 완료: ${user.uid}');
     } catch (e) {
-      debugPrint('사용자 정보 Firestore 저장 중 오류: $e');
+      debugPrint('⚠️ [AuthService] Firestore 저장 중 오류 (로그인 진행): $e');
       // 오류가 있어도 로그인 프로세스는 계속 진행
     }
   }

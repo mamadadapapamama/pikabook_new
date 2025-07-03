@@ -7,7 +7,7 @@ import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
 import '../services/payment/in_app_purchase_service.dart';
 import '../services/common/plan_service.dart';
-import '../services/trial/trial_manager.dart';
+
 import 'pika_button.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -384,18 +384,18 @@ class UpgradeModal extends StatelessWidget {
               _resetModalState();
               Navigator.of(context).pop(true);
               
-              // TrialManager를 통해 무료체험 시작
-              final trialManager = TrialManager();
-              final success = await trialManager.startPremiumTrial();
-              
-              if (success) {
+              // InAppPurchaseService를 통해 무료체험 시작
+              try {
+                final purchaseService = InAppPurchaseService();
+                await purchaseService.buyProduct(InAppPurchaseService.premiumMonthlyId);
+                
                 if (kDebugMode) {
-                  debugPrint('✅ [UpgradeModal] 무료체험 시작 성공');
+                  debugPrint('✅ [UpgradeModal] 무료체험 구독 시작');
                 }
                 onUpgrade?.call();
-              } else {
+              } catch (e) {
                 if (kDebugMode) {
-                  debugPrint('❌ [UpgradeModal] 무료체험 시작 실패');
+                  debugPrint('❌ [UpgradeModal] 무료체험 구독 실패: $e');
                 }
                 
                 if (context.mounted) {

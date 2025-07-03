@@ -151,55 +151,37 @@ class _LoginScreenState extends State<LoginScreen> {
 
                           SizedBox(height: SpacingTokens.md),
 
-                          // 이메일 로그인 또는 소셜 로그인 선택
+                          // 🎯 통합 로그인 버튼들 (깔끔한 3버튼 구조)
                           Column(
                               children: [
-                                // 이메일 로그인/소셜 로그인 토글 버튼
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          _isEmailLogin = false;
-                                          _errorMessage = null;
-                                        });
-                                      },
-                                      child: Text(
-                                        '소셜 로그인',
-                                        style: TypographyTokens.button.copyWith(
-                                          color: _isEmailLogin ? ColorTokens.textLight.withOpacity(0.6) : ColorTokens.textLight,
-                                          decoration: _isEmailLogin ? null : TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(width: SpacingTokens.md),
-                                    TextButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          _isEmailLogin = true;
-                                          _errorMessage = null;
-                                        });
-                                      },
-                                      child: Text(
-                                        '이메일 로그인',
-                                        style: TypographyTokens.button.copyWith(
-                                          color: !_isEmailLogin ? ColorTokens.textLight.withOpacity(0.6) : ColorTokens.textLight,
-                                          decoration: !_isEmailLogin ? null : TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: SpacingTokens.md),
-                                
-                                // 이메일 로그인 폼 또는 소셜 로그인 버튼들
                                 if (_isEmailLogin) ...[
                                   // 이메일 로그인 폼
                                   Container(
                                     width: 250,
                                     child: Column(
                                       children: [
+                                        // 뒤로가기 버튼
+                                        Row(
+                                          children: [
+                                            TextButton.icon(
+                                              onPressed: () {
+                                                setState(() {
+                                                  _isEmailLogin = false;
+                                                  _errorMessage = null;
+                                                  _emailController.clear();
+                                                  _passwordController.clear();
+                                                });
+                                              },
+                                              icon: Icon(Icons.arrow_back, color: ColorTokens.textLight, size: 18),
+                                              label: Text(
+                                                '뒤로',
+                                                style: TypographyTokens.body2.copyWith(color: ColorTokens.textLight),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        SizedBox(height: SpacingTokens.sm),
+                                        
                                         // 이메일 입력 필드
                                         TextField(
                                           controller: _emailController,
@@ -282,44 +264,70 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ),
                                 ] else ...[
-                                  // 소셜 로그인 버튼들
-                                  // Google 로그인 버튼
-                                  _buildLoginButton(
-                                    text: 'Google로 로그인',
-                                    onPressed: _handleGoogleSignIn,
-                                    backgroundColor: ColorTokens.surface,
-                                    textColor: ColorTokens.textPrimary,
-                                    leadingIcon: Padding(
-                                      padding: EdgeInsets.only(right: SpacingTokens.sm),
-                                      child: Image.asset(
-                                        'assets/images/google.png',
-                                        width: SpacingTokens.iconSizeMedium,
-                                        height: SpacingTokens.iconSizeMedium,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Icon(Icons.g_translate, color: ColorTokens.textPrimary);
-                                        },
+                                  // 🎯 메인 로그인 선택 화면 (3개 버튼)
+                                  Column(
+                                    children: [
+                                      // Google 로그인 버튼
+                                      _buildLoginButton(
+                                        text: 'Google로 로그인',
+                                        onPressed: _handleGoogleSignIn,
+                                        backgroundColor: ColorTokens.surface,
+                                        textColor: ColorTokens.textPrimary,
+                                        leadingIcon: Padding(
+                                          padding: EdgeInsets.only(right: SpacingTokens.sm),
+                                          child: Image.asset(
+                                            'assets/images/google.png',
+                                            width: SpacingTokens.iconSizeMedium,
+                                            height: SpacingTokens.iconSizeMedium,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return Icon(Icons.g_translate, color: ColorTokens.textPrimary);
+                                            },
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                  SizedBox(height: SpacingTokens.sm),
+                                      SizedBox(height: SpacingTokens.sm),
 
-                                  // Apple 로그인 버튼
-                                  _buildLoginButton(
-                                    text: 'Apple로 로그인',
-                                    onPressed: _handleAppleSignIn,
-                                    backgroundColor: ColorTokens.surface,
-                                    textColor: ColorTokens.black,
-                                    leadingIcon: Padding(
-                                      padding: EdgeInsets.only(right: SpacingTokens.sm, bottom: SpacingTokens.xs),
-                                      child: Image.asset(
-                                        'assets/images/apple.png',
-                                        width: SpacingTokens.iconSizeMedium,
-                                        height: SpacingTokens.iconSizeMedium,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return Icon(Icons.apple, color: ColorTokens.black);
-                                        },
+                                      // Apple 로그인 버튼
+                                      _buildLoginButton(
+                                        text: 'Apple로 로그인',
+                                        onPressed: _handleAppleSignIn,
+                                        backgroundColor: ColorTokens.surface,
+                                        textColor: ColorTokens.black,
+                                        leadingIcon: Padding(
+                                          padding: EdgeInsets.only(right: SpacingTokens.sm, bottom: SpacingTokens.xs),
+                                          child: Image.asset(
+                                            'assets/images/apple.png',
+                                            width: SpacingTokens.iconSizeMedium,
+                                            height: SpacingTokens.iconSizeMedium,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return Icon(Icons.apple, color: ColorTokens.black);
+                                            },
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                      SizedBox(height: SpacingTokens.sm),
+
+                                      // 🆕 이메일 로그인 버튼 (다른 버튼들과 동일한 스타일)
+                                      _buildLoginButton(
+                                        text: '이메일로 로그인',
+                                        onPressed: () {
+                                          setState(() {
+                                            _isEmailLogin = true;
+                                            _errorMessage = null;
+                                          });
+                                        },
+                                        backgroundColor: ColorTokens.surface,
+                                        textColor: ColorTokens.textPrimary,
+                                        leadingIcon: Padding(
+                                          padding: EdgeInsets.only(right: SpacingTokens.sm),
+                                          child: Icon(
+                                            Icons.email_outlined,
+                                            color: ColorTokens.textPrimary,
+                                            size: SpacingTokens.iconSizeMedium,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                                 

@@ -5,6 +5,7 @@ import 'app.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'dart:async';
 import 'firebase_options.dart';
 import 'core/services/media/image_service.dart';
@@ -40,9 +41,26 @@ void main() async {
     );
   }
   
-  // 릴리즈 모드에서 디버그 출력 억제 (타이머 등 출력 방지)
+  // 디버그 로그 레벨 조정 (성능 최적화)
   if (kReleaseMode) {
+    // 릴리즈 모드에서는 모든 디버그 출력 억제
     debugPrint = (String? message, {int? wrapWidth}) {};
+  } else if (kDebugMode) {
+    // 디버그 모드에서도 과도한 로그 제한
+    final originalDebugPrint = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      // 특정 패턴의 로그만 출력 (중요한 것만)
+      if (message != null && (
+        message.contains('❌') || // 에러
+        message.contains('✅') || // 성공
+        message.contains('🚨') || // 경고
+        message.contains('[HomeScreen]') || // 홈스크린
+        message.contains('[AuthService]') || // 인증
+        message.contains('[AppStoreSubscription]') // 구독
+      )) {
+        originalDebugPrint(message, wrapWidth: wrapWidth);
+      }
+    };
   }
   
   // 시작 시 캐시 정리
@@ -66,6 +84,19 @@ void main() async {
         appVerificationDisabledForTesting: false,
         forceRecaptchaFlow: false,
       );
+      
+      // 🚨 디버그 모드에서 Firebase Analytics 자동 이벤트 수집 비활성화
+      // (중복 구매 이벤트 방지)
+      await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
+      debugPrint('🚫 [DEBUG] Firebase Analytics 자동 수집 비활성화 (중복 이벤트 방지)');
+      
+      // 🚫 디버그 모드에서 Firebase Messaging FCM Token 요청 방지
+      // APNS Token이 없는 시뮬레이터에서 FCM Token 요청으로 인한 경고 방지
+      debugPrint('🚫 [DEBUG] Firebase Messaging FCM Token 요청 방지 (시뮬레이터 환경)');
+      
+      // 🚫 디버그 모드에서 Firebase Messaging 비활성화 (FCM Token 오류 방지)
+      // APNS Token이 없는 시뮬레이터에서 FCM Token 요청 방지
+      debugPrint('🚫 [DEBUG] Firebase Messaging 자동 초기화 비활성화 (FCM Token 오류 방지)');
     }
     
     // Firebase Auth 자동 복원 방지 - Apple ID 다이얼로그 방지

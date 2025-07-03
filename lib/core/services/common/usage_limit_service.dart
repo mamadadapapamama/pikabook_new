@@ -87,7 +87,7 @@ class UsageLimitService {
   
   /// 1. 앱 시작시 제한 확인 (캐시 사용으로 최적화)
   /// 제한 도달 시 UI 상태를 결정하기 위한 메서드
-  Future<Map<String, bool>> checkInitialLimitStatus({bool forceRefresh = false}) async {
+  Future<Map<String, bool>> checkInitialLimitStatus({bool forceRefresh = false, String? planType}) async {
     try {
       if (kDebugMode) {
         debugPrint('🔍 [UsageLimitService] checkInitialLimitStatus 시작 ${forceRefresh ? "(강제 새로고침)" : "(캐시 사용)"}');
@@ -114,7 +114,8 @@ class UsageLimitService {
         debugPrint('🔍 [UsageLimitService] 로드된 사용량: $usage');
       }
       
-      final limits = await _loadLimitsFromFirebase(forceRefresh: forceRefresh);
+      // 플랜 정보가 제공되면 사용, 없으면 기존 방식으로 로드
+      final limits = await _loadLimitsFromFirebase(forceRefresh: forceRefresh, planType: planType);
       if (kDebugMode) {
         debugPrint('🔍 [UsageLimitService] 로드된 제한: $limits');
       }
@@ -408,7 +409,7 @@ class UsageLimitService {
   }
   
   /// Firebase에서 제한 데이터 로드 (캐시 적용)
-  Future<Map<String, int>> _loadLimitsFromFirebase({bool forceRefresh = false}) async {
+  Future<Map<String, int>> _loadLimitsFromFirebase({bool forceRefresh = false, String? planType}) async {
     // 캐시 확인
     if (!forceRefresh && _isLimitsCacheValid()) {
       if (kDebugMode) {
@@ -440,10 +441,23 @@ class UsageLimitService {
       }
       
       // 2. 플랜 기반 제한 적용
-      final planService = PlanService();
-      final planType = await planService.getCurrentPlanType(forceRefresh: forceRefresh);
+      String actualPlanType;
+      if (planType != null) {
+        // 파라미터로 플랜 타입이 제공된 경우 사용 (중복 호출 방지)
+        actualPlanType = planType;
+        if (kDebugMode) {
+          debugPrint('🔄 [UsageLimitService] 제공된 플랜 타입 사용: $actualPlanType');
+        }
+      } else {
+        // 플랜 타입이 없으면 PlanService에서 가져오기
+        final planService = PlanService();
+        actualPlanType = await planService.getCurrentPlanType(forceRefresh: forceRefresh);
+        if (kDebugMode) {
+          debugPrint('🔄 [UsageLimitService] PlanService에서 플랜 타입 조회: $actualPlanType');
+        }
+      }
       
-      final limits = PlanService.PLAN_LIMITS[planType];
+      final limits = PlanService.PLAN_LIMITS[actualPlanType];
       if (limits != null) {
         final result = Map<String, int>.from(limits);
         
@@ -452,7 +466,7 @@ class UsageLimitService {
         _lastLimitsUpdate = DateTime.now();
         
         if (kDebugMode) {
-          debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 플랜 기반 제한 사용: $planType -> $result');
+          debugPrint('✅ [UsageLimitService] _loadLimitsFromFirebase: 플랜 기반 제한 사용: $actualPlanType -> $result');
         }
         return result;
       }

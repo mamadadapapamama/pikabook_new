@@ -11,7 +11,7 @@ import '../../core/models/subscription_state.dart';                    // 통합
 import '../../core/services/subscription/app_store_subscription_service.dart'; // 🆕 App Store 기반 구독 서비스
 import '../../core/services/common/usage_limit_service.dart';          // 사용량 한도 실시간 스트림용
 
-import '../../core/services/trial/trial_manager.dart';                // 환영 메시지 콜백용 (기존 유지)
+
 
 import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
@@ -43,6 +43,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   // 🎯 통합 구독 상태 (단일 상태 관리)
   SubscriptionState _subscriptionState = SubscriptionState.defaultState();
+  
+  // 초기 로드 완료 여부 추적
+  bool _hasInitialLoad = false;
 
   // 📡 실시간 스트림 구독 (상태 변경 감지)
   StreamSubscription<Map<String, dynamic>>? _limitStatusSubscription;  // 사용량 한도 변경
@@ -82,51 +85,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _usageLimitService = UsageLimitService();
   }
 
-  /// 🚀 비동기 초기화 작업 (대폭 단순화됨)
-  /// - 통합 구독 상태 로드 (모든 정보 한 번에)
-  /// - 환영 메시지 콜백 설정 (기존 기능 유지)
-  /// - 실시간 스트림 구독 (상태 변경 감지)
+  /// 🚀 비동기 초기화 작업 (간소화)
   Future<void> _initializeAsyncTasks() async {
     try {
-      // 🎯 구독 상태 로드 (모든 상태 정보 포함)
-      // 이전: BannerManager + TrialManager + PlanService 개별 호출
-      // 현재: SubscriptionStatusService 단일 호출로 모든 정보 획득
-      await _loadSubscriptionStatus();
+      // 🎯 구독 상태 로드 (백그라운드에서 실행)
+      _loadSubscriptionStatus();
       
-      // 🎉 TrialManager 환영 메시지 콜백 설정 (기존 기능 유지)
-      _setupTrialWelcomeCallback();
-      
-      // 📡 실시간 상태 변경 스트림 구독 (새로운 기능)
+      // 📡 실시간 스트림 구독
       _setupRealtimeStreams();
       
-    } catch (e, stackTrace) {
+    } catch (e) {
       if (kDebugMode) {
-        debugPrint('[HomeScreenRefactored] 비동기 초기화 중 오류 발생: $e');
-        debugPrint('[HomeScreenRefactored] 스택 트레이스: $stackTrace');
+        debugPrint('[HomeScreen] 초기화 오류: $e');
       }
-      // 🛡️ 비동기 초기화 실패는 앱 진행에 영향을 주지 않음 (Graceful degradation)
     }
   }
 
   /// 🎯 구독 상태 로드 (App Store 기반)
   Future<void> _loadSubscriptionStatus({bool forceRefresh = false}) async {
     try {
+      // 🎯 통합 구독 상태 조회 (App Store Connect 우선)
+      // 홈스크린 초기 로드 시에는 App Store Connect부터 확인
+      final shouldForceRefresh = forceRefresh || !_hasInitialLoad;
+      final isAppStart = !_hasInitialLoad;
+      
       if (kDebugMode) {
-        debugPrint('[HomeScreen] 🎯 Firebase Functions 기반 구독 상태 조회 시작 (캐시 우선 사용)');
-        
-        // 🔍 디버깅: 전체 구독 상태 진단 (forceRefresh일 때만)
-        if (forceRefresh) {
-          final debugHelper = SubscriptionDebugHelper();
-          await debugHelper.diagnoseSubscriptionState();
+        debugPrint('[HomeScreen] 구독 상태 조회 (forceRefresh: $shouldForceRefresh, 앱시작: $isAppStart)');
+      }
+      final appStoreService = AppStoreSubscriptionService();
+      final subscriptionState = await appStoreService.getUnifiedSubscriptionState(forceRefresh: shouldForceRefresh);
+      
+      // 초기 로드 완료 표시
+      if (!_hasInitialLoad) {
+        _hasInitialLoad = true;
+        if (kDebugMode) {
+          debugPrint('✅ [HomeScreen] 초기 로드 완료 - 다음부터는 캐시 우선 사용');
         }
       }
-      
-      // 🆕 Firebase Functions에서 캐시된 구독 상태 조회 (성능 최적화)
-      final appStoreService = AppStoreSubscriptionService();
-      final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: forceRefresh);
-      
-      // Firebase Functions 상태를 SubscriptionState로 변환
-      final subscriptionState = await _convertToSubscriptionState(appStoreStatus);
       
       // 🔄 결과 받아서 UI 업데이트 (mounted 체크로 메모리 누수 방지)
       if (mounted) {
@@ -145,47 +140,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 🎉 TrialManager 환영 메시지 콜백 설정 (기존 기능 유지)
-  /// 
-  /// 📝 환영 메시지만 설정:
-  /// - 무료체험 시작 시 환영 메시지 표시
-  /// 
-  /// 🎯 변경점: TrialStatusChecker 제거 - 실시간 스트림으로 상태 변경 감지
-  void _setupTrialWelcomeCallback() {
-    final trialManager = TrialManager();
-    
-    // 🎉 환영 메시지 콜백 (TrialManager) - 기존과 동일
-    trialManager.onWelcomeMessage = (title, message) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  message,
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ],
-            ),
-            backgroundColor: ColorTokens.snackbarBg,
-            duration: const Duration(seconds: 4),
-            behavior: SnackBarBehavior.fixed,
-          ),
-        );
-      }
-    };
-  }
+
 
   /// 📡 실시간 스트림 구독 설정 (새로운 기능)
   /// 🆕 새로 추가된 기능:
@@ -223,49 +178,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// App Store 상태를 SubscriptionState로 변환 (사용량 한도 포함)
-  Future<SubscriptionState> _convertToSubscriptionState(SubscriptionStatus appStoreStatus) async {
-    // 사용량 한도는 무료 플랜일 때만 확인
-    bool hasUsageLimitReached = false;
-    if (appStoreStatus.isFree) {
-      try {
-        final usageLimitStatus = await _usageLimitService.checkInitialLimitStatus();
-        final ocrLimitReached = usageLimitStatus['ocrLimitReached'] ?? false;
-        final ttsLimitReached = usageLimitStatus['ttsLimitReached'] ?? false;
-        hasUsageLimitReached = ocrLimitReached || ttsLimitReached;
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('⚠️ [HomeScreen] 사용량 한도 확인 실패: $e');
-        }
-      }
-    }
-    
-    // 🎯 BannerManager에서 활성 배너 목록 가져오기
-    List<BannerType> activeBanners = [];
-    try {
-      final bannerManager = BannerManager();
-      activeBanners = await bannerManager.getActiveBanners();
-      
-      if (kDebugMode) {
-        debugPrint('🎯 [HomeScreen] BannerManager에서 가져온 활성 배너: ${activeBanners.map((e) => e.name).toList()}');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('⚠️ [HomeScreen] BannerManager에서 배너 가져오기 실패: $e');
-      }
-    }
-    
-    return SubscriptionState(
-      isTrial: appStoreStatus.isTrial,
-      isTrialExpiringSoon: false, // App Store에서 자동 관리
-      isPremium: appStoreStatus.isPremium,
-      isExpired: appStoreStatus.isFree,
-      hasUsageLimitReached: hasUsageLimitReached,
-      daysRemaining: 0, // App Store에서 자동 관리
-      activeBanners: activeBanners, // 🎯 BannerManager에서 가져온 배너 사용
-      statusMessage: appStoreStatus.displayName,
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -666,42 +579,5 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     }
   }
-
-  /// 🐛 구독 상태 디버그 진단 (개발용)
-  Future<void> _runDebugDiagnosis() async {
-    if (!kDebugMode) return;
-    
-    try {
-      debugPrint('🔍 [디버그] 구독 상태 진단 시작...');
-      
-      final debugHelper = SubscriptionDebugHelper();
-      await debugHelper.diagnoseSubscriptionState();
-      
-      // 스낵바로 완료 알림
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🔍 구독 상태 디버그 완료! 콘솔 로그를 확인하세요.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-      
-    } catch (e) {
-      debugPrint('❌ [디버그] 구독 상태 진단 실패: $e');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ 디버그 진단 실패: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
-
 
 } 

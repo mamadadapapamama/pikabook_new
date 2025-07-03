@@ -101,26 +101,13 @@ class PlanService {
         }
       }
       
-      // 🎯 Firebase Functions에서 구독 상태 확인 (새로운 API 사용)
-      final subscriptionStatus = await _appStoreService.checkSubscriptionStatus(forceRefresh: forceRefresh);
-      
-      String planType;
-      if (subscriptionStatus.canUsePremiumFeatures) {
-        planType = PLAN_PREMIUM;
-      } else {
-        planType = PLAN_FREE;
-      }
+      // 🎯 getSubscriptionDetails를 호출해서 모든 정보를 한 번에 가져오기 (중복 호출 방지)
+      final subscriptionDetails = await getSubscriptionDetails(forceRefresh: forceRefresh);
+      final planType = subscriptionDetails['currentPlan'] as String;
       
       if (kDebugMode) {
-        debugPrint('🍎 [PlanService] Firebase Functions 구독 상태: ${subscriptionStatus.planType}');
-        debugPrint('   활성 상태: ${subscriptionStatus.isActive}');
-        debugPrint('   만료일: ${subscriptionStatus.expirationDate}');
-        debugPrint('   플랜 타입: $planType');
+        debugPrint('🔄 [PlanService] getSubscriptionDetails에서 플랜 타입 추출: $planType');
       }
-      
-      // 🚨 성공한 구독 상태를 AppStoreSubscriptionService 캐시에도 강제 저장
-      // 이렇게 하면 다른 곳에서 AppStoreSubscriptionService를 호출해도 중복 네트워크 요청 없이 캐시 사용
-      _appStoreService.updateCacheFromExternal(subscriptionStatus);
       
       // 이벤트 캐시에 저장
       _eventCache.setCache(cacheKey, planType);

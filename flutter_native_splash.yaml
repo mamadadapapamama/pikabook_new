@@ -1,9 +1,10 @@
-flutter_native_splash:
-  color: "#FE6A15"
-  image: assets/images/pikabook_textlogo.png
-  ios_content_mode: center
-  fullscreen: true
-  
-  android: false
-  android_12: false
-  web: false 
+# Flutter Native Splash 비활성화 - LaunchScreen.storyboard 사용
+# flutter_native_splash:
+#   color: "#FF8340"
+#   image: assets/images/pikabook_textlogo.png
+#   ios_content_mode: center
+#   fullscreen: true
+#   
+#   android: true
+#   android_12: true
+#   web: false 

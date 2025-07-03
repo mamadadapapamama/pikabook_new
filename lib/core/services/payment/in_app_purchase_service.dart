@@ -7,6 +7,9 @@ import '../subscription/app_store_subscription_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// In-App Purchase 관리 서비스
+/// 사용자가 "구독" 버튼을 눌렀을 때 App Store 결제 다이얼로그 띄우기
+/// apple/결제 시스템 연동 - in_app_purchase 패키지를 통한 네이티브 결제 및 구매 완료 알림 - 서버에 구매 완료 사실 전달
+
 class InAppPurchaseService {
   static final InAppPurchaseService _instance = InAppPurchaseService._internal();
   factory InAppPurchaseService() => _instance;
@@ -23,8 +26,7 @@ class InAppPurchaseService {
   // 구매 성공 콜백
   Function()? _onPurchaseSuccess;
   
-  // 처리된 구매 ID 추적 (중복 처리 방지)
-  final Set<String> _processedPurchases = <String>{};
+
   
   // 상품 ID 정의
   static const String premiumMonthlyId = 'premium_monthly';
@@ -110,7 +112,6 @@ class InAppPurchaseService {
     if (_isInitialized) {
       _subscription.cancel();
     }
-    _processedPurchases.clear();
   }
   
   /// 구매 성공 콜백 설정
@@ -118,15 +119,7 @@ class InAppPurchaseService {
     _onPurchaseSuccess = callback;
   }
 
-  /// 처리된 구매 목록 정리 (메모리 관리)
-  void _cleanupProcessedPurchases() {
-    if (_processedPurchases.length > 50) {
-      _processedPurchases.clear();
-      if (kDebugMode) {
-        print('🧹 처리된 구매 목록 정리 완료');
-      }
-    }
-  }
+
 
   /// 상품 정보 로드
   Future<void> _loadProducts() async {
@@ -162,21 +155,10 @@ class InAppPurchaseService {
   /// 구매 업데이트 처리
   void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
     if (kDebugMode) {
-      print('🔔 === 구매 업데이트 수신 ===');
-      print('🔔 [SANDBOX] 구매 업데이트 수신: ${purchaseDetailsList.length}개');
-      print('🔔 현재 시간: ${DateTime.now()}');
+      print('🔔 구매 업데이트 수신: ${purchaseDetailsList.length}개');
     }
     
     for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
-      if (kDebugMode) {
-        print('📦 [SANDBOX] 구매 상세정보:');
-        print('   상품 ID: ${purchaseDetails.productID}');
-        print('   상태: ${purchaseDetails.status}');
-        print('   구매 ID: ${purchaseDetails.purchaseID}');
-        print('   에러: ${purchaseDetails.error}');
-        print('   pendingCompletePurchase: ${purchaseDetails.pendingCompletePurchase}');
-        print('   verificationData: ${purchaseDetails.verificationData.toString()}');
-      }
       _handlePurchase(purchaseDetails);
     }
   }
@@ -218,21 +200,7 @@ class InAppPurchaseService {
   Future<void> _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) async {
     try {
       if (kDebugMode) {
-        print('🎯 === 구매 성공 처리 시작 ===');
-        print('🎯 상품 ID: ${purchaseDetails.productID}');
-        print('🎯 구매 ID: ${purchaseDetails.purchaseID}');
-        print('🎯 상태: ${purchaseDetails.status}');
-        print('🎯 에러: ${purchaseDetails.error}');
-        print('🎯 구매 상세 정보: ${purchaseDetails.toString()}');
-      }
-      
-      // 중복 처리 방지 체크
-      final purchaseId = purchaseDetails.purchaseID ?? purchaseDetails.productID;
-      if (_processedPurchases.contains(purchaseId)) {
-        if (kDebugMode) {
-          print('⚠️ 이미 처리된 구매입니다: $purchaseId');
-        }
-        return;
+        print('🎯 구매 성공 처리: ${purchaseDetails.productID}');
       }
       
       final user = FirebaseAuth.instance.currentUser;
@@ -244,37 +212,12 @@ class InAppPurchaseService {
       }
 
       if (kDebugMode) {
-        print('🔄 Firebase Functions로 구매 완료 처리 시작: ${purchaseDetails.productID}');
-        print('   사용자: ${user.email}');
-        print('   사용자 ID: ${user.uid}');
+        print('🔄 Firebase Functions로 구매 완료 처리: ${purchaseDetails.productID}');
       }
 
-      // 🔍 iOS에서 실제 originalTransactionId 추출 시도
-      String? originalTransactionId;
-      String? transactionId = purchaseDetails.purchaseID;
-      
-      // iOS 플랫폼에서 실제 영수증 데이터 확인
-      if (Platform.isIOS && purchaseDetails.verificationData.serverVerificationData.isNotEmpty) {
-        if (kDebugMode) {
-          print('📱 iOS 영수증 데이터 확인 중...');
-          print('   서버 검증 데이터 길이: ${purchaseDetails.verificationData.serverVerificationData.length}');
-        }
-        
-        // 실제 구현에서는 영수증을 파싱해서 originalTransactionId를 추출해야 함
-        // 현재는 purchaseID를 사용
-        originalTransactionId = purchaseDetails.purchaseID;
-        transactionId = purchaseDetails.purchaseID;
-      } else {
-        // 안드로이드이거나 데이터가 없는 경우
-        originalTransactionId = purchaseDetails.purchaseID ?? '';
-        transactionId = purchaseDetails.purchaseID ?? '';
-      }
-
-      if (kDebugMode) {
-        print('🔍 추출된 거래 정보:');
-        print('   transactionId: $transactionId');
-        print('   originalTransactionId: $originalTransactionId');
-      }
+      // 거래 ID 추출 (단순화)
+      final transactionId = purchaseDetails.purchaseID ?? '';
+      final originalTransactionId = purchaseDetails.purchaseID ?? '';
 
       // Firebase Functions를 통한 구매 완료 알림
       final appStoreService = AppStoreSubscriptionService();
@@ -291,23 +234,14 @@ class InAppPurchaseService {
           print('✅ Firebase Functions 구매 완료 알림 성공');
         }
         
-        // 처리된 구매 ID 추가 (중복 처리 방지)
-        _processedPurchases.add(purchaseId);
-        _cleanupProcessedPurchases();
-        
         // 플랜 캐시 무효화 (서버에서 업데이트된 구독 상태 반영)
         _planService.notifyPlanChanged('premium', userId: user.uid);
         
         // 구매 성공 콜백 호출
         _onPurchaseSuccess?.call();
-        
-        if (kDebugMode) {
-          print('📝 구매 처리 완료: $purchaseId');
-        }
       } else {
         if (kDebugMode) {
           print('❌ Firebase Functions 구매 완료 알림 실패');
-          print('💡 서버에서 구독 상태를 확인해주세요');
         }
         
         // Firebase Functions 실패 시에도 UI 업데이트는 수행
@@ -335,17 +269,12 @@ class InAppPurchaseService {
     
     try {
       if (kDebugMode) {
-        print('🧪 [SANDBOX] 구매 테스트 시작');
-        print('🧪 [SANDBOX] 상품 ID: $productId');
-        print('🧪 [SANDBOX] 서비스 사용 가능: $_isAvailable');
-        print('🧪 [SANDBOX] 로드된 상품 수: ${_products.length}');
-        print('🧪 [SANDBOX] 현재 환경: ${kDebugMode ? "DEBUG" : "RELEASE"}');
+        print('🛒 구매 시작: $productId');
       }
 
       if (!_isAvailable) {
         if (kDebugMode) {
-          print('❌ [SANDBOX] In-App Purchase를 사용할 수 없습니다');
-          print('❌ [SANDBOX] Simulator에서는 인앱구매가 지원되지 않습니다. 실제 기기를 사용해주세요.');
+          print('❌ In-App Purchase 사용 불가');
         }
         return false;
       }
@@ -356,25 +285,9 @@ class InAppPurchaseService {
 
       if (productDetails == null) {
         if (kDebugMode) {
-          print('❌ [SANDBOX] 상품을 찾을 수 없습니다: $productId');
-          print('❌ [SANDBOX] App Store Connect에서 상품이 등록되었는지 확인하세요');
-          print('❌ [SANDBOX] 사용 가능한 상품들: ${_products.map((p) => p.id).join(', ')}');
+          print('❌ 상품을 찾을 수 없습니다: $productId');
         }
         return false;
-      }
-
-      if (kDebugMode) {
-        print('🛒 [SANDBOX] 구매 시작: ${productDetails.title}');
-        print('🛒 [SANDBOX] 가격: ${productDetails.price}');
-        print('🛒 [SANDBOX] 설명: ${productDetails.description}');
-        print('🛒 [SANDBOX] 상품 타입: ${productDetails.id}');
-        print('🛒 [SANDBOX] 현재 사용자: ${FirebaseAuth.instance.currentUser?.email ?? "익명"}');
-        
-        // Introductory Offers는 App Store Connect에서 설정되며 자동으로 적용됩니다
-        if (productId == premiumYearlyId) {
-          print('🎁 [SANDBOX] 연간 구독: App Store Connect에서 설정된 무료 체험이 자동 적용됩니다');
-          print('🎁 [SANDBOX] Sandbox 계정 확인: 설정 → App Store → Sandbox Account에서 테스터 계정 로그인 필요');
-        }
       }
 
       final PurchaseParam purchaseParam = PurchaseParam(
@@ -386,19 +299,13 @@ class InAppPurchaseService {
       );
 
       if (kDebugMode) {
-        print('🛒 [SANDBOX] 구매 요청 결과: $success');
-        if (success) {
-          print('✅ [SANDBOX] 구매 다이얼로그가 표시됩니다');
-        } else {
-          print('❌ [SANDBOX] 구매 요청 실패');
-        }
+        print('🛒 구매 요청 결과: $success');
       }
 
       return success;
     } catch (e) {
       if (kDebugMode) {
-        print('❌ [SANDBOX] 구매 시작 중 오류: $e');
-        print('❌ [SANDBOX] 오류 타입: ${e.runtimeType}');
+        print('❌ 구매 시작 중 오류: $e');
       }
       return false;
     }

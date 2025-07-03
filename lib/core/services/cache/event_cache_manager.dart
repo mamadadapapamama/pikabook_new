@@ -130,8 +130,9 @@ class EventCacheManager {
     _cache[key] = value;
     _cacheTimestamps[key] = DateTime.now();
     
-    if (kDebugMode) {
-      print('💾 [EventCache] 캐시 저장: $key');
+    // 🔄 중요한 캐시만 로그 출력 (사용자 설정, 플랜 정보)
+    if (kDebugMode && (key.contains('user_preferences') || key.contains('plan_type') || key.contains('subscription'))) {
+      print('💾 [EventCache] 중요 캐시 저장: $key');
     }
   }
 
@@ -139,8 +140,9 @@ class EventCacheManager {
   T? getCache<T>(String key) {
     final value = _cache[key];
     if (value != null && value is T) {
-      if (kDebugMode) {
-        print('📦 [EventCache] 캐시 조회 성공: $key');
+      // 🔄 중요한 캐시 조회만 로그 출력
+      if (kDebugMode && (key.contains('user_preferences') || key.contains('plan_type') || key.contains('subscription'))) {
+        print('📦 [EventCache] 중요 캐시 조회: $key');
       }
       return value;
     }
@@ -157,8 +159,9 @@ class EventCacheManager {
     _cache.remove(key);
     _cacheTimestamps.remove(key);
     
-    if (kDebugMode) {
-      print('🗑️ [EventCache] 캐시 무효화: $key');
+    // 🔄 중요한 캐시 무효화만 로그 출력
+    if (kDebugMode && (key.contains('user_preferences') || key.contains('plan_type') || key.contains('subscription'))) {
+      print('🗑️ [EventCache] 중요 캐시 무효화: $key');
     }
   }
 

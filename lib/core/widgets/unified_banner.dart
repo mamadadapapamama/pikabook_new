@@ -79,49 +79,49 @@ class UnifiedBanner extends StatelessWidget {
           SizedBox(width: SpacingTokens.sm),
           
           // 액션 버튼들
-          Column(
-            mainAxisSize: MainAxisSize.min,
+            Column(
+              mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
+              children: [
               // 메인 버튼 (있는 경우)
               if (mainButtonText != null && onMainButtonPressed != null) ...[
                 PikaButton(
-                  text: mainButtonText!,
-                  variant: PikaButtonVariant.primary,
-                  size: PikaButtonSize.xs,
-                  padding: EdgeInsets.symmetric(
+                    text: mainButtonText!,
+                    variant: PikaButtonVariant.primary,
+                    size: PikaButtonSize.xs,
+                    padding: EdgeInsets.symmetric(
                     horizontal: SpacingTokens.sm,
                     vertical: SpacingTokens.xs,
+                    ),
+                    onPressed: onMainButtonPressed,
                   ),
-                  onPressed: onMainButtonPressed,
-                ),
                 SizedBox(height: SpacingTokens.xs),
               ],
-              
+                
               // 닫기 버튼 - 더 큰 터치 영역
               Container(
                 height: 32,
-                child: TextButton(
-                  onPressed: onDismiss,
-                  style: TextButton.styleFrom(
+                  child: TextButton(
+                    onPressed: onDismiss,
+                    style: TextButton.styleFrom(
                     padding: EdgeInsets.symmetric(
                       horizontal: SpacingTokens.xs,
                       vertical: SpacingTokens.xs,
                     ),
                     minimumSize: Size(48, 32), // 최소 터치 영역 보장
                     tapTargetSize: MaterialTapTargetSize.padded,
-                  ),
-                  child: Text(
-                    '닫기',
+                    ),
+                    child: Text(
+                      '닫기',
                     style: TypographyTokens.caption.copyWith(
-                      color: ColorTokens.textSecondary,
-                      decoration: TextDecoration.underline,
+                        color: ColorTokens.textSecondary,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );

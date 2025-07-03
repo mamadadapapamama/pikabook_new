@@ -58,9 +58,90 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 플랜 정보 새로고침 (설정 화면에서 수동 호출 가능)
   Future<void> refreshPlanInfo() async {
+    if (kDebugMode) {
+      print('🔄 [Settings] 플랜 정보 강제 새로고침 시작');
+    }
+    
     _isPlanLoaded = false;
     notifyListeners();
-    await loadPlanInfo();
+    
+    // 강제 새로고침으로 서버에서 최신 데이터 가져오기
+    await _loadPlanInfoWithForceRefresh();
+  }
+  
+  /// 강제 새로고침으로 플랜 정보 로드
+  Future<void> _loadPlanInfoWithForceRefresh() async {
+    _setLoading(true);
+    try {
+      if (kDebugMode) {
+        print('🔄 [Settings] App Store 기반 플랜 정보 강제 새로고침');
+      }
+      
+      // App Store에서 강제 새로고침으로 최신 구독 상태 조회
+      final appStoreService = AppStoreSubscriptionService();
+      final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: true);
+      
+      if (kDebugMode) {
+        print('📥 [Settings] 강제 새로고침 결과:');
+        print('   구독 상태: $appStoreStatus');
+        print('   상태 메시지: ${appStoreStatus.displayName}');
+        print('   프리미엄 여부: ${appStoreStatus.isPremium}');
+        print('   체험 여부: ${appStoreStatus.isTrial}');
+      }
+      
+      // UI에 표시할 정보 설정
+      if (appStoreStatus.isPremium) {
+        _planType = 'premium';
+      } else if (appStoreStatus.isTrial) {
+        _planType = 'premium'; // 체험도 프리미엄으로 분류
+      } else {
+        _planType = 'free';
+      }
+      
+      _planName = appStoreStatus.displayName;
+      _remainingDays = 0; // App Store에서 자동 관리
+      
+      // 플랜별 제한 설정 (간단화)
+      if (appStoreStatus.isPremium || appStoreStatus.isTrial) {
+        _planLimits = {
+          'ocrPages': 300,
+          'ttsRequests': 1000,
+        };
+      } else {
+        _planLimits = {
+          'ocrPages': 10,
+          'ttsRequests': 30,
+        };
+      }
+      
+      _isPlanLoaded = true;
+      notifyListeners();
+      
+      if (kDebugMode) {
+        print('✅ [Settings] 강제 새로고침 완료');
+        print('   UI 표시명: $_planName');
+        print('   플랜 타입: $_planType');
+        print('   제한: $_planLimits');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ [Settings] 강제 새로고침 오류: $e');
+      }
+      
+      // 에러 발생 시 기본값 설정
+      _planType = 'free';
+      _planName = '새로고침 실패';
+      _remainingDays = 0;
+      _planLimits = {
+        'ocrPages': 10,
+        'ttsRequests': 30,
+      };
+      _isPlanLoaded = true;
+      
+      notifyListeners();
+    } finally {
+      _setLoading(false);
+    }
   }
 
   /// 사용자 데이터 로드
@@ -107,9 +188,9 @@ class SettingsViewModel extends ChangeNotifier {
         print('🔍 [Settings] App Store 기반 플랜 정보 로드 시작');
       }
       
-      // App Store에서 캐시된 구독 상태 조회 (forceRefresh 제거)
+      // App Store에서 캐시된 구독 상태 조회 (초기 로드는 캐시 우선)
       final appStoreService = AppStoreSubscriptionService();
-      final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus();
+      final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: false);
       
       if (kDebugMode) {
           print('   구독 상태: $appStoreStatus');

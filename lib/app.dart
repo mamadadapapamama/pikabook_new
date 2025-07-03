@@ -147,7 +147,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 인증 상태 관찰 설정 (비동기)
       _setupAuthStateListener();
       
-      // App Store 구독 서비스 초기화 (비동기)
+      // App Store 구독 서비스 초기화 (비동기, App Store Connect 우선)
       _appStoreService.initialize();
       
       // 초기화 상태 즉시 업데이트
@@ -285,14 +285,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       }
   }
   
-  /// 사용자 로그인 후 처리 로직
+  /// 사용자 데이터 로드 (로그인 후)
   Future<void> _loadUserPreferences() async {
-    if (!mounted) return;
-    
-    if (kDebugMode) {
-      debugPrint('[loadUserPreferences] 시작');
-    }
-    
     try {
       if (_userId == null) {
         setState(() {
@@ -305,37 +299,18 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 로그인 상태이므로 샘플 모드 비활성화
       _isSampleMode = false;
       
-      // 사용자 데이터 로드
+      // 🎯 간소화: 필수 사용자 데이터만 로드
       await _preferencesService.setCurrentUserId(_userId!);
       
-      // Firestore에서 사용자 문서 존재 여부 확인
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(_userId!)
-          .get();
-      
-      if (!userDoc.exists) {
-        // 새로운 사용자이므로 사용자별 데이터만 초기화
-        debugPrint('🔄 새로운 사용자 감지 - 사용자 데이터 초기화');
-        await _preferencesService.clearUserData();
-        // PlanService 캐시는 사용자별로 관리되므로 초기화하지 않음
-        // (다른 사용자의 프리미엄 상태에 영향을 주지 않기 위해)
-      }
-      
-      // 앱 첫 진입 시 항상 Firestore에서 새로고침 (캐시 무시)
-      await _preferencesService.loadUserSettingsFromFirestore(forceRefresh: true);
-  
-      // 온보딩 상태 확인 (노트 생성 시 자동으로 완료 처리됨)
+      // 🎯 간소화: 온보딩 상태만 확인 (다른 복잡한 초기화 제거)
       _isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
       
-      // 상태 업데이트 (사용량 확인은 InitializationManager에서 처리됨)
+      // 상태 업데이트
       if (mounted) {
         setState(() {
           _isLoadingUserData = false;
           _isLoading = false;
         });
-        
-        // 플랜 변경은 InitializationManager에서 배너로 처리됨
       }
     } catch (e) {
       if (kDebugMode) {
@@ -350,12 +325,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       }
     }
   }
-  
-
-  
-
-  
-
   
   /// 샘플 모드에서 로그인 화면으로 전환 요청
   void _requestLoginScreen() {
