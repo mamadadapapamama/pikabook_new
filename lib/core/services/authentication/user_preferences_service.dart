@@ -178,12 +178,21 @@ class UserPreferencesService {
     }
   }
 
-  /// Firestore에서 사용자 설정 로드 (읽기 전용 - 저장하지 않음)
-  Future<void> loadUserSettingsFromFirestore() async {
+  /// Firestore에서 사용자 설정 로드 (앱 첫 진입 시 강제 새로고침)
+  Future<void> loadUserSettingsFromFirestore({bool forceRefresh = false}) async {
     final userId = await getCurrentUserId();
     if (userId == null || userId.isEmpty) {
       debugPrint('⚠️ Firestore에서 설정을 로드할 사용자 ID가 없습니다');
       return;
+    }
+    
+    // 앱 첫 진입 시 (forceRefresh = true)에는 캐시 무시하고 항상 Firestore에서 새로고침
+    final cacheKey = 'user_preferences_$userId';
+    if (forceRefresh) {
+      _eventCache.invalidateCache(cacheKey);
+      if (kDebugMode) {
+        debugPrint('🔄 [UserPreferences] 앱 첫 진입 - 캐시 무효화 후 Firestore에서 새로고침');
+      }
     }
     
     try {
@@ -202,10 +211,9 @@ class UserPreferencesService {
         await prefs.setString(key, jsonEncode(preferences.toJson()));
         
         // 이벤트 기반 캐시에만 저장 (Firestore 저장 없음)
-        final cacheKey = 'user_preferences_$userId';
         _eventCache.setCache(cacheKey, preferences);
         
-        debugPrint('✅ Firestore에서 사용자 설정 로드 완료 (읽기 전용)');
+        debugPrint('✅ Firestore에서 사용자 설정 로드 완료 (읽기 전용, forceRefresh: $forceRefresh)');
       } else {
         debugPrint('⚠️ Firestore에 사용자 문서가 없습니다: $userId');
       }

@@ -118,6 +118,10 @@ class PlanService {
         debugPrint('   플랜 타입: $planType');
       }
       
+      // 🚨 성공한 구독 상태를 AppStoreSubscriptionService 캐시에도 강제 저장
+      // 이렇게 하면 다른 곳에서 AppStoreSubscriptionService를 호출해도 중복 네트워크 요청 없이 캐시 사용
+      _appStoreService.updateCacheFromExternal(subscriptionStatus);
+      
       // 이벤트 캐시에 저장
       _eventCache.setCache(cacheKey, planType);
       
@@ -448,8 +452,11 @@ class PlanService {
   Future<Map<String, dynamic>> getSubscriptionDetails({bool forceRefresh = false}) async {
     final userId = _currentUserId;
     
-    // 강제 새로고침 시 관련 캐시 무효화
+    // 강제 새로고침 시 관련 캐시 무효화 (온보딩에서는 불필요한 호출 방지)
     if (forceRefresh && userId != null) {
+      if (kDebugMode) {
+        debugPrint('🔄 [PlanService] 강제 새로고침으로 캐시 무효화: $userId');
+      }
       _eventCache.invalidateCache('plan_type_$userId');
       _eventCache.invalidateCache('subscription_$userId');
     }
@@ -532,6 +539,10 @@ class PlanService {
         }
       }
       
+      // 🆕 Firebase Functions의 autoRenewStatus를 우선 사용 (실시간 App Store 상태)
+      bool autoRenewStatus = subscriptionStatus.autoRenewStatus;
+      bool isCancelled = !autoRenewStatus && (isFreeTrial || subscriptionStatus.isPremium);
+      
       if (kDebugMode) {
         debugPrint('🍎 [PlanService] Firebase Functions 기반 구독 상세 정보:');
         debugPrint('   사용자 ID: $userId');
@@ -541,6 +552,8 @@ class PlanService {
         debugPrint('   현재 무료 체험 중: $isFreeTrial');
         debugPrint('   프리미엄 사용 이력: $hasEverUsedPremium');
         debugPrint('   구독 유형: $subscriptionType');
+        debugPrint('   자동 갱신 상태: $autoRenewStatus (Firebase Functions 제공)');
+        debugPrint('   취소 상태: $isCancelled');
         debugPrint('   남은 일수: $daysRemaining (Firebase Functions 제공)');
       }
 
@@ -554,6 +567,8 @@ class PlanService {
         'daysRemaining': daysRemaining,
         'expiryDate': expiryDate,
         'subscriptionType': subscriptionType,
+        'isCancelled': isCancelled,
+        'autoRenewStatus': autoRenewStatus,
       };
       
       // 캐시에 저장
@@ -576,6 +591,8 @@ class PlanService {
         'daysRemaining': 0,
         'expiryDate': null,
         'subscriptionType': null,
+        'isCancelled': false,
+        'autoRenewStatus': true,
       };
     }
   }

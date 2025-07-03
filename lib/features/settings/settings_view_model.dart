@@ -107,9 +107,9 @@ class SettingsViewModel extends ChangeNotifier {
         print('🔍 [Settings] App Store 기반 플랜 정보 로드 시작');
       }
       
-      // App Store에서 직접 구독 상태 조회
+      // App Store에서 캐시된 구독 상태 조회 (forceRefresh 제거)
       final appStoreService = AppStoreSubscriptionService();
-      final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: true);
+      final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus();
       
       if (kDebugMode) {
           print('   구독 상태: $appStoreStatus');

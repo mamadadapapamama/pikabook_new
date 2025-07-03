@@ -15,7 +15,7 @@ import 'package:flutter/foundation.dart';
 /// 공통 앱바 위젯
 /// 모든 스크린에서 재사용할 수 있도록 설계된 커스터마이저블 앱바
 
-class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
+class PikaAppBar extends StatefulWidget implements PreferredSizeWidget {
   // 공통 속성
   final String? title;
   final VoidCallback? onBackPressed;
@@ -187,38 +187,62 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
+  State<PikaAppBar> createState() => _PikaAppBarState();
+  
+  @override
+  Size get preferredSize {
+    final double appBarHeight = height ?? toolbarHeight ?? kToolbarHeight;
+    final double bottomExtent = bottom is PreferredSizeWidget 
+        ? (bottom as PreferredSizeWidget).preferredSize.height 
+        : 0.0;
+    return Size.fromHeight(appBarHeight + bottomExtent);
+  }
+}
+
+class _PikaAppBarState extends State<PikaAppBar> {
+  // 🎯 Future를 한 번만 생성하여 재사용
+  late final Future<String> _planTypeFuture;
+  
+  @override
+  void initState() {
+    super.initState();
+    // 🎯 initState에서 한 번만 Future 생성
+    _planTypeFuture = PlanService().getCurrentPlanType();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (isHome) {
+    if (widget.isHome) {
       return _buildHomeAppBar(context);
     }
 
     // 앱바 컨텐츠
     AppBar appBar = AppBar(
-      backgroundColor: backgroundColor ?? Colors.transparent,
-      elevation: elevation ?? 0,
-      centerTitle: centerTitle,
-      automaticallyImplyLeading: automaticallyImplyLeading,
-      titleSpacing: showLogo ? 24.0 : 4.0,
+      backgroundColor: widget.backgroundColor ?? Colors.transparent,
+      elevation: widget.elevation ?? 0,
+      centerTitle: widget.centerTitle,
+      automaticallyImplyLeading: widget.automaticallyImplyLeading,
+      titleSpacing: widget.showLogo ? 24.0 : 4.0,
       systemOverlayStyle: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.dark, // 안드로이드용 (검정 아이콘)
         statusBarBrightness: Brightness.light, // iOS용 (밝은 배경 = 검정 아이콘)
       ),
-      leading: showBackButton
+      leading: widget.showBackButton
           ? IconButton(
               key: const Key('pika_app_bar_back_button'),
               icon: const Icon(Icons.arrow_back, color: ColorTokens.textSecondary),
-              onPressed: onBackPressed ?? () => Navigator.of(context).popUntil((route) => route.isFirst),
+              onPressed: widget.onBackPressed ?? () => Navigator.of(context).popUntil((route) => route.isFirst),
             )
-          : leading,
+          : widget.leading,
       title: _buildTitleWithPlanBadge(context),
-      actions: actions,
-      bottom: bottom != null
+      actions: widget.actions,
+      bottom: widget.bottom != null
           ? PreferredSize(
-              preferredSize: Size.fromHeight(bottomHeight),
-              child: bottom!,
+              preferredSize: Size.fromHeight(widget.bottomHeight),
+              child: widget.bottom!,
             )
-          : showBorder
+          : widget.showBorder
               ? PreferredSize(
                   preferredSize: Size.fromHeight(1.0),
                   child: Container(
@@ -230,19 +254,19 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
 
     // 페이지 인디케이터가 있는 경우
-    if (currentPageIndex != null && totalPages != null) {
+    if (widget.currentPageIndex != null && widget.totalPages != null) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           appBar,
-          SizedBox(height: bottomHeight),
+          SizedBox(height: widget.bottomHeight),
           _buildPageIndicator(),
         ],
       );
     }
 
     return Container(
-      height: preferredSize.height,
+      height: widget.preferredSize.height,
       child: appBar,
     );
   }
@@ -353,17 +377,18 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   Widget _buildTitleWithPlanBadge(BuildContext context) {
     // 설정 페이지인 경우 단순 타이틀만 표시
-    if (title != null && !showLogo) {
+    if (widget.title != null && !widget.showLogo) {
       return Text(
-        title!,
+        widget.title!,
         style: TypographyTokens.headline3.copyWith(
           color: ColorTokens.textPrimary,
         ),
       );
     }
 
+    // 🎯 미리 생성한 Future 재사용
     return FutureBuilder<String>(
-      future: PlanService().getCurrentPlanType(),
+      future: _planTypeFuture,
       builder: (context, snapshot) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,13 +396,13 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
             Row(
               children: [
                 Expanded(
-                  child: _buildLogoTitle(noteSpaceName),
+                  child: _buildLogoTitle(widget.noteSpaceName),
                 ),
               ],
             ),
-            if (subtitle != null) ...[
+            if (widget.subtitle != null) ...[
               SizedBox(height: SpacingTokens.xs),
-              subtitle!,
+              widget.subtitle!,
             ],
           ],
         );
@@ -416,7 +441,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
         // 노트 스페이스 이름
         if (noteSpaceName != null)
           FutureBuilder<String>(
-            future: PlanService().getCurrentPlanType(),
+            future: _planTypeFuture,
             builder: (context, snapshot) {
               final isPlanFree = snapshot.data == PlanService.PLAN_FREE;
               
@@ -447,7 +472,7 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          '$currentPageIndex / $totalPages',
+          '${widget.currentPageIndex} / ${widget.totalPages}',
           style: TypographyTokens.body2.copyWith(
             color: ColorTokens.textSecondary,
           ),
@@ -456,12 +481,4 @@ class PikaAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  @override
-  Size get preferredSize {
-    final double appBarHeight = height ?? toolbarHeight ?? kToolbarHeight;
-    final double bottomExtent = bottom is PreferredSizeWidget 
-        ? (bottom as PreferredSizeWidget).preferredSize.height 
-        : 0.0;
-    return Size.fromHeight(appBarHeight + bottomExtent);
-  }
 } 

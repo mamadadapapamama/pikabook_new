@@ -1005,6 +1005,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showUpgradeModal() async {
+    // 🚨 이미 업그레이드 모달이 표시 중이면 중복 호출 방지
+    if (UpgradeModal.isShowing) {
+      if (kDebugMode) {
+        debugPrint('⚠️ [Settings] 업그레이드 모달이 이미 표시 중입니다. 중복 호출 방지');
+      }
+      return;
+    }
+
     try {
       // 🎯 체험 이력에 따른 분기 처리
       final planService = PlanService();

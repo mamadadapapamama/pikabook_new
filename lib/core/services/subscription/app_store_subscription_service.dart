@@ -23,13 +23,14 @@ class AppStoreSubscriptionService {
         debugPrint('🔄 [AppStoreSubscription] Firebase Functions 서비스 초기화');
       }
 
-      // 개발 환경에서는 로컬 에뮬레이터 사용
-      if (kDebugMode) {
-        _functions.useFunctionsEmulator('localhost', 5001);
-      }
+      // 🚨 릴리즈 준비: 항상 프로덕션 Firebase Functions 사용
+      // 개발 환경에서도 프로덕션 서버 사용 (에뮬레이터 연결 문제 방지)
+      // if (kDebugMode) {
+      //   _functions.useFunctionsEmulator('localhost', 5001);
+      // }
 
       if (kDebugMode) {
-        debugPrint('✅ [AppStoreSubscription] 서비스 초기화 완료');
+        debugPrint('✅ [AppStoreSubscription] 서비스 초기화 완료 (프로덕션 Firebase 사용)');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -65,15 +66,34 @@ class AppStoreSubscriptionService {
         if (originalTransactionId != null) 'originalTransactionId': originalTransactionId,
       });
 
-      final data = result.data as Map<String, dynamic>;
+      // 안전한 타입 캐스팅으로 Firebase Functions 응답 처리
+      final data = Map<String, dynamic>.from(result.data as Map);
+      
+      if (kDebugMode) {
+        debugPrint('🔍 [AppStoreSubscription] Firebase Functions 원본 응답:');
+        debugPrint('   성공 여부: ${data['success']}');
+        if (data['subscription'] != null) {
+          final sub = data['subscription'] as Map;
+          debugPrint('   구독 정보: ${sub.toString()}');
+          debugPrint('   - currentPlan: ${sub['currentPlan']}');
+          debugPrint('   - isActive: ${sub['isActive']}');
+          debugPrint('   - expirationDate: ${sub['expirationDate']}');
+          debugPrint('   - autoRenewStatus: ${sub['autoRenewStatus']}');
+        }
+      }
       
       if (data['success'] == true) {
-        final subscriptionData = data['subscription'] as Map<String, dynamic>;
+        final subscriptionData = Map<String, dynamic>.from(data['subscription'] as Map);
         final subscriptionStatus = _parseSubscriptionStatus(subscriptionData);
         _updateCache(subscriptionStatus);
         
         if (kDebugMode) {
-          debugPrint('✅ [AppStoreSubscription] 구독 상태 확인 완료: ${subscriptionStatus.planType}');
+          debugPrint('✅ [AppStoreSubscription] 구독 상태 파싱 완료:');
+          debugPrint('   - 플랜 타입: ${subscriptionStatus.planType}');
+          debugPrint('   - 활성 상태: ${subscriptionStatus.isActive}');
+          debugPrint('   - 프리미엄: ${subscriptionStatus.isPremium}');
+          debugPrint('   - 체험: ${subscriptionStatus.isTrial}');
+          debugPrint('   - 무료: ${subscriptionStatus.isFree}');
         }
 
         return subscriptionStatus;
@@ -88,7 +108,21 @@ class AppStoreSubscriptionService {
       if (kDebugMode) {
         debugPrint('❌ [AppStoreSubscription] 구독 상태 확인 중 오류: $e');
       }
-      return SubscriptionStatus.free(); // 오류 시 무료 플랜으로 처리
+      
+      // 🚨 에러 발생 시: 캐시가 있으면 캐시 사용, 없으면 무료 플랜
+      if (_cachedStatus != null) {
+        if (kDebugMode) {
+          debugPrint('📦 [AppStoreSubscription] 에러 발생, 캐시된 상태 사용: ${_cachedStatus!.planType}');
+        }
+        return _cachedStatus!;
+      } else {
+        if (kDebugMode) {
+          debugPrint('🆓 [AppStoreSubscription] 에러 발생, 무료 플랜으로 처리');
+        }
+        final freeStatus = SubscriptionStatus.free();
+        _updateCache(freeStatus);
+        return freeStatus;
+      }
     }
   }
 
@@ -114,13 +148,13 @@ class AppStoreSubscriptionService {
         'originalTransactionId': originalTransactionId,
       });
 
-      final data = result.data as Map<String, dynamic>;
+      final data = Map<String, dynamic>.from(result.data as Map);
       
       if (data['success'] == true) {
         if (kDebugMode) {
           debugPrint('✅ [AppStoreSubscription] 상세 구독 정보 조회 완료');
         }
-        return data['subscription'] as Map<String, dynamic>;
+        return Map<String, dynamic>.from(data['subscription'] as Map);
       } else {
         if (kDebugMode) {
           debugPrint('❌ [AppStoreSubscription] 상세 구독 정보 조회 실패');
@@ -158,13 +192,13 @@ class AppStoreSubscriptionService {
         'transactionId': transactionId,
       });
 
-      final data = result.data as Map<String, dynamic>;
+      final data = Map<String, dynamic>.from(result.data as Map);
       
       if (data['success'] == true) {
         if (kDebugMode) {
           debugPrint('✅ [AppStoreSubscription] 거래 정보 조회 완료');
         }
-        return data['transaction'] as Map<String, dynamic>;
+        return Map<String, dynamic>.from(data['transaction'] as Map);
       } else {
         if (kDebugMode) {
           debugPrint('❌ [AppStoreSubscription] 거래 정보 조회 실패');
@@ -195,7 +229,12 @@ class AppStoreSubscriptionService {
   }) async {
     try {
       if (kDebugMode) {
-        debugPrint('📱 [AppStoreSubscription] 구매 완료 알림: $productId');
+        debugPrint('🚀 === Firebase Functions 구매 완료 알림 시작 ===');
+        debugPrint('📱 상품 ID: $productId');
+        debugPrint('📱 transactionId: $transactionId');
+        debugPrint('📱 originalTransactionId: $originalTransactionId');
+        debugPrint('📱 purchaseDate: $purchaseDate');
+        debugPrint('📱 expirationDate: $expirationDate');
       }
 
       // 로그인 상태 확인
@@ -207,21 +246,38 @@ class AppStoreSubscriptionService {
         return false;
       }
 
+      if (kDebugMode) {
+        debugPrint('✅ [AppStoreSubscription] 사용자 인증 확인: ${currentUser.email}');
+      }
+
       // Firebase Functions 호출
       final callable = _functions.httpsCallable('sub_notifyPurchaseComplete');
-      final result = await callable.call({
+      
+      final requestData = {
         'transactionId': transactionId,
         'originalTransactionId': originalTransactionId,
         'productId': productId,
         if (purchaseDate != null) 'purchaseDate': purchaseDate,
         if (expirationDate != null) 'expirationDate': expirationDate,
-      });
+      };
+      
+      if (kDebugMode) {
+        debugPrint('🔄 [AppStoreSubscription] Firebase Functions 호출 데이터: $requestData');
+      }
+      
+      final result = await callable.call(requestData);
 
-      final data = result.data as Map<String, dynamic>;
+      final data = Map<String, dynamic>.from(result.data as Map);
+      
+      if (kDebugMode) {
+        debugPrint('📥 [AppStoreSubscription] Firebase Functions 응답: $data');
+      }
       
       if (data['success'] == true) {
         if (kDebugMode) {
-          debugPrint('✅ [AppStoreSubscription] 구매 완료 알림 성공');
+          debugPrint('✅ [AppStoreSubscription] 구매 완료 알림 성공!');
+          debugPrint('   응답 메시지: ${data['message']}');
+          debugPrint('   거래 ID: ${data['transactionId']}');
         }
         
         // 캐시 무효화
@@ -231,6 +287,8 @@ class AppStoreSubscriptionService {
       } else {
         if (kDebugMode) {
           debugPrint('❌ [AppStoreSubscription] 구매 완료 알림 실패');
+          debugPrint('   실패 이유: ${data['error'] ?? '알 수 없음'}');
+          debugPrint('   전체 응답: $data');
         }
         return false;
       }
@@ -238,6 +296,8 @@ class AppStoreSubscriptionService {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [AppStoreSubscription] 구매 완료 알림 중 오류: $e');
+        debugPrint('   오류 타입: ${e.runtimeType}');
+        debugPrint('   오류 스택: ${e.toString()}');
       }
       return false;
     }
@@ -271,6 +331,14 @@ class AppStoreSubscriptionService {
     }
   }
 
+  /// 🚨 외부에서 캐시 업데이트 (PlanService에서 성공한 결과 공유용)
+  void updateCacheFromExternal(SubscriptionStatus status) {
+    _updateCache(status);
+    if (kDebugMode) {
+      debugPrint('📦 [AppStoreSubscription] 외부에서 캐시 업데이트: ${status.planType}');
+    }
+  }
+
   /// 무료체험 사용 이력 확인
   Future<bool> hasUsedFreeTrial() async {
     try {
@@ -278,7 +346,7 @@ class AppStoreSubscriptionService {
       final callable = _functions.httpsCallable('sub_hasUsedFreeTrial');
       final result = await callable.call();
       
-      final data = result.data as Map<String, dynamic>;
+      final data = Map<String, dynamic>.from(result.data as Map);
       return data['hasUsedTrial'] as bool? ?? false;
     } catch (e) {
       if (kDebugMode) {

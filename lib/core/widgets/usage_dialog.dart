@@ -402,6 +402,14 @@ class _UsageDialogState extends State<UsageDialog> {
         } else {
           // 무료 사용자 - 업그레이드 모달
           if (mounted) {
+            // 🚨 이미 업그레이드 모달이 표시 중이면 중복 호출 방지
+            if (UpgradeModal.isShowing) {
+              if (kDebugMode) {
+                debugPrint('⚠️ [UsageDialog] 업그레이드 모달이 이미 표시 중입니다. 중복 호출 방지');
+              }
+              return;
+            }
+
             UpgradeModal.show(
               context,
               reason: UpgradeReason.limitReached,

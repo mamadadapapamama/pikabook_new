@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
-import '../../core/services/authentication/auth_service.dart';
-import '../../core/services/authentication/deleted_user_service.dart';
-import '../../core/services/common/plan_service.dart';
+
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,7 +10,7 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import '../../../core/widgets/upgrade_modal.dart';
+
 import 'package:flutter_svg/flutter_svg.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -27,7 +25,6 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   final UserPreferencesService _userPreferences = UserPreferencesService();
-  final PlanService _planService = PlanService();
   final GlobalKey _customInputKey = GlobalKey(); // 기타 입력 필드용 키
   
   // 상태 변수
@@ -92,197 +89,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     setState(() {});
   }
 
-  /// 탈퇴 후 재가입인지 확인 및 이전 플랜 정보 반환
-  Future<Map<String, dynamic>?> _getDeletedUserInfo(String userId) async {
-    try {
-      if (kDebugMode) {
-        print('🔍 [온보딩] 탈퇴 이력 및 플랜 정보 확인 시작: $userId');
-      }
-      
-      // 중앙화된 서비스 사용 (항상 Firebase에서 최신 데이터 조회)
-      final deletedUserService = DeletedUserService();
-      final deletedUserInfo = await deletedUserService.getDeletedUserInfo();
-      
-      if (kDebugMode) {
-        if (deletedUserInfo != null) {
-          print('📋 [온보딩] 탈퇴 이력 발견');
-          final lastPlan = deletedUserInfo['lastPlan'] as Map<String, dynamic>?;
-          if (lastPlan != null) {
-            print('   이전 플랜 타입: ${lastPlan['planType']}');
-            print('   이전 무료체험: ${lastPlan['isFreeTrial']}');
-            print('   이전 구독 타입: ${lastPlan['subscriptionType']}');
-          } else {
-            print('   이전 플랜 정보: 없음');
-          }
-        } else {
-          print('📋 [온보딩] 탈퇴 이력 없음');
-        }
-      }
-      
-      return deletedUserInfo;
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ [온보딩] 탈퇴 이력 확인 중 오류: $e');
-      }
-      return null;
-    }
-  }
 
-  /// 탈퇴 후 재가입 사용자 처리
-  Future<void> _handleReturningUser(Map<String, dynamic>? deletedUserInfo) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
-      // 이미 가져온 탈퇴 정보에서 이전 플랜 정보 확인
-      final lastPlanInfo = deletedUserInfo?['lastPlan'] as Map<String, dynamic>?;
-      
-      if (kDebugMode) {
-        print('📋 [온보딩] 탈퇴 기록에서 이전 플랜 정보 확인:');
-        print('   이전 플랜: ${lastPlanInfo?['planType']}');
-        print('   무료체험: ${lastPlanInfo?['isFreeTrial']}');
-        print('   구독 타입: ${lastPlanInfo?['subscriptionType']}');
-        print('   남은 일수: ${lastPlanInfo?['daysRemaining']}');
-      }
-
-      // 🔧 임시: 플랜 정보가 없는 경우 기본값으로 업데이트 (테스트용)
-      if (lastPlanInfo == null && deletedUserInfo != null) {
-        if (kDebugMode) {
-          print('🔧 [온보딩] 플랜 정보 없음 - 기본 프리미엄 체험 정보로 업데이트');
-        }
-                 try {
-           final deletedUserService = DeletedUserService();
-           await deletedUserService.updateDeletedUserPlanInfo(
-             user.email!,
-             {
-               'planType': 'premium',
-               'isFreeTrial': true,
-               'subscriptionType': 'trial',
-               'daysRemaining': 0,
-               'expiryDate': null,
-             },
-           );
-          
-          // 업데이트된 정보로 다시 설정
-          final updatedLastPlanInfo = {
-            'planType': 'premium',
-            'isFreeTrial': true,
-            'subscriptionType': 'trial',
-            'daysRemaining': 0,
-            'expiryDate': null,
-          };
-          
-          if (kDebugMode) {
-            print('✅ [온보딩] 플랜 정보 업데이트 완료 - 프리미엄 업그레이드 모달 표시');
-          }
-          
-          // 이전에 무료체험을 사용했던 사용자로 처리
-          await UpgradePromptHelper.showPremiumUpgradePrompt(
-            context,
-            onComplete: () {
-              if (mounted) {
-                widget.onComplete();
-              }
-            },
-          );
-          return;
-        } catch (e) {
-          if (kDebugMode) {
-            print('⚠️ [온보딩] 플랜 정보 업데이트 실패: $e');
-          }
-        }
-      }
-
-      // 현재 구독 상태 확인 (혹시 복원된 경우 대비)
-      final subscriptionDetails = await _planService.getSubscriptionDetails(forceRefresh: true);
-      final currentPlanType = subscriptionDetails['currentPlan'] as String? ?? 'free';
-      
-      if (kDebugMode) {
-        print('🔄 [온보딩] 현재 구독 상태: $currentPlanType');
-      }
-
-      // 1. 현재 활성 구독이 있는 경우 (복원된 경우)
-      if (currentPlanType == 'premium') {
-        final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
-        if (kDebugMode) {
-          print('💎 [온보딩] 현재 프리미엄 구독 활성 - 복원 스낵바 표시');
-        }
-        UpgradePromptHelper.showSubscriptionRestoredSnackbar(
-          context,
-          isFreeTrial: isFreeTrial,
-        );
-        widget.onComplete();
-        return;
-      }
-
-      // 2. 이전 플랜 정보가 있는 경우
-      if (lastPlanInfo != null) {
-        final lastPlanType = lastPlanInfo['planType'] as String?;
-        final wasFreeTrial = lastPlanInfo['isFreeTrial'] as bool? ?? false;
-        
-        if (lastPlanType == 'premium') {
-          if (wasFreeTrial) {
-            if (kDebugMode) {
-              print('🎁 [온보딩] 이전 무료체험 사용자 - 프리미엄 업그레이드 모달');
-            }
-            // 이전에 무료체험을 사용했던 사용자 - 프리미엄 업그레이드 모달
-            await UpgradePromptHelper.showPremiumUpgradePrompt(
-              context,
-              onComplete: () {
-                if (mounted) {
-                  widget.onComplete();
-                }
-              },
-            );
-          } else {
-            if (kDebugMode) {
-              print('💎 [온보딩] 이전 프리미엄 구독자 - 복원 스낵바 표시');
-            }
-            // 이전에 프리미엄 구독자였던 사용자 - 복원 스낵바
-            UpgradePromptHelper.showSubscriptionRestoredSnackbar(
-              context,
-              isFreeTrial: false,
-            );
-            widget.onComplete();
-          }
-        } else {
-          if (kDebugMode) {
-            print('🆓 [온보딩] 이전 무료 플랜 사용자 - 환영 모달');
-          }
-          // 이전에 무료 플랜이었던 사용자 - 환영 모달
-          await UpgradePromptHelper.showWelcomeTrialPrompt(
-            context,
-            onComplete: () {
-              if (mounted) {
-                widget.onComplete();
-              }
-            },
-          );
-        }
-      } else {
-        if (kDebugMode) {
-          print('❓ [온보딩] 이전 플랜 정보 없음 - 환영 모달');
-        }
-        // 이전 플랜 정보가 없는 경우 - 환영 모달
-        await UpgradePromptHelper.showWelcomeTrialPrompt(
-          context,
-          onComplete: () {
-            if (mounted) {
-              widget.onComplete();
-            }
-          },
-        );
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ 탈퇴 후 재가입 사용자 처리 중 오류: $e');
-      }
-      // 오류 발생 시 기본 홈 화면으로 이동
-      if (mounted) {
-        widget.onComplete();
-      }
-    }
-  }
   
   bool get _canProceed {
     switch (_currentPage) {
@@ -429,27 +236,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return;
       }
 
-      // 1. 탈퇴 후 재가입인지 확인 및 이전 플랜 정보 가져오기
-      final deletedUserInfo = await _getDeletedUserInfo(user.uid);
-      final isReturningUser = deletedUserInfo != null;
-      
-      // 2. 현재 subscription 정보 확인
-      final subscriptionDetails = await _planService.getSubscriptionDetails(forceRefresh: true);
-      final hasExistingSubscription = subscriptionDetails['subscription'] != null;
-      final currentPlan = subscriptionDetails['currentPlan'] as String? ?? 'free';
-      
-      if (kDebugMode) {
-        print('🔍 [온보딩] 사용자 상태 확인 완료');
-        print('   사용자 ID: ${user.uid}');
-        print('   탈퇴 후 재가입: $isReturningUser');
-        print('   기존 구독 정보: $hasExistingSubscription');
-        print('   현재 플랜: $currentPlan');
-      }
-
       // 사용 목적 값 결정 (기타인 경우 커스텀 입력 값 사용)
       String finalUsagePurpose = _selectedUsagePurpose!;
       if (_selectedUsagePurpose == '기타' && _customPurposeController.text.trim().isNotEmpty) {
         finalUsagePurpose = _customPurposeController.text.trim();
+      }
+
+      if (kDebugMode) {
+        print('🔍 [온보딩] 사용자 정보 저장 시작');
+        print('   사용자 ID: ${user.uid}');
+        print('   이름: ${_nameController.text}');
+        print('   학습 목적: $finalUsagePurpose');
+        print('   레벨: $_selectedLevel');
       }
 
       // 번역 모드 자동 설정 (초급 -> 문장 모드, 중급/고급 -> 문단 모드)
@@ -509,59 +307,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       );
 
-      // 탈퇴 후 재가입인지에 따른 처리
+      if (kDebugMode) {
+        print('✅ [온보딩] 사용자 정보 저장 완료 - 홈으로 이동');
+      }
+
+      // 🚀 온보딩 완료 - 홈에서 구독 상태에 따른 처리 진행
       if (mounted) {
-        if (isReturningUser) {
-          if (kDebugMode) {
-            print('🔄 [온보딩] 탈퇴 후 재가입 사용자 처리 시작');
-          }
-          await _handleReturningUser(deletedUserInfo);
-        } else if (hasExistingSubscription) {
-          if (kDebugMode) {
-            print('📋 [온보딩] 기존 구독 정보 보유 사용자 - 현재 플랜: $currentPlan');
-          }
-          // 기존 구독 정보가 있는 사용자 처리
-          if (currentPlan == 'premium') {
-            final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
-            if (kDebugMode) {
-              print('💎 [온보딩] 현재 프리미엄 사용자 - 무료체험: $isFreeTrial');
-            }
-            // 현재 프리미엄 사용자 - 복원 스낵바 표시
-            UpgradePromptHelper.showSubscriptionRestoredSnackbar(
-              context,
-              isFreeTrial: isFreeTrial,
-            );
-          } else {
-            if (kDebugMode) {
-              print('🆓 [온보딩] 현재 무료 플랜 사용자 - 바로 홈으로 이동');
-            }
-            // 무료 플랜 사용자 - 바로 홈으로 이동
-          }
-          widget.onComplete();
-        } else {
-          if (kDebugMode) {
-            print('🆕 [온보딩] 신규 사용자 - 환영 모달 표시');
-          }
-          // 진짜 신규 사용자 - 7일 무료체험 유도 모달 표시
-          try {
-            await UpgradePromptHelper.showWelcomeTrialPrompt(
-              context,
-              onComplete: () {
-                if (mounted) {
-                  // 온보딩 완료 콜백 호출하여 앱 상태 변경
-                  widget.onComplete();
-                }
-              },
-            );
-          } catch (modalError) {
-            // 모달 에러가 발생해도 홈 화면으로 이동
-            debugPrint('업그레이드 모달 표시 중 오류: $modalError');
-            if (mounted) {
-              // 온보딩 완료 콜백 호출하여 앱 상태 변경
-              widget.onComplete();
-            }
-          }
-        }
+        widget.onComplete();
       }
     } catch (e) {
       debugPrint('온보딩 완료 처리 중 오류: $e');

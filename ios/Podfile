@@ -32,6 +32,9 @@ target 'Runner' do
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  
+  # GoogleUtilities 버전 충돌 해결
+  pod 'GoogleUtilities/Environment', '~> 8.0'
 end
 
 post_install do |installer|

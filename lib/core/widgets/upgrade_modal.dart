@@ -32,6 +32,10 @@ class UpgradeModal extends StatelessWidget {
   final VoidCallback? onCancel;
   final UpgradeReason reason;
 
+  /// 🚨 모달 중복 방지를 위한 정적 변수
+  static bool _isShowing = false;
+  static String _currentModalId = '';
+
   const UpgradeModal({
     Key? key,
     this.customTitle,
@@ -43,7 +47,7 @@ class UpgradeModal extends StatelessWidget {
     this.reason = UpgradeReason.general,
   }) : super(key: key);
 
-  /// 모달 표시 정적 메서드
+  /// 모달 표시 정적 메서드 (중복 방지 로직 추가)
   static Future<bool?> show(
     BuildContext context, {
     String? customTitle,
@@ -54,6 +58,24 @@ class UpgradeModal extends StatelessWidget {
     VoidCallback? onCancel,
     UpgradeReason reason = UpgradeReason.general,
   }) {
+    // 🚨 중복 방지 체크
+    final modalId = '${reason.name}_${DateTime.now().millisecondsSinceEpoch}';
+    
+    if (_isShowing) {
+      if (kDebugMode) {
+        debugPrint('⚠️ [UpgradeModal] 이미 모달이 표시 중입니다. 중복 호출 방지: $_currentModalId');
+      }
+      return Future.value(null);
+    }
+
+    if (kDebugMode) {
+      debugPrint('🎯 [UpgradeModal] 모달 표시 시작: $modalId (reason: ${reason.name})');
+    }
+
+    // 모달 표시 상태 설정
+    _isShowing = true;
+    _currentModalId = modalId;
+
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -68,8 +90,30 @@ class UpgradeModal extends StatelessWidget {
           reason: reason,
         );
       },
-    );
+    ).then((result) {
+      // 🚨 모달 닫힐 때 상태 초기화
+      _isShowing = false;
+      _currentModalId = '';
+      
+      if (kDebugMode) {
+        debugPrint('✅ [UpgradeModal] 모달 닫힘: $modalId (result: $result)');
+      }
+      
+      return result;
+    });
   }
+
+  /// 🚨 강제로 모달 상태 초기화 (에러 복구용)
+  static void resetModalState() {
+    _isShowing = false;
+    _currentModalId = '';
+    if (kDebugMode) {
+      debugPrint('🔄 [UpgradeModal] 모달 상태 강제 초기화');
+    }
+  }
+
+  /// 🚨 현재 모달 표시 상태 확인
+  static bool get isShowing => _isShowing;
 
   @override
   Widget build(BuildContext context) {
@@ -307,6 +351,7 @@ class UpgradeModal extends StatelessWidget {
             '더 많은 기능이 필요해요',
             '',
             () async {
+              _resetModalState();
               Navigator.of(context).pop(true);
               await launchUrl(Uri.parse('https://forms.gle/YaeznYjGLiMdHmBD9'));
               onUpgrade?.call();
@@ -318,6 +363,7 @@ class UpgradeModal extends StatelessWidget {
           _buildTextButton(
             '닫기',
             () {
+              _resetModalState();
               Navigator.of(context).pop(false);
               onCancel?.call();
             },
@@ -335,6 +381,7 @@ class UpgradeModal extends StatelessWidget {
             '7일간 무료로 프리미엄 시작하기',
             '(언제든 구독 취소할수 있어요)',
             () async {
+              _resetModalState();
               Navigator.of(context).pop(true);
               
               // TrialManager를 통해 무료체험 시작
@@ -371,6 +418,7 @@ class UpgradeModal extends StatelessWidget {
           _buildTextButton(
             '나가기',
             () {
+              _resetModalState();
               Navigator.of(context).pop(false);
               // 무료 플랜으로 시작 (인앱결제 없음)
               if (kDebugMode) {
@@ -421,6 +469,7 @@ class UpgradeModal extends StatelessWidget {
                   child: PikaButton(
                     text: '연간 구독 \$34.99 USD',
                     onPressed: () async {
+                      _resetModalState();
                       Navigator.of(context).pop(true);
                       await _handlePurchase(context, InAppPurchaseService.premiumYearlyId);
                       onUpgrade?.call();
@@ -439,6 +488,7 @@ class UpgradeModal extends StatelessWidget {
           PikaButton(
             text: '월간 구독 \$3.99 USD',
             onPressed: () async {
+              _resetModalState();
               Navigator.of(context).pop(true);
               await _handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
               onUpgrade?.call();
@@ -452,11 +502,12 @@ class UpgradeModal extends StatelessWidget {
           // 취소 버튼
           TextButton(
             onPressed: () {
+              _resetModalState();
               Navigator.of(context).pop(false);
               onCancel?.call();
             },
             child: Text(
-              '나중에',
+              cancelButtonText ?? '나가기',
               style: TypographyTokens.button.copyWith(
                 color: ColorTokens.textTertiary,
               ),
@@ -503,6 +554,7 @@ class UpgradeModal extends StatelessWidget {
                 child: PikaButton(
                   text: '연간 구독 \$34.99 USD',
                   onPressed: () async {
+                    _resetModalState();
                     Navigator.of(context).pop(true);
                     await _handlePurchase(context, InAppPurchaseService.premiumYearlyId);
                     onUpgrade?.call();
@@ -521,6 +573,7 @@ class UpgradeModal extends StatelessWidget {
         PikaButton(
           text: '월간 구독 \$3.99 USD',
           onPressed: () async {
+            _resetModalState();
             Navigator.of(context).pop(true);
             await _handlePurchase(context, InAppPurchaseService.premiumMonthlyId);
             onUpgrade?.call();
@@ -534,6 +587,7 @@ class UpgradeModal extends StatelessWidget {
         // 취소 버튼
         TextButton(
           onPressed: () {
+            _resetModalState();
             Navigator.of(context).pop(false);
             onCancel?.call();
           },
@@ -679,6 +733,10 @@ class UpgradeModal extends StatelessWidget {
         );
       }
     }
+  }
+
+  void _resetModalState() {
+    resetModalState();
   }
 }
 

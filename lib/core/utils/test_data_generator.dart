@@ -183,16 +183,23 @@ class TestDataGenerator {
         break;
 
       case 'trial_cancelled':
-        // 🎯 체험 중간 취소 → 무료 플랜 (배너 테스트용)
+        // 🎯 체험 취소 → 체험 기간 끝까지 프리미엄 사용 가능 (App Store 표준 방식)
         await _firestore.collection('users').doc(uid).update({
-          // subscription 필드 삭제 (무료 플랜으로 전환)
-          'subscription': FieldValue.delete(),
-          // 체험 이력 저장 (중간 취소했지만 체험은 사용함)
+          'subscription': {
+            'plan': 'premium',
+            'startDate': Timestamp.fromDate(now.subtract(const Duration(days: 3))), // 3일 전 시작
+            'expiryDate': Timestamp.fromDate(now.add(const Duration(days: 4))), // 4일 후 만료 (총 7일)
+            'status': 'trial',
+            'subscriptionType': 'monthly',
+            'isFreeTrial': true,
+            'autoRenewStatus': false, // 🎯 자동 갱신 취소됨
+            'isCancelled': true, // 🎯 취소 상태 표시
+          },
           'hasUsedFreeTrial': true,
           'hasEverUsedTrial': true,
-          // 🎯 프리미엄 이력은 없음 (체험 중간 취소)
+          // 🎯 프리미엄 이력은 없음 (체험만 사용)
         });
-        debugPrint('🧪 [TestData] Trial Cancelled 배너 테스트 데이터 생성 완료 (체험 중간 취소)');
+        debugPrint('🧪 [TestData] Trial Cancelled 상태 생성: 체험 기간 끝까지 프리미엄 사용 가능, 자동 갱신 비활성화');
         break;
 
       case 'free_plan':

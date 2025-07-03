@@ -162,7 +162,9 @@ class InAppPurchaseService {
   /// 구매 업데이트 처리
   void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
     if (kDebugMode) {
-      print('🔄 [SANDBOX] 구매 업데이트 수신: ${purchaseDetailsList.length}개');
+      print('🔔 === 구매 업데이트 수신 ===');
+      print('🔔 [SANDBOX] 구매 업데이트 수신: ${purchaseDetailsList.length}개');
+      print('🔔 현재 시간: ${DateTime.now()}');
     }
     
     for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
@@ -172,6 +174,8 @@ class InAppPurchaseService {
         print('   상태: ${purchaseDetails.status}');
         print('   구매 ID: ${purchaseDetails.purchaseID}');
         print('   에러: ${purchaseDetails.error}');
+        print('   pendingCompletePurchase: ${purchaseDetails.pendingCompletePurchase}');
+        print('   verificationData: ${purchaseDetails.verificationData.toString()}');
       }
       _handlePurchase(purchaseDetails);
     }
@@ -213,6 +217,15 @@ class InAppPurchaseService {
   /// 성공한 구매 처리
   Future<void> _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) async {
     try {
+      if (kDebugMode) {
+        print('🎯 === 구매 성공 처리 시작 ===');
+        print('🎯 상품 ID: ${purchaseDetails.productID}');
+        print('🎯 구매 ID: ${purchaseDetails.purchaseID}');
+        print('🎯 상태: ${purchaseDetails.status}');
+        print('🎯 에러: ${purchaseDetails.error}');
+        print('🎯 구매 상세 정보: ${purchaseDetails.toString()}');
+      }
+      
       // 중복 처리 방지 체크
       final purchaseId = purchaseDetails.purchaseID ?? purchaseDetails.productID;
       if (_processedPurchases.contains(purchaseId)) {
@@ -232,13 +245,42 @@ class InAppPurchaseService {
 
       if (kDebugMode) {
         print('🔄 Firebase Functions로 구매 완료 처리 시작: ${purchaseDetails.productID}');
+        print('   사용자: ${user.email}');
+        print('   사용자 ID: ${user.uid}');
+      }
+
+      // 🔍 iOS에서 실제 originalTransactionId 추출 시도
+      String? originalTransactionId;
+      String? transactionId = purchaseDetails.purchaseID;
+      
+      // iOS 플랫폼에서 실제 영수증 데이터 확인
+      if (Platform.isIOS && purchaseDetails.verificationData.serverVerificationData.isNotEmpty) {
+        if (kDebugMode) {
+          print('📱 iOS 영수증 데이터 확인 중...');
+          print('   서버 검증 데이터 길이: ${purchaseDetails.verificationData.serverVerificationData.length}');
+        }
+        
+        // 실제 구현에서는 영수증을 파싱해서 originalTransactionId를 추출해야 함
+        // 현재는 purchaseID를 사용
+        originalTransactionId = purchaseDetails.purchaseID;
+        transactionId = purchaseDetails.purchaseID;
+      } else {
+        // 안드로이드이거나 데이터가 없는 경우
+        originalTransactionId = purchaseDetails.purchaseID ?? '';
+        transactionId = purchaseDetails.purchaseID ?? '';
+      }
+
+      if (kDebugMode) {
+        print('🔍 추출된 거래 정보:');
+        print('   transactionId: $transactionId');
+        print('   originalTransactionId: $originalTransactionId');
       }
 
       // Firebase Functions를 통한 구매 완료 알림
       final appStoreService = AppStoreSubscriptionService();
       final notifySuccess = await appStoreService.notifyPurchaseComplete(
-        transactionId: purchaseDetails.purchaseID ?? '',
-        originalTransactionId: purchaseDetails.purchaseID ?? '', // iOS에서 실제 값으로 교체 필요
+        transactionId: transactionId ?? '',
+        originalTransactionId: originalTransactionId ?? '',
         productId: purchaseDetails.productID,
         purchaseDate: DateTime.now().toIso8601String(),
         // expirationDate는 App Store Connect에서 자동 계산됨

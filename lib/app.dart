@@ -322,7 +322,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         // (다른 사용자의 프리미엄 상태에 영향을 주지 않기 위해)
       }
       
-      await _preferencesService.loadUserSettingsFromFirestore();
+      // 앱 첫 진입 시 항상 Firestore에서 새로고침 (캐시 무시)
+      await _preferencesService.loadUserSettingsFromFirestore(forceRefresh: true);
   
       // 온보딩 상태 확인 (노트 생성 시 자동으로 완료 처리됨)
       _isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();

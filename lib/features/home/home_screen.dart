@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/utils/subscription_debug_helper.dart';
 // 🎯 Core imports - 새로운 통합 구독 상태 관리 시스템
 import '../../core/models/subscription_state.dart';                    // 통합 구독 상태 모델
 import '../../core/services/subscription/app_store_subscription_service.dart'; // 🆕 App Store 기반 구독 서비스
@@ -24,6 +26,7 @@ import '../../core/widgets/image_picker_bottom_sheet.dart';
 import '../note/view/note_detail_screen.dart';                        // NoteDetailScreenMVVM 사용
 import 'home_viewmodel.dart';                                         // HomeViewModel 사용
 import 'note_list_item.dart';
+import '../../core/services/common/banner_manager.dart';
 
 /// 🏠 홈 스크린
 
@@ -109,10 +112,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _loadSubscriptionStatus({bool forceRefresh = false}) async {
     try {
       if (kDebugMode) {
-        debugPrint('[HomeScreen] 🎯 Firebase Functions 기반 구독 상태 조회 시작 (forceRefresh: $forceRefresh)');
+        debugPrint('[HomeScreen] 🎯 Firebase Functions 기반 구독 상태 조회 시작 (캐시 우선 사용)');
+        
+        // 🔍 디버깅: 전체 구독 상태 진단 (forceRefresh일 때만)
+        if (forceRefresh) {
+          final debugHelper = SubscriptionDebugHelper();
+          await debugHelper.diagnoseSubscriptionState();
+        }
       }
       
-      // 🆕 Firebase Functions에서 직접 구독 상태 조회
+      // 🆕 Firebase Functions에서 캐시된 구독 상태 조회 (성능 최적화)
       final appStoreService = AppStoreSubscriptionService();
       final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: forceRefresh);
       
@@ -127,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       
       if (kDebugMode) {
-        debugPrint('[HomeScreen] ✅ Firebase Functions 기반 구독 상태 로드 완료: $_subscriptionState');
+        debugPrint('[HomeScreen] ✅ 캐시 기반 구독 상태 로드 완료: $_subscriptionState');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -231,25 +240,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
     }
     
-    // 활성 배너 결정
-    final activeBanners = <BannerType>[];
-    if (appStoreStatus.isFree) {
-      // 사용량 한도 배너
-      if (hasUsageLimitReached) {
-        activeBanners.add(BannerType.usageLimit);
-      }
+    // 🎯 BannerManager에서 활성 배너 목록 가져오기
+    List<BannerType> activeBanners = [];
+    try {
+      final bannerManager = BannerManager();
+      activeBanners = await bannerManager.getActiveBanners();
       
-      // 무료체험 관련 배너 (로컬 저장소에서 확인)
-      try {
-        final appStoreService = AppStoreSubscriptionService();
-        final hasUsedTrial = await appStoreService.hasUsedFreeTrial();
-        if (hasUsedTrial) {
-          activeBanners.add(BannerType.trialCompleted);
-        }
-      } catch (e) {
-    if (kDebugMode) {
-          debugPrint('⚠️ [HomeScreen] 무료체험 이력 확인 실패: $e');
-    }
+      if (kDebugMode) {
+        debugPrint('🎯 [HomeScreen] BannerManager에서 가져온 활성 배너: ${activeBanners.map((e) => e.name).toList()}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ [HomeScreen] BannerManager에서 배너 가져오기 실패: $e');
       }
     }
     
@@ -260,7 +262,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       isExpired: appStoreStatus.isFree,
       hasUsageLimitReached: hasUsageLimitReached,
       daysRemaining: 0, // App Store에서 자동 관리
-      activeBanners: activeBanners,
+      activeBanners: activeBanners, // 🎯 BannerManager에서 가져온 배너 사용
       statusMessage: appStoreStatus.displayName,
     );
   }
@@ -383,35 +385,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// 노트 리스트 위젯 (배너 포함)
   Widget _buildNotesList(BuildContext context, HomeViewModel viewModel) {
-    return Column(
+    return Stack(
       children: [
-        // 🎯 활성 배너들 표시
-        ..._buildActiveBanners(),
-        
-        // 노트 리스트
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () async {
-              await viewModel.refreshNotes();
-              await _loadSubscriptionStatus(); // 구독 상태도 함께 새로고침
+        // 📝 노트 리스트 (전체 화면)
+        RefreshIndicator(
+          onRefresh: () async {
+            await viewModel.refreshNotes();
+            await _loadSubscriptionStatus(); // 구독 상태도 함께 새로고침
+          },
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
+            itemCount: viewModel.notes.length,
+            itemBuilder: (context, index) {
+              final note = viewModel.notes[index];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: NoteListItem(
+                  note: note,
+                  onDismissed: () => _deleteNote(viewModel, note),
+                  onNoteTapped: (selectedNote) => _navigateToNoteDetail(selectedNote),
+                ),
+              );
             },
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
-              itemCount: viewModel.notes.length,
-              itemBuilder: (context, index) {
-                final note = viewModel.notes[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: NoteListItem(
-                    note: note,
-                    onDismissed: () => _deleteNote(viewModel, note),
-                    onNoteTapped: (selectedNote) => _navigateToNoteDetail(selectedNote),
-                  ),
-                );
-              },
-            ),
           ),
         ),
+        
+        // 🎯 플로팅 배너들 (노트 리스트 위에 겹쳐서 표시)
+        if (_subscriptionState.activeBanners.isNotEmpty)
+          Positioned(
+            top: 8,
+            left: 0,
+            right: 0,
+            child: Column(
+              children: _buildActiveBanners(),
+            ),
+          ),
       ],
     );
   }
@@ -423,72 +431,71 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Widget> _buildActiveBanners() {
     final banners = <Widget>[];
     
+    if (kDebugMode) {
+      debugPrint('🎯 [HomeScreen] _buildActiveBanners 호출');
+      debugPrint('   전체 활성 배너 수: ${_subscriptionState.activeBanners.length}');
+      debugPrint('   배너 목록: ${_subscriptionState.activeBanners.map((e) => e.name).toList()}');
+    }
+    
     // 🎯 통합 구독 상태에서 활성 배너 목록 가져오기
     for (final bannerType in _subscriptionState.activeBanners) {
       final bannerData = _getBannerData(bannerType);
+      
+      if (kDebugMode) {
+        debugPrint('🎯 [HomeScreen] 배너 위젯 생성: ${bannerType.name}');
+        debugPrint('   제목: ${bannerData['title']}');
+        debugPrint('   부제목: ${bannerData['subtitle']}');
+        debugPrint('   버튼 텍스트: ${bannerData['buttonText']}');
+      }
+      
       banners.add(
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-          child: UnifiedBanner(
-            icon: bannerData['icon'],
-            iconColor: bannerData['iconColor'],
-            title: bannerData['title'],
-            subtitle: bannerData['subtitle'],
-            mainButtonText: bannerData['buttonText'],
-            onMainButtonPressed: bannerData['buttonText'] != null 
-                ? () => _showUpgradeModal(bannerType) 
-                : null,
-            onDismiss: () {
-              // 🔄 배너 해제 로직 (필요시 구현)
-              // 현재는 서버 상태 기반이므로 로컬에서 해제하지 않음
-            },
-          ),
+        UnifiedBanner(
+          title: bannerData['title'],
+          subtitle: bannerData['subtitle'],
+          mainButtonText: bannerData['buttonText'],
+          onMainButtonPressed: bannerData['buttonText'] != null 
+              ? () => _showUpgradeModal(bannerType) 
+              : null,
+          onDismiss: () {
+            if (kDebugMode) {
+              debugPrint('🚫 [HomeScreen] 배너 닫기 버튼 클릭: ${bannerType.name}');
+            }
+            _dismissBanner(bannerType);
+          },
         ),
       );
+    }
+    
+    if (kDebugMode) {
+      debugPrint('🎯 [HomeScreen] 생성된 배너 위젯 수: ${banners.length}');
     }
     
     return banners;
   }
 
-  /// 🎨 배너 타입별 데이터 반환 (UI 설정)
-  /// 
-  /// 📝 각 배너 타입에 따른 아이콘, 색상, 텍스트 설정
-  /// BannerType enum과 1:1 매핑되어 일관성 보장
+  /// 🎨 배너 타입별 데이터 반환 (BannerManager extension 사용)
   Map<String, dynamic> _getBannerData(BannerType bannerType) {
+    // 🎯 BannerManager의 BannerTypeExtension 사용
+    String? buttonText;
     switch (bannerType) {
-      case BannerType.usageLimit:
-        return {
-          'icon': Icons.warning_rounded,
-          'iconColor': Colors.orange,
-          'title': '사용량 한도 도달',
-          'subtitle': '더 많은 기능을 사용하려면 프리미엄으로 업그레이드하세요',
-          'buttonText': '업그레이드',
-        };
-      case BannerType.trialCompleted:
-        return {
-          'icon': Icons.check_circle_rounded,
-          'iconColor': ColorTokens.secondary,
-          'title': '프리미엄으로 전환되었습니다',
-          'subtitle': '무료 체험기간이 끝나고 프리미엄(monthly)으로 전환되었습니다.\n구독 변경은 앱스토어에서 가능합니다.',
-          'buttonText': null,
-        };
+      case BannerType.usageLimitFree:
+      case BannerType.trialCancelled:
       case BannerType.premiumExpired:
-        return {
-          'icon': Icons.diamond_rounded,
-          'iconColor': Colors.purple,
-          'title': '프리미엄 만료',
-          'subtitle': '프리미엄 기능을 계속 사용하려면 구독을 갱신하세요',
-          'buttonText': '갱신하기',
-        };
-      default:
-        return {
-          'icon': Icons.info_rounded,
-          'iconColor': Colors.grey,
-          'title': '알림',
-          'subtitle': '새로운 소식이 있습니다',
-          'buttonText': null,
-        };
+        buttonText = '업그레이드';
+        break;
+      case BannerType.usageLimitPremium:
+        buttonText = '문의하기';
+        break;
+      case BannerType.trialCompleted:
+        buttonText = null; // 닫기만 가능
+        break;
     }
+
+    return {
+      'title': bannerType.title,
+      'subtitle': bannerType.subtitle,
+      'buttonText': buttonText,
+    };
   }
 
   /// 💎 업그레이드 모달 표시
@@ -496,20 +503,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 🔄 BannerType을 UpgradeReason으로 변환하여 적절한 모달 표시
   /// 각 배너 타입에 따라 다른 업그레이드 이유와 메시지를 제공
   void _showUpgradeModal(BannerType bannerType) {
+    // 🚨 이미 업그레이드 모달이 표시 중이면 중복 호출 방지
+    if (UpgradeModal.isShowing) {
+      if (kDebugMode) {
+        debugPrint('⚠️ [HomeScreen] 업그레이드 모달이 이미 표시 중입니다. 중복 호출 방지');
+      }
+      return;
+    }
+
     // 🔄 BannerType을 UpgradeReason으로 변환
     UpgradeReason reason;
     switch (bannerType) {
-      case BannerType.usageLimit:
-        reason = UpgradeReason.limitReached;      // 사용량 한도 도달
+      case BannerType.usageLimitFree:
+        reason = UpgradeReason.limitReached;      // 무료 플랜 사용량 한도 도달
         break;
+      case BannerType.usageLimitPremium:
+        // 프리미엄 플랜 사용량 한도 → 문의 폼으로 처리
+        _showContactForm();
+        return;
       case BannerType.trialCompleted:
         reason = UpgradeReason.trialExpired;      // 무료체험 완료
+        break;
+      case BannerType.trialCancelled:
+        reason = UpgradeReason.trialExpired;      // 프리미엄 체험 만료
         break;
       case BannerType.premiumExpired:
         reason = UpgradeReason.trialExpired;      // 프리미엄 만료 (체험 만료와 동일 처리)
         break;
       default:
         reason = UpgradeReason.general;           // 일반 업그레이드
+    }
+
+    if (kDebugMode) {
+      debugPrint('🎯 [HomeScreen] 업그레이드 모달 표시: ${reason.name} (bannerType: ${bannerType.name})');
     }
 
     // 🎯 업그레이드 모달 표시
@@ -567,4 +593,115 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _deleteNote(HomeViewModel viewModel, note) {
     viewModel.deleteNote(note.id);
   }
+
+  /// 📧 문의 폼 표시 (프리미엄 사용자용)
+  Future<void> _showContactForm() async {
+    const formUrl = 'https://docs.google.com/forms/d/e/1FAIpQLSfgVL4Bd5KcTh9nhfbVZ51yApPAmJAZJZgtM4V9hNhsBpKuaA/viewform?usp=dialog';
+    
+    try {
+      final Uri uri = Uri.parse(formUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('문의 폼을 열 수 없습니다.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('문의 폼을 여는 중 오류가 발생했습니다: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// 🚫 배너 닫기 처리
+  Future<void> _dismissBanner(BannerType bannerType) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🚫 [HomeScreen] 배너 닫기 시작: ${bannerType.name}');
+      }
+      
+      final bannerManager = BannerManager();
+      await bannerManager.dismissBanner(bannerType);
+      
+      if (kDebugMode) {
+        debugPrint('✅ [HomeScreen] 배너 닫기 완료: ${bannerType.name}');
+      }
+      
+      // 🎯 현재 상태에서 해당 배너만 제거하여 UI 업데이트
+      // _loadSubscriptionStatus() 호출하지 않음 (BannerManager.getActiveBanners() 재호출 방지)
+      if (mounted) {
+        setState(() {
+          _subscriptionState = SubscriptionState(
+            isTrial: _subscriptionState.isTrial,
+            isTrialExpiringSoon: _subscriptionState.isTrialExpiringSoon,
+            isPremium: _subscriptionState.isPremium,
+            isExpired: _subscriptionState.isExpired,
+            hasUsageLimitReached: _subscriptionState.hasUsageLimitReached,
+            daysRemaining: _subscriptionState.daysRemaining,
+            activeBanners: _subscriptionState.activeBanners.where((banner) => banner != bannerType).toList(),
+            statusMessage: _subscriptionState.statusMessage,
+          );
+        });
+      }
+      
+      if (kDebugMode) {
+        debugPrint('🔄 [HomeScreen] 배너 닫기 후 UI 업데이트 완료');
+        debugPrint('   남은 배너: ${_subscriptionState.activeBanners.map((e) => e.name).toList()}');
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeScreen] 배너 닫기 실패: $e');
+      }
+    }
+  }
+
+  /// 🐛 구독 상태 디버그 진단 (개발용)
+  Future<void> _runDebugDiagnosis() async {
+    if (!kDebugMode) return;
+    
+    try {
+      debugPrint('🔍 [디버그] 구독 상태 진단 시작...');
+      
+      final debugHelper = SubscriptionDebugHelper();
+      await debugHelper.diagnoseSubscriptionState();
+      
+      // 스낵바로 완료 알림
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🔍 구독 상태 디버그 완료! 콘솔 로그를 확인하세요.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      
+    } catch (e) {
+      debugPrint('❌ [디버그] 구독 상태 진단 실패: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 디버그 진단 실패: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+
 } 

@@ -1,3 +1,5 @@
+import '../services/common/banner_manager.dart';
+
 /// 구독 상태를 나타내는 통합 모델
 class SubscriptionState {
   final bool isTrial;
@@ -54,22 +56,4 @@ class SubscriptionState {
   }
 }
 
-/// 배너 타입 열거형
-enum BannerType {
-  premiumExpired,
-  trialCompleted,
-  usageLimit,
-}
-
-extension BannerTypeExtension on BannerType {
-  String get name {
-    switch (this) {
-      case BannerType.premiumExpired:
-        return 'premiumExpired';
-      case BannerType.trialCompleted:
-        return 'trialCompleted';
-      case BannerType.usageLimit:
-        return 'usageLimit';
-    }
-  }
-} 
+ 
