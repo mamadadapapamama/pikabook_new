@@ -146,13 +146,23 @@ Future<void> _preventAutoSignIn() async {
       }
       
       try {
-        // 토큰 유효성을 갱신 없이 확인만 (forceRefresh: false)
+        // 🎯 토큰 유효성을 갱신 없이 확인만 (forceRefresh: false)
+        // 이때 시스템 오류 발생 시 조용히 처리
         await currentUser.getIdToken(false);
         if (kDebugMode) {
           debugPrint('✅ Apple 토큰 유효함 - 정상 유지');
         }
       } catch (e) {
-        // 토큰이 만료되었거나 유효하지 않은 경우 자동 로그아웃
+        // 🎯 시스템 오류(Code=-54) 등은 무시하고 계속 진행
+        if (e.toString().contains('NSOSStatusErrorDomain Code=-54') ||
+            e.toString().contains('process may not map database')) {
+          if (kDebugMode) {
+            debugPrint('⚠️ Apple 시스템 오류 감지 - 무시하고 계속 진행: $e');
+          }
+          return; // 시스템 오류는 무시
+        }
+        
+        // 실제 토큰 만료/무효인 경우에만 로그아웃
         if (kDebugMode) {
           debugPrint('⚠️ Apple 토큰 만료/무효 - 자동 로그아웃 처리: $e');
         }

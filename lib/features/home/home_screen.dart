@@ -101,25 +101,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 🎯 구독 상태 로드 (App Store 기반)
+  /// 🎯 구독 상태 로드 (App Store 기반) - 캐시 우선 최적화
   Future<void> _loadSubscriptionStatus({bool forceRefresh = false}) async {
     try {
-      // 🎯 통합 구독 상태 조회 (App Store Connect 우선)
-      // 홈스크린 초기 로드 시에는 App Store Connect부터 확인
-      final shouldForceRefresh = forceRefresh || !_hasInitialLoad;
-      final isAppStart = !_hasInitialLoad;
+      // 🎯 초기 로드 시에는 캐시만 사용 (App.dart에서 이미 조회했음)
+      // 포그라운드 복귀나 명시적 새로고침 요청시에만 API 호출
+      final shouldUseCache = !forceRefresh && !_hasInitialLoad;
       
       if (kDebugMode) {
-        debugPrint('[HomeScreen] 구독 상태 조회 (forceRefresh: $shouldForceRefresh, 앱시작: $isAppStart)');
+        debugPrint('[HomeScreen] 구독 상태 조회 (캐시우선: $shouldUseCache, forceRefresh: $forceRefresh)');
       }
+      
       final appStoreService = AppStoreSubscriptionService();
-      final subscriptionState = await appStoreService.getUnifiedSubscriptionState(forceRefresh: shouldForceRefresh);
+      final subscriptionState = await appStoreService.getUnifiedSubscriptionState(
+        forceRefresh: forceRefresh,  // 명시적 새로고침 요청시에만 API 호출
+      );
       
       // 초기 로드 완료 표시
       if (!_hasInitialLoad) {
         _hasInitialLoad = true;
         if (kDebugMode) {
-          debugPrint('✅ [HomeScreen] 초기 로드 완료 - 다음부터는 캐시 우선 사용');
+          debugPrint('✅ [HomeScreen] 초기 로드 완료 - 캐시에서 로드됨');
         }
       }
       
@@ -131,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       
       if (kDebugMode) {
-        debugPrint('[HomeScreen] ✅ 캐시 기반 구독 상태 로드 완료: $_subscriptionState');
+        debugPrint('[HomeScreen] ✅ 구독 상태 로드 완료: $_subscriptionState');
       }
     } catch (e) {
       if (kDebugMode) {

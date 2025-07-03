@@ -80,14 +80,26 @@ class EventCacheManager {
   void _invalidateUserPreferences(String? userId) {
     if (userId == null) return;
     
+    // 🎯 온보딩 중 저장된 캐시는 무효화하지 않음 (짧은 시간 내 저장된 캐시 보호)
+    final now = DateTime.now();
     final keys = _cache.keys.where((key) => key.startsWith('user_preferences_$userId')).toList();
+    
     for (final key in keys) {
+      final timestamp = _cacheTimestamps[key];
+      // 30초 이내 저장된 캐시는 무효화하지 않음 (온보딩 완료 직후 보호)
+      if (timestamp != null && now.difference(timestamp).inSeconds < 30) {
+        if (kDebugMode) {
+          print('🛡️ [EventCache] 최근 저장된 캐시 보호: $key (${now.difference(timestamp).inSeconds}초 전)');
+        }
+        continue;
+      }
+      
       _cache.remove(key);
       _cacheTimestamps.remove(key);
     }
     
     if (kDebugMode) {
-      print('🗑️ [EventCache] 사용자 설정 캐시 무효화: $userId');
+      print('🗑️ [EventCache] 사용자 설정 캐시 무효화: $userId (보호된 항목 제외)');
     }
   }
 

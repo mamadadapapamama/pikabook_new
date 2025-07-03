@@ -35,31 +35,34 @@ class AuthService {
     _auth.authStateChanges().listen((User? user) async {
       final currentUserId = user?.uid;
       
-      if (kDebugMode) {
-        debugPrint('🔍 [AuthService] 인증 상태 변경: ${_lastUserId ?? "없음"} → ${currentUserId ?? "없음"}');
-      }
-      
-      // 사용자가 변경된 경우 (로그아웃 → 로그인, 다른 사용자로 로그인)
-      if (_lastUserId != null && _lastUserId != currentUserId) {
+      // 🎯 중복 로그 방지: 실제로 사용자가 변경된 경우에만 로그 출력
+      if (_lastUserId != currentUserId) {
         if (kDebugMode) {
-          debugPrint('🔄 [AuthService] 사용자 변경 감지 - 캐시 초기화');
+          debugPrint('🔍 [AuthService] 인증 상태 변경: ${_lastUserId ?? "없음"} → ${currentUserId ?? "없음"}');
         }
         
-        // 모든 캐시 초기화
-        final eventCache = EventCacheManager();
-        eventCache.clearAllCache();
+        // 사용자가 변경된 경우 (로그아웃 → 로그인, 다른 사용자로 로그인)
+        if (_lastUserId != null && _lastUserId != currentUserId) {
+          if (kDebugMode) {
+            debugPrint('🔄 [AuthService] 사용자 변경 감지 - 캐시 초기화');
+          }
+          
+          // 모든 캐시 초기화
+          final eventCache = EventCacheManager();
+          eventCache.clearAllCache();
+          
+          // SharedPreferences에서 사용자별 데이터 정리
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('last_user_id');
+        }
         
-        // SharedPreferences에서 사용자별 데이터 정리
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('last_user_id');
-      }
-      
-      _lastUserId = currentUserId;
-      
-      // 새 사용자 ID 저장
-      if (currentUserId != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('last_user_id', currentUserId);
+        _lastUserId = currentUserId;
+        
+        // 새 사용자 ID 저장
+        if (currentUserId != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('last_user_id', currentUserId);
+        }
       }
     });
   }
@@ -242,11 +245,32 @@ class AuthService {
       return user;
     } catch (e) {
       debugPrint('애플 로그인 오류: $e');
+      
+      // 🎯 Apple Sign In 특정 오류 처리
+      if (e.toString().contains('AuthorizationError Code=1001')) {
+        // 사용자 취소 - null 반환하여 조용히 처리
+        debugPrint('Apple Sign In: 사용자가 취소함');
+        return null;
+      }
+      
+      if (e.toString().contains('AKAuthenticationError Code=-7003')) {
+        // Apple ID 인증 실패 - 재시도 권장
+        debugPrint('Apple Sign In: Apple ID 인증 실패');
+        throw Exception('Apple ID 인증에 실패했습니다. 다시 시도해 주세요.');
+      }
+      
+      if (e.toString().contains('NSOSStatusErrorDomain Code=-54')) {
+        // 시스템 권한 오류 - 디바이스 재부팅 권장
+        debugPrint('Apple Sign In: 시스템 권한 오류');
+        throw Exception('시스템 오류가 발생했습니다. 디바이스를 재부팅하고 다시 시도해 주세요.');
+      }
+      
       // 오류 세부 정보 출력
       if (e is FirebaseAuthException) {
         debugPrint('Firebase Auth Error Code: ${e.code}');
         debugPrint('Firebase Auth Error Message: ${e.message}');
       }
+      
       rethrow;
     }
   }
@@ -277,6 +301,23 @@ class AuthService {
       return user;
     } catch (e) {
       debugPrint('대안적 애플 로그인 오류: $e');
+      
+      // 🎯 Apple Sign In 특정 오류 처리 (대안적 방법에서도 동일)
+      if (e.toString().contains('AuthorizationError Code=1001')) {
+        debugPrint('Alternative Apple Sign In: 사용자가 취소함');
+        return null;
+      }
+      
+      if (e.toString().contains('AKAuthenticationError Code=-7003')) {
+        debugPrint('Alternative Apple Sign In: Apple ID 인증 실패');
+        throw Exception('Apple ID 인증에 실패했습니다. 다시 시도해 주세요.');
+      }
+      
+      if (e.toString().contains('NSOSStatusErrorDomain Code=-54')) {
+        debugPrint('Alternative Apple Sign In: 시스템 권한 오류');
+        throw Exception('시스템 오류가 발생했습니다. 디바이스를 재부팅하고 다시 시도해 주세요.');
+      }
+      
       if (e is FirebaseAuthException) {
         debugPrint('Firebase Auth Error Code: ${e.code}');
         debugPrint('Firebase Auth Error Message: ${e.message}');
@@ -702,12 +743,6 @@ class AuthService {
     return await deletedUserService.isDeletedUser();
   }
 
-  // 🔧 임시: 기존 탈퇴 기록에 플랜 정보 추가 (테스트용)
-  Future<void> updateDeletedUserPlanInfo(String email, Map<String, dynamic> planInfo) async {
-    final deletedUserService = DeletedUserService();
-    await deletedUserService.updateDeletedUserPlanInfo(email, planInfo);
-  }
-
   // 핵심 서비스 캐시 초기화
   Future<void> _clearAllServiceCaches() async {
     try {
@@ -826,6 +861,16 @@ class AuthService {
         userData['isNewUser'] = true;
         userData['deviceCount'] = 1;
         userData['deviceIds'] = [await _getDeviceId()];
+        
+        // 🎯 신규 사용자 기본 구독 정보 설정
+        userData['subscription'] = {
+          'plan': 'free',
+          'status': 'active',
+          'isActive': true,
+          'isFreeTrial': false,
+          'autoRenewStatus': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        };
         
         // 신규 사용자는 항상 set 사용
         await userRef.set(userData);

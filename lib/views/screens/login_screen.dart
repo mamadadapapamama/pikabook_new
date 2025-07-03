@@ -516,6 +516,17 @@ class _LoginScreenState extends State<LoginScreen> {
         // 직접 구현된 Apple 로그인 시도
         user = await _authService.signInWithApple();
         
+        // 🎯 사용자 취소 시 조용히 처리 (null 반환)
+        if (user == null) {
+          if (kDebugMode) {
+            debugPrint('Apple Sign In: 사용자가 취소함 - 조용히 처리');
+          }
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
+        
         // 성공적으로 로그인한 경우
         if (user != null) {
           // 로그인 성공 콜백 호출
@@ -524,15 +535,37 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('첫 번째 방식 로그인 실패. 대안적 방식 시도 중...');
+          debugPrint('첫 번째 방식 로그인 실패: $e');
         }
         
-        // 첫 번째 방식 실패 시 대안적 방식 시도
+        // 🎯 특정 오류 메시지에 따른 처리
+        if (e.toString().contains('Apple ID 인증에 실패했습니다') ||
+            e.toString().contains('시스템 오류가 발생했습니다')) {
+          // 명확한 오류 메시지가 있는 경우 바로 표시
+          setState(() {
+            _errorMessage = e.toString().replaceAll('Exception: ', '');
+            _isLoading = false;
+          });
+          return;
+        }
+        
+        // 🎯 일반적인 오류의 경우에만 대안적 방식 시도
         try {
           if (kDebugMode) {
             debugPrint('Apple Sign In: 대안적 방식 시도...');
           }
           user = await _authService.signInWithAppleAlternative();
+          
+          // 🎯 사용자 취소 시 조용히 처리 (null 반환)
+          if (user == null) {
+            if (kDebugMode) {
+              debugPrint('Alternative Apple Sign In: 사용자가 취소함 - 조용히 처리');
+            }
+            setState(() {
+              _isLoading = false;
+            });
+            return;
+          }
           
           if (user != null) {
             // 로그인 성공 콜백 호출
@@ -544,8 +577,16 @@ class _LoginScreenState extends State<LoginScreen> {
           if (kDebugMode) {
             debugPrint('대안적 방식도 실패: $alternativeError');
           }
+          
+          // 🎯 특정 오류 메시지 표시
+          String errorMessage = '로그인 중 오류가 발생했습니다.';
+          if (alternativeError.toString().contains('Apple ID 인증에 실패했습니다') ||
+              alternativeError.toString().contains('시스템 오류가 발생했습니다')) {
+            errorMessage = alternativeError.toString().replaceAll('Exception: ', '');
+          }
+          
           setState(() {
-            _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
+            _errorMessage = errorMessage;
             _isLoading = false;
           });
           return; // 실패 시 함수 종료

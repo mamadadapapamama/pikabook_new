@@ -254,7 +254,7 @@ class BannerManager {
     }
   }
 
-  /// 핵심: 모든 배너 결정 로직 실행 (이미 확인된 플랜 정보 사용)
+  /// 핵심: 모든 배너 결정 로직 실행 (이미 확인된 플랜 정보 사용) - 성능 최적화
   Future<List<BannerType>> getActiveBanners({
     String? currentPlan,
     bool? isFreeTrial,
@@ -264,11 +264,13 @@ class BannerManager {
     bool? autoRenewStatus,
   }) async {
     try {
+      final stopwatch = kDebugMode ? (Stopwatch()..start()) : null;
+      
       if (kDebugMode) {
-        debugPrint('🎯 [BannerManager] 배너 결정 시작');
+        debugPrint('🎯 [BannerManager] 배너 결정 시작 (성능 최적화)');
       }
 
-      // 1. 플랜 정보가 파라미터로 전달되지 않은 경우에만 캐시에서 조회
+      // 1. 플랜 정보 준비 (빠른 로컬 처리)
       String finalCurrentPlan;
       bool finalIsFreeTrial;
       bool finalHasEverUsedTrial;
@@ -284,22 +286,8 @@ class BannerManager {
         finalHasEverUsedPremium = hasEverUsedPremium ?? false;
         finalIsCancelled = isCancelled ?? false;
         finalAutoRenewStatus = autoRenewStatus ?? true;
-        
-        if (kDebugMode) {
-          debugPrint('🎯 [BannerManager] 전달받은 플랜 정보 사용:');
-          debugPrint('   현재 플랜: $finalCurrentPlan');
-          debugPrint('   현재 무료체험 중: $finalIsFreeTrial');
-          debugPrint('   무료체험 사용 이력: $finalHasEverUsedTrial');
-          debugPrint('   프리미엄 사용 이력: $finalHasEverUsedPremium');
-          debugPrint('   취소 상태: $finalIsCancelled');
-          debugPrint('   자동 갱신: $finalAutoRenewStatus');
-        }
       } else {
         // 🔄 파라미터가 없는 경우에만 캐시에서 조회 (폴백)
-        if (kDebugMode) {
-          debugPrint('🔄 [BannerManager] 파라미터 없음 - 캐시에서 플랜 정보 조회');
-        }
-        
         final planService = PlanService();
         final subscriptionDetails = await planService.getSubscriptionDetails();
         finalCurrentPlan = subscriptionDetails['currentPlan'] as String;
@@ -310,44 +298,46 @@ class BannerManager {
         finalAutoRenewStatus = subscriptionDetails['autoRenewStatus'] as bool? ?? true;
       }
 
-      // 2. 사용량 한도 확인 (모든 플랜에서 확인)
-      Map<String, bool> usageLimitStatus = {};
-      final usageService = UsageLimitService();
-      usageLimitStatus = await usageService.checkInitialLimitStatus(planType: finalCurrentPlan);
-      
+      // 2. 🚀 병렬 처리: 사용량 체크와 SharedPreferences 로드를 동시에 실행
+      final futures = await Future.wait([
+        // 사용량 상태 확인
+        UsageLimitService().checkInitialLimitStatus(planType: finalCurrentPlan),
+        // SharedPreferences 미리 로드 (배치 처리)
+        SharedPreferences.getInstance(),
+        // 플랜 히스토리 확인 (필요한 경우만)
+        _shouldCheckPlanHistory(finalCurrentPlan, finalHasEverUsedTrial, finalHasEverUsedPremium) 
+          ? DeletedUserService().getLastPlanInfo(forceRefresh: false).catchError((_) => null)
+          : Future.value(null),
+      ]);
+
+      final usageLimitStatus = futures[0] as Map<String, bool>;
+      final prefs = futures[1] as SharedPreferences;
+      final lastPlanInfo = futures[2] as Map<String, dynamic>?;
+
       if (kDebugMode) {
-        debugPrint('🎯 [BannerManager] 사용량 상태: $usageLimitStatus');
+        debugPrint('🚀 [BannerManager] 병렬 처리 완료 (${stopwatch?.elapsedMilliseconds}ms)');
       }
 
-      // 3. 배너 결정 로직 실행 (두 종류 배너 독립적 처리)
+      // 3. 🎯 배너 결정 (최적화된 로직)
       final activeBanners = <BannerType>[];
       
-      if (kDebugMode) {
-        debugPrint('🎯 [BannerManager] 배너 결정 시작:');
-        debugPrint('   플랜: $finalCurrentPlan');
-        debugPrint('   체험 중: $finalIsFreeTrial');
-        debugPrint('   체험 이력: $finalHasEverUsedTrial');
-        debugPrint('   프리미엄 이력: $finalHasEverUsedPremium');
-        debugPrint('   취소 상태: $finalIsCancelled');
-      }
+      // 🚀 배너 타입 1: 사용량 한도 배너 결정 (동기 처리 - 성능 최적화)
+      _decideUsageLimitBannersSync(activeBanners, finalCurrentPlan, usageLimitStatus, prefs);
       
-      // �� 배너 타입 1: 사용량 한도 배너 결정 (독립적 처리)
-      await _decideUsageLimitBanners(activeBanners, finalCurrentPlan, usageLimitStatus);
-      
-      // 🎯 배너 타입 2: 플랜 상태 배너 결정 (독립적 처리)
-      await _decidePlanStatusBanners(activeBanners, {
+      // 🚀 배너 타입 2: 플랜 상태 배너 결정 (동기 처리 - 성능 최적화)
+      _decidePlanStatusBannersSync(activeBanners, {
         'currentPlan': finalCurrentPlan,
         'isFreeTrial': finalIsFreeTrial,
         'hasEverUsedTrial': finalHasEverUsedTrial,
         'hasEverUsedPremium': finalHasEverUsedPremium,
         'isCancelled': finalIsCancelled,
         'autoRenewStatus': finalAutoRenewStatus,
-      });
+      }, prefs, lastPlanInfo);
 
       if (kDebugMode) {
-        debugPrint('🎯 [BannerManager] 최종 활성 배너: ${activeBanners.map((e) => e.name).toList()}');
-        debugPrint('   사용량 한도 배너: ${activeBanners.where((b) => b == BannerType.usageLimitFree || b == BannerType.usageLimitPremium).map((e) => e.name).toList()}');
-        debugPrint('   플랜 상태 배너: ${activeBanners.where((b) => b == BannerType.premiumExpired || b == BannerType.trialCompleted || b == BannerType.trialCancelled).map((e) => e.name).toList()}');
+        stopwatch?.stop();
+        debugPrint('✅ [BannerManager] 배너 결정 완료 (${stopwatch?.elapsedMilliseconds}ms)');
+        debugPrint('   활성 배너: ${activeBanners.map((e) => e.name).toList()}');
       }
 
       return activeBanners;
@@ -359,16 +349,19 @@ class BannerManager {
     }
   }
 
-  /// 🎯 배너 타입 1: 사용량 한도 배너 결정 (독립적 처리)
-  Future<void> _decideUsageLimitBanners(List<BannerType> activeBanners, String currentPlan, Map<String, bool> usageLimitStatus) async {
+  /// 플랜 히스토리 확인이 필요한지 판단 (성능 최적화)
+  bool _shouldCheckPlanHistory(String currentPlan, bool hasEverUsedTrial, bool hasEverUsedPremium) {
+    // 신규 사용자는 히스토리 확인 불필요
+    if (currentPlan != PlanService.PLAN_FREE && !hasEverUsedTrial && !hasEverUsedPremium) {
+      return false;
+    }
+    return true;
+  }
+
+  /// 🚀 배너 타입 1: 사용량 한도 배너 결정 (동기 처리 - 성능 최적화)
+  void _decideUsageLimitBannersSync(List<BannerType> activeBanners, String currentPlan, Map<String, bool> usageLimitStatus, SharedPreferences prefs) {
     final ocrLimitReached = usageLimitStatus['ocrLimitReached'] ?? false;
     final ttsLimitReached = usageLimitStatus['ttsLimitReached'] ?? false;
-    
-    if (kDebugMode) {
-      debugPrint('🎯 [BannerManager] 사용량 한도 배너 결정:');
-      debugPrint('   OCR 한도 도달: $ocrLimitReached');
-      debugPrint('   TTS 한도 도달: $ttsLimitReached');
-    }
     
     if (ocrLimitReached || ttsLimitReached) {
       // 🎯 플랜에 따라 다른 사용량 한도 배너 표시
@@ -377,206 +370,141 @@ class BannerManager {
         setBannerState(BannerType.usageLimitPremium, true);
         setBannerState(BannerType.usageLimitFree, false);
         
-        if (await shouldShowBanner(BannerType.usageLimitPremium)) {
+        if (_shouldShowBannerSync(BannerType.usageLimitPremium, prefs)) {
           activeBanners.add(BannerType.usageLimitPremium);
-          if (kDebugMode) {
-            debugPrint('✅ [BannerManager] 프리미엄 사용량 한도 배너 추가');
-          }
         }
       } else {
         // 무료 플랜 → 업그레이드 모달
         setBannerState(BannerType.usageLimitFree, true);
         setBannerState(BannerType.usageLimitPremium, false);
         
-        if (await shouldShowBanner(BannerType.usageLimitFree)) {
+        if (_shouldShowBannerSync(BannerType.usageLimitFree, prefs)) {
           activeBanners.add(BannerType.usageLimitFree);
-          if (kDebugMode) {
-            debugPrint('✅ [BannerManager] 무료 사용량 한도 배너 추가');
-          }
         }
       }
     } else {
       // 사용량 한도 미도달 → 사용량 배너 없음
       setBannerState(BannerType.usageLimitFree, false);
       setBannerState(BannerType.usageLimitPremium, false);
-      
-      if (kDebugMode) {
-        debugPrint('➖ [BannerManager] 사용량 한도 미도달 → 사용량 배너 없음');
-      }
     }
   }
 
-  /// 🎯 배너 타입 2: 플랜 상태 배너 결정 (독립적 처리)
-  Future<void> _decidePlanStatusBanners(List<BannerType> activeBanners, Map<String, dynamic> subscriptionDetails) async {
+  /// 🚀 배너 타입 2: 플랜 상태 배너 결정 (동기 처리 - 성능 최적화)
+  void _decidePlanStatusBannersSync(List<BannerType> activeBanners, Map<String, dynamic> subscriptionDetails, SharedPreferences prefs, Map<String, dynamic>? lastPlanInfo) {
     final currentPlan = subscriptionDetails['currentPlan'] as String;
     final hasEverUsedTrial = subscriptionDetails['hasEverUsedTrial'] as bool? ?? false;
     final hasEverUsedPremium = subscriptionDetails['hasEverUsedPremium'] as bool? ?? false;
     
-    if (kDebugMode) {
-      debugPrint('🎯 [BannerManager] 플랜 상태 배너 결정:');
-      debugPrint('   현재 플랜: $currentPlan');
-      debugPrint('   체험 이력: $hasEverUsedTrial');
-      debugPrint('   프리미엄 이력: $hasEverUsedPremium');
-    }
-    
     // 플랜 상태 배너가 필요한 경우만 처리
     if (currentPlan == PlanService.PLAN_FREE || hasEverUsedTrial || hasEverUsedPremium) {
-      await _decidePlanRelatedBanners(activeBanners, subscriptionDetails);
+      _decidePlanRelatedBannersSync(activeBanners, subscriptionDetails, prefs, lastPlanInfo);
     } else {
       // 완전 신규 사용자 → 플랜 상태 배너 없음
       setBannerState(BannerType.premiumExpired, false);
       setBannerState(BannerType.trialCompleted, false);
       setBannerState(BannerType.trialCancelled, false);
+    }
+  }
+
+  /// 🚀 플랜 관련 배너 결정 (동기 처리 - 성능 최적화)
+  void _decidePlanRelatedBannersSync(List<BannerType> activeBanners, Map<String, dynamic> subscriptionDetails, SharedPreferences prefs, Map<String, dynamic>? lastPlanInfo) {
+    final hasEverUsedTrial = subscriptionDetails['hasEverUsedTrial'] as bool? ?? false;
+    final hasEverUsedPremium = subscriptionDetails['hasEverUsedPremium'] as bool? ?? false;
+    final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
+    final currentPlan = subscriptionDetails['currentPlan'] as String;
+    final isCancelled = subscriptionDetails['isCancelled'] as bool? ?? false;
+    final autoRenewStatus = subscriptionDetails['autoRenewStatus'] as bool? ?? true;
+    
+    final isTrialCancelled = isFreeTrial && (isCancelled || !autoRenewStatus);
+    final planId = 'plan_${DateTime.now().millisecondsSinceEpoch}';
+
+    // 🆕 체험 취소 배너 우선 처리
+    if (isTrialCancelled && currentPlan == 'premium') {
+      setBannerState(BannerType.trialCancelled, true, planId: planId);
+      setBannerState(BannerType.premiumExpired, false);
+      setBannerState(BannerType.trialCompleted, false);
       
-      if (kDebugMode) {
-        debugPrint('➖ [BannerManager] 신규 사용자 → 플랜 상태 배너 없음');
+      if (_shouldShowBannerSync(BannerType.trialCancelled, prefs)) {
+        activeBanners.add(BannerType.trialCancelled);
+      }
+      return; // 다른 배너보다 우선
+    }
+
+    if (lastPlanInfo != null) {
+      // 탈퇴 후 재가입 사용자
+      final previousPlanType = lastPlanInfo['planType'] as String?;
+      final previousIsFreeTrial = lastPlanInfo['isFreeTrial'] as bool? ?? false;
+
+      if (previousPlanType == PlanService.PLAN_PREMIUM) {
+        if (previousIsFreeTrial) {
+          // 이전에 무료 체험 → Trial Completed 배너
+          setBannerState(BannerType.trialCompleted, true, planId: planId);
+          setBannerState(BannerType.premiumExpired, false);
+          
+          if (_shouldShowBannerSync(BannerType.trialCompleted, prefs)) {
+            activeBanners.add(BannerType.trialCompleted);
+          }
+        } else {
+          // 이전에 정식 프리미엄 → Premium Expired 배너
+          setBannerState(BannerType.premiumExpired, true, planId: planId);
+          setBannerState(BannerType.trialCompleted, false);
+          
+          if (_shouldShowBannerSync(BannerType.premiumExpired, prefs)) {
+            activeBanners.add(BannerType.premiumExpired);
+          }
+        }
+      } else {
+        // 이전에도 무료 플랜 → 배너 없음
+        setBannerState(BannerType.premiumExpired, false);
+        setBannerState(BannerType.trialCompleted, false);
+        setBannerState(BannerType.trialCancelled, false);
+      }
+    } else {
+      // 이전 플랜 히스토리 없음 → 현재 구독 정보 기반
+      if (hasEverUsedPremium) {
+        // 프리미엄 이력 있음 → Premium Expired 배너
+        setBannerState(BannerType.premiumExpired, true, planId: planId);
+        setBannerState(BannerType.trialCompleted, false);
+        
+        if (_shouldShowBannerSync(BannerType.premiumExpired, prefs)) {
+          activeBanners.add(BannerType.premiumExpired);
+        }
+      } else if (hasEverUsedTrial) {
+        // 체험 이력만 있음 → Trial Completed 배너
+        setBannerState(BannerType.trialCompleted, true, planId: planId);
+        setBannerState(BannerType.premiumExpired, false);
+        
+        if (_shouldShowBannerSync(BannerType.trialCompleted, prefs)) {
+          activeBanners.add(BannerType.trialCompleted);
+        }
+      } else {
+        // 아무 이력 없음 → 배너 없음
+        setBannerState(BannerType.premiumExpired, false);
+        setBannerState(BannerType.trialCompleted, false);
+        setBannerState(BannerType.trialCancelled, false);
       }
     }
   }
 
-  /// 플랜 관련 배너 결정 (기존 메서드명 유지)
-  Future<void> _decidePlanRelatedBanners(List<BannerType> activeBanners, Map<String, dynamic> subscriptionDetails) async {
-    try {
-      final deletedUserService = DeletedUserService();
-      
-      // 이전 플랜 히스토리 확인
-      Map<String, dynamic>? lastPlanInfo;
-      try {
-        lastPlanInfo = await deletedUserService.getLastPlanInfo(forceRefresh: true);
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('⚠️ [BannerManager] 이전 플랜 히스토리 확인 실패: $e');
-        }
-      }
+  /// 🚀 배너 표시 여부 확인 (동기 처리 - 성능 최적화)
+  bool _shouldShowBannerSync(BannerType type, SharedPreferences prefs) {
+    final shouldShow = _bannerStates[type] ?? false;
+    if (!shouldShow) return false;
 
-      // 현재 구독 정보에서 이력 확인
-      final hasEverUsedTrial = subscriptionDetails['hasEverUsedTrial'] as bool? ?? false;
-      final hasEverUsedPremium = subscriptionDetails['hasEverUsedPremium'] as bool? ?? false;
-      final isFreeTrial = subscriptionDetails['isFreeTrial'] as bool? ?? false;
-      final currentPlan = subscriptionDetails['currentPlan'] as String;
-      
-      // 🆕 체험 취소 상태 확인 (App Store 표준 방식)
-      final isCancelled = subscriptionDetails['isCancelled'] as bool? ?? false;
-      final autoRenewStatus = subscriptionDetails['autoRenewStatus'] as bool? ?? true;
-      final isTrialCancelled = isFreeTrial && (isCancelled || !autoRenewStatus);
-
-      final planId = 'plan_${DateTime.now().millisecondsSinceEpoch}';
-
-      // 🆕 체험 취소 배너 우선 처리 (아직 체험 중이지만 자동 갱신 취소됨)
-      if (isTrialCancelled && currentPlan == 'premium') {
-        // 프리미엄 체험 취소되었지만 아직 체험 기간 중
-        setBannerState(BannerType.trialCancelled, true, planId: planId);
-        setBannerState(BannerType.premiumExpired, false);
-        setBannerState(BannerType.trialCompleted, false);
-        
-        // 🔍 사용자가 닫지 않았으면 배너 추가
-        if (await shouldShowBanner(BannerType.trialCancelled)) {
-          activeBanners.add(BannerType.trialCancelled);
-          if (kDebugMode) {
-            debugPrint('🎯 [BannerManager] 프리미엄 체험 취소 배너 추가');
-          }
-        } else {
-          if (kDebugMode) {
-            debugPrint('🎯 [BannerManager] 프리미엄 체험 취소 배너 - 사용자가 닫음');
-          }
-        }
-        return; // 다른 배너보다 우선
-      }
-
-      if (lastPlanInfo != null) {
-        // 탈퇴 후 재가입 사용자
-        final previousPlanType = lastPlanInfo['planType'] as String?;
-        final previousIsFreeTrial = lastPlanInfo['isFreeTrial'] as bool? ?? false;
-
-        if (previousPlanType == PlanService.PLAN_PREMIUM) {
-          if (previousIsFreeTrial) {
-            // 이전에 무료 체험 → Trial Completed 배너
-            setBannerState(BannerType.trialCompleted, true, planId: planId);
-            setBannerState(BannerType.premiumExpired, false);
-            
-            // 🔍 사용자가 닫지 않았으면 배너 추가
-            if (await shouldShowBanner(BannerType.trialCompleted)) {
-              activeBanners.add(BannerType.trialCompleted);
-              if (kDebugMode) {
-                debugPrint('🎯 [BannerManager] 체험 완료 배너 추가 (탈퇴 후 재가입)');
-              }
-            } else {
-              if (kDebugMode) {
-                debugPrint('🎯 [BannerManager] 체험 완료 배너 - 사용자가 닫음 (탈퇴 후 재가입)');
-              }
-            }
-          } else {
-            // 이전에 정식 프리미엄 → Premium Expired 배너
-            setBannerState(BannerType.premiumExpired, true, planId: planId);
-            setBannerState(BannerType.trialCompleted, false);
-            
-            // 🔍 사용자가 닫지 않았으면 배너 추가
-            if (await shouldShowBanner(BannerType.premiumExpired)) {
-              activeBanners.add(BannerType.premiumExpired);
-              if (kDebugMode) {
-                debugPrint('🎯 [BannerManager] 프리미엄 만료 배너 추가 (탈퇴 후 재가입)');
-              }
-            } else {
-              if (kDebugMode) {
-                debugPrint('🎯 [BannerManager] 프리미엄 만료 배너 - 사용자가 닫음 (탈퇴 후 재가입)');
-              }
-            }
-          }
-        } else {
-          // 이전에도 무료 플랜 → 배너 없음
-          setBannerState(BannerType.premiumExpired, false);
-          setBannerState(BannerType.trialCompleted, false);
-          setBannerState(BannerType.trialCancelled, false);
-        }
-      } else {
-        // 이전 플랜 히스토리 없음 → 현재 구독 정보 기반
-        if (hasEverUsedPremium) {
-          // 프리미엄 이력 있음 → Premium Expired 배너
-          setBannerState(BannerType.premiumExpired, true, planId: planId);
-          setBannerState(BannerType.trialCompleted, false);
-          
-          // 🔍 사용자가 닫지 않았으면 배너 추가
-          if (await shouldShowBanner(BannerType.premiumExpired)) {
-            activeBanners.add(BannerType.premiumExpired);
-            if (kDebugMode) {
-              debugPrint('🎯 [BannerManager] 프리미엄 만료 배너 추가 (현재 구독 정보 기반)');
-            }
-          } else {
-            if (kDebugMode) {
-              debugPrint('🎯 [BannerManager] 프리미엄 만료 배너 - 사용자가 닫음 (현재 구독 정보 기반)');
-            }
-          }
-        } else if (hasEverUsedTrial) {
-          // 체험 이력만 있음 → Trial Completed 배너
-          setBannerState(BannerType.trialCompleted, true, planId: planId);
-          setBannerState(BannerType.premiumExpired, false);
-          
-          // 🔍 사용자가 닫지 않았으면 배너 추가
-          if (await shouldShowBanner(BannerType.trialCompleted)) {
-            activeBanners.add(BannerType.trialCompleted);
-            if (kDebugMode) {
-              debugPrint('🎯 [BannerManager] 체험 완료 배너 추가 (현재 구독 정보 기반)');
-            }
-          } else {
-            if (kDebugMode) {
-              debugPrint('🎯 [BannerManager] 체험 완료 배너 - 사용자가 닫음 (현재 구독 정보 기반)');
-            }
-          }
-        } else {
-          // 아무 이력 없음 → 배너 없음
-          setBannerState(BannerType.premiumExpired, false);
-          setBannerState(BannerType.trialCompleted, false);
-          setBannerState(BannerType.trialCancelled, false);
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [BannerManager] 플랜 관련 배너 결정 실패: $e');
-      }
-      setBannerState(BannerType.premiumExpired, false);
-      setBannerState(BannerType.trialCompleted, false);
-      setBannerState(BannerType.trialCancelled, false);
+    // 사용량 한도 배너는 단순 처리
+    if (type == BannerType.usageLimitFree || type == BannerType.usageLimitPremium) {
+      final key = _bannerKeys[type]!;
+      final hasUserDismissed = prefs.getBool(key) ?? false;
+      return !hasUserDismissed;
     }
+    
+    // 프리미엄 만료, 체험 완료 배너는 플랜별 처리
+    final planId = _bannerPlanIds[type];
+    if (planId == null) return false;
+    
+    final dismissKey = '${_bannerKeys[type]!}$planId';
+    final hasUserDismissed = prefs.getBool(dismissKey) ?? false;
+    return !hasUserDismissed;
   }
 
   /// 현재 배너 상태 디버그 출력

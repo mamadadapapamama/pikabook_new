@@ -18,6 +18,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';
 import 'features/sample/sample_home_screen.dart';
 import 'features/home/home_viewmodel.dart';
+import 'core/widgets/upgrade_modal.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -302,6 +303,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 🎯 간소화: 필수 사용자 데이터만 로드
       await _preferencesService.setCurrentUserId(_userId!);
       
+      // 🎯 앱 첫 진입 시 Firestore에서 설정 로드 (온보딩 상태 포함)
+      await _preferencesService.loadUserSettingsFromFirestore(forceRefresh: true);
+      
       // 🎯 간소화: 온보딩 상태만 확인 (다른 복잡한 초기화 제거)
       _isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
       
@@ -350,6 +354,28 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         _isSampleMode = true;
       });
     }
+  }
+  
+  /// 온보딩 완료 후 환영 모달 표시
+  void _showWelcomeModal() {
+    if (!mounted) return;
+    
+    final context = _scaffoldMessengerKey.currentContext;
+    if (context == null) return;
+    
+    if (kDebugMode) {
+      debugPrint('🎉 [App] 온보딩 완료 후 환영 모달 표시');
+    }
+    
+    // 환영 모달 표시 (7일 무료체험 유도)
+    UpgradePromptHelper.showWelcomeTrialPrompt(
+      context,
+      onComplete: () {
+        if (kDebugMode) {
+          debugPrint('✅ [App] 환영 모달 완료');
+        }
+      },
+    );
   }
   
   @override
@@ -478,6 +504,11 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             if (mounted) {
               setState(() {
                 _isOnboardingCompleted = true;
+              });
+              
+              // 🎉 온보딩 완료 후 환영 모달 표시
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _showWelcomeModal();
               });
             }
           },
