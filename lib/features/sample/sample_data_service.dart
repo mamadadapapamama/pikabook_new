@@ -36,41 +36,74 @@ class SampleDataService {
       }
       
       // JSON 파일 로드
+      if (kDebugMode) {
+        debugPrint('📄 JSON 파일 로드 중: assets/data/sample_note_data.json');
+      }
       final String jsonString = await rootBundle.loadString('assets/data/sample_note_data.json');
+      
+      if (kDebugMode) {
+        debugPrint('📄 JSON 파일 로드 완료, 크기: ${jsonString.length} 문자');
+      }
+      
       final Map<String, dynamic> data = json.decode(jsonString);
+      
+      if (kDebugMode) {
+        debugPrint('📄 JSON 파싱 완료, 키: ${data.keys.toList()}');
+      }
       
       // 노트 데이터 파싱
       if (data['note'] != null) {
+        if (kDebugMode) {
+          debugPrint('📝 노트 데이터 파싱 중...');
+        }
         _sampleNote = Note.fromJson(data['note']);
+        if (kDebugMode) {
+          debugPrint('📝 노트 데이터 파싱 완료: ${_sampleNote?.title}');
+        }
       }
       
       // 페이지 데이터 파싱
       if (data['pages'] != null) {
+        if (kDebugMode) {
+          debugPrint('📄 페이지 데이터 파싱 중... (${(data['pages'] as List).length}개)');
+        }
         _samplePages = (data['pages'] as List)
             .map((pageData) => page_model.Page.fromJson(pageData))
             .toList();
+        if (kDebugMode) {
+          debugPrint('📄 페이지 데이터 파싱 완료: ${_samplePages.length}개');
+        }
       }
       
       // 플래시카드 데이터 파싱
       if (data['flashcards'] != null) {
+        if (kDebugMode) {
+          debugPrint('💳 플래시카드 데이터 파싱 중... (${(data['flashcards'] as List).length}개)');
+        }
         _sampleFlashCards = (data['flashcards'] as List)
             .map((cardData) => FlashCard.fromJson(cardData))
             .toList();
+        if (kDebugMode) {
+          debugPrint('💳 플래시카드 데이터 파싱 완료: ${_sampleFlashCards.length}개');
+        }
       }
       
       // 처리된 텍스트 데이터 파싱
       if (data['processedTexts'] != null) {
+        if (kDebugMode) {
+          debugPrint('📝 처리된 텍스트 데이터 파싱 중...');
+        }
         final processedTextsData = data['processedTexts'] as Map<String, dynamic>;
         _sampleProcessedTexts = processedTextsData.map(
           (pageId, textData) => MapEntry(pageId, ProcessedText.fromJson(textData))
         );
+        if (kDebugMode) {
+          debugPrint('📝 처리된 텍스트 데이터 파싱 완료: ${_sampleProcessedTexts.length}개');
+        }
       }
       
       // 샘플 이미지 경로를 assets 경로로 하드코딩
       _updateImagePathsToAssets();
-      
-      // 오디오 파일 체크는 하드코딩으로 처리하므로 불필요
-      // await SampleTtsService().checkAudioAssets();
       
       _isLoaded = true;
       
@@ -85,9 +118,10 @@ class SampleDataService {
         debugPrint('   플래시카드: ${_sampleFlashCards.length}개');
         debugPrint('   처리된 텍스트: ${_sampleProcessedTexts.length}개');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (kDebugMode) {
         debugPrint('❌ 샘플 데이터 로드 실패: $e');
+        debugPrint('스택 트레이스: $stackTrace');
       }
       rethrow;
     }

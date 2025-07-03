@@ -25,6 +25,7 @@ class SampleTtsService {
   // 샘플 모드에서 지원하는 오디오 파일들 (하드코딩)
   static const Map<String, String> _sampleAudioAssets = {
     // 플래시카드 단어들
+    '学校': 'assets/audio/sample/xuexiao.mp3',
     '老师': 'assets/audio/sample/laoshi.mp3',
     '黑板': 'assets/audio/sample/heiban.mp3',
     
@@ -33,7 +34,6 @@ class SampleTtsService {
     '教室里有很多桌子和椅子。': 'assets/audio/sample/sentence_2.mp3',
     
     // 나머지 문장들은 오디오 파일이 없으므로 스낵바 표시
-    // '下课后，我们去操场玩。' - 오디오 없음
     // '我喜欢我的学校。' - 오디오 없음
   };
 

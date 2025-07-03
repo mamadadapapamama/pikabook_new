@@ -133,7 +133,20 @@ class _SampleHomeScreenState extends State<SampleHomeScreen> {
                 color: ColorTokens.textPrimary,
               ),
             ),
-            SizedBox(height: SpacingTokens.md),
+            SizedBox(height: SpacingTokens.sm),
+            if (kDebugMode) ...[
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: SpacingTokens.lg),
+                child: Text(
+                  '에러: $_error',
+                  style: TypographyTokens.caption.copyWith(
+                    color: ColorTokens.error,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              SizedBox(height: SpacingTokens.md),
+            ],
             PikaButton(
               text: '다시 시도',
               variant: PikaButtonVariant.text,
