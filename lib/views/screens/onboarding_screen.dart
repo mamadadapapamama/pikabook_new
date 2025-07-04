@@ -307,13 +307,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       );
 
-          if (kDebugMode) {
+      if (kDebugMode) {
         print('✅ [온보딩] 사용자 정보 저장 완료 - 홈으로 이동');
-            }
+      }
 
       // 🚀 온보딩 완료 - 홈에서 구독 상태에 따른 처리 진행
-                if (mounted) {
-                  widget.onComplete();
+      if (mounted) {
+        widget.onComplete();
       }
     } catch (e) {
       debugPrint('온보딩 완료 처리 중 오류: $e');

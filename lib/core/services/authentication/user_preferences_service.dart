@@ -274,7 +274,13 @@ class UserPreferencesService {
   /// 온보딩 완료 여부 확인
   Future<bool> getOnboardingCompleted() async {
     final prefs = await getPreferences();
-    return prefs.onboardingCompleted;
+    final isCompleted = prefs.onboardingCompleted;
+    
+    if (kDebugMode) {
+      debugPrint('🔍 [UserPreferences] 온보딩 상태 확인: $isCompleted');
+    }
+    
+    return isCompleted;
   }
   
   /// 온보딩 완료 상태 저장

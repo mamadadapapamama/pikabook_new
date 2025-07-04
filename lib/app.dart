@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
@@ -127,48 +128,95 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
-  /// 앱 초기화 로직 (빠른 시작을 위해 최적화)
-  void _initializeApp() {
+  /// 앱 초기화 로직 (개선된 구조)
+  Future<void> _initializeApp() async {
     try {
       if (kDebugMode) {
-        debugPrint('앱: 빠른 초기화 시작');
+        debugPrint('🚀 [App] 앱 초기화 시작');
       }
       
-      // Firebase Auth 상태를 동기적으로 확인 (네트워크 대기 없음)
+      // 1. 필수 초기화 (순차적)
+      await _initializeFirebase();
+      await _initializeServices();
+      
+      // 2. 상태 확인
       final currentUser = FirebaseAuth.instance.currentUser;
-      final isLoggedIn = currentUser != null;
+      _updateAuthState(currentUser);
+      
+      _updateInitializationState(true);
       
       if (kDebugMode) {
-        debugPrint('앱: Firebase Auth 상태 확인 완료 - 로그인: $isLoggedIn');
-      }
-      
-      // 샘플 모드 상태 확인 (앱 특화 로직)
-      _checkSampleMode();
-      
-      // 인증 상태 관찰 설정 (비동기)
-      _setupAuthStateListener();
-      
-      // App Store 구독 서비스 초기화 (비동기, App Store Connect 우선)
-      _appStoreService.initialize();
-      
-      // 초기화 상태 즉시 업데이트
-      if (mounted) {
-      setState(() {
-        _isInitialized = true;
-          _isLoading = false; // 즉시 로딩 해제
-      });
-      }
-      
-      if (kDebugMode) {
-        debugPrint('앱: 빠른 초기화 완료 (로그인: $isLoggedIn, 샘플모드: $_isSampleMode)');
+        debugPrint('✅ [App] 앱 초기화 완료');
       }
     } catch (e) {
-      // 초기화 실패 처리
-      if (kDebugMode) {
-        debugPrint('앱: 초기화 실패 - $e');
-      }
+      _handleInitializationError(e);
+    }
+  }
+  
+  /// Firebase 초기화
+  Future<void> _initializeFirebase() async {
+    if (kDebugMode) {
+      debugPrint('🔥 [App] Firebase 초기화');
+    }
+    
+    // Firebase는 main.dart에서 이미 초기화되었으므로 상태만 확인
+    if (Firebase.apps.isEmpty) {
+      throw Exception('Firebase가 초기화되지 않았습니다.');
+    }
+  }
+  
+  /// 핵심 서비스 초기화
+  Future<void> _initializeServices() async {
+    if (kDebugMode) {
+      debugPrint('⚙️ [App] 핵심 서비스 초기화');
+    }
+    
+    // UserPreferencesService 초기화
+    _preferencesService = UserPreferencesService();
+    
+    // App Store 구독 서비스 초기화
+    await _appStoreService.initialize();
+  }
+  
+  /// 인증 상태 업데이트
+  void _updateAuthState(User? currentUser) {
+    final isLoggedIn = currentUser != null;
+    
+    if (kDebugMode) {
+      debugPrint('👤 [App] 인증 상태 확인: 로그인=$isLoggedIn');
+    }
+    
+    // 샘플 모드 상태 확인
+    _checkSampleMode();
+    
+    // 인증 상태 리스너 설정
+    _setupAuthStateListener();
+    
+    // 로그인된 사용자의 구독 상태 사전 로딩 (백그라운드)
+    if (isLoggedIn) {
+      _preloadSubscriptionStatus();
+    }
+  }
+  
+  /// 초기화 상태 업데이트
+  void _updateInitializationState(bool success) {
+    if (mounted) {
       setState(() {
-        _error = '앱 초기화 중 오류가 발생했습니다: $e';
+        _isInitialized = success;
+        _isLoading = false;
+      });
+    }
+  }
+  
+  /// 초기화 오류 처리
+  void _handleInitializationError(dynamic error) {
+    if (kDebugMode) {
+      debugPrint('❌ [App] 초기화 실패: $error');
+    }
+    
+    if (mounted) {
+      setState(() {
+        _error = '앱 초기화 중 오류가 발생했습니다: $error';
         _isInitialized = false;
         _isLoading = false;
       });
@@ -251,7 +299,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             setState(() {
               _user = null;
               _userId = null;
-              _isOnboardingCompleted = false;
+              // 🎯 온보딩 상태는 로그아웃 시 초기화하지 않음 (사용자별로 관리)
+              // _isOnboardingCompleted = false; // 제거
               _isLoading = false;
               _isLoadingUserData = false;
               // 로그아웃 시 샘플 모드 상태를 유지 (자동으로 비활성화하지 않음)
@@ -306,15 +355,24 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       // 🎯 앱 첫 진입 시 Firestore에서 설정 로드 (온보딩 상태 포함)
       await _preferencesService.loadUserSettingsFromFirestore(forceRefresh: true);
       
-      // 🎯 간소화: 온보딩 상태만 확인 (다른 복잡한 초기화 제거)
-      _isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
+      // 🎯 온보딩 상태 확인 (Firestore 우선, SharedPreferences 폴백)
+      final isOnboardingCompleted = await _preferencesService.getOnboardingCompleted();
+      
+      if (kDebugMode) {
+        debugPrint('🔍 [loadUserPreferences] 온보딩 상태 확인: $isOnboardingCompleted');
+      }
       
       // 상태 업데이트
       if (mounted) {
         setState(() {
+          _isOnboardingCompleted = isOnboardingCompleted;
           _isLoadingUserData = false;
           _isLoading = false;
         });
+        
+        if (kDebugMode) {
+          debugPrint('✅ [loadUserPreferences] 상태 업데이트 완료: 온보딩=$_isOnboardingCompleted');
+        }
       }
     } catch (e) {
       if (kDebugMode) {
@@ -360,22 +418,54 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   void _showWelcomeModal() {
     if (!mounted) return;
     
-    final context = _scaffoldMessengerKey.currentContext;
-    if (context == null) return;
-    
     if (kDebugMode) {
-      debugPrint('🎉 [App] 온보딩 완료 후 환영 모달 표시');
+      debugPrint('🎉 [App] 온보딩 완료 후 환영 모달 표시 준비');
     }
     
-    // 환영 모달 표시 (7일 무료체험 유도)
-    UpgradePromptHelper.showWelcomeTrialPrompt(
-      context,
-      onComplete: () {
+    // 약간의 지연 후 모달 표시 (BuildContext 안정화)
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      
+      final context = _scaffoldMessengerKey.currentContext;
+      if (context == null) {
         if (kDebugMode) {
-          debugPrint('✅ [App] 환영 모달 완료');
+          debugPrint('❌ [App] 환영 모달 표시 실패: context가 null');
         }
-      },
-    );
+        return;
+      }
+      
+      if (kDebugMode) {
+        debugPrint('🎉 [App] 환영 모달 표시 시작');
+      }
+      
+      // 환영 모달 표시 (7일 무료체험 유도)
+      UpgradePromptHelper.showWelcomeTrialPrompt(
+        context,
+        onComplete: () {
+          if (kDebugMode) {
+            debugPrint('✅ [App] 환영 모달 완료');
+          }
+        },
+      );
+    });
+  }
+  
+  /// 🎯 구독 상태 사전 로딩 (HomeScreen 빌드 전에 준비)
+  void _preloadSubscriptionStatus() {
+    if (kDebugMode) {
+      debugPrint('🔄 [App] 구독 상태 사전 로딩 시작');
+    }
+    
+    // 백그라운드에서 구독 상태 확인 (결과를 기다리지 않음)
+    _appStoreService.getCurrentSubscriptionStatus(isAppStart: true).then((status) {
+      if (kDebugMode) {
+        debugPrint('✅ [App] 구독 상태 사전 로딩 완료: ${status.planType}');
+      }
+    }).catchError((error) {
+      if (kDebugMode) {
+        debugPrint('⚠️ [App] 구독 상태 사전 로딩 실패: $error');
+      }
+    });
   }
   
   @override
