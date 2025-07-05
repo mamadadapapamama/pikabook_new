@@ -9,6 +9,8 @@ import '../../core/utils/subscription_debug_helper.dart';
 // 🎯 Core imports - 새로운 통합 구독 상태 관리 시스템
 import '../../core/models/subscription_state.dart';                    // 통합 구독 상태 모델
 import '../../core/services/subscription/app_store_subscription_service.dart'; // 🆕 App Store 기반 구독 서비스
+import '../../core/services/subscription/unified_subscription_manager.dart'; // 🎯 표준 Entitlement Engine
+import '../../core/utils/subscription_debug_helper.dart'; // 🧪 실기기 테스트 진단 도구
 import '../../core/services/common/usage_limit_service.dart';          // 사용량 한도 실시간 스트림용
 
 
@@ -101,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 🎯 구독 상태 로드 (App Store 기반) - 캐시 우선 최적화
+  /// 🎯 표준 방식: 구독 상태 로드 (Entitlement Engine 기반)
   Future<void> _loadSubscriptionStatus({bool forceRefresh = false}) async {
     try {
       // 🎯 초기 로드 시에는 App.dart에서 사전 로딩한 캐시만 사용
@@ -112,8 +114,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       }
       
-      final appStoreService = AppStoreSubscriptionService();
-      final subscriptionState = await appStoreService.getUnifiedSubscriptionState(
+      // 🎯 UnifiedSubscriptionManager 사용 (표준 Entitlement Engine 기반)
+      final subscriptionManager = UnifiedSubscriptionManager();
+      final subscriptionState = await subscriptionManager.getSubscriptionState(
         forceRefresh: forceRefresh,  // 초기 로드시 false, 새로고침시 true
       );
       
@@ -121,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (!_hasInitialLoad) {
         _hasInitialLoad = true;
         if (kDebugMode) {
-          debugPrint('✅ [HomeScreen] 초기 로드 완료 - 사전 로딩된 캐시 사용');
+          debugPrint('✅ [HomeScreen] 초기 로드 완료 - 표준 Entitlement Engine 캐시 사용');
         }
       }
       
@@ -260,10 +263,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             
             // 제로 스테이트 콘텐츠
             Expanded(
-              child: Center(
+              child: SingleChildScrollView(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
+                    const SizedBox(height: 50),
                     Image.asset(
                       'assets/images/zeronote.png',
                       width: 200,
@@ -287,7 +290,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         color: const Color(0xFF969696), // #969696
                       ),
                     ),
-                const SizedBox(height: 32), // 간격만 유지
+                    const SizedBox(height: 32),
+                    
+                    // 🧪 디버그 모드에서만 테스트 환경 진단 섹션 표시
+                    if (kDebugMode) ...[
+                      const SizedBox(height: 20),
+                      _buildTestEnvironmentSection(),
+                    ],
                   ],
                 ),
               ),
@@ -558,6 +567,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           _subscriptionState = SubscriptionState(
+            planStatus: _subscriptionState.planStatus,
             isTrial: _subscriptionState.isTrial,
             isTrialExpiringSoon: _subscriptionState.isTrialExpiringSoon,
             isPremium: _subscriptionState.isPremium,
@@ -580,6 +590,124 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         debugPrint('❌ [HomeScreen] 배너 닫기 실패: $e');
       }
     }
+  }
+
+  /// 🧪 실기기 테스트 환경 진단 섹션 (디버그 모드에서만 표시)
+  Widget _buildTestEnvironmentSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.1),
+        border: Border.all(color: Colors.orange, width: 1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '🧪 실기기 테스트 환경 진단',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.orange,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final debugHelper = SubscriptionDebugHelper();
+                    await debugHelper.diagnosisTestEnvironment();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('환경 진단'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    final debugHelper = SubscriptionDebugHelper();
+                    debugHelper.printSandboxSetupGuide();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('설정 가이드'),
+                ),
+              ),
+            ],
+          ),
+                     const SizedBox(height: 8),
+           Row(
+             children: [
+               Expanded(
+                 child: ElevatedButton(
+                   onPressed: () async {
+                     final debugHelper = SubscriptionDebugHelper();
+                     await debugHelper.createTestSubscriptionData(testType: 'trial');
+                     // 구독 상태 새로고침
+                     await _loadSubscriptionStatus(forceRefresh: true);
+                   },
+                   style: ElevatedButton.styleFrom(
+                     backgroundColor: Colors.green,
+                     foregroundColor: Colors.white,
+                   ),
+                   child: const Text('체험 데이터'),
+                 ),
+               ),
+               const SizedBox(width: 8),
+               Expanded(
+                 child: ElevatedButton(
+                   onPressed: () async {
+                     final debugHelper = SubscriptionDebugHelper();
+                     await debugHelper.createTestSubscriptionData(testType: 'premium');
+                     // 구독 상태 새로고침
+                     await _loadSubscriptionStatus(forceRefresh: true);
+                   },
+                   style: ElevatedButton.styleFrom(
+                     backgroundColor: Colors.purple,
+                     foregroundColor: Colors.white,
+                   ),
+                   child: const Text('프리미엄 데이터'),
+                 ),
+               ),
+             ],
+           ),
+           const SizedBox(height: 8),
+           // 🔍 Firestore 직접 테스트 버튼
+           SizedBox(
+             width: double.infinity,
+             child: ElevatedButton(
+               onPressed: () async {
+                 final debugHelper = SubscriptionDebugHelper();
+                 await debugHelper.testFirestoreDirectly();
+               },
+               style: ElevatedButton.styleFrom(
+                 backgroundColor: Colors.red,
+                 foregroundColor: Colors.white,
+               ),
+               child: const Text('🔍 Firestore 직접 테스트'),
+             ),
+           ),
+          const SizedBox(height: 8),
+          const Text(
+            '⚠️ 실기기에서 App Store 구독 테스트를 하려면:\n1. App Store Connect에서 샌드박스 계정 생성\n2. iOS 설정 → App Store → 샌드박스 계정 로그인\n3. 앱에서 구독 버튼 클릭하여 테스트',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.orange,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
 } 

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../common/plan_service.dart';
 import '../subscription/app_store_subscription_service.dart';
+import '../notification/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// In-App Purchase 관리 서비스
@@ -17,6 +18,7 @@ class InAppPurchaseService {
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   final PlanService _planService = PlanService();
+  final NotificationService _notificationService = NotificationService();
   
   late StreamSubscription<List<PurchaseDetails>> _subscription;
   bool _isAvailable = false;
@@ -137,7 +139,7 @@ class InAppPurchaseService {
         }
       });
       
-      _processedPurchases.clear();
+    _processedPurchases.clear();
       _isPurchaseInProgress = false;
     }
   }
@@ -192,7 +194,7 @@ class InAppPurchaseService {
       final purchaseKey = '${purchaseDetails.productID}_${purchaseDetails.purchaseID}';
       
       if (_processedPurchases.contains(purchaseKey)) {
-        if (kDebugMode) {
+      if (kDebugMode) {
           print('⏭️ 이미 처리된 구매 건너뛰기: $purchaseKey');
         }
         continue;
@@ -229,8 +231,8 @@ class InAppPurchaseService {
         // 구매 대기 중
         if (kDebugMode) {
           print('⏳ 구매 대기 중: ${purchaseDetails.productID}');
-        }
-        
+      }
+
         // 🎯 pending 상태도 일정 시간 후 강제 완료 처리 고려
         _scheduleTimeoutCompletion(purchaseDetails);
       }
@@ -250,7 +252,7 @@ class InAppPurchaseService {
   /// 성공한 구매 처리
   Future<void> _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) async {
     try {
-      if (kDebugMode) {
+        if (kDebugMode) {
         print('🎯 구매 성공 처리: ${purchaseDetails.productID}');
       }
       
@@ -272,10 +274,10 @@ class InAppPurchaseService {
         }
         return;
       }
-      
-      _processedPurchases.add(functionsKey);
 
-      if (kDebugMode) {
+      _processedPurchases.add(functionsKey);
+        
+        if (kDebugMode) {
         print('🔄 Firebase Functions로 구매 완료 처리: ${purchaseDetails.productID}');
       }
 
@@ -296,6 +298,9 @@ class InAppPurchaseService {
         if (kDebugMode) {
           print('✅ Firebase Functions 구매 완료 알림 성공');
         }
+        
+        // 🎯 구매 완료 시점에서 알림 스케줄링 (무료체험인 경우에만)
+        await _scheduleTrialNotificationsIfNeeded(purchaseDetails.productID);
         
         // 플랜 캐시 무효화 (서버에서 업데이트된 구독 상태 반영)
         _planService.notifyPlanChanged('premium', userId: user.uid);
@@ -427,11 +432,11 @@ class InAppPurchaseService {
           if (kDebugMode) {
             print('❌ 재시도 실패: $retryError');
             print('💡 사용자에게 몇 분 후 재시도 안내 필요');
-          }
-          return false;
-        }
       }
-      
+      return false;
+    }
+  }
+
       return false;
     } finally {
       // 🎯 구매 완료 후 상태 초기화 (지연 후)
@@ -537,13 +542,38 @@ class InAppPurchaseService {
   /// 월간 구독 상품 정보
   ProductDetails? get monthlyProduct => _getProductById(premiumMonthlyId);
 
-  /// 연간 구독 상품 정보  
+  /// 연간 구독 상품 정보
   ProductDetails? get yearlyProduct => _getProductById(premiumYearlyId);
 
   /// 월간 무료체험 상품 정보
   ProductDetails? get monthlyTrialProduct => _getProductById(premiumMonthlyWithTrialId);
 
-
+  /// 🎯 구매 완료 시점에서 무료체험 알림 스케줄링
+  Future<void> _scheduleTrialNotificationsIfNeeded(String productId) async {
+    try {
+      // 무료체험 상품인 경우에만 알림 스케줄링
+      if (productId == premiumMonthlyWithTrialId || productId == premiumMonthlyId) {
+        if (kDebugMode) {
+          print('🔔 무료체험 알림 스케줄링 시작: $productId');
+        }
+        
+        // 현재 시점을 체험 시작 시점으로 설정
+        await _notificationService.scheduleTrialEndNotifications(DateTime.now());
+        
+        if (kDebugMode) {
+          print('✅ 무료체험 알림 스케줄링 완료');
+        }
+      } else {
+        if (kDebugMode) {
+          print('⏭️ 무료체험 상품이 아니므로 알림 스케줄링 건너뛰기: $productId');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ 무료체험 알림 스케줄링 실패: $e');
+      }
+    }
+  }
 
   /// 🎯 사용자 친화적인 구매 시도 (pending transaction 자동 처리 포함)
   Future<Map<String, dynamic>> attemptPurchaseWithGuidance(String productId) async {

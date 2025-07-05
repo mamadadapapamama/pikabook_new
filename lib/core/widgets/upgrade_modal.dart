@@ -109,7 +109,7 @@ class UpgradeModal extends StatelessWidget {
     _currentModalId = '';
     if (kDebugMode) {
       debugPrint('🔄 [UpgradeModal] 모달 상태 강제 초기화');
-    }
+  }
   }
 
   /// 🚨 현재 모달 표시 상태 확인
@@ -388,7 +388,7 @@ class UpgradeModal extends StatelessWidget {
               try {
                 final purchaseService = InAppPurchaseService();
                 await purchaseService.buyProduct(InAppPurchaseService.premiumMonthlyId);
-                
+              
                 if (kDebugMode) {
                   debugPrint('✅ [UpgradeModal] 무료체험 구독 시작');
                 }

@@ -89,14 +89,6 @@ void main() async {
       // (중복 구매 이벤트 방지)
       await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(false);
       debugPrint('🚫 [DEBUG] Firebase Analytics 자동 수집 비활성화 (중복 이벤트 방지)');
-      
-      // 🚫 디버그 모드에서 Firebase Messaging FCM Token 요청 방지
-      // APNS Token이 없는 시뮬레이터에서 FCM Token 요청으로 인한 경고 방지
-      debugPrint('🚫 [DEBUG] Firebase Messaging FCM Token 요청 방지 (시뮬레이터 환경)');
-      
-      // 🚫 디버그 모드에서 Firebase Messaging 비활성화 (FCM Token 오류 방지)
-      // APNS Token이 없는 시뮬레이터에서 FCM Token 요청 방지
-      debugPrint('🚫 [DEBUG] Firebase Messaging 자동 초기화 비활성화 (FCM Token 오류 방지)');
     }
     
     // Firebase Auth 자동 복원 방지 - Apple ID 다이얼로그 방지

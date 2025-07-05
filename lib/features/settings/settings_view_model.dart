@@ -4,6 +4,8 @@ import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/common/plan_service.dart';
 import '../../core/services/subscription/app_store_subscription_service.dart';
+import '../../core/services/subscription/unified_subscription_manager.dart';
+import '../../core/models/subscription_state.dart';
 import '../../core/models/plan.dart';
 import '../../core/utils/language_constants.dart';
 import '../../core/services/text_processing/text_processing_service.dart';
@@ -77,9 +79,18 @@ class SettingsViewModel extends ChangeNotifier {
         print('🔄 [Settings] App Store 기반 플랜 정보 강제 새로고침');
       }
       
-      // App Store에서 강제 새로고침으로 최신 구독 상태 조회
-      final appStoreService = AppStoreSubscriptionService();
-      final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: true);
+      // 🎯 새로운 시스템: UnifiedSubscriptionManager 사용 (강제 새로고침)
+      final subscriptionManager = UnifiedSubscriptionManager();
+      final subscriptionState = await subscriptionManager.getSubscriptionState(forceRefresh: true);
+      
+      // SubscriptionState를 SubscriptionStatus 형태로 변환
+      final appStoreStatus = SubscriptionStatus(
+        planStatus: subscriptionState.planStatus,
+        planType: subscriptionState.isPremium ? 'premium' : (subscriptionState.isTrial ? 'trial' : 'free'),
+        isActive: subscriptionState.isPremium || subscriptionState.isTrial,
+        expirationDate: null, // UnifiedSubscriptionManager에서는 관리하지 않음
+        autoRenewStatus: !subscriptionState.isExpired,
+      );
       
       if (kDebugMode) {
         print('📥 [Settings] 강제 새로고침 결과:');
@@ -188,9 +199,18 @@ class SettingsViewModel extends ChangeNotifier {
         print('🔍 [Settings] App Store 기반 플랜 정보 로드 시작');
       }
       
-      // App Store에서 캐시된 구독 상태 조회 (초기 로드는 캐시 우선)
-      final appStoreService = AppStoreSubscriptionService();
-      final appStoreStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: false);
+      // 🎯 새로운 시스템: UnifiedSubscriptionManager 사용
+      final subscriptionManager = UnifiedSubscriptionManager();
+      final subscriptionState = await subscriptionManager.getSubscriptionState(forceRefresh: false);
+      
+      // SubscriptionState를 SubscriptionStatus 형태로 변환
+      final appStoreStatus = SubscriptionStatus(
+        planStatus: subscriptionState.planStatus,
+        planType: subscriptionState.isPremium ? 'premium' : (subscriptionState.isTrial ? 'trial' : 'free'),
+        isActive: subscriptionState.isPremium || subscriptionState.isTrial,
+        expirationDate: null, // UnifiedSubscriptionManager에서는 관리하지 않음
+        autoRenewStatus: !subscriptionState.isExpired,
+      );
       
       if (kDebugMode) {
           print('   구독 상태: $appStoreStatus');

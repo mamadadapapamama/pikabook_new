@@ -14,6 +14,7 @@ import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/common/plan_service.dart';
 import 'core/services/payment/in_app_purchase_service.dart';
 import 'core/services/subscription/app_store_subscription_service.dart';
+import 'core/services/subscription/unified_subscription_manager.dart';
 import 'views/screens/loading_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';

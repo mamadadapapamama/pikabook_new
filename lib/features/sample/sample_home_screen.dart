@@ -145,7 +145,7 @@ class _SampleHomeScreenState extends State<SampleHomeScreen> {
                   textAlign: TextAlign.center,
                 ),
               ),
-              SizedBox(height: SpacingTokens.md),
+            SizedBox(height: SpacingTokens.md),
             ],
             PikaButton(
               text: '다시 시도',

@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import '../../models/subscription_state.dart';
+import '../../models/plan_status.dart';
 import '../common/banner_manager.dart';
 import '../common/usage_limit_service.dart';
 
@@ -62,6 +63,7 @@ class AppStoreSubscriptionService {
       if (!forceRefresh && _isSubscriptionCacheValid()) {
         if (kDebugMode) {
           debugPrint('📦 [AppStoreSubscription] 유효한 캐시 사용 (앱시작: $isAppStart, 강제새로고침: $forceRefresh)');
+          debugPrint('   캐시된 상태: ${_cachedStatus!.planStatus} (${_cachedStatus!.planType})');
         }
         return _cachedStatus!;
       }
@@ -75,8 +77,6 @@ class AppStoreSubscriptionService {
       if (currentUser == null) {
         return SubscriptionStatus.notLoggedIn();
       }
-
-
 
       // 🎯 App Store Connect 우선 호출 (프리미엄/체험 정보)
       final callable = _functions.httpsCallable('sub_checkSubscriptionStatus');
@@ -97,10 +97,15 @@ class AppStoreSubscriptionService {
         debugPrint('🔍 [AppStoreSubscription] App Store Connect 우선 응답:');
         debugPrint('   성공 여부: ${data['success']}');
         debugPrint('   데이터 소스: ${data['dataSource'] ?? 'unknown'}'); // App Store vs Firebase
+        debugPrint('🔍 === RAW JSON 응답 (전체) ===');
+        debugPrint('$data');
+        debugPrint('🔍 === RAW JSON 응답 끝 ===');
         if (data['subscription'] != null) {
           final sub = data['subscription'] as Map;
           debugPrint('   구독 정보: ${sub.toString()}');
-          debugPrint('   - currentPlan: ${sub['currentPlan']}');
+          debugPrint('🔍 === RAW planStatus 값 ===');
+          debugPrint('   - planStatus: "${sub['planStatus']}" (타입: ${sub['planStatus'].runtimeType})');
+          debugPrint('🔍 === RAW planStatus 값 끝 ===');
           debugPrint('   - isActive: ${sub['isActive']}');
           debugPrint('   - expirationDate: ${sub['expirationDate']}');
           debugPrint('   - autoRenewStatus: ${sub['autoRenewStatus']}');
@@ -114,6 +119,9 @@ class AppStoreSubscriptionService {
         
         if (kDebugMode) {
           debugPrint('✅ [AppStoreSubscription] Firebase Functions 성공: ${subscriptionStatus.planType}');
+          if (data['dataSource'] != null) {
+            debugPrint('   데이터 소스: ${data['dataSource']}');
+          }
         }
 
         return subscriptionStatus;
@@ -260,73 +268,242 @@ class AppStoreSubscriptionService {
     }
   }
 
-  // 🎯 헬퍼 메서드들 (중복 제거)
-  
-  /// 로그인 상태 확인 헬퍼
-  User? _getCurrentUser({String? context}) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null && kDebugMode) {
-      debugPrint('❌ [AppStoreSubscription] 로그인이 필요합니다${context != null ? ' ($context)' : ''}');
-    }
-    return currentUser;
-  }
-
-  /// 캐시 유효성 확인 헬퍼 (통합)
-  bool _isCacheValid<T>(T? cached, DateTime? cacheTime, Duration validDuration) {
-    if (cached == null || cacheTime == null) return false;
-    return DateTime.now().difference(cacheTime) < validDuration;
-  }
-  
-  /// 구독 상태 캐시 유효성 확인
-  bool _isSubscriptionCacheValid() => 
-      _isCacheValid(_cachedStatus, _lastCacheTime, _cacheValidDuration);
-  
-  /// 통합 상태 캐시 유효성 확인
-  bool _isUnifiedCacheValid() => 
-      _isCacheValid(_cachedUnifiedState, _unifiedCacheTime, _unifiedCacheValidDuration);
-
-  /// Firebase Functions 호출 헬퍼
-  Future<Map<String, dynamic>?> _callFunction(String functionName, Map<String, dynamic> data, {String? context}) async {
+  /// 무료 체험 사용 여부 확인
+  Future<bool> hasUsedFreeTrial() async {
     try {
-      if (kDebugMode) {
-        debugPrint('🔄 [AppStoreSubscription] $functionName 호출${context != null ? ' ($context)' : ''}');
-      }
+      final currentUser = _getCurrentUser(context: '무료 체험 사용 여부 확인');
+      if (currentUser == null) return false;
 
-      final callable = _functions.httpsCallable(functionName);
-      final result = await callable.call(data);
-      final responseData = Map<String, dynamic>.from(result.data as Map);
-      
-      if (kDebugMode) {
-        debugPrint('📥 [AppStoreSubscription] $functionName 응답: ${responseData['success'] == true ? '성공' : '실패'}');
-      }
-      
-      return responseData;
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+
+      if (!userDoc.exists) return false;
+
+      final data = userDoc.data() as Map<String, dynamic>;
+      return data['hasUsedFreeTrial'] as bool? ?? false;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [AppStoreSubscription] $functionName 호출 중 오류: $e');
+        debugPrint('❌ [AppStoreSubscription] 무료 체험 사용 여부 확인 실패: $e');
+      }
+      return false;
+    }
+  }
+
+  /// 서비스 정리
+  void dispose() {
+    invalidateCache();
+    _ongoingUnifiedRequest = null;
+    if (kDebugMode) {
+      debugPrint('🗑️ [AppStoreSubscription] 서비스 정리 완료');
+    }
+  }
+
+  /// 테스트 환경 지원: Firestore에서 직접 구독 정보 조회
+  Future<SubscriptionStatus?> _getSubscriptionFromFirestore(String userId) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🔍 [AppStoreSubscription] Firestore 직접 조회 시작: $userId');
+      }
+
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .get();
+
+      if (!userDoc.exists) {
+        if (kDebugMode) {
+          debugPrint('❌ [AppStoreSubscription] 사용자 문서 없음');
+        }
+        return null;
+      }
+
+      final userData = userDoc.data() as Map<String, dynamic>;
+      
+      // 🎯 구독 정보 추출 (새로운 subscription 필드 구조)
+      final subscriptionData = userData['subscription'] as Map<String, dynamic>?;
+      if (subscriptionData == null) {
+        if (kDebugMode) {
+          debugPrint('❌ [AppStoreSubscription] Firestore에 구독 정보 없음 - 구조 확인 필요');
+        }
+        return null;
+      }
+
+      // 🎯 새로운 구독 상태 파싱 (plan, status, isFreeTrial 기반)
+      final plan = subscriptionData['plan'] as String? ?? 'free';
+      final subscriptionStatus = subscriptionData['status'] as String? ?? 'active';
+      final isFreeTrial = subscriptionData['isFreeTrial'] as bool? ?? false;
+      final isActive = subscriptionData['isActive'] as bool? ?? true;
+      final autoRenewStatus = subscriptionData['autoRenewStatus'] as bool? ?? false;
+      
+      // planType 결정 (plan + isFreeTrial 조합)
+      String planType = plan;
+      if (isFreeTrial && plan == 'premium') {
+        planType = 'trial';
+      }
+      
+      DateTime? expirationDate;
+      final expirationTimestamp = subscriptionData['expirationDate'];
+      if (expirationTimestamp != null) {
+        try {
+          if (kDebugMode) {
+            debugPrint('🔍 [AppStoreSubscription] Firestore 만료일 파싱 시도: $expirationTimestamp (타입: ${expirationTimestamp.runtimeType})');
+          }
+          
+          if (expirationTimestamp is Timestamp) {
+            expirationDate = expirationTimestamp.toDate();
+          } else if (expirationTimestamp is String) {
+            // 문자열 형태의 날짜 파싱 (다양한 형식 지원)
+            if (expirationTimestamp.contains('T')) {
+              // ISO 8601 형식
+              expirationDate = DateTime.parse(expirationTimestamp);
+            } else if (RegExp(r'^\d{13}$').hasMatch(expirationTimestamp)) {
+              // 13자리 밀리초 타임스탬프
+              expirationDate = DateTime.fromMillisecondsSinceEpoch(int.parse(expirationTimestamp));
+            } else if (RegExp(r'^\d{10}$').hasMatch(expirationTimestamp)) {
+              // 10자리 초 타임스탬프
+              expirationDate = DateTime.fromMillisecondsSinceEpoch(int.parse(expirationTimestamp) * 1000);
+            } else {
+              // 기본 DateTime.parse 시도
+              expirationDate = DateTime.parse(expirationTimestamp);
+            }
+          } else if (expirationTimestamp is int) {
+            // 정수 타임스탬프
+            if (expirationTimestamp > 9999999999) {
+              // 밀리초 타임스탬프 (13자리)
+              expirationDate = DateTime.fromMillisecondsSinceEpoch(expirationTimestamp);
+            } else {
+              // 초 타임스탬프 (10자리)
+              expirationDate = DateTime.fromMillisecondsSinceEpoch(expirationTimestamp * 1000);
+            }
+          }
+          
+          if (kDebugMode) {
+            debugPrint('✅ [AppStoreSubscription] Firestore 만료일 파싱 성공: $expirationDate');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ [AppStoreSubscription] Firestore 만료일 파싱 실패: $e');
+            debugPrint('   원본 값: $expirationTimestamp');
+            debugPrint('   값 타입: ${expirationTimestamp.runtimeType}');
+          }
+          expirationDate = null;
+        }
+      }
+
+      final result = SubscriptionStatus(
+        planStatus: PlanStatus.fromString(plan),
+        planType: planType,
+        isActive: isActive,
+        expirationDate: expirationDate,
+        autoRenewStatus: autoRenewStatus,
+        subscriptionType: planType,
+      );
+
+      if (kDebugMode) {
+        debugPrint('✅ [AppStoreSubscription] Firestore 구독 정보 파싱 완료:');
+        debugPrint('   - 플랜: $planType');
+        debugPrint('   - 활성: $isActive');
+        debugPrint('   - 만료일: $expirationDate');
+        debugPrint('   - 자동갱신: $autoRenewStatus');
+      }
+
+      return result;
+
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [AppStoreSubscription] Firestore 조회 실패: $e');
       }
       return null;
     }
   }
 
-  /// Firestore 폴백 처리 헬퍼 (중복 제거)
-  Future<SubscriptionStatus> _handleFirestoreFallback(String userId, {String? context}) async {
-    final firestoreStatus = await _getSubscriptionFromFirestore(userId);
-    if (firestoreStatus != null) {
-      _updateCache(firestoreStatus);
-      if (kDebugMode) {
-        debugPrint('✅ [AppStoreSubscription] Firestore에서 플랜 조회 성공: ${firestoreStatus.planType}${context != null ? ' ($context)' : ''}');
-      }
-      return firestoreStatus;
+  /// Firebase Functions 응답 파싱 (PlanStatus enum 적용)
+  SubscriptionStatus _parseSubscriptionStatus(Map<String, dynamic> subscriptionData) {
+    // Firebase Functions에서 planStatus 문자열로 받음
+    final planStatusString = subscriptionData['planStatus'] as String? ?? 'free';
+    
+    if (kDebugMode) {
+      debugPrint('🔍 === planStatus 파싱 시작 ===');
+      debugPrint('   받은 planStatus 문자열: "$planStatusString"');
+      debugPrint('   PlanStatus enum 값들: ${PlanStatus.values.map((e) => e.value).toList()}');
     }
     
-    // Firestore에도 없으면 무료 플랜
+    final planStatus = PlanStatus.fromString(planStatusString);
+    
     if (kDebugMode) {
-      debugPrint('🆓 [AppStoreSubscription] 구독 정보 없음 → 무료 플랜${context != null ? ' ($context)' : ''}');
+      debugPrint('   파싱된 PlanStatus: $planStatus (${planStatus.value})');
+      debugPrint('   isTrial: ${planStatus.isTrial}');
+      debugPrint('   isPremium: ${planStatus.isPremium}');
+      debugPrint('   isActive: ${planStatus.isActive}');
+      debugPrint('🔍 === planStatus 파싱 끝 ===');
     }
-    final freeStatus = SubscriptionStatus.free();
-    _updateCache(freeStatus);
-    return freeStatus;
+    
+    final autoRenewStatus = subscriptionData['autoRenewStatus'] as bool? ?? false;
+    final expirationDateString = subscriptionData['expirationDate'] as String?;
+    
+    DateTime? expirationDate;
+    if (expirationDateString != null) {
+      try {
+        if (kDebugMode) {
+          debugPrint('🔍 [AppStoreSubscription] 만료일 파싱 시도: "$expirationDateString" (타입: ${expirationDateString.runtimeType})');
+        }
+        
+        // 다양한 날짜 형식 지원
+        if (expirationDateString.contains('T')) {
+          // ISO 8601 형식 (예: 2024-01-01T00:00:00Z)
+          expirationDate = DateTime.parse(expirationDateString);
+        } else if (RegExp(r'^\d{13}$').hasMatch(expirationDateString)) {
+          // 13자리 밀리초 타임스탬프
+          expirationDate = DateTime.fromMillisecondsSinceEpoch(int.parse(expirationDateString));
+        } else if (RegExp(r'^\d{10}$').hasMatch(expirationDateString)) {
+          // 10자리 초 타임스탬프
+          expirationDate = DateTime.fromMillisecondsSinceEpoch(int.parse(expirationDateString) * 1000);
+        } else {
+          // 기본 DateTime.parse 시도
+          expirationDate = DateTime.parse(expirationDateString);
+        }
+        
+        if (kDebugMode) {
+          debugPrint('✅ [AppStoreSubscription] 만료일 파싱 성공: $expirationDate');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [AppStoreSubscription] 만료일 파싱 실패: $e');
+          debugPrint('   원본 문자열: "$expirationDateString"');
+          debugPrint('   문자열 길이: ${expirationDateString.length}');
+          debugPrint('   문자열 타입: ${expirationDateString.runtimeType}');
+        }
+        // 파싱 실패 시 null로 설정
+        expirationDate = null;
+      }
+    }
+
+    return SubscriptionStatus(
+      planStatus: planStatus,
+      planType: planStatus.value,
+      isActive: planStatus.isActive,
+      expirationDate: expirationDate,
+      autoRenewStatus: autoRenewStatus,
+      subscriptionType: planStatus.value,
+    );
+  }
+
+  /// 캐시 유효성 확인
+  bool _isSubscriptionCacheValid() {
+    if (_cachedStatus == null || _lastCacheTime == null) return false;
+    final timeDiff = DateTime.now().difference(_lastCacheTime!);
+    return timeDiff < _cacheValidDuration;
+  }
+
+  /// 현재 사용자 가져오기
+  User? _getCurrentUser({String? context}) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null && kDebugMode) {
+      debugPrint('❌ [AppStoreSubscription] 사용자 로그인 필요${context != null ? ' ($context)' : ''}');
+    }
+    return user;
   }
 
   /// 캐시 업데이트
@@ -339,129 +516,16 @@ class AppStoreSubscriptionService {
   void invalidateCache() {
     _cachedStatus = null;
     _lastCacheTime = null;
-    _cachedTrialHistory = null;
-    _trialHistoryCacheTime = null;
     _cachedUnifiedState = null;
     _unifiedCacheTime = null;
+    _ongoingUnifiedRequest = null;
     
     if (kDebugMode) {
-      debugPrint('🗑️ [AppStoreSubscription] 모든 캐시 무효화 (구독 상태 + 통합 상태 + 무료체험 이력)');
+      debugPrint('🗑️ [AppStoreSubscription] 캐시 무효화');
     }
   }
 
-  /// 🚨 외부에서 캐시 업데이트 (PlanService에서 성공한 결과 공유용)
-  void updateCacheFromExternal(SubscriptionStatus status) {
-    _updateCache(status);
-    if (kDebugMode) {
-      debugPrint('📦 [AppStoreSubscription] 외부에서 캐시 업데이트: ${status.planType}');
-    }
-  }
-
-  // 무료체험 이력 캐시
-  bool? _cachedTrialHistory;
-  DateTime? _trialHistoryCacheTime;
-  static const Duration _trialHistoryCacheDuration = Duration(hours: 1);
-
-  /// 무료체험 사용 이력 확인 (Firestore 직접 조회)
-  Future<bool> hasUsedFreeTrial() async {
-    try {
-      // 캐시된 이력이 유효하면 사용
-      if (_cachedTrialHistory != null && _trialHistoryCacheTime != null) {
-        final timeDiff = DateTime.now().difference(_trialHistoryCacheTime!);
-        if (timeDiff < _trialHistoryCacheDuration) {
-          if (kDebugMode) {
-            debugPrint('📦 [AppStoreSubscription] 캐시된 무료체험 이력 사용: $_cachedTrialHistory');
-          }
-          return _cachedTrialHistory!;
-        }
-      }
-
-      // 로그인 상태 확인
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        if (kDebugMode) {
-          debugPrint('⚠️ [AppStoreSubscription] 로그인되지 않음 - 무료체험 이력 확인 불가');
-        }
-        return false;
-      }
-
-      // 🎯 Firebase Functions 대신 Firestore에서 직접 확인
-      bool hasUsedTrial = false;
-      
-      try {
-        // Firestore에서 사용자 문서 확인
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .get();
-            
-        if (userDoc.exists) {
-          final userData = userDoc.data();
-          hasUsedTrial = userData?['hasUsedFreeTrial'] as bool? ?? false;
-        }
-        
-        // 탈퇴 이력에서도 확인 (DeletedUserService 사용)
-        if (!hasUsedTrial) {
-          // 간단한 이메일 기반 확인 (DeletedUserService 로직 일부 사용)
-          try {
-            final email = currentUser.email;
-            if (email != null) {
-              final deletedUsersQuery = await FirebaseFirestore.instance
-                  .collection('deleted_users')
-                  .where('email', isEqualTo: email)
-                  .limit(1)
-                  .get();
-                  
-              if (deletedUsersQuery.docs.isNotEmpty) {
-                final deletedUserData = deletedUsersQuery.docs.first.data();
-                final planData = deletedUserData['planData'] as Map<String, dynamic>?;
-                if (planData != null) {
-                  final wasFreeTrial = planData['isFreeTrial'] as bool? ?? false;
-                  final wasPremium = planData['planType'] == 'premium';
-                  hasUsedTrial = wasFreeTrial || wasPremium;
-                }
-              }
-            }
-          } catch (e) {
-            if (kDebugMode) {
-              debugPrint('⚠️ [AppStoreSubscription] 탈퇴 이력 확인 중 오류: $e');
-            }
-          }
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('⚠️ [AppStoreSubscription] Firestore 확인 중 오류: $e');
-        }
-        hasUsedTrial = false;
-      }
-      
-      // 캐시 업데이트
-      _cachedTrialHistory = hasUsedTrial;
-      _trialHistoryCacheTime = DateTime.now();
-      
-              if (kDebugMode) {
-          debugPrint('✅ [AppStoreSubscription] 무료체험 이력 확인 완료: $hasUsedTrial (Firestore 기반)');
-        }
-      
-      return hasUsedTrial;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [AppStoreSubscription] 무료체험 이력 확인 중 오류: $e');
-      }
-      
-      // 오류 시 캐시된 값이 있으면 사용
-      if (_cachedTrialHistory != null) {
-        if (kDebugMode) {
-          debugPrint('📦 [AppStoreSubscription] 오류 발생, 캐시된 이력 사용: $_cachedTrialHistory');
-        }
-        return _cachedTrialHistory!;
-      }
-      
-      return false;
-    }
-  }
-
-  /// 🎯 통합 구독 상태 조회 (모든 정보 한 번에)
+  /// 통합 구독 상태 조회 (모든 정보 한 번에)
   /// HomeScreen, Settings, BannerManager 등에서 동시에 호출해도
   /// 단일 네트워크 요청만 실행됩니다.
   Future<SubscriptionState> getUnifiedSubscriptionState({bool forceRefresh = false}) async {
@@ -529,12 +593,9 @@ class AppStoreSubscriptionService {
       List<BannerType> activeBanners = [];
       try {
         activeBanners = await _bannerManager.getActiveBanners(
-          currentPlan: appStoreStatus.planType,
-          isFreeTrial: appStoreStatus.isTrial,
+          planStatus: appStoreStatus.planStatus,
           hasEverUsedTrial: false, // TODO: App Store에서 이력 정보 가져오기
           hasEverUsedPremium: appStoreStatus.isPremium,
-          isCancelled: !appStoreStatus.autoRenewStatus,
-          autoRenewStatus: appStoreStatus.autoRenewStatus,
         );
       } catch (e) {
         if (kDebugMode) {
@@ -544,6 +605,7 @@ class AppStoreSubscriptionService {
 
       // 4. 통합 상태 생성
       final subscriptionState = SubscriptionState(
+        planStatus: appStoreStatus.planStatus,
         isTrial: appStoreStatus.isTrial,
         isTrialExpiringSoon: false, // App Store에서 자동 관리
         isPremium: appStoreStatus.isPremium,
@@ -573,176 +635,93 @@ class AppStoreSubscriptionService {
     }
   }
 
-  /// 서비스 정리
-  void dispose() {
-    invalidateCache();
-    _ongoingUnifiedRequest = null;
-    if (kDebugMode) {
-      debugPrint('🗑️ [AppStoreSubscription] 서비스 정리 완료');
-    }
+  /// 캐시 유효성 확인
+  bool _isUnifiedCacheValid() {
+    if (_cachedUnifiedState == null || _unifiedCacheTime == null) return false;
+    final timeDiff = DateTime.now().difference(_unifiedCacheTime!);
+    return timeDiff < _unifiedCacheValidDuration;
   }
 
-  /// 테스트 환경 지원: Firestore에서 직접 구독 정보 조회
-  Future<SubscriptionStatus?> _getSubscriptionFromFirestore(String userId) async {
+  /// Firebase Functions 호출 헬퍼
+  Future<Map<String, dynamic>?> _callFunction(String functionName, Map<String, dynamic> data, {String? context}) async {
     try {
       if (kDebugMode) {
-        debugPrint('🔍 [AppStoreSubscription] Firestore 직접 조회 시작: $userId');
+        debugPrint('🔄 [AppStoreSubscription] $functionName 호출${context != null ? ' ($context)' : ''}');
       }
 
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .get();
-
-      if (!userDoc.exists) {
-        if (kDebugMode) {
-          debugPrint('❌ [AppStoreSubscription] 사용자 문서 없음');
-        }
-        return null;
-      }
-
-      final userData = userDoc.data() as Map<String, dynamic>;
+      final callable = _functions.httpsCallable(functionName);
+      final result = await callable.call(data);
+      final responseData = Map<String, dynamic>.from(result.data as Map);
       
-      // 🎯 구독 정보 추출 (새로운 subscription 필드 구조)
-      final subscriptionData = userData['subscription'] as Map<String, dynamic>?;
-      if (subscriptionData == null) {
-        if (kDebugMode) {
-          debugPrint('❌ [AppStoreSubscription] Firestore에 구독 정보 없음 - 구조 확인 필요');
-        }
-        return null;
-      }
-
-      // 🎯 새로운 구독 상태 파싱 (plan, status, isFreeTrial 기반)
-      final plan = subscriptionData['plan'] as String? ?? 'free';
-      final subscriptionStatus = subscriptionData['status'] as String? ?? 'active';
-      final isFreeTrial = subscriptionData['isFreeTrial'] as bool? ?? false;
-      final isActive = subscriptionData['isActive'] as bool? ?? true;
-      final autoRenewStatus = subscriptionData['autoRenewStatus'] as bool? ?? false;
-      
-      // planType 결정 (plan + isFreeTrial 조합)
-      String planType = plan;
-      if (isFreeTrial && plan == 'premium') {
-        planType = 'trial';
-      }
-      
-      DateTime? expirationDate;
-      final expirationTimestamp = subscriptionData['expirationDate'];
-      if (expirationTimestamp != null) {
-        if (expirationTimestamp is Timestamp) {
-          expirationDate = expirationTimestamp.toDate();
-        } else if (expirationTimestamp is String) {
-          try {
-            expirationDate = DateTime.fromMillisecondsSinceEpoch(int.parse(expirationTimestamp));
-          } catch (e) {
-            if (kDebugMode) {
-              debugPrint('⚠️ [AppStoreSubscription] Firestore 만료일 파싱 실패: $e');
-            }
-          }
-        }
-      }
-
-      final result = SubscriptionStatus(
-        planType: planType,
-        isActive: isActive,
-        expirationDate: expirationDate,
-        autoRenewStatus: autoRenewStatus,
-      );
-
       if (kDebugMode) {
-        debugPrint('✅ [AppStoreSubscription] Firestore 구독 정보 파싱 완료:');
-        debugPrint('   - 플랜: $planType');
-        debugPrint('   - 활성: $isActive');
-        debugPrint('   - 만료일: $expirationDate');
-        debugPrint('   - 자동갱신: $autoRenewStatus');
+        debugPrint('📥 [AppStoreSubscription] $functionName 응답: ${responseData['success'] == true ? '성공' : '실패'}');
       }
-
-      return result;
-
+      
+      return responseData;
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [AppStoreSubscription] Firestore 조회 실패: $e');
+        debugPrint('❌ [AppStoreSubscription] $functionName 호출 중 오류: $e');
       }
       return null;
     }
   }
 
-  /// Firebase Functions 응답 파싱
-  SubscriptionStatus _parseSubscriptionStatus(Map<String, dynamic> data) {
-    try {
-      final isActive = data['isActive'] as bool? ?? false;
-      final currentPlan = data['currentPlan'] as String? ?? 'free';
-      final expirationDate = data['expirationDate'] as String?;
-      final autoRenewStatus = data['autoRenewStatus'] as bool? ?? false;
-      
-      // 🚨 추가: 체험/프리미엄 이력 확인
-      final hasEverUsedTrial = data['hasEverUsedTrial'] as bool? ?? false;
-      final hasEverUsedPremium = data['hasEverUsedPremium'] as bool? ?? false;
-
-      DateTime? expiration;
-      if (expirationDate != null) {
-        try {
-          expiration = DateTime.fromMillisecondsSinceEpoch(int.parse(expirationDate));
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('⚠️ [AppStoreSubscription] 만료일 파싱 실패: $e');
-          }
-        }
-      }
-      
-      // 🚨 수정: 체험 만료 → 프리미엄 전환 케이스 처리
-      String finalPlanType = currentPlan;
-      if (currentPlan == 'free' && hasEverUsedTrial && !hasEverUsedPremium) {
-        // 체험 만료 후 무료 플랜 → 실제로는 프리미엄으로 전환되어야 하는 케이스
-        finalPlanType = 'premium';
-        if (kDebugMode) {
-          debugPrint('🔄 [AppStoreSubscription] 체험 만료 → 프리미엄 전환 감지');
-          debugPrint('   원본 플랜: $currentPlan → 수정된 플랜: $finalPlanType');
-        }
-      }
-
-      return SubscriptionStatus(
-        planType: finalPlanType,
-        isActive: isActive,
-        expirationDate: expiration,
-        autoRenewStatus: autoRenewStatus,
-      );
-      
-    } catch (e) {
+  /// Firestore 폴백 처리 헬퍼 (중복 제거)
+  Future<SubscriptionStatus> _handleFirestoreFallback(String userId, {String? context}) async {
+    final firestoreStatus = await _getSubscriptionFromFirestore(userId);
+    if (firestoreStatus != null) {
+      _updateCache(firestoreStatus);
       if (kDebugMode) {
-        debugPrint('❌ [AppStoreSubscription] 구독 상태 파싱 실패: $e');
+        debugPrint('✅ [AppStoreSubscription] Firestore에서 플랜 조회 성공: ${firestoreStatus.planType}${context != null ? ' ($context)' : ''}');
       }
-      return SubscriptionStatus.free();
+      return firestoreStatus;
     }
+    
+    // Firestore에도 없으면 무료 플랜
+    if (kDebugMode) {
+      debugPrint('🆓 [AppStoreSubscription] 구독 정보 없음 → 무료 플랜${context != null ? ' ($context)' : ''}');
+    }
+    final freeStatus = SubscriptionStatus.free();
+    _updateCache(freeStatus);
+    return freeStatus;
   }
 }
 
 /// 구독 상태 모델
 class SubscriptionStatus {
+  final PlanStatus planStatus;
   final String planType;
   final bool isActive;
   final DateTime? expirationDate;
   final bool autoRenewStatus;
+  final String subscriptionType;
 
   SubscriptionStatus({
+    required this.planStatus,
     required this.planType,
     required this.isActive,
     this.expirationDate,
     this.autoRenewStatus = false,
+    this.subscriptionType = '',
   });
 
   /// 무료 플랜 상태
   factory SubscriptionStatus.free() {
     return SubscriptionStatus(
+      planStatus: PlanStatus.free,
       planType: 'free',
       isActive: false,
+      subscriptionType: '',
     );
   }
 
   /// 로그인되지 않은 상태
   factory SubscriptionStatus.notLoggedIn() {
     return SubscriptionStatus(
+      planStatus: PlanStatus.free,
       planType: 'not_logged_in',
       isActive: false,
+      subscriptionType: '',
     );
   }
 
@@ -759,12 +738,7 @@ class SubscriptionStatus {
   bool get isTrial => isActive && planType == 'trial';
 
   /// 구독 타입 (monthly/yearly)
-  String get subscriptionType {
-    if (planType == 'premium_monthly') return 'monthly';
-    if (planType == 'premium_yearly') return 'yearly';
-    if (planType == 'trial') return 'monthly'; // 체험은 monthly 기반
-    return '';
-  }
+  // subscriptionType 필드로 대체
 
   /// 표시용 이름
   String get displayName {
@@ -782,6 +756,6 @@ class SubscriptionStatus {
 
   @override
   String toString() {
-    return 'SubscriptionStatus(planType: $planType, isActive: $isActive, expirationDate: $expirationDate, autoRenewStatus: $autoRenewStatus)';
+    return 'SubscriptionStatus(planStatus: [33m$planStatus[0m, planType: $planType, isActive: $isActive, expirationDate: $expirationDate, autoRenewStatus: $autoRenewStatus, subscriptionType: $subscriptionType)';
   }
 } 

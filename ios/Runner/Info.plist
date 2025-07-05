@@ -108,5 +108,7 @@
 	<array>
 		<string>arm64</string>
 	</array>
+	<key>FirebaseMessagingAutoInitEnabled</key>
+	<false/>
 </dict>
 </plist>

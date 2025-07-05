@@ -450,7 +450,7 @@ class UsageLimitService {
         }
       } else {
         // 플랜 타입이 없으면 PlanService에서 가져오기
-        final planService = PlanService();
+      final planService = PlanService();
         actualPlanType = await planService.getCurrentPlanType(forceRefresh: forceRefresh);
         if (kDebugMode) {
           debugPrint('🔄 [UsageLimitService] PlanService에서 플랜 타입 조회: $actualPlanType');
