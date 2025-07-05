@@ -19,7 +19,7 @@ class UnifiedSubscriptionManager {
   // 🎯 단일 통합 상태 캐시
   SubscriptionState? _cachedState;
   DateTime? _lastCacheTime;
-  static const Duration _cacheValidDuration = Duration(minutes: 10);
+  static const Duration _cacheValidDuration = Duration(hours: 24);
   
   // 🎯 중복 요청 방지
   Future<SubscriptionState>? _ongoingRequest;

@@ -296,7 +296,7 @@ class BannerManager {
       final usageLimitStatus = futures[0] as Map<String, bool>;
       final prefs = futures[1] as SharedPreferences;
       final lastPlanInfo = futures[2] as Map<String, dynamic>?;
-
+      
       if (kDebugMode) {
         debugPrint('🚀 [BannerManager] 병렬 처리 완료 (${stopwatch?.elapsedMilliseconds}ms)');
       }
@@ -341,13 +341,13 @@ class BannerManager {
     } else {
       setBannerState(BannerType.usageLimitFree, false);
       setBannerState(BannerType.usageLimitPremium, false);
-    }
-  }
+        }
+      }
 
   /// 플랜 상태 배너 결정 (PlanStatus 기반)
   void _decidePlanStatusBannersSync(List<BannerType> activeBanners, PlanStatus planStatus, bool hasEverUsedTrial, bool hasEverUsedPremium, SharedPreferences prefs, Map<String, dynamic>? lastPlanInfo) {
     final isTrialCancelled = planStatus == PlanStatus.trialCancelled;
-    final planId = 'plan_${DateTime.now().millisecondsSinceEpoch}';
+      final planId = 'plan_${DateTime.now().millisecondsSinceEpoch}';
 
     // 현재 활성 프리미엄 사용자는 배너 표시 안함
     if (planStatus.isPremium && planStatus.isActive) {
@@ -371,11 +371,11 @@ class BannerManager {
       return;
     }
 
-    if (lastPlanInfo != null) {
-      final previousPlanType = lastPlanInfo['planType'] as String?;
-      final previousIsFreeTrial = lastPlanInfo['isFreeTrial'] as bool? ?? false;
+      if (lastPlanInfo != null) {
+        final previousPlanType = lastPlanInfo['planType'] as String?;
+        final previousIsFreeTrial = lastPlanInfo['isFreeTrial'] as bool? ?? false;
       if (previousPlanType == PLAN_PREMIUM) {
-        if (previousIsFreeTrial) {
+          if (previousIsFreeTrial) {
           setBannerState(BannerType.trialCompleted, true, planId: planId);
           setBannerState(BannerType.premiumExpired, false);
           if (_shouldShowBannerSync(BannerType.trialCompleted, prefs)) {
@@ -406,12 +406,12 @@ class BannerManager {
         if (_shouldShowBannerSync(BannerType.trialCompleted, prefs)) {
           activeBanners.add(BannerType.trialCompleted);
         }
-      } else {
-        setBannerState(BannerType.premiumExpired, false);
-        setBannerState(BannerType.trialCompleted, false);
+        } else {
+          setBannerState(BannerType.premiumExpired, false);
+          setBannerState(BannerType.trialCompleted, false);
         setBannerState(BannerType.trialCancelled, false);
+        }
       }
-    }
   }
 
   /// 플랜 히스토리 확인이 필요한지 판단 (성능 최적화)

@@ -50,7 +50,7 @@ class AuthService {
           }
           
           // 🎯 구독 서비스 캐시 무효화 (중요!)
-          await _invalidateSubscriptionCaches();
+          _invalidateSubscriptionCaches();
           
           // 모든 캐시 초기화
           final eventCache = EventCacheManager();
@@ -75,48 +75,35 @@ class AuthService {
     });
   }
 
-  /// 구독 서비스 캐시 무효화
-  Future<void> _invalidateSubscriptionCaches() async {
-    try {
-      if (kDebugMode) {
-        debugPrint('🗑️ [AuthService] 구독 서비스 캐시 무효화 시작');
-      }
-      
-      // App Store 구독 서비스 캐시 무효화
-      final appStoreService = AppStoreSubscriptionService();
-      appStoreService.invalidateCache();
-      
-      // 통합 구독 매니저 캐시 무효화
-      final unifiedManager = UnifiedSubscriptionManager();
-      unifiedManager.invalidateCache();
-      
-      if (kDebugMode) {
-        debugPrint('✅ [AuthService] 구독 서비스 캐시 무효화 완료');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('⚠️ [AuthService] 구독 서비스 캐시 무효화 실패: $e');
-      }
+  /// 사용자 변경 감지 및 구독 캐시 무효화
+  void _invalidateSubscriptionCaches() {
+    if (kDebugMode) {
+      debugPrint('🔄 [AuthService] 사용자 변경으로 인한 구독 캐시 무효화');
     }
+    
+    AppStoreSubscriptionService().invalidateCache();
+    UnifiedSubscriptionManager().invalidateCache();
   }
 
-  /// 로그인 시점에 App Store에서 강제로 구독 정보 불러오기
+  /// 로그인 후 구독 상태 강제 새로고침
   Future<void> _forceRefreshSubscriptionOnLogin() async {
     try {
       if (kDebugMode) {
-        debugPrint('🔄 [AuthService] 로그인 시점 - App Store 구독 정보 강제 새로고침 시작');
+        debugPrint('🔄 [AuthService] 로그인 후 구독 상태 강제 새로고침');
       }
       
-      // App Store에서 강제로 구독 정보 불러오기
-      final appStoreService = AppStoreSubscriptionService();
-      await appStoreService.checkSubscriptionStatus(forceRefresh: true);
+      // 로그인 직후에는 항상 최신 구독 상태를 서버에서 가져옴
+      await AppStoreSubscriptionService().getCurrentSubscriptionStatus(
+        forceRefresh: true, // 강제 새로고침
+        isAppStart: false,
+      );
       
       if (kDebugMode) {
-        debugPrint('✅ [AuthService] 로그인 시점 - App Store 구독 정보 강제 새로고침 완료');
+        debugPrint('✅ [AuthService] 로그인 후 구독 상태 새로고침 완료');
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('⚠️ [AuthService] 로그인 시점 - App Store 구독 정보 강제 새로고침 실패: $e');
+        debugPrint('❌ [AuthService] 로그인 후 구독 상태 새로고침 실패: $e');
       }
     }
   }

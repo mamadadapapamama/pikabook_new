@@ -19,12 +19,12 @@ class AppStoreSubscriptionService {
   // 캐시된 구독 상태 (성능 최적화)
   SubscriptionStatus? _cachedStatus;
   DateTime? _lastCacheTime;
-  static const Duration _cacheValidDuration = Duration(minutes: 30);
+  static const Duration _cacheValidDuration = Duration(hours: 24);
   
   // 캐시된 통합 상태 (성능 최적화)
   SubscriptionState? _cachedUnifiedState;
   DateTime? _unifiedCacheTime;
-  static const Duration _unifiedCacheValidDuration = Duration(minutes: 15);
+  static const Duration _unifiedCacheValidDuration = Duration(hours: 24);
   
   // 🎯 통합 서비스들 (중복 호출 방지)
   final BannerManager _bannerManager = BannerManager();
@@ -93,38 +93,47 @@ class AppStoreSubscriptionService {
       // 안전한 타입 캐스팅으로 Firebase Functions 응답 처리
       final data = Map<String, dynamic>.from(result.data as Map);
       
-      if (kDebugMode) {
-        debugPrint('🔍 [AppStoreSubscription] App Store Connect 우선 응답:');
-        debugPrint('   성공 여부: ${data['success']}');
-        debugPrint('   데이터 소스: ${data['dataSource'] ?? 'unknown'}'); // App Store vs Firebase
-        debugPrint('🔍 === RAW JSON 응답 (전체) ===');
-        debugPrint('$data');
-        debugPrint('🔍 === RAW JSON 응답 끝 ===');
-        if (data['subscription'] != null) {
-          final sub = data['subscription'] as Map;
-          debugPrint('   구독 정보: ${sub.toString()}');
-          debugPrint('🔍 === RAW planStatus 값 ===');
-          debugPrint('   - planStatus: "${sub['planStatus']}" (타입: ${sub['planStatus'].runtimeType})');
-          debugPrint('🔍 === RAW planStatus 값 끝 ===');
-          debugPrint('   - isActive: ${sub['isActive']}');
-          debugPrint('   - expirationDate: ${sub['expirationDate']}');
-          debugPrint('   - autoRenewStatus: ${sub['autoRenewStatus']}');
-        }
+      // 🔍 강제로 RAW JSON 로그 출력 (디버그용)
+      debugPrint('🔍 [AppStoreSubscription] App Store Connect 우선 응답:');
+      debugPrint('   성공 여부: ${data['success']}');
+      debugPrint('   데이터 소스: ${data['dataSource'] ?? 'unknown'}'); // App Store vs Firebase
+      debugPrint('🔍 === RAW JSON 응답 (전체) ===');
+      debugPrint('$data');
+      debugPrint('🔍 === RAW JSON 응답 끝 ===');
+      if (data['subscription'] != null) {
+        final sub = data['subscription'] as Map;
+        debugPrint('   구독 정보: ${sub.toString()}');
+        debugPrint('🔍 === RAW planStatus 값 ===');
+        debugPrint('   - planStatus: "${sub['planStatus']}" (타입: ${sub['planStatus'].runtimeType})');
+        debugPrint('🔍 === RAW planStatus 값 끝 ===');
+        debugPrint('   - isActive: ${sub['isActive']}');
+        debugPrint('   - expirationDate: ${sub['expirationDate']}');
+        debugPrint('   - autoRenewStatus: ${sub['autoRenewStatus']}');
+      } else {
+        debugPrint('🔍 === subscription 데이터가 null입니다 ===');
       }
       
       if (data['success'] == true) {
-        final subscriptionData = Map<String, dynamic>.from(data['subscription'] as Map);
-        final subscriptionStatus = _parseSubscriptionStatus(subscriptionData);
-        _updateCache(subscriptionStatus);
-        
-        if (kDebugMode) {
-          debugPrint('✅ [AppStoreSubscription] Firebase Functions 성공: ${subscriptionStatus.planType}');
-          if (data['dataSource'] != null) {
-            debugPrint('   데이터 소스: ${data['dataSource']}');
+        // 🔍 subscription 데이터 존재 여부 확인
+        if (data['subscription'] != null) {
+          final subscriptionData = Map<String, dynamic>.from(data['subscription'] as Map);
+          final subscriptionStatus = _parseSubscriptionStatus(subscriptionData);
+          _updateCache(subscriptionStatus);
+          
+          if (kDebugMode) {
+            debugPrint('✅ [AppStoreSubscription] Firebase Functions 성공: ${subscriptionStatus.planType}');
+            if (data['dataSource'] != null) {
+              debugPrint('   데이터 소스: ${data['dataSource']}');
+            }
           }
-        }
 
-        return subscriptionStatus;
+          return subscriptionStatus;
+        } else {
+          debugPrint('🚨 [AppStoreSubscription] success=true이지만 subscription 데이터가 null!');
+          debugPrint('   전체 응답: $data');
+          // Firestore 폴백으로 이동
+          return await _handleFirestoreFallback(currentUser.uid, context: 'subscription 데이터 null');
+        }
       } else {
         if (kDebugMode) {
           debugPrint('⚠️ [AppStoreSubscription] Firebase Functions에 데이터 없음 → Firestore 확인');
@@ -424,23 +433,21 @@ class AppStoreSubscriptionService {
     // Firebase Functions에서 planStatus 문자열로 받음
     final planStatusString = subscriptionData['planStatus'] as String? ?? 'free';
     
-    if (kDebugMode) {
-      debugPrint('🔍 === planStatus 파싱 시작 ===');
-      debugPrint('   받은 planStatus 문자열: "$planStatusString"');
-      debugPrint('   PlanStatus enum 값들: ${PlanStatus.values.map((e) => e.value).toList()}');
-    }
+    // 🔍 강제로 planStatus 파싱 로그 출력 (디버그용)
+    debugPrint('🔍 === planStatus 파싱 시작 ===');
+    debugPrint('   받은 planStatus 문자열: "$planStatusString"');
+    debugPrint('   PlanStatus enum 값들: ${PlanStatus.values.map((e) => e.value).toList()}');
     
     final planStatus = PlanStatus.fromString(planStatusString);
     
-    if (kDebugMode) {
-      debugPrint('   파싱된 PlanStatus: $planStatus (${planStatus.value})');
-      debugPrint('   isTrial: ${planStatus.isTrial}');
-      debugPrint('   isPremium: ${planStatus.isPremium}');
-      debugPrint('   isActive: ${planStatus.isActive}');
-      debugPrint('🔍 === planStatus 파싱 끝 ===');
-    }
+    debugPrint('   파싱된 PlanStatus: $planStatus (${planStatus.value})');
+    debugPrint('   isTrial: ${planStatus.isTrial}');
+    debugPrint('   isPremium: ${planStatus.isPremium}');
+    debugPrint('   isActive: ${planStatus.isActive}');
+    debugPrint('🔍 === planStatus 파싱 끝 ===');
     
     final autoRenewStatus = subscriptionData['autoRenewStatus'] as bool? ?? false;
+    final subscriptionType = subscriptionData['subscriptionType'] as String? ?? '';
     final expirationDateString = subscriptionData['expirationDate'] as String?;
     
     DateTime? expirationDate;
@@ -486,7 +493,7 @@ class AppStoreSubscriptionService {
       isActive: planStatus.isActive,
       expirationDate: expirationDate,
       autoRenewStatus: autoRenewStatus,
-      subscriptionType: planStatus.value,
+      subscriptionType: subscriptionType,
     );
   }
 
@@ -742,9 +749,64 @@ class SubscriptionStatus {
 
   /// 표시용 이름
   String get displayName {
-    if (isTrial) return '무료 체험';
-    if (isPremium) return '프리미엄';
-    return '무료';
+    switch (planStatus) {
+      case PlanStatus.trialActive:
+        // 체험 활성: '프리미엄 체험 (#일 남음)'
+        final days = daysUntilExpiration;
+        if (days > 0) {
+          return '프리미엄 체험 ($days일 남음)';
+        } else {
+          return '프리미엄 체험';
+        }
+      
+      case PlanStatus.trialCancelled:
+        // 체험 취소: '프리미엄 체험 (#일 남음)'
+        final days = daysUntilExpiration;
+        if (days > 0) {
+          return '프리미엄 체험 ($days일 남음)';
+        } else {
+          return '프리미엄 체험';
+        }
+      
+      case PlanStatus.trialCompleted:
+        // 체험 완료: '프리미엄 (monthly)'
+        final subType = subscriptionType.isNotEmpty ? subscriptionType : 'monthly';
+        return '프리미엄 ($subType)';
+      
+      case PlanStatus.premiumActive:
+        // 프리미엄 활성: '프리미엄 (monthly/yearly)'
+        final subType = subscriptionType.isNotEmpty ? subscriptionType : 'monthly';
+        return '프리미엄 ($subType)';
+      
+      case PlanStatus.premiumGrace:
+        // 프리미엄 유예: '프리미엄 (monthly) : 결제 확인 필요'
+        final subType = subscriptionType.isNotEmpty ? subscriptionType : 'monthly';
+        return '프리미엄 ($subType) : 결제 확인 필요';
+      
+      case PlanStatus.premiumCancelled:
+        // 프리미엄 취소: '프리미엄 (#일 남음)(monthly)'
+        final subType = subscriptionType.isNotEmpty ? subscriptionType : 'monthly';
+        final days = daysUntilExpiration;
+        if (days > 0) {
+          return '프리미엄 ($days일 남음)($subType)';
+        } else {
+          return '프리미엄 ($subType)';
+        }
+        break;
+      
+      case PlanStatus.premiumExpired:
+        // 프리미엄 만료: '무료'
+        return '무료';
+      
+      case PlanStatus.refunded:
+        // 환불: '무료'
+        return '무료';
+      
+      case PlanStatus.free:
+      default:
+        // 무료: '무료'
+        return '무료';
+    }
   }
 
   /// 구독 만료까지 남은 일수

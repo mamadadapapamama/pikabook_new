@@ -20,6 +20,9 @@ class SettingsViewModel extends ChangeNotifier {
   // 로딩 상태
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+  
+  // 🔄 현재 사용자 ID 추적 (사용자 변경 감지용)
+  String? _lastUserId;
 
   // 사용자 정보
   User? _currentUser;
@@ -53,9 +56,40 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 초기 데이터 로드
   Future<void> initialize() async {
+    // 🔄 사용자 변경 감지
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final isUserChanged = _lastUserId != null && _lastUserId != currentUserId;
+    
+    if (isUserChanged) {
+      if (kDebugMode) {
+        print('🔄 [Settings] 사용자 변경 감지: $_lastUserId → $currentUserId');
+      }
+      // 사용자가 변경된 경우 모든 데이터 초기화
+      _resetAllData();
+    }
+    
+    _lastUserId = currentUserId;
+    
+    // 🔄 사용자 변경 감지를 위해 강제로 최신 데이터 로드
     await loadUserData();
     await loadUserPreferences();
     await loadPlanInfo();
+  }
+  
+  /// 모든 데이터 초기화 (사용자 변경 시)
+  void _resetAllData() {
+    _currentUser = null;
+    _userName = '';
+    _noteSpaceName = '';
+    _sourceLanguage = SourceLanguage.DEFAULT;
+    _targetLanguage = TargetLanguage.DEFAULT;
+    _useSegmentMode = false;
+    _planType = null;
+    _planName = null;
+    _remainingDays = 0;
+    _planLimits = {};
+    _isPlanLoaded = false;
+    notifyListeners();
   }
 
   /// 플랜 정보 새로고침 (설정 화면에서 수동 호출 가능)
@@ -199,9 +233,9 @@ class SettingsViewModel extends ChangeNotifier {
         print('🔍 [Settings] App Store 기반 플랜 정보 로드 시작');
       }
       
-      // 🎯 새로운 시스템: UnifiedSubscriptionManager 사용
+      // 🎯 새로운 시스템: UnifiedSubscriptionManager 사용 (강제 새로고침)
       final subscriptionManager = UnifiedSubscriptionManager();
-      final subscriptionState = await subscriptionManager.getSubscriptionState(forceRefresh: false);
+      final subscriptionState = await subscriptionManager.getSubscriptionState(forceRefresh: true);
       
       // SubscriptionState를 SubscriptionStatus 형태로 변환
       final appStoreStatus = SubscriptionStatus(

@@ -44,24 +44,24 @@ class UserPreferencesService {
     
     // 🎯 로그 출력 최소화: 디버그 모드에서만
     if (kDebugMode) {
-      // 첫 로그인 또는 사용자 변경인 경우 로그 출력
-      if (previousUserId == null) {
-        debugPrint('🔑 새로운 사용자 로그인: $userId');
-      } else if (isUserChanged) {
-        debugPrint('🔄 사용자 전환 감지: $previousUserId → $userId');
-      } else {
-        debugPrint('🔒 동일 사용자 재인증: $userId');
+    // 첫 로그인 또는 사용자 변경인 경우 로그 출력
+    if (previousUserId == null) {
+      debugPrint('🔑 새로운 사용자 로그인: $userId');
+    } else if (isUserChanged) {
+      debugPrint('🔄 사용자 전환 감지: $previousUserId → $userId');
+    } else {
+      debugPrint('🔒 동일 사용자 재인증: $userId');
       }
     }
     
     // 사용자가 변경된 경우에만 데이터 초기화
     if (isUserChanged) {
       if (kDebugMode) {
-        debugPrint('📝 사용자 전환으로 이전 사용자 데이터 초기화 중...');
+      debugPrint('📝 사용자 전환으로 이전 사용자 데이터 초기화 중...');
       }
       await clearUserData();
       if (kDebugMode) {
-        debugPrint('✅ 사용자 데이터 초기화 완료');
+      debugPrint('✅ 사용자 데이터 초기화 완료');
       }
     }
     
@@ -193,8 +193,8 @@ class UserPreferencesService {
       _eventCache.invalidateCache(cacheKey);
       
       if (kDebugMode) {
-        debugPrint('⚠️ 사용자 설정이 초기화되었습니다: $userId');
-        debugPrint('🗑️ 이벤트 캐시도 함께 무효화되었습니다');
+      debugPrint('⚠️ 사용자 설정이 초기화되었습니다: $userId');
+      debugPrint('🗑️ 이벤트 캐시도 함께 무효화되었습니다');
       }
     } catch (e) {
       debugPrint('⚠️ 사용자 데이터 초기화 중 오류 발생: $e');

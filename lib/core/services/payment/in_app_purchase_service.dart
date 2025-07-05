@@ -299,6 +299,24 @@ class InAppPurchaseService {
           print('✅ Firebase Functions 구매 완료 알림 성공');
         }
         
+        // 🎯 구매 완료 후 구독 상태 캐시 무효화 및 최신 상태 강제 로드
+        appStoreService.invalidateCache();
+        
+        // 최신 구독 상태 강제로 가져오기
+        try {
+          await appStoreService.getCurrentSubscriptionStatus(
+            forceRefresh: true,
+            isAppStart: false,
+          );
+          if (kDebugMode) {
+            print('✅ 구매 완료 후 구독 상태 강제 새로고침 완료');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('⚠️ 구매 완료 후 구독 상태 새로고침 실패: $e');
+          }
+        }
+        
         // 🎯 구매 완료 시점에서 알림 스케줄링 (무료체험인 경우에만)
         await _scheduleTrialNotificationsIfNeeded(purchaseDetails.productID);
         

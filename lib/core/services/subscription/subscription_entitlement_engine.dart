@@ -17,7 +17,7 @@ class SubscriptionEntitlementEngine {
   // 🎯 단일 캐시 시스템
   EntitlementResult? _cachedResult;
   DateTime? _lastCacheTime;
-  static const Duration _cacheValidDuration = Duration(minutes: 15);
+  static const Duration _cacheValidDuration = Duration(hours: 24);
   
   // 🎯 중복 요청 방지
   Future<EntitlementResult>? _ongoingRequest;
@@ -147,14 +147,98 @@ class SubscriptionEntitlementEngine {
     final isTrial = entitlementCode >= 1.0 && entitlementCode < 2.0;
     final isPremium = entitlementCode >= 2.0;
     final autoRenewStatus = receiptData['autoRenewStatus'] as bool? ?? false;
+    final subscriptionType = receiptData['subscriptionType'] as String? ?? '';
     
+    // 만료일 파싱
+    DateTime? expirationDate;
+    final expirationDateString = receiptData['expirationDate'] as String?;
+    if (expirationDateString != null) {
+      try {
+        if (expirationDateString.contains('T')) {
+          expirationDate = DateTime.parse(expirationDateString);
+        } else if (RegExp(r'^\d{13}$').hasMatch(expirationDateString)) {
+          expirationDate = DateTime.fromMillisecondsSinceEpoch(int.parse(expirationDateString));
+        } else if (RegExp(r'^\d{10}$').hasMatch(expirationDateString)) {
+          expirationDate = DateTime.fromMillisecondsSinceEpoch(int.parse(expirationDateString) * 1000);
+        } else {
+          expirationDate = DateTime.parse(expirationDateString);
+        }
+      } catch (e) {
+        expirationDate = null;
+      }
+    }
+    
+    // 남은 일수 계산
+    int daysUntilExpiration = 0;
+    if (expirationDate != null) {
+      final difference = expirationDate.difference(DateTime.now());
+      daysUntilExpiration = difference.inDays;
+    }
+    
+    // PlanStatus에 따른 정확한 표시명 생성
     String statusMessage;
-    if (isTrial) {
-      statusMessage = '무료 체험';
-    } else if (isPremium) {
-      statusMessage = '프리미엄';
-    } else {
-      statusMessage = '무료';
+    switch (planStatus) {
+      case PlanStatus.trialActive:
+        // 체험 활성: '프리미엄 체험 (#일 남음)'
+        if (daysUntilExpiration > 0) {
+          statusMessage = '프리미엄 체험 ($daysUntilExpiration일 남음)';
+        } else {
+          statusMessage = '프리미엄 체험';
+        }
+        break;
+      
+      case PlanStatus.trialCancelled:
+        // 체험 취소: '프리미엄 체험 (#일 남음)'
+        if (daysUntilExpiration > 0) {
+          statusMessage = '프리미엄 체험 ($daysUntilExpiration일 남음)';
+        } else {
+          statusMessage = '프리미엄 체험';
+        }
+        break;
+      
+      case PlanStatus.trialCompleted:
+        // 체험 완료: '프리미엄 (monthly)'
+        final subType = subscriptionType.isNotEmpty ? subscriptionType : 'monthly';
+        statusMessage = '프리미엄 ($subType)';
+        break;
+      
+      case PlanStatus.premiumActive:
+        // 프리미엄 활성: '프리미엄 (monthly/yearly)'
+        final subType = subscriptionType.isNotEmpty ? subscriptionType : 'monthly';
+        statusMessage = '프리미엄 ($subType)';
+        break;
+      
+      case PlanStatus.premiumGrace:
+        // 프리미엄 유예: '프리미엄 (monthly) : 결제 확인 필요'
+        final subType = subscriptionType.isNotEmpty ? subscriptionType : 'monthly';
+        statusMessage = '프리미엄 ($subType) : 결제 확인 필요';
+        break;
+      
+      case PlanStatus.premiumCancelled:
+        // 프리미엄 취소: '프리미엄 (#일 남음)(monthly)'
+        final subType = subscriptionType.isNotEmpty ? subscriptionType : 'monthly';
+        if (daysUntilExpiration > 0) {
+          statusMessage = '프리미엄 ($daysUntilExpiration일 남음)($subType)';
+        } else {
+          statusMessage = '프리미엄 ($subType)';
+        }
+        break;
+      
+      case PlanStatus.premiumExpired:
+        // 프리미엄 만료: '무료'
+        statusMessage = '무료';
+        break;
+      
+      case PlanStatus.refunded:
+        // 환불: '무료'
+        statusMessage = '무료';
+        break;
+      
+      case PlanStatus.free:
+      default:
+        // 무료: '무료'
+        statusMessage = '무료';
+        break;
     }
 
     return EntitlementResult(
@@ -289,7 +373,7 @@ class EntitlementResult {
       isExpired: false,
       autoRenewStatus: true,
       entitlementCode: 1.1,
-      statusMessage: '무료 체험',
+      statusMessage: '프리미엄 체험',
       rawData: {},
       planStatus: PlanStatus.trialActive,
     );
@@ -303,7 +387,7 @@ class EntitlementResult {
       isExpired: false,
       autoRenewStatus: true,
       entitlementCode: 2.1,
-      statusMessage: '프리미엄',
+      statusMessage: '프리미엄 (monthly)',
       rawData: {},
       planStatus: PlanStatus.premiumActive,
     );

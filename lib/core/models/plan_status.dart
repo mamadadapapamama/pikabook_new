@@ -13,15 +13,35 @@ enum PlanStatus {
   final String value;
 
   static PlanStatus fromString(String value) {
-    // 🔍 서버에서 "trial"로 오는 경우 "trial_active"로 매핑
-    if (value == 'trial') {
-      return PlanStatus.trialActive;
+    // 🔍 서버에서 오는 다양한 형식을 표준 enum으로 매핑
+    switch (value) {
+      case 'trial':
+        return PlanStatus.trialActive;
+      case 'trial_cancelled':
+      case 'trialCancelled':
+        return PlanStatus.trialCancelled;
+      case 'trial_completed':
+      case 'trialCompleted':
+        return PlanStatus.trialCompleted;
+      case 'premium':
+      case 'premium_active':
+      case 'premiumActive':
+        return PlanStatus.premiumActive;
+      case 'premium_cancelled':
+      case 'premiumCancelled':
+        return PlanStatus.premiumCancelled;
+      case 'premium_expired':
+      case 'premiumExpired':
+        return PlanStatus.premiumExpired;
+      case 'premium_grace':
+      case 'premiumGrace':
+        return PlanStatus.premiumGrace;
+      case 'refunded':
+        return PlanStatus.refunded;
+      case 'free':
+      default:
+        return PlanStatus.free;
     }
-    
-    return PlanStatus.values.firstWhere(
-      (status) => status.value == value,
-      orElse: () => PlanStatus.free,
-    );
   }
 
   // 편의 메서드들
