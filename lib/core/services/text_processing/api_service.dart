@@ -106,17 +106,17 @@ class ApiService {
     String? processingMode, // 처리 모드 추가
   }) async* {
     if (kDebugMode) {
-      debugPrint('🌐 [API] 스트리밍 번역 시작: ${textSegments.length}개 세그먼트');
+      print('🌐 [API] 스트리밍 번역 시작: ${textSegments.length}개 세그먼트');
       if (processingMode != null) {
-        debugPrint('📝 [API] 처리 모드: $processingMode');
+        print('📝 [API] 처리 모드: $processingMode');
       }
       if (pageSegments != null) {
-        debugPrint('📄 [API] 페이지별 처리: ${pageSegments.length}개 페이지');
+        print('📄 [API] 페이지별 처리: ${pageSegments.length}개 페이지');
         for (final pageSegment in pageSegments) {
-          debugPrint('   - ${pageSegment['pageId']}: ${pageSegment['mode']}');
+          print('   - ${pageSegment['pageId']}: ${pageSegment['mode']}');
           if (pageSegment['mode'] == 'TextProcessingMode.paragraph') {
             final textLength = pageSegment['reorderedText']?.toString().length ?? 0;
-            debugPrint('     → 문단모드 텍스트: ${textLength}자');
+            print('     → 문단모드 텍스트: ${textLength}자');
           }
         }
       }
@@ -126,7 +126,14 @@ class ApiService {
       // Firebase Functions URL 직접 호출 (HTTP 스트리밍)
       final url = 'https://asia-southeast1-mylingowith.cloudfunctions.net/translateSegmentsStream';
       
+      print('🔍 [API] Auth 토큰 가져오기 시작...');
       final authToken = await _getAuthToken();
+      
+      if (authToken != null) {
+        print('✅ [API] Auth 토큰 획득 성공 (길이: ${authToken.length})');
+      } else {
+        print('⚠️ [API] Auth 토큰이 null입니다!');
+      }
       
       final request = http.Request('POST', Uri.parse(url));
       request.headers.addAll({
@@ -149,91 +156,100 @@ class ApiService {
 
       if (pageSegments != null && pageSegments.isNotEmpty) {
         requestBody['pageSegments'] = pageSegments;
-        if (kDebugMode) {
-          debugPrint('📄 [API] 페이지별 처리 정보 전달: ${pageSegments.length}개 페이지');
-        }
+        print('📄 [API] 페이지별 처리 정보 전달: ${pageSegments.length}개 페이지');
       }
       
       request.body = jsonEncode(requestBody);
 
-      if (kDebugMode) {
-        debugPrint('📤 [API] 서버 요청 전송 시작');
-        debugPrint('   URL: $url');
-        final prettyJson = const JsonEncoder.withIndent('  ').convert(requestBody);
-        debugPrint('   Body: $prettyJson');
-      }
+      print('📤 [API] 서버 요청 전송 시작');
+      print('   URL: $url');
+      final prettyJson = const JsonEncoder.withIndent('  ').convert(requestBody);
+      print('   Body: $prettyJson');
 
       final client = http.Client();
+      
+      print('🚀 [API] HTTP 요청 전송 중...');
       final response = await client.send(request);
+      print('📡 [API] HTTP 응답 수신: ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        if (kDebugMode) {
-          debugPrint('✅ [API] HTTP 200 응답 수신 - 스트리밍 시작');
-        }
+        print('✅ [API] HTTP 200 응답 수신 - 스트리밍 시작');
+        
+        bool hasReceivedAnyData = false;
+        int chunkCount = 0;
         
         // 실시간 스트리밍 응답 처리
         await for (final chunk in response.stream.transform(utf8.decoder).transform(const LineSplitter())) {
+          if (!hasReceivedAnyData) {
+            hasReceivedAnyData = true;
+            print('🎉 [API] 첫 번째 스트림 데이터 수신 성공!');
+          }
+          
+          chunkCount++;
+          
           if (kDebugMode) {
-            debugPrint('📡 [API] 원시 청크 수신: "${chunk.substring(0, math.min(100, chunk.length))}${chunk.length > 100 ? '...' : ''}"');
+            print('📡 [API] 원시 청크 #$chunkCount 수신: "${chunk.substring(0, math.min(100, chunk.length))}${chunk.length > 100 ? '...' : ''}"');
           }
           
           if (chunk.startsWith('data: ')) {
             final jsonStr = chunk.substring(6); // 'data: ' 제거
             if (jsonStr.trim().isNotEmpty) {
-              if (kDebugMode) {
-                debugPrint('📦 [API] JSON 데이터 파싱 시도');
-              }
+              print('📦 [API] JSON 데이터 파싱 시도 #$chunkCount');
               try {
                 final chunkData = jsonDecode(jsonStr);
                 
-                if (kDebugMode) {
-                  final chunkIndex = chunkData['chunkIndex'] + 1;
-                  final totalChunks = chunkData['totalChunks'];
-                  final isComplete = chunkData['isComplete'] == true;
-                  debugPrint('📦 [API] 실시간 청크 수신: ${chunkIndex}/${totalChunks}, 완료: $isComplete');
-                  
-                  if (chunkData.containsKey('pageId')) {
-                    debugPrint('📄 [API] 페이지 ID: ${chunkData['pageId']}');
-                  }
+                final chunkIndex = chunkData['chunkIndex'] + 1;
+                final totalChunks = chunkData['totalChunks'];
+                final isComplete = chunkData['isComplete'] == true;
+                print('📦 [API] 실시간 청크 수신: ${chunkIndex}/${totalChunks}, 완료: $isComplete');
+                
+                if (chunkData.containsKey('pageId')) {
+                  print('📄 [API] 페이지 ID: ${chunkData['pageId']}');
                 }
                 
                 yield chunkData;
                 
                 // 완료 신호 확인
                 if (chunkData['isComplete'] == true) {
-                  if (kDebugMode) {
-                    debugPrint('✅ [API] 스트리밍 완료 신호 확인 - 루프 종료');
-                  }
+                  print('✅ [API] 스트리밍 완료 신호 확인 - 루프 종료');
                   break;
                 }
                 
               } catch (e) {
-                if (kDebugMode) {
-                  debugPrint('❌ [API] 청크 파싱 실패: $e');
-                  debugPrint('   원본 JSON: "$jsonStr"');
-                }
+                print('❌ [API] 청크 파싱 실패 #$chunkCount: $e');
+                print('   원본 JSON: "$jsonStr"');
               }
             }
           }
         }
         
-        if (kDebugMode) {
-          debugPrint('🔚 [API] 스트리밍 루프 종료 - 연결 닫기');
+        print('🔚 [API] 스트리밍 루프 종료 - 연결 닫기');
+        print('📊 [API] 총 수신 청크: $chunkCount개');
+        
+        if (!hasReceivedAnyData) {
+          print('⚠️ [API] 스트림에서 데이터를 전혀 받지 못했습니다!');
         }
+        
         client.close();
       } else {
-        if (kDebugMode) {
-          debugPrint('❌ [API] HTTP 오류: ${response.statusCode}');
-          debugPrint('📄 [API] 응답 헤더: ${response.headers}');
+        print('❌ [API] HTTP 오류: ${response.statusCode}');
+        print('📄 [API] 응답 헤더: ${response.headers}');
+        
+        // 에러 응답 본문 읽기
+        try {
+          final errorBody = await response.stream.bytesToString();
+          print('📄 [API] 에러 응답 본문: $errorBody');
+        } catch (e) {
+          print('⚠️ [API] 에러 응답 본문 읽기 실패: $e');
         }
+        
         client.close();
         throw Exception('스트리밍 요청 실패: ${response.statusCode}');
       }
 
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [API] 스트리밍 오류: $e');
-      }
+    } catch (e, stackTrace) {
+      print('❌ [API] 스트리밍 오류: $e');
+      print('📍 [API] 스택 트레이스: $stackTrace');
       rethrow;
     }
   }

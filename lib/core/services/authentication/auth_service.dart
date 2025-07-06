@@ -16,6 +16,7 @@ import 'deleted_user_service.dart';
 import '../cache/event_cache_manager.dart';
 import '../subscription/app_store_subscription_service.dart';
 import '../subscription/unified_subscription_manager.dart';
+import '../common/banner_manager.dart';
 
 
 class AuthService {
@@ -52,6 +53,9 @@ class AuthService {
           // 🎯 구독 서비스 캐시 무효화 (중요!)
           _invalidateSubscriptionCaches();
           
+          // 🎯 배너 상태 초기화 (로그아웃 시)
+          _clearBannerStates();
+          
           // 모든 캐시 초기화
           final eventCache = EventCacheManager();
           eventCache.clearAllCache();
@@ -83,6 +87,22 @@ class AuthService {
     
     AppStoreSubscriptionService().invalidateCache();
     UnifiedSubscriptionManager().invalidateCache();
+  }
+
+  /// 🎯 배너 상태 초기화 (로그인/로그아웃 시)
+  void _clearBannerStates() {
+    if (kDebugMode) {
+      debugPrint('🔄 [AuthService] 사용자 변경으로 인한 배너 상태 초기화');
+    }
+    
+    try {
+      final bannerManager = BannerManager();
+      bannerManager.clearUserBannerStates();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [AuthService] 배너 상태 초기화 실패: $e');
+      }
+    }
   }
 
   /// 로그인 후 구독 상태 강제 새로고침
@@ -606,6 +626,7 @@ class AuthService {
         _clearAllLocalData(),
         _deleteFirestoreData(userId),
         _deleteFirebaseStorageData(userId),
+        _deleteUserBannerData(userId), // 🎯 사용자 배너 데이터 삭제 추가
       ]);
       
       // 소셜 로그인 세션 정리
@@ -643,6 +664,27 @@ class AuthService {
     } catch (e) {
       debugPrint('Firebase Storage 데이터 삭제 중 오류: $e');
       // Storage 삭제 실패는 치명적이지 않으므로 계속 진행
+    }
+  }
+
+  // 🎯 사용자 배너 데이터 삭제 (탈퇴 시)
+  Future<void> _deleteUserBannerData(String userId) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🗑️ [AuthService] 사용자 배너 데이터 삭제 시작: $userId');
+      }
+      
+      final bannerManager = BannerManager();
+      await bannerManager.deleteUserBannerData(userId);
+      
+      if (kDebugMode) {
+        debugPrint('✅ [AuthService] 사용자 배너 데이터 삭제 완료: $userId');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [AuthService] 사용자 배너 데이터 삭제 중 오류: $e');
+      }
+      // 배너 데이터 삭제 실패는 치명적이지 않으므로 계속 진행
     }
   }
 

@@ -8,3 +8,7 @@ alwaysApply: true
 
 - You can @ files here
 - You can use markdown but dont have to
+
+Pikabook projects directory
+- documents/pikabook -> client code
+- documents/pikabook_subscription/functions -> subuscription related appstore calling code

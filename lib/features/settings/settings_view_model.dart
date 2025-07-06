@@ -7,6 +7,7 @@ import '../../core/services/subscription/app_store_subscription_service.dart';
 import '../../core/services/subscription/unified_subscription_manager.dart';
 import '../../core/models/subscription_state.dart';
 import '../../core/models/plan.dart';
+import '../../core/models/plan_status.dart';
 import '../../core/utils/language_constants.dart';
 import '../../core/services/text_processing/text_processing_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,12 +48,25 @@ class SettingsViewModel extends ChangeNotifier {
   int _remainingDays = 0;
   Map<String, int> _planLimits = {};
   bool _isPlanLoaded = false;
+  
+  // 🎯 구독 상태별 CTA 정보
+  PlanStatus? _planStatus;
+  String _ctaButtonText = '';
+  bool _ctaButtonEnabled = true;
+  String _ctaSubtext = '';
+  bool _shouldUsePremiumQuota = false;
 
   String get planType => _planType ?? 'free';
   String get planName => _planName ?? '로딩 중...';
   int get remainingDays => _remainingDays;
   Map<String, int> get planLimits => _planLimits;
   bool get isPlanLoaded => _isPlanLoaded;
+  
+  // 🎯 CTA 관련 getters
+  String get ctaButtonText => _ctaButtonText;
+  bool get ctaButtonEnabled => _ctaButtonEnabled;
+  String get ctaSubtext => _ctaSubtext;
+  bool get shouldUsePremiumQuota => _shouldUsePremiumQuota;
 
   /// 초기 데이터 로드
   Future<void> initialize() async {
@@ -113,51 +127,37 @@ class SettingsViewModel extends ChangeNotifier {
         print('🔄 [Settings] App Store 기반 플랜 정보 강제 새로고침');
       }
       
-      // 🎯 새로운 시스템: UnifiedSubscriptionManager 사용 (강제 새로고침)
-      final subscriptionManager = UnifiedSubscriptionManager();
-      final subscriptionState = await subscriptionManager.getSubscriptionState(forceRefresh: true);
-      
-      // SubscriptionState를 SubscriptionStatus 형태로 변환
-      final appStoreStatus = SubscriptionStatus(
-        planStatus: subscriptionState.planStatus,
-        planType: subscriptionState.isPremium ? 'premium' : (subscriptionState.isTrial ? 'trial' : 'free'),
-        isActive: subscriptionState.isPremium || subscriptionState.isTrial,
-        expirationDate: null, // UnifiedSubscriptionManager에서는 관리하지 않음
-        autoRenewStatus: !subscriptionState.isExpired,
-      );
+      // 🎯 AppStoreSubscriptionService에서 직접 구독 상태 가져오기
+      final appStoreService = AppStoreSubscriptionService();
+      final subscriptionStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: true);
       
       if (kDebugMode) {
         print('📥 [Settings] 강제 새로고침 결과:');
-        print('   구독 상태: $appStoreStatus');
-        print('   상태 메시지: ${appStoreStatus.displayName}');
-        print('   프리미엄 여부: ${appStoreStatus.isPremium}');
-        print('   체험 여부: ${appStoreStatus.isTrial}');
+        print('   구독 상태: $subscriptionStatus');
+        print('   상태 메시지: ${subscriptionStatus.displayName}');
+        print('   프리미엄 여부: ${subscriptionStatus.isPremium}');
+        print('   체험 여부: ${subscriptionStatus.isTrial}');
+        print('   남은 일수: ${subscriptionStatus.daysUntilExpiration}');
       }
       
+      // 🎯 구독 상태 저장
+      _planStatus = subscriptionStatus.planStatus;
+      
       // UI에 표시할 정보 설정
-      if (appStoreStatus.isPremium) {
+      if (subscriptionStatus.isPremium) {
         _planType = 'premium';
-      } else if (appStoreStatus.isTrial) {
+      } else if (subscriptionStatus.isTrial) {
         _planType = 'premium'; // 체험도 프리미엄으로 분류
       } else {
         _planType = 'free';
       }
       
-      _planName = appStoreStatus.displayName;
-      _remainingDays = 0; // App Store에서 자동 관리
+      // 🎯 남은 일수 포함한 표시명 설정
+      _planName = subscriptionStatus.displayName;
+      _remainingDays = subscriptionStatus.daysUntilExpiration;
       
-      // 플랜별 제한 설정 (간단화)
-      if (appStoreStatus.isPremium || appStoreStatus.isTrial) {
-        _planLimits = {
-          'ocrPages': 300,
-          'ttsRequests': 1000,
-        };
-      } else {
-        _planLimits = {
-          'ocrPages': 10,
-          'ttsRequests': 30,
-        };
-      }
+      // 🎯 구독 상태별 CTA 및 쿼터 설정
+      _configureCTAAndQuota(subscriptionStatus);
       
       _isPlanLoaded = true;
       notifyListeners();
@@ -166,6 +166,9 @@ class SettingsViewModel extends ChangeNotifier {
         print('✅ [Settings] 강제 새로고침 완료');
         print('   UI 표시명: $_planName');
         print('   플랜 타입: $_planType');
+        print('   남은 일수: $_remainingDays');
+        print('   CTA 버튼: $_ctaButtonText (활성화: $_ctaButtonEnabled)');
+        print('   프리미엄 쿼터 사용: $_shouldUsePremiumQuota');
         print('   제한: $_planLimits');
       }
     } catch (e) {
@@ -177,10 +180,8 @@ class SettingsViewModel extends ChangeNotifier {
       _planType = 'free';
       _planName = '새로고침 실패';
       _remainingDays = 0;
-      _planLimits = {
-        'ocrPages': 10,
-        'ttsRequests': 30,
-      };
+      _planStatus = PlanStatus.free;
+      _configureCTAAndQuota(null); // 기본 무료 플랜 설정
       _isPlanLoaded = true;
       
       notifyListeners();
@@ -233,50 +234,37 @@ class SettingsViewModel extends ChangeNotifier {
         print('🔍 [Settings] App Store 기반 플랜 정보 로드 시작');
       }
       
-      // 🎯 새로운 시스템: UnifiedSubscriptionManager 사용 (강제 새로고침)
-      final subscriptionManager = UnifiedSubscriptionManager();
-      final subscriptionState = await subscriptionManager.getSubscriptionState(forceRefresh: true);
-      
-      // SubscriptionState를 SubscriptionStatus 형태로 변환
-      final appStoreStatus = SubscriptionStatus(
-        planStatus: subscriptionState.planStatus,
-        planType: subscriptionState.isPremium ? 'premium' : (subscriptionState.isTrial ? 'trial' : 'free'),
-        isActive: subscriptionState.isPremium || subscriptionState.isTrial,
-        expirationDate: null, // UnifiedSubscriptionManager에서는 관리하지 않음
-        autoRenewStatus: !subscriptionState.isExpired,
-      );
+      // 🎯 AppStoreSubscriptionService에서 직접 구독 상태 가져오기
+      final appStoreService = AppStoreSubscriptionService();
+      final subscriptionStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: true);
       
       if (kDebugMode) {
-          print('   구독 상태: $appStoreStatus');
-          print('   상태 메시지: ${appStoreStatus.displayName}');
-          print('   프리미엄 여부: ${appStoreStatus.isPremium}');
-          print('   체험 여부: ${appStoreStatus.isTrial}');
+        print('📥 [Settings] App Store 구독 상태 조회 결과:');
+        print('   구독 상태: $subscriptionStatus');
+        print('   상태 메시지: ${subscriptionStatus.displayName}');
+        print('   프리미엄 여부: ${subscriptionStatus.isPremium}');
+        print('   체험 여부: ${subscriptionStatus.isTrial}');
+        print('   남은 일수: ${subscriptionStatus.daysUntilExpiration}');
       }
       
-        // UI에 표시할 정보 설정
-        if (appStoreStatus.isPremium) {
-          _planType = 'premium';
-        } else if (appStoreStatus.isTrial) {
-          _planType = 'premium'; // 체험도 프리미엄으로 분류
-        } else {
-          _planType = 'free';
-        }
-        
-        _planName = appStoreStatus.displayName;
-        _remainingDays = 0; // App Store에서 자동 관리
-        
-        // 플랜별 제한 설정 (간단화)
-        if (appStoreStatus.isPremium || appStoreStatus.isTrial) {
-        _planLimits = {
-          'ocrPages': 300,
-          'ttsRequests': 1000,
-        };
+      // 🎯 구독 상태 저장
+      _planStatus = subscriptionStatus.planStatus;
+      
+      // UI에 표시할 정보 설정
+      if (subscriptionStatus.isPremium) {
+        _planType = 'premium';
+      } else if (subscriptionStatus.isTrial) {
+        _planType = 'premium'; // 체험도 프리미엄으로 분류
       } else {
-        _planLimits = {
-          'ocrPages': 10,
-          'ttsRequests': 30,
-        };
+        _planType = 'free';
       }
+      
+      // 🎯 남은 일수 포함한 표시명 설정
+      _planName = subscriptionStatus.displayName;
+      _remainingDays = subscriptionStatus.daysUntilExpiration;
+      
+      // 🎯 구독 상태별 CTA 및 쿼터 설정
+      _configureCTAAndQuota(subscriptionStatus);
       
       _isPlanLoaded = true;
       notifyListeners();
@@ -285,6 +273,9 @@ class SettingsViewModel extends ChangeNotifier {
         print('✅ [Settings] App Store 기반 플랜 정보 로드 완료');
         print('   UI 표시명: $_planName');
         print('   플랜 타입: $_planType');
+        print('   남은 일수: $_remainingDays');
+        print('   CTA 버튼: $_ctaButtonText (활성화: $_ctaButtonEnabled)');
+        print('   프리미엄 쿼터 사용: $_shouldUsePremiumQuota');
         print('   제한: $_planLimits');
       }
     } catch (e) {
@@ -296,15 +287,136 @@ class SettingsViewModel extends ChangeNotifier {
       _planType = 'free';
       _planName = 'App Store 연결 실패';
       _remainingDays = 0;
-      _planLimits = {
-        'ocrPages': 10,
-        'ttsRequests': 30,
-      };
+      _planStatus = PlanStatus.free;
+      _configureCTAAndQuota(null); // 기본 무료 플랜 설정
       _isPlanLoaded = true;
       
       notifyListeners();
     } finally {
       _setLoading(false);
+    }
+  }
+
+  /// 🎯 구독 상태별 CTA 버튼과 사용량 쿼터 설정
+  void _configureCTAAndQuota(SubscriptionStatus? subscriptionStatus) {
+    if (subscriptionStatus == null) {
+      // 에러 상황 - 기본 무료 플랜으로 설정
+      _ctaButtonText = '프리미엄으로 업그레이드';
+      _ctaButtonEnabled = true;
+      _ctaSubtext = '';
+      _shouldUsePremiumQuota = false;
+      _planLimits = {
+        'ocrPages': 10,
+        'ttsRequests': 30,
+      };
+      return;
+    }
+
+    switch (subscriptionStatus.planStatus) {
+      case PlanStatus.trialActive:
+        // trial active 일 경우
+        _ctaButtonText = '${_remainingDays}일 뒤에 프리미엄 전환';
+        _ctaButtonEnabled = false; // disabled
+        _ctaSubtext = '구독 취소는 App Store에서';
+        _shouldUsePremiumQuota = true; // premium quota
+        _planLimits = {
+          'ocrPages': 300,
+          'ttsRequests': 1000,
+        };
+        break;
+
+      case PlanStatus.trialCancelled:
+        // trial cancelled 일 경우 - 무료로 전환
+        _ctaButtonText = '${_remainingDays}일 뒤에 무료 플랜 전환';
+        _ctaButtonEnabled = false; // disabled
+        _ctaSubtext = ''; // 구독 취소는 App Store에서 문구 제거
+        _shouldUsePremiumQuota = true; // premium quota (아직 체험 기간 중)
+        _planLimits = {
+          'ocrPages': 300,
+          'ttsRequests': 1000,
+        };
+        break;
+
+      case PlanStatus.trialCompleted:
+        // trial completed 일 경우
+        _ctaButtonText = '사용량 추가 문의';
+        _ctaButtonEnabled = true;
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = true; // premium quota (trial 기간 사용량 포함)
+        _planLimits = {
+          'ocrPages': 300,
+          'ttsRequests': 1000,
+        };
+        break;
+
+      case PlanStatus.premiumActive:
+        // 프리미엄 일 경우
+        _ctaButtonText = '사용량 추가 문의';
+        _ctaButtonEnabled = true;
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = true; // premium quota (trial 기간 사용량 포함)
+        _planLimits = {
+          'ocrPages': 300,
+          'ttsRequests': 1000,
+        };
+        break;
+
+      case PlanStatus.premiumCancelled:
+        // 프리미엄 cancelled의 경우
+        _ctaButtonText = '${_remainingDays}일 뒤에 무료 전환';
+        _ctaButtonEnabled = false; // disabled
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = true; // premium quota
+        _planLimits = {
+          'ocrPages': 300,
+          'ttsRequests': 1000,
+        };
+        break;
+
+      case PlanStatus.premiumGrace:
+        // 프리미엄 grace period의 경우
+        _ctaButtonText = '앱스토어 결제 확인 필요';
+        _ctaButtonEnabled = false; // disabled
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = true; // premium quota
+        _planLimits = {
+          'ocrPages': 300,
+          'ttsRequests': 1000,
+        };
+        break;
+
+      case PlanStatus.premiumExpired:
+        // 프리미엄 expired
+        _ctaButtonText = '프리미엄으로 업그레이드';
+        _ctaButtonEnabled = true;
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = false; // 무료 quota
+        _planLimits = {
+          'ocrPages': 10,
+          'ttsRequests': 30,
+        };
+        break;
+
+      case PlanStatus.free:
+      default:
+        // 무료 플랜 일경우
+        _ctaButtonText = '프리미엄으로 업그레이드';
+        _ctaButtonEnabled = true;
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = false; // 무료 플랜 quota
+        _planLimits = {
+          'ocrPages': 10,
+          'ttsRequests': 30,
+        };
+        break;
+    }
+
+    if (kDebugMode) {
+      print('🎯 [Settings] CTA 설정 완료: ${subscriptionStatus.planStatus.name}');
+      print('   버튼 텍스트: $_ctaButtonText');
+      print('   버튼 활성화: $_ctaButtonEnabled');
+      print('   서브텍스트: $_ctaSubtext');
+      print('   프리미엄 쿼터: $_shouldUsePremiumQuota');
     }
   }
 

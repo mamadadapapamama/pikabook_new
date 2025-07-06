@@ -12,7 +12,7 @@ class SubscriptionEntitlementEngine {
   factory SubscriptionEntitlementEngine() => _instance;
   SubscriptionEntitlementEngine._internal();
 
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(region: 'asia-southeast1');
   
   // 🎯 단일 캐시 시스템
   EntitlementResult? _cachedResult;

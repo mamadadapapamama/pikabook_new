@@ -12,6 +12,8 @@ import '../../core/widgets/upgrade_modal.dart';
 import '../../core/widgets/edit_dialog.dart';
 import '../../core/utils/test_data_generator.dart';
 import '../../core/services/common/plan_service.dart';
+import '../../core/services/common/banner_manager.dart';
+import '../../core/utils/subscription_debug_helper.dart';
 import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
 
@@ -181,6 +183,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 text: '📋 테스트 계정 목록 출력',
                 variant: PikaButtonVariant.outline,
                 onPressed: () => TestDataGenerator.printTestAccounts(),
+                isFullWidth: true,
+              ),
+            ),
+            
+            // 배너 닫기 기록 초기화 버튼
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+              child: PikaButton(
+                text: '🔄 배너 닫기 기록 초기화',
+                variant: PikaButtonVariant.outline,
+                onPressed: _resetBannerStates,
+                isFullWidth: true,
+              ),
+            ),
+            
+            // 구독 디버그 헬퍼 버튼
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+              child: PikaButton(
+                text: '🔍 구독 상태 전체 진단',
+                variant: PikaButtonVariant.text,
+                onPressed: _runSubscriptionDebug,
                 isFullWidth: true,
               ),
             ),
@@ -407,16 +431,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             
-            // 무료 플랜인 경우 업그레이드 버튼 표시 (로딩 중이 아닐 때만)
-            if (!isLoading && _viewModel.planType == 'free') ...[
+            // 🎯 구독 상태별 CTA 버튼 표시 (로딩 중이 아닐 때만)
+            if (!isLoading && _viewModel.ctaButtonText.isNotEmpty) ...[
               SizedBox(height: SpacingTokens.md),
               PikaButton(
-                text: 'Premium으로 업그레이드',
-                variant: PikaButtonVariant.primary,
+                text: _viewModel.ctaButtonText,
+                variant: _viewModel.ctaButtonEnabled 
+                    ? PikaButtonVariant.primary 
+                    : PikaButtonVariant.outline,
                 size: PikaButtonSize.small,
-                onPressed: _showUpgradeModal,
+                onPressed: _viewModel.ctaButtonEnabled ? _handleCTAButtonPressed : null,
                 isFullWidth: true,
               ),
+              
+              // 🎯 서브텍스트 표시 (있는 경우만)
+              if (_viewModel.ctaSubtext.isNotEmpty) ...[
+                SizedBox(height: SpacingTokens.xs),
+                Text(
+                  _viewModel.ctaSubtext,
+                  style: TypographyTokens.caption.copyWith(
+                    color: ColorTokens.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ],
           ],
         ),
@@ -424,10 +462,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
   
+  /// 🎯 CTA 버튼 클릭 처리
+  void _handleCTAButtonPressed() {
+    if (_viewModel.ctaButtonText.contains('문의')) {
+      // "사용량 추가 문의" 버튼인 경우
+      _contactSupport();
+    } else if (_viewModel.ctaButtonText.contains('업그레이드')) {
+      // "프리미엄으로 업그레이드" 버튼인 경우
+      _showUpgradeModal();
+    }
+    // disabled 버튼들은 onPressed가 null이므로 여기에 도달하지 않음
+  }
+  
   // 사용량 다이얼로그 표시
   Future<void> _showUsageDialog() async {
     if (kDebugMode) {
       print('📊 사용량 확인 버튼 클릭 - 사용량 데이터 로드 시작');
+      print('📊 프리미엄 쿼터 사용: ${_viewModel.shouldUsePremiumQuota}');
+      print('📊 플랜 제한: ${_viewModel.planLimits}');
     }
     
     if (context.mounted) {
@@ -436,6 +488,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         limitStatus: null,
         usagePercentages: null,
         onContactSupport: _contactSupport,
+        shouldUsePremiumQuota: _viewModel.shouldUsePremiumQuota,
+        planLimits: _viewModel.planLimits,
       );
     }
   }
@@ -546,7 +600,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ? Text(
                         '향후 지원 예정',
                         style: TypographyTokens.caption.copyWith(
-                          color: ColorTokens.textTertiary,
+                          color: ColorTokens.textPrimary,
                         ),
                       )
                     : null,
@@ -568,7 +622,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text(
               '취소',
               style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textTertiary,
+                color: ColorTokens.textPrimary,
               ),
             ),
           ),
@@ -609,7 +663,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ? Text(
                         '향후 지원 예정',
                         style: TypographyTokens.caption.copyWith(
-                          color: ColorTokens.textTertiary,
+                          color: ColorTokens.textPrimary,
                         ),
                       )
                     : null,
@@ -631,7 +685,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text(
               '취소',
               style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textTertiary,
+                color: ColorTokens.textPrimary,
               ),
             ),
           ),
@@ -1000,6 +1054,121 @@ class _SettingsScreenState extends State<SettingsScreen> {
             duration: Duration(seconds: 4),
           ),
         );
+      }
+    }
+  }
+
+  // 🔄 배너 닫기 기록 초기화 (테스트용)
+  Future<void> _resetBannerStates() async {
+    try {
+      final bannerManager = BannerManager();
+      await bannerManager.resetAllBannerStates();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ 모든 배너 닫기 기록이 초기화되었습니다.',
+              style: TypographyTokens.caption.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: ColorTokens.success,
+            behavior: SnackBarBehavior.fixed,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      if (kDebugMode) {
+        debugPrint('✅ [Settings] 모든 배너 닫기 기록 초기화 완료');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '❌ 배너 초기화 실패: $e',
+              style: TypographyTokens.caption.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: ColorTokens.error,
+            behavior: SnackBarBehavior.fixed,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      
+      if (kDebugMode) {
+        debugPrint('❌ [Settings] 배너 초기화 실패: $e');
+      }
+    }
+  }
+
+  // 🔍 구독 상태 전체 진단 (테스트용)
+  Future<void> _runSubscriptionDebug() async {
+    if (!kDebugMode) return;
+    
+    try {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '🔍 구독 상태 진단을 시작합니다... (콘솔 확인)',
+              style: TypographyTokens.caption.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: ColorTokens.primary,
+            behavior: SnackBarBehavior.fixed,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      // 구독 상태 전체 진단 실행
+      final debugHelper = SubscriptionDebugHelper();
+      await debugHelper.diagnoseSubscriptionState();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ 구독 상태 진단이 완료되었습니다. 콘솔을 확인하세요.',
+              style: TypographyTokens.caption.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: ColorTokens.success,
+            behavior: SnackBarBehavior.fixed,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      
+      if (kDebugMode) {
+        debugPrint('✅ [Settings] 구독 상태 전체 진단 완료');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '❌ 구독 진단 실패: $e',
+              style: TypographyTokens.caption.copyWith(
+                color: Colors.white,
+              ),
+            ),
+            backgroundColor: ColorTokens.error,
+            behavior: SnackBarBehavior.fixed,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      
+      if (kDebugMode) {
+        debugPrint('❌ [Settings] 구독 진단 실패: $e');
       }
     }
   }

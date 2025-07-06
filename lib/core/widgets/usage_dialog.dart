@@ -15,12 +15,16 @@ class UsageDialog extends StatefulWidget {
   final String? title;
   final String? message;
   final Function? onContactSupport;
+  final bool? shouldUsePremiumQuota;
+  final Map<String, int>? planLimits;
 
   const UsageDialog({
     Key? key,
     this.title,
     this.message,
     this.onContactSupport,
+    this.shouldUsePremiumQuota,
+    this.planLimits,
   }) : super(key: key);
 
   @override
@@ -34,6 +38,8 @@ class UsageDialog extends StatefulWidget {
     Map<String, dynamic>? limitStatus, // 호환성을 위해 유지하지만 사용하지 않음
     Map<String, double>? usagePercentages, // 호환성을 위해 유지하지만 사용하지 않음
     Function? onContactSupport,
+    bool? shouldUsePremiumQuota,
+    Map<String, int>? planLimits,
   }) async {
     return showDialog(
       context: context,
@@ -43,6 +49,8 @@ class UsageDialog extends StatefulWidget {
           title: title,
           message: message,
           onContactSupport: onContactSupport,
+          shouldUsePremiumQuota: shouldUsePremiumQuota,
+          planLimits: planLimits,
         );
       },
     );
@@ -73,6 +81,8 @@ class _UsageDialogState extends State<UsageDialog> {
     try {
       if (kDebugMode) {
         debugPrint('📊 [UsageDialog] 사용량 데이터 로드 시작');
+        debugPrint('📊 [UsageDialog] 전달받은 프리미엄 쿼터: ${widget.shouldUsePremiumQuota}');
+        debugPrint('📊 [UsageDialog] 전달받은 플랜 제한: ${widget.planLimits}');
       }
       
       // 플랜 정보 가져오기
@@ -88,11 +98,26 @@ class _UsageDialogState extends State<UsageDialog> {
       
       // 사용량 정보 가져오기
       final usageInfo = await _usageService.getUserUsageForSettings();
-      _limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
       
-      if (kDebugMode) {
-        debugPrint('📊 [UsageDialog] 사용량 정보 원본: $usageInfo');
-        debugPrint('📊 [UsageDialog] 제한 상태: $_limitStatus');
+      // 🎯 전달받은 플랜 제한이 있으면 우선 사용, 없으면 기본 로직 사용
+      if (widget.planLimits != null) {
+        _limitStatus = {
+          'ocrLimitReached': false, // 실제 사용량 체크는 UsageLimitService에서
+          'ttsLimitReached': false,
+          'ocrLimit': widget.planLimits!['ocrPages'] ?? 10,
+          'ttsLimit': widget.planLimits!['ttsRequests'] ?? 30,
+        };
+        
+        if (kDebugMode) {
+          debugPrint('📊 [UsageDialog] 전달받은 플랜 제한 사용: $_limitStatus');
+        }
+      } else {
+        _limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
+        
+        if (kDebugMode) {
+          debugPrint('📊 [UsageDialog] 기본 사용량 정보 사용: $usageInfo');
+          debugPrint('📊 [UsageDialog] 제한 상태: $_limitStatus');
+        }
       }
       
       // 사용량 퍼센트 계산
@@ -112,13 +137,22 @@ class _UsageDialogState extends State<UsageDialog> {
         debugPrint('❌ [UsageDialog] 스택 트레이스: $stackTrace');
       }
       
-      // 기본값 설정
-      _limitStatus = {
-        'ocrLimitReached': false,
-        'ttsLimitReached': false,
-        'ocrLimit': 10,
-        'ttsLimit': 30,
-      };
+      // 기본값 설정 (전달받은 플랜 제한이 있으면 사용)
+      if (widget.planLimits != null) {
+        _limitStatus = {
+          'ocrLimitReached': false,
+          'ttsLimitReached': false,
+          'ocrLimit': widget.planLimits!['ocrPages'] ?? 10,
+          'ttsLimit': widget.planLimits!['ttsRequests'] ?? 30,
+        };
+      } else {
+        _limitStatus = {
+          'ocrLimitReached': false,
+          'ttsLimitReached': false,
+          'ocrLimit': 10,
+          'ttsLimit': 30,
+        };
+      }
       _usagePercentages = {'ocr': 0.0, 'tts': 0.0};
     } finally {
       if (mounted) {
@@ -161,7 +195,7 @@ class _UsageDialogState extends State<UsageDialog> {
                     SizedBox(height: SpacingTokens.md),
                   ],
                   // 프리미엄 사용자에게 플랜 정보 표시
-                  if (_currentPlan == PlanService.PLAN_PREMIUM) ...[
+                  if (_currentPlan == PlanService.PLAN_PREMIUM || (widget.shouldUsePremiumQuota ?? false)) ...[
                     _buildPlanInfoSection(),
                     SizedBox(height: SpacingTokens.lg),
                   ],
@@ -338,7 +372,9 @@ class _UsageDialogState extends State<UsageDialog> {
   
   /// 사용량 라벨 변환
   String _getUsageLabel(String key) {
-    final bool isPremium = _currentPlan == PlanService.PLAN_PREMIUM;
+    // 🎯 전달받은 프리미엄 쿼터 정보 사용
+    final bool isPremium = widget.shouldUsePremiumQuota ?? 
+                          (_currentPlan == PlanService.PLAN_PREMIUM);
     final String period = isPremium ? '/month' : '';
     
     switch (key) {
@@ -353,8 +389,11 @@ class _UsageDialogState extends State<UsageDialog> {
 
   /// 플랜 상태에 따른 액션 버튼
   Widget _buildActionButton() {
-    final bool isPremiumPaid = _currentPlan == PlanService.PLAN_PREMIUM && !_isFreeTrial;
-    final bool isPremiumTrial = _currentPlan == PlanService.PLAN_PREMIUM && _isFreeTrial;
+    // 🎯 전달받은 프리미엄 쿼터 정보 사용
+    final bool isPremiumQuota = widget.shouldUsePremiumQuota ?? 
+                               (_currentPlan == PlanService.PLAN_PREMIUM);
+    final bool isPremiumPaid = isPremiumQuota && !_isFreeTrial;
+    final bool isPremiumTrial = isPremiumQuota && _isFreeTrial;
     
     // 버튼 텍스트 결정
     String buttonText;

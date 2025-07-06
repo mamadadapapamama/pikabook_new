@@ -263,41 +263,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             
             // 제로 스테이트 콘텐츠
             Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    const SizedBox(height: 50),
-                    Image.asset(
-                      'assets/images/zeronote.png',
-                      width: 200,
-                      height: 200,
+              child: Center(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Image.asset(
+                          'assets/images/zeronote.png',
+                          width: 200,
+                          height: 200,
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          '먼저, 번역이 필요한\n이미지를 올려주세요.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.notoSans(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: ColorTokens.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '이미지를 기반으로 학습 노트를 만들어드립니다. \n카메라 촬영도 가능합니다.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            color: const Color(0xFF969696), // #969696
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        
+                        // 🧪 디버그 모드에서만 테스트 환경 진단 섹션 표시
+                        if (kDebugMode) ...[
+                          const SizedBox(height: 20),
+                          _buildTestEnvironmentSection(),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 24),
-                    Text(
-                      '먼저, 번역이 필요한\n이미지를 올려주세요.',
-                      style: GoogleFonts.notoSans(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: ColorTokens.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '이미지를 기반으로 학습 노트를 만들어드립니다. \n카메라 촬영도 가능합니다.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: const Color(0xFF969696), // #969696
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    
-                    // 🧪 디버그 모드에서만 테스트 환경 진단 섹션 표시
-                    if (kDebugMode) ...[
-                      const SizedBox(height: 20),
-                      _buildTestEnvironmentSection(),
-                    ],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -402,16 +409,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // 🎯 BannerManager의 BannerTypeExtension 사용
     String? buttonText;
     switch (bannerType) {
+      case BannerType.trialStarted:
+        buttonText = null; // 환영 메시지, 닫기만 가능
+        break;
       case BannerType.usageLimitFree:
       case BannerType.trialCancelled:
+      case BannerType.trialCompleted:
       case BannerType.premiumExpired:
         buttonText = '업그레이드';
         break;
       case BannerType.usageLimitPremium:
         buttonText = '문의하기';
         break;
-      case BannerType.trialCompleted:
-        buttonText = null; // 닫기만 가능
+      case BannerType.premiumGrace:
+        buttonText = 'App Store 열기';
         break;
     }
 
@@ -435,34 +446,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return;
     }
 
-    // 🔄 BannerType을 UpgradeReason으로 변환
-    UpgradeReason reason;
+    // 🔄 BannerType별 처리
     switch (bannerType) {
+      case BannerType.trialStarted:
+        // 트라이얼 시작 배너는 버튼 없음 (닫기만 가능)
+        return;
+
       case BannerType.usageLimitFree:
-        reason = UpgradeReason.limitReached;      // 무료 플랜 사용량 한도 도달
+        _showUpgradeModalWithReason(UpgradeReason.limitReached);
         break;
+
       case BannerType.usageLimitPremium:
         // 프리미엄 플랜 사용량 한도 → 문의 폼으로 처리
         _showContactForm();
         return;
+
       case BannerType.trialCompleted:
-        reason = UpgradeReason.trialExpired;      // 무료체험 완료
-        break;
       case BannerType.trialCancelled:
-        reason = UpgradeReason.trialExpired;      // 프리미엄 체험 만료
-        break;
       case BannerType.premiumExpired:
-        reason = UpgradeReason.trialExpired;      // 프리미엄 만료 (체험 만료와 동일 처리)
+        _showUpgradeModalWithReason(UpgradeReason.trialExpired);
         break;
+
+      case BannerType.premiumGrace:
+        // Grace Period → App Store 열기
+        _openAppStore();
+        return;
+
       default:
-        reason = UpgradeReason.general;           // 일반 업그레이드
+        _showUpgradeModalWithReason(UpgradeReason.general);
     }
+  }
 
+  /// 업그레이드 모달 표시 헬퍼
+  void _showUpgradeModalWithReason(UpgradeReason reason) {
     if (kDebugMode) {
-      debugPrint('🎯 [HomeScreen] 업그레이드 모달 표시: ${reason.name} (bannerType: ${bannerType.name})');
+      debugPrint('🎯 [HomeScreen] 업그레이드 모달 표시: ${reason.name}');
     }
 
-    // 🎯 업그레이드 모달 표시
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -541,6 +561,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('문의 폼을 여는 중 오류가 발생했습니다: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// 📱 App Store 열기 (Grace Period 사용자용)
+  Future<void> _openAppStore() async {
+    const appStoreUrl = 'https://apps.apple.com/account/subscriptions';
+    
+    try {
+      final Uri uri = Uri.parse(appStoreUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('App Store를 열 수 없습니다.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('App Store를 여는 중 오류가 발생했습니다: $e'),
             backgroundColor: Colors.red,
           ),
         );

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -14,7 +15,7 @@ class AppStoreSubscriptionService {
   factory AppStoreSubscriptionService() => _instance;
   AppStoreSubscriptionService._internal();
 
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(region: 'asia-southeast1');
   
   // 캐시된 구독 상태 (성능 최적화)
   SubscriptionStatus? _cachedStatus;
@@ -32,6 +33,9 @@ class AppStoreSubscriptionService {
   
   // 진행 중인 통합 요청 추적 (중복 방지)
   Future<SubscriptionState>? _ongoingUnifiedRequest;
+  
+  // 상태 변경 감지를 위한 이전 상태 저장
+  PlanStatus? _lastKnownStatus;
 
   /// 서비스 초기화 (Firebase Functions 설정)
   Future<void> initialize() async {
@@ -93,24 +97,24 @@ class AppStoreSubscriptionService {
       // 안전한 타입 캐스팅으로 Firebase Functions 응답 처리
       final data = Map<String, dynamic>.from(result.data as Map);
       
-      // 🔍 강제로 RAW JSON 로그 출력 (디버그용)
-      debugPrint('🔍 [AppStoreSubscription] App Store Connect 우선 응답:');
-      debugPrint('   성공 여부: ${data['success']}');
-      debugPrint('   데이터 소스: ${data['dataSource'] ?? 'unknown'}'); // App Store vs Firebase
-      debugPrint('🔍 === RAW JSON 응답 (전체) ===');
-      debugPrint('$data');
-      debugPrint('🔍 === RAW JSON 응답 끝 ===');
+      // 🔍 강제로 RAW JSON 로그 출력 (디버그용) - print 사용으로 변경
+      print('🔍 [AppStoreSubscription] App Store Connect 우선 응답:');
+      print('   성공 여부: ${data['success']}');
+      print('   데이터 소스: ${data['dataSource'] ?? 'unknown'}'); // App Store vs Firebase
+      print('🔍 === RAW JSON 응답 (전체) ===');
+      print('$data');
+      print('🔍 === RAW JSON 응답 끝 ===');
       if (data['subscription'] != null) {
         final sub = data['subscription'] as Map;
-        debugPrint('   구독 정보: ${sub.toString()}');
-        debugPrint('🔍 === RAW planStatus 값 ===');
-        debugPrint('   - planStatus: "${sub['planStatus']}" (타입: ${sub['planStatus'].runtimeType})');
-        debugPrint('🔍 === RAW planStatus 값 끝 ===');
-        debugPrint('   - isActive: ${sub['isActive']}');
-        debugPrint('   - expirationDate: ${sub['expirationDate']}');
-        debugPrint('   - autoRenewStatus: ${sub['autoRenewStatus']}');
+        print('   구독 정보: ${sub.toString()}');
+        print('🔍 === RAW planStatus 값 ===');
+        print('   - planStatus: "${sub['planStatus']}" (타입: ${sub['planStatus'].runtimeType})');
+        print('🔍 === RAW planStatus 값 끝 ===');
+        print('   - isActive: ${sub['isActive']}');
+        print('   - expirationDate: ${sub['expirationDate']}');
+        print('   - autoRenewStatus: ${sub['autoRenewStatus']}');
       } else {
-        debugPrint('🔍 === subscription 데이터가 null입니다 ===');
+        print('🔍 === subscription 데이터가 null입니다 ===');
       }
       
       if (data['success'] == true) {
@@ -432,21 +436,37 @@ class AppStoreSubscriptionService {
   SubscriptionStatus _parseSubscriptionStatus(Map<String, dynamic> subscriptionData) {
     // Firebase Functions에서 planStatus 문자열로 받음
     final planStatusString = subscriptionData['planStatus'] as String? ?? 'free';
+    final testAccountType = subscriptionData['testAccountType'] as String?;
+    final hasEverUsedTrial = subscriptionData['hasEverUsedTrial'] as bool?;
+    final autoRenewStatus = subscriptionData['autoRenewStatus'] as bool? ?? false;
+    final isActive = subscriptionData['isActive'] as bool? ?? false;
     
     // 🔍 강제로 planStatus 파싱 로그 출력 (디버그용)
-    debugPrint('🔍 === planStatus 파싱 시작 ===');
-    debugPrint('   받은 planStatus 문자열: "$planStatusString"');
-    debugPrint('   PlanStatus enum 값들: ${PlanStatus.values.map((e) => e.value).toList()}');
+    print('🔍 === planStatus 파싱 시작 ===');
+    print('   받은 planStatus 문자열: "$planStatusString"');
+    print('   testAccountType: "$testAccountType"');
+    print('   hasEverUsedTrial: $hasEverUsedTrial');
+    print('   autoRenewStatus: $autoRenewStatus');
+    print('   isActive: $isActive');
     
-    final planStatus = PlanStatus.fromString(planStatusString);
+    // 🎯 스마트 파싱: 서버 응답의 추가 컨텍스트를 고려
+    final planStatus = PlanStatus.fromServerResponse(
+      planStatusString,
+      testAccountType: testAccountType,
+      autoRenewStatus: autoRenewStatus,
+      hasEverUsedTrial: hasEverUsedTrial,
+      isActive: isActive,
+    );
     
-    debugPrint('   파싱된 PlanStatus: $planStatus (${planStatus.value})');
-    debugPrint('   isTrial: ${planStatus.isTrial}');
-    debugPrint('   isPremium: ${planStatus.isPremium}');
-    debugPrint('   isActive: ${planStatus.isActive}');
-    debugPrint('🔍 === planStatus 파싱 끝 ===');
-    
-    final autoRenewStatus = subscriptionData['autoRenewStatus'] as bool? ?? false;
+    print('   파싱된 PlanStatus: $planStatus (${planStatus.value})');
+    print('   isTrial: ${planStatus.isTrial}');
+    print('   isPremium: ${planStatus.isPremium}');
+    print('   isActive: ${planStatus.isActive}');
+    print('🔍 === planStatus 파싱 끝 ===');
+
+    // 🎯 상태 변경 감지 및 스낵바 표시
+    _detectStatusChangeAndShowSnackbar(planStatus);
+
     final subscriptionType = subscriptionData['subscriptionType'] as String? ?? '';
     final expirationDateString = subscriptionData['expirationDate'] as String?;
     
@@ -454,7 +474,7 @@ class AppStoreSubscriptionService {
     if (expirationDateString != null) {
       try {
         if (kDebugMode) {
-          debugPrint('🔍 [AppStoreSubscription] 만료일 파싱 시도: "$expirationDateString" (타입: ${expirationDateString.runtimeType})');
+          print('🔍 [AppStoreSubscription] 만료일 파싱 시도: "$expirationDateString" (타입: ${expirationDateString.runtimeType})');
         }
         
         // 다양한 날짜 형식 지원
@@ -473,14 +493,14 @@ class AppStoreSubscriptionService {
         }
         
         if (kDebugMode) {
-          debugPrint('✅ [AppStoreSubscription] 만료일 파싱 성공: $expirationDate');
+          print('✅ [AppStoreSubscription] 만료일 파싱 성공: $expirationDate');
         }
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('⚠️ [AppStoreSubscription] 만료일 파싱 실패: $e');
-          debugPrint('   원본 문자열: "$expirationDateString"');
-          debugPrint('   문자열 길이: ${expirationDateString.length}');
-          debugPrint('   문자열 타입: ${expirationDateString.runtimeType}');
+          print('⚠️ [AppStoreSubscription] 만료일 파싱 실패: $e');
+          print('   원본 문자열: "$expirationDateString"');
+          print('   문자열 길이: ${expirationDateString.length}');
+          print('   문자열 타입: ${expirationDateString.runtimeType}');
         }
         // 파싱 실패 시 null로 설정
         expirationDate = null;
@@ -691,6 +711,127 @@ class AppStoreSubscriptionService {
     final freeStatus = SubscriptionStatus.free();
     _updateCache(freeStatus);
     return freeStatus;
+  }
+
+  /// 상태 변경 감지 및 스낵바 표시
+  void _detectStatusChangeAndShowSnackbar(PlanStatus planStatus) {
+    // 이전 상태와 비교하여 변경사항 감지
+    final previousStatus = _lastKnownStatus;
+    
+    if (previousStatus != null && previousStatus != planStatus) {
+      if (kDebugMode) {
+        print('🔄 [AppStoreSubscriptionService] 구독 상태 변경 감지: ${previousStatus.value} → ${planStatus.value}');
+      }
+      
+      // 상태 변경에 따른 스낵바 표시
+      _showStatusChangeSnackbar(previousStatus, planStatus);
+    }
+    
+    // 현재 상태 저장
+    _lastKnownStatus = planStatus;
+  }
+
+  /// 상태 변경 스낵바 표시
+  void _showStatusChangeSnackbar(PlanStatus previousStatus, PlanStatus newStatus) {
+    // 현재 활성화된 BuildContext가 있는지 확인
+    final context = _getCurrentContext();
+    if (context == null || !context.mounted) return;
+
+    String message = '';
+    bool isSuccess = false;
+
+    // 상태 변경에 따른 메시지 결정
+    switch (newStatus) {
+      case PlanStatus.trialActive:
+        if (previousStatus == PlanStatus.free) {
+          message = '🎉 프리미엄 체험이 시작되었습니다!\n7일간 무제한으로 사용해보세요.';
+          isSuccess = true;
+        }
+        break;
+
+      case PlanStatus.trialCancelled:
+        if (previousStatus == PlanStatus.trialActive) {
+          message = '⏰ 프리미엄 체험이 취소되었습니다.\n체험 기간 종료 시 무료 플랜으로 전환됩니다.';
+        }
+        break;
+
+      case PlanStatus.trialCompleted:
+        if (previousStatus.isTrial) {
+          message = '⏰ 프리미엄 체험이 종료되었습니다.\n계속 사용하려면 구독해주세요.';
+        }
+        break;
+
+      case PlanStatus.premiumActive:
+        if (previousStatus.isTrial) {
+          message = '💎 프리미엄 구독이 시작되었습니다!\n무제한으로 사용하세요.';
+          isSuccess = true;
+        } else if (previousStatus == PlanStatus.free) {
+          message = '💎 프리미엄 구독이 복원되었습니다!';
+          isSuccess = true;
+        }
+        break;
+
+      case PlanStatus.premiumCancelled:
+        if (previousStatus == PlanStatus.premiumActive) {
+          message = '💎 프리미엄 구독이 취소되었습니다.\n만료일까지는 계속 사용 가능합니다.';
+        }
+        break;
+
+      case PlanStatus.premiumExpired:
+        if (previousStatus.isPremium) {
+          message = '💎 프리미엄 구독이 만료되었습니다.\n계속 사용하려면 다시 구독해주세요.';
+        }
+        break;
+
+      case PlanStatus.premiumGrace:
+        if (previousStatus == PlanStatus.premiumActive) {
+          message = '⚠️ 결제 정보를 확인해주세요.\nApp Store에서 결제 방법을 업데이트해주세요.';
+        }
+        break;
+
+      default:
+        return; // 메시지가 없으면 스낵바 표시하지 않음
+    }
+
+    if (message.isNotEmpty) {
+      _showSnackbar(context, message, isSuccess);
+    }
+  }
+
+  /// 스낵바 표시 헬퍼
+  void _showSnackbar(BuildContext context, String message, bool isSuccess) {
+    if (kDebugMode) {
+      print('📢 [AppStoreSubscriptionService] 스낵바 표시: $message');
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(color: Colors.white),
+        ),
+        backgroundColor: isSuccess 
+            ? Colors.green[600] 
+            : Colors.orange[600],
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  /// 현재 활성화된 BuildContext 가져오기
+  BuildContext? _getCurrentContext() {
+    // NavigatorState를 통해 현재 context 가져오기
+    try {
+      final navigatorState = WidgetsBinding.instance.rootElement?.findAncestorStateOfType<NavigatorState>();
+      return navigatorState?.context;
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ [AppStoreSubscriptionService] BuildContext 가져오기 실패: $e');
+      }
+      return null;
+    }
   }
 }
 

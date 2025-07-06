@@ -8,6 +8,7 @@ import '../theme/tokens/ui_tokens.dart';
 import '../../features/flashcard/flashcard_counter_badge.dart';
 import '../services/common/plan_service.dart';
 import '../services/authentication/user_preferences_service.dart';
+import '../services/subscription/app_store_subscription_service.dart';
 import '../../features/settings/settings_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
