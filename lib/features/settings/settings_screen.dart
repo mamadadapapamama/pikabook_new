@@ -11,7 +11,6 @@ import '../../core/widgets/usage_dialog.dart';
 import '../../core/widgets/upgrade_modal.dart';
 import '../../core/widgets/edit_dialog.dart';
 import '../../core/utils/test_data_generator.dart';
-import '../../core/services/common/plan_service.dart';
 import '../../core/services/common/banner_manager.dart';
 import '../../core/utils/subscription_debug_helper.dart';
 import 'settings_view_model.dart';
@@ -1184,15 +1183,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       // 🎯 체험 이력에 따른 분기 처리
-      final planService = PlanService();
-      final subscriptionDetails = await planService.getSubscriptionDetails();
-      final hasUsedFreeTrial = subscriptionDetails['hasUsedFreeTrial'] as bool? ?? false;
-      final hasEverUsedTrial = subscriptionDetails['hasEverUsedTrial'] as bool? ?? false;
-      
-      if (kDebugMode) {
-        debugPrint('🎯 [Settings] 업그레이드 버튼 클릭 - 체험 이력: $hasUsedFreeTrial/$hasEverUsedTrial');
-      }
-      
+      final hasUsedFreeTrial = _viewModel.hasUsedFreeTrial;
+      final hasEverUsedTrial = _viewModel.hasEverUsedTrial;
       if (hasUsedFreeTrial || hasEverUsedTrial) {
         // 🎯 체험 이력 있음 -> 일반 프리미엄 모달
         UpgradeModal.show(

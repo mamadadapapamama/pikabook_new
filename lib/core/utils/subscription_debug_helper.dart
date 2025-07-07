@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../services/subscription/unified_subscription_manager.dart';
-import '../services/common/plan_service.dart';
 import '../services/common/banner_manager.dart';
 import '../services/payment/in_app_purchase_service.dart';
 
@@ -115,19 +114,8 @@ class SubscriptionDebugHelper {
     debugPrint('\n🔧 PlanService 처리 결과:');
     
     try {
-      final planService = PlanService();
-      final details = await planService.getSubscriptionDetails(forceRefresh: true);
-      
-      debugPrint('   현재 플랜: ${details['currentPlan']}');
-      debugPrint('   현재 체험 중: ${details['isFreeTrial']}');
-      debugPrint('   체험 사용 이력: ${details['hasUsedFreeTrial']}');
-      debugPrint('   체험 사용 이력(영구): ${details['hasEverUsedTrial']}');
-      debugPrint('   프리미엄 사용 이력: ${details['hasEverUsedPremium']}');
-      debugPrint('   만료 여부: ${details['isExpired']}');
-      debugPrint('   남은 일수: ${details['daysRemaining']}');
-      debugPrint('   취소 상태: ${details['isCancelled']}');
-      debugPrint('   자동 갱신: ${details['autoRenewStatus']}');
-      
+      // PlanService 완전 삭제. UnifiedSubscriptionManager 등으로 대체하거나 안내 메시지 출력
+      debugPrint('   PlanService는 더 이상 사용되지 않습니다. (UnifiedSubscriptionManager를 참조하세요)');
     } catch (e) {
       debugPrint('   ❌ PlanService 확인 실패: $e');
     }
@@ -206,10 +194,6 @@ class SubscriptionDebugHelper {
         default:
           debugPrint('❌ 알 수 없는 시나리오: $scenario');
       }
-
-      // 캐시 무효화
-      final planService = PlanService();
-      planService.notifyPlanChanged('test', userId: user.uid);
 
     } catch (e) {
       debugPrint('❌ 테스트 시나리오 생성 실패: $e');

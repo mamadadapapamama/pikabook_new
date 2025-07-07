@@ -6,12 +6,12 @@ import '../theme/tokens/typography_tokens.dart';
 import '../theme/tokens/spacing_tokens.dart';
 import '../theme/tokens/ui_tokens.dart';
 import '../../features/flashcard/flashcard_counter_badge.dart';
-import '../services/common/plan_service.dart';
 import '../services/authentication/user_preferences_service.dart';
-import '../services/subscription/app_store_subscription_service.dart';
+import '../services/subscription/unified_subscription_manager.dart';
 import '../../features/settings/settings_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import '../../core/models/subscription_state.dart';
 
 /// 공통 앱바 위젯
 /// 모든 스크린에서 재사용할 수 있도록 설계된 커스터마이저블 앱바
@@ -201,14 +201,9 @@ class PikaAppBar extends StatefulWidget implements PreferredSizeWidget {
 }
 
 class _PikaAppBarState extends State<PikaAppBar> {
-  // 🎯 Future를 한 번만 생성하여 재사용
-  late final Future<String> _planTypeFuture;
-  
   @override
   void initState() {
     super.initState();
-    // 🎯 initState에서 한 번만 Future 생성
-    _planTypeFuture = _getPlanType();
   }
 
   @override
@@ -320,16 +315,15 @@ class _PikaAppBarState extends State<PikaAppBar> {
   Future<Map<String, dynamic>> _loadHomeAppBarData() async {
     try {
       final userPreferences = UserPreferencesService();
-      final planService = PlanService();
-      
+      final unifiedManager = UnifiedSubscriptionManager();
       final results = await Future.wait([
         userPreferences.getDefaultNoteSpace(),
-        planService.getCurrentPlanType(),
+        unifiedManager.getSubscriptionState(),
       ]);
-      
+      final subscriptionState = results[1] as SubscriptionState;
       return {
         'noteSpaceName': results[0] as String,
-        'isPlanFree': results[1] == PlanService.PLAN_FREE,
+        'isPlanFree': !(subscriptionState.isPremium),
       };
     } catch (e) {
       if (kDebugMode) {
@@ -387,27 +381,22 @@ class _PikaAppBarState extends State<PikaAppBar> {
       );
     }
 
-    // 🎯 미리 생성한 Future 재사용
-    return FutureBuilder<String>(
-      future: _planTypeFuture,
-      builder: (context, snapshot) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    // 플랜 뱃지 등 PlanService 의존 부분 제거, noteSpaceName만 표시
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: _buildLogoTitle(widget.noteSpaceName),
-                ),
-              ],
+            Expanded(
+              child: _buildLogoTitle(widget.noteSpaceName),
             ),
-            if (widget.subtitle != null) ...[
-              SizedBox(height: SpacingTokens.xs),
-              widget.subtitle!,
-            ],
           ],
-        );
-      },
+        ),
+        if (widget.subtitle != null) ...[
+          SizedBox(height: SpacingTokens.xs),
+          widget.subtitle!,
+        ],
+      ],
     );
   }
 
@@ -439,29 +428,22 @@ class _PikaAppBarState extends State<PikaAppBar> {
           ),
         ),
         SizedBox(height: SpacingTokens.xs),
-        // 노트 스페이스 이름
+        // 노트스페이스 이름만 단순 표시
         if (noteSpaceName != null)
-          FutureBuilder<String>(
-            future: _planTypeFuture,
-            builder: (context, snapshot) {
-              final isPlanFree = snapshot.data == PlanService.PLAN_FREE;
-              
-              return Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      noteSpaceName,
-                      style: TypographyTokens.headline3.copyWith(
-                        color: ColorTokens.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  noteSpaceName,
+                  style: TypographyTokens.headline3.copyWith(
+                    color: ColorTokens.textPrimary,
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
-              );
-            },
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
       ],
     );

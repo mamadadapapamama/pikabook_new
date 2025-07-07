@@ -7,9 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 // 🎯 Core imports - 새로운 통합 구독 상태 관리 시스템
 import '../../core/models/subscription_state.dart';                    // 통합 구독 상태 모델
-import '../../core/services/subscription/app_store_subscription_service.dart'; // 🆕 App Store 기반 구독 서비스
 import '../../core/services/subscription/unified_subscription_manager.dart'; // 🎯 표준 Entitlement Engine
-import '../../core/utils/subscription_debug_helper.dart'; // 🧪 실기기 테스트 진단 도구
 import '../../core/services/common/usage_limit_service.dart';          // 사용량 한도 실시간 스트림용
 
 

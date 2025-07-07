@@ -11,7 +11,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/services/media/image_service.dart';
 import '../../../core/services/common/usage_limit_service.dart';
-import '../common/plan_service.dart';
 import 'user_preferences_service.dart';
 import 'deleted_user_service.dart';
 import '../cache/event_cache_manager.dart';
@@ -626,16 +625,25 @@ class AuthService {
       // 🔥 중요: Firestore 데이터 삭제 전에 플랜 정보를 먼저 수집
       Map<String, dynamic>? subscriptionDetails;
       try {
-        final planService = PlanService();
-        subscriptionDetails = await planService.getSubscriptionDetails();
-        
+        // PlanService 완전 삭제. 구독 정보는 UnifiedSubscriptionManager 또는 null-safe 기본값 사용
+        final unifiedManager = UnifiedSubscriptionManager();
+        final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: true);
+        subscriptionDetails = {
+          'planStatus': subscriptionState.planStatus.value,
+          'isPremium': subscriptionState.isPremium,
+          'isTrial': subscriptionState.isTrial,
+          'isExpired': subscriptionState.isExpired,
+          'daysRemaining': subscriptionState.daysRemaining,
+          'statusMessage': subscriptionState.statusMessage,
+        };
         if (kDebugMode) {
           print('📊 [AuthService] 탈퇴 전 플랜 정보 수집 완료:');
-          print('   현재 플랜: ${subscriptionDetails['currentPlan']}');
-          print('   무료체험: ${subscriptionDetails['isFreeTrial']}');
-          print('   구독 타입: ${subscriptionDetails['subscriptionType']}');
+          print('   플랜 상태: ${subscriptionDetails['planStatus']}');
+          print('   프리미엄: ${subscriptionDetails['isPremium']}');
+          print('   체험: ${subscriptionDetails['isTrial']}');
+          print('   만료: ${subscriptionDetails['isExpired']}');
           print('   남은 일수: ${subscriptionDetails['daysRemaining']}');
-          print('   만료일: ${subscriptionDetails['expiryDate']}');
+          print('   상태 메시지: ${subscriptionDetails['statusMessage']}');
         }
       } catch (e) {
         if (kDebugMode) {
