@@ -5,7 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:convert';
 import 'dart:async';
-import 'plan_service.dart';
+import '../../constants/plan_constants.dart';
+import '../subscription/unified_subscription_manager.dart';
 
 /// 사용량 제한 관리 서비스 (개선된 버전)
 /// 3가지 호출 시점에 최적화:
@@ -449,15 +450,16 @@ class UsageLimitService {
           debugPrint('🔄 [UsageLimitService] 제공된 플랜 타입 사용: $actualPlanType');
         }
       } else {
-        // 플랜 타입이 없으면 PlanService에서 가져오기
-      final planService = PlanService();
-        actualPlanType = await planService.getCurrentPlanType(forceRefresh: forceRefresh);
+        // 플랜 타입이 없으면 UnifiedSubscriptionManager에서 가져오기
+        final unifiedManager = UnifiedSubscriptionManager();
+        final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: forceRefresh);
+        actualPlanType = subscriptionState.isPremium ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
         if (kDebugMode) {
-          debugPrint('🔄 [UsageLimitService] PlanService에서 플랜 타입 조회: $actualPlanType');
+          debugPrint('🔄 [UsageLimitService] UnifiedSubscriptionManager에서 플랜 타입 조회: $actualPlanType');
         }
       }
       
-      final limits = PlanService.PLAN_LIMITS[actualPlanType];
+      final limits = PlanConstants.PLAN_LIMITS[actualPlanType];
       if (limits != null) {
         final result = Map<String, int>.from(limits);
         
@@ -533,9 +535,9 @@ class UsageLimitService {
     };
   }
   
-  /// 기본 제한 값 (PlanService에서 가져오기)
+  /// 기본 제한 값 (PlanConstants에서 가져오기)
   Map<String, int> _getDefaultLimits() {
-    return Map<String, int>.from(PlanService.PLAN_LIMITS[PlanService.PLAN_FREE]!);
+    return Map<String, int>.from(PlanConstants.PLAN_LIMITS[PlanConstants.PLAN_FREE]!);
   }
   
   /// 기본 사용량 정보 (설정 화면용)
@@ -618,10 +620,11 @@ class UsageLimitService {
   /// 월간 사용량 초기화 (Free 플랜)
   Future<void> resetMonthlyUsage() async {
     try {
-      final planService = PlanService();
-      final planType = await planService.getCurrentPlanType();
+      final unifiedManager = UnifiedSubscriptionManager();
+      final subscriptionState = await unifiedManager.getSubscriptionState();
+      final planType = subscriptionState.isPremium ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
       
-      if (planType != PlanService.PLAN_FREE) {
+      if (planType != PlanConstants.PLAN_FREE) {
         debugPrint('Free 플랜이 아니므로 월간 초기화 건너뜀');
         return;
       }

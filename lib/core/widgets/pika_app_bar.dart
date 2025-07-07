@@ -208,7 +208,7 @@ class _PikaAppBarState extends State<PikaAppBar> {
   void initState() {
     super.initState();
     // 🎯 initState에서 한 번만 Future 생성
-    _planTypeFuture = PlanService().getCurrentPlanType();
+    _planTypeFuture = _getPlanType();
   }
 
   @override

@@ -13,6 +13,7 @@ enum BannerType {
   trialCompleted,     // 트라이얼 완료
   premiumExpired,     // 프리미엄 만료
   premiumGrace,       // 🆕 Grace Period
+  premiumCancelled,   // 🆕 프리미엄 구독 취소
   usageLimitFree,     // 무료 플랜 사용량 한도 → 업그레이드 모달
   usageLimitPremium,  // 프리미엄 플랜 사용량 한도 → 문의 폼
 }
@@ -28,6 +29,8 @@ extension BannerTypeExtension on BannerType {
         return 'trialCompleted';
       case BannerType.premiumExpired:
         return 'premiumExpired';
+      case BannerType.premiumCancelled:
+        return 'premiumCancelled';
       case BannerType.premiumGrace:
         return 'premiumGrace';
       case BannerType.usageLimitFree:
@@ -44,9 +47,11 @@ extension BannerTypeExtension on BannerType {
       case BannerType.trialCancelled:
         return '⏰ 프리미엄 구독 전환 취소됨';
       case BannerType.trialCompleted:
-        return '⏰ 프리미엄 체험 종료';
+        return '⏰ 프리미엄 월 구독으로 전환됨';
       case BannerType.premiumExpired:
         return '💎 프리미엄 만료';
+      case BannerType.premiumCancelled:
+        return '⏰ 프리미엄 구독 전환 취소됨';
       case BannerType.premiumGrace:
         return '⚠️ 결제 확인 필요';
       case BannerType.usageLimitFree:
@@ -63,9 +68,11 @@ extension BannerTypeExtension on BannerType {
       case BannerType.trialCancelled:
         return '체험 기간 종료 시 무료 플랜으로 전환됩니다. 계속 사용하려면 구독하세요';
       case BannerType.trialCompleted:
-        return '프리미엄 체험이 종료되어 무료 플랜으로 전환되었습니다. 프리미엄을 계속 사용하려면 업그레이드하세요';
+        return '프리미엄 월 구독으로 전환되었습니다! 피카북을 여유있게 사용해보세요';
       case BannerType.premiumExpired:
         return '프리미엄 혜택이 만료되었습니다. 계속 사용하려면 다시 구독하세요';
+      case BannerType.premiumCancelled:
+        return '프리미엄 구독이 취소되었습니다. 계속 사용하려면 다시 구독하세요';
       case BannerType.premiumGrace:
         return 'App Store에서 결제 정보를 확인해주세요. 확인되지 않으면 구독이 취소될 수 있습니다';
       case BannerType.usageLimitFree:
@@ -97,12 +104,18 @@ class BannerManager {
   static const String PLAN_FREE = 'free';
   static const String PLAN_PREMIUM = 'premium';
 
+  // 🎯 중복 호출 방지를 위한 캐시
+  List<BannerType>? _cachedActiveBanners;
+  DateTime? _lastBannerCacheTime;
+  static const Duration _bannerCacheDuration = Duration(seconds: 30);
+  
   // 🔄 사용자별 SharedPreferences 키 생성
   static const Map<BannerType, String> _bannerKeyPrefixes = {
     BannerType.trialStarted: 'trial_started_banner_dismissed_',
     BannerType.trialCancelled: 'trial_cancelled_banner_dismissed_',
     BannerType.trialCompleted: 'trial_completed_banner_dismissed_',
     BannerType.premiumExpired: 'premium_expired_banner_dismissed_',
+    BannerType.premiumCancelled: 'premium_cancelled_banner_dismissed_',
     BannerType.premiumGrace: 'premium_grace_banner_dismissed_',
     BannerType.usageLimitFree: 'usage_limit_free_banner_shown_',
     BannerType.usageLimitPremium: 'usage_limit_premium_banner_shown_',
@@ -130,7 +143,7 @@ class BannerManager {
     // 플랜 ID가 필요한 배너들
     if (type == BannerType.trialStarted || type == BannerType.trialCancelled || 
         type == BannerType.trialCompleted || type == BannerType.premiumExpired || 
-        type == BannerType.premiumGrace) {
+        type == BannerType.premiumCancelled || type == BannerType.premiumGrace) {
       _bannerPlanIds[type] = planId ?? '${type.name}_${DateTime.now().millisecondsSinceEpoch}';
     }
     
@@ -302,6 +315,7 @@ class BannerManager {
   void clearUserBannerStates() {
     _bannerStates.clear();
     _bannerPlanIds.clear();
+    invalidateBannerCache(); // 캐시도 무효화
     
     if (kDebugMode) {
       debugPrint('🔄 [BannerManager] 로그아웃으로 인한 메모리 배너 상태 초기화');
@@ -342,11 +356,24 @@ class BannerManager {
     PlanStatus? planStatus,
     bool? hasEverUsedTrial,
     bool? hasEverUsedPremium,
+    bool forceRefresh = false,
   }) async {
     try {
+      // 🎯 캐시 확인 (중복 호출 방지)
+      if (!forceRefresh && _isBannerCacheValid()) {
+        if (kDebugMode) {
+          debugPrint('📦 [BannerManager] 캐시된 배너 사용: ${_cachedActiveBanners!.map((e) => e.name).toList()}');
+        }
+        return _cachedActiveBanners!;
+      }
+      
       final stopwatch = kDebugMode ? (Stopwatch()..start()) : null;
       if (kDebugMode) {
         debugPrint('🎯 [BannerManager] 배너 결정 시작 (PlanStatus 기반)');
+        debugPrint('   입력 planStatus: $planStatus (${planStatus?.name})');
+        debugPrint('   입력 hasEverUsedTrial: $hasEverUsedTrial');
+        debugPrint('   입력 hasEverUsedPremium: $hasEverUsedPremium');
+        debugPrint('   forceRefresh: $forceRefresh');
       }
 
       // 1. 플랜 정보 준비 (PlanStatus 기반)
@@ -355,6 +382,15 @@ class BannerManager {
       bool finalHasEverUsedPremium = hasEverUsedPremium ?? false;
       bool finalIsCancelled = !finalPlanStatus.isActive;
       bool finalAutoRenewStatus = finalPlanStatus.isActive; // 단순화
+      
+      if (kDebugMode) {
+        debugPrint('🔍 [BannerManager] 최종 파라미터:');
+        debugPrint('   finalPlanStatus: $finalPlanStatus (${finalPlanStatus.name})');
+        debugPrint('   finalHasEverUsedTrial: $finalHasEverUsedTrial');
+        debugPrint('   finalHasEverUsedPremium: $finalHasEverUsedPremium');
+        debugPrint('   finalIsCancelled: $finalIsCancelled');
+        debugPrint('   finalAutoRenewStatus: $finalAutoRenewStatus');
+      }
 
       // 2. 🚀 병렬 처리: 사용량 체크와 SharedPreferences 로드를 동시에 실행
       final futures = await Future.wait([
@@ -380,6 +416,10 @@ class BannerManager {
       final activeBanners = <BannerType>[];
       _decideUsageLimitBannersSync(activeBanners, finalPlanStatus, usageLimitStatus, prefs);
       _decidePlanStatusBannersSync(activeBanners, finalPlanStatus, finalHasEverUsedTrial, finalHasEverUsedPremium, prefs, lastPlanInfo);
+
+      // 🎯 캐시 업데이트
+      _cachedActiveBanners = activeBanners;
+      _lastBannerCacheTime = DateTime.now();
 
       if (kDebugMode) {
         stopwatch?.stop();
@@ -424,7 +464,11 @@ class BannerManager {
     final planId = 'plan_${DateTime.now().millisecondsSinceEpoch}';
 
     if (kDebugMode) {
-      debugPrint('🎯 [BannerManager] 플랜 상태 배너 결정: ${planStatus.value}');
+      debugPrint('🎯 [BannerManager] 플랜 상태 배너 결정 시작');
+      debugPrint('   planStatus: ${planStatus.value} (타입: ${planStatus.runtimeType})');
+      debugPrint('   hasEverUsedTrial: $hasEverUsedTrial');
+      debugPrint('   hasEverUsedPremium: $hasEverUsedPremium');
+      debugPrint('   planId: $planId');
     }
 
     // 모든 배너 상태 초기화
@@ -449,10 +493,20 @@ class BannerManager {
         break;
 
       case PlanStatus.trialCompleted:
+        if (kDebugMode) {
+          debugPrint('🎯 [BannerManager] trialCompleted case 실행');
+        }
         // 트라이얼 완료 배너 표시
         setBannerState(BannerType.trialCompleted, true, planId: planId);
         if (_shouldShowBannerSync(BannerType.trialCompleted, prefs)) {
+          if (kDebugMode) {
+            debugPrint('✅ [BannerManager] trialCompleted 배너 추가됨');
+          }
           activeBanners.add(BannerType.trialCompleted);
+        } else {
+          if (kDebugMode) {
+            debugPrint('❌ [BannerManager] trialCompleted 배너가 _shouldShowBannerSync에서 false 반환');
+          }
         }
         break;
 
@@ -473,10 +527,27 @@ class BannerManager {
         break;
 
       case PlanStatus.premiumActive:
-      case PlanStatus.premiumCancelled:
         // 활성 프리미엄 사용자는 배너 표시 안함
         if (kDebugMode) {
-          debugPrint('🎯 [BannerManager] 프리미엄 사용자 → 플랜 상태 배너 없음');
+          debugPrint('🎯 [BannerManager] 활성 프리미엄 사용자 → 플랜 상태 배너 없음');
+        }
+        break;
+
+      case PlanStatus.premiumCancelled:
+        if (kDebugMode) {
+          debugPrint('🎯 [BannerManager] premiumCancelled case 실행');
+        }
+        // 프리미엄 취소 배너 표시
+        setBannerState(BannerType.premiumCancelled, true, planId: planId);
+        if (_shouldShowBannerSync(BannerType.premiumCancelled, prefs)) {
+          if (kDebugMode) {
+            debugPrint('✅ [BannerManager] premiumCancelled 배너 추가됨');
+          }
+          activeBanners.add(BannerType.premiumCancelled);
+        } else {
+          if (kDebugMode) {
+            debugPrint('❌ [BannerManager] premiumCancelled 배너가 _shouldShowBannerSync에서 false 반환');
+          }
         }
         break;
 
@@ -513,6 +584,7 @@ class BannerManager {
     setBannerState(BannerType.trialCancelled, false);
     setBannerState(BannerType.trialCompleted, false);
     setBannerState(BannerType.premiumExpired, false);
+    setBannerState(BannerType.premiumCancelled, false);
     setBannerState(BannerType.premiumGrace, false);
   }
 
@@ -528,22 +600,72 @@ class BannerManager {
   /// 🚀 배너 표시 여부 확인 (동기 처리 - 성능 최적화) - 사용자별
   bool _shouldShowBannerSync(BannerType type, SharedPreferences prefs) {
     final shouldShow = _bannerStates[type] ?? false;
-    if (!shouldShow) return false;
+    
+    if (kDebugMode) {
+      debugPrint('🔍 [BannerManager] _shouldShowBannerSync: ${type.name}');
+      debugPrint('   배너 상태: $shouldShow');
+    }
+    
+    if (!shouldShow) {
+      if (kDebugMode) {
+        debugPrint('   결과: false (배너 상태가 false)');
+      }
+      return false;
+    }
 
     // 사용량 한도 배너는 단순 처리 (사용자별)
     if (type == BannerType.usageLimitFree || type == BannerType.usageLimitPremium) {
       final key = _getUserBannerKey(type);
       final hasUserDismissed = prefs.getBool(key) ?? false;
-      return !hasUserDismissed;
+      final result = !hasUserDismissed;
+      
+      if (kDebugMode) {
+        debugPrint('   사용량 배너 - 키: $key, 닫힘: $hasUserDismissed, 결과: $result');
+      }
+      
+      return result;
     }
     
     // 프리미엄 만료, 체험 완료 배너는 플랜별 처리 (사용자별)
     final planId = _bannerPlanIds[type];
-    if (planId == null) return false;
+    
+    if (kDebugMode) {
+      debugPrint('   플랜별 배너 - planId: $planId');
+    }
+    
+    if (planId == null) {
+      if (kDebugMode) {
+        debugPrint('   결과: false (planId가 null)');
+      }
+      return false;
+    }
     
     final dismissKey = _getUserBannerKey(type, planId: planId);
     final hasUserDismissed = prefs.getBool(dismissKey) ?? false;
-    return !hasUserDismissed;
+    final result = !hasUserDismissed;
+    
+    if (kDebugMode) {
+      debugPrint('   플랜별 배너 - 키: $dismissKey, 닫힘: $hasUserDismissed, 결과: $result');
+    }
+    
+    return result;
+  }
+
+  /// 🎯 배너 캐시 유효성 확인
+  bool _isBannerCacheValid() {
+    if (_cachedActiveBanners == null || _lastBannerCacheTime == null) return false;
+    final timeDiff = DateTime.now().difference(_lastBannerCacheTime!);
+    return timeDiff < _bannerCacheDuration;
+  }
+
+  /// 🎯 배너 캐시 무효화
+  void invalidateBannerCache() {
+    _cachedActiveBanners = null;
+    _lastBannerCacheTime = null;
+    
+    if (kDebugMode) {
+      debugPrint('🗑️ [BannerManager] 배너 캐시 무효화');
+    }
   }
 
   /// 현재 배너 상태 디버그 출력

@@ -66,32 +66,53 @@ class OcrService {
   /// 서비스 계정 키 파일 로드
   Future<Map<String, dynamic>> _loadCredentialsFile() async {
     try {
-      // 먼저 앱 문서 디렉토리에서 키 파일 확인
       final directory = await getApplicationDocumentsDirectory();
       final credentialsPath = '${directory.path}/google_cloud_credentials.json';
       final file = File(credentialsPath);
 
+      // 🔄 기존 파일이 있다면 삭제하고 새로 로드 (JSON 오류 방지)
       if (await file.exists()) {
+        try {
         final contents = await file.readAsString();
-        return json.decode(contents) as Map<String, dynamic>;
-      } else {
-        // 앱 문서 디렉토리에 파일이 없으면 assets에서 로드하여 복사
+          final testData = json.decode(contents) as Map<String, dynamic>;
+          
+          // JSON 파싱이 성공하면 기존 파일 사용
+          if (kDebugMode) {
+            debugPrint('✅ 기존 서비스 계정 키 파일 검증 성공');
+          }
+          return testData;
+        } catch (parseError) {
+          if (kDebugMode) {
+            debugPrint('⚠️ 기존 서비스 계정 키 파일 파싱 실패, 새로 로드: $parseError');
+          }
+          // 파싱 실패 시 파일 삭제
+          await file.delete();
+        }
+      }
+
+      // assets에서 키 파일 로드하여 복사
         try {
           // assets에서 키 파일 로드
           final String jsonString = await rootBundle
               .loadString('assets/credentials/service-account.json');
 
+        // JSON 검증
+        final jsonData = json.decode(jsonString) as Map<String, dynamic>;
+
           // 앱 문서 디렉토리에 파일 저장
           await file.create(recursive: true);
           await file.writeAsString(jsonString);
 
-          return json.decode(jsonString) as Map<String, dynamic>;
+        if (kDebugMode) {
+          debugPrint('✅ assets에서 서비스 계정 키 파일 새로 로드 완료');
+        }
+        
+        return jsonData;
         } catch (assetError) {
           if (kDebugMode) {
             debugPrint('❌ assets에서 서비스 계정 키 파일 로드 실패: $assetError');
           }
           throw Exception('서비스 계정 키 파일을 찾을 수 없습니다.');
-        }
       }
     } catch (e) {
       if (kDebugMode) {

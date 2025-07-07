@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import '../common/plan_service.dart';
-import '../subscription/app_store_subscription_service.dart';
+import '../common/support_service.dart';
+import '../subscription/unified_subscription_manager.dart';
 import '../notification/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -17,7 +17,7 @@ class InAppPurchaseService {
   InAppPurchaseService._internal();
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
-  final PlanService _planService = PlanService();
+  // PlanService 제거됨 - 플랜 변경 알림은 UnifiedSubscriptionManager에서 처리
   final NotificationService _notificationService = NotificationService();
   
   late StreamSubscription<List<PurchaseDetails>> _subscription;
@@ -284,56 +284,26 @@ class InAppPurchaseService {
       // 거래 ID 추출 (단순화)
       final originalTransactionId = purchaseDetails.purchaseID ?? '';
 
-      // Firebase Functions를 통한 구매 완료 알림
-      final appStoreService = AppStoreSubscriptionService();
-      final notifySuccess = await appStoreService.notifyPurchaseComplete(
-        transactionId: transactionId,
-        originalTransactionId: originalTransactionId,
-        productId: purchaseDetails.productID,
-        purchaseDate: DateTime.now().toIso8601String(),
-        // expirationDate는 App Store Connect에서 자동 계산됨
-      );
-
-      if (notifySuccess) {
-        if (kDebugMode) {
-          print('✅ Firebase Functions 구매 완료 알림 성공');
-        }
-        
-        // 🎯 구매 완료 후 구독 상태 캐시 무효화 및 최신 상태 강제 로드
-        appStoreService.invalidateCache();
-        
-        // 최신 구독 상태 강제로 가져오기
-        try {
-          await appStoreService.getCurrentSubscriptionStatus(
-            forceRefresh: true,
-            isAppStart: false,
-          );
-          if (kDebugMode) {
-            print('✅ 구매 완료 후 구독 상태 강제 새로고침 완료');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print('⚠️ 구매 완료 후 구독 상태 새로고침 실패: $e');
-          }
-        }
-        
-        // 🎯 구매 완료 시점에서 알림 스케줄링 (무료체험인 경우에만)
-        await _scheduleTrialNotificationsIfNeeded(purchaseDetails.productID);
-        
-        // 플랜 캐시 무효화 (서버에서 업데이트된 구독 상태 반영)
-        _planService.notifyPlanChanged('premium', userId: user.uid);
-        
-        // 구매 성공 콜백 호출
-        _onPurchaseSuccess?.call();
-      } else {
-        if (kDebugMode) {
-          print('❌ Firebase Functions 구매 완료 알림 실패');
-        }
-        
-        // Firebase Functions 실패 시에도 UI 업데이트는 수행
-        // (실제 구독 상태는 다음 앱 시작 시 서버에서 동기화됨)
-        _onPurchaseSuccess?.call();
+      // 🎯 App Store 웹훅이 실시간으로 구독 상태를 업데이트하므로
+      // 클라이언트에서는 캐시 무효화만 수행하고 UI 업데이트 처리
+      if (kDebugMode) {
+        print('✅ 구매 완료 - App Store 웹훅이 구독 상태를 실시간 업데이트합니다');
       }
+      
+      // 🎯 구매 완료 후 구독 상태 캐시 무효화
+      final unifiedManager = UnifiedSubscriptionManager();
+      unifiedManager.invalidateCache();
+      
+      // 🎯 구매 완료 알림 (UnifiedSubscriptionManager 사용)
+      unifiedManager.notifyPurchaseCompleted();
+      
+      // 🎯 구매 완료 시점에서 알림 스케줄링 (무료체험인 경우에만)
+      await _scheduleTrialNotificationsIfNeeded(purchaseDetails.productID);
+      
+      // 플랜 변경 알림은 UnifiedSubscriptionManager에서 자동 처리됨
+      
+      // 구매 성공 콜백 호출
+      _onPurchaseSuccess?.call();
       
     } catch (e) {
       if (kDebugMode) {

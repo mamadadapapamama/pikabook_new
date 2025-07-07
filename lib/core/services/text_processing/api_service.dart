@@ -163,7 +163,7 @@ class ApiService {
 
       print('📤 [API] 서버 요청 전송 시작');
       print('   URL: $url');
-      final prettyJson = const JsonEncoder.withIndent('  ').convert(requestBody);
+        final prettyJson = const JsonEncoder.withIndent('  ').convert(requestBody);
       print('   Body: $prettyJson');
 
       final client = http.Client();
@@ -198,12 +198,12 @@ class ApiService {
               try {
                 final chunkData = jsonDecode(jsonStr);
                 
-                final chunkIndex = chunkData['chunkIndex'] + 1;
-                final totalChunks = chunkData['totalChunks'];
-                final isComplete = chunkData['isComplete'] == true;
+                  final chunkIndex = chunkData['chunkIndex'] + 1;
+                  final totalChunks = chunkData['totalChunks'];
+                  final isComplete = chunkData['isComplete'] == true;
                 print('📦 [API] 실시간 청크 수신: ${chunkIndex}/${totalChunks}, 완료: $isComplete');
-                
-                if (chunkData.containsKey('pageId')) {
+                  
+                  if (chunkData.containsKey('pageId')) {
                   print('📄 [API] 페이지 ID: ${chunkData['pageId']}');
                 }
                 
@@ -218,10 +218,10 @@ class ApiService {
               } catch (e) {
                 print('❌ [API] 청크 파싱 실패 #$chunkCount: $e');
                 print('   원본 JSON: "$jsonStr"');
+                }
               }
             }
           }
-        }
         
         print('🔚 [API] 스트리밍 루프 종료 - 연결 닫기');
         print('📊 [API] 총 수신 청크: $chunkCount개');

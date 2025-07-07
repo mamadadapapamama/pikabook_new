@@ -4,6 +4,7 @@ import 'subscription_entitlement_engine.dart';
 import '../common/banner_manager.dart';
 import '../common/usage_limit_service.dart';
 import '../../models/subscription_state.dart';
+import '../../models/plan_status.dart';
 
 /// 통합 구독 상태 매니저 (단순화)
 /// 모든 구독 관련 기능을 하나의 인터페이스로 제공
@@ -41,12 +42,26 @@ class UnifiedSubscriptionManager {
   /// 🎯 통합 구독 상태 조회 (모든 화면에서 사용)
   /// HomeScreen, Settings, BannerManager 등에서 호출
   Future<SubscriptionState> getSubscriptionState({bool forceRefresh = false}) async {
+    if (kDebugMode) {
+      debugPrint('🎯 [UnifiedSubscriptionManager] getSubscriptionState 호출 (forceRefresh: $forceRefresh)');
+    }
+    
     // 🎯 캐시 우선 사용
     if (!forceRefresh && _isStateValid()) {
       if (kDebugMode) {
         debugPrint('📦 [UnifiedSubscriptionManager] 캐시된 상태 사용');
+        debugPrint('   캐시된 상태: ${_cachedState!.statusMessage}');
+        debugPrint('   캐시된 배너: ${_cachedState!.activeBanners.map((e) => e.name).toList()}');
       }
       return _cachedState!;
+    }
+    
+    if (kDebugMode) {
+      if (forceRefresh) {
+        debugPrint('🔄 [UnifiedSubscriptionManager] 강제 새로고침 요청');
+      } else {
+        debugPrint('🔄 [UnifiedSubscriptionManager] 캐시 만료로 새로고침');
+      }
     }
     
     // 🎯 중복 요청 방지
@@ -63,6 +78,13 @@ class UnifiedSubscriptionManager {
     try {
       final result = await _ongoingRequest!;
       _updateStateCache(result);
+      
+      if (kDebugMode) {
+        debugPrint('✅ [UnifiedSubscriptionManager] 새로운 상태 캐시 업데이트 완료');
+        debugPrint('   새 상태: ${result.statusMessage}');
+        debugPrint('   새 배너: ${result.activeBanners.map((e) => e.name).toList()}');
+      }
+      
       return result;
     } finally {
       _ongoingRequest = null;
@@ -162,12 +184,46 @@ class UnifiedSubscriptionManager {
         debugPrint('   현재 플랜: ${entitlementResult.isTrial ? 'trial' : entitlementResult.isPremium ? 'premium' : 'free'}');
         debugPrint('   무료 체험: ${entitlementResult.isTrial}');
         debugPrint('   프리미엄: ${entitlementResult.isPremium}');
+        debugPrint('   플랜 상태: ${entitlementResult.planStatus.value}');
+      }
+      
+      // 🎯 플랜 상태에 따른 이력 정보 결정
+      bool hasEverUsedTrial = false;
+      bool hasEverUsedPremium = false;
+      
+             // 현재 상태나 과거 이력에 따라 판단
+       switch (entitlementResult.planStatus) {
+         case PlanStatus.trialActive:
+         case PlanStatus.trialCancelled:
+         case PlanStatus.trialCompleted:
+           hasEverUsedTrial = true;
+           break;
+           
+         case PlanStatus.premiumActive:
+         case PlanStatus.premiumCancelled:
+         case PlanStatus.premiumExpired:
+         case PlanStatus.premiumGrace:
+           hasEverUsedPremium = true;
+           break;
+           
+         case PlanStatus.free:
+         case PlanStatus.refunded:
+           // 무료 상태나 환불 상태에서는 이력을 별도로 확인해야 함
+           // 현재는 기본값 사용
+           break;
+       }
+      
+      if (kDebugMode) {
+        debugPrint('🎯 [UnifiedSubscriptionManager] 배너 조회 파라미터:');
+        debugPrint('   planStatus: ${entitlementResult.planStatus.value}');
+        debugPrint('   hasEverUsedTrial: $hasEverUsedTrial');
+        debugPrint('   hasEverUsedPremium: $hasEverUsedPremium');
       }
       
       return await _bannerManager.getActiveBanners(
         planStatus: entitlementResult.planStatus,
-        hasEverUsedTrial: false, // TODO: 이력 정보는 별도 서비스에서 관리
-        hasEverUsedPremium: false, // 🎯 수정: 현재 프리미엄 사용자는 이력이 아님
+        hasEverUsedTrial: hasEverUsedTrial,
+        hasEverUsedPremium: hasEverUsedPremium,
       );
     } catch (e) {
       if (kDebugMode) {

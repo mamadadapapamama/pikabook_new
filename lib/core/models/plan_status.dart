@@ -52,28 +52,50 @@ enum PlanStatus {
     bool? autoRenewStatus,
     bool? isActive,
   }) {
+    print('🔍 [PlanStatus] fromServerResponse 호출됨');
+    print('   planStatus: "$planStatus"');
+    print('   testAccountType: "$testAccountType"');
+    print('   autoRenewStatus: $autoRenewStatus');
+    print('   hasEverUsedTrial: $hasEverUsedTrial');
+    print('   isActive: $isActive');
+    
     // 테스트 계정 타입 기반 보정
     if (testAccountType != null) {
+      print('🔍 [PlanStatus] testAccountType 기반 처리 시작');
       switch (testAccountType) {
         case 'trial-expired':
           // 트라이얼 만료 → 취소되지 않았으면 프리미엄 활성, 취소되었으면 trial_completed
-          return (autoRenewStatus == true) ? PlanStatus.premiumActive : PlanStatus.trialCompleted;
+          final result = (autoRenewStatus == true) ? PlanStatus.premiumActive : PlanStatus.trialCompleted;
+          print('🎯 [PlanStatus] trial-expired 처리: autoRenewStatus=$autoRenewStatus → $result');
+          return result;
         case 'trial-cancelled':
           // 트라이얼 취소 → 만료 후 무료 플랜으로 전환
+          print('🎯 [PlanStatus] trial-cancelled 처리 → PlanStatus.trialCancelled');
           return PlanStatus.trialCancelled;
         case 'premium-active':
+          print('🎯 [PlanStatus] premium-active 처리 → PlanStatus.premiumActive');
           return PlanStatus.premiumActive;
         case 'premium-cancelled':
+          print('🎯 [PlanStatus] premium-cancelled 처리 → PlanStatus.premiumCancelled');
           return PlanStatus.premiumCancelled;
         case 'premium-expired':
+          print('🎯 [PlanStatus] premium-expired 처리 → PlanStatus.premiumExpired');
           return PlanStatus.premiumExpired;
         case 'premium-grace':
+          print('🎯 [PlanStatus] premium-grace 처리 → PlanStatus.premiumGrace');
           return PlanStatus.premiumGrace;
+        default:
+          print('🎯 [PlanStatus] 알 수 없는 testAccountType: $testAccountType → 기본 파싱으로 이동');
+          break;
       }
+    } else {
+      print('🔍 [PlanStatus] testAccountType이 null → 기본 파싱으로 이동');
     }
 
     // 기본 파싱 로직
-    return fromString(planStatus);
+    final result = fromString(planStatus);
+    print('🎯 [PlanStatus] 기본 파싱 결과: "$planStatus" → $result');
+    return result;
   }
 
   // 편의 메서드들

@@ -5,6 +5,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -14,12 +15,23 @@ import '../common/plan_service.dart';
 import 'user_preferences_service.dart';
 import 'deleted_user_service.dart';
 import '../cache/event_cache_manager.dart';
-import '../subscription/app_store_subscription_service.dart';
+
 import '../subscription/unified_subscription_manager.dart';
 import '../common/banner_manager.dart';
 
 
 class AuthService {
+  // 🎯 상수 정의
+  static const String _appInstallKey = 'pikabook_installed';
+  static const String _deviceIdKey = 'device_id';
+  static const String _lastUserIdKey = 'last_user_id';
+  static const int _batchSize = 500; // Firestore 배치 제한
+  static const int _recentLoginMinutes = 5; // 재인증 필요 시간
+  
+  // 🔄 싱글톤 패턴 구현
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
+  
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     forceCodeForRefreshToken: true,
@@ -28,13 +40,27 @@ class AuthService {
   );
   
   String? _lastUserId;
+  bool _isInitialized = false; // 🎯 중복 초기화 방지
+  Timer? _subscriptionRefreshTimer; // 🎯 구독 새로고침 디바운싱
   
-  AuthService() {
+  AuthService._internal() {
     _initializeUserChangeDetection();
   }
   
-  /// 사용자 변경 감지 및 캐시 초기화
+  /// 사용자 변경 감지 및 캐시 초기화 (중복 초기화 방지)
   void _initializeUserChangeDetection() {
+    if (_isInitialized) {
+      if (kDebugMode) {
+        debugPrint('🔄 [AuthService] 이미 초기화됨 - 중복 초기화 방지');
+      }
+      return;
+    }
+    
+    if (kDebugMode) {
+      debugPrint('🔄 [AuthService] 사용자 변경 감지 리스너 초기화 시작');
+    }
+    
+    _isInitialized = true;
     _auth.authStateChanges().listen((User? user) async {
       final currentUserId = user?.uid;
       
@@ -48,29 +74,40 @@ class AuthService {
         if (_lastUserId != null && _lastUserId != currentUserId) {
           if (kDebugMode) {
             debugPrint('🔄 [AuthService] 사용자 변경 감지 - 캐시 초기화');
+            debugPrint('   이전 사용자: $_lastUserId → 현재 사용자: $currentUserId');
           }
           
           // 🎯 구독 서비스 캐시 무효화 (중요!)
           _invalidateSubscriptionCaches();
           
-          // 🎯 배너 상태 초기화 (로그아웃 시)
-          _clearBannerStates();
+          // 🎯 배너 상태 초기화 (로그아웃 시와 사용자 전환 시 모두)
+          if (currentUserId == null) {
+            // 로그아웃하는 경우
+            if (kDebugMode) {
+              debugPrint('🔄 [AuthService] 로그아웃 감지 - 배너 상태 초기화');
+            }
+            _clearBannerStates();
+          } else {
+            // 다른 사용자로 로그인하는 경우 - 이전 사용자 배너 캐시 즉시 무효화
+            if (kDebugMode) {
+              debugPrint('🔄 [AuthService] 사용자 전환 감지 - 이전 사용자 배너 캐시 무효화');
+            }
+            _clearBannerStates(); // 사용자 전환 시에도 배너 캐시 무효화
+          }
           
           // 모든 캐시 초기화
           final eventCache = EventCacheManager();
           eventCache.clearAllCache();
           
           // SharedPreferences에서 사용자별 데이터 정리
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.remove('last_user_id');
+          await _removePrefsKey(_lastUserIdKey);
         }
         
         _lastUserId = currentUserId;
         
         // 새 사용자 ID 저장
         if (currentUserId != null) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('last_user_id', currentUserId);
+          await _setPrefsString(_lastUserIdKey, currentUserId);
           
           // 🎯 로그인 시점에 App Store에서 강제로 구독 정보 불러오기
           await _forceRefreshSubscriptionOnLogin();
@@ -85,7 +122,6 @@ class AuthService {
       debugPrint('🔄 [AuthService] 사용자 변경으로 인한 구독 캐시 무효화');
     }
     
-    AppStoreSubscriptionService().invalidateCache();
     UnifiedSubscriptionManager().invalidateCache();
   }
 
@@ -105,27 +141,32 @@ class AuthService {
     }
   }
 
-  /// 로그인 후 구독 상태 강제 새로고침
+  /// 로그인 후 구독 상태 강제 새로고침 (디바운싱 적용)
   Future<void> _forceRefreshSubscriptionOnLogin() async {
-    try {
-      if (kDebugMode) {
-        debugPrint('🔄 [AuthService] 로그인 후 구독 상태 강제 새로고침');
+    // 🎯 기존 타이머 취소
+    _subscriptionRefreshTimer?.cancel();
+    
+    // 🎯 500ms 디바운싱 적용
+    _subscriptionRefreshTimer = Timer(const Duration(milliseconds: 500), () async {
+      try {
+        if (kDebugMode) {
+          debugPrint('🔄 [AuthService] 로그인 후 구독 상태 강제 새로고침 (디바운싱됨)');
+        }
+        
+        // 로그인 직후에는 항상 최신 구독 상태를 서버에서 가져옴
+        await UnifiedSubscriptionManager().getSubscriptionState(
+          forceRefresh: true, // 강제 새로고침
+        );
+        
+        if (kDebugMode) {
+          debugPrint('✅ [AuthService] 로그인 후 구독 상태 새로고침 완료');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('❌ [AuthService] 로그인 후 구독 상태 새로고침 실패: $e');
+        }
       }
-      
-      // 로그인 직후에는 항상 최신 구독 상태를 서버에서 가져옴
-      await AppStoreSubscriptionService().getCurrentSubscriptionStatus(
-        forceRefresh: true, // 강제 새로고침
-        isAppStart: false,
-      );
-      
-      if (kDebugMode) {
-        debugPrint('✅ [AuthService] 로그인 후 구독 상태 새로고침 완료');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [AuthService] 로그인 후 구독 상태 새로고침 실패: $e');
-      }
-    }
+    });
   }
 
 // === 인증상태 관리 및 재설치 여부 판단 ===
@@ -138,15 +179,12 @@ class AuthService {
 
   /// 앱 재설치 확인 메서드
   Future<bool> _checkAppInstallation() async {
-    const String appInstallKey = 'pikabook_installed';
-    final prefs = await SharedPreferences.getInstance();
-    
     // 앱 설치 확인 키가 있는지 확인
-    final bool isAppAlreadyInstalled = prefs.getBool(appInstallKey) ?? false;
+    final bool isAppAlreadyInstalled = await _getPrefsBool(_appInstallKey) ?? false;
     
     // 키가 없으면 새 설치로 간주하고 설정
     if (!isAppAlreadyInstalled) {
-      await prefs.setBool(appInstallKey, true);
+      await _setPrefsBool(_appInstallKey, true);
       // 기존에 로그인된 상태면 강제 로그아웃
       if (FirebaseAuth.instance.currentUser != null) {
         await FirebaseAuth.instance.signOut();
@@ -213,6 +251,39 @@ class AuthService {
   }
 
 // === 소셜 로그인 ===
+
+  /// Apple Sign In 공통 오류 처리
+  User? _handleAppleSignInError(dynamic e, String context) {
+    debugPrint('$context 오류: $e');
+    
+    // 🎯 Apple Sign In 특정 오류 처리
+    if (e.toString().contains('AuthorizationError Code=1001')) {
+      // 사용자 취소 - null 반환하여 조용히 처리
+      debugPrint('$context: 사용자가 취소함');
+      return null;
+    }
+    
+    if (e.toString().contains('AKAuthenticationError Code=-7003')) {
+      // Apple ID 인증 실패 - 재시도 권장
+      debugPrint('$context: Apple ID 인증 실패');
+      throw Exception('Apple ID 인증에 실패했습니다. 다시 시도해 주세요.');
+    }
+    
+    if (e.toString().contains('NSOSStatusErrorDomain Code=-54')) {
+      // 시스템 권한 오류 - 디바이스 재부팅 권장
+      debugPrint('$context: 시스템 권한 오류');
+      throw Exception('시스템 오류가 발생했습니다. 디바이스를 재부팅하고 다시 시도해 주세요.');
+    }
+    
+    // 오류 세부 정보 출력
+    if (e is FirebaseAuthException) {
+      debugPrint('Firebase Auth Error Code: ${e.code}');
+      debugPrint('Firebase Auth Error Message: ${e.message}');
+    }
+    
+    // 기타 오류는 다시 던지기
+    throw e;
+  }
 
   // Google 로그인
   Future<User?> signInWithGoogle() async {
@@ -305,34 +376,7 @@ class AuthService {
       
       return user;
     } catch (e) {
-      debugPrint('애플 로그인 오류: $e');
-      
-      // 🎯 Apple Sign In 특정 오류 처리
-      if (e.toString().contains('AuthorizationError Code=1001')) {
-        // 사용자 취소 - null 반환하여 조용히 처리
-        debugPrint('Apple Sign In: 사용자가 취소함');
-        return null;
-      }
-      
-      if (e.toString().contains('AKAuthenticationError Code=-7003')) {
-        // Apple ID 인증 실패 - 재시도 권장
-        debugPrint('Apple Sign In: Apple ID 인증 실패');
-        throw Exception('Apple ID 인증에 실패했습니다. 다시 시도해 주세요.');
-      }
-      
-      if (e.toString().contains('NSOSStatusErrorDomain Code=-54')) {
-        // 시스템 권한 오류 - 디바이스 재부팅 권장
-        debugPrint('Apple Sign In: 시스템 권한 오류');
-        throw Exception('시스템 오류가 발생했습니다. 디바이스를 재부팅하고 다시 시도해 주세요.');
-      }
-      
-      // 오류 세부 정보 출력
-      if (e is FirebaseAuthException) {
-        debugPrint('Firebase Auth Error Code: ${e.code}');
-        debugPrint('Firebase Auth Error Message: ${e.message}');
-      }
-      
-      rethrow;
+      return _handleAppleSignInError(e, 'Apple Sign In');
     }
   }
 
@@ -361,29 +405,7 @@ class AuthService {
       
       return user;
     } catch (e) {
-      debugPrint('대안적 애플 로그인 오류: $e');
-      
-      // 🎯 Apple Sign In 특정 오류 처리 (대안적 방법에서도 동일)
-      if (e.toString().contains('AuthorizationError Code=1001')) {
-        debugPrint('Alternative Apple Sign In: 사용자가 취소함');
-        return null;
-      }
-      
-      if (e.toString().contains('AKAuthenticationError Code=-7003')) {
-        debugPrint('Alternative Apple Sign In: Apple ID 인증 실패');
-        throw Exception('Apple ID 인증에 실패했습니다. 다시 시도해 주세요.');
-      }
-      
-      if (e.toString().contains('NSOSStatusErrorDomain Code=-54')) {
-        debugPrint('Alternative Apple Sign In: 시스템 권한 오류');
-        throw Exception('시스템 오류가 발생했습니다. 디바이스를 재부팅하고 다시 시도해 주세요.');
-      }
-      
-      if (e is FirebaseAuthException) {
-        debugPrint('Firebase Auth Error Code: ${e.code}');
-        debugPrint('Firebase Auth Error Message: ${e.message}');
-      }
-      rethrow;
+      return _handleAppleSignInError(e, 'Alternative Apple Sign In');
     }
   }
 
@@ -396,7 +418,8 @@ class AuthService {
       // 1. 현재 UID 저장
       final currentUid = _auth.currentUser?.uid;
       
-      // 2. 타이머 정리 (기존 TrialStatusChecker 제거됨)
+      // 2. 타이머 정리
+      _subscriptionRefreshTimer?.cancel();
       
       // 3. 병렬 처리 가능한 작업들
       await Future.wait([
@@ -501,7 +524,7 @@ class AuthService {
       if (lastSignInTime != null) {
         final timeSinceLastSignIn = DateTime.now().difference(lastSignInTime);
         // Firebase는 보통 5분 이내 로그인을 "최근"으로 간주
-        final isRecentLogin = timeSinceLastSignIn.inMinutes <= 5;
+        final isRecentLogin = timeSinceLastSignIn.inMinutes <= _recentLoginMinutes;
         
         debugPrint('마지막 로그인: ${lastSignInTime.toLocal()}');
         debugPrint('경과 시간: ${timeSinceLastSignIn.inMinutes}분');
@@ -540,6 +563,16 @@ class AuthService {
     debugPrint('재인증 완료');
   }
   
+  /// 재인증 오류 처리 공통 메서드
+  void _handleReauthError(dynamic e, String provider) {
+    debugPrint('$provider 재인증 실패: $e');
+    if (e.toString().contains('취소') || e.toString().contains('cancel')) {
+      throw Exception('계정 보안을 위해 $provider 재로그인이 필요합니다.\n탈퇴를 원하시면 재로그인 후 다시 시도해주세요.');
+    } else {
+      throw Exception('$provider 재인증에 실패했습니다.\n네트워크를 확인하고 다시 시도해주세요.');
+    }
+  }
+
   // Google 재인증 (오류 메시지 개선)
   Future<void> _reauthenticateWithGoogle(User user) async {
     try {
@@ -558,12 +591,7 @@ class AuthService {
       await user.reauthenticateWithCredential(credential);
       debugPrint('Google 재인증 완료');
     } catch (e) {
-      debugPrint('Google 재인증 실패: $e');
-      if (e.toString().contains('취소')) {
-        throw Exception('계정 보안을 위해 Google 재로그인이 필요합니다.\n탈퇴를 원하시면 재로그인 후 다시 시도해주세요.');
-      } else {
-        throw Exception('Google 재인증에 실패했습니다.\n네트워크를 확인하고 다시 시도해주세요.');
-      }
+      _handleReauthError(e, 'Google');
     }
   }
   
@@ -586,12 +614,7 @@ class AuthService {
       await user.reauthenticateWithCredential(oauthCredential);
       debugPrint('Apple 재인증 완료');
     } catch (e) {
-      debugPrint('Apple 재인증 실패: $e');
-      if (e.toString().contains('취소') || e.toString().contains('cancel')) {
-        throw Exception('계정 보안을 위해 Apple 재로그인이 필요합니다.\n탈퇴를 원하시면 재로그인 후 다시 시도해주세요.');
-      } else {
-        throw Exception('Apple 재인증에 실패했습니다.\n네트워크를 확인하고 다시 시도해주세요.');
-      }
+      _handleReauthError(e, 'Apple');
     }
   }
 
@@ -767,14 +790,13 @@ class AuthService {
   // 배치 삭제 헬퍼 메서드 (500개 제한 처리)
   Future<void> _deleteBatchCollection(String collection, String field, String value) async {
     try {
-      const int batchSize = 500; // Firestore 배치 제한
       bool hasMore = true;
       
       while (hasMore) {
         final query = await FirebaseFirestore.instance
             .collection(collection)
             .where(field, isEqualTo: value)
-            .limit(batchSize)
+            .limit(_batchSize)
             .get();
             
         if (query.docs.isEmpty) {
@@ -791,7 +813,7 @@ class AuthService {
         debugPrint('$collection 배치 삭제 완료: ${query.docs.length}개');
         
         // 마지막 배치인지 확인
-        hasMore = query.docs.length == batchSize;
+        hasMore = query.docs.length == _batchSize;
       }
     } catch (e) {
       debugPrint('$collection 배치 삭제 중 오류: $e');
@@ -801,13 +823,47 @@ class AuthService {
 
 
 
+  /// SharedPreferences 헬퍼 메서드들
+  Future<SharedPreferences> _getPrefs() async {
+    return await SharedPreferences.getInstance();
+  }
+
+  Future<void> _setPrefsString(String key, String value) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(key, value);
+  }
+
+  Future<void> _setPrefsInt(String key, int value) async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(key, value);
+  }
+
+  Future<void> _setPrefsBool(String key, bool value) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(key, value);
+  }
+
+  Future<String?> _getPrefsString(String key) async {
+    final prefs = await _getPrefs();
+    return prefs.getString(key);
+  }
+
+  Future<bool?> _getPrefsBool(String key) async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(key);
+  }
+
+  Future<void> _removePrefsKey(String key) async {
+    final prefs = await _getPrefs();
+    await prefs.remove(key);
+  }
+
   // 디바이스 ID 가져오기
   Future<String> _getDeviceId() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? deviceId = prefs.getString('device_id');
+    String? deviceId = await _getPrefsString(_deviceIdKey);
     if (deviceId == null) {
       deviceId = const Uuid().v4();
-      await prefs.setString('device_id', deviceId);
+      await _setPrefsString(_deviceIdKey, deviceId);
     }
     return deviceId;
   }

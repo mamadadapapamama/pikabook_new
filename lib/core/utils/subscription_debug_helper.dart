@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import '../services/subscription/app_store_subscription_service.dart';
+import '../services/subscription/unified_subscription_manager.dart';
 import '../services/common/plan_service.dart';
 import '../services/common/banner_manager.dart';
 import '../services/payment/in_app_purchase_service.dart';
@@ -57,16 +57,16 @@ class SubscriptionDebugHelper {
     debugPrint('\n📡 Firebase Functions 직접 응답:');
     
     try {
-      final appStoreService = AppStoreSubscriptionService();
-      final status = await appStoreService.checkSubscriptionStatus(forceRefresh: true);
+      final unifiedManager = UnifiedSubscriptionManager();
+      final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: true);
       
-      debugPrint('   플랜 타입: ${status.planType}');
-      debugPrint('   활성 상태: ${status.isActive}');
-      debugPrint('   만료일: ${status.expirationDate}');
-      debugPrint('   자동 갱신: ${status.autoRenewStatus}');
-      debugPrint('   프리미엄: ${status.isPremium}');
-      debugPrint('   체험: ${status.isTrial}');
-      debugPrint('   무료: ${status.isFree}');
+      debugPrint('   플랜 상태: ${subscriptionState.planStatus.value}');
+      debugPrint('   프리미엄: ${subscriptionState.isPremium}');
+      debugPrint('   체험: ${subscriptionState.isTrial}');
+      debugPrint('   무료: ${subscriptionState.isExpired}');
+      debugPrint('   사용량 한도: ${subscriptionState.hasUsageLimitReached}');
+      debugPrint('   활성 배너: ${subscriptionState.activeBanners.map((e) => e.name).toList()}');
+      debugPrint('   상태 메시지: ${subscriptionState.statusMessage}');
       
     } catch (e) {
       debugPrint('   ❌ Firebase Functions 호출 실패: $e');
@@ -313,19 +313,19 @@ class SubscriptionDebugHelper {
   /// 3. App Store Connect 상태 확인
   Future<Map<String, dynamic>> _checkAppStoreConnection() async {
     try {
-      final appStoreService = AppStoreSubscriptionService();
+      final unifiedManager = UnifiedSubscriptionManager();
       
-      // Firebase Functions 호출 테스트
-      final subscriptionStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: true);
+      // 통합 구독 상태 조회 테스트
+      final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: true);
       
       return {
         'status': 'connected',
-        'planType': subscriptionStatus.planType,
-        'isActive': subscriptionStatus.isActive,
-        'isPremium': subscriptionStatus.isPremium,
-        'isTrial': subscriptionStatus.isTrial,
-        'autoRenewStatus': subscriptionStatus.autoRenewStatus,
-        'message': '✅ App Store Connect 연결 정상',
+        'planStatus': subscriptionState.planStatus.value,
+        'isPremium': subscriptionState.isPremium,
+        'isTrial': subscriptionState.isTrial,
+        'isExpired': subscriptionState.isExpired,
+        'hasUsageLimitReached': subscriptionState.hasUsageLimitReached,
+        'message': '✅ 통합 구독 상태 조회 정상',
       };
     } catch (e) {
       return {
@@ -444,11 +444,13 @@ class SubscriptionDebugHelper {
     // App Store 상태
     final appStore = diagnosis['appStore'] as Map<String, dynamic>?;
     if (appStore != null) {
-      debugPrint('🍎 App Store: ${appStore['message']}');
+      debugPrint('🍎 구독 상태: ${appStore['message']}');
       if (appStore['status'] == 'connected') {
-        debugPrint('   - 현재 플랜: ${appStore['planType']}');
+        debugPrint('   - 플랜 상태: ${appStore['planStatus']}');
         debugPrint('   - 프리미엄: ${appStore['isPremium']}');
         debugPrint('   - 체험: ${appStore['isTrial']}');
+        debugPrint('   - 만료: ${appStore['isExpired']}');
+        debugPrint('   - 사용량 한도: ${appStore['hasUsageLimitReached']}');
       }
     }
     

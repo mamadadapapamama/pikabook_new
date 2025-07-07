@@ -11,9 +11,9 @@ import 'views/screens/login_screen.dart';
 import 'features/home/home_screen.dart'; 
 import 'views/screens/onboarding_screen.dart';
 import 'core/services/authentication/user_preferences_service.dart';
-import 'core/services/common/plan_service.dart';
+
 import 'core/services/payment/in_app_purchase_service.dart';
-import 'core/services/subscription/app_store_subscription_service.dart';
+
 import 'core/services/subscription/unified_subscription_manager.dart';
 import 'views/screens/loading_screen.dart';
 import 'core/theme/app_theme.dart';
@@ -54,14 +54,15 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   bool _isOnboardingCompleted = false;
   bool _isLoadingUserData = false;
   bool _isSampleMode = false;
+  bool _shouldShowWelcomeModal = false; // 🎉 새 유저 환영 모달 플래그
   String? _userId;
   User? _user;
   StreamSubscription<User?>? _authStateSubscription;
   late UserPreferencesService _preferencesService;
   String? _error;
-  final PlanService _planService = PlanService();
+  // PlanService 제거됨
   final InAppPurchaseService _purchaseService = InAppPurchaseService();
-  final AppStoreSubscriptionService _appStoreService = AppStoreSubscriptionService();
+
 
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   
@@ -102,8 +103,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       _purchaseService.dispose();
     }
     
-    // AppStoreSubscriptionService dispose
-    _appStoreService.dispose();
+
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -175,8 +175,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     // UserPreferencesService 초기화
     _preferencesService = UserPreferencesService();
     
-    // App Store 구독 서비스 초기화
-    await _appStoreService.initialize();
+    // 통합 구독 관리자는 자동 초기화됨
   }
   
   /// 인증 상태 업데이트
@@ -417,7 +416,19 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   
   /// 온보딩 완료 후 환영 모달 표시
   void _showWelcomeModal() {
-    if (!mounted) return;
+    if (kDebugMode) {
+      debugPrint('🎉 [App] _showWelcomeModal 호출됨');
+      debugPrint('   mounted: $mounted');
+      debugPrint('   _user: ${_user?.uid}');
+      debugPrint('   _scaffoldMessengerKey: $_scaffoldMessengerKey');
+    }
+    
+    if (!mounted) {
+      if (kDebugMode) {
+        debugPrint('❌ [App] 환영 모달 표시 실패: mounted가 false');
+      }
+      return;
+    }
     
     if (kDebugMode) {
       debugPrint('🎉 [App] 온보딩 완료 후 환영 모달 표시 준비');
@@ -425,12 +436,28 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     
     // 약간의 지연 후 모달 표시 (BuildContext 안정화)
     Future.delayed(const Duration(milliseconds: 500), () {
-      if (!mounted) return;
+      if (kDebugMode) {
+        debugPrint('🎉 [App] 500ms 지연 후 환영 모달 표시 시도');
+        debugPrint('   mounted: $mounted');
+      }
+      
+      if (!mounted) {
+        if (kDebugMode) {
+          debugPrint('❌ [App] 환영 모달 표시 실패: 지연 후 mounted가 false');
+        }
+        return;
+      }
       
       final context = _scaffoldMessengerKey.currentContext;
+      if (kDebugMode) {
+        debugPrint('🎉 [App] ScaffoldMessenger context: ${context != null ? 'OK' : 'NULL'}');
+      }
+      
       if (context == null) {
         if (kDebugMode) {
           debugPrint('❌ [App] 환영 모달 표시 실패: context가 null');
+          debugPrint('   _scaffoldMessengerKey.currentState: ${_scaffoldMessengerKey.currentState}');
+          debugPrint('   _scaffoldMessengerKey.currentWidget: ${_scaffoldMessengerKey.currentWidget}');
         }
         return;
       }
@@ -457,16 +484,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       debugPrint('🔄 [App] 구독 상태 사전 로딩 시작');
     }
     
-    // 백그라운드에서 구독 상태 확인 (결과를 기다리지 않음)
-    _appStoreService.getCurrentSubscriptionStatus(isAppStart: true).then((status) {
-      if (kDebugMode) {
-        debugPrint('✅ [App] 구독 상태 사전 로딩 완료: ${status.planType}');
-      }
-    }).catchError((error) {
-      if (kDebugMode) {
-        debugPrint('⚠️ [App] 구독 상태 사전 로딩 실패: $error');
-      }
-    });
+    // 통합 구독 관리자는 지연 로딩되므로 사전 로딩 불필요
+    if (kDebugMode) {
+      debugPrint('✅ [App] 구독 상태는 필요 시 자동 로딩됩니다');
+    }
   }
   
   @override
@@ -516,9 +537,22 @@ class _AppState extends State<App> with WidgetsBindingObserver {
            //   }
            // });
            try {
+             // 🎉 환영 모달 플래그 확인 및 전달
+             final shouldShowWelcome = _shouldShowWelcomeModal;
+             if (_shouldShowWelcomeModal) {
+               // 플래그 리셋 (한 번만 표시)
+               WidgetsBinding.instance.addPostFrameCallback((_) {
+                 if (mounted) {
+                   setState(() {
+                     _shouldShowWelcomeModal = false;
+                   });
+                 }
+               });
+             }
+             
              return ChangeNotifierProvider(
                create: (context) => HomeViewModel(),
-               child: const HomeScreen(),
+               child: HomeScreen(shouldShowWelcomeModal: shouldShowWelcome),
              );
            } catch (e, stackTrace) {
              if (kDebugMode) {
@@ -595,12 +629,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
             if (mounted) {
               setState(() {
                 _isOnboardingCompleted = true;
+                _shouldShowWelcomeModal = true; // 🎉 환영 모달 플래그 설정
               });
               
-              // 🎉 온보딩 완료 후 환영 모달 표시
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _showWelcomeModal();
-              });
+              if (kDebugMode) {
+                debugPrint('🎉 [App] 온보딩 완료 - 환영 모달 플래그 설정');
+              }
             }
           },
     );

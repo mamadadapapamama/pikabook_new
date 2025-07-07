@@ -6,7 +6,8 @@ import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import 'pika_button.dart';
 import '../../../core/services/common/usage_limit_service.dart';
-import '../../../core/services/common/plan_service.dart';
+import '../constants/plan_constants.dart';
+import '../services/subscription/unified_subscription_manager.dart';
 import '../../../core/widgets/upgrade_modal.dart';
 
 /// 사용량 확인 다이얼로그
@@ -112,11 +113,11 @@ class _UsageDialogState extends State<UsageDialog> {
           debugPrint('📊 [UsageDialog] 전달받은 플랜 제한 사용: $_limitStatus');
         }
       } else {
-        _limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
-        
-        if (kDebugMode) {
+      _limitStatus = usageInfo['limitStatus'] as Map<String, dynamic>;
+      
+      if (kDebugMode) {
           debugPrint('📊 [UsageDialog] 기본 사용량 정보 사용: $usageInfo');
-          debugPrint('📊 [UsageDialog] 제한 상태: $_limitStatus');
+        debugPrint('📊 [UsageDialog] 제한 상태: $_limitStatus');
         }
       }
       
@@ -146,12 +147,12 @@ class _UsageDialogState extends State<UsageDialog> {
           'ttsLimit': widget.planLimits!['ttsRequests'] ?? 30,
         };
       } else {
-        _limitStatus = {
-          'ocrLimitReached': false,
-          'ttsLimitReached': false,
-          'ocrLimit': 10,
-          'ttsLimit': 30,
-        };
+      _limitStatus = {
+        'ocrLimitReached': false,
+        'ttsLimitReached': false,
+        'ocrLimit': 10,
+        'ttsLimit': 30,
+      };
       }
       _usagePercentages = {'ocr': 0.0, 'tts': 0.0};
     } finally {

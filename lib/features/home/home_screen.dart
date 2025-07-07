@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../core/utils/subscription_debug_helper.dart';
 // 🎯 Core imports - 새로운 통합 구독 상태 관리 시스템
 import '../../core/models/subscription_state.dart';                    // 통합 구독 상태 모델
 import '../../core/services/subscription/app_store_subscription_service.dart'; // 🆕 App Store 기반 구독 서비스
@@ -33,7 +32,12 @@ import '../../core/services/common/banner_manager.dart';
 /// 🏠 홈 스크린
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final bool shouldShowWelcomeModal; // 🎉 환영 모달 표시 플래그
+  
+  const HomeScreen({
+    super.key,
+    this.shouldShowWelcomeModal = false,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -51,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   // 📡 실시간 스트림 구독 (상태 변경 감지)
   StreamSubscription<Map<String, dynamic>>? _limitStatusSubscription;  // 사용량 한도 변경
+  StreamSubscription<User?>? _authStateSubscription;  // 🎯 인증 상태 변경 감지
 
   @override
   void initState() {
@@ -64,6 +69,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     // 📡 실시간 스트림 구독 해제 (메모리 누수 방지)
     _limitStatusSubscription?.cancel();
+    _authStateSubscription?.cancel(); // 🎯 인증 상태 리스너 해제
     WidgetsBinding.instance.removeObserver(this); // 앱 생명주기 관찰 해제
     super.dispose();
   }
@@ -106,11 +112,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 🎯 표준 방식: 구독 상태 로드 (Entitlement Engine 기반)
   Future<void> _loadSubscriptionStatus({bool forceRefresh = false}) async {
     try {
-      // 🎯 초기 로드 시에는 App.dart에서 사전 로딩한 캐시만 사용
-      // 포그라운드 복귀나 명시적 새로고침 요청시에만 API 호출
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 🔄 구독 상태 로드 시작 (forceRefresh: $forceRefresh)');
+      }
+      
+      // 🎯 강제 새로고침이나 초기 로드가 아닌 경우에만 캐시 확인
       if (!forceRefresh && !_hasInitialLoad) {
         if (kDebugMode) {
-          debugPrint('[HomeScreen] 초기 로드 - App.dart 사전 로딩 캐시 사용');
+          debugPrint('[HomeScreen] 초기 로드 - 캐시 우선 사용');
         }
       }
       
@@ -124,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (!_hasInitialLoad) {
         _hasInitialLoad = true;
         if (kDebugMode) {
-          debugPrint('✅ [HomeScreen] 초기 로드 완료 - 표준 Entitlement Engine 캐시 사용');
+          debugPrint('✅ [HomeScreen] 초기 로드 완료');
         }
       }
       
@@ -133,11 +142,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         setState(() {
           _subscriptionState = subscriptionState;
         });
+        
+        if (kDebugMode) {
+          debugPrint('[HomeScreen] ✅ 구독 상태 UI 업데이트 완료');
+          debugPrint('   상태: ${_subscriptionState.statusMessage}');
+          debugPrint('   활성 배너: ${_subscriptionState.activeBanners.map((e) => e.name).toList()}');
+        }
       }
       
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] ✅ 구독 상태 로드 완료: ${_subscriptionState.statusMessage}');
-      }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[HomeScreen] ❌ 구독 상태 로드 실패: $e');
@@ -151,6 +163,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 🆕 새로 추가된 기능:
   /// - 사용량 한도 실시간 감지 → 즉시 배너 업데이트
   /// - 플랜 변경 실시간 감지 → 즉시 UI 상태 업데이트
+  /// - 인증 상태 변경 감지 → 구독 상태 새로고침
   void _setupRealtimeStreams() {
     // 📊 사용량 한도 상태 변경 스트림 구독
     _limitStatusSubscription = _usageLimitService.limitStatusStream.listen(
@@ -167,19 +180,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           // 🔄 현재 상태와 다를 때만 업데이트 (불필요한 API 호출 방지)
           if (shouldShowUsageLimit != _subscriptionState.hasUsageLimitReached) {
             // 구독 상태 다시 로드 (통합 서비스 사용)
-            await _loadSubscriptionStatus();
+            await _loadSubscriptionStatus(forceRefresh: true);
           }
         }
       },
       onError: (error) {
         if (kDebugMode) {
-          debugPrint('❌ [HomeScreenRefactored] 사용량 한도 스트림 오류: $error');
+          debugPrint('❌ [HomeScreen] 사용량 한도 스트림 오류: $error');
         }
       },
     );
     
+    // 🎯 인증 상태 변경 스트림 구독 (로그인/로그아웃 감지)
+    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen(
+      (User? user) async {
+        if (mounted) {
           if (kDebugMode) {
-      debugPrint('✅ [HomeScreen] 실시간 스트림 구독 설정 완료 (사용량 한도만)');
+            debugPrint('🔔 [HomeScreen] 인증 상태 변경 감지: ${user?.uid ?? "로그아웃"}');
+          }
+          
+          // 🔄 인증 상태가 변경되면 구독 상태 강제 새로고침
+          // 약간의 지연을 두어 AuthService의 캐시 무효화가 완료된 후 실행
+          await Future.delayed(const Duration(milliseconds: 1000));
+          
+          if (mounted) {
+            await _loadSubscriptionStatus(forceRefresh: true);
+          }
+        }
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          debugPrint('❌ [HomeScreen] 인증 상태 스트림 오류: $error');
+        }
+      },
+    );
+    
+    if (kDebugMode) {
+      debugPrint('✅ [HomeScreen] 실시간 스트림 구독 설정 완료 (사용량 한도 + 인증 상태)');
     }
   }
 
@@ -296,12 +333,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ),
                         ),
                         const SizedBox(height: 32),
-                        
-                        // 🧪 디버그 모드에서만 테스트 환경 진단 섹션 표시
-                        if (kDebugMode) ...[
-                          const SizedBox(height: 20),
-                          _buildTestEnvironmentSection(),
-                        ],
                       ],
                     ),
                   ),
@@ -362,76 +393,47 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Widget> _buildActiveBanners() {
     final banners = <Widget>[];
     
-    if (kDebugMode) {
-      debugPrint('🎯 [HomeScreen] _buildActiveBanners 호출');
-      debugPrint('   전체 활성 배너 수: ${_subscriptionState.activeBanners.length}');
-      debugPrint('   배너 목록: ${_subscriptionState.activeBanners.map((e) => e.name).toList()}');
-    }
-    
     // 🎯 통합 구독 상태에서 활성 배너 목록 가져오기
     for (final bannerType in _subscriptionState.activeBanners) {
-      final bannerData = _getBannerData(bannerType);
-      
-      if (kDebugMode) {
-        debugPrint('🎯 [HomeScreen] 배너 위젯 생성: ${bannerType.name}');
-        debugPrint('   제목: ${bannerData['title']}');
-        debugPrint('   부제목: ${bannerData['subtitle']}');
-        debugPrint('   버튼 텍스트: ${bannerData['buttonText']}');
+      // 🎯 BannerTypeExtension에서 직접 데이터 가져오기
+      String? buttonText;
+      switch (bannerType) {
+        case BannerType.trialStarted:
+        case BannerType.trialCompleted:
+          buttonText = null; // 환영 메시지, 닫기만 가능
+          break;
+        case BannerType.usageLimitFree:
+        case BannerType.trialCancelled:
+        case BannerType.premiumExpired:
+        case BannerType.premiumCancelled:
+          buttonText = '업그레이드';
+          break;
+        case BannerType.usageLimitPremium:
+          buttonText = '문의하기';
+          break;
+        case BannerType.premiumGrace:
+          buttonText = 'App Store 열기';
+          break;
       }
       
       banners.add(
         UnifiedBanner(
-          title: bannerData['title'],
-          subtitle: bannerData['subtitle'],
-          mainButtonText: bannerData['buttonText'],
-          onMainButtonPressed: bannerData['buttonText'] != null 
+          title: bannerType.title,
+          subtitle: bannerType.subtitle,
+          mainButtonText: buttonText,
+          onMainButtonPressed: buttonText != null 
               ? () => _showUpgradeModal(bannerType) 
               : null,
           onDismiss: () {
-            if (kDebugMode) {
-              debugPrint('🚫 [HomeScreen] 배너 닫기 버튼 클릭: ${bannerType.name}');
-            }
             _dismissBanner(bannerType);
           },
         ),
       );
     }
-    
-    if (kDebugMode) {
-      debugPrint('🎯 [HomeScreen] 생성된 배너 위젯 수: ${banners.length}');
-    }
-    
     return banners;
   }
 
-  /// 🎨 배너 타입별 데이터 반환 (BannerManager extension 사용)
-  Map<String, dynamic> _getBannerData(BannerType bannerType) {
-    // 🎯 BannerManager의 BannerTypeExtension 사용
-    String? buttonText;
-    switch (bannerType) {
-      case BannerType.trialStarted:
-        buttonText = null; // 환영 메시지, 닫기만 가능
-        break;
-      case BannerType.usageLimitFree:
-      case BannerType.trialCancelled:
-      case BannerType.trialCompleted:
-      case BannerType.premiumExpired:
-        buttonText = '업그레이드';
-        break;
-      case BannerType.usageLimitPremium:
-        buttonText = '문의하기';
-        break;
-      case BannerType.premiumGrace:
-        buttonText = 'App Store 열기';
-        break;
-    }
 
-    return {
-      'title': bannerType.title,
-      'subtitle': bannerType.subtitle,
-      'buttonText': buttonText,
-    };
-  }
 
   /// 💎 업그레이드 모달 표시
   /// 
@@ -642,122 +644,5 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 🧪 실기기 테스트 환경 진단 섹션 (디버그 모드에서만 표시)
-  Widget _buildTestEnvironmentSection() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
-        border: Border.all(color: Colors.orange, width: 1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '🧪 실기기 테스트 환경 진단',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.orange,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final debugHelper = SubscriptionDebugHelper();
-                    await debugHelper.diagnosisTestEnvironment();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('환경 진단'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    final debugHelper = SubscriptionDebugHelper();
-                    debugHelper.printSandboxSetupGuide();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('설정 가이드'),
-                ),
-              ),
-            ],
-          ),
-                     const SizedBox(height: 8),
-           Row(
-             children: [
-               Expanded(
-                 child: ElevatedButton(
-                   onPressed: () async {
-                     final debugHelper = SubscriptionDebugHelper();
-                     await debugHelper.createTestSubscriptionData(testType: 'trial');
-                     // 구독 상태 새로고침
-                     await _loadSubscriptionStatus(forceRefresh: true);
-                   },
-                   style: ElevatedButton.styleFrom(
-                     backgroundColor: Colors.green,
-                     foregroundColor: Colors.white,
-                   ),
-                   child: const Text('체험 데이터'),
-                 ),
-               ),
-               const SizedBox(width: 8),
-               Expanded(
-                 child: ElevatedButton(
-                   onPressed: () async {
-                     final debugHelper = SubscriptionDebugHelper();
-                     await debugHelper.createTestSubscriptionData(testType: 'premium');
-                     // 구독 상태 새로고침
-                     await _loadSubscriptionStatus(forceRefresh: true);
-                   },
-                   style: ElevatedButton.styleFrom(
-                     backgroundColor: Colors.purple,
-                     foregroundColor: Colors.white,
-                   ),
-                   child: const Text('프리미엄 데이터'),
-                 ),
-               ),
-             ],
-           ),
-           const SizedBox(height: 8),
-           // 🔍 Firestore 직접 테스트 버튼
-           SizedBox(
-             width: double.infinity,
-             child: ElevatedButton(
-               onPressed: () async {
-                 final debugHelper = SubscriptionDebugHelper();
-                 await debugHelper.testFirestoreDirectly();
-               },
-               style: ElevatedButton.styleFrom(
-                 backgroundColor: Colors.red,
-                 foregroundColor: Colors.white,
-               ),
-               child: const Text('🔍 Firestore 직접 테스트'),
-             ),
-           ),
-          const SizedBox(height: 8),
-          const Text(
-            '⚠️ 실기기에서 App Store 구독 테스트를 하려면:\n1. App Store Connect에서 샌드박스 계정 생성\n2. iOS 설정 → App Store → 샌드박스 계정 로그인\n3. 앱에서 구독 버튼 클릭하여 테스트',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.orange,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
 } 

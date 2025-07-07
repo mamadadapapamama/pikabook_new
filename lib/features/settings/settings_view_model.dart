@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
-import '../../core/services/common/plan_service.dart';
-import '../../core/services/subscription/app_store_subscription_service.dart';
+import '../../core/services/common/support_service.dart';
+import '../../core/services/subscription/unified_subscription_manager.dart';
 import '../../core/services/subscription/unified_subscription_manager.dart';
 import '../../core/models/subscription_state.dart';
 import '../../core/models/plan.dart';
@@ -14,7 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsViewModel extends ChangeNotifier {
   final UserPreferencesService _userPreferences = UserPreferencesService();
-  final PlanService _planService = PlanService();
+  final SupportService _supportService = SupportService();
 
   final AuthService _authService = AuthService();
 
@@ -127,17 +127,17 @@ class SettingsViewModel extends ChangeNotifier {
         print('🔄 [Settings] App Store 기반 플랜 정보 강제 새로고침');
       }
       
-      // 🎯 AppStoreSubscriptionService에서 직접 구독 상태 가져오기
-      final appStoreService = AppStoreSubscriptionService();
-      final subscriptionStatus = await appStoreService.getCurrentSubscriptionStatus(forceRefresh: true);
+      // 🎯 UnifiedSubscriptionManager에서 통합 구독 상태 가져오기
+      final unifiedManager = UnifiedSubscriptionManager();
+      final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: true);
       
       if (kDebugMode) {
         print('📥 [Settings] 강제 새로고침 결과:');
-        print('   구독 상태: $subscriptionStatus');
-        print('   상태 메시지: ${subscriptionStatus.displayName}');
-        print('   프리미엄 여부: ${subscriptionStatus.isPremium}');
-        print('   체험 여부: ${subscriptionStatus.isTrial}');
-        print('   남은 일수: ${subscriptionStatus.daysUntilExpiration}');
+        print('   구독 상태: $subscriptionState');
+        print('   상태 메시지: ${subscriptionState.statusMessage}');
+        print('   프리미엄 여부: ${subscriptionState.isPremium}');
+        print('   체험 여부: ${subscriptionState.isTrial}');
+        print('   남은 일수: ${subscriptionState.daysRemaining}');
       }
       
       // 🎯 구독 상태 저장
@@ -363,7 +363,7 @@ class SettingsViewModel extends ChangeNotifier {
 
       case PlanStatus.premiumCancelled:
         // 프리미엄 cancelled의 경우
-        _ctaButtonText = '${_remainingDays}일 뒤에 무료 전환';
+        _ctaButtonText = '${_remainingDays}일 뒤에 무료 플랜 전환';
         _ctaButtonEnabled = false; // disabled
         _ctaSubtext = '';
         _shouldUsePremiumQuota = true; // premium quota
@@ -574,7 +574,7 @@ class SettingsViewModel extends ChangeNotifier {
       final body = '플랜: $planName\n'
                  '사용자 ID: ${_currentUser?.uid ?? '알 수 없음'}\n';
       
-      await _planService.contactSupport(subject: subject, body: body);
+      await _supportService.contactSupport(subject: subject, body: body);
       return true;
     } catch (e) {
       if (kDebugMode) {
