@@ -253,6 +253,55 @@ class UnifiedSubscriptionManager {
     if (kDebugMode) {
       debugPrint('🛒 [UnifiedSubscriptionManager] 구매 완료 - 캐시 무효화');
     }
+    
+    // 🎯 서버 웹훅 처리 대기 후 재시도 (5초 지연)
+    _scheduleRetryAfterPurchase();
+  }
+
+  /// 🎯 구매 완료 후 서버 웹훅 처리 대기 및 재시도
+  void _scheduleRetryAfterPurchase() {
+    Future.delayed(const Duration(seconds: 5), () async {
+      try {
+        if (kDebugMode) {
+          debugPrint('🔄 [UnifiedSubscriptionManager] 구매 완료 5초 후 상태 재조회 시작');
+        }
+        
+        // 강제 새로고침으로 서버에서 업데이트된 구독 상태 조회
+        final updatedState = await getSubscriptionState(forceRefresh: true);
+        
+        if (kDebugMode) {
+          debugPrint('✅ [UnifiedSubscriptionManager] 구매 완료 후 상태 재조회 완료');
+          debugPrint('   업데이트된 상태: ${updatedState.statusMessage}');
+          debugPrint('   프리미엄 여부: ${updatedState.isPremium}');
+          debugPrint('   체험 여부: ${updatedState.isTrial}');
+        }
+        
+        // 🎯 아직도 무료 상태라면 추가 재시도 (최대 2회)
+        if (!updatedState.isPremium && !updatedState.isTrial) {
+          if (kDebugMode) {
+            debugPrint('⚠️ [UnifiedSubscriptionManager] 아직 무료 상태 - 10초 후 재시도');
+          }
+          
+          Future.delayed(const Duration(seconds: 10), () async {
+            try {
+              final finalState = await getSubscriptionState(forceRefresh: true);
+              if (kDebugMode) {
+                debugPrint('🔄 [UnifiedSubscriptionManager] 최종 재시도 완료: ${finalState.statusMessage}');
+              }
+            } catch (e) {
+              if (kDebugMode) {
+                debugPrint('❌ [UnifiedSubscriptionManager] 최종 재시도 실패: $e');
+              }
+            }
+          });
+        }
+        
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('❌ [UnifiedSubscriptionManager] 구매 완료 후 재조회 실패: $e');
+        }
+      }
+    });
   }
 
   /// 캐시 관리

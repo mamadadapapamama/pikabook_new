@@ -26,6 +26,7 @@ import '../note/view/note_detail_screen.dart';                        // NoteDet
 import 'home_viewmodel.dart';                                         // HomeViewModel 사용
 import 'note_list_item.dart';
 import '../../core/services/common/banner_manager.dart';
+import '../../core/services/payment/in_app_purchase_service.dart';
 
 /// 🏠 홈 스크린
 
@@ -100,11 +101,46 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 📡 실시간 스트림 구독
       _setupRealtimeStreams();
       
+      // 🎉 환영 모달 표시 (온보딩 완료 후)
+      if (widget.shouldShowWelcomeModal) {
+        _showWelcomeModalAfterDelay();
+      }
+      
+      // 🎯 InApp Purchase 완료 감지 (구매 완료 후 즉시 UI 업데이트)
+      _setupPurchaseCompletionListener();
+      
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[HomeScreen] 초기화 오류: $e');
       }
     }
+  }
+
+  /// 🎉 환영 모달 표시 (지연 후)
+  void _showWelcomeModalAfterDelay() {
+    if (kDebugMode) {
+      debugPrint('🎉 [HomeScreen] 환영 모달 표시 준비');
+    }
+    
+    // 화면이 완전히 로드된 후 환영 모달 표시
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) {
+          if (kDebugMode) {
+            debugPrint('🎉 [HomeScreen] 환영 모달 표시 시작');
+          }
+          
+          UpgradePromptHelper.showWelcomeTrialPrompt(
+            context,
+            onComplete: () {
+              if (kDebugMode) {
+                debugPrint('✅ [HomeScreen] 환영 모달 완료');
+              }
+            },
+          );
+        }
+      });
+    });
   }
 
   /// 🎯 표준 방식: 구독 상태 로드 (Entitlement Engine 기반)
@@ -218,7 +254,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-
+  /// 🎯 InApp Purchase 완료 감지 및 UI 업데이트
+  void _setupPurchaseCompletionListener() {
+    // InApp Purchase 서비스의 구매 완료 콜백 설정
+    final purchaseService = InAppPurchaseService();
+    purchaseService.setOnPurchaseSuccess(() {
+      if (mounted) {
+        if (kDebugMode) {
+          debugPrint('🎉 [HomeScreen] 구매 완료 감지 - UI 즉시 업데이트');
+        }
+        
+        // 구독 상태 즉시 새로고침 (배너 포함)
+        _loadSubscriptionStatus(forceRefresh: true);
+        
+        // 2초 후 한번 더 새로고침 (배너 상태 안정화)
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            _loadSubscriptionStatus(forceRefresh: true);
+          }
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -398,6 +455,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       switch (bannerType) {
         case BannerType.trialStarted:
         case BannerType.trialCompleted:
+        case BannerType.premiumStarted:
           buttonText = null; // 환영 메시지, 닫기만 가능
           break;
         case BannerType.usageLimitFree:
@@ -449,7 +507,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // 🔄 BannerType별 처리
     switch (bannerType) {
       case BannerType.trialStarted:
-        // 트라이얼 시작 배너는 버튼 없음 (닫기만 가능)
+      case BannerType.premiumStarted:
+        // 트라이얼 시작 및 프리미엄 시작 배너는 버튼 없음 (닫기만 가능)
         return;
 
       case BannerType.usageLimitFree:
@@ -464,6 +523,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       case BannerType.trialCompleted:
       case BannerType.trialCancelled:
       case BannerType.premiumExpired:
+      case BannerType.premiumCancelled:
         _showUpgradeModalWithReason(UpgradeReason.trialExpired);
         break;
 

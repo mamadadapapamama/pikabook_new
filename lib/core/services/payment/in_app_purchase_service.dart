@@ -6,6 +6,7 @@ import '../common/support_service.dart';
 import '../subscription/unified_subscription_manager.dart';
 import '../notification/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../common/banner_manager.dart';
 
 /// In-App Purchase 관리 서비스
 /// 사용자가 "구독" 버튼을 눌렀을 때 App Store 결제 다이얼로그 띄우기
@@ -296,6 +297,51 @@ class InAppPurchaseService {
       
       // 🎯 구매 완료 알림 (UnifiedSubscriptionManager 사용)
       unifiedManager.notifyPurchaseCompleted();
+      
+      // 🎯 구매 완료 즉시 배너 표시 (서버 웹훅 처리 전까지 임시)
+      final bannerManager = BannerManager();
+      final planId = 'temp_purchase_${DateTime.now().millisecondsSinceEpoch}';
+      
+      // 🎯 구매한 상품에 따라 적절한 배너 설정
+      if (purchaseDetails.productID == premiumMonthlyWithTrialId) {
+        // 무료체험 포함 월간 구독
+        bannerManager.setBannerState(BannerType.trialStarted, true, planId: planId);
+        if (kDebugMode) {
+          print('🎉 [InAppPurchase] 무료체험 구매 완료 - trialStarted 배너 설정');
+        }
+      } else if (purchaseDetails.productID == premiumMonthlyId || purchaseDetails.productID == premiumYearlyId) {
+        // 일반 프리미엄 구독 (월간/연간)
+        bannerManager.setBannerState(BannerType.premiumStarted, true, planId: planId);
+        if (kDebugMode) {
+          print('💎 [InAppPurchase] 프리미엄 구매 완료 - premiumStarted 배너 설정');
+        }
+      } else {
+        if (kDebugMode) {
+          print('❓ [InAppPurchase] 알 수 없는 상품 구매: ${purchaseDetails.productID}');
+        }
+      }
+      
+      bannerManager.invalidateBannerCache(); // 배너 캐시 무효화
+      
+      // 🎯 서버 웹훅 처리 대기 후 재조회 (5초 지연)
+      Future.delayed(const Duration(seconds: 5), () async {
+        try {
+          if (kDebugMode) {
+            print('🔄 [InAppPurchase] 서버 웹훅 처리 완료 대기 후 구독 상태 재조회');
+          }
+          
+          // 강제 새로고침으로 서버에서 업데이트된 구독 상태 조회
+          await unifiedManager.getSubscriptionState(forceRefresh: true);
+          
+          if (kDebugMode) {
+            print('✅ [InAppPurchase] 서버 웹훅 반영 완료');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('⚠️ [InAppPurchase] 지연된 구독 상태 재조회 실패: $e');
+          }
+        }
+      });
       
       // 🎯 구매 완료 시점에서 알림 스케줄링 (무료체험인 경우에만)
       await _scheduleTrialNotificationsIfNeeded(purchaseDetails.productID);

@@ -11,6 +11,7 @@ enum BannerType {
   trialStarted,       // 🆕 트라이얼 시작
   trialCancelled,     // 프리미엄 체험 취소
   trialCompleted,     // 트라이얼 완료
+  premiumStarted,     // 🆕 프리미엄 시작 (무료체험 없이 바로 구매)
   premiumExpired,     // 프리미엄 만료
   premiumGrace,       // 🆕 Grace Period
   premiumCancelled,   // 🆕 프리미엄 구독 취소
@@ -27,12 +28,14 @@ extension BannerTypeExtension on BannerType {
         return 'trialCancelled';
       case BannerType.trialCompleted:
         return 'trialCompleted';
+      case BannerType.premiumStarted:
+        return 'premiumStarted';
       case BannerType.premiumExpired:
         return 'premiumExpired';
-      case BannerType.premiumCancelled:
-        return 'premiumCancelled';
       case BannerType.premiumGrace:
         return 'premiumGrace';
+      case BannerType.premiumCancelled:
+        return 'premiumCancelled';
       case BannerType.usageLimitFree:
         return 'usageLimitFree';
       case BannerType.usageLimitPremium:
@@ -48,12 +51,14 @@ extension BannerTypeExtension on BannerType {
         return '⏰ 프리미엄 구독 전환 취소됨';
       case BannerType.trialCompleted:
         return '⏰ 프리미엄 월 구독으로 전환됨';
+      case BannerType.premiumStarted:
+        return '🎉 프리미엄 시작';
       case BannerType.premiumExpired:
         return '💎 프리미엄 만료';
-      case BannerType.premiumCancelled:
-        return '⏰ 프리미엄 구독 전환 취소됨';
       case BannerType.premiumGrace:
         return '⚠️ 결제 확인 필요';
+      case BannerType.premiumCancelled:
+        return '⏰ 프리미엄 구독 전환 취소됨';
       case BannerType.usageLimitFree:
         return '⚠️ 사용량 한도 도달';
       case BannerType.usageLimitPremium:
@@ -69,12 +74,14 @@ extension BannerTypeExtension on BannerType {
         return '체험 기간 종료 시 무료 플랜으로 전환됩니다. 계속 사용하려면 구독하세요';
       case BannerType.trialCompleted:
         return '프리미엄 월 구독으로 전환되었습니다! 피카북을 여유있게 사용해보세요';
+              case BannerType.premiumStarted:
+          return '프리미엄 구독이 시작되었습니다! 피카북을 여유있게 사용해보세요';
       case BannerType.premiumExpired:
         return '프리미엄 혜택이 만료되었습니다. 계속 사용하려면 다시 구독하세요';
-      case BannerType.premiumCancelled:
-        return '프리미엄 구독이 취소되었습니다. 계속 사용하려면 다시 구독하세요';
       case BannerType.premiumGrace:
         return 'App Store에서 결제 정보를 확인해주세요. 확인되지 않으면 구독이 취소될 수 있습니다';
+      case BannerType.premiumCancelled:
+        return '프리미엄 구독이 취소되었습니다. 계속 사용하려면 다시 구독하세요';
       case BannerType.usageLimitFree:
         return '프리미엄으로 업그레이드하여 무제한으로 사용하세요';
       case BannerType.usageLimitPremium:
@@ -114,9 +121,10 @@ class BannerManager {
     BannerType.trialStarted: 'trial_started_banner_dismissed_',
     BannerType.trialCancelled: 'trial_cancelled_banner_dismissed_',
     BannerType.trialCompleted: 'trial_completed_banner_dismissed_',
+    BannerType.premiumStarted: 'premium_started_banner_dismissed_',
     BannerType.premiumExpired: 'premium_expired_banner_dismissed_',
-    BannerType.premiumCancelled: 'premium_cancelled_banner_dismissed_',
     BannerType.premiumGrace: 'premium_grace_banner_dismissed_',
+    BannerType.premiumCancelled: 'premium_cancelled_banner_dismissed_',
     BannerType.usageLimitFree: 'usage_limit_free_banner_shown_',
     BannerType.usageLimitPremium: 'usage_limit_premium_banner_shown_',
   };
@@ -142,8 +150,9 @@ class BannerManager {
     
     // 플랜 ID가 필요한 배너들
     if (type == BannerType.trialStarted || type == BannerType.trialCancelled || 
-        type == BannerType.trialCompleted || type == BannerType.premiumExpired || 
-        type == BannerType.premiumCancelled || type == BannerType.premiumGrace) {
+        type == BannerType.trialCompleted || type == BannerType.premiumStarted ||
+        type == BannerType.premiumExpired || type == BannerType.premiumCancelled || 
+        type == BannerType.premiumGrace) {
       _bannerPlanIds[type] = planId ?? '${type.name}_${DateTime.now().millisecondsSinceEpoch}';
     }
     
@@ -583,6 +592,7 @@ class BannerManager {
     setBannerState(BannerType.trialStarted, false);
     setBannerState(BannerType.trialCancelled, false);
     setBannerState(BannerType.trialCompleted, false);
+    setBannerState(BannerType.premiumStarted, false);
     setBannerState(BannerType.premiumExpired, false);
     setBannerState(BannerType.premiumCancelled, false);
     setBannerState(BannerType.premiumGrace, false);

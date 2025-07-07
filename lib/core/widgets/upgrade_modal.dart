@@ -117,45 +117,82 @@ class UpgradeModal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
       child: Container(
-        width: double.infinity,
-        constraints: const BoxConstraints(maxWidth: 340),
+        padding: const EdgeInsets.only(bottom: 24),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 상단 캐릭터 일러스트 영역
             _buildCharacterHeader(),
-            
-            // 콘텐츠 영역
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  // 메인 메시지
-                  _buildMainMessage(),
-                  const SizedBox(height: 24),
-                  
-                  // 기능 리스트
-                  _buildFeatureList(),
-                  const SizedBox(height: 32),
-                  
-                  // 버튼들
-                  _buildButtons(context),
-                ],
-              ),
-            ),
+            if (reason == UpgradeReason.welcomeTrial)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (customTitle != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          customTitle!,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    _buildMainMessage(),
+                    const SizedBox(height: 16),
+                    _buildFeatureList(),
+                    const SizedBox(height: 24),
+                    _buildButtons(context),
+                  ],
+                ),
+              )
+            else ...[
+              const SizedBox(height: 16),
+              if (reason == UpgradeReason.general && customMessage == null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                  child: Text(
+                    '이미 무료체험을 사용하셨습니다',
+                    style: const TextStyle(
+                      color: Color(0xFFFA6400),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              if (customTitle != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    customTitle!,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              if (customTitle != null) const SizedBox(height: 8),
+              _buildMainMessage(),
+              const SizedBox(height: 16),
+              _buildFeatureList(),
+              const SizedBox(height: 24),
+              _buildButtons(context),
+            ],
           ],
         ),
       ),
@@ -380,29 +417,84 @@ class UpgradeModal extends StatelessWidget {
             '7일간 무료로 프리미엄 시작하기',
             '(언제든 구독 취소할수 있어요)',
             () async {
+              if (kDebugMode) {
+                debugPrint('🎯 [UpgradeModal] 무료체험 버튼 클릭됨');
+              }
+              
               _resetModalState();
               Navigator.of(context).pop(true);
               
               // InAppPurchaseService를 통해 무료체험 시작
               try {
-                final purchaseService = InAppPurchaseService();
-                await purchaseService.buyProduct(InAppPurchaseService.premiumMonthlyId);
-              
                 if (kDebugMode) {
-                  debugPrint('✅ [UpgradeModal] 무료체험 구독 시작');
+                  debugPrint('🛒 [UpgradeModal] InAppPurchaseService 인스턴스 생성');
                 }
+                
+                final purchaseService = InAppPurchaseService();
+                
+                // 서비스 사용 가능 여부 확인
+                if (kDebugMode) {
+                  debugPrint('🔍 [UpgradeModal] InApp Purchase 사용 가능 여부: ${purchaseService.isAvailable}');
+                }
+                
+                // 서비스가 사용 불가능하면 초기화
+                if (!purchaseService.isAvailable) {
+                  if (kDebugMode) {
+                    debugPrint('🔄 [UpgradeModal] InApp Purchase 서비스 초기화 시작');
+                  }
+                  await purchaseService.initialize();
+                  
+                  if (kDebugMode) {
+                    debugPrint('✅ [UpgradeModal] InApp Purchase 서비스 초기화 완료: ${purchaseService.isAvailable}');
+                  }
+                }
+                
+                // 구매 시작
+                if (kDebugMode) {
+                  debugPrint('🛒 [UpgradeModal] 구매 시작: ${InAppPurchaseService.premiumMonthlyId}');
+                }
+                
+                final success = await purchaseService.buyProduct(InAppPurchaseService.premiumMonthlyId);
+                
+                if (kDebugMode) {
+                  debugPrint('📊 [UpgradeModal] 구매 결과: $success');
+                }
+              
+                if (success) {
+                  if (kDebugMode) {
+                    debugPrint('✅ [UpgradeModal] 무료체험 구독 시작 성공');
+                  }
+                } else {
+                  if (kDebugMode) {
+                    debugPrint('⚠️ [UpgradeModal] 무료체험 구독 시작 실패 (success: false)');
+                  }
+                  
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('구매를 시작할 수 없습니다. 잠시 후 다시 시도해주세요.'),
+                        backgroundColor: Colors.orange[600],
+                        duration: const Duration(seconds: 3),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                }
+                
                 onUpgrade?.call();
               } catch (e) {
                 if (kDebugMode) {
                   debugPrint('❌ [UpgradeModal] 무료체험 구독 실패: $e');
+                  debugPrint('❌ [UpgradeModal] 에러 타입: ${e.runtimeType}');
+                  debugPrint('❌ [UpgradeModal] 스택 트레이스: ${StackTrace.current}');
                 }
                 
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('무료체험 시작에 실패했습니다. 다시 시도해주세요.'),
+                      content: Text('무료체험 시작에 실패했습니다: ${e.toString()}'),
                       backgroundColor: Colors.red[600],
-                      duration: const Duration(seconds: 2),
+                      duration: const Duration(seconds: 4),
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
