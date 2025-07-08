@@ -6,6 +6,7 @@ import '../common/support_service.dart';
 import '../subscription/unified_subscription_manager.dart';
 import '../notification/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../common/banner_manager.dart';
 
 /// In-App Purchase 관리 서비스
@@ -71,22 +72,8 @@ class InAppPurchaseService {
         print('✅ In-App Purchase 사용 가능');
       }
 
-      // 🎯 기존 미완료 구매 정리 (테스트 환경 대응)
+      // 🎯 미완료 구매 정리 (간소화)
       await _clearPendingPurchases();
-      
-      // 🎯 추가 정리: 초기화 후 한번 더 정리
-      Future.delayed(const Duration(seconds: 1), () async {
-        try {
-          await _finishPendingTransactions();
-          if (kDebugMode) {
-            print('🧹 추가 미완료 거래 정리 완료');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print('⚠️ 추가 정리 중 오류: $e');
-          }
-        }
-      });
 
       // 구매 스트림 구독
       _subscription = _inAppPurchase.purchaseStream.listen(
@@ -121,10 +108,17 @@ class InAppPurchaseService {
     }
   }
 
-  /// 지연 초기화 확인
+  /// 지연 초기화 확인 (모든 구매 기능 호출 전에 실행)
   Future<void> _ensureInitialized() async {
     if (!_isInitialized) {
+      if (kDebugMode) {
+        print('🛒 [InAppPurchase] 지연 초기화 시작 (첫 구매 시도)');
+      }
       await initialize();
+    } else {
+      if (kDebugMode) {
+        print('✅ [InAppPurchase] 이미 초기화됨, 중복 초기화 방지');
+      }
     }
   }
 
@@ -223,23 +217,38 @@ class InAppPurchaseService {
         if (kDebugMode) {
           print('❌ 구매 실패: ${purchaseDetails.error}');
         }
+        // 🎯 구매 실패 시 즉시 완료 처리하여 pending transaction 방지
+        await _completePurchaseIfNeeded(purchaseDetails, isErrorRecovery: true);
+        _isPurchaseInProgress = false; // 구매 진행 상태 즉시 해제
       } else if (purchaseDetails.status == PurchaseStatus.canceled) {
         // 구매 취소 처리
         if (kDebugMode) {
           print('🚫 구매 취소됨');
         }
+        // 🎯 구매 취소 시 즉시 완료 처리하여 pending transaction 방지
+        await _completePurchaseIfNeeded(purchaseDetails, isErrorRecovery: true);
+        _isPurchaseInProgress = false; // 구매 진행 상태 즉시 해제
       } else if (purchaseDetails.status == PurchaseStatus.pending) {
         // 구매 대기 중
         if (kDebugMode) {
           print('⏳ 구매 대기 중: ${purchaseDetails.productID}');
-      }
+        }
 
         // 🎯 pending 상태도 일정 시간 후 강제 완료 처리 고려
         _scheduleTimeoutCompletion(purchaseDetails);
+      } else {
+        // 🎯 알 수 없는 상태도 완료 처리
+        if (kDebugMode) {
+          print('❓ 알 수 없는 구매 상태: ${purchaseDetails.status}');
+        }
+        await _completePurchaseIfNeeded(purchaseDetails, isErrorRecovery: true);
+        _isPurchaseInProgress = false;
       }
 
-      // 🎯 모든 상태의 구매에 대해 완료 처리 (pending transaction 방지)
-      await _completePurchaseIfNeeded(purchaseDetails);
+      // 🎯 성공한 구매가 아닌 경우 완료 처리 (pending transaction 방지)
+      if (purchaseDetails.status != PurchaseStatus.purchased) {
+        await _completePurchaseIfNeeded(purchaseDetails);
+      }
     } catch (e) {
       if (kDebugMode) {
         print('❌ 구매 처리 중 오류: $e');
@@ -247,6 +256,7 @@ class InAppPurchaseService {
       
       // 🎯 오류 발생 시에도 완료 처리 시도
       await _completePurchaseIfNeeded(purchaseDetails, isErrorRecovery: true);
+      _isPurchaseInProgress = false; // 구매 진행 상태 해제
     }
   }
 
@@ -284,6 +294,25 @@ class InAppPurchaseService {
 
       // 거래 ID 추출 (단순화)
       final originalTransactionId = purchaseDetails.purchaseID ?? '';
+
+      // 🎯 웹훅이 사용자를 찾을 수 있도록 originalTransactionId 저장
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+          'subscription.originalTransactionId': originalTransactionId,
+          'subscription.lastPurchaseDate': FieldValue.serverTimestamp(),
+        });
+        
+        if (kDebugMode) {
+          print('✅ [InAppPurchase] originalTransactionId 저장 완료: $originalTransactionId');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('❌ [InAppPurchase] originalTransactionId 저장 실패: $e');
+        }
+      }
 
       // 🎯 App Store 웹훅이 실시간으로 구독 상태를 업데이트하므로
       // 클라이언트에서는 캐시 무효화만 수행하고 UI 업데이트 처리
@@ -327,14 +356,14 @@ class InAppPurchaseService {
       Future.delayed(const Duration(seconds: 5), () async {
         try {
           if (kDebugMode) {
-            print('🔄 [InAppPurchase] 서버 웹훅 처리 완료 대기 후 구독 상태 재조회');
+            print('🔄 [InAppPurchase] 서버 웹훅 처리 완료 대기 후 구독 상태 재조회 (캐시 활용)');
           }
           
-          // 강제 새로고침으로 서버에서 업데이트된 구독 상태 조회
-          await unifiedManager.getSubscriptionState(forceRefresh: true);
+          // 캐시를 활용한 구독 상태 조회 (불필요한 Firebase Functions 호출 방지)
+          await unifiedManager.getSubscriptionState(forceRefresh: false); // forceRefresh를 false로 변경
           
           if (kDebugMode) {
-            print('✅ [InAppPurchase] 서버 웹훅 반영 완료');
+            print('✅ [InAppPurchase] 서버 웹훅 반영 완료 (캐시 활용)');
           }
         } catch (e) {
           if (kDebugMode) {
@@ -350,6 +379,12 @@ class InAppPurchaseService {
       
       // 구매 성공 콜백 호출
       _onPurchaseSuccess?.call();
+      
+      // 🎯 사용자에게 상태 업데이트 진행 중임을 안내
+      if (kDebugMode) {
+        print('📢 [InAppPurchase] 구매 완료 - 서버에서 구독 상태 업데이트 중...');
+        print('💡 [InAppPurchase] 상태 반영까지 최대 30초 소요될 수 있습니다 (Sandbox 환경)');
+      }
       
     } catch (e) {
       if (kDebugMode) {
@@ -377,13 +412,10 @@ class InAppPurchaseService {
     // 실제 구매 시점에 초기화
     await _ensureInitialized();
     
-    // 🎯 구매 시작 전 pending transaction 확인 및 처리
-    final hasPendingTransactions = await handlePendingTransactionsForUser();
-    if (hasPendingTransactions) {
-      if (kDebugMode) {
-        print('⚠️ 미완료 거래가 있어 구매를 진행할 수 없습니다. 잠시 후 다시 시도해주세요.');
-      }
-      return false;
+    // 🎯 구매 진행 상태 초기화 (pending transaction 정리 없이)
+    _isPurchaseInProgress = false;
+    if (kDebugMode) {
+      print('🔄 구매 진행 상태 초기화 완료');
     }
     
     try {
@@ -429,47 +461,17 @@ class InAppPurchaseService {
         print('❌ 구매 시작 중 오류: $e');
       }
       
-      // 🎯 pending transaction 에러 처리 - 더 강력한 처리
+      // 🎯 pending transaction 에러 처리 - 사용자 안내 중심
       if (e.toString().contains('pending transaction') || 
           e.toString().contains('storekit_duplicate_product_object')) {
         if (kDebugMode) {
-          print('🔧 미완료 거래 감지, 강력한 정리 후 재시도');
+          print('🔧 미완료 거래 감지 - 사용자 안내 필요');
+          print('💡 Apple Sandbox 환경에서 흔한 문제입니다');
         }
         
-        try {
-          // 1차: 미완료 거래 정리
-          await _finishPendingTransactions();
-          
-          // 2차: 더 긴 대기 시간
-          await Future.delayed(const Duration(seconds: 3));
-          
-          // 3차: 다시 한번 정리
-          await _finishPendingTransactions();
-          
-          if (kDebugMode) {
-            print('🔄 강력한 정리 후 재시도');
-          }
-          
-          // 재시도
-          final bool retrySuccess = await _inAppPurchase.buyNonConsumable(
-            purchaseParam: PurchaseParam(productDetails: _products
-                .where((product) => product.id == productId)
-                .first),
-          );
-          
-          if (kDebugMode) {
-            print('🔄 재시도 결과: $retrySuccess');
-          }
-          
-          return retrySuccess;
-        } catch (retryError) {
-          if (kDebugMode) {
-            print('❌ 재시도 실패: $retryError');
-            print('💡 사용자에게 몇 분 후 재시도 안내 필요');
+        // 사용자에게 명확한 안내 제공을 위해 특별한 에러 코드 반환
+        throw Exception('PENDING_TRANSACTION_ERROR');
       }
-      return false;
-    }
-  }
 
       return false;
     } finally {
@@ -525,11 +527,23 @@ class InAppPurchaseService {
     }
   }
 
-  /// 사용 가능한 상품 목록 반환
-  List<ProductDetails> get availableProducts => _products;
+  /// 사용 가능한 상품 목록 반환 (지연 초기화 포함)
+  Future<List<ProductDetails>> get availableProducts async {
+    await _ensureInitialized();
+    return _products;
+  }
 
-  /// In-App Purchase 사용 가능 여부
-  bool get isAvailable => _isAvailable;
+  /// In-App Purchase 사용 가능 여부 (지연 초기화 포함)
+  Future<bool> get isAvailable async {
+    await _ensureInitialized();
+    return _isAvailable;
+  }
+  
+  /// 즉시 사용 가능한 상품 목록 (초기화 없이)
+  List<ProductDetails> get availableProductsSync => _products;
+
+  /// 즉시 사용 가능 여부 (초기화 없이)
+  bool get isAvailableSync => _isAvailable;
 
   // 🎯 간소화된 상품 정보 getter들 (중복 제거)
   
@@ -573,14 +587,32 @@ class InAppPurchaseService {
     });
   }
 
-  /// 월간 구독 상품 정보
-  ProductDetails? get monthlyProduct => _getProductById(premiumMonthlyId);
+  /// 월간 구독 상품 정보 (지연 초기화 포함)
+  Future<ProductDetails?> get monthlyProduct async {
+    await _ensureInitialized();
+    return _getProductById(premiumMonthlyId);
+  }
 
-  /// 연간 구독 상품 정보
-  ProductDetails? get yearlyProduct => _getProductById(premiumYearlyId);
+  /// 연간 구독 상품 정보 (지연 초기화 포함)
+  Future<ProductDetails?> get yearlyProduct async {
+    await _ensureInitialized();
+    return _getProductById(premiumYearlyId);
+  }
 
-  /// 월간 무료체험 상품 정보
-  ProductDetails? get monthlyTrialProduct => _getProductById(premiumMonthlyWithTrialId);
+  /// 월간 무료체험 상품 정보 (지연 초기화 포함)
+  Future<ProductDetails?> get monthlyTrialProduct async {
+    await _ensureInitialized();
+    return _getProductById(premiumMonthlyWithTrialId);
+  }
+  
+  /// 즉시 월간 구독 상품 정보 (초기화 없이)
+  ProductDetails? get monthlyProductSync => _getProductById(premiumMonthlyId);
+
+  /// 즉시 연간 구독 상품 정보 (초기화 없이)
+  ProductDetails? get yearlyProductSync => _getProductById(premiumYearlyId);
+
+  /// 즉시 월간 무료체험 상품 정보 (초기화 없이)
+  ProductDetails? get monthlyTrialProductSync => _getProductById(premiumMonthlyWithTrialId);
 
   /// 🎯 구매 완료 시점에서 무료체험 알림 스케줄링
   Future<void> _scheduleTrialNotificationsIfNeeded(String productId) async {
@@ -622,15 +654,13 @@ class InAppPurchaseService {
         };
       }
       
-      // 2. 실패한 경우 pending transaction 확인
-      final hasPending = await handlePendingTransactionsForUser();
-      
-      if (hasPending) {
-        return {
-          'success': false,
-          'message': '이전 구매가 아직 처리 중입니다.\n잠시 기다린 후 다시 시도해주세요.',
-          'shouldRetryLater': true,
-        };
+      // 2. 실패한 경우 pending transaction 정리 시도
+      try {
+        await handlePendingTransactionsForUser();
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ 미완료 거래 정리 실패: $e');
+        }
       }
       
       return {
@@ -701,32 +731,23 @@ class InAppPurchaseService {
   }
   
   /// 🎯 사용자 친화적인 pending transaction 처리
-  Future<bool> handlePendingTransactionsForUser() async {
+  Future<void> handlePendingTransactionsForUser() async {
     try {
       if (kDebugMode) {
         print('🔍 사용자용 미완료 거래 확인 시작');
       }
       
-      // 구매 복원을 통해 pending transaction 확인
-      await _inAppPurchase.restorePurchases();
+      // 🎯 간단한 pending transaction 정리 (중복 호출 방지)
+      // 이미 _clearPendingPurchases에서 정리했으므로 추가 정리는 최소화
+      _isPurchaseInProgress = false; // 구매 진행 상태 초기화
       
-      // 잠시 대기하여 pending transaction이 스트림으로 들어오는지 확인
-      await Future.delayed(const Duration(seconds: 1));
-      
-      // 현재 진행 중인 구매가 있다면 사용자에게 안내
-      if (_isPurchaseInProgress) {
-        if (kDebugMode) {
-          print('⚠️ 미완료 거래가 있습니다. 잠시 기다려주세요.');
-        }
-        return true; // pending transaction이 있음을 알림
+      if (kDebugMode) {
+        print('🧹 미완료 거래 상태 초기화 완료');
       }
-      
-      return false; // pending transaction이 없음
     } catch (e) {
       if (kDebugMode) {
         print('❌ 미완료 거래 확인 실패: $e');
       }
-      return false;
     }
   }
 } 

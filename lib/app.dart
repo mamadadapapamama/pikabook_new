@@ -21,6 +21,7 @@ import 'core/theme/tokens/color_tokens.dart';
 import 'features/sample/sample_home_screen.dart';
 import 'features/home/home_viewmodel.dart';
 import 'core/widgets/upgrade_modal.dart';
+import 'core/services/notification/notification_service.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -99,7 +100,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   void dispose() {
     _authStateSubscription?.cancel();
     // InAppPurchaseService는 싱글톤이므로 앱 종료 시에만 dispose
-    if (_purchaseService.isAvailable) {
+    if (_purchaseService.isAvailableSync) {
       _purchaseService.dispose();
     }
     
@@ -166,16 +167,47 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
-  /// 핵심 서비스 초기화
+  /// 서비스 초기화 (앱 시작 시)
   Future<void> _initializeServices() async {
     if (kDebugMode) {
-      debugPrint('⚙️ [App] 핵심 서비스 초기화');
+      debugPrint('⚙️ [App] 핵심 서비스 초기화 (필수만)');
     }
     
-    // UserPreferencesService 초기화
-    _preferencesService = UserPreferencesService();
+    // 🎯 빠른 앱 시작을 위해 필수 서비스만 초기화
+    await Future.wait([
+      // UserPreferencesService 초기화 (필수)
+      Future(() {
+        _preferencesService = UserPreferencesService();
+      }),
+      
+      // 🔔 NotificationService 초기화 및 권한 요청 (백그라운드)
+      Future(() async {
+        try {
+          final notificationService = NotificationService();
+          await notificationService.initialize();
+          await notificationService.requestPermissions();
+          
+          if (kDebugMode) {
+            debugPrint('✅ [App] NotificationService 초기화 완료');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('⚠️ [App] NotificationService 초기화 실패: $e');
+          }
+        }
+      }),
     
-    // 통합 구독 관리자는 자동 초기화됨
+      // 🎯 통합 구독 관리자 초기화 (홈화면에서 바로 사용)
+      UnifiedSubscriptionManager().initialize().catchError((e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [App] 통합 구독 관리자 초기화 실패 (무시): $e');
+        }
+      }),
+    ]);
+    
+    if (kDebugMode) {
+      debugPrint('✅ [App] 핵심 서비스 초기화 완료 (빠른 시작)');
+    }
   }
   
   /// 인증 상태 업데이트

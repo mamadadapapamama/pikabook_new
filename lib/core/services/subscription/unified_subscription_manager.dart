@@ -5,6 +5,7 @@ import '../common/banner_manager.dart';
 import '../common/usage_limit_service.dart';
 import '../../models/subscription_state.dart';
 import '../../models/plan_status.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// 통합 구독 상태 매니저 (단순화)
 /// 모든 구독 관련 기능을 하나의 인터페이스로 제공
@@ -20,10 +21,12 @@ class UnifiedSubscriptionManager {
   // 🎯 단일 통합 상태 캐시
   SubscriptionState? _cachedState;
   DateTime? _lastCacheTime;
-  static const Duration _cacheValidDuration = Duration(hours: 24);
+  static const Duration _cacheValidDuration = Duration(minutes: 5); // 24시간 → 5분으로 단축하되 적극 활용
   
-  // 🎯 중복 요청 방지
+  // 🎯 중복 요청 방지 + 디바운싱
   Future<SubscriptionState>? _ongoingRequest;
+  DateTime? _lastRequestTime;
+  static const Duration _debounceDelay = Duration(milliseconds: 300); // 300ms 디바운싱
 
   /// 🎯 앱 시작 시 초기화 (한 번만 호출)
   Future<void> initialize() async {
@@ -46,14 +49,46 @@ class UnifiedSubscriptionManager {
       debugPrint('🎯 [UnifiedSubscriptionManager] getSubscriptionState 호출 (forceRefresh: $forceRefresh)');
     }
     
-    // 🎯 캐시 우선 사용
-    if (!forceRefresh && _isStateValid()) {
+    // 🚨 로그인 상태 우선 체크 (무한 반복 방지)
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
       if (kDebugMode) {
-        debugPrint('📦 [UnifiedSubscriptionManager] 캐시된 상태 사용');
-        debugPrint('   캐시된 상태: ${_cachedState!.statusMessage}');
-        debugPrint('   캐시된 배너: ${_cachedState!.activeBanners.map((e) => e.name).toList()}');
+        debugPrint('⚠️ [UnifiedSubscriptionManager] 로그인되지 않음 - 기본 상태 반환');
       }
-      return _cachedState!;
+      return SubscriptionState.defaultState();
+    }
+    
+    // 🎯 디바운싱: 300ms 이내 연속 요청 방지
+    final now = DateTime.now();
+    if (_lastRequestTime != null && now.difference(_lastRequestTime!) < _debounceDelay) {
+      if (kDebugMode) {
+        debugPrint('⏱️ [UnifiedSubscriptionManager] 디바운싱: 너무 빠른 연속 요청 - 캐시 사용');
+      }
+      // 캐시가 있으면 캐시 반환, 없으면 기본값
+      return _cachedState ?? SubscriptionState.defaultState();
+    }
+    _lastRequestTime = now;
+    
+    // 🎯 캐시 우선 사용 (forceRefresh가 false이거나 캐시가 매우 최신인 경우)
+    if (_isStateValid()) {
+      if (!forceRefresh) {
+        if (kDebugMode) {
+          debugPrint('📦 [UnifiedSubscriptionManager] 캐시된 상태 사용');
+          debugPrint('   캐시된 상태: ${_cachedState!.statusMessage}');
+          debugPrint('   캐시된 배너: ${_cachedState!.activeBanners.map((e) => e.name).toList()}');
+        }
+        return _cachedState!;
+      } else {
+        // forceRefresh=true여도 캐시가 1분 이내면 캐시 사용
+        final cacheAge = DateTime.now().difference(_lastCacheTime!);
+        if (cacheAge < Duration(minutes: 1)) {
+          if (kDebugMode) {
+            debugPrint('📦 [UnifiedSubscriptionManager] forceRefresh이지만 캐시가 너무 최신 (${cacheAge.inSeconds}초) - 캐시 사용');
+            debugPrint('   캐시된 상태: ${_cachedState!.statusMessage}');
+          }
+          return _cachedState!;
+        }
+      }
     }
     
     if (kDebugMode) {
@@ -185,33 +220,34 @@ class UnifiedSubscriptionManager {
         debugPrint('   무료 체험: ${entitlementResult.isTrial}');
         debugPrint('   프리미엄: ${entitlementResult.isPremium}');
         debugPrint('   플랜 상태: ${entitlementResult.planStatus.value}');
+        debugPrint('   플랜 상태 객체: ${entitlementResult.planStatus}');
       }
       
       // 🎯 플랜 상태에 따른 이력 정보 결정
       bool hasEverUsedTrial = false;
       bool hasEverUsedPremium = false;
       
-             // 현재 상태나 과거 이력에 따라 판단
-       switch (entitlementResult.planStatus) {
-         case PlanStatus.trialActive:
-         case PlanStatus.trialCancelled:
-         case PlanStatus.trialCompleted:
-           hasEverUsedTrial = true;
-           break;
-           
-         case PlanStatus.premiumActive:
-         case PlanStatus.premiumCancelled:
-         case PlanStatus.premiumExpired:
-         case PlanStatus.premiumGrace:
-           hasEverUsedPremium = true;
-           break;
-           
-         case PlanStatus.free:
-         case PlanStatus.refunded:
-           // 무료 상태나 환불 상태에서는 이력을 별도로 확인해야 함
-           // 현재는 기본값 사용
-           break;
-       }
+      // 현재 상태나 과거 이력에 따라 판단
+      switch (entitlementResult.planStatus) {
+        case PlanStatus.trialActive:
+        case PlanStatus.trialCancelled:
+        case PlanStatus.trialCompleted:
+          hasEverUsedTrial = true;
+          break;
+          
+        case PlanStatus.premiumActive:
+        case PlanStatus.premiumCancelled:
+        case PlanStatus.premiumExpired:
+        case PlanStatus.premiumGrace:
+          hasEverUsedPremium = true;
+          break;
+          
+        case PlanStatus.free:
+        case PlanStatus.refunded:
+          // 무료 상태나 환불 상태에서는 이력을 별도로 확인해야 함
+          // 현재는 기본값 사용
+          break;
+      }
       
       if (kDebugMode) {
         debugPrint('🎯 [UnifiedSubscriptionManager] 배너 조회 파라미터:');
@@ -220,11 +256,20 @@ class UnifiedSubscriptionManager {
         debugPrint('   hasEverUsedPremium: $hasEverUsedPremium');
       }
       
-      return await _bannerManager.getActiveBanners(
+      final activeBanners = await _bannerManager.getActiveBanners(
         planStatus: entitlementResult.planStatus,
         hasEverUsedTrial: hasEverUsedTrial,
         hasEverUsedPremium: hasEverUsedPremium,
       );
+      
+      if (kDebugMode) {
+        debugPrint('🎯 [UnifiedSubscriptionManager] BannerManager 응답 받음:');
+        debugPrint('   활성 배너 개수: ${activeBanners.length}');
+        debugPrint('   활성 배너 목록: ${activeBanners.map((e) => e.name).toList()}');
+      }
+      
+      return activeBanners;
+      
     } catch (e) {
       if (kDebugMode) {
         debugPrint('⚠️ [UnifiedSubscriptionManager] 배너 조회 실패: $e');
@@ -254,54 +299,85 @@ class UnifiedSubscriptionManager {
       debugPrint('🛒 [UnifiedSubscriptionManager] 구매 완료 - 캐시 무효화');
     }
     
+    // 🚨 로그인 상태 체크 (무한 반복 방지)
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      if (kDebugMode) {
+        debugPrint('⚠️ [UnifiedSubscriptionManager] 구매 완료 알림 중단 - 사용자가 로그아웃됨');
+      }
+      return; // 로그아웃 상태면 재시도 스케줄링 안함
+    }
+    
     // 🎯 서버 웹훅 처리 대기 후 재시도 (5초 지연)
     _scheduleRetryAfterPurchase();
   }
 
-  /// 🎯 구매 완료 후 서버 웹훅 처리 대기 및 재시도
+  /// 🎯 구매 완료 후 서버 웹훅 처리 대기 및 적극적 재시도 (Sandbox 환경 대응)
   void _scheduleRetryAfterPurchase() {
-    Future.delayed(const Duration(seconds: 5), () async {
-      try {
-        if (kDebugMode) {
-          debugPrint('🔄 [UnifiedSubscriptionManager] 구매 완료 5초 후 상태 재조회 시작');
-        }
-        
-        // 강제 새로고침으로 서버에서 업데이트된 구독 상태 조회
-        final updatedState = await getSubscriptionState(forceRefresh: true);
-        
-        if (kDebugMode) {
-          debugPrint('✅ [UnifiedSubscriptionManager] 구매 완료 후 상태 재조회 완료');
-          debugPrint('   업데이트된 상태: ${updatedState.statusMessage}');
-          debugPrint('   프리미엄 여부: ${updatedState.isPremium}');
-          debugPrint('   체험 여부: ${updatedState.isTrial}');
-        }
-        
-        // 🎯 아직도 무료 상태라면 추가 재시도 (최대 2회)
-        if (!updatedState.isPremium && !updatedState.isTrial) {
-          if (kDebugMode) {
-            debugPrint('⚠️ [UnifiedSubscriptionManager] 아직 무료 상태 - 10초 후 재시도');
-          }
-          
-          Future.delayed(const Duration(seconds: 10), () async {
-            try {
-              final finalState = await getSubscriptionState(forceRefresh: true);
-              if (kDebugMode) {
-                debugPrint('🔄 [UnifiedSubscriptionManager] 최종 재시도 완료: ${finalState.statusMessage}');
-              }
-            } catch (e) {
-              if (kDebugMode) {
-                debugPrint('❌ [UnifiedSubscriptionManager] 최종 재시도 실패: $e');
-              }
-            }
-          });
-        }
-        
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('❌ [UnifiedSubscriptionManager] 구매 완료 후 재조회 실패: $e');
-        }
-      }
+    // 1차 재시도: 3초 후
+    Future.delayed(const Duration(seconds: 3), () async {
+      await _performRetryCheck('1차 (3초 후)');
     });
+    
+    // 2차 재시도: 8초 후
+    Future.delayed(const Duration(seconds: 8), () async {
+      await _performRetryCheck('2차 (8초 후)');
+    });
+    
+    // 3차 재시도: 15초 후
+    Future.delayed(const Duration(seconds: 15), () async {
+      await _performRetryCheck('3차 (15초 후)');
+    });
+    
+    // 4차 재시도: 30초 후 (최종)
+    Future.delayed(const Duration(seconds: 30), () async {
+      await _performRetryCheck('최종 (30초 후)');
+    });
+  }
+  
+  /// 재시도 체크 수행
+  Future<void> _performRetryCheck(String retryLabel) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🔄 [UnifiedSubscriptionManager] $retryLabel 재시도 시작');
+      }
+      
+      // 🚨 로그인 상태 먼저 체크 (무한 반복 방지)
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [UnifiedSubscriptionManager] $retryLabel 중단 - 사용자가 로그아웃됨');
+        }
+        return; // 로그아웃 상태면 재시도 중단
+      }
+      
+      // 강제 새로고침으로 서버에서 업데이트된 구독 상태 조회
+      final updatedState = await getSubscriptionState(forceRefresh: true);
+      
+      if (kDebugMode) {
+        debugPrint('📊 [UnifiedSubscriptionManager] $retryLabel 결과:');
+        debugPrint('   상태: ${updatedState.statusMessage}');
+        debugPrint('   프리미엄: ${updatedState.isPremium}');
+        debugPrint('   체험: ${updatedState.isTrial}');
+      }
+      
+      // 🎯 프리미엄이나 체험 상태로 변경되었으면 성공
+      if (updatedState.isPremium || updatedState.isTrial) {
+        if (kDebugMode) {
+          debugPrint('✅ [UnifiedSubscriptionManager] $retryLabel 성공 - 구독 상태 업데이트됨!');
+        }
+        return; // 성공하면 더 이상 재시도하지 않음
+      }
+      
+      if (kDebugMode) {
+        debugPrint('⚠️ [UnifiedSubscriptionManager] $retryLabel 아직 무료 상태');
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [UnifiedSubscriptionManager] $retryLabel 실패: $e');
+      }
+    }
   }
 
   /// 캐시 관리

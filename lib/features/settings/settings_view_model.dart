@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
+import '../../core/services/authentication/deleted_user_service.dart';
 import '../../core/services/common/support_service.dart';
 import '../../core/services/subscription/unified_subscription_manager.dart';
 import '../../core/models/subscription_state.dart';
@@ -68,9 +69,26 @@ class SettingsViewModel extends ChangeNotifier {
   String get ctaSubtext => _ctaSubtext;
   bool get shouldUsePremiumQuota => _shouldUsePremiumQuota;
 
-  // 무료체험 이력 getter 추가
-  bool get hasUsedFreeTrial => _planStatus == PlanStatus.trialCompleted || _planStatus == PlanStatus.trialCancelled;
-  bool get hasEverUsedTrial => _planStatus == PlanStatus.trialCompleted || _planStatus == PlanStatus.trialCancelled || _planStatus == PlanStatus.trialActive;
+  // 무료체험 이력 관련 필드 추가
+  bool _hasEverUsedTrialFromHistory = false;
+  bool _hasEverUsedPremiumFromHistory = false;
+
+  // 무료체험 이력 getter 수정 (과거 이력 포함)
+  bool get hasUsedFreeTrial {
+    // 현재 상태 기반 체험 이력
+    final currentTrialHistory = _planStatus == PlanStatus.trialCompleted || _planStatus == PlanStatus.trialCancelled;
+    // 과거 이력 포함
+    return currentTrialHistory || _hasEverUsedTrialFromHistory;
+  }
+  
+  bool get hasEverUsedTrial {
+    // 현재 상태 기반 체험 이력 (활성 포함)
+    final currentTrialHistory = _planStatus == PlanStatus.trialCompleted || 
+                               _planStatus == PlanStatus.trialCancelled || 
+                               _planStatus == PlanStatus.trialActive;
+    // 과거 이력 포함
+    return currentTrialHistory || _hasEverUsedTrialFromHistory;
+  }
 
   /// 초기 데이터 로드
   Future<void> initialize() async {
@@ -92,6 +110,9 @@ class SettingsViewModel extends ChangeNotifier {
     await loadUserData();
     await loadUserPreferences();
     await loadPlanInfo();
+    
+    // 🎯 과거 체험 이력 로드 (탈퇴 이력 포함)
+    await _loadTrialHistoryFromDeletedUser();
   }
   
   /// 모든 데이터 초기화 (사용자 변경 시)
@@ -107,6 +128,8 @@ class SettingsViewModel extends ChangeNotifier {
     _remainingDays = 0;
     _planLimits = {};
     _isPlanLoaded = false;
+    _hasEverUsedTrialFromHistory = false;
+    _hasEverUsedPremiumFromHistory = false;
     notifyListeners();
   }
 
@@ -235,11 +258,11 @@ class SettingsViewModel extends ChangeNotifier {
     _setLoading(true);
     try {
       if (kDebugMode) {
-        print('🔍 [Settings] 플랜 정보 로드 시작');
+        print('🔍 [Settings] 플랜 정보 로드 시작 (캐시 우선)');
       }
-      // UnifiedSubscriptionManager에서 구독 상태 가져오기
+      // UnifiedSubscriptionManager에서 구독 상태 가져오기 (캐시 활용)
       final unifiedManager = UnifiedSubscriptionManager();
-      final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: true);
+      final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: false); // forceRefresh를 false로 변경
       if (kDebugMode) {
         print('📥 [Settings] 구독 상태 조회 결과:');
         print('   구독 상태: $subscriptionState');
@@ -266,7 +289,7 @@ class SettingsViewModel extends ChangeNotifier {
       _isPlanLoaded = true;
       notifyListeners();
       if (kDebugMode) {
-        print('✅ [Settings] 플랜 정보 로드 완료');
+        print('✅ [Settings] 플랜 정보 로드 완료 (캐시 활용)');
         print('   UI 표시명: $_planName');
         print('   플랜 타입: $_planType');
         print('   남은 일수: $_remainingDays');
@@ -536,6 +559,35 @@ class SettingsViewModel extends ChangeNotifier {
     if (_isLoading != loading) {
       _isLoading = loading;
       notifyListeners();
+    }
+  }
+
+  /// 🎯 과거 체험 이력 로드 (탈퇴 이력 포함)
+  Future<void> _loadTrialHistoryFromDeletedUser() async {
+    try {
+      if (kDebugMode) {
+        print('🔍 [Settings] 과거 체험 이력 조회 시작');
+      }
+      
+      // DeletedUserService에서 탈퇴 이력 조회
+      final deletedUserService = DeletedUserService();
+      final hasUsedTrialFromHistory = await deletedUserService.hasUsedFreeTrialFromHistory(forceRefresh: false);
+      
+      _hasEverUsedTrialFromHistory = hasUsedTrialFromHistory;
+      
+      if (kDebugMode) {
+        print('✅ [Settings] 과거 체험 이력 조회 완료');
+        print('   탈퇴 이력에서 체험 사용: $hasUsedTrialFromHistory');
+        print('   최종 hasUsedFreeTrial: ${hasUsedFreeTrial}');
+        print('   최종 hasEverUsedTrial: ${hasEverUsedTrial}');
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ [Settings] 과거 체험 이력 조회 실패: $e');
+      }
+      // 오류 시 기본값 유지 (false)
     }
   }
 } 

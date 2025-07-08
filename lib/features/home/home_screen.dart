@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/subscription_state.dart';                    // 통합 구독 상태 모델
 import '../../core/services/subscription/unified_subscription_manager.dart'; // 🎯 표준 Entitlement Engine
 import '../../core/services/common/usage_limit_service.dart';          // 사용량 한도 실시간 스트림용
+import '../../core/services/authentication/user_preferences_service.dart'; // 사용자 설정 서비스
 
 
 
@@ -79,11 +80,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     
     if (state == AppLifecycleState.resumed) {
-      // 앱이 포그라운드로 복귀했을 때 구독 상태 새로고침
+      // 앱이 포그라운드로 복귀했을 때 구독 상태 새로고침 (캐시 활용)
       if (kDebugMode) {
-        debugPrint('🔄 [HomeScreen] 앱 포그라운드 복귀 - 구독 상태 새로고침');
+        debugPrint('🔄 [HomeScreen] 앱 포그라운드 복귀 - 구독 상태 확인 (캐시 우선)');
       }
-      _loadSubscriptionStatus(forceRefresh: true);
+      _loadSubscriptionStatus(forceRefresh: false); // forceRefresh를 false로 변경
     }
   }
 
@@ -132,9 +133,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           
           UpgradePromptHelper.showWelcomeTrialPrompt(
             context,
-            onComplete: () {
+            onComplete: () async {
               if (kDebugMode) {
-                debugPrint('✅ [HomeScreen] 환영 모달 완료');
+                debugPrint('✅ [HomeScreen] 환영 모달 완료 - 온보딩 완료 처리 시작');
+              }
+              
+              try {
+                // 온보딩 완료 상태 업데이트
+                final userPreferences = UserPreferencesService();
+                final preferences = await userPreferences.getPreferences();
+                await userPreferences.savePreferences(
+                  preferences.copyWith(onboardingCompleted: true),
+                );
+                
+                if (kDebugMode) {
+                  debugPrint('✅ [HomeScreen] 온보딩 완료 상태 저장됨');
+                }
+                
+                // 온보딩 완료 후 구독 상태 체크
+                await loadSubscriptionStatusAfterOnboarding();
+                
+              } catch (e) {
+                if (kDebugMode) {
+                  debugPrint('❌ [HomeScreen] 온보딩 완료 처리 실패: $e');
+                }
               }
             },
           );
@@ -150,17 +172,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         debugPrint('[HomeScreen] 🔄 구독 상태 로드 시작 (forceRefresh: $forceRefresh)');
       }
       
-      // 🎯 강제 새로고침이나 초기 로드가 아닌 경우에만 캐시 확인
-      if (!forceRefresh && !_hasInitialLoad) {
+      // 🚨 온보딩 완료 여부 확인 - 신규 사용자는 온보딩 완료 후에만 구독 상태 체크
+      final userPreferences = UserPreferencesService();
+      final preferences = await userPreferences.getPreferences();
+      final hasCompletedOnboarding = preferences.onboardingCompleted;
+      
+      if (!hasCompletedOnboarding) {
         if (kDebugMode) {
-          debugPrint('[HomeScreen] 초기 로드 - 캐시 우선 사용');
+          debugPrint('[HomeScreen] ⚠️ 온보딩 미완료 사용자 - 구독 상태 체크 건너뜀');
+        }
+        // 기본 상태로 설정
+        if (mounted) {
+          setState(() {
+            _subscriptionState = SubscriptionState.defaultState();
+          });
+        }
+        return;
+      }
+      
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] ✅ 온보딩 완료된 사용자 - 구독 상태 체크 진행');
+      }
+      
+      // 🚨 사용자 변경 후에는 항상 강제 새로고침 (캐시 사용 금지)
+      bool shouldForceRefresh = forceRefresh;
+      
+      // 초기 로드가 아직 완료되지 않았다면 강제 새로고침
+      if (!_hasInitialLoad) {
+        shouldForceRefresh = true;
+        if (kDebugMode) {
+          debugPrint('[HomeScreen] 초기 로드 - 강제 새로고침으로 변경');
         }
       }
       
       // 🎯 UnifiedSubscriptionManager 사용 (표준 Entitlement Engine 기반)
       final subscriptionManager = UnifiedSubscriptionManager();
       final subscriptionState = await subscriptionManager.getSubscriptionState(
-        forceRefresh: forceRefresh,  // 초기 로드시 false, 새로고침시 true
+        forceRefresh: shouldForceRefresh,  // 항상 강제 새로고침
       );
       
       // 초기 로드 완료 표시
@@ -191,7 +239,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-
+  /// 🎯 구매 완료 후 구독 상태 로드 (온보딩 체크 건너뛰기)
+  Future<void> _loadSubscriptionStatusAfterPurchase({bool forceRefresh = true}) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 🎉 구매 완료 후 구독 상태 로드 시작');
+      }
+      
+      // 🎯 UnifiedSubscriptionManager 사용 (표준 Entitlement Engine 기반)
+      final subscriptionManager = UnifiedSubscriptionManager();
+      final subscriptionState = await subscriptionManager.getSubscriptionState(
+        forceRefresh: forceRefresh,
+      );
+      
+      // 🔄 결과 받아서 UI 업데이트 (mounted 체크로 메모리 누수 방지)
+      if (mounted) {
+        setState(() {
+          _subscriptionState = subscriptionState;
+        });
+        
+        if (kDebugMode) {
+          debugPrint('[HomeScreen] ✅ 구매 완료 후 구독 상태 UI 업데이트 완료');
+          debugPrint('   상태: ${_subscriptionState.statusMessage}');
+          debugPrint('   활성 배너: ${_subscriptionState.activeBanners.map((e) => e.name).toList()}');
+        }
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] ❌ 구매 완료 후 구독 상태 로드 실패: $e');
+      }
+    }
+  }
 
   /// 📡 실시간 스트림 구독 설정 (새로운 기능)
   /// 🆕 새로 추가된 기능:
@@ -233,9 +312,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             debugPrint('🔔 [HomeScreen] 인증 상태 변경 감지: ${user?.uid ?? "로그아웃"}');
           }
           
+          // 🚨 로그아웃된 경우에는 구독 상태 조회 안함
+          if (user == null) {
+            if (kDebugMode) {
+              debugPrint('⚠️ [HomeScreen] 로그아웃 감지 - 구독 상태 조회 건너뜀');
+            }
+            return;
+          }
+          
+          // 🚨 사용자 변경 시 초기 로드 플래그 리셋 (강제 새로고침 보장)
+          _hasInitialLoad = false;
+          
           // 🔄 인증 상태가 변경되면 구독 상태 강제 새로고침
-          // 약간의 지연을 두어 AuthService의 캐시 무효화가 완료된 후 실행
-          await Future.delayed(const Duration(milliseconds: 1000));
+          // 지연 시간을 줄임 (1초 → 300ms)
+          await Future.delayed(const Duration(milliseconds: 300));
           
           if (mounted) {
             await _loadSubscriptionStatus(forceRefresh: true);
@@ -265,16 +355,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
         
         // 구독 상태 즉시 새로고침 (배너 포함)
-        _loadSubscriptionStatus(forceRefresh: true);
+        _loadSubscriptionStatusAfterPurchase();
         
-        // 2초 후 한번 더 새로고침 (배너 상태 안정화)
+        // 2초 후 한번 더 새로고침 (배너 상태 안정화) - 캐시 활용
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted) {
-            _loadSubscriptionStatus(forceRefresh: true);
+            _loadSubscriptionStatus(forceRefresh: false); // forceRefresh를 false로 변경
           }
         });
       }
     });
+  }
+
+  /// 🎯 온보딩 완료 후 구독 상태 로드
+  Future<void> loadSubscriptionStatusAfterOnboarding() async {
+    try {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] 🎓 온보딩 완료 후 구독 상태 로드 시작');
+      }
+      
+      // 강제 새로고침으로 최신 구독 상태 확인
+      await _loadSubscriptionStatus(forceRefresh: true);
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[HomeScreen] ❌ 온보딩 완료 후 구독 상태 로드 실패: $e');
+      }
+    }
   }
 
   @override

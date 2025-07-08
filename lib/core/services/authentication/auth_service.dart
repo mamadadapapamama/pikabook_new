@@ -69,6 +69,29 @@ class AuthService {
           debugPrint('🔍 [AuthService] 인증 상태 변경: ${_lastUserId ?? "없음"} → ${currentUserId ?? "없음"}');
         }
         
+        // 🎯 일시적인 인증 상태 변경 무시 (In-App Purchase 중 발생할 수 있음)
+        if (_lastUserId != null && currentUserId == null) {
+          // 로그인 상태에서 로그아웃으로 변경된 경우 - 잠시 대기 후 재확인
+          if (kDebugMode) {
+            debugPrint('⚠️ [AuthService] 일시적 로그아웃 감지 - 3초 후 재확인');
+          }
+          
+          await Future.delayed(const Duration(seconds: 3));
+          
+          // 3초 후 다시 확인
+          final reconfirmedUser = _auth.currentUser;
+          if (reconfirmedUser != null) {
+            if (kDebugMode) {
+              debugPrint('✅ [AuthService] 일시적 로그아웃이었음 - 사용자 복원됨: ${reconfirmedUser.uid}');
+            }
+            return; // 일시적 변경이었으므로 처리하지 않음
+          } else {
+            if (kDebugMode) {
+              debugPrint('🔍 [AuthService] 실제 로그아웃 확인됨');
+            }
+          }
+        }
+        
         // 사용자가 변경된 경우 (로그아웃 → 로그인, 다른 사용자로 로그인)
         if (_lastUserId != null && _lastUserId != currentUserId) {
           if (kDebugMode) {
@@ -149,7 +172,23 @@ class AuthService {
     _subscriptionRefreshTimer = Timer(const Duration(milliseconds: 500), () async {
       try {
         if (kDebugMode) {
-          debugPrint('🔄 [AuthService] 로그인 후 구독 상태 강제 새로고침 (디바운싱됨)');
+          debugPrint('🔄 [AuthService] 로그인 후 구독 상태 강제 새로고침 시작 (디바운싱됨)');
+        }
+        
+        // 🚨 온보딩 완료 여부 확인 - 신규 사용자는 온보딩 완료 후에만 구독 상태 체크
+        final userPreferences = UserPreferencesService();
+        final preferences = await userPreferences.getPreferences();
+        final hasCompletedOnboarding = preferences.onboardingCompleted;
+        
+        if (!hasCompletedOnboarding) {
+          if (kDebugMode) {
+            debugPrint('⚠️ [AuthService] 온보딩 미완료 사용자 - 구독 상태 체크 건너뜀');
+          }
+          return;
+        }
+        
+        if (kDebugMode) {
+          debugPrint('✅ [AuthService] 온보딩 완료된 사용자 - 구독 상태 체크 진행');
         }
         
         // 로그인 직후에는 항상 최신 구독 상태를 서버에서 가져옴

@@ -438,14 +438,14 @@ class UpgradeModal extends StatelessWidget {
                 }
                 
                 // 서비스가 사용 불가능하면 초기화
-                if (!purchaseService.isAvailable) {
+                if (!purchaseService.isAvailableSync) {
                   if (kDebugMode) {
                     debugPrint('🔄 [UpgradeModal] InApp Purchase 서비스 초기화 시작');
                   }
                   await purchaseService.initialize();
                   
                   if (kDebugMode) {
-                    debugPrint('✅ [UpgradeModal] InApp Purchase 서비스 초기화 완료: ${purchaseService.isAvailable}');
+                    debugPrint('✅ [UpgradeModal] InApp Purchase 서비스 초기화 완료: ${purchaseService.isAvailableSync}');
                   }
                 }
                 
@@ -489,12 +489,50 @@ class UpgradeModal extends StatelessWidget {
                   debugPrint('❌ [UpgradeModal] 스택 트레이스: ${StackTrace.current}');
                 }
                 
+                // 🎯 사용자 취소인 경우 조용히 처리
+                if (e.toString().contains('Payment sheet dismissed') || 
+                    e.toString().contains('cancelled') ||
+                    e.toString().contains('canceled')) {
+                  if (kDebugMode) {
+                    debugPrint('ℹ️ [UpgradeModal] 사용자가 구매를 취소함');
+                  }
+                  return; // 취소는 에러 메시지 표시하지 않음
+                }
+                
+                // 🎯 Pending transaction 에러인 경우 특별 안내
+                if (e.toString().contains('PENDING_TRANSACTION_ERROR') ||
+                    e.toString().contains('pending transaction') ||
+                    e.toString().contains('storekit_duplicate_product_object')) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          '이전 구매가 아직 처리 중입니다.\n\n'
+                          '해결 방법:\n'
+                          '1. 잠시 기다린 후 다시 시도\n'
+                          '2. 앱을 완전히 종료 후 재시작\n'
+                          '3. iOS 설정 → App Store → Sandbox 계정에서 구독 정리'
+                        ),
+                        backgroundColor: Colors.blue[700],
+                        duration: const Duration(seconds: 8),
+                        behavior: SnackBarBehavior.floating,
+                        action: SnackBarAction(
+                          label: '확인',
+                          textColor: Colors.white,
+                          onPressed: () {},
+                        ),
+                      ),
+                    );
+                  }
+                  return;
+                }
+                
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('무료체험 시작에 실패했습니다: ${e.toString()}'),
-                      backgroundColor: Colors.red[600],
-                      duration: const Duration(seconds: 4),
+                      content: Text('무료체험 시작에 실패했습니다. 잠시 후 다시 시도해주세요.'),
+                      backgroundColor: Colors.orange[600],
+                      duration: const Duration(seconds: 3),
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -781,7 +819,7 @@ class UpgradeModal extends StatelessWidget {
       });
       
       // 인앱 구매 서비스가 초기화되지 않았으면 초기화
-      if (!purchaseService.isAvailable) {
+      if (!purchaseService.isAvailableSync) {
         await purchaseService.initialize();
       }
 

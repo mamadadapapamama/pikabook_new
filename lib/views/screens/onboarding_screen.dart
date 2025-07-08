@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
+import '../../core/services/payment/in_app_purchase_service.dart';
 
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
@@ -74,6 +75,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void initState() {
     super.initState();
     _nameController.addListener(_updateState);
+    
+    // 🛒 백그라운드에서 In-App Purchase 서비스 초기화 (온보딩 진행 중에 준비)
+    _initializeInAppPurchaseInBackground();
+  }
+  
+  /// 백그라운드에서 In-App Purchase 서비스 초기화
+  void _initializeInAppPurchaseInBackground() {
+    // 온보딩이 진행되는 동안 백그라운드에서 서비스 준비
+    InAppPurchaseService().initialize().then((_) {
+      if (kDebugMode) {
+        debugPrint('🛒 [OnboardingScreen] In-App Purchase 서비스 백그라운드 초기화 완료');
+      }
+    }).catchError((e) {
+      if (kDebugMode) {
+        debugPrint('⚠️ [OnboardingScreen] In-App Purchase 서비스 초기화 실패 (무시): $e');
+      }
+      // 초기화 실패해도 온보딩은 계속 진행
+    });
   }
 
   @override

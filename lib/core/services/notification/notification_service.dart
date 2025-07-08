@@ -187,10 +187,15 @@ class NotificationService {
         debugPrint('   체험 종료: ${trialEndDate.toString()}');
         debugPrint('   1일 전 알림: ${oneDayBeforeAt10AM.toString()}');
         debugPrint('   당일 알림: ${endDayAt10AM.toString()}');
+        
+        // 🎯 스케줄링 결과 확인
+        final pendingAfterScheduling = await getPendingNotifications();
+        debugPrint('📊 [Notification] 스케줄링 후 예약된 알림 수: ${pendingAfterScheduling.length}');
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [Notification] 무료체험 알림 스케줄링 실패: $e');
+        debugPrint('   스택 트레이스: ${StackTrace.current}');
       }
     }
   }
@@ -342,6 +347,68 @@ class NotificationService {
         debugPrint('❌ [Notification] 예약된 알림 조회 실패: $e');
       }
       return [];
+    }
+  }
+
+  /// 🔍 알림 시스템 상태 전체 확인 (디버깅용)
+  Future<void> checkNotificationSystemStatus() async {
+    if (kDebugMode) {
+      debugPrint('\n🔍 [Notification] 시스템 상태 전체 확인:');
+      
+      // 1. 초기화 상태
+      debugPrint('   초기화 상태: $_isInitialized');
+      
+      // 2. 권한 상태
+      try {
+        final hasPermission = await requestPermissions();
+        debugPrint('   권한 상태: $hasPermission');
+      } catch (e) {
+        debugPrint('   권한 확인 실패: $e');
+      }
+      
+      // 3. 시간대 설정
+      debugPrint('   현재 시간대: ${tz.local.name}');
+      debugPrint('   현재 시간 (Local): ${DateTime.now()}');
+      debugPrint('   현재 시간 (TZ): ${tz.TZDateTime.now(tz.local)}');
+      
+      // 4. 예약된 알림
+      await getPendingNotifications();
+      
+      // 5. 테스트 알림 스케줄링 (5초 후)
+      try {
+        final testTime = DateTime.now().add(const Duration(seconds: 5));
+        await _scheduleNotification(
+          id: 9999,
+          title: '🧪 테스트 알림',
+          body: '5초 후 테스트 알림입니다',
+          scheduledDate: testTime,
+          payload: 'test_notification',
+        );
+        debugPrint('   ✅ 테스트 알림 스케줄링 성공 (5초 후)');
+      } catch (e) {
+        debugPrint('   ❌ 테스트 알림 스케줄링 실패: $e');
+      }
+      
+      debugPrint('🔍 [Notification] 시스템 상태 확인 완료\n');
+    }
+  }
+
+  /// 🧪 테스트 알림 즉시 표시
+  Future<void> showTestNotification() async {
+    if (kDebugMode) {
+      debugPrint('🧪 [Notification] 테스트 알림 즉시 표시');
+      
+      try {
+        await showImmediateNotification(
+          id: 9998,
+          title: '🧪 즉시 테스트 알림',
+          body: '알림 시스템이 정상 작동합니다',
+          payload: 'immediate_test',
+        );
+        debugPrint('✅ [Notification] 즉시 테스트 알림 성공');
+      } catch (e) {
+        debugPrint('❌ [Notification] 즉시 테스트 알림 실패: $e');
+      }
     }
   }
 

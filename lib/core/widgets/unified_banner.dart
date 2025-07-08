@@ -90,7 +90,7 @@ class UnifiedBanner extends StatelessWidget {
                     variant: PikaButtonVariant.primary,
                     size: PikaButtonSize.xs,
                     padding: EdgeInsets.symmetric(
-                    horizontal: SpacingTokens.sm,
+                    horizontal: SpacingTokens.xs,
                     vertical: SpacingTokens.xs,
                     ),
                     onPressed: onMainButtonPressed,
