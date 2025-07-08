@@ -360,11 +360,13 @@ class InAppPurchaseService {
           }
           
           // 캐시를 활용한 구독 상태 조회 (불필요한 Firebase Functions 호출 방지)
-          await unifiedManager.getSubscriptionState(forceRefresh: false); // forceRefresh를 false로 변경
+          final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: false); // forceRefresh를 false로 변경
           
           if (kDebugMode) {
             print('✅ [InAppPurchase] 서버 웹훅 반영 완료 (캐시 활용)');
+            print('📊 [InAppPurchase] 업데이트된 구독 상태: ${subscriptionState.statusMessage}');
           }
+          
         } catch (e) {
           if (kDebugMode) {
             print('⚠️ [InAppPurchase] 지연된 구독 상태 재조회 실패: $e');
@@ -372,7 +374,7 @@ class InAppPurchaseService {
         }
       });
       
-      // 🎯 구매 완료 시점에서 알림 스케줄링 (무료체험인 경우에만)
+      // 🎯 구매 완료 시점에서 D-1 알림 스케줄링 (무료체험인 경우에만)
       await _scheduleTrialNotificationsIfNeeded(purchaseDetails.productID);
       
       // 플랜 변경 알림은 UnifiedSubscriptionManager에서 자동 처리됨

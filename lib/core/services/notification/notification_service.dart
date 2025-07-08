@@ -132,26 +132,21 @@ class NotificationService {
     }
   }
 
-  /// 무료체험 종료 알림 스케줄링 (인앱구매용)
+  /// 무료체험 D-1 알림 스케줄링 (간단 버전)
   Future<void> scheduleTrialEndNotifications(DateTime trialStartDate) async {
     if (!_isInitialized) {
       await initialize();
     }
 
     try {
-      final trialEndDate = trialStartDate.add(const Duration(days: 7));
-      
       // 기존 체험 관련 알림 취소
       await cancelTrialNotifications();
 
-      // 🎯 실제 프로덕션 모드로 변경됨 - 테스트 모드 제거
-
-      // 🚀 PRODUCTION MODE: 실제 오전 10시 스케줄링
-      // 1일 전 오전 10시 알림 (6일 후 오전 10시)
-      final oneDayBeforeAt10AM = DateTime(
-        trialEndDate.year,
-        trialEndDate.month,
-        trialEndDate.day - 1,
+      // 🎯 간단하게 D-1 (6일 후) 오전 10시에만 알림
+      final dMinusOneAt10AM = DateTime(
+        trialStartDate.year,
+        trialStartDate.month,
+        trialStartDate.day + 6, // 6일 후 (D-1)
         10, // 오전 10시
         0,
       );
@@ -160,33 +155,14 @@ class NotificationService {
         id: 1001,
         title: 'Pikabook 프리미엄 무료체험 내일 종료',
         body: '무료 체험이 곧 종료되고, 유료 구독으로 전환될 예정입니다.',
-        scheduledDate: oneDayBeforeAt10AM,
+        scheduledDate: dMinusOneAt10AM,
         payload: 'trial_ending_tomorrow',
       );
 
-      // 당일 오전 10시 알림 (7일 후 오전 10시)
-      final endDayAt10AM = DateTime(
-        trialEndDate.year,
-        trialEndDate.month,
-        trialEndDate.day,
-        10, // 오전 10시
-        0,
-      );
-
-      await _scheduleNotification(
-        id: 1002,
-        title: 'Pikabook 프리미엄 무료체험 오늘 종료',
-        body: '오늘 프리미엄 무료체험이 종료되고, 유료구독으로 전환됩니다.',
-        scheduledDate: endDayAt10AM,
-        payload: 'trial_ending_today',
-      );
-
       if (kDebugMode) {
-        debugPrint('✅ [Notification] 무료체험 알림 스케줄링 완료 (오전 10시)');
+        debugPrint('✅ [Notification] D-1 알림 스케줄링 완료');
         debugPrint('   체험 시작: ${trialStartDate.toString()}');
-        debugPrint('   체험 종료: ${trialEndDate.toString()}');
-        debugPrint('   1일 전 알림: ${oneDayBeforeAt10AM.toString()}');
-        debugPrint('   당일 알림: ${endDayAt10AM.toString()}');
+        debugPrint('   D-1 알림: ${dMinusOneAt10AM.toString()}');
         
         // 🎯 스케줄링 결과 확인
         final pendingAfterScheduling = await getPendingNotifications();
@@ -194,7 +170,7 @@ class NotificationService {
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [Notification] 무료체험 알림 스케줄링 실패: $e');
+        debugPrint('❌ [Notification] D-1 알림 스케줄링 실패: $e');
         debugPrint('   스택 트레이스: ${StackTrace.current}');
       }
     }
@@ -296,12 +272,10 @@ class NotificationService {
   /// 무료체험 관련 알림 취소
   Future<void> cancelTrialNotifications() async {
     try {
-      await _flutterLocalNotificationsPlugin.cancel(1001); // 1일 전
-      await _flutterLocalNotificationsPlugin.cancel(1002); // 당일
-      await _flutterLocalNotificationsPlugin.cancel(1003); // 1일 후
+      await _flutterLocalNotificationsPlugin.cancel(1001); // D-1 알림
       
       if (kDebugMode) {
-        debugPrint('🗑️ [Notification] 무료체험 알림 취소 완료');
+        debugPrint('🗑️ [Notification] 무료체험 D-1 알림 취소 완료');
       }
     } catch (e) {
       if (kDebugMode) {
