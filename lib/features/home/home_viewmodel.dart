@@ -17,6 +17,9 @@ class HomeViewModel extends ChangeNotifier {
   StreamSubscription<List<Note>>? _notesSubscription;
   StreamSubscription<User?>? _authStateSubscription; // 🎯 사용자 변경 감지용
   
+  // 🆕 신규 사용자 플래그 (환영 모달 완료 전까지 최소 서비스 호출)
+  bool _isNewUser = false;
+  
   // 사용량 제한 상태
   bool _ocrLimitReached = false;
   bool _translationLimitReached = false;
@@ -43,6 +46,23 @@ class HomeViewModel extends ChangeNotifier {
     _initializeViewModel();
   }
 
+  /// 🆕 신규 사용자 설정 (환영 모달 완료 전까지 최소 서비스 호출)
+  void setNewUser(bool isNewUser) {
+    final wasNewUser = _isNewUser;
+    _isNewUser = isNewUser;
+    if (kDebugMode) {
+      debugPrint('[HomeViewModel] 신규 사용자 플래그 설정: $wasNewUser → $_isNewUser');
+    }
+    
+    // 🎉 환영 모달 완료 후 신규 사용자 → 기존 사용자로 전환 시 사용량 체크 시작
+    if (wasNewUser && !isNewUser) {
+      if (kDebugMode) {
+        debugPrint('[HomeViewModel] 🎉 환영 모달 완료 - 이제 사용량 체크 시작');
+      }
+      _checkUsageLimits();
+    }
+  }
+
   // ViewModel 초기화 (단순한 Firestore 스트림)
   Future<void> _initializeViewModel() async {
     debugPrint('[HomeViewModel] 초기화 시작');
@@ -50,8 +70,14 @@ class HomeViewModel extends ChangeNotifier {
       // 🎯 사용자 변경 감지 리스너 설정
       _setupAuthStateListener();
       
-      // 사용량 제한 상태 확인
-      await _checkUsageLimits();
+      // 🚨 신규 사용자가 아닐 때만 사용량 제한 상태 확인
+      if (!_isNewUser) {
+        await _checkUsageLimits();
+      } else {
+        if (kDebugMode) {
+          debugPrint('[HomeViewModel] 🆕 신규 사용자 - 사용량 체크 건너뜀');
+        }
+      }
       
       // Firestore 실시간 스트림 구독
       _subscribeToNoteService();
@@ -103,6 +129,15 @@ class HomeViewModel extends ChangeNotifier {
     try {
       if (kDebugMode) {
         debugPrint('🔄 [HomeViewModel] 사용자 변경 후 온보딩 상태 확인');
+      }
+      
+      // 🚨 신규 사용자면 사용량 체크 건너뛰기
+      if (_isNewUser) {
+        if (kDebugMode) {
+          debugPrint('🔄 [HomeViewModel] 🆕 신규 사용자 - 환영 모달 완료 전이므로 사용량 체크 건너뜀');
+        }
+        _resetUsageLimits();
+        return;
       }
       
       // UserPreferencesService import 필요

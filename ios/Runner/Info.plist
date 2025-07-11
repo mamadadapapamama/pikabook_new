@@ -70,13 +70,15 @@
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<false/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>카메라로 이미지를 촬영하여 텍스트 추출을 위해 사용합니다.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>이 앱은 사진을 선택하는 데 필요합니다.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string></string>
+	<string>This app does not require access to local network devices.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIDeviceFamily</key>
@@ -111,6 +113,10 @@
 		<string>arm64</string>
 	</array>
 	<key>FirebaseMessagingAutoInitEnabled</key>
+	<false/>
+	<key>FirebaseAnalyticsCollectionEnabled</key>
+	<false/>
+	<key>GoogleUtilitiesAppDelegateProxyEnabled</key>
 	<false/>
 </dict>
 </plist>

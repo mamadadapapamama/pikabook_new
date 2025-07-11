@@ -36,6 +36,8 @@ class AuthService {
     forceCodeForRefreshToken: true,
     signInOption: SignInOption.standard,
     scopes: ['email', 'profile'],
+    // 🚫 로컬 네트워크 검색 비활성화
+    hostedDomain: null,
   );
   
   String? _lastUserId;

@@ -50,6 +50,12 @@ post_install do |installer|
       
       # ARM64 문제 해결
       config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'arm64'
+      
+      # 🚫 로컬 네트워크 접근 비활성화 (Google SDK)
+      if target.name == 'GoogleSignIn' || target.name == 'FirebaseAuth' || target.name.start_with?('Google')
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'DISABLE_LOCAL_NETWORK=1'
+      end
     end
   end
 end 

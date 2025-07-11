@@ -88,12 +88,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         debugPrint('[HomeScreen] 🆕 신규 사용자 - 환영 모달 표시');
       }
       _lifecycleCoordinator.initializeForNewUser();
+      
+      // 🚨 HomeViewModel에도 신규 사용자 플래그 설정
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final viewModel = Provider.of<HomeViewModel>(context, listen: false);
+        viewModel.setNewUser(true);
+      });
+      
       _showWelcomeModal();
     } else {
       if (kDebugMode) {
         debugPrint('[HomeScreen] 🔄 기존 사용자 - 기존 사용자 초기화');
       }
       _lifecycleCoordinator.initializeForExistingUser();
+      
+      // 🚨 HomeViewModel에도 기존 사용자 플래그 설정
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final viewModel = Provider.of<HomeViewModel>(context, listen: false);
+        viewModel.setNewUser(false);
+      });
     }
   }
 
@@ -132,6 +145,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (kDebugMode) {
           debugPrint('[HomeScreen] 환영 모달 완료 - 온보딩 완료 처리');
         }
+        
+        // 🚨 HomeViewModel의 신규 사용자 플래그도 해제
+        final viewModel = Provider.of<HomeViewModel>(context, listen: false);
+        viewModel.setNewUser(false);
+        
         _lifecycleCoordinator.loadSubscriptionStatusAfterOnboarding();
       },
     );

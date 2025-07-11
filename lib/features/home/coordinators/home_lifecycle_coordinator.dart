@@ -26,6 +26,7 @@ class HomeLifecycleCoordinator {
   
   // 🎯 상태 관리
   bool _hasInitialLoad = false;
+  bool _isNewUser = false; // 신규 사용자 플래그
   
   // 🔄 콜백들
   Function(SubscriptionState)? _onSubscriptionStateChanged;
@@ -71,12 +72,19 @@ class HomeLifecycleCoordinator {
           debugPrint('🔄 [HomeLifecycleCoordinator] 사용자 변경 - 상태 초기화 완료');
         }
         
-        // 🔄 온보딩 상태 확인 후 구독 상태 로드 여부 결정
-        await loadSubscriptionStatus(
-          forceRefresh: true,
-          setupUsageStream: true,
-          context: '사용자변경',
-        );
+                 // 🚨 신규 사용자는 환영 모달 완료 전까지 구독 상태 체크 안함
+         if (!_isNewUser) {
+           // 🔄 기존 사용자만 구독 상태 로드
+           await loadSubscriptionStatus(
+             forceRefresh: true,
+             setupUsageStream: true,
+             context: '사용자변경',
+           );
+         } else {
+           if (kDebugMode) {
+             debugPrint('[HomeLifecycleCoordinator] 🆕 신규 사용자 - 환영 모달 완료 전까지 구독 상태 체크 건너뜀');
+           }
+         }
       },
       onError: (error) {
         if (kDebugMode) {
@@ -132,6 +140,15 @@ class HomeLifecycleCoordinator {
       final contextMsg = context ?? '일반';
       if (kDebugMode) {
         debugPrint('[HomeLifecycleCoordinator] 🔄 구독 상태 로드 시작 [$contextMsg] (forceRefresh: $forceRefresh)');
+      }
+      
+      // 🚨 신규 사용자는 환영 모달 완료 전까지 구독 상태 체크 안함
+      if (_isNewUser) {
+        if (kDebugMode) {
+          debugPrint('[HomeLifecycleCoordinator] ⚠️ 신규 사용자 - 환영 모달 완료 전이므로 구독 상태 체크 건너뜀 [$contextMsg]');
+        }
+        _onSubscriptionStateChanged?.call(SubscriptionState.defaultState());
+        return;
       }
       
       // 🚨 온보딩 완료 여부 확인 (skipOnboardingCheck가 true면 건너뛰기)
@@ -203,6 +220,10 @@ class HomeLifecycleCoordinator {
 
   /// 🎯 온보딩 완료 후 구독 상태 로드
   Future<void> loadSubscriptionStatusAfterOnboarding() async {
+    _isNewUser = false; // 🎯 신규 사용자 플래그 해제 (이제 정상 사용자)
+    if (kDebugMode) {
+      debugPrint('[HomeLifecycleCoordinator] 🎉 환영 모달 완료 - 이제 정상적인 서비스 호출 시작');
+    }
     await loadSubscriptionStatus(
       forceRefresh: true,
       setupUsageStream: true,
@@ -236,10 +257,11 @@ class HomeLifecycleCoordinator {
 
   /// 🎯 신규 사용자를 위한 초기화 (환영 모달용)
   void initializeForNewUser() {
+    _isNewUser = true; // 🚨 신규 사용자 플래그 설정
     if (kDebugMode) {
-      debugPrint('[HomeLifecycleCoordinator] 🆕 신규 사용자 초기화 - 사용량 스트림 구독 없이 진행');
+      debugPrint('[HomeLifecycleCoordinator] 🆕 신규 사용자 초기화 - 환영 모달 완료 전까지 최소 서비스 호출');
     }
-    // 신규 사용자는 기본 상태만 설정
+    // 신규 사용자는 기본 상태만 설정 (구독 상태 체크 없음)
     _onSubscriptionStateChanged?.call(SubscriptionState.defaultState());
   }
 
