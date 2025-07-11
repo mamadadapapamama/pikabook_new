@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import '../services/subscription/unified_subscription_manager.dart';
+import '../services/subscription/subscription_entitlement_engine.dart';
 import '../services/common/banner_manager.dart';
 import '../services/payment/in_app_purchase_service.dart';
 
@@ -53,19 +54,67 @@ class SubscriptionDebugHelper {
 
   /// Firebase Functions 직접 응답 확인
   Future<void> _checkFirebaseFunctionsResponse() async {
-    debugPrint('\n📡 Firebase Functions 직접 응답:');
+    debugPrint('\n📡 Firebase Functions 직접 응답 (Apple 공식 라이브러리):');
     
     try {
       final unifiedManager = UnifiedSubscriptionManager();
       final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: true);
       
+      debugPrint('   🎯 구독 상태 정보:');
       debugPrint('   플랜 상태: ${subscriptionState.planStatus.value}');
       debugPrint('   프리미엄: ${subscriptionState.isPremium}');
       debugPrint('   체험: ${subscriptionState.isTrial}');
-      debugPrint('   무료: ${subscriptionState.isExpired}');
+      debugPrint('   만료: ${subscriptionState.isExpired}');
       debugPrint('   사용량 한도: ${subscriptionState.hasUsageLimitReached}');
       debugPrint('   활성 배너: ${subscriptionState.activeBanners.map((e) => e.name).toList()}');
       debugPrint('   상태 메시지: ${subscriptionState.statusMessage}');
+      
+      // 🚀 Apple 공식 라이브러리 메타데이터 정보 표시
+      final entitlementEngine = SubscriptionEntitlementEngine();
+      final cachedEntitlements = entitlementEngine.cachedEntitlements;
+      
+      if (cachedEntitlements != null) {
+        final serverVersion = cachedEntitlements['_serverVersion'] as String?;
+        final dataSource = cachedEntitlements['_dataSource'] as String?;
+        final timestamp = cachedEntitlements['_timestamp'] as String?;
+        final libraryInfo = cachedEntitlements['_libraryInfo'] as Map<String, dynamic>?;
+        
+        debugPrint('\n   🚀 Apple 공식 라이브러리 메타데이터:');
+        debugPrint('   서버 버전: ${serverVersion ?? "알 수 없음"}');
+        debugPrint('   데이터 소스: ${dataSource ?? "알 수 없음"}');
+        debugPrint('   응답 시간: ${timestamp ?? "알 수 없음"}');
+        
+        if (libraryInfo != null) {
+          final isUsingOfficialLibrary = libraryInfo['isUsingOfficialLibrary'] as bool? ?? false;
+          final benefits = libraryInfo['benefits'] as List<dynamic>? ?? [];
+          
+          debugPrint('   공식 라이브러리 사용: ${isUsingOfficialLibrary ? "✅ 예" : "❌ 아니오"}');
+          
+          if (benefits.isNotEmpty) {
+            debugPrint('   주요 개선사항:');
+            for (final benefit in benefits) {
+              debugPrint('     • $benefit');
+            }
+          }
+        }
+        
+        // 🎯 데이터 소스별 상태 진단
+        if (dataSource == 'appstore-official-library') {
+          debugPrint('   🎉 상태: Apple 공식 라이브러리 기반 응답 - 최적화됨');
+        } else if (dataSource == 'test-account') {
+          debugPrint('   🧪 상태: 테스트 계정 응답 - 개발 환경');
+        } else if (dataSource == 'firestore-webhook') {
+          debugPrint('   📡 상태: Webhook 기반 응답 - 실시간 업데이트');
+        } else if (dataSource == 'firestore-legacy') {
+          debugPrint('   📱 상태: 레거시 Firestore 응답 - 구 버전 호환');
+        } else if (dataSource == 'default') {
+          debugPrint('   ⚠️ 상태: 기본값 응답 - 구독 정보 없음');
+        } else {
+          debugPrint('   ❓ 상태: 알 수 없는 데이터 소스');
+        }
+      } else {
+        debugPrint('\n   ⚠️ Apple 공식 라이브러리 메타데이터를 찾을 수 없습니다');
+      }
       
     } catch (e) {
       debugPrint('   ❌ Firebase Functions 호출 실패: $e');
@@ -145,7 +194,7 @@ class SubscriptionDebugHelper {
     }
   }
 
-  /// 🧪 특정 시나리오 재현을 위한 테스트 데이터 생성
+  /// �� 특정 시나리오 재현을 위한 테스트 데이터 생성
   Future<void> recreateTestScenario(String scenario) async {
     if (!kDebugMode) return;
 
@@ -451,14 +500,76 @@ class SubscriptionDebugHelper {
     // 구독 상태
     final subscription = diagnosis['subscription'] as Map<String, dynamic>?;
     if (subscription != null) {
-      debugPrint('📊 구독 정보: ${subscription['message']}');
-      if (subscription['firestoreData'] != null) {
-        debugPrint('   - Firestore 데이터: ${subscription['firestoreData']}');
+      debugPrint('💳 구독 정보: ${subscription['message']}');
+      if (subscription['status'] == 'found' && subscription['hasSubscriptionField'] == true) {
+        final data = subscription['firestoreData'] as Map<String, dynamic>?;
+        if (data != null) {
+          debugPrint('   - 플랜: ${data['plan']}');
+          debugPrint('   - 상태: ${data['status']}');
+          debugPrint('   - 체험: ${data['isFreeTrial']}');
+        }
       }
     }
     
-    debugPrint('');
-    debugPrint('=== 진단 완료 ===\n');
+    debugPrint('\n🧪 === 진단 완료 ===');
+  }
+
+  /// 🚀 Apple 공식 라이브러리 정보 간단 출력
+  Future<void> printLibraryInfo() async {
+    if (!kDebugMode) return;
+
+    debugPrint('\n🚀 === Apple 공식 라이브러리 정보 ===');
+    
+    try {
+      final entitlementEngine = SubscriptionEntitlementEngine();
+      final cachedEntitlements = entitlementEngine.cachedEntitlements;
+      
+      if (cachedEntitlements != null) {
+        final serverVersion = cachedEntitlements['_serverVersion'] as String?;
+        final dataSource = cachedEntitlements['_dataSource'] as String?;
+        final timestamp = cachedEntitlements['_timestamp'] as String?;
+        final libraryInfo = cachedEntitlements['_libraryInfo'] as Map<String, dynamic>?;
+        
+        debugPrint('📡 서버 정보:');
+        debugPrint('   - 버전: ${serverVersion ?? "알 수 없음"}');
+        debugPrint('   - 데이터 소스: ${dataSource ?? "알 수 없음"}');
+        debugPrint('   - 응답 시간: ${timestamp ?? "알 수 없음"}');
+        
+        if (libraryInfo != null) {
+          final isUsingOfficialLibrary = libraryInfo['isUsingOfficialLibrary'] as bool? ?? false;
+          final benefits = libraryInfo['benefits'] as List<dynamic>? ?? [];
+          
+          debugPrint('\n🎉 Apple 공식 라이브러리:');
+          debugPrint('   - 사용 중: ${isUsingOfficialLibrary ? "✅ 예" : "❌ 아니오"}');
+          
+          if (benefits.isNotEmpty && isUsingOfficialLibrary) {
+            debugPrint('   - 주요 개선사항:');
+            for (final benefit in benefits) {
+              debugPrint('     • $benefit');
+            }
+          }
+          
+          // 데이터 소스별 상태 요약
+          if (dataSource == 'appstore-official-library') {
+            debugPrint('\n✨ 상태: 최적화된 Apple 공식 라이브러리 사용 중');
+          } else if (dataSource == 'test-account') {
+            debugPrint('\n🧪 상태: 테스트 환경 (개발용)');
+          } else {
+            debugPrint('\n⚠️ 상태: 기존 방식 사용 중 (업그레이드 권장)');
+          }
+        } else {
+          debugPrint('\n⚠️ Apple 공식 라이브러리 정보를 찾을 수 없습니다');
+        }
+      } else {
+        debugPrint('❌ 캐시된 권한 정보가 없습니다');
+        debugPrint('💡 먼저 구독 상태를 조회해주세요');
+      }
+      
+    } catch (e) {
+      debugPrint('❌ 라이브러리 정보 조회 실패: $e');
+    }
+    
+    debugPrint('🚀 === 정보 조회 완료 ===\n');
   }
 
   /// 🎯 실기기 테스트용 샌드박스 계정 설정 가이드 출력

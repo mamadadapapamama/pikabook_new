@@ -7,6 +7,43 @@ import '../../models/subscription_state.dart';
 import '../../models/plan_status.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+// 🎯 Apple 공식 라이브러리 기반 권한 결과 타입 정의
+typedef EntitlementResult = Map<String, dynamic>;
+
+// 🎯 EntitlementResult 편의 확장 메서드
+extension EntitlementResultExtension on EntitlementResult {
+  // 구독 상태 접근자
+  bool get isPremium => this['premium'] as bool? ?? this['isPremium'] as bool? ?? false;
+  bool get isTrial => this['trial'] as bool? ?? this['isTrial'] as bool? ?? false;
+  bool get isExpired => this['expired'] as bool? ?? this['isExpired'] as bool? ?? false;
+  
+  // 플랜 상태 접근자
+  PlanStatus get planStatus {
+    final planStatusValue = this['planStatus'] as String? ?? 'free';
+    return PlanStatus.fromString(planStatusValue);
+  }
+  
+  // 상태 메시지 접근자
+  String get statusMessage {
+    if (isPremium) return '프리미엄';
+    if (isTrial) return '무료 체험';
+    return '무료';
+  }
+  
+  // Apple 공식 라이브러리 메타데이터 접근자
+  String? get serverVersion => this['_serverVersion'] as String?;
+  String? get dataSource => this['_dataSource'] as String?;
+  String? get timestamp => this['_timestamp'] as String?;
+  Map<String, dynamic>? get libraryInfo => this['_libraryInfo'] as Map<String, dynamic>?;
+  
+  // Apple 공식 라이브러리 사용 여부 확인
+  bool get isUsingOfficialLibrary {
+    final libraryInfoData = libraryInfo;
+    if (libraryInfoData == null) return false;
+    return libraryInfoData['isUsingOfficialLibrary'] as bool? ?? false;
+  }
+}
+
 /// 통합 구독 상태 매니저 (단순화)
 /// 모든 구독 관련 기능을 하나의 인터페이스로 제공
 class UnifiedSubscriptionManager {
@@ -72,12 +109,12 @@ class UnifiedSubscriptionManager {
     // 🎯 캐시 우선 사용 (forceRefresh가 false이거나 캐시가 매우 최신인 경우)
     if (_isStateValid()) {
       if (!forceRefresh) {
-        if (kDebugMode) {
-          debugPrint('📦 [UnifiedSubscriptionManager] 캐시된 상태 사용');
-          debugPrint('   캐시된 상태: ${_cachedState!.statusMessage}');
-          debugPrint('   캐시된 배너: ${_cachedState!.activeBanners.map((e) => e.name).toList()}');
-        }
-        return _cachedState!;
+      if (kDebugMode) {
+        debugPrint('📦 [UnifiedSubscriptionManager] 캐시된 상태 사용');
+        debugPrint('   캐시된 상태: ${_cachedState!.statusMessage}');
+        debugPrint('   캐시된 배너: ${_cachedState!.activeBanners.map((e) => e.name).toList()}');
+      }
+      return _cachedState!;
       } else {
         // forceRefresh=true여도 캐시가 1분 이내면 캐시 사용
         final cacheAge = DateTime.now().difference(_lastCacheTime!);

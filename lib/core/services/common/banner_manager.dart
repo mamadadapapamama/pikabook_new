@@ -396,7 +396,7 @@ class BannerManager {
       }
       
       final stopwatch = kDebugMode ? (Stopwatch()..start()) : null;
-      
+
       // 1. 플랜 정보 준비 (PlanStatus 기반)
       PlanStatus finalPlanStatus = planStatus ?? PlanStatus.free;
       bool finalHasEverUsedTrial = hasEverUsedTrial ?? false;

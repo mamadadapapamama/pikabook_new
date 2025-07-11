@@ -449,32 +449,55 @@ class UpgradeModal extends StatelessWidget {
                   }
                 }
                 
-                // 구매 시작
+                // 🎯 개선된 구매 시작 (자동 에러 처리 포함)
                 if (kDebugMode) {
-                  debugPrint('🛒 [UpgradeModal] 구매 시작: ${InAppPurchaseService.premiumMonthlyId}');
+                  debugPrint('🛒 [UpgradeModal] 무료체험 구매 시작: ${InAppPurchaseService.premiumMonthlyId}');
                 }
                 
-                final success = await purchaseService.buyProduct(InAppPurchaseService.premiumMonthlyId);
+                final result = await purchaseService.attemptPurchaseWithGuidance(InAppPurchaseService.premiumMonthlyId);
                 
                 if (kDebugMode) {
-                  debugPrint('📊 [UpgradeModal] 구매 결과: $success');
+                  debugPrint('📊 [UpgradeModal] 구매 결과: ${result['success']}');
                 }
               
-                if (success) {
+                if (result['success'] == true) {
                   if (kDebugMode) {
                     debugPrint('✅ [UpgradeModal] 무료체험 구독 시작 성공');
+                    if (result['wasAutoResolved'] == true) {
+                      debugPrint('🔧 [UpgradeModal] 자동 해결됨: ${result['message']}');
+                    }
                   }
+                  
+                  // 자동 해결된 경우 사용자에게 알림
+                  if (result['wasAutoResolved'] == true && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(result['message'] ?? '구매가 시작되었습니다.'),
+                        backgroundColor: Colors.blue[700],
+                        duration: const Duration(seconds: 3),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                  
                 } else {
+                  // 🛠️ Pending Transaction 에러 특별 처리
+                  if (result['isPendingTransactionError'] == true) {
+                    await _showPendingTransactionDialog(context, result);
+                    return;
+                  }
+                  
+                  // 일반 에러 처리
                   if (kDebugMode) {
-                    debugPrint('⚠️ [UpgradeModal] 무료체험 구독 시작 실패 (success: false)');
+                    debugPrint('⚠️ [UpgradeModal] 무료체험 구독 시작 실패: ${result['message']}');
                   }
                   
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('구매를 시작할 수 없습니다. 잠시 후 다시 시도해주세요.'),
+                        content: Text(result['message'] ?? '구매를 시작할 수 없습니다.'),
                         backgroundColor: Colors.orange[600],
-                        duration: const Duration(seconds: 3),
+                        duration: Duration(seconds: result['shouldRetryLater'] == true ? 4 : 3),
                         behavior: SnackBarBehavior.floating,
                       ),
                     );
@@ -499,33 +522,8 @@ class UpgradeModal extends StatelessWidget {
                   return; // 취소는 에러 메시지 표시하지 않음
                 }
                 
-                // 🎯 Pending transaction 에러인 경우 특별 안내
-                if (e.toString().contains('PENDING_TRANSACTION_ERROR') ||
-                    e.toString().contains('pending transaction') ||
-                    e.toString().contains('storekit_duplicate_product_object')) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '이전 구매가 아직 처리 중입니다.\n\n'
-                          '해결 방법:\n'
-                          '1. 잠시 기다린 후 다시 시도\n'
-                          '2. 앱을 완전히 종료 후 재시작\n'
-                          '3. iOS 설정 → App Store → Sandbox 계정에서 구독 정리'
-                        ),
-                        backgroundColor: Colors.blue[700],
-                        duration: const Duration(seconds: 8),
-                        behavior: SnackBarBehavior.floating,
-                        action: SnackBarAction(
-                          label: '확인',
-                          textColor: Colors.white,
-                          onPressed: () {},
-                        ),
-                      ),
-                    );
-                  }
-                  return;
-                }
+                // 🎯 Pending transaction 에러는 이제 attemptPurchaseWithGuidance에서 자동 처리됨
+                // 여기서는 예외적인 케이스만 처리
                 
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -793,7 +791,7 @@ class UpgradeModal extends StatelessWidget {
     );
   }
 
-  /// 인앱 구매 처리
+  /// 인앱 구매 처리 (개선된 에러 처리)
   static Future<void> _handlePurchase(BuildContext context, String productId) async {
     try {
       if (kDebugMode) {
@@ -818,29 +816,47 @@ class UpgradeModal extends StatelessWidget {
         }
       });
       
-      // 인앱 구매 서비스가 초기화되지 않았으면 초기화
-      if (!purchaseService.isAvailableSync) {
-        await purchaseService.initialize();
-      }
-
-      // 구매 시작
-      final success = await purchaseService.buyProduct(productId);
+      // 🎯 개선된 구매 시도 (자동 에러 처리 포함)
+      final result = await purchaseService.attemptPurchaseWithGuidance(productId);
       
-      if (success) {
+      if (result['success'] == true) {
         if (kDebugMode) {
           debugPrint('✅ [UpgradeModal] 구매 요청 성공');
+          if (result['wasAutoResolved'] == true) {
+            debugPrint('🔧 [UpgradeModal] 자동 해결됨: ${result['message']}');
+          }
         }
+        
+        // 자동 해결된 경우 사용자에게 알림
+        if (result['wasAutoResolved'] == true && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? '구매가 시작되었습니다.'),
+              backgroundColor: Colors.blue[700],
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        
       } else {
+        // 🛠️ Pending Transaction 에러 특별 처리
+        if (result['isPendingTransactionError'] == true) {
+          await _showPendingTransactionDialog(context, result);
+          return;
+        }
+        
+        // 일반 에러 처리
         if (kDebugMode) {
-          debugPrint('❌ [UpgradeModal] 구매 요청 실패');
+          debugPrint('❌ [UpgradeModal] 구매 요청 실패: ${result['message']}');
         }
         
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('구매 요청 중 오류가 발생했습니다. 다시 시도해주세요.'),
+              content: Text(result['message'] ?? '구매 요청 중 오류가 발생했습니다.'),
               backgroundColor: Colors.red[600],
-              duration: const Duration(seconds: 2),
+              duration: Duration(seconds: result['shouldRetryLater'] == true ? 3 : 2),
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -848,13 +864,13 @@ class UpgradeModal extends StatelessWidget {
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [UpgradeModal] 구매 처리 중 오류: $e');
+        debugPrint('❌ [UpgradeModal] 구매 처리 중 예외: $e');
       }
       
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('구매 처리 중 오류가 발생했습니다: $e'),
+            content: Text('구매 처리 중 오류가 발생했습니다.'),
             backgroundColor: Colors.red[600],
             duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
@@ -862,6 +878,210 @@ class UpgradeModal extends StatelessWidget {
         );
       }
     }
+  }
+
+  /// 🛠️ Pending Transaction 해결 가이드 다이얼로그
+  static Future<void> _showPendingTransactionDialog(
+    BuildContext context, 
+    Map<String, dynamic> errorDetails
+  ) async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange[600], size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  errorDetails['title'] ?? '미완료 구매 감지',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                errorDetails['message'] ?? '이전 구매가 완료되지 않아 새 구매를 진행할 수 없습니다.',
+                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              ),
+              SizedBox(height: 16),
+              Text(
+                '해결 방법:',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              ...((errorDetails['solutions'] as List<Map<String, dynamic>>?) ?? [])
+                  .map((solution) => Padding(
+                        padding: EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          '• ${solution['description']}',
+                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        ),
+                      )),
+            ],
+          ),
+          actions: [
+            // 구매 복원 버튼
+            TextButton.icon(
+              icon: Icon(Icons.restore, size: 18),
+              label: Text('구매 복원'),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _attemptRestorePurchases(context);
+              },
+            ),
+            
+            // 앱 재시작 안내 버튼
+            TextButton.icon(
+              icon: Icon(Icons.refresh, size: 18),
+              label: Text('앱 재시작'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showAppRestartDialog(context);
+              },
+            ),
+            
+            // 닫기 버튼
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ColorTokens.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text('확인'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 🔄 구매 복원 시도
+  static Future<void> _attemptRestorePurchases(BuildContext context) async {
+    // 로딩 표시
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('미완료 거래 정리 중...'),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final purchaseService = InAppPurchaseService();
+      final result = await purchaseService.resolvePendingTransactions();
+      
+      // 로딩 다이얼로그 닫기
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      // 결과에 따른 메시지 표시
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? '처리 완료'),
+            backgroundColor: result['success'] == true 
+                ? Colors.green[600] 
+                : Colors.orange[600],
+            duration: Duration(seconds: result['needsManualIntervention'] == true ? 5 : 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      
+    } catch (e) {
+      // 로딩 다이얼로그 닫기
+      if (context.mounted) {
+        Navigator.of(context).pop();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('구매 복원 중 오류가 발생했습니다.'),
+            backgroundColor: Colors.red[600],
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  /// 📱 앱 재시작 안내 다이얼로그
+  static void _showAppRestartDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.restart_alt, color: Colors.blue[600], size: 24),
+              SizedBox(width: 8),
+              Text('앱 재시작 안내', style: TextStyle(fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '앱을 완전히 종료하고 다시 실행하면 미완료 거래가 자동으로 정리됩니다.',
+                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+              ),
+              SizedBox(height: 12),
+              Text(
+                '앱 종료 방법:',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 6),
+              Text(
+                '• iPhone: 홈 버튼 두 번 누르기 → 앱 위로 스와이프\n'
+                '• iPhone X 이상: 화면 하단에서 위로 스와이프 후 멈춤 → 앱 위로 스와이프',
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ColorTokens.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text('확인'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _resetModalState() {
