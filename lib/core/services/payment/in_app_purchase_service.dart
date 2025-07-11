@@ -38,6 +38,10 @@ class InAppPurchaseService {
   final Set<String> _processedPurchases = {};
   bool _isPurchaseInProgress = false;
   
+  // 🎯 사용자 변경 감지용
+  String? _lastUserId;
+  StreamSubscription<User?>? _authStateSubscription;
+  
   // 🎯 구매 성공 콜백
   Function()? _onPurchaseSuccess;
   
@@ -96,12 +100,16 @@ class InAppPurchaseService {
       // 🎯 상품 정보 로드
       await _loadProducts();
 
+      // 🎯 사용자 변경 감지 리스너 설정
+      _setupAuthStateListener();
+
       _isInitialized = true;
       
       if (kDebugMode) {
         print('✅ StoreKit 2 서비스 초기화 완료');
         print('   - Transaction.updates 자동 처리 활성화');
         print('   - 로드된 상품: ${_products.length}개');
+        print('   - 사용자 변경 감지 활성화');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -120,10 +128,42 @@ class InAppPurchaseService {
     }
   }
 
+  /// 🎯 사용자 변경 감지 리스너 설정
+  void _setupAuthStateListener() {
+    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen(
+      (User? user) {
+        final currentUserId = user?.uid;
+        
+        // 사용자가 변경된 경우 구매 관련 캐시 초기화
+        if (_lastUserId != currentUserId) {
+          if (kDebugMode) {
+            print('🔄 [InAppPurchaseService] 사용자 변경 감지: ${_lastUserId ?? "없음"} → ${currentUserId ?? "없음"}');
+          }
+          
+          // 구매 처리 캐시 초기화
+          _processedPurchases.clear();
+          _isPurchaseInProgress = false;
+          
+          _lastUserId = currentUserId;
+          
+          if (kDebugMode) {
+            print('✅ [InAppPurchaseService] 구매 캐시 초기화 완료');
+          }
+        }
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          print('❌ [InAppPurchaseService] 사용자 변경 감지 오류: $error');
+        }
+      },
+    );
+  }
+
   /// 🎯 서비스 종료
   void dispose() {
     if (_isInitialized) {
       _subscription.cancel();
+      _authStateSubscription?.cancel(); // 🎯 사용자 변경 감지 구독 취소
       
       // 🎯 StoreKit 2 미완료 거래 정리
       _finishPendingTransactions().catchError((error) {

@@ -63,6 +63,9 @@ class UnifiedSubscriptionManager {
   Future<SubscriptionState>? _ongoingRequest;
   DateTime? _lastRequestTime;
   static const Duration _debounceDelay = Duration(milliseconds: 300); // 300ms 디바운싱
+  
+  // 🎯 사용자 변경 감지용
+  String? _lastUserId;
 
   /// 🎯 앱 시작 시 초기화 (한 번만 호출)
   Future<void> initialize() async {
@@ -94,9 +97,25 @@ class UnifiedSubscriptionManager {
       return SubscriptionState.defaultState();
     }
     
-    // 🎯 디바운싱: 300ms 이내 연속 요청 방지
+    // 🎯 사용자 변경 감지 (캐시 무효화 및 강제 새로고침)
+    final currentUserId = currentUser.uid;
+    bool userChanged = false;
+    if (_lastUserId != currentUserId) {
+      userChanged = true;
+      _lastUserId = currentUserId;
+      
+      if (kDebugMode) {
+        debugPrint('🔄 [UnifiedSubscriptionManager] 사용자 변경 감지: $currentUserId');
+      }
+      
+      // 사용자 변경 시 캐시 즉시 무효화
+      invalidateCache();
+      forceRefresh = true; // 강제 새로고침 활성화
+    }
+    
+    // 🎯 디바운싱: 300ms 이내 연속 요청 방지 (단, 사용자 변경 시는 제외)
     final now = DateTime.now();
-    if (_lastRequestTime != null && now.difference(_lastRequestTime!) < _debounceDelay) {
+    if (!userChanged && _lastRequestTime != null && now.difference(_lastRequestTime!) < _debounceDelay) {
       if (kDebugMode) {
         debugPrint('⏱️ [UnifiedSubscriptionManager] 디바운싱: 너무 빠른 연속 요청 - 캐시 사용');
       }

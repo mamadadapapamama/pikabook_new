@@ -224,6 +224,24 @@ class _LoginScreenState extends State<LoginScreen> {
                                             ),
                                           ),
                                         ),
+                                        
+                                        // 🎯 비밀번호 찾기 링크 (로그인 모드에서만 표시)
+                                        if (!_isSignUp) ...[
+                                          Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: TextButton(
+                                              onPressed: _showPasswordResetDialog,
+                                              child: Text(
+                                                '비밀번호를 잊으셨나요?',
+                                                style: TypographyTokens.body2.copyWith(
+                                                  color: ColorTokens.textLight,
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        
                                         SizedBox(height: SpacingTokens.sm),
                                         
                                         // 로그인/회원가입 버튼
@@ -603,14 +621,28 @@ class _LoginScreenState extends State<LoginScreen> {
       if (_isSignUp) {
         // 회원가입
         user = await _authService.signUpWithEmail(email, password);
+        
+        if (user != null) {
+          // 🎯 회원가입 성공 - 이메일 검증 안내
+          await _showEmailVerificationDialog(user);
+          return;
+        }
       } else {
         // 로그인
         user = await _authService.signInWithEmail(email, password);
+        
+        if (user != null) {
+          // 🎯 로그인 성공 - 이메일 검증 상태 확인
+          if (!user.emailVerified) {
+            await _showEmailNotVerifiedDialog(user);
+            return;
+          }
+          
+          widget.onLoginSuccess(user);
+        }
       }
       
-      if (user != null) {
-        widget.onLoginSuccess(user);
-      } else {
+      if (user == null) {
         setState(() {
           _errorMessage = '로그인에 실패했습니다. 다시 시도해주세요.';
           _isLoading = false;
@@ -622,23 +654,43 @@ class _LoginScreenState extends State<LoginScreen> {
       if (e is FirebaseAuthException) {
         switch (e.code) {
           case 'user-not-found':
-            errorMessage = '등록되지 않은 이메일입니다.';
+            errorMessage = '등록되지 않은 이메일입니다. 회원가입을 먼저 해주세요.';
+            // 🎯 로그인 모드에서 에러 발생 시 회원가입 모드로 전환 제안
+            if (!_isSignUp) {
+              Future.delayed(Duration(milliseconds: 100), () {
+                if (mounted) {
+                  setState(() {
+                    _isSignUp = true; // 회원가입 모드로 전환
+                  });
+                }
+              });
+            }
             break;
           case 'wrong-password':
-            errorMessage = '비밀번호가 올바르지 않습니다.';
+            errorMessage = '비밀번호가 올바르지 않습니다. 비밀번호를 확인해주세요.';
             break;
           case 'email-already-in-use':
-            errorMessage = '이미 사용 중인 이메일입니다.';
+            errorMessage = '이미 가입된 이메일입니다. 로그인해주세요.';
+            // 🎯 회원가입 모드에서 에러 발생 시 자동으로 로그인 모드로 전환
+            if (_isSignUp) {
+              Future.delayed(Duration(milliseconds: 100), () {
+                if (mounted) {
+                  setState(() {
+                    _isSignUp = false; // 로그인 모드로 전환
+                  });
+                }
+              });
+            }
             break;
-          case 'weak-password':
-            errorMessage = '비밀번호가 너무 약합니다.';
-            break;
-          case 'invalid-email':
-            errorMessage = '올바르지 않은 이메일 형식입니다.';
-            break;
-          case 'too-many-requests':
-            errorMessage = '너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.';
-            break;
+                      case 'weak-password':
+              errorMessage = '비밀번호가 너무 약합니다. 6자 이상, 숫자와 문자를 포함해주세요.';
+              break;
+            case 'invalid-email':
+              errorMessage = '올바르지 않은 이메일 형식입니다. 다시 확인해주세요.';
+              break;
+            case 'too-many-requests':
+              errorMessage = '너무 많은 시도가 있었습니다. 5분 후 다시 시도해주세요.';
+              break;
           default:
             errorMessage = e.message ?? errorMessage;
             break;
@@ -704,5 +756,298 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  // === 이메일 검증 관련 다이얼로그 ===
+
+  /// 회원가입 후 이메일 검증 안내 다이얼로그
+  Future<void> _showEmailVerificationDialog(User user) async {
+    setState(() {
+      _isLoading = false;
+    });
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.mark_email_unread, color: ColorTokens.primary, size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '이메일 인증 필요',
+                  style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '🎉 회원가입이 완료되었습니다!',
+                style: TypographyTokens.body1,
+              ),
+              SizedBox(height: 16),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ColorTokens.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: ColorTokens.primary.withOpacity(0.3)),
+                ),
+                child: Text(
+                  '인증 메일을 ${user.email}로 발송했습니다. 이메일 인증을 완료하시고 피카북을 사용해 주세요.',
+                  style: TypographyTokens.body2.copyWith(color: ColorTokens.textPrimary),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await _resendVerificationEmail(user);
+              },
+              child: Text('메일 재발송', style: TypographyTokens.button.copyWith(color: ColorTokens.primary)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // 🎯 회원가입 완료 후 바로 로그인 처리 (이메일 검증 선택사항)
+                widget.onLoginSuccess(user);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ColorTokens.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('피카북 시작하기', style: TypographyTokens.button),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 로그인 시 이메일 미인증 안내 다이얼로그
+  Future<void> _showEmailNotVerifiedDialog(User user) async {
+    setState(() {
+      _isLoading = false;
+    });
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber, color: Colors.orange[600], size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '이메일 인증 필요',
+                  style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${user.email}\n이메일 인증이 완료되지 않았습니다.',
+                style: TypographyTokens.body1,
+              ),
+              SizedBox(height: 16),
+              Text(
+                '📧 인증 메일을 확인하고 인증 링크를 클릭해주세요.\n인증 후 다시 로그인해주세요.',
+                style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _resendVerificationEmail(user);
+              },
+              child: Text('인증 메일 재발송', style: TypographyTokens.button.copyWith(color: ColorTokens.primary)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                // 로그아웃 후 메인 로그인 화면으로
+                await FirebaseAuth.instance.signOut();
+                Navigator.of(context).pop();
+                setState(() {
+                  _isEmailLogin = false;
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ColorTokens.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('확인', style: TypographyTokens.button),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 인증 메일 재발송
+  Future<void> _resendVerificationEmail(User user) async {
+    try {
+      await _authService.resendEmailVerification();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('인증 메일을 재발송했습니다. 이메일을 확인해주세요.'),
+            backgroundColor: ColorTokens.secondary,
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('인증 메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.'),
+            backgroundColor: Colors.red[600],
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  /// 비밀번호 재설정 다이얼로그
+  Future<void> _showPasswordResetDialog() async {
+    final TextEditingController emailController = TextEditingController();
+    String? errorMessage;
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Row(
+                children: [
+                  Icon(Icons.lock_reset, color: ColorTokens.primary, size: 24),
+                  SizedBox(width: 8),
+                                     Expanded(
+                     child: Text(
+                       '비밀번호 재설정',
+                       style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold),
+                     ),
+                   ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '가입하신 이메일 주소를 입력하면\n비밀번호 재설정 링크를 보내드립니다.',
+                    style: TypographyTokens.body1,
+                  ),
+                  SizedBox(height: 16),
+                  TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      labelText: '이메일 주소',
+                      hintText: 'example@email.com',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.email_outlined),
+                      errorText: errorMessage,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: Text('취소', style: TypographyTokens.button.copyWith(color: ColorTokens.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final email = emailController.text.trim();
+                    
+                    if (email.isEmpty) {
+                      setDialogState(() {
+                        errorMessage = '이메일을 입력해주세요.';
+                      });
+                      return;
+                    }
+                    
+                    if (!email.contains('@') || !email.contains('.')) {
+                      setDialogState(() {
+                        errorMessage = '올바른 이메일 형식을 입력해주세요.';
+                      });
+                      return;
+                    }
+                    
+                    try {
+                      await _authService.sendPasswordResetEmail(email);
+                      Navigator.of(context).pop();
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('비밀번호 재설정 메일을 발송했습니다.\n이메일을 확인해주세요.'),
+                            backgroundColor: ColorTokens.secondary,
+                            duration: Duration(seconds: 4),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      String message = '메일 발송에 실패했습니다.';
+                      if (e is FirebaseAuthException) {
+                        switch (e.code) {
+                          case 'user-not-found':
+                            message = '등록되지 않은 이메일입니다.';
+                            break;
+                          case 'invalid-email':
+                            message = '올바르지 않은 이메일 형식입니다.';
+                            break;
+                        }
+                      }
+                      setDialogState(() {
+                        errorMessage = message;
+                      });
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: ColorTokens.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text('재설정 메일 발송', style: TypographyTokens.button),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }

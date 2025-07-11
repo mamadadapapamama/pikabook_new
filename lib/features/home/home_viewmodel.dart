@@ -4,6 +4,8 @@ import 'dart:async';
 import '../../core/models/note.dart';
 import '../../features/note/services/note_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
+import '../../core/services/authentication/user_preferences_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class HomeViewModel extends ChangeNotifier {
   final NoteService _noteService = NoteService();
@@ -13,6 +15,7 @@ class HomeViewModel extends ChangeNotifier {
   bool _isLoading = true;
   String? _error;
   StreamSubscription<List<Note>>? _notesSubscription;
+  StreamSubscription<User?>? _authStateSubscription; // 🎯 사용자 변경 감지용
   
   // 사용량 제한 상태
   bool _ocrLimitReached = false;
@@ -44,6 +47,9 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> _initializeViewModel() async {
     debugPrint('[HomeViewModel] 초기화 시작');
     try {
+      // 🎯 사용자 변경 감지 리스너 설정
+      _setupAuthStateListener();
+      
       // 사용량 제한 상태 확인
       await _checkUsageLimits();
       
@@ -53,6 +59,79 @@ class HomeViewModel extends ChangeNotifier {
       debugPrint('[HomeViewModel] 초기화 중 오류 발생: $e');
       debugPrint('[HomeViewModel] 스택 트레이스: $stackTrace');
       _handleError('노트 목록을 불러오는 중 오류가 발생했습니다: $e');
+    }
+  }
+
+  /// 🎯 사용자 변경 감지 리스너 설정
+  void _setupAuthStateListener() {
+    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen(
+      (User? user) async {
+        if (kDebugMode) {
+          debugPrint('🔔 [HomeViewModel] 사용자 변경 감지: ${user?.uid ?? "로그아웃"}');
+        }
+        
+        if (user == null) {
+          // 로그아웃 시 상태 초기화
+          _resetUsageLimits();
+          if (kDebugMode) {
+            debugPrint('🔄 [HomeViewModel] 로그아웃 - 사용량 상태 초기화');
+          }
+        } else {
+          // 새 사용자 로그인 시 온보딩 상태 확인 후 사용량 상태 체크
+          await _checkUsageLimitsAfterUserChange();
+        }
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          debugPrint('❌ [HomeViewModel] 사용자 변경 감지 오류: $error');
+        }
+      },
+    );
+  }
+
+  /// 🔄 사용량 상태 초기화 (로그아웃 시)
+  void _resetUsageLimits() {
+    _ocrLimitReached = false;
+    _translationLimitReached = false;
+    _ttsLimitReached = false;
+    _storageLimitReached = false;
+    notifyListeners();
+  }
+
+  /// 🎯 사용자 변경 후 온보딩 상태 확인하여 사용량 체크
+  Future<void> _checkUsageLimitsAfterUserChange() async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🔄 [HomeViewModel] 사용자 변경 후 온보딩 상태 확인');
+      }
+      
+      // UserPreferencesService import 필요
+      final userPrefsService = UserPreferencesService();
+      final preferences = await userPrefsService.getPreferences();
+      final hasCompletedOnboarding = preferences.onboardingCompleted;
+      
+      if (!hasCompletedOnboarding) {
+        if (kDebugMode) {
+          debugPrint('🔄 [HomeViewModel] 🆕 신규 사용자 (온보딩 미완료) - 사용량 상태 체크 건너뛰고 초기화');
+        }
+        // 신규 사용자는 사용량 상태 초기화 (제한 없음)
+        _resetUsageLimits();
+        return;
+      }
+      
+      if (kDebugMode) {
+        debugPrint('🔄 [HomeViewModel] ✅ 기존 사용자 (온보딩 완료) - 사용량 상태 재체크');
+      }
+      
+      // 온보딩 완료된 사용자만 사용량 상태 체크
+      await _checkUsageLimits();
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeViewModel] 사용자 변경 후 사용량 체크 실패: $e');
+      }
+      // 오류 시 안전하게 제한 없음으로 설정
+      _resetUsageLimits();
     }
   }
 
@@ -233,6 +312,7 @@ class HomeViewModel extends ChangeNotifier {
   void dispose() {
     debugPrint('[HomeViewModel] dispose 호출됨');
     _notesSubscription?.cancel();
+    _authStateSubscription?.cancel(); // 🎯 사용자 변경 감지 구독 취소
     super.dispose();
   }
 }
