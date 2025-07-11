@@ -4,10 +4,8 @@ import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/authentication/deleted_user_service.dart';
 import '../../core/services/common/support_service.dart';
-import '../../core/services/subscription/unified_subscription_manager.dart';
 import '../../core/services/subscription/subscription_entitlement_engine.dart';
 import '../../core/models/subscription_state.dart';
-import '../../core/models/plan.dart';
 import '../../core/models/plan_status.dart';
 import '../../core/utils/language_constants.dart';
 import '../../core/services/text_processing/text_processing_service.dart';
@@ -182,6 +180,8 @@ class SettingsViewModel extends ChangeNotifier {
       final entitlement = serverResponse['entitlement'] as String? ?? 'free';
       final subscriptionStatus = serverResponse['subscriptionStatus'] as String? ?? 'cancelled';
       final hasUsedTrial = serverResponse['hasUsedTrial'] as bool? ?? false;
+      final expirationDate = serverResponse['expirationDate'] as String?;
+      final subscriptionType = serverResponse['subscriptionType'] as String?;
       
       // 🎯 기존 호환성을 위한 PlanStatus 설정 (레거시 UI용)
       _planStatus = _calculatePlanStatusFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
@@ -195,8 +195,9 @@ class SettingsViewModel extends ChangeNotifier {
         _planType = 'free';
       }
       
-      // 🎯 표시명과 CTA 설정 (v4-simplified 직접 처리)
-      _configureUIFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
+      // 🎯 표시명과 CTA 설정 (v4-simplified 직접 처리 + 날짜 정보)
+      _configureUIFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial, 
+        expirationDate: expirationDate, subscriptionType: subscriptionType);
       
       _isPlanLoaded = true;
       notifyListeners();
@@ -220,7 +221,7 @@ class SettingsViewModel extends ChangeNotifier {
       _planName = '새로고침 실패';
       _remainingDays = 0;
       _planStatus = PlanStatus.free;
-      _configureUIFromServerResponse('free', 'cancelled', false); // v4-simplified 기본값
+      _configureUIFromServerResponse('free', 'cancelled', false, expirationDate: null, subscriptionType: null); // v4-simplified 기본값
       _isPlanLoaded = true;
       
       notifyListeners();
@@ -289,6 +290,8 @@ class SettingsViewModel extends ChangeNotifier {
       final entitlement = serverResponse['entitlement'] as String? ?? 'free';
       final subscriptionStatus = serverResponse['subscriptionStatus'] as String? ?? 'cancelled';
       final hasUsedTrial = serverResponse['hasUsedTrial'] as bool? ?? false;
+      final expirationDate = serverResponse['expirationDate'] as String?;
+      final subscriptionType = serverResponse['subscriptionType'] as String?;
       
       // 🎯 기존 호환성을 위한 PlanStatus 설정 (레거시 UI용)
       _planStatus = _calculatePlanStatusFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
@@ -302,8 +305,9 @@ class SettingsViewModel extends ChangeNotifier {
         _planType = 'free';
       }
       
-      // 🎯 표시명과 CTA 설정 (v4-simplified 직접 처리)
-      _configureUIFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
+      // 🎯 표시명과 CTA 설정 (v4-simplified 직접 처리 + 날짜 정보)
+      _configureUIFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial, 
+        expirationDate: expirationDate, subscriptionType: subscriptionType);
       
       _isPlanLoaded = true;
       notifyListeners();
@@ -325,7 +329,7 @@ class SettingsViewModel extends ChangeNotifier {
       _planName = '플랜 정보 로드 실패';
       _remainingDays = 0;
       _planStatus = PlanStatus.free;
-      _configureUIFromServerResponse('free', 'cancelled', false); // v4-simplified 기본값
+      _configureUIFromServerResponse('free', 'cancelled', false, expirationDate: null, subscriptionType: null); // v4-simplified 기본값
       _isPlanLoaded = true;
       notifyListeners();
     } finally {
@@ -619,28 +623,67 @@ class SettingsViewModel extends ChangeNotifier {
   }
 
   /// 🎯 v4-simplified 서버 응답으로부터 UI 설정 (직접 처리)
-  void _configureUIFromServerResponse(String entitlement, String subscriptionStatus, bool hasUsedTrial) {
-    // 🎯 상태 메시지 생성
-    if (entitlement == 'trial') {
-      _planName = subscriptionStatus == 'cancelling' ? '무료체험 (취소 예정)' : '무료체험 중';
-      _remainingDays = 0; // 서버에서 남은 일수 계산 안함 (단순화)
-    } else if (entitlement == 'premium') {
-      _planName = subscriptionStatus == 'cancelling' ? '프리미엄 (취소 예정)' : '프리미엄';
-      _remainingDays = 0;
-    } else {
-      _planName = '무료 플랜';
-      _remainingDays = 0;
+  void _configureUIFromServerResponse(String entitlement, String subscriptionStatus, bool hasUsedTrial, {String? expirationDate, String? subscriptionType}) {
+    // 🎯 만료일 계산 및 표시
+    String? dateDisplay;
+    int daysRemaining = 0;
+    
+    if (expirationDate != null && expirationDate.isNotEmpty) {
+      try {
+        final expiration = DateTime.parse(expirationDate);
+        final now = DateTime.now();
+        daysRemaining = expiration.difference(now).inDays;
+        
+        // 날짜 표시 형식 (월 일)
+        dateDisplay = '${expiration.month}월 ${expiration.day}일';
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ [Settings] 만료일 파싱 실패: $expirationDate');
+        }
+      }
     }
+    
+    // 🎯 구독 타입 표시 (monthly/yearly)
+    final subscriptionTypeDisplay = subscriptionType == 'yearly' ? 'yearly' : 'monthly';
+    
+    // 🎯 상태별 표시명 생성 (날짜 정보 포함)
+    if (entitlement == 'trial') {
+      if (subscriptionStatus == 'active') {
+        _planName = dateDisplay != null ? '무료체험 중 (${daysRemaining}일 남음)' : '무료체험 중';
+      } else if (subscriptionStatus == 'cancelling') {
+        _planName = dateDisplay != null ? '무료체험 중 (${daysRemaining}일 후 무료 전환)' : '무료체험 중 (취소 예정)';
+      } else {
+        _planName = '무료체험 완료';
+      }
+    } else if (entitlement == 'premium') {
+      if (subscriptionStatus == 'active') {
+        _planName = dateDisplay != null ? '프리미엄 ($subscriptionTypeDisplay), 다음 결제일: $dateDisplay' : '프리미엄';
+      } else if (subscriptionStatus == 'cancelling') {
+        _planName = dateDisplay != null ? '프리미엄 ($subscriptionTypeDisplay), $dateDisplay 부터 무료 전환' : '프리미엄 (취소 예정)';
+      } else {
+        _planName = '프리미엄 만료';
+      }
+    } else {
+      // Grace period 처리 (서버에서 entitlement가 premium이지만 특별한 상태)
+      if (subscriptionStatus == 'active' && dateDisplay != null && daysRemaining <= 7) {
+        // Grace period로 추정 (만료일이 7일 이내)
+        _planName = '프리미엄 ($dateDisplay 까지 결제 확인 필요)';
+      } else {
+        _planName = '무료 플랜';
+      }
+    }
+    
+    _remainingDays = daysRemaining;
     
     // 🎯 CTA 및 쿼터 설정 (v4-simplified 직접 처리 - 매우 단순!)
     if (entitlement == 'trial') {
       if (subscriptionStatus == 'active') {
-        _ctaButtonText = '체험 중 (App Store에서 관리)';
+        _ctaButtonText = dateDisplay != null ? '${daysRemaining}일 뒤에 프리미엄 전환' : '체험 중 (App Store에서 관리)';
         _ctaButtonEnabled = false;
         _ctaSubtext = '구독 취소는 App Store에서';
         _shouldUsePremiumQuota = true;
       } else if (subscriptionStatus == 'cancelling') {
-        _ctaButtonText = '체험 종료 예정 (App Store에서 관리)';
+        _ctaButtonText = dateDisplay != null ? '${daysRemaining}일 뒤에 무료 플랜 전환' : '체험 종료 예정 (App Store에서 관리)';
         _ctaButtonEnabled = false;
         _ctaSubtext = '';
         _shouldUsePremiumQuota = true;
@@ -652,10 +695,24 @@ class SettingsViewModel extends ChangeNotifier {
         _shouldUsePremiumQuota = false;
       }
     } else if (entitlement == 'premium') {
-      _ctaButtonText = '사용량 추가 문의';
-      _ctaButtonEnabled = true;
-      _ctaSubtext = '';
-      _shouldUsePremiumQuota = true;
+      if (subscriptionStatus == 'active' && dateDisplay != null && daysRemaining <= 7) {
+        // Grace period 상태
+        _ctaButtonText = '앱스토어 결제 확인 필요';
+        _ctaButtonEnabled = false;
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = true;
+      } else if (subscriptionStatus == 'cancelling') {
+        _ctaButtonText = '프리미엄으로 업그레이드';
+        _ctaButtonEnabled = true;
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = true;
+      } else {
+        // 정상 프리미엄
+        _ctaButtonText = '사용량 추가 문의';
+        _ctaButtonEnabled = true;
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = true;
+      }
     } else { // entitlement == 'free'
       _ctaButtonText = '프리미엄으로 업그레이드';
       _ctaButtonEnabled = true;

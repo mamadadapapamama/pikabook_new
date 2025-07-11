@@ -12,7 +12,8 @@ import '../../core/widgets/upgrade_modal.dart';
 import '../../core/widgets/edit_dialog.dart';
 import '../../core/utils/test_data_generator.dart';
 import '../../core/services/common/banner_manager.dart';
-import '../../core/utils/subscription_debug_helper.dart';
+import '../../core/services/subscription/unified_subscription_manager.dart';
+
 import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
 
@@ -1105,7 +1106,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // 🔍 구독 상태 전체 진단 (테스트용)
+  // 🔍 구독 상태 간단 진단 (v4-simplified)
   Future<void> _runSubscriptionDebug() async {
     if (!kDebugMode) return;
     
@@ -1114,7 +1115,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '🔍 구독 상태 진단을 시작합니다... (콘솔 확인)',
+              '🔍 구독 상태 확인 중... (콘솔 확인)',
               style: TypographyTokens.caption.copyWith(
                 color: Colors.white,
               ),
@@ -1126,15 +1127,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
       
-      // 구독 상태 전체 진단 실행
-      final debugHelper = SubscriptionDebugHelper();
-      await debugHelper.diagnoseSubscriptionState();
+      // v4-simplified: 간단한 상태 출력
+      final unifiedManager = UnifiedSubscriptionManager();
+      final state = await unifiedManager.getSubscriptionState(forceRefresh: true);
+      
+      debugPrint('🔍 [Settings] === v4-simplified 구독 상태 ===');
+      debugPrint('   권한: ${state.entitlement.value}');
+      debugPrint('   구독 상태: ${state.subscriptionStatus.value}');
+      debugPrint('   체험 사용 이력: ${state.hasUsedTrial}');
+      debugPrint('   프리미엄 여부: ${state.isPremium}');
+      debugPrint('   체험 여부: ${state.isTrial}');
+      debugPrint('   상태 메시지: ${state.statusMessage}');
+      debugPrint('   사용량 한도: ${state.hasUsageLimitReached}');
+      debugPrint('   활성 배너: ${state.activeBanners.map((e) => e.name).toList()}');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '✅ 구독 상태 진단이 완료되었습니다. 콘솔을 확인하세요.',
+              '✅ 구독 상태 확인 완료. 콘솔을 확인하세요.',
               style: TypographyTokens.caption.copyWith(
                 color: Colors.white,
               ),
@@ -1146,15 +1157,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
       
-      if (kDebugMode) {
-        debugPrint('✅ [Settings] 구독 상태 전체 진단 완료');
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '❌ 구독 진단 실패: $e',
+              '❌ 구독 상태 확인 실패: $e',
               style: TypographyTokens.caption.copyWith(
                 color: Colors.white,
               ),
@@ -1167,7 +1175,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       
       if (kDebugMode) {
-        debugPrint('❌ [Settings] 구독 진단 실패: $e');
+        debugPrint('❌ [Settings] 구독 상태 확인 실패: $e');
       }
     }
   }
