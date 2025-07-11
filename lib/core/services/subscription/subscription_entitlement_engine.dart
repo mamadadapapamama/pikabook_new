@@ -38,6 +38,7 @@ class SubscriptionEntitlementEngine {
   bool _isInitialized = false;
   Map<String, dynamic>? _cachedEntitlements;
   DateTime? _lastEntitlementCheck;
+  String? _cachedUserId; // 🎯 사용자별 캐시 분리용
   
   // 🎯 처리된 Transaction ID 추적 (중복 방지)
   final Set<String> _processedTransactionIds = {};
@@ -323,24 +324,37 @@ class SubscriptionEntitlementEngine {
   /// 🎯 현재 권한 조회 (v4-simplified 응답 구조)
   Future<Map<String, dynamic>> getCurrentEntitlements({bool forceRefresh = false}) async {
     try {
-      // 🎯 캐시 확인
-      if (!forceRefresh && _cachedEntitlements != null && _lastEntitlementCheck != null) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        return _getDefaultEntitlements();
+      }
+      
+      // 🎯 사용자별 캐시 확인 (사용자 변경 시 캐시 무효화)
+      final currentUserId = user.uid;
+      if (!forceRefresh && 
+          _cachedEntitlements != null && 
+          _lastEntitlementCheck != null && 
+          _cachedUserId == currentUserId) {  // 🚨 사용자 ID 체크 추가!
         final cacheAge = DateTime.now().difference(_lastEntitlementCheck!);
         if (cacheAge < _cacheValidDuration) {
           if (kDebugMode) {
-            print('✅ 캐시된 권한 정보 반환 (${cacheAge.inSeconds}초 전)');
+            print('✅ 캐시된 권한 정보 반환 (${cacheAge.inSeconds}초 전, 사용자: ${currentUserId.substring(0, 8)}...)');
           }
           return _cachedEntitlements!;
         }
       }
+      
+      // 🎯 사용자가 변경된 경우 캐시 무효화
+      if (_cachedUserId != currentUserId) {
+        if (kDebugMode) {
+          print('🔄 [EntitlementEngine] 사용자 변경 감지: ${_cachedUserId?.substring(0, 8) ?? 'null'} → ${currentUserId.substring(0, 8)}');
+          print('   캐시 무효화 및 강제 새로고침');
+        }
+        invalidateCache();
+      }
 
       if (kDebugMode) {
         print('🔍 v4-simplified 권한 조회 ${forceRefresh ? '(강제 갱신)' : ''}');
-      }
-
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        return _getDefaultEntitlements();
       }
 
       // 🎯 서버에서 권한 조회 (v4-simplified)
@@ -360,14 +374,15 @@ class SubscriptionEntitlementEngine {
         return _getDefaultEntitlements();
       }
       
-      // 🚀 v4-simplified 응답 구조 처리
-      final version = responseData['version'] as String?;
-      final dataSource = responseData['dataSource'] as String?;
+      // 🚀 v4-simplified 응답 구조 처리 (안전한 타입 추출)
+      final version = responseData['version'] is String ? responseData['version'] as String : null;
+      final dataSource = responseData['dataSource'] is String ? responseData['dataSource'] as String : null;
       
-      // 🔧 안전한 subscription 필드 추출
+      // 🔧 안전한 subscription 필드 추출 (캐스팅 제거)
       Map<String, dynamic>? subscription;
-      if (responseData['subscription'] is Map) {
-        subscription = Map<String, dynamic>.from(responseData['subscription'] as Map);
+      final subscriptionRaw = responseData['subscription'];
+      if (subscriptionRaw is Map) {
+        subscription = Map<String, dynamic>.from(subscriptionRaw);
       }
       
       if (kDebugMode) {
@@ -382,8 +397,11 @@ class SubscriptionEntitlementEngine {
           print('   - hasUsedTrial: ${subscription['hasUsedTrial']}');
           
           if (subscription['bannerMetadata'] != null) {
-            final bannerMeta = subscription['bannerMetadata'] as Map<String, dynamic>;
-            print('   - bannerType: ${bannerMeta['bannerType']}');
+            final bannerMetaRaw = subscription['bannerMetadata'];
+            if (bannerMetaRaw is Map) {
+              final bannerMeta = Map<String, dynamic>.from(bannerMetaRaw);
+              print('   - bannerType: ${bannerMeta['bannerType']}');
+            }
           }
         }
         
@@ -404,21 +422,21 @@ class SubscriptionEntitlementEngine {
         return _getDefaultEntitlements();
       }
       
-      // 🎯 v4-simplified 구조를 기존 형식으로 변환 (호환성)
-      final entitlement = subscription['entitlement'] as String? ?? 'free';
-      final subscriptionStatus = subscription['subscriptionStatus'] as String? ?? 'cancelled';
-      final hasUsedTrial = subscription['hasUsedTrial'] as bool? ?? false;
+      // 🎯 v4-simplified 구조를 기존 형식으로 변환 (호환성) - 안전한 타입 추출
+      final entitlement = subscription != null && subscription['entitlement'] is String ? subscription['entitlement'] as String : 'free';
+      final subscriptionStatus = subscription != null && subscription['subscriptionStatus'] is String ? subscription['subscriptionStatus'] as String : 'cancelled';
+      final hasUsedTrial = subscription != null && subscription['hasUsedTrial'] is bool ? subscription['hasUsedTrial'] as bool : false;
       
       final compatibleFormat = {
         // 새로운 필드들
         'entitlement': entitlement,
         'subscriptionStatus': subscriptionStatus,
         'hasUsedTrial': hasUsedTrial,
-        'autoRenewEnabled': subscription['autoRenewEnabled'] ?? false,
-        'expirationDate': subscription['expirationDate'],
-        'subscriptionType': subscription['subscriptionType'],
-        'originalTransactionId': subscription['originalTransactionId'],
-        'bannerMetadata': subscription['bannerMetadata'],
+        'autoRenewEnabled': subscription != null && subscription['autoRenewEnabled'] is bool ? subscription['autoRenewEnabled'] : false,
+        'expirationDate': subscription != null && subscription['expirationDate'] is String ? subscription['expirationDate'] : null,
+        'subscriptionType': subscription != null && subscription['subscriptionType'] is String ? subscription['subscriptionType'] : null,
+        'originalTransactionId': subscription != null && subscription['originalTransactionId'] is String ? subscription['originalTransactionId'] : null,
+        'bannerMetadata': subscription != null && subscription['bannerMetadata'] is Map ? Map<String, dynamic>.from(subscription['bannerMetadata']) : null,
         
         // 기존 호환성 필드들
         'premium': entitlement == 'premium',
@@ -436,6 +454,7 @@ class SubscriptionEntitlementEngine {
       
       _cachedEntitlements = compatibleFormat;
       _lastEntitlementCheck = DateTime.now();
+      _cachedUserId = currentUserId; // 🎯 사용자별 캐시 분리
       
       // 🎯 권한 스트림 업데이트
       _entitlementStreamController.add(compatibleFormat);
@@ -543,6 +562,7 @@ class SubscriptionEntitlementEngine {
   void invalidateCache() {
     _cachedEntitlements = null;
     _lastEntitlementCheck = null;
+    _cachedUserId = null; // 🎯 사용자별 캐시 분리
     
     if (kDebugMode) {
       print('🧹 StoreKit 2 권한 캐시 무효화');

@@ -5,6 +5,7 @@ import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/authentication/deleted_user_service.dart';
 import '../../core/services/common/support_service.dart';
 import '../../core/services/subscription/unified_subscription_manager.dart';
+import '../../core/services/subscription/subscription_entitlement_engine.dart';
 import '../../core/models/subscription_state.dart';
 import '../../core/models/plan.dart';
 import '../../core/models/plan_status.dart';
@@ -102,14 +103,25 @@ class SettingsViewModel extends ChangeNotifier {
       }
       // 사용자가 변경된 경우 모든 데이터 초기화
       _resetAllData();
+      
+      // 🎯 SubscriptionEntitlementEngine 캐시도 무효화 (중요!)
+      final entitlementEngine = SubscriptionEntitlementEngine();
+      entitlementEngine.invalidateCache();
     }
     
     _lastUserId = currentUserId;
     
-    // 🔄 사용자 변경 감지를 위해 강제로 최신 데이터 로드
+    // 🔄 사용자 변경이 있었다면 강제 새로고침, 아니면 캐시 활용
     await loadUserData();
     await loadUserPreferences();
-    await loadPlanInfo();
+    
+    if (isUserChanged) {
+      // 🚨 사용자 변경 시 반드시 강제 새로고침 (이전 사용자 데이터 방지)
+      await _loadPlanInfoWithForceRefresh();
+    } else {
+      // 동일 사용자면 캐시 활용
+      await loadPlanInfo();
+    }
     
     // 🎯 과거 체험 이력 로드 (탈퇴 이력 포함)
     await _loadTrialHistoryFromDeletedUser();
@@ -146,46 +158,45 @@ class SettingsViewModel extends ChangeNotifier {
     await _loadPlanInfoWithForceRefresh();
   }
   
-  /// 강제 새로고침으로 플랜 정보 로드
+  /// 강제 새로고침으로 플랜 정보 로드 (v4-simplified 직접 처리)
   Future<void> _loadPlanInfoWithForceRefresh() async {
     _setLoading(true);
     try {
       if (kDebugMode) {
-        print('🔄 [Settings] App Store 기반 플랜 정보 강제 새로고침');
+        print('🔄 [Settings] v4-simplified 서버 응답 직접 처리 (강제 새로고침)');
       }
       
-      // 🎯 UnifiedSubscriptionManager에서 통합 구독 상태 가져오기
-      final unifiedManager = UnifiedSubscriptionManager();
-      final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: true);
+      // 🎯 SubscriptionEntitlementEngine에서 직접 서버 응답 가져오기
+      final entitlementEngine = SubscriptionEntitlementEngine();
+      final serverResponse = await entitlementEngine.getCurrentEntitlements(forceRefresh: true);
       
       if (kDebugMode) {
-        print('📥 [Settings] 강제 새로고침 결과:');
-        print('   구독 상태: $subscriptionState');
-        print('   상태 메시지: ${subscriptionState.statusMessage}');
-        print('   프리미엄 여부: ${subscriptionState.isPremium}');
-        print('   체험 여부: ${subscriptionState.isTrial}');
-        print('   남은 일수: ${subscriptionState.daysRemaining}');
+        print('📥 [Settings] v4-simplified 서버 응답:');
+        print('   entitlement: ${serverResponse['entitlement']}');
+        print('   subscriptionStatus: ${serverResponse['subscriptionStatus']}');
+        print('   hasUsedTrial: ${serverResponse['hasUsedTrial']}');
+        print('   dataSource: ${serverResponse['_dataSource']}');
       }
       
-      // 🎯 구독 상태 저장 (v4-simplified 구조 사용)
-      // PlanStatus는 entitlement와 subscriptionStatus 조합으로 계산
-      _planStatus = _calculatePlanStatusFromSubscriptionState(subscriptionState);
+      // v4-simplified 필드 추출
+      final entitlement = serverResponse['entitlement'] as String? ?? 'free';
+      final subscriptionStatus = serverResponse['subscriptionStatus'] as String? ?? 'cancelled';
+      final hasUsedTrial = serverResponse['hasUsedTrial'] as bool? ?? false;
+      
+      // 🎯 기존 호환성을 위한 PlanStatus 설정 (레거시 UI용)
+      _planStatus = _calculatePlanStatusFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
       
       // UI에 표시할 정보 설정
-      if (subscriptionState.isPremium) {
+      if (entitlement == 'premium') {
         _planType = 'premium';
-      } else if (subscriptionState.isTrial) {
+      } else if (entitlement == 'trial') {
         _planType = 'premium'; // 체험도 프리미엄으로 분류
       } else {
         _planType = 'free';
       }
       
-      // 🎯 남은 일수 포함한 표시명 설정
-      _planName = subscriptionState.statusMessage;
-      _remainingDays = subscriptionState.daysRemaining;
-      
-      // 🎯 구독 상태별 CTA 및 쿼터 설정
-      _configureCTAAndQuota(subscriptionState);
+      // 🎯 표시명과 CTA 설정 (v4-simplified 직접 처리)
+      _configureUIFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
       
       _isPlanLoaded = true;
       notifyListeners();
@@ -204,12 +215,12 @@ class SettingsViewModel extends ChangeNotifier {
         print('❌ [Settings] 강제 새로고침 오류: $e');
       }
       
-      // 에러 발생 시 기본값 설정
+      // 에러 발생 시 기본값 설정 (v4-simplified 방식)
       _planType = 'free';
       _planName = '새로고침 실패';
       _remainingDays = 0;
       _planStatus = PlanStatus.free;
-      _configureCTAAndQuota(null); // 기본 무료 플랜 설정
+      _configureUIFromServerResponse('free', 'cancelled', false); // v4-simplified 기본값
       _isPlanLoaded = true;
       
       notifyListeners();
@@ -254,39 +265,46 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
-  /// 플랜 정보 로드 (App Store 기반)
+  /// 플랜 정보 로드 (v4-simplified 직접 처리)
   Future<void> loadPlanInfo() async {
     _setLoading(true);
     try {
       if (kDebugMode) {
-        print('🔍 [Settings] 플랜 정보 로드 시작 (캐시 우선)');
+        print('🔍 [Settings] v4-simplified 서버 응답 직접 처리 (캐시 우선)');
       }
-      // UnifiedSubscriptionManager에서 구독 상태 가져오기 (캐시 활용)
-      final unifiedManager = UnifiedSubscriptionManager();
-      final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: false); // forceRefresh를 false로 변경
+      
+      // 🎯 SubscriptionEntitlementEngine에서 직접 서버 응답 가져오기 (캐시 활용)
+      final entitlementEngine = SubscriptionEntitlementEngine();
+      final serverResponse = await entitlementEngine.getCurrentEntitlements(forceRefresh: false);
+      
       if (kDebugMode) {
-        print('📥 [Settings] 구독 상태 조회 결과:');
-        print('   구독 상태: $subscriptionState');
-        print('   상태 메시지: ${subscriptionState.statusMessage}');
-        print('   프리미엄 여부: ${subscriptionState.isPremium}');
-        print('   체험 여부: ${subscriptionState.isTrial}');
-        print('   남은 일수: ${subscriptionState.daysRemaining}');
+        print('📥 [Settings] v4-simplified 서버 응답 (캐시):');
+        print('   entitlement: ${serverResponse['entitlement']}');
+        print('   subscriptionStatus: ${serverResponse['subscriptionStatus']}');
+        print('   hasUsedTrial: ${serverResponse['hasUsedTrial']}');
+        print('   dataSource: ${serverResponse['_dataSource']}');
       }
-      // 🎯 구독 상태 저장 (v4-simplified 구조 사용)
-      _planStatus = _calculatePlanStatusFromSubscriptionState(subscriptionState);
+      
+      // v4-simplified 필드 추출
+      final entitlement = serverResponse['entitlement'] as String? ?? 'free';
+      final subscriptionStatus = serverResponse['subscriptionStatus'] as String? ?? 'cancelled';
+      final hasUsedTrial = serverResponse['hasUsedTrial'] as bool? ?? false;
+      
+      // 🎯 기존 호환성을 위한 PlanStatus 설정 (레거시 UI용)
+      _planStatus = _calculatePlanStatusFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
+      
       // UI에 표시할 정보 설정
-      if (subscriptionState.isPremium) {
+      if (entitlement == 'premium') {
         _planType = 'premium';
-      } else if (subscriptionState.isTrial) {
+      } else if (entitlement == 'trial') {
         _planType = 'premium'; // 체험도 프리미엄으로 분류
       } else {
         _planType = 'free';
       }
-      // 🎯 남은 일수 포함한 표시명 설정
-      _planName = subscriptionState.statusMessage;
-      _remainingDays = subscriptionState.daysRemaining;
-      // 🎯 구독 상태별 CTA 및 쿼터 설정
-      _configureCTAAndQuota(subscriptionState);
+      
+      // 🎯 표시명과 CTA 설정 (v4-simplified 직접 처리)
+      _configureUIFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
+      
       _isPlanLoaded = true;
       notifyListeners();
       if (kDebugMode) {
@@ -302,12 +320,12 @@ class SettingsViewModel extends ChangeNotifier {
       if (kDebugMode) {
         print('❌ [Settings] 플랜 정보 로드 오류: $e');
       }
-      // 에러 발생 시 기본값 설정
+      // 에러 발생 시 기본값 설정 (v4-simplified 방식)
       _planType = 'free';
       _planName = '플랜 정보 로드 실패';
       _remainingDays = 0;
       _planStatus = PlanStatus.free;
-      _configureCTAAndQuota(null); // 기본 무료 플랜 설정
+      _configureUIFromServerResponse('free', 'cancelled', false); // v4-simplified 기본값
       _isPlanLoaded = true;
       notifyListeners();
     } finally {
@@ -563,7 +581,106 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
-  /// 🎯 SubscriptionState로부터 PlanStatus 계산 (v4-simplified 구조 호환)
+  /// 🎯 v4-simplified 서버 응답으로부터 PlanStatus 계산
+  PlanStatus _calculatePlanStatusFromServerResponse(String entitlement, String subscriptionStatus, bool hasUsedTrial) {
+    if (entitlement == 'premium') {
+      switch (subscriptionStatus) {
+        case 'active':
+          return PlanStatus.premiumActive;
+        case 'cancelling':
+          return PlanStatus.premiumCancelled;
+        case 'cancelled':
+        case 'expired':
+          return PlanStatus.premiumExpired;
+        case 'refunded':
+          return PlanStatus.premiumExpired; // 환불된 경우 만료로 처리
+      }
+    } else if (entitlement == 'trial') {
+      switch (subscriptionStatus) {
+        case 'active':
+          return PlanStatus.trialActive;
+        case 'cancelling':
+          return PlanStatus.trialCancelled;
+        case 'cancelled':
+        case 'expired':
+          return PlanStatus.trialCompleted;
+        case 'refunded':
+          return PlanStatus.trialCompleted; // 환불된 경우 완료로 처리
+      }
+    } else { // entitlement == 'free'
+      if (hasUsedTrial) {
+        return PlanStatus.trialCompleted; // 과거에 체험을 사용했던 무료 사용자
+      } else {
+        return PlanStatus.free; // 순수 무료 사용자
+      }
+    }
+    
+    return PlanStatus.free; // 기본값
+  }
+
+  /// 🎯 v4-simplified 서버 응답으로부터 UI 설정 (직접 처리)
+  void _configureUIFromServerResponse(String entitlement, String subscriptionStatus, bool hasUsedTrial) {
+    // 🎯 상태 메시지 생성
+    if (entitlement == 'trial') {
+      _planName = subscriptionStatus == 'cancelling' ? '무료체험 (취소 예정)' : '무료체험 중';
+      _remainingDays = 0; // 서버에서 남은 일수 계산 안함 (단순화)
+    } else if (entitlement == 'premium') {
+      _planName = subscriptionStatus == 'cancelling' ? '프리미엄 (취소 예정)' : '프리미엄';
+      _remainingDays = 0;
+    } else {
+      _planName = '무료 플랜';
+      _remainingDays = 0;
+    }
+    
+    // 🎯 CTA 및 쿼터 설정 (v4-simplified 직접 처리 - 매우 단순!)
+    if (entitlement == 'trial') {
+      if (subscriptionStatus == 'active') {
+        _ctaButtonText = '체험 중 (App Store에서 관리)';
+        _ctaButtonEnabled = false;
+        _ctaSubtext = '구독 취소는 App Store에서';
+        _shouldUsePremiumQuota = true;
+      } else if (subscriptionStatus == 'cancelling') {
+        _ctaButtonText = '체험 종료 예정 (App Store에서 관리)';
+        _ctaButtonEnabled = false;
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = true;
+      } else {
+        // 체험 완료
+        _ctaButtonText = '프리미엄으로 업그레이드';
+        _ctaButtonEnabled = true;
+        _ctaSubtext = '';
+        _shouldUsePremiumQuota = false;
+      }
+    } else if (entitlement == 'premium') {
+      _ctaButtonText = '사용량 추가 문의';
+      _ctaButtonEnabled = true;
+      _ctaSubtext = '';
+      _shouldUsePremiumQuota = true;
+    } else { // entitlement == 'free'
+      _ctaButtonText = '프리미엄으로 업그레이드';
+      _ctaButtonEnabled = true;
+      _ctaSubtext = '';
+      _shouldUsePremiumQuota = false;
+    }
+    
+    // 플랜 제한 설정
+    if (_shouldUsePremiumQuota) {
+      _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM));
+    } else {
+      _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_FREE));
+    }
+    
+    if (kDebugMode) {
+      print('🎯 [Settings] v4-simplified UI 설정 완료:');
+      print('   표시명: $_planName');
+      print('   CTA 버튼: $_ctaButtonText (활성화: $_ctaButtonEnabled)');
+      print('   서브텍스트: $_ctaSubtext');
+      print('   프리미엄 쿼터: $_shouldUsePremiumQuota');
+      print('   플랜 제한: $_planLimits');
+    }
+  }
+
+  /// 레거시: SubscriptionState로부터 PlanStatus 계산 (v4-simplified 구조 호환)
   PlanStatus _calculatePlanStatusFromSubscriptionState(SubscriptionState subscriptionState) {
     // v4-simplified 구조: entitlement + subscriptionStatus + hasUsedTrial 조합으로 PlanStatus 계산
     final entitlement = subscriptionState.entitlement;
