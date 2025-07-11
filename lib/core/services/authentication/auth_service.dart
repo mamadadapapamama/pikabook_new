@@ -668,7 +668,9 @@ class AuthService {
         final unifiedManager = UnifiedSubscriptionManager();
         final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: true);
         subscriptionDetails = {
-          'planStatus': subscriptionState.planStatus.value,
+          'entitlement': subscriptionState.entitlement.value,
+          'subscriptionStatus': subscriptionState.subscriptionStatus.value,
+          'hasUsedTrial': subscriptionState.hasUsedTrial,
           'isPremium': subscriptionState.isPremium,
           'isTrial': subscriptionState.isTrial,
           'isExpired': subscriptionState.isExpired,
@@ -677,7 +679,9 @@ class AuthService {
         };
         if (kDebugMode) {
           print('📊 [AuthService] 탈퇴 전 플랜 정보 수집 완료:');
-          print('   플랜 상태: ${subscriptionDetails['planStatus']}');
+          print('   권한: ${subscriptionDetails['entitlement']}');
+          print('   구독 상태: ${subscriptionDetails['subscriptionStatus']}');
+          print('   체험 사용 이력: ${subscriptionDetails['hasUsedTrial']}');
           print('   프리미엄: ${subscriptionDetails['isPremium']}');
           print('   체험: ${subscriptionDetails['isTrial']}');
           print('   만료: ${subscriptionDetails['isExpired']}');

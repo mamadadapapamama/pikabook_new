@@ -4,44 +4,43 @@ import 'subscription_entitlement_engine.dart';
 import '../common/banner_manager.dart';
 import '../common/usage_limit_service.dart';
 import '../../models/subscription_state.dart';
-import '../../models/plan_status.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 // 🎯 Apple 공식 라이브러리 기반 권한 결과 타입 정의
 typedef EntitlementResult = Map<String, dynamic>;
 
-// 🎯 EntitlementResult 편의 확장 메서드
+// 🎯 EntitlementResult 편의 확장 메서드 (v4-simplified)
 extension EntitlementResultExtension on EntitlementResult {
-  // 구독 상태 접근자
-  bool get isPremium => this['premium'] as bool? ?? this['isPremium'] as bool? ?? false;
-  bool get isTrial => this['trial'] as bool? ?? this['isTrial'] as bool? ?? false;
-  bool get isExpired => this['expired'] as bool? ?? this['isExpired'] as bool? ?? false;
+  // 새로운 v4-simplified 필드 접근자
+  String get entitlement => this['entitlement'] as String? ?? 'free';
+  String get subscriptionStatus => this['subscriptionStatus'] as String? ?? 'cancelled';
+  bool get hasUsedTrial => this['hasUsedTrial'] as bool? ?? false;
   
-  // 플랜 상태 접근자
-  PlanStatus get planStatus {
-    final planStatusValue = this['planStatus'] as String? ?? 'free';
-    return PlanStatus.fromString(planStatusValue);
-  }
+  // 기존 호환성 접근자
+  bool get isPremium => entitlement == 'premium';
+  bool get isTrial => entitlement == 'trial';
+  bool get isExpired => subscriptionStatus == 'expired';
+  bool get isActive => subscriptionStatus == 'active';
+  bool get isCancelling => subscriptionStatus == 'cancelling';
   
   // 상태 메시지 접근자
   String get statusMessage {
-    if (isPremium) return '프리미엄';
-    if (isTrial) return '무료 체험';
-    return '무료';
+    if (isTrial) {
+      return isCancelling ? '무료체험 (취소 예정)' : '무료체험 중';
+    } else if (isPremium) {
+      return isCancelling ? '프리미엄 (취소 예정)' : '프리미엄';
+    } else {
+      return '무료 플랜';
+    }
   }
   
-  // Apple 공식 라이브러리 메타데이터 접근자
-  String? get serverVersion => this['_serverVersion'] as String?;
+  // 메타데이터 접근자
+  String? get version => this['_version'] as String?;
   String? get dataSource => this['_dataSource'] as String?;
   String? get timestamp => this['_timestamp'] as String?;
-  Map<String, dynamic>? get libraryInfo => this['_libraryInfo'] as Map<String, dynamic>?;
   
-  // Apple 공식 라이브러리 사용 여부 확인
-  bool get isUsingOfficialLibrary {
-    final libraryInfoData = libraryInfo;
-    if (libraryInfoData == null) return false;
-    return libraryInfoData['isUsingOfficialLibrary'] as bool? ?? false;
-  }
+  // 배너 메타데이터 접근자 (테스트 계정용)
+  Map<String, dynamic>? get bannerMetadata => this['bannerMetadata'] as Map<String, dynamic>?;
 }
 
 /// 통합 구독 상태 매니저 (단순화)
@@ -190,15 +189,12 @@ class UnifiedSubscriptionManager {
       final hasUsageLimitReached = results[0] as bool;
       final activeBanners = results[1] as List<BannerType>;
 
-      // Step 4: 통합 상태 생성
+      // Step 4: 통합 상태 생성 (v4-simplified)
       final subscriptionState = SubscriptionState(
-        planStatus: entitlementResult.planStatus,
-        isTrial: entitlementResult.isTrial,
-        isTrialExpiringSoon: false, // App Store에서 자동 관리
-        isPremium: entitlementResult.isPremium,
-        isExpired: entitlementResult.isExpired,
+        entitlement: Entitlement.fromString(entitlementResult.entitlement),
+        subscriptionStatus: SubscriptionStatus.fromString(entitlementResult.subscriptionStatus),
+        hasUsedTrial: entitlementResult.hasUsedTrial,
         hasUsageLimitReached: hasUsageLimitReached,
-        daysRemaining: 0, // App Store에서 자동 관리
         activeBanners: activeBanners,
         statusMessage: entitlementResult.statusMessage,
       );
@@ -222,15 +218,11 @@ class UnifiedSubscriptionManager {
     }
   }
 
-  /// 사용량 한도 확인 (비동기)
+  /// 사용량 한도 확인 (비동기) - v4-simplified
   Future<bool> _checkUsageLimit(EntitlementResult entitlementResult) async {
     try {
-      String planType = 'free';
-      if (entitlementResult.isTrial) {
-        planType = 'trial';
-      } else if (entitlementResult.isPremium) {
-        planType = 'premium';
-      }
+      // 🎯 entitlement 필드를 직접 사용 (더 단순!)
+      String planType = entitlementResult.entitlement; // 'free', 'trial', 'premium'
 
       final usageLimitStatus = await _usageLimitService.checkInitialLimitStatus(
         planType: planType,
@@ -238,6 +230,13 @@ class UnifiedSubscriptionManager {
       
       final ocrLimitReached = usageLimitStatus['ocrLimitReached'] ?? false;
       final ttsLimitReached = usageLimitStatus['ttsLimitReached'] ?? false;
+      
+      if (kDebugMode) {
+        debugPrint('🎯 [UnifiedSubscriptionManager] 사용량 한도 확인:');
+        debugPrint('   planType: $planType (entitlement 기반)');
+        debugPrint('   ocrLimitReached: $ocrLimitReached');
+        debugPrint('   ttsLimitReached: $ttsLimitReached');
+      }
       
       return ocrLimitReached || ttsLimitReached;
     } catch (e) {
@@ -248,59 +247,36 @@ class UnifiedSubscriptionManager {
     }
   }
 
-  /// 활성 배너 조회 (비동기)
+  /// 활성 배너 조회 (비동기) - v4-simplified
   Future<List<BannerType>> _getActiveBanners(EntitlementResult entitlementResult) async {
     try {
       if (kDebugMode) {
-        debugPrint('🎯 [UnifiedSubscriptionManager] 배너 조회 시작');
-        debugPrint('   현재 플랜: ${entitlementResult.isTrial ? 'trial' : entitlementResult.isPremium ? 'premium' : 'free'}');
-        debugPrint('   무료 체험: ${entitlementResult.isTrial}');
-        debugPrint('   프리미엄: ${entitlementResult.isPremium}');
-        debugPrint('   플랜 상태: ${entitlementResult.planStatus.value}');
-        debugPrint('   플랜 상태 객체: ${entitlementResult.planStatus}');
+        debugPrint('🎯 [UnifiedSubscriptionManager] 배너 조회 시작 (v4-simplified)');
+        debugPrint('   entitlement: ${entitlementResult.entitlement}');
+        debugPrint('   subscriptionStatus: ${entitlementResult.subscriptionStatus}');
+        debugPrint('   hasUsedTrial: ${entitlementResult.hasUsedTrial}');
+        debugPrint('   isPremium: ${entitlementResult.isPremium}');
+        debugPrint('   isTrial: ${entitlementResult.isTrial}');
+        debugPrint('   isActive: ${entitlementResult.isActive}');
       }
       
-      // 🎯 플랜 상태에 따른 이력 정보 결정
-      bool hasEverUsedTrial = false;
-      bool hasEverUsedPremium = false;
+      // 🎯 새로운 v4-simplified 직접 방식 사용 (중간 변환 제거)
+      final serverResponse = {
+        'subscription': {
+          'entitlement': entitlementResult.entitlement,
+          'subscriptionStatus': entitlementResult.subscriptionStatus,
+          'hasUsedTrial': entitlementResult.hasUsedTrial,
+          'bannerMetadata': entitlementResult.bannerMetadata,
+        },
+      };
       
-      // 현재 상태나 과거 이력에 따라 판단
-      switch (entitlementResult.planStatus) {
-        case PlanStatus.trialActive:
-        case PlanStatus.trialCancelled:
-        case PlanStatus.trialCompleted:
-          hasEverUsedTrial = true;
-          break;
-          
-        case PlanStatus.premiumActive:
-        case PlanStatus.premiumCancelled:
-        case PlanStatus.premiumExpired:
-        case PlanStatus.premiumGrace:
-          hasEverUsedPremium = true;
-          break;
-          
-        case PlanStatus.free:
-        case PlanStatus.refunded:
-          // 무료 상태나 환불 상태에서는 이력을 별도로 확인해야 함
-          // 현재는 기본값 사용
-          break;
-      }
-      
-      if (kDebugMode) {
-        debugPrint('🎯 [UnifiedSubscriptionManager] 배너 조회 파라미터:');
-        debugPrint('   planStatus: ${entitlementResult.planStatus.value}');
-        debugPrint('   hasEverUsedTrial: $hasEverUsedTrial');
-        debugPrint('   hasEverUsedPremium: $hasEverUsedPremium');
-      }
-      
-      final activeBanners = await _bannerManager.getActiveBanners(
-        planStatus: entitlementResult.planStatus,
-        hasEverUsedTrial: hasEverUsedTrial,
-        hasEverUsedPremium: hasEverUsedPremium,
+      final activeBanners = await _bannerManager.getActiveBannersFromServerResponse(
+        serverResponse,
+        forceRefresh: false, // 여기서는 캐시 활용 (이미 forceRefresh된 데이터)
       );
       
       if (kDebugMode) {
-        debugPrint('🎯 [UnifiedSubscriptionManager] BannerManager 응답 받음:');
+        debugPrint('🎯 [UnifiedSubscriptionManager] 배너 조회 완료:');
         debugPrint('   활성 배너 개수: ${activeBanners.length}');
         debugPrint('   활성 배너 목록: ${activeBanners.map((e) => e.name).toList()}');
       }

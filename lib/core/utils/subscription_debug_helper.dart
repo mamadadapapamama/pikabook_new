@@ -61,7 +61,9 @@ class SubscriptionDebugHelper {
       final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: true);
       
       debugPrint('   🎯 구독 상태 정보:');
-      debugPrint('   플랜 상태: ${subscriptionState.planStatus.value}');
+      debugPrint('   권한: ${subscriptionState.entitlement.value}');
+      debugPrint('   구독 상태: ${subscriptionState.subscriptionStatus.value}');
+      debugPrint('   체험 사용 이력: ${subscriptionState.hasUsedTrial}');
       debugPrint('   프리미엄: ${subscriptionState.isPremium}');
       debugPrint('   체험: ${subscriptionState.isTrial}');
       debugPrint('   만료: ${subscriptionState.isExpired}');
@@ -353,7 +355,9 @@ class SubscriptionDebugHelper {
       
       return {
         'status': 'connected',
-        'planStatus': subscriptionState.planStatus.value,
+        'entitlement': subscriptionState.entitlement.value,
+        'subscriptionStatus': subscriptionState.subscriptionStatus.value,
+        'hasUsedTrial': subscriptionState.hasUsedTrial,
         'isPremium': subscriptionState.isPremium,
         'isTrial': subscriptionState.isTrial,
         'isExpired': subscriptionState.isExpired,

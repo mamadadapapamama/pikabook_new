@@ -428,7 +428,7 @@ class InAppPurchaseService {
         'userId': userId,
       });
       
-      final data = result.data as Map<String, dynamic>;
+      final data = Map<String, dynamic>.from(result.data as Map);
       
       // 🚀 Apple 공식 라이브러리 응답 필드 처리
       final success = data['success'] as bool? ?? false;

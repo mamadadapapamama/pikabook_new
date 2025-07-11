@@ -167,8 +167,9 @@ class SettingsViewModel extends ChangeNotifier {
         print('   남은 일수: ${subscriptionState.daysRemaining}');
       }
       
-      // 🎯 구독 상태 저장
-      _planStatus = subscriptionState.planStatus;
+      // 🎯 구독 상태 저장 (v4-simplified 구조 사용)
+      // PlanStatus는 entitlement와 subscriptionStatus 조합으로 계산
+      _planStatus = _calculatePlanStatusFromSubscriptionState(subscriptionState);
       
       // UI에 표시할 정보 설정
       if (subscriptionState.isPremium) {
@@ -271,8 +272,8 @@ class SettingsViewModel extends ChangeNotifier {
         print('   체험 여부: ${subscriptionState.isTrial}');
         print('   남은 일수: ${subscriptionState.daysRemaining}');
       }
-      // 🎯 구독 상태 저장
-      _planStatus = subscriptionState.planStatus;
+      // 🎯 구독 상태 저장 (v4-simplified 구조 사용)
+      _planStatus = _calculatePlanStatusFromSubscriptionState(subscriptionState);
       // UI에 표시할 정보 설정
       if (subscriptionState.isPremium) {
         _planType = 'premium';
@@ -325,7 +326,7 @@ class SettingsViewModel extends ChangeNotifier {
       return;
     }
 
-    switch (subscriptionState.planStatus) {
+    switch (_planStatus) {
       case PlanStatus.trialActive:
         _ctaButtonText = '${_remainingDays}일 뒤에 프리미엄 전환';
         _ctaButtonEnabled = false;
@@ -350,8 +351,8 @@ class SettingsViewModel extends ChangeNotifier {
       case PlanStatus.premiumActive:
       case PlanStatus.premiumCancelled:
       case PlanStatus.premiumGrace:
-        _ctaButtonText = subscriptionState.planStatus == PlanStatus.premiumGrace ? '앱스토어 결제 확인 필요' : '사용량 추가 문의';
-        _ctaButtonEnabled = subscriptionState.planStatus == PlanStatus.premiumGrace ? false : true;
+        _ctaButtonText = _planStatus == PlanStatus.premiumGrace ? '앱스토어 결제 확인 필요' : '사용량 추가 문의';
+        _ctaButtonEnabled = _planStatus == PlanStatus.premiumGrace ? false : true;
         _ctaSubtext = '';
         _shouldUsePremiumQuota = true;
         _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM));
@@ -374,7 +375,7 @@ class SettingsViewModel extends ChangeNotifier {
     }
 
     if (kDebugMode) {
-      print('🎯 [Settings] CTA 설정 완료: ${subscriptionState.planStatus.name}');
+      print('🎯 [Settings] CTA 설정 완료: ${_planStatus?.name ?? "알 수 없음"}');
       print('   버튼 텍스트: $_ctaButtonText');
       print('   버튼 활성화: $_ctaButtonEnabled');
       print('   서브텍스트: $_ctaSubtext');
@@ -560,6 +561,48 @@ class SettingsViewModel extends ChangeNotifier {
       _isLoading = loading;
       notifyListeners();
     }
+  }
+
+  /// 🎯 SubscriptionState로부터 PlanStatus 계산 (v4-simplified 구조 호환)
+  PlanStatus _calculatePlanStatusFromSubscriptionState(SubscriptionState subscriptionState) {
+    // v4-simplified 구조: entitlement + subscriptionStatus + hasUsedTrial 조합으로 PlanStatus 계산
+    final entitlement = subscriptionState.entitlement;
+    final subscriptionStatus = subscriptionState.subscriptionStatus;
+    final hasUsedTrial = subscriptionState.hasUsedTrial;
+    
+    if (entitlement == Entitlement.premium) {
+      switch (subscriptionStatus) {
+        case SubscriptionStatus.active:
+          return PlanStatus.premiumActive;
+        case SubscriptionStatus.cancelling:
+          return PlanStatus.premiumCancelled;
+        case SubscriptionStatus.cancelled:
+        case SubscriptionStatus.expired:
+          return PlanStatus.premiumExpired;
+        case SubscriptionStatus.refunded:
+          return PlanStatus.premiumExpired; // 환불된 경우 만료로 처리
+      }
+    } else if (entitlement == Entitlement.trial) {
+      switch (subscriptionStatus) {
+        case SubscriptionStatus.active:
+          return PlanStatus.trialActive;
+        case SubscriptionStatus.cancelling:
+          return PlanStatus.trialCancelled;
+        case SubscriptionStatus.cancelled:
+        case SubscriptionStatus.expired:
+          return PlanStatus.trialCompleted;
+        case SubscriptionStatus.refunded:
+          return PlanStatus.trialCompleted; // 환불된 경우 완료로 처리
+      }
+    } else { // Entitlement.free
+      if (hasUsedTrial) {
+        return PlanStatus.trialCompleted; // 과거에 체험을 사용했던 무료 사용자
+      } else {
+        return PlanStatus.free; // 순수 무료 사용자
+      }
+    }
+    
+    return PlanStatus.free; // 기본값
   }
 
   /// 🎯 과거 체험 이력 로드 (탈퇴 이력 포함)

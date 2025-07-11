@@ -241,7 +241,7 @@ class SubscriptionEntitlementEngine {
         print('✅ StoreKit 2 구매 완료 처리 완료');
       }
     } catch (e) {
-      if (kDebugMode) {
+          if (kDebugMode) {
         print('❌ StoreKit 2 구매 완료 처리 실패: $e');
       }
     }
@@ -320,7 +320,7 @@ class SubscriptionEntitlementEngine {
     await getCurrentEntitlements(forceRefresh: true);
   }
 
-  /// 🎯 현재 권한 조회 (StoreKit 2 개선)
+  /// 🎯 현재 권한 조회 (v4-simplified 응답 구조)
   Future<Map<String, dynamic>> getCurrentEntitlements({bool forceRefresh = false}) async {
     try {
       // 🎯 캐시 확인
@@ -335,7 +335,7 @@ class SubscriptionEntitlementEngine {
       }
 
       if (kDebugMode) {
-        print('🔍 StoreKit 2 권한 조회 ${forceRefresh ? '(강제 갱신)' : ''}');
+        print('🔍 v4-simplified 권한 조회 ${forceRefresh ? '(강제 갱신)' : ''}');
       }
 
       final user = FirebaseAuth.instance.currentUser;
@@ -343,42 +343,53 @@ class SubscriptionEntitlementEngine {
         return _getDefaultEntitlements();
       }
 
-      // 🎯 서버에서 권한 조회 (Apple 공식 라이브러리 사용)
+      // 🎯 서버에서 권한 조회 (v4-simplified)
       final functions = FirebaseFunctions.instanceFor(region: 'asia-southeast1');
-      final callable = functions.httpsCallable('checkSubscriptionStatus');
+      final callable = functions.httpsCallable('sub_checkSubscriptionStatus');
       
       final result = await callable.call({'userId': user.uid});
-      final responseData = result.data as Map<String, dynamic>;
       
-      // 🚀 새로운 Apple 공식 라이브러리 응답 필드 처리
-      final serverVersion = responseData['version'] as String?;
+      // 🔧 안전한 타입 변환 (Object? -> Map<String, dynamic>)
+      Map<String, dynamic> responseData;
+      if (result.data is Map) {
+        responseData = Map<String, dynamic>.from(result.data as Map);
+      } else {
+        if (kDebugMode) {
+          print('❌ [EntitlementEngine] 예상치 못한 응답 타입: ${result.data.runtimeType}');
+        }
+        return _getDefaultEntitlements();
+      }
+      
+      // 🚀 v4-simplified 응답 구조 처리
+      final version = responseData['version'] as String?;
       final dataSource = responseData['dataSource'] as String?;
-      final timestamp = responseData['timestamp'] as String?;
-      final libraryInfo = responseData['libraryInfo'] as Map<String, dynamic>?;
+      
+      // 🔧 안전한 subscription 필드 추출
+      Map<String, dynamic>? subscription;
+      if (responseData['subscription'] is Map) {
+        subscription = Map<String, dynamic>.from(responseData['subscription'] as Map);
+      }
       
       if (kDebugMode) {
-        print('📡 [EntitlementEngine] 서버 응답 메타데이터:');
-        print('   - 서버 버전: ${serverVersion ?? "알 수 없음"}');
+        print('📡 [EntitlementEngine] v4-simplified 응답:');
+        print('   - 버전: ${version ?? "알 수 없음"}');
         print('   - 데이터 소스: ${dataSource ?? "알 수 없음"}');
-        print('   - 응답 시간: ${timestamp ?? "알 수 없음"}');
+        print('   - 구독 정보: ${subscription != null ? "있음" : "없음"}');
         
-        if (libraryInfo != null) {
-          final isUsingOfficialLibrary = libraryInfo['isUsingOfficialLibrary'] as bool? ?? false;
-          final benefits = libraryInfo['benefits'] as List<dynamic>? ?? [];
+        if (subscription != null) {
+          print('   - entitlement: ${subscription['entitlement']}');
+          print('   - subscriptionStatus: ${subscription['subscriptionStatus']}');
+          print('   - hasUsedTrial: ${subscription['hasUsedTrial']}');
           
-          print('🚀 [EntitlementEngine] Apple 공식 라이브러리 정보:');
-          print('   - 공식 라이브러리 사용: ${isUsingOfficialLibrary ? "✅ 예" : "❌ 아니오"}');
-          if (benefits.isNotEmpty) {
-            print('   - 주요 개선사항:');
-            for (final benefit in benefits) {
-              print('     • $benefit');
-            }
+          if (subscription['bannerMetadata'] != null) {
+            final bannerMeta = subscription['bannerMetadata'] as Map<String, dynamic>;
+            print('   - bannerType: ${bannerMeta['bannerType']}');
           }
         }
         
         // 🎯 데이터 소스별 특별 로깅
         if (dataSource == 'appstore-official-library') {
-          print('🎉 [EntitlementEngine] Apple 공식 라이브러리 기반 응답 확인!');
+          print('🎉 [EntitlementEngine] Apple 공식 라이브러리 기반 응답!');
         } else if (dataSource == 'test-account') {
           print('🧪 [EntitlementEngine] 테스트 계정 응답');
         } else if (dataSource == 'firestore-webhook') {
@@ -386,36 +397,61 @@ class SubscriptionEntitlementEngine {
         }
       }
       
-      // 🎯 실제 구독 정보 추출 (기존과 동일)
-      final entitlements = responseData['subscription'] as Map<String, dynamic>? ?? responseData;
+      if (subscription == null) {
+        if (kDebugMode) {
+          print('⚠️ [EntitlementEngine] subscription 필드가 없음 - 기본값 반환');
+        }
+        return _getDefaultEntitlements();
+      }
       
-      // 🎯 캐시 업데이트 (메타데이터 포함)
-      final enrichedEntitlements = Map<String, dynamic>.from(entitlements);
-      enrichedEntitlements.addAll({
-        '_serverVersion': serverVersion,
+      // 🎯 v4-simplified 구조를 기존 형식으로 변환 (호환성)
+      final entitlement = subscription['entitlement'] as String? ?? 'free';
+      final subscriptionStatus = subscription['subscriptionStatus'] as String? ?? 'cancelled';
+      final hasUsedTrial = subscription['hasUsedTrial'] as bool? ?? false;
+      
+      final compatibleFormat = {
+        // 새로운 필드들
+        'entitlement': entitlement,
+        'subscriptionStatus': subscriptionStatus,
+        'hasUsedTrial': hasUsedTrial,
+        'autoRenewEnabled': subscription['autoRenewEnabled'] ?? false,
+        'expirationDate': subscription['expirationDate'],
+        'subscriptionType': subscription['subscriptionType'],
+        'originalTransactionId': subscription['originalTransactionId'],
+        'bannerMetadata': subscription['bannerMetadata'],
+        
+        // 기존 호환성 필드들
+        'premium': entitlement == 'premium',
+        'trial': entitlement == 'trial',
+        'expired': subscriptionStatus == 'expired',
+        'isPremium': entitlement == 'premium',
+        'isTrial': entitlement == 'trial',
+        'isExpired': subscriptionStatus == 'expired',
+        
+        // 메타데이터
+        '_version': version,
         '_dataSource': dataSource,
-        '_timestamp': timestamp,
-        '_libraryInfo': libraryInfo,
-      });
+        '_timestamp': DateTime.now().toIso8601String(),
+      };
       
-      _cachedEntitlements = enrichedEntitlements;
+      _cachedEntitlements = compatibleFormat;
       _lastEntitlementCheck = DateTime.now();
       
       // 🎯 권한 스트림 업데이트
-      _entitlementStreamController.add(enrichedEntitlements);
+      _entitlementStreamController.add(compatibleFormat);
       
       if (kDebugMode) {
-        print('✅ StoreKit 2 권한 조회 완료 (Apple 공식 라이브러리)');
-        print('   - Premium: ${entitlements['premium'] ?? entitlements['isPremium'] ?? false}');
-        print('   - Trial: ${entitlements['trial'] ?? entitlements['isTrial'] ?? false}');
-        print('   - Expired: ${entitlements['expired'] ?? entitlements['isExpired'] ?? false}');
+        print('✅ v4-simplified 권한 조회 완료');
+        print('   - entitlement: $entitlement');
+        print('   - subscriptionStatus: $subscriptionStatus');
+        print('   - hasUsedTrial: $hasUsedTrial');
       }
       
-      return enrichedEntitlements;
+      return compatibleFormat;
     } catch (e) {
       if (kDebugMode) {
-        print('❌ StoreKit 2 권한 조회 실패: $e');
-        print('🔍 [EntitlementEngine] 서버 연결 또는 Apple 라이브러리 오류 가능성');
+        print('❌ v4-simplified 권한 조회 실패: $e');
+        print('🔍 [EntitlementEngine] 서버 연결 오류 가능성');
       }
       return _getDefaultEntitlements();
     }
@@ -424,12 +460,28 @@ class SubscriptionEntitlementEngine {
   /// 🎯 기본 권한 반환
   Map<String, dynamic> _getDefaultEntitlements() {
     return {
+      // 새로운 필드들
+      'entitlement': 'free',
+      'subscriptionStatus': 'cancelled',
+      'hasUsedTrial': false,
+      'autoRenewEnabled': false,
+      'expirationDate': null,
+      'subscriptionType': null,
+      'originalTransactionId': null,
+      'bannerMetadata': null,
+      
+      // 기존 호환성 필드들
       'premium': false,
       'trial': false,
       'expired': false,
-      'planId': null,
-      'expiresAt': null,
-      'originalTransactionId': null,
+      'isPremium': false,
+      'isTrial': false,
+      'isExpired': false,
+      
+      // 메타데이터
+      '_version': 'v4-simplified',
+      '_dataSource': 'default',
+      '_timestamp': DateTime.now().toIso8601String(),
     };
   }
 

@@ -784,13 +784,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) {
         setState(() {
           _subscriptionState = SubscriptionState(
-            planStatus: _subscriptionState.planStatus,
-            isTrial: _subscriptionState.isTrial,
-            isTrialExpiringSoon: _subscriptionState.isTrialExpiringSoon,
-            isPremium: _subscriptionState.isPremium,
-            isExpired: _subscriptionState.isExpired,
+            entitlement: _subscriptionState.entitlement,
+            subscriptionStatus: _subscriptionState.subscriptionStatus,
+            hasUsedTrial: _subscriptionState.hasUsedTrial,
             hasUsageLimitReached: _subscriptionState.hasUsageLimitReached,
-            daysRemaining: _subscriptionState.daysRemaining,
             activeBanners: _subscriptionState.activeBanners.where((banner) => banner != bannerType).toList(),
             statusMessage: _subscriptionState.statusMessage,
           );
