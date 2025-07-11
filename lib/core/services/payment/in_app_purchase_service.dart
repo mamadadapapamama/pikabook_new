@@ -77,7 +77,7 @@ class InAppPurchaseService {
 
       // 🎯 미완료 구매 정리 (StoreKit 2 개선)
       await _clearPendingPurchasesV2();
-
+      
       // 🎯 구매 스트림 구독 (StoreKit 2 Transaction.updates 자동 처리)
       _subscription = _inAppPurchase.purchaseStream.listen(
         _onPurchaseUpdate,
@@ -132,7 +132,7 @@ class InAppPurchaseService {
         }
       });
       
-      _processedPurchases.clear();
+    _processedPurchases.clear();
       _isPurchaseInProgress = false;
     }
   }
@@ -178,13 +178,13 @@ class InAppPurchaseService {
     if (kDebugMode) {
       print('🔔 StoreKit 2 구매 업데이트 수신: ${purchaseDetailsList.length}개');
     }
-
+    
     for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
       // 🎯 중복 처리 방지
       final purchaseKey = '${purchaseDetails.productID}_${purchaseDetails.purchaseID}';
       
       if (_processedPurchases.contains(purchaseKey)) {
-        if (kDebugMode) {
+      if (kDebugMode) {
           print('⏭️ 이미 처리된 구매 건너뛰기: $purchaseKey');
         }
         continue;
@@ -251,7 +251,7 @@ class InAppPurchaseService {
   /// 🎉 성공한 구매 처리 (StoreKit 2 개선)
   Future<void> _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) async {
     try {
-      if (kDebugMode) {
+        if (kDebugMode) {
         print('🎉 StoreKit 2 구매 성공 처리: ${purchaseDetails.productID}');
       }
       
@@ -302,7 +302,7 @@ class InAppPurchaseService {
       }
       return false;
     }
-
+    
     await _ensureInitialized();
     
     try {
@@ -495,12 +495,12 @@ class InAppPurchaseService {
       if (kDebugMode) {
         print('🔧 StoreKit 2 미완료 거래 강제 완료 시작');
       }
-      
+
       // StoreKit 2에서는 Transaction.updates가 자동으로 처리하므로
       // 구매 복원만 수행
       await _inAppPurchase.restorePurchases();
       await Future.delayed(const Duration(seconds: 2));
-      
+
       if (kDebugMode) {
         print('✅ StoreKit 2 미완료 거래 강제 완료 처리');
       }
@@ -556,11 +556,11 @@ class InAppPurchaseService {
   Future<void> restorePurchases() async {
     await _ensureInitialized();
     try {
-      if (kDebugMode) {
+        if (kDebugMode) {
         print('🔄 StoreKit 2 구매 복원 시작');
-      }
+        }
       await _inAppPurchase.restorePurchases();
-      if (kDebugMode) {
+        if (kDebugMode) {
         print('✅ StoreKit 2 구매 복원 완료');
       }
     } catch (e) {
@@ -674,13 +674,13 @@ class InAppPurchaseService {
       }
     }
   }
-
+  
   /// 🆘 사용자 직접 호출 Pending Transaction 해결
   Future<Map<String, dynamic>> resolvePendingTransactions() async {
-    if (kDebugMode) {
+      if (kDebugMode) {
       print('🔧 StoreKit 2 사용자 요청: Pending Transaction 해결');
-    }
-    
+      }
+      
     try {
       await _finishPendingTransactions();
       await _inAppPurchase.restorePurchases();

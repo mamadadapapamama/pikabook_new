@@ -133,7 +133,7 @@ class UpgradeModal extends StatelessWidget {
             _buildCharacterHeader(),
             if (reason == UpgradeReason.welcomeTrial)
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -162,7 +162,7 @@ class UpgradeModal extends StatelessWidget {
               const SizedBox(height: 16),
               if (reason == UpgradeReason.general && customMessage == null)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                   child: Text(
                     '이미 무료체험을 사용하셨습니다',
                     style: const TextStyle(
@@ -175,7 +175,7 @@ class UpgradeModal extends StatelessWidget {
                 ),
               if (customTitle != null)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Text(
                     customTitle!,
                     style: const TextStyle(
@@ -187,11 +187,20 @@ class UpgradeModal extends StatelessWidget {
                   ),
                 ),
               if (customTitle != null) const SizedBox(height: 8),
-              _buildMainMessage(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildMainMessage(),
+              ),
               const SizedBox(height: 16),
-              _buildFeatureList(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildFeatureList(),
+              ),
               const SizedBox(height: 24),
-              _buildButtons(context),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _buildButtons(context),
+              ),
             ],
           ],
         ),
@@ -738,7 +747,7 @@ class UpgradeModal extends StatelessWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFFFF6B35),
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),

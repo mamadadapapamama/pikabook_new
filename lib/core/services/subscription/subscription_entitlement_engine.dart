@@ -367,7 +367,7 @@ class SubscriptionEntitlementEngine {
       Map<String, dynamic> responseData;
       if (result.data is Map) {
         responseData = Map<String, dynamic>.from(result.data as Map);
-      } else {
+        } else {
         if (kDebugMode) {
           print('❌ [EntitlementEngine] 예상치 못한 응답 타입: ${result.data.runtimeType}');
         }
