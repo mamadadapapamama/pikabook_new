@@ -81,7 +81,7 @@ class SettingsViewModel extends ChangeNotifier {
     
     if (isUserChanged) {
       if (kDebugMode) {
-        print('🔄 [Settings] 사용자 변경 감지: $_lastUserId → $currentUserId');
+        print('🔄 [Settings] 사용자 변경 감지');
       }
       // 사용자가 변경된 경우 모든 데이터 초기화
       _resetAllData();
@@ -125,9 +125,7 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 플랜 정보 새로고침 (설정 화면에서 수동 호출 가능)
   Future<void> refreshPlanInfo() async {
-    if (kDebugMode) {
-      print('🔄 [Settings] 플랜 정보 강제 새로고침 시작');
-    }
+
     
     _isPlanLoaded = false;
     notifyListeners();
@@ -140,22 +138,14 @@ class SettingsViewModel extends ChangeNotifier {
   Future<void> _loadPlanInfoWithForceRefresh() async {
     _setLoading(true);
     try {
-      if (kDebugMode) {
-        print('🔄 [Settings] v4-simplified 서버 응답 직접 처리 (강제 새로고침)');
-      }
+
       
       // 🎯 SubscriptionEntitlementEngine에서 직접 서버 응답 가져오기
       final entitlementEngine = SubscriptionEntitlementEngine();
       final serverResponse = await entitlementEngine.getCurrentEntitlements(forceRefresh: true);
       
       if (kDebugMode) {
-        print('📥 [Settings] v4-simplified 서버 응답:');
-        print('   entitlement: ${serverResponse['entitlement']}');
-        print('   subscriptionStatus: ${serverResponse['subscriptionStatus']}');
-        print('   hasUsedTrial: ${serverResponse['hasUsedTrial']}');
-        print('   expirationDate: ${serverResponse['expirationDate']}');
-        print('   subscriptionType: ${serverResponse['subscriptionType']}');
-        print('   dataSource: ${serverResponse['_dataSource']}');
+        print('📥 [Settings] 서버 응답: ${serverResponse['entitlement']} (${serverResponse['subscriptionStatus']})');
       }
       
       // v4-simplified 필드 추출
@@ -187,15 +177,7 @@ class SettingsViewModel extends ChangeNotifier {
       _isPlanLoaded = true;
       notifyListeners();
       
-      if (kDebugMode) {
-        print('✅ [Settings] 강제 새로고침 완료');
-        print('   UI 표시명: $_planName');
-        print('   플랜 타입: $_planType');
-        print('   남은 일수: $_remainingDays');
-        print('   CTA 버튼: $_ctaButtonText (활성화: $_ctaButtonEnabled)');
-        print('   프리미엄 쿼터 사용: $_shouldUsePremiumQuota');
-        print('   제한: $_planLimits');
-      }
+
     } catch (e) {
       if (kDebugMode) {
         print('❌ [Settings] 강제 새로고침 오류: $e');
@@ -256,22 +238,14 @@ class SettingsViewModel extends ChangeNotifier {
   Future<void> loadPlanInfo() async {
     _setLoading(true);
     try {
-      if (kDebugMode) {
-        print('🔍 [Settings] v4-simplified 서버 응답 직접 처리 (캐시 우선)');
-      }
+
       
       // 🎯 SubscriptionEntitlementEngine에서 직접 서버 응답 가져오기 (캐시 활용)
       final entitlementEngine = SubscriptionEntitlementEngine();
       final serverResponse = await entitlementEngine.getCurrentEntitlements(forceRefresh: false);
       
       if (kDebugMode) {
-        print('📥 [Settings] v4-simplified 서버 응답 (캐시):');
-        print('   entitlement: ${serverResponse['entitlement']}');
-        print('   subscriptionStatus: ${serverResponse['subscriptionStatus']}');
-        print('   hasUsedTrial: ${serverResponse['hasUsedTrial']}');
-        print('   expirationDate: ${serverResponse['expirationDate']}');
-        print('   subscriptionType: ${serverResponse['subscriptionType']}');
-        print('   dataSource: ${serverResponse['_dataSource']}');
+        print('📥 [Settings] 서버 응답 (캐시): ${serverResponse['entitlement']} (${serverResponse['subscriptionStatus']})');
       }
       
       // v4-simplified 필드 추출
@@ -302,15 +276,6 @@ class SettingsViewModel extends ChangeNotifier {
       
       _isPlanLoaded = true;
       notifyListeners();
-      if (kDebugMode) {
-        print('✅ [Settings] 플랜 정보 로드 완료 (캐시 활용)');
-        print('   UI 표시명: $_planName');
-        print('   플랜 타입: $_planType');
-        print('   남은 일수: $_remainingDays');
-        print('   CTA 버튼: $_ctaButtonText (활성화: $_ctaButtonEnabled)');
-        print('   프리미엄 쿼터 사용: $_shouldUsePremiumQuota');
-        print('   제한: $_planLimits');
-      }
     } catch (e) {
       if (kDebugMode) {
         print('❌ [Settings] 플랜 정보 로드 오류: $e');
@@ -549,15 +514,7 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 🎯 v4-simplified 서버 응답으로부터 UI 설정 (직접 처리)
   void _configureUIFromServerResponse(String entitlement, String subscriptionStatus, bool hasUsedTrial, {String? expirationDate, String? subscriptionType}) {
-    if (kDebugMode) {
-      print('🎯 [Settings] UI 설정 시작:');
-      print('   입력 파라미터:');
-      print('     entitlement: $entitlement');
-      print('     subscriptionStatus: $subscriptionStatus');
-      print('     hasUsedTrial: $hasUsedTrial');
-      print('     expirationDate: $expirationDate');
-      print('     subscriptionType: $subscriptionType');
-    }
+
     
     // 🎯 만료일 계산 및 표시
     String? dateDisplay;
@@ -572,15 +529,10 @@ class SettingsViewModel extends ChangeNotifier {
           // 숫자만 있는 경우: Unix timestamp (milliseconds)
           final timestamp = int.parse(expirationDate);
           expiration = DateTime.fromMillisecondsSinceEpoch(timestamp);
-          if (kDebugMode) {
-            print('   Unix timestamp 감지: $timestamp → $expiration');
-          }
+          
         } else {
           // ISO 문자열 형태
           expiration = DateTime.parse(expirationDate);
-          if (kDebugMode) {
-            print('   ISO 날짜 문자열 파싱: $expirationDate → $expiration');
-          }
         }
         
         final now = DateTime.now();
@@ -589,84 +541,48 @@ class SettingsViewModel extends ChangeNotifier {
         // 날짜 표시 형식 (년 월 일)
         dateDisplay = '${expiration.year}년 ${expiration.month}월 ${expiration.day}일';
         
-        if (kDebugMode) {
-          print('   날짜 처리 결과:');
-          print('     파싱된 만료일: $expiration');
-          print('     현재 시간: $now');
-          print('     남은 일수: $daysRemaining');
-          print('     표시 형식: $dateDisplay');
-        }
+
       } catch (e) {
         if (kDebugMode) {
           print('⚠️ [Settings] 만료일 파싱 실패: $expirationDate');
-          print('   에러: $e');
-          print('   타입: ${expirationDate.runtimeType}');
         }
       }
-    } else {
-      if (kDebugMode) {
-        print('   만료일 없음: expirationDate가 null 또는 빈 문자열');
-      }
-    }
+          }
     
     // 🎯 구독 타입 표시 (monthly/yearly)
     final subscriptionTypeDisplay = subscriptionType == 'yearly' ? 'yearly' : 'monthly';
     
-    if (kDebugMode) {
-      print('   구독 타입 처리:');
-      print('     원본 subscriptionType: $subscriptionType');
-      print('     표시용 subscriptionTypeDisplay: $subscriptionTypeDisplay');
-    }
-    
     // 🎯 상태별 표시명 생성 (날짜 정보 포함)
-    if (kDebugMode) {
-      print('   플랜명 생성 시작:');
-      print('     entitlement: $entitlement');
-      print('     subscriptionStatus: $subscriptionStatus');
-      print('     dateDisplay: $dateDisplay');
-      print('     daysRemaining: $daysRemaining');
-    }
     
     if (entitlement == 'trial') {
       if (subscriptionStatus == 'active') {
         _planName = dateDisplay != null ? '무료체험 중 (${daysRemaining}일 남음)' : '무료체험 중';
-        if (kDebugMode) print('     → 무료체험 활성: $_planName');
       } else if (subscriptionStatus == 'cancelling') {
         _planName = dateDisplay != null ? '무료체험 중 (${daysRemaining}일 후 무료 전환)' : '무료체험 중 (취소 예정)';
-        if (kDebugMode) print('     → 무료체험 취소 예정: $_planName');
       } else {
         _planName = '무료체험 완료';
-        if (kDebugMode) print('     → 무료체험 완료: $_planName');
       }
     } else if (entitlement == 'premium') {
       if (subscriptionStatus == 'active') {
         _planName = dateDisplay != null ? '프리미엄 ($subscriptionTypeDisplay)\n다음 결제일: $dateDisplay' : '프리미엄';
-        if (kDebugMode) print('     → 프리미엄 활성: $_planName');
       } else if (subscriptionStatus == 'cancelling') {
         _planName = dateDisplay != null ? '프리미엄 ($subscriptionTypeDisplay)\n$dateDisplay 부터 무료 전환' : '프리미엄 (취소 예정)';
-        if (kDebugMode) print('     → 프리미엄 취소 예정: $_planName');
       } else {
         _planName = '프리미엄 만료';
-        if (kDebugMode) print('     → 프리미엄 만료: $_planName');
       }
     } else {
       // Grace period 처리 (서버에서 entitlement가 premium이지만 특별한 상태)
       if (subscriptionStatus == 'active' && dateDisplay != null && daysRemaining <= 7) {
         // Grace period로 추정 (만료일이 7일 이내)
         _planName = '프리미엄 ($dateDisplay 까지 결제 확인 필요)';
-        if (kDebugMode) print('     → Grace period 감지: $_planName');
       } else {
         _planName = '무료 플랜';
-        if (kDebugMode) print('     → 무료 플랜: $_planName');
       }
     }
     
     _remainingDays = daysRemaining;
     
     // 🎯 CTA 및 쿼터 설정 (v4-simplified 직접 처리 - 매우 단순!)
-    if (kDebugMode) {
-      print('   CTA 버튼 설정 시작:');
-    }
     
     if (entitlement == 'trial') {
       if (subscriptionStatus == 'active') {
@@ -674,20 +590,17 @@ class SettingsViewModel extends ChangeNotifier {
         _ctaButtonEnabled = false;
         _ctaSubtext = '구독 취소는 App Store에서';
         _shouldUsePremiumQuota = true;
-        if (kDebugMode) print('     → 무료체험 활성 CTA: $_ctaButtonText');
       } else if (subscriptionStatus == 'cancelling') {
         _ctaButtonText = dateDisplay != null ? '${daysRemaining}일 뒤에 무료 플랜 전환' : '체험 종료 예정 (App Store에서 관리)';
         _ctaButtonEnabled = false;
         _ctaSubtext = '';
         _shouldUsePremiumQuota = true;
-        if (kDebugMode) print('     → 무료체험 취소 예정 CTA: $_ctaButtonText');
       } else {
         // 체험 완료
         _ctaButtonText = '프리미엄으로 업그레이드';
         _ctaButtonEnabled = true;
         _ctaSubtext = '';
         _shouldUsePremiumQuota = false;
-        if (kDebugMode) print('     → 무료체험 완료 CTA: $_ctaButtonText');
       }
     } else if (entitlement == 'premium') {
       if (subscriptionStatus == 'active' && dateDisplay != null && daysRemaining <= 7) {
@@ -696,27 +609,23 @@ class SettingsViewModel extends ChangeNotifier {
         _ctaButtonEnabled = false;
         _ctaSubtext = '';
         _shouldUsePremiumQuota = true;
-        if (kDebugMode) print('     → Grace period CTA: $_ctaButtonText');
       } else if (subscriptionStatus == 'cancelling') {
         _ctaButtonText = '프리미엄으로 업그레이드';
         _ctaButtonEnabled = true;
         _ctaSubtext = '';
         _shouldUsePremiumQuota = true;
-        if (kDebugMode) print('     → 프리미엄 취소 예정 CTA: $_ctaButtonText');
       } else {
         // 정상 프리미엄
         _ctaButtonText = '사용량 추가 문의';
         _ctaButtonEnabled = true;
         _ctaSubtext = '';
         _shouldUsePremiumQuota = true;
-        if (kDebugMode) print('     → 정상 프리미엄 CTA: $_ctaButtonText');
       }
     } else { // entitlement == 'free'
       _ctaButtonText = '프리미엄으로 업그레이드';
       _ctaButtonEnabled = true;
       _ctaSubtext = '';
       _shouldUsePremiumQuota = false;
-      if (kDebugMode) print('     → 무료 플랜 CTA: $_ctaButtonText');
     }
     
     // 플랜 제한 설정
@@ -727,22 +636,7 @@ class SettingsViewModel extends ChangeNotifier {
     }
     
     if (kDebugMode) {
-      print('🎯 [Settings] v4-simplified UI 설정 완료:');
-      print('   ═══════════════════════════════════════');
-      print('   📱 최종 UI 정보:');
-      print('     플랜명: $_planName');
-      print('     플랜 타입: $_planType');
-      print('   ═══════════════════════════════════════');
-      print('   🎯 CTA 버튼 정보:');
-      print('     버튼 텍스트: $_ctaButtonText');
-      print('     버튼 활성화: $_ctaButtonEnabled');
-      print('     서브텍스트: $_ctaSubtext');
-      print('   ═══════════════════════════════════════');
-      print('   ⚙️ 시스템 설정:');
-      print('     프리미엄 쿼터 사용: $_shouldUsePremiumQuota');
-      print('     플랜 제한: $_planLimits');
-      print('     hasUsedTrial: $_hasUsedTrial');
-      print('   ═══════════════════════════════════════');
+      print('✅ [Settings] UI 설정 완료: $_planName');
     }
   }
 

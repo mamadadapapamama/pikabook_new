@@ -267,6 +267,26 @@ class _LoginScreenState extends State<LoginScreen> {
                                   // 🎯 메인 로그인 선택 화면 (3개 버튼)
                                   Column(
                                     children: [
+                                      // Apple 로그인 버튼 (맨 위로 이동)
+                                      _buildLoginButton(
+                                        text: 'Apple로 로그인',
+                                        onPressed: _handleAppleSignIn,
+                                        backgroundColor: ColorTokens.surface,
+                                        textColor: ColorTokens.black,
+                                        leadingIcon: Padding(
+                                          padding: EdgeInsets.only(right: SpacingTokens.sm, bottom: SpacingTokens.xs),
+                                          child: Image.asset(
+                                            'assets/images/apple.png',
+                                            width: SpacingTokens.iconSizeMedium,
+                                            height: SpacingTokens.iconSizeMedium,
+                                            errorBuilder: (context, error, stackTrace) {
+                                              return Icon(Icons.apple, color: ColorTokens.black);
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(height: SpacingTokens.sm),
+
                                       // Google 로그인 버튼
                                       _buildLoginButton(
                                         text: 'Google로 로그인',
@@ -281,26 +301,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                             height: SpacingTokens.iconSizeMedium,
                                             errorBuilder: (context, error, stackTrace) {
                                               return Icon(Icons.g_translate, color: ColorTokens.textPrimary);
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                      SizedBox(height: SpacingTokens.sm),
-
-                                      // Apple 로그인 버튼
-                                      _buildLoginButton(
-                                        text: 'Apple로 로그인',
-                                        onPressed: _handleAppleSignIn,
-                                        backgroundColor: ColorTokens.surface,
-                                        textColor: ColorTokens.black,
-                                        leadingIcon: Padding(
-                                          padding: EdgeInsets.only(right: SpacingTokens.sm, bottom: SpacingTokens.xs),
-                                          child: Image.asset(
-                                            'assets/images/apple.png',
-                                            width: SpacingTokens.iconSizeMedium,
-                                            height: SpacingTokens.iconSizeMedium,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              return Icon(Icons.apple, color: ColorTokens.black);
                                             },
                                           ),
                                         ),
