@@ -2,10 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
-import '../../core/services/authentication/deleted_user_service.dart';
 import '../../core/services/common/support_service.dart';
 import '../../core/services/subscription/subscription_entitlement_engine.dart';
-import '../../core/models/subscription_state.dart';
 import '../../core/models/plan_status.dart';
 import '../../core/utils/language_constants.dart';
 import '../../core/services/text_processing/text_processing_service.dart';
@@ -68,26 +66,12 @@ class SettingsViewModel extends ChangeNotifier {
   String get ctaSubtext => _ctaSubtext;
   bool get shouldUsePremiumQuota => _shouldUsePremiumQuota;
 
-  // 무료체험 이력 관련 필드 추가
-  bool _hasEverUsedTrialFromHistory = false;
-  bool _hasEverUsedPremiumFromHistory = false;
+  // v4-simplified: 서버에서 직접 hasUsedTrial 제공
+  bool _hasUsedTrial = false;
 
-  // 무료체험 이력 getter 수정 (과거 이력 포함)
-  bool get hasUsedFreeTrial {
-    // 현재 상태 기반 체험 이력
-    final currentTrialHistory = _planStatus == PlanStatus.trialCompleted || _planStatus == PlanStatus.trialCancelled;
-    // 과거 이력 포함
-    return currentTrialHistory || _hasEverUsedTrialFromHistory;
-  }
-  
-  bool get hasEverUsedTrial {
-    // 현재 상태 기반 체험 이력 (활성 포함)
-    final currentTrialHistory = _planStatus == PlanStatus.trialCompleted || 
-                               _planStatus == PlanStatus.trialCancelled || 
-                               _planStatus == PlanStatus.trialActive;
-    // 과거 이력 포함
-    return currentTrialHistory || _hasEverUsedTrialFromHistory;
-  }
+  // v4-simplified 체험 이력 getter들 (서버 기반)
+  bool get hasUsedFreeTrial => _hasUsedTrial;
+  bool get hasEverUsedTrial => _hasUsedTrial;
 
   /// 초기 데이터 로드
   Future<void> initialize() async {
@@ -120,9 +104,6 @@ class SettingsViewModel extends ChangeNotifier {
       // 동일 사용자면 캐시 활용
       await loadPlanInfo();
     }
-    
-    // 🎯 과거 체험 이력 로드 (탈퇴 이력 포함)
-    await _loadTrialHistoryFromDeletedUser();
   }
   
   /// 모든 데이터 초기화 (사용자 변경 시)
@@ -138,8 +119,7 @@ class SettingsViewModel extends ChangeNotifier {
     _remainingDays = 0;
     _planLimits = {};
     _isPlanLoaded = false;
-    _hasEverUsedTrialFromHistory = false;
-    _hasEverUsedPremiumFromHistory = false;
+    _hasUsedTrial = false;
     notifyListeners();
   }
 
@@ -183,6 +163,9 @@ class SettingsViewModel extends ChangeNotifier {
       final expirationDate = serverResponse['expirationDate'] as String?;
       final subscriptionType = serverResponse['subscriptionType'] as String?;
       
+      // 🎯 v4-simplified 필드 업데이트
+      _hasUsedTrial = hasUsedTrial;
+      
       // 🎯 기존 호환성을 위한 PlanStatus 설정 (레거시 UI용)
       _planStatus = _calculatePlanStatusFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
       
@@ -221,6 +204,7 @@ class SettingsViewModel extends ChangeNotifier {
       _planName = '새로고침 실패';
       _remainingDays = 0;
       _planStatus = PlanStatus.free;
+      _hasUsedTrial = false;
       _configureUIFromServerResponse('free', 'cancelled', false, expirationDate: null, subscriptionType: null); // v4-simplified 기본값
       _isPlanLoaded = true;
       
@@ -293,6 +277,9 @@ class SettingsViewModel extends ChangeNotifier {
       final expirationDate = serverResponse['expirationDate'] as String?;
       final subscriptionType = serverResponse['subscriptionType'] as String?;
       
+      // 🎯 v4-simplified 필드 업데이트
+      _hasUsedTrial = hasUsedTrial;
+      
       // 🎯 기존 호환성을 위한 PlanStatus 설정 (레거시 UI용)
       _planStatus = _calculatePlanStatusFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
       
@@ -329,6 +316,7 @@ class SettingsViewModel extends ChangeNotifier {
       _planName = '플랜 정보 로드 실패';
       _remainingDays = 0;
       _planStatus = PlanStatus.free;
+      _hasUsedTrial = false;
       _configureUIFromServerResponse('free', 'cancelled', false, expirationDate: null, subscriptionType: null); // v4-simplified 기본값
       _isPlanLoaded = true;
       notifyListeners();
@@ -337,74 +325,7 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
-  /// 🎯 구독 상태별 CTA 버튼과 사용량 쿼터 설정
-  void _configureCTAAndQuota(SubscriptionState? subscriptionState) {
-    if (subscriptionState == null) {
-      _ctaButtonText = '프리미엄으로 업그레이드';
-      _ctaButtonEnabled = true;
-      _ctaSubtext = '';
-      _shouldUsePremiumQuota = false;
-      _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_FREE));
-      return;
-    }
 
-    switch (_planStatus) {
-      case PlanStatus.trialActive:
-        _ctaButtonText = '${_remainingDays}일 뒤에 프리미엄 전환';
-        _ctaButtonEnabled = false;
-        _ctaSubtext = '구독 취소는 App Store에서';
-        _shouldUsePremiumQuota = true;
-        _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM));
-        break;
-      case PlanStatus.trialCancelled:
-        _ctaButtonText = '${_remainingDays}일 뒤에 무료 플랜 전환';
-        _ctaButtonEnabled = false;
-        _ctaSubtext = '';
-        _shouldUsePremiumQuota = true;
-        _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM));
-        break;
-      case PlanStatus.trialCompleted:
-        _ctaButtonText = '사용량 추가 문의';
-        _ctaButtonEnabled = true;
-        _ctaSubtext = '';
-        _shouldUsePremiumQuota = true;
-        _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM));
-        break;
-      case PlanStatus.premiumActive:
-      case PlanStatus.premiumCancelled:
-      case PlanStatus.premiumGrace:
-        _ctaButtonText = _planStatus == PlanStatus.premiumGrace ? '앱스토어 결제 확인 필요' : '사용량 추가 문의';
-        _ctaButtonEnabled = _planStatus == PlanStatus.premiumGrace ? false : true;
-        _ctaSubtext = '';
-        _shouldUsePremiumQuota = true;
-        _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM));
-        break;
-      case PlanStatus.premiumExpired:
-        _ctaButtonText = '프리미엄으로 업그레이드';
-        _ctaButtonEnabled = true;
-        _ctaSubtext = '';
-        _shouldUsePremiumQuota = false;
-        _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_FREE));
-        break;
-      case PlanStatus.free:
-      default:
-        _ctaButtonText = '프리미엄으로 업그레이드';
-        _ctaButtonEnabled = true;
-        _ctaSubtext = '';
-        _shouldUsePremiumQuota = false;
-        _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_FREE));
-        break;
-    }
-
-    if (kDebugMode) {
-      print('🎯 [Settings] CTA 설정 완료: ${_planStatus?.name ?? "알 수 없음"}');
-      print('   버튼 텍스트: $_ctaButtonText');
-      print('   버튼 활성화: $_ctaButtonEnabled');
-      print('   서브텍스트: $_ctaSubtext');
-      print('   프리미엄 쿼터: $_shouldUsePremiumQuota');
-      print('   플랜 제한: $_planLimits');
-    }
-  }
 
   /// 학습자 이름 업데이트
   Future<bool> updateUserName(String newName) async {
@@ -737,74 +658,7 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
-  /// 레거시: SubscriptionState로부터 PlanStatus 계산 (v4-simplified 구조 호환)
-  PlanStatus _calculatePlanStatusFromSubscriptionState(SubscriptionState subscriptionState) {
-    // v4-simplified 구조: entitlement + subscriptionStatus + hasUsedTrial 조합으로 PlanStatus 계산
-    final entitlement = subscriptionState.entitlement;
-    final subscriptionStatus = subscriptionState.subscriptionStatus;
-    final hasUsedTrial = subscriptionState.hasUsedTrial;
-    
-    if (entitlement == Entitlement.premium) {
-      switch (subscriptionStatus) {
-        case SubscriptionStatus.active:
-          return PlanStatus.premiumActive;
-        case SubscriptionStatus.cancelling:
-          return PlanStatus.premiumCancelled;
-        case SubscriptionStatus.cancelled:
-        case SubscriptionStatus.expired:
-          return PlanStatus.premiumExpired;
-        case SubscriptionStatus.refunded:
-          return PlanStatus.premiumExpired; // 환불된 경우 만료로 처리
-      }
-    } else if (entitlement == Entitlement.trial) {
-      switch (subscriptionStatus) {
-        case SubscriptionStatus.active:
-          return PlanStatus.trialActive;
-        case SubscriptionStatus.cancelling:
-          return PlanStatus.trialCancelled;
-        case SubscriptionStatus.cancelled:
-        case SubscriptionStatus.expired:
-          return PlanStatus.trialCompleted;
-        case SubscriptionStatus.refunded:
-          return PlanStatus.trialCompleted; // 환불된 경우 완료로 처리
-      }
-    } else { // Entitlement.free
-      if (hasUsedTrial) {
-        return PlanStatus.trialCompleted; // 과거에 체험을 사용했던 무료 사용자
-      } else {
-        return PlanStatus.free; // 순수 무료 사용자
-      }
-    }
-    
-    return PlanStatus.free; // 기본값
-  }
 
-  /// 🎯 과거 체험 이력 로드 (탈퇴 이력 포함)
-  Future<void> _loadTrialHistoryFromDeletedUser() async {
-    try {
-      if (kDebugMode) {
-        print('🔍 [Settings] 과거 체험 이력 조회 시작');
-      }
-      
-      // DeletedUserService에서 탈퇴 이력 조회
-      final deletedUserService = DeletedUserService();
-      final hasUsedTrialFromHistory = await deletedUserService.hasUsedFreeTrialFromHistory(forceRefresh: false);
-      
-      _hasEverUsedTrialFromHistory = hasUsedTrialFromHistory;
-      
-      if (kDebugMode) {
-        print('✅ [Settings] 과거 체험 이력 조회 완료');
-        print('   탈퇴 이력에서 체험 사용: $hasUsedTrialFromHistory');
-        print('   최종 hasUsedFreeTrial: ${hasUsedFreeTrial}');
-        print('   최종 hasEverUsedTrial: ${hasEverUsedTrial}');
-      }
-      
-      notifyListeners();
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ [Settings] 과거 체험 이력 조회 실패: $e');
-      }
-      // 오류 시 기본값 유지 (false)
-    }
-  }
+
+
 } 
