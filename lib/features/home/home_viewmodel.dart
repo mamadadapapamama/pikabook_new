@@ -131,13 +131,12 @@ class HomeViewModel extends ChangeNotifier {
         debugPrint('🔄 [HomeViewModel] 사용자 변경 후 온보딩 상태 확인');
       }
       
-      // 🚨 신규 사용자면 사용량 체크 건너뛰기
+      // 🆕 신규 사용자도 사용량 체크는 수행 (이미 구독이 있을 수 있음)
       if (_isNewUser) {
         if (kDebugMode) {
-          debugPrint('🔄 [HomeViewModel] 🆕 신규 사용자 - 환영 모달 완료 전이므로 사용량 체크 건너뜀');
+          debugPrint('🔄 [HomeViewModel] 🆕 신규 사용자지만 사용량 체크는 수행 (이미 구독이 있을 수 있음)');
         }
-        _resetUsageLimits();
-        return;
+        // 환영 모달은 여전히 표시하되, 사용량 체크는 정상 진행
       }
       
       // UserPreferencesService import 필요
@@ -147,11 +146,9 @@ class HomeViewModel extends ChangeNotifier {
       
       if (!hasCompletedOnboarding) {
         if (kDebugMode) {
-          debugPrint('🔄 [HomeViewModel] 🆕 신규 사용자 (온보딩 미완료) - 사용량 상태 체크 건너뛰고 초기화');
+          debugPrint('🔄 [HomeViewModel] 🆕 온보딩 미완료 사용자지만 사용량 상태는 체크 (이미 구독이 있을 수 있음)');
         }
-        // 신규 사용자는 사용량 상태 초기화 (제한 없음)
-        _resetUsageLimits();
-        return;
+        // 온보딩 미완료라도 사용량 상태는 정상 체크
       }
       
       if (kDebugMode) {

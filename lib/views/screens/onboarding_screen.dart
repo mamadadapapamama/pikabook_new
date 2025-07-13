@@ -11,6 +11,7 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import '../../core/utils/safe_math_utils.dart';
 
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -108,6 +109,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     setState(() {});
   }
 
+  // 안전한 화면 크기 계산 (NaN 방지)
+  double _getSafeScreenWidth(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    return SafeMathUtils.safeScreenDimension(screenWidth, defaultValue: 375.0);
+  }
+
+  double _getSafeScreenHeight(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    return SafeMathUtils.safeScreenDimension(screenHeight, defaultValue: 812.0);
+  }
+
+  // 안전한 패딩 계산
+  EdgeInsets _getSafePadding(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final topPadding = SafeMathUtils.safeSize(mediaQuery.padding.top, defaultValue: 44.0);
+    final bottomPadding = SafeMathUtils.safeSize(mediaQuery.padding.bottom, defaultValue: 34.0);
+    return EdgeInsets.only(top: topPadding, bottom: bottomPadding);
+  }
+
 
   
   bool get _canProceed {
@@ -145,37 +165,67 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       return;
     }
 
-    // 다음 페이지로 이동
-    _pageController.nextPage(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
+    // 다음 페이지로 이동 (안전한 애니메이션)
+    if (mounted && _pageController.hasClients) {
+      try {
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('PageController nextPage 오류: $e');
+        }
+        // 애니메이션 실패 시 직접 페이지 설정
+        if (mounted) {
+          setState(() {
+            _currentPage = (_currentPage + 1).clamp(0, 2);
+          });
+        }
+      }
+    }
   }
   
   // 이전 페이지로 이동
   void _prevPage() {
-    if (_currentPage > 0) {
-      _pageController.previousPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
+    if (_currentPage > 0 && mounted && _pageController.hasClients) {
+      try {
+        _pageController.previousPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('PageController previousPage 오류: $e');
+        }
+        // 애니메이션 실패 시 직접 페이지 설정
+        if (mounted) {
+          setState(() {
+            _currentPage = (_currentPage - 1).clamp(0, 2);
+          });
+        }
+      }
     }
   }
 
   // 온보딩 완료 처리
   void _finishOnboarding() {
-    setState(() {
-      _isProcessing = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isProcessing = true;
+      });
 
-    _completeOnboarding();
+      _completeOnboarding();
+    }
   }
 
   // 온보딩 건너뛰기 처리
   void _skipOnboarding() async {
-    setState(() {
-      _isProcessing = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isProcessing = true;
+      });
+    }
 
     try {
       // 기본값 설정
@@ -236,9 +286,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       
     } catch (e) {
       debugPrint('온보딩 건너뛰기 처리 중 오류 발생: $e');
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
@@ -349,6 +401,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 안전한 화면 크기 계산
+    final safeWidth = _getSafeScreenWidth(context);
+    final safeHeight = _getSafeScreenHeight(context);
+    final safePadding = _getSafePadding(context);
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: ColorTokens.background,
@@ -361,17 +418,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
       ),
       body: Container(
+        width: safeWidth,
+        height: safeHeight,
         decoration: BoxDecoration(
           color: ColorTokens.background, // 디자인 토큰 사용
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            padding: EdgeInsets.symmetric(
+              horizontal: SafeMathUtils.safeSize(24.0),
+            ),
             child: Column(
               children: [
                 // 상단 stepper 영역
                 Padding(
-                  padding: EdgeInsets.only(top: SpacingTokens.lg, bottom: SpacingTokens.xl),
+                  padding: EdgeInsets.only(
+                    top: SafeMathUtils.safeSize(SpacingTokens.lg), 
+                    bottom: SafeMathUtils.safeSize(SpacingTokens.xl)
+                  ),
                   child: _buildStepper(),
                 ),
 
@@ -381,9 +445,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     controller: _pageController,
                     physics: const NeverScrollableScrollPhysics(),
                     onPageChanged: (index) {
-                      setState(() {
-                        _currentPage = index;
-                      });
+                      if (mounted) {
+                        setState(() {
+                          _currentPage = index;
+                        });
+                      }
                       // 키보드 숨기기
                       FocusScope.of(context).unfocus();
                     },
@@ -397,10 +463,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
                 // 하단 버튼 영역
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 24.0), // skip 아래 공간 24px
+                  padding: EdgeInsets.only(
+                    bottom: SafeMathUtils.safeSize(24.0)
+                  ), // skip 아래 공간 24px
                   child: Column(
                     children: [
-                      const SizedBox(height: 24), // '다음으로' 버튼 위 24px
+                      SizedBox(height: SafeMathUtils.safeSize(24.0)), // '다음으로' 버튼 위 24px
                        Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -417,7 +485,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 
                           // 뒤로 버튼과 다음 버튼 사이 간격
                           if (_currentPage > 0)
-                            const SizedBox(width: 16),
+                            SizedBox(width: SafeMathUtils.safeSize(16.0)),
                                 
                           // 다음/시작 버튼
                           Expanded(
@@ -435,7 +503,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       // Skip 버튼 (마지막 페이지에서는 숨김)
                       if (_currentPage < 2)
                         Padding(
-                          padding: const EdgeInsets.only(top: 24.0), // skip과 '다음으로' 사이 24px
+                          padding: EdgeInsets.only(
+                            top: SafeMathUtils.safeSize(24.0)
+                          ), // skip과 '다음으로' 사이 24px
                           child: TextButton(
                             onPressed: _isProcessing ? null : _skipOnboarding,
                             child: Text(
@@ -468,10 +538,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         // 머리 아이콘
         SvgPicture.asset(
           'assets/images/icon_head.svg',
-          width: 24,
-          height: 24,
+          width: SafeMathUtils.safeSize(24.0),
+          height: SafeMathUtils.safeSize(24.0),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: SafeMathUtils.safeSize(12.0)),
         
         // Step indicators
         Row(
@@ -482,15 +552,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             return Row(
               children: [
                 Container(
-                  width: 32,
-                  height: 32,
+                  width: SafeMathUtils.safeSize(32.0),
+                  height: SafeMathUtils.safeSize(32.0),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: isActive || isCompleted 
                         ? ColorTokens.primary 
                         : ColorTokens.primarylight,
                     border: isActive 
-                        ? Border.all(color: ColorTokens.primary, width: 2)
+                        ? Border.all(
+                            color: ColorTokens.primary, 
+                            width: SafeMathUtils.safeSize(2.0)
+                          )
                         : null,
                   ),
                   child: Center(
@@ -507,8 +580,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
                 if (index < 2) // 마지막 step이 아닌 경우 연결선 추가
                   Container(
-                    width: 40,
-                    height: 2,
+                    width: SafeMathUtils.safeSize(40.0),
+                    height: SafeMathUtils.safeSize(2.0),
                     color: isCompleted 
                         ? ColorTokens.primary 
                         : ColorTokens.primarylight,
@@ -527,7 +600,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 48),
+          SizedBox(height: SafeMathUtils.safeSize(48.0)),
           RichText(
             textAlign: TextAlign.center,
             text: TextSpan(
@@ -559,7 +632,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 48),
+          SizedBox(height: SafeMathUtils.safeSize(48.0)),
           Text(
             "먼저, 학습하실 분의\n이름을 알려주세요.",
             textAlign: TextAlign.center,
@@ -569,7 +642,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: SafeMathUtils.safeSize(24.0)),
           Container(
             decoration: BoxDecoration(
               color: ColorTokens.surface,
@@ -613,7 +686,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 48),
+          SizedBox(height: SafeMathUtils.safeSize(48.0)),
           RichText(
             textAlign: TextAlign.center,
             text: TextSpan(
@@ -785,7 +858,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // 3단계: 학습 수준 선택
   Widget _buildLevelPage() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_currentPage == 2) {
+      if (_currentPage == 2 && mounted) {
         FocusScope.of(context).unfocus();
       }
     });
@@ -794,7 +867,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 8),
+          SizedBox(height: SafeMathUtils.safeSize(8.0)),
           RichText(
             text: TextSpan(
               children: [
@@ -815,7 +888,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 48),
+          SizedBox(height: SafeMathUtils.safeSize(48.0)),
           ..._levelOptions
               .asMap()
               .entries
@@ -827,7 +900,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     _buildLevelOption(option),
                     // 옵션 간 spacing (마지막 항목이 아닌 경우)
                     if (index < _levelOptions.length - 1)
-                      const SizedBox(height: 12),
+                      SizedBox(height: SafeMathUtils.safeSize(12.0)),
                   ],
                 );
               })
@@ -842,31 +915,33 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final isSelected = _selectedLevel == option['title'];
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _selectedLevel = option['title'];
-        });
+        if (mounted) {
+          setState(() {
+            _selectedLevel = option['title'];
+          });
+        }
       },
       child: Container(
         width: double.infinity,
         padding: EdgeInsets.symmetric(
-          horizontal: SpacingTokens.lg,
-          vertical: SpacingTokens.lg,
+          horizontal: SafeMathUtils.safeSize(SpacingTokens.lg),
+          vertical: SafeMathUtils.safeSize(SpacingTokens.lg),
         ),
         decoration: BoxDecoration(
           color: isSelected ? ColorTokens.primaryverylight : ColorTokens.surface,
-          borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+          borderRadius: BorderRadius.circular(SafeMathUtils.safeSize(SpacingTokens.radiusSmall)),
           border: Border.all(
             color: isSelected ? ColorTokens.primary : ColorTokens.primarylight,
-            width: 2,
+            width: SafeMathUtils.safeSize(2.0),
           ),
         ),
         child: Row(
           children: [
             Text(
               option['icon']!, 
-              style: const TextStyle(fontSize: 24),
+              style: TextStyle(fontSize: SafeMathUtils.safeSize(24.0)),
             ),
-            const SizedBox(width: 16),
+            SizedBox(width: SafeMathUtils.safeSize(16.0)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -877,7 +952,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       color: ColorTokens.textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: SafeMathUtils.safeSize(4.0)),
                   Text(
                     option['description']!,
                     style: TypographyTokens.body2.copyWith(

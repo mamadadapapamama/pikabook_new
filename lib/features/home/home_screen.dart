@@ -24,12 +24,7 @@ import 'widgets/home_floating_button.dart';
 /// - 생명주기 관리는 HomeLifecycleCoordinator에 위임
 /// - UI 상호작용은 HomeUICoordinator에 위임
 class HomeScreen extends StatefulWidget {
-  final bool shouldShowWelcomeModal;
-  
-  const HomeScreen({
-    super.key,
-    this.shouldShowWelcomeModal = false,
-  });
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -76,38 +71,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _lifecycleCoordinator = HomeLifecycleCoordinator();
     _uiCoordinator = HomeUICoordinator();
     
-    // 생명주기 coordinator 초기화
+    // 생명주기 coordinator 초기화 (기기별 트라이얼 이력으로 환영 모달 표시 여부 결정)
     _lifecycleCoordinator.initialize(
       onSubscriptionStateChanged: _onSubscriptionStateChanged,
       onUserChanged: _onUserChanged,
+      onUserStatusDetermined: (isNewUser) {
+        if (kDebugMode) {
+          debugPrint('[HomeScreen] 사용자 상태 결정: ${isNewUser ? "신규" : "기존"}');
+        }
+        
+        // HomeViewModel에 신규 사용자 플래그 설정
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final viewModel = Provider.of<HomeViewModel>(context, listen: false);
+          viewModel.setNewUser(isNewUser);
+        });
+        
+        // 신규 사용자인 경우 환영 모달 표시
+        if (isNewUser) {
+          _showWelcomeModal();
+        }
+      },
     );
-    
-    // 신규 사용자 vs 기존 사용자 처리
-    if (widget.shouldShowWelcomeModal) {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 🆕 신규 사용자 - 환영 모달 표시');
-      }
-      _lifecycleCoordinator.initializeForNewUser();
-      
-      // 🚨 HomeViewModel에도 신규 사용자 플래그 설정
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final viewModel = Provider.of<HomeViewModel>(context, listen: false);
-        viewModel.setNewUser(true);
-      });
-      
-      _showWelcomeModal();
-    } else {
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 🔄 기존 사용자 - 기존 사용자 초기화');
-      }
-      _lifecycleCoordinator.initializeForExistingUser();
-      
-      // 🚨 HomeViewModel에도 기존 사용자 플래그 설정
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final viewModel = Provider.of<HomeViewModel>(context, listen: false);
-        viewModel.setNewUser(false);
-      });
-    }
   }
 
   /// 구독 상태 변경 콜백
@@ -141,16 +125,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _showWelcomeModal() {
     _uiCoordinator.showWelcomeModalAfterDelay(
       context,
-      onComplete: () {
+      onComplete: (bool userChoseTrial) {
         if (kDebugMode) {
-          debugPrint('[HomeScreen] 환영 모달 완료 - 온보딩 완료 처리');
+          debugPrint('[HomeScreen] 환영 모달 완료 - 구매 선택: $userChoseTrial');
         }
         
         // 🚨 HomeViewModel의 신규 사용자 플래그도 해제
         final viewModel = Provider.of<HomeViewModel>(context, listen: false);
         viewModel.setNewUser(false);
         
-        _lifecycleCoordinator.loadSubscriptionStatusAfterOnboarding();
+        // 새로운 handleWelcomeModalCompleted 호출
+        _lifecycleCoordinator.handleWelcomeModalCompleted(
+          userChoseTrial: userChoseTrial,
+        );
       },
     );
   }

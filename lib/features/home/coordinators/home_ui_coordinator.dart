@@ -20,7 +20,7 @@ class HomeUICoordinator {
   /// 🎉 환영 모달 표시 (지연 후)
   void showWelcomeModalAfterDelay(
     BuildContext context, {
-    required Function() onComplete,
+    required Function(bool userChoseTrial) onComplete,
   }) {
     if (kDebugMode) {
       debugPrint('🎉 [HomeUICoordinator] 환영 모달 표시 준비');
@@ -36,30 +36,13 @@ class HomeUICoordinator {
           
           UpgradePromptHelper.showWelcomeTrialPrompt(
             context,
-            onComplete: () async {
+            onComplete: (bool userChoseTrial) async {
               if (kDebugMode) {
-                debugPrint('✅ [HomeUICoordinator] 환영 모달 완료 - 온보딩 완료 처리 시작');
+                debugPrint('✅ [HomeUICoordinator] 환영 모달 완료 - 구매 선택: $userChoseTrial');
               }
               
-              try {
-                // 온보딩 완료 상태 업데이트
-                final preferences = await _userPreferencesService.getPreferences();
-                await _userPreferencesService.savePreferences(
-                  preferences.copyWith(onboardingCompleted: true),
-                );
-                
-                if (kDebugMode) {
-                  debugPrint('✅ [HomeUICoordinator] 온보딩 완료 상태 저장됨');
-                }
-                
-                // 완료 콜백 호출
-                onComplete();
-                
-              } catch (e) {
-                if (kDebugMode) {
-                  debugPrint('❌ [HomeUICoordinator] 온보딩 완료 처리 실패: $e');
-                }
-              }
+              // 완료 콜백 호출 (구매 선택 여부 전달)
+              onComplete(userChoseTrial);
             },
           );
         }

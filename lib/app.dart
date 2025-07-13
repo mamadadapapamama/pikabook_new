@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
@@ -11,9 +10,7 @@ import 'views/screens/login_screen.dart';
 import 'features/home/home_screen.dart'; 
 import 'views/screens/onboarding_screen.dart';
 import 'core/services/authentication/user_preferences_service.dart';
-
 import 'core/services/payment/in_app_purchase_service.dart';
-
 import 'core/services/subscription/unified_subscription_manager.dart';
 import 'views/screens/loading_screen.dart';
 import 'core/theme/app_theme.dart';
@@ -56,7 +53,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   bool _isOnboardingCompleted = false;
   bool _isLoadingUserData = false;
   bool _isSampleMode = false;
-  bool _shouldShowWelcomeModal = false; // 🎉 새 유저 환영 모달 플래그
   String? _userId;
   User? _user;
   StreamSubscription<User?>? _authStateSubscription;
@@ -176,10 +172,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     
     // 🎯 빠른 앱 시작을 위해 필수 서비스만 초기화
     await Future.wait([
-      // UserPreferencesService 초기화 (필수)
-      Future(() {
-    _preferencesService = UserPreferencesService();
-      }),
     
       // 🔔 NotificationService 초기화 및 권한 요청 (백그라운드)
       Future(() async {
@@ -411,7 +403,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         debugPrint('🔍 [loadUserPreferences] 온보딩 상태 확인: $isOnboardingCompleted');
       }
       
-      // 상태 업데이트
+      // 상태 업데이트 (환영 모달 로직은 HomeScreen에서 처리)
       if (mounted) {
         setState(() {
           _isOnboardingCompleted = isOnboardingCompleted;
@@ -463,69 +455,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
-  /// 온보딩 완료 후 환영 모달 표시
-  void _showWelcomeModal() {
-    if (kDebugMode) {
-      debugPrint('🎉 [App] _showWelcomeModal 호출됨');
-      debugPrint('   mounted: $mounted');
-      debugPrint('   _user: ${_user?.uid}');
-      debugPrint('   _scaffoldMessengerKey: $_scaffoldMessengerKey');
-    }
-    
-    if (!mounted) {
-      if (kDebugMode) {
-        debugPrint('❌ [App] 환영 모달 표시 실패: mounted가 false');
-      }
-      return;
-    }
-    
-    if (kDebugMode) {
-      debugPrint('🎉 [App] 온보딩 완료 후 환영 모달 표시 준비');
-    }
-    
-    // 약간의 지연 후 모달 표시 (BuildContext 안정화)
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (kDebugMode) {
-        debugPrint('🎉 [App] 500ms 지연 후 환영 모달 표시 시도');
-        debugPrint('   mounted: $mounted');
-      }
-      
-      if (!mounted) {
-        if (kDebugMode) {
-          debugPrint('❌ [App] 환영 모달 표시 실패: 지연 후 mounted가 false');
-        }
-        return;
-      }
-      
-      final context = _scaffoldMessengerKey.currentContext;
-      if (kDebugMode) {
-        debugPrint('🎉 [App] ScaffoldMessenger context: ${context != null ? 'OK' : 'NULL'}');
-      }
-      
-      if (context == null) {
-        if (kDebugMode) {
-          debugPrint('❌ [App] 환영 모달 표시 실패: context가 null');
-          debugPrint('   _scaffoldMessengerKey.currentState: ${_scaffoldMessengerKey.currentState}');
-          debugPrint('   _scaffoldMessengerKey.currentWidget: ${_scaffoldMessengerKey.currentWidget}');
-        }
-        return;
-      }
-      
-      if (kDebugMode) {
-        debugPrint('🎉 [App] 환영 모달 표시 시작');
-      }
-      
-      // 환영 모달 표시 (7일 무료체험 유도)
-      UpgradePromptHelper.showWelcomeTrialPrompt(
-        context,
-        onComplete: () {
-          if (kDebugMode) {
-            debugPrint('✅ [App] 환영 모달 완료');
-          }
-        },
-      );
-    });
-  }
+
   
   /// 🎯 구독 상태 사전 로딩 (HomeScreen 빌드 전에 준비)
   void _preloadSubscriptionStatus() {
@@ -586,22 +516,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
            //   }
            // });
            try {
-             // 🎉 환영 모달 플래그 확인 및 전달
-             final shouldShowWelcome = _shouldShowWelcomeModal;
-             if (_shouldShowWelcomeModal) {
-               // 플래그 리셋 (한 번만 표시)
-               WidgetsBinding.instance.addPostFrameCallback((_) {
-                 if (mounted) {
-                   setState(() {
-                     _shouldShowWelcomeModal = false;
-                   });
-                 }
-               });
-             }
-             
              return ChangeNotifierProvider(
                create: (context) => HomeViewModel(),
-               child: HomeScreen(shouldShowWelcomeModal: shouldShowWelcome),
+               child: const HomeScreen(),
              );
            } catch (e, stackTrace) {
              if (kDebugMode) {
@@ -675,14 +592,15 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     return OnboardingScreen(
           onComplete: () async {
             await _preferencesService.setOnboardingCompleted(true);
+            
+            // 온보딩 완료 후 상태 업데이트 (환영 모달 로직은 HomeScreen에서 처리)
             if (mounted) {
               setState(() {
                 _isOnboardingCompleted = true;
-                _shouldShowWelcomeModal = true; // 🎉 환영 모달 플래그 설정
               });
               
               if (kDebugMode) {
-                debugPrint('🎉 [App] 온보딩 완료 - 환영 모달 플래그 설정');
+                debugPrint('🎉 [App] 온보딩 완료 - HomeScreen에서 환영 모달 처리 예정');
               }
             }
           },

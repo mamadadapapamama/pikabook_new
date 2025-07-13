@@ -458,6 +458,9 @@ class UpgradeModal extends StatelessWidget {
                   }
                 }
                 
+                // 🎯 Trial 컨텍스트 설정 (환영 모달에서 구매 시)
+                purchaseService.setTrialContext(true);
+                
                 // 🎯 개선된 구매 시작 (자동 에러 처리 포함)
                 if (kDebugMode) {
                   debugPrint('🛒 [UpgradeModal] 무료체험 구매 시작: ${InAppPurchaseService.premiumMonthlyId}');
@@ -1103,28 +1106,88 @@ class UpgradePromptHelper {
   /// 온보딩 완료 후 환영 모달 표시 (7일 무료체험 유도)
   static Future<void> showWelcomeTrialPrompt(
     BuildContext context, {
-    required VoidCallback onComplete,
+    required Function(bool userChoseTrial) onComplete,
   }) async {
+    bool userChoseTrial = false;
+    
     try {
       if (kDebugMode) {
         print('🎉 [UpgradeModal] 환영 모달 표시 시작 (7일 무료체험 유도)');
       }
       
-      await UpgradeModal.show(
+      // InAppPurchaseService 구매 결과 콜백 설정
+      final purchaseService = InAppPurchaseService();
+      bool purchaseCompleted = false;
+      
+      purchaseService.setOnPurchaseResult((bool success, String? transactionId, String? error) {
+        if (kDebugMode) {
+          print('🛒 [UpgradeModal] 구매 결과 수신: success=$success, transactionId=$transactionId, error=$error');
+        }
+        
+        if (success) {
+          userChoseTrial = true;
+          purchaseCompleted = true;
+          if (kDebugMode) {
+            print('✅ [UpgradeModal] 구매 성공 - 무료체험 선택됨');
+          }
+        } else {
+          // 구매 실패 시 무료 플랜으로 처리
+          userChoseTrial = false;
+          purchaseCompleted = true;
+          if (kDebugMode) {
+            print('⚠️ [UpgradeModal] 구매 실패 - 무료 플랜으로 처리: $error');
+          }
+        }
+      });
+      
+      final result = await UpgradeModal.show(
         context,
         reason: UpgradeReason.welcomeTrial,
         // onUpgrade는 버튼 내에서 직접 처리  
       );
       
+      // 모달 결과에 따라 처리
+      if (result == true) {
+        // "7일간 무료로 프리미엄 시작하기" 선택
+        if (kDebugMode) {
+          print('🎯 [UpgradeModal] 사용자가 무료체험 버튼 선택 - 구매 결과 대기');
+        }
+        
+        // 구매 완료까지 최대 10초 대기
+        int waitCount = 0;
+        while (!purchaseCompleted && waitCount < 100) { // 10초 (100 * 100ms)
+          await Future.delayed(Duration(milliseconds: 100));
+          waitCount++;
+        }
+        
+        if (!purchaseCompleted) {
+          if (kDebugMode) {
+            print('⏰ [UpgradeModal] 구매 결과 대기 타임아웃 - 무료 플랜으로 처리');
+          }
+          userChoseTrial = false;
+        }
+      } else {
+        // "나가기" 선택
+        userChoseTrial = false;
+        if (kDebugMode) {
+          print('🎯 [UpgradeModal] 사용자가 나가기 선택 - 무료 플랜');
+        }
+      }
+      
       if (kDebugMode) {
-        print('✅ [UpgradeModal] 환영 모달 완료');
+        print('✅ [UpgradeModal] 환영 모달 완료 - 최종 선택: ${userChoseTrial ? "무료체험" : "무료플랜"}');
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [UpgradeModal] 환영 모달 표시 오류: $e');
       }
+      userChoseTrial = false;
     } finally {
-      onComplete();
+      // 구매 결과 콜백 해제
+      final purchaseService = InAppPurchaseService();
+      purchaseService.setOnPurchaseResult(null);
+      
+      onComplete(userChoseTrial);
     }
   }
 

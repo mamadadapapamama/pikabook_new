@@ -467,10 +467,12 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_isLoading) return;
     
     try {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = true;
+          _errorMessage = null;
+        });
+      }
       
       // Firebase가 초기화되었는지 확인
       if (Firebase.apps.isEmpty) {
@@ -490,22 +492,28 @@ class _LoginScreenState extends State<LoginScreen> {
           widget.onLoginSuccess(user);
         } else {
           // throw Exception('로그인이 취소되었습니다.');
+          if (mounted) {
+            setState(() {
+              _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
+              _isLoading = false;
+            });
+          }
+        }
+      } catch (e) {
+        if (mounted) {
           setState(() {
             _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
             _isLoading = false;
           });
         }
-      } catch (e) {
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
           _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
-        _isLoading = false;
-      });
     }
   }
   
@@ -514,10 +522,12 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_isLoading) return;
     
     try {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = true;
+          _errorMessage = null;
+        });
+      }
       
       // Firebase가 초기화되었는지 확인
       if (Firebase.apps.isEmpty) {
@@ -536,9 +546,11 @@ class _LoginScreenState extends State<LoginScreen> {
         if (kDebugMode) {
           debugPrint('🍎 Apple Sign In: 사용자가 취소함 - 조용히 처리');
         }
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
         return;
       }
       
@@ -559,9 +571,11 @@ class _LoginScreenState extends State<LoginScreen> {
       if (e.toString().contains('AuthorizationError Code=1001') ||
           e.toString().contains('사용자가 취소')) {
         // 사용자 취소 - 조용히 처리
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
         return;
       }
       
@@ -574,10 +588,12 @@ class _LoginScreenState extends State<LoginScreen> {
         errorMessage = e.toString().replaceAll('Exception: ', '');
       }
       
-      setState(() {
-        _errorMessage = errorMessage;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = errorMessage;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -590,31 +606,39 @@ class _LoginScreenState extends State<LoginScreen> {
     
     // 입력값 검증
     if (email.isEmpty || password.isEmpty) {
-      setState(() {
-        _errorMessage = '이메일과 비밀번호를 입력해주세요.';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = '이메일과 비밀번호를 입력해주세요.';
+        });
+      }
       return;
     }
     
     if (!email.contains('@') || !email.contains('.')) {
-      setState(() {
-        _errorMessage = '올바른 이메일 형식을 입력해주세요.';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = '올바른 이메일 형식을 입력해주세요.';
+        });
+      }
       return;
     }
     
     if (password.length < 6) {
-      setState(() {
-        _errorMessage = '비밀번호는 6자 이상이어야 합니다.';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = '비밀번호는 6자 이상이어야 합니다.';
+        });
+      }
       return;
     }
     
     try {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = true;
+          _errorMessage = null;
+        });
+      }
       
       User? user;
       
@@ -643,10 +667,12 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       
       if (user == null) {
-        setState(() {
-          _errorMessage = '로그인에 실패했습니다. 다시 시도해주세요.';
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _errorMessage = '로그인에 실패했습니다. 다시 시도해주세요.';
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       String errorMessage = '오류가 발생했습니다. 다시 시도해주세요.';
@@ -697,10 +723,12 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
       
-      setState(() {
-        _errorMessage = errorMessage;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = errorMessage;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -718,9 +746,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_isLoading) return;
     
     try {
-      setState(() {
-        _isLoading = true;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = true;
+        });
+      }
       
       if (kDebugMode) {
         debugPrint('[LoginScreen] 로그인 없이 둘러보기 시작');
@@ -745,16 +775,20 @@ class _LoginScreenState extends State<LoginScreen> {
         if (kDebugMode) {
           debugPrint('[LoginScreen] 경고: onSkipLogin 콜백이 null입니다.');
         }
-        setState(() { _isLoading = false; }); // 로딩 해제
+        if (mounted) {
+          setState(() { _isLoading = false; }); // 로딩 해제
+        }
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[LoginScreen] 샘플 모드 진입 중 오류: $e');
       }
-      setState(() {
-        _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = '로그인이 취소되었습니다. 다시 시도해 주세요.';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -762,9 +796,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// 회원가입 후 이메일 검증 안내 다이얼로그
   Future<void> _showEmailVerificationDialog(User user) async {
-    setState(() {
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
 
     return showDialog<void>(
       context: context,
@@ -836,9 +872,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// 로그인 시 이메일 미인증 안내 다이얼로그
   Future<void> _showEmailNotVerifiedDialog(User user) async {
-    setState(() {
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
 
     return showDialog<void>(
       context: context,
@@ -888,9 +926,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 // 로그아웃 후 메인 로그인 화면으로
                 await FirebaseAuth.instance.signOut();
                 Navigator.of(context).pop();
-                setState(() {
-                  _isEmailLogin = false;
-                });
+                if (mounted) {
+                  setState(() {
+                    _isEmailLogin = false;
+                  });
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: ColorTokens.primary,

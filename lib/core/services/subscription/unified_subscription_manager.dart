@@ -3,6 +3,7 @@ import 'dart:async';
 import 'subscription_entitlement_engine.dart';
 import '../common/banner_manager.dart';
 import '../common/usage_limit_service.dart';
+
 import '../../models/subscription_state.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -88,14 +89,8 @@ class UnifiedSubscriptionManager {
       debugPrint('🎯 [UnifiedSubscriptionManager] getSubscriptionState 호출 (forceRefresh: $forceRefresh)');
     }
     
-    // 🚨 로그인 상태 우선 체크 (무한 반복 방지)
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) {
-      if (kDebugMode) {
-        debugPrint('⚠️ [UnifiedSubscriptionManager] 로그인되지 않음 - 기본 상태 반환');
-      }
-      return SubscriptionState.defaultState();
-    }
+    // 홈화면 진입 시점에서 이미 로그인됨이 보장되므로 로그인 상태 확인 불필요
+    final currentUser = FirebaseAuth.instance.currentUser!;
     
     // 🎯 사용자 변경 감지 (캐시 무효화 및 강제 새로고침)
     final currentUserId = currentUser.uid;
@@ -212,7 +207,7 @@ class UnifiedSubscriptionManager {
       final subscriptionState = SubscriptionState(
         entitlement: Entitlement.fromString(entitlementResult.entitlement),
         subscriptionStatus: SubscriptionStatus.fromString(entitlementResult.subscriptionStatus),
-        hasUsedTrial: entitlementResult.hasUsedTrial,
+        hasUsedTrial: entitlementResult.hasUsedTrial, // 서버 값 사용
         hasUsageLimitReached: hasUsageLimitReached,
         activeBanners: activeBanners,
         statusMessage: entitlementResult.statusMessage,
@@ -331,14 +326,7 @@ class UnifiedSubscriptionManager {
       debugPrint('🛒 [UnifiedSubscriptionManager] 구매 완료 - 캐시 무효화');
     }
     
-    // 🚨 로그인 상태 체크 (무한 반복 방지)
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) {
-      if (kDebugMode) {
-        debugPrint('⚠️ [UnifiedSubscriptionManager] 구매 완료 알림 중단 - 사용자가 로그아웃됨');
-      }
-      return; // 로그아웃 상태면 재시도 스케줄링 안함
-    }
+    // 홈화면에서 구매 완료 알림이므로 로그인 상태 보장됨
     
     // 🎯 서버 웹훅 처리 대기 후 재시도 (5초 지연)
     _scheduleRetryAfterPurchase();
@@ -374,14 +362,7 @@ class UnifiedSubscriptionManager {
         debugPrint('🔄 [UnifiedSubscriptionManager] $retryLabel 재시도 시작');
       }
       
-      // 🚨 로그인 상태 먼저 체크 (무한 반복 방지)
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        if (kDebugMode) {
-          debugPrint('⚠️ [UnifiedSubscriptionManager] $retryLabel 중단 - 사용자가 로그아웃됨');
-        }
-        return; // 로그아웃 상태면 재시도 중단
-      }
+      // 홈화면에서 구매 완료 재시도이므로 로그인 상태 보장됨
       
       // 강제 새로고침으로 서버에서 업데이트된 구독 상태 조회
       final updatedState = await getSubscriptionState(forceRefresh: true);

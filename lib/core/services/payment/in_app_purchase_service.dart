@@ -9,6 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../common/banner_manager.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
+
 /// 🚀 StoreKit 2 기반 In-App Purchase 관리 서비스
 /// 
 /// in_app_purchase_storekit 패키지를 사용하여 StoreKit 2의 장점을 활용하면서
@@ -38,22 +39,22 @@ class InAppPurchaseService {
   final Set<String> _processedPurchases = {};
   bool _isPurchaseInProgress = false;
   
-  // 🎯 사용자 변경 감지용
-  String? _lastUserId;
-  StreamSubscription<User?>? _authStateSubscription;
-  
   // 🎯 구매 성공 콜백
   Function()? _onPurchaseSuccess;
+  
+  // 🎯 구매 결과 콜백 (Transaction ID 포함)
+  Function(bool success, String? transactionId, String? error)? _onPurchaseResult;
+  
+  // 🎯 Trial 구매 컨텍스트 (환영 모달에서 구매 시 true)
+  bool _isTrialContext = false;
   
   // 🎯 상품 ID 정의
   static const String premiumMonthlyId = 'premium_monthly';
   static const String premiumYearlyId = 'premium_yearly';
-  static const String premiumMonthlyWithTrialId = 'premium_monthly_with_trial';
   
   static const Set<String> _productIds = {
     premiumMonthlyId,
     premiumYearlyId,
-    premiumMonthlyWithTrialId,
   };
 
   /// 🚀 StoreKit 2 서비스 초기화
@@ -93,15 +94,16 @@ class InAppPurchaseService {
         onError: (error) {
           if (kDebugMode) {
             print('❌ StoreKit 2 구매 스트림 오류: $error');
+            print('🔧 구매 스트림 오류 자동 복구 시도');
           }
+          
+          // 구매 스트림 오류 시 자동 복구
+          _recoverFromStreamError(error);
         },
       );
 
       // 🎯 상품 정보 로드
       await _loadProducts();
-
-      // 🎯 사용자 변경 감지 리스너 설정
-      _setupAuthStateListener();
 
       _isInitialized = true;
       
@@ -128,42 +130,25 @@ class InAppPurchaseService {
     }
   }
 
-  /// 🎯 사용자 변경 감지 리스너 설정
-  void _setupAuthStateListener() {
-    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen(
-      (User? user) {
-        final currentUserId = user?.uid;
-        
-        // 사용자가 변경된 경우 구매 관련 캐시 초기화
-        if (_lastUserId != currentUserId) {
-          if (kDebugMode) {
-            print('🔄 [InAppPurchaseService] 사용자 변경 감지: ${_lastUserId ?? "없음"} → ${currentUserId ?? "없음"}');
-          }
-          
-          // 구매 처리 캐시 초기화
-          _processedPurchases.clear();
-          _isPurchaseInProgress = false;
-          
-          _lastUserId = currentUserId;
-          
-          if (kDebugMode) {
-            print('✅ [InAppPurchaseService] 구매 캐시 초기화 완료');
-          }
-        }
-      },
-      onError: (error) {
-        if (kDebugMode) {
-          print('❌ [InAppPurchaseService] 사용자 변경 감지 오류: $error');
-        }
-      },
-    );
+  /// 🎯 구매 캐시 초기화 (AuthService에서 호출)
+  void clearUserCache() {
+    if (kDebugMode) {
+      print('🔄 [InAppPurchaseService] 사용자 변경으로 인한 구매 캐시 초기화');
+    }
+    
+    // 구매 처리 캐시 초기화
+    _processedPurchases.clear();
+    _isPurchaseInProgress = false;
+    
+    if (kDebugMode) {
+      print('✅ [InAppPurchaseService] 구매 캐시 초기화 완료');
+    }
   }
 
   /// 🎯 서비스 종료
   void dispose() {
     if (_isInitialized) {
       _subscription.cancel();
-      _authStateSubscription?.cancel(); // 🎯 사용자 변경 감지 구독 취소
       
       // 🎯 StoreKit 2 미완료 거래 정리
       _finishPendingTransactions().catchError((error) {
@@ -180,6 +165,19 @@ class InAppPurchaseService {
   /// 🎯 구매 성공 콜백 설정
   void setOnPurchaseSuccess(Function()? callback) {
     _onPurchaseSuccess = callback;
+  }
+
+  /// 🎯 구매 결과 콜백 설정 (환영 모달용)
+  void setOnPurchaseResult(Function(bool success, String? transactionId, String? error)? callback) {
+    _onPurchaseResult = callback;
+  }
+
+  /// 🎯 Trial 구매 컨텍스트 설정 (환영 모달에서 구매 시 true)
+  void setTrialContext(bool isTrialContext) {
+    _isTrialContext = isTrialContext;
+    if (kDebugMode) {
+      print('🎯 [InAppPurchase] Trial 컨텍스트 설정: $isTrialContext');
+    }
   }
 
   /// 🎯 상품 정보 로드
@@ -245,6 +243,8 @@ class InAppPurchaseService {
       if (purchaseDetails.status == PurchaseStatus.purchased) {
         // 🎉 구매 성공 처리
         await _handleSuccessfulPurchase(purchaseDetails);
+        // 🎯 구매 결과 콜백 호출 (성공)
+        _onPurchaseResult?.call(true, purchaseDetails.purchaseID, null);
       } else if (purchaseDetails.status == PurchaseStatus.error) {
         // ❌ 구매 실패 처리
         if (kDebugMode) {
@@ -252,6 +252,8 @@ class InAppPurchaseService {
         }
         await _completePurchaseIfNeeded(purchaseDetails, isErrorRecovery: true);
         _isPurchaseInProgress = false;
+        // 🎯 구매 결과 콜백 호출 (실패)
+        _onPurchaseResult?.call(false, null, purchaseDetails.error?.message ?? '구매 실패');
       } else if (purchaseDetails.status == PurchaseStatus.canceled) {
         // 🚫 구매 취소 처리
         if (kDebugMode) {
@@ -259,6 +261,8 @@ class InAppPurchaseService {
         }
         await _completePurchaseIfNeeded(purchaseDetails, isErrorRecovery: true);
         _isPurchaseInProgress = false;
+        // 🎯 구매 결과 콜백 호출 (취소)
+        _onPurchaseResult?.call(false, null, '사용자가 구매를 취소했습니다');
       } else if (purchaseDetails.status == PurchaseStatus.pending) {
         // ⏳ 구매 대기 중 (StoreKit 2에서 자동 처리)
         if (kDebugMode) {
@@ -317,6 +321,8 @@ class InAppPurchaseService {
       
       // 🎯 알림 설정
       await _scheduleNotificationsIfNeeded(purchaseDetails.productID);
+      
+
       
       // 🎯 성공 콜백 호출
       _onPurchaseSuccess?.call();
@@ -389,12 +395,21 @@ class InAppPurchaseService {
         print('❌ StoreKit 2 구매 시작 중 오류: $e');
       }
       
-      // 🎯 Pending Transaction 에러 처리
-      if (e.toString().contains('pending transaction') || 
-          e.toString().contains('storekit_duplicate_product_object')) {
-        throw Exception('PENDING_TRANSACTION_ERROR');
+      // 🎯 StoreKit 2 특정 오류 처리 및 자동 복구 시도
+      final errorResult = await _handleStoreKitError(e, productId);
+      if (errorResult['canRetry'] == true) {
+        if (kDebugMode) {
+          print('🔄 StoreKit 2 오류 복구 후 재시도: $productId');
+        }
+        
+        // 2초 대기 후 재시도
+        await Future.delayed(const Duration(seconds: 2));
+        return await _retryPurchase(productId);
       }
-
+      
+      // 🎯 구매 결과 콜백 호출 (실패)
+      _onPurchaseResult?.call(false, null, errorResult['message'] as String);
+      
       return false;
     } finally {
       Future.delayed(const Duration(seconds: 3), () {
@@ -427,21 +442,37 @@ class InAppPurchaseService {
     unifiedManager.notifyPurchaseCompleted();
     
     final bannerManager = BannerManager();
-    if (productId == premiumMonthlyWithTrialId) {
-      bannerManager.setBannerState(BannerType.trialStarted, true, planId: 'storekit2_trial');
+    if (productId == premiumMonthlyId) {
+      // Trial 컨텍스트에 따라 배너 결정
+      if (_isTrialContext) {
+        bannerManager.setBannerState(BannerType.trialStarted, true, planId: 'storekit2_trial');
+        if (kDebugMode) {
+          print('🎉 [InAppPurchase] Trial 배너 설정 (환영 모달 구매)');
+        }
+      } else {
+        bannerManager.setBannerState(BannerType.premiumStarted, true, planId: 'storekit2_premium');
+        if (kDebugMode) {
+          print('🎉 [InAppPurchase] Premium 배너 설정 (일반 구매)');
+        }
+      }
     } else {
       bannerManager.setBannerState(BannerType.premiumStarted, true, planId: 'storekit2_premium');
     }
     bannerManager.invalidateBannerCache();
+    
+    // Trial 컨텍스트 초기화
+    _isTrialContext = false;
   }
 
   /// 🎯 알림 설정
   Future<void> _scheduleNotificationsIfNeeded(String productId) async {
-    if (productId == premiumMonthlyWithTrialId) {
+    if (productId == premiumMonthlyId) {
       try {
+        // premium_monthly 구매 시 알림 스케줄링
+        // (Trial이든 정규 구매든 D-1 알림이 유용함)
         await _notificationService.scheduleTrialEndNotifications(DateTime.now());
         if (kDebugMode) {
-          print('✅ StoreKit 2 무료체험 알림 스케줄링 완료');
+          print('✅ StoreKit 2 구독 알림 스케줄링 완료');
         }
       } catch (e) {
         if (kDebugMode) {
@@ -590,7 +621,7 @@ class InAppPurchaseService {
   // 🎯 기존 호환성 메서드들
   Future<bool> buyMonthly() => buyProduct(premiumMonthlyId);
   Future<bool> buyYearly() => buyProduct(premiumYearlyId);
-  Future<bool> buyMonthlyTrial() => buyProduct(premiumMonthlyWithTrialId);
+  Future<bool> buyMonthlyTrial() => buyProduct(premiumMonthlyId); // Trial은 premium_monthly의 offer
 
   /// 구매 복원
   Future<void> restorePurchases() async {
@@ -644,13 +675,13 @@ class InAppPurchaseService {
 
   Future<ProductDetails?> get monthlyTrialProduct async {
     await _ensureInitialized();
-    return _getProductById(premiumMonthlyWithTrialId);
+    return _getProductById(premiumMonthlyId); // Trial은 premium_monthly의 offer
   }
 
   /// 즉시 상품 정보 getter들
   ProductDetails? get monthlyProductSync => _getProductById(premiumMonthlyId);
   ProductDetails? get yearlyProductSync => _getProductById(premiumYearlyId);
-  ProductDetails? get monthlyTrialProductSync => _getProductById(premiumMonthlyWithTrialId);
+  ProductDetails? get monthlyTrialProductSync => _getProductById(premiumMonthlyId); // Trial은 premium_monthly의 offer
 
   /// 🎯 사용자 친화적인 구매 시도
   Future<Map<String, dynamic>> attemptPurchaseWithGuidance(String productId) async {
@@ -694,7 +725,7 @@ class InAppPurchaseService {
   /// 간소화된 구매 메서드들
   Future<Map<String, dynamic>> buyMonthlyWithGuidance() => attemptPurchaseWithGuidance(premiumMonthlyId);
   Future<Map<String, dynamic>> buyYearlyWithGuidance() => attemptPurchaseWithGuidance(premiumYearlyId);
-  Future<Map<String, dynamic>> buyMonthlyTrialWithGuidance() => attemptPurchaseWithGuidance(premiumMonthlyWithTrialId);
+  Future<Map<String, dynamic>> buyMonthlyTrialWithGuidance() => attemptPurchaseWithGuidance(premiumMonthlyId); // Trial은 premium_monthly의 offer
 
   /// 🆘 사용자 친화적인 pending transaction 처리
   Future<void> handlePendingTransactionsForUser() async {
@@ -743,5 +774,183 @@ class InAppPurchaseService {
         'needsManualIntervention': true,
       };
     }
+  }
+
+  /// 🎯 사용 가능한 상품 목록 반환 (Debug용)
+  Future<List<ProductDetails>> getAvailableProducts() async {
+    await _ensureInitialized();
+    return _products;
+  }
+
+  /// 🎯 StoreKit 2 오류 처리 및 복구 시도
+  Future<Map<String, dynamic>> _handleStoreKitError(dynamic error, String productId) async {
+    final errorString = error.toString();
+    
+    if (kDebugMode) {
+      print('🔍 StoreKit 2 오류 분석 중: $errorString');
+    }
+    
+    // 1. Pending Transaction 오류
+    if (errorString.contains('pending transaction') || 
+        errorString.contains('storekit_duplicate_product_object') ||
+        errorString.contains('StoreKitError')) {
+      
+      if (kDebugMode) {
+        print('🔧 Pending Transaction 감지 - 자동 복구 시도');
+      }
+      
+      try {
+        // 미완료 거래 정리
+        await _finishPendingTransactions();
+        
+        // 구매 스트림 재설정
+        await _inAppPurchase.restorePurchases();
+        
+        // 상품 정보 재로드
+        await _loadProducts();
+        
+        return {
+          'canRetry': true,
+          'message': 'Pending Transaction 복구 완료',
+        };
+      } catch (e) {
+        if (kDebugMode) {
+          print('❌ Pending Transaction 복구 실패: $e');
+        }
+        return {
+          'canRetry': false,
+          'message': '미완료 거래 정리 실패. 앱을 재시작해주세요.',
+        };
+      }
+    }
+    
+    // 2. Network 오류
+    if (errorString.contains('network') || 
+        errorString.contains('connection') ||
+        errorString.contains('timeout')) {
+      return {
+        'canRetry': true,
+        'message': '네트워크 오류가 발생했습니다.',
+      };
+    }
+    
+    // 3. Product 로드 오류
+    if (errorString.contains('product') || 
+        errorString.contains('identifier')) {
+      
+      if (kDebugMode) {
+        print('🔧 상품 정보 재로드 시도');
+      }
+      
+      try {
+        await _loadProducts();
+        return {
+          'canRetry': true,
+          'message': '상품 정보 재로드 완료',
+        };
+      } catch (e) {
+        return {
+          'canRetry': false,
+          'message': '상품 정보를 불러올 수 없습니다.',
+        };
+      }
+    }
+    
+    // 4. 사용자 취소
+    if (errorString.contains('cancelled') || 
+        errorString.contains('cancel')) {
+      return {
+        'canRetry': false,
+        'message': '사용자가 구매를 취소했습니다.',
+      };
+    }
+    
+    // 5. 기타 오류
+    return {
+      'canRetry': false,
+      'message': 'StoreKit 오류가 발생했습니다: ${errorString.length > 100 ? errorString.substring(0, 100) + '...' : errorString}',
+    };
+  }
+
+  /// 🎯 구매 재시도 (복구 후)
+  Future<bool> _retryPurchase(String productId) async {
+    try {
+      if (kDebugMode) {
+        print('🔄 StoreKit 2 구매 재시도: $productId');
+      }
+      
+      // 초기화 상태 확인
+      if (!_isAvailable) {
+        if (kDebugMode) {
+          print('❌ StoreKit 2 사용 불가 (재시도)');
+        }
+        return false;
+      }
+      
+      // 상품 정보 확인
+      final ProductDetails? productDetails = _products
+          .where((product) => product.id == productId)
+          .firstOrNull;
+      
+      if (productDetails == null) {
+        if (kDebugMode) {
+          print('❌ StoreKit 2 상품을 찾을 수 없습니다 (재시도): $productId');
+        }
+        return false;
+      }
+      
+      // 구매 요청
+      final PurchaseParam purchaseParam = PurchaseParam(
+        productDetails: productDetails,
+      );
+      
+      final bool success = await _inAppPurchase.buyNonConsumable(
+        purchaseParam: purchaseParam,
+      );
+      
+      if (kDebugMode) {
+        print('🔄 StoreKit 2 구매 재시도 결과: $success');
+      }
+      
+      return success;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ StoreKit 2 구매 재시도 실패: $e');
+      }
+      
+      // 재시도에서도 실패하면 더 이상 시도하지 않음
+      _onPurchaseResult?.call(false, null, '구매 재시도 실패: ${e.toString()}');
+             return false;
+     }
+   }
+
+  /// 🎯 구매 스트림 오류 자동 복구
+  void _recoverFromStreamError(dynamic error) {
+    if (kDebugMode) {
+      print('🔧 구매 스트림 오류 복구 시작: $error');
+    }
+    
+    // 비동기 복구 작업 (UI 블록 방지)
+    Future.delayed(const Duration(milliseconds: 500), () async {
+      try {
+        // 1. 진행 중인 구매 상태 초기화
+        _isPurchaseInProgress = false;
+        _processedPurchases.clear();
+        
+        // 2. 미완료 거래 정리
+        await _finishPendingTransactions();
+        
+        // 3. 구매 복원 시도
+        await _inAppPurchase.restorePurchases();
+        
+        if (kDebugMode) {
+          print('✅ 구매 스트림 오류 복구 완료');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('❌ 구매 스트림 오류 복구 실패: $e');
+        }
+      }
+    });
   }
 } 

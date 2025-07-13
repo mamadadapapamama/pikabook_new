@@ -13,6 +13,7 @@ import '../../core/widgets/edit_dialog.dart';
 import '../../core/utils/test_data_generator.dart';
 import '../../core/services/common/banner_manager.dart';
 import '../../core/services/subscription/unified_subscription_manager.dart';
+import '../debug/payment_debug_screen.dart';
 
 import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
@@ -194,6 +195,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 text: '🔄 배너 닫기 기록 초기화',
                 variant: PikaButtonVariant.outline,
                 onPressed: _resetBannerStates,
+                isFullWidth: true,
+              ),
+            ),
+            
+            // Payment Debug 화면 이동 버튼
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+              child: PikaButton(
+                text: '🔍 Payment Debug 화면',
+                variant: PikaButtonVariant.outline,
+                onPressed: _navigateToPaymentDebug,
                 isFullWidth: true,
               ),
             ),
@@ -1225,5 +1237,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         },
       );
     }
+  }
+
+  /// 🔍 Payment Debug 화면으로 이동
+  void _navigateToPaymentDebug() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PaymentDebugScreen(),
+      ),
+    );
   }
 }

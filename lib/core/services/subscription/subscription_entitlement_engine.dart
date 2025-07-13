@@ -361,7 +361,11 @@ class SubscriptionEntitlementEngine {
       final functions = FirebaseFunctions.instanceFor(region: 'asia-southeast1');
       final callable = functions.httpsCallable('sub_checkSubscriptionStatus');
       
-      final result = await callable.call({'userId': user.uid});
+      // 🚀 Apple StoreKit 우선 검증을 위한 파라미터 추가
+      final result = await callable.call({
+        'userId': user.uid,
+        'appStoreFirst': true, // 🎯 Apple Store Connect 우선 확인 요청
+      });
       
       // 🔧 안전한 타입 변환 (Object? -> Map<String, dynamic>)
       Map<String, dynamic> responseData;
