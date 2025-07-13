@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
 import '../../core/services/common/support_service.dart';
-import '../../core/services/subscription/subscription_entitlement_engine.dart';
+import '../../core/services/subscription/unified_subscription_manager.dart';
 import '../../core/models/plan_status.dart';
 import '../../core/utils/language_constants.dart';
 import '../../core/services/text_processing/text_processing_service.dart';
@@ -86,9 +86,9 @@ class SettingsViewModel extends ChangeNotifier {
       // 사용자가 변경된 경우 모든 데이터 초기화
       _resetAllData();
       
-      // 🎯 SubscriptionEntitlementEngine 캐시도 무효화 (중요!)
-      final entitlementEngine = SubscriptionEntitlementEngine();
-      entitlementEngine.invalidateCache();
+      // 🎯 UnifiedSubscriptionManager 캐시도 무효화 (중요!)
+      final subscriptionManager = UnifiedSubscriptionManager();
+      subscriptionManager.invalidateCache();
     }
     
     _lastUserId = currentUserId;
@@ -140,20 +140,20 @@ class SettingsViewModel extends ChangeNotifier {
     try {
 
       
-      // 🎯 SubscriptionEntitlementEngine에서 직접 서버 응답 가져오기
-      final entitlementEngine = SubscriptionEntitlementEngine();
-      final serverResponse = await entitlementEngine.getCurrentEntitlements(forceRefresh: true);
+      // 🎯 UnifiedSubscriptionManager에서 구독 상태 가져오기
+      final subscriptionManager = UnifiedSubscriptionManager();
+      final entitlements = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
       
       if (kDebugMode) {
-        print('📥 [Settings] 서버 응답: ${serverResponse['entitlement']} (${serverResponse['subscriptionStatus']})');
+        print('📥 [Settings] 구독 상태: ${entitlements.entitlement} (${entitlements.subscriptionStatus})');
       }
       
-      // v4-simplified 필드 추출
-      final entitlement = serverResponse['entitlement'] as String? ?? 'free';
-      final subscriptionStatus = serverResponse['subscriptionStatus'] as String? ?? 'cancelled';
-      final hasUsedTrial = serverResponse['hasUsedTrial'] as bool? ?? false;
-      final expirationDate = serverResponse['expirationDate'] as String?;
-      final subscriptionType = serverResponse['subscriptionType'] as String?;
+      // 구독 상태에서 필드 추출
+      final entitlement = entitlements.entitlement;
+      final subscriptionStatus = entitlements.subscriptionStatus;
+      final hasUsedTrial = entitlements.hasUsedTrial;
+      final expirationDate = subscriptionManager.cachedEntitlements?['expirationDate'] as String?;
+      final subscriptionType = subscriptionManager.cachedEntitlements?['subscriptionType'] as String?;
       
       // 🎯 v4-simplified 필드 업데이트
       _hasUsedTrial = hasUsedTrial;
@@ -240,20 +240,20 @@ class SettingsViewModel extends ChangeNotifier {
     try {
 
       
-      // 🎯 SubscriptionEntitlementEngine에서 직접 서버 응답 가져오기 (캐시 활용)
-      final entitlementEngine = SubscriptionEntitlementEngine();
-      final serverResponse = await entitlementEngine.getCurrentEntitlements(forceRefresh: false);
+      // 🎯 UnifiedSubscriptionManager에서 구독 상태 가져오기 (캐시 활용)
+      final subscriptionManager = UnifiedSubscriptionManager();
+      final entitlements = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: false);
       
       if (kDebugMode) {
-        print('📥 [Settings] 서버 응답 (캐시): ${serverResponse['entitlement']} (${serverResponse['subscriptionStatus']})');
+        print('📥 [Settings] 구독 상태 (캐시): ${entitlements.entitlement} (${entitlements.subscriptionStatus})');
       }
       
-      // v4-simplified 필드 추출
-      final entitlement = serverResponse['entitlement'] as String? ?? 'free';
-      final subscriptionStatus = serverResponse['subscriptionStatus'] as String? ?? 'cancelled';
-      final hasUsedTrial = serverResponse['hasUsedTrial'] as bool? ?? false;
-      final expirationDate = serverResponse['expirationDate'] as String?;
-      final subscriptionType = serverResponse['subscriptionType'] as String?;
+      // 구독 상태에서 필드 추출
+      final entitlement = entitlements.entitlement;
+      final subscriptionStatus = entitlements.subscriptionStatus;
+      final hasUsedTrial = entitlements.hasUsedTrial;
+      final expirationDate = subscriptionManager.cachedEntitlements?['expirationDate'] as String?;
+              final subscriptionType = subscriptionManager.cachedEntitlements?['subscriptionType'] as String?;
       
       // 🎯 v4-simplified 필드 업데이트
       _hasUsedTrial = hasUsedTrial;

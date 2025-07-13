@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'usage_limit_service.dart';
+import '../../events/subscription_events.dart';
+import '../../models/subscription_state.dart';
 
 /// 배너 타입 열거형
 enum BannerType {
@@ -87,13 +89,16 @@ extension BannerTypeExtension on BannerType {
   }
 }
 
-/// 통합 배너 관리 서비스
+/// 통합 배너 관리 서비스 (Event-Driven)
 /// 구독 상태에 따른 배너 표시/숨김 관리 (사용자별 분리)
-class BannerManager {
+class BannerManager extends SubscriptionEventListener {
   // 싱글톤 패턴
   static final BannerManager _instance = BannerManager._internal();
   factory BannerManager() => _instance;
-  BannerManager._internal();
+  BannerManager._internal() {
+    // 이벤트 리스닝 시작
+    startListening();
+  }
 
   // 배너별 상태 저장
   final Map<BannerType, bool> _bannerStates = {};
@@ -706,5 +711,151 @@ class BannerManager {
         debugPrint('  - ${type.name}: $state${planId != null ? ' (플랜ID: $planId)' : ''}');
       }
     }
+  }
+
+  /// 🎯 구독 이벤트 처리 (Event-Driven)
+  @override
+  void onSubscriptionEvent(SubscriptionEvent event) {
+    if (kDebugMode) {
+      debugPrint('📡 [BannerManager] 구독 이벤트 수신: ${event.type} (${event.context})');
+    }
+
+    try {
+      // 일관된 planId 생성
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final planId = '${event.context}_${event.state.entitlement.value}_$timestamp';
+
+      if (kDebugMode) {
+        debugPrint('🏷️ [BannerManager] 생성된 planId: $planId');
+      }
+
+      // 배너 캐시 무효화
+      invalidateBannerCache();
+
+      // 이벤트 타입에 따른 배너 업데이트
+      _updateBannersForEvent(event, planId);
+
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [BannerManager] 구독 이벤트 처리 실패: $e');
+      }
+    }
+  }
+
+  /// 🎯 이벤트에 따른 배너 업데이트
+  void _updateBannersForEvent(SubscriptionEvent event, String planId) {
+    final state = event.state;
+    final entitlement = state.entitlement.value;
+    final subscriptionStatus = state.subscriptionStatus.value;
+    final isTrialContext = event.metadata?['isTrialContext'] == true;
+
+    if (kDebugMode) {
+      debugPrint('🔄 [BannerManager] 배너 업데이트: $entitlement / $subscriptionStatus');
+      debugPrint('   이벤트: ${event.type}, Trial 컨텍스트: $isTrialContext');
+    }
+
+    // 모든 구독 관련 배너 초기화
+    _resetAllSubscriptionBanners();
+
+    // 이벤트 타입과 구독 상태에 따른 배너 설정
+    switch (event.type) {
+      case SubscriptionEventType.purchased:
+      case SubscriptionEventType.trialStarted:
+        if (subscriptionStatus == 'active') {
+          if (entitlement == 'trial' || (entitlement == 'premium' && isTrialContext)) {
+            setBannerState(BannerType.trialStarted, true, planId: planId);
+            if (kDebugMode) {
+              debugPrint('🎉 [BannerManager] Trial 시작 배너 설정');
+            }
+          } else if (entitlement == 'premium') {
+            setBannerState(BannerType.premiumStarted, true, planId: planId);
+            if (kDebugMode) {
+              debugPrint('🎉 [BannerManager] Premium 시작 배너 설정');
+            }
+          }
+        }
+        break;
+
+      case SubscriptionEventType.cancelled:
+        if (subscriptionStatus == 'cancelling') {
+          if (entitlement == 'trial') {
+            setBannerState(BannerType.trialCancelled, true, planId: planId);
+          } else {
+            setBannerState(BannerType.premiumCancelled, true, planId: planId);
+          }
+        }
+        break;
+
+      case SubscriptionEventType.expired:
+        if (subscriptionStatus == 'expired') {
+          if (entitlement == 'trial' || state.hasUsedTrial) {
+            setBannerState(BannerType.trialCompleted, true, planId: planId);
+          } else {
+            setBannerState(BannerType.premiumExpired, true, planId: planId);
+          }
+        }
+        break;
+
+      case SubscriptionEventType.refunded:
+        setBannerState(BannerType.premiumCancelled, true, planId: planId);
+        break;
+
+      case SubscriptionEventType.gracePeriod:
+        setBannerState(BannerType.premiumGrace, true, planId: planId);
+        break;
+
+      case SubscriptionEventType.webhookReceived:
+      case SubscriptionEventType.stateRefreshed:
+        // 일반적인 상태 기반 배너 설정
+        _setGeneralBanners(state, planId);
+        break;
+
+      default:
+        // 기타 이벤트는 일반 상태 기반 처리
+        _setGeneralBanners(state, planId);
+        break;
+    }
+  }
+
+  /// 🎯 일반적인 상태 기반 배너 설정
+  void _setGeneralBanners(SubscriptionState state, String planId) {
+    final entitlement = state.entitlement.value;
+    final subscriptionStatus = state.subscriptionStatus.value;
+
+    if (subscriptionStatus == 'active') {
+      if (entitlement == 'trial') {
+        setBannerState(BannerType.trialStarted, true, planId: planId);
+      } else if (entitlement == 'premium') {
+        setBannerState(BannerType.premiumStarted, true, planId: planId);
+      }
+    } else if (subscriptionStatus == 'cancelling') {
+      if (entitlement == 'trial') {
+        setBannerState(BannerType.trialCancelled, true, planId: planId);
+      } else {
+        setBannerState(BannerType.premiumCancelled, true, planId: planId);
+      }
+    } else if (subscriptionStatus == 'expired') {
+      if (entitlement == 'trial' || state.hasUsedTrial) {
+        setBannerState(BannerType.trialCompleted, true, planId: planId);
+      } else {
+        setBannerState(BannerType.premiumExpired, true, planId: planId);
+      }
+    }
+  }
+
+  /// 🎯 모든 구독 관련 배너 초기화
+  void _resetAllSubscriptionBanners() {
+    setBannerState(BannerType.trialStarted, false);
+    setBannerState(BannerType.trialCancelled, false);
+    setBannerState(BannerType.trialCompleted, false);
+    setBannerState(BannerType.premiumStarted, false);
+    setBannerState(BannerType.premiumExpired, false);
+    setBannerState(BannerType.premiumCancelled, false);
+    setBannerState(BannerType.premiumGrace, false);
+  }
+
+  /// 🎯 서비스 종료 시 이벤트 리스닝 중지
+  void dispose() {
+    stopListening();
   }
 } 

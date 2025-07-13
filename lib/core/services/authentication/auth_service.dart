@@ -169,7 +169,7 @@ class AuthService {
         }
         
         // 로그인 직후에는 항상 최신 구독 상태를 서버에서 가져옴
-        await UnifiedSubscriptionManager().getSubscriptionState(
+        await UnifiedSubscriptionManager().getSubscriptionEntitlements(
           forceRefresh: true, // 강제 새로고침
         );
         
@@ -723,16 +723,15 @@ class AuthService {
       try {
         // PlanService 완전 삭제. 구독 정보는 UnifiedSubscriptionManager 또는 null-safe 기본값 사용
         final unifiedManager = UnifiedSubscriptionManager();
-        final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: true);
+        final entitlements = await unifiedManager.getSubscriptionEntitlements(forceRefresh: true);
         subscriptionDetails = {
-          'entitlement': subscriptionState.entitlement.value,
-          'subscriptionStatus': subscriptionState.subscriptionStatus.value,
-          'hasUsedTrial': subscriptionState.hasUsedTrial,
-          'isPremium': subscriptionState.isPremium,
-          'isTrial': subscriptionState.isTrial,
-          'isExpired': subscriptionState.isExpired,
-          'daysRemaining': subscriptionState.daysRemaining,
-          'statusMessage': subscriptionState.statusMessage,
+          'entitlement': entitlements.entitlement,
+          'subscriptionStatus': entitlements.subscriptionStatus,
+          'hasUsedTrial': entitlements.hasUsedTrial,
+          'isPremium': entitlements.isPremium,
+          'isTrial': entitlements.isTrial,
+          'isExpired': entitlements.isExpired,
+          'statusMessage': entitlements.statusMessage,
         };
         if (kDebugMode) {
           print('📊 [AuthService] 탈퇴 전 플랜 정보 수집 완료:');

@@ -19,7 +19,6 @@ import 'features/sample/sample_home_screen.dart';
 import 'features/home/home_viewmodel.dart';
 import 'core/widgets/upgrade_modal.dart';
 import 'core/services/notification/notification_service.dart';
-import 'core/services/subscription/subscription_entitlement_engine.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -197,21 +196,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         }
       }),
 
-      // 🎯 EntitlementEngine 초기화 (Transaction Listener 및 Webhook Listener 시작)
-      Future(() async {
-        try {
-          final entitlementEngine = SubscriptionEntitlementEngine();
-          await entitlementEngine.startTransactionListener();
-          
-          if (kDebugMode) {
-            debugPrint('✅ [App] EntitlementEngine 초기화 완료');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('⚠️ [App] EntitlementEngine 초기화 실패: $e');
-          }
-        }
-      }),
+      // 🎯 EntitlementEngine 기능은 이제 UnifiedSubscriptionManager에 통합됨
     ]);
     
     if (kDebugMode) {

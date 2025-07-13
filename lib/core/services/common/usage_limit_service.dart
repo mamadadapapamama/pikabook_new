@@ -452,8 +452,8 @@ class UsageLimitService {
       } else {
         // 플랜 타입이 없으면 UnifiedSubscriptionManager에서 가져오기
         final unifiedManager = UnifiedSubscriptionManager();
-        final subscriptionState = await unifiedManager.getSubscriptionState(forceRefresh: forceRefresh);
-        actualPlanType = subscriptionState.isPremium ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
+        final entitlements = await unifiedManager.getSubscriptionEntitlements(forceRefresh: forceRefresh);
+        actualPlanType = entitlements.isPremium ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
         if (kDebugMode) {
           debugPrint('🔄 [UsageLimitService] UnifiedSubscriptionManager에서 플랜 타입 조회: $actualPlanType');
         }
@@ -621,8 +621,8 @@ class UsageLimitService {
   Future<void> resetMonthlyUsage() async {
     try {
       final unifiedManager = UnifiedSubscriptionManager();
-      final subscriptionState = await unifiedManager.getSubscriptionState();
-      final planType = subscriptionState.isPremium ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
+      final entitlements = await unifiedManager.getSubscriptionEntitlements();
+      final planType = entitlements.isPremium ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
       
       if (planType != PlanConstants.PLAN_FREE) {
         debugPrint('Free 플랜이 아니므로 월간 초기화 건너뜀');

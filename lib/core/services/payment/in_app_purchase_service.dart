@@ -3,10 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import '../subscription/unified_subscription_manager.dart';
-import '../subscription/subscription_entitlement_engine.dart';
 import '../notification/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../common/banner_manager.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 
@@ -314,7 +312,7 @@ class InAppPurchaseService {
       }
 
       // 🎯 EntitlementEngine 연동 (StoreKit 2 Transaction.updates 활용)
-      await _notifyEntitlementEngine();
+      await _notifySubscriptionManager();
       
       // 🎯 UI 업데이트
       await _updateUIAfterPurchase(purchaseDetails.productID);
@@ -418,19 +416,18 @@ class InAppPurchaseService {
     }
   }
 
-  /// 🎯 EntitlementEngine 알림 (StoreKit 2 Transaction.updates 활용)
-  Future<void> _notifyEntitlementEngine() async {
+  /// 🎯 UnifiedSubscriptionManager 상태 갱신 (통합된 구독 관리)
+  Future<void> _notifySubscriptionManager() async {
     try {
-      final entitlementEngine = SubscriptionEntitlementEngine();
-      await entitlementEngine.startTransactionListener();
-      await entitlementEngine.getCurrentEntitlements(forceRefresh: true);
+      final subscriptionManager = UnifiedSubscriptionManager();
+      await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
       
       if (kDebugMode) {
-        print('✅ StoreKit 2 EntitlementEngine 알림 완료');
+        print('✅ UnifiedSubscriptionManager 상태 갱신 완료');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('⚠️ StoreKit 2 EntitlementEngine 알림 실패: $e');
+        print('❌ UnifiedSubscriptionManager 상태 갱신 실패: $e');
       }
     }
   }
@@ -441,24 +438,11 @@ class InAppPurchaseService {
     unifiedManager.invalidateCache();
     unifiedManager.notifyPurchaseCompleted();
     
-    final bannerManager = BannerManager();
-    if (productId == premiumMonthlyId) {
-      // Trial 컨텍스트에 따라 배너 결정
-      if (_isTrialContext) {
-        bannerManager.setBannerState(BannerType.trialStarted, true, planId: 'storekit2_trial');
-        if (kDebugMode) {
-          print('🎉 [InAppPurchase] Trial 배너 설정 (환영 모달 구매)');
-        }
-      } else {
-        bannerManager.setBannerState(BannerType.premiumStarted, true, planId: 'storekit2_premium');
-        if (kDebugMode) {
-          print('🎉 [InAppPurchase] Premium 배너 설정 (일반 구매)');
-        }
-      }
-    } else {
-      bannerManager.setBannerState(BannerType.premiumStarted, true, planId: 'storekit2_premium');
+    // 🎯 이벤트 발행은 UnifiedSubscriptionManager의 Transaction 모니터링에서 자동 처리됨
+    if (kDebugMode) {
+      final context = _isTrialContext ? 'trial' : 'premium';
+      print('🎉 [InAppPurchase] 구매 완료 - UnifiedSubscriptionManager가 자동으로 이벤트 발행할 예정 ($context)');
     }
-    bannerManager.invalidateBannerCache();
     
     // Trial 컨텍스트 초기화
     _isTrialContext = false;

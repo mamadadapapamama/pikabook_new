@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/services/payment/in_app_purchase_service.dart';
 import '../../core/services/subscription/unified_subscription_manager.dart';
-import '../../core/services/subscription/subscription_entitlement_engine.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 
 class PaymentDebugScreen extends StatefulWidget {
@@ -116,28 +115,26 @@ class _PaymentDebugScreenState extends State<PaymentDebugScreen> {
       
       // 캐시 무효화 후 새로 가져오기
       unifiedManager.invalidateCache();
-      final state = await unifiedManager.getSubscriptionState(forceRefresh: true);
+      final entitlements = await unifiedManager.getSubscriptionEntitlements(forceRefresh: true);
       
       _subscriptionState = {
-        'entitlement': state.entitlement.value,
-        'subscriptionStatus': state.subscriptionStatus.value,
-        'isPremium': state.isPremium,
-        'isTrial': state.isTrial,
-        'isExpired': state.isExpired,
-        'hasUsedTrial': state.hasUsedTrial,
-        'daysRemaining': state.daysRemaining,
-        'statusMessage': state.statusMessage,
+        'entitlement': entitlements.entitlement,
+        'subscriptionStatus': entitlements.subscriptionStatus,
+        'isPremium': entitlements.isPremium,
+        'isTrial': entitlements.isTrial,
+        'isExpired': entitlements.isExpired,
+        'hasUsedTrial': entitlements.hasUsedTrial,
+        'statusMessage': entitlements.statusMessage,
       };
       
       _addLog('✅ 구독 상태 확인 완료');
-      _addLog('📊 권한: ${state.entitlement.value}');
-      _addLog('📊 구독 상태: ${state.subscriptionStatus.value}');
-      _addLog('📊 프리미엄: ${state.isPremium}');
-      _addLog('📊 체험: ${state.isTrial}');
-      _addLog('📊 만료: ${state.isExpired}');
-      _addLog('📊 체험 사용 이력: ${state.hasUsedTrial}');
-      _addLog('📊 남은 일수: ${state.daysRemaining}');
-      _addLog('📊 상태 메시지: ${state.statusMessage}');
+      _addLog('📊 권한: ${entitlements.entitlement}');
+      _addLog('📊 구독 상태: ${entitlements.subscriptionStatus}');
+      _addLog('📊 프리미엄: ${entitlements.isPremium}');
+      _addLog('📊 체험: ${entitlements.isTrial}');
+      _addLog('📊 만료: ${entitlements.isExpired}');
+      _addLog('📊 체험 사용 이력: ${entitlements.hasUsedTrial}');
+      _addLog('📊 상태 메시지: ${entitlements.statusMessage}');
       
     } catch (e) {
       _addLog('❌ 구독 상태 확인 실패: $e');
@@ -151,13 +148,14 @@ class _PaymentDebugScreenState extends State<PaymentDebugScreen> {
     setState(() => _isLoading = true);
     
     try {
-      _addLog('🔍 4단계: EntitlementEngine 확인 중...');
+      _addLog('🔍 4단계: UnifiedSubscriptionManager 확인 중...');
       
-      final entitlementEngine = SubscriptionEntitlementEngine();
-      final entitlements = await entitlementEngine.getCurrentEntitlements(forceRefresh: true);
+      final subscriptionManager = UnifiedSubscriptionManager();
+      final entitlements = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
       
-      _addLog('✅ EntitlementEngine 확인 완료');
-      _addLog('🎫 권한 정보: ${entitlements.toString()}');
+      _addLog('✅ UnifiedSubscriptionManager 확인 완료');
+      _addLog('🎫 구독 권한: ${entitlements.entitlement}');
+      _addLog('🎫 구독 상태: ${entitlements.subscriptionStatus}');
       
     } catch (e) {
       _addLog('❌ EntitlementEngine 확인 실패: $e');
@@ -215,10 +213,10 @@ class _PaymentDebugScreenState extends State<PaymentDebugScreen> {
     try {
       _addLog('🔍 6단계: 서버 동기화 시도 중...');
       
-      final entitlementEngine = SubscriptionEntitlementEngine();
-      await entitlementEngine.startTransactionListener();
+      final subscriptionManager = UnifiedSubscriptionManager();
+      await subscriptionManager.initialize();
       
-      _addLog('✅ Transaction Listener 시작됨');
+      _addLog('✅ UnifiedSubscriptionManager 초기화됨');
       
       // 10초 대기 후 상태 확인
       await Future.delayed(const Duration(seconds: 10));
