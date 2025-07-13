@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import '../../core/models/note.dart';
@@ -6,6 +5,23 @@ import '../../features/note/services/note_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+/// 🔄 HomeViewModel (반응형 버전)
+/// 
+/// 🎯 **핵심 책임 (Reactive Architecture):**
+/// - NoteService 스트림 구독하여 노트 목록 관리
+/// - UsageLimitService 스트림 구독하여 사용량 제한 상태 관리
+/// - 신규 사용자 플래그 관리
+/// 
+/// 🚫 **더 이상 담당하지 않음:**
+/// - ❌ 수동 사용량 제한 체크 → UsageLimitService 스트림 구독
+/// - ❌ 수동 사용자 변경 감지 → 스트림 기반 자동 업데이트
+/// 
+/// 🔄 **스트림 기반 흐름:**
+/// ```
+/// UsageLimitService.limitStatusStream → HomeViewModel → UI 업데이트
+/// NoteService.stream → HomeViewModel → 노트 목록 업데이트
+/// ```
 
 class HomeViewModel extends ChangeNotifier {
   final NoteService _noteService = NoteService();
@@ -16,11 +32,12 @@ class HomeViewModel extends ChangeNotifier {
   String? _error;
   StreamSubscription<List<Note>>? _notesSubscription;
   StreamSubscription<User?>? _authStateSubscription; // 🎯 사용자 변경 감지용
+  StreamSubscription<Map<String, bool>>? _usageLimitSubscription; // 🎯 사용량 제한 스트림
   
   // 🆕 신규 사용자 플래그 (환영 모달 완료 전까지 최소 서비스 호출)
   bool _isNewUser = false;
   
-  // 사용량 제한 상태
+  // 사용량 제한 상태 (스트림 기반)
   bool _ocrLimitReached = false;
   bool _translationLimitReached = false;
   bool _ttsLimitReached = false;
@@ -54,28 +71,28 @@ class HomeViewModel extends ChangeNotifier {
       debugPrint('[HomeViewModel] 신규 사용자 플래그 설정: $wasNewUser → $_isNewUser');
     }
     
-    // 🎉 환영 모달 완료 후 신규 사용자 → 기존 사용자로 전환 시 사용량 체크 시작
+    // 🎉 환영 모달 완료 후 신규 사용자 → 기존 사용자로 전환 시 사용량 스트림 구독 시작
     if (wasNewUser && !isNewUser) {
       if (kDebugMode) {
-        debugPrint('[HomeViewModel] 🎉 환영 모달 완료 - 이제 사용량 체크 시작');
+        debugPrint('[HomeViewModel] 🎉 환영 모달 완료 - 이제 사용량 스트림 구독 시작');
       }
-      _checkUsageLimits();
+      _setupUsageLimitStream();
     }
   }
 
-  // ViewModel 초기화 (단순한 Firestore 스트림)
+  // ViewModel 초기화 (스트림 기반)
   Future<void> _initializeViewModel() async {
     debugPrint('[HomeViewModel] 초기화 시작');
     try {
       // 🎯 사용자 변경 감지 리스너 설정
       _setupAuthStateListener();
       
-      // 🚨 신규 사용자가 아닐 때만 사용량 제한 상태 확인
+      // 🚨 신규 사용자가 아닐 때만 사용량 스트림 구독
       if (!_isNewUser) {
-        await _checkUsageLimits();
+        _setupUsageLimitStream();
       } else {
         if (kDebugMode) {
-          debugPrint('[HomeViewModel] 🆕 신규 사용자 - 사용량 체크 건너뜀');
+          debugPrint('[HomeViewModel] 🆕 신규 사용자 - 사용량 스트림 구독 건너뜀');
         }
       }
       
@@ -103,8 +120,10 @@ class HomeViewModel extends ChangeNotifier {
             debugPrint('🔄 [HomeViewModel] 로그아웃 - 사용량 상태 초기화');
           }
         } else {
-          // 새 사용자 로그인 시 온보딩 상태 확인 후 사용량 상태 체크
-          await _checkUsageLimitsAfterUserChange();
+          // 새 사용자 로그인 시 스트림 재구독
+          if (!_isNewUser) {
+            _setupUsageLimitStream();
+          }
         }
       },
       onError: (error) {
@@ -115,6 +134,49 @@ class HomeViewModel extends ChangeNotifier {
     );
   }
 
+  /// 🎯 사용량 제한 스트림 구독 설정 (반응형 핵심)
+  void _setupUsageLimitStream() {
+    if (kDebugMode) {
+      debugPrint('🔄 [HomeViewModel] 사용량 제한 스트림 구독 시작');
+    }
+    
+    // 기존 구독이 있으면 취소
+    _usageLimitSubscription?.cancel();
+    
+    // UsageLimitService의 실시간 스트림 구독
+    _usageLimitSubscription = _usageLimitService.limitStatusStream.listen(
+      (limitStatus) {
+        if (kDebugMode) {
+          debugPrint('🔔 [HomeViewModel] 사용량 제한 상태 업데이트: $limitStatus');
+        }
+        
+        // 상태 업데이트
+        _ocrLimitReached = limitStatus['ocrLimitReached'] ?? false;
+        _ttsLimitReached = limitStatus['ttsLimitReached'] ?? false;
+        
+        // UI 업데이트
+        notifyListeners();
+        
+        if (kDebugMode) {
+          debugPrint('[HomeViewModel] 사용량 제한 상태 반영 완료:');
+          debugPrint('   OCR 제한: $_ocrLimitReached');
+          debugPrint('   TTS 제한: $_ttsLimitReached');
+        }
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          debugPrint('❌ [HomeViewModel] 사용량 제한 스트림 오류: $error');
+        }
+        // 오류 시 안전하게 제한 없음으로 설정
+        _resetUsageLimits();
+      },
+    );
+    
+    if (kDebugMode) {
+      debugPrint('✅ [HomeViewModel] 사용량 제한 스트림 구독 완료');
+    }
+  }
+
   /// 🔄 사용량 상태 초기화 (로그아웃 시)
   void _resetUsageLimits() {
     _ocrLimitReached = false;
@@ -122,49 +184,6 @@ class HomeViewModel extends ChangeNotifier {
     _ttsLimitReached = false;
     _storageLimitReached = false;
     notifyListeners();
-  }
-
-  /// 🎯 사용자 변경 후 온보딩 상태 확인하여 사용량 체크
-  Future<void> _checkUsageLimitsAfterUserChange() async {
-    try {
-      if (kDebugMode) {
-        debugPrint('🔄 [HomeViewModel] 사용자 변경 후 온보딩 상태 확인');
-      }
-      
-      // 🆕 신규 사용자도 사용량 체크는 수행 (이미 구독이 있을 수 있음)
-      if (_isNewUser) {
-        if (kDebugMode) {
-          debugPrint('🔄 [HomeViewModel] 🆕 신규 사용자지만 사용량 체크는 수행 (이미 구독이 있을 수 있음)');
-        }
-        // 환영 모달은 여전히 표시하되, 사용량 체크는 정상 진행
-      }
-      
-      // UserPreferencesService import 필요
-      final userPrefsService = UserPreferencesService();
-      final preferences = await userPrefsService.getPreferences();
-      final hasCompletedOnboarding = preferences.onboardingCompleted;
-      
-      if (!hasCompletedOnboarding) {
-        if (kDebugMode) {
-          debugPrint('🔄 [HomeViewModel] 🆕 온보딩 미완료 사용자지만 사용량 상태는 체크 (이미 구독이 있을 수 있음)');
-        }
-        // 온보딩 미완료라도 사용량 상태는 정상 체크
-      }
-      
-      if (kDebugMode) {
-        debugPrint('🔄 [HomeViewModel] ✅ 기존 사용자 (온보딩 완료) - 사용량 상태 재체크');
-      }
-      
-      // 온보딩 완료된 사용자만 사용량 상태 체크
-      await _checkUsageLimits();
-      
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [HomeViewModel] 사용자 변경 후 사용량 체크 실패: $e');
-      }
-      // 오류 시 안전하게 제한 없음으로 설정
-      _resetUsageLimits();
-    }
   }
 
   /// NoteService 데이터 구독 (최적화된 업데이트)
@@ -258,34 +277,13 @@ class HomeViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 사용량 제한 상태 확인
-  Future<void> _checkUsageLimits() async {
-    try {
-      final limits = await _usageLimitService.checkInitialLimitStatus();
-      
-      _ocrLimitReached = limits['ocrLimitReached'] ?? false;
-      _translationLimitReached = limits['translationLimitReached'] ?? false;
-      _ttsLimitReached = limits['ttsLimitReached'] ?? false;
-      _storageLimitReached = limits['storageLimitReached'] ?? false;
-      
-      if (kDebugMode) {
-        debugPrint('[HomeViewModel] 사용량 제한 상태 확인 완료:');
-        debugPrint('   OCR 제한: $_ocrLimitReached');
-        debugPrint('   번역 제한: $_translationLimitReached');
-        debugPrint('   TTS 제한: $_ttsLimitReached');
-        debugPrint('   스토리지 제한: $_storageLimitReached');
-      }
-      
-      notifyListeners();
-    } catch (e) {
-      debugPrint('[HomeViewModel] 사용량 제한 확인 중 오류: $e');
-      // 오류 발생 시 기본값 유지 (제한 없음으로 가정)
-    }
-  }
-
-  /// 사용량 제한 상태 새로고침 (노트 생성 후 호출)
+  /// 🎯 사용량 제한 상태 새로고침 (노트 생성 후 호출)
+  /// 이제 스트림 기반이므로 자동으로 업데이트됨
   Future<void> refreshUsageLimits() async {
-    await _checkUsageLimits();
+    if (kDebugMode) {
+      debugPrint('[HomeViewModel] 사용량 제한 새로고침 요청 - 스트림 기반이므로 자동 업데이트됨');
+    }
+    // 스트림 기반이므로 별도 작업 불필요
   }
 
   /// 새로운 노트를 로컬 리스트에 즉시 추가 (UI 응답성 향상)
@@ -345,6 +343,7 @@ class HomeViewModel extends ChangeNotifier {
     debugPrint('[HomeViewModel] dispose 호출됨');
     _notesSubscription?.cancel();
     _authStateSubscription?.cancel(); // 🎯 사용자 변경 감지 구독 취소
+    _usageLimitSubscription?.cancel(); // 🎯 사용량 제한 스트림 구독 취소
     super.dispose();
   }
 }

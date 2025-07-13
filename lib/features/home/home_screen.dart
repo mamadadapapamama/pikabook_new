@@ -60,9 +60,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     if (state == AppLifecycleState.resumed) {
       if (kDebugMode) {
-        debugPrint('🔄 [HomeScreen] 앱 포그라운드 복귀');
+        debugPrint('🔄 [HomeScreen] 앱 포그라운드 복귀 - 반응형 아키텍처로 자동 업데이트됨');
       }
-      _lifecycleCoordinator.loadSubscriptionStatusAfterResume();
+      // 🎯 반응형 아키텍처에서는 자동으로 업데이트됨
     }
   }
 
@@ -152,15 +152,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _uiCoordinator.dismissBanner(
       bannerType,
       onBannersUpdated: (updatedBanners) {
-        // 배너 닫기 후 구독 상태 새로고침
-        _lifecycleCoordinator.refreshSubscriptionStatus();
+        // 🎯 반응형 아키텍처에서는 자동으로 업데이트됨
+        if (kDebugMode) {
+          debugPrint('🎯 [HomeScreen] 배너 닫기 완료 - 자동 업데이트됨');
+        }
       },
     );
   }
 
-  /// 수동 새로고침
+  /// 수동 새로고침 (반응형 아키텍처에서는 불필요)
   void _onRefresh() {
-    _lifecycleCoordinator.refreshSubscriptionStatus();
+    if (kDebugMode) {
+      debugPrint('🔄 [HomeScreen] 새로고침 요청 - 반응형 아키텍처로 자동 업데이트됨');
+    }
+    // 🎯 반응형 아키텍처에서는 자동으로 업데이트됨
   }
 
   @override

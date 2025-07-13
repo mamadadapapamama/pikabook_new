@@ -423,7 +423,7 @@ class BannerManager extends SubscriptionEventListener {
       
       // 🚀 병렬 처리: 사용량 체크와 SharedPreferences 로드
       final futures = await Future.wait([
-        UsageLimitService().checkInitialLimitStatus(planType: entitlement),
+        UsageLimitService().checkInitialLimitStatus(),
         SharedPreferences.getInstance(),
       ]);
       
