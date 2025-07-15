@@ -188,16 +188,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             
-            // 배너 닫기 기록 초기화 버튼
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-              child: PikaButton(
-                text: '🔄 배너 닫기 기록 초기화',
-                variant: PikaButtonVariant.outline,
-                onPressed: _resetBannerStates,
-                isFullWidth: true,
-              ),
-            ),
+
             
             // Payment Debug 화면 이동 버튼
             Padding(
@@ -1070,53 +1061,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // 🔄 배너 닫기 기록 초기화 (테스트용)
-  Future<void> _resetBannerStates() async {
-    try {
-      final bannerManager = BannerManager();
-      await bannerManager.resetAllBannerStates();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '✅ 모든 배너 닫기 기록이 초기화되었습니다.',
-              style: TypographyTokens.caption.copyWith(
-                color: Colors.white,
-              ),
-            ),
-            backgroundColor: ColorTokens.success,
-            behavior: SnackBarBehavior.fixed,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      
-      if (kDebugMode) {
-        debugPrint('✅ [Settings] 모든 배너 닫기 기록 초기화 완료');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '❌ 배너 초기화 실패: $e',
-              style: TypographyTokens.caption.copyWith(
-                color: Colors.white,
-              ),
-            ),
-            backgroundColor: ColorTokens.error,
-            behavior: SnackBarBehavior.fixed,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-      
-      if (kDebugMode) {
-        debugPrint('❌ [Settings] 배너 초기화 실패: $e');
-      }
-    }
-  }
+
 
   // 🔍 구독 상태 간단 진단 (v4-simplified)
   Future<void> _runSubscriptionDebug() async {

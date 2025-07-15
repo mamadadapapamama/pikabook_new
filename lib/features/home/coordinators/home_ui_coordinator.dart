@@ -70,6 +70,7 @@ class HomeUICoordinator {
         // 트라이얼 시작 및 프리미엄 시작 배너는 버튼 없음 (닫기만 가능)
         return;
 
+      case BannerType.free:
       case BannerType.usageLimitFree:
         _showUpgradeModalWithReason(context, UpgradeReason.limitReached);
         break;

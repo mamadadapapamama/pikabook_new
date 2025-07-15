@@ -45,6 +45,7 @@ class BannerBuilderHelper {
       case BannerType.premiumStarted:
         return null; // 환영 메시지, 닫기만 가능
       
+      case BannerType.free:
       case BannerType.usageLimitFree:
       case BannerType.trialCancelled:
       case BannerType.premiumExpired:
