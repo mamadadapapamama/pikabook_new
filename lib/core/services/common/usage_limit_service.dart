@@ -65,22 +65,11 @@ class UsageLimitService {
   /// 🎯 반응형 구독 이벤트 초기화
   void _initializeReactiveSubscription() {
     if (kDebugMode) {
-      debugPrint('🚀 [UsageLimitService] 반응형 구독 이벤트 초기화');
+      debugPrint('⚠️ [UsageLimitService] 반응형 구독 이벤트 기능 제거됨 - 단순화된 구조');
     }
     
-    // UnifiedSubscriptionManager의 구독 이벤트 스트림 구독
-    _subscriptionEventSubscription = _subscriptionManager.subscriptionEventStream.listen(
-      _handleSubscriptionEvent,
-      onError: (error) {
-        if (kDebugMode) {
-          debugPrint('❌ [UsageLimitService] 구독 이벤트 스트림 오류: $error');
-        }
-      },
-    );
-    
-    if (kDebugMode) {
-      debugPrint('✅ [UsageLimitService] 구독 이벤트 스트림 구독 완료');
-    }
+    // 이벤트 스트림이 더 이상 존재하지 않으므로 구독 제거
+    // UnifiedSubscriptionManager의 구독 이벤트 스트림이 제거됨
   }
   
   /// 🎯 구독 이벤트 처리 (반응형 핵심)
@@ -716,7 +705,7 @@ class UsageLimitService {
     try {
       final unifiedManager = UnifiedSubscriptionManager();
       final entitlements = await unifiedManager.getSubscriptionEntitlements();
-      final planType = entitlements.isPremium ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
+      final planType = entitlements['isPremium'] as bool? ?? false ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
       
       if (planType != PlanConstants.PLAN_FREE) {
         debugPrint('Free 플랜이 아니므로 월간 초기화 건너뜀');

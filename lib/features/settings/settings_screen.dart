@@ -1144,14 +1144,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final entitlements = await unifiedManager.getSubscriptionEntitlements(forceRefresh: true);
       
       debugPrint('🔍 [Settings] === v4-simplified 구독 상태 ===');
-      debugPrint('   권한: ${entitlements.entitlement}');
-      debugPrint('   구독 상태: ${entitlements.subscriptionStatus}');
-      debugPrint('   체험 사용 이력: ${entitlements.hasUsedTrial}');
-      debugPrint('   프리미엄 여부: ${entitlements.isPremium}');
-      debugPrint('   체험 여부: ${entitlements.isTrial}');
-      debugPrint('   상태 메시지: ${entitlements.statusMessage}');
-      debugPrint('   만료 여부: ${entitlements.isExpired}');
-      debugPrint('   활성 여부: ${entitlements.isActive}');
+      debugPrint('   권한: ${entitlements['entitlement']}');
+      debugPrint('   구독 상태: ${entitlements['subscriptionStatus']}');
+      debugPrint('   체험 사용 이력: ${entitlements['hasUsedTrial']}');
+      debugPrint('   프리미엄 여부: ${entitlements['isPremium']}');
+      debugPrint('   체험 여부: ${entitlements['isTrial']}');
+      debugPrint('   상태 메시지: ${entitlements['statusMessage']}');
+      debugPrint('   만료 여부: ${entitlements['isExpired']}');
+      debugPrint('   활성 여부: ${entitlements['isActive']}');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

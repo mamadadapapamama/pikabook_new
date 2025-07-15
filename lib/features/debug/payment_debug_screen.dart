@@ -90,7 +90,7 @@ class _PaymentDebugScreenState extends State<PaymentDebugScreen> {
       _addLog('✅ StoreKit 초기화 완료');
       
       // 상품 정보 확인
-      final products = await purchaseService.getAvailableProducts();
+      final products = await purchaseService.availableProducts;
       _addLog('📦 사용 가능한 상품: ${products.length}개');
       
       for (final product in products) {
@@ -118,23 +118,23 @@ class _PaymentDebugScreenState extends State<PaymentDebugScreen> {
       final entitlements = await unifiedManager.getSubscriptionEntitlements(forceRefresh: true);
       
       _subscriptionState = {
-        'entitlement': entitlements.entitlement,
-        'subscriptionStatus': entitlements.subscriptionStatus,
-        'isPremium': entitlements.isPremium,
-        'isTrial': entitlements.isTrial,
-        'isExpired': entitlements.isExpired,
-        'hasUsedTrial': entitlements.hasUsedTrial,
-        'statusMessage': entitlements.statusMessage,
+        'entitlement': entitlements['entitlement'],
+        'subscriptionStatus': entitlements['subscriptionStatus'],
+        'isPremium': entitlements['isPremium'],
+        'isTrial': entitlements['isTrial'],
+        'isExpired': entitlements['isExpired'],
+        'hasUsedTrial': entitlements['hasUsedTrial'],
+        'statusMessage': entitlements['statusMessage'],
       };
       
       _addLog('✅ 구독 상태 확인 완료');
-      _addLog('📊 권한: ${entitlements.entitlement}');
-      _addLog('📊 구독 상태: ${entitlements.subscriptionStatus}');
-      _addLog('📊 프리미엄: ${entitlements.isPremium}');
-      _addLog('📊 체험: ${entitlements.isTrial}');
-      _addLog('📊 만료: ${entitlements.isExpired}');
-      _addLog('📊 체험 사용 이력: ${entitlements.hasUsedTrial}');
-      _addLog('📊 상태 메시지: ${entitlements.statusMessage}');
+      _addLog('📊 권한: ${entitlements['entitlement']}');
+      _addLog('📊 구독 상태: ${entitlements['subscriptionStatus']}');
+      _addLog('📊 프리미엄: ${entitlements['isPremium']}');
+      _addLog('📊 체험: ${entitlements['isTrial']}');
+      _addLog('📊 만료: ${entitlements['isExpired']}');
+      _addLog('📊 체험 사용 이력: ${entitlements['hasUsedTrial']}');
+      _addLog('📊 상태 메시지: ${entitlements['statusMessage']}');
       
     } catch (e) {
       _addLog('❌ 구독 상태 확인 실패: $e');
@@ -154,8 +154,8 @@ class _PaymentDebugScreenState extends State<PaymentDebugScreen> {
       final entitlements = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
       
       _addLog('✅ UnifiedSubscriptionManager 확인 완료');
-      _addLog('🎫 구독 권한: ${entitlements.entitlement}');
-      _addLog('🎫 구독 상태: ${entitlements.subscriptionStatus}');
+      _addLog('🎫 구독 권한: ${entitlements['entitlement']}');
+      _addLog('🎫 구독 상태: ${entitlements['subscriptionStatus']}');
       
     } catch (e) {
       _addLog('❌ EntitlementEngine 확인 실패: $e');
@@ -214,7 +214,7 @@ class _PaymentDebugScreenState extends State<PaymentDebugScreen> {
       _addLog('🔍 6단계: 서버 동기화 시도 중...');
       
       final subscriptionManager = UnifiedSubscriptionManager();
-      await subscriptionManager.initialize();
+      // initialize 메서드는 더 이상 존재하지 않으므로 제거
       
       _addLog('✅ UnifiedSubscriptionManager 초기화됨');
       

@@ -145,13 +145,13 @@ class SettingsViewModel extends ChangeNotifier {
       final entitlements = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
       
       if (kDebugMode) {
-        print('📥 [Settings] 구독 상태: ${entitlements.entitlement} (${entitlements.subscriptionStatus})');
+        print('📥 [Settings] 구독 상태: ${entitlements['entitlement']} (${entitlements['subscriptionStatus']})');
       }
       
       // 구독 상태에서 필드 추출
-      final entitlement = entitlements.entitlement;
-      final subscriptionStatus = entitlements.subscriptionStatus;
-      final hasUsedTrial = entitlements.hasUsedTrial;
+      final entitlement = entitlements['entitlement'];
+      final subscriptionStatus = entitlements['subscriptionStatus'];
+      final hasUsedTrial = entitlements['hasUsedTrial'];
       final expirationDate = subscriptionManager.cachedEntitlements?['expirationDate'] as String?;
       final subscriptionType = subscriptionManager.cachedEntitlements?['subscriptionType'] as String?;
       
@@ -245,13 +245,13 @@ class SettingsViewModel extends ChangeNotifier {
       final entitlements = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: false);
       
       if (kDebugMode) {
-        print('📥 [Settings] 구독 상태 (캐시): ${entitlements.entitlement} (${entitlements.subscriptionStatus})');
+        print('📥 [Settings] 구독 상태 (캐시): ${entitlements['entitlement']} (${entitlements['subscriptionStatus']})');
       }
       
       // 구독 상태에서 필드 추출
-      final entitlement = entitlements.entitlement;
-      final subscriptionStatus = entitlements.subscriptionStatus;
-      final hasUsedTrial = entitlements.hasUsedTrial;
+      final entitlement = entitlements['entitlement'];
+      final subscriptionStatus = entitlements['subscriptionStatus'];
+      final hasUsedTrial = entitlements['hasUsedTrial'];
       final expirationDate = subscriptionManager.cachedEntitlements?['expirationDate'] as String?;
               final subscriptionType = subscriptionManager.cachedEntitlements?['subscriptionType'] as String?;
       

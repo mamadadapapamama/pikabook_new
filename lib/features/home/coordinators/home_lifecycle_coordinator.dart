@@ -20,6 +20,7 @@ import '../../../core/events/subscription_events.dart';
 /// - ❌ 구독 상태 수동 조회 → UnifiedSubscriptionManager가 자동 처리
 /// - ❌ StoreKit/Webhook 모니터링 → UnifiedSubscriptionManager가 실시간 처리  
 /// - ❌ 구독 상태 캐싱 → UnifiedSubscriptionManager가 중앙 관리
+/// - ❌ 배너 관리 → UnifiedSubscriptionManager가 BannerManager와 통합 처리
 class HomeLifecycleCoordinator {
   // 🔧 서비스 인스턴스
   final UsageLimitService _usageLimitService = UsageLimitService();
@@ -135,27 +136,9 @@ class HomeLifecycleCoordinator {
     // 🔄 기존 구독이 있으면 취소
     _subscriptionEventSubscription?.cancel();
     
-    // 🎯 UnifiedSubscriptionManager의 구독 이벤트 스트림 구독
-    _subscriptionEventSubscription = _subscriptionManager.subscriptionEventStream.listen(
-      (subscriptionEvent) {
-        if (kDebugMode) {
-          debugPrint('🔔 [HomeLifecycleCoordinator] 구독 이벤트 수신: ${subscriptionEvent.type}');
-          debugPrint('   컨텍스트: ${subscriptionEvent.context}');
-          debugPrint('   상태: ${subscriptionEvent.state.entitlement.value}');
-        }
-        
-        // 🎯 구독 이벤트를 받으면 UI에 바로 반영 (reactive)
-        _onSubscriptionStateChanged?.call(subscriptionEvent.state);
-      },
-      onError: (error) {
-        if (kDebugMode) {
-          debugPrint('❌ [HomeLifecycleCoordinator] 구독 이벤트 스트림 오류: $error');
-        }
-      },
-    );
-    
+    // 🎯 이벤트 스트림이 더 이상 존재하지 않으므로 단순화
     if (kDebugMode) {
-      debugPrint('✅ [HomeLifecycleCoordinator] 구독 이벤트 스트림 구독 완료');
+      debugPrint('⚠️ [HomeLifecycleCoordinator] 구독 이벤트 스트림 기능 제거됨 - 단순화된 구조');
     }
   }
 
@@ -168,24 +151,15 @@ class HomeLifecycleCoordinator {
         debugPrint('🔍 [HomeLifecycleCoordinator] 초기 구독 상태 로드');
       }
       
-      // UnifiedSubscriptionManager에서 현재 상태 가져오기
-      final entitlements = await _subscriptionManager.getSubscriptionEntitlements();
-      
-      // SubscriptionState로 변환
-      final subscriptionState = SubscriptionState(
-        entitlement: Entitlement.fromString(entitlements['entitlement']),
-        subscriptionStatus: SubscriptionStatus.fromString(entitlements['subscriptionStatus']),
-        hasUsedTrial: entitlements['hasUsedTrial'],
-        hasUsageLimitReached: false, // 사용량은 별도 확인
-        activeBanners: [], // BannerManager에서 처리
-        statusMessage: entitlements.statusMessage,
-      );
+      // 🎯 UnifiedSubscriptionManager에서 배너 포함 완전한 상태 가져오기
+      final subscriptionState = await _subscriptionManager.getSubscriptionStateWithBanners();
       
       _hasInitialLoad = true;
       _onSubscriptionStateChanged?.call(subscriptionState);
       
       if (kDebugMode) {
         debugPrint('✅ [HomeLifecycleCoordinator] 초기 구독 상태 로드 완료');
+        debugPrint('   활성 배너: ${subscriptionState.activeBanners.length}개');
       }
       
     } catch (e) {
@@ -263,10 +237,7 @@ class HomeLifecycleCoordinator {
 
   /// 📊 사용량 한도 스트림 구독 설정 (단순화)
   void _setupUsageLimitStream() {
-    // 🔄 기존 구독이 있으면 취소 (중복 구독 방지)
-    _limitStatusSubscription?.cancel();
-    
-    // 📊 사용량 한도 상태 변경 스트림 구독
+    // �� 사용량 한도 상태 변경 스트림 구독
     _limitStatusSubscription = _usageLimitService.limitStatusStream.listen(
       (limitStatus) {
         if (kDebugMode) {

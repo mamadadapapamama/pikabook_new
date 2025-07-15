@@ -159,21 +159,11 @@ class SubscriptionEventManager {
 abstract class SubscriptionEventListener {
   late StreamSubscription<SubscriptionEvent> _subscription;
   
-  /// 이벤트 구독 시작 (UnifiedSubscriptionManager 사용)
+  /// 이벤트 구독 시작 (단순화됨)
   void startListening() {
-    // UnifiedSubscriptionManager에서 직접 구독
-    final unifiedManager = UnifiedSubscriptionManager();
-    _subscription = unifiedManager.subscriptionEventStream.listen(
-      onSubscriptionEvent,
-      onError: (error) {
-        if (kDebugMode) {
-          debugPrint('❌ [${runtimeType}] 구독 이벤트 리스너 오류: $error');
-        }
-      },
-    );
-    
+    // UnifiedSubscriptionManager에서 이벤트 스트림이 제거되었으므로 단순화
     if (kDebugMode) {
-      debugPrint('👂 [${runtimeType}] 구독 이벤트 리스닝 시작 (UnifiedSubscriptionManager)');
+      debugPrint('⚠️ [${runtimeType}] 구독 이벤트 스트림 기능 제거됨 - 단순화된 구조');
     }
   }
   

@@ -480,16 +480,9 @@ class UpgradeModal extends StatelessWidget {
                     }
                   }
                   
-                  // 자동 해결된 경우 사용자에게 알림
-                  if (result['wasAutoResolved'] == true && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(result['message'] ?? '구매가 시작되었습니다.'),
-                        backgroundColor: Colors.blue[700],
-                        duration: const Duration(seconds: 3),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                  // 자동 해결된 경우 디버그 로그만 출력 (배너를 통해 알림)
+                  if (result['wasAutoResolved'] == true && kDebugMode) {
+                    print('🔧 [UpgradeModal] 자동 해결: ${result['message']}');
                   }
                   
                 } else {
@@ -812,19 +805,10 @@ class UpgradeModal extends StatelessWidget {
 
       final purchaseService = InAppPurchaseService();
       
-      // 구매 성공 콜백 설정
+      // 구매 성공 콜백 설정 (배너를 통해 알림되므로 별도 UI 불필요)
       purchaseService.setOnPurchaseSuccess(() {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '💎 프리미엄 플랜이 시작되었어요!\n자세한 내용은 설정→플랜에서 확인하세요.',
-              ),
-              backgroundColor: ColorTokens.secondary,
-              duration: const Duration(seconds: 4),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+        if (kDebugMode) {
+          print('✅ [UpgradeModal] 구매 완료 - 배너를 통해 사용자에게 알림될 예정');
         }
       });
       
@@ -839,16 +823,9 @@ class UpgradeModal extends StatelessWidget {
           }
         }
         
-        // 자동 해결된 경우 사용자에게 알림
-        if (result['wasAutoResolved'] == true && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message'] ?? '구매가 시작되었습니다.'),
-              backgroundColor: Colors.blue[700],
-              duration: const Duration(seconds: 3),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+        // 자동 해결된 경우 디버그 로그만 출력 (배너를 통해 알림)
+        if (result['wasAutoResolved'] == true && kDebugMode) {
+          print('🔧 [UpgradeModal] 자동 해결: ${result['message']}');
         }
         
       } else {
@@ -1003,7 +980,7 @@ class UpgradeModal extends StatelessWidget {
 
     try {
       final purchaseService = InAppPurchaseService();
-      final result = await purchaseService.resolvePendingTransactions();
+      await purchaseService.restorePurchases();
       
       // 로딩 다이얼로그 닫기
       if (context.mounted) {
@@ -1014,11 +991,9 @@ class UpgradeModal extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result['message'] ?? '처리 완료'),
-            backgroundColor: result['success'] == true 
-                ? Colors.green[600] 
-                : Colors.orange[600],
-            duration: Duration(seconds: result['needsManualIntervention'] == true ? 5 : 3),
+            content: Text('구매 복원이 완료되었습니다.'),
+            backgroundColor: Colors.green[600],
+            duration: const Duration(seconds: 3),
             behavior: SnackBarBehavior.floating,
           ),
         );

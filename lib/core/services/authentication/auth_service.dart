@@ -725,13 +725,13 @@ class AuthService {
         final unifiedManager = UnifiedSubscriptionManager();
         final entitlements = await unifiedManager.getSubscriptionEntitlements(forceRefresh: true);
         subscriptionDetails = {
-          'entitlement': entitlements.entitlement,
-          'subscriptionStatus': entitlements.subscriptionStatus,
-          'hasUsedTrial': entitlements.hasUsedTrial,
-          'isPremium': entitlements.isPremium,
-          'isTrial': entitlements.isTrial,
-          'isExpired': entitlements.isExpired,
-          'statusMessage': entitlements.statusMessage,
+          'entitlement': entitlements['entitlement'],
+          'subscriptionStatus': entitlements['subscriptionStatus'],
+          'hasUsedTrial': entitlements['hasUsedTrial'],
+          'isPremium': entitlements['isPremium'],
+          'isTrial': entitlements['isTrial'],
+          'isExpired': entitlements['isExpired'],
+          'statusMessage': entitlements['statusMessage'],
         };
         if (kDebugMode) {
           print('📊 [AuthService] 탈퇴 전 플랜 정보 수집 완료:');

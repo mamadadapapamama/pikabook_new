@@ -323,7 +323,7 @@ class _PikaAppBarState extends State<PikaAppBar> {
       final entitlements = results[1] as Map<String, dynamic>;
       return {
         'noteSpaceName': results[0] as String,
-        'isPlanFree': !(entitlements.isPremium),
+        'isPlanFree': !(entitlements['isPremium'] as bool? ?? false),
       };
     } catch (e) {
       if (kDebugMode) {

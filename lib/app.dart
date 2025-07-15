@@ -11,13 +11,11 @@ import 'features/home/home_screen.dart';
 import 'views/screens/onboarding_screen.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/payment/in_app_purchase_service.dart';
-import 'core/services/subscription/unified_subscription_manager.dart';
 import 'views/screens/loading_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/tokens/color_tokens.dart';
 import 'features/sample/sample_home_screen.dart';
 import 'features/home/home_viewmodel.dart';
-import 'core/widgets/upgrade_modal.dart';
 import 'core/services/notification/notification_service.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
@@ -188,16 +186,15 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           }
         }
       }),
-    
-      // 🎯 통합 구독 관리자 초기화 (홈화면에서 바로 사용)
-      UnifiedSubscriptionManager().initialize().catchError((e) {
-        if (kDebugMode) {
-          debugPrint('⚠️ [App] 통합 구독 관리자 초기화 실패 (무시): $e');
-        }
-      }),
-
-      // 🎯 EntitlementEngine 기능은 이제 UnifiedSubscriptionManager에 통합됨
     ]);
+    
+    // 🎯 통합 구독 관리자는 지연 로딩되므로 초기화 불필요
+    // UnifiedSubscriptionManager는 이제 단순한 SubscriptionRepository이므로 별도 초기화 없음
+    if (kDebugMode) {
+      debugPrint('✅ [App] 통합 구독 관리자는 필요 시 자동 로딩됩니다');
+    }
+    
+    // 🎯 EntitlementEngine 기능은 이제 UnifiedSubscriptionManager에 통합됨
     
     if (kDebugMode) {
       debugPrint('✅ [App] 핵심 서비스 초기화 완료 (빠른 시작)');
