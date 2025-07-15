@@ -1205,8 +1205,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // 🎯 체험 이력에 따른 분기 처리
       final hasUsedFreeTrial = _viewModel.hasUsedFreeTrial;
       final hasEverUsedTrial = _viewModel.hasEverUsedTrial;
+      
+      if (kDebugMode) {
+        debugPrint('🔍 [Settings] 업그레이드 모달 표시 분기 판단:');
+        debugPrint('   hasUsedFreeTrial: $hasUsedFreeTrial');
+        debugPrint('   hasEverUsedTrial: $hasEverUsedTrial');
+        debugPrint('   플랜 이름: ${_viewModel.planName}');
+        debugPrint('   플랜 타입: ${_viewModel.planType}');
+      }
+      
       if (hasUsedFreeTrial || hasEverUsedTrial) {
         // 🎯 체험 이력 있음 -> 일반 프리미엄 모달
+        if (kDebugMode) {
+          debugPrint('🎯 [Settings] 체험 이력 있음 → 일반 프리미엄 모달 표시');
+        }
+        
         UpgradeModal.show(
           context,
           reason: UpgradeReason.general,
@@ -1216,6 +1229,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       } else {
         // 🎯 체험 이력 없음 -> 무료체험 유도 모달
+        if (kDebugMode) {
+          debugPrint('🎯 [Settings] 체험 이력 없음 → 무료체험 유도 모달 표시');
+        }
+        
         UpgradeModal.show(
           context,
           reason: UpgradeReason.welcomeTrial,

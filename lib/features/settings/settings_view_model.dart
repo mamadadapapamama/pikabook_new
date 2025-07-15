@@ -134,6 +134,8 @@ class SettingsViewModel extends ChangeNotifier {
     await _loadPlanInfoWithForceRefresh();
   }
   
+
+
   /// 강제 새로고침으로 플랜 정보 로드 (v4-simplified 직접 처리)
   Future<void> _loadPlanInfoWithForceRefresh() async {
     _setLoading(true);
@@ -155,11 +157,23 @@ class SettingsViewModel extends ChangeNotifier {
       final expirationDate = subscriptionManager.cachedEntitlements?['expirationDate'] as String?;
       final subscriptionType = subscriptionManager.cachedEntitlements?['subscriptionType'] as String?;
       
-      // 🎯 v4-simplified 필드 업데이트
+      if (kDebugMode) {
+        print('🔍 [Settings] 체험 이력 디버그:');
+        print('   entitlement: $entitlement');
+        print('   subscriptionStatus: $subscriptionStatus');
+        print('   hasUsedTrial (서버): $hasUsedTrial');
+        print('   전체 서버 응답: $entitlements');
+      }
+      
+      // 🎯 서버 응답 그대로 사용 (클라이언트 추론 없음)
       _hasUsedTrial = hasUsedTrial;
       
+      if (kDebugMode) {
+        print('✅ [Settings] 최종 hasUsedTrial: $_hasUsedTrial (서버 응답 그대로)');
+      }
+      
       // 🎯 기존 호환성을 위한 PlanStatus 설정 (레거시 UI용)
-      _planStatus = _calculatePlanStatusFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
+      _planStatus = _calculatePlanStatusFromServerResponse(entitlement, subscriptionStatus, _hasUsedTrial);
       
       // UI에 표시할 정보 설정
       if (entitlement == 'premium') {
@@ -171,7 +185,7 @@ class SettingsViewModel extends ChangeNotifier {
       }
       
       // 🎯 표시명과 CTA 설정 (v4-simplified 직접 처리 + 날짜 정보)
-      _configureUIFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial, 
+      _configureUIFromServerResponse(entitlement, subscriptionStatus, _hasUsedTrial, 
         expirationDate: expirationDate, subscriptionType: subscriptionType);
       
       _isPlanLoaded = true;
@@ -255,11 +269,23 @@ class SettingsViewModel extends ChangeNotifier {
       final expirationDate = subscriptionManager.cachedEntitlements?['expirationDate'] as String?;
               final subscriptionType = subscriptionManager.cachedEntitlements?['subscriptionType'] as String?;
       
-      // 🎯 v4-simplified 필드 업데이트
+      if (kDebugMode) {
+        print('🔍 [Settings] 체험 이력 디버그 (캐시):');
+        print('   entitlement: $entitlement');
+        print('   subscriptionStatus: $subscriptionStatus');
+        print('   hasUsedTrial (서버): $hasUsedTrial');
+        print('   전체 서버 응답: $entitlements');
+      }
+      
+      // 🎯 서버 응답 그대로 사용 (클라이언트 추론 없음)
       _hasUsedTrial = hasUsedTrial;
       
+      if (kDebugMode) {
+        print('✅ [Settings] 최종 hasUsedTrial: $_hasUsedTrial (서버 응답 그대로)');
+      }
+      
       // 🎯 기존 호환성을 위한 PlanStatus 설정 (레거시 UI용)
-      _planStatus = _calculatePlanStatusFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial);
+      _planStatus = _calculatePlanStatusFromServerResponse(entitlement, subscriptionStatus, _hasUsedTrial);
       
       // UI에 표시할 정보 설정
       if (entitlement == 'premium') {
@@ -271,7 +297,7 @@ class SettingsViewModel extends ChangeNotifier {
       }
       
       // 🎯 표시명과 CTA 설정 (v4-simplified 직접 처리 + 날짜 정보)
-      _configureUIFromServerResponse(entitlement, subscriptionStatus, hasUsedTrial, 
+      _configureUIFromServerResponse(entitlement, subscriptionStatus, _hasUsedTrial, 
         expirationDate: expirationDate, subscriptionType: subscriptionType);
       
       _isPlanLoaded = true;
