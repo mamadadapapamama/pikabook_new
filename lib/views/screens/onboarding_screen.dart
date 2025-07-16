@@ -232,26 +232,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       final defaultName = "사용자";
       final defaultNoteSpace = "${defaultName}의 학습노트";
       
-      // 기본 설정 일괄 저장 (중복 호출 방지)
-      final preferences = await _userPreferences.getPreferences();
-      await _userPreferences.savePreferences(
-        preferences.copyWith(
-          useSegmentMode: true,
-          defaultNoteSpace: defaultNoteSpace,
-          noteSpaces: [defaultNoteSpace],
-          userName: defaultName,
-          onboardingCompleted: true,
-          learningPurpose: '직접 원서 공부',
-          hasLoginHistory: true,
-        ),
-      );
-
-
-      
-      // Firestore에 기본 데이터 저장
+      // 🎯 온보딩 건너뛰기 시에도 Firebase에 직접 저장 (캐시 사용 안 함)
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         await _userPreferences.setCurrentUserId(user.uid);
+        
         await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
           'userName': defaultName,
           'level': '처음이에요', // 기본값 (chineseLevel → level)
@@ -277,9 +262,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             'lastUpdated': FieldValue.serverTimestamp(),
           },
         });
+        
+        // 🎯 온보딩 완료 플래그만 SharedPreferences에 저장 (캐시 시스템 우회)
+        await _userPreferences.setOnboardingCompletedDirect(true);
       }
-      
-      // 온보딩 완료 표시 (이미 위에서 일괄 처리되었으므로 제거)
       
       // Skip한 경우 바로 홈으로 이동 (환영 모달 표시하지 않음)
       if (mounted) {
@@ -334,7 +320,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       }
       String translationMode = selectedLevelValue == '초급' ? 'segment' : 'full';
 
-      // Firestore에 사용자 정보 저장 (새 문서 생성)
+      // 🎯 온보딩 데이터는 Firebase에 직접 저장 (캐시 사용 안 함)
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'userName': _nameController.text,  // name → userName
         'learningPurpose': finalUsagePurpose,  // usagePurpose → learningPurpose
@@ -358,35 +344,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         },
       });
 
-      // UserPreferencesService를 통해 설정 일괄 저장 (중복 호출 방지)
+      // 🎯 온보딩 완료 플래그만 SharedPreferences에 저장 (캐시 시스템 우회)
       await _userPreferences.setCurrentUserId(user.uid);
-      
-      // 모든 설정을 한 번에 저장
-      final preferences = await _userPreferences.getPreferences();
-      final noteSpaceName = '${_nameController.text}의 학습노트';
-      final noteSpaces = List<String>.from(preferences.noteSpaces);
-      if (!noteSpaces.contains(noteSpaceName)) {
-        noteSpaces.add(noteSpaceName);
-      }
-      
-      await _userPreferences.savePreferences(
-        preferences.copyWith(
-          onboardingCompleted: true,
-          userName: _nameController.text,
-          learningPurpose: finalUsagePurpose,
-          useSegmentMode: translationMode == 'segment',
-          defaultNoteSpace: noteSpaceName,
-          noteSpaces: noteSpaces,
-        ),
-      );
+      await _userPreferences.setOnboardingCompletedDirect(true);
 
-          if (kDebugMode) {
+      if (kDebugMode) {
         print('✅ [온보딩] 사용자 정보 저장 완료 - 홈으로 이동');
-            }
+      }
 
-      // 🚀 온보딩 완료 - 홈에서 구독 상태에 따른 처리 진행
-                if (mounted) {
-                  widget.onComplete();
+      if (mounted) {
+        widget.onComplete();
       }
     } catch (e) {
       debugPrint('온보딩 완료 처리 중 오류: $e');

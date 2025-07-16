@@ -43,9 +43,27 @@ class EventCacheManager {
   // 캐시 저장소
   final Map<String, dynamic> _cache = {};
   final Map<String, DateTime> _cacheTimestamps = {};
+  
+  // 🎯 이벤트 디바운싱 (중복 이벤트 방지)
+  final Map<String, DateTime> _lastEventTimes = {};
+  static const Duration _eventDebounceDelay = Duration(seconds: 2);
 
   /// 이벤트 발생
   void emitEvent(CacheEventType type, {String? userId, Map<String, dynamic>? data}) {
+    // 🎯 이벤트 디바운싱 확인
+    final eventKey = '${type.name}_${userId ?? 'global'}';
+    final now = DateTime.now();
+    final lastEventTime = _lastEventTimes[eventKey];
+    
+    if (lastEventTime != null && now.difference(lastEventTime) < _eventDebounceDelay) {
+      if (kDebugMode) {
+        print('⏰ [EventCache] 이벤트 디바운싱: $eventKey (${now.difference(lastEventTime).inSeconds}초 전 발생)');
+      }
+      return;
+    }
+    
+    _lastEventTimes[eventKey] = now;
+    
     final event = CacheEvent(type: type, userId: userId, data: data);
     
     if (kDebugMode) {
@@ -302,5 +320,6 @@ class EventCacheManager {
     _eventController.close();
     _cache.clear();
     _cacheTimestamps.clear();
+    _lastEventTimes.clear(); // 🎯 이벤트 디바운싱 데이터 정리
   }
 } 

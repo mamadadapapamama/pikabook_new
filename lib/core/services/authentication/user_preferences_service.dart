@@ -4,10 +4,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:convert';
 import '../../models/user_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../cache/event_cache_manager.dart';
+// import '../cache/event_cache_manager.dart'; // 캐시 제거
 
-/// 사용자 설정을 관리하는 서비스
-/// SharedPreferences를 사용하여 로컬에 설정을 저장하고 관리합니다.
+/// 사용자 설정을 관리하는 서비스 (캐시 없이 직접 DB 조회)
+/// 
+/// **캐시 제거 이유:**
+/// - 사용자 설정은 중요한 개인 데이터
+/// - 항상 최신 상태 보장 필요
+/// - 캐시로 인한 불일치 방지
+/// 
+/// **동작 방식:**
+/// - 모든 조회는 SharedPreferences에서 직접 수행
+/// - 중요한 설정만 Firestore에 저장
+/// - 클라이언트 측 캐시 없음
 class UserPreferencesService {
   static const String _preferencesKey = 'user_preferences';
   static const String _currentUserIdKey = 'current_user_id';
@@ -16,8 +25,8 @@ class UserPreferencesService {
   // 현재 사용자 ID
   String? _currentUserId;
   
-  // 이벤트 기반 캐시 매니저
-  final EventCacheManager _eventCache = EventCacheManager();
+  // 🎯 캐시 제거 - 이벤트 캐시 매니저 사용 안 함
+  // final EventCacheManager _eventCache = EventCacheManager();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -80,18 +89,12 @@ class UserPreferencesService {
     return _currentUserId;
   }
 
-  /// 사용자 설정 가져오기 (이벤트 기반 캐시)
+  /// 사용자 설정 가져오기 (캐시 없이 항상 SharedPreferences에서 직접 조회)
   Future<UserPreferences> getPreferences() async {
     final userId = await getCurrentUserId();
-    final cacheKey = 'user_preferences_${userId ?? 'anonymous'}';
     
-    // 이벤트 기반 캐시 확인
-    final cachedPreferences = _eventCache.getCache<UserPreferences>(cacheKey);
-    if (cachedPreferences != null) {
-      if (kDebugMode) {
-        debugPrint('📦 [EventCache] 캐시된 사용자 설정 반환: $userId');
-      }
-      return cachedPreferences;
+    if (kDebugMode) {
+      debugPrint('📦 [UserPreferences] 사용자 설정 직접 조회: $userId');
     }
     
     final prefs = await SharedPreferences.getInstance();
@@ -112,17 +115,14 @@ class UserPreferencesService {
       preferences = UserPreferences.defaults();
     }
     
-    // 이벤트 기반 캐시에 저장
-    _eventCache.setCache(cacheKey, preferences);
-    
     if (kDebugMode) {
-      debugPrint('✅ 사용자 설정 로드 및 이벤트 캐시 저장 완료');
+      debugPrint('✅ [UserPreferences] 사용자 설정 로드 완료 (캐시 없이 직접 조회)');
     }
     
     return preferences;
   }
 
-  /// 사용자 설정 저장 (이벤트 기반 캐시 업데이트)
+  /// 사용자 설정 저장 (캐시 없이 항상 SharedPreferences + Firestore 직접 저장)
   Future<void> savePreferences(UserPreferences preferences) async {
     final prefs = await SharedPreferences.getInstance();
     final userId = await getCurrentUserId();
@@ -130,10 +130,6 @@ class UserPreferencesService {
     // 사용자 ID별 키 생성
     final key = userId != null ? '${_preferencesKey}_$userId' : _preferencesKey;
     await prefs.setString(key, jsonEncode(preferences.toJson()));
-    
-    // 이벤트 기반 캐시 업데이트
-    final cacheKey = 'user_preferences_${userId ?? 'anonymous'}';
-    _eventCache.setCache(cacheKey, preferences);
     
     // 🔄 Firestore 저장 최적화: 중요한 설정 변경시에만 저장
     if (userId != null && userId.isNotEmpty) {
@@ -162,19 +158,12 @@ class UserPreferencesService {
       }
     }
     
-    // 사용자 설정 변경 이벤트 발생
-    _eventCache.emitEvent(
-      CacheEventType.userPreferencesChanged,
-      userId: userId,
-      data: preferences.toJson(),
-    );
-    
     if (kDebugMode) {
-      debugPrint('💾 [UserPreferences] 설정 저장 및 이벤트 캐시 업데이트 완료');
+      debugPrint('💾 [UserPreferences] 설정 저장 완료 (캐시 없이 직접 저장)');
     }
   }
 
-  /// 사용자 데이터 초기화 (이벤트 기반 캐시 무효화)
+  /// 사용자 데이터 초기화 (캐시 없이 직접 SharedPreferences에서 삭제)
   Future<void> clearUserData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -185,23 +174,19 @@ class UserPreferencesService {
         return;
       }
       
-      // 사용자 설정 삭제
+      // 사용자 설정 직접 삭제
       await prefs.remove('${_preferencesKey}_$userId');
       
-      // 이벤트 기반 캐시 무효화
-      final cacheKey = 'user_preferences_${userId}';
-      _eventCache.invalidateCache(cacheKey);
-      
       if (kDebugMode) {
-      debugPrint('⚠️ 사용자 설정이 초기화되었습니다: $userId');
-      debugPrint('🗑️ 이벤트 캐시도 함께 무효화되었습니다');
+        debugPrint('⚠️ 사용자 설정이 초기화되었습니다: $userId');
+        debugPrint('🗑️ 캐시 없이 직접 SharedPreferences에서 삭제');
       }
     } catch (e) {
       debugPrint('⚠️ 사용자 데이터 초기화 중 오류 발생: $e');
     }
   }
 
-  /// Firestore에서 사용자 설정 로드 (앱 첫 진입 시 강제 새로고침)
+  /// Firestore에서 사용자 설정 로드 (캐시 없이 SharedPreferences에만 저장)
   Future<void> loadUserSettingsFromFirestore({bool forceRefresh = false}) async {
     final userId = await getCurrentUserId();
     if (userId == null || userId.isEmpty) {
@@ -219,9 +204,6 @@ class UserPreferencesService {
       return;
     }
     
-    final cacheKey = 'user_preferences_$userId';
-    _eventCache.invalidateCache(cacheKey);
-    
     if (kDebugMode) {
       debugPrint('🔄 [UserPreferences] 앱 첫 진입 - Firestore에서 설정 로드');
     }
@@ -233,7 +215,7 @@ class UserPreferencesService {
         final userData = userDoc.data();
         if (userData == null) return;
         
-        // 🎯 읽기 전용: 캐시에만 저장하고 Firestore에 다시 저장하지 않음
+        // 🎯 읽기 전용: SharedPreferences에만 저장
         final preferences = UserPreferences.fromJson(userData);
         
         // 로컬 SharedPreferences에만 저장
@@ -241,11 +223,8 @@ class UserPreferencesService {
         final key = '${_preferencesKey}_$userId';
         await prefs.setString(key, jsonEncode(preferences.toJson()));
         
-        // 이벤트 기반 캐시에만 저장 (Firestore 저장 없음)
-        _eventCache.setCache(cacheKey, preferences);
-        
         if (kDebugMode) {
-          debugPrint('✅ [UserPreferences] Firestore 설정 로드 완료 (읽기 전용)');
+          debugPrint('✅ [UserPreferences] Firestore 설정 로드 완료 (캐시 없이 직접 저장)');
         }
       } else {
         if (kDebugMode) {
@@ -287,6 +266,40 @@ class UserPreferencesService {
   Future<void> setOnboardingCompleted(bool completed) async {
     final prefs = await getPreferences();
     await savePreferences(prefs.copyWith(onboardingCompleted: completed));
+  }
+  
+  /// 🎯 온보딩 완료 상태 직접 저장 (캐시 시스템 우회)
+  /// 온보딩은 일회성 설정이므로 이벤트 캐시를 사용하지 않음
+  Future<void> setOnboardingCompletedDirect(bool completed) async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = await getCurrentUserId();
+    
+    // 사용자 ID별 키 생성
+    final key = userId != null ? '${_preferencesKey}_$userId' : _preferencesKey;
+    
+    // 기존 설정 가져오기
+    final jsonString = prefs.getString(key);
+    UserPreferences preferences;
+    
+    if (jsonString != null) {
+      try {
+        preferences = UserPreferences.fromJson(jsonDecode(jsonString));
+      } catch (e) {
+        preferences = UserPreferences.defaults();
+      }
+    } else {
+      preferences = UserPreferences.defaults();
+    }
+    
+    // 온보딩 완료 플래그만 업데이트
+    final updatedPreferences = preferences.copyWith(onboardingCompleted: completed);
+    
+    // SharedPreferences에만 저장 (캐시 이벤트 발생 안 함)
+    await prefs.setString(key, jsonEncode(updatedPreferences.toJson()));
+    
+    if (kDebugMode) {
+      debugPrint('✅ [UserPreferences] 온보딩 완료 플래그 직접 저장 완료 (캐시 우회): $completed');
+    }
   }
   
   /// 사용자 이름 설정

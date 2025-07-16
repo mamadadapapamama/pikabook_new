@@ -71,9 +71,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       timeDilation = 1.0;
     }
     
-    // 시스템 UI 조정
-    SystemChannels.textInput.invokeMethod('TextInput.hide');
-    
     // 상태표시줄 설정
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setSystemUIOverlayStyle(

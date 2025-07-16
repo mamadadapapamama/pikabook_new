@@ -228,12 +228,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         'welcomeModalSeenAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // 2. 온보딩 완료 상태 저장
-      final preferences = await _userPreferencesService.getPreferences();
-      await _userPreferencesService.savePreferences(
-        preferences.copyWith(onboardingCompleted: true),
-      );
-
+      // 2. 온보딩 완료 상태는 이미 온보딩에서 저장됨 (중복 저장 방지)
+      // 🚨 제거: 불필요한 사용자 설정 저장으로 인한 캐시 이벤트 반복 방지
+      
       // 3. 무료 플랜 선택 시 Firestore 상태 설정
       if (!userChoseTrial) {
         await FirebaseFirestore.instance

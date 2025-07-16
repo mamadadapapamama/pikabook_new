@@ -11,6 +11,7 @@ import 'firebase_options.dart';
 import 'core/services/media/image_service.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';
 // import 'package:shared_preferences/shared_preferences.dart';
 // import 'views/screens/home_screen_mvvm.dart';
 // import 'views/screens/note_detail_screen.dart';
@@ -24,7 +25,9 @@ void main() async {
   
   // Timezone 초기화 (스케줄된 알림을 위해 필요)
   tz.initializeTimeZones();
-  tz.setLocalLocation(tz.getLocation('Asia/Seoul')); // 한국 시간대 설정
+  
+  // 🌍 사용자의 실제 타임존 가져와서 설정
+  await _setupUserTimezone();
   
   if (kDebugMode) {
     debugPrint('⏰ Timezone 초기화 완료: ${tz.local.name}');
@@ -197,5 +200,22 @@ Future<void> _cleanupOnStart() async {
     debugPrint('앱 시작 시 캐시 정리 완료');
   } catch (e) {
     debugPrint('앱 시작 시 캐시 정리 중 오류: $e');
+  }
+}
+
+/// 사용자의 실제 타임존을 가져와서 설정합니다.
+/// 실패 시 기본값으로 'Asia/Seoul'을 사용합니다.
+Future<void> _setupUserTimezone() async {
+  try {
+    final userTimezone = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(userTimezone));
+    if (kDebugMode) {
+      debugPrint('🌍 사용자의 실제 타임존 설정: $userTimezone');
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      debugPrint('⚠️ 사용자의 실제 타임존 설정 실패. 기본값으로 설정: $e');
+    }
+    tz.setLocalLocation(tz.getLocation('Asia/Seoul')); // 한국 시간대 기본값
   }
 }
