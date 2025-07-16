@@ -152,7 +152,7 @@ class AuthService {
     }
   }
 
-  /// 로그인 후 구독 상태 강제 새로고침 (디바운싱 적용)
+  /// 🎯 로그인 후 기본 설정 (구독 상태 확인 제거)
   Future<void> _forceRefreshSubscriptionOnLogin() async {
     // 🎯 기존 타이머 취소
     _subscriptionRefreshTimer?.cancel();
@@ -161,24 +161,16 @@ class AuthService {
     _subscriptionRefreshTimer = Timer(const Duration(milliseconds: 500), () async {
       try {
         if (kDebugMode) {
-          debugPrint('🔄 [AuthService] 로그인 후 구독 상태 강제 새로고침 시작 (디바운싱됨)');
+          debugPrint('🔄 [AuthService] 로그인 후 기본 설정 완료');
+          debugPrint('   구독 상태는 HomeScreen에서 직접 로드합니다');
         }
         
-        if (kDebugMode) {
-          debugPrint('✅ [AuthService] 로그인된 사용자 - 구독 상태 체크 진행');
-        }
+        // 🎯 구독 상태 확인 제거 - HomeScreen에서 직접 처리
+        // 이제 AuthService는 단순히 로그인 감지만 담당
         
-        // 로그인 직후에는 항상 최신 구독 상태를 서버에서 가져옴
-        await UnifiedSubscriptionManager().getSubscriptionEntitlements(
-          forceRefresh: true, // 강제 새로고침
-        );
-        
-        if (kDebugMode) {
-          debugPrint('✅ [AuthService] 로그인 후 구독 상태 새로고침 완료');
-        }
       } catch (e) {
         if (kDebugMode) {
-          debugPrint('❌ [AuthService] 로그인 후 구독 상태 새로고침 실패: $e');
+          debugPrint('❌ [AuthService] 로그인 후 기본 설정 실패: $e');
         }
       }
     });

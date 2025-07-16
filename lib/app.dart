@@ -215,10 +215,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     // 인증 상태 리스너 설정
     _setupAuthStateListener();
     
-    // 로그인된 사용자의 구독 상태 사전 로딩 (백그라운드)
-    if (isLoggedIn) {
-      _preloadSubscriptionStatus();
-    }
+    // 🎯 구독 상태 사전 로딩 제거 - HomeScreen에서 직접 처리
+    // 로그인 감지는 AuthService가, 구독 상태 로드는 HomeScreen이 담당
   }
   
   /// 초기화 상태 업데이트
@@ -438,18 +436,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   }
   
 
-  
-  /// 🎯 구독 상태 사전 로딩 (HomeScreen 빌드 전에 준비)
-  void _preloadSubscriptionStatus() {
-    if (kDebugMode) {
-      debugPrint('🔄 [App] 구독 상태 사전 로딩 시작');
-    }
-    
-    // 통합 구독 관리자는 지연 로딩되므로 사전 로딩 불필요
-    if (kDebugMode) {
-      debugPrint('✅ [App] 구독 상태는 필요 시 자동 로딩됩니다');
-    }
-  }
   
   @override
   Widget build(BuildContext context) {

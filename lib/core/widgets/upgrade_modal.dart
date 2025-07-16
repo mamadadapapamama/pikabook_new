@@ -248,7 +248,7 @@ class UpgradeModal extends StatelessWidget {
   /// 메인 메시지
   Widget _buildMainMessage() {
     return const Text(
-      '월 \$3.99로, Pikabook을\n마음껏 사용해 보세요!',
+      '월 \$USD3.99로, \nPikabook을 마음껏 사용해 보세요!',
       style: TextStyle(
         fontSize: 20,
         fontWeight: FontWeight.bold,
@@ -417,131 +417,111 @@ class UpgradeModal extends StatelessWidget {
       );
     }
 
-    // 온보딩 후 환영 모달 (7일 무료체험 유도)
+    // 온보딩 후 환영 모달 (월간 구독 7일 무료체험 + 연간 구독 즉시 결제)
     if (reason == UpgradeReason.welcomeTrial) {
       return Column(
         children: [
-          // 주황색 CTA 버튼 - 7일 무료체험 (TrialManager 사용)
+          // 🎯 월간 구독 (7일 무료체험 포함)
           _buildPrimaryButton(
-            '7일간 무료로 프리미엄 시작하기',
+            '월 \$3.99 USD (7일 무료체험)',
             '(언제든 구독 취소할수 있어요)',
             () async {
               if (kDebugMode) {
-                debugPrint('🎯 [UpgradeModal] 무료체험 버튼 클릭됨');
+                debugPrint('🎯 [UpgradeModal] 월간 구독 (7일 무료체험) 버튼 클릭됨');
               }
               
               _resetModalState();
               Navigator.of(context).pop(true);
               
-              // InAppPurchaseService를 통해 무료체험 시작
-              try {
-                if (kDebugMode) {
-                  debugPrint('🛒 [UpgradeModal] InAppPurchaseService 인스턴스 생성');
-                }
-                
-                final purchaseService = InAppPurchaseService();
-                
-                // 서비스 사용 가능 여부 확인
-                if (kDebugMode) {
-                  debugPrint('🔍 [UpgradeModal] InApp Purchase 사용 가능 여부: ${purchaseService.isAvailable}');
-                }
-                
-                // 서비스가 사용 불가능하면 초기화
-                if (!purchaseService.isAvailableSync) {
-                  if (kDebugMode) {
-                    debugPrint('🔄 [UpgradeModal] InApp Purchase 서비스 초기화 시작');
-                  }
-                  await purchaseService.initialize();
-                  
-                  if (kDebugMode) {
-                    debugPrint('✅ [UpgradeModal] InApp Purchase 서비스 초기화 완료: ${purchaseService.isAvailableSync}');
-                  }
-                }
-                
-                // 🎯 Trial 컨텍스트 설정 (환영 모달에서 구매 시)
-                purchaseService.setTrialContext(true);
-                
-                // 🎯 개선된 구매 시작 (자동 에러 처리 포함)
-                if (kDebugMode) {
-                  debugPrint('🛒 [UpgradeModal] 무료체험 구매 시작: ${InAppPurchaseService.premiumMonthlyId}');
-                }
-                
-                final result = await purchaseService.attemptPurchaseWithGuidance(InAppPurchaseService.premiumMonthlyId);
-                
-                if (kDebugMode) {
-                  debugPrint('📊 [UpgradeModal] 구매 결과: ${result['success']}');
-                }
-              
-                if (result['success'] == true) {
-                  if (kDebugMode) {
-                    debugPrint('✅ [UpgradeModal] 무료체험 구독 시작 성공');
-                    if (result['wasAutoResolved'] == true) {
-                      debugPrint('🔧 [UpgradeModal] 자동 해결됨: ${result['message']}');
-                    }
-                  }
-                  
-                  // 자동 해결된 경우 디버그 로그만 출력 (배너를 통해 알림)
-                  if (result['wasAutoResolved'] == true && kDebugMode) {
-                    print('🔧 [UpgradeModal] 자동 해결: ${result['message']}');
-                  }
-                  
-                } else {
-                  // 🛠️ Pending Transaction 에러 특별 처리
-                  if (result['isPendingTransactionError'] == true) {
-                    await _showPendingTransactionDialog(context, result);
-                    return;
-                  }
-                  
-                  // 일반 에러 처리
-                  if (kDebugMode) {
-                    debugPrint('⚠️ [UpgradeModal] 무료체험 구독 시작 실패: ${result['message']}');
-                  }
-                  
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(result['message'] ?? '구매를 시작할 수 없습니다.'),
-                        backgroundColor: Colors.orange[600],
-                        duration: Duration(seconds: result['shouldRetryLater'] == true ? 4 : 3),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
-                }
-                
-                onUpgrade?.call();
-              } catch (e) {
-                if (kDebugMode) {
-                  debugPrint('❌ [UpgradeModal] 무료체험 구독 실패: $e');
-                  debugPrint('❌ [UpgradeModal] 에러 타입: ${e.runtimeType}');
-                  debugPrint('❌ [UpgradeModal] 스택 트레이스: ${StackTrace.current}');
-                }
-                
-                // 🎯 사용자 취소인 경우 조용히 처리
-                if (e.toString().contains('Payment sheet dismissed') || 
-                    e.toString().contains('cancelled') ||
-                    e.toString().contains('canceled')) {
-                  if (kDebugMode) {
-                    debugPrint('ℹ️ [UpgradeModal] 사용자가 구매를 취소함');
-                  }
-                  return; // 취소는 에러 메시지 표시하지 않음
-                }
-                
-                // 🎯 Pending transaction 에러는 이제 attemptPurchaseWithGuidance에서 자동 처리됨
-                // 여기서는 예외적인 케이스만 처리
-                
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('무료체험 시작에 실패했습니다. 잠시 후 다시 시도해주세요.'),
-                      backgroundColor: Colors.orange[600],
-                      duration: const Duration(seconds: 3),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-              }
+              // 월간 구독은 7일 무료체험이 있는 offer
+              await _handleWelcomeTrialPurchase(context, InAppPurchaseService.premiumMonthlyId);
+              onUpgrade?.call();
             },
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // 🎯 연간 구독 (즉시 결제, 할인 강조)
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFFFF6B35), width: 1.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: [
+                // 할인 배지
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFF6B35),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(6),
+                      topRight: Radius.circular(6),
+                    ),
+                  ),
+                  child: const Text(
+                    '2개월 무료! 27% 할인',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                // 연간 구독 버튼
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () async {
+                if (kDebugMode) {
+                        debugPrint('🎯 [UpgradeModal] 연간 구독 (즉시 결제) 버튼 클릭됨');
+                      }
+                      
+                      _resetModalState();
+                      Navigator.of(context).pop(true);
+                      
+                      // 연간 구독은 즉시 결제 (무료체험 없음)
+                      await _handleWelcomeYearlyPurchase(context, InAppPurchaseService.premiumYearlyId);
+                      onUpgrade?.call();
+                    },
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(6),
+                      bottomRight: Radius.circular(6),
+                    ),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      child: Column(
+                        children: [
+                          const Text(
+                            '연간 \$34.99 USD',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFFF6B35),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            '(월 \$2.91 USD 상당)',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFFF6B35),
+                              fontWeight: FontWeight.normal,
+                            ),
+                            textAlign: TextAlign.center,
+                    ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           
           const SizedBox(height: 16),
@@ -1040,17 +1020,7 @@ class UpgradeModal extends StatelessWidget {
                 '앱을 완전히 종료하고 다시 실행하면 미완료 거래가 자동으로 정리됩니다.',
                 style: TextStyle(fontSize: 14, color: Colors.grey[700]),
               ),
-              SizedBox(height: 12),
-              Text(
-                '앱 종료 방법:',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 6),
-              Text(
-                '• iPhone: 홈 버튼 두 번 누르기 → 앱 위로 스와이프\n'
-                '• iPhone X 이상: 화면 하단에서 위로 스와이프 후 멈춤 → 앱 위로 스와이프',
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-              ),
+              SizedBox(height: 12)
             ],
           ),
           actions: [
@@ -1073,6 +1043,226 @@ class UpgradeModal extends StatelessWidget {
 
   void _resetModalState() {
     resetModalState();
+  }
+
+  /// 환영 모달에서 무료체험 구매 처리 (월간 구독)
+  static Future<void> _handleWelcomeTrialPurchase(BuildContext context, String productId) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🛒 [UpgradeModal] 환영 모달 무료체험 구매 시작: $productId');
+      }
+      
+      final purchaseService = InAppPurchaseService();
+      
+      // 서비스 사용 가능 여부 확인
+      if (kDebugMode) {
+        debugPrint('🔍 [UpgradeModal] InApp Purchase 사용 가능 여부: ${purchaseService.isAvailable}');
+      }
+      
+      // 서비스가 사용 불가능하면 초기화
+      if (!purchaseService.isAvailableSync) {
+        if (kDebugMode) {
+          debugPrint('🔄 [UpgradeModal] InApp Purchase 서비스 초기화 시작');
+        }
+        await purchaseService.initialize();
+        
+        if (kDebugMode) {
+          debugPrint('✅ [UpgradeModal] InApp Purchase 서비스 초기화 완료: ${purchaseService.isAvailableSync}');
+        }
+      }
+      
+      // 🎯 Trial 컨텍스트 설정 (환영 모달에서 구매 시)
+      purchaseService.setTrialContext(true);
+      
+      // 🎯 개선된 구매 시작 (자동 에러 처리 포함)
+      if (kDebugMode) {
+        debugPrint('🛒 [UpgradeModal] 무료체험 구매 시작: $productId');
+      }
+      
+      final result = await purchaseService.attemptPurchaseWithGuidance(productId);
+      
+      if (kDebugMode) {
+        debugPrint('📊 [UpgradeModal] 구매 결과: ${result['success']}');
+      }
+    
+      if (result['success'] == true) {
+        if (kDebugMode) {
+          debugPrint('✅ [UpgradeModal] 무료체험 구독 시작 성공');
+          if (result['wasAutoResolved'] == true) {
+            debugPrint('🔧 [UpgradeModal] 자동 해결됨: ${result['message']}');
+          }
+        }
+        
+        // 자동 해결된 경우 디버그 로그만 출력 (배너를 통해 알림)
+        if (result['wasAutoResolved'] == true && kDebugMode) {
+          print('🔧 [UpgradeModal] 자동 해결: ${result['message']}');
+        }
+        
+      } else {
+        // 🛠️ Pending Transaction 에러 특별 처리
+        if (result['isPendingTransactionError'] == true) {
+          await _showPendingTransactionDialog(context, result);
+          return;
+        }
+        
+        // 일반 에러 처리
+        if (kDebugMode) {
+          debugPrint('⚠️ [UpgradeModal] 무료체험 구독 시작 실패: ${result['message']}');
+        }
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? '구매를 시작할 수 없습니다.'),
+              backgroundColor: Colors.orange[600],
+              duration: Duration(seconds: result['shouldRetryLater'] == true ? 4 : 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [UpgradeModal] 무료체험 구독 실패: $e');
+        debugPrint('❌ [UpgradeModal] 에러 타입: ${e.runtimeType}');
+        debugPrint('❌ [UpgradeModal] 스택 트레이스: ${StackTrace.current}');
+      }
+      
+      // 🎯 사용자 취소인 경우 조용히 처리
+      if (e.toString().contains('Payment sheet dismissed') || 
+          e.toString().contains('cancelled') ||
+          e.toString().contains('canceled')) {
+        if (kDebugMode) {
+          debugPrint('ℹ️ [UpgradeModal] 사용자가 구매를 취소함');
+        }
+        return; // 취소는 에러 메시지 표시하지 않음
+      }
+      
+      // 🎯 Pending transaction 에러는 이제 attemptPurchaseWithGuidance에서 자동 처리됨
+      // 여기서는 예외적인 케이스만 처리
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('무료체험 시작에 실패했습니다. 잠시 후 다시 시도해주세요.'),
+            backgroundColor: Colors.orange[600],
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  /// 환영 모달에서 연간 구독 구매 처리 (즉시 결제)
+  static Future<void> _handleWelcomeYearlyPurchase(BuildContext context, String productId) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🛒 [UpgradeModal] 환영 모달 연간 구독 구매 시작: $productId');
+      }
+      
+      final purchaseService = InAppPurchaseService();
+      
+      // 서비스 사용 가능 여부 확인
+      if (kDebugMode) {
+        debugPrint('🔍 [UpgradeModal] InApp Purchase 사용 가능 여부: ${purchaseService.isAvailable}');
+      }
+      
+      // 서비스가 사용 불가능하면 초기화
+      if (!purchaseService.isAvailableSync) {
+        if (kDebugMode) {
+          debugPrint('🔄 [UpgradeModal] InApp Purchase 서비스 초기화 시작');
+        }
+        await purchaseService.initialize();
+        
+        if (kDebugMode) {
+          debugPrint('✅ [UpgradeModal] InApp Purchase 서비스 초기화 완료: ${purchaseService.isAvailableSync}');
+        }
+      }
+      
+      // 🎯 연간 구독은 무료체험이 없으므로 Trial 컨텍스트를 false로 설정
+      purchaseService.setTrialContext(false);
+      
+      // 🎯 개선된 구매 시작 (자동 에러 처리 포함)
+      if (kDebugMode) {
+        debugPrint('🛒 [UpgradeModal] 연간 구독 구매 시작: $productId');
+      }
+      
+      final result = await purchaseService.attemptPurchaseWithGuidance(productId);
+      
+      if (kDebugMode) {
+        debugPrint('📊 [UpgradeModal] 구매 결과: ${result['success']}');
+      }
+    
+      if (result['success'] == true) {
+        if (kDebugMode) {
+          debugPrint('✅ [UpgradeModal] 연간 구독 구매 성공');
+          if (result['wasAutoResolved'] == true) {
+            debugPrint('🔧 [UpgradeModal] 자동 해결됨: ${result['message']}');
+          }
+        }
+        
+        // 자동 해결된 경우 디버그 로그만 출력 (배너를 통해 알림)
+        if (result['wasAutoResolved'] == true && kDebugMode) {
+          print('🔧 [UpgradeModal] 자동 해결: ${result['message']}');
+        }
+        
+      } else {
+        // 🛠️ Pending Transaction 에러 특별 처리
+        if (result['isPendingTransactionError'] == true) {
+          await _showPendingTransactionDialog(context, result);
+          return;
+        }
+        
+        // 일반 에러 처리
+        if (kDebugMode) {
+          debugPrint('⚠️ [UpgradeModal] 연간 구독 구매 실패: ${result['message']}');
+        }
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? '구매를 시작할 수 없습니다.'),
+              backgroundColor: Colors.orange[600],
+              duration: Duration(seconds: result['shouldRetryLater'] == true ? 4 : 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [UpgradeModal] 연간 구독 구매 실패: $e');
+        debugPrint('❌ [UpgradeModal] 에러 타입: ${e.runtimeType}');
+        debugPrint('❌ [UpgradeModal] 스택 트레이스: ${StackTrace.current}');
+      }
+      
+      // 🎯 사용자 취소인 경우 조용히 처리
+      if (e.toString().contains('Payment sheet dismissed') || 
+          e.toString().contains('cancelled') ||
+          e.toString().contains('canceled')) {
+        if (kDebugMode) {
+          debugPrint('ℹ️ [UpgradeModal] 사용자가 구매를 취소함');
+        }
+        return; // 취소는 에러 메시지 표시하지 않음
+      }
+      
+      // 🎯 Pending transaction 에러는 이제 attemptPurchaseWithGuidance에서 자동 처리됨
+      // 여기서는 예외적인 케이스만 처리
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('연간 구독 구매에 실패했습니다. 잠시 후 다시 시도해주세요.'),
+            backgroundColor: Colors.orange[600],
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 }
 

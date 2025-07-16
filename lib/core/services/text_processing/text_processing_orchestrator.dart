@@ -107,7 +107,7 @@ class TextProcessingOrchestrator {
         }
         
         // 텍스트 분리
-        textSegments = _textSeparationService.separateByMode(processedText, mode);
+        textSegments = _textSeparationService.separateForCreation(processedText, mode);
         
         // OCR 결과 저장
         detectedTitles = ocrResult.titleCandidates.map((t) => t.text).toList();

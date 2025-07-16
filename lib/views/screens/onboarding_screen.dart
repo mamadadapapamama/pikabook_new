@@ -259,6 +259,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           'translationMode': 'segment',
           'hasOnboarded': true,
           'onboardingCompleted': true,
+          'hasSeenWelcomeModal': true, // 🎯 Skip 시에도 환영모달 본 것으로 처리
+          'welcomeModalSeenAt': FieldValue.serverTimestamp(), // 🎯 Skip 시점 기록
           'defaultNoteSpace': defaultNoteSpace,
           'noteSpaces': [defaultNoteSpace],
           'sourceLanguage': 'zh-CN',  // 추가

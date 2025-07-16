@@ -1,28 +1,32 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // 🎯 Core imports
 import '../../core/models/subscription_state.dart';
 import '../../core/services/common/banner_manager.dart';
+import '../../core/services/subscription/unified_subscription_manager.dart';
+import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
+import '../../core/widgets/upgrade_modal.dart';
 
 // 🎯 Feature imports
 import 'home_viewmodel.dart';
-import 'coordinators/home_lifecycle_coordinator.dart';
 import 'coordinators/home_ui_coordinator.dart';
 import 'widgets/home_zero_state.dart';
 import 'widgets/home_notes_list.dart';
 import 'widgets/home_floating_button.dart';
 
-/// 🏠 홈 스크린 (리팩토링된 버전)
+/// 🏠 홈 스크린 (단순화된 버전)
 /// 
 /// 책임:
-/// - HomeViewModel과 coordinators를 조합하여 UI 렌더링
-/// - 생명주기 관리는 HomeLifecycleCoordinator에 위임
-/// - UI 상호작용은 HomeUICoordinator에 위임
+/// - UnifiedSubscriptionManager 직접 사용
+/// - 환영 모달 표시 관리
+/// - 구독 상태 및 배너 관리
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -31,24 +35,25 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  // 🔧 Coordinators
-  late final HomeLifecycleCoordinator _lifecycleCoordinator;
-  late final HomeUICoordinator _uiCoordinator;
+  // 🔧 서비스 인스턴스
+  final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
+  final UserPreferencesService _userPreferencesService = UserPreferencesService();
+  final HomeUICoordinator _uiCoordinator = HomeUICoordinator();
   
   // 🎯 상태 관리
   SubscriptionState _subscriptionState = SubscriptionState.defaultState();
   bool _isLoading = true;
+  bool _isNewUser = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initializeCoordinators();
+    _initializeScreen();
   }
 
   @override
   void dispose() {
-    _lifecycleCoordinator.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -60,64 +65,129 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     if (state == AppLifecycleState.resumed) {
       if (kDebugMode) {
-        debugPrint('🔄 [HomeScreen] 앱 포그라운드 복귀 - 반응형 아키텍처로 자동 업데이트됨');
+        debugPrint('🔄 [HomeScreen] 앱 포그라운드 복귀 - 구독 상태 새로고침');
       }
-      // 🎯 반응형 아키텍처에서는 자동으로 업데이트됨
+      _refreshSubscriptionState();
     }
   }
 
-  /// Coordinators 초기화
-  void _initializeCoordinators() {
-    _lifecycleCoordinator = HomeLifecycleCoordinator();
-    _uiCoordinator = HomeUICoordinator();
-    
-    // 생명주기 coordinator 초기화 (기기별 트라이얼 이력으로 환영 모달 표시 여부 결정)
-    _lifecycleCoordinator.initialize(
-      onSubscriptionStateChanged: _onSubscriptionStateChanged,
-      onUserChanged: _onUserChanged,
-      onUserStatusDetermined: (isNewUser) {
+  /// 화면 초기화
+  Future<void> _initializeScreen() async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🔄 [HomeScreen] 화면 초기화 시작');
+      }
+      
+      // 🎯 신규/기존 사용자 확인
+      await _determineUserStatus();
+      
+      // 🎯 기존 사용자인 경우 구독 상태 로드
+      if (!_isNewUser) {
+        await _loadSubscriptionState();
+      }
+      
+      if (kDebugMode) {
+        debugPrint('✅ [HomeScreen] 화면 초기화 완료');
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeScreen] 화면 초기화 실패: $e');
+      }
+      _setDefaultState();
+    }
+  }
+
+  /// 🎯 사용자 상태 결정 - 환영 모달 본 적 있는지 확인
+  Future<void> _determineUserStatus() async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser!;
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
+      
+      bool hasSeenWelcomeModal = false;
+      if (userDoc.exists) {
+        final userData = userDoc.data() as Map<String, dynamic>;
+        hasSeenWelcomeModal = userData['hasSeenWelcomeModal'] as bool? ?? false;
+      }
+      
+      _isNewUser = !hasSeenWelcomeModal;
+      
         if (kDebugMode) {
-          debugPrint('[HomeScreen] 사용자 상태 결정: ${isNewUser ? "신규" : "기존"}');
+        debugPrint('🔍 [HomeScreen] 사용자 상태 결정: ${_isNewUser ? "신규" : "기존"}');
         }
         
         // HomeViewModel에 신규 사용자 플래그 설정
         WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
           final viewModel = Provider.of<HomeViewModel>(context, listen: false);
-          viewModel.setNewUser(isNewUser);
+          viewModel.setNewUser(_isNewUser);
+        }
         });
         
         // 신규 사용자인 경우 환영 모달 표시
-        if (isNewUser) {
+      if (_isNewUser) {
+        _setDefaultState();
+        _showWelcomeModal();
+      }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeScreen] 사용자 상태 결정 실패: $e');
+      }
+      _isNewUser = true;
+      _setDefaultState();
           _showWelcomeModal();
         }
-      },
-    );
   }
 
-  /// 구독 상태 변경 콜백
-  void _onSubscriptionStateChanged(SubscriptionState subscriptionState) {
+  /// 🎯 구독 상태 로드
+  Future<void> _loadSubscriptionState() async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🔍 [HomeScreen] 구독 상태 로드 시작');
+      }
+      
+      final subscriptionState = await _subscriptionManager.getSubscriptionStateWithBanners();
+      
     if (mounted) {
       setState(() {
         _subscriptionState = subscriptionState;
         _isLoading = false;
       });
+      }
       
       if (kDebugMode) {
-        debugPrint('[HomeScreen] 구독 상태 업데이트: ${subscriptionState.statusMessage}');
+        debugPrint('✅ [HomeScreen] 구독 상태 로드 완료');
+        debugPrint('   권한: ${subscriptionState.entitlement.value}');
+        debugPrint('   활성 배너: ${subscriptionState.activeBanners.length}개');
+        debugPrint('   배너 타입: ${subscriptionState.activeBanners.map((e) => e.name).toList()}');
       }
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeScreen] 구독 상태 로드 실패: $e');
+      }
+      _setDefaultState();
     }
   }
 
-  /// 사용자 변경 콜백
-  void _onUserChanged() {
+  /// 🎯 구독 상태 새로고침
+  Future<void> _refreshSubscriptionState() async {
+    if (_isNewUser) return; // 신규 사용자는 새로고침 안함
+    
+    await _loadSubscriptionState();
+  }
+
+  /// 🎯 기본 상태 설정
+  void _setDefaultState() {
     if (mounted) {
       setState(() {
-        _isLoading = true;
+        _subscriptionState = SubscriptionState.defaultState();
+        _isLoading = false;
       });
-      
-      if (kDebugMode) {
-        debugPrint('[HomeScreen] 사용자 변경 감지 - 상태 초기화');
-      }
     }
   }
 
@@ -125,21 +195,72 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _showWelcomeModal() {
     _uiCoordinator.showWelcomeModalAfterDelay(
       context,
-      onComplete: (bool userChoseTrial) {
+      onComplete: (bool userChoseTrial) async {
         if (kDebugMode) {
           debugPrint('[HomeScreen] 환영 모달 완료 - 구매 선택: $userChoseTrial');
         }
         
-        // 🚨 HomeViewModel의 신규 사용자 플래그도 해제
+        // 🚨 HomeViewModel의 신규 사용자 플래그 해제
         final viewModel = Provider.of<HomeViewModel>(context, listen: false);
         viewModel.setNewUser(false);
         
-        // 새로운 handleWelcomeModalCompleted 호출
-        _lifecycleCoordinator.handleWelcomeModalCompleted(
-          userChoseTrial: userChoseTrial,
-        );
+        // 🎯 환영 모달 완료 처리
+        await _handleWelcomeModalCompleted(userChoseTrial: userChoseTrial);
       },
     );
+  }
+
+  /// 🎯 환영 모달 완료 후 처리
+  Future<void> _handleWelcomeModalCompleted({required bool userChoseTrial}) async {
+    try {
+      if (kDebugMode) {
+        debugPrint('🎉 [HomeScreen] 환영 모달 완료 처리');
+        debugPrint('   무료체험 선택: $userChoseTrial');
+      }
+
+      // 1. 환영 모달 본 것으로 표시
+      final currentUser = FirebaseAuth.instance.currentUser!;
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .set({
+        'hasSeenWelcomeModal': true,
+        'welcomeModalSeenAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // 2. 온보딩 완료 상태 저장
+      final preferences = await _userPreferencesService.getPreferences();
+      await _userPreferencesService.savePreferences(
+        preferences.copyWith(onboardingCompleted: true),
+      );
+
+      // 3. 무료 플랜 선택 시 Firestore 상태 설정
+      if (!userChoseTrial) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .set({
+          'planStatus': 'free',
+          'subscriptionStatus': 'cancelled',
+          'entitlement': 'free',
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      // 4. 구독 상태 확인 (배너 표시용)
+      if (userChoseTrial) {
+        // 구매 완료를 기다린 후 확인
+        await Future.delayed(const Duration(milliseconds: 1500));
+      }
+      
+      await _loadSubscriptionState();
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeScreen] 환영 모달 완료 처리 실패: $e');
+      }
+      _setDefaultState();
+    }
   }
 
   /// 업그레이드 모달 표시
@@ -152,20 +273,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _uiCoordinator.dismissBanner(
       bannerType,
       onBannersUpdated: (updatedBanners) {
-        // 🎯 반응형 아키텍처에서는 자동으로 업데이트됨
-        if (kDebugMode) {
-          debugPrint('🎯 [HomeScreen] 배너 닫기 완료 - 자동 업데이트됨');
-        }
+        // 배너 상태 새로고침
+        _refreshSubscriptionState();
       },
     );
   }
 
-  /// 수동 새로고침 (반응형 아키텍처에서는 불필요)
+  /// 수동 새로고침
   void _onRefresh() {
-    if (kDebugMode) {
-      debugPrint('🔄 [HomeScreen] 새로고침 요청 - 반응형 아키텍처로 자동 업데이트됨');
-    }
-    // 🎯 반응형 아키텍처에서는 자동으로 업데이트됨
+    _refreshSubscriptionState();
   }
 
   @override

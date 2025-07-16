@@ -1,13 +1,12 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/models/processed_text.dart';
 
-/// 텍스트 모드별 분리 서비스 (클라이언트 측 처리)
+/// 텍스트 모드별 분리 서비스 (노트 생성 시 전용)
 /// 
 /// 사용 시나리오:
 /// 1. 노트 생성 시: segment 모드만 클라이언트에서 처리 (paragraph는 LLM에서 처리)
-/// 2. 설정 변경 후: 사용자가 텍스트 모드를 변경한 후 기존 노트를 새로운 모드로 재처리할 때
 /// 
-/// 주의: 일반적인 노트 로딩에서는 이미 처리된 캐시 데이터를 사용하므로 이 서비스를 사용하지 않음
+/// 주의: 설정 변경 시 기존 노트 재처리는 이루어지지 않음
 /// 
 class TextModeSeparationService {
   // 싱글톤 패턴
@@ -24,67 +23,16 @@ class TextModeSeparationService {
   static final _commaRegex = RegExp(_commaPattern);
   static final _quotationRegex = RegExp(_quotationPattern);
 
-  /// 모드에 따라 텍스트 분리 (클라이언트 측)
-  /// 
-  /// [context] 사용 컨텍스트:
-  /// - 'creation': 노트 생성 시 (segment 모드만 사용)
-  /// - 'settings': 설정 변경 후 재처리 시 (모든 모드 사용)
-  List<String> separateByMode(String text, TextProcessingMode mode, {String context = 'loading'}) {
-    if (text.isEmpty) {
+  /// 노트 생성 시 사용 (segment 모드만)
+  List<String> separateForCreation(String text, TextProcessingMode mode) {
+    if (mode == TextProcessingMode.paragraph) {
       if (kDebugMode) {
-        debugPrint('TextModeSeparationService: 빈 텍스트 입력');
+        debugPrint('⚠️ 노트 생성 시 paragraph 모드는 서버에서 처리됩니다.');
       }
-      return [];
+      return [text]; // 서버에서 처리할 전체 텍스트 반환
     }
-
-    if (kDebugMode) {
-      debugPrint('TextModeSeparationService: 텍스트 분리 시작 - 모드: $mode, 컨텍스트: $context, 길이: ${text.length}자');
-    }
-
-    List<String> result = [];
     
-    switch (mode) {
-      case TextProcessingMode.segment:
-        result = splitIntoSentences(text);
-        if (kDebugMode) {
-          debugPrint('📝 문장 단위 분리 완료: ${result.length}개 문장');
-        }
-        break;
-      case TextProcessingMode.paragraph:
-        // 노트 생성 시에는 서버에서 처리하므로 경고 표시
-        if (context == 'creation') {
-          if (kDebugMode) {
-            debugPrint('⚠️ 노트 생성 시 paragraph 모드는 서버에서 처리됩니다. 클라이언트 처리를 건너뜁니다.');
-          }
-          result = [text]; // 전체 텍스트를 그대로 반환
-        } else {
-          result = splitIntoParagraphs(text);
-          if (kDebugMode) {
-            debugPrint('📄 문단 단위 분리 완료: ${result.length}개 문단 (설정 변경 후 재처리)');
-          }
-        }
-        break;
-    }
-
-    // 분리 실패시 전체 텍스트를 하나의 단위로 처리
-    if (result.isEmpty) {
-      if (kDebugMode) {
-        debugPrint('⚠️ 분리 실패, 전체 텍스트를 하나의 단위로 처리');
-      }
-      result = [text];
-    }
-
-    if (kDebugMode) {
-      debugPrint('✅ 텍스트 분리 완료: ${result.length}개 단위');
-      for (int i = 0; i < result.length && i < 3; i++) {
-        final preview = result[i].length > 30 
-            ? '${result[i].substring(0, 30)}...' 
-            : result[i];
-        debugPrint('  ${i+1}: "$preview"');
-      }
-    }
-
-    return result;
+    return splitIntoSentences(text);
   }
 
   /// 문장 단위로 텍스트 분리 (순차적 4단계 처리)
@@ -613,99 +561,22 @@ class TextModeSeparationService {
     return text.length - 1;
   }
 
-
-
-  /// 문단 단위로 텍스트 분리 (설정 변경 후 재처리 시 사용)
-  /// 
-  /// 노트 생성 시에는 LLM에서 의미 단위로 분리하므로 이 메서드는 사용하지 않음
-  /// 사용자가 설정에서 텍스트 모드를 변경한 후 기존 노트를 재처리할 때만 사용
-  List<String> splitIntoParagraphs(String text) {
-    if (text.isEmpty) return [];
-
-    if (kDebugMode) {
-      debugPrint('문단 단위 분리 시작: ${text.length}자');
-    }
-
-    // 방법 1: 연속된 줄바꿈으로 문단 구분
-    List<String> paragraphs = text.split(RegExp(r'\n\s*\n'))
-        .map((p) => p.trim())
-        .where((p) => p.isNotEmpty)
-        .toList();
-
-    // 방법 1이 실패한 경우 방법 2: 단일 줄바꿈으로 분리
-    if (paragraphs.length <= 1) {
-      paragraphs = text.split('\n')
-          .map((p) => p.trim())
-          .where((p) => p.isNotEmpty)
-          .toList();
-    }
-
-    // 방법 2도 실패한 경우 방법 3: 문장 구분자 기반으로 긴 단위로 분리
-    if (paragraphs.length <= 1) {
-      final sentences = splitIntoSentences(text);
-      
-      // 문장들을 적절한 크기의 문단으로 그룹화 (3-5문장씩)
-      paragraphs = [];
-      const int sentencesPerParagraph = 3;
-      
-      for (int i = 0; i < sentences.length; i += sentencesPerParagraph) {
-        final endIndex = (i + sentencesPerParagraph < sentences.length) 
-            ? i + sentencesPerParagraph 
-            : sentences.length;
-        
-        final paragraphSentences = sentences.sublist(i, endIndex);
-        final paragraph = paragraphSentences.join(' ');
-        
-        if (paragraph.trim().isNotEmpty) {
-          paragraphs.add(paragraph.trim());
-        }
-      }
-    }
-
-    if (kDebugMode) {
-      debugPrint('문단 분리 결과: ${paragraphs.length}개 문단');
-    }
-
-    return paragraphs;
-  }
-
-  /// 노트 생성 시 사용 (segment 모드만)
-  List<String> separateForCreation(String text, TextProcessingMode mode) {
-    if (mode == TextProcessingMode.paragraph) {
-      if (kDebugMode) {
-        debugPrint('⚠️ 노트 생성 시 paragraph 모드는 서버에서 처리됩니다.');
-      }
-      return [text]; // 서버에서 처리할 전체 텍스트 반환
-    }
-    
-    return separateByMode(text, mode, context: 'creation');
-  }
-  
-  /// 설정 변경 후 재처리 시 사용 (모든 모드)
-  List<String> separateForSettingsChange(String text, TextProcessingMode mode) {
-    return separateByMode(text, mode, context: 'settings');
-  }
-
   /// 텍스트 분리 미리보기 (디버깅용)
   Map<String, dynamic> previewSeparation(String text) {
     if (text.isEmpty) {
       return {
         'sentences': [],
-        'paragraphs': [],
         'summary': '빈 텍스트'
       };
     }
 
     final sentences = splitIntoSentences(text);
-    final paragraphs = splitIntoParagraphs(text);
 
     return {
       'sentences': sentences,
-      'paragraphs': paragraphs,
       'summary': {
         'originalLength': text.length,
         'sentenceCount': sentences.length,
-        'paragraphCount': paragraphs.length,
       }
     };
   }

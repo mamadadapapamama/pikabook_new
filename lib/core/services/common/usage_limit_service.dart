@@ -7,26 +7,18 @@ import 'dart:convert';
 import 'dart:async';
 import '../../constants/plan_constants.dart';
 import '../subscription/unified_subscription_manager.dart';
-import '../../events/subscription_events.dart';
 import '../../models/subscription_state.dart';
 
-/// 🔄 사용량 제한 관리 서비스 (반응형 버전)
+/// 🔄 사용량 제한 관리 서비스 (단순화된 버전)
 /// 
-/// 🎯 **핵심 책임 (Reactive Architecture):**
-/// - UnifiedSubscriptionManager 구독 이벤트 구독
-/// - 구독 상태 변경에 반응하여 사용량 제한 자동 재계산
+/// 🎯 **핵심 책임:**
 /// - 사용량 데이터 Firebase 관리
-/// - 실시간 한도 상태 스트림 제공
+/// - 제한 상태 확인 및 스트림 제공
+/// - 캐시 기반 성능 최적화
 /// 
-/// 🚫 **더 이상 담당하지 않음:**
-/// - ❌ 수동 구독 상태 조회 → UnifiedSubscriptionManager 이벤트 구독
-/// - ❌ 수동 플랜 타입 확인 → 이벤트에서 자동 제공
-/// 
-/// 🔄 **이벤트 기반 흐름:**
+/// 🔄 **사용 흐름:**
 /// ```
-/// UnifiedSubscriptionManager → SubscriptionEvent → UsageLimitService 
-///                                                ↓
-///                               limitStatusStream → HomeViewModel
+/// App 시작 → checkInitialLimitStatus() → 실시간 스트림 → UI 업데이트
 /// ```
 
 class UsageLimitService {
@@ -38,15 +30,9 @@ class UsageLimitService {
   static final UsageLimitService _instance = UsageLimitService._internal();
   factory UsageLimitService() => _instance;
   
-  UsageLimitService._internal() {
-    _initializeReactiveSubscription();
-  }
+  UsageLimitService._internal();
   
-  // 🎯 반응형 구독 관리
-  final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
-  StreamSubscription<SubscriptionEvent>? _subscriptionEventSubscription;
-  
-  // 🎯 캐시 메커니즘 추가
+  // 🎯 캐시 메커니즘
   Map<String, int>? _cachedUsageData;
   Map<String, int>? _cachedLimitsData;
   DateTime? _lastUsageUpdate;
@@ -61,118 +47,6 @@ class UsageLimitService {
   
   // 현재 사용자 ID 가져오기
   String? get _currentUserId => _auth.currentUser?.uid;
-  
-  /// 🎯 반응형 구독 이벤트 초기화
-  void _initializeReactiveSubscription() {
-    if (kDebugMode) {
-      debugPrint('⚠️ [UsageLimitService] 반응형 구독 이벤트 기능 제거됨 - 단순화된 구조');
-    }
-    
-    // 이벤트 스트림이 더 이상 존재하지 않으므로 구독 제거
-    // UnifiedSubscriptionManager의 구독 이벤트 스트림이 제거됨
-  }
-  
-  /// 🎯 구독 이벤트 처리 (반응형 핵심)
-  Future<void> _handleSubscriptionEvent(SubscriptionEvent event) async {
-    if (kDebugMode) {
-      debugPrint('📡 [UsageLimitService] 구독 이벤트 수신: ${event.type}');
-      debugPrint('   컨텍스트: ${event.context}');
-      debugPrint('   권한: ${event.state.entitlement.value}');
-    }
-    
-    try {
-      // 🎯 구독 상태 변경시 사용량 제한 자동 재계산
-      await _recalculateLimitsFromSubscriptionState(event.state);
-      
-      // 🎯 현재 사용량과 새로운 제한으로 한도 상태 체크
-      final limitStatus = await _calculateCurrentLimitStatus();
-      
-      // 🎯 실시간 스트림으로 업데이트 발행
-      _notifyLimitStatusChange(limitStatus);
-      
-      if (kDebugMode) {
-        debugPrint('✅ [UsageLimitService] 구독 이벤트 처리 완료: $limitStatus');
-      }
-      
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [UsageLimitService] 구독 이벤트 처리 실패: $e');
-      }
-    }
-  }
-  
-  /// 🎯 구독 상태로부터 사용량 제한 재계산
-  Future<void> _recalculateLimitsFromSubscriptionState(SubscriptionState state) async {
-    final planType = state.canUsePremiumFeatures 
-        ? PlanConstants.PLAN_PREMIUM 
-        : PlanConstants.PLAN_FREE;
-    
-    if (kDebugMode) {
-      debugPrint('🔄 [UsageLimitService] 플랜 타입 결정: $planType (권한: ${state.entitlement.value})');
-    }
-    
-    // 🎯 캐시 무효화 후 새 제한으로 업데이트
-    _cachedLimitsData = null;
-    _lastLimitsUpdate = null;
-    
-    // 새로운 제한 로드 (플랜 타입 직접 제공)
-    await _loadLimitsFromPlanType(planType);
-  }
-  
-  /// 🎯 플랜 타입으로부터 제한 로드 (이벤트 기반)
-  Future<void> _loadLimitsFromPlanType(String planType) async {
-    try {
-      final limits = PlanConstants.PLAN_LIMITS[planType];
-      if (limits != null) {
-        _cachedLimitsData = Map<String, int>.from(limits);
-        _lastLimitsUpdate = DateTime.now();
-        
-        if (kDebugMode) {
-          debugPrint('✅ [UsageLimitService] 플랜 기반 제한 로드: $planType -> $_cachedLimitsData');
-        }
-      } else {
-        _cachedLimitsData = _getDefaultLimits();
-        _lastLimitsUpdate = DateTime.now();
-        
-        if (kDebugMode) {
-          debugPrint('⚠️ [UsageLimitService] 플랜 정보 없음, 기본 제한 사용: $_cachedLimitsData');
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [UsageLimitService] 플랜 기반 제한 로드 실패: $e');
-      }
-      _cachedLimitsData = _getDefaultLimits();
-      _lastLimitsUpdate = DateTime.now();
-    }
-  }
-  
-  /// 🎯 현재 사용량 상태로 한도 도달 여부 계산
-  Future<Map<String, bool>> _calculateCurrentLimitStatus() async {
-    try {
-      final usage = await _loadUsageDataFromFirebase();
-      final limits = _cachedLimitsData ?? _getDefaultLimits();
-      
-      final limitStatus = {
-        'ocrLimitReached': (usage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
-        'ttsLimitReached': (usage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0),
-      };
-      
-      if (kDebugMode) {
-        debugPrint('🔍 [UsageLimitService] 현재 한도 상태 계산:');
-        debugPrint('   OCR: ${usage['ocrPages']}/${limits['ocrPages']} = ${limitStatus['ocrLimitReached']}');
-        debugPrint('   TTS: ${usage['ttsRequests']}/${limits['ttsRequests']} = ${limitStatus['ttsLimitReached']}');
-      }
-      
-      return limitStatus;
-      
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [UsageLimitService] 한도 상태 계산 실패: $e');
-      }
-      return {'ocrLimitReached': false, 'ttsLimitReached': false};
-    }
-  }
 
   /// 캐시 무효화 (사용자 변경 시 또는 명시적 호출)
   void _invalidateCache() {
@@ -218,8 +92,34 @@ class UsageLimitService {
            DateTime.now().difference(_lastLimitsUpdate!).abs() < _cacheValidDuration;
   }
   
+  /// 현재 사용량 상태로 한도 도달 여부 계산
+  Future<Map<String, bool>> _calculateCurrentLimitStatus() async {
+    try {
+      final usage = await _loadUsageDataFromFirebase();
+      final limits = await _loadLimitsFromFirebase();
+      
+      final limitStatus = {
+        'ocrLimitReached': (usage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
+        'ttsLimitReached': (usage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0),
+      };
+      
+      if (kDebugMode) {
+        debugPrint('🔍 [UsageLimitService] 현재 한도 상태 계산:');
+        debugPrint('   OCR: ${usage['ocrPages']}/${limits['ocrPages']} = ${limitStatus['ocrLimitReached']}');
+        debugPrint('   TTS: ${usage['ttsRequests']}/${limits['ttsRequests']} = ${limitStatus['ttsLimitReached']}');
+      }
+      
+      return limitStatus;
+      
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [UsageLimitService] 한도 상태 계산 실패: $e');
+      }
+      return {'ocrLimitReached': false, 'ttsLimitReached': false};
+    }
+  }
+
   /// 1. 앱 시작시 제한 확인 (캐시 사용으로 최적화)
-  /// 🎯 더 이상 수동 구독 상태 조회하지 않음 - 이벤트 기반으로 자동 업데이트
   Future<Map<String, bool>> checkInitialLimitStatus({bool forceRefresh = false}) async {
     try {
       if (kDebugMode) {
@@ -237,7 +137,7 @@ class UsageLimitService {
         };
       }
       
-      // 🎯 현재 상태로 한도 계산 (이벤트 기반으로 이미 최신 상태)
+      // 현재 상태로 한도 계산
       return await _calculateCurrentLimitStatus();
       
     } catch (e) {
@@ -325,7 +225,6 @@ class UsageLimitService {
   /// 서비스 정리 (스트림 컨트롤러 닫기)
   void dispose() {
     _limitStatusController.close();
-    _subscriptionEventSubscription?.cancel(); // 구독 이벤트 스트림 구독 취소
     if (kDebugMode) {
       debugPrint('🗑️ [UsageLimitService] 서비스 정리 완료');
     }

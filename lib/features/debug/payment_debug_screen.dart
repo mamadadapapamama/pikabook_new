@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/services/payment/in_app_purchase_service.dart';
 import '../../core/services/subscription/unified_subscription_manager.dart';
+import '../../core/services/notification/notification_service.dart';
 import '../../core/theme/tokens/color_tokens.dart';
 
 class PaymentDebugScreen extends StatefulWidget {
@@ -231,6 +232,69 @@ class _PaymentDebugScreenState extends State<PaymentDebugScreen> {
     }
   }
 
+  /// 🔹 알림 시스템 상태 확인
+  Future<void> _checkNotificationStatus() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      _addLog('🔔 알림 시스템 상태 확인 중...');
+      
+      final purchaseService = InAppPurchaseService();
+      await purchaseService.checkNotificationSystemStatus();
+      
+      _addLog('✅ 알림 시스템 상태 확인 완료 (로그 참조)');
+      
+    } catch (e) {
+      _addLog('❌ 알림 시스템 상태 확인 실패: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  /// 🔹 알림 스케줄링 테스트
+  Future<void> _testNotificationScheduling() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      _addLog('📅 알림 스케줄링 테스트 중...');
+      
+      final purchaseService = InAppPurchaseService();
+      await purchaseService.initialize();
+      
+      // 현재 구독 상태 확인
+      final subscriptionManager = UnifiedSubscriptionManager();
+      final entitlements = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
+      
+      _addLog('📊 현재 구독 상태: ${entitlements['entitlement']}');
+      
+      // 트라이얼 만료일 확인
+      final expirationDateStr = entitlements['expirationDate'] as String?;
+      if (expirationDateStr != null) {
+        final expirationDate = DateTime.parse(expirationDateStr);
+        _addLog('📅 만료일: ${expirationDate.toString()}');
+        
+        // 알림 스케줄링 테스트
+        await purchaseService.scheduleNotificationsIfNeeded(InAppPurchaseService.premiumMonthlyId);
+        _addLog('✅ 알림 스케줄링 테스트 완료');
+      } else {
+        _addLog('⚠️ 만료일 정보 없음 - 트라이얼 상태가 아닙니다');
+        _addLog('💡 7일 무료체험 구매 후 다시 테스트해보세요');
+        
+        // 즉시 테스트 알림 표시
+        _addLog('🧪 즉시 테스트 알림 표시 시도...');
+        // NotificationService를 직접 사용
+        final notificationService = NotificationService();
+        await notificationService.showTestNotification();
+        _addLog('✅ 즉시 테스트 알림 표시 완료');
+      }
+      
+    } catch (e) {
+      _addLog('❌ 알림 스케줄링 테스트 실패: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   /// 🔹 전체 플로우 테스트
   Future<void> _runFullTest() async {
     _clearLogs();
@@ -325,6 +389,24 @@ class _PaymentDebugScreenState extends State<PaymentDebugScreen> {
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _forceSyncWithServer,
                         child: const Text('6. 서버 동기화'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _checkNotificationStatus,
+                        child: const Text('🔔 알림 확인'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _testNotificationScheduling,
+                        child: const Text('📅 알림 테스트'),
                       ),
                     ),
                   ],

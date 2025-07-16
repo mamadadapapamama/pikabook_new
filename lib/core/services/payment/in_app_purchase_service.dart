@@ -32,7 +32,6 @@ class InAppPurchaseService {
   // 🎯 중복 처리 방지
   final Set<String> _processedPurchases = {};
   bool _isPurchaseInProgress = false;
-  bool _isDelayedRefreshScheduled = false;
   
   // 🎯 구매 성공 콜백
   Function()? _onPurchaseSuccess;
@@ -285,7 +284,7 @@ class InAppPurchaseService {
       await _updateUIAfterPurchase(purchaseDetails.productID);
       
       // 🎯 알림 설정 (중복 방지 적용)
-      await _scheduleNotificationsIfNeeded(purchaseDetails.productID);
+      await scheduleNotificationsIfNeeded(purchaseDetails.productID);
       
       // 🎯 성공 콜백 호출
       _onPurchaseSuccess?.call();
@@ -388,7 +387,6 @@ class InAppPurchaseService {
     _processedPurchases.clear();
     _scheduledNotifications.clear(); // 알림 스케줄링 중복 방지 세트 초기화
     _isPurchaseInProgress = false;
-    _isDelayedRefreshScheduled = false; // 지연된 갱신 플래그 초기화
     
     if (kDebugMode) {
       print('✅ [InAppPurchaseService] 구매 캐시 초기화 완료');
@@ -402,7 +400,6 @@ class InAppPurchaseService {
       _processedPurchases.clear();
       _scheduledNotifications.clear(); // 알림 스케줄링 중복 방지 세트 초기화
       _isPurchaseInProgress = false;
-      _isDelayedRefreshScheduled = false; // 지연된 갱신 플래그 초기화
     }
   }
   
@@ -428,15 +425,15 @@ class InAppPurchaseService {
   Future<void> _notifySubscriptionManager() async {
     try {
       final subscriptionManager = UnifiedSubscriptionManager();
-      await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
+      final result = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
       
       if (kDebugMode) {
-        print('✅ UnifiedSubscriptionManager 상태 갱신 완료 (새로운 API)');
+        print('✅ UnifiedSubscriptionManager 상태 갱신 완료');
+        print('   구독 상태: ${result['entitlement']}');
       }
       
-      // 🎯 JWS 검증 방식이라도 Apple 서버 동기화 지연 대응
-      // 구매 완료 후 5초, 15초 후에 추가 확인
-      _scheduleDelayedRefresh(subscriptionManager);
+      // 🎯 JWS 검증 완료 시 추가 확인 불필요
+      // 구매 즉시 상태가 정확히 반영되므로 지연 확인 제거
       
     } catch (e) {
       if (kDebugMode) {
@@ -445,74 +442,7 @@ class InAppPurchaseService {
     }
   }
 
-  /// 🎯 지연된 구독 상태 갱신 (Apple API 동기화 지연 대응) - 최대 2회
-  void _scheduleDelayedRefresh(UnifiedSubscriptionManager subscriptionManager) {
-    if (_isDelayedRefreshScheduled) {
-      if (kDebugMode) {
-        print('⏭️ [InAppPurchase] 지연된 갱신이 이미 스케줄링됨, 건너뛰기');
-      }
-      return;
-    }
-    
-    _isDelayedRefreshScheduled = true;
-    
-    if (kDebugMode) {
-      print('🔄 [InAppPurchase] 지연된 구독 상태 갱신 스케줄링 (최대 2회)');
-    }
-    
-    // 5초 후 첫 번째 재확인
-    Future.delayed(const Duration(seconds: 5), () async {
-      try {
-        if (kDebugMode) {
-          print('🔄 [InAppPurchase] 5초 후 구독 상태 재확인 (1/2)');
-        }
-        final result = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
-        
-        if (result['entitlement'] != 'free') {
-          if (kDebugMode) {
-            print('✅ [InAppPurchase] 5초 후 구독 상태 확인됨: ${result['entitlement']}');
-          }
-          _isDelayedRefreshScheduled = false; // 성공시 플래그 해제
-          return; // 성공시 더 이상 확인하지 않음
-        }
-        
-        if (kDebugMode) {
-          print('⏳ [InAppPurchase] 5초 후에도 여전히 무료 상태');
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          print('❌ [InAppPurchase] 5초 후 구독 상태 재확인 실패: $e');
-        }
-      }
-    });
-    
-    // 15초 후 최종 재확인
-    Future.delayed(const Duration(seconds: 15), () async {
-      try {
-        if (kDebugMode) {
-          print('🔄 [InAppPurchase] 15초 후 최종 구독 상태 재확인 (2/2)');
-        }
-        final result = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
-        
-        if (result['entitlement'] != 'free') {
-          if (kDebugMode) {
-            print('✅ [InAppPurchase] 15초 후 구독 상태 확인됨: ${result['entitlement']}');
-          }
-        } else {
-          if (kDebugMode) {
-            print('⚠️ [InAppPurchase] 15초 후에도 구독 상태가 무료입니다.');
-            print('🔍 [InAppPurchase] Apple 서버 동기화 지연이 예상보다 길거나 서버 오류일 수 있습니다.');
-          }
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          print('❌ [InAppPurchase] 15초 후 최종 구독 상태 재확인 실패: $e');
-        }
-      } finally {
-        _isDelayedRefreshScheduled = false; // 최종 완료 후 플래그 해제
-      }
-    });
-  }
+
 
   /// 🎯 UI 업데이트
   Future<void> _updateUIAfterPurchase(String productId) async {
@@ -528,8 +458,8 @@ class InAppPurchaseService {
     _isTrialContext = false;
   }
 
-  /// 🎯 알림 설정
-  Future<void> _scheduleNotificationsIfNeeded(String productId) async {
+  /// 🎯 알림 설정 (실제 만료일 기반)
+  Future<void> scheduleNotificationsIfNeeded(String productId) async {
     if (productId == premiumMonthlyId) {
       // 🎯 중복 알림 스케줄링 방지
       final notificationKey = '${productId}_${DateTime.now().millisecondsSinceEpoch ~/ 60000}'; // 분 단위로 중복 체크
@@ -544,9 +474,31 @@ class InAppPurchaseService {
       _scheduledNotifications.add(notificationKey);
       
       try {
-        await _notificationService.scheduleTrialEndNotifications(DateTime.now());
+        // 🎯 서버에서 실제 트라이얼 만료일 가져오기
+        final subscriptionManager = UnifiedSubscriptionManager();
+        final entitlements = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
+        
+        DateTime? trialEndDate;
+        final expirationDateStr = entitlements['expirationDate'] as String?;
+        
+        if (expirationDateStr != null) {
+          try {
+            trialEndDate = DateTime.parse(expirationDateStr);
+          } catch (e) {
+            if (kDebugMode) {
+              print('⚠️ 만료일 파싱 실패: $expirationDateStr');
+            }
+          }
+        }
+        
+        await _notificationService.scheduleTrialEndNotifications(
+          DateTime.now(),
+          trialEndDate: trialEndDate,
+        );
+        
         if (kDebugMode) {
           print('✅ 구독 알림 스케줄링 완료');
+          print('   트라이얼 만료일: ${trialEndDate?.toString() ?? "기본값 사용"}');
         }
       } catch (e) {
         if (kDebugMode) {
@@ -837,6 +789,20 @@ class InAppPurchaseService {
         'message': '구매 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.',
         'shouldRetryLater': true,
       };
+    }
+  }
+
+  /// 🔍 알림 시스템 상태 확인 (디버깅용)
+  Future<void> checkNotificationSystemStatus() async {
+    if (kDebugMode) {
+      print('\n🔍 [InAppPurchase] 알림 시스템 상태 확인:');
+      
+      try {
+        await _notificationService.checkNotificationSystemStatus();
+        print('✅ [InAppPurchase] 알림 시스템 상태 확인 완료');
+      } catch (e) {
+        print('❌ [InAppPurchase] 알림 시스템 상태 확인 실패: $e');
+      }
     }
   }
 

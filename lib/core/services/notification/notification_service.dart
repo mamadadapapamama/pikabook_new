@@ -132,8 +132,8 @@ class NotificationService {
     }
   }
 
-  /// 무료체험 D-1 알림 스케줄링 (간단 버전)
-  Future<void> scheduleTrialEndNotifications(DateTime trialStartDate) async {
+  /// 무료체험 D-1 알림 스케줄링 (실제 만료일 기반)
+  Future<void> scheduleTrialEndNotifications(DateTime trialStartDate, {DateTime? trialEndDate}) async {
     if (!_isInitialized) {
       await initialize();
     }
@@ -142,27 +142,53 @@ class NotificationService {
       // 기존 체험 관련 알림 취소
       await cancelTrialNotifications();
 
-      // 🎯 간단하게 D-1 (6일 후) 오전 10시에만 알림
+      // 🎯 실제 트라이얼 만료일 계산
+      DateTime actualTrialEndDate;
+      if (trialEndDate != null) {
+        actualTrialEndDate = trialEndDate;
+      } else {
+        // 기본값: 7일 후 (실제 환경)
+        actualTrialEndDate = trialStartDate.add(const Duration(days: 7));
+      }
+
+      // 🎯 D-1 알림 시간 = 만료일 - 1일 + 오전 10시
       final dMinusOneAt10AM = DateTime(
-        trialStartDate.year,
-        trialStartDate.month,
-        trialStartDate.day + 6, // 6일 후 (D-1)
+        actualTrialEndDate.year,
+        actualTrialEndDate.month,
+        actualTrialEndDate.day - 1, // 만료일 - 1일
         10, // 오전 10시
         0,
       );
 
+      // 🎯 샌드박스 단기 테스트 대응 (1시간 이내 트라이얼)
+      DateTime actualNotificationTime = dMinusOneAt10AM;
+      final trialDuration = actualTrialEndDate.difference(trialStartDate);
+      
+      if (trialDuration.inHours <= 1) {
+        // 1시간 이내 트라이얼: 만료 10분 전 알림
+        actualNotificationTime = actualTrialEndDate.subtract(const Duration(minutes: 10));
+      } else if (trialDuration.inHours <= 6) {
+        // 6시간 이내 트라이얼: 만료 1시간 전 알림
+        actualNotificationTime = actualTrialEndDate.subtract(const Duration(hours: 1));
+      } else if (trialDuration.inDays < 2) {
+        // 2일 이내 트라이얼: 만료 4시간 전 알림
+        actualNotificationTime = actualTrialEndDate.subtract(const Duration(hours: 4));
+      }
+
       await _scheduleNotification(
         id: 1001,
-        title: 'Pikabook 프리미엄 무료체험 내일 종료',
+        title: 'Pikabook 프리미엄 무료체험 곧 종료',
         body: '무료 체험이 곧 종료되고, 유료 구독으로 전환될 예정입니다.',
-        scheduledDate: dMinusOneAt10AM,
-        payload: 'trial_ending_tomorrow',
+        scheduledDate: actualNotificationTime,
+        payload: 'trial_ending_soon',
       );
 
       if (kDebugMode) {
         debugPrint('✅ [Notification] D-1 알림 스케줄링 완료');
         debugPrint('   체험 시작: ${trialStartDate.toString()}');
-        debugPrint('   D-1 알림: ${dMinusOneAt10AM.toString()}');
+        debugPrint('   체험 종료: ${actualTrialEndDate.toString()}');
+        debugPrint('   체험 기간: ${trialDuration.inDays}일 ${trialDuration.inHours % 24}시간');
+        debugPrint('   알림 시간: ${actualNotificationTime.toString()}');
         
         // 🎯 스케줄링 결과 확인
         final pendingAfterScheduling = await getPendingNotifications();
