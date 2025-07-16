@@ -118,7 +118,7 @@ class UsageLimitService {
       return {'ocrLimitReached': false, 'ttsLimitReached': false};
     }
   }
-
+  
   /// 1. 앱 시작시 제한 확인 (캐시 사용으로 최적화)
   Future<Map<String, bool>> checkInitialLimitStatus({bool forceRefresh = false}) async {
     try {

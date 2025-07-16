@@ -7,9 +7,14 @@ import '../../models/subscription_state.dart';
 /// 🎯 구독 상태 관리 저장소 (Apple 2025 Best Practice)
 /// 
 /// **최적화된 성능:**
-/// - 5분 캐시로 빠른 응답
+/// - 동적 캐시 시간 (구독 상태별 최적화)
 /// - 서버 측 10분 캐시 + App Store Server API 조합
 /// - 웹훅 기반 실시간 업데이트
+/// 
+/// **캐시 전략:**
+/// - 활성 구독: 1시간 캐시 (안정적인 상태)
+/// - 문제있는 구독: 10분 캐시 (상태 변경 가능성)
+/// - 무료 플랜: 30분 캐시 (중간값)
 /// 
 /// **핵심 기능:**
 /// - 서버에서 구독 상태 조회 (캐시 우선)
@@ -24,7 +29,11 @@ class SubscriptionRepository {
   // 🎯 캐시 관리
   Map<String, dynamic>? _cachedEntitlements;
   DateTime? _lastEntitlementCheck;
-  static const Duration _cacheValidDuration = Duration(minutes: 5);
+  
+  // 🎯 동적 캐시 시간 (구독 상태별)
+  static const Duration _activeCacheDuration = Duration(hours: 1);      // 활성 구독
+  static const Duration _problemCacheDuration = Duration(minutes: 10);  // 문제있는 구독
+  static const Duration _freeCacheDuration = Duration(hours: 1);     // 무료 플랜
   
   // 🎯 중복 요청 방지
   Future<Map<String, dynamic>>? _ongoingRequest;
@@ -75,11 +84,17 @@ class SubscriptionRepository {
     // 🎯 캐시 우선 사용
     if (!forceRefresh && _cachedEntitlements != null && _lastEntitlementCheck != null) {
       final cacheAge = DateTime.now().difference(_lastEntitlementCheck!);
-      if (cacheAge < _cacheValidDuration) {
+      final cacheDuration = _getCacheDuration();
+      
+      if (cacheAge < cacheDuration) {
         if (kDebugMode) {
-          debugPrint('📦 [SubscriptionRepository] 캐시된 권한 반환 (${cacheAge.inSeconds}초 전)');
+          debugPrint('📦 [SubscriptionRepository] 캐시된 권한 반환 (${cacheAge.inSeconds}초 전, 유효기간: ${cacheDuration.inMinutes}분)');
         }
         return _cachedEntitlements!;
+      } else {
+        if (kDebugMode) {
+          debugPrint('⏰ [SubscriptionRepository] 캐시 만료 (${cacheAge.inSeconds}초 전, 유효기간: ${cacheDuration.inMinutes}분)');
+        }
       }
     }
     
@@ -445,6 +460,64 @@ class SubscriptionRepository {
       // 실패시 기본 상태
       return SubscriptionState.defaultState();
     }
+  }
+
+  /// 🎯 캐시 유효 시간 결정 (구독 상태별 최적화)
+  Duration _getCacheDuration() {
+    if (_cachedEntitlements == null) {
+      // 캐시가 없으면 기본값 (무료 플랜)
+      return _freeCacheDuration;
+    }
+    
+    final entitlement = _cachedEntitlements!['entitlement'] as String? ?? 'free';
+    final subscriptionStatus = _cachedEntitlements!['subscriptionStatus'] as String? ?? 'cancelled';
+    
+    // 🎯 활성 구독 (안정적인 상태)
+    if ((entitlement == 'premium' || entitlement == 'trial') && subscriptionStatus == 'active') {
+      if (kDebugMode) {
+        debugPrint('⏰ [SubscriptionRepository] 활성 구독 캐시 (1시간)');
+      }
+      return _activeCacheDuration;
+    }
+    
+    // 🎯 문제있는 구독 (상태 변경 가능성 높음)
+    if (_isProblemSubscription(entitlement, subscriptionStatus)) {
+      if (kDebugMode) {
+        debugPrint('⏰ [SubscriptionRepository] 문제있는 구독 캐시 (10분)');
+      }
+      return _problemCacheDuration;
+    }
+    
+    // 🎯 무료 플랜 (중간값)
+    if (kDebugMode) {
+      debugPrint('⏰ [SubscriptionRepository] 무료 플랜 캐시 (30분)');
+    }
+    return _freeCacheDuration;
+  }
+
+  /// 🎯 문제있는 구독 상태 판단
+  bool _isProblemSubscription(String entitlement, String subscriptionStatus) {
+    // 만료된 구독
+    if (subscriptionStatus == 'expired') return true;
+    
+    // 취소된 구독
+    if (subscriptionStatus == 'cancelled' || subscriptionStatus == 'cancelling') {
+      return entitlement == 'premium' || entitlement == 'trial';
+    }
+    
+    // Grace period (결제 실패 등)
+    if (subscriptionStatus == 'grace_period' || subscriptionStatus == 'payment_failed') return true;
+    
+    return false;
+  }
+
+  /// 🎯 웹훅 또는 수동 새로고침으로 캐시 즉시 갱신
+  Future<Map<String, dynamic>> forceRefreshFromWebhook() async {
+    if (kDebugMode) {
+      debugPrint('🔄 [SubscriptionRepository] 웹훅/수동 새로고침으로 캐시 즉시 갱신');
+    }
+    
+    return await getSubscriptionEntitlements(forceRefresh: true);
   }
 }
 

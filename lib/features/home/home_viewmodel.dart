@@ -59,7 +59,10 @@ class HomeViewModel extends ChangeNotifier {
   bool get canCreateNote => !_ocrLimitReached;
 
   // 생성자
-  HomeViewModel() {
+  HomeViewModel({bool isNewUser = false}) : _isNewUser = isNewUser {
+    if (kDebugMode) {
+      debugPrint('[HomeViewModel] 초기화 시작 (isNewUser: $isNewUser)');
+    }
     _initializeViewModel();
   }
 

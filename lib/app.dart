@@ -484,10 +484,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
            //   }
            // });
            try {
-             return ChangeNotifierProvider(
-               create: (context) => HomeViewModel(),
-               child: const HomeScreen(),
-             );
+             return const HomeScreen();
            } catch (e, stackTrace) {
              if (kDebugMode) {
                 debugPrint('⚠️ HomeScreen 인스턴스 생성 중 오류 발생: $e');

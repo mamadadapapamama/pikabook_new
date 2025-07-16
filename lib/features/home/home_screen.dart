@@ -44,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   SubscriptionState _subscriptionState = SubscriptionState.defaultState();
   bool _isLoading = true;
   bool _isNewUser = false;
+  HomeViewModel? _homeViewModel;
 
   @override
   void initState() {
@@ -81,6 +82,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 🎯 신규/기존 사용자 확인
       await _determineUserStatus();
       
+      // 🎯 사용자 상태가 확인되면 HomeViewModel 생성
+      if (mounted) {
+        _homeViewModel = HomeViewModel(isNewUser: _isNewUser);
+        setState(() {
+          // UI 업데이트
+        });
+      }
+      
       // 🎯 기존 사용자인 경우 구독 상태 로드
       if (!_isNewUser) {
         await _loadSubscriptionState();
@@ -115,19 +124,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       _isNewUser = !hasSeenWelcomeModal;
       
-        if (kDebugMode) {
+      if (kDebugMode) {
         debugPrint('🔍 [HomeScreen] 사용자 상태 결정: ${_isNewUser ? "신규" : "기존"}');
-        }
-        
-        // HomeViewModel에 신규 사용자 플래그 설정
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          final viewModel = Provider.of<HomeViewModel>(context, listen: false);
-          viewModel.setNewUser(_isNewUser);
-        }
-        });
-        
-        // 신규 사용자인 경우 환영 모달 표시
+      }
+      
+      // 신규 사용자인 경우 환영 모달 표시
       if (_isNewUser) {
         _setDefaultState();
         _showWelcomeModal();
@@ -139,8 +140,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       _isNewUser = true;
       _setDefaultState();
-          _showWelcomeModal();
-        }
+      _showWelcomeModal();
+    }
   }
 
   /// 🎯 구독 상태 로드
@@ -201,8 +202,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
         
         // 🚨 HomeViewModel의 신규 사용자 플래그 해제
-        final viewModel = Provider.of<HomeViewModel>(context, listen: false);
-        viewModel.setNewUser(false);
+        _homeViewModel?.setNewUser(false);
         
         // 🎯 환영 모달 완료 처리
         await _handleWelcomeModalCompleted(userChoseTrial: userChoseTrial);
@@ -286,11 +286,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: UITokens.screenBackground,
-      appBar: PikaAppBar.home(),
-      body: _buildBody(),
-      floatingActionButton: const HomeFloatingButton(),
+    // HomeViewModel이 아직 생성되지 않은 경우 로딩 표시
+    if (_homeViewModel == null) {
+      return Scaffold(
+        backgroundColor: UITokens.screenBackground,
+        appBar: PikaAppBar.home(),
+        body: const Center(
+          child: DotLoadingIndicator(message: '초기화 중...'),
+        ),
+      );
+    }
+
+    return ChangeNotifierProvider<HomeViewModel>.value(
+      value: _homeViewModel!,
+      child: Scaffold(
+        backgroundColor: UITokens.screenBackground,
+        appBar: PikaAppBar.home(),
+        body: _buildBody(),
+        floatingActionButton: const HomeFloatingButton(),
+      ),
     );
   }
 

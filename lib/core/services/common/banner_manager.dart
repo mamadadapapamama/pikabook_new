@@ -270,11 +270,11 @@ class BannerManager {
         return activeBanners;
       }
       
-      // 필드 추출
-      final entitlement = subscription['entitlement'] as String? ?? 'free';
-      final subscriptionStatus = subscription['subscriptionStatus'] as String? ?? 'cancelled';
-      final hasUsedTrial = subscription['hasUsedTrial'] as bool? ?? false;
-      final expirationDate = subscription['expirationDate'] as String?;
+      // 필드 추출 (안전한 타입 변환)
+      final entitlement = _safeStringConversion(subscription['entitlement']) ?? 'free';
+      final subscriptionStatus = _safeStringConversion(subscription['subscriptionStatus']) ?? 'cancelled';
+      final hasUsedTrial = _safeBoolConversion(subscription['hasUsedTrial']) ?? false;
+      final expirationDate = _safeStringConversion(subscription['expirationDate']);
       
       if (kDebugMode) {
         debugPrint('📥 [BannerManager] 서버 응답 필드:');
@@ -542,7 +542,7 @@ class BannerManager {
 
   /// 테스트 계정 배너 처리
   Future<List<BannerType>> _handleTestAccountBanners(Map<String, dynamic> bannerMetadata) async {
-    final bannerType = bannerMetadata['bannerType'] as String?;
+    final bannerType = _safeStringConversion(bannerMetadata['bannerType']);
     if (bannerType == null) return [];
     
     if (kDebugMode) {
@@ -670,7 +670,32 @@ class BannerManager {
     }
   }
 
+  /// 🎯 안전한 String 변환 헬퍼
+  String? _safeStringConversion(dynamic data) {
+    if (data == null) return null;
+    if (data is String) return data;
+    if (data is int) return data.toString();
+    if (data is double) return data.toString();
+    if (data is bool) return data.toString();
+    if (kDebugMode) {
+      debugPrint('⚠️ [BannerManager] 예상치 못한 String 타입: ${data.runtimeType}');
+    }
+    return null;
+  }
 
+  /// 🎯 안전한 Bool 변환 헬퍼
+  bool? _safeBoolConversion(dynamic data) {
+    if (data == null) return null;
+    if (data is bool) return data;
+    if (data is String) {
+      if (data.toLowerCase() == 'true') return true;
+      if (data.toLowerCase() == 'false') return false;
+      }
+    if (kDebugMode) {
+      debugPrint('⚠️ [BannerManager] 예상치 못한 Bool 타입: ${data.runtimeType}');
+    }
+    return null;
+  }
 
 
 

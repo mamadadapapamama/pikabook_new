@@ -28,7 +28,7 @@ class TextModeSeparationService {
     if (mode == TextProcessingMode.paragraph) {
       if (kDebugMode) {
         debugPrint('⚠️ 노트 생성 시 paragraph 모드는 서버에서 처리됩니다.');
-      }
+          }
       return [text]; // 서버에서 처리할 전체 텍스트 반환
     }
     

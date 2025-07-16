@@ -125,17 +125,23 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 플랜 정보 새로고침 (설정 화면에서 수동 호출 가능)
   Future<void> refreshPlanInfo() async {
-
+    if (kDebugMode) {
+      print('🔄 [Settings] 사용자 요청으로 플랜 정보 새로고침 (동적 캐시 적용)');
+    }
     
     _isPlanLoaded = false;
     notifyListeners();
     
-    // 강제 새로고침으로 서버에서 최신 데이터 가져오기
-    await _loadPlanInfoWithForceRefresh();
+    // 🎯 새로운 동적 캐시 메서드 사용 (웹훅/수동 새로고침 전용)
+    final subscriptionManager = UnifiedSubscriptionManager();
+    await subscriptionManager.forceRefreshFromWebhook();
+    
+    // 🎯 캐시가 이미 갱신되었으므로 일반 로드 메서드 사용
+    await loadPlanInfo();
   }
   
 
-
+  
   /// 강제 새로고침으로 플랜 정보 로드 (v4-simplified 직접 처리)
   Future<void> _loadPlanInfoWithForceRefresh() async {
     _setLoading(true);
