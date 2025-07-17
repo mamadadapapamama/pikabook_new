@@ -172,6 +172,69 @@ class SubscriptionInfo {
   bool get shouldShowTrialOffer => 
       entitlement.isFree && !hasUsedTrial;
 
+  // 🎯 UI 표시용 텍스트 getter들
+  
+  /// 플랜 제목 (남은 기간 포함)
+  String get planTitle {
+    final daysRemaining = _getRemainingDays();
+    final typeDisplay = subscriptionType?.value == 'yearly' ? '연간' : '월간';
+
+    if (entitlement.isTrial) {
+      return daysRemaining > 0 ? '프리미엄 체험중 ($daysRemaining일 남음)' : '프리미엄 체험중';
+    }
+    if (entitlement.isPremium) {
+      if (subscriptionStatus.isCancelling) {
+        return daysRemaining > 0 ? '프리미엄 ($typeDisplay) (${daysRemaining}일 남음)' : '프리미엄 ($typeDisplay)';
+      }
+      return '프리미엄 ($typeDisplay)';
+    }
+    return '무료';
+  }
+
+  /// 날짜 정보 텍스트 (다음 결제일 / 체험 종료일)
+  String? get dateInfoText {
+    if (expirationDate == null) return null;
+    final expiry = DateTime.tryParse(expirationDate!);
+    if (expiry == null) return null;
+
+    final formattedDate = '${expiry.year}년 ${expiry.month}월 ${expiry.day}일';
+
+    if (entitlement.isTrial) {
+      return '체험 종료일: $formattedDate';
+    }
+    if (entitlement.isPremium) {
+      return subscriptionStatus.isCancelling ? '플랜 종료일: $formattedDate' : '다음 결제일: $formattedDate';
+    }
+    return null;
+  }
+
+  /// CTA 버튼 텍스트
+  String get ctaText {
+    if (entitlement.isFree) return '프리미엄으로 업그레이드';
+    if (subscriptionStatus.isCancelling) return '구독 갱신하기';
+    return 'App Store에서 관리';
+  }
+
+  /// CTA 버튼 보조 텍스트
+  String? get ctaSubtext {
+    if (entitlement.isTrial && !subscriptionStatus.isCancelling) {
+      return '체험 기간 종료 시 자동으로 결제됩니다.';
+    }
+    if (entitlement.isPremium && !subscriptionStatus.isCancelling) {
+      return '구독은 App Store에서 관리할 수 있습니다.';
+    }
+    return null;
+  }
+
+  int _getRemainingDays() {
+    if (expirationDate == null) return 0;
+    final expiry = DateTime.tryParse(expirationDate!);
+    if (expiry == null) return 0;
+    final remaining = expiry.difference(DateTime.now()).inDays;
+    return remaining > 0 ? remaining : 0;
+  }
+
+
   String get displayStatus {
     if (entitlement.isTrial) {
       return subscriptionStatus.isCancelling 

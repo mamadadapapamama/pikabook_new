@@ -33,45 +33,45 @@ class LoginScreen extends StatelessWidget {
       create: (_) => LoginViewModel(),
       child: Consumer<LoginViewModel>(
         builder: (context, viewModel, child) {
-          return Scaffold(
-            body: Stack(
-              children: [
+    return Scaffold(
+      body: Stack(
+        children: [
                 // Background
-                Positioned.fill(
-                  child: Image.asset(
-                    'assets/images/splash_background.png',
-                    fit: BoxFit.cover,
-                  ),
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/splash_background.png',
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    ColorTokens.black.withOpacity(0.0),
+                    ColorTokens.black.withOpacity(0.3),
+                    ColorTokens.black.withOpacity(0.0),
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
                 ),
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          ColorTokens.black.withOpacity(0.0),
-                          ColorTokens.black.withOpacity(0.3),
-                          ColorTokens.black.withOpacity(0.0),
-                        ],
-                        stops: const [0.0, 0.5, 1.0],
-                      ),
-                    ),
-                  ),
-                ),
-                SafeArea(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: SpacingTokens.xxl - SpacingTokens.sm),
-                    child: Center(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: SpacingTokens.xxl - SpacingTokens.sm),
+              child: Center(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
                             if (!viewModel.isEmailLogin)
                               const _LoginHeader(),
                             SizedBox(height: SpacingTokens.xl),
                             _buildLoadingAndError(context, viewModel),
-                            SizedBox(height: SpacingTokens.md),
+                          SizedBox(height: SpacingTokens.md),
                             viewModel.isEmailLogin
                                 ? _buildEmailForm(context, viewModel)
                                 : _buildSocialLogins(context, viewModel),
@@ -100,21 +100,21 @@ class LoginScreen extends StatelessWidget {
     }
     if (viewModel.errorMessage != null) {
       return Container(
-        padding: EdgeInsets.all(SpacingTokens.sm + SpacingTokens.xs),
-        margin: EdgeInsets.symmetric(vertical: SpacingTokens.sm),
-        decoration: BoxDecoration(
-          color: ColorTokens.errorLight,
-          borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-          border: Border.all(
-            color: ColorTokens.error.withOpacity(0.3),
-            width: 1,
-          ),
-        ),
-        child: Text(
+                              padding: EdgeInsets.all(SpacingTokens.sm + SpacingTokens.xs),
+                              margin: EdgeInsets.symmetric(vertical: SpacingTokens.sm),
+                              decoration: BoxDecoration(
+                                color: ColorTokens.errorLight,
+                                borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+                                border: Border.all(
+                                  color: ColorTokens.error.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
           viewModel.errorMessage!,
-          textAlign: TextAlign.center,
+                                textAlign: TextAlign.center,
           style: TypographyTokens.body2.copyWith(color: ColorTokens.error),
-        ),
+                                ),
       );
     }
     return const SizedBox.shrink();
@@ -154,48 +154,48 @@ class LoginScreen extends StatelessWidget {
 
   Widget _buildEmailForm(BuildContext context, LoginViewModel viewModel) {
     return Container(
-      width: 250,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              TextButton.icon(
+                                    width: 250,
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          children: [
+                                            TextButton.icon(
                 onPressed: () => viewModel.toggleEmailLogin(false),
-                icon: Icon(Icons.arrow_back, color: ColorTokens.textLight, size: 18),
+                                              icon: Icon(Icons.arrow_back, color: ColorTokens.textLight, size: 18),
                 label: Text('뒤로', style: TypographyTokens.body2.copyWith(color: ColorTokens.textLight)),
-              ),
-            ],
-          ),
-          SizedBox(height: SpacingTokens.sm),
-          TextField(
+                                            ),
+                                          ],
+                                        ),
+                                        SizedBox(height: SpacingTokens.sm),
+                                        TextField(
             controller: viewModel.emailController,
-            keyboardType: TextInputType.emailAddress,
-            style: TypographyTokens.body1.copyWith(color: ColorTokens.textPrimary),
+                                          keyboardType: TextInputType.emailAddress,
+                                          style: TypographyTokens.body1.copyWith(color: ColorTokens.textPrimary),
             decoration: _inputDecoration('이메일'),
-          ),
-          SizedBox(height: SpacingTokens.sm),
-          TextField(
+                                        ),
+                                        SizedBox(height: SpacingTokens.sm),
+                                        TextField(
             controller: viewModel.passwordController,
-            obscureText: true,
-            style: TypographyTokens.body1.copyWith(color: ColorTokens.textPrimary),
+                                          obscureText: true,
+                                          style: TypographyTokens.body1.copyWith(color: ColorTokens.textPrimary),
             decoration: _inputDecoration('비밀번호'),
           ),
           if (!viewModel.isSignUp)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
+                                          Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: TextButton(
                 onPressed: () => showPasswordResetDialog(context),
-                child: Text(
-                  '비밀번호를 잊으셨나요?',
-                  style: TypographyTokens.body2.copyWith(
-                    color: ColorTokens.textLight,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-              ),
-            ),
-          SizedBox(height: SpacingTokens.sm),
-          ElevatedButton(
+                                              child: Text(
+                                                '비밀번호를 잊으셨나요?',
+                                                style: TypographyTokens.body2.copyWith(
+                                                  color: ColorTokens.textLight,
+                                                  decoration: TextDecoration.underline,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        SizedBox(height: SpacingTokens.sm),
+                                        ElevatedButton(
             onPressed: viewModel.isLoading ? null : () async {
               final user = await viewModel.handleEmailAuth();
               if (user != null) {
@@ -210,45 +210,45 @@ class LoginScreen extends StatelessWidget {
                 }
               }
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: ColorTokens.primary,
-              foregroundColor: ColorTokens.textLight,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: ColorTokens.primary,
+                                            foregroundColor: ColorTokens.textLight,
               minimumSize: const Size(250, 48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
-              ),
-            ),
-            child: Text(
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
+                                            ),
+                                          ),
+                                          child: Text(
               viewModel.isSignUp ? '회원가입' : '로그인',
-              style: TypographyTokens.button.copyWith(color: ColorTokens.textLight),
-            ),
-          ),
-          SizedBox(height: SpacingTokens.xs),
-          TextButton(
+                                            style: TypographyTokens.button.copyWith(color: ColorTokens.textLight),
+                                          ),
+                                        ),
+                                        SizedBox(height: SpacingTokens.xs),
+                                        TextButton(
             onPressed: viewModel.toggleSignUp,
-            child: Text(
+                                          child: Text(
               viewModel.isSignUp ? '이미 계정이 있으신가요? 로그인' : '계정이 없으신가요? 회원가입',
-              style: TypographyTokens.body2.copyWith(
-                color: ColorTokens.textLight,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
-        ],
-      ),
+                                            style: TypographyTokens.body2.copyWith(
+                                              color: ColorTokens.textLight,
+                                              decoration: TextDecoration.underline,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
     );
   }
 
   Widget _buildSkipLoginButton(BuildContext context, LoginViewModel viewModel) {
     return TextButton(
       onPressed: viewModel.isLoading ? null : onSkipLogin,
-      child: Text(
-        '로그인 없이 둘러보기',
-        style: TypographyTokens.button.copyWith(
-          color: ColorTokens.textLight,
-          decoration: TextDecoration.underline,
-        ),
-      ),
+                                  child: Text(
+                                    '로그인 없이 둘러보기',
+                                    style: TypographyTokens.button.copyWith(
+                                      color: ColorTokens.textLight,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
     );
   }
 
@@ -261,7 +261,7 @@ class LoginScreen extends StatelessWidget {
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(SpacingTokens.radiusSmall),
         borderSide: BorderSide.none,
-      ),
+                                        ),
       contentPadding: EdgeInsets.symmetric(
         horizontal: SpacingTokens.sm,
         vertical: SpacingTokens.sm,
@@ -329,7 +329,7 @@ class _LoginHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: [
+            children: [
         SizedBox(height: MediaQuery.of(context).size.height * 0.15),
         Image.asset(
           'assets/images/pikabook_bird.png',
@@ -338,13 +338,13 @@ class _LoginHeader extends StatelessWidget {
           fit: BoxFit.contain,
         ),
         SizedBox(height: SpacingTokens.md),
-        Text(
+              Text(
           '책으로 하는 중국어 공부,\n스마트하게',
           textAlign: TextAlign.center,
           style: TypographyTokens.subtitle1.copyWith(
             color: ColorTokens.textLight,
             height: 1.4,
-          ),
+            ),
         ),
         const SizedBox(height: 12),
         Image.asset(
@@ -353,8 +353,8 @@ class _LoginHeader extends StatelessWidget {
           height: SpacingTokens.appLogoHeight2x,
           fit: BoxFit.contain,
           color: ColorTokens.textLight,
-        ),
-      ],
+              ),
+            ],
     );
   }
 }
@@ -366,8 +366,8 @@ class _LegalInfoWidget extends StatelessWidget {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
     }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -375,7 +375,7 @@ class _LegalInfoWidget extends StatelessWidget {
       textAlign: TextAlign.center,
       text: TextSpan(
         style: TypographyTokens.body2.copyWith(color: ColorTokens.textLight),
-        children: [
+                children: [
           const TextSpan(text: '로그인 시 '),
           TextSpan(
             text: '개인정보 처리방침',

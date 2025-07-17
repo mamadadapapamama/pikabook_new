@@ -215,25 +215,26 @@ class UnifiedSubscriptionManager {
 
   /// 🎯 구독 권한 조회 (통합 응답 기반)
   Future<Map<String, dynamic>> getSubscriptionEntitlements({bool forceRefresh = false}) async {
-    final serverResponse = await _getUnifiedServerResponse(forceRefresh: forceRefresh);
-    
-    final subscription = _safeMapConversion(serverResponse['subscription']);
-    if (subscription == null) {
+    try {
+      final serverResponse = await _getUnifiedServerResponse(forceRefresh: forceRefresh);
+      final info = SubscriptionInfo.fromJson(serverResponse);
+      
+      return {
+        'entitlement': info.entitlement.value,
+        'subscriptionStatus': info.subscriptionStatus.value,
+        'hasUsedTrial': info.hasUsedTrial,
+        'isPremium': info.isPremium,
+        'isTrial': info.isTrial,
+        'isFree': info.entitlement.isFree,
+        'expirationDate': info.expirationDate,
+        'subscriptionType': info.subscriptionType?.value,
+      };
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ [U-Manager] getSubscriptionEntitlements 오류: $e. 기본값 반환.');
+      }
       return _getDefaultEntitlements();
     }
-    
-    final entitlement = subscription['entitlement'] as String? ?? 'free';
-    final subscriptionStatus = subscription['subscriptionStatus'] as String? ?? 'cancelled';
-    final hasUsedTrial = subscription['hasUsedTrial'] as bool? ?? false;
-    
-    return {
-      'entitlement': entitlement,
-      'subscriptionStatus': subscriptionStatus,
-      'hasUsedTrial': hasUsedTrial,
-      'isPremium': entitlement == 'premium',
-      'isTrial': entitlement == 'trial',
-      'isFree': entitlement == 'free',
-    };
   }
 
   /// 🎯 BannerManager용 전체 서버 응답 (통합 응답 기반)

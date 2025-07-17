@@ -300,8 +300,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         options: options,
         currentValue: viewModel.useSegmentMode.toString(),
         onSelected: (value) async {
-          final success = await viewModel.updateTextProcessingMode(value == 'true');
-          if (mounted && success) {
+          await viewModel.updateUseSegmentMode(value == 'true');
+          if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
@@ -603,69 +603,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-
-  void _showUpgradeModal(BuildContext context, SettingsViewModel viewModel) async {
-    // 🚨 이미 업그레이드 모달이 표시 중이면 중복 호출 방지
-    if (UpgradeModal.isShowing) {
-      if (kDebugMode) {
-        debugPrint('⚠️ [Settings] 업그레이드 모달이 이미 표시 중입니다. 중복 호출 방지');
-      }
-      return;
-    }
-
-    try {
-      // 🎯 체험 이력에 따른 분기 처리
-      final hasUsedFreeTrial = viewModel.hasUsedFreeTrial;
-      final hasEverUsedTrial = viewModel.hasEverUsedTrial;
-      
-      if (kDebugMode) {
-        debugPrint('🔍 [Settings] 업그레이드 모달 표시 분기 판단:');
-        debugPrint('   hasUsedFreeTrial: $hasUsedFreeTrial');
-        debugPrint('   hasEverUsedTrial: $hasEverUsedTrial');
-        debugPrint('   플랜 이름: ${viewModel.planName}');
-        debugPrint('   플랜 타입: ${viewModel.planType}');
-      }
-      
-      if (hasUsedFreeTrial || hasEverUsedTrial) {
-        // 🎯 체험 이력 있음 -> 일반 프리미엄 모달
-        if (kDebugMode) {
-          debugPrint('🎯 [Settings] 체험 이력 있음 → 일반 프리미엄 모달 표시');
-        }
-        
-        UpgradeModal.show(
-          context,
-          reason: UpgradeReason.general,
-          onUpgrade: () {
-            debugPrint('🎯 [Settings] 프리미엄 업그레이드 선택 (체험 이력 있음)');
-          },
-        );
-      } else {
-        // 🎯 체험 이력 없음 -> 무료체험 유도 모달
-        if (kDebugMode) {
-          debugPrint('🎯 [Settings] 체험 이력 없음 → 무료체험 유도 모달 표시');
-        }
-        
-        UpgradeModal.show(
-          context,
-          reason: UpgradeReason.welcomeTrial,
-          onUpgrade: () {
-            debugPrint('🎯 [Settings] 무료체험 시작 선택');
-          },
-        );
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [Settings] 업그레이드 모달 표시 실패: $e');
-      }
-      // 오류 시 기본 모달 표시
-      UpgradeModal.show(
-        context,
-        reason: UpgradeReason.settings,
-        onUpgrade: () {
-          debugPrint('🎯 [Settings] 프리미엄 업그레이드 선택 (기본)');
-        },
-      );
-    }
-  }
-
-  }
+}

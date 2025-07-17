@@ -6,8 +6,6 @@ import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
 import '../settings_view_model.dart';
 import 'package:provider/provider.dart';
-import '../../../core/widgets/upgrade_modal.dart';
-
 
 class PlanCard extends StatelessWidget {
   const PlanCard({Key? key}) : super(key: key);
@@ -15,9 +13,10 @@ class PlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final viewModel = Provider.of<SettingsViewModel>(context);
+    final subscriptionInfo = viewModel.subscriptionInfo;
 
     return GestureDetector(
-      onTap: viewModel.isPlanLoaded ? () async => await viewModel.refreshPlanInfo() : null,
+      onTap: () => viewModel.refreshPlanInfo(force: true),
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
@@ -28,39 +27,25 @@ class PlanCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (viewModel.isPlanLoaded)
-              _buildPlanDetails(context, viewModel)
+            if (viewModel.isPlanLoaded && subscriptionInfo != null)
+              _buildPlanDetails(context, viewModel, subscriptionInfo)
             else
               _buildLoadingSkeleton(),
             
-            // CTA 버튼은 무료 플랜일 때만 표시되도록 수정
-            if (viewModel.isPlanLoaded && viewModel.planType == 'free') ...[
+            if (viewModel.isPlanLoaded && subscriptionInfo != null) ...[
               const SizedBox(height: SpacingTokens.md),
               PikaButton(
-                text: viewModel.ctaButton.text,
-                variant: viewModel.ctaButton.variant,
-                size: PikaButtonSize.small,
-                onPressed: viewModel.ctaButton.isEnabled 
-                    ? () => viewModel.handleCTAAction(context) 
-                    : null,
-                isFullWidth: true,
-              ),
-            ]
-            // 프리미엄/체험중일 때는 App Store 관리 버튼 표시
-            else if (viewModel.isPlanLoaded && viewModel.planType == 'premium') ...[
-               const SizedBox(height: SpacingTokens.md),
-               PikaButton(
-                text: 'App Store에서 관리',
-                variant: PikaButtonVariant.outline,
+                text: subscriptionInfo.ctaText,
+                variant: subscriptionInfo.entitlement.isFree ? PikaButtonVariant.primary : PikaButtonVariant.outline,
                 size: PikaButtonSize.small,
                 onPressed: () => viewModel.handleCTAAction(context),
                 isFullWidth: true,
               ),
-              if (viewModel.ctaSubtext.isNotEmpty) ...[
+              if (subscriptionInfo.ctaSubtext != null) ...[
                 const SizedBox(height: SpacingTokens.xs),
                 Center(
                   child: Text(
-                    viewModel.ctaSubtext,
+                    subscriptionInfo.ctaSubtext!,
                     style: TypographyTokens.caption.copyWith(
                       color: ColorTokens.textSecondary,
                     ),
@@ -75,9 +60,7 @@ class PlanCard extends StatelessWidget {
     );
   }
 
-  Widget _buildPlanDetails(BuildContext context, SettingsViewModel viewModel) {
-    String? dateInfoText = viewModel.nextPaymentDateText ?? viewModel.freeTransitionDateText;
-
+  Widget _buildPlanDetails(BuildContext context, SettingsViewModel viewModel, subscriptionInfo) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -85,35 +68,33 @@ class PlanCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Plan Title (with remaining days)
             Expanded(
               child: Text(
-                viewModel.planTitle, 
+                subscriptionInfo.planTitle, 
                 style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               )
             ),
             const SizedBox(width: SpacingTokens.sm),
-            // Usage Button (always visible)
             PikaButton(
               text: '사용량 조회',
               variant: PikaButtonVariant.primary,
               size: PikaButtonSize.xs,
-              onPressed: () {
-                // TODO: Implement usage detail view
-              },
+              onPressed: () => viewModel.showUsageDialog(context),
             )
           ],
         ),
-        // Subtitle (Next payment date etc.)
-        if (viewModel.planType != 'free' && dateInfoText != null) ...[
+        if (subscriptionInfo.dateInfoText != null) ...[
           const SizedBox(height: SpacingTokens.xsHalf),
           Row(
             children: [
-              Text(dateInfoText, style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary)),
+              Text(
+                subscriptionInfo.dateInfoText!, 
+                style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary)
+              ),
               const SizedBox(width: SpacingTokens.xs),
               InkWell(
-                onTap: viewModel.isLoading ? null : viewModel.refreshPlanInfo,
+                onTap: viewModel.isLoading ? null : () => viewModel.refreshPlanInfo(force: true),
                 child: const Icon(Icons.refresh, size: 16, color: ColorTokens.textSecondary),
               ),
             ],
@@ -126,9 +107,35 @@ class PlanCard extends StatelessWidget {
   }
 
   Widget _buildLoadingSkeleton() {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            SkeletonBox(width: 120, height: 24),
+            SkeletonBox(width: 80, height: 28),
+          ],
+        ),
+        SizedBox(height: SpacingTokens.xsHalf),
+        SkeletonBox(width: 150, height: 18),
+        SizedBox(height: SpacingTokens.md),
+        Divider(color: ColorTokens.greyLight, height: 1),
+      ],
+    );
+  }
+}
+
+class SkeletonBox extends StatelessWidget {
+  final double width;
+  final double height;
+  const SkeletonBox({Key? key, required this.width, required this.height}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      width: 80,
-      height: 20,
+      width: width,
+      height: height,
       decoration: BoxDecoration(
         color: ColorTokens.greyLight,
         borderRadius: BorderRadius.circular(4),
