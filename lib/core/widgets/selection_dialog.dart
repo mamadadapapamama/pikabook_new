@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/tokens/color_tokens.dart';
-import '../../../core/theme/tokens/typography_tokens.dart';
+import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
 
 class SelectionOption {
   final String value;

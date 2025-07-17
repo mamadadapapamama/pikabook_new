@@ -19,7 +19,7 @@ import 'settings_view_model.dart';
 import 'widgets/plan_card.dart';
 import 'widgets/profile_card.dart';
 import 'widgets/setting_item.dart';
-import 'dialogs/selection_dialog.dart';
+import '../../core/widgets/selection_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onLogout;
