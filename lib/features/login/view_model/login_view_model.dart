@@ -158,12 +158,6 @@ class LoginViewModel with ChangeNotifier {
         final errorMessage = _mapAuthException(e.code);
         _setError(errorMessage);
         
-        // Auto-switch between login/signup forms on specific errors
-        if (e.code == 'user-not-found' && !_isSignUp) {
-            Future.delayed(Duration(milliseconds: 100), () => toggleSignUp());
-        } else if (e.code == 'email-already-in-use' && _isSignUp) {
-            Future.delayed(Duration(milliseconds: 100), () => toggleSignUp());
-        }
     } catch (e) {
       _setError('오류가 발생했습니다. 다시 시도해주세요.');
     }
