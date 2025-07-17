@@ -68,19 +68,25 @@ class PlanCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Expanded(
-              child: Text(
-                subscriptionInfo.planTitle, 
-                style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-              )
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      subscriptionInfo.planTitle, 
+                      style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: SpacingTokens.xs),
+                  InkWell(
+                    onTap: viewModel.isLoading ? null : () => viewModel.refreshPlanInfo(force: true),
+                    child: const Icon(Icons.refresh, size: 18, color: ColorTokens.textSecondary),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(width: SpacingTokens.sm),
-            InkWell(
-              onTap: viewModel.isLoading ? null : () => viewModel.refreshPlanInfo(force: true),
-              child: const Icon(Icons.refresh, size: 18, color: ColorTokens.textSecondary),
-            ),
-            const SizedBox(width: SpacingTokens.sm),
             PikaButton(
               text: '사용량 조회',
               variant: PikaButtonVariant.primary,
