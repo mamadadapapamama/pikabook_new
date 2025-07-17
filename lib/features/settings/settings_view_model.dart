@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/plan_constants.dart';
 import '../../core/widgets/pika_button.dart';
 import '../../core/widgets/upgrade_modal.dart';
+import '../../core/utils/date_formatter.dart'; // Added import for DateFormatter
 
 
 /// CTA 버튼 상태 모델
@@ -91,9 +92,6 @@ class SettingsViewModel extends ChangeNotifier {
   String get planStatusText => _planStatusText;
   String? get nextPaymentDateText => _nextPaymentDateText;
   String? get freeTransitionDateText => _freeTransitionDateText;
-
-  /// 사용량 조회 버튼 표시 여부
-  bool get shouldShowUsageButton => _planType == 'premium';
 
   // 🎯 CTA 관련 getters
   CTAButtonModel get ctaButton {
@@ -604,118 +602,83 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 🎯 v4-simplified 서버 응답으로부터 UI 설정 (직접 처리)
   void _configureUIFromServerResponse(String entitlement, String subscriptionStatus, bool hasUsedTrial, {String? expirationDate, String? subscriptionType}) {
-
-    
-    // 🎯 만료일 계산 및 표시
-    String? dateDisplay;
-    int daysRemaining = 0;
-    
-    if (expirationDate != null && expirationDate.isNotEmpty) {
-      try {
-        DateTime expiration;
-        
-        // Unix timestamp (milliseconds) 또는 ISO 문자열 처리
-        if (RegExp(r'^\d+$').hasMatch(expirationDate)) {
-          // 숫자만 있는 경우: Unix timestamp (milliseconds)
-          final timestamp = int.parse(expirationDate);
-          expiration = DateTime.fromMillisecondsSinceEpoch(timestamp);
-          
-        } else {
-          // ISO 문자열 형태
-          expiration = DateTime.parse(expirationDate);
-        }
-        
-        final now = DateTime.now();
-        daysRemaining = expiration.difference(now).inDays;
-        
-        // 날짜 표시 형식 (년 월 일)
-        dateDisplay = '${expiration.year}년 ${expiration.month}월 ${expiration.day}일';
-        _nextPaymentDateText = '다음 결제일: $dateDisplay';
-        _freeTransitionDateText = '$dateDisplay 부터 무료 전환';
-        
-
-      } catch (e) {
-        if (kDebugMode) {
-          print('⚠️ [Settings] 만료일 파싱 실패: $expirationDate');
-        }
-        _nextPaymentDateText = null;
-        _freeTransitionDateText = null;
-      }
-    } else {
-      _nextPaymentDateText = null;
-      _freeTransitionDateText = null;
+    // 날짜 포매터 초기화
+    final now = DateTime.now();
+    DateTime? expiry;
+    if (expirationDate != null) {
+      expiry = DateTime.tryParse(expirationDate);
     }
     
-    // 🎯 구독 타입 표시 (monthly/yearly)
-    final subscriptionTypeDisplay = subscriptionType == 'yearly' ? '연간 구독' : '월간 구독';
+    // 남은 기간 계산
+    _remainingDays = expiry != null ? expiry.difference(now).inDays : 0;
+    if (_remainingDays < 0) _remainingDays = 0;
     
-    // 🎯 상태별 UI 텍스트 설정
-    if (entitlement == 'trial') {
-      _planTitle = 'Premium';
-      _planSubtitle = '무료체험';
-      if (subscriptionStatus == 'active') {
-        _planStatusText = '활성';
-        _ctaButtonText = 'App Store에서 관리';
-        _ctaButtonEnabled = false;
-        _ctaSubtext = '체험 기간 종료 시 자동으로 결제됩니다.';
-        _planName = dateDisplay != null ? '무료체험 중 (${daysRemaining}일 남음)' : '무료체험 중';
-      } else { // cancelling, expired, refunded
-        _planStatusText = '종료됨';
-        _ctaButtonText = '프리미엄으로 업그레이드';
-        _ctaButtonEnabled = true;
-        _ctaSubtext = '';
-        _planName = '무료체험 완료';
-      }
-      _shouldUsePremiumQuota = true;
+    // 기본값 초기화
+    _planTitle = '무료';
+    _planSubtitle = '모든 기능을 제한 없이 사용해보세요';
+    _planStatusText = '무료';
+    _nextPaymentDateText = null;
+    _freeTransitionDateText = null;
+    _ctaButtonText = '프리미엄으로 업그레이드';
+    _ctaButtonEnabled = true;
+    _ctaSubtext = '';
 
-    } else if (entitlement == 'premium') {
-      _planTitle = 'Premium';
-      _planSubtitle = subscriptionTypeDisplay;
-      if (subscriptionStatus == 'active') {
-        _planStatusText = '활성';
-        _ctaButtonText = 'App Store에서 관리';
-        _ctaButtonEnabled = false;
-        _ctaSubtext = '';
-        _planName = '프리미엄 ($subscriptionTypeDisplay)';
-      } else { // cancelling, expired, refunded
-        _planStatusText = '만료됨';
-        _ctaButtonText = '프리미엄으로 업그레이드';
-        _ctaButtonEnabled = true;
-        _ctaSubtext = '';
-        _planName = '프리미엄 만료';
+    // 상태에 따라 UI 텍스트 설정
+    if (entitlement == 'trial' && subscriptionStatus == 'active') {
+      _planTitle = '프리미엄 체험중';
+      if (_remainingDays > 0) {
+        _planTitle += ' (${_remainingDays}일 남음)';
       }
-      _shouldUsePremiumQuota = true;
-
-    } else { // free
-      _planTitle = 'Free';
-      _planSubtitle = '무료 플랜';
+      _planSubtitle = ''; // 부제 대신 날짜 표시
       _planStatusText = '활성';
+      if (expiry != null) {
+        _freeTransitionDateText = '체험 종료일: ${DateFormatter.formatDate(expiry)}';
+      }
+      _ctaButtonText = 'App Store에서 관리';
+      _ctaSubtext = '체험 기간 종료 시 자동으로 결제됩니다.';
+
+    } else if (entitlement == 'premium' && subscriptionStatus == 'active') {
+      _planTitle = '프리미엄 (${subscriptionType ?? 'monthly'})';
+      _planSubtitle = '';
+      _planStatusText = '활성';
+      if (expiry != null) {
+        _nextPaymentDateText = '다음 결제일: ${DateFormatter.formatDate(expiry)}';
+      }
+      _ctaButtonText = 'App Store에서 관리';
+      _ctaSubtext = '구독은 App Store에서 관리할 수 있습니다.';
+
+    } else if (subscriptionStatus == 'cancelled') {
+      _planTitle = '프리미엄 (${subscriptionType ?? 'monthly'}) - 취소 예정';
+       if (_remainingDays > 0) {
+        _planTitle += ' (${_remainingDays}일 남음)';
+      }
+      _planSubtitle = '';
+      _planStatusText = '취소 예정';
+      if (expiry != null) {
+        _freeTransitionDateText = '플랜 종료일: ${DateFormatter.formatDate(expiry)}';
+      }
+      _ctaButtonText = '구독 갱신하기';
+
+    } else if (subscriptionStatus == 'expired') {
+      _planTitle = '프리미엄';
+      _planSubtitle = '';
+      _planStatusText = '종료됨';
+       if (expiry != null) {
+        _freeTransitionDateText = '플랜 종료일: ${DateFormatter.formatDate(expiry)}';
+      }
       _ctaButtonText = '프리미엄으로 업그레이드';
-      _ctaButtonEnabled = true;
-      _ctaSubtext = '';
-      _planName = '무료 플랜';
-      _shouldUsePremiumQuota = false;
-    }
-    
-    // Grace Period 특별 처리
-    if (entitlement == 'premium' && subscriptionStatus == 'active' && daysRemaining > 0 && daysRemaining <= 7) {
+
+    } else if (subscriptionStatus == 'billing_issue') {
+      _planTitle = '프리미엄';
+      _planSubtitle = '';
       _planStatusText = '결제 문제';
+       if (expiry != null) {
+        _nextPaymentDateText = '결제 정보를 App Store에서 업데이트해주세요';
+      }
       _ctaButtonText = 'App Store에서 결제 정보 업데이트';
-      _ctaButtonEnabled = true; // 사용자가 직접 해결하도록 유도
-      _ctaSubtext = '구독을 유지하려면 결제 정보를 업데이트해주세요.';
-    }
-    
-    _remainingDays = daysRemaining;
-    
-    // 플랜 제한 설정
-    if (_shouldUsePremiumQuota) {
-      _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM));
-    } else {
-      _planLimits = Map<String, int>.from(PlanConstants.getPlanLimits(PlanConstants.PLAN_FREE));
-    }
-    
-    if (kDebugMode) {
-      print('✅ [Settings] UI 설정 완료: $_planName');
+
+    } else { // Free
+      // 기본값 사용
     }
   }
 

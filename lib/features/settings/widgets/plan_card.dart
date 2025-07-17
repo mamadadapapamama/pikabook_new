@@ -33,7 +33,8 @@ class PlanCard extends StatelessWidget {
             else
               _buildLoadingSkeleton(),
             
-            if (viewModel.isPlanLoaded && viewModel.ctaButton.text.isNotEmpty) ...[
+            // CTA 버튼은 무료 플랜일 때만 표시되도록 수정
+            if (viewModel.isPlanLoaded && viewModel.planType == 'free') ...[
               const SizedBox(height: SpacingTokens.md),
               PikaButton(
                 text: viewModel.ctaButton.text,
@@ -44,7 +45,17 @@ class PlanCard extends StatelessWidget {
                     : null,
                 isFullWidth: true,
               ),
-              
+            ]
+            // 프리미엄/체험중일 때는 App Store 관리 버튼 표시
+            else if (viewModel.isPlanLoaded && viewModel.planType == 'premium') ...[
+               const SizedBox(height: SpacingTokens.md),
+               PikaButton(
+                text: 'App Store에서 관리',
+                variant: PikaButtonVariant.outline,
+                size: PikaButtonSize.small,
+                onPressed: () => viewModel.handleCTAAction(context),
+                isFullWidth: true,
+              ),
               if (viewModel.ctaSubtext.isNotEmpty) ...[
                 const SizedBox(height: SpacingTokens.xs),
                 Center(
@@ -57,7 +68,7 @@ class PlanCard extends StatelessWidget {
                   ),
                 ),
               ],
-            ],
+            ]
           ],
         ),
       ),
@@ -65,58 +76,48 @@ class PlanCard extends StatelessWidget {
   }
 
   Widget _buildPlanDetails(BuildContext context, SettingsViewModel viewModel) {
-    String? subtitleText;
-    if (viewModel.planStatusText == '활성' || viewModel.planStatusText == '결제 문제') {
-      subtitleText = viewModel.nextPaymentDateText;
-    } else if (viewModel.planStatusText == '취소 예정' || viewModel.planStatusText == '종료됨') {
-      subtitleText = viewModel.freeTransitionDateText;
-    }
+    String? dateInfoText = viewModel.nextPaymentDateText ?? viewModel.freeTransitionDateText;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Plan Title
+            // Plan Title (with remaining days)
             Expanded(
               child: Text(
                 viewModel.planTitle, 
-                style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold)
+                style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
               )
             ),
-            // Status Badge OR Usage Button
-            if (viewModel.shouldShowUsageButton)
-              PikaButton(
-                text: '사용량 조회',
-                variant: PikaButtonVariant.primary,
-                size: PikaButtonSize.xs,
-                onPressed: () {
-                  // TODO: Implement usage detail view
-                },
-              )
-            else
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: SpacingTokens.sm, vertical: SpacingTokens.xsHalf),
-                decoration: BoxDecoration(
-                  color: viewModel.planStatusText == '활성' ? ColorTokens.success.withOpacity(0.1) : ColorTokens.greyMedium.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(SpacingTokens.xsHalf),
-                ),
-                child: Text(
-                  viewModel.planStatusText,
-                  style: TypographyTokens.caption.copyWith(
-                    color: viewModel.planStatusText == '활성' ? ColorTokens.success : ColorTokens.textSecondary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
+            const SizedBox(width: SpacingTokens.sm),
+            // Usage Button (always visible)
+            PikaButton(
+              text: '사용량 조회',
+              variant: PikaButtonVariant.primary,
+              size: PikaButtonSize.xs,
+              onPressed: () {
+                // TODO: Implement usage detail view
+              },
+            )
           ],
         ),
         // Subtitle (Next payment date etc.)
-        if (subtitleText != null) ...[
+        if (viewModel.planType != 'free' && dateInfoText != null) ...[
           const SizedBox(height: SpacingTokens.xsHalf),
-          Text(subtitleText, style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary)),
+          Row(
+            children: [
+              Text(dateInfoText, style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary)),
+              const SizedBox(width: SpacingTokens.xs),
+              InkWell(
+                onTap: viewModel.isLoading ? null : viewModel.refreshPlanInfo,
+                child: const Icon(Icons.refresh, size: 16, color: ColorTokens.textSecondary),
+              ),
+            ],
+          ),
         ],
         const SizedBox(height: SpacingTokens.md),
         const Divider(color: ColorTokens.greyLight, height: 1),
