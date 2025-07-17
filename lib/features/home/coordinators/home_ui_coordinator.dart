@@ -80,9 +80,8 @@ class HomeUICoordinator {
         showContactForm(context);
         return;
 
-      case BannerType.trialCompleted:
+      case BannerType.switchToPremium: // trialCompleted, premiumExpired 통합
       case BannerType.trialCancelled:
-      case BannerType.premiumExpired:
       case BannerType.premiumCancelled:
         _showUpgradeModalWithReason(context, UpgradeReason.trialExpired);
         break;

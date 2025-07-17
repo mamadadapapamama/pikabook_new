@@ -421,19 +421,23 @@ class InAppPurchaseService {
     }
   }
 
-  /// 🎯 구독 상태 갱신 (새로운 Apple 권장 방식)
+  /// 🎯 구독 상태 갱신 (구매 완료 후 스트림 업데이트 포함)
   Future<void> _notifySubscriptionManager() async {
     try {
       final subscriptionManager = UnifiedSubscriptionManager();
-      final result = await subscriptionManager.getSubscriptionEntitlements(forceRefresh: true);
+      
+      // 🔔 구독 상태 조회 + 스트림 업데이트
+      final subscriptionState = await subscriptionManager.getSubscriptionState();
       
       if (kDebugMode) {
         print('✅ UnifiedSubscriptionManager 상태 갱신 완료');
-        print('   구독 상태: ${result['entitlement']}');
+        print('   구독 상태: ${subscriptionState.entitlement.value}');
+        print('   활성 배너: ${subscriptionState.activeBanners.length}개');
+        print('🔔 구독 상태 스트림 업데이트됨 - 실시간 배너 업데이트');
       }
       
-      // 🎯 JWS 검증 완료 시 추가 확인 불필요
-      // 구매 즉시 상태가 정확히 반영되므로 지연 확인 제거
+      // 🎯 구매 완료 후 즉시 배너 업데이트됨
+      // 더 이상 지연된 확인 불필요
       
     } catch (e) {
       if (kDebugMode) {

@@ -41,22 +41,29 @@ class BannerBuilderHelper {
   static String? _getButtonTextForBannerType(BannerType bannerType) {
     switch (bannerType) {
       case BannerType.trialStarted:
-      case BannerType.trialCompleted:
       case BannerType.premiumStarted:
         return null; // 환영 메시지, 닫기만 가능
       
       case BannerType.free:
+        return '풀팩 보기';
+      
       case BannerType.usageLimitFree:
+        return '풀팩보기';
+      
       case BannerType.trialCancelled:
-      case BannerType.premiumExpired:
+        return '풀팩 보기';
+      
+      case BannerType.switchToPremium:
+        return '단기'; // 트라이얼 완료후 월구독 시작
+      
       case BannerType.premiumCancelled:
-        return '업그레이드';
+        return '단기';
       
       case BannerType.usageLimitPremium:
         return '문의하기';
       
       case BannerType.premiumGrace:
-        return 'App Store 열기';
+        return '앱 스토어 바로가기';
       
       default:
         return '업그레이드';

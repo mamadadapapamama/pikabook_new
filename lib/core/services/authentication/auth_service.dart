@@ -748,7 +748,7 @@ class AuthService {
         _clearAllLocalData(),
         _deleteFirestoreData(userId),
         _deleteFirebaseStorageData(userId),
-        _deleteUserBannerData(userId), // 🎯 사용자 배너 데이터 삭제 추가
+        // _deleteUserBannerData(userId), // 🗑️ 제거: SharedPreferences.clear()로 이미 삭제됨
       ]);
       
       // 소셜 로그인 세션 정리
@@ -790,6 +790,7 @@ class AuthService {
   }
 
   // 🎯 사용자 배너 데이터 삭제 (탈퇴 시)
+  /*
   Future<void> _deleteUserBannerData(String userId) async {
     try {
       if (kDebugMode) {
@@ -809,6 +810,7 @@ class AuthService {
       // 배너 데이터 삭제 실패는 치명적이지 않으므로 계속 진행
     }
   }
+  */
 
   // 로컬 데이터 완전 삭제 (병렬 처리 추가)
   Future<void> _clearAllLocalData() async {

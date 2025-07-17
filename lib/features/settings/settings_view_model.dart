@@ -134,7 +134,7 @@ class SettingsViewModel extends ChangeNotifier {
     
     // 🎯 새로운 동적 캐시 메서드 사용 (웹훅/수동 새로고침 전용)
     final subscriptionManager = UnifiedSubscriptionManager();
-    await subscriptionManager.forceRefreshFromWebhook();
+    await subscriptionManager.getSubscriptionState(forceRefresh: true);
     
     // 🎯 캐시가 이미 갱신되었으므로 일반 로드 메서드 사용
     await loadPlanInfo();
@@ -160,8 +160,8 @@ class SettingsViewModel extends ChangeNotifier {
       final entitlement = entitlements['entitlement'];
       final subscriptionStatus = entitlements['subscriptionStatus'];
       final hasUsedTrial = entitlements['hasUsedTrial'];
-      final expirationDate = subscriptionManager.cachedEntitlements?['expirationDate'] as String?;
-      final subscriptionType = subscriptionManager.cachedEntitlements?['subscriptionType'] as String?;
+      final expirationDate = entitlements['expirationDate'] as String?;
+      final subscriptionType = entitlements['subscriptionType'] as String?;
       
       if (kDebugMode) {
         print('🔍 [Settings] 체험 이력 디버그:');
@@ -272,8 +272,8 @@ class SettingsViewModel extends ChangeNotifier {
       final entitlement = entitlements['entitlement'];
       final subscriptionStatus = entitlements['subscriptionStatus'];
       final hasUsedTrial = entitlements['hasUsedTrial'];
-      final expirationDate = subscriptionManager.cachedEntitlements?['expirationDate'] as String?;
-              final subscriptionType = subscriptionManager.cachedEntitlements?['subscriptionType'] as String?;
+      final expirationDate = entitlements['expirationDate'] as String?;
+      final subscriptionType = entitlements['subscriptionType'] as String?;
       
       if (kDebugMode) {
         print('🔍 [Settings] 체험 이력 디버그 (캐시):');

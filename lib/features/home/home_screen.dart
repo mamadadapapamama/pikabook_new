@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 
 // 🎯 Core imports
 import '../../core/models/subscription_state.dart';
@@ -45,6 +46,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isLoading = true;
   bool _isNewUser = false;
   HomeViewModel? _homeViewModel;
+  
+  // 🆕 구독 상태 변경 스트림 구독
+  StreamSubscription<SubscriptionState>? _subscriptionStateSubscription;
 
   @override
   void initState() {
@@ -56,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _subscriptionStateSubscription?.cancel(); // 🆕 스트림 구독 취소
     super.dispose();
   }
 
@@ -66,7 +71,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     if (state == AppLifecycleState.resumed) {
       if (kDebugMode) {
-        debugPrint('🔄 [HomeScreen] 앱 포그라운드 복귀 - 구독 상태 새로고침');
+        debugPrint('🔄 [HomeScreen] 앱 포그라운드 복귀 - 구독 상태 새로고침 (스트림 기반)');
       }
       _refreshSubscriptionState();
     }
@@ -90,9 +95,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
       
-      // 🎯 기존 사용자인 경우 구독 상태 로드
+      // 🎯 기존 사용자인 경우 구독 상태 스트림 설정 + 초기 로드
       if (!_isNewUser) {
-        await _loadSubscriptionState();
+        _setupSubscriptionStateStream(); // 🔔 스트림 구독 먼저 설정
+        await _loadSubscriptionState();  // 🔍 초기 상태 로드
       }
       
       if (kDebugMode) {
@@ -144,20 +150,56 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 🎯 구독 상태 로드
+  /// 🎯 구독 상태 스트림 설정 (실시간 배너 업데이트)
+  void _setupSubscriptionStateStream() {
+    if (kDebugMode) {
+      debugPrint('🔔 [HomeScreen] 구독 상태 스트림 구독 시작');
+    }
+    
+    _subscriptionStateSubscription = _subscriptionManager.subscriptionStateStream.listen(
+      (subscriptionState) {
+        if (kDebugMode) {
+          debugPrint('🔔 [HomeScreen] 구독 상태 변경 수신');
+          debugPrint('   권한: ${subscriptionState.entitlement.value}');
+          debugPrint('   활성 배너: ${subscriptionState.activeBanners.length}개');
+          debugPrint('   배너 타입: ${subscriptionState.activeBanners.map((e) => e.name).toList()}');
+        }
+        
+        if (mounted) {
+          setState(() {
+            _subscriptionState = subscriptionState;
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          debugPrint('❌ [HomeScreen] 구독 상태 스트림 오류: $error');
+        }
+        _setDefaultState();
+      },
+    );
+    
+    if (kDebugMode) {
+      debugPrint('✅ [HomeScreen] 구독 상태 스트림 구독 완료');
+    }
+  }
+
+  /// 🎯 구독 상태 로드 (최초 1회만 호출)
   Future<void> _loadSubscriptionState() async {
     try {
       if (kDebugMode) {
         debugPrint('🔍 [HomeScreen] 구독 상태 로드 시작');
       }
       
-      final subscriptionState = await _subscriptionManager.getSubscriptionStateWithBanners();
+      // 🎯 최초 1회만 호출 - 이후는 스트림으로 자동 업데이트
+      final subscriptionState = await _subscriptionManager.getSubscriptionState();
       
-    if (mounted) {
-      setState(() {
-        _subscriptionState = subscriptionState;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _subscriptionState = subscriptionState;
+          _isLoading = false;
+        });
       }
       
       if (kDebugMode) {
@@ -175,11 +217,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 🎯 구독 상태 새로고침
+  /// 🎯 구독 상태 새로고침 (스트림 기반 업데이트)
   Future<void> _refreshSubscriptionState() async {
     if (_isNewUser) return; // 신규 사용자는 새로고침 안함
     
-    await _loadSubscriptionState();
+    if (kDebugMode) {
+      debugPrint('🔄 [HomeScreen] 구독 상태 새로고침 요청');
+    }
+    
+    try {
+      // 서버에서 최신 상태 조회 - 스트림으로 자동 업데이트됨
+      await _subscriptionManager.getSubscriptionState();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeScreen] 구독 상태 새로고침 실패: $e');
+      }
+    }
   }
 
   /// 🎯 기본 상태 설정
@@ -244,13 +297,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }, SetOptions(merge: true));
       }
 
-      // 4. 구독 상태 확인 (배너 표시용)
+      // 4. 구독 상태 스트림 설정 + 초기 로드
+      _setupSubscriptionStateStream(); // 🔔 스트림 구독 먼저 설정
+      
       if (userChoseTrial) {
         // 구매 완료를 기다린 후 확인
         await Future.delayed(const Duration(milliseconds: 1500));
       }
       
-      await _loadSubscriptionState();
+      await _loadSubscriptionState(); // 🔍 초기 상태 로드
       
     } catch (e) {
       if (kDebugMode) {
@@ -265,19 +320,53 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _uiCoordinator.showUpgradeModal(context, bannerType);
   }
 
-  /// 배너 닫기
-  void _onDismissBanner(BannerType bannerType) {
-    _uiCoordinator.dismissBanner(
-      bannerType,
-      onBannersUpdated: (updatedBanners) {
-        // 배너 상태 새로고침
-        _refreshSubscriptionState();
-      },
-    );
+  /// 배너 닫기 (즉시 UI 업데이트 + 스트림 기반 새로고침)
+  void _onDismissBanner(BannerType bannerType) async {
+    if (kDebugMode) {
+      debugPrint('🚫 [HomeScreen] 배너 닫기 시작: ${bannerType.name}');
+    }
+    
+    try {
+      // 즉시 UI에서 해당 배너 제거
+      setState(() {
+        final updatedBanners = _subscriptionState.activeBanners.where((banner) => banner != bannerType).toList();
+        _subscriptionState = SubscriptionState(
+          entitlement: _subscriptionState.entitlement,
+          subscriptionStatus: _subscriptionState.subscriptionStatus,
+          hasUsedTrial: _subscriptionState.hasUsedTrial,
+          hasUsageLimitReached: _subscriptionState.hasUsageLimitReached,
+          activeBanners: updatedBanners,
+          statusMessage: _subscriptionState.statusMessage,
+        );
+      });
+      
+      // 백그라운드에서 배너 상태 저장 및 새로고침
+      await _uiCoordinator.dismissBanner(
+        bannerType,
+        onBannersUpdated: (updatedBanners) {
+          // 배너 상태 새로고침 - 스트림으로 자동 업데이트됨
+          if (kDebugMode) {
+            debugPrint('🔄 [HomeScreen] 배너 닫기 후 구독 상태 새로고침');
+          }
+          _refreshSubscriptionState();
+        },
+      );
+      
+      if (kDebugMode) {
+        debugPrint('✅ [HomeScreen] 배너 닫기 완료: ${bannerType.name}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeScreen] 배너 닫기 실패: $e');
+      }
+    }
   }
 
-  /// 수동 새로고침
+  /// 수동 새로고침 (스트림 기반)
   void _onRefresh() {
+    if (kDebugMode) {
+      debugPrint('🔄 [HomeScreen] 수동 새로고침 요청');
+    }
     _refreshSubscriptionState();
   }
 
