@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../features/home/coordinators/home_ui_coordinator.dart';
+import '../models/subscription_state.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
@@ -15,16 +18,14 @@ class UsageDialog extends StatefulWidget {
   final String? title;
   final String? message;
   final Function? onContactSupport;
-  final bool? shouldUsePremiumQuota;
-  final Map<String, int>? planLimits;
+  final SubscriptionInfo? subscriptionInfo;
 
   const UsageDialog({
     Key? key,
     this.title,
     this.message,
     this.onContactSupport,
-    this.shouldUsePremiumQuota,
-    this.planLimits,
+    this.subscriptionInfo,
   }) : super(key: key);
 
   @override
@@ -35,11 +36,7 @@ class UsageDialog extends StatefulWidget {
     BuildContext context, {
     String? title,
     String? message,
-    Map<String, dynamic>? limitStatus, // 호환성을 위해 유지하지만 사용하지 않음
-    Map<String, double>? usagePercentages, // 호환성을 위해 유지하지만 사용하지 않음
-    Function? onContactSupport,
-    bool? shouldUsePremiumQuota,
-    Map<String, int>? planLimits,
+    SubscriptionInfo? subscriptionInfo,
   }) async {
     return showDialog(
       context: context,
@@ -48,9 +45,7 @@ class UsageDialog extends StatefulWidget {
         return UsageDialog(
           title: title,
           message: message,
-          onContactSupport: onContactSupport,
-          shouldUsePremiumQuota: shouldUsePremiumQuota,
-          planLimits: planLimits,
+          subscriptionInfo: subscriptionInfo,
         );
       },
     );
@@ -59,6 +54,7 @@ class UsageDialog extends StatefulWidget {
 
 class _UsageDialogState extends State<UsageDialog> {
   final UsageLimitService _usageService = UsageLimitService();
+  final HomeUICoordinator _uiCoordinator = HomeUICoordinator();
   
   Map<String, dynamic> _limitStatus = {};
   Map<String, double> _usagePercentages = {};
@@ -76,20 +72,15 @@ class _UsageDialogState extends State<UsageDialog> {
     try {
       if (kDebugMode) {
         debugPrint('📊 [UsageDialog] 사용량 데이터 로드 시작');
-        debugPrint('📊 [UsageDialog] 전달받은 프리미엄 쿼터: ${widget.shouldUsePremiumQuota}');
-        debugPrint('📊 [UsageDialog] 전달받은 플랜 제한: ${widget.planLimits}');
       }
       
-      // 플랜 정보는 widget.planLimits 또는 PlanConstants 사용
-      // 사용량 정보 가져오기
       final usageInfo = await _usageService.getUserUsageForSettings();
-      // 전달받은 플랜 제한이 있으면 우선 사용, 없으면 PlanConstants 사용
-      final isPremium = widget.shouldUsePremiumQuota ?? false;
-      final planLimits = widget.planLimits ?? (
-        isPremium
-          ? PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM)
-          : PlanConstants.getPlanLimits(PlanConstants.PLAN_FREE)
-      );
+      
+      final isPremium = widget.subscriptionInfo?.canUsePremiumFeatures ?? false;
+      final planLimits = isPremium 
+        ? PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM) 
+        : PlanConstants.getPlanLimits(PlanConstants.PLAN_FREE);
+
       _limitStatus = {
         'ocrLimitReached': usageInfo['limitStatus']?['ocrLimitReached'] ?? false,
         'ttsLimitReached': usageInfo['limitStatus']?['ttsLimitReached'] ?? false,
@@ -97,20 +88,11 @@ class _UsageDialogState extends State<UsageDialog> {
         'ttsLimit': planLimits['ttsRequests'] ?? 30,
       };
       
-      if (kDebugMode) {
-        debugPrint('📊 [UsageDialog] 적용된 플랜 제한 사용: $_limitStatus');
-      }
-      
-      // 사용량 퍼센트 계산
       final percentagesMap = usageInfo['usagePercentages'] as Map<String, dynamic>? ?? {};
       _usagePercentages = {};
       percentagesMap.forEach((key, value) {
         _usagePercentages[key] = (value is num) ? value.toDouble() : 0.0;
       });
-      
-      if (kDebugMode) {
-        debugPrint('📊 [UsageDialog] 사용량 퍼센트: $_usagePercentages');
-      }
       
     } catch (e, stackTrace) {
       if (kDebugMode) {
@@ -118,13 +100,10 @@ class _UsageDialogState extends State<UsageDialog> {
         debugPrint('❌ [UsageDialog] 스택 트레이스: $stackTrace');
       }
       
-      // 에러 시 PlanConstants 사용
-      final isPremium = widget.shouldUsePremiumQuota ?? false;
-      final planLimits = widget.planLimits ?? (
-        isPremium
-          ? PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM)
-          : PlanConstants.getPlanLimits(PlanConstants.PLAN_FREE)
-      );
+      final isPremium = widget.subscriptionInfo?.canUsePremiumFeatures ?? false;
+      final planLimits = isPremium 
+          ? PlanConstants.getPlanLimits(PlanConstants.PLAN_PREMIUM) 
+          : PlanConstants.getPlanLimits(PlanConstants.PLAN_FREE);
       _limitStatus = {
         'ocrLimitReached': false,
         'ttsLimitReached': false,
@@ -141,14 +120,8 @@ class _UsageDialogState extends State<UsageDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final bool hasReachedLimit = _limitStatus['ocrLimitReached'] == true || 
-                                _limitStatus['ttsLimitReached'] == true;
-    
-    final String effectiveTitle = widget.title ?? 
-        (hasReachedLimit ? '사용량 한도에 도달했어요.' : '현재까지의 사용량');
-        
-    final String effectiveMessage = widget.message ?? 
-        (hasReachedLimit ? '사용량 한도에 도달했어요.\n업그레이드하여 더 많은 기능을 이용해보세요!' : '');
+    final String effectiveTitle = widget.title ?? '현재까지의 사용량';
+    final String effectiveMessage = widget.message ?? '';
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -160,7 +133,7 @@ class _UsageDialogState extends State<UsageDialog> {
       content: _isLoading
           ? const SizedBox(
               width: 260,
-              height: 220,
+              height: 180,
               child: Center(child: CircularProgressIndicator()),
             )
           : SingleChildScrollView(
@@ -176,12 +149,14 @@ class _UsageDialogState extends State<UsageDialog> {
                 ],
               ),
             ),
-      actionsPadding: EdgeInsets.all(SpacingTokens.md),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      actionsAlignment: MainAxisAlignment.center,
       actions: [
-        if (widget.onContactSupport != null) _buildActionButton(),
+        _buildActionButton(context),
+        const SizedBox(width: SpacingTokens.sm),
         PikaButton(
           text: '닫기',
-          variant: PikaButtonVariant.primary,
+          variant: PikaButtonVariant.outline,
           size: PikaButtonSize.small,
           onPressed: () => Navigator.of(context).pop(),
         ),
@@ -191,54 +166,26 @@ class _UsageDialogState extends State<UsageDialog> {
   
   /// 사용량 그래프 위젯
   Widget _buildUsageGraph() {
-    final List<MapEntry<String, double>> entries = [
-      MapEntry('ocr', _usagePercentages['ocr'] ?? 0.0),
-      MapEntry('tts', _usagePercentages['tts'] ?? 0.0),
-    ];
-    
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '사용량 현황',
-          style: TypographyTokens.body2.copyWith(fontWeight: FontWeight.bold),
-        ),
-        SizedBox(height: SpacingTokens.sm),
-        ...entries.map((entry) {
-          final String label = _getUsageLabel(entry.key);
-          // NaN 방지: 유효하지 않은 값은 0으로 처리
-          final double rawPercentage = entry.value.isFinite ? entry.value : 0.0;
-          final double percentage = rawPercentage.clamp(0, 100);
-          
-          return Padding(
-            padding: EdgeInsets.only(bottom: SpacingTokens.xs),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(label, style: TypographyTokens.caption),
-                    Text(
-                      '${percentage.toStringAsFixed(0)}%',
-                      style: TypographyTokens.caption.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: _getUsageColor(percentage),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                LinearProgressIndicator(
-                  value: percentage / 100, // percentage가 이미 0-100 범위로 clamp되어 안전
-                  backgroundColor: ColorTokens.divider,
-                  valueColor: AlwaysStoppedAnimation<Color>(_getUsageColor(percentage)),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ],
+      children: _usagePercentages.entries.map((entry) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: SpacingTokens.xs),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_getUsageLabel(entry.key), style: TypographyTokens.caption),
+              const SizedBox(height: SpacingTokens.xsHalf),
+              LinearProgressIndicator(
+                value: entry.value / 100,
+                backgroundColor: ColorTokens.greyLight,
+                valueColor: AlwaysStoppedAnimation<Color>(_getUsageColor(entry.value)),
+                minHeight: 8,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
   
@@ -251,9 +198,8 @@ class _UsageDialogState extends State<UsageDialog> {
   
   /// 사용량 라벨 변환
   String _getUsageLabel(String key) {
-    // 🎯 전달받은 프리미엄 쿼터 정보 사용
-    final bool isPremium = widget.shouldUsePremiumQuota ?? false;
-    final String period = isPremium ? '/month' : '';
+    final bool isPremium = widget.subscriptionInfo?.canUsePremiumFeatures ?? false;
+    final String period = isPremium ? '/월' : '';
     
     switch (key) {
       case 'ocr':
@@ -266,73 +212,48 @@ class _UsageDialogState extends State<UsageDialog> {
   }
 
   /// 플랜 상태에 따른 액션 버튼
-  Widget _buildActionButton() {
-    // 🎯 전달받은 프리미엄 쿼터 정보 사용
-    final bool isPremiumQuota = widget.shouldUsePremiumQuota ?? false;
-    final bool isPremiumPaid = isPremiumQuota;
-    final bool isPremiumTrial = false;
-    
-    // 버튼 텍스트 결정
+  Widget _buildActionButton(BuildContext context) {
+    final info = widget.subscriptionInfo;
+    if (info == null) {
+      // 정보가 없는 경우 비활성화된 버튼 반환
+      return const PikaButton(
+        text: '정보 로딩 중...',
+        variant: PikaButtonVariant.primary,
+        size: PikaButtonSize.small,
+        onPressed: null,
+      );
+    }
+
     String buttonText;
-    if (isPremiumPaid) {
-      buttonText = '추가 사용 문의';
-    } else if (isPremiumTrial) {
-      buttonText = '프리미엄 체험 중';
-    } else {
+    VoidCallback? onPressedAction;
+
+    if (!info.hasUsedTrial) {
+      buttonText = '무료 체험 시작';
+      onPressedAction = () {
+        Navigator.of(context).pop();
+        _uiCoordinator.showWelcomeModalAfterDelay(context, onComplete: (_) {});
+      };
+    } else if (info.entitlement.isFree) {
       buttonText = '프리미엄으로 업그레이드';
+      onPressedAction = () {
+        Navigator.of(context).pop();
+        UpgradeModal.show(context, reason: UpgradeReason.general);
+      };
+    } else { // isPremium
+      buttonText = '사용량 추가 문의';
+      onPressedAction = () async {
+        final formUrl = Uri.parse('https://docs.google.com/forms/d/e/1FAIpQLSfgVL4Bd5KcTh9nhfbVZ51yApPAmJAZJZgtM4V9hNhsBpKuaA/viewform?usp=dialog');
+        if (await canLaunchUrl(formUrl)) {
+          await launchUrl(formUrl, mode: LaunchMode.externalApplication);
+        }
+      };
     }
     
     return PikaButton(  
       text: buttonText,
-      variant: PikaButtonVariant.outline,
+      variant: PikaButtonVariant.primary,
       size: PikaButtonSize.small,
-      onPressed: isPremiumTrial ? null : () async {
-        Navigator.of(context).pop();
-        
-        if (isPremiumPaid) {
-          // 유료 프리미엄 사용자 - 바로 Google Form 열기
-          final formUrl = Uri.parse('https://docs.google.com/forms/d/e/1FAIpQLSfgVL4Bd5KcTh9nhfbVZ51yApPAmJAZJZgtM4V9hNhsBpKuaA/viewform?usp=dialog');
-          try {
-            if (await canLaunchUrl(formUrl)) {
-              await launchUrl(formUrl, mode: LaunchMode.externalApplication);
-            } else {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('문의 폼을 열 수 없습니다.'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            }
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('문의 폼을 여는 중 오류가 발생했습니다: $e'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
-          }
-        } else {
-          // 무료 사용자 - 업그레이드 모달
-          if (mounted) {
-            // 🚨 이미 업그레이드 모달이 표시 중이면 중복 호출 방지
-            if (UpgradeModal.isShowing) {
-              if (kDebugMode) {
-                debugPrint('⚠️ [UsageDialog] 업그레이드 모달이 이미 표시 중입니다. 중복 호출 방지');
-              }
-              return;
-            }
-
-            UpgradeModal.show(
-              context,
-              reason: UpgradeReason.limitReached,
-            );
-          }
-        }
-      },
+      onPressed: onPressedAction,
     );
   }
 } 

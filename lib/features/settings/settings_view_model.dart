@@ -151,11 +151,16 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 사용량 조회 다이얼로그 표시
   Future<void> showUsageDialog(BuildContext context) async {
+    if (_subscriptionInfo == null) {
+      if (kDebugMode) print('SubscriptionInfo가 null이므로 UsageDialog를 표시할 수 없습니다.');
+      return;
+    }
+    
     try {
       showDialog(
         context: context,
         builder: (BuildContext context) {
-          return const UsageDialog();
+          return UsageDialog(subscriptionInfo: _subscriptionInfo);
         },
       );
     } catch (e) {
