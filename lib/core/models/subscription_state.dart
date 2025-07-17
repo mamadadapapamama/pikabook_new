@@ -147,19 +147,31 @@ class SubscriptionInfo {
   });
 
   factory SubscriptionInfo.fromJson(Map<String, dynamic> json) {
-    // subscription 필드에서 실제 구독 정보 추출
-    final subscription = json['subscription'] as Map<String, dynamic>? ?? json;
+    // subscription 필드에서 실제 구독 정보 추출 (안전한 타입 변환)
+    final subscription = json['subscription'] != null
+        ? Map<String, dynamic>.from(json['subscription'] as Map)
+        : json;
+    
+    // expirationDate를 안전하게 파싱
+    String? parsedExpirationDate;
+    final dynamic rawExpirationDate = subscription['expirationDate'];
+    if (rawExpirationDate is String) {
+      parsedExpirationDate = rawExpirationDate;
+    } else if (rawExpirationDate is int) {
+      // Unix timestamp (milliseconds)로 가정
+      parsedExpirationDate = DateTime.fromMillisecondsSinceEpoch(rawExpirationDate).toIso8601String();
+    }
     
     return SubscriptionInfo(
       entitlement: Entitlement.fromString(subscription['entitlement'] as String? ?? 'free'),
       subscriptionStatus: SubscriptionStatus.fromString(subscription['subscriptionStatus'] as String? ?? 'cancelled'),
       hasUsedTrial: subscription['hasUsedTrial'] as bool? ?? false,
       autoRenewEnabled: subscription['autoRenewEnabled'] as bool? ?? false,
-      expirationDate: subscription['expirationDate'] as String?,
+      expirationDate: parsedExpirationDate,
       subscriptionType: SubscriptionType.fromString(subscription['subscriptionType'] as String?),
       originalTransactionId: subscription['originalTransactionId'] as String?,
       bannerMetadata: subscription['bannerMetadata'] != null
-          ? BannerMetadata.fromJson(Map<String, dynamic>.from(subscription['bannerMetadata']))
+          ? BannerMetadata.fromJson(Map<String, dynamic>.from(subscription['bannerMetadata'] as Map))
           : null,
       dataSource: json['dataSource'] as String? ?? 'unknown',
       version: json['version'] as String? ?? 'unknown',

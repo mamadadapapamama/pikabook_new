@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/theme/tokens/color_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import '../../../core/theme/tokens/typography_tokens.dart';
@@ -76,9 +75,14 @@ class PlanCard extends StatelessWidget {
               )
             ),
             const SizedBox(width: SpacingTokens.sm),
+            InkWell(
+              onTap: viewModel.isLoading ? null : () => viewModel.refreshPlanInfo(force: true),
+              child: const Icon(Icons.refresh, size: 18, color: ColorTokens.textSecondary),
+            ),
+            const SizedBox(width: SpacingTokens.sm),
             PikaButton(
               text: '사용량 조회',
-              variant: PikaButtonVariant.primary,
+              variant: PikaButtonVariant.outline,
               size: PikaButtonSize.xs,
               onPressed: () => viewModel.showUsageDialog(context),
             )
@@ -86,22 +90,11 @@ class PlanCard extends StatelessWidget {
         ),
         if (subscriptionInfo.dateInfoText != null) ...[
           const SizedBox(height: SpacingTokens.xsHalf),
-          Row(
-            children: [
-              Text(
-                subscriptionInfo.dateInfoText!, 
-                style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary)
-              ),
-              const SizedBox(width: SpacingTokens.xs),
-              InkWell(
-                onTap: viewModel.isLoading ? null : () => viewModel.refreshPlanInfo(force: true),
-                child: const Icon(Icons.refresh, size: 16, color: ColorTokens.textSecondary),
-              ),
-            ],
+          Text(
+            subscriptionInfo.dateInfoText!, 
+            style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary)
           ),
         ],
-        const SizedBox(height: SpacingTokens.md),
-        const Divider(color: ColorTokens.greyLight, height: 1),
       ],
     );
   }
