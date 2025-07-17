@@ -92,6 +92,9 @@ class SettingsViewModel extends ChangeNotifier {
   String? get nextPaymentDateText => _nextPaymentDateText;
   String? get freeTransitionDateText => _freeTransitionDateText;
 
+  /// 사용량 조회 버튼 표시 여부
+  bool get shouldShowUsageButton => _planType == 'premium';
+
   // 🎯 CTA 관련 getters
   CTAButtonModel get ctaButton {
     // 현재 상태에 따라 다른 버튼 모델 반환

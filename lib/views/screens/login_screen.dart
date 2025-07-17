@@ -14,12 +14,6 @@ import '../../features/login/dialogs/password_reset_dialog.dart';
 import '../../features/login/dialogs/email_verification_dialog.dart';
 import '../../features/login/dialogs/email_not_verified_dialog.dart';
 
-// TODO: Refactor into smaller widgets and dialogs
-// - PasswordResetDialog
-// - EmailVerificationDialogs
-// - LoginHeader
-// - SocialLoginButtons
-// - EmailLoginForm
 
 class LoginScreen extends StatelessWidget {
   final Function(User) onLoginSuccess;
@@ -73,7 +67,8 @@ class LoginScreen extends StatelessWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const _LoginHeader(),
+                            if (!viewModel.isEmailLogin)
+                              const _LoginHeader(),
                             SizedBox(height: SpacingTokens.xl),
                             _buildLoadingAndError(context, viewModel),
                             SizedBox(height: SpacingTokens.md),

@@ -29,7 +29,7 @@ class PlanCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (viewModel.isPlanLoaded)
-              _buildPlanDetails(viewModel)
+              _buildPlanDetails(context, viewModel)
             else
               _buildLoadingSkeleton(),
             
@@ -47,12 +47,14 @@ class PlanCard extends StatelessWidget {
               
               if (viewModel.ctaSubtext.isNotEmpty) ...[
                 const SizedBox(height: SpacingTokens.xs),
-                Text(
-                  viewModel.ctaSubtext,
-                  style: TypographyTokens.caption.copyWith(
-                    color: ColorTokens.textSecondary,
+                Center(
+                  child: Text(
+                    viewModel.ctaSubtext,
+                    style: TypographyTokens.caption.copyWith(
+                      color: ColorTokens.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ],
             ],
@@ -62,7 +64,14 @@ class PlanCard extends StatelessWidget {
     );
   }
 
-  Widget _buildPlanDetails(SettingsViewModel viewModel) {
+  Widget _buildPlanDetails(BuildContext context, SettingsViewModel viewModel) {
+    String? subtitleText;
+    if (viewModel.planStatusText == '활성' || viewModel.planStatusText == '결제 문제') {
+      subtitleText = viewModel.nextPaymentDateText;
+    } else if (viewModel.planStatusText == '취소 예정' || viewModel.planStatusText == '종료됨') {
+      subtitleText = viewModel.freeTransitionDateText;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -70,37 +79,47 @@ class PlanCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(viewModel.planTitle, style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: SpacingTokens.xsHalf),
-                Text(viewModel.planSubtitle, style: TypographyTokens.body2),
-              ],
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: SpacingTokens.sm, vertical: SpacingTokens.xsHalf),
-              decoration: BoxDecoration(
-                color: viewModel.planStatusText == '활성' ? ColorTokens.success.withOpacity(0.1) : ColorTokens.greyMedium.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(SpacingTokens.xsHalf),
-              ),
+            // Plan Title
+            Expanded(
               child: Text(
-                viewModel.planStatusText,
-                style: TypographyTokens.caption.copyWith(
-                  color: viewModel.planStatusText == '활성' ? ColorTokens.success : ColorTokens.textSecondary,
-                  fontWeight: FontWeight.bold,
+                viewModel.planTitle, 
+                style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold)
+              )
+            ),
+            // Status Badge OR Usage Button
+            if (viewModel.shouldShowUsageButton)
+              PikaButton(
+                text: '사용량 조회',
+                variant: PikaButtonVariant.primary,
+                size: PikaButtonSize.xs,
+                onPressed: () {
+                  // TODO: Implement usage detail view
+                },
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: SpacingTokens.sm, vertical: SpacingTokens.xsHalf),
+                decoration: BoxDecoration(
+                  color: viewModel.planStatusText == '활성' ? ColorTokens.success.withOpacity(0.1) : ColorTokens.greyMedium.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(SpacingTokens.xsHalf),
+                ),
+                child: Text(
+                  viewModel.planStatusText,
+                  style: TypographyTokens.caption.copyWith(
+                    color: viewModel.planStatusText == '활성' ? ColorTokens.success : ColorTokens.textSecondary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
+        // Subtitle (Next payment date etc.)
+        if (subtitleText != null) ...[
+          const SizedBox(height: SpacingTokens.xsHalf),
+          Text(subtitleText, style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary)),
+        ],
         const SizedBox(height: SpacingTokens.md),
-        const Divider(color: ColorTokens.greyMedium, height: 1),
-        const SizedBox(height: SpacingTokens.md),
-        if (viewModel.nextPaymentDateText != null && (viewModel.planStatusText == '활성' || viewModel.planStatusText == '결제 문제'))
-          _buildInfoRow(Icons.calendar_today, viewModel.nextPaymentDateText!),
-        if (viewModel.freeTransitionDateText != null && (viewModel.planStatusText == '취소 예정' || viewModel.planStatusText == '종료됨'))
-           _buildInfoRow(Icons.event_busy, viewModel.freeTransitionDateText!),
+        const Divider(color: ColorTokens.greyLight, height: 1),
       ],
     );
   }
@@ -112,19 +131,6 @@ class PlanCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: ColorTokens.greyLight,
         borderRadius: BorderRadius.circular(4),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: SpacingTokens.sm),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: ColorTokens.textSecondary),
-          const SizedBox(width: SpacingTokens.sm),
-          Text(text, style: TypographyTokens.body2),
-        ],
       ),
     );
   }
