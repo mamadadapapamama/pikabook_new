@@ -393,13 +393,22 @@ class InAppPurchaseService {
     }
   }
 
-  /// 🎯 서비스 종료
+  /// 🚀 서비스 정리 (로그아웃 시 호출)
   void dispose() {
-    if (_isInitialized) {
-      _subscription?.cancel();
-      _processedPurchases.clear();
-      _scheduledNotifications.clear(); // 알림 스케줄링 중복 방지 세트 초기화
-      _isPurchaseInProgress = false;
+    if (kDebugMode) {
+      print('🗑️ InAppPurchase 서비스 정리 시작');
+    }
+    _subscription?.cancel();
+    _subscription = null;
+    _isInitialized = false;
+    _products.clear();
+    _processedPurchases.clear();
+    _isPurchaseInProgress = false;
+    _onPurchaseSuccess = null;
+    _onPurchaseResult = null;
+    _scheduledNotifications.clear();
+    if (kDebugMode) {
+      print('✅ InAppPurchase 서비스 정리 완료');
     }
   }
   

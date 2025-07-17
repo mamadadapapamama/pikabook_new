@@ -54,14 +54,14 @@ class UnifiedSubscriptionManager {
         if (kDebugMode) {
           debugPrint('🔄 [UnifiedSubscriptionManager] 사용자 변경 감지 (인증 상태): ${user.uid}');
         }
-        clearUserCache(); // 이전 사용자 캐시 정리
+        _clearCache(); // 이전 사용자 캐시 및 리스너 정리
         _setupFirestoreListener(user.uid); // 새 사용자를 위한 리스너 설정
       }
     } else {
       if (kDebugMode) {
         debugPrint('🔒 [UnifiedSubscriptionManager] 사용자 로그아웃 감지');
       }
-      clearUserCache(); // 로그아웃 시 캐시 및 리스너 정리
+      _clearCache(); // 로그아웃 시 캐시 및 리스너 정리
     }
   }
   
@@ -194,7 +194,7 @@ class UnifiedSubscriptionManager {
     _cachedServerResponse = null;
     _cacheTimestamp = null;
     _cachedUserId = null;
-    _firestoreSubscription?.cancel(); // 리스너도 함께 취소
+    _firestoreSubscription?.cancel();
     _firestoreSubscription = null;
     if (kDebugMode) {
       debugPrint('🗑️ [UnifiedSubscriptionManager] 캐시 및 리스너 초기화');
@@ -339,5 +339,9 @@ class UnifiedSubscriptionManager {
   void dispose() {
     _firestoreSubscription?.cancel();
     _subscriptionStateController.close();
+    _clearCache();
+    if (kDebugMode) {
+      debugPrint('💥 [UnifiedSubscriptionManager] 서비스 완전 종료');
+    }
   }
 } 

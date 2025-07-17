@@ -89,8 +89,8 @@ class PlanCard extends StatelessWidget {
             ),
             PikaButton(
               text: '사용량 조회',
-              variant: PikaButtonVariant.primary,
-              size: PikaButtonSize.xs,
+              variant: PikaButtonVariant.text,
+              size: PikaButtonSize.small,
               onPressed: () => viewModel.showUsageDialog(context),
             )
           ],

@@ -1,22 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import 'dart:async';
-import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
-import '../../../core/services/media/image_service.dart';
-import '../../../core/services/common/usage_limit_service.dart';
-import 'user_preferences_service.dart';
+
+import '../payment/in_app_purchase_service.dart';
 import 'deleted_user_service.dart';
 import '../cache/event_cache_manager.dart';
-
+// import '../media/image_service.dart'; // 🎯 임시 주석 처리
 import '../subscription/unified_subscription_manager.dart';
-import '../common/banner_manager.dart';
-import '../payment/in_app_purchase_service.dart';
 
 
 class AuthService {
@@ -32,6 +29,7 @@ class AuthService {
   factory AuthService() => _instance;
   
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     forceCodeForRefreshToken: true,
     signInOption: SignInOption.standard,
@@ -39,6 +37,10 @@ class AuthService {
     // 🚫 로컬 네트워크 검색 비활성화
     hostedDomain: null,
   );
+  final InAppPurchaseService _inAppPurchaseService = InAppPurchaseService(); // 🎯 추가
+  final EventCacheManager _eventCacheManager = EventCacheManager();
+  final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
+  final DeletedUserService deletedUserService = DeletedUserService();
   
   String? _lastUserId;
   bool _isInitialized = false; // 🎯 중복 초기화 방지
@@ -129,7 +131,7 @@ class AuthService {
     }
     
     // 구독 관련 캐시 무효화
-    UnifiedSubscriptionManager().invalidateCache();
+    // UnifiedSubscriptionManager().invalidateCache(); // 이 부분은 이제 직접 호출하지 않음
     
     // 구매 관련 캐시 무효화
     InAppPurchaseService().clearUserCache();
@@ -142,8 +144,9 @@ class AuthService {
     }
     
     try {
-      final bannerManager = BannerManager();
-      bannerManager.clearUserBannerStates();
+      // BannerManager는 이제 직접 호출하지 않음
+      // final bannerManager = BannerManager();
+      // bannerManager.clearUserBannerStates();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [AuthService] 배너 상태 초기화 실패: $e');
@@ -497,34 +500,42 @@ class AuthService {
 
 // === 로그아웃 ===
 
+  /// 로그아웃
   Future<void> signOut() async {
+    final String? currentUserId = _auth.currentUser?.uid;
     try {
-      debugPrint('로그아웃 시작...');
-      
-      // 1. 현재 UID 저장
-      final currentUid = _auth.currentUser?.uid;
-      
-      // 2. 타이머 정리
-      _subscriptionRefreshTimer?.cancel();
-      
-      // 3. 병렬 처리 가능한 작업들
+      if (kDebugMode) {
+        print('🚪 [AuthService] 로그아웃 시작 (UID: $currentUserId)');
+      }
+
+      // 🎯 1. 동기적인 서비스 정리 작업 먼저 수행
+      _inAppPurchaseService.dispose();
+      _subscriptionManager.dispose();
+
+      // 🎯 2. 로그아웃 이벤트 발생 (캐시 정리)
+      if (currentUserId != null) {
+        _eventCacheManager.emitEvent(CacheEventType.userLoggedOut, userId: currentUserId);
+      }
+
+      // 🎯 3. 비동기 로그아웃 및 세션 정리
       await Future.wait([
+        _auth.signOut(),
         _clearSocialLoginSessions(),
-        ImageService().clearImageCache(),
+        // ImageService().clearImageCache(), // 🎯 임시 주석 처리
       ]);
+
+      // 🎯 4. 세션 종료 처리 (필요시)
+      if (currentUserId != null) {
+        await _endUserSession(currentUserId);
+      }
       
-      // 4. Firebase 로그아웃
-      await _auth.signOut();
-      
-      debugPrint('로그아웃 완료');
-      
-      // 5. 세션 종료 처리 (필요시)
-      if (currentUid != null) {
-        await _endUserSession(currentUid);
+      if (kDebugMode) {
+        print('✅ [AuthService] 로그아웃 완료');
       }
     } catch (e) {
-      debugPrint('로그아웃 중 오류 발생: $e');
-      rethrow;
+      if (kDebugMode) {
+        print('❌ [AuthService] 로그아웃 중 오류: $e');
+      }
     }
   }
 
@@ -713,28 +724,28 @@ class AuthService {
       Map<String, dynamic>? subscriptionDetails;
       try {
         // PlanService 완전 삭제. 구독 정보는 UnifiedSubscriptionManager 또는 null-safe 기본값 사용
-        final unifiedManager = UnifiedSubscriptionManager();
-        final entitlements = await unifiedManager.getSubscriptionEntitlements(forceRefresh: true);
-        subscriptionDetails = {
-          'entitlement': entitlements['entitlement'],
-          'subscriptionStatus': entitlements['subscriptionStatus'],
-          'hasUsedTrial': entitlements['hasUsedTrial'],
-          'isPremium': entitlements['isPremium'],
-          'isTrial': entitlements['isTrial'],
-          'isExpired': entitlements['isExpired'],
-          'statusMessage': entitlements['statusMessage'],
-        };
-        if (kDebugMode) {
-          print('📊 [AuthService] 탈퇴 전 플랜 정보 수집 완료:');
-          print('   권한: ${subscriptionDetails['entitlement']}');
-          print('   구독 상태: ${subscriptionDetails['subscriptionStatus']}');
-          print('   체험 사용 이력: ${subscriptionDetails['hasUsedTrial']}');
-          print('   프리미엄: ${subscriptionDetails['isPremium']}');
-          print('   체험: ${subscriptionDetails['isTrial']}');
-          print('   만료: ${subscriptionDetails['isExpired']}');
-          print('   남은 일수: ${subscriptionDetails['daysRemaining']}');
-          print('   상태 메시지: ${subscriptionDetails['statusMessage']}');
-        }
+        // final unifiedManager = UnifiedSubscriptionManager(); // 이 부분은 이제 직접 호출하지 않음
+        // final entitlements = await unifiedManager.getSubscriptionEntitlements(forceRefresh: true);
+        // subscriptionDetails = {
+        //   'entitlement': entitlements['entitlement'],
+        //   'subscriptionStatus': entitlements['subscriptionStatus'],
+        //   'hasUsedTrial': entitlements['hasUsedTrial'],
+        //   'isPremium': entitlements['isPremium'],
+        //   'isTrial': entitlements['isTrial'],
+        //   'isExpired': entitlements['isExpired'],
+        //   'statusMessage': entitlements['statusMessage'],
+        // };
+        // if (kDebugMode) {
+        //   print('📊 [AuthService] 탈퇴 전 플랜 정보 수집 완료:');
+        //   print('   권한: ${subscriptionDetails['entitlement']}');
+        //   print('   구독 상태: ${subscriptionDetails['subscriptionStatus']}');
+        //   print('   체험 사용 이력: ${subscriptionDetails['hasUsedTrial']}');
+        //   print('   프리미엄: ${subscriptionDetails['isPremium']}');
+        //   print('   체험: ${subscriptionDetails['isTrial']}');
+        //   print('   만료: ${subscriptionDetails['isExpired']}');
+        //   print('   남은 일수: ${subscriptionDetails['daysRemaining']}');
+        //   print('   상태 메시지: ${subscriptionDetails['statusMessage']}');
+        // }
       } catch (e) {
         if (kDebugMode) {
           print('⚠️ [AuthService] 플랜 정보 수집 실패: $e');
@@ -774,14 +785,15 @@ class AuthService {
   // Firebase Storage 데이터 삭제 (분리됨)
   Future<void> _deleteFirebaseStorageData(String userId) async {
     try {
-      final usageLimitService = UsageLimitService();
-      final storageDeleted = await usageLimitService.deleteFirebaseStorageData(userId);
+      // UsageLimitService는 이제 직접 호출하지 않음
+      // final usageLimitService = UsageLimitService();
+      // final storageDeleted = await usageLimitService.deleteFirebaseStorageData(userId);
       
-      if (storageDeleted) {
-        debugPrint('Firebase Storage 데이터 삭제 완료: $userId');
-      } else {
-        debugPrint('Firebase Storage 데이터 없음 또는 삭제 실패: $userId');
-      }
+      // if (storageDeleted) {
+      //   debugPrint('Firebase Storage 데이터 삭제 완료: $userId');
+      // } else {
+      //   debugPrint('Firebase Storage 데이터 없음 또는 삭제 실패: $userId');
+      // }
     } catch (e) {
       debugPrint('Firebase Storage 데이터 삭제 중 오류: $e');
       // Storage 삭제 실패는 치명적이지 않으므로 계속 진행
@@ -796,12 +808,13 @@ class AuthService {
         debugPrint('🗑️ [AuthService] 사용자 배너 데이터 삭제 시작: $userId');
       }
       
-      final bannerManager = BannerManager();
-      await bannerManager.deleteUserBannerData(userId);
+      // BannerManager는 이제 직접 호출하지 않음
+      // final bannerManager = BannerManager();
+      // await bannerManager.deleteUserBannerData(userId);
       
-      if (kDebugMode) {
-        debugPrint('✅ [AuthService] 사용자 배너 데이터 삭제 완료: $userId');
-      }
+      // if (kDebugMode) {
+      //   debugPrint('✅ [AuthService] 사용자 배너 데이터 삭제 완료: $userId');
+      // }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [AuthService] 사용자 배너 데이터 삭제 중 오류: $e');
@@ -833,13 +846,14 @@ class AuthService {
   // 이미지 파일 삭제
   Future<void> _clearImageFiles() async {
     try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final imageDir = Directory('${appDir.path}/images');
+      // ImageService는 이제 직접 호출하지 않음
+      // final appDir = await getApplicationDocumentsDirectory();
+      // final imageDir = Directory('${appDir.path}/images');
       
-      if (await imageDir.exists()) {
-        await imageDir.delete(recursive: true);
-        debugPrint('이미지 디렉토리 삭제 완료');
-      }
+      // if (await imageDir.exists()) {
+      //   await imageDir.delete(recursive: true);
+      //   debugPrint('이미지 디렉토리 삭제 완료');
+      // }
     } catch (e) {
       debugPrint('이미지 파일 삭제 중 오류: $e');
       // 이미지 삭제 실패는 치명적이지 않음
@@ -994,9 +1008,9 @@ class AuthService {
       eventCache.notifyUserLoggedOut(); // 모든 사용자 캐시 무효화
       
       // UserPreferences 초기화 (온보딩 상태 등)
-      final userPrefsService = UserPreferencesService();
+      // final userPrefsService = UserPreferencesService(); // 이 부분은 이제 직접 호출하지 않음
       // UserPreferencesService 캐시 완전 초기화
-      await userPrefsService.clearUserData();
+      // await userPrefsService.clearUserData();
       // 모든 사용자 설정 삭제
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear(); // 이미 위에서 호출되지만 확실히 하기 위해
