@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart' hide Transaction;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:math';
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -1087,48 +1086,40 @@ class AuthService {
   Future<void> _saveUserToFirestore(User user, {bool isNewUser = false}) async {
     try {
       final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
-      
-      // 사용자 기본 정보
-      final userData = {
-        'uid': user.uid,
-        'email': user.email,
-        'displayName': user.displayName ?? '',
-        'photoURL': user.photoURL ?? '',
-        'lastLogin': FieldValue.serverTimestamp(),
-      };
-      
-      // 신규 사용자인 경우 추가 정보 설정
+      final deviceId = await _getDeviceId();
+
       if (isNewUser) {
-        userData['createdAt'] = FieldValue.serverTimestamp();
-        userData['isNewUser'] = true;
-        userData['deviceCount'] = 1;
-        userData['deviceIds'] = [await _getDeviceId()];
-        
-        // 🎯 신규 사용자 기본 구독 정보 설정
-        userData['subscription'] = {
-          'plan': 'free',
-          'status': 'active',
-          'isActive': true,
-          'isFreeTrial': false,
-          'autoRenewStatus': false,
+        // 신규 사용자: set으로 문서 생성
+        final Map<String, dynamic> userData = {
+          // 필수 정보
+          'uid': user.uid,
+          'email': user.email,
           'createdAt': FieldValue.serverTimestamp(),
+          'lastLogin': FieldValue.serverTimestamp(),
+          
+          // 🎯 신규 사용자를 위한 기본값 설정
+          'entitlement': 'free',
+          'onboardingCompleted': false,
+          'hasSeenWelcomeModal': false,
+          'isNewUser': true,
+          
+          // 기기 정보
+          'deviceCount': 1,
+          'deviceIds': [deviceId],
         };
-        
-        // 신규 사용자는 항상 set 사용
         await userRef.set(userData);
-        
+
         if (kDebugMode) {
           debugPrint('✅ [AuthService] 신규 사용자 Firestore 저장 완료: ${user.uid}');
         }
       } else {
-        // 기존 사용자 정보 업데이트
-        final deviceId = await _getDeviceId();
-        userData['lastUpdated'] = FieldValue.serverTimestamp();
-        
-        // 기존 문서 확인
+        // 기존 사용자: update로 정보 업데이트
+        final Map<String, dynamic> userData = {
+          'lastLogin': FieldValue.serverTimestamp(),
+        };
+
         final userDoc = await userRef.get();
         if (userDoc.exists) {
-          // 문서가 존재하면 update 사용
           final List<dynamic> deviceIds = userDoc.data()?['deviceIds'] ?? [];
           if (!deviceIds.contains(deviceId)) {
             userData['deviceIds'] = FieldValue.arrayUnion([deviceId]);
@@ -1136,21 +1127,22 @@ class AuthService {
           }
           await userRef.update(userData);
         } else {
-          // 문서가 없으면 set 사용 (온보딩 미완료 사용자)
+          // 에지 케이스: 기존 사용자지만 문서가 없는 경우 (온보딩 전 앱 삭제 등)
+          // 신규 사용자와 동일하게 문서를 생성해준다.
           userData['createdAt'] = FieldValue.serverTimestamp();
-          userData['isNewUser'] = false;
+          userData['isNewUser'] = true;
+          userData['entitlement'] = 'free';
+          userData['onboardingCompleted'] = false;
+          userData['hasSeenWelcomeModal'] = false;
           userData['deviceCount'] = 1;
           userData['deviceIds'] = [deviceId];
           await userRef.set(userData);
         }
-        
+
         if (kDebugMode) {
           debugPrint('✅ [AuthService] 기존 사용자 Firestore 업데이트 완료: ${user.uid}');
         }
       }
-
-
-      
     } catch (e) {
       debugPrint('⚠️ [AuthService] Firestore 저장 중 오류 (로그인 진행): $e');
       // 오류가 있어도 로그인 프로세스는 계속 진행

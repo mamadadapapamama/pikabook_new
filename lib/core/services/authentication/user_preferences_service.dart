@@ -140,7 +140,6 @@ class UserPreferencesService {
           'sourceLanguage': preferences.sourceLanguage,
           'targetLanguage': preferences.targetLanguage,
           'useSegmentMode': preferences.useSegmentMode,
-          'lastUpdated': FieldValue.serverTimestamp(),
         };
         
         await FirebaseFirestore.instance.collection('users').doc(userId).set(

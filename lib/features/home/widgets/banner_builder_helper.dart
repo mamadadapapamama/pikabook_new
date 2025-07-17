@@ -45,13 +45,13 @@ class BannerBuilderHelper {
         return null; // 환영 메시지, 닫기만 가능
       
       case BannerType.free:
-        return '풀팩 보기';
+        return '모든 플랜 보기';
       
       case BannerType.usageLimitFree:
-        return '풀팩보기';
+        return '모든 플랜 보기';
       
       case BannerType.trialCancelled:
-        return '풀팩 보기';
+        return '모든 플랜 보기';
       
       case BannerType.switchToPremium:
         return '단기'; // 트라이얼 완료후 월구독 시작

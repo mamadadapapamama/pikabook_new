@@ -145,7 +145,7 @@ class _UsageDialogState extends State<UsageDialog> {
                                 _limitStatus['ttsLimitReached'] == true;
     
     final String effectiveTitle = widget.title ?? 
-        (hasReachedLimit ? '학습 한도에 도달했어요.' : '현재까지의 사용량');
+        (hasReachedLimit ? '사용량 한도에 도달했어요.' : '현재까지의 사용량');
         
     final String effectiveMessage = widget.message ?? 
         (hasReachedLimit ? '사용량 한도에 도달했어요.\n업그레이드하여 더 많은 기능을 이용해보세요!' : '');

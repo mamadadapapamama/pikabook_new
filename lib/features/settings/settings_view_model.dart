@@ -63,7 +63,7 @@ class SettingsViewModel extends ChangeNotifier {
   String get sourceLanguage => _sourceLanguage;
   String get targetLanguage => _targetLanguage;
   bool get useSegmentMode => _useSegmentMode;
-  
+
   // 🎯 강화된 모델로부터 직접 UI 데이터 제공
   SubscriptionInfo? get subscriptionInfo => _subscriptionInfo;
 
@@ -71,18 +71,18 @@ class SettingsViewModel extends ChangeNotifier {
   Future<void> initialize() async {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final isUserChanged = _lastUserId != null && _lastUserId != currentUserId;
-
+    
     if (isUserChanged) {
       if (kDebugMode) print('🔄 [Settings] 사용자 변경 감지. 데이터 초기화 및 강제 새로고침.');
       _resetAllData();
       _subscriptionManager.invalidateCache();
     }
     _lastUserId = currentUserId;
-
+    
     await loadUserData();
     await loadUserPreferences();
     await refreshPlanInfo(force: isUserChanged);
-  }
+    }
 
   void _resetAllData() {
     _currentUser = null;
@@ -96,7 +96,7 @@ class SettingsViewModel extends ChangeNotifier {
     _isLoading = loading;
     notifyListeners();
   }
-
+  
   /// 플랜 정보 새로고침 (UI 호출 또는 내부 로직용)
   Future<void> refreshPlanInfo({bool force = true}) async {
     if (kDebugMode) print('🔄 [Settings] 플랜 정보 새로고침 시작 (force: $force)');
@@ -115,7 +115,7 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 사용자 데이터 로드
   Future<void> loadUserData() async {
-    _currentUser = FirebaseAuth.instance.currentUser;
+      _currentUser = FirebaseAuth.instance.currentUser;
     notifyListeners();
   }
 
@@ -139,7 +139,7 @@ class SettingsViewModel extends ChangeNotifier {
     if (_subscriptionInfo == null) return;
     
     final ctaText = _subscriptionInfo!.ctaText;
-
+      
     if (ctaText.contains('문의하기')) {
       _supportService.contactSupport();
     } else if (ctaText.contains('App Store') || ctaText.contains('갱신하기')) {
@@ -246,23 +246,23 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 원문 언어 업데이트
   Future<void> updateSourceLanguage(String language) async {
-    final preferences = await _userPreferences.getPreferences();
+      final preferences = await _userPreferences.getPreferences();
     await _userPreferences.savePreferences(preferences.copyWith(sourceLanguage: language));
-    await loadUserPreferences();
+      await loadUserPreferences();
   }
 
   /// 번역 언어 업데이트
   Future<void> updateTargetLanguage(String language) async {
-    final preferences = await _userPreferences.getPreferences();
+      final preferences = await _userPreferences.getPreferences();
     await _userPreferences.savePreferences(preferences.copyWith(targetLanguage: language));
-    await loadUserPreferences();
+      await loadUserPreferences();
   }
 
   /// 텍스트 처리 모드 업데이트
   Future<void> updateUseSegmentMode(bool value) async {
-    final preferences = await _userPreferences.getPreferences();
+      final preferences = await _userPreferences.getPreferences();
     await _userPreferences.savePreferences(preferences.copyWith(useSegmentMode: value));
-    await loadUserPreferences();
+      await loadUserPreferences();
   }
 
   /// 재인증 필요 여부 확인

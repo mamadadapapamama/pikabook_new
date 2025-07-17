@@ -333,6 +333,7 @@ class SubscriptionState {
   // 기존 코드 호환성을 위한 편의 메서드들
   bool get isPremium => entitlement.isPremium;
   bool get isTrial => entitlement.isTrial;
+  bool get isPremiumOrTrial => entitlement.isPremiumOrTrial; // 🎯 추가
   bool get isTrialExpiringSoon => false; // 새 구조에서는 서버에서 관리
   bool get isExpired => subscriptionStatus.isExpired;
   int get daysRemaining => 0; // 새 구조에서는 서버에서 관리

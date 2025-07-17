@@ -244,22 +244,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           'translationMode': 'segment',
           'hasOnboarded': true,
           'onboardingCompleted': true,
-          'hasSeenWelcomeModal': true, // 🎯 Skip 시에도 환영모달 본 것으로 처리
-          'welcomeModalSeenAt': FieldValue.serverTimestamp(), // 🎯 Skip 시점 기록
           'defaultNoteSpace': defaultNoteSpace,
           'noteSpaces': [defaultNoteSpace],
           'sourceLanguage': 'zh-CN',  // 추가
           'targetLanguage': 'ko',  // 추가
-          'hasLoginHistory': true,  // 추가
           'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
           // 기본 사용량 초기화
           'usage': {
             'ocrPages': 0,
             'ttsRequests': 0,
             'translatedChars': 0,
             'storageUsageBytes': 0,
-            'lastUpdated': FieldValue.serverTimestamp(),
           },
         });
         
@@ -331,16 +326,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'noteSpaces': ['${_nameController.text}의 학습노트'],  // 추가
         'sourceLanguage': 'zh-CN',  // 추가
         'targetLanguage': 'ko',  // 추가
-        'hasLoginHistory': true,  // 추가
         'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
         // 기본 사용량 초기화
         'usage': {
           'ocrPages': 0,
           'ttsRequests': 0,
           'translatedChars': 0,
           'storageUsageBytes': 0,
-          'lastUpdated': FieldValue.serverTimestamp(),
         },
       });
 

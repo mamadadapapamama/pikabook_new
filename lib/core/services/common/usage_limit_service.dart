@@ -25,6 +25,7 @@ class UsageLimitService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
+  final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager(); // 🎯 추가
   
   // 싱글톤 패턴 구현
   static final UsageLimitService _instance = UsageLimitService._internal();
@@ -438,8 +439,9 @@ class UsageLimitService {
         return customLimits;
       }
       
-      // 2. 플랜 기반 제한 적용 (기본값 사용 - 이벤트 기반에서 자동 업데이트됨)
-      final planType = PlanConstants.PLAN_FREE; // 이벤트 기반에서 자동으로 업데이트됨
+      // 2. 🎯 플랜 기반 제한 적용 (SubscriptionManager 사용)
+      final subscriptionState = await _subscriptionManager.getSubscriptionState();
+      final planType = subscriptionState.entitlement.isPremiumOrTrial ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
       
       final limits = PlanConstants.PLAN_LIMITS[planType];
       if (limits != null) {

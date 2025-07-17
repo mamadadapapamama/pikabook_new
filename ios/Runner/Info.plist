@@ -70,8 +70,6 @@
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
-		<key>NSAllowsLocalNetworking</key>
-		<false/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>카메라로 이미지를 촬영하여 텍스트 추출을 위해 사용합니다.</string>

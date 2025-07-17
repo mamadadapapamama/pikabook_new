@@ -278,7 +278,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           .doc(currentUser.uid)
           .set({
         'hasSeenWelcomeModal': true,
-        'welcomeModalSeenAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
       // 2. 온보딩 완료 상태는 이미 온보딩에서 저장됨 (중복 저장 방지)
@@ -290,10 +289,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             .collection('users')
             .doc(currentUser.uid)
             .set({
-          'planStatus': 'free',
           'subscriptionStatus': 'cancelled',
           'entitlement': 'free',
-          'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
 

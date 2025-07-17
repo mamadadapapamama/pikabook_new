@@ -42,10 +42,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return ChangeNotifierProvider(
       create: (_) => SettingsViewModel()..initialize(),
       child: Scaffold(
-        backgroundColor: ColorTokens.background,
-        appBar: PikaAppBar.settings(
-          onBackPressed: () => Navigator.of(context).pop(),
-        ),
+      backgroundColor: ColorTokens.background,
+      appBar: PikaAppBar.settings(
+        onBackPressed: () => Navigator.of(context).pop(),
+      ),
         // Consumer를 사용하여 ViewModel의 변경사항을 UI에 반영
         body: Consumer<SettingsViewModel>(
           builder: (context, viewModel, child) {
@@ -96,8 +96,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           const SizedBox(height: 32),
           
-          _buildSectionTitle('내 플랜'),
-          const SizedBox(height: 12),
+                      _buildSectionTitle('내 플랜'),
+            const SizedBox(height: 12),
           const PlanCard(), // 분리된 PlanCard 위젯 사용
           
           const SizedBox(height: 32),
@@ -120,7 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           
           const SizedBox(height: 8),
-
+          
           SettingItem(
             title: '원문 언어',
             value: SourceLanguage.getName(viewModel.sourceLanguage),
@@ -163,7 +163,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
+  
   // 섹션 제목 위젯
   Widget _buildSectionTitle(String title) {
     return Text(
@@ -302,17 +302,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onSelected: (value) async {
           await viewModel.updateUseSegmentMode(value == 'true');
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '텍스트 처리 모드가 변경되었습니다. 새로 만드는 노트에 적용됩니다.',
-                  style: TypographyTokens.caption.copyWith(
-                    color: ColorTokens.textLight,
-                  ),
-                ),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '텍스트 처리 모드가 변경되었습니다. 새로 만드는 노트에 적용됩니다.',
+              style: TypographyTokens.caption.copyWith(
+                color: ColorTokens.textLight,
               ),
-            );
-          }
+            ),
+          ),
+        );
+      }
         },
       ),
     );
@@ -603,4 +603,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-}
+  }

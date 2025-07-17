@@ -31,13 +31,13 @@ class UnifiedSubscriptionManager {
   DateTime? _cacheTimestamp;
   String? _cachedUserId;
   static const Duration _cacheTTL = Duration(minutes: 10);
-  
+
   // 🎯 중복 요청 방지
   Future<Map<String, dynamic>>? _ongoingRequest;
-  
+
   // 🎯 BannerManager 인스턴스
   final BannerManager _bannerManager = BannerManager();
-  
+
   // 🎯 실시간 스트림
   final StreamController<SubscriptionState> _subscriptionStateController = 
       StreamController<SubscriptionState>.broadcast();
@@ -46,7 +46,7 @@ class UnifiedSubscriptionManager {
   StreamSubscription<DocumentSnapshot>? _firestoreSubscription;
 
   Stream<SubscriptionState> get subscriptionStateStream => _subscriptionStateController.stream;
-
+  
   /// 認証状態の変更を処理する
   void _onAuthStateChanged(User? user) {
     if (user != null) {
@@ -87,7 +87,7 @@ class UnifiedSubscriptionManager {
     }, onError: (error) {
       if (kDebugMode) {
         debugPrint('❌ [UnifiedSubscriptionManager] Firestore 리스너 오류: $error');
-      }
+    }
     });
   }
 
@@ -125,11 +125,11 @@ class UnifiedSubscriptionManager {
       }
       return await _ongoingRequest!;
     }
-    
+
     if (kDebugMode) {
       debugPrint('🔍 [UnifiedSubscriptionManager] 서버 조회 시작');
     }
-    
+
     _ongoingRequest = _fetchFromServer();
     
     try {
@@ -166,13 +166,13 @@ class UnifiedSubscriptionManager {
       final responseData = _safeMapConversion(result.data);
       if (responseData == null) {
         return _getDefaultServerResponse();
-      }
+        }
       
       return responseData;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [UnifiedSubscriptionManager] Firebase Functions 호출 실패: $e');
-      }
+        }
       return _getDefaultServerResponse();
     }
   }
@@ -203,23 +203,23 @@ class UnifiedSubscriptionManager {
 
   /// 🎯 기본 서버 응답
   Map<String, dynamic> _getDefaultServerResponse() {
-    return {
-      'success': false,
-      'subscription': {
-        'entitlement': 'free',
-        'subscriptionStatus': 'cancelled',
-        'hasUsedTrial': false,
-      }
-    };
-  }
-
+      return {
+        'success': false,
+        'subscription': {
+          'entitlement': 'free',
+          'subscriptionStatus': 'cancelled',
+          'hasUsedTrial': false,
+        }
+      };
+    }
+    
   /// 🎯 구독 권한 조회 (통합 응답 기반)
   Future<Map<String, dynamic>> getSubscriptionEntitlements({bool forceRefresh = false}) async {
     try {
       final serverResponse = await _getUnifiedServerResponse(forceRefresh: forceRefresh);
       final info = SubscriptionInfo.fromJson(serverResponse);
       
-      return {
+        return {
         'entitlement': info.entitlement.value,
         'subscriptionStatus': info.subscriptionStatus.value,
         'hasUsedTrial': info.hasUsedTrial,
@@ -253,7 +253,7 @@ class UnifiedSubscriptionManager {
     final entitlements = await getSubscriptionEntitlements(forceRefresh: false); // 캐시 재사용
     
     // 🎯 활성 배너 조회
-    final activeBanners = await _bannerManager.getActiveBannersFromServerResponse(
+      final activeBanners = await _bannerManager.getActiveBannersFromServerResponse(
       serverResponse
     );
     
@@ -267,16 +267,16 @@ class UnifiedSubscriptionManager {
       subscriptionStatus: SubscriptionStatus.fromString(subscriptionStatusString),
       hasUsedTrial: hasUsedTrial,
       hasUsageLimitReached: false, // This needs to be handled separately
-      activeBanners: activeBanners,
+        activeBanners: activeBanners,
       statusMessage: "Status message based on entitlement and status", // This needs a proper implementation.
-    );
-    
+      );
+      
     // 🎯 스트림 업데이트 발생
     _emitSubscriptionStateChange(state);
-    
+      
     return state;
   }
-
+      
   /// 🎯 구독 상태 변경 이벤트 발생
   void _emitSubscriptionStateChange(SubscriptionState state) {
     if (!_subscriptionStateController.isClosed) {
@@ -334,7 +334,7 @@ class UnifiedSubscriptionManager {
       'isFree': true,
     };
   }
-
+  
   /// 🎯 리소스 정리
   void dispose() {
     _firestoreSubscription?.cancel();

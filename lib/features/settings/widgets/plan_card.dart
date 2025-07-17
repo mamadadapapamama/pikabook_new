@@ -6,6 +6,7 @@ import '../../../core/widgets/pika_button.dart';
 import '../settings_view_model.dart';
 import 'package:provider/provider.dart';
 
+//내플랜 카드 위젯
 class PlanCard extends StatelessWidget {
   const PlanCard({Key? key}) : super(key: key);
 
@@ -82,7 +83,7 @@ class PlanCard extends StatelessWidget {
             const SizedBox(width: SpacingTokens.sm),
             PikaButton(
               text: '사용량 조회',
-              variant: PikaButtonVariant.outline,
+              variant: PikaButtonVariant.primary,
               size: PikaButtonSize.xs,
               onPressed: () => viewModel.showUsageDialog(context),
             )
