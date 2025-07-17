@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
@@ -9,6 +10,24 @@ import '../../core/utils/language_constants.dart';
 import '../../core/services/text_processing/text_processing_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/plan_constants.dart';
+import '../../core/widgets/pika_button.dart';
+import '../../core/widgets/upgrade_modal.dart';
+
+
+/// CTA 버튼 상태 모델
+class CTAButtonModel {
+  final String text;
+  final PikaButtonVariant variant;
+  final bool isEnabled;
+  final VoidCallback? action;
+
+  CTAButtonModel({
+    required this.text,
+    this.variant = PikaButtonVariant.primary,
+    this.isEnabled = true,
+    this.action,
+  });
+}
 
 class SettingsViewModel extends ChangeNotifier {
   final UserPreferencesService _userPreferences = UserPreferencesService();
@@ -60,9 +79,38 @@ class SettingsViewModel extends ChangeNotifier {
   Map<String, int> get planLimits => _planLimits;
   bool get isPlanLoaded => _isPlanLoaded;
   
+  // 🎯 v4-simplified: 내 플랜 상세 정보
+  String _planTitle = '';
+  String _planSubtitle = '';
+  String _planStatusText = '';
+  String? _nextPaymentDateText;
+  String? _freeTransitionDateText;
+
+  String get planTitle => _planTitle;
+  String get planSubtitle => _planSubtitle;
+  String get planStatusText => _planStatusText;
+  String? get nextPaymentDateText => _nextPaymentDateText;
+  String? get freeTransitionDateText => _freeTransitionDateText;
+
   // 🎯 CTA 관련 getters
-  String get ctaButtonText => _ctaButtonText;
-  bool get ctaButtonEnabled => _ctaButtonEnabled;
+  CTAButtonModel get ctaButton {
+    // 현재 상태에 따라 다른 버튼 모델 반환
+    if (_ctaButtonText.contains('문의')) {
+      return CTAButtonModel(text: _ctaButtonText, action: () => contactSupport());
+    }
+    if (_ctaButtonText.contains('업그레이드')) {
+      return CTAButtonModel(text: _ctaButtonText, action: () => _showUpgradeModal(null));
+    }
+    if (_ctaButtonText.contains('App Store')) {
+       return CTAButtonModel(text: _ctaButtonText, action: () => _openAppStore());
+    }
+    return CTAButtonModel(
+      text: _ctaButtonText, 
+      variant: _ctaButtonEnabled ? PikaButtonVariant.primary : PikaButtonVariant.outline,
+      isEnabled: _ctaButtonEnabled,
+    );
+  }
+
   String get ctaSubtext => _ctaSubtext;
   bool get shouldUsePremiumQuota => _shouldUsePremiumQuota;
 
@@ -572,93 +620,82 @@ class SettingsViewModel extends ChangeNotifier {
         
         // 날짜 표시 형식 (년 월 일)
         dateDisplay = '${expiration.year}년 ${expiration.month}월 ${expiration.day}일';
+        _nextPaymentDateText = '다음 결제일: $dateDisplay';
+        _freeTransitionDateText = '$dateDisplay 부터 무료 전환';
         
 
       } catch (e) {
         if (kDebugMode) {
           print('⚠️ [Settings] 만료일 파싱 실패: $expirationDate');
         }
-      }
-          }
-    
-    // 🎯 구독 타입 표시 (monthly/yearly)
-    final subscriptionTypeDisplay = subscriptionType == 'yearly' ? 'yearly' : 'monthly';
-    
-    // 🎯 상태별 표시명 생성 (날짜 정보 포함)
-    
-    if (entitlement == 'trial') {
-      if (subscriptionStatus == 'active') {
-        _planName = dateDisplay != null ? '무료체험 중 (${daysRemaining}일 남음)' : '무료체험 중';
-      } else if (subscriptionStatus == 'cancelling') {
-        _planName = dateDisplay != null ? '무료체험 중 (${daysRemaining}일 후 무료 전환)' : '무료체험 중 (취소 예정)';
-      } else {
-        _planName = '무료체험 완료';
-      }
-    } else if (entitlement == 'premium') {
-      if (subscriptionStatus == 'active') {
-        _planName = dateDisplay != null ? '프리미엄 ($subscriptionTypeDisplay)\n다음 결제일: $dateDisplay' : '프리미엄';
-      } else if (subscriptionStatus == 'cancelling') {
-        _planName = dateDisplay != null ? '프리미엄 ($subscriptionTypeDisplay)\n$dateDisplay 부터 무료 전환' : '프리미엄 (취소 예정)';
-      } else {
-        _planName = '프리미엄 만료';
+        _nextPaymentDateText = null;
+        _freeTransitionDateText = null;
       }
     } else {
-      // Grace period 처리 (서버에서 entitlement가 premium이지만 특별한 상태)
-      if (subscriptionStatus == 'active' && dateDisplay != null && daysRemaining <= 7) {
-        // Grace period로 추정 (만료일이 7일 이내)
-        _planName = '프리미엄 ($dateDisplay 까지 결제 확인 필요)';
-      } else {
-        _planName = '무료 플랜';
-      }
+      _nextPaymentDateText = null;
+      _freeTransitionDateText = null;
     }
     
-    _remainingDays = daysRemaining;
+    // 🎯 구독 타입 표시 (monthly/yearly)
+    final subscriptionTypeDisplay = subscriptionType == 'yearly' ? '연간 구독' : '월간 구독';
     
-    // 🎯 CTA 및 쿼터 설정 (v4-simplified 직접 처리 - 매우 단순!)
-    
+    // 🎯 상태별 UI 텍스트 설정
     if (entitlement == 'trial') {
+      _planTitle = 'Premium';
+      _planSubtitle = '무료체험';
       if (subscriptionStatus == 'active') {
-        _ctaButtonText = dateDisplay != null ? '${daysRemaining}일 뒤에 프리미엄 전환' : '체험 중 (App Store에서 관리)';
+        _planStatusText = '활성';
+        _ctaButtonText = 'App Store에서 관리';
         _ctaButtonEnabled = false;
-        _ctaSubtext = '구독 취소는 App Store에서';
-        _shouldUsePremiumQuota = true;
-      } else if (subscriptionStatus == 'cancelling') {
-        _ctaButtonText = dateDisplay != null ? '${daysRemaining}일 뒤에 무료 플랜 전환' : '체험 종료 예정 (App Store에서 관리)';
-        _ctaButtonEnabled = false;
-        _ctaSubtext = '';
-        _shouldUsePremiumQuota = true;
-      } else {
-        // 체험 완료
+        _ctaSubtext = '체험 기간 종료 시 자동으로 결제됩니다.';
+        _planName = dateDisplay != null ? '무료체험 중 (${daysRemaining}일 남음)' : '무료체험 중';
+      } else { // cancelling, expired, refunded
+        _planStatusText = '종료됨';
         _ctaButtonText = '프리미엄으로 업그레이드';
         _ctaButtonEnabled = true;
         _ctaSubtext = '';
-        _shouldUsePremiumQuota = false;
+        _planName = '무료체험 완료';
       }
+      _shouldUsePremiumQuota = true;
+
     } else if (entitlement == 'premium') {
-      if (subscriptionStatus == 'active' && dateDisplay != null && daysRemaining <= 7) {
-        // Grace period 상태
-        _ctaButtonText = '앱스토어 결제 확인 필요';
+      _planTitle = 'Premium';
+      _planSubtitle = subscriptionTypeDisplay;
+      if (subscriptionStatus == 'active') {
+        _planStatusText = '활성';
+        _ctaButtonText = 'App Store에서 관리';
         _ctaButtonEnabled = false;
         _ctaSubtext = '';
-        _shouldUsePremiumQuota = true;
-      } else if (subscriptionStatus == 'cancelling') {
+        _planName = '프리미엄 ($subscriptionTypeDisplay)';
+      } else { // cancelling, expired, refunded
+        _planStatusText = '만료됨';
         _ctaButtonText = '프리미엄으로 업그레이드';
         _ctaButtonEnabled = true;
         _ctaSubtext = '';
-        _shouldUsePremiumQuota = true;
-      } else {
-        // 정상 프리미엄
-        _ctaButtonText = '사용량 추가 문의';
-        _ctaButtonEnabled = true;
-        _ctaSubtext = '';
-        _shouldUsePremiumQuota = true;
+        _planName = '프리미엄 만료';
       }
-    } else { // entitlement == 'free'
+      _shouldUsePremiumQuota = true;
+
+    } else { // free
+      _planTitle = 'Free';
+      _planSubtitle = '무료 플랜';
+      _planStatusText = '활성';
       _ctaButtonText = '프리미엄으로 업그레이드';
       _ctaButtonEnabled = true;
       _ctaSubtext = '';
+      _planName = '무료 플랜';
       _shouldUsePremiumQuota = false;
     }
+    
+    // Grace Period 특별 처리
+    if (entitlement == 'premium' && subscriptionStatus == 'active' && daysRemaining > 0 && daysRemaining <= 7) {
+      _planStatusText = '결제 문제';
+      _ctaButtonText = 'App Store에서 결제 정보 업데이트';
+      _ctaButtonEnabled = true; // 사용자가 직접 해결하도록 유도
+      _ctaSubtext = '구독을 유지하려면 결제 정보를 업데이트해주세요.';
+    }
+    
+    _remainingDays = daysRemaining;
     
     // 플랜 제한 설정
     if (_shouldUsePremiumQuota) {
@@ -672,7 +709,31 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
+  /// CTA 버튼 액션 처리
+  void handleCTAAction(BuildContext context) {
+    if (ctaButton.action != null) {
+      ctaButton.action!();
+    } else if (_ctaButtonText.contains('업그레이드')) {
+       _showUpgradeModal(context);
+    }
+  }
 
+  // 업그레이드 모달 표시
+  void _showUpgradeModal(BuildContext? context) {
+    if (context == null) return;
+    UpgradeModal.show(
+      context,
+      reason: hasUsedFreeTrial ? UpgradeReason.general : UpgradeReason.welcomeTrial,
+      onUpgrade: () {
+        // 실제 구매 로직 연결
+      },
+    );
+  }
+  
+  // App Store 열기
+  void _openAppStore() {
+    // URL Launcher 로직 추가
+  }
 
 
 } 

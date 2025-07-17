@@ -11,12 +11,15 @@ import '../../core/widgets/usage_dialog.dart';
 import '../../core/widgets/upgrade_modal.dart';
 import '../../core/widgets/edit_dialog.dart';
 import '../../core/utils/test_data_generator.dart';
-import '../../core/services/common/banner_manager.dart';
-import '../../core/services/subscription/unified_subscription_manager.dart';
-import '../debug/payment_debug_screen.dart';
-
-import 'settings_view_model.dart';
 import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
+
+// 뷰모델 및 위젯 임포트
+import 'settings_view_model.dart';
+import 'widgets/plan_card.dart';
+import 'widgets/profile_card.dart';
+import 'widgets/setting_item.dart';
+import 'dialogs/selection_dialog.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -31,49 +34,35 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late SettingsViewModel _viewModel;
-
-  @override
-  void initState() {
-    super.initState();
-    _viewModel = SettingsViewModel();
-    _viewModel.addListener(_onViewModelChanged);
-  }
-
-  @override
-  void dispose() {
-    _viewModel.removeListener(_onViewModelChanged);
-    _viewModel.dispose();
-    super.dispose();
-  }
-
-  void _onViewModelChanged() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
+  // ViewModel은 Provider를 통해 제공되므로 여기서는 생성하지 않음
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: ColorTokens.background,
-      appBar: PikaAppBar.settings(
-        onBackPressed: () => Navigator.of(context).pop(),
-      ),
-      body: LoadingExperience(
-        loadingMessage: '설정 로딩 중...',
-        loadData: () async {
-          await _viewModel.initialize();
-        },
-        contentBuilder: (context) => _buildProfileContent(),
+    // ChangeNotifierProvider로 ViewModel을 제공
+    return ChangeNotifierProvider(
+      create: (_) => SettingsViewModel()..initialize(),
+      child: Scaffold(
+        backgroundColor: ColorTokens.background,
+        appBar: PikaAppBar.settings(
+          onBackPressed: () => Navigator.of(context).pop(),
+        ),
+        // Consumer를 사용하여 ViewModel의 변경사항을 UI에 반영
+        body: Consumer<SettingsViewModel>(
+          builder: (context, viewModel, child) {
+            if (viewModel.isLoading && !viewModel.isPlanLoaded) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return _buildProfileContent(context, viewModel);
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildProfileContent() {
-    final String displayName = _viewModel.currentUser?.displayName ?? '사용자';
-    final String email = _viewModel.currentUser?.email ?? '이메일 없음';
-    final String? photoUrl = _viewModel.currentUser?.photoURL;
+  Widget _buildProfileContent(BuildContext context, SettingsViewModel viewModel) {
+    final String displayName = viewModel.currentUser?.displayName ?? '사용자';
+    final String email = viewModel.currentUser?.email ?? '이메일 없음';
+    final String? photoUrl = viewModel.currentUser?.photoURL;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -82,14 +71,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           const SizedBox(height: 32),
           
-          // 1. 프로필 정보 섹션
           _buildSectionTitle('프로필'),
           const SizedBox(height: 12),
-          _buildProfileCard(displayName, email, photoUrl),
+          ProfileCard(
+            displayName: displayName,
+            email: email,
+            photoUrl: photoUrl,
+          ),
           
           const SizedBox(height: 16),
           
-          // 로그아웃 버튼
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
             child: PikaButton(
@@ -105,127 +96,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           const SizedBox(height: 32),
           
-          // 현재 사용 중인 플랜 정보 섹션
-                      _buildSectionTitle('내 플랜'),
-            const SizedBox(height: 12),
-            _buildPlanCard(isLoading: !_viewModel.isPlanLoaded),
+          _buildSectionTitle('내 플랜'),
+          const SizedBox(height: 12),
+          const PlanCard(), // 분리된 PlanCard 위젯 사용
           
           const SizedBox(height: 32),
           
-          // 2. 노트 설정 섹션
           _buildSectionTitle('노트 설정'),
           const SizedBox(height: 12),
           
-          // 학습자 이름 설정
-          _buildSettingItem(
+          SettingItem(
             title: '학습자 이름',
-            value: _viewModel.userName,
-            onTap: _showUserNameDialog,
+            value: viewModel.userName,
+            onTap: () => _showUserNameDialog(context, viewModel),
           ),
           
           const SizedBox(height: 8),
           
-          // 노트 스페이스 이름 설정
-          _buildSettingItem(
+          SettingItem(
             title: '노트스페이스 이름',
-            value: _viewModel.noteSpaceName,
-            onTap: _showNoteSpaceNameDialog,
+            value: viewModel.noteSpaceName,
+            onTap: () => _showNoteSpaceNameDialog(context, viewModel),
           ),
           
           const SizedBox(height: 8),
-          
-          // 원문 언어 설정
-          _buildSettingItem(
+
+          SettingItem(
             title: '원문 언어',
-            value: SourceLanguage.getName(_viewModel.sourceLanguage),
-            onTap: _showSourceLanguageDialog,
+            value: SourceLanguage.getName(viewModel.sourceLanguage),
+            onTap: () => _showSourceLanguageDialog(context, viewModel),
           ),
           
           const SizedBox(height: 8),
           
-          // 번역 언어 설정
-          _buildSettingItem(
+          SettingItem(
             title: '번역 언어',
-            value: TargetLanguage.getName(_viewModel.targetLanguage),
-            onTap: _showTargetLanguageDialog,
+            value: TargetLanguage.getName(viewModel.targetLanguage),
+            onTap: () => _showTargetLanguageDialog(context, viewModel),
           ),
           
           const SizedBox(height: 8),
           
-          // 텍스트 처리 모드 설정
-          _buildSettingItem(
+          SettingItem(
             title: '텍스트 처리 모드',
-            value: _viewModel.useSegmentMode ? '문장 단위' : '문단 단위',
-            onTap: _showTextProcessingModeDialog,
+            value: viewModel.useSegmentMode ? '문장 단위' : '문단 단위',
+            onTap: () => _showTextProcessingModeDialog(context, viewModel),
           ),
           
           const SizedBox(height: 32),
           
-          // 디버그 전용 섹션 (테스트 데이터 생성)
-          if (kDebugMode) ...[
-            _buildSectionTitle('🧪 개발자 도구'),
-            const SizedBox(height: 12),
-            
-            // 테스트 계정 생성 버튼
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-              child: PikaButton(
-                text: '🎯 모든 테스트 계정 생성',
-                variant: PikaButtonVariant.primary,
-                onPressed: _generateAllTestAccounts,
-                isFullWidth: true,
-              ),
-            ),
-            
-            // 테스트 계정 목록 출력 버튼
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-              child: PikaButton(
-                text: '📋 테스트 계정 목록 출력',
-                variant: PikaButtonVariant.outline,
-                onPressed: () => TestDataGenerator.printTestAccounts(),
-                isFullWidth: true,
-              ),
-            ),
-            
-
-            
-            // Payment Debug 화면 이동 버튼
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-              child: PikaButton(
-                text: '🔍 Payment Debug 화면',
-                variant: PikaButtonVariant.outline,
-                onPressed: _navigateToPaymentDebug,
-                isFullWidth: true,
-              ),
-            ),
-            
-            // 구독 디버그 헬퍼 버튼
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-              child: PikaButton(
-                text: '🔍 구독 상태 전체 진단',
-                variant: PikaButtonVariant.text,
-                onPressed: _runSubscriptionDebug,
-                isFullWidth: true,
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-          ],
-          
-          // 3. 계정 관리 섹션
           _buildSectionTitle('계정관리'),
           const SizedBox(height: 12),
           
-          // 회원 탈퇴 버튼
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
             child: PikaButton(
               text: '회원 탈퇴',
               variant: PikaButtonVariant.warning,
-              onPressed: () => _handleAccountDeletion(context),
+              onPressed: () => _handleAccountDeletion(context, viewModel),
               isFullWidth: true,
             ),
           ),
@@ -236,54 +164,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // 프로필 카드 위젯
-  Widget _buildProfileCard(String displayName, String email, String? photoUrl) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(SpacingTokens.sm),
-      decoration: BoxDecoration(
-        color: ColorTokens.surface,
-        borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-      ),
-      child: Row(
-        children: [
-          // 프로필 이미지
-          CircleAvatar(
-            radius: SpacingTokens.iconSizeMedium,
-            backgroundColor: ColorTokens.greyLight,
-            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-            child: photoUrl == null
-                ? Icon(Icons.person, 
-                    size: SpacingTokens.iconSizeMedium, 
-                    color: ColorTokens.greyMedium)
-                : null,
-          ),
-          SizedBox(width: SpacingTokens.md),
-          
-          // 사용자 정보
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  displayName,
-                  style: TypographyTokens.buttonEn,
-                ),
-                SizedBox(height: SpacingTokens.xsHalf),
-                Text(
-                  email,
-                  style: TypographyTokens.captionEn.copyWith(
-                    color: ColorTokens.textPrimary.withOpacity(0.7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
   // 섹션 제목 위젯
   Widget _buildSectionTitle(String title) {
     return Text(
@@ -294,240 +174,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
   
-  // 설정 항목 위젯
-  Widget _buildSettingItem({
-    required String title,
-    required String value,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-        child: Container(
-          width: double.infinity,
-          height: SpacingTokens.buttonHeight + SpacingTokens.sm,
-          padding: EdgeInsets.symmetric(
-            horizontal: SpacingTokens.md,
-            vertical: SpacingTokens.sm
-          ),
-          decoration: BoxDecoration(
-            color: ColorTokens.surface,
-            borderRadius: BorderRadius.circular(SpacingTokens.radiusXs),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    title,
-                    style: TypographyTokens.captionEn.copyWith(
-                      color: ColorTokens.textSecondary,
-                    ),
-                  ),
-                  Text(
-                    value,
-                    style: TypographyTokens.body2,
-                  ),
-                ],
-              ),
-              SvgPicture.asset(
-                'assets/images/icon_arrow_right.svg',
-                width: SpacingTokens.iconSizeSmall + SpacingTokens.xs,
-                height: SpacingTokens.iconSizeSmall + SpacingTokens.xs,
-                colorFilter: const ColorFilter.mode(
-                  ColorTokens.secondary,
-                  BlendMode.srcIn,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-  
-  // 플랜 카드 위젯 (로딩/정보 통합)
-  Widget _buildPlanCard({bool isLoading = false}) {
-    return GestureDetector(
-      onTap: isLoading ? null : () async {
-        // 플랜 정보 새로고침
-        await _viewModel.refreshPlanInfo();
-      },
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // 플랜 이름 또는 로딩 스켈레톤
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (isLoading)
-                        Container(
-                          width: 80,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: ColorTokens.greyLight,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        )
-                      else ...[
-                        Text(
-                          _viewModel.planName,
-                          style: TypographyTokens.body2.copyWith(
-                            color: ColorTokens.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '탭하여 새로고침',
-                          style: TypographyTokens.caption.copyWith(
-                            color: ColorTokens.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                
-                // 사용량 확인 버튼
-                Opacity(
-                  opacity: isLoading ? 0.5 : 1.0,
-                  child: GestureDetector(
-                    onTap: isLoading ? null : _showUsageDialog,
-                    child: Row(
-                      children: [
-                        Text(
-                          '사용량 확인',
-                          style: TypographyTokens.body2.copyWith(
-                            color: ColorTokens.textPrimary,
-                            fontWeight: FontWeight.normal,
-                          ),
-                        ),
-                        SizedBox(width: SpacingTokens.md),
-                        SvgPicture.asset(
-                          'assets/images/icon_arrow_right.svg',
-                          width: 20,
-                          height: 20,
-                          colorFilter: const ColorFilter.mode(
-                            ColorTokens.secondary,
-                            BlendMode.srcIn,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            
-            // 🎯 구독 상태별 CTA 버튼 표시 (로딩 중이 아닐 때만)
-            if (!isLoading && _viewModel.ctaButtonText.isNotEmpty) ...[
-              SizedBox(height: SpacingTokens.md),
-              PikaButton(
-                text: _viewModel.ctaButtonText,
-                variant: _viewModel.ctaButtonEnabled 
-                    ? PikaButtonVariant.primary 
-                    : PikaButtonVariant.outline,
-                size: PikaButtonSize.small,
-                onPressed: _viewModel.ctaButtonEnabled ? _handleCTAButtonPressed : null,
-                isFullWidth: true,
-              ),
-              
-              // 🎯 서브텍스트 표시 (있는 경우만)
-              if (_viewModel.ctaSubtext.isNotEmpty) ...[
-                SizedBox(height: SpacingTokens.xs),
-                Text(
-                  _viewModel.ctaSubtext,
-                  style: TypographyTokens.caption.copyWith(
-                    color: ColorTokens.textSecondary,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-  
-  /// 🎯 CTA 버튼 클릭 처리
-  void _handleCTAButtonPressed() {
-    if (_viewModel.ctaButtonText.contains('문의')) {
-      // "사용량 추가 문의" 버튼인 경우
-      _contactSupport();
-    } else if (_viewModel.ctaButtonText.contains('업그레이드')) {
-      // "프리미엄으로 업그레이드" 버튼인 경우
-      _showUpgradeModal();
-    }
-    // disabled 버튼들은 onPressed가 null이므로 여기에 도달하지 않음
-  }
-  
-  // 사용량 다이얼로그 표시
-  Future<void> _showUsageDialog() async {
-    if (kDebugMode) {
-      print('📊 사용량 확인 버튼 클릭 - 사용량 데이터 로드 시작');
-      print('📊 프리미엄 쿼터 사용: ${_viewModel.shouldUsePremiumQuota}');
-      print('📊 플랜 제한: ${_viewModel.planLimits}');
-    }
-    
-    if (context.mounted) {
-      await UsageDialog.show(
-        context,
-        limitStatus: null,
-        usagePercentages: null,
-        onContactSupport: _contactSupport,
-        shouldUsePremiumQuota: _viewModel.shouldUsePremiumQuota,
-        planLimits: _viewModel.planLimits,
-      );
-    }
-  }
-  
-  // 문의하기 기능 (향후 인앱 구매로 전환 예정)
-  void _contactSupport() async {
-    final success = await _viewModel.contactSupport();
-    if (mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('문의가 등록되었습니다.'),
-            backgroundColor: ColorTokens.success,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('문의 등록 중 오류가 발생했습니다.'),
-            backgroundColor: ColorTokens.error,
-          ),
-        );
-      }
-    }
-  }
-  
   // 학습자 이름 설정 다이얼로그
-  Future<void> _showUserNameDialog() async {
+  Future<void> _showUserNameDialog(BuildContext context, SettingsViewModel viewModel) async {
     showDialog<void>(
       context: context,
       builder: (context) => EditDialog.forUserName(
-        currentName: _viewModel.userName,
+        currentName: viewModel.userName,
         onNameUpdated: (newName) async {
           if (newName.isNotEmpty) {
-            await _viewModel.updateUserName(newName);
+            await viewModel.updateUserName(newName);
           }
         },
       ),
@@ -535,14 +190,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
   
   // 노트 스페이스 이름 변경 다이얼로그
-  Future<void> _showNoteSpaceNameDialog() async {
+  Future<void> _showNoteSpaceNameDialog(BuildContext context, SettingsViewModel viewModel) async {
     showDialog<void>(
       context: context,
       builder: (context) => EditDialog.forNoteSpace(
-        currentName: _viewModel.noteSpaceName,
+        currentName: viewModel.noteSpaceName,
         onNameUpdated: (newName) async {
           if (newName.isNotEmpty) {
-            final success = await _viewModel.updateNoteSpaceName(newName);
+            final success = await viewModel.updateNoteSpaceName(newName);
             if (mounted) {
               if (success) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -576,204 +231,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
   
   // 원문 언어 설정 다이얼로그
-  Future<void> _showSourceLanguageDialog() async {
-    final sourceLanguages = [...SourceLanguage.SUPPORTED, ...SourceLanguage.FUTURE_SUPPORTED];
-    
-    final result = await showDialog<String>(
+  Future<void> _showSourceLanguageDialog(BuildContext context, SettingsViewModel viewModel) async {
+    final options = [...SourceLanguage.SUPPORTED, ...SourceLanguage.FUTURE_SUPPORTED]
+        .map((lang) => SelectionOption(
+              value: lang,
+              label: SourceLanguage.getName(lang),
+              isDisabled: SourceLanguage.FUTURE_SUPPORTED.contains(lang),
+              subtitle: SourceLanguage.FUTURE_SUPPORTED.contains(lang) ? '향후 지원 예정' : null,
+            ))
+        .toList();
+
+    await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ColorTokens.surface,
-        title: Text('원문 언어 설정', style: TypographyTokens.subtitle2),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 300,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: sourceLanguages.length,
-            itemBuilder: (context, index) {
-              final language = sourceLanguages[index];
-              final bool isFutureSupported = SourceLanguage.FUTURE_SUPPORTED.contains(language);
-              
-              return RadioListTile<String>(
-                title: Text(
-                  SourceLanguage.getName(language),
-                  style: TypographyTokens.body2,
-                ),
-                subtitle: isFutureSupported 
-                    ? Text(
-                        '향후 지원 예정',
-                        style: TypographyTokens.caption.copyWith(
-                          color: ColorTokens.textPrimary,
-                        ),
-                      )
-                    : null,
-                value: language,
-                groupValue: _viewModel.sourceLanguage,
-                activeColor: ColorTokens.primary,
-                onChanged: isFutureSupported 
-                    ? null 
-                    : (value) {
-                        Navigator.pop(context, value);
-                      },
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              '취소',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textPrimary,
-              ),
-            ),
-          ),
-        ],
+      builder: (context) => SelectionDialog(
+        title: '원문 언어 설정',
+        options: options,
+        currentValue: viewModel.sourceLanguage,
+        onSelected: (value) async {
+          await viewModel.updateSourceLanguage(value);
+        },
       ),
     );
-    
-    if (result != null) {
-      await _viewModel.updateSourceLanguage(result);
-    }
   }
   
   // 번역 언어 설정 다이얼로그
-  Future<void> _showTargetLanguageDialog() async {
-    final targetLanguages = [...TargetLanguage.SUPPORTED, ...TargetLanguage.FUTURE_SUPPORTED];
-    
-    final result = await showDialog<String>(
+  Future<void> _showTargetLanguageDialog(BuildContext context, SettingsViewModel viewModel) async {
+    final options = [...TargetLanguage.SUPPORTED, ...TargetLanguage.FUTURE_SUPPORTED]
+        .map((lang) => SelectionOption(
+              value: lang,
+              label: TargetLanguage.getName(lang),
+              isDisabled: TargetLanguage.FUTURE_SUPPORTED.contains(lang),
+              subtitle: TargetLanguage.FUTURE_SUPPORTED.contains(lang) ? '향후 지원 예정' : null,
+            ))
+        .toList();
+
+    await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ColorTokens.surface,
-        title: Text('번역 언어 설정', style: TypographyTokens.subtitle2),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 300,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: targetLanguages.length,
-            itemBuilder: (context, index) {
-              final language = targetLanguages[index];
-              final bool isFutureSupported = TargetLanguage.FUTURE_SUPPORTED.contains(language);
-              
-              return RadioListTile<String>(
-                title: Text(
-                  TargetLanguage.getName(language),
-                  style: TypographyTokens.body2,
-                ),
-                subtitle: isFutureSupported 
-                    ? Text(
-                        '향후 지원 예정',
-                        style: TypographyTokens.caption.copyWith(
-                          color: ColorTokens.textPrimary,
-                        ),
-                      )
-                    : null,
-                value: language,
-                groupValue: _viewModel.targetLanguage,
-                activeColor: ColorTokens.primary,
-                onChanged: isFutureSupported 
-                    ? null 
-                    : (value) {
-                        Navigator.pop(context, value);
-                      },
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              '취소',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textPrimary,
-              ),
-            ),
-          ),
-        ],
+      builder: (context) => SelectionDialog(
+        title: '번역 언어 설정',
+        options: options,
+        currentValue: viewModel.targetLanguage,
+        onSelected: (value) async {
+          await viewModel.updateTargetLanguage(value);
+        },
       ),
     );
-    
-    if (result != null) {
-      await _viewModel.updateTargetLanguage(result);
-    }
   }
   
   // 텍스트 처리 모드 설정 다이얼로그
-  Future<void> _showTextProcessingModeDialog() async {
-    final result = await showDialog<bool>(
+  Future<void> _showTextProcessingModeDialog(BuildContext context, SettingsViewModel viewModel) async {
+    final options = [
+      SelectionOption(
+        value: 'true',
+        label: '문장 단위',
+        subtitle: '문장별로 분리하여 번역하고 발음을 제공합니다.',
+      ),
+      SelectionOption(
+        value: 'false',
+        label: '문단 단위',
+        subtitle: '문단 단위로 번역해 문맥에 맞는 번역을 제공합니다.',
+      ),
+    ];
+
+    await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ColorTokens.surface,
-        title: Text('텍스트 처리 모드 설정', style: TypographyTokens.subtitle2),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RadioListTile<bool>(
-              title: Text(
-                '문장 단위',
-                style: TypographyTokens.body2,
-              ),
-              subtitle: Text(
-                '문장별로 분리하여 번역하고 발음을 제공합니다.',
-                style: TypographyTokens.caption.copyWith(
-                  color: ColorTokens.textSecondary,
+      builder: (context) => SelectionDialog(
+        title: '텍스트 처리 모드 설정',
+        options: options,
+        currentValue: viewModel.useSegmentMode.toString(),
+        onSelected: (value) async {
+          final success = await viewModel.updateTextProcessingMode(value == 'true');
+          if (mounted && success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '텍스트 처리 모드가 변경되었습니다. 새로 만드는 노트에 적용됩니다.',
+                  style: TypographyTokens.caption.copyWith(
+                    color: ColorTokens.textLight,
+                  ),
                 ),
               ),
-              value: true,
-              groupValue: _viewModel.useSegmentMode,
-              activeColor: ColorTokens.primary,
-              onChanged: (value) => Navigator.pop(context, value),
-            ),
-            RadioListTile<bool>(
-              title: Text(
-                '문단 단위',
-                style: TypographyTokens.body2,
-              ),
-              subtitle: Text(
-                '문단 단위로 번역해 문맥에 맞는 번역을 제공합니다.',
-                style: TypographyTokens.caption.copyWith(
-                  color: ColorTokens.textSecondary,
-                ),
-              ),
-              value: false,
-              groupValue: _viewModel.useSegmentMode,
-              activeColor: ColorTokens.primary,
-              onChanged: (value) => Navigator.pop(context, value),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              '취소',
-              style: TypographyTokens.button.copyWith(
-                color: ColorTokens.textSecondary,
-              ),
-            ),
-          ),
-        ],
+            );
+          }
+        },
       ),
     );
-    
-    if (result != null) {
-      final success = await _viewModel.updateTextProcessingMode(result);
-      if (mounted && success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '텍스트 처리 모드가 변경되었습니다. 새로 만드는 노트에 적용됩니다.',
-              style: TypographyTokens.caption.copyWith(
-                color: ColorTokens.textLight,
-              ),
-            ),
-          ),
-        );
-      }
-    }
   }
   
   // 계정 탈퇴 기능 구현
@@ -822,16 +364,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _handleAccountDeletion(BuildContext context) async {
+  Future<void> _handleAccountDeletion(BuildContext context, SettingsViewModel viewModel) async {
     // 1. 재인증 필요 여부 확인
-    final needsReauth = await _viewModel.isReauthenticationRequired();
+    final needsReauth = await viewModel.isReauthenticationRequired();
     
     if (needsReauth) {
       // 재인증이 필요한 경우: 재인증 안내 모달
       await _showReauthRequiredDialog(context);
     } else {
       // 재인증이 불필요한 경우: 경고 메시지 후 바로 탈퇴 처리
-      await _showWarningAndDelete(context);
+      await _showWarningAndDelete(context, viewModel);
     }
   }
   
@@ -925,7 +467,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
   
   // 경고 메시지 후 탈퇴 처리 (재인증 불필요한 경우)
-  Future<void> _showWarningAndDelete(BuildContext context) async {
+  Future<void> _showWarningAndDelete(BuildContext context, SettingsViewModel viewModel) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -992,11 +534,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirm != true) return;
     
     // 탈퇴 처리 실행
-    await _executeAccountDeletion(context);
+    await _executeAccountDeletion(context, viewModel);
   }
   
   // 실제 탈퇴 처리 실행
-  Future<void> _executeAccountDeletion(BuildContext context) async {
+  Future<void> _executeAccountDeletion(BuildContext context, SettingsViewModel viewModel) async {
     try {
       // 먼저 스낵바 표시 (Firebase 인증 상태 변경 전에)
       if (mounted) {
@@ -1018,7 +560,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // 스낵바가 표시될 시간 확보
       await Future.delayed(Duration(milliseconds: 500));
       
-      final success = await _viewModel.deleteAccount();
+      final success = await viewModel.deleteAccount();
       
       if (mounted && success) {
         // 탈퇴 성공 메시지
@@ -1062,82 +604,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
 
-
-  // 🔍 구독 상태 간단 진단 (v4-simplified)
-  Future<void> _runSubscriptionDebug() async {
-    if (!kDebugMode) return;
-    
-    try {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '🔍 구독 상태 확인 중... (콘솔 확인)',
-              style: TypographyTokens.caption.copyWith(
-                color: Colors.white,
-              ),
-            ),
-            backgroundColor: ColorTokens.primary,
-            behavior: SnackBarBehavior.fixed,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      
-      // v4-simplified: 간단한 상태 출력
-      final unifiedManager = UnifiedSubscriptionManager();
-      final entitlements = await unifiedManager.getSubscriptionEntitlements(forceRefresh: true);
-      
-      debugPrint('🔍 [Settings] === v4-simplified 구독 상태 ===');
-      debugPrint('   권한: ${entitlements['entitlement']}');
-      debugPrint('   구독 상태: ${entitlements['subscriptionStatus']}');
-      debugPrint('   체험 사용 이력: ${entitlements['hasUsedTrial']}');
-      debugPrint('   프리미엄 여부: ${entitlements['isPremium']}');
-      debugPrint('   체험 여부: ${entitlements['isTrial']}');
-      debugPrint('   상태 메시지: ${entitlements['statusMessage']}');
-      debugPrint('   만료 여부: ${entitlements['isExpired']}');
-      debugPrint('   활성 여부: ${entitlements['isActive']}');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '✅ 구독 상태 확인 완료. 콘솔을 확인하세요.',
-              style: TypographyTokens.caption.copyWith(
-                color: Colors.white,
-              ),
-            ),
-            backgroundColor: ColorTokens.success,
-            behavior: SnackBarBehavior.fixed,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-      
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '❌ 구독 상태 확인 실패: $e',
-              style: TypographyTokens.caption.copyWith(
-                color: Colors.white,
-              ),
-            ),
-            backgroundColor: ColorTokens.error,
-            behavior: SnackBarBehavior.fixed,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-      
-      if (kDebugMode) {
-        debugPrint('❌ [Settings] 구독 상태 확인 실패: $e');
-      }
-    }
-  }
-
-  void _showUpgradeModal() async {
+  void _showUpgradeModal(BuildContext context, SettingsViewModel viewModel) async {
     // 🚨 이미 업그레이드 모달이 표시 중이면 중복 호출 방지
     if (UpgradeModal.isShowing) {
       if (kDebugMode) {
@@ -1148,15 +615,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       // 🎯 체험 이력에 따른 분기 처리
-      final hasUsedFreeTrial = _viewModel.hasUsedFreeTrial;
-      final hasEverUsedTrial = _viewModel.hasEverUsedTrial;
+      final hasUsedFreeTrial = viewModel.hasUsedFreeTrial;
+      final hasEverUsedTrial = viewModel.hasEverUsedTrial;
       
       if (kDebugMode) {
         debugPrint('🔍 [Settings] 업그레이드 모달 표시 분기 판단:');
         debugPrint('   hasUsedFreeTrial: $hasUsedFreeTrial');
         debugPrint('   hasEverUsedTrial: $hasEverUsedTrial');
-        debugPrint('   플랜 이름: ${_viewModel.planName}');
-        debugPrint('   플랜 타입: ${_viewModel.planType}');
+        debugPrint('   플랜 이름: ${viewModel.planName}');
+        debugPrint('   플랜 타입: ${viewModel.planType}');
       }
       
       if (hasUsedFreeTrial || hasEverUsedTrial) {
@@ -1201,13 +668,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// 🔍 Payment Debug 화면으로 이동
-  void _navigateToPaymentDebug() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const PaymentDebugScreen(),
-      ),
-    );
   }
-}
