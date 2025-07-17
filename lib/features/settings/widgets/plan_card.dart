@@ -40,7 +40,7 @@ class PlanCard extends StatelessWidget {
                 variant: viewModel.ctaButton.variant,
                 size: PikaButtonSize.small,
                 onPressed: viewModel.ctaButton.isEnabled 
-                    ? viewModel.ctaButton.action
+                    ? () => viewModel.handleCTAAction(context) 
                     : null,
                 isFullWidth: true,
               ),

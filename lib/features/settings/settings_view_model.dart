@@ -95,15 +95,6 @@ class SettingsViewModel extends ChangeNotifier {
   // 🎯 CTA 관련 getters
   CTAButtonModel get ctaButton {
     // 현재 상태에 따라 다른 버튼 모델 반환
-    if (_ctaButtonText.contains('문의')) {
-      return CTAButtonModel(text: _ctaButtonText, action: () => contactSupport());
-    }
-    if (_ctaButtonText.contains('업그레이드')) {
-      return CTAButtonModel(text: _ctaButtonText, action: () => _showUpgradeModal(null));
-    }
-    if (_ctaButtonText.contains('App Store')) {
-       return CTAButtonModel(text: _ctaButtonText, action: () => _openAppStore());
-    }
     return CTAButtonModel(
       text: _ctaButtonText, 
       variant: _ctaButtonEnabled ? PikaButtonVariant.primary : PikaButtonVariant.outline,
@@ -120,6 +111,22 @@ class SettingsViewModel extends ChangeNotifier {
   // v4-simplified 체험 이력 getter들 (서버 기반)
   bool get hasUsedFreeTrial => _hasUsedTrial;
   bool get hasEverUsedTrial => _hasUsedTrial;
+
+  /// CTA 버튼 클릭 처리
+  void handleCTAAction(BuildContext context) {
+    if (_ctaButtonText.contains('문의하기')) {
+      contactSupport();
+    } else if (_ctaButtonText.contains('App Store')) {
+      _openAppStore();
+    } else if (_ctaButtonText.contains('업그레이드')) {
+      _showUpgradeModal(context);
+    } else {
+      // 다른 CTA (예: 구독 관리 등)가 추가될 수 있음
+      if (kDebugMode) {
+        print('정의되지 않은 CTA 액션: $_ctaButtonText');
+      }
+    }
+  }
 
   /// 초기 데이터 로드
   Future<void> initialize() async {
@@ -709,27 +716,33 @@ class SettingsViewModel extends ChangeNotifier {
     }
   }
 
-  /// CTA 버튼 액션 처리
-  void handleCTAAction(BuildContext context) {
-    if (ctaButton.action != null) {
-      ctaButton.action!();
-    } else if (_ctaButtonText.contains('업그레이드')) {
-       _showUpgradeModal(context);
-    }
-  }
-
-  // 업그레이드 모달 표시
+  /// 업그레이드 모달 표시
   void _showUpgradeModal(BuildContext? context) {
-    if (context == null) return;
-    UpgradeModal.show(
-      context,
-      reason: hasUsedFreeTrial ? UpgradeReason.general : UpgradeReason.welcomeTrial,
-      onUpgrade: () {
-        // 실제 구매 로직 연결
+    if (context == null) {
+      if (kDebugMode) {
+        print("모달을 표시할 컨텍스트가 없습니다.");
+      }
+      return;
+    }
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext innerContext) {
+        return UpgradeModal(
+          onUpgrade: () async {
+            if (kDebugMode) {
+              print('🎉 업그레이드 성공! 플랜 정보를 새로고침합니다.');
+            }
+            Navigator.of(innerContext).pop();
+            await refreshPlanInfo();
+          },
+        );
       },
     );
   }
-  
+
   // App Store 열기
   void _openAppStore() {
     // URL Launcher 로직 추가
