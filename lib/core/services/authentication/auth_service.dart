@@ -12,8 +12,8 @@ import 'package:uuid/uuid.dart';
 import '../payment/in_app_purchase_service.dart';
 import 'deleted_user_service.dart';
 import '../cache/event_cache_manager.dart';
+import '../common/usage_limit_service.dart';
 // import '../media/image_service.dart'; // 🎯 임시 주석 처리
-import '../subscription/unified_subscription_manager.dart';
 
 
 class AuthService {
@@ -39,7 +39,6 @@ class AuthService {
   );
   final InAppPurchaseService _inAppPurchaseService = InAppPurchaseService(); // 🎯 추가
   final EventCacheManager _eventCacheManager = EventCacheManager();
-  final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
   final DeletedUserService deletedUserService = DeletedUserService();
   
   String? _lastUserId;
@@ -510,7 +509,7 @@ class AuthService {
 
       // 🎯 1. 동기적인 서비스 정리 작업 먼저 수행
       _inAppPurchaseService.dispose();
-      _subscriptionManager.dispose();
+      UsageLimitService().clearUserCache(); // 🎯 추가: 사용량 서비스 캐시 정리
 
       // 🎯 2. 로그아웃 이벤트 발생 (캐시 정리)
       if (currentUserId != null) {

@@ -49,6 +49,11 @@ class UsageLimitService {
   // 현재 사용자 ID 가져오기
   String? get _currentUserId => _auth.currentUser?.uid;
 
+  /// 🎯 [Public] 사용자 캐시 완전 무효화 (로그아웃 시 호출)
+  void clearUserCache() {
+    _invalidateCache();
+  }
+  
   /// 캐시 무효화 (사용자 변경 시 또는 명시적 호출)
   void _invalidateCache() {
     _cachedUsageData = null;
