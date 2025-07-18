@@ -100,7 +100,13 @@ class SettingsViewModel extends ChangeNotifier {
   }
   
   /// 플랜 정보 새로고침 (UI 호출 또는 내부 로직용)
-  Future<void> refreshPlanInfo({bool force = true}) async {
+  Future<void> refreshPlanInfo({bool force = false}) async {
+    // 🎯 이미 로딩 중이면 중복 호출 방지
+    if (_isLoading) {
+      if (kDebugMode) print('⏭️ [Settings] 이미 로딩 중 - 중복 호출 방지');
+      return;
+    }
+    
     if (kDebugMode) print('🔄 [Settings] 플랜 정보 새로고침 시작 (force: $force)');
     _setLoading(true);
 

@@ -1071,9 +1071,6 @@ class UpgradeModal extends StatelessWidget {
         }
       }
       
-      // 🎯 Trial 컨텍스트 설정 (환영 모달에서 구매 시)
-      purchaseService.setTrialContext(true);
-      
       // 🎯 개선된 구매 시작 (자동 에러 처리 포함)
       if (kDebugMode) {
         debugPrint('🛒 [UpgradeModal] 무료체험 구매 시작: $productId');
@@ -1180,9 +1177,6 @@ class UpgradeModal extends StatelessWidget {
           debugPrint('✅ [UpgradeModal] InApp Purchase 서비스 초기화 완료: ${purchaseService.isAvailableSync}');
         }
       }
-      
-      // 🎯 연간 구독은 무료체험이 없으므로 Trial 컨텍스트를 false로 설정
-      purchaseService.setTrialContext(false);
       
       // 🎯 개선된 구매 시작 (자동 에러 처리 포함)
       if (kDebugMode) {

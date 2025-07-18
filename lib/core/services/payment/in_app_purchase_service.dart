@@ -6,6 +6,9 @@ import '../notification/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
+/// ✅ 개선: 명확한 구매 흐름 상태 정의
+enum PurchaseFlowState { processing, completed }
+
 /// 🚀 In-App Purchase 관리 서비스 (iOS 전용)
 /// 
 /// StoreKit2 기반 JWS 검증 방식을 사용합니다.
@@ -29,10 +32,8 @@ class InAppPurchaseService {
   bool _isInitialized = false;
   List<ProductDetails> _products = [];
   
-  // 🎯 중복 처리 방지
-  final Set<String> _processedPurchases = {};
-  final Set<String> _pendingPurchaseKeys = {}; // 📌 처리 중인 구매를 추적하기 위한 Set (Lock)
-  bool _isPurchaseInProgress = false;
+  // ✅ 개선: 통합된 구매 상태 관리
+  final Map<String, PurchaseFlowState> _purchaseStates = {};
   
   // 🎯 구매 성공 콜백
   Function()? _onPurchaseSuccess;
@@ -82,7 +83,7 @@ class InAppPurchaseService {
 
       // 🎯 구매 스트림 구독
       _subscription = _inAppPurchase.purchaseStream.listen(
-        _onPurchaseUpdate,
+        _handlePurchaseUpdates,
         onDone: () {
           if (kDebugMode) {
             print('🔄 구매 스트림 완료');
@@ -142,127 +143,99 @@ class InAppPurchaseService {
     }
   }
 
-  /// 🎯 구매 업데이트 처리
-  void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
+  /// 🎧 구매 업데이트 스트림 처리
+  Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchaseDetailsList) async {
+    if (purchaseDetailsList.isEmpty) {
+      if (kDebugMode) print('🔔 구매 업데이트 수신: 0개');
+      return;
+    }
+
     if (kDebugMode) {
       print('🔔 구매 업데이트 수신: ${purchaseDetailsList.length}개');
     }
-    
-    for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
-      // 📌 purchaseID가 null일 수 있으므로 transactionDate를 fallback으로 사용
-      final purchaseKey = '${purchaseDetails.productID}_${purchaseDetails.purchaseID ?? purchaseDetails.transactionDate}';
+
+    // ✅ 개선: 여러 업데이트를 병렬로 처리하되, 중복은 방지
+    for (final purchase in purchaseDetailsList) {
+      final key = _getPurchaseKey(purchase);
       
-      // 📌 루프 방지를 위한 핵심 로직: 현재 처리 중인 구매는 건너뜀
-      if (_pendingPurchaseKeys.contains(purchaseKey)) {
+      // 이미 처리 중이거나 완료된 건은 건너뛰기
+      if (_purchaseStates.containsKey(key)) {
         if (kDebugMode) {
-          print('⏳ 이미 처리 중인 구매($purchaseKey)이므로 건너뜁니다.');
+          print('⏭️ 이미 처리 중/완료된 구매 건너뛰기: $key (${_purchaseStates[key]})');
+        }
+        if (_purchaseStates[key] == PurchaseFlowState.completed) {
+          _completePurchaseIfNeeded(purchase); // StoreKit 큐에서 제거만 시도
         }
         continue;
       }
       
-      // 📌 이미 최종 처리된 구매 건너뛰기
-      if (_processedPurchases.contains(purchaseKey)) {
-        if (kDebugMode) {
-          print('⏭️ 이미 처리 완료된 구매($purchaseKey)이므로 건너뜁니다.');
-        }
-        _completePurchaseIfNeeded(purchaseDetails);
-        continue;
+      // 처리 시작
+      _purchaseStates[key] = PurchaseFlowState.processing;
+      if (kDebugMode) {
+        print('➕ 처리 시작: $key');
       }
 
-      try {
-        // 📌 처리 시작: lock 설정
-        _pendingPurchaseKeys.add(purchaseKey);
+      // 비동기로 개별 처리
+      _processSinglePurchase(purchase).whenComplete(() {
+        _purchaseStates[key] = PurchaseFlowState.completed;
         if (kDebugMode) {
-          print('➕ 처리 시작: $purchaseKey');
+          print('➖ 처리 완료: $key');
         }
-        
-        _handlePurchase(purchaseDetails).whenComplete(() {
-          if (kDebugMode) {
-            print('➖ 처리 완료 및 lock 해제: $purchaseKey');
-          }
-          _pendingPurchaseKeys.remove(purchaseKey);
-          _processedPurchases.add(purchaseKey); // 영구적으로 처리된 것으로 기록
-        });
-      } catch (e) {
-        if (kDebugMode) {
-          print('❌ 처리 시작 중 오류 발생, lock 해제: $e');
-        }
-        _pendingPurchaseKeys.remove(purchaseKey);
-      }
+      });
     }
   }
 
-  /// 🎯 구매 처리
-  Future<void> _handlePurchase(PurchaseDetails purchaseDetails) async {
+  /// 🎯 단일 구매 건 처리 로직
+  Future<void> _processSinglePurchase(PurchaseDetails details) async {
     try {
-      if (kDebugMode) {
-        print('🛒 구매 처리: ${purchaseDetails.productID}, 상태: ${purchaseDetails.status}');
+      // 구매 상태에 따른 처리
+      if (details.status == PurchaseStatus.error) {
+        await _handleError(details);
+      } else if (details.status == PurchaseStatus.purchased || details.status == PurchaseStatus.restored) {
+        await _handlePurchaseSuccess(details);
+      } else if (details.status == PurchaseStatus.canceled) {
+        await _handleCanceled(details);
       }
-
-      if (purchaseDetails.status == PurchaseStatus.purchased) {
-        // 🎉 구매 성공 처리
-        await _handleSuccessfulPurchase(purchaseDetails);
-        // 🎯 구매 결과 콜백 호출 (성공)
-        _onPurchaseResult?.call(true, purchaseDetails.purchaseID, null);
-      } else if (purchaseDetails.status == PurchaseStatus.restored) {
-        // 🔄 구매 복원 처리 - 구매 성공과 동일하게 처리
-        if (kDebugMode) {
-          print('🔄 구매 복원 - 구매 성공과 동일하게 처리');
-        }
-        await _handleSuccessfulPurchase(purchaseDetails);
-        // 🎯 구매 결과 콜백 호출 (성공)
-        _onPurchaseResult?.call(true, purchaseDetails.purchaseID, null);
-      } else if (purchaseDetails.status == PurchaseStatus.error) {
-        // ❌ 구매 실패 처리
-        if (kDebugMode) {
-          print('❌ 구매 실패: ${purchaseDetails.error}');
-        }
-        await _completePurchaseIfNeeded(purchaseDetails, isErrorRecovery: true);
-        _isPurchaseInProgress = false;
-        // 🎯 구매 결과 콜백 호출 (실패)
-        _onPurchaseResult?.call(false, null, purchaseDetails.error?.message ?? '구매 실패');
-      } else if (purchaseDetails.status == PurchaseStatus.canceled) {
-        // 🚫 구매 취소 처리
-        if (kDebugMode) {
-          print('🚫 구매 취소됨');
-        }
-        await _completePurchaseIfNeeded(purchaseDetails, isErrorRecovery: true);
-        _isPurchaseInProgress = false;
-        // 🎯 구매 결과 콜백 호출 (취소)
-        _onPurchaseResult?.call(false, null, '사용자가 구매를 취소했습니다');
-      } else if (purchaseDetails.status == PurchaseStatus.pending) {
-        // ⏳ 구매 대기 중
-        if (kDebugMode) {
-          print('⏳ 구매 대기 중: ${purchaseDetails.productID}');
-        }
-        _scheduleTimeoutCompletion(purchaseDetails);
-      } else {
-        // 🎯 알 수 없는 상태 처리
-        if (kDebugMode) {
-          print('❓ 알 수 없는 구매 상태: ${purchaseDetails.status}');
-        }
-        await _completePurchaseIfNeeded(purchaseDetails, isErrorRecovery: true);
-        _isPurchaseInProgress = false;
-      }
-
-      // 🎯 모든 구매는 반드시 완료 처리 (중복 방지)
-      await _completePurchaseIfNeeded(purchaseDetails);
+      
+      // ✅ 중요: 모든 흐름의 끝에서 구매 완료 처리를 호출해야 StoreKit 큐에서 제거됨
+      await _completePurchaseIfNeeded(details);
+      
     } catch (e) {
       if (kDebugMode) {
-        print('❌ 구매 처리 중 오류: $e');
+        print('❌ 단일 구매 처리 중 심각한 오류: $e');
       }
-      
-      await _completePurchaseIfNeeded(purchaseDetails, isErrorRecovery: true);
-      _isPurchaseInProgress = false;
+      // 오류 발생 시에도 구매 완료 처리를 시도하여 큐 막힘 방지
+      await _completePurchaseIfNeeded(details, isErrorRecovery: true);
     }
   }
+
+  /// ✅ 구매 성공/복원 처리
+  Future<void> _handlePurchaseSuccess(PurchaseDetails details) async {
+    if (kDebugMode) {
+      print('🛒 구매 처리: ${details.productID}, 상태: ${details.status}');
+    }
+
+    if (details.status == PurchaseStatus.restored) {
+        if (kDebugMode) print('🔄 구매 복원 - 구매 성공과 동일하게 처리');
+    }
+
+    await _handleSuccessfulPurchase(details);
+    _onPurchaseResult?.call(true, details.purchaseID, null);
+  }
+
+  /// 🚫 구매 취소 처리
+  Future<void> _handleCanceled(PurchaseDetails details) async {
+    if (kDebugMode) {
+      print('🚫 사용자가 구매를 취소했습니다.');
+    }
+    _onPurchaseResult?.call(false, null, '사용자가 구매를 취소했습니다');
+  }
+
+  /// 🎯 구매 처리 (제거됨 - 로직 통합)
+  // Future<void> _handlePurchase(PurchaseDetails purchaseDetails) async { ... }
 
   /// 🎉 성공한 구매 처리
   Future<void> _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) async {
-    // 🎯 구매 진행 상태 플래그 설정 (중복 방지)
-    if (_isPurchaseInProgress) return;
-    _isPurchaseInProgress = true;
-    
     try {
       if (kDebugMode) {
         print('🎉 구매 성공 처리 시작: ${purchaseDetails.productID}');
@@ -275,64 +248,64 @@ class InAppPurchaseService {
         }
         return;
       }
-
-      // 🎯 1. _syncPurchaseInfo를 await으로 호출하여 서버 동기화 완료까지 대기
+      
       final jwsRepresentation = _extractJWSRepresentation(purchaseDetails);
-      if (jwsRepresentation != null) {
-        try {
-          await _syncPurchaseInfo(user.uid, jwsRepresentation);
-          if (kDebugMode) {
-            print('✅ JWS 기반 구매 정보 동기화 성공');
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            print('❌ JWS 기반 구매 정보 동기화 실패 (계속 진행): $e');
-          }
-        }
-      } else {
+      if (jwsRepresentation == null) {
         if (kDebugMode) {
           print('⚠️ JWS Representation 추출 실패 - 구매 검증 건너뛰기');
         }
+        return; // JWS 없이는 처리 불가
       }
-
-      // 🎯 2. 동기화가 끝난 후, UI 업데이트 및 후속 처리 순차적 호출
-      await _updateUIAfterPurchase(purchaseDetails.productID);
-      await scheduleNotificationsIfNeeded(purchaseDetails.productID);
+      
+      // ✅ 개선: 병렬 처리 + 핵심 기능 우선
+      // 서버 동기화는 UI/후속 처리와 독립적으로 실행
+      final serverSyncFuture = _syncPurchaseInfo(user.uid, jwsRepresentation)
+          .catchError((e) {
+            if (kDebugMode) print('❌ 백그라운드 서버 동기화 실패: $e');
+            // 실패해도 UI 업데이트는 진행
+          });
+          
+      // UI 업데이트 및 후속 처리는 즉시 실행
+      _updateUIAfterPurchase(purchaseDetails.productID);
+      scheduleNotificationsIfNeeded(purchaseDetails.productID);
       
       // 🎯 성공 콜백 호출
       _onPurchaseSuccess?.call();
       
+      // 서버 동기화가 최종적으로 완료되기를 기다릴 수 있음 (선택적)
+      await serverSyncFuture;
+      
       if (kDebugMode) {
-        print('✅ 구매 처리 플로우 완료');
+        print('✅ 구매 처리 플로우 완료 (서버 동기화 포함)');
       }
+      
     } catch (e) {
       if (kDebugMode) {
         print('❌ 구매 성공 처리 중 오류: $e');
       }
-      _onPurchaseSuccess?.call(); // 오류 시에도 콜백 호출
-    } finally {
-      // 🎯 3. 모든 작업이 끝난 후 finally 블록에서 플래그 해제
-      _isPurchaseInProgress = false;
-      if (kDebugMode) {
-        print('🏁 구매 성공 처리 최종 완료 및 플래그 해제');
-      }
     }
+  }
+
+  /// 🎯 구매 실패 처리
+  Future<void> _handleError(PurchaseDetails purchaseDetails) async {
+    if (kDebugMode) {
+      print('❌ 구매 실패: ${purchaseDetails.error}');
+    }
+    _onPurchaseResult?.call(false, null, purchaseDetails.error?.message ?? '구매 실패');
   }
 
   /// 🛒 구매 시작
   Future<bool> buyProduct(String productId) async {
-    if (_isPurchaseInProgress) {
+    if (_purchaseStates.values.any((state) => state == PurchaseFlowState.processing)) {
       if (kDebugMode) {
         print('⚠️ 구매가 이미 진행 중입니다');
       }
       return false;
     }
     
-    await _ensureInitialized();
+    _purchaseStates.clear(); // ✅ 새로운 구매 시작 전, 이전 상태 초기화
     
     try {
-      _isPurchaseInProgress = true;
-      
       if (kDebugMode) {
         print('🛒 구매 시작: $productId');
       }
@@ -374,11 +347,16 @@ class InAppPurchaseService {
         print('❌ 구매 시작 중 오류: $e');
       }
       
-      _isPurchaseInProgress = false;
+      _purchaseStates.clear();// 모든 구매 상태 초기화
       _onPurchaseResult?.call(false, null, e.toString());
       
       return false;
     }
+  }
+
+  /// 🔑 구매 키 생성
+  String _getPurchaseKey(PurchaseDetails purchase) {
+    return '${purchase.productID}_${purchase.purchaseID ?? purchase.transactionDate}';
   }
 
   /// 🎯 지연 초기화 확인
@@ -397,10 +375,8 @@ class InAppPurchaseService {
       print('🔄 [InAppPurchaseService] 사용자 변경으로 인한 구매 캐시 초기화');
     }
     
-    _processedPurchases.clear();
-    _pendingPurchaseKeys.clear(); // 처리 중인 구매 키 캐시 초기화
-    _scheduledNotifications.clear(); // 알림 스케줄링 중복 방지 세트 초기화
-    _isPurchaseInProgress = false;
+    _purchaseStates.clear();
+    _scheduledNotifications.clear();
     
     if (kDebugMode) {
       print('✅ [InAppPurchaseService] 구매 캐시 초기화 완료');
@@ -416,9 +392,7 @@ class InAppPurchaseService {
     _subscription = null;
     _isInitialized = false;
     _products.clear();
-    _processedPurchases.clear();
-    _pendingPurchaseKeys.clear(); // 처리 중인 구매 키 캐시 초기화
-    _isPurchaseInProgress = false;
+    _purchaseStates.clear();
     _onPurchaseSuccess = null;
     _onPurchaseResult = null;
     _scheduledNotifications.clear();
@@ -435,14 +409,6 @@ class InAppPurchaseService {
   /// 🎯 구매 결과 콜백 설정
   void setOnPurchaseResult(Function(bool success, String? transactionId, String? error)? callback) {
     _onPurchaseResult = callback;
-  }
-
-  /// 🎯 Trial 구매 컨텍스트 설정
-  void setTrialContext(bool isTrialContext) {
-    _isTrialContext = isTrialContext;
-    if (kDebugMode) {
-      print('🎯 [InAppPurchase] Trial 컨텍스트 설정: $isTrialContext');
-    }
   }
 
   /// 🎯 구독 상태 갱신 (구매 완료 후 스트림 업데이트 포함)
@@ -476,14 +442,10 @@ class InAppPurchaseService {
   Future<void> _updateUIAfterPurchase(String productId) async {
     final unifiedManager = UnifiedSubscriptionManager();
     unifiedManager.invalidateCache();
-    // notifyPurchaseCompleted 메서드는 더 이상 존재하지 않음
     
     if (kDebugMode) {
-      final context = _isTrialContext ? 'trial' : 'premium';
-      print('🎉 [InAppPurchase] 구매 완료 - 캐시 무효화됨 ($context)');
+      print('🎉 [InAppPurchase] 구매 완료 - 캐시 무효화됨');
     }
-    
-    _isTrialContext = false;
   }
 
   /// 🎯 알림 설정 (실제 만료일 기반)

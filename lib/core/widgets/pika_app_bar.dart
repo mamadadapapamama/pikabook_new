@@ -315,10 +315,11 @@ class _PikaAppBarState extends State<PikaAppBar> {
   Future<Map<String, dynamic>> _loadHomeAppBarData() async {
     try {
       final userPreferences = UserPreferencesService();
+      // 🎯 캐시된 데이터 사용 (forceRefresh: false)
       final unifiedManager = UnifiedSubscriptionManager();
       final results = await Future.wait([
         userPreferences.getDefaultNoteSpace(),
-        unifiedManager.getSubscriptionEntitlements(),
+        unifiedManager.getSubscriptionEntitlements(forceRefresh: false),
       ]);
       final entitlements = results[1] as Map<String, dynamic>;
       return {

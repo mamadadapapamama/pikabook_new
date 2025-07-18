@@ -153,11 +153,43 @@ class SubscriptionInfo {
     // expirationDate를 안전하게 파싱
     String? parsedExpirationDate;
     final dynamic rawExpirationDate = subscription['expirationDate'];
+    
+    if (kDebugMode) {
+      print('🔍 [SubscriptionInfo] expirationDate 파싱 시작');
+      print('   - rawExpirationDate: $rawExpirationDate');
+      print('   - rawExpirationDate 타입: ${rawExpirationDate.runtimeType}');
+    }
+    
     if (rawExpirationDate is String) {
-      parsedExpirationDate = rawExpirationDate;
+      // 🎯 문자열이 Unix timestamp인지 확인
+      final timestamp = int.tryParse(rawExpirationDate);
+      if (timestamp != null) {
+        // Unix timestamp 문자열을 ISO 8601 문자열로 변환
+        final dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+        parsedExpirationDate = dateTime.toIso8601String();
+        if (kDebugMode) {
+          print('   - Unix timestamp 문자열을 DateTime으로 변환: $dateTime');
+          print('   - ISO 8601 문자열로 변환: $parsedExpirationDate');
+        }
+      } else {
+        // 일반 ISO 8601 문자열로 가정
+        parsedExpirationDate = rawExpirationDate;
+        if (kDebugMode) {
+          print('   - 일반 ISO 8601 문자열로 처리: $parsedExpirationDate');
+        }
+      }
     } else if (rawExpirationDate is int) {
-      // Unix timestamp (milliseconds)로 가정
-      parsedExpirationDate = DateTime.fromMillisecondsSinceEpoch(rawExpirationDate).toIso8601String();
+      // Unix timestamp (milliseconds)를 ISO 8601 문자열로 변환
+      final dateTime = DateTime.fromMillisecondsSinceEpoch(rawExpirationDate);
+      parsedExpirationDate = dateTime.toIso8601String();
+      if (kDebugMode) {
+        print('   - int를 DateTime으로 변환: $dateTime');
+        print('   - ISO 8601 문자열로 변환: $parsedExpirationDate');
+      }
+    } else {
+      if (kDebugMode) {
+        print('   - 지원되지 않는 타입: ${rawExpirationDate.runtimeType}');
+      }
     }
     
     return SubscriptionInfo(
@@ -208,11 +240,16 @@ class SubscriptionInfo {
 
   /// 날짜 정보 텍스트 (다음 결제일 / 체험 종료일)
   String? get dateInfoText {
-    if (kDebugMode) {
-      print('🔍 [SubscriptionInfo] dateInfoText 호출됨');
-      print('   - entitlement: ${entitlement.value}');
-      print('   - expirationDate: $expirationDate');
-      print('   - subscriptionStatus: ${subscriptionStatus.value}');
+    // 🎯 디버그 로그 최소화 - 파싱 실패 시에만 출력
+    if (kDebugMode && expirationDate != null) {
+      try {
+        DateTime.parse(expirationDate!);
+      } catch (e) {
+        print('🔍 [SubscriptionInfo] dateInfoText 호출됨 (파싱 실패)');
+        print('   - entitlement: ${entitlement.value}');
+        print('   - expirationDate: $expirationDate');
+        print('   - subscriptionStatus: ${subscriptionStatus.value}');
+      }
     }
     
     if (entitlement.isFree) {
@@ -229,10 +266,21 @@ class SubscriptionInfo {
       return null;
     }
     
-    final expiry = DateTime.tryParse(expirationDate!);
-    if (expiry == null) {
+    // 🎯 더 안전한 날짜 파싱
+    DateTime? expiry;
+    try {
+      expiry = DateTime.parse(expirationDate!);
+    } catch (e) {
       if (kDebugMode) {
         print('   - expirationDate 파싱 실패: $expirationDate');
+        print('   - 파싱 에러: $e');
+      }
+      return null;
+    }
+    
+    if (expiry == null) {
+      if (kDebugMode) {
+        print('   - expirationDate 파싱 결과가 null: $expirationDate');
       }
       return null;
     }
@@ -262,9 +310,9 @@ class SubscriptionInfo {
         return '$formattedNextDay에 무료 플랜으로 전환됩니다.';
       }
       if (kDebugMode) {
-        print('   - 프리미엄: "다음 구독 결제일: $formattedExpiry" 반환');
+        print('   - 프리미엄: "구독 갱신일: $formattedExpiry" 반환');
       }
-      return '다음 구독 결제일: $formattedExpiry';
+      return '구독 갱신일: $formattedExpiry';
     }
     
     if (kDebugMode) {
