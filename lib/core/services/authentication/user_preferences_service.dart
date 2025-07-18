@@ -25,6 +25,9 @@ class UserPreferencesService {
   // 현재 사용자 ID
   String? _currentUserId;
   
+  // 🎯 중복 호출 방지
+  Future<UserPreferences>? _ongoingLoadOperation;
+  
   // 🎯 캐시 제거 - 이벤트 캐시 매니저 사용 안 함
   // final EventCacheManager _eventCache = EventCacheManager();
 
@@ -91,6 +94,28 @@ class UserPreferencesService {
 
   /// 사용자 설정 가져오기 (캐시 없이 항상 SharedPreferences에서 직접 조회)
   Future<UserPreferences> getPreferences() async {
+    // 🎯 중복 호출 방지
+    if (_ongoingLoadOperation != null) {
+      if (kDebugMode) {
+        debugPrint('⏭️ [UserPreferences] 진행 중인 로드 작업 대기');
+      }
+      await _ongoingLoadOperation!;
+      // 대기 후 내부 메서드 직접 호출
+      return await _getPreferencesInternal();
+    }
+    
+    _ongoingLoadOperation = _getPreferencesInternal();
+    
+    try {
+      final result = await _ongoingLoadOperation!;
+      return result;
+    } finally {
+      _ongoingLoadOperation = null;
+    }
+  }
+  
+  /// 내부 사용자 설정 조회 메서드
+  Future<UserPreferences> _getPreferencesInternal() async {
     final userId = await getCurrentUserId();
     
     if (kDebugMode) {
