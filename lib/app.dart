@@ -17,6 +17,9 @@ import 'core/theme/tokens/color_tokens.dart';
 import 'features/sample/sample_home_screen.dart';
 import 'features/home/home_viewmodel.dart';
 import 'core/services/notification/notification_service.dart';
+import 'core/services/authentication/auth_service.dart';
+import 'core/services/authentication/user_account_service.dart';
+import 'core/services/authentication/user_lifecycle_manager.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -54,6 +57,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   User? _user;
   StreamSubscription<User?>? _authStateSubscription;
   late UserPreferencesService _preferencesService;
+  late UserLifecycleManager _lifecycleManager; // 🎯 추가
   String? _error;
   // PlanService 제거됨
   final InAppPurchaseService _purchaseService = InAppPurchaseService();
@@ -65,6 +69,10 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    
+    // 🎯 UserLifecycleManager 초기화
+    _lifecycleManager = UserLifecycleManager(AuthService(), UserAccountService());
+    _lifecycleManager.initialize();
     
     // 디버그 타이머 비활성화 (디버그 모드에서만)
     if (kDebugMode) {
@@ -90,6 +98,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   @override
   void dispose() {
     _authStateSubscription?.cancel();
+    _lifecycleManager.dispose(); // 🎯 추가
     // InAppPurchaseService는 싱글톤이므로 앱 종료 시에만 dispose
     if (_purchaseService.isAvailableSync) {
       _purchaseService.dispose();
@@ -133,8 +142,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       await _initializeServices();
       
       // 2. 상태 확인
-      final currentUser = FirebaseAuth.instance.currentUser;
-      _updateAuthState(currentUser);
+      // final currentUser = FirebaseAuth.instance.currentUser;
+      // _updateAuthState(currentUser); // 🗑️ UserLifecycleManager가 담당하므로 제거
+      _setupAuthStateListener(); // 🎯 로그인/로그아웃 상태 변화를 감지하기 위해 리스너는 유지
       
       _updateInitializationState(true);
       
@@ -198,7 +208,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
-  /// 인증 상태 업데이트
+  /// 인증 상태 업데이트 // 🗑️ 제거
+  /*
   void _updateAuthState(User? currentUser) {
     final isLoggedIn = currentUser != null;
     
@@ -215,6 +226,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     // 🎯 구독 상태 사전 로딩 제거 - HomeScreen에서 직접 처리
     // 로그인 감지는 AuthService가, 구독 상태 로드는 HomeScreen이 담당
   }
+  */
   
   /// 초기화 상태 업데이트
   void _updateInitializationState(bool success) {
@@ -432,7 +444,12 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     }
   }
   
-
+  // 🗑️ UserLifecycleManager가 authStateChanges를 구독하므로,
+  // AppState에서는 더 이상 직접 구독할 필요가 없습니다.
+  // 대신 UserLifecycleManager가 상태 변경 시 필요한 UI 업데이트를 트리거해야 합니다.
+  // 예를 들어, UserLifecycleManager에 콜백을 전달하거나,
+  // 공유된 상태 모델(Provider 등)을 통해 상태를 전파할 수 있습니다.
+  // 여기서는 기존 구조를 최대한 유지하기 위해 리스너를 남겨두고 UI 상태만 변경합니다.
   
   @override
   Widget build(BuildContext context) {

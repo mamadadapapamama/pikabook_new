@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/services/authentication/auth_service.dart';
+import '../../core/services/authentication/user_account_service.dart';
 import '../../core/services/common/support_service.dart';
 import '../../core/services/subscription/unified_subscription_manager.dart';
 import '../../core/models/subscription_state.dart';
@@ -35,6 +36,7 @@ class SettingsViewModel extends ChangeNotifier {
   final UserPreferencesService _userPreferences = UserPreferencesService();
   final SupportService _supportService = SupportService();
   final AuthService _authService = AuthService();
+  final UserAccountService _userAccountService = UserAccountService();
   final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
 
   // --- 상태 변수 ---
@@ -273,7 +275,7 @@ class SettingsViewModel extends ChangeNotifier {
   /// 재인증 필요 여부 확인
   Future<bool> isReauthenticationRequired() async {
     try {
-      return await _authService.isReauthenticationRequired();
+      return await _userAccountService.isReauthenticationRequired();
     } catch (e) {
       if (kDebugMode) {
         print('재인증 필요 여부 확인 오류: $e');
