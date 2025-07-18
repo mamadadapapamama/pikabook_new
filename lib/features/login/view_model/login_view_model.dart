@@ -128,10 +128,6 @@ class LoginViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> resendVerificationEmail() async {
-    await _authService.resendEmailVerification();
-  }
-
   String _mapAuthException(FirebaseAuthException e) {
     switch (e.code) {
       case 'invalid-email':

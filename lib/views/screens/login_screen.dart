@@ -11,8 +11,6 @@ import '../../features/login/view_model/login_view_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/gestures.dart';
 import '../../features/login/dialogs/password_reset_dialog.dart';
-import '../../features/login/dialogs/email_verification_dialog.dart';
-import '../../features/login/dialogs/email_not_verified_dialog.dart';
 
 
 class LoginScreen extends StatelessWidget {
@@ -199,15 +197,7 @@ class LoginScreen extends StatelessWidget {
             onPressed: viewModel.isLoading ? null : () async {
               final user = await viewModel.handleEmailAuth();
               if (user != null) {
-                if (viewModel.isSignUp) {
-                  await showEmailVerificationDialog(context, user, onLoginSuccess);
-                } else {
-                  if (!user.emailVerified) {
-                    await showEmailNotVerifiedDialog(context, user);
-                  } else {
-                    onLoginSuccess(user);
-                  }
-                }
+                onLoginSuccess(user);
               }
             },
                                           style: ElevatedButton.styleFrom(

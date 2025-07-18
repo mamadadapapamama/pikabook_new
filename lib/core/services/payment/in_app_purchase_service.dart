@@ -259,9 +259,13 @@ class InAppPurchaseService {
 
   /// 🎉 성공한 구매 처리
   Future<void> _handleSuccessfulPurchase(PurchaseDetails purchaseDetails) async {
+    // 🎯 구매 진행 상태 플래그 설정 (중복 방지)
+    if (_isPurchaseInProgress) return;
+    _isPurchaseInProgress = true;
+    
     try {
       if (kDebugMode) {
-        print('🎉 구매 성공 처리: ${purchaseDetails.productID}');
+        print('🎉 구매 성공 처리 시작: ${purchaseDetails.productID}');
       }
       
       final user = FirebaseAuth.instance.currentUser;
@@ -272,18 +276,9 @@ class InAppPurchaseService {
         return;
       }
 
-      // 🎯 구매 진행 상태 플래그 설정 (중복 방지)
-      _isPurchaseInProgress = false;
-
-      // 🎯 JWS Representation 처리 (Apple 권장 방식)
+      // 🎯 1. _syncPurchaseInfo를 await으로 호출하여 서버 동기화 완료까지 대기
       final jwsRepresentation = _extractJWSRepresentation(purchaseDetails);
       if (jwsRepresentation != null) {
-        if (kDebugMode) {
-          print('🔍 JWS Representation 추출 완료');
-          print('   - userId: ${user.uid}');
-          print('   - hasJWS: ${jwsRepresentation.isNotEmpty}');
-          print('   - Firebase Functions 호출 시작...');
-        }
         try {
           await _syncPurchaseInfo(user.uid, jwsRepresentation);
           if (kDebugMode) {
@@ -292,10 +287,6 @@ class InAppPurchaseService {
         } catch (e) {
           if (kDebugMode) {
             print('❌ JWS 기반 구매 정보 동기화 실패 (계속 진행): $e');
-            print('🔍 에러 타입: ${e.runtimeType}');
-            print('🔍 에러 상세: ${e.toString()}');
-            print('🚨 [중요] 서버 검증 실패로 인해 구독 상태가 즉시 반영되지 않을 수 있습니다.');
-            print('🔄 지연된 구독 상태 갱신을 통해 재시도됩니다.');
           }
         }
       } else {
@@ -304,7 +295,7 @@ class InAppPurchaseService {
         }
       }
 
-      // 🎯 서버 동기화 후 UI 업데이트 및 후속 처리
+      // 🎯 2. 동기화가 끝난 후, UI 업데이트 및 후속 처리 순차적 호출
       await _updateUIAfterPurchase(purchaseDetails.productID);
       await scheduleNotificationsIfNeeded(purchaseDetails.productID);
       
@@ -312,19 +303,19 @@ class InAppPurchaseService {
       _onPurchaseSuccess?.call();
       
       if (kDebugMode) {
-        print('✅ 구매 처리 완료');
-        print('📢 [InAppPurchase] 구매 완료 - 배너를 통해 사용자에게 알림됨');
+        print('✅ 구매 처리 플로우 완료');
       }
     } catch (e) {
       if (kDebugMode) {
         print('❌ 구매 성공 처리 중 오류: $e');
       }
-      
-      // 오류 발생 시에도 UI 업데이트
-      _onPurchaseSuccess?.call();
+      _onPurchaseSuccess?.call(); // 오류 시에도 콜백 호출
     } finally {
-      // 🎯 구매 진행 상태 해제
+      // 🎯 3. 모든 작업이 끝난 후 finally 블록에서 플래그 해제
       _isPurchaseInProgress = false;
+      if (kDebugMode) {
+        print('🏁 구매 성공 처리 최종 완료 및 플래그 해제');
+      }
     }
   }
 

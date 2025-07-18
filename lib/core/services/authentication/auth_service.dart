@@ -76,7 +76,6 @@ class AuthService {
       final User? user = userCredential.user;
       
       if (user != null) {
-        await _sendEmailVerification(user);
         await UserAccountService().synchronizeUserData(user, isNewUser: true);
         debugPrint('이메일 회원가입 성공: ${user.uid}');
       }
@@ -111,55 +110,6 @@ class AuthService {
 
 // === 이메일 검증 및 비밀번호 관련 기능 ===
 
-  /// 이메일 검증 메일 발송 (내부 사용)
-  Future<void> _sendEmailVerification(User user) async {
-    try {
-      if (!user.emailVerified) {
-        await user.sendEmailVerification();
-        debugPrint('✅ [AuthService] 이메일 검증 메일 발송: ${user.email}');
-      }
-    } catch (e) {
-      debugPrint('❌ [AuthService] 이메일 검증 메일 발송 실패: $e');
-    }
-  }
-
-  /// 이메일 검증 메일 재발송 (공개 메소드)
-  Future<bool> resendEmailVerification() async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) throw Exception('로그인이 필요합니다.');
-
-      if (user.emailVerified) {
-        debugPrint('✅ [AuthService] 이미 이메일이 검증됨');
-        return true;
-      }
-
-      await user.sendEmailVerification();
-      debugPrint('✅ [AuthService] 이메일 검증 메일 재발송: ${user.email}');
-      return true;
-    } catch (e) {
-      debugPrint('❌ [AuthService] 이메일 검증 메일 재발송 실패: $e');
-      rethrow;
-    }
-  }
-
-  /// 이메일 검증 상태 확인 및 새로고침
-  Future<bool> checkEmailVerification() async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return false;
-
-      await user.reload();
-      final refreshedUser = _auth.currentUser;
-      
-      debugPrint('🔍 [AuthService] 이메일 검증 상태: ${refreshedUser?.emailVerified}');
-      return refreshedUser?.emailVerified ?? false;
-    } catch (e) {
-      debugPrint('❌ [AuthService] 이메일 검증 상태 확인 실패: $e');
-      return false;
-    }
-  }
-
   /// 비밀번호 재설정 메일 발송
   Future<bool> sendPasswordResetEmail(String email) async {
     try {
@@ -171,9 +121,6 @@ class AuthService {
       rethrow;
     }
   }
-
-  /// 현재 사용자의 이메일 검증 상태 확인
-  bool get isEmailVerified => _auth.currentUser?.emailVerified ?? false;
 
   /// 현재 사용자의 이메일 주소
   String? get currentUserEmail => _auth.currentUser?.email;
