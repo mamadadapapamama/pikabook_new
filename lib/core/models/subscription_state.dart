@@ -298,7 +298,8 @@ class SubscriptionState {
   final bool hasUsageLimitReached;
   final List<BannerType> activeBanners;
   final String statusMessage;
-  
+
+  // 기본 생성자
   const SubscriptionState({
     required this.entitlement,
     required this.subscriptionStatus,
@@ -307,6 +308,22 @@ class SubscriptionState {
     required this.activeBanners,
     required this.statusMessage,
   });
+
+  factory SubscriptionState.fromServerResponse(Map<String, dynamic> serverResponse) {
+    final subscription = (serverResponse['subscription'] as Map<String, dynamic>?) ?? {};
+    final entitlementString = subscription['entitlement'] as String? ?? 'free';
+    final subscriptionStatusString = subscription['subscriptionStatus'] as String? ?? 'cancelled';
+    final hasUsedTrial = subscription['hasUsedTrial'] as bool? ?? false;
+    
+    return SubscriptionState(
+      entitlement: Entitlement.fromString(entitlementString),
+      subscriptionStatus: SubscriptionStatus.fromString(subscriptionStatusString),
+      hasUsedTrial: hasUsedTrial,
+      hasUsageLimitReached: false, // 이 값은 BannerManager에서 UsageLimitService를 통해 별도로 계산되어야 함
+      activeBanners: [], // 이 값은 BannerManager에서 최종적으로 계산함
+      statusMessage: "Status message based on entitlement and status", // 필요 시 구현
+    );
+  }
 
   /// 기본 상태 (로그아웃/샘플 모드)
   factory SubscriptionState.defaultState() {

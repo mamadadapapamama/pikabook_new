@@ -8,6 +8,7 @@ import '../../core/services/authentication/auth_service.dart';
 import '../sample/sample_tts_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
 import '../../core/widgets/upgrade_modal.dart';
+import '../../core/services/subscription/unified_subscription_manager.dart';
 
 /// 통합 TTS 전체 재생 버튼
 class UnifiedTtsPlayAllButton extends StatefulWidget {
@@ -28,6 +29,7 @@ class _UnifiedTtsPlayAllButtonState extends State<UnifiedTtsPlayAllButton> {
   final UnifiedTtsService _ttsService = UnifiedTtsService();
   final SampleTtsService _sampleTtsService = SampleTtsService();
   final AuthService _authService = AuthService();
+  final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
   bool _isPlaying = false;
 
   // 콜백 참조 저장
@@ -66,7 +68,8 @@ class _UnifiedTtsPlayAllButtonState extends State<UnifiedTtsPlayAllButton> {
 
     // TTS 사용량 제한 체크
     final usageService = UsageLimitService();
-    final limitStatus = await usageService.checkInitialLimitStatus();
+    final subscriptionState = await _subscriptionManager.getSubscriptionState();
+    final limitStatus = await usageService.checkInitialLimitStatus(subscriptionState: subscriptionState);
     
     if (limitStatus['ttsLimitReached'] == true) {
       if (mounted) {

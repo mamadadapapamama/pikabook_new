@@ -191,7 +191,10 @@ class BannerManager {
       final expirationDate = subscriptionData['expirationDate'] as String?;
       
       // 3. 사용량 배너 결정
-      final usageLimitStatus = await UsageLimitService().checkInitialLimitStatus();
+      final subscriptionStateForUsage = SubscriptionState.fromServerResponse(serverResponse);
+      final usageLimitStatus = await UsageLimitService().checkInitialLimitStatus(
+        subscriptionState: subscriptionStateForUsage,
+      );
       _addUsageBanners(activeBanners, entitlement, usageLimitStatus, prefs);
       
       // 4. 상태 배너 결정
@@ -234,7 +237,7 @@ class BannerManager {
   
   /// 2. 테스트 계정 처리
   Future<List<BannerType>?> _handleTestAccountBanners(Map<String, dynamic> subscriptionData, SharedPreferences prefs) async {
-    final bannerMetadata = subscriptionData['bannerMetadata'] as Map<String, dynamic>?;
+    final bannerMetadata = _safeMapConversion(subscriptionData['bannerMetadata']);
     if (bannerMetadata == null) return null;
 
     final bannerTypeName = _safeStringConversion(bannerMetadata['bannerType']);

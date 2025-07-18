@@ -7,6 +7,7 @@ import '../../core/theme/tokens/color_tokens.dart';
 import '../../core/services/common/usage_limit_service.dart';
 import '../sample/sample_tts_service.dart';
 import '../../core/utils/safe_math_utils.dart';
+import '../../core/services/subscription/unified_subscription_manager.dart';
 
 /// 통합 TTS 버튼
 /// 일반 TTS와 느린 TTS를 하나의 버튼으로 처리
@@ -70,6 +71,7 @@ class _UnifiedTtsButtonState extends State<UnifiedTtsButton> {
   final UnifiedTtsService _ttsService = UnifiedTtsService();
   final SampleTtsService _sampleTtsService = SampleTtsService();
   final AuthService _authService = AuthService();
+  final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
   
   bool _isPlaying = false;
   
@@ -213,7 +215,8 @@ class _UnifiedTtsButtonState extends State<UnifiedTtsButton> {
   /// 사용량 제한 체크
   Future<bool> _checkUsageLimit() async {
     final usageService = UsageLimitService();
-    final limitStatus = await usageService.checkInitialLimitStatus();
+    final subscriptionState = await _subscriptionManager.getSubscriptionState();
+    final limitStatus = await usageService.checkInitialLimitStatus(subscriptionState: subscriptionState);
     
     if (limitStatus['ttsLimitReached'] == true) {
       // 사용량 제한 도달 시 처리 (필요시 업그레이드 프롬프트)

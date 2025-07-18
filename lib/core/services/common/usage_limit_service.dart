@@ -99,10 +99,10 @@ class UsageLimitService {
   }
   
   /// 현재 사용량 상태로 한도 도달 여부 계산
-  Future<Map<String, bool>> _calculateCurrentLimitStatus() async {
+  Future<Map<String, bool>> _calculateCurrentLimitStatus({required SubscriptionState subscriptionState}) async {
     try {
       final usage = await _loadUsageDataFromFirebase();
-      final limits = await _loadLimitsFromFirebase();
+      final limits = await _loadLimitsFromFirebase(subscriptionState: subscriptionState);
       
       final limitStatus = {
         'ocrLimitReached': (usage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
@@ -126,7 +126,10 @@ class UsageLimitService {
   }
   
   /// 1. 앱 시작시 제한 확인 (캐시 사용으로 최적화)
-  Future<Map<String, bool>> checkInitialLimitStatus({bool forceRefresh = false}) async {
+  Future<Map<String, bool>> checkInitialLimitStatus({
+    bool forceRefresh = false,
+    required SubscriptionState subscriptionState,
+  }) async {
     try {
       if (kDebugMode) {
         debugPrint('🔍 [UsageLimitService] checkInitialLimitStatus 시작 ${forceRefresh ? "(강제 새로고침)" : "(캐시 사용)"}');
@@ -144,7 +147,7 @@ class UsageLimitService {
       }
       
       // 현재 상태로 한도 계산
-      return await _calculateCurrentLimitStatus();
+      return await _calculateCurrentLimitStatus(subscriptionState: subscriptionState);
       
     } catch (e) {
       debugPrint('❌ [UsageLimitService] checkInitialLimitStatus 오류: $e');
@@ -196,7 +199,9 @@ class UsageLimitService {
       debugPrint('사용량 업데이트 완료: $newUsage');
       
       // 제한 확인
-      final limits = await _loadLimitsFromFirebase();
+      final limits = await _loadLimitsFromFirebase(
+        subscriptionState: await _subscriptionManager.getSubscriptionState(),
+      );
       final limitStatus = {
         'ocrLimitReached': (newUsage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
         'ttsLimitReached': (newUsage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0),
@@ -254,7 +259,10 @@ class UsageLimitService {
       final usage = await _loadUsageDataFromFirebase(forceRefresh: true);
       debugPrint('📊 [UsageLimitService] Firebase 사용량 데이터: $usage');
       
-      final limits = await _loadLimitsFromFirebase(forceRefresh: true);
+      final limits = await _loadLimitsFromFirebase(
+        forceRefresh: true,
+        subscriptionState: await _subscriptionManager.getSubscriptionState(forceRefresh: true),
+      );
       debugPrint('📊 [UsageLimitService] Firebase 제한 데이터: $limits');
       
       // 제한 도달 여부
@@ -322,7 +330,9 @@ class UsageLimitService {
       debugPrint('TTS 사용량 증가 완료: $newTtsUsage');
       
       // 🎯 제한 확인 및 실시간 알림
-      final limits = await _loadLimitsFromFirebase();
+      final limits = await _loadLimitsFromFirebase(
+        subscriptionState: await _subscriptionManager.getSubscriptionState(),
+      );
       final limitStatus = {
         'ocrLimitReached': (currentUsage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
         'ttsLimitReached': newTtsUsage >= (limits['ttsRequests'] ?? 0),
@@ -413,7 +423,10 @@ class UsageLimitService {
   }
   
   /// Firebase에서 제한 데이터 로드 (캐시 적용)
-  Future<Map<String, int>> _loadLimitsFromFirebase({bool forceRefresh = false}) async {
+  Future<Map<String, int>> _loadLimitsFromFirebase({
+    bool forceRefresh = false,
+    required SubscriptionState subscriptionState,
+  }) async {
     // 캐시 확인
     if (!forceRefresh && _isLimitsCacheValid()) {
       if (kDebugMode) {
@@ -445,7 +458,6 @@ class UsageLimitService {
       }
       
       // 2. 🎯 플랜 기반 제한 적용 (SubscriptionManager 사용)
-      final subscriptionState = await _subscriptionManager.getSubscriptionState();
       final planType = subscriptionState.entitlement.isPremiumOrTrial ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
       
       final limits = PlanConstants.PLAN_LIMITS[planType];
@@ -575,7 +587,9 @@ class UsageLimitService {
   /// 사용량 한도 도달 여부 확인 (배너용)
   Future<bool> hasReachedAnyLimit() async {
     try {
-      final limitStatus = await checkInitialLimitStatus();
+      final limitStatus = await checkInitialLimitStatus(
+        subscriptionState: await _subscriptionManager.getSubscriptionState(),
+      );
       final ocrReached = limitStatus['ocrLimitReached'] ?? false;
       final ttsReached = limitStatus['ttsLimitReached'] ?? false;
       

@@ -17,6 +17,7 @@ import '../../../core/services/authentication/auth_service.dart';
 import '../../sample/sample_tts_service.dart';
 import '../../../core/widgets/dot_loading_indicator.dart';
 import '../../../core/utils/error_handler.dart';
+import '../../../core/services/subscription/unified_subscription_manager.dart';
 
 /// ProcessedTextWidget은 처리된 텍스트(중국어 원문, 병음, 번역)를 표시하는 위젯입니다.
 
@@ -61,6 +62,7 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
   final UnifiedTtsService _ttsService = UnifiedTtsService();
   final AuthService _authService = AuthService();
   final SampleTtsService _sampleTtsService = SampleTtsService();
+  final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
   
   // TTS 리스너 콜백 참조 저장 (dispose 시 제거용)
   Function(int?)? _stateChangedCallback;
@@ -186,7 +188,8 @@ class _ProcessedTextWidgetState extends State<ProcessedTextWidget> {
 
       // TTS 사용량 제한 체크
       final usageService = UsageLimitService();
-      final limitStatus = await usageService.checkInitialLimitStatus();
+      final subscriptionState = await _subscriptionManager.getSubscriptionState();
+      final limitStatus = await usageService.checkInitialLimitStatus(subscriptionState: subscriptionState);
       
       if (limitStatus['ttsLimitReached'] == true) {
         if (mounted) {
