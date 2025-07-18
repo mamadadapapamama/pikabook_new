@@ -105,7 +105,7 @@ class SettingsViewModel extends ChangeNotifier {
     _setLoading(true);
 
     try {
-      final responseMap = await _subscriptionManager.getSubscriptionEntitlements(forceRefresh: force);
+      final responseMap = await _subscriptionManager.getRawServerResponse(forceRefresh: force);
       _subscriptionInfo = SubscriptionInfo.fromJson(responseMap);
     } catch (e) {
       if (kDebugMode) print('❌ [Settings] 플랜 정보 로드 오류: $e');

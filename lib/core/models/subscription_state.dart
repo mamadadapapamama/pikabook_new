@@ -1,4 +1,5 @@
 // lib/models/subscription_info.dart
+import 'package:flutter/foundation.dart';
 import '../services/common/banner_manager.dart';
 
 /// 권한 타입 (기능 접근 제어)
@@ -207,13 +208,34 @@ class SubscriptionInfo {
 
   /// 날짜 정보 텍스트 (다음 결제일 / 체험 종료일)
   String? get dateInfoText {
+    if (kDebugMode) {
+      print('🔍 [SubscriptionInfo] dateInfoText 호출됨');
+      print('   - entitlement: ${entitlement.value}');
+      print('   - expirationDate: $expirationDate');
+      print('   - subscriptionStatus: ${subscriptionStatus.value}');
+    }
+    
     if (entitlement.isFree) {
+      if (kDebugMode) {
+        print('   - 무료 플랜: "현재 무료 플랜을 사용하고 있습니다." 반환');
+      }
       return '현재 무료 플랜을 사용하고 있습니다.';
     }
 
-    if (expirationDate == null) return null;
+    if (expirationDate == null) {
+      if (kDebugMode) {
+        print('   - expirationDate가 null이므로 null 반환');
+      }
+      return null;
+    }
+    
     final expiry = DateTime.tryParse(expirationDate!);
-    if (expiry == null) return null;
+    if (expiry == null) {
+      if (kDebugMode) {
+        print('   - expirationDate 파싱 실패: $expirationDate');
+      }
+      return null;
+    }
 
     final nextDay = expiry.add(const Duration(days: 1));
     final formattedNextDay = '${nextDay.year}년 ${nextDay.month}월 ${nextDay.day}일';
@@ -221,18 +243,33 @@ class SubscriptionInfo {
 
     if (entitlement.isTrial) {
       if (subscriptionStatus.isCancelling) {
+        if (kDebugMode) {
+          print('   - 트라이얼 취소: "$formattedNextDay에 무료 플랜으로 전환됩니다." 반환');
+        }
         return '$formattedNextDay에 무료 플랜으로 전환됩니다.';
+      }
+      if (kDebugMode) {
+        print('   - 트라이얼: "$formattedNextDay에 월 구독으로 전환됩니다." 반환');
       }
       return '$formattedNextDay에 월 구독으로 전환됩니다.';
     }
 
     if (entitlement.isPremium) {
       if (subscriptionStatus.isCancelling || subscriptionStatus.isGracePeriod) {
+        if (kDebugMode) {
+          print('   - 프리미엄 취소/그레이스: "$formattedNextDay에 무료 플랜으로 전환됩니다." 반환');
+        }
         return '$formattedNextDay에 무료 플랜으로 전환됩니다.';
+      }
+      if (kDebugMode) {
+        print('   - 프리미엄: "다음 구독 결제일: $formattedExpiry" 반환');
       }
       return '다음 구독 결제일: $formattedExpiry';
     }
     
+    if (kDebugMode) {
+      print('   - 조건에 맞지 않아 null 반환');
+    }
     return null;
   }
 

@@ -207,6 +207,14 @@ class UnifiedSubscriptionManager {
 
   /// 🎯 모든 사용자 관련 캐시 초기화 (로그아웃 및 사용자 변경 시)
   void _clearAllUserCache() {
+    // 🎯 중복 호출 방지
+    if (_cachedServerResponse == null && _cachedUserId == null) {
+      if (kDebugMode) {
+        debugPrint('⏭️ [UnifiedSubscriptionManager] 이미 캐시가 초기화됨 - 중복 호출 건너뜀');
+      }
+      return;
+    }
+    
     _cachedServerResponse = null;
     _cacheTimestamp = null;
     _cachedUserId = null;
