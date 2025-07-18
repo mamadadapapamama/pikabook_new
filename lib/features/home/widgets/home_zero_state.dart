@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/theme/tokens/color_tokens.dart';
-import '../../../core/services/common/banner_manager.dart';
-import 'banner_builder_helper.dart';
 
 /// 📭 HomeScreen 제로 상태 위젯
 /// 
@@ -12,15 +10,11 @@ import 'banner_builder_helper.dart';
 /// - 활성 배너들 표시
 /// - 안내 메시지 및 이미지 표시
 class HomeZeroState extends StatelessWidget {
-  final List<BannerType> activeBanners;
-  final Function(BannerType) onShowUpgradeModal;
-  final Function(BannerType) onDismissBanner;
+  final List<Widget> activeBanners;
 
   const HomeZeroState({
     super.key,
     required this.activeBanners,
-    required this.onShowUpgradeModal,
-    required this.onDismissBanner,
   });
 
   @override
@@ -28,11 +22,7 @@ class HomeZeroState extends StatelessWidget {
             return Column(
           children: [
             // 🎯 활성 배너들 표시
-            ...BannerBuilderHelper.buildActiveBanners(
-              activeBanners: activeBanners,
-              onShowUpgradeModal: onShowUpgradeModal,
-              onDismissBanner: onDismissBanner,
-            ),
+            ...activeBanners,
             
             // 제로 스테이트 콘텐츠
         Expanded(

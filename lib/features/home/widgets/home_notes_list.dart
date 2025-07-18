@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/models/note.dart';
-import '../../../core/services/common/banner_manager.dart';
 import '../home_viewmodel.dart';
 import '../note_list_item.dart';
 import '../../note/view/note_detail_screen.dart';
-import 'banner_builder_helper.dart';
 
 /// 📝 HomeScreen 노트 리스트 위젯
 /// 
@@ -16,16 +14,12 @@ import 'banner_builder_helper.dart';
 /// - Pull-to-refresh 기능
 /// - 노트 삭제 처리
 class HomeNotesList extends StatelessWidget {
-  final List<BannerType> activeBanners;
-  final Function(BannerType) onShowUpgradeModal;
-  final Function(BannerType) onDismissBanner;
+  final List<Widget> activeBanners;
   final Function() onRefresh;
 
   const HomeNotesList({
     super.key,
     required this.activeBanners,
-    required this.onShowUpgradeModal,
-    required this.onDismissBanner,
     required this.onRefresh,
   });
 
@@ -65,11 +59,7 @@ class HomeNotesList extends StatelessWidget {
                 left: 0,
                 right: 0,
                 child: Column(
-                  children: BannerBuilderHelper.buildActiveBanners(
-                    activeBanners: activeBanners,
-                    onShowUpgradeModal: onShowUpgradeModal,
-                    onDismissBanner: onDismissBanner,
-                  ),
+                  children: activeBanners,
                 ),
               ),
           ],

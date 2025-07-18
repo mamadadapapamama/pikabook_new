@@ -1,6 +1,6 @@
-import 'banner_manager.dart';
+import '../../models/banner_type.dart';
 
-/// 🎯 배너 관리 설정 상수들
+/// �� 배너 관리 설정 상수들
 /// 
 /// BannerManager에서 사용하는 모든 설정 상수들을 중앙화하여 관리
 class BannerConfig {

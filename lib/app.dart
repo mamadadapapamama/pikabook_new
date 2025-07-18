@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'views/screens/login_screen.dart';
-import 'features/home/home_screen.dart'; 
+import 'features/home/home_screen.dart';
 import 'views/screens/onboarding_screen.dart';
 import 'core/services/authentication/user_preferences_service.dart';
 import 'core/services/payment/in_app_purchase_service.dart';
@@ -19,6 +19,7 @@ import 'features/home/home_viewmodel.dart';
 import 'core/services/notification/notification_service.dart';
 import 'core/services/authentication/auth_service.dart';
 import 'core/services/authentication/user_account_service.dart';
+import 'core/services/subscription/unified_subscription_manager.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -61,7 +62,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   // PlanService 제거됨
   final InAppPurchaseService _purchaseService = InAppPurchaseService();
 
-
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   
   @override
@@ -88,6 +88,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     
     // 초기화 로직 시작
     _preferencesService = UserPreferencesService();
+    _purchaseService.setScaffoldMessengerKey(_scaffoldMessengerKey);
     _initializeApp();
   }
   
@@ -96,7 +97,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     _authStateSubscription?.cancel();
     
     // InAppPurchaseService는 싱글톤이므로 앱 종료 시에만 dispose
-    if (_purchaseService.isAvailableSync) {
+    if (_purchaseService.isAvailable) {
       _purchaseService.dispose();
     }
     
@@ -119,6 +120,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     // 앱 라이프사이클 상태 관리
     if (state == AppLifecycleState.resumed) {
+      // 앱이 포그라운드로 돌아올 때 구독 상태 갱신
+      UnifiedSubscriptionManager().invalidateCache();
       // 앱이 포그라운드로 돌아왔을 때
       _checkSampleMode();
     } else if (state == AppLifecycleState.paused) {

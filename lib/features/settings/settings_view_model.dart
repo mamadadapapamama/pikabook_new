@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -38,6 +39,7 @@ class SettingsViewModel extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final UserAccountService _userAccountService = UserAccountService();
   final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
+  StreamSubscription? _subscriptionStateStreamSubscription;
 
   // --- 상태 변수 ---
   bool _isLoading = false;
@@ -84,7 +86,34 @@ class SettingsViewModel extends ChangeNotifier {
     await loadUserData();
     await loadUserPreferences();
     await refreshPlanInfo(force: isUserChanged);
-    }
+    
+    // 🎯 구독 상태 스트림 구독 (구매 완료 시 자동 업데이트)
+    _setupSubscriptionStream();
+  }
+  
+  /// 🎯 구독 상태 스트림 구독 설정
+  void _setupSubscriptionStream() {
+    _subscriptionStateStreamSubscription = _subscriptionManager.subscriptionStateStream.listen(
+      (subscriptionState) {
+        if (kDebugMode) {
+          print('🔔 [Settings] 구독 상태 변경 감지 - 자동 새로고침');
+        }
+        // 구독 상태가 변경되면 자동으로 플랜 정보 새로고침
+        refreshPlanInfo(force: true);
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          print('❌ [Settings] 구독 상태 스트림 오류: $error');
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscriptionStateStreamSubscription?.cancel();
+    super.dispose();
+  }
 
   void _resetAllData() {
     _currentUser = null;

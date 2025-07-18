@@ -1,6 +1,6 @@
 // lib/models/subscription_info.dart
 import 'package:flutter/foundation.dart';
-import '../services/common/banner_manager.dart';
+import '../models/banner_type.dart';
 
 /// 권한 타입 (기능 접근 제어)
 enum Entitlement {
@@ -154,41 +154,46 @@ class SubscriptionInfo {
     String? parsedExpirationDate;
     final dynamic rawExpirationDate = subscription['expirationDate'];
     
-    if (kDebugMode) {
-      print('🔍 [SubscriptionInfo] expirationDate 파싱 시작');
-      print('   - rawExpirationDate: $rawExpirationDate');
-      print('   - rawExpirationDate 타입: ${rawExpirationDate.runtimeType}');
-    }
-    
-    if (rawExpirationDate is String) {
-      // 🎯 문자열이 Unix timestamp인지 확인
-      final timestamp = int.tryParse(rawExpirationDate);
-      if (timestamp != null) {
-        // Unix timestamp 문자열을 ISO 8601 문자열로 변환
-        final dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    // 🎯 rawExpirationDate가 null이면 즉시 파싱 종료
+    if (rawExpirationDate == null) {
+      parsedExpirationDate = null;
+    } else {
+      if (kDebugMode) {
+        print('🔍 [SubscriptionInfo] expirationDate 파싱 시작');
+        print('   - rawExpirationDate: $rawExpirationDate');
+        print('   - rawExpirationDate 타입: ${rawExpirationDate.runtimeType}');
+      }
+      
+      if (rawExpirationDate is String) {
+        // 🎯 문자열이 Unix timestamp인지 확인
+        final timestamp = int.tryParse(rawExpirationDate);
+        if (timestamp != null) {
+          // Unix timestamp 문자열을 ISO 8601 문자열로 변환
+          final dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+          parsedExpirationDate = dateTime.toIso8601String();
+          if (kDebugMode) {
+            print('   - Unix timestamp 문자열을 DateTime으로 변환: $dateTime');
+            print('   - ISO 8601 문자열로 변환: $parsedExpirationDate');
+          }
+        } else {
+          // 일반 ISO 8601 문자열로 가정
+          parsedExpirationDate = rawExpirationDate;
+          if (kDebugMode) {
+            print('   - 일반 ISO 8601 문자열로 처리: $parsedExpirationDate');
+          }
+        }
+      } else if (rawExpirationDate is int) {
+        // Unix timestamp (milliseconds)를 ISO 8601 문자열로 변환
+        final dateTime = DateTime.fromMillisecondsSinceEpoch(rawExpirationDate);
         parsedExpirationDate = dateTime.toIso8601String();
         if (kDebugMode) {
-          print('   - Unix timestamp 문자열을 DateTime으로 변환: $dateTime');
+          print('   - int를 DateTime으로 변환: $dateTime');
           print('   - ISO 8601 문자열로 변환: $parsedExpirationDate');
         }
       } else {
-        // 일반 ISO 8601 문자열로 가정
-        parsedExpirationDate = rawExpirationDate;
         if (kDebugMode) {
-          print('   - 일반 ISO 8601 문자열로 처리: $parsedExpirationDate');
+          print('   - 지원되지 않는 타입: ${rawExpirationDate.runtimeType}');
         }
-      }
-    } else if (rawExpirationDate is int) {
-      // Unix timestamp (milliseconds)를 ISO 8601 문자열로 변환
-      final dateTime = DateTime.fromMillisecondsSinceEpoch(rawExpirationDate);
-      parsedExpirationDate = dateTime.toIso8601String();
-      if (kDebugMode) {
-        print('   - int를 DateTime으로 변환: $dateTime');
-        print('   - ISO 8601 문자열로 변환: $parsedExpirationDate');
-      }
-    } else {
-      if (kDebugMode) {
-        print('   - 지원되지 않는 타입: ${rawExpirationDate.runtimeType}');
       }
     }
     
@@ -282,14 +287,14 @@ class SubscriptionInfo {
 
     if (entitlement.isTrial) {
       if (subscriptionStatus.isCancelling) {
-        return '$formattedNextDay에 무료 플랜으로 전환됩니다.';
+        return '무료 플랜으로 전환: $formattedNextDay';
       }
-      return '$formattedNextDay에 월 구독으로 전환됩니다.';
+      return '월 구독으로 전환: $formattedNextDay';
     }
 
     if (entitlement.isPremium) {
       if (subscriptionStatus.isCancelling || subscriptionStatus.isGracePeriod) {
-        return '$formattedNextDay에 무료 플랜으로 전환됩니다.';
+        return '무료 플랜으로 전환: $formattedNextDay';
       }
       return '구독 갱신일: $formattedExpiry';
     }

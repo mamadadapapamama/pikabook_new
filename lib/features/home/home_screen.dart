@@ -8,13 +8,11 @@ import 'package:collection/collection.dart'; // 🎯 추가
 
 // 🎯 Core imports
 import '../../core/models/subscription_state.dart';
-import '../../core/services/common/banner_manager.dart';
 import '../../core/services/subscription/unified_subscription_manager.dart';
-import '../../core/services/authentication/user_preferences_service.dart';
 import '../../core/theme/tokens/ui_tokens.dart';
 import '../../core/widgets/pika_app_bar.dart';
 import '../../core/widgets/dot_loading_indicator.dart';
-import '../../core/widgets/upgrade_modal.dart';
+import '../../core/models/banner_type.dart';
 
 // 🎯 Feature imports
 import 'home_viewmodel.dart';
@@ -39,7 +37,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // 🔧 서비스 인스턴스
   final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
-  final UserPreferencesService _userPreferencesService = UserPreferencesService();
   final HomeUICoordinator _uiCoordinator = HomeUICoordinator();
   
   // 🎯 상태 관리
@@ -139,7 +136,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 신규 사용자인 경우 환영 모달 표시
       if (_isNewUser) {
         _setDefaultState();
-        _showWelcomeModal();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _showWelcomeModal();
+          }
+        });
       }
       
     } catch (e) {
@@ -148,7 +149,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
       _isNewUser = true;
       _setDefaultState();
-      _showWelcomeModal();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _showWelcomeModal();
+        }
+      });
     }
   }
 
@@ -206,6 +211,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     // 3. 로딩 상태 변경 확인
     if (_isLoading) return true;
+
+    // 4. 구독 상태 메시지 변경 확인
+    if (oldState.statusMessage != newState.statusMessage) return true;
 
     return false;
   }
@@ -316,6 +324,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             .set({
           'subscriptionStatus': 'cancelled',
           'entitlement': 'free',
+          'hasUsedTrial': false, // 🎯 명시적으로 false로 설정
         }, SetOptions(merge: true));
       }
 
@@ -362,17 +371,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         );
       });
       
-      // 백그라운드에서 배너 상태 저장 및 새로고침
-      await _uiCoordinator.dismissBanner(
-        bannerType,
-        onBannersUpdated: (updatedBanners) {
-          // 배너 상태 새로고침 - 스트림으로 자동 업데이트됨
-          if (kDebugMode) {
-            debugPrint('🔄 [HomeScreen] 배너 닫기 후 구독 상태 새로고침');
-          }
-          _refreshSubscriptionState();
-        },
-      );
+      // 백그라운드에서 배너 상태 저장
+      await _uiCoordinator.dismissBanner(bannerType);
       
       if (kDebugMode) {
         debugPrint('✅ [HomeScreen] 배너 닫기 완료: ${bannerType.name}');
@@ -427,22 +427,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return Consumer<HomeViewModel>(
       builder: (context, viewModel, _) {
         final hasNotes = viewModel.notes.isNotEmpty;
-        final activeBanners = _subscriptionState.activeBanners;
+        final activeBanners = _uiCoordinator.buildActiveBanners(
+          context: context,
+          activeBanners: _subscriptionState.activeBanners,
+          onShowUpgradeModal: _onShowUpgradeModal,
+          onDismissBanner: _onDismissBanner,
+        );
 
         if (hasNotes) {
           // 노트가 있는 경우 - 노트 리스트 표시
           return HomeNotesList(
             activeBanners: activeBanners,
-            onShowUpgradeModal: _onShowUpgradeModal,
-            onDismissBanner: _onDismissBanner,
             onRefresh: _onRefresh,
           );
         } else {
           // 노트가 없는 경우 - 제로 상태 표시
           return HomeZeroState(
             activeBanners: activeBanners,
-            onShowUpgradeModal: _onShowUpgradeModal,
-            onDismissBanner: _onDismissBanner,
           );
         }
       },

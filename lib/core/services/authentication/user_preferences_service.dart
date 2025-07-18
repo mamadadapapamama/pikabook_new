@@ -5,6 +5,7 @@ import 'dart:convert';
 import '../../models/user_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 // import '../cache/event_cache_manager.dart'; // 캐시 제거
+import 'dart:async'; // Completer 추가
 
 /// 사용자 설정을 관리하는 서비스 (캐시 없이 직접 DB 조회)
 /// 
@@ -24,6 +25,9 @@ class UserPreferencesService {
     
   // 현재 사용자 ID
   String? _currentUserId;
+
+  // 🎯 메모리 캐시 (세션 기반)
+  UserPreferences? _cachedPreferences;
   
   // 🎯 중복 호출 방지
   Future<UserPreferences>? _ongoingLoadOperation;
@@ -49,7 +53,7 @@ class UserPreferencesService {
     final prefs = await SharedPreferences.getInstance();
     
     // 이전 사용자 ID 가져오기
-    final previousUserId = prefs.getString(_currentUserIdKey);
+    final previousUserId = _currentUserId ?? prefs.getString(_currentUserIdKey);
     
     // 사용자 변경 여부 확인
     final bool isUserChanged = previousUserId != null && previousUserId != userId;
@@ -66,12 +70,12 @@ class UserPreferencesService {
       }
     }
     
-    // 사용자가 변경된 경우에만 데이터 초기화
+    // 사용자가 변경된 경우에만 데이터 초기화 및 캐시 무효화
     if (isUserChanged) {
       if (kDebugMode) {
       debugPrint('📝 사용자 전환으로 이전 사용자 데이터 초기화 중...');
       }
-      await clearUserData();
+      await clearUserData(); // clearUserData가 캐시를 무효화함
       if (kDebugMode) {
       debugPrint('✅ 사용자 데이터 초기화 완료');
       }
@@ -94,21 +98,32 @@ class UserPreferencesService {
 
   /// 사용자 설정 가져오기 (캐시 없이 항상 SharedPreferences에서 직접 조회)
   Future<UserPreferences> getPreferences() async {
+    // 🎯 캐시 확인 (세션 동안 유효)
+    if (_cachedPreferences != null) {
+      if (kDebugMode) {
+        debugPrint('✅ [UserPreferences] 캐시에서 설정 로드 완료');
+      }
+      return _cachedPreferences!;
+    }
+    
     // 🎯 중복 호출 방지
     if (_ongoingLoadOperation != null) {
       if (kDebugMode) {
         debugPrint('⏭️ [UserPreferences] 진행 중인 로드 작업 대기');
       }
-      await _ongoingLoadOperation!;
-      // 대기 후 내부 메서드 직접 호출
-      return await _getPreferencesInternal();
+      return await _ongoingLoadOperation!;
     }
     
-    _ongoingLoadOperation = _getPreferencesInternal();
-    
+    final completer = Completer<UserPreferences>();
+    _ongoingLoadOperation = completer.future;
+
     try {
-      final result = await _ongoingLoadOperation!;
+      final result = await _getPreferencesInternal();
+      completer.complete(result);
       return result;
+    } catch (e) {
+      completer.completeError(e);
+      rethrow;
     } finally {
       _ongoingLoadOperation = null;
     }
@@ -119,7 +134,7 @@ class UserPreferencesService {
     final userId = await getCurrentUserId();
     
     if (kDebugMode) {
-      debugPrint('📦 [UserPreferences] 사용자 설정 직접 조회: $userId');
+      debugPrint('📦 [UserPreferences] SharedPreferences에서 설정 직접 조회: $userId');
     }
     
     final prefs = await SharedPreferences.getInstance();
@@ -140,8 +155,11 @@ class UserPreferencesService {
       preferences = UserPreferences.defaults();
     }
     
+    // 🎯 캐시에 저장
+    _cachedPreferences = preferences;
+
     if (kDebugMode) {
-      debugPrint('✅ [UserPreferences] 사용자 설정 로드 완료 (캐시 없이 직접 조회)');
+      debugPrint('✅ [UserPreferences] SharedPreferences에서 설정 로드 완료 및 캐시 저장');
     }
     
     return preferences;
@@ -149,6 +167,9 @@ class UserPreferencesService {
 
   /// 사용자 설정 저장 (캐시 없이 항상 SharedPreferences + Firestore 직접 저장)
   Future<void> savePreferences(UserPreferences preferences) async {
+    // 🎯 캐시 무효화
+    _cachedPreferences = null;
+    
     final prefs = await SharedPreferences.getInstance();
     final userId = await getCurrentUserId();
     
@@ -189,6 +210,9 @@ class UserPreferencesService {
 
   /// 사용자 데이터 초기화 (캐시 없이 직접 SharedPreferences에서 삭제)
   Future<void> clearUserData() async {
+    // 🎯 캐시 무효화
+    _cachedPreferences = null;
+    
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = await getCurrentUserId();
@@ -212,6 +236,9 @@ class UserPreferencesService {
 
   /// Firestore에서 사용자 설정 로드 (캐시 없이 SharedPreferences에만 저장)
   Future<void> loadUserSettingsFromFirestore({bool forceRefresh = false}) async {
+    // 🎯 캐시 무효화
+    _cachedPreferences = null;
+
     final userId = await getCurrentUserId();
     if (userId == null || userId.isEmpty) {
       if (kDebugMode) {

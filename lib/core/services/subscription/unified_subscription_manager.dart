@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../common/banner_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../models/banner_type.dart';
 import '../../models/subscription_state.dart';
 import 'dart:async';
 
@@ -39,9 +41,6 @@ class UnifiedSubscriptionManager {
   // 🎯 중복 요청 방지
   Future<Map<String, dynamic>>? _ongoingRequest;
 
-  // 🎯 BannerManager 인스턴스
-  final BannerManager _bannerManager = BannerManager();
-
   // 🎯 실시간 스트림
   final StreamController<SubscriptionState> _subscriptionStateController = 
       StreamController<SubscriptionState>.broadcast();
@@ -52,13 +51,17 @@ class UnifiedSubscriptionManager {
   Stream<SubscriptionState> get subscriptionStateStream => _subscriptionStateController.stream;
   
   /// 인증 상태 변경 처리 (중앙 오케스트레이터 역할)
-  void _onAuthStateChanged(User? user) {
+  void _onAuthStateChanged(User? user) async {
     if (user != null) {
       if (_cachedUserId != user.uid) {
         if (kDebugMode) {
           debugPrint('🔄 [UnifiedSubscriptionManager] 사용자 변경 감지: ${user.uid}');
         }
         _clearAllUserCache(); // 이전 사용자 캐시 정리
+        
+        // 🎯 InAppPurchaseService 초기화
+        await InAppPurchaseService().initialize();
+        
         _setupFirestoreListener(user.uid); // 새 사용자를 위한 리스너 설정
         getSubscriptionState(forceRefresh: true); // 새 사용자 정보 즉시 로드
       }
@@ -71,7 +74,7 @@ class UnifiedSubscriptionManager {
       _subscriptionStateController.add(SubscriptionState.defaultState());
     }
   }
-  
+
   /// 🔥 Firestore 실시간 리스너 설정
   void _setupFirestoreListener(String userId) {
     // 기존 리스너가 있다면 취소
@@ -179,7 +182,7 @@ class UnifiedSubscriptionManager {
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [UnifiedSubscriptionManager] Firebase Functions 호출 실패: $e');
-        }
+      }
       return _getDefaultServerResponse();
     }
   }
@@ -200,7 +203,7 @@ class UnifiedSubscriptionManager {
   void invalidateCache() {
     _cachedServerResponse = null;
     _cacheTimestamp = null;
-    if (kDebugMode) {
+      if (kDebugMode) {
       debugPrint('🗑️ [UnifiedSubscriptionManager] 내부 캐시 무효화');
     }
   }
@@ -222,7 +225,6 @@ class UnifiedSubscriptionManager {
     _firestoreSubscription = null;
     
     // 🎯 다른 서비스들의 캐시도 여기서 중앙 관리
-    InAppPurchaseService().clearUserCache();
     UsageLimitService().clearUserCache();
     EventCacheManager().clearAllCache();
     
@@ -280,24 +282,9 @@ class UnifiedSubscriptionManager {
     }
 
     final serverResponse = await _getUnifiedServerResponse(forceRefresh: forceRefresh);
-    
-    // 🎯 캐시된 배너 결과 확인 (중복 호출 방지)
-    List<BannerType> activeBanners = [];
-    if (forceRefresh || _cachedServerResponse == null) {
-      // 🎯 강제 새로고침이거나 캐시가 없을 때만 배너 결정
-      if (kDebugMode) {
-        debugPrint('🎯 [UnifiedSubscriptionManager] 배너 결정 실행 (forceRefresh: $forceRefresh)');
-      }
-      activeBanners = await _bannerManager.getActiveBannersFromServerResponse(serverResponse);
-    } else {
-      // 🎯 캐시된 서버 응답이 있으면 배너 결정 건너뛰기
-      if (kDebugMode) {
-        debugPrint('⏭️ [UnifiedSubscriptionManager] 캐시된 서버 응답 사용 - 배너 결정 건너뛰기');
-      }
-      // 기존 상태에서 배너 정보만 가져오기
-      final existingState = await _getCachedSubscriptionState();
-      activeBanners = existingState?.activeBanners ?? [];
-    }
+      
+    // 🎯 단순화된 배너 결정 로직
+    final activeBanners = await _getActiveBanners(serverResponse);
     
     final subscription = _safeMapConversion(serverResponse['subscription']);
     final entitlementString = subscription?['entitlement'] as String? ?? 'free';
@@ -319,6 +306,43 @@ class UnifiedSubscriptionManager {
     return state;
   }
   
+  /// 🎯 단순화된 배너 결정 로직
+  Future<List<BannerType>> _getActiveBanners(Map<String, dynamic> serverResponse) async {
+    final activeBanners = <BannerType>[];
+    final prefs = await SharedPreferences.getInstance();
+
+    final subscription = _safeMapConversion(serverResponse['subscription']);
+    if (subscription == null) return activeBanners;
+
+    final entitlement = subscription['entitlement'] as String? ?? 'free';
+    final subscriptionStatus = subscription['subscriptionStatus'] as String? ?? 'cancelled';
+    final hasUsedTrial = subscription['hasUsedTrial'] as bool? ?? false;
+
+    BannerType? bannerType;
+
+    // 🎯 구매 직후 배너(trialStarted, premiumStarted)는 스낵바로 대체되었으므로 제거
+    if (subscriptionStatus == 'active') {
+      if (entitlement == 'premium' && hasUsedTrial) {
+        // 무료체험 후 프리미엄으로 전환된 경우
+        bannerType = BannerType.switchToPremium;
+      }
+    } else if (subscriptionStatus == 'cancelling') {
+      bannerType = entitlement == 'trial' ? BannerType.trialCancelled : BannerType.premiumCancelled;
+    } else if (subscriptionStatus == 'expired') {
+      bannerType = (entitlement == 'trial' || hasUsedTrial) ? BannerType.switchToPremium : BannerType.free;
+    }
+
+    if (bannerType != null) {
+      final key = 'banner_${bannerType.name}_dismissed';
+      final hasDismissed = prefs.getBool(key) ?? false;
+      if (!hasDismissed) {
+        activeBanners.add(bannerType);
+      }
+    }
+
+    return activeBanners;
+  }
+
   /// 🎯 캐시된 구독 상태 조회 (배너 결정 없이)
   Future<SubscriptionState?> _getCachedSubscriptionState() async {
     if (_cachedServerResponse == null) return null;

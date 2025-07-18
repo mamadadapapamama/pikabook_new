@@ -20,6 +20,7 @@ import 'widgets/plan_card.dart';
 import 'widgets/profile_card.dart';
 import 'widgets/setting_item.dart';
 import '../../core/widgets/selection_dialog.dart';
+import '../../core/services/payment/in_app_purchase_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -159,6 +160,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           
           const SizedBox(height: 32),
+          
+          if (kDebugMode) ...[
+            _buildSectionTitle('디버그 메뉴'),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+              child: PikaButton(
+                text: '미완료 거래 정리',
+                variant: PikaButtonVariant.warning,
+                onPressed: () async {
+                  await InAppPurchaseService().clearPendingTransactions();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('미완료 거래 정리가 완료되었습니다.'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                },
+                isFullWidth: true,
+              ),
+            ),
+            const SizedBox(height: 32),
+          ],
         ],
       ),
     );
