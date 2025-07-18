@@ -253,16 +253,10 @@ class SubscriptionInfo {
     }
     
     if (entitlement.isFree) {
-      if (kDebugMode) {
-        print('   - 무료 플랜: "현재 무료 플랜을 사용하고 있습니다." 반환');
-      }
       return '현재 무료 플랜을 사용하고 있습니다.';
     }
 
     if (expirationDate == null) {
-      if (kDebugMode) {
-        print('   - expirationDate가 null이므로 null 반환');
-      }
       return null;
     }
     
@@ -279,9 +273,6 @@ class SubscriptionInfo {
     }
     
     if (expiry == null) {
-      if (kDebugMode) {
-        print('   - expirationDate 파싱 결과가 null: $expirationDate');
-      }
       return null;
     }
 
@@ -291,33 +282,18 @@ class SubscriptionInfo {
 
     if (entitlement.isTrial) {
       if (subscriptionStatus.isCancelling) {
-        if (kDebugMode) {
-          print('   - 트라이얼 취소: "$formattedNextDay에 무료 플랜으로 전환됩니다." 반환');
-        }
         return '$formattedNextDay에 무료 플랜으로 전환됩니다.';
-      }
-      if (kDebugMode) {
-        print('   - 트라이얼: "$formattedNextDay에 월 구독으로 전환됩니다." 반환');
       }
       return '$formattedNextDay에 월 구독으로 전환됩니다.';
     }
 
     if (entitlement.isPremium) {
       if (subscriptionStatus.isCancelling || subscriptionStatus.isGracePeriod) {
-        if (kDebugMode) {
-          print('   - 프리미엄 취소/그레이스: "$formattedNextDay에 무료 플랜으로 전환됩니다." 반환');
-        }
         return '$formattedNextDay에 무료 플랜으로 전환됩니다.';
-      }
-      if (kDebugMode) {
-        print('   - 프리미엄: "구독 갱신일: $formattedExpiry" 반환');
       }
       return '구독 갱신일: $formattedExpiry';
     }
     
-    if (kDebugMode) {
-      print('   - 조건에 맞지 않아 null 반환');
-    }
     return null;
   }
 
