@@ -267,7 +267,7 @@ class InAppPurchaseService {
         }
 
         PurchaseLogger.info('[Continuous] New successful purchase detected: ${details.purchaseID}');
-        await _handlePurchaseSuccess(details);
+        await _handleContinuousPurchaseSuccess(details);
 
         if (purchaseId != null) {
             _processedTransactions.add(purchaseId);
@@ -278,6 +278,36 @@ class InAppPurchaseService {
     await _completePurchase(details);
   }
 
+  /// 🎉 지속적인 구매 성공 처리 (스낵바 없이)
+  Future<void> _handleContinuousPurchaseSuccess(PurchaseDetails details) async {
+    PurchaseLogger.info('Continuous purchase successful: ${details.productID}');
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      PurchaseLogger.error('User not authenticated');
+      return;
+    }
+    
+    final jwsRepresentation = _extractJWSRepresentation(details);
+    if (jwsRepresentation == null) {
+      PurchaseLogger.error('Failed to extract JWS representation');
+      return;
+    }
+    
+    // 서버 동기화 먼저 수행
+    final syncSuccess = await _syncPurchaseInfo(user.uid, jwsRepresentation);
+    
+    // 지속적인 감지에서는 스낵바를 표시하지 않음 (이미 처리된 거래일 가능성이 높음)
+    if (!syncSuccess) {
+      PurchaseLogger.error('Continuous purchase sync failed');
+    }
+    
+    // UI 업데이트와 알림 스케줄링은 병렬로 처리
+    await Future.wait([
+      _updateUIAfterPurchase(details.productID),
+      _scheduleNotifications(details),
+    ]);
+  }
 
   /// 🔄 구매 업데이트 처리
   Future<void> _handlePurchaseUpdates(
