@@ -228,7 +228,6 @@ class UserAccountService {
           'email': user.email,
           'createdAt': FieldValue.serverTimestamp(),
           'lastLogin': FieldValue.serverTimestamp(),
-          'entitlement': 'free',
           'onboardingCompleted': false,
           'hasSeenWelcomeModal': false,
           'isNewUser': true,
@@ -258,7 +257,6 @@ class UserAccountService {
           // 에지 케이스: 기존 사용자지만 문서가 없는 경우 (온보딩 전 앱 삭제 등)
           userData['createdAt'] = FieldValue.serverTimestamp();
           userData['isNewUser'] = true;
-          userData['entitlement'] = 'free';
           userData['onboardingCompleted'] = false;
           userData['hasSeenWelcomeModal'] = false;
           userData['deviceCount'] = 1;

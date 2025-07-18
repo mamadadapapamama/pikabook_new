@@ -153,13 +153,6 @@ class _UsageDialogState extends State<UsageDialog> {
       actionsAlignment: MainAxisAlignment.center,
       actions: [
         _buildActionButton(context),
-        const SizedBox(width: SpacingTokens.sm),
-        PikaButton(
-          text: '닫기',
-          variant: PikaButtonVariant.outline,
-          size: PikaButtonSize.small,
-          onPressed: () => Navigator.of(context).pop(),
-        ),
       ],
     );
   }
@@ -213,47 +206,11 @@ class _UsageDialogState extends State<UsageDialog> {
 
   /// 플랜 상태에 따른 액션 버튼
   Widget _buildActionButton(BuildContext context) {
-    final info = widget.subscriptionInfo;
-    if (info == null) {
-      // 정보가 없는 경우 비활성화된 버튼 반환
-      return const PikaButton(
-        text: '정보 로딩 중...',
-        variant: PikaButtonVariant.primary,
-        size: PikaButtonSize.small,
-        onPressed: null,
-      );
-    }
-
-    String buttonText;
-    VoidCallback? onPressedAction;
-
-    if (!info.hasUsedTrial) {
-      buttonText = '무료 체험 시작';
-      onPressedAction = () {
-        Navigator.of(context).pop();
-        _uiCoordinator.showWelcomeModalAfterDelay(context, onComplete: (_) {});
-      };
-    } else if (info.entitlement.isFree) {
-      buttonText = '프리미엄으로 업그레이드';
-      onPressedAction = () {
-        Navigator.of(context).pop();
-        UpgradeModal.show(context, reason: UpgradeReason.general);
-      };
-    } else { // isPremium
-      buttonText = '사용량 추가 문의';
-      onPressedAction = () async {
-        final formUrl = Uri.parse('https://docs.google.com/forms/d/e/1FAIpQLSfgVL4Bd5KcTh9nhfbVZ51yApPAmJAZJZgtM4V9hNhsBpKuaA/viewform?usp=dialog');
-        if (await canLaunchUrl(formUrl)) {
-          await launchUrl(formUrl, mode: LaunchMode.externalApplication);
-        }
-      };
-    }
-    
     return PikaButton(  
-      text: buttonText,
+      text: '닫기',
       variant: PikaButtonVariant.primary,
       size: PikaButtonSize.small,
-      onPressed: onPressedAction,
+      onPressed: () => Navigator.of(context).pop(),
     );
   }
 } 

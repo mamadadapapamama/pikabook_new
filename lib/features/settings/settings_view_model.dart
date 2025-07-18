@@ -179,7 +179,6 @@ class SettingsViewModel extends ChangeNotifier {
       builder: (BuildContext innerContext) {
         return UpgradeModal(
           onUpgrade: () async {
-            Navigator.of(innerContext).pop();
             await refreshPlanInfo(force: true);
           },
         );

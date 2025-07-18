@@ -207,6 +207,10 @@ class SubscriptionInfo {
 
   /// 날짜 정보 텍스트 (다음 결제일 / 체험 종료일)
   String? get dateInfoText {
+    if (entitlement.isFree) {
+      return '현재 무료 플랜을 사용하고 있습니다.';
+    }
+
     if (expirationDate == null) return null;
     final expiry = DateTime.tryParse(expirationDate!);
     if (expiry == null) return null;
@@ -217,14 +221,14 @@ class SubscriptionInfo {
 
     if (entitlement.isTrial) {
       if (subscriptionStatus.isCancelling) {
-        return '$formattedNextDay 에 무료 플랜으로 전환됩니다.';
+        return '$formattedNextDay에 무료 플랜으로 전환됩니다.';
       }
-      return '$formattedNextDay 에 월 구독으로 전환됩니다.';
+      return '$formattedNextDay에 월 구독으로 전환됩니다.';
     }
 
     if (entitlement.isPremium) {
       if (subscriptionStatus.isCancelling || subscriptionStatus.isGracePeriod) {
-        return '$formattedNextDay 에 무료 플랜으로 전환됩니다.';
+        return '$formattedNextDay에 무료 플랜으로 전환됩니다.';
       }
       return '다음 구독 결제일: $formattedExpiry';
     }
@@ -310,7 +314,8 @@ class SubscriptionState {
   });
 
   factory SubscriptionState.fromServerResponse(Map<String, dynamic> serverResponse) {
-    final subscription = (serverResponse['subscription'] as Map<String, dynamic>?) ?? {};
+    final subscriptionRaw = serverResponse['subscription'];
+    final subscription = (subscriptionRaw is Map) ? Map<String, dynamic>.from(subscriptionRaw) : <String, dynamic>{};
     final entitlementString = subscription['entitlement'] as String? ?? 'free';
     final subscriptionStatusString = subscription['subscriptionStatus'] as String? ?? 'cancelled';
     final hasUsedTrial = subscription['hasUsedTrial'] as bool? ?? false;

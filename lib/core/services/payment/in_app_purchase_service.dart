@@ -155,6 +155,15 @@ class InAppPurchaseService {
         if (kDebugMode) {
           print('⏭️ 이미 처리된 구매 건너뛰기: $purchaseKey');
         }
+        // 🎯 복원(restored) 건은 건너뛰더라도 구매 성공 처리를 다시 시도하여 서버 상태를 갱신
+        if (purchaseDetails.status == PurchaseStatus.restored) {
+          if (kDebugMode) {
+            print('🔄 건너뛴 복원 건에 대해 구매 성공 처리를 재시도합니다.');
+          }
+          // 구매 성공 로직을 다시 실행하여 서버와 동기화
+          _handleSuccessfulPurchase(purchaseDetails);
+        }
+        
         // 🎯 이미 처리된 구매는 반드시 완료 처리
         _completePurchaseIfNeeded(purchaseDetails);
         continue;
@@ -610,9 +619,10 @@ class InAppPurchaseService {
       }
       
       final success = data['success'] as bool? ?? false;
+      // 🎯 'transaction' 필드도 확인하여 호환성 확보
       final subscriptionData = data['subscription'] != null 
           ? Map<String, dynamic>.from(data['subscription'] as Map)
-          : null;
+          : (data['transaction'] != null ? Map<String, dynamic>.from(data['transaction'] as Map) : null);
       final dataSource = data['dataSource'] as String?;
       final errorMessage = data['error'] as String?;
       
@@ -655,6 +665,8 @@ class InAppPurchaseService {
           print('❌ JWS 기반 구매 정보 동기화 실패');
           print('🔍 에러 정보: ${errorMessage ?? "알 수 없는 오류"}');
         }
+        // 동기화 실패 시에도 UI 갱신 시도
+        _notifySubscriptionManager();
       }
     } catch (e) {
       if (kDebugMode) {
