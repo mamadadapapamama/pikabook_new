@@ -33,36 +33,33 @@ enum Entitlement {
 enum SubscriptionStatus {
   active('active'),
   cancelling('cancelling'),
-  cancelled('cancelled'),
   expired('expired'),
-  refunded('refunded');
+  refunded('refunded'),
+  gracePeriod('grace'),
+  unknown('unknown'),
+  cancelled('cancelled');
 
   const SubscriptionStatus(this.value);
   final String value;
 
-  static SubscriptionStatus fromString(String value) {
+  factory SubscriptionStatus.fromString(String? value) {
     switch (value) {
-      case 'active':
-        return SubscriptionStatus.active;
-      case 'cancelling':
-        return SubscriptionStatus.cancelling;
-      case 'cancelled':
-        return SubscriptionStatus.cancelled;
-      case 'expired':
-        return SubscriptionStatus.expired;
-      case 'refunded':
-        return SubscriptionStatus.refunded;
-      default:
-        return SubscriptionStatus.cancelled;
+      case 'active': return SubscriptionStatus.active;
+      case 'cancelling': return SubscriptionStatus.cancelling;
+      case 'grace': return SubscriptionStatus.gracePeriod;
+      case 'expired': return SubscriptionStatus.expired;
+      case 'refunded': return SubscriptionStatus.refunded;
+      case 'cancelled': return SubscriptionStatus.cancelled;
+      default: return SubscriptionStatus.unknown;
     }
   }
 
-  // 편의 메서드들
   bool get isActive => this == SubscriptionStatus.active;
   bool get isCancelling => this == SubscriptionStatus.cancelling;
-  bool get isCancelled => this == SubscriptionStatus.cancelled;
+  bool get isGracePeriod => this == SubscriptionStatus.gracePeriod;
   bool get isExpired => this == SubscriptionStatus.expired;
   bool get isRefunded => this == SubscriptionStatus.refunded;
+  bool get isCancelled => this == SubscriptionStatus.cancelled;
 }
 
 /// 구독 타입
@@ -164,7 +161,7 @@ class SubscriptionInfo {
     
     return SubscriptionInfo(
       entitlement: Entitlement.fromString(subscription['entitlement'] as String? ?? 'free'),
-      subscriptionStatus: SubscriptionStatus.fromString(subscription['subscriptionStatus'] as String? ?? 'cancelled'),
+      subscriptionStatus: SubscriptionStatus.fromString(subscription['subscriptionStatus'] as String?),
       hasUsedTrial: subscription['hasUsedTrial'] as bool? ?? false,
       autoRenewEnabled: subscription['autoRenewEnabled'] as bool? ?? false,
       expirationDate: parsedExpirationDate,
@@ -188,19 +185,24 @@ class SubscriptionInfo {
   
   /// 플랜 제목 (남은 기간 포함)
   String get planTitle {
-    final daysRemaining = _getRemainingDays();
     final typeDisplay = subscriptionType?.value == 'yearly' ? '연간' : '월간';
+    String title;
 
     if (entitlement.isTrial) {
-      return daysRemaining > 0 ? '프리미엄 체험중 ($daysRemaining일 남음)' : '프리미엄 체험중';
+      title = '프리미엄 체험';
+    } else if (entitlement.isPremium) {
+      title = '프리미엄 ($typeDisplay)';
+    } else {
+      title = '무료';
     }
-    if (entitlement.isPremium) {
-      if (subscriptionStatus.isCancelling) {
-        return daysRemaining > 0 ? '프리미엄 ($typeDisplay) (${daysRemaining}일 남음)' : '프리미엄 ($typeDisplay)';
-      }
-      return '프리미엄 ($typeDisplay)';
+    
+    if (subscriptionStatus.isCancelling) {
+      title += ' (취소됨)';
+    } else if (subscriptionStatus.isGracePeriod) {
+      title += ' (결제 확인 요망)';
     }
-    return '무료';
+    
+    return title;
   }
 
   /// 날짜 정보 텍스트 (다음 결제일 / 체험 종료일)
@@ -209,14 +211,24 @@ class SubscriptionInfo {
     final expiry = DateTime.tryParse(expirationDate!);
     if (expiry == null) return null;
 
-    final formattedDate = '${expiry.year}년 ${expiry.month}월 ${expiry.day}일';
+    final nextDay = expiry.add(const Duration(days: 1));
+    final formattedNextDay = '${nextDay.year}년 ${nextDay.month}월 ${nextDay.day}일';
+    final formattedExpiry = '${expiry.year}년 ${expiry.month}월 ${expiry.day}일';
 
     if (entitlement.isTrial) {
-      return '체험 종료일: $formattedDate';
+      if (subscriptionStatus.isCancelling) {
+        return '$formattedNextDay 에 무료 플랜으로 전환됩니다.';
+      }
+      return '$formattedNextDay 에 월 구독으로 전환됩니다.';
     }
+
     if (entitlement.isPremium) {
-      return subscriptionStatus.isCancelling ? '플랜 종료일: $formattedDate' : '다음 결제일: $formattedDate';
+      if (subscriptionStatus.isCancelling || subscriptionStatus.isGracePeriod) {
+        return '$formattedNextDay 에 무료 플랜으로 전환됩니다.';
+      }
+      return '다음 구독 결제일: $formattedExpiry';
     }
+    
     return null;
   }
 
@@ -233,7 +245,7 @@ class SubscriptionInfo {
       return '체험 기간 종료 시 자동으로 결제됩니다.';
     }
     if (entitlement.isPremium && !subscriptionStatus.isCancelling) {
-      return '구독은 App Store에서 관리할 수 있습니다.';
+      return null;
     }
     return null;
   }

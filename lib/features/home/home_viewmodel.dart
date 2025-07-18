@@ -90,17 +90,8 @@ class HomeViewModel extends ChangeNotifier {
       // 🎯 사용자 변경 감지 리스너 설정
       _setupAuthStateListener();
       
-      // 🚨 신규 사용자가 아닐 때만 사용량 스트림 구독
-      if (!_isNewUser) {
-        _setupUsageLimitStream();
-      } else {
-        if (kDebugMode) {
-          debugPrint('[HomeViewModel] 🆕 신규 사용자 - 사용량 스트림 구독 건너뜀');
-        }
-      }
+      // 🚨 이 부분에서 노트/사용량 구독 로직 제거 -> authStateListener가 담당
       
-      // Firestore 실시간 스트림 구독
-      _subscribeToNoteService();
     } catch (e, stackTrace) {
       debugPrint('[HomeViewModel] 초기화 중 오류 발생: $e');
       debugPrint('[HomeViewModel] 스택 트레이스: $stackTrace');
@@ -118,12 +109,20 @@ class HomeViewModel extends ChangeNotifier {
         
         if (user == null) {
           // 로그아웃 시 상태 초기화
+          _notes = [];
+          _isLoading = false;
           _resetUsageLimits();
+          _notesSubscription?.cancel(); // 🎯 로그아웃 시 노트 구독 취소
+          notifyListeners();
           if (kDebugMode) {
-            debugPrint('🔄 [HomeViewModel] 로그아웃 - 사용량 상태 초기화');
+            debugPrint('🔄 [HomeViewModel] 로그아웃 - 상태 초기화 및 노트 구독 취소');
           }
         } else {
           // 새 사용자 로그인 시 스트림 재구독
+          if (kDebugMode) {
+            debugPrint('🔄 [HomeViewModel] 로그인 감지 - 노트 및 사용량 스트림 구독 시작');
+          }
+          _subscribeToNoteService();
           if (!_isNewUser) {
             _setupUsageLimitStream();
           }

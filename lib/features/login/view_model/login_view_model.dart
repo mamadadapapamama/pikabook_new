@@ -1,98 +1,97 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import '../../../core/services/authentication/auth_service.dart';
 
-enum LoginState { idle, loading, success, error }
 enum SocialLoginType { google, apple }
+enum AuthState { idle, loading, error, success }
 
-class LoginViewModel with ChangeNotifier {
+class LoginViewModel extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
 
-  // State
-  LoginState _state = LoginState.idle;
+  bool _isDisposed = false; // 🎯 추가
+  AuthState _state = AuthState.idle;
   String? _errorMessage;
-  bool _isEmailLogin = false;
   bool _isSignUp = false;
+  bool _isEmailLogin = false;
 
-  // Controllers
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
-
-  // Getters
-  LoginState get state => _state;
+  AuthState get state => _state;
   String? get errorMessage => _errorMessage;
-  bool get isEmailLogin => _isEmailLogin;
   bool get isSignUp => _isSignUp;
-  bool get isLoading => _state == LoginState.loading;
-
-  // Constructor
-  LoginViewModel() {
-    // Clean up controllers
-    emailController.addListener(() {
-      if (_errorMessage != null) {
-        _clearError();
-      }
-    });
-    passwordController.addListener(() {
-      if (_errorMessage != null) {
-        _clearError();
-      }
-    });
-  }
-
+  bool get isEmailLogin => _isEmailLogin;
+  bool get isLoading => _state == AuthState.loading;
+  
   @override
   void dispose() {
+    _isDisposed = true; // 🎯 추가
     emailController.dispose();
     passwordController.dispose();
     super.dispose();
   }
 
-  // --- State Management ---
-
-  void _setState(LoginState newState) {
+  void _setState(AuthState newState) {
+    if (_isDisposed) return; // 🎯 추가
     _state = newState;
     notifyListeners();
   }
 
-  void _setError(String message) {
+  void _setError(String? message) {
+    if (_isDisposed) return; // 🎯 추가
     _errorMessage = message;
-    _setState(LoginState.error);
+    _state = (message != null) ? AuthState.error : AuthState.idle;
+    notifyListeners();
   }
 
-  void _clearError() {
+  void toggleEmailLogin(bool value) {
+    _isEmailLogin = value;
     _errorMessage = null;
-    if (_state == LoginState.error) {
-      _setState(LoginState.idle);
-    }
-  }
-  
-  void _setLoading() {
-      _errorMessage = null;
-      _setState(LoginState.loading);
-  }
-
-
-  // --- UI Interactions ---
-
-  void toggleEmailLogin(bool show) {
-    _isEmailLogin = show;
-    _isSignUp = false; // Reset sign up state when switching
-    _clearError();
-    emailController.clear();
-    passwordController.clear();
     notifyListeners();
   }
 
   void toggleSignUp() {
     _isSignUp = !_isSignUp;
-    _clearError();
+    _errorMessage = null;
     notifyListeners();
   }
 
-  // --- Authentication Logic ---
+  Future<User?> handleEmailAuth() async {
+    if (isLoading) return null;
+    _setState(AuthState.loading);
+    _setError(null);
+
+    try {
+      final email = emailController.text.trim();
+      final password = passwordController.text.trim();
+      User? user;
+
+      if (_isSignUp) {
+        user = await _authService.signUpWithEmail(email, password);
+      } else {
+        user = await _authService.signInWithEmail(email, password);
+      }
+      
+      if (_isDisposed) return null; // 🎯 추가
+
+      _setState(AuthState.success);
+      return user;
+    } on FirebaseAuthException catch (e) {
+      if (_isDisposed) return null; // 🎯 추가
+      _setError(_mapAuthException(e));
+      return null;
+    } catch (e) {
+      if (_isDisposed) return null; // 🎯 추가
+      _setError('알 수 없는 오류가 발생했습니다.');
+      return null;
+    }
+  }
 
   Future<User?> handleSocialSignIn(SocialLoginType type) async {
-    _setLoading();
+    if (isLoading) return null;
+    _setState(AuthState.loading);
+    _setError(null);
+
     try {
       User? user;
       switch (type) {
@@ -103,114 +102,55 @@ class LoginViewModel with ChangeNotifier {
           user = await _authService.signInWithApple();
           break;
       }
-
-      if (user != null) {
-        _setState(LoginState.success);
-        return user;
-      } else {
-        // User cancelled the sign in
-        _setState(LoginState.idle);
-        return null;
-      }
-    } on FirebaseAuthException catch (e) {
-      _setError(_mapAuthException(e.code));
-    } catch (e) {
-      _setError('로그인 중 오류가 발생했습니다. 다시 시도해 주세요.');
-    }
-    return null;
-  }
-  
-  Future<User?> handleEmailAuth() async {
-    final email = emailController.text.trim();
-    final password = passwordController.text;
-
-    // Validation
-    if (email.isEmpty || password.isEmpty) {
-        _setError('이메일과 비밀번호를 입력해주세요.');
-        return null;
-    }
-    if (!email.contains('@') || !email.contains('.')) {
-        _setError('올바른 이메일 형식을 입력해주세요.');
-        return null;
-    }
-    if (password.length < 6) {
-        _setError('비밀번호는 6자 이상이어야 합니다.');
-        return null;
-    }
-
-    _setLoading();
-    try {
-      User? user;
-      if (_isSignUp) {
-        user = await _authService.signUpWithEmail(email, password);
-      } else {
-        user = await _authService.signInWithEmail(email, password);
-      }
       
-      if (user != null) {
-          _setState(LoginState.success);
-      } else {
-          _setError('로그인에 실패했습니다. 다시 시도해주세요.');
-      }
-      return user;
+      if (_isDisposed) return null; // 🎯 추가
 
-    } on FirebaseAuthException catch (e) {
-        final errorMessage = _mapAuthException(e.code);
-        _setError(errorMessage);
-        
+      _setState(AuthState.success);
+      return user;
     } catch (e) {
-      _setError('오류가 발생했습니다. 다시 시도해주세요.');
+      if (_isDisposed) return null; // 🎯 추가
+      _setError('소셜 로그인 중 오류가 발생했습니다.');
+      return null;
     }
-    return null;
   }
 
   Future<void> sendPasswordResetEmail() async {
-      final email = emailController.text.trim();
-      if (email.isEmpty || !email.contains('@')) {
-          throw Exception('올바른 이메일을 입력해주세요.');
-      }
-      _setLoading();
-      try {
-          await _authService.sendPasswordResetEmail(email);
-          _setState(LoginState.idle);
-      } catch (e) {
-          _setState(LoginState.idle);
-          if (e is FirebaseAuthException) {
-            throw Exception(_mapAuthException(e.code));
-          }
-          throw Exception('메일 발송에 실패했습니다. 잠시 후 다시 시도해주세요.');
-      }
+    if (isLoading) return;
+    _setState(AuthState.loading);
+    try {
+      await _authService.sendPasswordResetEmail(emailController.text.trim());
+      if (_isDisposed) return;
+      _setState(AuthState.idle);
+    } catch (e) {
+      if (_isDisposed) return;
+      _setError(e is FirebaseAuthException ? _mapAuthException(e) : '메일 발송에 실패했습니다.');
+      rethrow;
+    }
   }
-  
+
   Future<void> resendVerificationEmail() async {
-      await _authService.resendEmailVerification();
+    await _authService.resendEmailVerification();
   }
 
-
-  String _mapAuthException(String code) {
-    switch (code) {
-      case 'user-not-found':
-      case 'invalid-credential':
-      case 'wrong-password':
-        return '이메일 또는 비밀번호가 일치하지 않습니다.';
-      case 'user-disabled':
-        return '이 계정은 사용이 중지되었습니다.';
-      case 'email-already-in-use':
-        return '이미 가입된 이메일입니다. 로그인해주세요.';
-      case 'weak-password':
-        return '비밀번호가 너무 약합니다. 6자 이상, 숫자와 문자를 포함해주세요.';
+  String _mapAuthException(FirebaseAuthException e) {
+    switch (e.code) {
       case 'invalid-email':
-        return '이메일 주소를 확인해주세요.';
-      case 'too-many-requests':
-        return '잠시 후 다시 시도해주세요.';
+        return '유효하지 않은 이메일 형식입니다.';
+      case 'user-disabled':
+        return '비활성화된 계정입니다.';
+      case 'user-not-found':
+      case 'wrong-password':
+      case 'invalid-credential':
+        return '이메일 또는 비밀번호가 올바르지 않습니다.';
+      case 'email-already-in-use':
+        return '이미 사용 중인 이메일입니다.';
+      case 'weak-password':
+        return '비밀번호는 6자리 이상이어야 합니다.';
       case 'network-request-failed':
-        return '네트워크 상태를 확인해주세요.';
-      case 'cancelled':
-      case 'sign_in_cancelled':
-      case 'AuthorizationError Code=1001':
-        return '로그인이 취소되었습니다.';
+        return '네트워크 연결을 확인해주세요.';
       default:
-        return '알 수 없는 오류가 발생했습니다: $code';
+        debugPrint('Firebase Auth 오류: ${e.code}');
+        return '인증 중 오류가 발생했습니다. (${e.code})';
     }
   }
 } 

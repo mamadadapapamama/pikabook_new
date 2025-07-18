@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
+import 'package:collection/collection.dart'; // 🎯 추가
 
 // 🎯 Core imports
 import '../../core/models/subscription_state.dart';
@@ -46,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isLoading = true;
   bool _isNewUser = false;
   HomeViewModel? _homeViewModel;
+  SubscriptionState? _previousSubscriptionState; // 🎯 추가
   
   // 🆕 구독 상태 변경 스트림 구독
   StreamSubscription<SubscriptionState>? _subscriptionStateSubscription;
@@ -157,20 +159,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     
     _subscriptionStateSubscription = _subscriptionManager.subscriptionStateStream.listen(
-      (subscriptionState) {
-        if (kDebugMode) {
-          debugPrint('🔔 [HomeScreen] 구독 상태 변경 수신');
-          debugPrint('   권한: ${subscriptionState.entitlement.value}');
-          debugPrint('   활성 배너: ${subscriptionState.activeBanners.length}개');
-          debugPrint('   배너 타입: ${subscriptionState.activeBanners.map((e) => e.name).toList()}');
+      (newState) {
+        final hasChanged = _hasSubscriptionStateChanged(newState);
+
+        if (hasChanged) {
+          if (kDebugMode) {
+            debugPrint('🔔 [HomeScreen] 구독 상태 변경 감지됨 -> UI 업데이트');
+            debugPrint('   이전: ${_previousSubscriptionState?.entitlement.value} / 새 상태: ${newState.entitlement.value}');
+            debugPrint('   이전 배너: ${_previousSubscriptionState?.activeBanners.length}개 / 새 배너: ${newState.activeBanners.length}개');
+          }
+
+          if (mounted) {
+            setState(() {
+              _subscriptionState = newState;
+              _isLoading = false;
+            });
+          }
         }
-        
-        if (mounted) {
-          setState(() {
-            _subscriptionState = subscriptionState;
-            _isLoading = false;
-          });
-        }
+        _previousSubscriptionState = newState;
       },
       onError: (error) {
         if (kDebugMode) {
@@ -183,6 +189,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (kDebugMode) {
       debugPrint('✅ [HomeScreen] 구독 상태 스트림 구독 완료');
     }
+  }
+
+  /// 🎯 새로운 상태와 이전 상태를 비교하여 UI 업데이트 여부를 결정
+  bool _hasSubscriptionStateChanged(SubscriptionState newState) {
+    if (_previousSubscriptionState == null) return true; // 첫 로드는 항상 업데이트
+
+    final oldState = _previousSubscriptionState!;
+    
+    // 1. 주요 권한 변경 확인
+    if (oldState.entitlement != newState.entitlement) return true;
+
+    // 2. 배너 목록 변경 확인 (순서 무관)
+    final bannerEquality = const DeepCollectionEquality.unordered();
+    if (!bannerEquality.equals(oldState.activeBanners, newState.activeBanners)) return true;
+    
+    // 3. 로딩 상태 변경 확인
+    if (_isLoading) return true;
+
+    return false;
   }
 
   /// 🎯 구독 상태 로드 (최초 1회만 호출)
