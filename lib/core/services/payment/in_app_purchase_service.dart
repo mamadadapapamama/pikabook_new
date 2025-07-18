@@ -31,6 +31,7 @@ class InAppPurchaseService {
   
   // 🎯 중복 처리 방지
   final Set<String> _processedPurchases = {};
+  final Set<String> _pendingPurchaseKeys = {}; // 📌 처리 중인 구매를 추적하기 위한 Set (Lock)
   bool _isPurchaseInProgress = false;
   
   // 🎯 구매 성공 콜백
@@ -148,29 +149,46 @@ class InAppPurchaseService {
     }
     
     for (final PurchaseDetails purchaseDetails in purchaseDetailsList) {
-      // 🎯 중복 처리 방지 (더 엄격한 조건)
-      final purchaseKey = '${purchaseDetails.productID}_${purchaseDetails.purchaseID}';
+      // 📌 purchaseID가 null일 수 있으므로 transactionDate를 fallback으로 사용
+      final purchaseKey = '${purchaseDetails.productID}_${purchaseDetails.purchaseID ?? purchaseDetails.transactionDate}';
       
-      if (_processedPurchases.contains(purchaseKey)) {
+      // 📌 루프 방지를 위한 핵심 로직: 현재 처리 중인 구매는 건너뜀
+      if (_pendingPurchaseKeys.contains(purchaseKey)) {
         if (kDebugMode) {
-          print('⏭️ 이미 처리된 구매 건너뛰기: $purchaseKey');
+          print('⏳ 이미 처리 중인 구매($purchaseKey)이므로 건너뜁니다.');
         }
-        // 🎯 복원(restored) 건은 건너뛰더라도 구매 성공 처리를 다시 시도하여 서버 상태를 갱신
-        if (purchaseDetails.status == PurchaseStatus.restored) {
-          if (kDebugMode) {
-            print('🔄 건너뛴 복원 건에 대해 구매 성공 처리를 재시도합니다.');
-          }
-          // 구매 성공 로직을 다시 실행하여 서버와 동기화
-          _handleSuccessfulPurchase(purchaseDetails);
-        }
-        
-        // 🎯 이미 처리된 구매는 반드시 완료 처리
-        _completePurchaseIfNeeded(purchaseDetails);
         continue;
       }
       
-      _processedPurchases.add(purchaseKey);
-      _handlePurchase(purchaseDetails);
+      // 📌 이미 최종 처리된 구매 건너뛰기
+      if (_processedPurchases.contains(purchaseKey)) {
+        if (kDebugMode) {
+          print('⏭️ 이미 처리 완료된 구매($purchaseKey)이므로 건너뜁니다.');
+        }
+        _completePurchaseIfNeeded(purchaseDetails);
+        continue;
+      }
+
+      try {
+        // 📌 처리 시작: lock 설정
+        _pendingPurchaseKeys.add(purchaseKey);
+        if (kDebugMode) {
+          print('➕ 처리 시작: $purchaseKey');
+        }
+        
+        _handlePurchase(purchaseDetails).whenComplete(() {
+          if (kDebugMode) {
+            print('➖ 처리 완료 및 lock 해제: $purchaseKey');
+          }
+          _pendingPurchaseKeys.remove(purchaseKey);
+          _processedPurchases.add(purchaseKey); // 영구적으로 처리된 것으로 기록
+        });
+      } catch (e) {
+        if (kDebugMode) {
+          print('❌ 처리 시작 중 오류 발생, lock 해제: $e');
+        }
+        _pendingPurchaseKeys.remove(purchaseKey);
+      }
     }
   }
 
@@ -286,13 +304,8 @@ class InAppPurchaseService {
         }
       }
 
-      // 🎯 구독 상태 갱신
-      await _notifySubscriptionManager();
-      
-      // 🎯 UI 업데이트
+      // 🎯 서버 동기화 후 UI 업데이트 및 후속 처리
       await _updateUIAfterPurchase(purchaseDetails.productID);
-      
-      // 🎯 알림 설정 (중복 방지 적용)
       await scheduleNotificationsIfNeeded(purchaseDetails.productID);
       
       // 🎯 성공 콜백 호출
@@ -394,6 +407,7 @@ class InAppPurchaseService {
     }
     
     _processedPurchases.clear();
+    _pendingPurchaseKeys.clear(); // 처리 중인 구매 키 캐시 초기화
     _scheduledNotifications.clear(); // 알림 스케줄링 중복 방지 세트 초기화
     _isPurchaseInProgress = false;
     
@@ -412,6 +426,7 @@ class InAppPurchaseService {
     _isInitialized = false;
     _products.clear();
     _processedPurchases.clear();
+    _pendingPurchaseKeys.clear(); // 처리 중인 구매 키 캐시 초기화
     _isPurchaseInProgress = false;
     _onPurchaseSuccess = null;
     _onPurchaseResult = null;
@@ -660,6 +675,9 @@ class InAppPurchaseService {
           print('✅ JWS 기반 구매 정보 동기화 완료');
           print('🚀 Apple 권장 방식 기반 처리 확인됨');
         }
+        // 🎯 동기화 성공 시, UnifiedSubscriptionManager가 새로운 상태를 가져오도록 강제 갱신
+        _notifySubscriptionManager();
+
       } else {
         if (kDebugMode) {
           print('❌ JWS 기반 구매 정보 동기화 실패');
