@@ -6,6 +6,10 @@ import '../common/banner_manager.dart';
 import '../../models/subscription_state.dart';
 import 'dart:async';
 
+import '../cache/event_cache_manager.dart';
+import '../common/usage_limit_service.dart';
+import '../payment/in_app_purchase_service.dart';
+
 /// 🎯 통합 구독 관리자 (중복 호출 제거 + 캐시 + 스트림)
 /// 
 /// **새로운 최적화:**
@@ -47,21 +51,24 @@ class UnifiedSubscriptionManager {
 
   Stream<SubscriptionState> get subscriptionStateStream => _subscriptionStateController.stream;
   
-  /// 認証状態の変更を処理する
+  /// 인증 상태 변경 처리 (중앙 오케스트레이터 역할)
   void _onAuthStateChanged(User? user) {
     if (user != null) {
       if (_cachedUserId != user.uid) {
         if (kDebugMode) {
-          debugPrint('🔄 [UnifiedSubscriptionManager] 사용자 변경 감지 (인증 상태): ${user.uid}');
+          debugPrint('🔄 [UnifiedSubscriptionManager] 사용자 변경 감지: ${user.uid}');
         }
-        clearUserCache(); // 이전 사용자 캐시 정리
+        _clearAllUserCache(); // 이전 사용자 캐시 정리
         _setupFirestoreListener(user.uid); // 새 사용자를 위한 리스너 설정
+        getSubscriptionState(forceRefresh: true); // 새 사용자 정보 즉시 로드
       }
     } else {
       if (kDebugMode) {
-        debugPrint('🔒 [UnifiedSubscriptionManager] 사용자 로그아웃 감지');
+        debugPrint('🔒 [UnifiedSubscriptionManager] 사용자 로그아웃 감지. 모든 사용자 데이터 초기화.');
       }
-      clearUserCache(); // 로그아웃 시 캐시 및 리스너 정리
+      _clearAllUserCache(); // 로그아웃 시 모든 캐시 정리
+      // 🎯 로그아웃 시 기본 상태를 스트림으로 방출
+      _subscriptionStateController.add(SubscriptionState.defaultState());
     }
   }
   
@@ -113,7 +120,7 @@ class UnifiedSubscriptionManager {
       if (kDebugMode) {
         debugPrint('🔄 [UnifiedSubscriptionManager] 사용자 변경 감지');
       }
-      _clearCache();
+      _clearAllUserCache();
       _cachedUserId = currentUserId;
       _setupFirestoreListener(currentUserId); // 리스너 재설정
     }
@@ -189,15 +196,30 @@ class UnifiedSubscriptionManager {
     return age < _cacheTTL;
   }
 
-  /// 🎯 캐시 초기화
-  void _clearCache() {
+  /// 🎯 캐시 초기화 (단순 내부 캐시)
+  void invalidateCache() {
+    _cachedServerResponse = null;
+    _cacheTimestamp = null;
+    if (kDebugMode) {
+      debugPrint('🗑️ [UnifiedSubscriptionManager] 내부 캐시 무효화');
+    }
+  }
+
+  /// 🎯 모든 사용자 관련 캐시 초기화 (로그아웃 및 사용자 변경 시)
+  void _clearAllUserCache() {
     _cachedServerResponse = null;
     _cacheTimestamp = null;
     _cachedUserId = null;
-    _firestoreSubscription?.cancel(); // 리스너도 함께 취소
+    _firestoreSubscription?.cancel();
     _firestoreSubscription = null;
+    
+    // 🎯 다른 서비스들의 캐시도 여기서 중앙 관리
+    InAppPurchaseService().clearUserCache();
+    UsageLimitService().clearUserCache();
+    EventCacheManager().clearAllCache();
+    
     if (kDebugMode) {
-      debugPrint('🗑️ [UnifiedSubscriptionManager] 캐시 및 리스너 초기화');
+      debugPrint('🗑️ [UnifiedSubscriptionManager] 모든 사용자 캐시 및 리스너 초기화 완료');
     }
   }
 
@@ -289,27 +311,11 @@ class UnifiedSubscriptionManager {
     }
   }
 
-  /// 🎯 캐시 무효화 (수동 새로고침)
-  void invalidateCache() {
-    _clearCache();
-    // 수동 새로고침 후에는 다시 상태를 조회해야 리스너가 재설정됨
-    getSubscriptionState(forceRefresh: true);
-  }
-
   /// 🎯 사용자 변경 시 상태 초기화
   void clearUserCache() {
-    _clearCache();
-    // 스트림에 기본 상태 전송
-    _emitSubscriptionStateChange(
-      SubscriptionState(
-        entitlement: Entitlement.free,
-        subscriptionStatus: SubscriptionStatus.cancelled,
-        hasUsedTrial: false,
-        hasUsageLimitReached: false,
-        activeBanners: [],
-        statusMessage: "로그아웃됨",
-      )
-    );
+    _clearAllUserCache();
+    // 수동 새로고침 후에는 다시 상태를 조회해야 리스너가 재설정됨
+    getSubscriptionState(forceRefresh: true);
   }
 
   /// 🎯 안전한 Map 변환

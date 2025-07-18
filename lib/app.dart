@@ -19,7 +19,6 @@ import 'features/home/home_viewmodel.dart';
 import 'core/services/notification/notification_service.dart';
 import 'core/services/authentication/auth_service.dart';
 import 'core/services/authentication/user_account_service.dart';
-import 'core/services/authentication/user_lifecycle_manager.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -57,7 +56,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   User? _user;
   StreamSubscription<User?>? _authStateSubscription;
   late UserPreferencesService _preferencesService;
-  late UserLifecycleManager _lifecycleManager; // 🎯 추가
+  
   String? _error;
   // PlanService 제거됨
   final InAppPurchaseService _purchaseService = InAppPurchaseService();
@@ -70,9 +69,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     
-    // 🎯 UserLifecycleManager 초기화
-    _lifecycleManager = UserLifecycleManager(AuthService(), UserAccountService());
-    _lifecycleManager.initialize();
     
     // 디버그 타이머 비활성화 (디버그 모드에서만)
     if (kDebugMode) {
@@ -98,7 +94,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   @override
   void dispose() {
     _authStateSubscription?.cancel();
-    _lifecycleManager.dispose(); // 🎯 추가
+    
     // InAppPurchaseService는 싱글톤이므로 앱 종료 시에만 dispose
     if (_purchaseService.isAvailableSync) {
       _purchaseService.dispose();
