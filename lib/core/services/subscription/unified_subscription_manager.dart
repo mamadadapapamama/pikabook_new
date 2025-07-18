@@ -280,12 +280,24 @@ class UnifiedSubscriptionManager {
     }
 
     final serverResponse = await _getUnifiedServerResponse(forceRefresh: forceRefresh);
-    final entitlements = await getSubscriptionEntitlements(forceRefresh: false); // 캐시 재사용
     
-    // 🎯 활성 배너 조회
-      final activeBanners = await _bannerManager.getActiveBannersFromServerResponse(
-      serverResponse
-    );
+    // 🎯 캐시된 배너 결과 확인 (중복 호출 방지)
+    List<BannerType> activeBanners = [];
+    if (forceRefresh || _cachedServerResponse == null) {
+      // 🎯 강제 새로고침이거나 캐시가 없을 때만 배너 결정
+      if (kDebugMode) {
+        debugPrint('🎯 [UnifiedSubscriptionManager] 배너 결정 실행 (forceRefresh: $forceRefresh)');
+      }
+      activeBanners = await _bannerManager.getActiveBannersFromServerResponse(serverResponse);
+    } else {
+      // 🎯 캐시된 서버 응답이 있으면 배너 결정 건너뛰기
+      if (kDebugMode) {
+        debugPrint('⏭️ [UnifiedSubscriptionManager] 캐시된 서버 응답 사용 - 배너 결정 건너뛰기');
+      }
+      // 기존 상태에서 배너 정보만 가져오기
+      final existingState = await _getCachedSubscriptionState();
+      activeBanners = existingState?.activeBanners ?? [];
+    }
     
     final subscription = _safeMapConversion(serverResponse['subscription']);
     final entitlementString = subscription?['entitlement'] as String? ?? 'free';
@@ -305,6 +317,30 @@ class UnifiedSubscriptionManager {
     _emitSubscriptionStateChange(state);
       
     return state;
+  }
+  
+  /// 🎯 캐시된 구독 상태 조회 (배너 결정 없이)
+  Future<SubscriptionState?> _getCachedSubscriptionState() async {
+    if (_cachedServerResponse == null) return null;
+    
+    try {
+      final subscription = _safeMapConversion(_cachedServerResponse!['subscription']);
+      final entitlementString = subscription?['entitlement'] as String? ?? 'free';
+      final subscriptionStatusString = subscription?['subscriptionStatus'] as String? ?? 'cancelled';
+      final hasUsedTrial = subscription?['hasUsedTrial'] as bool? ?? false;
+      
+      // 🎯 캐시된 배너 정보는 별도로 저장하지 않으므로 빈 배열 반환
+      return SubscriptionState(
+        entitlement: Entitlement.fromString(entitlementString),
+        subscriptionStatus: SubscriptionStatus.fromString(subscriptionStatusString),
+        hasUsedTrial: hasUsedTrial,
+        hasUsageLimitReached: false,
+        activeBanners: [], // 배너는 매번 새로 계산해야 하므로 빈 배열
+        statusMessage: "Status message based on entitlement and status",
+      );
+    } catch (e) {
+      return null;
+    }
   }
       
   /// 🎯 구독 상태 변경 이벤트 발생
