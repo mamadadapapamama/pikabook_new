@@ -1,8 +1,8 @@
 /// 플랜 관련 상수 정의
 class PlanConstants {
   // 플랜 유형
-  static const String PLAN_FREE = 'free';
-  static const String PLAN_PREMIUM = 'premium';
+  static const String PLAN_FREE = '무료';
+  static const String PLAN_PREMIUM = '프리미엄';
   
   // 플랜별 제한값
   static const Map<String, Map<String, int>> PLAN_LIMITS = {

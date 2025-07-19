@@ -229,9 +229,10 @@ class InAppPurchaseService {
   void _startContinuousPurchaseListener() {
     _purchaseSubscription = _inAppPurchase.purchaseStream.listen(
       (purchaseDetailsList) {
-        for (var details in purchaseDetailsList) {
-          _handlePurchaseUpdate(details);
-        }
+        // 🚨 중요: 여러 구매가 동시에 들어올 때 순차적으로 처리하여 경쟁 상태 방지
+        Future.forEach<PurchaseDetails>(purchaseDetailsList, (details) async {
+          await _handlePurchaseUpdate(details);
+        });
       },
       onError: (error) {
         PurchaseLogger.error('Purchase stream error: $error');
@@ -249,10 +250,11 @@ class InAppPurchaseService {
   Future<void> _handlePurchaseUpdate(PurchaseDetails details) async {
     final purchaseId = details.purchaseID;
 
-    // 이미 처리된 거래는 무시
-    if (purchaseId != null && _processedTransactions.contains(purchaseId)) {
+    // 🚨 중요: 무한 루프 방지를 위해 핸들러 시작 시점에 바로 거래 ID를 추가합니다.
+    if (purchaseId == null || _processedTransactions.contains(purchaseId)) {
       return;
     }
+    _processedTransactions.add(purchaseId);
     
     final activePurchaseCompleter = _activePurchases[details.productID];
     final isDirectPurchase = activePurchaseCompleter != null;
@@ -284,10 +286,6 @@ class InAppPurchaseService {
 
     if (details.pendingCompletePurchase) {
       await _completePurchase(details);
-    }
-
-    if (purchaseId != null) {
-      _processedTransactions.add(purchaseId);
     }
   }
 

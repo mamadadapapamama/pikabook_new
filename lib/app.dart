@@ -20,6 +20,7 @@ import 'core/services/notification/notification_service.dart';
 import 'core/services/authentication/auth_service.dart';
 import 'core/services/authentication/user_account_service.dart';
 import 'core/services/subscription/unified_subscription_manager.dart';
+import 'core/models/subscription_state.dart';
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -56,6 +57,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   String? _userId;
   User? _user;
   StreamSubscription<User?>? _authStateSubscription;
+  StreamSubscription<SubscriptionState>? _subscriptionStateSubscription; // ✅ 구독 상태 스트림
+  SubscriptionState _subscriptionState = SubscriptionState.defaultState(); // ✅ 구독 상태 객체
   late UserPreferencesService _preferencesService;
   
   String? _error;
@@ -95,6 +98,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   @override
   void dispose() {
     _authStateSubscription?.cancel();
+    _subscriptionStateSubscription?.cancel(); // ✅ 구독 상태 스트림 구독 취소
     
     // InAppPurchaseService는 싱글톤이므로 앱 종료 시에만 dispose
     if (_purchaseService.isAvailable) {
@@ -298,8 +302,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     
     try {
       // Firebase Auth 상태 변경 감지
-      _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen(
-        (User? user) async {
+      _authStateSubscription = AuthService().authStateChanges.listen(
+        (user) async {
           if (!mounted) return;
           
           if (kDebugMode) {
@@ -317,6 +321,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               _isSampleMode = false; // 로그인 시 샘플 모드 비활성화
             });
             
+            // 🎯 로그인 시 구독 상태 스트림 구독 시작
+            _subscribeToSubscriptionState();
+
             // 사용자 데이터 로드
             await _loadUserPreferences();
           } else {
@@ -335,6 +342,14 @@ class _AppState extends State<App> with WidgetsBindingObserver {
               // 로그아웃 시 샘플 모드 상태를 유지 (자동으로 비활성화하지 않음)
               // _isSampleMode는 명시적으로 "로그인 없이 사용하기"를 선택했을 때만 true가 됨
             });
+
+            // 🎯 로그아웃 시 구독 상태 스트림 구독 취소 및 상태 초기화
+            _unsubscribeFromSubscriptionState();
+            if (mounted) {
+              setState(() {
+                _subscriptionState = SubscriptionState.defaultState();
+              });
+            }
           }
         },
         onError: (error, stackTrace) {
@@ -363,7 +378,38 @@ class _AppState extends State<App> with WidgetsBindingObserver {
         }
       }
   }
-  
+
+  /// 🎯 구독 상태 스트림 구독
+  void _subscribeToSubscriptionState() {
+    if (_subscriptionStateSubscription != null) return; // 이미 구독 중이면 반환
+    if (kDebugMode) {
+      debugPrint('🔔 [App] 구독 상태 스트림 구독 시작');
+    }
+    _subscriptionStateSubscription = UnifiedSubscriptionManager().subscriptionStateStream.listen(
+      (newState) {
+        if (mounted) {
+          setState(() {
+            _subscriptionState = newState;
+          });
+        }
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          debugPrint('❌ [App] 구독 상태 스트림 오류: $error');
+        }
+      },
+    );
+  }
+
+  /// 🎯 구독 상태 스트림 구독 취소
+  void _unsubscribeFromSubscriptionState() {
+    if (kDebugMode) {
+      debugPrint('🔕 [App] 구독 상태 스트림 구독 취소');
+    }
+    _subscriptionStateSubscription?.cancel();
+    _subscriptionStateSubscription = null;
+  }
+
   /// 사용자 데이터 로드 (로그인 후)
   Future<void> _loadUserPreferences() async {
     try {
@@ -497,7 +543,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
            //   }
            // });
            try {
-             return const HomeScreen();
+             return HomeScreen(subscriptionState: _subscriptionState);
            } catch (e, stackTrace) {
              if (kDebugMode) {
                 debugPrint('⚠️ HomeScreen 인스턴스 생성 중 오류 발생: $e');

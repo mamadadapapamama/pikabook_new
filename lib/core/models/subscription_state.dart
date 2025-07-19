@@ -127,24 +127,24 @@ class SubscriptionInfo {
   String get ctaText {
     switch (subscriptionStatus) {
       case SubscriptionStatus.active:
-        return 'Manage Subscription';
+        return '프리미엄 구독하기';
       case SubscriptionStatus.cancelling:
-        return 'Cancel Subscription';
+        return '앱스토어에서 확인하기';
       case SubscriptionStatus.expired:
-        return 'Renew Subscription';
+        return '프리미엄 구독하기';
       case SubscriptionStatus.unknown:
       default:
-        return 'View Subscription';
+        return '플랜 관리';
     }
   }
 
   String? get ctaSubtext {
     if (subscriptionStatus == SubscriptionStatus.active) {
-      return 'Manage your current subscription plan.';
+      return null;
     } else if (subscriptionStatus == SubscriptionStatus.cancelling) {
-      return 'Cancel your current subscription plan.';
+      return null;
     } else if (subscriptionStatus == SubscriptionStatus.expired) {
-      return 'Your subscription has expired. Renew to continue using the app.';
+      return null;
     }
     return null;
   }
