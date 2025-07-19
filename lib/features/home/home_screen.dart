@@ -170,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (hasChanged) {
           if (kDebugMode) {
             debugPrint('🔔 [HomeScreen] 구독 상태 변경 감지됨 -> UI 업데이트');
-            debugPrint('   이전: ${_previousSubscriptionState?.entitlement.value} / 새 상태: ${newState.entitlement.value}');
+            debugPrint('   이전: ${_previousSubscriptionState?.plan.name} / 새 상태: ${newState.plan.name}');
             debugPrint('   이전 배너: ${_previousSubscriptionState?.activeBanners.length}개 / 새 배너: ${newState.activeBanners.length}개');
           }
 
@@ -203,7 +203,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final oldState = _previousSubscriptionState!;
     
     // 1. 주요 권한 변경 확인
-    if (oldState.entitlement != newState.entitlement) return true;
+    if (oldState.plan.id != newState.plan.id) return true;
 
     // 2. 배너 목록 변경 확인 (순서 무관)
     final bannerEquality = const DeepCollectionEquality.unordered();
@@ -212,8 +212,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // 3. 로딩 상태 변경 확인
     if (_isLoading) return true;
 
-    // 4. 구독 상태 메시지 변경 확인
-    if (oldState.statusMessage != newState.statusMessage) return true;
+    // 4. 구독 상태 메시지 변경 확인 (예: status.name)
+    if (oldState.status.name != newState.status.name) return true;
 
     return false;
   }
@@ -237,9 +237,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       if (kDebugMode) {
         debugPrint('✅ [HomeScreen] 구독 상태 로드 완료');
-        debugPrint('   권한: ${subscriptionState.entitlement.value}');
+        debugPrint('   권한: ${subscriptionState.plan.name}');
         debugPrint('   활성 배너: ${subscriptionState.activeBanners.length}개');
-        debugPrint('   배너 타입: ${subscriptionState.activeBanners.map((e) => e.name).toList()}');
+        debugPrint('   배너 타입: ${subscriptionState.activeBanners.map((e) => e).toList()}');
       }
       
     } catch (e) {
@@ -360,14 +360,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       // 즉시 UI에서 해당 배너 제거
       setState(() {
-        final updatedBanners = _subscriptionState.activeBanners.where((banner) => banner != bannerType).toList();
-        _subscriptionState = SubscriptionState(
-          entitlement: _subscriptionState.entitlement,
-          subscriptionStatus: _subscriptionState.subscriptionStatus,
-          hasUsedTrial: _subscriptionState.hasUsedTrial,
-          hasUsageLimitReached: _subscriptionState.hasUsageLimitReached,
+        final updatedBanners = _subscriptionState.activeBanners.where((banner) => banner != bannerType.name).toList();
+        _subscriptionState = _subscriptionState.copyWith(
           activeBanners: updatedBanners,
-          statusMessage: _subscriptionState.statusMessage,
         );
       });
       
@@ -429,7 +424,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         final hasNotes = viewModel.notes.isNotEmpty;
         final activeBanners = _uiCoordinator.buildActiveBanners(
           context: context,
-          activeBanners: _subscriptionState.activeBanners,
+          activeBanners: _subscriptionState.activeBanners
+              .map((name) {
+                try {
+                  return BannerType.values.firstWhere((e) => e.name == name);
+                } catch (e) {
+                  return null;
+                }
+              })
+              .where((e) => e != null)
+              .cast<BannerType>()
+              .toList(),
           onShowUpgradeModal: _onShowUpgradeModal,
           onDismissBanner: _onDismissBanner,
         );

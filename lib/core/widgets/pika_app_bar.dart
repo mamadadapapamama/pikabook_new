@@ -12,6 +12,7 @@ import '../../features/settings/settings_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/models/subscription_state.dart';
+import '../../core/widgets/upgrade_modal.dart';
 
 /// 공통 앱바 위젯
 /// 모든 스크린에서 재사용할 수 있도록 설계된 커스터마이저블 앱바
@@ -319,12 +320,12 @@ class _PikaAppBarState extends State<PikaAppBar> {
       final unifiedManager = UnifiedSubscriptionManager();
       final results = await Future.wait([
         userPreferences.getDefaultNoteSpace(),
-        unifiedManager.getSubscriptionEntitlements(forceRefresh: false),
+        unifiedManager.getSubscriptionState(forceRefresh: false),
       ]);
-      final entitlements = results[1] as Map<String, dynamic>;
+      final subscriptionState = results[1] as SubscriptionState;
       return {
         'noteSpaceName': results[0] as String,
-        'isPlanFree': !(entitlements['isPremium'] as bool? ?? false),
+        'isPlanFree': !subscriptionState.plan.isPremium,
       };
     } catch (e) {
       if (kDebugMode) {

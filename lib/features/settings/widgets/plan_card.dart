@@ -5,6 +5,7 @@ import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/widgets/pika_button.dart';
 import '../settings_view_model.dart';
 import 'package:provider/provider.dart';
+import '../../../core/models/subscription_state.dart'; // Entitlement enum import
 
 //내플랜 카드 위젯
 class PlanCard extends StatelessWidget {
@@ -36,7 +37,7 @@ class PlanCard extends StatelessWidget {
               const SizedBox(height: SpacingTokens.md),
               PikaButton(
                 text: subscriptionInfo.ctaText,
-                variant: subscriptionInfo.entitlement.isFree ? PikaButtonVariant.primary : PikaButtonVariant.outline,
+                variant: subscriptionInfo.entitlement == Entitlement.free ? PikaButtonVariant.primary : PikaButtonVariant.outline,
                 size: PikaButtonSize.small,
                 onPressed: () => viewModel.handleCTAAction(context),
                 isFullWidth: true,

@@ -96,10 +96,12 @@ class SettingsViewModel extends ChangeNotifier {
     _subscriptionStateStreamSubscription = _subscriptionManager.subscriptionStateStream.listen(
       (subscriptionState) {
         if (kDebugMode) {
-          print('🔔 [Settings] 구독 상태 변경 감지 - 자동 새로고침');
+          print('🔔 [Settings] 구독 상태 변경 감지 - UI 직접 업데이트');
         }
-        // 구독 상태가 변경되면 자동으로 플랜 정보 새로고침
-        refreshPlanInfo(force: true);
+        // 🚨 중요: 네트워크 요청을 다시 보내는 대신, 스트림으로 받은 새 상태를 직접 사용합니다.
+        // 이렇게 하면 무한 루프를 방지할 수 있습니다.
+        _subscriptionInfo = SubscriptionInfo.fromSubscriptionState(subscriptionState);
+        notifyListeners(); // UI 갱신
       },
       onError: (error) {
         if (kDebugMode) {
@@ -130,8 +132,7 @@ class SettingsViewModel extends ChangeNotifier {
   
   /// 플랜 정보 새로고침 (UI 호출 또는 내부 로직용)
   Future<void> refreshPlanInfo({bool force = false}) async {
-    // 🎯 이미 로딩 중이면 중복 호출 방지
-    if (_isLoading) {
+    if (_isLoading && !force) {
       if (kDebugMode) print('⏭️ [Settings] 이미 로딩 중 - 중복 호출 방지');
       return;
     }
@@ -140,8 +141,8 @@ class SettingsViewModel extends ChangeNotifier {
     _setLoading(true);
 
     try {
-      final responseMap = await _subscriptionManager.getRawServerResponse(forceRefresh: force);
-      _subscriptionInfo = SubscriptionInfo.fromJson(responseMap);
+      final state = await _subscriptionManager.getSubscriptionState(forceRefresh: force);
+      _subscriptionInfo = SubscriptionInfo.fromSubscriptionState(state);
     } catch (e) {
       if (kDebugMode) print('❌ [Settings] 플랜 정보 로드 오류: $e');
       _subscriptionInfo = null;
@@ -177,11 +178,9 @@ class SettingsViewModel extends ChangeNotifier {
     
     final ctaText = _subscriptionInfo!.ctaText;
       
-    if (ctaText.contains('문의하기')) {
-      _supportService.contactSupport();
-    } else if (ctaText.contains('App Store') || ctaText.contains('갱신하기')) {
+    if (ctaText.contains('App Store') || ctaText.contains('갱신하기')) {
       _openAppStore();
-    } else if (ctaText.contains('업그레이드')) {
+    } else {
       _showUpgradeModal(context);
     }
   }
@@ -197,7 +196,7 @@ class SettingsViewModel extends ChangeNotifier {
       showDialog(
         context: context,
         builder: (BuildContext context) {
-          return UsageDialog(subscriptionInfo: _subscriptionInfo);
+          return UsageDialog(subscriptionInfo: _subscriptionInfo!);
         },
       );
     } catch (e) {
@@ -207,16 +206,10 @@ class SettingsViewModel extends ChangeNotifier {
 
   /// 업그레이드 모달 표시
   void _showUpgradeModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (BuildContext innerContext) {
-        return UpgradeModal(
-          onUpgrade: () async {
-            await refreshPlanInfo(force: true);
-          },
-        );
+    UpgradeModal.show(
+      context,
+      onUpgrade: () async {
+        await refreshPlanInfo(force: true);
       },
     );
   }

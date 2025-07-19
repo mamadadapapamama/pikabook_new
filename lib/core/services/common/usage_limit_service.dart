@@ -458,7 +458,7 @@ class UsageLimitService {
       }
       
       // 2. 🎯 플랜 기반 제한 적용 (SubscriptionManager 사용)
-      final planType = subscriptionState.entitlement.isPremiumOrTrial ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
+      final planType = subscriptionState.isPremiumOrTrial ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
       
       final limits = PlanConstants.PLAN_LIMITS[planType];
       if (limits != null) {
@@ -624,8 +624,8 @@ class UsageLimitService {
   Future<void> resetMonthlyUsage() async {
     try {
       final unifiedManager = UnifiedSubscriptionManager();
-      final entitlements = await unifiedManager.getSubscriptionEntitlements();
-      final planType = entitlements['isPremium'] as bool? ?? false ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
+      final subscriptionState = await unifiedManager.getSubscriptionState();
+      final planType = subscriptionState.isPremiumOrTrial ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
       
       if (planType != PlanConstants.PLAN_FREE) {
         debugPrint('Free 플랜이 아니므로 월간 초기화 건너뜀');

@@ -158,7 +158,7 @@ class UserAccountService {
       final deviceId = await _getDeviceId();
 
       // 🎯 2. 유료/체험 사용자일 경우에만 탈퇴 기록 저장
-      if (subscriptionState.entitlement.isPremiumOrTrial) {
+      if (subscriptionState.isPremiumOrTrial) {
         await DeletedUserService().saveTrialUserDeletionRecord(userId, email, deviceId);
       }
 

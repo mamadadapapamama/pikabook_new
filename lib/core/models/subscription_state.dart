@@ -1,452 +1,296 @@
 // lib/models/subscription_info.dart
 import 'package:flutter/foundation.dart';
-import '../models/banner_type.dart';
+import 'plan.dart';
+import 'plan_status.dart';
 
-/// 권한 타입 (기능 접근 제어)
+// 레거시 enum들은 SubscriptionInfo와의 호환성을 위해 당분간 유지합니다.
 enum Entitlement {
-  free('free'),
-  trial('trial'),
-  premium('premium');
-
-  const Entitlement(this.value);
-  final String value;
-
-  static Entitlement fromString(String value) {
-    switch (value) {
-      case 'trial':
-        return Entitlement.trial;
-      case 'premium':
-        return Entitlement.premium;
-      case 'free':
-      default:
-        return Entitlement.free;
-    }
-  }
-
-  // 편의 메서드들
-  bool get isPremiumOrTrial => this != Entitlement.free;
-  bool get isPremium => this == Entitlement.premium;
-  bool get isTrial => this == Entitlement.trial;
-  bool get isFree => this == Entitlement.free;
+  free,
+  premium,
+  trial,
 }
 
-/// 구독 상태 (실제 구독 상태)
 enum SubscriptionStatus {
-  active('active'),
-  cancelling('cancelling'),
-  expired('expired'),
-  refunded('refunded'),
-  gracePeriod('grace'),
-  unknown('unknown'),
-  cancelled('cancelled');
-
-  const SubscriptionStatus(this.value);
-  final String value;
-
-  factory SubscriptionStatus.fromString(String? value) {
-    switch (value) {
-      case 'active': return SubscriptionStatus.active;
-      case 'cancelling': return SubscriptionStatus.cancelling;
-      case 'grace': return SubscriptionStatus.gracePeriod;
-      case 'expired': return SubscriptionStatus.expired;
-      case 'refunded': return SubscriptionStatus.refunded;
-      case 'cancelled': return SubscriptionStatus.cancelled;
-      default: return SubscriptionStatus.unknown;
-    }
-  }
-
-  bool get isActive => this == SubscriptionStatus.active;
-  bool get isCancelling => this == SubscriptionStatus.cancelling;
-  bool get isGracePeriod => this == SubscriptionStatus.gracePeriod;
-  bool get isExpired => this == SubscriptionStatus.expired;
-  bool get isRefunded => this == SubscriptionStatus.refunded;
-  bool get isCancelled => this == SubscriptionStatus.cancelled;
+  active,
+  cancelling,
+  expired,
+  unknown,
 }
 
-/// 구독 타입
 enum SubscriptionType {
-  monthly('monthly'),
-  yearly('yearly');
-
-  const SubscriptionType(this.value);
-  final String value;
-
-  static SubscriptionType? fromString(String? value) {
-    if (value == null) return null;
-    switch (value) {
-      case 'monthly':
-        return SubscriptionType.monthly;
-      case 'yearly':
-        return SubscriptionType.yearly;
-      default:
-        return null;
-    }
-  }
-}
-
-/// 배너 메타데이터 (테스트 계정용)
-class BannerMetadata {
-  final String bannerType;
-  final DateTime? bannerDismissedAt;
-
-  const BannerMetadata({
-    required this.bannerType,
-    this.bannerDismissedAt,
-  });
-
-  factory BannerMetadata.fromJson(Map<String, dynamic> json) {
-    return BannerMetadata(
-      bannerType: json['bannerType'] as String,
-      bannerDismissedAt: json['bannerDismissedAt'] != null
-          ? DateTime.parse(json['bannerDismissedAt'] as String)
-          : null,
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'bannerType': bannerType,
-      'bannerDismissedAt': bannerDismissedAt?.toIso8601String(),
-    };
-  }
+  monthly,
+  yearly,
 }
 
 /// 새로운 구독 정보 모델 (v4-simplified)
+/// 🚨 레거시: SettingsViewModel과의 호환성을 위해 임시로 유지됩니다.
+/// TODO: SettingsViewModel을 리팩토링하여 SubscriptionState를 직접 사용하고 이 클래스를 제거해야 합니다.
 class SubscriptionInfo {
-  // 핵심 3개 필드
-  final Entitlement entitlement;           // 기능 접근
+  final Entitlement entitlement;
   final SubscriptionStatus subscriptionStatus;
-  final bool hasUsedTrial;                 // 체험 경험
-
-  // 메타데이터
-  final bool autoRenewEnabled;
+  final bool hasUsedTrial;
   final String? expirationDate;
   final SubscriptionType? subscriptionType;
-  final String? originalTransactionId;
-
-  // 배너용 (테스트 계정만)
-  final BannerMetadata? bannerMetadata;
-
-  // 응답 메타데이터
-  final String dataSource;
-  final String version;
 
   SubscriptionInfo({
     required this.entitlement,
     required this.subscriptionStatus,
     required this.hasUsedTrial,
-    required this.autoRenewEnabled,
     this.expirationDate,
     this.subscriptionType,
-    this.originalTransactionId,
-    this.bannerMetadata,
-    required this.dataSource,
-    required this.version,
   });
 
-  factory SubscriptionInfo.fromJson(Map<String, dynamic> json) {
-    // subscription 필드에서 실제 구독 정보 추출 (안전한 타입 변환)
-    final subscription = json['subscription'] != null
-        ? Map<String, dynamic>.from(json['subscription'] as Map)
-        : json;
-    
-    // expirationDate를 안전하게 파싱
-    String? parsedExpirationDate;
-    final dynamic rawExpirationDate = subscription['expirationDate'];
-    
-    // 🎯 rawExpirationDate가 null이면 즉시 파싱 종료
-    if (rawExpirationDate == null) {
-      parsedExpirationDate = null;
+  /// 🎯 SubscriptionState로부터 SubscriptionInfo를 생성하는 팩토리 생성자
+  factory SubscriptionInfo.fromSubscriptionState(SubscriptionState state) {
+    Entitlement entitlement;
+    if (state.plan.isPremium) {
+      // 'trial' 상태를 구분할 방법이 현재 Plan 모델에 없으므로,
+      // 프리미엄이면 'premium'으로 간주합니다.
+      entitlement = Entitlement.premium;
     } else {
-      if (kDebugMode) {
-        print('🔍 [SubscriptionInfo] expirationDate 파싱 시작');
-        print('   - rawExpirationDate: $rawExpirationDate');
-        print('   - rawExpirationDate 타입: ${rawExpirationDate.runtimeType}');
-      }
-      
-      if (rawExpirationDate is String) {
-        // 🎯 문자열이 Unix timestamp인지 확인
-        final timestamp = int.tryParse(rawExpirationDate);
-        if (timestamp != null) {
-          // Unix timestamp 문자열을 ISO 8601 문자열로 변환
-          final dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-          parsedExpirationDate = dateTime.toIso8601String();
-          if (kDebugMode) {
-            print('   - Unix timestamp 문자열을 DateTime으로 변환: $dateTime');
-            print('   - ISO 8601 문자열로 변환: $parsedExpirationDate');
-          }
-        } else {
-          // 일반 ISO 8601 문자열로 가정
-          parsedExpirationDate = rawExpirationDate;
-          if (kDebugMode) {
-            print('   - 일반 ISO 8601 문자열로 처리: $parsedExpirationDate');
-          }
-        }
-      } else if (rawExpirationDate is int) {
-        // Unix timestamp (milliseconds)를 ISO 8601 문자열로 변환
-        final dateTime = DateTime.fromMillisecondsSinceEpoch(rawExpirationDate);
-        parsedExpirationDate = dateTime.toIso8601String();
-        if (kDebugMode) {
-          print('   - int를 DateTime으로 변환: $dateTime');
-          print('   - ISO 8601 문자열로 변환: $parsedExpirationDate');
-        }
-      } else {
-        if (kDebugMode) {
-          print('   - 지원되지 않는 타입: ${rawExpirationDate.runtimeType}');
-        }
-      }
+      entitlement = Entitlement.free;
     }
-    
+
+    // PlanStatus를 레거시 SubscriptionStatus로 매핑
+    SubscriptionStatus status;
+    switch (state.status) {
+      case PlanStatus.active:
+        status = SubscriptionStatus.active;
+        break;
+      case PlanStatus.cancelling:
+        status = SubscriptionStatus.cancelling;
+        break;
+      case PlanStatus.expired:
+        status = SubscriptionStatus.expired;
+        break;
+      case PlanStatus.unknown:
+      default:
+        status = SubscriptionStatus.unknown;
+        break;
+    }
+
+    SubscriptionType? type;
+    if (state.plan.id.contains('monthly')) {
+      type = SubscriptionType.monthly;
+    } else if (state.plan.id.contains('yearly')) {
+      type = SubscriptionType.yearly;
+    }
+
     return SubscriptionInfo(
-      entitlement: Entitlement.fromString(subscription['entitlement'] as String? ?? 'free'),
-      subscriptionStatus: SubscriptionStatus.fromString(subscription['subscriptionStatus'] as String?),
-      hasUsedTrial: subscription['hasUsedTrial'] as bool? ?? false,
-      autoRenewEnabled: subscription['autoRenewEnabled'] as bool? ?? false,
-      expirationDate: parsedExpirationDate,
-      subscriptionType: SubscriptionType.fromString(subscription['subscriptionType'] as String?),
-      originalTransactionId: subscription['originalTransactionId'] as String?,
-      bannerMetadata: subscription['bannerMetadata'] != null
-          ? BannerMetadata.fromJson(Map<String, dynamic>.from(subscription['bannerMetadata'] as Map))
-          : null,
-      dataSource: json['dataSource'] as String? ?? 'unknown',
-      version: json['version'] as String? ?? 'unknown',
+      entitlement: entitlement,
+      subscriptionStatus: status,
+      hasUsedTrial: state.hasUsedTrial,
+      expirationDate: state.expiresDate?.toIso8601String(),
+      subscriptionType: type,
     );
   }
 
-  // 편의 메서드들
-  bool get canUsePremiumFeatures => entitlement.isPremiumOrTrial;
-  
-  bool get shouldShowTrialOffer => 
-      entitlement.isFree && !hasUsedTrial;
+  /// 객체를 JSON 맵으로 변환
+  Map<String, dynamic> toJson() {
+    return {
+      'entitlement': entitlement.name,
+      'subscriptionStatus': subscriptionStatus.name,
+      'hasUsedTrial': hasUsedTrial,
+      'expirationDate': expirationDate,
+      'subscriptionType': subscriptionType?.name,
+    };
+  }
 
-  // 🎯 UI 표시용 텍스트 getter들
-  
-  /// 플랜 제목 (남은 기간 포함)
   String get planTitle {
-    final typeDisplay = subscriptionType?.value == 'yearly' ? '연간' : '월간';
-    String title;
-
-    if (entitlement.isTrial) {
-      title = '프리미엄 체험';
-    } else if (entitlement.isPremium) {
-      title = '프리미엄 ($typeDisplay)';
-    } else {
-      title = '무료';
+    switch (entitlement) {
+      case Entitlement.free:
+        return 'Free';
+      case Entitlement.premium:
+        return 'Premium';
+      case Entitlement.trial:
+        return 'Trial';
     }
-    
-    if (subscriptionStatus.isCancelling) {
-      title += ' (취소됨)';
-    } else if (subscriptionStatus.isGracePeriod) {
-      title += ' (결제 확인 요망)';
-    }
-    
-    return title;
   }
 
-  /// 날짜 정보 텍스트 (다음 결제일 / 체험 종료일)
   String? get dateInfoText {
-    // 🎯 디버그 로그 최소화 - 파싱 실패 시에만 출력
-    if (kDebugMode && expirationDate != null) {
-      try {
-        DateTime.parse(expirationDate!);
-      } catch (e) {
-        print('🔍 [SubscriptionInfo] dateInfoText 호출됨 (파싱 실패)');
-        print('   - entitlement: ${entitlement.value}');
-        print('   - expirationDate: $expirationDate');
-        print('   - subscriptionStatus: ${subscriptionStatus.value}');
-      }
-    }
-    
-    if (entitlement.isFree) {
-      return '현재 무료 플랜을 사용하고 있습니다.';
-    }
-
-    if (expirationDate == null) {
-      return null;
-    }
-    
-    // 🎯 더 안전한 날짜 파싱
-    DateTime? expiry;
-    try {
-      expiry = DateTime.parse(expirationDate!);
-    } catch (e) {
-      if (kDebugMode) {
-        print('   - expirationDate 파싱 실패: $expirationDate');
-        print('   - 파싱 에러: $e');
-      }
-      return null;
-    }
-    
-    if (expiry == null) {
-      return null;
-    }
-
-    final nextDay = expiry.add(const Duration(days: 1));
-    final formattedNextDay = '${nextDay.year}년 ${nextDay.month}월 ${nextDay.day}일';
-    final formattedExpiry = '${expiry.year}년 ${expiry.month}월 ${expiry.day}일';
-
-    if (entitlement.isTrial) {
-      if (subscriptionStatus.isCancelling) {
-        return '무료 플랜으로 전환: $formattedNextDay';
-      }
-      return '월 구독으로 전환: $formattedNextDay';
-    }
-
-    if (entitlement.isPremium) {
-      if (subscriptionStatus.isCancelling || subscriptionStatus.isGracePeriod) {
-        return '무료 플랜으로 전환: $formattedNextDay';
-      }
-      return '구독 갱신일: $formattedExpiry';
-    }
-    
-    return null;
-  }
-
-  /// CTA 버튼 텍스트
-  String get ctaText {
-    if (entitlement.isFree) return '프리미엄으로 업그레이드';
-    if (subscriptionStatus.isCancelling) return '구독 갱신하기';
-    return 'App Store에서 관리';
-  }
-
-  /// CTA 버튼 보조 텍스트
-  String? get ctaSubtext {
-    if (entitlement.isTrial && !subscriptionStatus.isCancelling) {
-      return '체험 기간 종료 시 자동으로 결제됩니다.';
-    }
-    if (entitlement.isPremium && !subscriptionStatus.isCancelling) {
-      return null;
-    }
-    return null;
-  }
-
-  int _getRemainingDays() {
-    if (expirationDate == null) return 0;
+    if (expirationDate == null) return null;
     final expiry = DateTime.tryParse(expirationDate!);
-    if (expiry == null) return 0;
-    final remaining = expiry.difference(DateTime.now()).inDays;
-    return remaining > 0 ? remaining : 0;
+    if (expiry == null) return null;
+
+    final now = DateTime.now();
+    final diff = expiry.difference(now);
+
+    if (diff.inDays < 0) {
+      return 'Expired';
+    } else if (diff.inDays < 7) {
+      return 'Expires in ${diff.inDays} days';
+    } else {
+      return 'Expires in ${diff.inDays ~/ 7} weeks';
+    }
   }
 
+  String get ctaText {
+    switch (subscriptionStatus) {
+      case SubscriptionStatus.active:
+        return 'Manage Subscription';
+      case SubscriptionStatus.cancelling:
+        return 'Cancel Subscription';
+      case SubscriptionStatus.expired:
+        return 'Renew Subscription';
+      case SubscriptionStatus.unknown:
+      default:
+        return 'View Subscription';
+    }
+  }
+
+  String? get ctaSubtext {
+    if (subscriptionStatus == SubscriptionStatus.active) {
+      return 'Manage your current subscription plan.';
+    } else if (subscriptionStatus == SubscriptionStatus.cancelling) {
+      return 'Cancel your current subscription plan.';
+    } else if (subscriptionStatus == SubscriptionStatus.expired) {
+      return 'Your subscription has expired. Renew to continue using the app.';
+    }
+    return null;
+  }
 
   String get displayStatus {
-    if (entitlement.isTrial) {
-      return subscriptionStatus.isCancelling 
-          ? '무료체험 (취소 예정)' 
-          : '무료체험 중';
-    } else if (entitlement.isPremium) {
-      return subscriptionStatus.isCancelling 
-          ? '프리미엄 (취소 예정)' 
-          : '프리미엄';
-    } else {
-      return '무료 플랜';
+    switch (subscriptionStatus) {
+      case SubscriptionStatus.active:
+        return 'Active';
+      case SubscriptionStatus.cancelling:
+        return 'Cancelling';
+      case SubscriptionStatus.expired:
+        return 'Expired';
+      case SubscriptionStatus.unknown:
+      default:
+        return 'Unknown';
     }
   }
 
-  /// 기존 코드 호환성을 위한 변환 메서드들
-  bool get isPremium => entitlement.isPremium;
-  bool get isTrial => entitlement.isTrial;
-  bool get isExpired => subscriptionStatus.isExpired;
-  bool get isActive => subscriptionStatus.isActive;
-
-  @override
-  String toString() {
-    return 'SubscriptionInfo('
-        'entitlement: ${entitlement.value}, '
-        'subscriptionStatus: ${subscriptionStatus.value}, '
-        'hasUsedTrial: $hasUsedTrial, '
-        'dataSource: $dataSource'
-        ')';
-  }
+  bool get isPremiumOrTrial => entitlement == Entitlement.premium || entitlement == Entitlement.trial;
+  
+  bool get canUsePremiumFeatures => isPremiumOrTrial;
 }
 
-/// 구독 상태를 나타내는 통합 모델
+/// 앱의 전체 구독 상태를 나타내는 클래스
+/// Firestore, 서버 응답 등 모든 소스의 데이터를 통합하여 관리합니다.
 class SubscriptionState {
-  final Entitlement entitlement;
-  final SubscriptionStatus subscriptionStatus;
+  final Plan plan;
+  final PlanStatus status;
+  final DateTime? expiresDate;
   final bool hasUsedTrial;
-  final bool hasUsageLimitReached;
-  final List<BannerType> activeBanners;
-  final String statusMessage;
+  final DateTime? timestamp;
+  final List<String> activeBanners;
 
-  // 기본 생성자
-  const SubscriptionState({
-    required this.entitlement,
-    required this.subscriptionStatus,
-    required this.hasUsedTrial,
-    required this.hasUsageLimitReached,
-    required this.activeBanners,
-    required this.statusMessage,
+  SubscriptionState({
+    required this.plan,
+    required this.status,
+    this.expiresDate,
+    this.hasUsedTrial = false,
+    this.timestamp,
+    this.activeBanners = const [],
   });
 
-  factory SubscriptionState.fromServerResponse(Map<String, dynamic> serverResponse) {
-    final subscriptionRaw = serverResponse['subscription'];
-    final subscription = (subscriptionRaw is Map) ? Map<String, dynamic>.from(subscriptionRaw) : <String, dynamic>{};
-    final entitlementString = subscription['entitlement'] as String? ?? 'free';
-    final subscriptionStatusString = subscription['subscriptionStatus'] as String? ?? 'cancelled';
-    final hasUsedTrial = subscription['hasUsedTrial'] as bool? ?? false;
-    
-    return SubscriptionState(
-      entitlement: Entitlement.fromString(entitlementString),
-      subscriptionStatus: SubscriptionStatus.fromString(subscriptionStatusString),
-      hasUsedTrial: hasUsedTrial,
-      hasUsageLimitReached: false, // 이 값은 BannerManager에서 UsageLimitService를 통해 별도로 계산되어야 함
-      activeBanners: [], // 이 값은 BannerManager에서 최종적으로 계산함
-      statusMessage: "Status message based on entitlement and status", // 필요 시 구현
-    );
-  }
-
-  /// 기본 상태 (로그아웃/샘플 모드)
+  /// 기본 상태 (로그아웃 또는 초기 상태)
   factory SubscriptionState.defaultState() {
-    return const SubscriptionState(
-      entitlement: Entitlement.free,
-      subscriptionStatus: SubscriptionStatus.cancelled,
-      hasUsedTrial: false,
-      hasUsageLimitReached: false,
-      activeBanners: [],
-      statusMessage: '샘플 모드',
+    return SubscriptionState(
+      plan: Plan.free(),
+      status: PlanStatus.active,
+      timestamp: DateTime.now(),
     );
   }
 
-  /// SubscriptionInfo 기반으로 상태 생성
-  factory SubscriptionState.fromSubscriptionInfo(
-    SubscriptionInfo info, {
-    bool hasUsageLimitReached = false,
-    List<BannerType> activeBanners = const [],
+  /// Firestore 문서로부터 상태 객체 생성
+  factory SubscriptionState.fromFirestore(Map<String, dynamic> data) {
+    try {
+      final planId = data['planId'] as String? ?? 'free_monthly';
+      final rawStatus = data['status'] as String? ?? 'active';
+
+      return SubscriptionState(
+        plan: Plan.fromId(planId),
+        status: PlanStatus.fromString(rawStatus),
+        expiresDate: (data['expiresDate'] as String?) != null
+            ? DateTime.tryParse(data['expiresDate'] ?? '')
+            : null,
+        hasUsedTrial: data['hasUsedTrial'] as bool? ?? false,
+        timestamp: (data['timestamp'] as String?) != null
+            ? DateTime.tryParse(data['timestamp'] ?? '')
+            : DateTime.now(),
+        activeBanners: List<String>.from(data['activeBanners'] ?? []),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ SubscriptionState.fromFirestore 파싱 오류: $e');
+      }
+      return SubscriptionState.defaultState();
+    }
+  }
+
+  /// 🎯 서버 응답으로부터 상태 객체 생성
+  factory SubscriptionState.fromServerResponse(Map<String, dynamic> data) {
+    try {
+      final planId = data['subscriptionType'] as String?;
+      final rawStatus = data['subscriptionStatus'] as String?;
+      final entitlement = data['entitlement'] as String?;
+
+      // entitlement가 'PREMIUM' 또는 'TRIAL'이면 planId를 기반으로 Plan 생성, 아니면 free Plan
+      final plan = (entitlement == 'PREMIUM' || entitlement == 'TRIAL') && planId != null
+          ? Plan.fromId(planId)
+          : Plan.free();
+
+      return SubscriptionState(
+        plan: plan,
+        status: PlanStatus.fromString(rawStatus ?? 'unknown'),
+        expiresDate: (data['expiresDate'] as String?) != null
+            ? DateTime.tryParse(data['expiresDate'] ?? '')
+            : null,
+        hasUsedTrial: data['hasUsedTrial'] as bool? ?? false,
+        timestamp: (data['timestamp'] as String?) != null
+            ? DateTime.tryParse(data['timestamp'] ?? '')
+            : DateTime.now(),
+        // 서버 응답에는 배너 정보가 없으므로 기본값 사용
+        activeBanners: [],
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ SubscriptionState.fromServerResponse 파싱 오류: $e');
+      }
+      return SubscriptionState.defaultState();
+    }
+  }
+
+  /// 객체를 JSON 맵으로 변환
+  Map<String, dynamic> toJson() {
+    return {
+      'planId': plan.id,
+      'status': status.name,
+      'expiresDate': expiresDate?.toIso8601String(),
+      'hasUsedTrial': hasUsedTrial,
+      'timestamp': timestamp?.toIso8601String(),
+      'activeBanners': activeBanners,
+    };
+  }
+  
+  // 편의 getter
+  bool get isPremiumOrTrial => plan.isPremium;
+
+  /// 상태 복사 및 일부 값 변경
+  SubscriptionState copyWith({
+    Plan? plan,
+    PlanStatus? status,
+    DateTime? expiresDate,
+    bool? hasUsedTrial,
+    DateTime? timestamp,
+    List<String>? activeBanners,
   }) {
     return SubscriptionState(
-      entitlement: info.entitlement,
-      subscriptionStatus: info.subscriptionStatus,
-      hasUsedTrial: info.hasUsedTrial,
-      hasUsageLimitReached: hasUsageLimitReached,
-      activeBanners: activeBanners,
-      statusMessage: info.displayStatus,
+      plan: plan ?? this.plan,
+      status: status ?? this.status,
+      expiresDate: expiresDate ?? this.expiresDate,
+      hasUsedTrial: hasUsedTrial ?? this.hasUsedTrial,
+      timestamp: timestamp ?? this.timestamp,
+      activeBanners: activeBanners ?? this.activeBanners,
     );
   }
-
-  /// 프리미엄 기능 사용 가능 여부
-  bool get canUsePremiumFeatures => entitlement.isPremiumOrTrial;
-
-  /// 노트 생성 가능 여부 (사용량 한도 고려)
-  bool get canCreateNote => canUsePremiumFeatures && !hasUsageLimitReached;
-
-  // 기존 코드 호환성을 위한 편의 메서드들
-  bool get isPremium => entitlement.isPremium;
-  bool get isTrial => entitlement.isTrial;
-  bool get isPremiumOrTrial => entitlement.isPremiumOrTrial; // 🎯 추가
-  bool get isTrialExpiringSoon => false; // 새 구조에서는 서버에서 관리
-  bool get isExpired => subscriptionStatus.isExpired;
-  int get daysRemaining => 0; // 새 구조에서는 서버에서 관리
 
   @override
   String toString() {
-    return 'SubscriptionState('
-        'entitlement: ${entitlement.value}, '
-        'subscriptionStatus: ${subscriptionStatus.value}, '
-        'hasUsedTrial: $hasUsedTrial, '
-        'hasUsageLimitReached: $hasUsageLimitReached, '
-        'activeBanners: ${activeBanners.map((e) => e.name).toList()}, '
-        'statusMessage: $statusMessage'
-        ')';
+    return 'SubscriptionState(plan: ${plan.name}, status: ${status.name}, expires: $expiresDate)';
   }
 }
