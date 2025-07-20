@@ -53,6 +53,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (kDebugMode) {
+      debugPrint('🔄 [HomeScreen] 화면 초기화 시작');
+    }
+    
     _initializeScreen();
   }
 
@@ -99,35 +103,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// 화면 초기화
   Future<void> _initializeScreen() async {
     try {
+      // 사용자 상태 확인
+      final userStatus = await _determineUserStatus();
+      
       if (kDebugMode) {
-        debugPrint('🔄 [HomeScreen] 화면 초기화 시작');
+        debugPrint('🔍 [HomeScreen] 사용자 상태 결정: $userStatus');
       }
       
-      // 🎯 신규/기존 사용자 확인
-      await _determineUserStatus();
-      
-      // 🎯 사용자 상태가 확인되면 HomeViewModel 생성
-      if (mounted) {
-        _homeViewModel = HomeViewModel(isNewUser: _isNewUser);
-        setState(() {
-          _isLoading = false; // 뷰몸 로딩 완료
-        });
-      }
+      // HomeViewModel 초기화
+      _homeViewModel = HomeViewModel(isNewUser: userStatus == '신규');
       
       if (kDebugMode) {
         debugPrint('✅ [HomeScreen] 화면 초기화 완료');
       }
-      
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [HomeScreen] 화면 초기화 실패: $e');
       }
-      _setDefaultState();
     }
   }
 
   /// 🎯 사용자 상태 결정 - 환영 모달 본 적 있는지 확인
-  Future<void> _determineUserStatus() async {
+  Future<String> _determineUserStatus() async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser!;
       final userDoc = await FirebaseFirestore.instance
@@ -149,12 +146,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       
       // 신규 사용자인 경우 환영 모달 표시
       if (_isNewUser) {
-        _setDefaultState();
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _showWelcomeModal();
-          }
-        });
+        return '신규';
+      } else {
+        return '기존';
       }
       
     } catch (e) {
@@ -162,12 +156,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         debugPrint('❌ [HomeScreen] 사용자 상태 결정 실패: $e');
       }
       _isNewUser = true;
-      _setDefaultState();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _showWelcomeModal();
-        }
-      });
+      return '신규';
     }
   }
 
@@ -180,71 +169,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// 환영 모달 표시
-  void _showWelcomeModal() {
-    _uiCoordinator.showWelcomeModalAfterDelay(
-      context,
-      onComplete: (bool userChoseTrial) async {
-        if (kDebugMode) {
-          debugPrint('[HomeScreen] 환영 모달 완료 - 구매 선택: $userChoseTrial');
-        }
-        
-        // 🚨 HomeViewModel의 신규 사용자 플래그 해제
-        _homeViewModel?.setNewUser(false);
-        
-        // 🎯 환영 모달 완료 처리
-        await _handleWelcomeModalCompleted(userChoseTrial: userChoseTrial);
-      },
-    );
-  }
-
-  /// 🎯 환영 모달 완료 후 처리
-  Future<void> _handleWelcomeModalCompleted({required bool userChoseTrial}) async {
-    try {
-      if (kDebugMode) {
-        debugPrint('🎉 [HomeScreen] 환영 모달 완료 처리');
-        debugPrint('   무료체험 선택: $userChoseTrial');
-      }
-
-      // 1. 환영 모달 본 것으로 표시
-      final currentUser = FirebaseAuth.instance.currentUser!;
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .set({
-        'hasSeenWelcomeModal': true,
-      }, SetOptions(merge: true));
-
-      // 2. 온보딩 완료 상태는 이미 온보딩에서 저장됨 (중복 저장 방지)
-      
-      // 3. 무료 플랜 선택 시 Firestore 상태 설정
-      if (!userChoseTrial) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser.uid)
-            .set({
-          'subscriptionStatus': 'cancelled',
-          'entitlement': 'free',
-          'hasUsedTrial': false, // 🎯 명시적으로 false로 설정
-        }, SetOptions(merge: true));
-      }
-
-      // 4. 🔥 중요: App.dart에서 이미 구독 중이므로, 여기서는 캐시 무효화만 요청
-      await UnifiedSubscriptionManager().invalidateCache();
-      
-      // 🎯 환영 모달 완료 후 구독 상태를 사용하여 사용량 스트림 구독 시작
-      // didUpdateWidget이 호출되므로 여기서는 별도 호출이 필요 없을 수 있으나,
-      // 상태 변경이 없을 경우를 대비해 안전하게 호출합니다.
-      if (!_isNewUser && _homeViewModel != null) {
-        _homeViewModel!.setupUsageLimitStreamWithSubscriptionState(widget.subscriptionState);
-      }
-      
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [HomeScreen] 환영 모달 완료 처리 실패: $e');
-      }
-      _setDefaultState();
+  /// 수동 새로고침 (스트림 기반)
+  void _onRefresh() {
+    if (kDebugMode) {
+      debugPrint('🔄 [HomeScreen] 수동 새로고침 요청');
     }
+    // App.dart를 통해 상태가 관리되므로, 캐시 무효화만 트리거
+    UnifiedSubscriptionManager().invalidateCache();
   }
 
   /// 업그레이드 모달 표시
@@ -258,16 +189,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       debugPrint('🚫 [HomeScreen] 배너 닫기 시작: ${bannerType.name}');
     }
     
-    // 💥 중요: 이제 HomeScreen은 상태를 직접 수정하지 않음
-    // 올바른 방법은 UnifiedSubscriptionManager를 통해 상태를 업데이트하는 것이나,
-    // 현재 구조에서는 HomeUICoordinator가 이를 처리하도록 위임.
-    // setState(() {
-    //   final updatedBanners = widget.subscriptionState.activeBanners.where((banner) => banner != bannerType.name).toList();
-    //   _subscriptionState = _subscriptionState.copyWith(
-    //     activeBanners: updatedBanners,
-    //   );
-    // });
-      
     try {
       // 백그라운드에서 배너 상태 저장 -> 이로 인해 스트림이 업데이트되고 App.dart를 통해 HomeScreen에 전달됨
       await _uiCoordinator.dismissBanner(bannerType);
@@ -287,15 +208,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         debugPrint('❌ [HomeScreen] 배너 닫기 실패: $e');
       }
     }
-  }
-
-  /// 수동 새로고침 (스트림 기반)
-  void _onRefresh() {
-    if (kDebugMode) {
-      debugPrint('🔄 [HomeScreen] 수동 새로고침 요청');
-    }
-    // App.dart를 통해 상태가 관리되므로, 캐시 무효화만 트리거
-    UnifiedSubscriptionManager().invalidateCache();
   }
 
   @override

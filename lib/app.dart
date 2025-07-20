@@ -21,6 +21,8 @@ import 'core/services/authentication/auth_service.dart';
 import 'core/services/authentication/user_account_service.dart';
 import 'core/services/subscription/unified_subscription_manager.dart';
 import 'core/models/subscription_state.dart';
+import 'core/widgets/upgrade_modal.dart'; // UpgradeModal 추가
+import 'package:cloud_firestore/cloud_firestore.dart'; // FirebaseFirestore 추가
 
 /// 오버스크롤 색상을 지정하는 커스텀 스크롤 비헤이비어
 class CustomScrollBehavior extends ScrollBehavior {
@@ -615,18 +617,75 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           onComplete: () async {
             await _preferencesService.setOnboardingCompleted(true);
             
-            // 온보딩 완료 후 상태 업데이트 (환영 모달 로직은 HomeScreen에서 처리)
+            // 온보딩 완료 후 상태 업데이트
             if (mounted) {
               setState(() {
                 _isOnboardingCompleted = true;
               });
               
               if (kDebugMode) {
-                debugPrint('🎉 [App] 온보딩 완료 - HomeScreen에서 환영 모달 처리 예정');
+                debugPrint('🎉 [App] 온보딩 완료 - 홈 화면 이동 후 환영 모달 표시');
               }
+
+              // 🎯 온보딩 완료 후 잠시 대기하여 홈 화면이 완전히 로드된 후 환영 모달 표시
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                Future.delayed(const Duration(milliseconds: 500), () {
+                  if (mounted) {
+                    _showWelcomeModalAfterOnboarding();
+                  }
+                });
+              });
             }
           },
     );
+  }
+
+  /// 🎉 온보딩 완료 후 환영 모달 표시
+  void _showWelcomeModalAfterOnboarding() {
+    if (kDebugMode) {
+      debugPrint('🎉 [App] 온보딩 완료 후 환영 모달 표시');
+    }
+
+    final context = _scaffoldMessengerKey.currentContext;
+    if (context == null) {
+      if (kDebugMode) {
+        debugPrint('❌ [App] Context를 찾을 수 없어 환영 모달 표시 실패');
+      }
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      isDismissible: false, // 온보딩 후에는 반드시 선택하도록
+      builder: (context) => UpgradeModal(reason: UpgradeReason.welcomeTrial),
+    ).then((result) async {
+      if (kDebugMode) {
+        debugPrint('✅ [App] 온보딩 후 환영 모달 완료');
+      }
+      
+      // 🎯 환영 모달 완료 기록을 Firestore에 저장
+      try {
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .set({
+            'hasSeenWelcomeModal': true,
+          }, SetOptions(merge: true));
+          
+          if (kDebugMode) {
+            debugPrint('✅ [App] 환영 모달 완료 기록 저장 완료');
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('❌ [App] 환영 모달 완료 기록 저장 실패: $e');
+        }
+      }
+    });
   }
   
   // 홈 화면 렌더링 실패 시 표시할 대체 UI
