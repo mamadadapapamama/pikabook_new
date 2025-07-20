@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import '../theme/tokens/color_tokens.dart';
-import '../theme/tokens/typography_tokens.dart';
-import '../theme/tokens/spacing_tokens.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../theme/tokens/ui_tokens.dart';
-import '../../features/flashcard/flashcard_counter_badge.dart';
+import '../theme/tokens/color_tokens.dart';
+import '../theme/tokens/spacing_tokens.dart';
+import '../theme/tokens/typography_tokens.dart';
 import '../services/authentication/user_preferences_service.dart';
 import '../services/subscription/unified_subscription_manager.dart';
+import '../models/subscription_state.dart';
 import '../../features/settings/settings_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
-import '../../core/models/subscription_state.dart';
-import '../../core/widgets/upgrade_modal.dart';
+import '../../features/flashcard/flashcard_counter_badge.dart';
 
 /// 공통 앱바 위젯
 /// 모든 스크린에서 재사용할 수 있도록 설계된 커스터마이저블 앱바
@@ -344,23 +343,52 @@ class _PikaAppBarState extends State<PikaAppBar> {
       debugPrint('설정 화면으로 이동 시도');
     }
     try {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => SettingsScreen(
-            onLogout: () async {
-              if (kDebugMode) {
-                debugPrint('로그아웃 콜백 호출됨');
-              }
-              // 로그아웃 처리
-              await FirebaseAuth.instance.signOut();
-              // 홈 화면으로 돌아가기
-              if (context.mounted) {
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              }
-            },
-          ),
-        ),
-      );
+      // 🎯 구독 상태를 가져와서 SettingsScreen에 전달
+      UnifiedSubscriptionManager().getSubscriptionState().then((subscriptionState) {
+        if (context.mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => SettingsScreen(
+                subscriptionState: subscriptionState, // 구독 상태 전달
+                onLogout: () async {
+                  if (kDebugMode) {
+                    debugPrint('로그아웃 콜백 호출됨');
+                  }
+                  // 로그아웃 처리
+                  await FirebaseAuth.instance.signOut();
+                  // 홈 화면으로 돌아가기
+                  if (context.mounted) {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  }
+                },
+              ),
+            ),
+          );
+        }
+      }).catchError((error) {
+        if (kDebugMode) {
+          debugPrint('구독 상태 로드 실패: $error');
+        }
+        // 에러 발생 시 기본 상태로 SettingsScreen 호출
+        if (context.mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => SettingsScreen(
+                subscriptionState: SubscriptionState.defaultState(),
+                onLogout: () async {
+                  if (kDebugMode) {
+                    debugPrint('로그아웃 콜백 호출됨');
+                  }
+                  await FirebaseAuth.instance.signOut();
+                  if (context.mounted) {
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  }
+                },
+              ),
+            ),
+          );
+        }
+      });
     } catch (e) {
       if (kDebugMode) {
         debugPrint('설정 화면 이동 중 오류: $e');

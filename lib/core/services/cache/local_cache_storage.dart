@@ -259,10 +259,25 @@ class LocalCacheStorage<T> implements CacheStorage<T>, BinaryCacheStorage {
         await _prefs!.remove(key);
       }
 
-      // 캐시 디렉토리 삭제
-      if (await _cacheDir!.exists()) {
-        await _cacheDir!.delete(recursive: true);
-        await _cacheDir!.create(recursive: true);
+      // 캐시 디렉토리 삭제 (안전하게 처리)
+      try {
+        if (_cacheDir != null && await _cacheDir!.exists()) {
+          await _cacheDir!.delete(recursive: true);
+          await _cacheDir!.create(recursive: true);
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('⚠️ [LocalCacheStorage] 캐시 디렉토리 삭제 실패($_namespace): $e');
+          debugPrint('   디렉토리가 존재하지 않거나 권한 문제일 수 있습니다. 계속 진행합니다.');
+        }
+        // 디렉토리 재생성 시도
+        try {
+          await _cacheDir!.create(recursive: true);
+        } catch (createError) {
+          if (kDebugMode) {
+            debugPrint('⚠️ [LocalCacheStorage] 캐시 디렉토리 재생성 실패($_namespace): $createError');
+          }
+        }
       }
 
       _memoryCache.clear();
@@ -277,6 +292,9 @@ class LocalCacheStorage<T> implements CacheStorage<T>, BinaryCacheStorage {
       if (kDebugMode) {
         debugPrint('❌ 전체 캐시 삭제 실패($_namespace): $e');
       }
+      // 오류가 발생해도 메모리 캐시와 메타데이터는 정리
+      _memoryCache.clear();
+      _metadata.clear();
     }
   }
 

@@ -102,13 +102,7 @@ class PlanCard extends StatelessWidget {
             subscriptionInfo.dateInfoText!, 
             style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary)
           ),
-        ] else ...[
-          const SizedBox(height: SpacingTokens.xsHalf),
-          Text(
-            '구독 정보를 갱신하려면 탭하세요.',
-            style: TypographyTokens.body2.copyWith(color: ColorTokens.textSecondary)
-          ),
-        ],
+        ]
       ],
     );
   }

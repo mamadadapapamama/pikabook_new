@@ -10,8 +10,6 @@ import '../../../core/theme/tokens/spacing_tokens.dart';
 import 'pika_button.dart';
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../../core/services/subscription/unified_subscription_manager.dart';
-import '../constants/plan_constants.dart';
-import '../../../core/widgets/upgrade_modal.dart';
 
 /// 사용량 확인 다이얼로그
 /// 현재 사용량과 플랜 정보를 표시합니다.
@@ -69,8 +67,8 @@ class UsageDialog extends StatelessWidget {
                 
                 // 📱 이미지 노트 변환 그래프
                 _buildUsageGraph(
-                  '📱',
-                  '이미지 노트 변환',
+                  '📖',
+                  '이미지 변환',
                   usage['ocrPages'] ?? 0,
                   limits['ocrPages'] ?? 0,
                   usagePercentages['ocr'] ?? 0.0,

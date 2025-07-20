@@ -177,8 +177,8 @@ class NotificationService {
 
       await _scheduleNotification(
         id: 1001,
-        title: 'Pikabook 프리미엄 무료체험 곧 종료',
-        body: '무료 체험이 곧 종료되고, 유료 구독으로 전환될 예정입니다.',
+        title: 'Pikabook 프리미엄 트라이얼 내일 종료',
+        body: '프리미엄 트라이얼이 내일 10시에 되고, 유료 구독으로 전환될 예정입니다.',
         scheduledDate: actualNotificationTime,
         payload: 'trial_ending_soon',
       );

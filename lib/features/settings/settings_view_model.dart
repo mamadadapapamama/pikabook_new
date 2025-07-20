@@ -39,7 +39,6 @@ class SettingsViewModel extends ChangeNotifier {
   final AuthService _authService = AuthService();
   final UserAccountService _userAccountService = UserAccountService();
   final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager();
-  StreamSubscription? _subscriptionStateStreamSubscription;
 
   // --- 상태 변수 ---
   bool _isLoading = false;
@@ -55,7 +54,7 @@ class SettingsViewModel extends ChangeNotifier {
   String _targetLanguage = TargetLanguage.DEFAULT;
   bool _useSegmentMode = false;
 
-  // 🎯 구독 정보 (단일 모델로 관리)
+  // 🎯 구독 정보 (읽기 전용 - 외부에서 주입받음)
   SubscriptionInfo? _subscriptionInfo;
   bool get isPlanLoaded => _subscriptionInfo != null && !_isLoading;
 
@@ -68,7 +67,7 @@ class SettingsViewModel extends ChangeNotifier {
   String get targetLanguage => _targetLanguage;
   bool get useSegmentMode => _useSegmentMode;
 
-  // 🎯 강화된 모델로부터 직접 UI 데이터 제공
+  // 🎯 읽기 전용으로 구독 정보 제공
   SubscriptionInfo? get subscriptionInfo => _subscriptionInfo;
 
   /// 초기 데이터 로드
@@ -77,43 +76,54 @@ class SettingsViewModel extends ChangeNotifier {
     final isUserChanged = _lastUserId != null && _lastUserId != currentUserId;
     
     if (isUserChanged) {
-      if (kDebugMode) print('🔄 [Settings] 사용자 변경 감지. 데이터 초기화 및 강제 새로고침.');
+      if (kDebugMode) print('🔄 [Settings] 사용자 변경 감지. 데이터 초기화.');
       _resetAllData();
-      _subscriptionManager.invalidateCache();
     }
     _lastUserId = currentUserId;
     
     await loadUserData();
     await loadUserPreferences();
-    await refreshPlanInfo(force: isUserChanged);
-    
-    // 🎯 구독 상태 스트림 구독 (구매 완료 시 자동 업데이트)
-    _setupSubscriptionStream();
+    // refreshPlanInfo 제거 - 외부에서 주입받음
   }
-  
-  /// 🎯 구독 상태 스트림 구독 설정
-  void _setupSubscriptionStream() {
-    _subscriptionStateStreamSubscription = _subscriptionManager.subscriptionStateStream.listen(
-      (subscriptionState) {
-        if (kDebugMode) {
-          print('🔔 [Settings] 구독 상태 변경 감지 - UI 직접 업데이트');
-        }
-        // 🚨 중요: 네트워크 요청을 다시 보내는 대신, 스트림으로 받은 새 상태를 직접 사용합니다.
-        // 이렇게 하면 무한 루프를 방지할 수 있습니다.
-        _subscriptionInfo = SubscriptionInfo.fromSubscriptionState(subscriptionState);
-        notifyListeners(); // UI 갱신
-      },
-      onError: (error) {
-        if (kDebugMode) {
-          print('❌ [Settings] 구독 상태 스트림 오류: $error');
-        }
-      },
-    );
+
+  /// 🎯 외부에서 구독 상태 설정 (App.dart에서 호출)
+  void setSubscriptionInfo(SubscriptionInfo subscriptionInfo) {
+    if (kDebugMode) {
+      print('📝 [Settings] 구독 정보 설정: ${subscriptionInfo.planTitle}');
+    }
+    _subscriptionInfo = subscriptionInfo;
+    notifyListeners();
+  }
+
+  /// 플랜 정보 새로고침 (UI 호출용 - 강제 새로고침만)
+  Future<void> refreshPlanInfo({bool force = false}) async {
+    if (_isLoading && !force) {
+      if (kDebugMode) print('⏭️ [Settings] 이미 로딩 중 - 중복 호출 방지');
+      return;
+    }
+    
+    if (kDebugMode) print('🔄 [Settings] 강제 새로고침 요청 - UnifiedSubscriptionManager 캐시 무효화');
+    
+    // 🎯 UI 피드백을 위한 로딩 상태 표시
+    _setLoading(true);
+    
+    try {
+      // 강제 새로고침은 UnifiedSubscriptionManager에 위임
+      await _subscriptionManager.invalidateCache();
+      // 상태는 App.dart를 통해 업데이트됨
+      
+      // 잠시 대기하여 사용자에게 새로고침이 진행되고 있음을 알림
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+    } catch (e) {
+      if (kDebugMode) print('❌ [Settings] 강제 새로고침 실패: $e');
+    } finally {
+      _setLoading(false);
+    }
   }
 
   @override
   void dispose() {
-    _subscriptionStateStreamSubscription?.cancel();
     super.dispose();
   }
 
@@ -128,27 +138,6 @@ class SettingsViewModel extends ChangeNotifier {
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
-  }
-  
-  /// 플랜 정보 새로고침 (UI 호출 또는 내부 로직용)
-  Future<void> refreshPlanInfo({bool force = false}) async {
-    if (_isLoading && !force) {
-      if (kDebugMode) print('⏭️ [Settings] 이미 로딩 중 - 중복 호출 방지');
-      return;
-    }
-    
-    if (kDebugMode) print('🔄 [Settings] 플랜 정보 새로고침 시작 (force: $force)');
-    _setLoading(true);
-
-    try {
-      final state = await _subscriptionManager.getSubscriptionState(forceRefresh: force);
-      _subscriptionInfo = SubscriptionInfo.fromSubscriptionState(state);
-    } catch (e) {
-      if (kDebugMode) print('❌ [Settings] 플랜 정보 로드 오류: $e');
-      _subscriptionInfo = null;
-    } finally {
-      _setLoading(false);
-    }
   }
 
   /// 사용자 데이터 로드

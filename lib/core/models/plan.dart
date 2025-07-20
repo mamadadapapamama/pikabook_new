@@ -11,8 +11,9 @@ class Plan {
   factory Plan.fromId(String id) {
     switch (id) {
       case 'premium_monthly':
+        return Plan.premiumMonthly();
       case 'premium_yearly':
-        return Plan.premium();
+        return Plan.premiumYearly();
       case 'free_monthly':
       default:
         return Plan.free();
@@ -31,6 +32,22 @@ class Plan {
     return Plan(
       id: 'premium_monthly', // 대표 ID
       name: '프리미엄',
+      limits: PlanConstants.PLAN_LIMITS[PlanConstants.PLAN_PREMIUM]!,
+    );
+  }
+
+  factory Plan.premiumMonthly() {
+    return Plan(
+      id: 'premium_monthly',
+      name: '프리미엄 (월간)',
+      limits: PlanConstants.PLAN_LIMITS[PlanConstants.PLAN_PREMIUM]!,
+    );
+  }
+
+  factory Plan.premiumYearly() {
+    return Plan(
+      id: 'premium_yearly',
+      name: '프리미엄 (연간)',
       limits: PlanConstants.PLAN_LIMITS[PlanConstants.PLAN_PREMIUM]!,
     );
   }

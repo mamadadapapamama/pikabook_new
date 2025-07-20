@@ -100,11 +100,18 @@ class SubscriptionInfo {
   String get planTitle {
     switch (entitlement) {
       case Entitlement.free:
-        return 'Free';
+        return '무료';
       case Entitlement.premium:
-        return 'Premium';
+        // subscriptionType이 있으면 월간/연간 구분
+        if (subscriptionType == SubscriptionType.monthly) {
+          return '프리미엄 (월간)';
+        } else if (subscriptionType == SubscriptionType.yearly) {
+          return '프리미엄 (연간)';
+        } else {
+          return '프리미엄';
+        }
       case Entitlement.trial:
-        return 'Trial';
+        return '트라이얼';
     }
   }
 
@@ -117,25 +124,32 @@ class SubscriptionInfo {
     final diff = expiry.difference(now);
 
     if (diff.inDays < 0) {
-      return 'Expired';
+      return '만료됨';
+    } else if (diff.inDays < 1) {
+      final hours = diff.inHours;
+      return '${hours}시간 후 만료';
     } else if (diff.inDays < 7) {
-      return 'Expires in ${diff.inDays} days';
+      return '${diff.inDays}일 후 만료';
     } else {
-      return 'Expires in ${diff.inDays ~/ 7} weeks';
+      // 🎯 구독 갱신일 형식: 2025.01.01
+      final year = expiry.year;
+      final month = expiry.month.toString().padLeft(2, '0');
+      final day = expiry.day.toString().padLeft(2, '0');
+      return '구독 갱신일: $year.$month.$day';
     }
   }
 
   String get ctaText {
     switch (subscriptionStatus) {
       case SubscriptionStatus.active:
-        return '프리미엄 구독하기';
+        return '모든 플랜 보기';
       case SubscriptionStatus.cancelling:
-        return '앱스토어에서 확인하기';
+        return '앱스토어에서 관리하기';
       case SubscriptionStatus.expired:
-        return '프리미엄 구독하기';
+        return '다시 구독하기';
       case SubscriptionStatus.unknown:
       default:
-        return '플랜 관리';
+        return '모든 플랜 보기';
     }
   }
 
@@ -200,24 +214,63 @@ class SubscriptionState extends Equatable {
   /// Firestore 문서로부터 상태 객체 생성
   factory SubscriptionState.fromFirestore(Map<String, dynamic> data) {
     try {
-      final planId = data['planId'] as String? ?? 'free_monthly';
-      final rawStatus = data['status'] as String? ?? 'active';
+      // 🎯 서버 필드명에 맞게 수정
+      final productId = data['productId'] as String?;
+      final entitlement = data['entitlement'] as String?;
+      final subscriptionStatus = data['subscriptionStatus']; // int 또는 string 가능
+      
+      if (kDebugMode) {
+        debugPrint('🔍 [SubscriptionState] Firestore 데이터 파싱:');
+        debugPrint('   - productId: $productId');
+        debugPrint('   - entitlement: $entitlement');
+        debugPrint('   - subscriptionStatus: $subscriptionStatus');
+      }
+
+      // entitlement 기반으로 Plan 결정
+      Plan plan;
+      if (entitlement == 'premium' && productId != null) {
+        plan = Plan.fromId(productId);
+      } else {
+        plan = Plan.free();
+      }
+
+      // subscriptionStatus 파싱 (int 또는 string)
+      PlanStatus status;
+      if (subscriptionStatus is int) {
+        switch (subscriptionStatus) {
+          case 1:
+            status = PlanStatus.active;
+            break;
+          case 2:
+            status = PlanStatus.cancelling;
+            break;
+          case 3:
+            status = PlanStatus.expired;
+            break;
+          default:
+            status = PlanStatus.unknown;
+        }
+      } else {
+        status = PlanStatus.fromString(subscriptionStatus?.toString() ?? 'active');
+      }
+
+      if (kDebugMode) {
+        debugPrint('   - 최종 Plan: ${plan.name}');
+        debugPrint('   - 최종 Status: ${status.name}');
+      }
 
       return SubscriptionState(
-        plan: Plan.fromId(planId),
-        status: PlanStatus.fromString(rawStatus),
-        expiresDate: (data['expiresDate'] as String?) != null
-            ? DateTime.tryParse(data['expiresDate'] ?? '')
-            : null,
+        plan: plan,
+        status: status,
+        expiresDate: _parseExpirationDate(data),
         hasUsedTrial: data['hasUsedTrial'] as bool? ?? false,
-        timestamp: (data['timestamp'] as String?) != null
-            ? DateTime.tryParse(data['timestamp'] ?? '')
-            : DateTime.now(),
+        timestamp: _parseDateTime(data['lastUpdatedAt']) ?? DateTime.now(),
         activeBanners: List<String>.from(data['activeBanners'] ?? []),
       );
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ SubscriptionState.fromFirestore 파싱 오류: $e');
+        debugPrint('데이터: $data');
       }
       return SubscriptionState.defaultState();
     }
@@ -226,34 +279,134 @@ class SubscriptionState extends Equatable {
   /// 🎯 서버 응답으로부터 상태 객체 생성
   factory SubscriptionState.fromServerResponse(Map<String, dynamic> data) {
     try {
-      final planId = data['subscriptionType'] as String?;
-      final rawStatus = data['subscriptionStatus'] as String?;
-      final entitlement = data['entitlement'] as String?;
+      // 🔧 안전한 타입 캐스팅
+      final planId = _safeStringCast(data['subscriptionType']) ?? _safeStringCast(data['productId']);
+      final rawStatus = _safeStringCast(data['subscriptionStatus']);
+      final entitlement = _safeStringCast(data['entitlement']);
+
+      if (kDebugMode) {
+        debugPrint('🔍 [SubscriptionState] 서버 응답 파싱:');
+        debugPrint('   - planId: $planId');
+        debugPrint('   - rawStatus: $rawStatus');
+        debugPrint('   - entitlement: $entitlement');
+      }
 
       // entitlement가 'PREMIUM' 또는 'TRIAL'이면 planId를 기반으로 Plan 생성, 아니면 free Plan
       final plan = (entitlement == 'PREMIUM' || entitlement == 'TRIAL') && planId != null
           ? Plan.fromId(planId)
           : Plan.free();
 
+      if (kDebugMode) {
+        debugPrint('   - 최종 Plan: ${plan.name}');
+      }
+
       return SubscriptionState(
         plan: plan,
         status: PlanStatus.fromString(rawStatus ?? 'unknown'),
-        expiresDate: (data['expiresDate'] as String?) != null
-            ? DateTime.tryParse(data['expiresDate'] ?? '')
-            : null,
+        expiresDate: _parseDateTime(data['expiresDate']),
         hasUsedTrial: data['hasUsedTrial'] as bool? ?? false,
-        timestamp: (data['timestamp'] as String?) != null
-            ? DateTime.tryParse(data['timestamp'] ?? '')
-            : DateTime.now(),
-        // 서버 응답에는 배너 정보가 없으므로 기본값 사용
-        activeBanners: [],
+        timestamp: _parseDateTime(data['timestamp']) ?? DateTime.now(),
+        // 🎯 서버 응답 기반으로 배너 생성
+        activeBanners: _generateBannersFromServerResponse(data, plan),
       );
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ SubscriptionState.fromServerResponse 파싱 오류: $e');
+        debugPrint('서버 응답 데이터: $data');
       }
       return SubscriptionState.defaultState();
     }
+  }
+
+  /// 🔧 만료일 파싱 헬퍼 (서버 필드명 고려)
+  static DateTime? _parseExpirationDate(Map<String, dynamic> data) {
+    // 서버에서는 expirationDate (밀리초) 사용
+    final expirationDate = data['expirationDate'];
+    if (expirationDate != null) {
+      if (expirationDate is int) {
+        return DateTime.fromMillisecondsSinceEpoch(expirationDate);
+      } else if (expirationDate is String) {
+        final timestamp = int.tryParse(expirationDate);
+        if (timestamp != null) {
+          return DateTime.fromMillisecondsSinceEpoch(timestamp);
+        }
+        return DateTime.tryParse(expirationDate);
+      }
+    }
+    
+    // Fallback: expiresDate 필드도 확인
+    final expiresDate = data['expiresDate'];
+    if (expiresDate is String) {
+      return DateTime.tryParse(expiresDate);
+    }
+    
+    return null;
+  }
+
+  /// 🔧 안전한 String 캐스팅 헬퍼 메서드
+  static String? _safeStringCast(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value;
+    if (value is int) return value.toString();
+    if (value is double) return value.toString();
+    if (value is bool) return value.toString();
+    return value.toString(); // 다른 타입도 문자열로 변환 시도
+  }
+
+  /// 🔧 안전한 DateTime 파싱 헬퍼 메서드
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    
+    try {
+      // String인 경우 ISO 8601 형식으로 파싱
+      if (value is String) {
+        if (value.isEmpty) return null;
+        return DateTime.tryParse(value);
+      }
+      // int인 경우 Unix timestamp (초 단위)로 간주
+      else if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value * 1000);
+      }
+      // double인 경우도 Unix timestamp로 간주 (소수점 버림)
+      else if (value is double) {
+        return DateTime.fromMillisecondsSinceEpoch((value * 1000).toInt());
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ DateTime 파싱 실패: $value (타입: ${value.runtimeType}), 오류: $e');
+      }
+    }
+    
+    return null;
+  }
+
+  /// 🎯 서버 응답 기반으로 배너 생성
+  static List<String> _generateBannersFromServerResponse(Map<String, dynamic> data, Plan plan) {
+    final List<String> banners = [];
+    final entitlement = _safeStringCast(data['entitlement']);
+    final subscriptionStatus = _safeStringCast(data['subscriptionStatus']);
+
+    // entitlement 기반 배너
+    if (entitlement == 'PREMIUM') {
+      banners.add('premiumStarted');
+    } else if (entitlement == 'TRIAL') {
+      banners.add('trialStarted');
+    } else if (entitlement == 'FREE') {
+      banners.add('free');
+    }
+
+    // 구독 상태 기반 배너
+    if (subscriptionStatus == '2') { // cancelling
+      if (plan.isPremium) {
+        banners.add('premiumCancelled');
+      } else {
+        banners.add('trialCancelled');
+      }
+    } else if (subscriptionStatus == '3') { // expired
+      banners.add('switchToPremium');
+    }
+
+    return banners;
   }
 
   /// 객체를 JSON 맵으로 변환

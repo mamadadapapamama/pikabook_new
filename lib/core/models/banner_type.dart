@@ -40,7 +40,7 @@ extension BannerTypeExtension on BannerType {
       case BannerType.free:
         return '무료 플랜 시작';
       case BannerType.trialStarted:
-        return '🎉 프리미엄 무료 체험 시작!';
+        return '🎉 트라이얼 시작!';
       case BannerType.trialCancelled:
         return '⏰ 프리미엄 구독 전환 취소됨';
       case BannerType.switchToPremium:
@@ -63,7 +63,7 @@ extension BannerTypeExtension on BannerType {
       case BannerType.free:
         return '무료 플랜이 시작되었습니다. 여유있게 사용하시려면 프리미엄을 구독해 보세요.';
       case BannerType.trialStarted:
-        return '7일간 프리미엄 기능을 무료로 사용해보세요.';
+        return '7일간의 프리미엄 무료체험을 시작합니다. 기간 종료시 월 구독플랜으로 전환됩니다.';
       case BannerType.trialCancelled:
         return '체험 기간 종료 시 무료 플랜으로 전환됩니다.';
       case BannerType.switchToPremium:

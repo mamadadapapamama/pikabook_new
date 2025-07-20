@@ -21,13 +21,16 @@ import 'widgets/profile_card.dart';
 import 'widgets/setting_item.dart';
 import '../../core/widgets/selection_dialog.dart';
 import '../../core/services/payment/in_app_purchase_service.dart';
+import '../../core/models/subscription_state.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onLogout;
+  final SubscriptionState subscriptionState;
 
   const SettingsScreen({
     Key? key,
     required this.onLogout,
+    required this.subscriptionState,
   }) : super(key: key);
 
   @override
@@ -35,13 +38,40 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  // ViewModel은 Provider를 통해 제공되므로 여기서는 생성하지 않음
+  SettingsViewModel? _viewModel;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewModel = SettingsViewModel();
+    _viewModel!.initialize();
+    // 초기 구독 상태 설정
+    final subscriptionInfo = SubscriptionInfo.fromSubscriptionState(widget.subscriptionState);
+    _viewModel!.setSubscriptionInfo(subscriptionInfo);
+  }
+
+  @override
+  void didUpdateWidget(SettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // 구독 상태가 변경되면 ViewModel에 전달
+    if (oldWidget.subscriptionState != widget.subscriptionState && _viewModel != null) {
+      final subscriptionInfo = SubscriptionInfo.fromSubscriptionState(widget.subscriptionState);
+      _viewModel!.setSubscriptionInfo(subscriptionInfo);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_viewModel == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    
     // ChangeNotifierProvider로 ViewModel을 제공
-    return ChangeNotifierProvider(
-      create: (_) => SettingsViewModel()..initialize(),
+    return ChangeNotifierProvider<SettingsViewModel>.value(
+      value: _viewModel!,
       child: Scaffold(
       backgroundColor: ColorTokens.background,
       appBar: PikaAppBar.settings(
