@@ -144,13 +144,14 @@ class UnifiedSubscriptionManager {
       final newState = SubscriptionState.fromServerResponse(serverData);
       
       if (kDebugMode) {
-        debugPrint('✅ [UnifiedSubscriptionManager] 파싱된 새 상태:');
+        debugPrint('📊 [UnifiedSubscriptionManager] 서버 응답으로 상태 업데이트:');
         debugPrint('   - Plan: ${newState.plan.name}');
         debugPrint('   - Status: ${newState.status.name}');
         debugPrint('   - IsPremium: ${newState.isPremiumOrTrial}');
         debugPrint('   - ExpiresDate: ${newState.expiresDate}');
         debugPrint('   - HasUsedTrial: ${newState.hasUsedTrial}');
         debugPrint('   - Timestamp: ${newState.timestamp}');
+        debugPrint('   - ActiveBanners: ${newState.activeBanners}');
       }
       
       // 🎯 기존 상태와 timestamp 비교 - 더 최신 응답만 처리

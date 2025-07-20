@@ -328,6 +328,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       try {
                         return BannerType.values.firstWhere((e) => e.name == name);
                       } catch (e) {
+                        if (kDebugMode) {
+                          debugPrint('⚠️ [HomeScreen] 알 수 없는 배너 타입: $name');
+                        }
                         return null;
                       }
                     })
@@ -339,6 +342,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
               builder: (context, snapshot) {
                 final activeBanners = snapshot.data ?? [];
+                
+                if (kDebugMode) {
+                  debugPrint('🏠 [HomeScreen] 배너 상태:');
+                  debugPrint('   - 구독 상태 배너: ${widget.subscriptionState.activeBanners}');
+                  debugPrint('   - 변환된 BannerType: ${widget.subscriptionState.activeBanners.map((name) => BannerType.values.where((e) => e.name == name).toList()).toList()}');
+                  debugPrint('   - 최종 표시될 배너 위젯 수: ${activeBanners.length}');
+                }
 
                 if (hasNotes) {
                   // 노트가 있는 경우 - 노트 리스트 표시

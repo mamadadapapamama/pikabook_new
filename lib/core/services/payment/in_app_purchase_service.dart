@@ -7,6 +7,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 import '../subscription/unified_subscription_manager.dart';
 import '../notification/notification_service.dart';
+import '../../constants/subscription_constants.dart';
 
 /// 🎯 구매 상태 관리
 class PurchaseState {
@@ -371,17 +372,21 @@ class InAppPurchaseService {
     }
   }
   
-  /// 📱 성공 스낵바 표시
+  /// 📱 성공 스낵바 표시 (중앙화된 메시지 사용)
   void _showSuccessSnackBar(PurchaseDetails details) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final message = details.productID == premiumMonthlyId
-          ? '프리미엄 월간 플랜이 시작되었습니다!'
-          : '프리미엄 연간 플랜이 시작되었습니다!';
-      
-      _scaffoldMessengerKey?.currentState?.showSnackBar(
-        SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-      );
-    });
+    final scaffoldMessenger = _scaffoldMessengerKey?.currentState;
+    if (scaffoldMessenger == null) return;
+
+    // 🎯 중앙화된 상수에서 메시지 가져오기
+    final message = SubscriptionConstants.getPurchaseSuccessMessage(details.productID);
+    
+    scaffoldMessenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   /// 📱 에러 스낵바 표시

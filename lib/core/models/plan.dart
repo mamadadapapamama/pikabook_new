@@ -1,56 +1,58 @@
-import '../constants/plan_constants.dart';
+import 'package:equatable/equatable.dart';
+import '../constants/subscription_constants.dart';
 
-/// 플랜 정보를 나타내는 모델 클래스
-class Plan {
+/// 구독 플랜을 나타내는 모델 클래스
+class Plan extends Equatable {
   final String id;
   final String name;
-  final Map<String, int> limits;
+  final bool isPremium;
 
-  const Plan({required this.id, required this.name, required this.limits});
+  const Plan({
+    required this.id,
+    required this.name,
+    required this.isPremium,
+  });
 
+  /// 무료 플랜
+  factory Plan.free() => const Plan(
+    id: 'free',
+    name: '무료',
+    isPremium: false,
+  );
+
+  /// 프리미엄 월간 플랜
+  factory Plan.premiumMonthly() => const Plan(
+    id: 'premium_monthly',
+    name: '프리미엄 (월간)',
+    isPremium: true,
+  );
+
+  /// 프리미엄 연간 플랜
+  factory Plan.premiumYearly() => const Plan(
+    id: 'premium_yearly',
+    name: '프리미엄 (연간)',
+    isPremium: true,
+  );
+
+  /// ID로부터 플랜 생성 (중앙화된 상수 사용)
   factory Plan.fromId(String id) {
     switch (id) {
       case 'premium_monthly':
         return Plan.premiumMonthly();
       case 'premium_yearly':
         return Plan.premiumYearly();
-      case 'free_monthly':
+      case 'free':
       default:
         return Plan.free();
     }
   }
 
-  factory Plan.free() {
-    return Plan(
-      id: 'free_monthly',
-      name: '무료 플랜',
-      limits: PlanConstants.PLAN_LIMITS[PlanConstants.PLAN_FREE]!,
-    );
-  }
+  /// 🎯 중앙화된 상수에서 플랜 표시 이름 가져오기
+  String get displayName => SubscriptionConstants.getPlanDisplayName(id);
 
-  factory Plan.premium() {
-    return Plan(
-      id: 'premium_monthly', // 대표 ID
-      name: '프리미엄',
-      limits: PlanConstants.PLAN_LIMITS[PlanConstants.PLAN_PREMIUM]!,
-    );
-  }
+  @override
+  List<Object?> get props => [id, name, isPremium];
 
-  factory Plan.premiumMonthly() {
-    return Plan(
-      id: 'premium_monthly',
-      name: '프리미엄 (월간)',
-      limits: PlanConstants.PLAN_LIMITS[PlanConstants.PLAN_PREMIUM]!,
-    );
-  }
-
-  factory Plan.premiumYearly() {
-    return Plan(
-      id: 'premium_yearly',
-      name: '프리미엄 (연간)',
-      limits: PlanConstants.PLAN_LIMITS[PlanConstants.PLAN_PREMIUM]!,
-    );
-  }
-
-  bool get isPremium => id.startsWith('premium');
+  @override
+  String toString() => 'Plan(id: $id, name: $name, isPremium: $isPremium)';
 } 

@@ -116,9 +116,9 @@ import FirebaseMessaging
     let request = SKReceiptRefreshRequest()
     request.delegate = ReceiptRefreshDelegate(result: result)
     request.start()
-  }
-  
-  // MARK: - UNUserNotificationCenterDelegate
+}
+
+// MARK: - UNUserNotificationCenterDelegate
   
   // 앱이 포그라운드에 있을 때 알림 표시
   override func userNotificationCenter(_ center: UNUserNotificationCenter,

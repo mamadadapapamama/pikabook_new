@@ -1,3 +1,5 @@
+import '../constants/subscription_constants.dart';
+
 /// 배너 타입 열거형
 enum BannerType {
   free,               // 무료 플랜
@@ -35,49 +37,19 @@ extension BannerTypeExtension on BannerType {
     }
   }
 
+  /// 🎯 중앙화된 상수에서 배너 텍스트 가져오기
   String get title {
-    switch (this) {
-      case BannerType.free:
-        return '무료 플랜 시작';
-      case BannerType.trialStarted:
-        return '🎉 트라이얼 시작!';
-      case BannerType.trialCancelled:
-        return '⏰ 프리미엄 구독 전환 취소됨';
-      case BannerType.switchToPremium:
-        return '💎 프리미엄 월 구독 시작!';
-      case BannerType.premiumStarted:
-        return '🎉 프리미엄 연 구독 시작!';
-      case BannerType.premiumGrace:
-        return '⚠️ 결제 확인 필요';
-      case BannerType.premiumCancelled:
-        return '⏰ 프리미엄 구독 취소됨';
-      case BannerType.usageLimitFree:
-        return '⚠️ 사용량 한도 도달';
-      case BannerType.usageLimitPremium:
-        return '⚠️ 프리미엄 사용량 한도 도달';
-    }
+    final bannerTexts = SubscriptionConstants.BANNER_TEXTS[name];
+    return bannerTexts?['title'] ?? '알림';
   }
 
   String get subtitle {
-    switch (this) {
-      case BannerType.free:
-        return '무료 플랜이 시작되었습니다. 여유있게 사용하시려면 프리미엄을 구독해 보세요.';
-      case BannerType.trialStarted:
-        return '7일간의 프리미엄 무료체험을 시작합니다. 기간 종료시 월 구독플랜으로 전환됩니다.';
-      case BannerType.trialCancelled:
-        return '체험 기간 종료 시 무료 플랜으로 전환됩니다.';
-      case BannerType.switchToPremium:
-        return '프리미엄 월 구독으로 전환되었습니다! 피카북을 여유있게 사용해보세요.';
-      case BannerType.premiumStarted:
-        return '프리미엄 연 구독이 시작되었습니다! 피카북을 여유있게 사용해보세요.';
-      case BannerType.premiumGrace:
-        return 'App Store에서 결제 정보를 확인해주세요. 확인되지 않으면 구독이 취소될 수 있습니다';
-      case BannerType.premiumCancelled:
-        return '잔여 기간동안 프리미엄 혜택을 사용하시고 이후 무료로 전환됩니다.';
-      case BannerType.usageLimitFree:
-        return '프리미엄으로 업그레이드하여 넉넉하게 사용하세요.';
-      case BannerType.usageLimitPremium:
-        return '추가 사용량이 필요하시면 문의해 주세요';
-    }
+    final bannerTexts = SubscriptionConstants.BANNER_TEXTS[name];
+    return bannerTexts?['subtitle'] ?? '';
+  }
+
+  String? get buttonText {
+    final bannerTexts = SubscriptionConstants.BANNER_TEXTS[name];
+    return bannerTexts?['buttonText'];
   }
 } 

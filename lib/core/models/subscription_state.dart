@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'plan.dart';
 import 'plan_status.dart';
+import '../constants/subscription_constants.dart';
 
 // 레거시 enum들은 SubscriptionInfo와의 호환성을 위해 당분간 유지합니다.
 enum Entitlement {
@@ -140,17 +141,10 @@ class SubscriptionInfo {
   }
 
   String get ctaText {
-    switch (subscriptionStatus) {
-      case SubscriptionStatus.active:
-        return '모든 플랜 보기';
-      case SubscriptionStatus.cancelling:
-        return '앱스토어에서 관리하기';
-      case SubscriptionStatus.expired:
-        return '다시 구독하기';
-      case SubscriptionStatus.unknown:
-      default:
-        return '모든 플랜 보기';
-    }
+    // 🎯 중앙화된 상수 사용
+    final entitlementStr = entitlement.name;
+    final status = subscriptionStatus.name;
+    return SubscriptionConstants.getCTAText(entitlementStr, status);
   }
 
   String? get ctaSubtext {
@@ -236,16 +230,26 @@ class SubscriptionState extends Equatable {
 
       // subscriptionStatus 파싱 (int 또는 string)
       PlanStatus status;
-      if (subscriptionStatus is int) {
+      
+      // 🎯 무료 플랜일 때는 항상 active 상태
+      if (entitlement == 'FREE' || entitlement == 'free') {
+        status = PlanStatus.active;
+        if (kDebugMode) {
+          debugPrint('   - 무료 플랜이므로 강제로 active 상태 설정');
+        }
+      } else if (subscriptionStatus is int) {
         switch (subscriptionStatus) {
           case 1:
-            status = PlanStatus.active;
+            status = PlanStatus.active;      // ACTIVE
             break;
           case 2:
-            status = PlanStatus.cancelling;
+            status = PlanStatus.expired;     // 🎯 수정: EXPIRED (만료됨)
             break;
           case 3:
-            status = PlanStatus.expired;
+            status = PlanStatus.expired;     // REFUNDED (환불됨 -> 만료 처리)
+            break;
+          case 7:
+            status = PlanStatus.cancelling;  // 🎯 수정: CANCELLED (취소됨)
             break;
           default:
             status = PlanStatus.unknown;
@@ -381,59 +385,79 @@ class SubscriptionState extends Equatable {
     return null;
   }
 
-  /// 🎯 서버 응답 기반으로 배너 생성
+  /// 🎯 서버 응답 기반으로 배너 생성 (중앙화된 상수 사용)
   static List<String> _generateBannersFromServerResponse(Map<String, dynamic> data, Plan plan) {
     final List<String> banners = [];
-    final entitlement = _safeStringCast(data['entitlement']);
-    final subscriptionStatus = _safeStringCast(data['subscriptionStatus']);
-
-    // entitlement 기반 배너
-    if (entitlement == 'PREMIUM') {
-      banners.add('premiumStarted');
-    } else if (entitlement == 'TRIAL') {
-      banners.add('trialStarted');
-    } else if (entitlement == 'FREE') {
-      banners.add('free');
+    final entitlement = _safeStringCast(data['entitlement']) ?? '';
+    final subscriptionStatusRaw = data['subscriptionStatus'];
+    
+    // subscriptionStatus를 int로 변환
+    int subscriptionStatus;
+    if (subscriptionStatusRaw is int) {
+      subscriptionStatus = subscriptionStatusRaw;
+    } else if (subscriptionStatusRaw is String) {
+      subscriptionStatus = int.tryParse(subscriptionStatusRaw) ?? SubscriptionConstants.STATUS_UNKNOWN;
+    } else {
+      subscriptionStatus = SubscriptionConstants.STATUS_UNKNOWN;
     }
 
-    // 구독 상태 기반 배너
-    if (subscriptionStatus == '2') { // cancelling
-      if (plan.isPremium) {
-        banners.add('premiumCancelled');
-      } else {
-        banners.add('trialCancelled');
+    if (kDebugMode) {
+      debugPrint('🎯 [SubscriptionState] 서버 응답 배너 생성:');
+      debugPrint('   - entitlement: $entitlement');
+      debugPrint('   - subscriptionStatus: $subscriptionStatus');
+      debugPrint('   - plan.isPremium: ${plan.isPremium}');
+    }
+
+    // 🎯 중앙화된 상수 사용
+    final bannerType = SubscriptionConstants.getBannerType(entitlement, subscriptionStatus);
+    if (bannerType != null) {
+      banners.add(bannerType);
+      if (kDebugMode) {
+        debugPrint('   - 추가된 배너: $bannerType');
       }
-    } else if (subscriptionStatus == '3') { // expired
-      banners.add('switchToPremium');
+    }
+
+    if (kDebugMode) {
+      debugPrint('   - 최종 배너 목록: $banners');
     }
 
     return banners;
   }
 
-  /// 🎯 Firestore 데이터에서도 배너 동적 생성
+  /// 🎯 Firestore 데이터에서도 배너 동적 생성 (중앙화된 상수 사용)
   static List<String> _generateBannersFromFirestoreData(Map<String, dynamic> data, Plan plan, PlanStatus status) {
     final List<String> banners = [];
-    final entitlement = _safeStringCast(data['entitlement']);
-    final subscriptionStatus = _safeStringCast(data['subscriptionStatus']);
-
-    // entitlement 기반 배너
-    if (entitlement == 'PREMIUM') {
-      banners.add('premiumStarted');
-    } else if (entitlement == 'TRIAL') {
-      banners.add('trialStarted');
-    } else if (entitlement == 'FREE') {
-      banners.add('free');
+    final entitlement = _safeStringCast(data['entitlement']) ?? '';
+    final subscriptionStatusRaw = data['subscriptionStatus'];
+    
+    // subscriptionStatus를 int로 변환
+    int subscriptionStatus;
+    if (subscriptionStatusRaw is int) {
+      subscriptionStatus = subscriptionStatusRaw;
+    } else if (subscriptionStatusRaw is String) {
+      subscriptionStatus = int.tryParse(subscriptionStatusRaw) ?? SubscriptionConstants.STATUS_UNKNOWN;
+    } else {
+      subscriptionStatus = SubscriptionConstants.STATUS_UNKNOWN;
     }
 
-    // 구독 상태 기반 배너
-    if (subscriptionStatus == '2') { // cancelling
-      if (plan.isPremium) {
-        banners.add('premiumCancelled');
-      } else {
-        banners.add('trialCancelled');
+    if (kDebugMode) {
+      debugPrint('🎯 [SubscriptionState] Firestore 배너 생성:');
+      debugPrint('   - entitlement: $entitlement');
+      debugPrint('   - subscriptionStatus: $subscriptionStatus');
+      debugPrint('   - plan.isPremium: ${plan.isPremium}');
+    }
+
+    // 🎯 중앙화된 상수 사용
+    final bannerType = SubscriptionConstants.getBannerType(entitlement, subscriptionStatus);
+    if (bannerType != null) {
+      banners.add(bannerType);
+      if (kDebugMode) {
+        debugPrint('   - 추가된 배너: $bannerType');
       }
-    } else if (subscriptionStatus == '3') { // expired
-      banners.add('switchToPremium');
+    }
+
+    if (kDebugMode) {
+      debugPrint('   - 최종 배너 목록: $banners');
     }
 
     return banners;

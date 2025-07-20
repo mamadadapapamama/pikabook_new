@@ -95,7 +95,7 @@ class HomeViewModel extends ChangeNotifier {
     try {
       // 🎯 사용자 변경 감지 리스너 제거 → 로그인 후에만 생성되므로 불필요
       // _setupAuthStateListener();
-
+      
       // 🎯 로그인된 상태이므로 바로 노트 구독 시작
       _subscribeToNoteService();
       
@@ -115,7 +115,7 @@ class HomeViewModel extends ChangeNotifier {
   void setupUsageLimitStreamWithSubscriptionState(SubscriptionState subscriptionState) {
     // 🚨 중요: 이미 구독 중이면 중복 호출 방지
     if (_isUsageLimitStreamActive) {
-      if (kDebugMode) {
+          if (kDebugMode) {
         debugPrint('⏭️ [HomeViewModel] 사용량 제한 스트림 이미 구독 중 - 중복 호출 방지');
       }
       return;

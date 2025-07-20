@@ -9,6 +9,8 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import 'user_account_service.dart';
+import '../subscription/unified_subscription_manager.dart';
+import '../payment/in_app_purchase_service.dart';
 
 /// 🎯 Firebase 인증 제공자(Provider)를 관리하고 인증 흐름을 처리하는 서비스
 ///
@@ -201,6 +203,9 @@ class AuthService {
         print('🚪 [AuthService] 로그아웃 시작 (UID: ${_auth.currentUser?.uid})');
       }
 
+      // 🎯 로그아웃 전 모든 서비스 정리
+      await _cleanupServicesOnSignOut();
+
       await Future.wait([
         _auth.signOut(),
         _googleSignIn.signOut(),
@@ -212,6 +217,27 @@ class AuthService {
     } catch (e) {
       if (kDebugMode) {
         print('❌ [AuthService] 로그아웃 중 오류: $e');
+      }
+    }
+  }
+
+  /// 🧹 로그아웃 시 모든 서비스 정리
+  Future<void> _cleanupServicesOnSignOut() async {
+    try {
+      // 1. UnifiedSubscriptionManager 정리
+      final subscriptionManager = UnifiedSubscriptionManager();
+      subscriptionManager.dispose();
+      
+      // 2. InAppPurchaseService 정리 (pending transaction 처리 중단)
+      final purchaseService = InAppPurchaseService();
+      purchaseService.clearPendingTransactions();
+      
+      if (kDebugMode) {
+        print('🧹 [AuthService] 로그아웃 시 서비스 정리 완료');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ [AuthService] 서비스 정리 중 오류: $e');
       }
     }
   }
