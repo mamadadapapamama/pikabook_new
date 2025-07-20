@@ -119,7 +119,8 @@ class UnifiedSubscriptionManager {
       if (kDebugMode) {
         debugPrint('🔥 [UnifiedSubscriptionManager] Firestore 데이터 변경 감지!');
         }
-      getSubscriptionState(forceRefresh: true);
+      // 🔥 중요: Firestore 변경 시 직접 상태 처리 (무한 루프 방지)
+      _handleFirestoreSnapshot(snapshot);
     }, onError: (error) {
       if (kDebugMode) {
         debugPrint(
@@ -150,6 +151,42 @@ class UnifiedSubscriptionManager {
     }
   }
 
+  /// 🔥 Firestore 스냅샷 직접 처리 (무한 루프 방지)
+  void _handleFirestoreSnapshot(DocumentSnapshot snapshot) {
+    try {
+      if (snapshot.exists && snapshot.data() != null) {
+        final data = snapshot.data()! as Map<String, dynamic>;
+        final newState = SubscriptionState.fromFirestore(data);
+
+        // ✅ JWS 정보가 없는 UNVERIFIED 상태일 때, 구매 복원 로직 실행
+        if (newState.status == PlanStatus.unverified) {
+          if (kDebugMode) {
+            debugPrint('🤔 [UnifiedSubscriptionManager] 구독 상태 미확인(UNVERIFIED). 구매 정보 복원을 시도합니다.');
+          }
+          InAppPurchaseService().restorePurchases();
+          
+          // 🚦 중요: unverified 상태에서는 배너를 표시하지 않음.
+          final stateWithoutBanners = newState.copyWith(activeBanners: []);
+          _cache.set(_cacheKey, stateWithoutBanners.toJson());
+          _subscriptionStateController.add(stateWithoutBanners);
+          return;
+        }
+        
+        _cache.set(_cacheKey, newState.toJson());
+        _subscriptionStateController.add(newState);
+      } else {
+        // Firestore에 문서가 없으면 기본 상태로 간주
+        final defaultState = SubscriptionState.defaultState();
+        _cache.set(_cacheKey, defaultState.toJson());
+        _subscriptionStateController.add(defaultState);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [UnifiedSubscriptionManager] Firestore 스냅샷 처리 중 오류: $e');
+      }
+    }
+  }
+
   /// ---------------------------------------------------
   /// 🎯 Public API (외부에서 사용)
   /// ---------------------------------------------------
@@ -171,7 +208,7 @@ class UnifiedSubscriptionManager {
           debugPrint('✅ [UnifiedSubscriptionManager] 캐시에서 구독 정보 로드');
         }
         final state = SubscriptionState.fromFirestore(cachedData);
-        _subscriptionStateController.add(state); // 스트림에 최신 상태 전파
+        // 🔥 중요: 캐시에서 로드할 때는 스트림에 전파하지 않음 (무한 루프 방지)
         return state;
       }
     }
@@ -204,36 +241,17 @@ class UnifiedSubscriptionManager {
           .doc('subscription');
 
       final snapshot = await docRef.get();
-
-      if (snapshot.exists && snapshot.data() != null) {
-        final data = snapshot.data()!;
-        final newState = SubscriptionState.fromFirestore(data);
-
-        // ✅ JWS 정보가 없는 UNVERIFIED 상태일 때, 구매 복원 로직 실행
-        if (newState.status == PlanStatus.unverified) {
-          if (kDebugMode) {
-            debugPrint('🤔 [UnifiedSubscriptionManager] 구독 상태 미확인(UNVERIFIED). 구매 정보 복원을 시도합니다.');
-          }
-          InAppPurchaseService().restorePurchases();
-          
-          // 🚦 중요: unverified 상태에서는 배너를 표시하지 않음.
-          // restorePurchases가 완료되고 실제 상태가 스트림으로 들어올 때까지 기다립니다.
-          final stateWithoutBanners = newState.copyWith(activeBanners: []);
-          _cache.set(_cacheKey, stateWithoutBanners.toJson());
-          _subscriptionStateController.add(stateWithoutBanners);
-          return stateWithoutBanners;
-        }
-        
-        _cache.set(_cacheKey, newState.toJson()); // 캐시 업데이트
-        _subscriptionStateController.add(newState);
-        return newState;
-      } else {
-        // Firestore에 문서가 없으면 기본 상태로 간주
-        final defaultState = SubscriptionState.defaultState();
-        _cache.set(_cacheKey, defaultState.toJson());
-        _subscriptionStateController.add(defaultState);
-        return defaultState;
+      
+      // 🔥 중요: 스냅샷 처리 로직을 재사용하여 중복 제거
+      _handleFirestoreSnapshot(snapshot);
+      
+      // 캐시에서 업데이트된 상태를 반환
+      final cachedData = await _cache.get(_cacheKey);
+      if (cachedData != null) {
+        return SubscriptionState.fromFirestore(cachedData);
       }
+      
+      return SubscriptionState.defaultState();
     } catch (e) {
       if (kDebugMode) {
         debugPrint(

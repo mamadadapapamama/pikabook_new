@@ -141,7 +141,6 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       }
       
       // 1. 필수 초기화 (순차적)
-      await _initializeFirebase();
       await _initializeServices();
       
       // 2. 상태 확인
@@ -158,18 +157,7 @@ class _AppState extends State<App> with WidgetsBindingObserver {
       _handleInitializationError(e);
     }
   }
-  
-  /// Firebase 초기화
-  Future<void> _initializeFirebase() async {
-    if (kDebugMode) {
-      debugPrint('🔥 [App] Firebase 초기화');
-    }
-    
-    // Firebase는 main.dart에서 이미 초기화되었으므로 상태만 확인
-    if (Firebase.apps.isEmpty) {
-      throw Exception('Firebase가 초기화되지 않았습니다.');
-    }
-  }
+
   
   /// 서비스 초기화 (앱 시작 시)
   Future<void> _initializeServices() async {
