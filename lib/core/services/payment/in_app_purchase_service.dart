@@ -135,6 +135,11 @@ class InAppPurchaseService {
         return;
       }
 
+      // 🔄 (디버그용) 앱 시작 시 미완료 거래를 정리하여 무한 루프 방지
+      if (kDebugMode) {
+        await clearPendingTransactions();
+      }
+
       await _loadProducts();
 
       // 지속적인 구매 감지 리스너 시작
@@ -487,7 +492,7 @@ class InAppPurchaseService {
         if (!isAvailable) {
           PurchaseLogger.warning('InAppPurchase not available, cannot clear transactions.');
           return;
-  }
+        }
       }
 
       final completer = Completer<void>();
@@ -509,7 +514,7 @@ class InAppPurchaseService {
               timeout.cancel();
               subscription.cancel();
               completer.complete();
-  }
+            }
             return;
           }
 
@@ -530,7 +535,7 @@ class InAppPurchaseService {
           if (!completer.isCompleted) {
             timeout.cancel();
             completer.complete();
-    }
+          }
         },
         onError: (error) {
           PurchaseLogger.error('Error during transaction cleanup: $error');
