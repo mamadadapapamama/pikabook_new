@@ -134,13 +134,14 @@ class UnifiedSubscriptionManager {
     });
   }
 
-  /// 🎯 서버 응답 데이터로 직접 상태 업데이트 (InAppPurchaseService에서 호출)
+  /// 🎯 서버 응답으로 상태 업데이트 (InAppPurchaseService에서 호출)
   void updateStateWithServerResponse(Map<String, dynamic> serverData) {
-    if (kDebugMode) {
-      debugPrint('⚡️ [UnifiedSubscriptionManager] 서버 응답으로 직접 상태 업데이트 시작');
-      debugPrint('서버 데이터: $serverData');
-    }
     try {
+      if (kDebugMode) {
+        debugPrint('📊 [UnifiedSubscriptionManager] 서버 응답 수신:');
+        debugPrint('   - 전체 데이터: $serverData');
+      }
+      
       final newState = SubscriptionState.fromServerResponse(serverData);
       
       if (kDebugMode) {

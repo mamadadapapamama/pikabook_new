@@ -291,6 +291,7 @@ class SubscriptionState extends Equatable {
 
       if (kDebugMode) {
         debugPrint('🔍 [SubscriptionState] 서버 응답 파싱:');
+        debugPrint('   - 원본 데이터: $data');
         debugPrint('   - planId: $planId');
         debugPrint('   - rawStatus: $rawStatus');
         debugPrint('   - entitlement: $entitlement');
@@ -301,19 +302,30 @@ class SubscriptionState extends Equatable {
           ? Plan.fromId(planId)
           : Plan.free();
 
+      final status = PlanStatus.fromString(rawStatus ?? 'unknown');
+
       if (kDebugMode) {
-        debugPrint('   - 최종 Plan: ${plan.name}');
+        debugPrint('   - 생성된 Plan: ${plan.id} (${plan.name})');
+        debugPrint('   - 생성된 Status: ${status.name}');
+        debugPrint('   - isPremium: ${plan.isPremium}');
       }
 
-      return SubscriptionState(
+      final result = SubscriptionState(
         plan: plan,
-        status: PlanStatus.fromString(rawStatus ?? 'unknown'),
+        status: status,
         expiresDate: _parseDateTime(data['expiresDate']),
         hasUsedTrial: data['hasUsedTrial'] as bool? ?? false,
         timestamp: _parseDateTime(data['timestamp']) ?? DateTime.now(),
         // 🎯 서버 응답 기반으로 배너 생성
         activeBanners: _generateBannersFromServerResponse(data, plan),
       );
+
+      if (kDebugMode) {
+        debugPrint('   - 최종 결과: ${result.toString()}');
+        debugPrint('   - 최종 배너: ${result.activeBanners}');
+      }
+
+      return result;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ SubscriptionState.fromServerResponse 파싱 오류: $e');
@@ -499,7 +511,7 @@ class SubscriptionState extends Equatable {
 
   @override
   String toString() {
-    return 'SubscriptionState(plan: ${plan.name}, status: ${status.name}, expires: $expiresDate)';
+    return 'SubscriptionState(plan: ${plan.id}(${plan.name}), status: ${status.name}, isPremium: ${plan.isPremium}, expires: $expiresDate, banners: $activeBanners)';
   }
 
   @override

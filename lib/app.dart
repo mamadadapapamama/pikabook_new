@@ -372,13 +372,23 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     if (_subscriptionStateSubscription != null) return; // 이미 구독 중이면 반환
     if (kDebugMode) {
       debugPrint('🔔 [App] 구독 상태 스트림 구독 시작');
+      debugPrint('   - 현재 사용자: ${_user?.uid}');
+      debugPrint('   - 현재 구독 상태: ${_subscriptionState.toString()}');
     }
     _subscriptionStateSubscription = UnifiedSubscriptionManager().subscriptionStateStream.listen(
       (newState) {
+        if (kDebugMode) {
+          debugPrint('🔔 [App] 구독 상태 업데이트 수신:');
+          debugPrint('   - 이전: ${_subscriptionState.toString()}');
+          debugPrint('   - 새로운: ${newState.toString()}');
+        }
         if (mounted) {
           setState(() {
             _subscriptionState = newState;
           });
+          if (kDebugMode) {
+            debugPrint('✅ [App] 구독 상태 UI 업데이트 완료');
+          }
         }
       },
       onError: (error) {
