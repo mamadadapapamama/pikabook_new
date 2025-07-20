@@ -6,6 +6,7 @@ import 'package:googleapis/vision/v1.dart' as vision;
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/subscription/unified_subscription_manager.dart';
 
 /// OCR 서비스 (순수 OCR 기능만 담당)
 /// 
@@ -206,7 +207,12 @@ class OcrService {
           if (kDebugMode) {
             debugPrint('📊 OCR 사용량 카운트 증가 시작');
           }
-          await _usageLimitService.updateUsageAfterNoteCreation(ocrPages: 1);
+          // 🎯 구독 상태를 가져와서 UsageLimitService에 전달
+          final subscriptionState = await UnifiedSubscriptionManager().getSubscriptionState();
+          await _usageLimitService.updateUsageAfterNoteCreation(
+            ocrPages: 1,
+            subscriptionState: subscriptionState,
+          );
           if (kDebugMode) {
             debugPrint('✅ OCR 사용량 카운트 증가 완료');
           }

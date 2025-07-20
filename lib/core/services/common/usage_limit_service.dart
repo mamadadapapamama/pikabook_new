@@ -25,7 +25,8 @@ class UsageLimitService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
-  final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager(); // 🎯 추가
+  // 🚨 제거: UnifiedSubscriptionManager 직접 참조로 인한 순환 호출 방지
+  // final UnifiedSubscriptionManager _subscriptionManager = UnifiedSubscriptionManager(); // 🎯 추가
   
   // 싱글톤 패턴 구현
   static final UsageLimitService _instance = UsageLimitService._internal();
@@ -163,6 +164,7 @@ class UsageLimitService {
   Future<Map<String, bool>> updateUsageAfterNoteCreation({
     int ocrPages = 0,
     int ttsRequests = 0,
+    required SubscriptionState subscriptionState, // 🚨 외부에서 주입받도록 변경
   }) async {
     try {
       debugPrint('노트 생성 후 사용량 업데이트 시작');
@@ -199,9 +201,7 @@ class UsageLimitService {
       debugPrint('사용량 업데이트 완료: $newUsage');
       
       // 제한 확인
-      final limits = await _loadLimitsFromFirebase(
-        subscriptionState: await _subscriptionManager.getSubscriptionState(),
-      );
+      final limits = await _loadLimitsFromFirebase(subscriptionState: subscriptionState);
       final limitStatus = {
         'ocrLimitReached': (newUsage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
         'ttsLimitReached': (newUsage['ttsRequests'] ?? 0) >= (limits['ttsRequests'] ?? 0),
@@ -243,7 +243,9 @@ class UsageLimitService {
   
   /// 3. 설정 화면에서 사용량 조회
   /// 사용자가 명시적으로 사용량을 확인할 때 사용
-  Future<Map<String, dynamic>> getUserUsageForSettings() async {
+  Future<Map<String, dynamic>> getUserUsageForSettings({
+    required SubscriptionState subscriptionState, // 🚨 외부에서 주입받도록 변경
+  }) async {
     try {
       debugPrint('📊 [UsageLimitService] 설정 화면 사용량 조회 시작');
       
@@ -261,7 +263,7 @@ class UsageLimitService {
       
       final limits = await _loadLimitsFromFirebase(
         forceRefresh: true,
-        subscriptionState: await _subscriptionManager.getSubscriptionState(forceRefresh: true),
+        subscriptionState: subscriptionState,
       );
       debugPrint('📊 [UsageLimitService] Firebase 제한 데이터: $limits');
       
@@ -303,7 +305,9 @@ class UsageLimitService {
   
   /// 4. TTS 재생 완료 후 사용량 증가 (실시간 알림 포함)
   /// TTS 재생이 성공적으로 완료된 후 호출하여 사용량을 1 증가시킴
-  Future<bool> incrementTtsUsageAfterPlayback() async {
+  Future<bool> incrementTtsUsageAfterPlayback({
+    required SubscriptionState subscriptionState, // 🚨 외부에서 주입받도록 변경
+  }) async {
     try {
       debugPrint('TTS 재생 완료 후 사용량 증가 시작');
       
@@ -330,9 +334,7 @@ class UsageLimitService {
       debugPrint('TTS 사용량 증가 완료: $newTtsUsage');
       
       // 🎯 제한 확인 및 실시간 알림
-      final limits = await _loadLimitsFromFirebase(
-        subscriptionState: await _subscriptionManager.getSubscriptionState(),
-      );
+      final limits = await _loadLimitsFromFirebase(subscriptionState: subscriptionState);
       final limitStatus = {
         'ocrLimitReached': (currentUsage['ocrPages'] ?? 0) >= (limits['ocrPages'] ?? 0),
         'ttsLimitReached': newTtsUsage >= (limits['ttsRequests'] ?? 0),
@@ -572,24 +574,29 @@ class UsageLimitService {
   // ========== PlanService 호환성을 위한 메서드들 ==========
   
   /// 사용량 비율 계산 (PlanService 호환성)
-  Future<Map<String, double>> getUsagePercentages() async {
-    final result = await getUserUsageForSettings();
+  Future<Map<String, double>> getUsagePercentages({
+    required SubscriptionState subscriptionState, // 🚨 외부에서 주입받도록 변경
+  }) async {
+    final result = await getUserUsageForSettings(subscriptionState: subscriptionState);
     return Map<String, double>.from(result['usagePercentages'] as Map);
   }
   
   /// 제한 상태 확인 (PlanService 호환성)
-  Future<Map<String, dynamic>> checkFreeLimits({bool withBuffer = false}) async {
-    final result = await getUserUsageForSettings();
+  Future<Map<String, dynamic>> checkFreeLimits({
+    bool withBuffer = false,
+    required SubscriptionState subscriptionState, // 🚨 외부에서 주입받도록 변경
+  }) async {
+    final result = await getUserUsageForSettings(subscriptionState: subscriptionState);
     return result['limitStatus'] as Map<String, dynamic>;
   }
   
   
   /// 사용량 한도 도달 여부 확인 (배너용)
-  Future<bool> hasReachedAnyLimit() async {
+  Future<bool> hasReachedAnyLimit({
+    required SubscriptionState subscriptionState, // 🚨 외부에서 주입받도록 변경
+  }) async {
     try {
-      final limitStatus = await checkInitialLimitStatus(
-        subscriptionState: await _subscriptionManager.getSubscriptionState(),
-      );
+      final limitStatus = await checkInitialLimitStatus(subscriptionState: subscriptionState);
       final ocrReached = limitStatus['ocrLimitReached'] ?? false;
       final ttsReached = limitStatus['ttsLimitReached'] ?? false;
       
@@ -621,10 +628,10 @@ class UsageLimitService {
   }
   
   /// 월간 사용량 초기화 (Free 플랜)
-  Future<void> resetMonthlyUsage() async {
+  Future<void> resetMonthlyUsage({
+    required SubscriptionState subscriptionState, // 🚨 외부에서 주입받도록 변경
+  }) async {
     try {
-      final unifiedManager = UnifiedSubscriptionManager();
-      final subscriptionState = await unifiedManager.getSubscriptionState();
       final planType = subscriptionState.isPremiumOrTrial ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE;
       
       if (planType != PlanConstants.PLAN_FREE) {

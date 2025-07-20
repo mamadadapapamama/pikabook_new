@@ -12,6 +12,8 @@ import 'core/services/media/image_service.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 // import 'package:shared_preferences/shared_preferences.dart';
 // import 'views/screens/home_screen_mvvm.dart';
 // import 'views/screens/note_detail_screen.dart';
@@ -22,6 +24,27 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 /// 모든 로직은 App 클래스에 위임합니다.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Firebase 초기화
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    
+    // 🟡 Firebase 초기화 후 FCM 권한 요청
+    await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    
+    if (kDebugMode) {
+      debugPrint('✅ Firebase 및 FCM 초기화 완료');
+    }
+  } catch (e) {
+    debugPrint('❌ Firebase 초기화 실패: $e');
+    // 초기화 실패해도 앱은 계속 실행 (일부 기능 제한)
+  }
   
   // Timezone 초기화 (스케줄된 알림을 위해 필요)
   tz.initializeTimeZones();
@@ -69,12 +92,8 @@ void main() async {
   // 시작 시 캐시 정리
   await _cleanupOnStart();
   
-  // Firebase 초기화
+  // Firestore 설정
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    
     // 디버그 모드에서 타임스탬프 사용 설정
     FirebaseFirestore.instance.settings = const Settings(
       persistenceEnabled: true,
@@ -97,17 +116,13 @@ void main() async {
     // Firebase Auth 자동 복원 방지 - Apple ID 다이얼로그 방지
     await _preventAutoSignIn();
     
-    debugPrint('Firebase 초기화 완료');
   } catch (e) {
-    debugPrint('Firebase 초기화 실패: $e');
-    // 초기화 실패해도 앱은 계속 실행 (일부 기능 제한)
+    debugPrint('❌ Firestore 설정 실패: $e');
   }
-  
+
   // 이미지 캐시 초기화
   final imageService = ImageService();
   await imageService.cleanupTempFiles();
-  
-
   
   // 일반적인 앱 실행
   runApp(const App());
@@ -129,6 +144,7 @@ Future<void> _preventAutoSignIn() async {
       }
       return;
     }
+    
     
     // Apple 로그인 사용자인지 확인
     final isAppleUser = currentUser.providerData.any(

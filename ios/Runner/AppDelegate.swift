@@ -2,6 +2,8 @@ import Flutter
 import UIKit
 import UserNotifications
 import StoreKit
+import Firebase
+import FirebaseMessaging
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -9,7 +11,11 @@ import StoreKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    FirebaseApp.configure()
+    UNUserNotificationCenter.current().delegate = self
+    application.registerForRemoteNotifications()
     
+    // Flutter 채널 설정
     let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
     let screenshotChannel = FlutterMethodChannel(name: "com.example.pikabook/screenshot",
                                               binaryMessenger: controller.binaryMessenger)
@@ -30,15 +36,18 @@ import StoreKit
     
     GeneratedPluginRegistrant.register(with: self)
     
-    // 포그라운드 알림 표시를 위한 설정
-    if #available(iOS 10.0, *) {
-      UNUserNotificationCenter.current().delegate = self as UNUserNotificationCenterDelegate
-    }
-    
     // App Store Receipt 채널 설정
     setupAppStoreReceiptChannel()
     
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+  
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    Messaging.messaging().apnsToken = deviceToken
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
   }
   
   private func startScreenshotDetection(screenshotChannel: FlutterMethodChannel) {
@@ -108,11 +117,9 @@ import StoreKit
     request.delegate = ReceiptRefreshDelegate(result: result)
     request.start()
   }
-}
-
-// MARK: - UNUserNotificationCenterDelegate
-@available(iOS 10.0, *)
-extension AppDelegate {
+  
+  // MARK: - UNUserNotificationCenterDelegate
+  
   // 앱이 포그라운드에 있을 때 알림 표시
   override func userNotificationCenter(_ center: UNUserNotificationCenter,
                             willPresent notification: UNNotification,

@@ -10,6 +10,7 @@ import '../../core/models/processed_text.dart';
 import '../../core/models/processing_status.dart';
 import '../../core/models/page_processing_data.dart';
 import '../../core/services/common/usage_limit_service.dart';
+import '../../core/services/subscription/unified_subscription_manager.dart';
 import 'post_llm_workflow.dart';
 
 /// 전처리 워크플로우: 빠른 노트 생성 (3-5초 목표)
@@ -269,7 +270,12 @@ class PreLLMWorkflow {
           try {
             final successfulOcrPages = pageDataList.where((page) => page.ocrSuccess).length;
             if (successfulOcrPages > 0) {
-              await _usageLimitService.updateUsageAfterNoteCreation(ocrPages: successfulOcrPages);
+              // 🎯 구독 상태를 가져와서 UsageLimitService에 전달
+              final subscriptionState = await UnifiedSubscriptionManager().getSubscriptionState();
+              await _usageLimitService.updateUsageAfterNoteCreation(
+                ocrPages: successfulOcrPages,
+                subscriptionState: subscriptionState,
+              );
               if (kDebugMode) {
                 debugPrint('📊 [PreLLM] OCR 사용량 업데이트: $successfulOcrPages개 페이지');
               }

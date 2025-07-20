@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import '../../../core/services/common/usage_limit_service.dart';
 import '../../utils/language_constants.dart';
+import '../../../core/services/subscription/unified_subscription_manager.dart';
 
 /// TTS API 서비스
 /// ElevenLabs API 호출 및 음성 합성, 사용량 관리를 담당합니다.
@@ -151,6 +152,17 @@ class TtsApiService {
 
   /// TTS 재생 완료 후 사용량 증가
   Future<bool> incrementTtsUsageAfterPlayback() async {
-    return await _usageLimitService.incrementTtsUsageAfterPlayback();
+    try {
+      // 🎯 구독 상태를 가져와서 UsageLimitService에 전달
+      final subscriptionState = await UnifiedSubscriptionManager().getSubscriptionState();
+      return await _usageLimitService.incrementTtsUsageAfterPlayback(
+        subscriptionState: subscriptionState,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ TTS 사용량 증가 실패: $e');
+      }
+      return false;
+    }
   }
 }

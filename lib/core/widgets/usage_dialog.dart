@@ -9,6 +9,7 @@ import '../../../core/theme/tokens/typography_tokens.dart';
 import '../../../core/theme/tokens/spacing_tokens.dart';
 import 'pika_button.dart';
 import '../../../core/services/common/usage_limit_service.dart';
+import '../../../core/services/subscription/unified_subscription_manager.dart';
 import '../constants/plan_constants.dart';
 import '../../../core/widgets/upgrade_modal.dart';
 
@@ -32,12 +33,12 @@ class UsageDialog extends StatelessWidget {
         style: TypographyTokens.subtitle1.copyWith(fontWeight: FontWeight.bold),
       ),
       content: FutureBuilder<Map<String, dynamic>>(
-        future: UsageLimitService().getUserUsageForSettings(),
+        future: _getUsageData(),
         builder: (BuildContext context, AsyncSnapshot<Map<String, dynamic>> snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const SizedBox(
-              width: 260,
-              height: 180,
+              width: 280,
+              height: 200,
               child: Center(child: CircularProgressIndicator()),
             );
           }
@@ -52,37 +53,41 @@ class UsageDialog extends StatelessWidget {
           }
 
           final usage = snapshot.data?['usage'] as Map<String, dynamic>? ?? {};
-          final limits = PlanConstants.getPlanLimits(subscriptionInfo.canUsePremiumFeatures ? PlanConstants.PLAN_PREMIUM : PlanConstants.PLAN_FREE);
+          final limits = snapshot.data?['limits'] as Map<String, dynamic>? ?? {};
+          final usagePercentages = snapshot.data?['usagePercentages'] as Map<String, double>? ?? {};
 
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (effectiveMessage.isNotEmpty) ...[
-                Text(effectiveMessage, style: TypographyTokens.body2),
-                SizedBox(height: SpacingTokens.md),
+          return SizedBox(
+            width: 280,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (effectiveMessage.isNotEmpty) ...[
+                  Text(effectiveMessage, style: TypographyTokens.body2),
+                  SizedBox(height: SpacingTokens.md),
+                ],
+                
+                // 📱 이미지 노트 변환 그래프
+                _buildUsageGraph(
+                  '📱',
+                  '이미지 노트 변환',
+                  usage['ocrPages'] ?? 0,
+                  limits['ocrPages'] ?? 0,
+                  usagePercentages['ocr'] ?? 0.0,
+                ),
+                
+                const SizedBox(height: 20),
+                
+                // 🔊 원어민 발음 듣기 그래프 (통합)
+                _buildUsageGraph(
+                  '🔊',
+                  '원어민 발음 듣기',
+                  usage['ttsRequests'] ?? 0,
+                  limits['ttsRequests'] ?? 0,
+                  usagePercentages['tts'] ?? 0.0,
+                ),
               ],
-              _buildUsageItem(
-                '📱', 
-                '이미지 노트 변환', 
-                '이번 달 ${usage['ocrPages'] ?? 0}장 사용',
-                '월 ${limits['ocrPages'] ?? 0}장'
-              ),
-              const SizedBox(height: 16),
-              _buildUsageItem(
-                '🔊', 
-                '원어민 발음 듣기 (노트)', 
-                '이번 달 ${usage['ttsRequestsNote'] ?? 0}회 사용',
-                '월 ${limits['ttsRequests'] ?? 0}회'
-              ),
-              const SizedBox(height: 16),
-              _buildUsageItem(
-                '📚', 
-                '원어민 발음 듣기 (플래시카드)', 
-                '이번 달 ${usage['ttsRequestsFlashcard'] ?? 0}회 사용',
-                '월 ${limits['ttsRequests'] ?? 0}회'
-              ),
-            ],
+            ),
           );
         },
       ),
@@ -99,23 +104,94 @@ class UsageDialog extends StatelessWidget {
     );
   }
   
-  Widget _buildUsageItem(String icon, String title, String usage, String limit) {
-    return Row(
+  /// 구독 상태를 가져와서 사용량 데이터 조회
+  Future<Map<String, dynamic>> _getUsageData() async {
+    try {
+      final subscriptionState = await UnifiedSubscriptionManager().getSubscriptionState();
+      return await UsageLimitService().getUserUsageForSettings(
+        subscriptionState: subscriptionState,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ UsageDialog: 사용량 데이터 로드 실패: $e');
+      }
+      rethrow;
+    }
+  }
+  
+  /// 사용량 그래프 위젯 생성
+  Widget _buildUsageGraph(String icon, String title, int current, int limit, double percentage) {
+    // 퍼센티지를 0-100 범위로 제한
+    final clampedPercentage = percentage.clamp(0.0, 100.0);
+    final progressValue = clampedPercentage / 100.0;
+    
+    // 색상 결정 (80% 이상이면 주황색, 100%면 빨간색)
+    Color progressColor;
+    if (clampedPercentage >= 100.0) {
+      progressColor = Colors.red;
+    } else if (clampedPercentage >= 80.0) {
+      progressColor = Colors.orange;
+    } else {
+      progressColor = ColorTokens.primary;
+    }
+    
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(icon, style: TypographyTokens.body1.copyWith(fontSize: 24)),
-        const SizedBox(width: SpacingTokens.xs),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: TypographyTokens.body1),
-              SizedBox(height: SpacingTokens.xsHalf),
-              Text(usage, style: TypographyTokens.caption),
-              SizedBox(height: SpacingTokens.xsHalf),
-              Text(limit, style: TypographyTokens.caption),
-            ],
+        // 제목과 아이콘
+        Row(
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 20)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: TypographyTokens.body1.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+        
+        const SizedBox(height: 8),
+        
+        // 진행률 바
+        Container(
+          height: 8,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: Colors.grey[200],
           ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progressValue,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+            ),
+          ),
+        ),
+        
+        const SizedBox(height: 6),
+        
+        // 사용량 텍스트
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '$current / $limit',
+              style: TypographyTokens.caption.copyWith(
+                color: ColorTokens.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Text(
+              '${clampedPercentage.toInt()}%',
+              style: TypographyTokens.caption.copyWith(
+                color: progressColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ],
     );

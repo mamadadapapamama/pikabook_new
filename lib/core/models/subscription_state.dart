@@ -1,4 +1,5 @@
 // lib/models/subscription_info.dart
+import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'plan.dart';
 import 'plan_status.dart';
@@ -170,7 +171,7 @@ class SubscriptionInfo {
 
 /// 앱의 전체 구독 상태를 나타내는 클래스
 /// Firestore, 서버 응답 등 모든 소스의 데이터를 통합하여 관리합니다.
-class SubscriptionState {
+class SubscriptionState extends Equatable {
   final Plan plan;
   final PlanStatus status;
   final DateTime? expiresDate;
@@ -178,7 +179,7 @@ class SubscriptionState {
   final DateTime? timestamp;
   final List<String> activeBanners;
 
-  SubscriptionState({
+  const SubscriptionState({
     required this.plan,
     required this.status,
     this.expiresDate,
@@ -293,4 +294,14 @@ class SubscriptionState {
   String toString() {
     return 'SubscriptionState(plan: ${plan.name}, status: ${status.name}, expires: $expiresDate)';
   }
+
+  @override
+  List<Object?> get props => [
+        plan,
+        status,
+        expiresDate,
+        hasUsedTrial,
+        // timestamp는 상태 비교에서 제외 (항상 바뀌므로)
+        activeBanners,
+      ];
 }

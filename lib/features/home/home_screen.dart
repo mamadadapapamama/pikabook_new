@@ -46,6 +46,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isLoading = true; // 뷰모델 로딩 상태
   bool _isNewUser = false;
   HomeViewModel? _homeViewModel;
+  // 🗑️ 제거: 더 이상 필요 없는 중복 호출 방지 플래그
+  // bool _hasSetupUsageLimitStream = false;
 
   @override
   void initState() {
@@ -58,6 +60,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// 위젯 업데이트 감지 (구독 상태 변경 시)
+  @override
+  void didUpdateWidget(HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // ✅ Equatable 덕분에 이제 이 비교는 내용 기반으로 정확하게 이루어집니다.
+    if (oldWidget.subscriptionState != widget.subscriptionState && 
+        _homeViewModel != null && 
+        !_isNewUser) {
+      
+      if (kDebugMode) {
+        debugPrint('🔄 [HomeScreen] 구독 상태 변경 감지 - HomeViewModel에 알림');
+        debugPrint('   이전: ${oldWidget.subscriptionState}');
+        debugPrint('   현재: ${widget.subscriptionState}');
+      }
+      
+      // HomeViewModel에 구독 상태 전달
+      _homeViewModel!.setupUsageLimitStreamWithSubscriptionState(widget.subscriptionState);
+    }
   }
 
   /// 앱 생명주기 변경 감지
@@ -208,6 +231,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       // 4. 🔥 중요: App.dart에서 이미 구독 중이므로, 여기서는 캐시 무효화만 요청
       await UnifiedSubscriptionManager().invalidateCache();
+      
+      // 🎯 환영 모달 완료 후 구독 상태를 사용하여 사용량 스트림 구독 시작
+      // didUpdateWidget이 호출되므로 여기서는 별도 호출이 필요 없을 수 있으나,
+      // 상태 변경이 없을 경우를 대비해 안전하게 호출합니다.
+      if (!_isNewUser && _homeViewModel != null) {
+        _homeViewModel!.setupUsageLimitStreamWithSubscriptionState(widget.subscriptionState);
+      }
       
     } catch (e) {
       if (kDebugMode) {

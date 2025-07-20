@@ -4,6 +4,7 @@ import '../../core/models/note.dart';
 import '../../features/note/services/note_service.dart';
 import '../../core/services/common/usage_limit_service.dart';
 import '../../core/services/authentication/user_preferences_service.dart';
+import '../../core/models/subscription_state.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 /// 🔄 HomeViewModel (반응형 버전)
@@ -31,11 +32,15 @@ class HomeViewModel extends ChangeNotifier {
   bool _isLoading = true;
   String? _error;
   StreamSubscription<List<Note>>? _notesSubscription;
-  StreamSubscription<User?>? _authStateSubscription; // 🎯 사용자 변경 감지용
+  // 🗑️ 제거: 중복된 인증 리스너
+  // StreamSubscription<User?>? _authStateSubscription;
   StreamSubscription<Map<String, bool>>? _usageLimitSubscription; // 🎯 사용량 제한 스트림
   
   // 🆕 신규 사용자 플래그 (환영 모달 완료 전까지 최소 서비스 호출)
   bool _isNewUser = false;
+  
+  // 🚨 중복 구독 방지 플래그
+  bool _isUsageLimitStreamActive = false;
   
   // 사용량 제한 상태 (스트림 기반)
   bool _ocrLimitReached = false;
@@ -79,7 +84,8 @@ class HomeViewModel extends ChangeNotifier {
       if (kDebugMode) {
         debugPrint('[HomeViewModel] 🎉 환영 모달 완료 - 이제 사용량 스트림 구독 시작');
       }
-      _setupUsageLimitStream();
+      // 🚨 중요: 구독 상태 없이는 사용량 스트림을 구독할 수 없으므로, 이 부분은 제거
+      // _setupUsageLimitStream();
     }
   }
 
@@ -87,10 +93,13 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> _initializeViewModel() async {
     debugPrint('[HomeViewModel] 초기화 시작');
     try {
-      // 🎯 사용자 변경 감지 리스너 설정
-      _setupAuthStateListener();
+      // 🎯 사용자 변경 감지 리스너 제거 → 로그인 후에만 생성되므로 불필요
+      // _setupAuthStateListener();
+
+      // 🎯 로그인된 상태이므로 바로 노트 구독 시작
+      _subscribeToNoteService();
       
-      // 🚨 이 부분에서 노트/사용량 구독 로직 제거 -> authStateListener가 담당
+      // 🚨 사용량 스트림은 외부에서 구독 상태를 받아 설정
       
     } catch (e, stackTrace) {
       debugPrint('[HomeViewModel] 초기화 중 오류 발생: $e');
@@ -99,51 +108,39 @@ class HomeViewModel extends ChangeNotifier {
     }
   }
 
-  /// 🎯 사용자 변경 감지 리스너 설정
-  void _setupAuthStateListener() {
-    _authStateSubscription = FirebaseAuth.instance.authStateChanges().listen(
-      (User? user) async {
-        if (kDebugMode) {
-          debugPrint('🔔 [HomeViewModel] 사용자 변경 감지: ${user?.uid ?? "로그아웃"}');
-        }
-        
-        if (user == null) {
-          // 로그아웃 시 상태 초기화
-          _notes = [];
-          _isLoading = false;
-          _resetUsageLimits();
-          _notesSubscription?.cancel(); // 🎯 로그아웃 시 노트 구독 취소
-          notifyListeners();
-          if (kDebugMode) {
-            debugPrint('🔄 [HomeViewModel] 로그아웃 - 상태 초기화 및 노트 구독 취소');
-          }
-        } else {
-          // 새 사용자 로그인 시 스트림 재구독
-          if (kDebugMode) {
-            debugPrint('🔄 [HomeViewModel] 로그인 감지 - 노트 및 사용량 스트림 구독 시작');
-          }
-          _subscribeToNoteService();
-          if (!_isNewUser) {
-            _setupUsageLimitStream();
-          }
-        }
-      },
-      onError: (error) {
-        if (kDebugMode) {
-          debugPrint('❌ [HomeViewModel] 사용자 변경 감지 오류: $error');
-        }
-      },
-    );
-  }
+  // 🗑️ 제거: 중복된 인증 리스너
+  // void _setupAuthStateListener() { ... }
 
   /// 🎯 사용량 제한 스트림 구독 설정 (반응형 핵심)
-  void _setupUsageLimitStream() {
+  void setupUsageLimitStreamWithSubscriptionState(SubscriptionState subscriptionState) {
+    // 🚨 중요: 이미 구독 중이면 중복 호출 방지
+    if (_isUsageLimitStreamActive) {
+      if (kDebugMode) {
+        debugPrint('⏭️ [HomeViewModel] 사용량 제한 스트림 이미 구독 중 - 중복 호출 방지');
+      }
+      return;
+    }
+    
     if (kDebugMode) {
       debugPrint('🔄 [HomeViewModel] 사용량 제한 스트림 구독 시작');
     }
     
+    // 🚨 중복 구독 방지 플래그 설정
+    _isUsageLimitStreamActive = true;
+    
     // 기존 구독이 있으면 취소
     _usageLimitSubscription?.cancel();
+    
+    // 초기 상태 설정
+    _usageLimitService.checkInitialLimitStatus(subscriptionState: subscriptionState).then((limitStatus) {
+      _ocrLimitReached = limitStatus['ocrLimitReached'] ?? false;
+      _ttsLimitReached = limitStatus['ttsLimitReached'] ?? false;
+      notifyListeners();
+    }).catchError((error) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeViewModel] 초기 사용량 상태 로드 실패: $error');
+      }
+    });
     
     // UsageLimitService의 실시간 스트림 구독
     _usageLimitSubscription = _usageLimitService.limitStatusStream.listen(
@@ -171,6 +168,12 @@ class HomeViewModel extends ChangeNotifier {
         }
         // 오류 시 안전하게 제한 없음으로 설정
         _resetUsageLimits();
+      },
+      onDone: () {
+        if (kDebugMode) {
+          debugPrint('🔚 [HomeViewModel] 사용량 제한 스트림 종료');
+        }
+        _isUsageLimitStreamActive = false;
       },
     );
     
@@ -344,8 +347,9 @@ class HomeViewModel extends ChangeNotifier {
   void dispose() {
     debugPrint('[HomeViewModel] dispose 호출됨');
     _notesSubscription?.cancel();
-    _authStateSubscription?.cancel(); // 🎯 사용자 변경 감지 구독 취소
-    _usageLimitSubscription?.cancel(); // 🎯 사용량 제한 스트림 구독 취소
+    // 🗑️ 제거: _authStateSubscription?.cancel();
+    _usageLimitSubscription?.cancel();
+    _isUsageLimitStreamActive = false;
     super.dispose();
   }
 }
