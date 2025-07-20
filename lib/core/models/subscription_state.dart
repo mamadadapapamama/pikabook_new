@@ -265,7 +265,8 @@ class SubscriptionState extends Equatable {
         expiresDate: _parseExpirationDate(data),
         hasUsedTrial: data['hasUsedTrial'] as bool? ?? false,
         timestamp: _parseDateTime(data['lastUpdatedAt']) ?? DateTime.now(),
-        activeBanners: List<String>.from(data['activeBanners'] ?? []),
+        // 🎯 Firestore 데이터에서도 배너 동적 생성
+        activeBanners: _generateBannersFromFirestoreData(data, plan, status),
       );
     } catch (e) {
       if (kDebugMode) {
@@ -382,6 +383,35 @@ class SubscriptionState extends Equatable {
 
   /// 🎯 서버 응답 기반으로 배너 생성
   static List<String> _generateBannersFromServerResponse(Map<String, dynamic> data, Plan plan) {
+    final List<String> banners = [];
+    final entitlement = _safeStringCast(data['entitlement']);
+    final subscriptionStatus = _safeStringCast(data['subscriptionStatus']);
+
+    // entitlement 기반 배너
+    if (entitlement == 'PREMIUM') {
+      banners.add('premiumStarted');
+    } else if (entitlement == 'TRIAL') {
+      banners.add('trialStarted');
+    } else if (entitlement == 'FREE') {
+      banners.add('free');
+    }
+
+    // 구독 상태 기반 배너
+    if (subscriptionStatus == '2') { // cancelling
+      if (plan.isPremium) {
+        banners.add('premiumCancelled');
+      } else {
+        banners.add('trialCancelled');
+      }
+    } else if (subscriptionStatus == '3') { // expired
+      banners.add('switchToPremium');
+    }
+
+    return banners;
+  }
+
+  /// 🎯 Firestore 데이터에서도 배너 동적 생성
+  static List<String> _generateBannersFromFirestoreData(Map<String, dynamic> data, Plan plan, PlanStatus status) {
     final List<String> banners = [];
     final entitlement = _safeStringCast(data['entitlement']);
     final subscriptionStatus = _safeStringCast(data['subscriptionStatus']);

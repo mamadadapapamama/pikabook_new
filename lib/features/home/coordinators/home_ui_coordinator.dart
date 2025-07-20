@@ -20,15 +20,18 @@ class HomeUICoordinator {
   final UserPreferencesService _userPreferencesService = UserPreferencesService();
 
   /// 활성 배너들을 UnifiedBanner 위젯 리스트로 변환
-  List<Widget> buildActiveBanners({
+  Future<List<Widget>> buildActiveBanners({
     required BuildContext context,
     required List<BannerType> activeBanners,
     required Function(BannerType) onShowUpgradeModal,
     required Function(BannerType) onDismissBanner,
-  }) {
+  }) async {
     final banners = <Widget>[];
     
-    for (final bannerType in activeBanners) {
+    // 🎯 닫힌 배너 필터링
+    final filteredBanners = await _filterDismissedBanners(activeBanners);
+    
+    for (final bannerType in filteredBanners) {
       final buttonText = _getButtonTextForBannerType(bannerType);
       
       banners.add(
@@ -45,6 +48,38 @@ class HomeUICoordinator {
     }
     
     return banners;
+  }
+
+  /// 🎯 닫힌 배너 필터링
+  Future<List<BannerType>> _filterDismissedBanners(List<BannerType> banners) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final filteredBanners = <BannerType>[];
+      
+      for (final bannerType in banners) {
+        final key = 'banner_${bannerType.name}_dismissed';
+        final isDismissed = prefs.getBool(key) ?? false;
+        
+        if (!isDismissed) {
+          filteredBanners.add(bannerType);
+        } else {
+          if (kDebugMode) {
+            debugPrint('🚫 [HomeUICoordinator] 닫힌 배너 필터링: ${bannerType.name}');
+          }
+        }
+      }
+      
+      if (kDebugMode) {
+        debugPrint('📋 [HomeUICoordinator] 배너 필터링 결과: ${banners.length} → ${filteredBanners.length}');
+      }
+      
+      return filteredBanners;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [HomeUICoordinator] 배너 필터링 실패: $e');
+      }
+      return banners; // 실패 시 원본 반환
+    }
   }
 
   /// 배너 타입별 버튼 텍스트 결정

@@ -272,6 +272,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // 백그라운드에서 배너 상태 저장 -> 이로 인해 스트림이 업데이트되고 App.dart를 통해 HomeScreen에 전달됨
       await _uiCoordinator.dismissBanner(bannerType);
       
+      // 🎯 배너 닫기 후 즉시 UI 업데이트
+      if (mounted) {
+        setState(() {
+          // FutureBuilder가 재실행되어 필터링된 배너 목록을 다시 빌드함
+        });
+      }
+      
       if (kDebugMode) {
         debugPrint('✅ [HomeScreen] 배너 닫기 완료: ${bannerType.name}');
       }
@@ -312,35 +319,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         body: Consumer<HomeViewModel>(
           builder: (context, viewModel, _) {
             final hasNotes = viewModel.notes.isNotEmpty;
-            final activeBanners = _uiCoordinator.buildActiveBanners(
-              context: context,
-              activeBanners: widget.subscriptionState.activeBanners
-                  .map((name) {
-                    try {
-                      return BannerType.values.firstWhere((e) => e.name == name);
-                    } catch (e) {
-                      return null;
-                    }
-                  })
-                  .where((e) => e != null)
-                  .cast<BannerType>()
-                  .toList(),
-              onShowUpgradeModal: _onShowUpgradeModal,
-              onDismissBanner: _onDismissBanner,
-            );
+            
+            return FutureBuilder<List<Widget>>(
+              future: _uiCoordinator.buildActiveBanners(
+                context: context,
+                activeBanners: widget.subscriptionState.activeBanners
+                    .map((name) {
+                      try {
+                        return BannerType.values.firstWhere((e) => e.name == name);
+                      } catch (e) {
+                        return null;
+                      }
+                    })
+                    .where((e) => e != null)
+                    .cast<BannerType>()
+                    .toList(),
+                onShowUpgradeModal: _onShowUpgradeModal,
+                onDismissBanner: _onDismissBanner,
+              ),
+              builder: (context, snapshot) {
+                final activeBanners = snapshot.data ?? [];
 
-            if (hasNotes) {
-              // 노트가 있는 경우 - 노트 리스트 표시
-              return HomeNotesList(
-                activeBanners: activeBanners,
-                onRefresh: _onRefresh,
-              );
-            } else {
-              // 노트가 없는 경우 - 제로 상태 표시
-              return HomeZeroState(
-                activeBanners: activeBanners,
-              );
-            }
+                if (hasNotes) {
+                  // 노트가 있는 경우 - 노트 리스트 표시
+                  return HomeNotesList(
+                    activeBanners: activeBanners,
+                    onRefresh: _onRefresh,
+                  );
+                } else {
+                  // 노트가 없는 경우 - 제로 상태 표시
+                  return HomeZeroState(
+                    activeBanners: activeBanners,
+                  );
+                }
+              },
+            );
           },
         ),
         floatingActionButton: const HomeFloatingButton(),

@@ -22,6 +22,7 @@ import 'widgets/setting_item.dart';
 import '../../core/widgets/selection_dialog.dart';
 import '../../core/services/payment/in_app_purchase_service.dart';
 import '../../core/models/subscription_state.dart';
+import '../../core/services/notification/notification_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -213,6 +214,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 32),
+            // 🧪 디버그 모드에서만 표시되는 알림 테스트 버튼
+            if (kDebugMode) ...[
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () async {
+                  final notificationService = NotificationService();
+                  
+                  // 1. 시스템 상태 전체 확인
+                  await notificationService.checkNotificationSystemStatus();
+                  
+                  // 2. 즉시 테스트 알림
+                  await notificationService.showTestNotification();
+                  
+                  // 3. 예약된 알림 확인
+                  await notificationService.getPendingNotifications();
+                },
+                child: const Text('🧪 알림 시스템 테스트'),
+              ),
+            ],
           ],
         ],
       ),
