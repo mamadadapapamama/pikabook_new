@@ -79,9 +79,9 @@ class SubscriptionConstants {
       'buttonText': '앱스토어에서 관리하기',
     },
     'switchToPremium': {
-      'title': '💎 무료체험이 종료되었습니다',
-      'subtitle': '프리미엄으로 업그레이드하여 계속 이용하세요',
-      'buttonText': '프리미엄 시작하기',
+      'title': '💎 프리미엄 월 구독으로 전환되었습니다.',
+      'subtitle': '7일 무료 체험이 끝났습니다. 프리미엄 기능을 마음껏 사용해보세요.',
+      'buttonText': null,
     },
     'premiumGrace': {
       'title': '⚠️ 결제 문제가 발생했습니다',
@@ -112,7 +112,7 @@ class SubscriptionConstants {
   static const Map<String, String> TRIAL_MESSAGES = {
     'started': '🎉 7일 무료체험이 시작되었습니다!',
     'ending_soon': '📅 무료체험이 내일 종료됩니다',
-    'ended': '📅 무료체험이 종료되었습니다',
+    'ended': '📅 무료체험이 종료되고 프리미엄 월 구독으로 전환되었습니다.',
   };
 
   // ────────────────────────────────────────────────────────────────────────
@@ -121,11 +121,11 @@ class SubscriptionConstants {
   
   static const Map<String, String> CTA_TEXTS = {
     'free_active': '모든 플랜 보기',
-    'premium_active': '모든 플랜 보기',
+    'premium_active': '앱스토어에서 관리하기',
     'premium_cancelling': '앱스토어에서 관리하기',
-    'premium_expired': '다시 구독하기',
-    'trial_active': '모든 플랜 보기',
-    'trial_cancelling': '다시 시작하기',
+    'premium_expired': '모든 플랜 보기',
+    'trial_active': '앱스토어에서 관리하기',
+    'trial_cancelling': '앱스토어에서 관리하기',
     'trial_expired': '프리미엄 시작하기',
   };
 
