@@ -262,8 +262,8 @@ class LocalCacheStorage<T> implements CacheStorage<T>, BinaryCacheStorage {
       // 캐시 디렉토리 삭제 (안전하게 처리)
       try {
         if (_cacheDir != null && await _cacheDir!.exists()) {
-          await _cacheDir!.delete(recursive: true);
-          await _cacheDir!.create(recursive: true);
+        await _cacheDir!.delete(recursive: true);
+        await _cacheDir!.create(recursive: true);
         }
       } catch (e) {
         if (kDebugMode) {

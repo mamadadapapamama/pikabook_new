@@ -3,20 +3,17 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../cache/local_cache_storage.dart';
 import '../../models/subscription_state.dart';
 import '../../models/plan.dart';
 import '../../models/plan_status.dart';
 import '../../constants/subscription_constants.dart';
-import '../payment/in_app_purchase_service.dart';
 
-/// 🎯 구독 상태를 통합적으로 관리하는 서비스 (SubscriptionRepository 역할)
+/// 🎯 구독 상태를 통합적으로 관리하는 서비스 (간소화 버전)
 /// 
 /// **주요 책임:**
-/// 1. Firestore에서 구독 정보 실시간 수신
-/// 2. 로컬 캐시를 활용하여 빠른 응답 및 오프라인 지원
+/// 1. Firestore에서 구독 정보 실시간 수신 (주요 경로)
+/// 2. InAppPurchase 서버 응답 즉시 반영 (빠른 UI 반응)
 /// 3. 구독 상태 변경 시 Stream을 통해 앱 전체에 알림
-/// 4. In-App Purchase 성공 시 서버 응답을 직접 받아 상태 즉시 업데이트
 class UnifiedSubscriptionManager {
   static final UnifiedSubscriptionManager _instance =
       UnifiedSubscriptionManager._internal();
@@ -25,14 +22,6 @@ class UnifiedSubscriptionManager {
   // 🎯 의존성
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final LocalCacheStorage<Map<String, dynamic>> _cache =
-      LocalCacheStorage(
-        namespace: 'subscription',
-        maxSize: 1 * 1024 * 1024, // 1MB
-        maxItems: 10,
-        fromJson: (json) => json,
-        toJson: (data) => data,
-      );
 
   // 🎯 상태 관리
   final StreamController<SubscriptionState> _subscriptionStateController = 
@@ -44,18 +33,7 @@ class UnifiedSubscriptionManager {
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<DocumentSnapshot>? _firestoreSubscription;
   String? _cachedUserId;
-  SubscriptionState? _currentState; // 현재 상태 캐싱
-  DateTime? _lastCacheTime; // 캐시 시간 추적
-
-  // 🎯 상수
-  static const String _cacheKey = 'main_subscription_state';
-  static const Duration _cacheDuration = Duration(minutes: 5); // 캐시 만료 시간을 5분으로 단축
-  static const Duration _unverifiedRetryDelay = Duration(seconds: 10); // UNVERIFIED 상태 재시도 간격
-
-  // 🎯 UNVERIFIED 상태 관리
-  Timer? _unverifiedRetryTimer;
-  int _unverifiedRetryCount = 0;
-  static const int maxUnverifiedRetries = 3;
+  SubscriptionState? _currentState; // 현재 상태만 메모리에 보관
 
   /// ---------------------------------------------------
   /// 🎯 초기화 및 생명주기
@@ -63,22 +41,11 @@ class UnifiedSubscriptionManager {
 
   UnifiedSubscriptionManager._internal() {
     _authSubscription = _auth.authStateChanges().listen(_onAuthStateChanged);
-    _initializeOnFirstAuth();
-  }
-
-  void _initializeOnFirstAuth() async {
-    // 앱 시작 시 첫 인증 상태 확인
-    await _cache.initialize(); // 캐시 초기화 추가
-    final currentUser = _auth.currentUser;
-    if (currentUser != null) {
-      _onAuthStateChanged(currentUser);
-      }
   }
 
   void dispose() {
     _authSubscription?.cancel();
     _firestoreSubscription?.cancel();
-    _unverifiedRetryTimer?.cancel();
     _subscriptionStateController.close();
   }
 
@@ -90,397 +57,143 @@ class UnifiedSubscriptionManager {
     if (user != null) {
       if (_cachedUserId != user.uid) {
         if (kDebugMode) {
-          debugPrint(
-              '🔄 [UnifiedSubscriptionManager] 사용자 변경 감지: ${user.uid}');
+          debugPrint('🔄 [UnifiedSubscriptionManager] 사용자 변경: ${user.uid}');
         }
-        _clearAllUserCache();
+        _clearUserData();
         _cachedUserId = user.uid;
-
-        // 🚨 InAppPurchaseService 초기화 (한 번만!)
-        try {
-          final purchaseService = InAppPurchaseService();
-          if (!purchaseService.isInitialized) {
-            await purchaseService.initialize();
-            if (kDebugMode) {
-              debugPrint('✅ [UnifiedSubscriptionManager] InAppPurchaseService 초기화 완료');
-            }
-          } else {
-            if (kDebugMode) {
-              debugPrint('⏭️ [UnifiedSubscriptionManager] InAppPurchaseService 이미 초기화됨');
-            }
-          }
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('❌ [UnifiedSubscriptionManager] InAppPurchaseService 초기화 실패: $e');
-          }
-        }
-
         _setupFirestoreListener(user.uid);
-        getSubscriptionState(forceRefresh: true);
       }
-      } else {
+    } else {
       if (kDebugMode) {
-        debugPrint(
-            '🔒 [UnifiedSubscriptionManager] 사용자 로그아웃 감지. 모든 사용자 데이터 초기화.');
+        debugPrint('🔒 [UnifiedSubscriptionManager] 사용자 로그아웃');
       }
-      _clearAllUserCache();
-      final defaultState = SubscriptionState.defaultState();
-      _updateCurrentState(defaultState);
-  }
+      _clearUserData();
+      _updateState(SubscriptionState.defaultState());
+    }
   }
 
   void _setupFirestoreListener(String userId) {
     _firestoreSubscription?.cancel();
+    
     if (kDebugMode) {
-      debugPrint('🔥 [UnifiedSubscriptionManager] Firestore 리스너 설정 시작: users/$userId');
+      debugPrint('🔥 [UnifiedSubscriptionManager] Firestore 리스너 설정: users/$userId');
     }
     
-    // 🎯 수정: 올바른 경로로 변경 (users/{userId} 문서)
     final docRef = _firestore.collection('users').doc(userId);
-
-    _firestoreSubscription = docRef.snapshots().listen((snapshot) {
-      if (kDebugMode) {
-        debugPrint('🔥 [UnifiedSubscriptionManager] Firestore 데이터 변경 감지!');
-      }
-      // 🔥 중요: Firestore 변경 시 직접 상태 처리 (무한 루프 방지)
-      _handleFirestoreSnapshot(snapshot);
-    }, onError: (error) {
-      if (kDebugMode) {
-        debugPrint('❌ [UnifiedSubscriptionManager] Firestore 리스너 오류: $error');
-      }
-    });
-  }
-
-  /// 🎯 서버 응답으로 상태 업데이트 (InAppPurchaseService에서 호출)
-  void updateStateWithServerResponse(Map<String, dynamic> serverData) {
-    try {
-      if (kDebugMode) {
-        debugPrint('📊 [UnifiedSubscriptionManager] 서버 응답 수신:');
-        debugPrint('   - 전체 데이터: $serverData');
-      }
-      
-      final newState = SubscriptionState.fromServerResponse(serverData);
-      
-      if (kDebugMode) {
-        debugPrint('📊 [UnifiedSubscriptionManager] 서버 응답으로 상태 업데이트:');
-        debugPrint('   - Plan: ${newState.plan.name}');
-        debugPrint('   - Status: ${newState.status.name}');
-        debugPrint('   - IsPremium: ${newState.isPremiumOrTrial}');
-        debugPrint('   - ExpiresDate: ${newState.expiresDate}');
-        debugPrint('   - HasUsedTrial: ${newState.hasUsedTrial}');
-        debugPrint('   - Timestamp: ${newState.timestamp}');
-        debugPrint('   - ActiveBanners: ${newState.activeBanners}');
-      }
-      
-      // 🎯 기존 상태와 timestamp 비교 - 더 최신 응답만 처리
-      if (_currentState != null) {
-        final currentTimestamp = _currentState!.timestamp;
-        final newTimestamp = newState.timestamp;
-        
-        if (currentTimestamp != null && newTimestamp != null) {
-          if (!newTimestamp.isAfter(currentTimestamp)) {
-            if (kDebugMode) {
-              debugPrint('⏭️ [UnifiedSubscriptionManager] 더 오래된 응답 무시');
-              debugPrint('   - 현재: $currentTimestamp');
-              debugPrint('   - 새로운: $newTimestamp');
-            }
-            return;
-          }
+    _firestoreSubscription = docRef.snapshots().listen(
+      _handleFirestoreSnapshot,
+      onError: (error) {
+        if (kDebugMode) {
+          debugPrint('❌ [UnifiedSubscriptionManager] Firestore 리스너 오류: $error');
         }
       }
-      
-      // 🚨 개선: PREMIUM → FREE 전환 시 더 엄격한 검증
-      final entitlement = serverData['entitlement'] as String?;
-      final subscriptionStatus = serverData['subscriptionStatus'];
-      
-      if (_currentState != null && entitlement == 'FREE') {
-        // 현재 상태가 프리미엄이고 새 응답이 FREE라면
-        if (_currentState!.isPremiumOrTrial) {
-          final timeDiff = newState.timestamp != null && _currentState!.timestamp != null 
-              ? newState.timestamp!.difference(_currentState!.timestamp!).inSeconds.abs()
-              : 0;
-          
-          // 🚨 조건 강화: 30초 이내의 FREE 응답은 무시
-          if (timeDiff <= 30) {
-            if (kDebugMode) {
-              debugPrint('⏭️ [UnifiedSubscriptionManager] 의심스러운 FREE 응답 무시:');
-              debugPrint('   - 현재 상태: PREMIUM (${_currentState!.plan.name})');
-              debugPrint('   - 새 응답: FREE (${timeDiff}초 차이)');
-              debugPrint('   - subscriptionStatus: $subscriptionStatus');
-              debugPrint('   - 서버 응답 전체: $serverData');
-            }
-            return;
-          }
-          
-          // 🚨 추가 검증: subscriptionStatus가 활성(1)이면서 FREE인 경우 무시
-          if (subscriptionStatus == 1) {
-            if (kDebugMode) {
-              debugPrint('⏭️ [UnifiedSubscriptionManager] 활성 상태인데 FREE 응답 - 데이터 불일치로 무시');
-              debugPrint('   - subscriptionStatus: $subscriptionStatus (ACTIVE)');
-              debugPrint('   - entitlement: $entitlement');
-            }
-            return;
-          }
-        }
-      }
-      
-      _updateCurrentState(newState, fromServer: true);
-      
-      if (kDebugMode) {
-        debugPrint('✅ [UnifiedSubscriptionManager] 상태 업데이트 완료: ${newState.plan.name}');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('❌ [UnifiedSubscriptionManager] 서버 응답 처리 중 오류: $e');
-        debugPrint('서버 데이터: $serverData');
-      }
-    }
+    );
   }
 
-  /// 📝 상태 업데이트 통합 메서드
-  void _updateCurrentState(SubscriptionState newState, {bool fromServer = false}) {
-    _currentState = newState;
-    _lastCacheTime = DateTime.now();
-    
-    // 캐시에 저장
-    _cache.set(_cacheKey, newState.toJson());
-    
-    // 스트림에 전파
-    _subscriptionStateController.add(newState);
-    
-    if (kDebugMode) {
-      final source = fromServer ? '서버' : 'Firestore';
-      debugPrint('📝 [UnifiedSubscriptionManager] 상태 업데이트 ($source): ${newState.plan.name} / ${newState.status}');
-    }
-  }
-
-  /// 🔥 Firestore 스냅샷 직접 처리 (개선됨)
+  /// 🔥 Firestore 스냅샷 처리 (주요 경로)
   void _handleFirestoreSnapshot(DocumentSnapshot snapshot) {
     try {
       if (kDebugMode) {
-        debugPrint('🔥 [UnifiedSubscriptionManager] Firestore 스냅샷 수신:');
-        debugPrint('   - 문서 ID: ${snapshot.id}');
-        debugPrint('   - 문서 존재: ${snapshot.exists}');
-        debugPrint('   - 메타데이터: ${snapshot.metadata}');
-        debugPrint('   - 서버에서 온 데이터: ${snapshot.metadata.isFromCache ? "NO (캐시)" : "YES (서버)"}');
+        debugPrint('🔥 [UnifiedSubscriptionManager] Firestore 데이터 수신');
       }
       
       if (snapshot.exists && snapshot.data() != null) {
         final userData = snapshot.data()! as Map<String, dynamic>;
-        // 🎯 수정: subscriptionData 필드에서 데이터 추출
         final subscriptionData = userData['subscriptionData'] as Map<String, dynamic>?;
         
-        if (subscriptionData == null) {
+        if (subscriptionData != null) {
+          final newState = SubscriptionState.fromFirestore(subscriptionData);
+          _updateState(newState);
+          
           if (kDebugMode) {
-            debugPrint('⚠️ [UnifiedSubscriptionManager] subscriptionData 필드가 없음 - 기본 상태 사용');
+            debugPrint('✅ [UnifiedSubscriptionManager] 상태 업데이트: ${newState.plan.name} / ${newState.status.name}');
           }
-          final defaultState = SubscriptionState.defaultState();
-          _updateCurrentState(defaultState);
-          return;
+        } else {
+          _updateState(SubscriptionState.defaultState());
         }
-
-        if (kDebugMode) {
-          debugPrint('✅ [UnifiedSubscriptionManager] Firestore 스냅샷 처리');
-          debugPrint('   - 🚨 CRITICAL: 이 데이터가 클라이언트에서 업데이트된 것인지 확인 필요!');
-          debugPrint('   - 전체 subscriptionData: $subscriptionData');
-          debugPrint('   - entitlement: "${subscriptionData['entitlement']}" (타입: ${subscriptionData['entitlement'].runtimeType})');
-          debugPrint('   - subscriptionStatus: ${subscriptionData['subscriptionStatus']} (타입: ${subscriptionData['subscriptionStatus'].runtimeType})');
-          debugPrint('   - productId: "${subscriptionData['productId']}" (타입: ${subscriptionData['productId'].runtimeType})');
-          debugPrint('   - hasUsedTrial: ${subscriptionData['hasUsedTrial']}');
-          
-          // 🚨 배너 생성 테스트
-          final testEntitlement = subscriptionData['entitlement'] as String? ?? '';
-          final testStatus = subscriptionData['subscriptionStatus'] ?? 0;
-          int testStatusInt;
-          if (testStatus is int) {
-            testStatusInt = testStatus;
-          } else if (testStatus is String) {
-            testStatusInt = int.tryParse(testStatus) ?? 0;
-          } else {
-            testStatusInt = 0;
-          }
-          
-          debugPrint('   - 🎯 배너 생성 테스트:');
-          debugPrint('     - entitlement: "$testEntitlement"');
-          debugPrint('     - subscriptionStatus (int): $testStatusInt');
-          
-          final testBanner = SubscriptionConstants.getBannerType(testEntitlement, testStatusInt);
-          debugPrint('     - 생성된 배너: ${testBanner ?? "null"}');
-          
-          // 🚨 FREE entitlement 감지 시 특별 로그
-          if (subscriptionData['entitlement'] == 'FREE') {
-            debugPrint('🚨🚨🚨 [CRITICAL] FREE entitlement 감지!');
-            debugPrint('   - 이것이 클라이언트에서 직접 업데이트한 것인지 확인 필요');
-          }
-        }
-
-        final newState = SubscriptionState.fromFirestore(subscriptionData);
-
-        // ✅ UNVERIFIED 상태 처리 개선
-        if (newState.status == PlanStatus.unverified) {
-          _handleUnverifiedState(newState);
-          return;
-        }
-        
-        // 정상 상태일 때 UNVERIFIED 재시도 초기화
-        _resetUnverifiedRetry();
-        _updateCurrentState(newState);
       } else {
-        // Firestore에 문서가 없으면 기본 상태로 간주
-        if (kDebugMode) {
-          debugPrint('⚠️ [UnifiedSubscriptionManager] 사용자 문서가 존재하지 않음 - 기본 상태 사용');
-        }
-        final defaultState = SubscriptionState.defaultState();
-        _updateCurrentState(defaultState);
+        _updateState(SubscriptionState.defaultState());
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('❌ [UnifiedSubscriptionManager] Firestore 스냅샷 처리 중 오류: $e');
-        debugPrint('   - Stack trace: ${StackTrace.current}');
+        debugPrint('❌ [UnifiedSubscriptionManager] Firestore 처리 오류: $e');
       }
     }
   }
 
-  /// 🤔 UNVERIFIED 상태 처리 개선
-  void _handleUnverifiedState(SubscriptionState newState) {
-    if (kDebugMode) {
-      debugPrint('🤔 [UnifiedSubscriptionManager] 구독 상태 미확인(UNVERIFIED). 재시도 횟수: $_unverifiedRetryCount');
-    }
-
-    // 최대 재시도 횟수 초과 시 기본 상태로 처리
-    if (_unverifiedRetryCount >= maxUnverifiedRetries) {
+  /// 🛒 InAppPurchase 서버 응답 처리 (빠른 UI 반응)
+  void updateStateWithServerResponse(Map<String, dynamic> serverData) {
+    try {
       if (kDebugMode) {
-        debugPrint('⚠️ [UnifiedSubscriptionManager] UNVERIFIED 상태 최대 재시도 횟수 초과. 기본 상태로 처리.');
+        debugPrint('🛒 [UnifiedSubscriptionManager] 서버 응답 수신');
       }
-      final defaultState = SubscriptionState.defaultState();
-      _updateCurrentState(defaultState);
-      return;
-    }
-
-    // 첫 번째 시도에서만 구매 복원 실행
-    if (_unverifiedRetryCount == 0) {
-      InAppPurchaseService().restorePurchases();
-    }
-
-    // 배너 없는 상태로 임시 업데이트
-    final stateWithoutBanners = newState.copyWith(activeBanners: []);
-    _updateCurrentState(stateWithoutBanners);
-
-    // 재시도 타이머 설정
-    _unverifiedRetryTimer?.cancel();
-    _unverifiedRetryTimer = Timer(_unverifiedRetryDelay, () {
-      _unverifiedRetryCount++;
+      
+      final newState = SubscriptionState.fromServerResponse(serverData);
+      _updateState(newState);
+      
       if (kDebugMode) {
-        debugPrint('🔄 [UnifiedSubscriptionManager] UNVERIFIED 상태 재확인 시도: $_unverifiedRetryCount');
+        debugPrint('✅ [UnifiedSubscriptionManager] 서버 응답 반영: ${newState.plan.name}');
       }
-      // 캐시 무효화를 통한 강제 새로고침
-      invalidateCache();
-    });
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('❌ [UnifiedSubscriptionManager] 서버 응답 처리 오류: $e');
+      }
+    }
   }
 
-  /// 🔄 UNVERIFIED 재시도 초기화
-  void _resetUnverifiedRetry() {
-    _unverifiedRetryTimer?.cancel();
-    _unverifiedRetryTimer = null;
-    _unverifiedRetryCount = 0;
+  /// 📝 상태 업데이트 (단일 메서드)
+  void _updateState(SubscriptionState newState) {
+    _currentState = newState;
+    _subscriptionStateController.add(newState);
   }
 
   /// ---------------------------------------------------
-  /// 🎯 Public API (외부에서 사용)
+  /// 🎯 Public API
   /// ---------------------------------------------------
 
-  /// 현재 구독 상태 조회 (개선됨)
-  Future<SubscriptionState> getSubscriptionState({bool forceRefresh = false}) async {
+  /// 현재 구독 상태 조회
+  Future<SubscriptionState> getSubscriptionState() async {
+    // 메모리에 있으면 즉시 반환
+    if (_currentState != null) {
+      if (kDebugMode) {
+        debugPrint('✅ [UnifiedSubscriptionManager] 메모리에서 구독 정보 반환: ${_currentState!.plan.name}');
+      }
+      return _currentState!;
+    }
+
+    // 없으면 Firestore에서 로드
     final userId = _auth.currentUser?.uid;
     if (userId == null) {
       return SubscriptionState.defaultState();
     }
 
-    // 강제 새로고침이 아니고 현재 상태가 있으며 캐시가 유효한 경우
-    if (!forceRefresh && _currentState != null && _isCacheValid()) {
-      if (kDebugMode) {
-        debugPrint('✅ [UnifiedSubscriptionManager] 메모리 캐시에서 구독 정보 반환');
-      }
-      return _currentState!;
-    }
-
-    // 캐시에서 확인 (forceRefresh가 아닌 경우만)
-    if (!forceRefresh) {
-      final cachedData = await _cache.get(_cacheKey);
-      if (cachedData != null) {
-        if (kDebugMode) {
-          debugPrint('✅ [UnifiedSubscriptionManager] 로컬 캐시에서 구독 정보 로드');
-        }
-        final state = SubscriptionState.fromFirestore(cachedData);
-        _currentState = state;
-        _lastCacheTime = DateTime.now();
-        return state;
-      }
-    }
-    
-    // 캐시 없거나 만료 시 Firestore에서 로드
     return _fetchFromFirestore(userId);
   }
 
-  /// 🕐 캐시 유효성 확인
-  bool _isCacheValid() {
-    if (_lastCacheTime == null) return false;
-    return DateTime.now().difference(_lastCacheTime!) < _cacheDuration;
-  }
-  
-  /// 🗑️ 캐시 무효화 및 상태 새로고침 (외부 호출용)
-  Future<void> invalidateCache() async {
-    if (kDebugMode) {
-      debugPrint('🔄 [UnifiedSubscriptionManager] 캐시 무효화 및 강제 새로고침');
-    }
-    _currentState = null;
-    _lastCacheTime = null;
-    await _cache.clear();
-    await getSubscriptionState(forceRefresh: true);
-  }
-
-  /// ---------------------------------------------------
-  /// 🎯 내부 로직
-  /// ---------------------------------------------------
-
+  /// Firestore에서 직접 조회
   Future<SubscriptionState> _fetchFromFirestore(String userId) async {
-    if (kDebugMode) {
-      debugPrint('☁️ [UnifiedSubscriptionManager] Firestore에서 구독 정보 로드');
-    }
     try {
-      // 🎯 수정: 올바른 경로로 변경 (users/{userId} 문서의 subscriptionData 필드)
-      final docRef = _firestore.collection('users').doc(userId);
+      if (kDebugMode) {
+        debugPrint('☁️ [UnifiedSubscriptionManager] Firestore에서 구독 정보 로드');
+      }
 
+      final docRef = _firestore.collection('users').doc(userId);
       final snapshot = await docRef.get();
       
-      if (!snapshot.exists) {
-        if (kDebugMode) {
-          debugPrint('⚠️ [UnifiedSubscriptionManager] 사용자 문서가 존재하지 않음');
+      if (snapshot.exists && snapshot.data() != null) {
+        final userData = snapshot.data()! as Map<String, dynamic>;
+        final subscriptionData = userData['subscriptionData'] as Map<String, dynamic>?;
+        
+        if (subscriptionData != null) {
+          final state = SubscriptionState.fromFirestore(subscriptionData);
+          _updateState(state);
+          return state;
         }
-        return SubscriptionState.defaultState();
       }
-
-      final userData = snapshot.data() as Map<String, dynamic>?;
-      final subscriptionData = userData?['subscriptionData'] as Map<String, dynamic>?;
       
-      if (subscriptionData == null) {
-        if (kDebugMode) {
-          debugPrint('⚠️ [UnifiedSubscriptionManager] subscriptionData 필드가 없음');
-        }
-        return SubscriptionState.defaultState();
-      }
-
-      if (kDebugMode) {
-        debugPrint('✅ [UnifiedSubscriptionManager] Firestore 데이터 로드 성공');
-        debugPrint('   - entitlement: ${subscriptionData['entitlement']}');
-        debugPrint('   - subscriptionStatus: ${subscriptionData['subscriptionStatus']}');
-        debugPrint('   - productId: ${subscriptionData['productId']}');
-      }
-
-      final state = SubscriptionState.fromFirestore(subscriptionData);
-      _updateCurrentState(state);
-      
-      return state;
+      final defaultState = SubscriptionState.defaultState();
+      _updateState(defaultState);
+      return defaultState;
     } catch (e) {
       if (kDebugMode) {
         debugPrint('❌ [UnifiedSubscriptionManager] Firestore 로드 실패: $e');
@@ -489,35 +202,35 @@ class UnifiedSubscriptionManager {
     }
   }
 
-  void _clearAllUserCache() {
-    _firestoreSubscription?.cancel();
-    _firestoreSubscription = null;
-    _unverifiedRetryTimer?.cancel();
-    _unverifiedRetryTimer = null;
-    _cache.clear();
-    _cachedUserId = null;
-    _currentState = null;
-    _lastCacheTime = null;
-    _unverifiedRetryCount = 0;
+  /// 강제 새로고침
+  Future<void> invalidateCache() async {
     if (kDebugMode) {
-      debugPrint('🗑️ [UnifiedSubscriptionManager] 모든 사용자 캐시/리스너 정리 완료');
+      debugPrint('🔄 [UnifiedSubscriptionManager] 강제 새로고침');
+    }
+    
+    final userId = _auth.currentUser?.uid;
+    if (userId != null) {
+      await _fetchFromFirestore(userId);
     }
   }
 
-  // 헬퍼: 현재 Plan 객체 가져오기 (UI에서 사용)
+  /// ---------------------------------------------------
+  /// 🎯 헬퍼 메서드
+  /// ---------------------------------------------------
+
+  void _clearUserData() {
+    _firestoreSubscription?.cancel();
+    _firestoreSubscription = null;
+    _cachedUserId = null;
+    _currentState = null;
+  }
+
+  /// 현재 상태 즉시 반환 (스트림용)
+  SubscriptionState? get currentState => _currentState;
+
+  /// 현재 플랜 조회
   Future<Plan> getCurrentPlan() async {
     final state = await getSubscriptionState();
     return state.plan;
-  }
-
-  /// 🎯 현재 상태 즉시 반환 (스트림 용)
-  SubscriptionState? get currentState => _currentState;
-
-  /// 🎯 강제 상태 새로고침 (디버그용)
-  Future<void> forceRefresh() async {
-    if (kDebugMode) {
-      debugPrint('🔄 [UnifiedSubscriptionManager] 강제 새로고침 실행');
-    }
-    await invalidateCache();
   }
 } 

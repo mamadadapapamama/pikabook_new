@@ -27,6 +27,8 @@ class HomeUICoordinator {
     required Function(BannerType) onShowUpgradeModal,
     required Function(BannerType) onDismissBanner,
   }) async {
+
+    
     if (kDebugMode) {
       debugPrint('🎨 [HomeUICoordinator] buildActiveBanners 시작:');
       debugPrint('   - 입력 배너 수: ${activeBanners.length}');
@@ -37,6 +39,8 @@ class HomeUICoordinator {
     
     // 🎯 닫힌 배너 필터링
     final filteredBanners = await _filterDismissedBanners(activeBanners);
+    
+
     
     if (kDebugMode) {
       debugPrint('   - 필터링 후 배너 수: ${filteredBanners.length}');
@@ -59,6 +63,8 @@ class HomeUICoordinator {
       );
     }
     
+
+    
     if (kDebugMode) {
       debugPrint('   - 최종 생성된 배너 위젯 수: ${banners.length}');
       debugPrint('🎨 [HomeUICoordinator] buildActiveBanners 완료');
@@ -77,9 +83,12 @@ class HomeUICoordinator {
         final key = 'banner_${bannerType.name}_dismissed';
         final isDismissed = prefs.getBool(key) ?? false;
         
+
+        
         if (!isDismissed) {
           filteredBanners.add(bannerType);
         } else {
+
           if (kDebugMode) {
             debugPrint('🚫 [HomeUICoordinator] 닫힌 배너 필터링: ${bannerType.name}');
           }

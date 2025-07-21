@@ -88,7 +88,7 @@ dependencies:
   googleapis_auth: ^1.6.0          # Google Auth for APIs (OCR 서비스에서 사용됨)
   pinyin: ^3.3.0                   # Chinese pinyin conversion (한국어 병음 변환에 사용됨)
   # In-app Purchase (iOS only)
-  in_app_purchase: ^3.2.0          # In-app purchase (StoreKit 1 + 2 호환)
+  in_app_purchase: ^3.2.3          
   in_app_purchase_storekit: ^0.4.2  # StoreKit 2 전용 (iOS 15+)
 
   # Local Notifications

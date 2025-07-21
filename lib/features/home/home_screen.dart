@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
-import 'package:collection/collection.dart'; // 🎯 추가
 
 // 🎯 Core imports
 import '../../core/models/subscription_state.dart';
@@ -47,8 +46,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isLoading = true; // 뷰모델 로딩 상태
   bool _isNewUser = false;
   HomeViewModel? _homeViewModel;
-  // 🗑️ 제거: 더 이상 필요 없는 중복 호출 방지 플래그
-  // bool _hasSetupUsageLimitStream = false;
 
   @override
   void initState() {
@@ -315,12 +312,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             }
 
             return FutureBuilder<List<Widget>>(
-              future: _uiCoordinator.buildActiveBanners(
-                context: context,
-                activeBanners: convertedBanners,
-                onShowUpgradeModal: _onShowUpgradeModal,
-                onDismissBanner: _onDismissBanner,
-              ),
+              future: (() async {
+                try {
+                  if (kDebugMode) {
+                    debugPrint('🔧 [HomeScreen] buildActiveBanners 호출 시작');
+                    debugPrint('   - 전달할 배너: ${convertedBanners.map((e) => e.name).toList()}');
+                  }
+                  
+                  final result = await _uiCoordinator.buildActiveBanners(
+                    context: context,
+                    activeBanners: convertedBanners,
+                    onShowUpgradeModal: _onShowUpgradeModal,
+                    onDismissBanner: _onDismissBanner,
+                  );
+                  
+                  if (kDebugMode) {
+                    debugPrint('🔧 [HomeScreen] buildActiveBanners 호출 완료');
+                    debugPrint('   - 반환된 위젯 수: ${result.length}');
+                  }
+                  
+                  return result;
+                } catch (e, stackTrace) {
+                  if (kDebugMode) {
+                    debugPrint('❌ [HomeScreen] buildActiveBanners 에러: $e');
+                    debugPrint('Stack trace: $stackTrace');
+                  }
+                  return <Widget>[]; // 에러 시 빈 리스트 반환
+                }
+              })(),
               builder: (context, snapshot) {
                 if (kDebugMode) {
                   debugPrint('🏠 [HomeScreen] FutureBuilder 결과:');

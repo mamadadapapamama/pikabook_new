@@ -315,11 +315,10 @@ class _PikaAppBarState extends State<PikaAppBar> {
   Future<Map<String, dynamic>> _loadHomeAppBarData() async {
     try {
       final userPreferences = UserPreferencesService();
-      // 🎯 캐시된 데이터 사용 (forceRefresh: false)
       final unifiedManager = UnifiedSubscriptionManager();
       final results = await Future.wait([
         userPreferences.getDefaultNoteSpace(),
-        unifiedManager.getSubscriptionState(forceRefresh: false),
+        unifiedManager.getSubscriptionState(),
       ]);
       final subscriptionState = results[1] as SubscriptionState;
       return {
@@ -346,24 +345,24 @@ class _PikaAppBarState extends State<PikaAppBar> {
       // 🎯 구독 상태를 가져와서 SettingsScreen에 전달
       UnifiedSubscriptionManager().getSubscriptionState().then((subscriptionState) {
         if (context.mounted) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => SettingsScreen(
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => SettingsScreen(
                 subscriptionState: subscriptionState, // 구독 상태 전달
-                onLogout: () async {
-                  if (kDebugMode) {
-                    debugPrint('로그아웃 콜백 호출됨');
-                  }
-                  // 로그아웃 처리
-                  await FirebaseAuth.instance.signOut();
-                  // 홈 화면으로 돌아가기
-                  if (context.mounted) {
-                    Navigator.of(context).popUntil((route) => route.isFirst);
-                  }
-                },
-              ),
-            ),
-          );
+            onLogout: () async {
+              if (kDebugMode) {
+                debugPrint('로그아웃 콜백 호출됨');
+              }
+              // 로그아웃 처리
+              await FirebaseAuth.instance.signOut();
+              // 홈 화면으로 돌아가기
+              if (context.mounted) {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            },
+          ),
+        ),
+      );
         }
       }).catchError((error) {
         if (kDebugMode) {
